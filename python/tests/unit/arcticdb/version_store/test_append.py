@@ -567,7 +567,7 @@ def test_append_docs_example(lmdb_version_store):
     # Write example
     cols = ["COL_%d" % i for i in range(50)]
     df = pd.DataFrame(np.random.randint(0, 50, size=(25, 50)), columns=cols)
-    df.index = pd.date_range(datetime(2000, 1, 1, 5), periods=25, freq="H")
+    df.index = pd.date_range(datetime(2000, 1, 1, 5), periods=25, freq="h")
     print(df.head(2))
     lib.write("test_frame", df)
 
@@ -589,7 +589,7 @@ def test_append_docs_example(lmdb_version_store):
     # Update example
     random_data = np.random.randint(0, 50, size=(25, 50))
     df2 = pd.DataFrame(random_data, columns=["COL_%d" % i for i in range(50)])
-    df2.index = pd.date_range(datetime(2000, 1, 1, 5), periods=25, freq="H")
+    df2.index = pd.date_range(datetime(2000, 1, 1, 5), periods=25, freq="h")
     df2 = df2.iloc[[0, 2]]
     print(df2)
     lib.update("test_frame", df2)
@@ -599,7 +599,7 @@ def test_append_docs_example(lmdb_version_store):
     random_data = np.random.randint(0, 50, size=(5, 50))
     df_append = pd.DataFrame(random_data, columns=["COL_%d" % i for i in range(50)])
     print(df_append)
-    df_append.index = pd.date_range(datetime(2000, 1, 2, 7), periods=5, freq="H")
+    df_append.index = pd.date_range(datetime(2000, 1, 2, 7), periods=5, freq="h")
 
     lib.append("test_frame", df_append)
     print(lib.tail("test_frame", 7).data)
@@ -633,6 +633,7 @@ def test_read_incomplete_no_warning(s3_store_factory, sym, get_stderr):
 
 
 @pytest.mark.parametrize("prune_previous_versions", [True, False])
+@pytest.mark.filterwarnings("ignore:(defragment_symbol_data|is_symbol_fragmented) is deprecated:DeprecationWarning")
 def test_defragment_read_prev_versions(sym, lmdb_version_store, prune_previous_versions):
     start_time, end_time = pd.to_datetime(("1990-1-1", "1995-1-1"))
     cols = ["a", "b", "c", "d"]
@@ -678,6 +679,7 @@ def test_defragment_read_prev_versions(sym, lmdb_version_store, prune_previous_v
     assert_frame_equal(lmdb_version_store.read(sym).data, expected_dfs[-1])
 
 
+@pytest.mark.filterwarnings("ignore:(defragment_symbol_data|is_symbol_fragmented) is deprecated:DeprecationWarning")
 def test_defragment_no_work_to_do(sym, lmdb_version_store):
     df = pd.DataFrame({"a": [1, 2, 3]})
     lmdb_version_store.write(sym, df)

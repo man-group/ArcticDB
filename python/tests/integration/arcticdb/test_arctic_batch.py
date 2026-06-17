@@ -447,7 +447,7 @@ def test_write_batch_dedup(library_factory):
     for sym in range(num_symbols):
         data_key_version = lib._nvs.read_index("symbol_" + str(sym))["version_id"]
         for s in range(num_segments):
-            assert data_key_version[s] == 0
+            assert data_key_version.iloc[s] == 0
 
 
 @pytest.mark.storage

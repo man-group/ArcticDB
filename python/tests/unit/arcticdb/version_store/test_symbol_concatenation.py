@@ -14,7 +14,7 @@ import pytest
 from arcticdb import col, concat, LazyDataFrame, LazyDataFrameCollection, QueryBuilder, ReadRequest
 from arcticdb.exceptions import NoSuchVersionException, SchemaException
 from arcticdb.options import LibraryOptions
-from arcticdb.util.test import assert_frame_equal, assert_series_equal
+from arcticdb.util.test import assert_frame_equal, assert_series_equal, nans_to_none
 from tests.util.mark import WINDOWS
 
 pytestmark = pytest.mark.pipeline
@@ -152,7 +152,7 @@ def test_symbol_concat_different_column_sets(
     lib.write("sym1", df_1)
 
     received = concat(lib.read_batch(["sym0", "sym1"], lazy=True), join=join).collect().data
-    expected = pd.concat([df_0, df_1], join=join)
+    expected = nans_to_none(pd.concat([df_0, df_1], join=join))
     expected.index = pd.RangeIndex(len(expected))
     assert_frame_equal(expected, received)
 
@@ -708,8 +708,8 @@ def test_symbol_concat_multiindex_timezone_handling(
         if (tz_0_level_1 == tz_1_level_1 and tz_0_level_1 is not None)
         else "datetime64[ns]"
     )
-    assert str(received.index.dtypes[0]) == expected_level_0_tz
-    assert str(received.index.dtypes[1]) == expected_level_1_tz
+    assert str(received.index.dtypes.iloc[0]) == expected_level_0_tz
+    assert str(received.index.dtypes.iloc[1]) == expected_level_1_tz
 
 
 @pytest.mark.parametrize("join", ["inner", "outer"])

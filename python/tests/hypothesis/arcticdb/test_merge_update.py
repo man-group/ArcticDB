@@ -111,6 +111,7 @@ def merge_arguments(
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @given(merge_args=merge_arguments(COL_NAMES, DTYPES))
 @settings(deadline=None, suppress_health_check=[HealthCheck.data_too_large])
+@pytest.mark.filterwarnings("ignore:Mismatched null-like values:FutureWarning")
 def test_timeseries_merge_update(s3_version_store_v1, merge_args):
     target_list, source, on = merge_args
     lib = s3_version_store_v1
@@ -138,6 +139,7 @@ def test_timeseries_merge_update(s3_version_store_v1, merge_args):
     cols_to_promote=st.lists(st.sampled_from(COL_NAMES), unique=True, min_size=1),
 )
 @settings(deadline=None, suppress_health_check=[HealthCheck.data_too_large])
+@pytest.mark.filterwarnings("ignore:Mismatched null-like values:FutureWarning")
 def test_multiindex_merge_update(s3_version_store_v1, merge_args, cols_to_promote):
     target_list, source, on = merge_args
     target_list = [df.set_index(cols_to_promote, append=True) for df in target_list]

@@ -26,7 +26,7 @@ def make_matching_source(
     assert (on is not None and on_segments is not None) or (on is None and on_segments is None)
     on = on or []
     on_segments = on_segments or []
-    matched_columns = pd.DataFrame(columns=on)
+    matched_parts = []
     segments = sorted(segments)
     for seg in segments:
         start = seg * rows_per_segment
@@ -47,7 +47,9 @@ def make_matching_source(
                 for col in on:
                     raw = target_vals[col].values.view(np.uint32)
                     target_vals[col] = (raw ^ np.uint32(0xFFFFFFFF)).view(np.float32)
-            matched_columns = pd.concat([matched_columns, target_vals], ignore_index=True)
+            matched_parts.append(target_vals)
+
+    matched_columns = pd.concat(matched_parts, ignore_index=True) if matched_parts else pd.DataFrame(columns=on)
 
     data = {}
     for col in target_df.columns:

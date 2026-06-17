@@ -95,7 +95,7 @@ def generate_overlapping_dataframes(
         df = create_synthetic_tick_data(
             start=start_time,
             end=end_time,
-            tick_freq="1S",
+            tick_freq="1s",
             time_col="timestamp",
             price_col="price",
             volume_col="volume",
@@ -173,7 +173,7 @@ def test_sort_and_finalize_append_stress(lmdb_library):
     df = create_synthetic_tick_data(
         start=start_time,
         end=end_time,
-        tick_freq="1S",
+        tick_freq="1s",
         time_col="timestamp",
         price_col="price",
         volume_col="volume",

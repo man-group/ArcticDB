@@ -35,7 +35,7 @@ def test_observation_time(lmdb_version_store):
             data_col_name: np.arange(0 * hours_per_day, 1 * hours_per_day),
             observed_col_name: hours_per_day * [pd.Timestamp(year=2000, month=1, day=1, hour=23, minute=59)],
         },
-        index=pd.date_range(pd.Timestamp(year=2000, month=1, day=1), periods=hours_per_day, freq="H"),
+        index=pd.date_range(pd.Timestamp(year=2000, month=1, day=1), periods=hours_per_day, freq="h"),
     )
     # Observed 2000-01-02
     df_2 = pd.DataFrame(
@@ -43,7 +43,7 @@ def test_observation_time(lmdb_version_store):
             data_col_name: np.arange(1 * hours_per_day, 2 * hours_per_day),
             observed_col_name: hours_per_day * [pd.Timestamp(year=2000, month=1, day=2, hour=23, minute=59)],
         },
-        index=pd.date_range(pd.Timestamp(year=2000, month=1, day=2), periods=hours_per_day, freq="H"),
+        index=pd.date_range(pd.Timestamp(year=2000, month=1, day=2), periods=hours_per_day, freq="h"),
     )
     # Observed 2000-01-03
     df_3 = pd.DataFrame(
@@ -51,7 +51,7 @@ def test_observation_time(lmdb_version_store):
             data_col_name: np.arange(2 * hours_per_day, 3 * hours_per_day),
             observed_col_name: hours_per_day * [pd.Timestamp(year=2000, month=1, day=3, hour=23, minute=59)],
         },
-        index=pd.date_range(pd.Timestamp(year=2000, month=1, day=3), periods=hours_per_day, freq="H"),
+        index=pd.date_range(pd.Timestamp(year=2000, month=1, day=3), periods=hours_per_day, freq="h"),
     )
     # Observed 2000-01-04, with rows missing 12:00:00-16:00:00 (inclusive) initially
     df_4 = pd.DataFrame(
@@ -59,7 +59,7 @@ def test_observation_time(lmdb_version_store):
             data_col_name: np.arange(3 * hours_per_day, 4 * hours_per_day),
             observed_col_name: hours_per_day * [pd.Timestamp(year=2000, month=1, day=4, hour=23, minute=59)],
         },
-        index=pd.date_range(pd.Timestamp(year=2000, month=1, day=4), periods=hours_per_day, freq="H"),
+        index=pd.date_range(pd.Timestamp(year=2000, month=1, day=4), periods=hours_per_day, freq="h"),
     )
     df_4_initial = df_4.loc[(df_4[data_col_name] <= 84) | (df_4[data_col_name] >= 90)]
     df_4_patch = df_4.loc[(df_4[data_col_name] > 84) & (df_4[data_col_name] < 90)]
@@ -69,7 +69,7 @@ def test_observation_time(lmdb_version_store):
             data_col_name: np.arange(4 * hours_per_day, 5 * hours_per_day),
             observed_col_name: hours_per_day * [pd.Timestamp(year=2000, month=1, day=5, hour=23, minute=59)],
         },
-        index=pd.date_range(pd.Timestamp(year=2000, month=1, day=5), periods=hours_per_day, freq="H"),
+        index=pd.date_range(pd.Timestamp(year=2000, month=1, day=5), periods=hours_per_day, freq="h"),
     )
     df_total = pd.concat((df_1, df_2, df_3, df_4, df_5))
 

@@ -871,7 +871,7 @@ def test_date_range(basic_store, use_date_range_clause, any_output_format):
     else:
         data_start = basic_store.read(sym, date_range=date_range).data
     assert query_start_ts == data_start.index[0]
-    assert data_start[data_start.columns[0]][0] == start_offset
+    assert data_start[data_start.columns[0]].iloc[0] == start_offset
 
     # Should return everything from start of index to the given end.
     date_range = (None, query_end_ts)
@@ -882,7 +882,7 @@ def test_date_range(basic_store, use_date_range_clause, any_output_format):
     else:
         data_end = basic_store.read(sym, date_range=date_range).data
     assert query_end_ts == data_end.index[-1]
-    assert data_end[data_end.columns[0]][-1] == end_offset
+    assert data_end[data_end.columns[0]].iloc[-1] == end_offset
 
     date_range = (query_start_ts, query_end_ts)
     if use_date_range_clause:
@@ -893,8 +893,8 @@ def test_date_range(basic_store, use_date_range_clause, any_output_format):
         data_closed = basic_store.read(sym, date_range=date_range).data
     assert query_start_ts == data_closed.index[0]
     assert query_end_ts == data_closed.index[-1]
-    assert data_closed[data_closed.columns[0]][0] == start_offset
-    assert data_closed[data_closed.columns[0]][-1] == end_offset
+    assert data_closed[data_closed.columns[0]].iloc[0] == start_offset
+    assert data_closed[data_closed.columns[0]].iloc[-1] == end_offset
 
 
 @pytest.mark.parametrize("use_date_range_clause", [True, False])
@@ -937,7 +937,7 @@ def test_date_range_start_equals_end(basic_store, use_date_range_clause, any_out
     else:
         data = basic_store.read(sym, date_range=date_range).data
     assert len(data) == 1
-    assert data[data.columns[0]][0] == start_offset
+    assert data[data.columns[0]].iloc[0] == start_offset
 
 
 @pytest.mark.parametrize("use_date_range_clause", [True, False])
@@ -1947,7 +1947,7 @@ def test_coercion_to_float(basic_store):
     lib = basic_store
     df = pd.DataFrame({"col": [np.nan, "1", np.nan]})
     # col is now an Object column with all NaNs
-    df["col"][1] = np.nan
+    df.loc[1, "col"] = np.nan
 
     assert df["col"].dtype == np.object_
 

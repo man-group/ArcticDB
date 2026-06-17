@@ -222,10 +222,10 @@ def test_repeating_index_values(lmdb_library_static_dynamic):
     assert data.index.equals(expected.index)
     for i in range(0, len(df1)):
         row = 2 * i
-        assert data["col"][row] == df1["col"][i] or data["col"][row] == df2["col"][i]
-        assert (data["col"][row + 1] == df1["col"][i] or data["col"][row + 1] == df2["col"][i]) and data["col"][
-            row
-        ] != data["col"][row + 1]
+        assert data["col"].iloc[row] == df1["col"].iloc[i] or data["col"].iloc[row] == df2["col"].iloc[i]
+        assert (
+            data["col"].iloc[row + 1] == df1["col"].iloc[i] or data["col"].iloc[row + 1] == df2["col"].iloc[i]
+        ) and data["col"].iloc[row] != data["col"].iloc[row + 1]
 
 
 class TestMergeSortAppend:

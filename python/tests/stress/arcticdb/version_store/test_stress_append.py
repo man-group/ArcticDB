@@ -12,6 +12,7 @@ import pandas as pd
 
 from arcticdb.util.test import (
     assert_frame_equal,
+    nans_to_none,
     dataframe_for_date,
     random_strings_of_length,
     random_floats,
@@ -129,7 +130,9 @@ def test_write_parallel_stress_schema_change_strings(lmdb_version_store_dynamic_
     df.sort_index(axis=1, inplace=True)
     result = vit.data
     result.sort_index(axis=1, inplace=True)
-    assert_frame_equal(vit.data, df)
+    # Dynamic schema backfills missing string values with None, concat uses NaN;
+    # written NaNs round-trip as NaN, so normalize both sides
+    assert_frame_equal(nans_to_none(vit.data), nans_to_none(df))
 
 
 def test_write_parallel_stress_schema_change_strings_with_nan(lmdb_version_store_dynamic_schema):
@@ -163,7 +166,9 @@ def test_write_parallel_stress_schema_change_strings_with_nan(lmdb_version_store
     df.sort_index(axis=1, inplace=True)
     result = vit.data
     result.sort_index(axis=1, inplace=True)
-    assert_frame_equal(vit.data, df)
+    # Dynamic schema backfills missing string values with None, concat uses NaN;
+    # written NaNs round-trip as NaN, so normalize both sides
+    assert_frame_equal(nans_to_none(vit.data), nans_to_none(df))
 
 
 def test_change_to_dynamic_strings(object_version_store):

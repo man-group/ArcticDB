@@ -10,7 +10,7 @@ import pytest
 import pandas as pd
 import random
 
-from arcticdb.util.test import assert_frame_equal
+from arcticdb.util.test import assert_frame_equal, nans_to_none
 
 
 @pytest.mark.parametrize(
@@ -42,6 +42,7 @@ def test_dynamic_bucketize_append_variable_width(
         lib.append(symbol, df2)
         count += 1
     res = lib.read(symbol).data
-    df1 = df1.reindex(sorted(list(df1.columns)), axis=1)
+    # Concat backfills missing string columns with NaN, ArcticDB uses None
+    df1 = nans_to_none(df1.reindex(sorted(list(df1.columns)), axis=1))
     res = res.reindex(sorted(list(res.columns)), axis=1)
     assert_frame_equal(res, df1)

@@ -16,7 +16,7 @@ def test_stage_finalize(arctic_library):
 
     df1 = pd.DataFrame(
         {
-            "timestamp": pd.date_range("2023-01-01", periods=25, freq="H").repeat(2),
+            "timestamp": pd.date_range("2023-01-01", periods=25, freq="h").repeat(2),
             "col1": np.arange(1, 51),
             "col2": [f"a{i:02d}" for i in range(1, 51)],
         }
@@ -24,7 +24,7 @@ def test_stage_finalize(arctic_library):
 
     df2 = pd.DataFrame(
         {
-            "timestamp": pd.date_range("2023-01-04", periods=25, freq="H").repeat(2),
+            "timestamp": pd.date_range("2023-01-04", periods=25, freq="h").repeat(2),
             "col1": np.arange(51, 101),
             "col2": [f"b{i:02d}" for i in range(1, 51)],
         }
@@ -50,7 +50,7 @@ def test_stage_finalize_dynamic(arctic_library_dynamic):
 
     df1 = pd.DataFrame(
         {
-            "timestamp": pd.date_range("2023-01-01", periods=25, freq="H").repeat(2),
+            "timestamp": pd.date_range("2023-01-01", periods=25, freq="h").repeat(2),
             "col1": np.arange(1, 51),
             "col2": [f"a{i:02d}" for i in range(1, 51)],
             "col3": np.arange(51, 101),
@@ -59,7 +59,7 @@ def test_stage_finalize_dynamic(arctic_library_dynamic):
 
     df2 = pd.DataFrame(
         {
-            "timestamp": pd.date_range("2023-01-04", periods=25, freq="H").repeat(2),
+            "timestamp": pd.date_range("2023-01-04", periods=25, freq="h").repeat(2),
             "col1": np.arange(51, 101),
             "col2": [f"b{i:02d}" for i in range(1, 51)],
             "col3": np.arange(101, 151),
@@ -85,7 +85,7 @@ def test_stage_finalize_strings(arctic_library):
 
     df1 = pd.DataFrame(
         {
-            "timestamp": pd.date_range("2023-01-01", periods=25, freq="H").repeat(2),
+            "timestamp": pd.date_range("2023-01-01", periods=25, freq="h").repeat(2),
             "col1": np.arange(1, 51),
             "col2": [f"a{i:02d}" for i in range(1, 51)],
             "col3": random_strings_of_length(50, 12),
@@ -94,7 +94,7 @@ def test_stage_finalize_strings(arctic_library):
 
     df2 = pd.DataFrame(
         {
-            "timestamp": pd.date_range("2023-01-04", periods=25, freq="H").repeat(2),
+            "timestamp": pd.date_range("2023-01-04", periods=25, freq="h").repeat(2),
             "col1": np.arange(51, 101),
             "col2": [f"b{i:02d}" for i in range(1, 51)],
             "col3": random_strings_of_length(50, 12),
@@ -121,7 +121,7 @@ def test_stage_finalize_strings_dynamic(arctic_library_dynamic):
 
     df1 = pd.DataFrame(
         {
-            "timestamp": pd.date_range("2023-01-01", periods=25, freq="H").repeat(2),
+            "timestamp": pd.date_range("2023-01-01", periods=25, freq="h").repeat(2),
             "col1": np.arange(1, 51),
             "col2": [f"a{i:02d}" for i in range(1, 51)],
             "col3": random_strings_of_length(50, 12),
@@ -130,7 +130,7 @@ def test_stage_finalize_strings_dynamic(arctic_library_dynamic):
 
     df2 = pd.DataFrame(
         {
-            "timestamp": pd.date_range("2023-01-04", periods=25, freq="H").repeat(2),
+            "timestamp": pd.date_range("2023-01-04", periods=25, freq="h").repeat(2),
             "col1": np.arange(51, 101),
             "col2": [f"b{i:02d}" for i in range(1, 51)],
             "col4": [f"a{i:02d}" for i in range(101, 151)],
@@ -147,6 +147,9 @@ def test_stage_finalize_strings_dynamic(arctic_library_dynamic):
     result = arctic_library.read(symbol).data
 
     expected = pd.concat([df1, df2]).sort_values(sort_cols)
+    # Pandas concat fills missing string values with NaN, ArcticDB uses None
+    object_cols = expected.columns[expected.dtypes == object]
+    expected[object_cols] = expected[object_cols].where(expected[object_cols].notna(), None)
     pd.testing.assert_frame_equal(result, expected)
 
 
@@ -157,7 +160,7 @@ def test_stage_finalize_sort_index(arctic_library):
 
     df1 = pd.DataFrame(
         {
-            "timestamp": pd.date_range("2023-01-01", periods=50, freq="H"),
+            "timestamp": pd.date_range("2023-01-01", periods=50, freq="h"),
             "col1": np.arange(1, 51),
             "col2": [f"a{i:02d}" for i in range(1, 51)],
         }
@@ -165,7 +168,7 @@ def test_stage_finalize_sort_index(arctic_library):
 
     df2 = pd.DataFrame(
         {
-            "timestamp": pd.date_range("2023-01-04", periods=50, freq="H"),
+            "timestamp": pd.date_range("2023-01-04", periods=50, freq="h"),
             "col1": np.arange(51, 101),
             "col2": [f"b{i:02d}" for i in range(1, 51)],
         }
@@ -189,7 +192,7 @@ def test_stage_with_sort_index_chunking(lmdb_version_store_tiny_segment):
 
     df1 = pd.DataFrame(
         {
-            "timestamp": pd.date_range("2023-01-01", periods=50, freq="H"),
+            "timestamp": pd.date_range("2023-01-01", periods=50, freq="h"),
             "col1": np.arange(1, 51),
             "col2": [f"a{i:02d}" for i in range(1, 51)],
             "col3": np.arange(1, 51),
@@ -254,7 +257,7 @@ def test_stage_finalize_dynamic_with_chunking(arctic_client, lib_name):
 
     df1 = pd.DataFrame(
         {
-            "timestamp": pd.date_range("2023-01-01", periods=7, freq="H"),
+            "timestamp": pd.date_range("2023-01-01", periods=7, freq="h"),
             "col1": np.arange(1, 8, dtype=np.uint8),
             "col2": [f"a{i:02d}" for i in range(1, 8)],
             "col3": np.arange(1, 8, dtype=np.int32),
@@ -263,7 +266,7 @@ def test_stage_finalize_dynamic_with_chunking(arctic_client, lib_name):
 
     df2 = pd.DataFrame(
         {
-            "timestamp": pd.date_range("2023-01-04", periods=7, freq="H"),
+            "timestamp": pd.date_range("2023-01-04", periods=7, freq="h"),
             "col1": np.arange(8, 15, dtype=np.int32),
             "col2": [f"b{i:02d}" for i in range(8, 15)],
             "col3": np.arange(8, 15, dtype=np.uint16),
@@ -300,7 +303,7 @@ def test_stage_finalize_index_and_additional(arctic_library):
 
     df1 = pd.DataFrame(
         {
-            "timestamp": pd.date_range("2023-01-01", periods=25, freq="H").repeat(2),
+            "timestamp": pd.date_range("2023-01-01", periods=25, freq="h").repeat(2),
             "col1": np.arange(1, 51),
             "col2": [f"a{i:02d}" for i in range(1, 51)],
         }
@@ -308,7 +311,7 @@ def test_stage_finalize_index_and_additional(arctic_library):
 
     df2 = pd.DataFrame(
         {
-            "timestamp": pd.date_range("2023-01-04", periods=25, freq="H").repeat(2),
+            "timestamp": pd.date_range("2023-01-04", periods=25, freq="h").repeat(2),
             "col1": np.arange(51, 101),
             "col2": [f"b{i:02d}" for i in range(1, 51)],
         }
