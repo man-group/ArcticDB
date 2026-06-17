@@ -194,6 +194,7 @@ class LocalVersionedEngine : public VersionedEngine {
             const PreDeleteChecks& checks = default_pre_delete_checks
     ) override {
         std::unordered_set<StreamId> stream_ids;
+        stream_ids.reserve(idx_to_be_deleted.size());
         for (const auto& key : idx_to_be_deleted) {
             stream_ids.insert(key.id());
         }

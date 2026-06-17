@@ -296,7 +296,6 @@ class DeleteSymbolWithSnapshots:
     number = 1  # the deleted symbol is gone after one run, so setup rebuilds the library for each run
     warmup_time = 0
     timeout = 600
-    repeat = 3  # each setup writes NUM_SYMBOLS symbols and NUM_SNAPSHOTS snapshots
 
     NUM_SYMBOLS = 5_000
     NUM_SNAPSHOTS = 20

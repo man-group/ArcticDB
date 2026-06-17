@@ -282,6 +282,7 @@ inline BatchGetVersionResult<SymbolVersion> batch_get_specific_versions(
 
     if (!tombstoned_vers->empty()) {
         std::unordered_set<StreamId> stream_ids;
+        stream_ids.reserve(tombstoned_vers->size());
         for (const auto& [sym_version, key] : *tombstoned_vers) {
             stream_ids.insert(sym_version.first);
         }

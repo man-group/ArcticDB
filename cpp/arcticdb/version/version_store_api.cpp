@@ -487,6 +487,7 @@ void PythonVersionStore::add_to_snapshot(
     write_snapshot_entry(store(), retained_keys, snap_name, user_meta, version_map()->log_changes());
     if (is_delete_keys_immediately) {
         std::unordered_set<StreamId> deleted_stream_ids;
+        deleted_stream_ids.reserve(deleted_keys.size());
         for (const auto& key : deleted_keys) {
             deleted_stream_ids.insert(key.id());
         }
@@ -540,6 +541,7 @@ void PythonVersionStore::remove_from_snapshot(
     write_snapshot_entry(store(), retained_keys, snap_name, user_meta, version_map()->log_changes());
     if (is_delete_keys_immediately) {
         std::unordered_set<StreamId> deleted_stream_ids;
+        deleted_stream_ids.reserve(deleted_keys.size());
         for (const auto& key : deleted_keys) {
             deleted_stream_ids.insert(key.id());
         }
