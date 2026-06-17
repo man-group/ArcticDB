@@ -8,7 +8,7 @@ import pytest
 import numpy as np
 import arcticdb
 from arcticdb import QueryBuilder, LibraryOptions
-from arcticdb.flattener import Flattener
+from arcticdb.flattener import Flattener, DEFAULT_RECURSE_LIMIT
 from arcticdb.version_store._custom_normalizers import (
     CustomNormalizer,
     register_normalizer,
@@ -392,12 +392,18 @@ def test_deep_nesting_metastruct_size_over_limit(lmdb_version_store_v1, all_recu
     key = "reasonable_length_key"
     data = {key: pd.DataFrame({"col": [0]})}
 
-    nesting_levels = 256
+    # Mirror the guard in flattener._create_meta_structure (raises above DEFAULT_RECURSE_LIMIT // 2).
+    # flattener clamps DEFAULT_RECURSE_LIMIT to 511, so this is 255 - see the note there for why.
+    nesting_limit = DEFAULT_RECURSE_LIMIT // 2
+    nesting_levels = nesting_limit + 1
     for i in range(nesting_levels - 1):
         data[key] = {key: data[key]}
 
     # When & Then
-    with pytest.raises(DataTooNestedException, match=r"^Symbol sym cannot be recursively normalized.*255 levels.*"):
+    with pytest.raises(
+        DataTooNestedException,
+        match=rf"^Symbol sym cannot be recursively normalized.*{nesting_limit} levels.*",
+    ):
         lib.write(sym, data, recursive_normalizers=True)
 
 
@@ -408,7 +414,7 @@ def test_deep_nesting_metastruct_size_under_limit(lmdb_version_store_v1, all_rec
     key = "reasonable_length_key"
     data = {key: pd.DataFrame({"col": [0]})}
 
-    nesting_levels = 255
+    nesting_levels = (DEFAULT_RECURSE_LIMIT - 1) // 2
     for i in range(nesting_levels - 1):
         data[key] = {key: data[key]}
 
