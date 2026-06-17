@@ -109,13 +109,22 @@ struct MasterSnapshotMapAndKeys {
  * Map the index keys in every snapshot, additionally reporting the total number of snapshots iterated.
  *
  * The stats are used by the enterprise repo for delayed-deletes logging.
+ *
+ * @param stream_ids When set, only these symbols are included in the returned map. The full snapshot set is still
+ * iterated (so total_snapshots is unaffected).
  */
-MasterSnapshotMapWithStats get_master_snapshots_map_with_stats(std::shared_ptr<Store> store);
+MasterSnapshotMapWithStats get_master_snapshots_map_with_stats(
+        std::shared_ptr<Store> store, const std::optional<std::unordered_set<StreamId>>& stream_ids = std::nullopt
+);
 
 /**
  * Map the index keys in every snapshot.
+ *
+ * @param stream_ids When set, only these symbols are included in the returned map
  */
-MasterSnapshotMap get_master_snapshots_map(std::shared_ptr<Store> store);
+MasterSnapshotMap get_master_snapshots_map(
+        std::shared_ptr<Store> store, const std::optional<std::unordered_set<StreamId>>& stream_ids = std::nullopt
+);
 
 /**
  * Map the index keys in every snapshot, additionally collecting the index keys contained in the given snapshot.
