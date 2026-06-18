@@ -3428,3 +3428,300 @@ TEST_F(TestSplitByTimeSlice, IsolatedThenCliqueThenIsolatedThenClique_OneColPerR
     const std::array<std::vector<size_t>, 4> expected{{{0}, {1, 2, 3}, {4}, {5, 6}}};
     ASSERT_TRUE(std::ranges::equal(structure_by_time_slice(input), expected));
 }
+
+// Extra: a clique [10,15) [14,15) [14,20) sharing value 14, whose last slice [14,20) then begins a
+// chain [14,20) [19,25) [24,30) [29,35) (seam values 19, 24, 29). The shared slice [14,20) belongs to
+// the clique and to the first chain group.
+TEST_F(TestSplitByTimeSlice, CliqueThenChain_OneColPerRowSlice) {
+    std::array<RangesAndKey, 6> input{{
+            RangesAndKey{
+                    RowRange{0, 5},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(10).end_index(15).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{5, 10},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(14).end_index(15).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{10, 15},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(14).end_index(20).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{15, 20},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(19).end_index(25).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{20, 25},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(24).end_index(30).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{25, 30},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(29).end_index(35).build<KeyType::TABLE_DATA>("t")
+            },
+    }};
+    shuffle(input);
+    const std::array<std::vector<size_t>, 4> expected{{{0, 1, 2}, {2, 3}, {3, 4}, {4, 5}}};
+    ASSERT_TRUE(std::ranges::equal(structure_by_time_slice(input), expected));
+}
+
+// 
+TEST_F(TestSplitByTimeSlice, CliqueThenChain_TwoColsPerRowSlice) {
+    std::array<RangesAndKey, 12> input{{
+            RangesAndKey{
+                    RowRange{0, 5},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(10).end_index(15).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{0, 5},
+                    ColRange{2, 3},
+                    AtomKeyBuilder().start_index(10).end_index(15).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{5, 10},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(14).end_index(15).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{5, 10},
+                    ColRange{2, 3},
+                    AtomKeyBuilder().start_index(14).end_index(15).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{10, 15},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(14).end_index(20).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{10, 15},
+                    ColRange{2, 3},
+                    AtomKeyBuilder().start_index(14).end_index(20).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{15, 20},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(19).end_index(25).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{15, 20},
+                    ColRange{2, 3},
+                    AtomKeyBuilder().start_index(19).end_index(25).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{20, 25},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(24).end_index(30).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{20, 25},
+                    ColRange{2, 3},
+                    AtomKeyBuilder().start_index(24).end_index(30).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{25, 30},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(29).end_index(35).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{25, 30},
+                    ColRange{2, 3},
+                    AtomKeyBuilder().start_index(29).end_index(35).build<KeyType::TABLE_DATA>("t")
+            },
+    }};
+    shuffle(input);
+    const std::array<std::vector<size_t>, 4> expected{{{0, 1, 2, 3, 4, 5}, {4, 5, 6, 7}, {6, 7, 8, 9}, {8, 9, 10, 11}}};
+    ASSERT_TRUE(std::ranges::equal(structure_by_time_slice(input), expected));
+}
+
+// 
+TEST_F(TestSplitByTimeSlice, CliqueThenChain_ThreeColsPerRowSlice) {
+    std::array<RangesAndKey, 18> input{{
+            RangesAndKey{
+                    RowRange{0, 5},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(10).end_index(15).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{0, 5},
+                    ColRange{2, 3},
+                    AtomKeyBuilder().start_index(10).end_index(15).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{0, 5},
+                    ColRange{3, 4},
+                    AtomKeyBuilder().start_index(10).end_index(15).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{5, 10},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(14).end_index(15).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{5, 10},
+                    ColRange{2, 3},
+                    AtomKeyBuilder().start_index(14).end_index(15).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{5, 10},
+                    ColRange{3, 4},
+                    AtomKeyBuilder().start_index(14).end_index(15).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{10, 15},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(14).end_index(20).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{10, 15},
+                    ColRange{2, 3},
+                    AtomKeyBuilder().start_index(14).end_index(20).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{10, 15},
+                    ColRange{3, 4},
+                    AtomKeyBuilder().start_index(14).end_index(20).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{15, 20},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(19).end_index(25).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{15, 20},
+                    ColRange{2, 3},
+                    AtomKeyBuilder().start_index(19).end_index(25).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{15, 20},
+                    ColRange{3, 4},
+                    AtomKeyBuilder().start_index(19).end_index(25).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{20, 25},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(24).end_index(30).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{20, 25},
+                    ColRange{2, 3},
+                    AtomKeyBuilder().start_index(24).end_index(30).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{20, 25},
+                    ColRange{3, 4},
+                    AtomKeyBuilder().start_index(24).end_index(30).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{25, 30},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(29).end_index(35).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{25, 30},
+                    ColRange{2, 3},
+                    AtomKeyBuilder().start_index(29).end_index(35).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{25, 30},
+                    ColRange{3, 4},
+                    AtomKeyBuilder().start_index(29).end_index(35).build<KeyType::TABLE_DATA>("t")
+            },
+    }};
+    shuffle(input);
+    const std::array<std::vector<size_t>, 4> expected{{{0, 1, 2, 3, 4, 5, 6, 7, 8}, {6, 7, 8, 9, 10, 11}, {9, 10, 11, 12, 13, 14}, {12, 13, 14, 15, 16, 17}}};
+    ASSERT_TRUE(std::ranges::equal(structure_by_time_slice(input), expected));
+}
+
+// Extra: two cliques that share a single bridging row slice. [10,15) [14,15) [14,18) all share value
+// 14; [14,18) [17,18) [17,22) all share value 17. The slice [14,18) is in both cliques.
+TEST_F(TestSplitByTimeSlice, TwoCliquesShareBridgingRowSlice_OneColPerRowSlice) {
+    std::array<RangesAndKey, 5> input{{
+            RangesAndKey{
+                    RowRange{0, 5},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(10).end_index(15).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{5, 10},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(14).end_index(15).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{10, 15},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(14).end_index(18).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{15, 20},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(17).end_index(18).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{20, 25},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(17).end_index(22).build<KeyType::TABLE_DATA>("t")
+            },
+    }};
+    shuffle(input);
+    const std::array<std::vector<size_t>, 2> expected{{{0, 1, 2}, {2, 3, 4}}};
+    ASSERT_TRUE(std::ranges::equal(structure_by_time_slice(input), expected));
+}
+
+// Extra: a four slice chain [0,5) [4,10) [9,15) [14,20) (seam values 4, 9, 14 - each adjacent pair is
+// its own clique) followed by a disjoint three slice clique [30,35) [34,35) [34,40) sharing value 34.
+TEST_F(TestSplitByTimeSlice, ChainInterleavedWithClique_OneColPerRowSlice) {
+    std::array<RangesAndKey, 7> input{{
+            RangesAndKey{
+                    RowRange{0, 5},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(0).end_index(5).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{5, 10},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(4).end_index(10).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{10, 15},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(9).end_index(15).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{15, 20},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(14).end_index(20).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{20, 25},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(30).end_index(35).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{25, 30},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(34).end_index(35).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{30, 35},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(34).end_index(40).build<KeyType::TABLE_DATA>("t")
+            },
+    }};
+    shuffle(input);
+    const std::array<std::vector<size_t>, 4> expected{{{0, 1}, {1, 2}, {2, 3}, {4, 5, 6}}};
+    ASSERT_TRUE(std::ranges::equal(structure_by_time_slice(input), expected));
+}
+
+// Extra: an empty input produces no groups.
+TEST_F(TestSplitByTimeSlice, EmptyInput) {
+    std::array<RangesAndKey, 0> input{};
+    shuffle(input);
+    const std::array<std::vector<size_t>, 0> expected{};
+    ASSERT_TRUE(std::ranges::equal(structure_by_time_slice(input), expected));
+}
