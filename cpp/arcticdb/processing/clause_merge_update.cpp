@@ -429,35 +429,6 @@ bool update_column(
     return row_slice_changed;
 }
 
-/// Places all ranges and keys that could contain the same index value in a single logical unit to be processed by
-/// MergeUpdateClause::process.
-std::vector<std::vector<size_t>> structure_by_time_slice(std::span<RangesAndKey> ranges) {
-    std::ranges::sort(ranges, [](const RangesAndKey& left, const RangesAndKey& right) {
-        return std::tie(left.row_range().first, left.col_range().first) <
-               std::tie(right.row_range().first, right.col_range().first);
-    });
-    std::vector<std::vector<size_t>> res;
-    TimestampRange previous_time_range{std::numeric_limits<timestamp>::min(), std::numeric_limits<timestamp>::min()};
-    size_t overlapping_ranges{};
-    for (const auto& [idx, ranges_and_key] : folly::enumerate(ranges)) {
-        const TimestampRange& current_time_range = ranges_and_key.key_.time_range();
-        if (previous_time_range.second <= current_time_range.first) {
-            res.emplace_back();
-            const TimestampRange& first_overlap = ranges[idx - overlapping_ranges].key_.time_range();
-            if (first_overlap.second - 1 == current_time_range.first) {
-                for (size_t i = idx - overlapping_ranges; i < idx; ++i) {
-                    res.back().emplace_back(i);
-                }
-            }
-            overlapping_ranges = 0;
-            previous_time_range = current_time_range;
-        }
-        overlapping_ranges += current_time_range.second != previous_time_range.second;
-        res.back().emplace_back(idx);
-    }
-    return res;
-}
-
 std::vector<std::vector<size_t>> split_by_row_slice(
         const std::span<const RangesAndKey> ranges, std::span<const size_t> indexes
 ) {
