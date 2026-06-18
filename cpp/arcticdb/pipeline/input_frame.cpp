@@ -16,10 +16,39 @@
 
 namespace arcticdb::pipelines {
 
+namespace {
+SortedValue compute_index_sortedness(const Column& index_column) {
+    using TimeseriesTDT = stream::TimeseriesIndex::TypeDescTag;
+    auto column_data = index_column.data();
+    auto it = column_data.cbegin<TimeseriesTDT>();
+    const auto end = column_data.cend<TimeseriesTDT>();
+    if (it == end) {
+        return SortedValue::ASCENDING;
+    }
+    bool ascending = true;
+    bool descending = true;
+    auto prev = *it;
+    for (++it; it != end; ++it) {
+        const auto curr = *it;
+        if (curr < prev) {
+            ascending = false;
+        } else if (curr > prev) {
+            descending = false;
+        }
+        if (!ascending && !descending) {
+            return SortedValue::UNSORTED;
+        }
+        prev = curr;
+    }
+    return ascending ? SortedValue::ASCENDING : SortedValue::DESCENDING;
+}
+} // namespace
+
 InputFrame::InputFrame() : index(stream::empty_index()) {}
 
 void InputFrame::set_from_columns(
-        std::vector<Column>&& cols, StreamDescriptor&& desc, std::vector<sparrow::record_batch>&& arrow_buffer_owners
+        std::vector<Column>&& cols, StreamDescriptor&& desc, std::vector<sparrow::record_batch>&& arrow_buffer_owners,
+        SortednessScan sortedness_scan
 ) {
     util::check(norm_meta.has_experimental_arrow(), "Unexpected non-Arrow norm metadata provided with Arrow data");
     desc_ = std::move(desc);
@@ -34,9 +63,11 @@ void InputFrame::set_from_columns(
         );
         desc_.set_index({IndexDescriptorImpl::Type::TIMESTAMP, 1});
         index = stream::TimeseriesIndex{std::string(desc_.field(0).name())};
-        // We do not verify monotonicity of Arrow index columns, so the sort order is UNKNOWN. This avoids the
-        // O(n) check on write; the polars read path will not claim the column is sorted as a result.
-        seg.descriptor().set_sorted(SortedValue::UNKNOWN);
+        // Arrow input does not record sortedness up front (unlike pandas), so we have to compute it when required.
+        seg.descriptor().set_sorted(
+                sortedness_scan == SortednessScan::SCAN_IF_UNKNOWN ? compute_index_sortedness(seg.column(0))
+                                                                   : SortedValue::UNKNOWN
+        );
     } else {
         desc_.set_index({IndexDescriptorImpl::Type::ROWCOUNT, 0});
         index = stream::RowCountIndex{};

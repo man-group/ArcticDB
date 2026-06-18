@@ -14,7 +14,9 @@ import pandas as pd
 import pyarrow as pa
 import polars as pl
 import pytest
+from arcticdb import DataError
 from arcticdb.exceptions import SchemaException, StreamDescriptorMismatch, UserInputException
+from arcticdb_ext.exceptions import UnsortedDataException
 from arcticdb.options import ArrowOutputStringFormat
 from arcticdb.util.arrow import cast_string_columns
 from arcticdb.util.test import (
@@ -1383,3 +1385,80 @@ def test_arrow_buffer_released_after_write(in_memory_version_store_arrow):
     del tables, t
     gc.collect()
     assert sorted(released) == [0, 1, 2, 3, 4]
+
+
+def _ts_arrow_table(days):
+    return pa.table(
+        {
+            "ts": pa.array([pd.Timestamp(d) for d in days], pa.timestamp("ns")),
+            "col": pa.array(list(range(len(days))), pa.int64()),
+        }
+    )
+
+
+_SORTED_DAYS = ["2024-01-01", "2024-01-02", "2024-01-03"]
+_UNSORTED_DAYS = ["2024-01-03", "2024-01-01", "2024-01-02"]
+
+
+@pytest.mark.parametrize("method", ["write", "append", "update", "stage"])
+@pytest.mark.parametrize("validate_index", [True, False])
+@pytest.mark.parametrize("sorted_data", [True, False])
+def test_validate_index_arrow(lmdb_version_store_arrow, method, validate_index, sorted_data):
+    lib = lmdb_version_store_arrow
+    sym = "test_validate_index_arrow"
+    table = _ts_arrow_table(_SORTED_DAYS if sorted_data else _UNSORTED_DAYS)
+    if method == "append":
+        lib.write(sym, _ts_arrow_table(["2023-12-01", "2023-12-02"]), index_column=True, validate_index=True)
+    elif method == "update":
+        lib.write(sym, _ts_arrow_table(_SORTED_DAYS), index_column=True, validate_index=True)
+
+    ops = {
+        "write": lambda: lib.write(sym, table, validate_index=validate_index, index_column=True),
+        "append": lambda: lib.append(sym, table, validate_index=validate_index, index_column=True),
+        "update": lambda: lib.update(sym, table, index_column=True),
+        "stage": lambda: lib.stage(sym, table, validate_index=validate_index, index_column=True),
+    }
+    # update always validates the index; the other methods only when validate_index is set
+    if not sorted_data and (validate_index or method == "update"):
+        with pytest.raises(UnsortedDataException):
+            ops[method]()
+    else:
+        ops[method]()
+
+
+def _batch_rejected_as_unsorted(fn):
+    # batch_write/batch_append raise; batch_update surfaces per-symbol failures as DataError entries
+    try:
+        result = fn()
+    except UnsortedDataException:
+        return True
+    return any(isinstance(r, DataError) for r in result)
+
+
+@pytest.mark.parametrize("method", ["batch_write", "batch_append", "batch_update"])
+@pytest.mark.parametrize("validate_index", [True, False])
+@pytest.mark.parametrize("sorted_data", [True, False])
+def test_validate_index_arrow_batch(lmdb_version_store_arrow, method, validate_index, sorted_data):
+    lib = lmdb_version_store_arrow
+    sym = "test_validate_index_arrow_batch"
+    table = _ts_arrow_table(_SORTED_DAYS if sorted_data else _UNSORTED_DAYS)
+    if method == "batch_append":
+        lib.write(sym, _ts_arrow_table(["2023-12-01", "2023-12-02"]), index_column=True, validate_index=True)
+    elif method == "batch_update":
+        lib.write(sym, _ts_arrow_table(_SORTED_DAYS), index_column=True, validate_index=True)
+
+    ops = {
+        "batch_write": lambda: lib.batch_write(
+            [sym], [table], validate_index=validate_index, index_column_vector=[True]
+        ),
+        "batch_append": lambda: lib.batch_append(
+            [sym], [table], validate_index=validate_index, index_column_vector=[True]
+        ),
+        "batch_update": lambda: lib._batch_update_internal([sym], [table], [None], [None], index_column_vector=[True]),
+    }
+    # batch_update always validates the index; the others only when validate_index is set
+    if not sorted_data and (validate_index or method == "batch_update"):
+        assert _batch_rejected_as_unsorted(ops[method])
+    else:
+        result = ops[method]()
+        assert all(not isinstance(r, DataError) for r in result)

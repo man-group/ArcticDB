@@ -807,7 +807,7 @@ class NativeVersionStore:
         validate_index: bool, default=False
             If True, will verify that the index of `data` supports date range searches and update operations. This in effect tests that the data is sorted in ascending order.
             ArcticDB relies on Pandas to detect if data is sorted - you can call DataFrame.index.is_monotonic_increasing on your input DataFrame to see if Pandas believes the
-            data to be sorted. Note that no checks are performed for Arrow input data.
+            data to be sorted. For Arrow input data, ArcticDB checks the index column directly.
         index_column: bool, default=False
             Only applicable when data is a PyArrow Table or Polars DataFrame. If True, the first column
             is treated as the timeseries index.
@@ -981,7 +981,7 @@ class NativeVersionStore:
         validate_index: bool, default=False
             If True, will verify that resulting symbol will support date range searches and update operations. This in effect tests that the previous version of the
             data and `data` are both sorted in ascending order. ArcticDB relies on Pandas to detect if data is sorted - you can call DataFrame.index.is_monotonic_increasing
-            on your input DataFrame to see if Pandas believes the data to be sorted.  Note that no checks are performed for Arrow input data.
+            on your input DataFrame to see if Pandas believes the data to be sorted.  For Arrow input data, ArcticDB checks the index column directly.
         index_column: bool, default=False
             Only applicable when data is a PyArrow Table or Polars DataFrame. If True, the first column
             is treated as the timeseries index.
@@ -1819,7 +1819,7 @@ class NativeVersionStore:
             If set to True, it will verify for each entry in the batch whether the index of the data supports date range searches and update operations.
             This in effect tests that the data is sorted in ascending order. ArcticDB relies on Pandas to detect if data is sorted -
             you can call DataFrame.index.is_monotonic_increasing on your input DataFrame to see if Pandas believes the data to be sorted.
-            Note that no checks are performed for Arrow input data.
+            For Arrow input data, ArcticDB checks the index column directly.
         index_column_vector: Optional[List[bool]], default=None
             Only applicable when data is a PyArrow Table or Polars DataFrame. If True for a given entry,
             the first column is treated as the timeseries index.
@@ -2034,7 +2034,7 @@ class NativeVersionStore:
             If set to True, it will verify for each entry in the batch whether the index of the data supports date range searches and update operations.
             This in effect tests that the data is sorted in ascending order. ArcticDB relies on Pandas to detect if data is sorted -
             you can call DataFrame.index.is_monotonic_increasing on your input DataFrame to see if Pandas believes the data to be sorted.
-            Note that no checks are performed for Arrow input data.
+            For Arrow input data, ArcticDB checks the index column directly.
         index_column_vector: Optional[List[bool]], default=None
             Only applicable when data is a PyArrow Table or Polars DataFrame. If True for a given entry,
             the first column is treated as the timeseries index.
@@ -2834,7 +2834,7 @@ class NativeVersionStore:
             If True, will verify that the index of the symbol after this operation supports date range searches and
             update operations. This requires that the indexes of the incomplete segments are non-overlapping with each
             other, and, in the case of append=True, fall after the last index value in the previous version.
-            Note that no checks are performed for Arrow input data.
+            For Arrow input data, ArcticDB checks the index column directly.
         delete_staged_data_on_failure : bool, default=False
             Determines the handling of staged data when an exception occurs during the execution of the
             ``compact_incomplete`` function.

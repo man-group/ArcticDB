@@ -335,7 +335,10 @@ void tensors_to_frame(const py::tuple& tuple, const bool empty_types, InputFrame
     frame.set_from_tensors(std::move(desc), std::move(field_tensors), std::move(opt_index_tensor));
 }
 
-void record_batches_to_frame(const std::vector<std::shared_ptr<RecordBatchData>>& record_batches, InputFrame& frame) {
+void record_batches_to_frame(
+        const std::vector<std::shared_ptr<RecordBatchData>>& record_batches, InputFrame& frame,
+        pipelines::SortednessScan sortedness_scan
+) {
     util::check(
             frame.norm_meta.has_experimental_arrow(), "Unexpected non-Arrow norm metadata provided with Arrow data"
     );
@@ -349,12 +352,14 @@ void record_batches_to_frame(const std::vector<std::shared_ptr<RecordBatchData>>
         sparrow_record_batches.emplace_back(std::move(rbd->array_), std::move(rbd->schema_));
     }
     auto [columns, descriptor] = record_batches_to_columns(sparrow_record_batches, arrow_norm_metadata.has_index());
-    frame.set_from_columns(std::move(columns), std::move(descriptor), std::move(sparrow_record_batches));
+    frame.set_from_columns(
+            std::move(columns), std::move(descriptor), std::move(sparrow_record_batches), sortedness_scan
+    );
 }
 
 std::shared_ptr<InputFrame> py_ndf_to_frame(
         const StreamId& stream_name, const InputItem& item, const py::object& norm_meta, const py::object& user_meta,
-        bool empty_types
+        bool empty_types, pipelines::SortednessScan sortedness_scan
 ) {
     ARCTICDB_SUBSAMPLE_DEFAULT(NormalizeFrame)
     auto res = std::make_shared<InputFrame>();
@@ -367,7 +372,7 @@ std::shared_ptr<InputFrame> py_ndf_to_frame(
             item,
             [&](const py::tuple& tensors) { tensors_to_frame(tensors, empty_types, *res); },
             [&](const std::vector<std::shared_ptr<RecordBatchData>>& record_batches) {
-                record_batches_to_frame(record_batches, *res);
+                record_batches_to_frame(record_batches, *res, sortedness_scan);
             }
     );
     res->set_index_range();

@@ -29,6 +29,13 @@ concept ValidIndex = util::any_of<
         std::remove_cvref_t<std::remove_pointer_t<std::decay_t<IndexT>>>, stream::TimeseriesIndex,
         stream::RowCountIndex, stream::TableIndex, stream::EmptyIndex>;
 
+// Whether to determine the sort order of a timeseries index column by walking it (an O(n) scan).
+// Only applies to Arrow input for which sortedness is not known upfront. Pandas precomputes it on construction.
+enum class SortednessScan {
+    SKIP,            // do not scan; for Arrow, leave the index sort order as UNKNOWN
+    SCAN_IF_UNKNOWN, // for Arrow, walk the index column to determine its sort order
+};
+
 // This class originally wrapped numpy data, but with the addition of Arrow as an input format it is now a thin wrapper
 // around a variant representing either numpy or Arrow input data
 struct InputFrame {
@@ -71,9 +78,11 @@ struct InputFrame {
         );
     };
 
+    // With SortednessScan::SCAN_IF_UNKNOWN we do an O(n) verification of the sortedness of a timeseries index and
+    // use it to populate SortedValue. Otherwise the sort order is left as SortedValue::UNKNOWN.
     void set_from_columns(
             std::vector<Column>&& cols, StreamDescriptor&& desc,
-            std::vector<sparrow::record_batch>&& arrow_buffer_owners
+            std::vector<sparrow::record_batch>&& arrow_buffer_owners, SortednessScan sortedness_scan
     );
     StreamDescriptor& desc();
     const StreamDescriptor& desc() const;

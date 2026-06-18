@@ -78,12 +78,13 @@ std::variant<StringEncodingError, PyStringWrapper> py_unicode_to_buffer(
 NativeTensor obj_to_tensor(PyObject* ptr, bool empty_types, std::optional<std::string_view> column_name = std::nullopt);
 
 void record_batches_to_frame(
-        const std::vector<std::shared_ptr<RecordBatchData>>& record_batches, pipelines::InputFrame& frame
+        const std::vector<std::shared_ptr<RecordBatchData>>& record_batches, pipelines::InputFrame& frame,
+        pipelines::SortednessScan sortedness_scan
 );
 
 std::shared_ptr<pipelines::InputFrame> py_ndf_to_frame(
         const StreamId& stream_name, const InputItem& item, const py::object& norm_meta, const py::object& user_meta,
-        bool empty_types
+        bool empty_types, pipelines::SortednessScan sortedness_scan
 );
 
 std::shared_ptr<pipelines::InputFrame> py_none_to_frame();
