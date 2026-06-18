@@ -2193,6 +2193,13 @@ INSTANTIATE_TEST_SUITE_P(
         )
 );
 
+class TestSplitByTimeSlice : testing::Test {
+    TestSplitByTimeSlice() : g(rd()) {}
+    void shuffle(std::span<RangesAndKey> input) { std::ranges::shuffle(input, g); }
+    std::random_device rd;
+    std::mt19937 g;
+};
+
 TEST(MergeUpdateInsertIndexSpansMultipleSegments, LastIndexValueSameAsNextSegmentFirstTwoOverlapingSegments) {
     constexpr static std::array fields{
             FieldRef{{DataType::INT64, Dimension::Dim0}, "a"}, FieldRef{{DataType::INT32, Dimension::Dim0}, "b"}
