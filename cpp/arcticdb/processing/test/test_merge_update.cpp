@@ -2526,14 +2526,26 @@ TEST(MergeUpdateInsertIndexSpansMultipleSegments, TwoGroupsOfSegmentsWithMatchin
 // Example 1: the time ranges of the row slices do not intersect at all - every row slice is its own group.
 TEST_F(TestSplitByTimeSlice, DisjointTimeRanges_OneColPerRowSlice) {
     std::array<RangesAndKey, 4> input{{
-            RangesAndKey{RowRange{0, 5}, ColRange{1, 2},
-                         AtomKeyBuilder().start_index(0).end_index(10).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{5, 10}, ColRange{1, 2},
-                         AtomKeyBuilder().start_index(20).end_index(30).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{10, 15}, ColRange{1, 2},
-                         AtomKeyBuilder().start_index(40).end_index(50).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{15, 20}, ColRange{1, 2},
-                         AtomKeyBuilder().start_index(60).end_index(70).build<KeyType::TABLE_DATA>("t")},
+            RangesAndKey{
+                    RowRange{0, 5},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(0).end_index(10).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{5, 10},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(20).end_index(30).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{10, 15},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(40).end_index(50).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{15, 20},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(60).end_index(70).build<KeyType::TABLE_DATA>("t")
+            },
     }};
     shuffle(input);
     const std::array<std::vector<size_t>, 4> expected{{{0}, {1}, {2}, {3}}};
@@ -2542,22 +2554,46 @@ TEST_F(TestSplitByTimeSlice, DisjointTimeRanges_OneColPerRowSlice) {
 
 TEST_F(TestSplitByTimeSlice, DisjointTimeRanges_TwoColsPerRowSlice) {
     std::array<RangesAndKey, 8> input{{
-            RangesAndKey{RowRange{0, 5}, ColRange{1, 2},
-                         AtomKeyBuilder().start_index(0).end_index(10).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{0, 5}, ColRange{2, 3},
-                         AtomKeyBuilder().start_index(0).end_index(10).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{5, 10}, ColRange{1, 2},
-                         AtomKeyBuilder().start_index(20).end_index(30).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{5, 10}, ColRange{2, 3},
-                         AtomKeyBuilder().start_index(20).end_index(30).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{10, 15}, ColRange{1, 2},
-                         AtomKeyBuilder().start_index(40).end_index(50).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{10, 15}, ColRange{2, 3},
-                         AtomKeyBuilder().start_index(40).end_index(50).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{15, 20}, ColRange{1, 2},
-                         AtomKeyBuilder().start_index(60).end_index(70).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{15, 20}, ColRange{2, 3},
-                         AtomKeyBuilder().start_index(60).end_index(70).build<KeyType::TABLE_DATA>("t")},
+            RangesAndKey{
+                    RowRange{0, 5},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(0).end_index(10).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{0, 5},
+                    ColRange{2, 3},
+                    AtomKeyBuilder().start_index(0).end_index(10).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{5, 10},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(20).end_index(30).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{5, 10},
+                    ColRange{2, 3},
+                    AtomKeyBuilder().start_index(20).end_index(30).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{10, 15},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(40).end_index(50).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{10, 15},
+                    ColRange{2, 3},
+                    AtomKeyBuilder().start_index(40).end_index(50).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{15, 20},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(60).end_index(70).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{15, 20},
+                    ColRange{2, 3},
+                    AtomKeyBuilder().start_index(60).end_index(70).build<KeyType::TABLE_DATA>("t")
+            },
     }};
     shuffle(input);
     const std::array<std::vector<size_t>, 4> expected{{{0, 1}, {2, 3}, {4, 5}, {6, 7}}};
@@ -2566,30 +2602,66 @@ TEST_F(TestSplitByTimeSlice, DisjointTimeRanges_TwoColsPerRowSlice) {
 
 TEST_F(TestSplitByTimeSlice, DisjointTimeRanges_ThreeColsPerRowSlice) {
     std::array<RangesAndKey, 12> input{{
-            RangesAndKey{RowRange{0, 5}, ColRange{1, 2},
-                         AtomKeyBuilder().start_index(0).end_index(10).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{0, 5}, ColRange{2, 3},
-                         AtomKeyBuilder().start_index(0).end_index(10).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{0, 5}, ColRange{3, 4},
-                         AtomKeyBuilder().start_index(0).end_index(10).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{5, 10}, ColRange{1, 2},
-                         AtomKeyBuilder().start_index(20).end_index(30).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{5, 10}, ColRange{2, 3},
-                         AtomKeyBuilder().start_index(20).end_index(30).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{5, 10}, ColRange{3, 4},
-                         AtomKeyBuilder().start_index(20).end_index(30).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{10, 15}, ColRange{1, 2},
-                         AtomKeyBuilder().start_index(40).end_index(50).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{10, 15}, ColRange{2, 3},
-                         AtomKeyBuilder().start_index(40).end_index(50).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{10, 15}, ColRange{3, 4},
-                         AtomKeyBuilder().start_index(40).end_index(50).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{15, 20}, ColRange{1, 2},
-                         AtomKeyBuilder().start_index(60).end_index(70).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{15, 20}, ColRange{2, 3},
-                         AtomKeyBuilder().start_index(60).end_index(70).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{15, 20}, ColRange{3, 4},
-                         AtomKeyBuilder().start_index(60).end_index(70).build<KeyType::TABLE_DATA>("t")},
+            RangesAndKey{
+                    RowRange{0, 5},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(0).end_index(10).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{0, 5},
+                    ColRange{2, 3},
+                    AtomKeyBuilder().start_index(0).end_index(10).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{0, 5},
+                    ColRange{3, 4},
+                    AtomKeyBuilder().start_index(0).end_index(10).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{5, 10},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(20).end_index(30).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{5, 10},
+                    ColRange{2, 3},
+                    AtomKeyBuilder().start_index(20).end_index(30).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{5, 10},
+                    ColRange{3, 4},
+                    AtomKeyBuilder().start_index(20).end_index(30).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{10, 15},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(40).end_index(50).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{10, 15},
+                    ColRange{2, 3},
+                    AtomKeyBuilder().start_index(40).end_index(50).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{10, 15},
+                    ColRange{3, 4},
+                    AtomKeyBuilder().start_index(40).end_index(50).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{15, 20},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(60).end_index(70).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{15, 20},
+                    ColRange{2, 3},
+                    AtomKeyBuilder().start_index(60).end_index(70).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{15, 20},
+                    ColRange{3, 4},
+                    AtomKeyBuilder().start_index(60).end_index(70).build<KeyType::TABLE_DATA>("t")
+            },
     }};
     shuffle(input);
     const std::array<std::vector<size_t>, 4> expected{{{0, 1, 2}, {3, 4, 5}, {6, 7, 8}, {9, 10, 11}}};
@@ -2600,14 +2672,26 @@ TEST_F(TestSplitByTimeSlice, DisjointTimeRanges_ThreeColsPerRowSlice) {
 // value of [15,20) (19) equals the first value of [19,25) (19), so they form one group.
 TEST_F(TestSplitByTimeSlice, SingleSharedValueTwoRowSlices_OneColPerRowSlice) {
     std::array<RangesAndKey, 4> input{{
-            RangesAndKey{RowRange{0, 5}, ColRange{1, 2},
-                         AtomKeyBuilder().start_index(0).end_index(10).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{5, 10}, ColRange{1, 2},
-                         AtomKeyBuilder().start_index(15).end_index(20).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{10, 15}, ColRange{1, 2},
-                         AtomKeyBuilder().start_index(19).end_index(25).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{15, 20}, ColRange{1, 2},
-                         AtomKeyBuilder().start_index(30).end_index(50).build<KeyType::TABLE_DATA>("t")},
+            RangesAndKey{
+                    RowRange{0, 5},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(0).end_index(10).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{5, 10},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(15).end_index(20).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{10, 15},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(19).end_index(25).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{15, 20},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(30).end_index(50).build<KeyType::TABLE_DATA>("t")
+            },
     }};
     shuffle(input);
     const std::array<std::vector<size_t>, 3> expected{{{0}, {1, 2}, {3}}};
@@ -2616,22 +2700,46 @@ TEST_F(TestSplitByTimeSlice, SingleSharedValueTwoRowSlices_OneColPerRowSlice) {
 
 TEST_F(TestSplitByTimeSlice, SingleSharedValueTwoRowSlices_TwoColsPerRowSlice) {
     std::array<RangesAndKey, 8> input{{
-            RangesAndKey{RowRange{0, 5}, ColRange{1, 2},
-                         AtomKeyBuilder().start_index(0).end_index(10).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{0, 5}, ColRange{2, 3},
-                         AtomKeyBuilder().start_index(0).end_index(10).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{5, 10}, ColRange{1, 2},
-                         AtomKeyBuilder().start_index(15).end_index(20).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{5, 10}, ColRange{2, 3},
-                         AtomKeyBuilder().start_index(15).end_index(20).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{10, 15}, ColRange{1, 2},
-                         AtomKeyBuilder().start_index(19).end_index(25).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{10, 15}, ColRange{2, 3},
-                         AtomKeyBuilder().start_index(19).end_index(25).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{15, 20}, ColRange{1, 2},
-                         AtomKeyBuilder().start_index(30).end_index(50).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{15, 20}, ColRange{2, 3},
-                         AtomKeyBuilder().start_index(30).end_index(50).build<KeyType::TABLE_DATA>("t")},
+            RangesAndKey{
+                    RowRange{0, 5},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(0).end_index(10).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{0, 5},
+                    ColRange{2, 3},
+                    AtomKeyBuilder().start_index(0).end_index(10).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{5, 10},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(15).end_index(20).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{5, 10},
+                    ColRange{2, 3},
+                    AtomKeyBuilder().start_index(15).end_index(20).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{10, 15},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(19).end_index(25).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{10, 15},
+                    ColRange{2, 3},
+                    AtomKeyBuilder().start_index(19).end_index(25).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{15, 20},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(30).end_index(50).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{15, 20},
+                    ColRange{2, 3},
+                    AtomKeyBuilder().start_index(30).end_index(50).build<KeyType::TABLE_DATA>("t")
+            },
     }};
     shuffle(input);
     const std::array<std::vector<size_t>, 3> expected{{{0, 1}, {2, 3, 4, 5}, {6, 7}}};
@@ -2640,30 +2748,66 @@ TEST_F(TestSplitByTimeSlice, SingleSharedValueTwoRowSlices_TwoColsPerRowSlice) {
 
 TEST_F(TestSplitByTimeSlice, SingleSharedValueTwoRowSlices_ThreeColsPerRowSlice) {
     std::array<RangesAndKey, 12> input{{
-            RangesAndKey{RowRange{0, 5}, ColRange{1, 2},
-                         AtomKeyBuilder().start_index(0).end_index(10).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{0, 5}, ColRange{2, 3},
-                         AtomKeyBuilder().start_index(0).end_index(10).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{0, 5}, ColRange{3, 4},
-                         AtomKeyBuilder().start_index(0).end_index(10).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{5, 10}, ColRange{1, 2},
-                         AtomKeyBuilder().start_index(15).end_index(20).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{5, 10}, ColRange{2, 3},
-                         AtomKeyBuilder().start_index(15).end_index(20).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{5, 10}, ColRange{3, 4},
-                         AtomKeyBuilder().start_index(15).end_index(20).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{10, 15}, ColRange{1, 2},
-                         AtomKeyBuilder().start_index(19).end_index(25).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{10, 15}, ColRange{2, 3},
-                         AtomKeyBuilder().start_index(19).end_index(25).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{10, 15}, ColRange{3, 4},
-                         AtomKeyBuilder().start_index(19).end_index(25).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{15, 20}, ColRange{1, 2},
-                         AtomKeyBuilder().start_index(30).end_index(50).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{15, 20}, ColRange{2, 3},
-                         AtomKeyBuilder().start_index(30).end_index(50).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{15, 20}, ColRange{3, 4},
-                         AtomKeyBuilder().start_index(30).end_index(50).build<KeyType::TABLE_DATA>("t")},
+            RangesAndKey{
+                    RowRange{0, 5},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(0).end_index(10).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{0, 5},
+                    ColRange{2, 3},
+                    AtomKeyBuilder().start_index(0).end_index(10).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{0, 5},
+                    ColRange{3, 4},
+                    AtomKeyBuilder().start_index(0).end_index(10).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{5, 10},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(15).end_index(20).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{5, 10},
+                    ColRange{2, 3},
+                    AtomKeyBuilder().start_index(15).end_index(20).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{5, 10},
+                    ColRange{3, 4},
+                    AtomKeyBuilder().start_index(15).end_index(20).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{10, 15},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(19).end_index(25).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{10, 15},
+                    ColRange{2, 3},
+                    AtomKeyBuilder().start_index(19).end_index(25).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{10, 15},
+                    ColRange{3, 4},
+                    AtomKeyBuilder().start_index(19).end_index(25).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{15, 20},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(30).end_index(50).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{15, 20},
+                    ColRange{2, 3},
+                    AtomKeyBuilder().start_index(30).end_index(50).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{15, 20},
+                    ColRange{3, 4},
+                    AtomKeyBuilder().start_index(30).end_index(50).build<KeyType::TABLE_DATA>("t")
+            },
     }};
     shuffle(input);
     const std::array<std::vector<size_t>, 3> expected{{{0, 1, 2}, {3, 4, 5, 6, 7, 8}, {9, 10, 11}}};
@@ -2675,14 +2819,26 @@ TEST_F(TestSplitByTimeSlice, SingleSharedValueTwoRowSlices_ThreeColsPerRowSlice)
 // [20,36) is disjoint.
 TEST_F(TestSplitByTimeSlice, SharedValueSpansThreeRowSlices_OneColPerRowSlice) {
     std::array<RangesAndKey, 4> input{{
-            RangesAndKey{RowRange{0, 5}, ColRange{1, 2},
-                         AtomKeyBuilder().start_index(10).end_index(15).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{5, 10}, ColRange{1, 2},
-                         AtomKeyBuilder().start_index(14).end_index(15).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{10, 15}, ColRange{1, 2},
-                         AtomKeyBuilder().start_index(14).end_index(15).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{15, 20}, ColRange{1, 2},
-                         AtomKeyBuilder().start_index(20).end_index(36).build<KeyType::TABLE_DATA>("t")},
+            RangesAndKey{
+                    RowRange{0, 5},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(10).end_index(15).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{5, 10},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(14).end_index(15).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{10, 15},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(14).end_index(15).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{15, 20},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(20).end_index(36).build<KeyType::TABLE_DATA>("t")
+            },
     }};
     shuffle(input);
     const std::array<std::vector<size_t>, 2> expected{{{0, 1, 2}, {3}}};
@@ -2691,22 +2847,46 @@ TEST_F(TestSplitByTimeSlice, SharedValueSpansThreeRowSlices_OneColPerRowSlice) {
 
 TEST_F(TestSplitByTimeSlice, SharedValueSpansThreeRowSlices_TwoColsPerRowSlice) {
     std::array<RangesAndKey, 8> input{{
-            RangesAndKey{RowRange{0, 5}, ColRange{1, 2},
-                         AtomKeyBuilder().start_index(10).end_index(15).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{0, 5}, ColRange{2, 3},
-                         AtomKeyBuilder().start_index(10).end_index(15).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{5, 10}, ColRange{1, 2},
-                         AtomKeyBuilder().start_index(14).end_index(15).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{5, 10}, ColRange{2, 3},
-                         AtomKeyBuilder().start_index(14).end_index(15).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{10, 15}, ColRange{1, 2},
-                         AtomKeyBuilder().start_index(14).end_index(15).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{10, 15}, ColRange{2, 3},
-                         AtomKeyBuilder().start_index(14).end_index(15).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{15, 20}, ColRange{1, 2},
-                         AtomKeyBuilder().start_index(20).end_index(36).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{15, 20}, ColRange{2, 3},
-                         AtomKeyBuilder().start_index(20).end_index(36).build<KeyType::TABLE_DATA>("t")},
+            RangesAndKey{
+                    RowRange{0, 5},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(10).end_index(15).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{0, 5},
+                    ColRange{2, 3},
+                    AtomKeyBuilder().start_index(10).end_index(15).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{5, 10},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(14).end_index(15).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{5, 10},
+                    ColRange{2, 3},
+                    AtomKeyBuilder().start_index(14).end_index(15).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{10, 15},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(14).end_index(15).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{10, 15},
+                    ColRange{2, 3},
+                    AtomKeyBuilder().start_index(14).end_index(15).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{15, 20},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(20).end_index(36).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{15, 20},
+                    ColRange{2, 3},
+                    AtomKeyBuilder().start_index(20).end_index(36).build<KeyType::TABLE_DATA>("t")
+            },
     }};
     shuffle(input);
     const std::array<std::vector<size_t>, 2> expected{{{0, 1, 2, 3, 4, 5}, {6, 7}}};
@@ -2715,30 +2895,66 @@ TEST_F(TestSplitByTimeSlice, SharedValueSpansThreeRowSlices_TwoColsPerRowSlice) 
 
 TEST_F(TestSplitByTimeSlice, SharedValueSpansThreeRowSlices_ThreeColsPerRowSlice) {
     std::array<RangesAndKey, 12> input{{
-            RangesAndKey{RowRange{0, 5}, ColRange{1, 2},
-                         AtomKeyBuilder().start_index(10).end_index(15).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{0, 5}, ColRange{2, 3},
-                         AtomKeyBuilder().start_index(10).end_index(15).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{0, 5}, ColRange{3, 4},
-                         AtomKeyBuilder().start_index(10).end_index(15).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{5, 10}, ColRange{1, 2},
-                         AtomKeyBuilder().start_index(14).end_index(15).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{5, 10}, ColRange{2, 3},
-                         AtomKeyBuilder().start_index(14).end_index(15).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{5, 10}, ColRange{3, 4},
-                         AtomKeyBuilder().start_index(14).end_index(15).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{10, 15}, ColRange{1, 2},
-                         AtomKeyBuilder().start_index(14).end_index(15).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{10, 15}, ColRange{2, 3},
-                         AtomKeyBuilder().start_index(14).end_index(15).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{10, 15}, ColRange{3, 4},
-                         AtomKeyBuilder().start_index(14).end_index(15).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{15, 20}, ColRange{1, 2},
-                         AtomKeyBuilder().start_index(20).end_index(36).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{15, 20}, ColRange{2, 3},
-                         AtomKeyBuilder().start_index(20).end_index(36).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{15, 20}, ColRange{3, 4},
-                         AtomKeyBuilder().start_index(20).end_index(36).build<KeyType::TABLE_DATA>("t")},
+            RangesAndKey{
+                    RowRange{0, 5},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(10).end_index(15).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{0, 5},
+                    ColRange{2, 3},
+                    AtomKeyBuilder().start_index(10).end_index(15).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{0, 5},
+                    ColRange{3, 4},
+                    AtomKeyBuilder().start_index(10).end_index(15).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{5, 10},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(14).end_index(15).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{5, 10},
+                    ColRange{2, 3},
+                    AtomKeyBuilder().start_index(14).end_index(15).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{5, 10},
+                    ColRange{3, 4},
+                    AtomKeyBuilder().start_index(14).end_index(15).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{10, 15},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(14).end_index(15).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{10, 15},
+                    ColRange{2, 3},
+                    AtomKeyBuilder().start_index(14).end_index(15).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{10, 15},
+                    ColRange{3, 4},
+                    AtomKeyBuilder().start_index(14).end_index(15).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{15, 20},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(20).end_index(36).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{15, 20},
+                    ColRange{2, 3},
+                    AtomKeyBuilder().start_index(20).end_index(36).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{15, 20},
+                    ColRange{3, 4},
+                    AtomKeyBuilder().start_index(20).end_index(36).build<KeyType::TABLE_DATA>("t")
+            },
     }};
     shuffle(input);
     const std::array<std::vector<size_t>, 2> expected{{{0, 1, 2, 3, 4, 5, 6, 7, 8}, {9, 10, 11}}};
@@ -2749,14 +2965,26 @@ TEST_F(TestSplitByTimeSlice, SharedValueSpansThreeRowSlices_ThreeColsPerRowSlice
 // first slice, fills the two middle ones and starts the last), so all four form a single group.
 TEST_F(TestSplitByTimeSlice, SharedValueSpansFourRowSlices_OneColPerRowSlice) {
     std::array<RangesAndKey, 4> input{{
-            RangesAndKey{RowRange{0, 5}, ColRange{1, 2},
-                         AtomKeyBuilder().start_index(10).end_index(15).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{5, 10}, ColRange{1, 2},
-                         AtomKeyBuilder().start_index(14).end_index(15).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{10, 15}, ColRange{1, 2},
-                         AtomKeyBuilder().start_index(14).end_index(15).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{15, 20}, ColRange{1, 2},
-                         AtomKeyBuilder().start_index(14).end_index(16).build<KeyType::TABLE_DATA>("t")},
+            RangesAndKey{
+                    RowRange{0, 5},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(10).end_index(15).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{5, 10},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(14).end_index(15).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{10, 15},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(14).end_index(15).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{15, 20},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(14).end_index(16).build<KeyType::TABLE_DATA>("t")
+            },
     }};
     shuffle(input);
     const std::array<std::vector<size_t>, 1> expected{{{0, 1, 2, 3}}};
@@ -2765,22 +2993,46 @@ TEST_F(TestSplitByTimeSlice, SharedValueSpansFourRowSlices_OneColPerRowSlice) {
 
 TEST_F(TestSplitByTimeSlice, SharedValueSpansFourRowSlices_TwoColsPerRowSlice) {
     std::array<RangesAndKey, 8> input{{
-            RangesAndKey{RowRange{0, 5}, ColRange{1, 2},
-                         AtomKeyBuilder().start_index(10).end_index(15).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{0, 5}, ColRange{2, 3},
-                         AtomKeyBuilder().start_index(10).end_index(15).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{5, 10}, ColRange{1, 2},
-                         AtomKeyBuilder().start_index(14).end_index(15).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{5, 10}, ColRange{2, 3},
-                         AtomKeyBuilder().start_index(14).end_index(15).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{10, 15}, ColRange{1, 2},
-                         AtomKeyBuilder().start_index(14).end_index(15).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{10, 15}, ColRange{2, 3},
-                         AtomKeyBuilder().start_index(14).end_index(15).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{15, 20}, ColRange{1, 2},
-                         AtomKeyBuilder().start_index(14).end_index(16).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{15, 20}, ColRange{2, 3},
-                         AtomKeyBuilder().start_index(14).end_index(16).build<KeyType::TABLE_DATA>("t")},
+            RangesAndKey{
+                    RowRange{0, 5},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(10).end_index(15).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{0, 5},
+                    ColRange{2, 3},
+                    AtomKeyBuilder().start_index(10).end_index(15).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{5, 10},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(14).end_index(15).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{5, 10},
+                    ColRange{2, 3},
+                    AtomKeyBuilder().start_index(14).end_index(15).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{10, 15},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(14).end_index(15).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{10, 15},
+                    ColRange{2, 3},
+                    AtomKeyBuilder().start_index(14).end_index(15).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{15, 20},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(14).end_index(16).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{15, 20},
+                    ColRange{2, 3},
+                    AtomKeyBuilder().start_index(14).end_index(16).build<KeyType::TABLE_DATA>("t")
+            },
     }};
     shuffle(input);
     const std::array<std::vector<size_t>, 1> expected{{{0, 1, 2, 3, 4, 5, 6, 7}}};
@@ -2789,30 +3041,66 @@ TEST_F(TestSplitByTimeSlice, SharedValueSpansFourRowSlices_TwoColsPerRowSlice) {
 
 TEST_F(TestSplitByTimeSlice, SharedValueSpansFourRowSlices_ThreeColsPerRowSlice) {
     std::array<RangesAndKey, 12> input{{
-            RangesAndKey{RowRange{0, 5}, ColRange{1, 2},
-                         AtomKeyBuilder().start_index(10).end_index(15).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{0, 5}, ColRange{2, 3},
-                         AtomKeyBuilder().start_index(10).end_index(15).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{0, 5}, ColRange{3, 4},
-                         AtomKeyBuilder().start_index(10).end_index(15).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{5, 10}, ColRange{1, 2},
-                         AtomKeyBuilder().start_index(14).end_index(15).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{5, 10}, ColRange{2, 3},
-                         AtomKeyBuilder().start_index(14).end_index(15).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{5, 10}, ColRange{3, 4},
-                         AtomKeyBuilder().start_index(14).end_index(15).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{10, 15}, ColRange{1, 2},
-                         AtomKeyBuilder().start_index(14).end_index(15).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{10, 15}, ColRange{2, 3},
-                         AtomKeyBuilder().start_index(14).end_index(15).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{10, 15}, ColRange{3, 4},
-                         AtomKeyBuilder().start_index(14).end_index(15).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{15, 20}, ColRange{1, 2},
-                         AtomKeyBuilder().start_index(14).end_index(16).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{15, 20}, ColRange{2, 3},
-                         AtomKeyBuilder().start_index(14).end_index(16).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{15, 20}, ColRange{3, 4},
-                         AtomKeyBuilder().start_index(14).end_index(16).build<KeyType::TABLE_DATA>("t")},
+            RangesAndKey{
+                    RowRange{0, 5},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(10).end_index(15).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{0, 5},
+                    ColRange{2, 3},
+                    AtomKeyBuilder().start_index(10).end_index(15).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{0, 5},
+                    ColRange{3, 4},
+                    AtomKeyBuilder().start_index(10).end_index(15).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{5, 10},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(14).end_index(15).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{5, 10},
+                    ColRange{2, 3},
+                    AtomKeyBuilder().start_index(14).end_index(15).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{5, 10},
+                    ColRange{3, 4},
+                    AtomKeyBuilder().start_index(14).end_index(15).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{10, 15},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(14).end_index(15).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{10, 15},
+                    ColRange{2, 3},
+                    AtomKeyBuilder().start_index(14).end_index(15).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{10, 15},
+                    ColRange{3, 4},
+                    AtomKeyBuilder().start_index(14).end_index(15).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{15, 20},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(14).end_index(16).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{15, 20},
+                    ColRange{2, 3},
+                    AtomKeyBuilder().start_index(14).end_index(16).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{15, 20},
+                    ColRange{3, 4},
+                    AtomKeyBuilder().start_index(14).end_index(16).build<KeyType::TABLE_DATA>("t")
+            },
     }};
     shuffle(input);
     const std::array<std::vector<size_t>, 1> expected{{{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11}}};
@@ -2825,38 +3113,75 @@ TEST_F(TestSplitByTimeSlice, SharedValueSpansFourRowSlices_ThreeColsPerRowSlice)
 // both groups.
 TEST_F(TestSplitByTimeSlice, Chain_OneColPerRowSlice) {
     std::array<RangesAndKey, 4> input{{
-            RangesAndKey{RowRange{0, 5}, ColRange{1, 2},
-                         AtomKeyBuilder().start_index(100).end_index(105).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{5, 10}, ColRange{1, 2},
-                         AtomKeyBuilder().start_index(104).end_index(110).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{10, 15}, ColRange{1, 2},
-                         AtomKeyBuilder().start_index(109).end_index(115).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{15, 20}, ColRange{1, 2},
-                         AtomKeyBuilder().start_index(114).end_index(120).build<KeyType::TABLE_DATA>("t")},
+            RangesAndKey{
+                    RowRange{0, 5},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(100).end_index(105).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{5, 10},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(104).end_index(110).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{10, 15},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(109).end_index(115).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{15, 20},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(114).end_index(120).build<KeyType::TABLE_DATA>("t")
+            },
     }};
     shuffle(input);
     const std::array<std::vector<size_t>, 3> expected{{{0, 1}, {1, 2}, {2, 3}}};
-    ASSERT_TRUE(std::ranges::equal(structure_by_time_slice(input), expected));
+    const std::vector<std::vector<size_t>> result = structure_by_time_slice(input);
+    ASSERT_TRUE(std::ranges::equal(result, expected));
 }
 
 TEST_F(TestSplitByTimeSlice, Chain_TwoColsPerRowSlice) {
     std::array<RangesAndKey, 8> input{{
-            RangesAndKey{RowRange{0, 5}, ColRange{1, 2},
-                         AtomKeyBuilder().start_index(100).end_index(105).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{0, 5}, ColRange{2, 3},
-                         AtomKeyBuilder().start_index(100).end_index(105).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{5, 10}, ColRange{1, 2},
-                         AtomKeyBuilder().start_index(104).end_index(110).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{5, 10}, ColRange{2, 3},
-                         AtomKeyBuilder().start_index(104).end_index(110).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{10, 15}, ColRange{1, 2},
-                         AtomKeyBuilder().start_index(109).end_index(115).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{10, 15}, ColRange{2, 3},
-                         AtomKeyBuilder().start_index(109).end_index(115).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{15, 20}, ColRange{1, 2},
-                         AtomKeyBuilder().start_index(114).end_index(120).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{15, 20}, ColRange{2, 3},
-                         AtomKeyBuilder().start_index(114).end_index(120).build<KeyType::TABLE_DATA>("t")},
+            RangesAndKey{
+                    RowRange{0, 5},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(100).end_index(105).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{0, 5},
+                    ColRange{2, 3},
+                    AtomKeyBuilder().start_index(100).end_index(105).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{5, 10},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(104).end_index(110).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{5, 10},
+                    ColRange{2, 3},
+                    AtomKeyBuilder().start_index(104).end_index(110).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{10, 15},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(109).end_index(115).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{10, 15},
+                    ColRange{2, 3},
+                    AtomKeyBuilder().start_index(109).end_index(115).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{15, 20},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(114).end_index(120).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{15, 20},
+                    ColRange{2, 3},
+                    AtomKeyBuilder().start_index(114).end_index(120).build<KeyType::TABLE_DATA>("t")
+            },
     }};
     shuffle(input);
     const std::array<std::vector<size_t>, 3> expected{{{0, 1, 2, 3}, {2, 3, 4, 5}, {4, 5, 6, 7}}};
@@ -2865,47 +3190,90 @@ TEST_F(TestSplitByTimeSlice, Chain_TwoColsPerRowSlice) {
 
 TEST_F(TestSplitByTimeSlice, Chain_ThreeColsPerRowSlice) {
     std::array<RangesAndKey, 12> input{{
-            RangesAndKey{RowRange{0, 5}, ColRange{1, 2},
-                         AtomKeyBuilder().start_index(100).end_index(105).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{0, 5}, ColRange{2, 3},
-                         AtomKeyBuilder().start_index(100).end_index(105).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{0, 5}, ColRange{3, 4},
-                         AtomKeyBuilder().start_index(100).end_index(105).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{5, 10}, ColRange{1, 2},
-                         AtomKeyBuilder().start_index(104).end_index(110).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{5, 10}, ColRange{2, 3},
-                         AtomKeyBuilder().start_index(104).end_index(110).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{5, 10}, ColRange{3, 4},
-                         AtomKeyBuilder().start_index(104).end_index(110).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{10, 15}, ColRange{1, 2},
-                         AtomKeyBuilder().start_index(109).end_index(115).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{10, 15}, ColRange{2, 3},
-                         AtomKeyBuilder().start_index(109).end_index(115).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{10, 15}, ColRange{3, 4},
-                         AtomKeyBuilder().start_index(109).end_index(115).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{15, 20}, ColRange{1, 2},
-                         AtomKeyBuilder().start_index(114).end_index(120).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{15, 20}, ColRange{2, 3},
-                         AtomKeyBuilder().start_index(114).end_index(120).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{15, 20}, ColRange{3, 4},
-                         AtomKeyBuilder().start_index(114).end_index(120).build<KeyType::TABLE_DATA>("t")},
+            RangesAndKey{
+                    RowRange{0, 5},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(100).end_index(105).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{0, 5},
+                    ColRange{2, 3},
+                    AtomKeyBuilder().start_index(100).end_index(105).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{0, 5},
+                    ColRange{3, 4},
+                    AtomKeyBuilder().start_index(100).end_index(105).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{5, 10},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(104).end_index(110).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{5, 10},
+                    ColRange{2, 3},
+                    AtomKeyBuilder().start_index(104).end_index(110).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{5, 10},
+                    ColRange{3, 4},
+                    AtomKeyBuilder().start_index(104).end_index(110).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{10, 15},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(109).end_index(115).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{10, 15},
+                    ColRange{2, 3},
+                    AtomKeyBuilder().start_index(109).end_index(115).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{10, 15},
+                    ColRange{3, 4},
+                    AtomKeyBuilder().start_index(109).end_index(115).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{15, 20},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(114).end_index(120).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{15, 20},
+                    ColRange{2, 3},
+                    AtomKeyBuilder().start_index(114).end_index(120).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{15, 20},
+                    ColRange{3, 4},
+                    AtomKeyBuilder().start_index(114).end_index(120).build<KeyType::TABLE_DATA>("t")
+            },
     }};
     shuffle(input);
-    const std::array<std::vector<size_t>, 3> expected{
-            {{0, 1, 2, 3, 4, 5}, {3, 4, 5, 6, 7, 8}, {6, 7, 8, 9, 10, 11}}
-    };
+    const std::array<std::vector<size_t>, 3> expected{{{0, 1, 2, 3, 4, 5}, {3, 4, 5, 6, 7, 8}, {6, 7, 8, 9, 10, 11}}};
     ASSERT_TRUE(std::ranges::equal(structure_by_time_slice(input), expected));
 }
 
 // Extra: a single row slice with several column slices is one group.
 TEST_F(TestSplitByTimeSlice, SingleRowSlice_ThreeColsPerRowSlice) {
     std::array<RangesAndKey, 3> input{{
-            RangesAndKey{RowRange{0, 5}, ColRange{1, 2},
-                         AtomKeyBuilder().start_index(0).end_index(10).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{0, 5}, ColRange{2, 3},
-                         AtomKeyBuilder().start_index(0).end_index(10).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{0, 5}, ColRange{3, 4},
-                         AtomKeyBuilder().start_index(0).end_index(10).build<KeyType::TABLE_DATA>("t")},
+            RangesAndKey{
+                    RowRange{0, 5},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(0).end_index(10).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{0, 5},
+                    ColRange{2, 3},
+                    AtomKeyBuilder().start_index(0).end_index(10).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{0, 5},
+                    ColRange{3, 4},
+                    AtomKeyBuilder().start_index(0).end_index(10).build<KeyType::TABLE_DATA>("t")
+            },
     }};
     shuffle(input);
     const std::array<std::vector<size_t>, 1> expected{{{0, 1, 2}}};
@@ -2916,10 +3284,16 @@ TEST_F(TestSplitByTimeSlice, SingleRowSlice_ThreeColsPerRowSlice) {
 // value 10), so they are separate groups.
 TEST_F(TestSplitByTimeSlice, AdjacentTimeRangesShareNoValue_OneColPerRowSlice) {
     std::array<RangesAndKey, 2> input{{
-            RangesAndKey{RowRange{0, 5}, ColRange{1, 2},
-                         AtomKeyBuilder().start_index(0).end_index(10).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{5, 10}, ColRange{1, 2},
-                         AtomKeyBuilder().start_index(10).end_index(20).build<KeyType::TABLE_DATA>("t")},
+            RangesAndKey{
+                    RowRange{0, 5},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(0).end_index(10).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{5, 10},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(10).end_index(20).build<KeyType::TABLE_DATA>("t")
+            },
     }};
     shuffle(input);
     const std::array<std::vector<size_t>, 2> expected{{{0}, {1}}};
@@ -2929,14 +3303,26 @@ TEST_F(TestSplitByTimeSlice, AdjacentTimeRangesShareNoValue_OneColPerRowSlice) {
 // Extra: two independent overlapping pairs separated by a gap, producing two groups.
 TEST_F(TestSplitByTimeSlice, TwoSeparateSharedValueGroups_OneColPerRowSlice) {
     std::array<RangesAndKey, 4> input{{
-            RangesAndKey{RowRange{0, 5}, ColRange{1, 2},
-                         AtomKeyBuilder().start_index(0).end_index(10).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{5, 10}, ColRange{1, 2},
-                         AtomKeyBuilder().start_index(9).end_index(15).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{10, 15}, ColRange{1, 2},
-                         AtomKeyBuilder().start_index(30).end_index(40).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{15, 20}, ColRange{1, 2},
-                         AtomKeyBuilder().start_index(39).end_index(45).build<KeyType::TABLE_DATA>("t")},
+            RangesAndKey{
+                    RowRange{0, 5},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(0).end_index(10).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{5, 10},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(9).end_index(15).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{10, 15},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(30).end_index(40).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{15, 20},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(39).end_index(45).build<KeyType::TABLE_DATA>("t")
+            },
     }};
     shuffle(input);
     const std::array<std::vector<size_t>, 2> expected{{{0, 1}, {2, 3}}};
@@ -2946,10 +3332,16 @@ TEST_F(TestSplitByTimeSlice, TwoSeparateSharedValueGroups_OneColPerRowSlice) {
 // Extra: the minimal overlap - last value of the first slice (4) equals the first value of the second.
 TEST_F(TestSplitByTimeSlice, MinimalSeamOverlap_OneColPerRowSlice) {
     std::array<RangesAndKey, 2> input{{
-            RangesAndKey{RowRange{0, 5}, ColRange{1, 2},
-                         AtomKeyBuilder().start_index(0).end_index(5).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{5, 10}, ColRange{1, 2},
-                         AtomKeyBuilder().start_index(4).end_index(10).build<KeyType::TABLE_DATA>("t")},
+            RangesAndKey{
+                    RowRange{0, 5},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(0).end_index(5).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{5, 10},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(4).end_index(10).build<KeyType::TABLE_DATA>("t")
+            },
     }};
     shuffle(input);
     const std::array<std::vector<size_t>, 1> expected{{{0, 1}}};
@@ -2960,16 +3352,31 @@ TEST_F(TestSplitByTimeSlice, MinimalSeamOverlap_OneColPerRowSlice) {
 // neighbouring groups.
 TEST_F(TestSplitByTimeSlice, ChainOfFiveRowSlices_OneColPerRowSlice) {
     std::array<RangesAndKey, 5> input{{
-            RangesAndKey{RowRange{0, 5}, ColRange{1, 2},
-                         AtomKeyBuilder().start_index(100).end_index(105).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{5, 10}, ColRange{1, 2},
-                         AtomKeyBuilder().start_index(104).end_index(110).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{10, 15}, ColRange{1, 2},
-                         AtomKeyBuilder().start_index(109).end_index(115).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{15, 20}, ColRange{1, 2},
-                         AtomKeyBuilder().start_index(114).end_index(120).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{20, 25}, ColRange{1, 2},
-                         AtomKeyBuilder().start_index(119).end_index(125).build<KeyType::TABLE_DATA>("t")},
+            RangesAndKey{
+                    RowRange{0, 5},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(100).end_index(105).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{5, 10},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(104).end_index(110).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{10, 15},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(109).end_index(115).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{15, 20},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(114).end_index(120).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{20, 25},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(119).end_index(125).build<KeyType::TABLE_DATA>("t")
+            },
     }};
     shuffle(input);
     const std::array<std::vector<size_t>, 4> expected{{{0, 1}, {1, 2}, {2, 3}, {3, 4}}};
@@ -2981,20 +3388,41 @@ TEST_F(TestSplitByTimeSlice, ChainOfFiveRowSlices_OneColPerRowSlice) {
 // value 49. Verifies cliques and isolated slices interleave correctly.
 TEST_F(TestSplitByTimeSlice, IsolatedThenCliqueThenIsolatedThenClique_OneColPerRowSlice) {
     std::array<RangesAndKey, 7> input{{
-            RangesAndKey{RowRange{0, 5}, ColRange{1, 2},
-                         AtomKeyBuilder().start_index(0).end_index(10).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{5, 10}, ColRange{1, 2},
-                         AtomKeyBuilder().start_index(15).end_index(20).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{10, 15}, ColRange{1, 2},
-                         AtomKeyBuilder().start_index(19).end_index(20).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{15, 20}, ColRange{1, 2},
-                         AtomKeyBuilder().start_index(19).end_index(25).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{20, 25}, ColRange{1, 2},
-                         AtomKeyBuilder().start_index(30).end_index(40).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{25, 30}, ColRange{1, 2},
-                         AtomKeyBuilder().start_index(45).end_index(50).build<KeyType::TABLE_DATA>("t")},
-            RangesAndKey{RowRange{30, 35}, ColRange{1, 2},
-                         AtomKeyBuilder().start_index(49).end_index(55).build<KeyType::TABLE_DATA>("t")},
+            RangesAndKey{
+                    RowRange{0, 5},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(0).end_index(10).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{5, 10},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(15).end_index(20).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{10, 15},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(19).end_index(20).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{15, 20},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(19).end_index(25).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{20, 25},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(30).end_index(40).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{25, 30},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(45).end_index(50).build<KeyType::TABLE_DATA>("t")
+            },
+            RangesAndKey{
+                    RowRange{30, 35},
+                    ColRange{1, 2},
+                    AtomKeyBuilder().start_index(49).end_index(55).build<KeyType::TABLE_DATA>("t")
+            },
     }};
     shuffle(input);
     const std::array<std::vector<size_t>, 4> expected{{{0}, {1, 2, 3}, {4}, {5, 6}}};

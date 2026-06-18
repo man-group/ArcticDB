@@ -86,9 +86,11 @@ std::vector<std::vector<size_t>> structure_by_time_slice(std::span<RangesAndKey>
                 for (size_t i = idx - overlapping_ranges; i < idx; ++i) {
                     res.back().emplace_back(i);
                 }
+                previous_time_range = first_overlap;
+            } else {
+                previous_time_range = current_time_range;
             }
             overlapping_ranges = 0;
-            previous_time_range = current_time_range;
         }
         overlapping_ranges += current_time_range.second != previous_time_range.second;
         res.back().emplace_back(idx);
