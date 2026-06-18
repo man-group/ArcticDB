@@ -3470,7 +3470,7 @@ TEST_F(TestSplitByTimeSlice, CliqueThenChain_OneColPerRowSlice) {
     ASSERT_TRUE(std::ranges::equal(structure_by_time_slice(input), expected));
 }
 
-// 
+//
 TEST_F(TestSplitByTimeSlice, CliqueThenChain_TwoColsPerRowSlice) {
     std::array<RangesAndKey, 12> input{{
             RangesAndKey{
@@ -3539,7 +3539,7 @@ TEST_F(TestSplitByTimeSlice, CliqueThenChain_TwoColsPerRowSlice) {
     ASSERT_TRUE(std::ranges::equal(structure_by_time_slice(input), expected));
 }
 
-// 
+//
 TEST_F(TestSplitByTimeSlice, CliqueThenChain_ThreeColsPerRowSlice) {
     std::array<RangesAndKey, 18> input{{
             RangesAndKey{
@@ -3634,7 +3634,9 @@ TEST_F(TestSplitByTimeSlice, CliqueThenChain_ThreeColsPerRowSlice) {
             },
     }};
     shuffle(input);
-    const std::array<std::vector<size_t>, 4> expected{{{0, 1, 2, 3, 4, 5, 6, 7, 8}, {6, 7, 8, 9, 10, 11}, {9, 10, 11, 12, 13, 14}, {12, 13, 14, 15, 16, 17}}};
+    const std::array<std::vector<size_t>, 4> expected{
+            {{0, 1, 2, 3, 4, 5, 6, 7, 8}, {6, 7, 8, 9, 10, 11}, {9, 10, 11, 12, 13, 14}, {12, 13, 14, 15, 16, 17}}
+    };
     ASSERT_TRUE(std::ranges::equal(structure_by_time_slice(input), expected));
 }
 
