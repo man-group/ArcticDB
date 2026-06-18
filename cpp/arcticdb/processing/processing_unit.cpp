@@ -8,6 +8,8 @@
 
 #include <arcticdb/processing/processing_unit.hpp>
 
+#include <ranges>
+
 namespace arcticdb {
 
 void ProcessingUnit::apply_filter(util::BitSet&& bitset, PipelineOptimisation optimisation) {
