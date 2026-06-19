@@ -29,7 +29,7 @@ RC_GTEST_PROP(StructureByTimeSlice, Rapidcheck, ()) {
 
     // Number of column slices per row slice, between 1 and 5.
     const int64_t num_col_slices = *rc::gen::inRange<int64_t>(1, 6);
-    const size_t num_row_slices = *rc::gen::inRange<size_t>(1, 1000);
+    const size_t num_row_slices = *rc::gen::inRange<size_t>(1, 1500);
 
     std::vector<TimestampRange> row_slice_time_ranges;
     row_slice_time_ranges.reserve(num_row_slices);
@@ -65,16 +65,22 @@ RC_GTEST_PROP(StructureByTimeSlice, Rapidcheck, ()) {
 
     const size_t num_entries = ranges.size();
 
+    std::vector<TimestampRange> group_range;
+    group_range.reserve(num_entries);
     util::BitSet covered(num_entries);
     for (const std::vector<size_t>& group : groups) {
         RC_ASSERT(!group.empty());
+        TimestampRange acc{std::numeric_limits<timestamp>::max(), std::numeric_limits<timestamp>::min()};
         for (const size_t idx : group) {
             RC_ASSERT(idx < num_entries);
             covered[idx] = true;
+            const TimestampRange& range = ranges[idx].key_.time_range();
+            acc = TimestampRange{std::min(acc.first, range.first), std::max(acc.second, range.second)};
         }
+        group_range.emplace_back(acc);
     }
     RC_ASSERT(covered.count() == covered.size());
-
+    
     for (auto current_group = groups.begin(); current_group != groups.end(); ++current_group) {
         for (auto range_index = current_group->begin(); range_index != current_group->end(); ++range_index) {
             const TimestampRange& current_time_range = ranges[*range_index].key_.time_range();
@@ -103,16 +109,17 @@ RC_GTEST_PROP(StructureByTimeSlice, Rapidcheck, ()) {
                         RC_ASSERT(std::ranges::all_of(*next_group_it, intersects_with_current_range));
                     }
                 } else {
-                    RC_ASSERT(std::ranges::none_of(*next_group_it, intersects_with_current_range));
+                    const TimestampRange range = group_range[std::distance(groups.begin(), next_group_it)];
+                    RC_ASSERT_FALSE(current_time_range.first < range.second && range.first < current_time_range.second);
                 }
             }
             RC_ASSERT(
                     groups.end() - current_group > 2 ||
-                    std::all_of(
-                            current_group + 2,
-                            groups.end(),
-                            [&](const auto& group) {
-                                return std::ranges::none_of(group, intersects_with_current_range);
+                    std::none_of(
+                            group_range.begin() + (current_group - groups.begin()) + 2,
+                            group_range.end(),
+                            [&](const auto& ts) {
+                                return current_time_range.first < ts.second && ts.first < current_time_range.second;
                             }
                     )
             );
