@@ -218,8 +218,8 @@ void S3Storage::create_s3_client(const S3Settings& conf, const Aws::Auth::AWSCre
         auto client_config = get_s3_config_and_set_env_var(conf);
         if (!conf.aws_profile().empty()) {
             ARCTICDB_RUNTIME_DEBUG(log::storage(), "Using AWS profile {}", conf.aws_profile());
-            Aws::Config::ReloadCachedConfigFile(); // config files loaded in Aws::InitAPI; It runs once at first S3Storage
-                                                   // object construct; reload to get latest
+            Aws::Config::ReloadCachedConfigFile(); // config files loaded in Aws::InitAPI; It runs once at first
+                                                   // S3Storage object construct; reload to get latest
             client_config.profileName = conf.aws_profile();
             // Set the profile on both fields. aws-sdk-cpp >= 1.11.814 re-reads profileName when building the
             // credentials chain (ClientConfiguration::ResolveCredentialProviderConfig), but 1.11.748..1.11.813 read

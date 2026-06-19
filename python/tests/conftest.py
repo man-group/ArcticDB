@@ -634,8 +634,6 @@ def monkeypatch_session():
 def route_env_to_extension(monkeypatch):
     # We statically linked msvcrt which maintains a seprate copy of the environment
     if os.name == "nt":
-        if sys.version_info < (3, 9):
-            pytest.skip("Older Python don't support unsetenv on Windows")
         from arcticdb_ext.tools import putenv_s
 
         monkeypatch.setattr(os, "putenv", putenv_s)
