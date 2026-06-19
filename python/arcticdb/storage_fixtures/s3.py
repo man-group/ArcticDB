@@ -622,7 +622,8 @@ def real_s3_default_profile_from_environment_variables(
         )
     profile_dir = os.path.dirname(profile_file_path)
     os.makedirs(profile_dir, exist_ok=True)
-    with open(profile_file_path, "w") as profile_file:
+    fd = os.open(profile_file_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as profile_file:
         profile_file.write(profile_file_content)
 
     out.native_config = NativeVariantStorage(
