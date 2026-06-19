@@ -486,7 +486,14 @@ void PythonVersionStore::add_to_snapshot(
     std::sort(std::begin(retained_keys), std::end(retained_keys));
     write_snapshot_entry(store(), retained_keys, snap_name, user_meta, version_map()->log_changes());
     if (is_delete_keys_immediately) {
-        delete_trees_responsibly(store(), version_map(), deleted_keys, get_master_snapshots_map(store()), snap_name)
+        std::unordered_set<StreamId> deleted_stream_ids;
+        deleted_stream_ids.reserve(deleted_keys.size());
+        for (const auto& key : deleted_keys) {
+            deleted_stream_ids.insert(key.id());
+        }
+        delete_trees_responsibly(
+                store(), version_map(), deleted_keys, get_master_snapshots_map(store(), deleted_stream_ids), snap_name
+        )
                 .get();
         if (version_map()->log_changes()) {
             log_delete_snapshot(store(), snap_name);
@@ -533,7 +540,14 @@ void PythonVersionStore::remove_from_snapshot(
 
     write_snapshot_entry(store(), retained_keys, snap_name, user_meta, version_map()->log_changes());
     if (is_delete_keys_immediately) {
-        delete_trees_responsibly(store(), version_map(), deleted_keys, get_master_snapshots_map(store()), snap_name)
+        std::unordered_set<StreamId> deleted_stream_ids;
+        deleted_stream_ids.reserve(deleted_keys.size());
+        for (const auto& key : deleted_keys) {
+            deleted_stream_ids.insert(key.id());
+        }
+        delete_trees_responsibly(
+                store(), version_map(), deleted_keys, get_master_snapshots_map(store(), deleted_stream_ids), snap_name
+        )
                 .get();
         if (version_map()->log_changes()) {
             log_delete_snapshot(store(), snap_name);
@@ -1022,14 +1036,16 @@ void PythonVersionStore::delete_snapshot(const SnapshotId& snap_name) {
 void PythonVersionStore::delete_snapshot_sync(const SnapshotId& snap_name, const VariantKey& snap_key) {
     ARCTICDB_DEBUG(log::version(), "Deleting data of Snapshot {}", snap_name);
 
-    std::vector<AtomKey> index_keys_in_current_snapshot;
-    auto snap_map = get_master_snapshots_map(store(), std::tie(snap_key, index_keys_in_current_snapshot));
+    auto snap_map_and_keys = get_master_snapshots_map_and_keys_in_given_snapshot(store(), snap_key);
 
     ARCTICDB_DEBUG(log::version(), "Deleting Snapshot {}", snap_name);
     store()->remove_key(snap_key).get();
 
     try {
-        delete_trees_responsibly(store(), version_map(), index_keys_in_current_snapshot, snap_map, snap_name).get();
+        delete_trees_responsibly(
+                store(), version_map(), snap_map_and_keys.index_keys_in_given_snapshot, snap_map_and_keys.map, snap_name
+        )
+                .get();
         ARCTICDB_DEBUG(log::version(), "Deleted orphaned index keys in snapshot {}", snap_name);
     } catch (const std::exception& ex) {
         log::version().warn("Garbage collection of unreachable deleted index keys failed due to: {}", ex.what());

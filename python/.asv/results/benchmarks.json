@@ -2716,6 +2716,48 @@
         "version": "9fccfe476a9df615a7647e269f078d8d154caf9a77a75d0666b465c250e09aba",
         "warmup_time": -1
     },
+    "modification_functions.DeleteSymbolWithSnapshots.peakmem_delete": {
+        "code": "class DeleteSymbolWithSnapshots:\n    def peakmem_delete(self, *args):\n        self.lib.delete(\"sym_0\")\n\n    def setup(self, lib_for_storage, storage):\n        lib = lib_for_storage[storage]\n        if lib is None:\n            raise SkipNotImplemented\n        self.lib = lib\n        self.lib._nvs.version_store.clear()\n    \n        df = pd.DataFrame({\"a\": [1]})\n        self.lib.write_batch([WritePayload(f\"sym_{i}\", df) for i in range(self.NUM_SYMBOLS)])\n        for i in range(self.NUM_SNAPSHOTS):\n            self.lib.snapshot(f\"snap_{i}\")\n\n    def setup_cache(self):\n        return create_libraries_across_storages(DeleteSymbolWithSnapshots.storages)",
+        "name": "modification_functions.DeleteSymbolWithSnapshots.peakmem_delete",
+        "param_names": [
+            "storage"
+        ],
+        "params": [
+            [
+                "<Storage.LMDB: 2>",
+                "<Storage.AMAZON: 1>"
+            ]
+        ],
+        "setup_cache_key": "modification_functions:307",
+        "timeout": 600,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "1e62b0196d933641387aa688001666634d0247ccbbbed35c8231abac817b388d"
+    },
+    "modification_functions.DeleteSymbolWithSnapshots.time_delete": {
+        "code": "class DeleteSymbolWithSnapshots:\n    def time_delete(self, *args):\n        self.lib.delete(\"sym_0\")\n\n    def setup(self, lib_for_storage, storage):\n        lib = lib_for_storage[storage]\n        if lib is None:\n            raise SkipNotImplemented\n        self.lib = lib\n        self.lib._nvs.version_store.clear()\n    \n        df = pd.DataFrame({\"a\": [1]})\n        self.lib.write_batch([WritePayload(f\"sym_{i}\", df) for i in range(self.NUM_SYMBOLS)])\n        for i in range(self.NUM_SNAPSHOTS):\n            self.lib.snapshot(f\"snap_{i}\")\n\n    def setup_cache(self):\n        return create_libraries_across_storages(DeleteSymbolWithSnapshots.storages)",
+        "min_run_count": 2,
+        "name": "modification_functions.DeleteSymbolWithSnapshots.time_delete",
+        "number": 1,
+        "param_names": [
+            "storage"
+        ],
+        "params": [
+            [
+                "<Storage.LMDB: 2>",
+                "<Storage.AMAZON: 1>"
+            ]
+        ],
+        "repeat": 0,
+        "rounds": 2,
+        "sample_time": 0.01,
+        "setup_cache_key": "modification_functions:307",
+        "timeout": 600,
+        "type": "time",
+        "unit": "seconds",
+        "version": "3388d52354676ccb0fb560370e8007f22d2e8dc73b621a0e3a24c41cd1e1b71a",
+        "warmup_time": 0
+    },
     "modification_functions.Deletion.time_delete": {
         "code": "class Deletion:\n    def time_delete(self, *args):\n        assert self.lib.has_symbol(\"sym\")\n        self.lib.delete(\"sym\")\n\n    def setup(self, lib_for_storage, rows_and_cols, storage):\n        lib = lib_for_storage[storage]\n        if lib is None:\n            raise SkipNotImplemented\n        self.lib = lib\n        self.lib._nvs.version_store.clear()\n    \n        rows, cols = rows_and_cols\n        df = generate_random_floats_dataframe_with_index(num_rows=rows, num_cols=cols)\n        self.lib.write(\"sym\", df)\n\n    def setup_cache(self):\n        lib_for_storage = create_libraries_across_storages(Deletion.storages)\n        return lib_for_storage",
         "min_run_count": 2,

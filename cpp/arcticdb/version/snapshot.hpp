@@ -100,25 +100,37 @@ struct MasterSnapshotMapWithStats {
     size_t total_snapshots = 0;
 };
 
+struct MasterSnapshotMapAndKeys {
+    MasterSnapshotMap map;
+    std::vector<IndexTypeKey> index_keys_in_given_snapshot;
+};
+
 /**
  * Map the index keys in every snapshot, additionally reporting the total number of snapshots iterated.
  *
  * The stats are used by the enterprise repo for delayed-deletes logging.
+ *
+ * @param stream_ids When set, only these symbols are included in the returned map. The full snapshot set is still
+ * iterated (so total_snapshots is unaffected).
  */
 MasterSnapshotMapWithStats get_master_snapshots_map_with_stats(
-        std::shared_ptr<Store> store,
-        const std::optional<const std::tuple<const SnapshotVariantKey&, std::vector<IndexTypeKey>&>>&
-                get_keys_in_snapshot = std::nullopt
+        std::shared_ptr<Store> store, const std::optional<std::unordered_set<StreamId>>& stream_ids = std::nullopt
 );
 
 /**
  * Map the index keys in every snapshot.
- * @param get_keys_in_snapshot If set, the VariantKey in the tuple should be a SNAPSHOT[_REF] key and the index keys in
- * that snapshot will be passed to the second item.
+ *
+ * @param stream_ids When set, only these symbols are included in the returned map
  */
 MasterSnapshotMap get_master_snapshots_map(
-        std::shared_ptr<Store> store,
-        const std::optional<const std::tuple<const SnapshotVariantKey&, std::vector<IndexTypeKey>&>>&
-                get_keys_in_snapshot = std::nullopt
+        std::shared_ptr<Store> store, const std::optional<std::unordered_set<StreamId>>& stream_ids = std::nullopt
+);
+
+/**
+ * Map the index keys in every snapshot, additionally collecting the index keys contained in the given snapshot.
+ * @param given_snapshot A SNAPSHOT[_REF] key whose index keys will be returned in index_keys_in_given_snapshot.
+ */
+MasterSnapshotMapAndKeys get_master_snapshots_map_and_keys_in_given_snapshot(
+        std::shared_ptr<Store> store, const SnapshotVariantKey& given_snapshot
 );
 } // namespace arcticdb

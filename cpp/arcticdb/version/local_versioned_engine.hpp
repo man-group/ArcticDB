@@ -193,7 +193,12 @@ class LocalVersionedEngine : public VersionedEngine {
             const std::vector<IndexTypeKey>& idx_to_be_deleted,
             const PreDeleteChecks& checks = default_pre_delete_checks
     ) override {
-        auto snapshot_map = get_master_snapshots_map(store());
+        std::unordered_set<StreamId> stream_ids;
+        stream_ids.reserve(idx_to_be_deleted.size());
+        for (const auto& key : idx_to_be_deleted) {
+            stream_ids.insert(key.id());
+        }
+        auto snapshot_map = get_master_snapshots_map(store(), stream_ids);
         delete_trees_responsibly(store(), version_map(), idx_to_be_deleted, snapshot_map, std::nullopt, checks).get();
     };
 
