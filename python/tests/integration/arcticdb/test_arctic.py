@@ -13,17 +13,15 @@ import psutil
 import pytz
 import math
 import pytest
-import requests
 import pandas as pd
 import numpy as np
-from contextlib import contextmanager
 from datetime import datetime, timedelta
 from typing import List
 from enum import Enum
 import multiprocessing
 
 from arcticdb_ext import get_config_int, set_config_int
-from arcticdb_ext.exceptions import InternalException, PermissionException, UnsortedDataException, UserInputException
+from arcticdb_ext.exceptions import InternalException, UnsortedDataException, UserInputException
 from arcticdb_ext.storage import NoDataFoundException, KeyType, AWSAuthMethod
 from arcticdb.exceptions import ArcticDbNotYetImplemented, NoSuchVersionException
 from arcticdb.adapters.mongo_library_adapter import MongoLibraryAdapter
