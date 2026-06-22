@@ -187,8 +187,8 @@ class OutputFormat(str, Enum):
         String format can be customized via `ArrowOutputStringFormat`.
         If ArcticDB has verified the index column is monotonic (ascending or descending), its Polars sorted
         flag is set automatically, enabling Polars sort-aware optimizations such as fast joins and group-bys.
-        Symbols whose sort order was never verified (Arrow writes, or symbols written by ArcticDB versions
-        before sortedness was tracked) keep the default unsorted flag.
+        Symbols whose sort order was never verified (e.g. Arrow writes without index validation) keep the default
+        unsorted flag.
     """
 
     PANDAS = "PANDAS"
