@@ -70,8 +70,7 @@ folly::Future<entity::AtomKey> write_frame(
 
 folly::Future<entity::AtomKey> append_frame(
         IndexPartialKey&& key, const std::shared_ptr<InputFrame>& frame, const SlicingPolicy& slicing,
-        index::IndexSegmentReader& index_segment_reader, const std::shared_ptr<Store>& store, bool dynamic_schema,
-        bool ignore_sort_order
+        index::IndexSegmentReader& index_segment_reader, const std::shared_ptr<Store>& store, bool dynamic_schema
 );
 
 enum class AffectedSegmentPart { START, END };

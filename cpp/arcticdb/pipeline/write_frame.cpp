@@ -508,33 +508,14 @@ folly::Future<entity::AtomKey> write_frame(
 
 folly::Future<AtomKey> append_frame(
         IndexPartialKey&& key, const std::shared_ptr<InputFrame>& frame, const SlicingPolicy& slicing,
-        index::IndexSegmentReader& index_segment_reader, const std::shared_ptr<Store>& store, bool dynamic_schema,
-        bool ignore_sort_order
+        index::IndexSegmentReader& index_segment_reader, const std::shared_ptr<Store>& store, bool dynamic_schema
 ) {
     ARCTICDB_SAMPLE_DEFAULT(AppendFrame)
-    util::variant_match(
-            frame->index,
-            [&index_segment_reader, &frame, ignore_sort_order](const TimeseriesIndex&) {
-                util::check(frame->has_index(), "Cannot append timeseries without index");
-                if (index_segment_reader.tsd().total_rows() != 0 && frame->num_rows != 0) {
-                    auto first_index = NumericIndex{frame->index_value_at(0)};
-                    auto prev = std::get<NumericIndex>(index_segment_reader.last()->key().end_index());
-                    util::check(
-                            ignore_sort_order || prev - 1 <= first_index,
-                            "Can't append dataframe with start index {} to existing sequence ending at {}",
-                            util::format_timestamp(first_index),
-                            util::format_timestamp(prev)
-                    );
-                }
-            },
-            [](const auto&) {
-                // Do whatever, but you can't range search it
-            }
-    );
-
     auto existing_slices = unfiltered_index(index_segment_reader);
+    const auto tsd =
+            index::get_merged_tsd(frame->num_rows + frame->offset, dynamic_schema, index_segment_reader.tsd(), frame);
     auto keys_fut = slice_and_write(frame, slicing, IndexPartialKey{key}, store);
-    return std::move(keys_fut).thenValue([dynamic_schema,
+    return std::move(keys_fut).thenValue([tsd = std::move(tsd),
                                           slices_to_write = std::move(existing_slices),
                                           frame = frame,
                                           index_segment_reader = std::move(index_segment_reader),
@@ -546,9 +527,6 @@ folly::Future<AtomKey> append_frame(
                 std::make_move_iterator(std::end(slice_and_keys_to_append))
         );
         ranges::sort(slices_to_write);
-        const auto tsd = index::get_merged_tsd(
-                frame->num_rows + frame->offset, dynamic_schema, index_segment_reader.tsd(), frame
-        );
         return index::write_index(
                 index_type_from_descriptor(tsd.as_stream_descriptor()), tsd, std::move(slices_to_write), key, store
         );
