@@ -8,12 +8,17 @@
 #include <map>
 #include <set>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <unordered_set>
 
 namespace arcticdb {
+ankerl::unordered_dense::map<std::string, size_t> map_symbol_fields_to_offsets(const TimeseriesDescriptor& tsd);
 
-SegmentInMemory merge_column_stats_segments(const std::vector<SegmentInMemory>& segments);
+SegmentInMemory merge_column_stats_segments(
+        const std::vector<SegmentInMemory>& segments,
+        const ankerl::unordered_dense::map<std::string, size_t>& symbol_fields_to_offsets
+);
 
 // User facing types - eg users are only allowed to create min and max together, not one or the other
 enum class ColumnStatType { MINMAX };
@@ -25,18 +30,20 @@ static constexpr size_t start_index_column_offset = 0;
 static const char* const end_index_column_name = "end_index";
 static constexpr size_t end_index_column_offset = 1;
 
-struct NameAndStatTypes {
+struct NameAndStats {
     std::string mangled_name;
     std::set<ColumnStatType> column_stats;
 
-    bool operator==(const NameAndStatTypes& right) const {
+    bool operator==(const NameAndStats& right) const {
         return mangled_name == right.mangled_name && column_stats == right.column_stats;
     }
 };
 
 void validate_column_stats_header_version(const arcticc::pb2::column_stats_pb2::ColumnStatsHeader& header);
 
-std::string to_segment_column_name(const std::string& column, ColumnStatTypeInternal type);
+// Produce the segment column name for column and its stat type.
+// For example: the stat MIN for the col "price" will produce "v1_MIN(price)"
+std::string column_and_stat_to_segment_name(const std::string& column, ColumnStatTypeInternal type);
 
 class ColumnStats {
   public:
@@ -55,8 +62,12 @@ class ColumnStats {
     bool operator==(const ColumnStats& right) const;
 
   private:
-    std::unordered_map<size_t, NameAndStatTypes> offset_to_stat_info_;
-    bool offset_to_stat_info_set_{false};
+    void map_stats_to_column_name(const std::string& column_name, const std::unordered_set<std::string>& stats_names);
+
+    // Use ordered map/set here for consistent ordering in the resulting stats objects
+    std::map<std::string, std::set<ColumnStatType>> input_column_name_to_stats_;
+    std::unordered_map<size_t, NameAndStats> offset_to_input_column_and_stats_;
+    bool offset_to_input_column_and_stats_calculated_{false};
 };
 
 } // namespace arcticdb

@@ -437,6 +437,8 @@ FilterQuery<index::IndexSegmentReader> create_column_stats_filter(
         util::check(row_indices.size() == isr.size(), "Expected row_indices.size() == isr.size()");
 
         // Evaluate the AST
+        StatsVariantData result =
+                evaluate_ast_node_against_stats(expression_context.root_node_name_, expression_context, stats_rows);
         StatsVariantData result = evaluate_ast_node_against_stats(
                 expression_context.root_node_name_, expression_context, row_indices, column_stats_data
         );

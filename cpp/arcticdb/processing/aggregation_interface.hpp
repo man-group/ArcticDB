@@ -10,8 +10,21 @@
 
 #include <folly/Poly.h>
 #include <arcticdb/entity/types.hpp>
+#include <arcticdb/pipeline/value.hpp>
+#include <arcticdb/column_store/memory_segment.hpp>
+#include <arcticdb/processing/expression_node.hpp>
+#include <optional>
 
 namespace arcticdb {
+
+// Lightweight per slice and per aggregator struct, replacing the previous SegmentInMemory
+struct ColumnStatsAggregatorOutput {
+    std::optional<Value> min;
+    std::optional<Value> max;
+    uint64_t nan_count{0};
+    uint64_t null_count{0};
+    size_t input_column_offset{0};
+};
 
 struct IGroupingAggregatorData {
     template<class Base>
@@ -60,9 +73,7 @@ struct IColumnStatsAggregatorData {
     template<class Base>
     struct Interface : Base {
         void aggregate(const ColumnWithStrings& input_column) { folly::poly_call<0>(*this, input_column); }
-        SegmentInMemory finalize(const std::vector<ColumnName>& output_column_names) const {
-            return folly::poly_call<1>(*this, output_column_names);
-        }
+        ColumnStatsAggregatorOutput finalize() const { return folly::poly_call<1>(*this); }
     };
 
     template<class T>
