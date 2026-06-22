@@ -32,9 +32,9 @@ _VENV_PIP := $(VENV_DIR)/$(VENV_NAME)/bin/pip
 # ── Phony targets ────────────────────────────────────────────────────────────
 .PHONY: help setup protoc venv activate lint lint-check \
         build build-debug configure configure-debug \
-        test-cpp test-cpp-debug symlink symlink-debug \
+        test-cpp test-cpp-debug test-cpp-rapidcheck test-cpp-rapidcheck-debug symlink symlink-debug \
         test-py build-and-test-py build-and-test-py-debug \
-        wheel bench-cpp bench-py install-editable
+        wheel bench-cpp bench-cpp-build bench-py install-editable
 
 # ── help ─────────────────────────────────────────────────────────────────────
 help: ## Show this help
@@ -136,6 +136,15 @@ test-cpp-debug: $(_DEBUG_BUILD_DIR)/.configure-stamp ## Build and run C++ unit t
 	cmake --build $(_DEBUG_BUILD_DIR) -j $(CMAKE_JOBS) --target test_unit_arcticdb
 	$(_DEBUG_BUILD_DIR)/arcticdb/test_unit_arcticdb $(if $(FILTER),--gtest_filter=$(FILTER))
 
+# ── test-cpp-rapidcheck ──────────────────────────────────────────────────────
+test-cpp-rapidcheck: $(_RELEASE_BUILD_DIR)/.configure-stamp ## Build and run C++ rapidcheck tests (release, FILTER= for gtest_filter)
+	cmake --build $(_RELEASE_BUILD_DIR) -j $(CMAKE_JOBS) --target arcticdb_rapidcheck_tests
+	$(_RELEASE_BUILD_DIR)/arcticdb/arcticdb_rapidcheck_tests $(if $(FILTER),--gtest_filter=$(FILTER))
+
+test-cpp-rapidcheck-debug: $(_DEBUG_BUILD_DIR)/.configure-stamp ## Build and run C++ rapidcheck tests (debug, FILTER= for gtest_filter)
+	cmake --build $(_DEBUG_BUILD_DIR) -j $(CMAKE_JOBS) --target arcticdb_rapidcheck_tests
+	$(_DEBUG_BUILD_DIR)/arcticdb/arcticdb_rapidcheck_tests $(if $(FILTER),--gtest_filter=$(FILTER))
+
 # ── symlink ──────────────────────────────────────────────────────────────────
 _EXT_SUFFIX := $(shell python3 -c "import sysconfig; print(sysconfig.get_config_var('EXT_SUFFIX'))")
 
@@ -169,8 +178,10 @@ wheel: ## Build a pip wheel
 		$(PROXY_CMD) $(_VENV_PIP) wheel . --no-deps -w dist/
 
 # ── bench-cpp ────────────────────────────────────────────────────────────────
-bench-cpp: $(_RELEASE_BUILD_DIR)/.configure-stamp ## Build and run C++ benchmarks (release, FILTER= for benchmark_filter)
+bench-cpp-build: $(_RELEASE_BUILD_DIR)/.configure-stamp ## Build C++ benchmarks without running (release)
 	cmake --build $(_RELEASE_BUILD_DIR) -j $(CMAKE_JOBS) --target benchmarks
+
+bench-cpp: bench-cpp-build ## Build and run C++ benchmarks (release, FILTER= for benchmark_filter)
 	$(_RELEASE_BUILD_DIR)/arcticdb/benchmarks $(if $(FILTER),--benchmark_filter=$(FILTER))
 
 # ── install-editable ─────────────────────────────────────────────────────────
