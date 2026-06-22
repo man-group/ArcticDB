@@ -95,31 +95,7 @@ class S3Bucket(StorageFixture):
         else:
             self.key = factory.default_key
 
-        secure, host, port = re.match(r"(?:http(s?)://)?([^:/]+)(?::(\d+))?", factory.endpoint).groups()
-        self.arctic_uri = f"s3{secure or ''}://{host}:{self.bucket}?"
-
-        if factory.aws_auth == None or factory.aws_auth == AWSAuthMethod.DISABLED:
-            self.arctic_uri += f"access={self.key.id}&secret={self.key.secret}"
-        elif factory.aws_auth == AWSAuthMethod.STS_PROFILE_CREDENTIALS_PROVIDER:
-            assert factory.aws_profile is not None
-            self.arctic_uri += "aws_auth=sts"
-            self.arctic_uri += f"&aws_profile={factory.aws_profile}"
-        else:
-            self.arctic_uri += "aws_auth=default"
-            if factory.aws_profile:
-                self.arctic_uri += f"&aws_profile={factory.aws_profile}"
-        if port:
-            self.arctic_uri += f"&port={port}"
-        if factory.default_prefix:
-            self.arctic_uri += f"&path_prefix={factory.default_prefix}"
-        if factory.ssl:
-            self.arctic_uri += "&ssl=True"
-        if factory._test_only_is_nfs_layout:
-            self.arctic_uri += "&_test_only_is_nfs_layout=True"
-        if platform.system() == "Linux":
-            if factory.client_cert_file:
-                self.arctic_uri += f"&CA_cert_path={self.factory.client_cert_file}"
-            # client_cert_dir is skipped on purpose; It will be tested manually in other tests
+        self.arctic_uri = self.get_arctic_uri()
 
     def __exit__(self, exc_type, exc_value, traceback):
         if self.factory.clean_bucket_on_fixture_exit:
@@ -156,6 +132,37 @@ class S3Bucket(StorageFixture):
             native_cfg=self.native_config,
         )  # client_cert_dir is skipped on purpose; It will be tested manually in other tests
         return cfg, self.native_config
+
+    def get_arctic_uri(self, profile: Optional[str] = None):
+        secure, host, port = re.match(r"(?:http(s?)://)?([^:/]+)(?::(\d+))?", self.factory.endpoint).groups()
+        arctic_uri = f"s3{secure or ''}://{host}:{self.bucket}?"
+
+        if self.factory.aws_auth == None or self.factory.aws_auth == AWSAuthMethod.DISABLED:
+            arctic_uri += f"access={self.key.id}&secret={self.key.secret}"
+        elif self.factory.aws_auth == AWSAuthMethod.STS_PROFILE_CREDENTIALS_PROVIDER:
+            assert self.factory.aws_profile is not None
+            arctic_uri += "aws_auth=sts"
+            arctic_uri += f"&aws_profile={self.factory.aws_profile}"
+        else:
+            arctic_uri += "aws_auth=default"
+            profile = profile or self.factory.aws_profile
+            if profile:
+                arctic_uri += f"&aws_profile={profile}"
+
+        if port:
+            arctic_uri += f"&port={port}"
+        if self.factory.default_prefix:
+            arctic_uri += f"&path_prefix={self.factory.default_prefix}"
+        if self.factory.ssl:
+            arctic_uri += "&ssl=True"
+        if self.factory._test_only_is_nfs_layout:
+            arctic_uri += "&_test_only_is_nfs_layout=True"
+        if platform.system() == "Linux":
+            if self.factory.client_cert_file:
+                arctic_uri += f"&CA_cert_path={self.factory.client_cert_file}"
+            # client_cert_dir is skipped on purpose; It will be tested manually in other tests
+
+        return arctic_uri
 
     def set_permission(self, *, read: bool, write: bool):
         factory = self.factory
@@ -592,52 +599,6 @@ aws_secret_access_key = {factory.sts_test_key.secret}
 
     with open(config_file_path, "w") as config_file:
         config_file.write(aws_credentials)
-
-
-def real_s3_default_profile_from_environment_variables(
-    profile_name: str, profile_file_path: str, use_credentials_file: bool = False
-) -> BaseS3StorageFixtureFactory:
-    """Factory for testing aws_profile with the default credentials provider chain (non-STS): writes the real S3
-    static credentials under the named profile and configures the fixture to authenticate via aws_auth=default + that
-    profile.
-
-    With use_credentials_file=False the keys are written to an AWS *config* file (``[profile X]``); with
-    use_credentials_file=True they are written to an AWS *credentials* file (``[X]``). The distinction matters because
-    aws-sdk-cpp only reads profile credentials from the config file since 1.11.748 (the CRT provider, like boto3),
-    whereas every supported version reads them from the credentials file."""
-    additional_suffix = f"{random.randint(0, 999)}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_%f')}"
-    out = real_s3_from_environment_variables(False, NativeVariantStorage(), additional_suffix)
-    if use_credentials_file:
-        # Credentials file: profile-less section header, no region (region comes from the native config)
-        profile_file_content = (
-            f"[{profile_name}]\n"
-            f"aws_access_key_id = {out.default_key.id}\n"
-            f"aws_secret_access_key = {out.default_key.secret}\n"
-        )
-    else:
-        profile_file_content = (
-            f"[profile {profile_name}]\n"
-            f"aws_access_key_id = {out.default_key.id}\n"
-            f"aws_secret_access_key = {out.default_key.secret}\n"
-        )
-    profile_dir = os.path.dirname(profile_file_path)
-    os.makedirs(profile_dir, exist_ok=True)
-    fd = os.open(profile_file_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, "w") as profile_file:
-        profile_file.write(profile_file_content)
-
-    out.native_config = NativeVariantStorage(
-        NativeS3Settings(
-            aws_auth=AWSAuthMethod.DEFAULT_CREDENTIALS_PROVIDER_CHAIN,
-            aws_profile=profile_name,
-            use_internal_client_wrapper_for_testing=False,
-        )
-    )
-    out.aws_auth = AWSAuthMethod.DEFAULT_CREDENTIALS_PROVIDER_CHAIN
-    out.aws_profile = profile_name
-    # Reset to ensure the client can't fall back to default key+secret auth and must resolve the profile
-    out.default_key = Key(id="", secret="", user_name="unknown user")
-    return out
 
 
 def real_s3_sts_resources_ready(factory: BaseS3StorageFixtureFactory):
