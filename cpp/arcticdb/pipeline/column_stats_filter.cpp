@@ -140,7 +140,7 @@ StatsVariantData dispatch_unary_stats(const StatsVariantData& left, OperationTyp
         ARCTICDB_DEBUG(log::version(), "Unsupported unary operator for stats {}", operation);
         return util::variant_match(
                 left,
-show                [](const std::vector<StatsComparison>& comparisons) -> StatsVariantData {
+                [](const std::vector<StatsComparison>& comparisons) -> StatsVariantData {
                     return std::vector(comparisons.size(), StatsComparison::UNKNOWN);
                 },
                 [](const std::vector<ColumnStatsValues>& values) -> StatsVariantData {
@@ -327,7 +327,6 @@ FilterQuery<index::IndexSegmentReader> create_column_stats_filter(
         // Evaluate the AST
         StatsVariantData result =
                 evaluate_ast_node_against_stats(expression_context.root_node_name_, expression_context, stats_rows);
-                
         util::check(
                 std::holds_alternative<std::vector<StatsComparison>>(result),
                 "evaluate_ast_node_against_stats should evaluate to a vector<StatsComparison>"
