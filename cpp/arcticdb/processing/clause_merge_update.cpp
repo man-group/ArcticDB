@@ -372,7 +372,7 @@ std::vector<std::vector<size_t>> MergeUpdateClause::structure_for_processing_log
     std::vector<std::vector<size_t>> offsets = structure_by_row_slice(ranges_and_keys);
     std::vector<size_t> row_slices_to_keep;
     // TODO: Arrow is not supported yet.
-    const TypedTensor<IndexType::DataTypeTag::raw_type> index_tensor(source_->opt_index_tensor().value());
+    const TypedTensor<IndexType::DataTypeTag::raw_type> index_tensor(source_->get_tensor(0));
     user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
             util::is_cstyle_array<IndexType::DataTypeTag::raw_type>(index_tensor),
             "Fortran-style arrays are not supported by merge update yet. The index column has data type {} of "
@@ -443,7 +443,7 @@ std::vector<EntityId> MergeUpdateClause::process(std::vector<EntityId>&& entity_
         std::optional<std::vector<std::vector<size_t>>> result;
         if (source_->has_index()) {
             using IndexType = ScalarTagType<DataTypeTag<DataType::NANOSECONDS_UTC64>>;
-            const TypedTensor<IndexType::DataTypeTag::raw_type> index_tensor(source_->opt_index_tensor().value());
+            const TypedTensor<IndexType::DataTypeTag::raw_type> index_tensor(source_->get_tensor(0));
             result.emplace(filter_index_match(
                     proc.segments_->front()->column(0), std::span(index_tensor.data(), source_->num_rows), proc
             ));
@@ -454,9 +454,12 @@ std::vector<EntityId> MergeUpdateClause::process(std::vector<EntityId>&& entity_
         user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Arrow format is not supported as input for merge update"
         );
     }
+    // source_tensors holds only data columns; the index (if any) sits at columns_[0] and is handled separately
+    // by filter_index_match above.
+    const auto index_fields = source_->desc().index().field_count();
     std::vector<NativeTensor> source_tensors;
-    source_tensors.reserve(source_->num_columns());
-    for (size_t i = 0; i < source_->num_columns(); ++i) {
+    source_tensors.reserve(source_->num_columns() - index_fields);
+    for (size_t i = index_fields; i < source_->num_columns(); ++i) {
         source_tensors.push_back(source_->get_tensor(i));
     }
     // TODO: Source and target descriptor can differ for dynamic schema

@@ -52,17 +52,24 @@ struct InputFrame {
         set_from_tensors(std::forward<DescriptorT>(desc), std::move(field_tensors), std::move(index_tensor));
     }
 
+    // Index, when present, is unified into columns_[0]; data tensors follow.
     template<typename DescriptorT>
     requires std::same_as<std::decay_t<DescriptorT>, StreamDescriptor>
     void set_from_tensors(
-            DescriptorT&& desc, std::vector<NativeTensor>&& field_tensors, std::optional<NativeTensor>&& index_tensor
+            DescriptorT&& desc, std::vector<NativeTensor>&& field_tensors,
+            std::optional<NativeTensor>&& index_tensor
     ) {
         desc_ = std::forward<DescriptorT>(desc);
-        index_tensor_ = std::move(index_tensor);
-        columns_ = std::vector<FieldData>(
-                std::make_move_iterator(field_tensors.begin()), std::make_move_iterator(field_tensors.end())
+        columns_.clear();
+        columns_.reserve(field_tensors.size() + (index_tensor.has_value() ? 1 : 0));
+        if (index_tensor.has_value()) {
+            columns_.emplace_back(std::move(*index_tensor));
+        }
+        columns_.insert(
+                columns_.end(),
+                std::make_move_iterator(field_tensors.begin()),
+                std::make_move_iterator(field_tensors.end())
         );
-        has_only_arrow_columns_ = false;
     };
 
     void set_from_columns(
@@ -84,10 +91,8 @@ struct InputFrame {
     const FieldData& field_data(size_t idx) const;
     const entity::NativeTensor& get_tensor(size_t idx) const;
     const Column& get_column(size_t idx) const;
-    const std::optional<entity::NativeTensor>& opt_index_tensor() const;
 
-    bool has_only_tensors() const;
-    bool has_only_arrow_columns() const;
+    bool has_only_tensors() const; //TODO: Remove this once we support Arrow everywhere
 
     mutable arcticdb::proto::descriptors::NormalizationMetadata norm_meta;
     arcticdb::proto::descriptors::UserDefinedMetadata user_meta;
@@ -101,12 +106,10 @@ struct InputFrame {
   private:
     std::vector<FieldData> columns_;
     std::vector<sparrow::record_batch> arrow_buffer_owners_;
-    std::optional<NativeTensor> index_tensor_;
     StreamDescriptor desc_;
     std::optional<StreamDescriptor> desc_for_tsd_;
 
     bool has_only_tensors_{true};
-    bool has_only_arrow_columns_{true};
 };
 
 } // namespace arcticdb::pipelines

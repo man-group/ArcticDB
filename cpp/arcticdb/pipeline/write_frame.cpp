@@ -359,22 +359,21 @@ SegmentInMemory WriteToSegmentTask::slice() const {
         );
     };
 
-    // Index column
-    if (index_field_count > 0) {
+    // Index column 
+    if (frame_->has_index()) {
         const auto& fd = frame_->desc().fields(0);
-        if (frame_->opt_index_tensor().has_value()) {
-            add_tensor_column(0, *frame_->opt_index_tensor(), fd, false);
-        } else {
-            add_arrow_column(frame_->get_column(0), fd);
-        }
+        util::variant_match(
+                frame_->field_data(0),
+                [&](const NativeTensor& tensor) { add_tensor_column(0, tensor, fd, false); },
+                [&](const Column& source_column) { add_arrow_column(source_column, fd); }
+        );
     }
 
     // Non-index columns
-    const size_t columns_index_offset = frame_->opt_index_tensor().has_value() ? 0 : index_field_count;
     for (size_t col = 0, end = slice_.col_range.diff(); col < end; ++col) {
         const auto abs_col = col + index_field_count;
         const auto& fd = slice_.non_index_field(col);
-        const auto col_idx = slice_.absolute_field_col(col) + columns_index_offset;
+        const auto col_idx = slice_.absolute_field_col(col) + index_field_count;
         util::variant_match(
                 frame_->field_data(col_idx),
                 [&](const NativeTensor& tensor) { add_tensor_column(abs_col, tensor, fd, sparsify_floats_); },

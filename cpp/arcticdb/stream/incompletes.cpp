@@ -153,8 +153,6 @@ SegmentInMemory incomplete_segment_from_tensor_frame(
     auto offset_in_frame = 0;
     auto slice_num_for_column = 0;
     const auto num_rows = frame->num_rows;
-    auto index_tensor = frame->opt_index_tensor();
-    const bool has_index = frame->has_index();
     const auto index = std::move(frame->index);
 
     auto output = std::visit(
@@ -192,37 +190,14 @@ SegmentInMemory incomplete_segment_from_tensor_frame(
                                                 output = std::forward<SegmentInMemory>(segment);
                                             }};
 
-                if (has_index) {
-                    util::check(
-                            static_cast<bool>(index_tensor),
-                            "Expected index tensor for index type {}",
-                            agg.descriptor().index()
-                    );
-                    auto opt_error = aggregator_set_data(
-                            agg.descriptor().field(0).type(),
-                            index_tensor.value(),
-                            agg,
-                            0,
-                            num_rows,
-                            offset_in_frame,
-                            slice_num_for_column,
-                            num_rows,
-                            allow_sparse
-                    );
-
-                    if (opt_error.has_value()) {
-                        opt_error->raise(agg.descriptor().field(0).name());
-                    }
-                }
-
+                // columns_[0] is the index (if present), columns_[1..] are data — mirrors the descriptor.
                 for (auto col = 0u; col < frame->num_columns(); ++col) {
-                    auto dest_col = col + agg.descriptor().index().field_count();
                     const auto& tensor = frame->get_tensor(col);
                     auto opt_error = aggregator_set_data(
-                            agg.descriptor().field(dest_col).type(),
+                            agg.descriptor().field(col).type(),
                             tensor,
                             agg,
-                            dest_col,
+                            col,
                             num_rows,
                             offset_in_frame,
                             slice_num_for_column,
@@ -230,7 +205,7 @@ SegmentInMemory incomplete_segment_from_tensor_frame(
                             allow_sparse
                     );
                     if (opt_error.has_value()) {
-                        opt_error->raise(agg.descriptor().field(dest_col).name());
+                        opt_error->raise(agg.descriptor().field(col).name());
                     }
                 }
 

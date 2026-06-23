@@ -12,6 +12,7 @@
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/entity/stream_descriptor.hpp>
 #include <arcticdb/stream/index.hpp>
+#include <variant>
 
 namespace arcticdb::pipelines {
 
@@ -68,21 +69,17 @@ bool InputFrame::empty() const { return num_rows == 0; }
 
 timestamp InputFrame::index_value_at(size_t row) {
     util::check(has_index(), "InputFrame::index_value_at should only be called on timeseries data");
-
-    // Pandas
-    if (index_tensor_.has_value()) {
-        util::check(
-                index_tensor_->data_type() == DataType::NANOSECONDS_UTC64,
-                "Expected timestamp index in append, got type {}",
-                index_tensor_->data_type()
-        );
-        return *index_tensor_->ptr_cast<timestamp>(row);
-    }
-
-    // Arrow: only the first column can be the index
     util::check(!columns_.empty(), "InputFrame::index_value_at called but no columns are present");
     return util::variant_match(
             columns_[0],
+            [row](const NativeTensor& tensor) {
+                util::check(
+                        tensor.data_type() == DataType::NANOSECONDS_UTC64,
+                        "Expected timestamp index in append, got type {}",
+                        tensor.data_type()
+                );
+                return *tensor.ptr_cast<timestamp>(row);
+            },
             [row](const Column& col) {
                 util::check(
                         static_cast<position_t>(row) < col.row_count(),
@@ -93,11 +90,6 @@ timestamp InputFrame::index_value_at(size_t row) {
                 // Note that scalar_at is O(log(n)) where n is the number of chunks in the underlying buffer, which is
                 // equal to the number of input record batches for Arrow
                 return *col.scalar_at<timestamp>(row);
-            },
-            [](const NativeTensor&) -> timestamp {
-                internal::raise<ErrorCode::E_ASSERTION_FAILURE>(
-                        "Index in columns_[0] is a NativeTensor; NumPy index must be stored in index_tensor_"
-                );
             }
     );
 };
@@ -121,8 +113,6 @@ void InputFrame::set_bucketize_dynamic(bool bucketize) { bucketize_dynamic = buc
 
 bool InputFrame::has_only_tensors() const { return has_only_tensors_; };
 
-bool InputFrame::has_only_arrow_columns() const { return has_only_arrow_columns_; };
-
 size_t InputFrame::num_columns() const { return columns_.size(); }
 
 const InputFrame::FieldData& InputFrame::field_data(size_t idx) const {
@@ -132,14 +122,24 @@ const InputFrame::FieldData& InputFrame::field_data(size_t idx) const {
 
 const NativeTensor& InputFrame::get_tensor(size_t idx) const {
     util::check(idx < columns_.size(), "InputFrame::get_tensor index {} out of range (size {})", idx, columns_.size());
-    return std::get<NativeTensor>(columns_[idx]);
+    auto& variant_column = columns_[idx];
+    util::check(
+            std::holds_alternative<NativeTensor>(variant_column),
+            "InputFrame::get_tensor called for index {}, but that is not a NativeTensor.",
+            idx
+    );
+    return std::get<NativeTensor>(variant_column);
 }
 
 const Column& InputFrame::get_column(size_t idx) const {
     util::check(idx < columns_.size(), "InputFrame::get_column index {} out of range (size {})", idx, columns_.size());
-    return std::get<Column>(columns_[idx]);
+    auto& variant_column = columns_[idx];
+    util::check(
+            std::holds_alternative<Column>(variant_column),
+            "InputFrame::get_column called for index {}, but that is not a Column.",
+            idx
+    );
+    return std::get<Column>(variant_column);
 }
-
-const std::optional<entity::NativeTensor>& InputFrame::opt_index_tensor() const { return index_tensor_; }
 
 } // namespace arcticdb::pipelines
