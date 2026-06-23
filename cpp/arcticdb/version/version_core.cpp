@@ -228,27 +228,32 @@ folly::Future<AtomKey> async_append_impl(
         const std::shared_ptr<Store>& store, const UpdateInfo& update_info, const std::shared_ptr<InputFrame>& frame,
         const WriteOptions& options, bool validate_index, bool empty_types
 ) {
-
     util::check(
             update_info.previous_index_key_.has_value(), "Cannot append as there is no previous index key to append to"
     );
-    const StreamId stream_id = frame->desc().id();
-    ARCTICDB_DEBUG(log::version(), "append stream_id: {} , version_id: {}", stream_id, update_info.next_version_id_);
-    auto index_segment_reader = index::get_index_reader(*(update_info.previous_index_key_), store);
-    check_can_append(*frame, index_segment_reader, options, validate_index, empty_types);
-    bool bucketize_dynamic = index_segment_reader.bucketize_dynamic();
-    auto row_offset = index_segment_reader.tsd().total_rows();
-    frame->set_offset(static_cast<ssize_t>(row_offset));
-    frame->set_bucketize_dynamic(bucketize_dynamic);
-    auto slicing_arg = get_slicing_policy(options, *frame);
-    return append_frame(
-            IndexPartialKey{stream_id, update_info.next_version_id_},
-            frame,
-            slicing_arg,
-            index_segment_reader,
-            store,
-            options.dynamic_schema
+    ARCTICDB_DEBUG(
+            log::version(), "append stream_id: {} , version_id: {}", frame->desc().id(), update_info.next_version_id_
     );
+    return index::async_get_index_reader(*(update_info.previous_index_key_), store)
+            .via(&async::io_executor())
+            .thenValueInline([store, update_info, frame, options, validate_index, empty_types](
+                                     index::IndexSegmentReader&& index_segment_reader
+                             ) {
+                check_can_append(*frame, index_segment_reader, options, validate_index, empty_types);
+                bool bucketize_dynamic = index_segment_reader.bucketize_dynamic();
+                auto row_offset = index_segment_reader.tsd().total_rows();
+                frame->set_offset(static_cast<ssize_t>(row_offset));
+                frame->set_bucketize_dynamic(bucketize_dynamic);
+                auto slicing_arg = get_slicing_policy(options, *frame);
+                return append_frame(
+                        IndexPartialKey{frame->desc().id(), update_info.next_version_id_},
+                        frame,
+                        slicing_arg,
+                        index_segment_reader,
+                        store,
+                        options.dynamic_schema
+                );
+            });
 }
 
 VersionedItem append_impl(
