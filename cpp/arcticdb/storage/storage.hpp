@@ -16,12 +16,17 @@
 #include <arcticdb/stream/index.hpp>
 
 #include <optional>
+#include <set>
 #include <span>
 
 namespace arcticdb::storage {
 
 using CompressedSize = uint64_t;
 using ObjectSizesVisitor = std::function<void(const VariantKey&, CompressedSize)>;
+
+// '*', '<' and '>' are problematic for S3 and are rejected by every backend, so they form the default set of
+// characters disallowed in names. Backends extend this set by overriding Storage::do_unsupported_*_chars().
+inline const std::set<char> GLOBALLY_UNSUPPORTED_CHARS{'*', '<', '>'};
 
 struct ObjectSizes {
     ObjectSizes(KeyType key_type, uint64_t count, CompressedSize compressed_size) :
@@ -164,11 +169,17 @@ class Storage {
 
     [[nodiscard]] std::string key_path(const VariantKey& key) const { return do_key_path(key); }
 
-    // Returns the first character of `path` that this backend cannot store faithfully in a key, or std::nullopt if the
-    // path is acceptable.
-    [[nodiscard]] std::optional<char> is_path_valid(std::string_view path) const { return do_is_path_valid(path); }
-    [[nodiscard]] std::optional<char> is_library_path_valid(std::string_view path) const {
-        return do_is_library_path_valid(path);
+    // Characters this backend cannot store faithfully in a symbol key or snapshot name (a superset of
+    // GLOBALLY_UNSUPPORTED_CHARS). Fed into verify_name as its unsupported_chars argument.
+    [[nodiscard]] const std::set<char>& unsupported_symbol_chars() const { return do_unsupported_symbol_chars(); }
+    // Characters disallowed in a library name. Defaults to GLOBALLY_UNSUPPORTED_CHARS; backends override to add their
+    // own restrictions (e.g. Mongo database names disallow '/', Azure blob paths disallow '\').
+    [[nodiscard]] const std::set<char>& unsupported_library_chars() const { return do_unsupported_library_chars(); }
+    // Positional (suffix) validation of a library name, complementing the unsupported-character sets above. Returns
+    // the offending trailing character if the name ends in one the backend cannot represent (currently only LMDB's
+    // Windows filesystem rule: no trailing '.' or whitespace).
+    [[nodiscard]] std::optional<char> verify_library_suffix(std::string_view path) const {
+        return do_verify_library_suffix(path);
     }
 
     [[nodiscard]] const LibraryPath& library_path() const { return lib_path_; }
@@ -260,10 +271,13 @@ class Storage {
 
     [[nodiscard]] virtual std::string do_key_path(const VariantKey& key) const = 0;
 
-    [[nodiscard]] virtual std::optional<char> do_is_path_valid(std::string_view) const { return std::nullopt; }
-    [[nodiscard]] virtual std::optional<char> do_is_library_path_valid(std::string_view path) const {
-        return do_is_path_valid(path);
+    [[nodiscard]] virtual const std::set<char>& do_unsupported_symbol_chars() const {
+        return GLOBALLY_UNSUPPORTED_CHARS;
     }
+    [[nodiscard]] virtual const std::set<char>& do_unsupported_library_chars() const {
+        return GLOBALLY_UNSUPPORTED_CHARS;
+    }
+    [[nodiscard]] virtual std::optional<char> do_verify_library_suffix(std::string_view) const { return std::nullopt; }
 
     LibraryPath lib_path_;
     OpenMode mode_;

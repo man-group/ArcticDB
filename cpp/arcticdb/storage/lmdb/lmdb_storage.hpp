@@ -65,7 +65,9 @@ class LmdbStorage final : public Storage {
 
     bool do_key_exists(const VariantKey& key) final;
 
-    std::optional<char> do_is_library_path_valid(std::string_view path) const final;
+    const std::set<char>& do_unsupported_library_chars() const final;
+
+    std::optional<char> do_verify_library_suffix(std::string_view path) const final;
 
     ::lmdb::env& env();
 

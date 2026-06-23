@@ -199,14 +199,16 @@ bool MongoStorage::do_iterate_type_until_match(
     return false;
 }
 
-std::optional<char> MongoStorage::do_is_library_path_valid(std::string_view path) const {
-    if (auto unsupported = is_path_valid(path)) {
-        return unsupported;
-    }
-    // (Part of) Library name forms the name of mongo database. Some characters are not allowed there
+const std::set<char>& MongoStorage::do_unsupported_library_chars() const {
+    // (Part of) Library name forms the name of mongo database. '/' is not allowed there, on top of the globally
+    // unsupported characters.
     // https://www.mongodb.com/docs/manual/reference/limits/?atlas-provider=aws&atlas-class=general#mongodb-limit-Restrictions-on-Database-Names-for-Unix-and-Linux-Systems
-    const auto pos = path.find('/');
-    return pos == std::string_view::npos ? std::nullopt : std::optional<char>{path[pos]};
+    static const std::set<char> chars = [] {
+        std::set<char> result = GLOBALLY_UNSUPPORTED_CHARS;
+        result.insert('/');
+        return result;
+    }();
+    return chars;
 }
 
 bool MongoStorage::do_key_exists(const VariantKey& key) {
