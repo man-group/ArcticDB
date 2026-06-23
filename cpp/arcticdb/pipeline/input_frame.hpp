@@ -83,7 +83,7 @@ struct InputFrame {
     void set_offset(ssize_t off) const;
     bool has_index() const;
     bool empty() const;
-    timestamp index_value_at(size_t row);
+    timestamp index_value_at(size_t row) const;
     void set_index_range();
     void set_bucketize_dynamic(bool bucketize);
     size_t num_columns() const;
