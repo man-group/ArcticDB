@@ -56,8 +56,7 @@ struct InputFrame {
     template<typename DescriptorT>
     requires std::same_as<std::decay_t<DescriptorT>, StreamDescriptor>
     void set_from_tensors(
-            DescriptorT&& desc, std::vector<NativeTensor>&& field_tensors,
-            std::optional<NativeTensor>&& index_tensor
+            DescriptorT&& desc, std::vector<NativeTensor>&& field_tensors, std::optional<NativeTensor>&& index_tensor
     ) {
         desc_ = std::forward<DescriptorT>(desc);
         columns_.clear();
@@ -92,7 +91,7 @@ struct InputFrame {
     const entity::NativeTensor& get_tensor(size_t idx) const;
     const Column& get_column(size_t idx) const;
 
-    bool has_only_tensors() const; //TODO: Remove this once we support Arrow everywhere
+    bool has_only_tensors() const; // TODO: Remove this once we support Arrow everywhere
 
     mutable arcticdb::proto::descriptors::NormalizationMetadata norm_meta;
     arcticdb::proto::descriptors::UserDefinedMetadata user_meta;

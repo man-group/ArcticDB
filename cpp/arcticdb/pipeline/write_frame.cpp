@@ -359,7 +359,7 @@ SegmentInMemory WriteToSegmentTask::slice() const {
         );
     };
 
-    // Index column 
+    // Index column
     if (frame_->has_index()) {
         const auto& fd = frame_->desc().fields(0);
         util::variant_match(
