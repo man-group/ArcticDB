@@ -2050,9 +2050,6 @@ void create_column_stats_impl(
         return;
     }
 
-    // Maps all column names from the symbol to their offset, because later the 'tsd' is moved and the reference becomes invalid
-    auto symbol_fields_to_offsets = map_symbol_fields_to_offsets(tsd);
-
     std::optional<SegmentInMemory> old_segment;
     if (column_stats_try.hasException()) {
         // Old column stats key doesn't exist
@@ -2097,7 +2094,7 @@ void create_column_stats_impl(
     for (auto& slice_and_key : col_stats_slices_and_keys) {
         col_stats_segments.emplace_back(slice_and_key.release_segment(store));
     }
-    SegmentInMemory new_segment = merge_column_stats_segments(col_stats_segments, symbol_fields_to_offsets);
+    SegmentInMemory new_segment = merge_column_stats_segments(col_stats_segments);
     util::check(new_segment.metadata(), "new_segment should always have metadata");
     new_segment.descriptor().set_id(versioned_item.key_.id());
 

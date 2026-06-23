@@ -8,81 +8,111 @@
 
 namespace arcticdb {
 
-ankerl::unordered_dense::map<std::string, size_t> map_symbol_fields_to_offsets(const TimeseriesDescriptor& tsd) {
-    ankerl::unordered_dense::map<std::string, size_t> field_to_offset;
-    for (const auto& [index, field] : folly::enumerate(tsd.fields())) {
-        field_to_offset.emplace(std::string{field.name()}, index);
-    }
-    return field_to_offset;
-}
-
 namespace merge_internal {
 
 struct MergedSchema {
     std::vector<std::string> field_names;
     std::vector<TypeDescriptor> type_descriptors;
     ankerl::unordered_dense::map<std::string, size_t> name_to_index;
+    std::vector<std::optional<std::pair<uint32_t, ColumnStatTypeInternal>>> stat_info;
 };
+
+arcticc::pb2::column_stats_pb2::ColumnStatsHeader unpack_header(const SegmentInMemory& segment) {
+    arcticc::pb2::column_stats_pb2::ColumnStatsHeader header;
+
+    auto* metadata = segment.metadata();
+    util::check(metadata != nullptr, "Column stats segment has no metadata");
+    bool unpacked = metadata->UnpackTo(&header);
+    util::check(unpacked, "Could not unpack column stats segment metadata");
+    return header;
+}
+
+using SegOffsetToInputOffsetAndStatMap =
+        ankerl::unordered_dense::map<uint32_t, std::pair<uint32_t, ColumnStatTypeInternal>>;
+
+SegOffsetToInputOffsetAndStatMap invert_stats_header(const arcticc::pb2::column_stats_pb2::ColumnStatsHeader& header) {
+    SegOffsetToInputOffsetAndStatMap seg_offset_to_input_offset_and_stat;
+
+    for (const auto& [input_column_offset, entry_list] : header.stats_by_column()) {
+        for (const auto& entry : entry_list.entries()) {
+            seg_offset_to_input_offset_and_stat.emplace(
+                    entry.stats_seg_offset(), std::pair{input_column_offset, entry.type()}
+            );
+        }
+    }
+    return seg_offset_to_input_offset_and_stat;
+}
+
+void merge_existing_column_type(MergedSchema& schema, size_t existing_index, const TypeDescriptor& new_type) {
+    auto& merged_type = schema.type_descriptors.at(existing_index);
+    auto opt_common_type = has_valid_common_type(merged_type, new_type);
+    internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+            opt_common_type.has_value(),
+            "No valid common type between {} and {} in {}",
+            merged_type,
+            new_type,
+            __FUNCTION__
+    );
+    merged_type = *opt_common_type;
+}
+
+void add_new_column(
+        MergedSchema& schema, const std::string& name, const TypeDescriptor& new_type, size_t seg_offset,
+        const SegOffsetToInputOffsetAndStatMap& seg_offset_to_input_offset_and_stat
+) {
+    schema.name_to_index.emplace(name, schema.type_descriptors.size());
+    schema.type_descriptors.emplace_back(new_type);
+    schema.field_names.emplace_back(name);
+
+    if (auto stat_it = seg_offset_to_input_offset_and_stat.find(static_cast<uint32_t>(seg_offset));
+        stat_it != seg_offset_to_input_offset_and_stat.end()) {
+        schema.stat_info.emplace_back(stat_it->second);
+    } else {
+        schema.stat_info.emplace_back(std::nullopt);
+    }
+}
 
 MergedSchema compute_merged_schema(const std::vector<SegmentInMemory>& col_stats_segments) {
     MergedSchema schema;
+
     for (auto& segment : col_stats_segments) {
-        for (const auto& field : segment.descriptor().fields()) {
+        auto seg_offset_to_input_offset_and_stat = invert_stats_header(unpack_header(segment));
+
+        for (const auto& [idx, field] : folly::enumerate(segment.descriptor().fields())) {
             const auto new_type = field.type();
             const std::string name{field.name()};
+
             if (auto it = schema.name_to_index.find(name); it != schema.name_to_index.end()) {
-                auto& merged_type = schema.type_descriptors.at(it->second);
-                auto opt_common_type = has_valid_common_type(merged_type, new_type);
-                internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-                        opt_common_type.has_value(),
-                        "No valid common type between {} and {} in {}",
-                        merged_type,
-                        new_type,
-                        __FUNCTION__
-                );
-                merged_type = *opt_common_type;
+                merge_existing_column_type(schema, it->second, new_type);
             } else {
-                schema.name_to_index.emplace(name, schema.type_descriptors.size());
-                schema.type_descriptors.emplace_back(new_type);
-                schema.field_names.emplace_back(name);
+                add_new_column(schema, name, new_type, idx, seg_offset_to_input_offset_and_stat);
             }
         }
     }
     return schema;
 }
 
-arcticc::pb2::column_stats_pb2::ColumnStatsHeader build_column_stats_header(
-        const MergedSchema& schema, const ankerl::unordered_dense::map<std::string, size_t>& symbol_fields_to_offsets
-) {
+arcticc::pb2::column_stats_pb2::ColumnStatsHeader build_column_stats_header(const MergedSchema& schema) {
     arcticc::pb2::column_stats_pb2::ColumnStatsHeader header;
-    header.set_version(1); // see column_stats.proto for explanation of the versioning scheme
-    const auto end_index_offset = static_cast<size_t>(index::Fields::end_index);
-    for (const auto& [idx, field_name] : folly::enumerate(schema.field_names)) {
-        if (idx <= end_index_offset) {
-            // start_index and end_index are not statistics
+    header.set_version(1);
+
+    for (const auto& [idx, info] : folly::enumerate(schema.stat_info)) {
+        if (!info.has_value()) {
             continue;
         }
-        auto parsed = parse_segment_column_name(field_name);
-        auto offset_it = symbol_fields_to_offsets.find(parsed.column_name);
-        internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-                offset_it != symbol_fields_to_offsets.end(),
-                "Column stats refer to column '{}' which is not present in the data's TimeseriesDescriptor",
-                parsed.column_name
-        );
-        auto& entry_list = (*header.mutable_stats_by_column())[static_cast<uint32_t>(offset_it->second)];
+
+        const auto& [data_col_offset, stat_type] = *info;
+        auto& entry_list = (*header.mutable_stats_by_column())[data_col_offset];
         auto* new_entry = entry_list.add_entries();
         new_entry->set_stats_seg_offset(static_cast<uint32_t>(idx));
-        new_entry->set_type(parsed.stat_type);
+        new_entry->set_type(stat_type);
     }
     return header;
 }
 
 } // namespace merge_internal
 
-SegmentInMemory merge_column_stats_segments(
-        const std::vector<SegmentInMemory>& col_stats_segments,
-        const ankerl::unordered_dense::map<std::string, size_t>& symbol_fields_to_offsets
-) {
+SegmentInMemory merge_column_stats_segments(const std::vector<SegmentInMemory>& col_stats_segments) {
     using namespace merge_internal;
 
     auto schema = compute_merged_schema(col_stats_segments);
@@ -99,11 +129,14 @@ SegmentInMemory merge_column_stats_segments(
     merged.set_compacted(true);
     merged.sort(start_index_column_name);
 
-    auto header = build_column_stats_header(schema, symbol_fields_to_offsets);
+    auto header = build_column_stats_header(schema);
     google::protobuf::Any any;
     bool packed = any.PackFrom(header);
+
     util::check(packed, "Failed to pack merged column stats header into Any");
+
     merged.set_metadata(std::move(any));
+
     return merged;
 }
 
@@ -136,40 +169,11 @@ std::optional<ColumnStatType> stat_name_to_stat(const std::string& statName) {
         return ColumnStatType::MINMAX;
     }
 
-    user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Unknown column stat type provided: {}", name);
+    user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Unknown column stat type provided: {}", statName);
 }
 
 std::string column_and_stat_to_segment_name(const std::string& column, ColumnStatTypeInternal stat) {
     return fmt::format("{}({})", stat_to_operator_string(stat), column);
-}
-
-ParsedSegmentColumnName parse_segment_column_name(std::string_view segment_column_name) {
-    // Expected format: "{prefix}({column_name})". The prefix identifies the stat
-    // type; the column_name is the original (mangled) data-column name.
-    auto open_paren = segment_column_name.find('(');
-    internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-            open_paren != std::string_view::npos && !segment_column_name.empty() && segment_column_name.back() == ')',
-            "Malformed column stats segment field name: '{}'",
-            segment_column_name
-    );
-    auto prefix = segment_column_name.substr(0, open_paren);
-    auto column_name = segment_column_name.substr(open_paren + 1, segment_column_name.size() - open_paren - 2);
-
-    ColumnStatTypeInternal stat_type;
-    if (prefix == "v1_MIN") {
-        stat_type = ColumnStatTypeInternal::MIN_V1;
-    } else if (prefix == "v1_MAX") {
-        stat_type = ColumnStatTypeInternal::MAX_V1;
-    } else if (prefix == "v1_NAN_COUNT") {
-        stat_type = ColumnStatTypeInternal::NAN_COUNT_V1;
-    } else if (prefix == "v1_NULL_COUNT") {
-        stat_type = ColumnStatTypeInternal::NULL_COUNT_V1;
-    } else {
-        internal::raise<ErrorCode::E_ASSERTION_FAILURE>(
-                "Unknown column stats prefix '{}' in segment field name '{}'", prefix, segment_column_name
-        );
-    }
-    return {std::string{column_name}, stat_type};
 }
 
 void validate_column_stats_header_version(const arcticc::pb2::column_stats_pb2::ColumnStatsHeader& header) {

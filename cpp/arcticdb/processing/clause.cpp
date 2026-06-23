@@ -6,6 +6,7 @@
  * will be governed by the Apache License, version 2.0.
  */
 
+#include <array>
 #include <vector>
 #include <variant>
 
@@ -925,10 +926,17 @@ void append_aggregated_stats_as_columns_to_result(
 // First: finalize every aggregator_data and collect the aggregated col stats
 // Second: append the aggregated col stats to result_segment as columns
 // Note: aggregators that produced no min/max, do not append any columns to the result_segment
-void finalize_and_append_stats_cols_to_result(
+// Returns: ColumnStatsHeader describing: <input_column_offset -> [{stat_segment_offset, stat_type}]>
+arcticc::pb2::column_stats_pb2::ColumnStatsHeader finalize_and_append_stats_cols_to_result(
         SegmentInMemory& result_segment, std::vector<ColumnStatsAggregatorData>& aggregators_data,
         const std::vector<ColumnStatsAggregator>& aggregators
 ) {
+    using namespace arcticc::pb2::column_stats_pb2;
+    static constexpr std::array<ColumnStatsType, 4> stat_order{MIN_V1, MAX_V1, NAN_COUNT_V1, NULL_COUNT_V1};
+
+    ColumnStatsHeader header;
+    header.set_version(1);
+
     for (const auto& agg_data : folly::enumerate(aggregators_data)) {
         auto aggregated_stats = agg_data->finalize();
         if (!aggregated_stats.min.has_value()) {
@@ -936,8 +944,28 @@ void finalize_and_append_stats_cols_to_result(
         }
 
         const auto& output_column_names = aggregators.at(agg_data.index).get_output_column_names();
+        const auto current_stat_start_offset = result_segment.descriptor().field_count();
+
         append_aggregated_stats_as_columns_to_result(result_segment, aggregated_stats, output_column_names);
+
+        // checks if entry exists for the 'input_column_offset' (create if not)
+        auto& entry_list = (*header.mutable_stats_by_column())[aggregated_stats.input_column_offset];
+
+        // mapping: <input_column_offset -> [{stat_segment_offset, stat_type}]>
+        for (const auto& [i, stat_type] : folly::enumerate(stat_order)) {
+            // example: input_column="price" has offset 3 in the original dataframe, input_column_offset=3
+            // in the header: key=3(input_column_offset), value=[
+            // {stats_seg_offset: 2, MIN_V1} (for "price" the MIN stat is at offset 2+0 in stats_segment)
+            // {stats_seg_offset: 3, MAX_V1} (for "price" the MIN stat is at offset 2+1 in stats_segment)
+            // {stats_seg_offset: 4, NAN_COUNT_V1} (for "price" the NAN_COUNT stat is at offset 2+2 in stats_segment)
+            // {stats_seg_offset: 5, NULL_COUNT_V1} (for "price" the NULL_COUNT stat is at offset 2+2 in stats_segment)]
+
+            auto* entry = entry_list.add_entries();
+            entry->set_stats_seg_offset(current_stat_start_offset + i);
+            entry->set_type(stat_type);
+        }
     }
+    return header;
 }
 
 } // namespace column_stats_internal
@@ -968,7 +996,13 @@ std::vector<EntityId> ColumnStatsGenerationClause::process(std::vector<EntityId>
 
     // now the result_segment becomes:
     // |start_index|end_index|v1_min(col1)|v1_max(col1)|v1_nan_count(col1)|v1_null_count(col1)|v2_min(col2)|...
-    finalize_and_append_stats_cols_to_result(result_segment, aggregators_data, *column_stats_aggregators_);
+    auto header =
+            finalize_and_append_stats_cols_to_result(result_segment, aggregators_data, *column_stats_aggregators_);
+
+    google::protobuf::Any any;
+    bool packed = any.PackFrom(header);
+    util::check(packed, "Failed to pack column stats header into Any in ColumnStatsGenerationClause::process");
+    result_segment.set_metadata(std::move(any));
 
     result_segment.set_row_id(0);
     return push_entities(*component_manager_, ProcessingUnit(std::move(result_segment)));

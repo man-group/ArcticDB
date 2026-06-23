@@ -13,12 +13,7 @@
 #include <unordered_set>
 
 namespace arcticdb {
-ankerl::unordered_dense::map<std::string, size_t> map_symbol_fields_to_offsets(const TimeseriesDescriptor& tsd);
-
-SegmentInMemory merge_column_stats_segments(
-        const std::vector<SegmentInMemory>& segments,
-        const ankerl::unordered_dense::map<std::string, size_t>& symbol_fields_to_offsets
-);
+SegmentInMemory merge_column_stats_segments(const std::vector<SegmentInMemory>& segments);
 
 // User facing types - eg users are only allowed to create min and max together, not one or the other
 enum class ColumnStatType { MINMAX };
@@ -42,7 +37,7 @@ struct NameAndStats {
 void validate_column_stats_header_version(const arcticc::pb2::column_stats_pb2::ColumnStatsHeader& header);
 
 // Produce the segment column name for column and its stat type.
-// For example: the stat MIN for the col "price" will produce "v1_MIN(price)"
+// Example: stat MIN for the column "price" -> "v1_MIN(price)"
 std::string column_and_stat_to_segment_name(const std::string& column, ColumnStatTypeInternal type);
 
 class ColumnStats {
@@ -64,7 +59,6 @@ class ColumnStats {
   private:
     void map_stats_to_column_name(const std::string& column_name, const std::unordered_set<std::string>& stats_names);
 
-    // Use ordered map/set here for consistent ordering in the resulting stats objects
     std::map<std::string, std::set<ColumnStatType>> input_column_name_to_stats_;
     std::unordered_map<size_t, NameAndStats> offset_to_input_column_and_stats_;
     bool offset_to_input_column_and_stats_calculated_{false};
