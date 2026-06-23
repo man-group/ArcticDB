@@ -22,6 +22,8 @@
 #include <arcticdb/async/tasks.hpp>
 #include <arcticdb/util/format_date.hpp>
 
+#include <ankerl/unordered_dense.h>
+
 #include <vector>
 #include <array>
 
@@ -77,6 +79,7 @@ struct ArrowInputContiguousSlice {
     size_t size;
     IMemBlock* block;
     std::optional<ExternalPackedMemBlock*> bitmap_block;
+    std::optional<ExternalMemBlock*> offsets_block;
     std::optional<ExternalMemBlock*> strings_block;
 };
 
@@ -101,6 +104,7 @@ std::vector<ArrowInputContiguousSlice> arrow_contiguous_slices_in_range(const Co
                 .size = num_bytes_in_arrow_slice / type_size,
                 .block = block,
                 .bitmap_block = std::nullopt,
+                .offsets_block = std::nullopt,
                 .strings_block = std::nullopt
         };
         if (col.has_extra_buffer(block_offset, ExtraBufferType::BITMAP)) {
@@ -117,6 +121,21 @@ std::vector<ArrowInputContiguousSlice> arrow_contiguous_slices_in_range(const Co
                     bitmap_block->get_type()
             );
             slice.bitmap_block = static_cast<ExternalPackedMemBlock*>(bitmap_block);
+        }
+        if (col.has_extra_buffer(block_offset, ExtraBufferType::OFFSET)) {
+            const auto& offsets_buffer = col.get_extra_buffer(block_offset, ExtraBufferType::OFFSET);
+            util::check(
+                    offsets_buffer.num_blocks() == 1,
+                    "Expected exactly one offsets block but got {}",
+                    offsets_buffer.num_blocks()
+            );
+            auto offsets_block = offsets_buffer.blocks()[0];
+            util::check(
+                    offsets_block->get_type() == MemBlockType::EXTERNAL_WITH_EXTRA_BYTES,
+                    "Expected to see an external block but got: {}",
+                    offsets_block->get_type()
+            );
+            slice.offsets_block = static_cast<ExternalMemBlock*>(offsets_block);
         }
         if (col.has_extra_buffer(block_offset, ExtraBufferType::STRING)) {
             const auto& strings_buffer = col.get_extra_buffer(block_offset, ExtraBufferType::STRING);
@@ -254,33 +273,62 @@ void merge_arrow_slices_into_column(
         if constexpr (is_sequence_type(source_type_info::data_type)) {
             auto logical_pos = 0u;
             for (const auto& slice : slices) {
-                util::check(
-                        slice.block->physical_bytes() == slice.block->logical_size() + sizeof(SourceType),
-                        "Expected offsets buffer to have one extra offset value but instead got physical: {}, "
-                        "logical: {}",
-                        slice.block->physical_bytes(),
-                        slice.block->logical_size()
-                );
-                auto offsets = reinterpret_cast<SourceType*>(slice.block->data());
                 util::check(slice.strings_block.has_value(), "Expected to have strings block in strings arrow column");
-                auto strings = reinterpret_cast<char*>(slice.strings_block.value()->data());
-                auto add_dense_string = [&] ARCTICDB_LAMBDA_INLINE(size_t pos) {
-                    auto pos_in_offsets = (pos - logical_pos) + slice.start_pos;
-                    auto strings_buffer_offset = offsets[pos_in_offsets];
-                    // offsets[pos_in_offsets + 1] is not out of bounds because that is an ExternalMemBlock with
-                    // extra bytes as asserted above.
-                    auto string_length = offsets[pos_in_offsets + 1] - strings_buffer_offset;
-                    std::string_view str(&strings[strings_buffer_offset], string_length);
-                    *dest_dense_ptr++ = string_pool.get(str).offset();
-                };
-                if (slice.bitmap_block.has_value() && dest.is_sparse()) {
-                    iterate_over_set_positions(
-                            dest.sparse_map(), logical_pos, logical_pos + slice.size, std::move(add_dense_string)
-                    );
-                } else {
-                    for (auto pos = logical_pos; pos < logical_pos + slice.size; ++pos) {
-                        add_dense_string(pos);
+                auto strings = reinterpret_cast<const char*>(slice.strings_block.value()->data());
+
+                auto apply_to_every_set_position_in_slice = [&](auto&& f) {
+                    if (slice.bitmap_block.has_value() && dest.is_sparse()) {
+                        iterate_over_set_positions(
+                                dest.sparse_map(), logical_pos, logical_pos + slice.size, std::forward<decltype(f)>(f)
+                        );
+                    } else {
+                        for (auto pos = logical_pos; pos < logical_pos + slice.size; ++pos) {
+                            f(pos);
+                        }
                     }
+                };
+
+                if (slice.offsets_block.has_value()) {
+                    // Dictionary-encoded strings
+                    // keys can be int32 >= 0 (from pyarrow) or uint32 (from polars). reinterpret_cast<uint32_t*> works
+                    // for both
+                    auto keys = reinterpret_cast<const uint32_t*>(slice.block->data());
+                    auto offsets = reinterpret_cast<const int64_t*>(slice.offsets_block.value()->data());
+                    // Use the pool_offsets cache to not repeatedly call `string_pool.get` on duplicate strings
+                    ankerl::unordered_dense::map<uint32_t, DestType> pool_offsets;
+                    auto add_dense_string = [&] ARCTICDB_LAMBDA_INLINE(size_t pos) {
+                        auto key = keys[(pos - logical_pos) + slice.start_pos];
+                        if (auto it = pool_offsets.find(key); it != pool_offsets.end()) {
+                            *dest_dense_ptr++ = it->second;
+                        } else {
+                            auto string_start = offsets[key];
+                            auto string_length = offsets[key + 1] - string_start;
+                            std::string_view str(&strings[string_start], string_length);
+                            auto dest_offset = static_cast<DestType>(string_pool.get(str).offset());
+                            pool_offsets.emplace(key, dest_offset);
+                            *dest_dense_ptr++ = dest_offset;
+                        }
+                    };
+                    apply_to_every_set_position_in_slice(std::move(add_dense_string));
+                } else {
+                    // Variable-length strings
+                    util::check(
+                            slice.block->physical_bytes() == slice.block->logical_size() + sizeof(SourceType),
+                            "Expected offsets buffer to have one extra offset value but instead got physical: {}, "
+                            "logical: {}",
+                            slice.block->physical_bytes(),
+                            slice.block->logical_size()
+                    );
+                    auto offsets = reinterpret_cast<const SourceType*>(slice.block->data());
+                    auto add_dense_string = [&] ARCTICDB_LAMBDA_INLINE(size_t pos) {
+                        auto pos_in_offsets = (pos - logical_pos) + slice.start_pos;
+                        auto strings_buffer_offset = offsets[pos_in_offsets];
+                        // offsets[pos_in_offsets + 1] is in bounds because the block carries one extra offset.
+                        auto string_length = offsets[pos_in_offsets + 1] - strings_buffer_offset;
+                        std::string_view str(&strings[strings_buffer_offset], string_length);
+                        *dest_dense_ptr++ = string_pool.get(str).offset();
+                    };
+                    apply_to_every_set_position_in_slice(std::move(add_dense_string));
                 }
                 logical_pos += slice.size;
             }
