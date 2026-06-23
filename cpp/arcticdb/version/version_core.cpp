@@ -181,13 +181,9 @@ void check_update_data_is_sorted(const InputFrame& frame, const index::IndexSegm
 }
 
 static void check_can_append(
-        const InputFrame& frame, const index::IndexSegmentReader& index_segment_reader, const UpdateInfo& update_info,
+        const InputFrame& frame, const index::IndexSegmentReader& index_segment_reader,
         const WriteOptions& write_options, bool validate_index, bool empty_types
 ) {
-    util::check(
-            update_info.previous_index_key_.has_value(),
-            "Cannot append as there is no previous index key to append into"
-    );
     util::check_rte(!index_segment_reader.is_pickled(), "Cannot append to pickled data");
     fix_descriptor_mismatch_or_throw(APPEND, write_options.dynamic_schema, index_segment_reader, frame, empty_types);
     if (validate_index) {
@@ -216,13 +212,9 @@ static void check_can_append(
 }
 
 static void check_can_update(
-        const InputFrame& frame, const index::IndexSegmentReader& index_segment_reader, const UpdateInfo& update_info,
-        bool dynamic_schema, bool empty_types
+        const InputFrame& frame, const index::IndexSegmentReader& index_segment_reader, bool dynamic_schema,
+        bool empty_types
 ) {
-    util::check(
-            update_info.previous_index_key_.has_value(),
-            "Cannot update as there is no previous index key to update into"
-    );
     util::check_rte(!index_segment_reader.is_pickled(), "Cannot update to pickled data");
     check_index_match(frame.index, index_segment_reader.tsd().index());
     const auto index_desc = index_segment_reader.tsd().index();
@@ -243,9 +235,9 @@ folly::Future<AtomKey> async_append_impl(
     const StreamId stream_id = frame->desc().id();
     ARCTICDB_DEBUG(log::version(), "append stream_id: {} , version_id: {}", stream_id, update_info.next_version_id_);
     auto index_segment_reader = index::get_index_reader(*(update_info.previous_index_key_), store);
+    check_can_append(*frame, index_segment_reader, options, validate_index, empty_types);
     bool bucketize_dynamic = index_segment_reader.bucketize_dynamic();
     auto row_offset = index_segment_reader.tsd().total_rows();
-    check_can_append(*frame, index_segment_reader, update_info, options, validate_index, empty_types);
     frame->set_offset(static_cast<ssize_t>(row_offset));
     frame->set_bucketize_dynamic(bucketize_dynamic);
     auto slicing_arg = get_slicing_policy(options, *frame);
@@ -578,7 +570,7 @@ folly::Future<AtomKey> async_update_impl(
             .thenValue([store, update_info, query, frame, options = std::move(options), dynamic_schema, empty_types](
                                index::IndexSegmentReader&& index_segment_reader
                        ) {
-                check_can_update(*frame, index_segment_reader, update_info, dynamic_schema, empty_types);
+                check_can_update(*frame, index_segment_reader, dynamic_schema, empty_types);
                 ARCTICDB_DEBUG(
                         log::version(),
                         "Update versioned dataframe for stream_id: {} , version_id = {}",
