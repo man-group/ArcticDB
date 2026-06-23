@@ -1,5 +1,6 @@
 #include <arcticdb/storage/storage_utils.hpp>
 #include <arcticdb/pipeline/index_writer.hpp>
+#include <arcticdb/stream/index.hpp>
 #include <arcticdb/stream/index_aggregator.hpp>
 #include <arcticdb/async/tasks.hpp>
 #include <folly/futures/Future.h>
@@ -45,52 +46,56 @@ AtomKey write_table_index_tree_from_source_to_target(
     // In
     auto [_, index_seg] = source_store->read_sync(index_key);
     index::IndexSegmentReader index_segment_reader{std::move(index_seg)};
-    // Out
-    index::IndexWriter<stream::RowCountIndex> writer(
-            target_store,
-            {index_key.id(), new_version_id.value_or(index_key.version_id())},
-            std::move(index_segment_reader.mutable_tsd()),
-            /*key_type =*/std::nullopt,
-            /*sync =*/true
-    );
-
-    std::vector<folly::Future<async::CopyCompressedInterStoreTask::ProcessingResult>> futures;
-
-    // Process
-    for (auto iter = index_segment_reader.begin(); iter != index_segment_reader.end(); ++iter) {
-        auto& sk = *iter;
-        auto& key = sk.key();
-        std::optional<entity::AtomKey> key_to_write = atom_key_builder()
-                                                              .version_id(new_version_id.value_or(key.version_id()))
-                                                              .creation_ts(util::SysClock::nanos_since_epoch())
-                                                              .start_index(key.start_index())
-                                                              .end_index(key.end_index())
-                                                              .content_hash(key.content_hash())
-                                                              .build(key.id(), key.type());
-
-        writer.add(*key_to_write, sk.slice()); // Both const ref
-        futures.emplace_back(submit_io_task(async::CopyCompressedInterStoreTask{
-                sk.key(), std::move(key_to_write), false, false, source_store, {target_store}
-        }));
-    }
-
-    const std::vector<async::CopyCompressedInterStoreTask::ProcessingResult> store_results = collect(futures).get();
-    for (const async::CopyCompressedInterStoreTask::ProcessingResult& res : store_results) {
-        util::variant_match(
-                res,
-                [&](const async::CopyCompressedInterStoreTask::FailedTargets& failed) {
-                    log::storage().error(
-                            "Failed to move targets: {} from {} to {}",
-                            failed,
-                            source_store->name(),
-                            target_store->name()
-                    );
-                },
-                [](const auto&) {}
+    auto index = stream::index_type_from_descriptor(index_segment_reader.tsd().as_stream_descriptor());
+    return util::variant_match(index, [&](auto index_type) {
+        using IndexType = decltype(index_type);
+        // Out
+        index::IndexWriter<IndexType> writer(
+                target_store,
+                {index_key.id(), new_version_id.value_or(index_key.version_id())},
+                std::move(index_segment_reader.mutable_tsd()),
+                /*key_type =*/std::nullopt,
+                /*sync =*/true
         );
-    }
-    // FUTURE: clean up already written keys if exception
-    return writer.commit_sync();
+
+        std::vector<folly::Future<async::CopyCompressedInterStoreTask::ProcessingResult>> futures;
+
+        // Process
+        for (auto iter = index_segment_reader.begin(); iter != index_segment_reader.end(); ++iter) {
+            auto& sk = *iter;
+            auto& key = sk.key();
+            std::optional<entity::AtomKey> key_to_write = atom_key_builder()
+                                                                  .version_id(new_version_id.value_or(key.version_id()))
+                                                                  .creation_ts(util::SysClock::nanos_since_epoch())
+                                                                  .start_index(key.start_index())
+                                                                  .end_index(key.end_index())
+                                                                  .content_hash(key.content_hash())
+                                                                  .build(key.id(), key.type());
+
+            writer.add(*key_to_write, sk.slice()); // Both const ref
+            futures.emplace_back(submit_io_task(async::CopyCompressedInterStoreTask{
+                    sk.key(), std::move(key_to_write), false, false, source_store, {target_store}
+            }));
+        }
+
+        const std::vector<async::CopyCompressedInterStoreTask::ProcessingResult> store_results = collect(futures).get();
+        for (const async::CopyCompressedInterStoreTask::ProcessingResult& res : store_results) {
+            util::variant_match(
+                    res,
+                    [&](const async::CopyCompressedInterStoreTask::FailedTargets& failed) {
+                        log::storage().error(
+                                "Failed to move targets: {} from {} to {}",
+                                failed,
+                                source_store->name(),
+                                target_store->name()
+                        );
+                    },
+                    [](const auto&) {}
+            );
+        }
+        // FUTURE: clean up already written keys if exception
+        return writer.commit_sync();
+    });
 }
 
 AtomKey copy_multi_key_from_source_to_target(

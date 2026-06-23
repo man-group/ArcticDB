@@ -1110,6 +1110,7 @@ if(${TEST})
             storage/test/test_path_validation.cpp
             storage/test/common.hpp
             storage/test/test_storage_operations.cpp
+            storage/test/test_storage_utils.cpp
             stream/test/stream_test_common.cpp
             stream/test/test_aggregator.cpp
             stream/test/test_incompletes.cpp
