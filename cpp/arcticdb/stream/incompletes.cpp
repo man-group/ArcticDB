@@ -146,18 +146,15 @@ SegmentInMemory incomplete_segment_from_tensor_frame(
 ) {
     using namespace arcticdb::stream;
     util::check(
-            frame->has_tensors(),
+            frame->has_only_tensors(),
             "incomplete_segment_from_tensor_frame should not be called with InputFrame backed by SegmentInMemory"
     );
 
     auto offset_in_frame = 0;
     auto slice_num_for_column = 0;
     const auto num_rows = frame->num_rows;
-    auto index_tensor = frame->opt_index_tensor();
-    const bool has_index = frame->has_index();
     const auto index = std::move(frame->index);
 
-    auto field_tensors = frame->field_tensors();
     auto output = std::visit(
             [&](const auto& idx) {
                 using IdxType = std::decay_t<decltype(idx)>;
@@ -193,37 +190,14 @@ SegmentInMemory incomplete_segment_from_tensor_frame(
                                                 output = std::forward<SegmentInMemory>(segment);
                                             }};
 
-                if (has_index) {
-                    util::check(
-                            static_cast<bool>(index_tensor),
-                            "Expected index tensor for index type {}",
-                            agg.descriptor().index()
-                    );
+                // columns_[0] is the index (if present), columns_[1..] are data — mirrors the descriptor.
+                for (auto col = 0u; col < frame->num_columns(); ++col) {
+                    const auto& tensor = frame->get_tensor(col);
                     auto opt_error = aggregator_set_data(
-                            agg.descriptor().field(0).type(),
-                            index_tensor.value(),
-                            agg,
-                            0,
-                            num_rows,
-                            offset_in_frame,
-                            slice_num_for_column,
-                            num_rows,
-                            allow_sparse
-                    );
-
-                    if (opt_error.has_value()) {
-                        opt_error->raise(agg.descriptor().field(0).name());
-                    }
-                }
-
-                for (auto col = 0u; col < field_tensors.size(); ++col) {
-                    auto dest_col = col + agg.descriptor().index().field_count();
-                    auto& tensor = field_tensors[col];
-                    auto opt_error = aggregator_set_data(
-                            agg.descriptor().field(dest_col).type(),
+                            agg.descriptor().field(col).type(),
                             tensor,
                             agg,
-                            dest_col,
+                            col,
                             num_rows,
                             offset_in_frame,
                             slice_num_for_column,
@@ -231,7 +205,7 @@ SegmentInMemory incomplete_segment_from_tensor_frame(
                             allow_sparse
                     );
                     if (opt_error.has_value()) {
-                        opt_error->raise(agg.descriptor().field(dest_col).name());
+                        opt_error->raise(agg.descriptor().field(col).name());
                     }
                 }
 
@@ -284,8 +258,25 @@ void do_sort(SegmentInMemory& mutable_seg, const std::vector<std::string> sort_c
     // Note that we do not set `next_key` in the has_segment() case as that is only used by the library tool
     // TODO: This clone is also insufficient if there are string columns in the input frame, fix with 18190648152
     // Ideally remove incomplete_segment_from_tensor_frame entirely and just use WriteToSegmentTask
-    auto segment = frame->has_tensors() ? incomplete_segment_from_tensor_frame(frame, 0, next_key, sparsify_floats)
-                                        : frame->segment().clone();
+    auto segment = [&]() -> SegmentInMemory {
+        if (frame->has_only_tensors()) {
+            return incomplete_segment_from_tensor_frame(frame, 0, next_key, sparsify_floats);
+        }
+        SegmentInMemory seg;
+        seg.descriptor().set_id(stream_id);
+        if (frame->has_index()) {
+            seg.descriptor().set_index({IndexDescriptorImpl::Type::TIMESTAMP, 1});
+        } else {
+            seg.descriptor().set_index({IndexDescriptorImpl::Type::ROWCOUNT, 0});
+        }
+        for (size_t i = 0; i < frame->num_columns(); ++i) {
+            seg.add_column(frame->desc().fields(i).name(), std::make_shared<Column>(frame->get_column(i).clone()));
+        }
+        if (frame->num_rows > 0) {
+            seg.set_row_data(frame->num_rows - 1);
+        }
+        return seg;
+    }();
     if (options.sort_on_index) {
         util::check(frame->has_index(), "Sort requested on index but no index supplied");
         std::vector<std::string> cols;
@@ -435,7 +426,6 @@ void do_sort(SegmentInMemory& mutable_seg, const std::vector<std::string> sort_c
                                                                      slicing_policy,
                                                                      get_partial_key_gen(frame, typed_stream_version),
                                                                      slice.second,
-                                                                     frame->index,
                                                                      sparsify_floats
                                                              ))
                                        .thenValue([store, de_dup_map, bucketize_dynamic, desc, norm_meta, user_meta](

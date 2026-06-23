@@ -14,6 +14,7 @@
 #include <arcticdb/util/allocator.hpp>
 #include <sparrow/layout/primitive_data_access.hpp>
 #include <sparrow/record_batch.hpp>
+#include <utility>
 
 namespace arcticdb {
 
@@ -420,31 +421,27 @@ DataType arcticdb_type_from_arrow_array(const sparrow::array& array) {
     }
 }
 
-SegmentInMemory arrow_data_to_segment(const std::vector<sparrow::record_batch>& record_batches, bool has_index) {
-    SegmentInMemory seg;
+std::pair<std::vector<Column>, entity::StreamDescriptor> record_batches_to_columns(
+        const std::vector<sparrow::record_batch>& record_batches, bool has_index
+) {
     if (record_batches.empty()) {
-        return seg;
+        return {};
     }
     const auto& first_batch = record_batches.front();
     schema::check<ErrorCode::E_COLUMN_DOESNT_EXIST>(
             !has_index || first_batch.nb_columns() > 0, "Cannot use index_column=True on a table with no columns"
     );
-    uint64_t total_rows = std::accumulate(
-            record_batches.cbegin(),
-            record_batches.cend(),
-            uint64_t(0),
-            [](const uint64_t& accum, const sparrow::record_batch& record_batch) {
-                return accum + record_batch.nb_rows();
-            }
-    );
     auto column_names = first_batch.names();
     std::vector<Column> columns;
     columns.reserve(first_batch.nb_columns());
+    StreamDescriptor desc;
     for (size_t idx = 0; idx < first_batch.nb_columns(); ++idx) {
         auto data_type = arcticdb_type_from_arrow_array(first_batch.get_column(idx));
         // The Arrow data may be semantically sparse, but this buffer is still dense, hence Sparsity::NOT_PERMITTED
         columns.emplace_back(make_scalar_type(data_type), Sparsity::NOT_PERMITTED, ChunkedBuffer());
+        desc.add_field(scalar_field(data_type, column_names[idx]));
     }
+
     uint64_t start_row{0};
     for (const auto& batch : record_batches) {
         for (size_t idx = 0; idx < batch.nb_columns(); ++idx) {
@@ -500,11 +497,10 @@ SegmentInMemory arrow_data_to_segment(const std::vector<sparrow::record_batch>& 
         }
         start_row += batch.nb_rows();
     }
-    for (size_t idx = 0; idx < column_names.size(); ++idx) {
-        seg.add_column(column_names[idx], std::make_shared<Column>(std::move(columns[idx])));
+    for (auto& col : columns) {
+        col.set_row_data(start_row - 1);
     }
-    seg.set_row_data(static_cast<ssize_t>(total_rows) - 1);
-    return seg;
+    return std::make_pair(std::move(columns), std::move(desc));
 }
 
 RecordBatchData empty_record_batch_from_descriptor(

@@ -6,6 +6,8 @@
  * will be governed by the Apache License, version 2.0.
  */
 
+#include "codec/segment.hpp"
+#include "column_store/memory_segment.hpp"
 #include <arcticdb/pipeline/input_frame.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/pipeline/index_utils.hpp>
@@ -31,7 +33,7 @@ namespace ranges = std::ranges;
 
 WriteToSegmentTask::WriteToSegmentTask(
         std::shared_ptr<InputFrame> frame, FrameSlice slice, const SlicingPolicy& slicing,
-        folly::Function<PartialKey(const FrameSlice&)>&& partial_key_gen, size_t slice_num_for_column, Index index,
+        folly::Function<PartialKey(const FrameSlice&)>&& partial_key_gen, size_t slice_num_for_column,
         bool sparsify_floats
 ) :
     frame_(std::move(frame)),
@@ -39,7 +41,6 @@ WriteToSegmentTask::WriteToSegmentTask(
     slicing_(slicing),
     partial_key_gen_(std::move(partial_key_gen)),
     slice_num_for_column_(slice_num_for_column),
-    index_(std::move(index)),
     sparsify_floats_(sparsify_floats) {
     slice_.check_magic();
 }
@@ -49,34 +50,9 @@ std::tuple<PartialKey, SegmentInMemory, FrameSlice> WriteToSegmentTask::operator
     slice_.check_magic();
     magic_.check();
     auto key = partial_key_gen_(slice_);
-    auto seg = frame_->has_segment() ? slice_segment() : slice_tensors();
+    auto seg = slice();
     seg.descriptor().set_id(key.stream_id);
     return {std::move(key), std::move(seg), std::move(slice_)};
-}
-
-SegmentInMemory WriteToSegmentTask::slice_segment() const {
-    const auto& frame = frame_->segment();
-    const auto offset = frame_->offset;
-    SegmentInMemory seg;
-    if (frame.descriptor().index().field_count() > 0) {
-        seg.descriptor().set_index({IndexDescriptorImpl::Type::TIMESTAMP, 1});
-    } else {
-        seg.descriptor().set_index({IndexDescriptorImpl::Type::ROWCOUNT, 0});
-    }
-    for (size_t col_idx = 0; col_idx < frame.descriptor().index().field_count(); ++col_idx) {
-        seg.add_column(
-                frame.field(col_idx).name(),
-                std::make_shared<Column>(slice_column(frame, col_idx, offset, seg.string_pool()))
-        );
-    }
-    for (size_t col_idx = slice_.columns().first; col_idx < slice_.columns().second; ++col_idx) {
-        seg.add_column(
-                frame.field(col_idx).name(),
-                std::make_shared<Column>(slice_column(frame, col_idx, offset, seg.string_pool()))
-        );
-    }
-    seg.set_row_data((slice_.rows().second - slice_.rows().first) - 1);
-    return seg;
 }
 
 struct ArrowInputContiguousSlice {
@@ -298,10 +274,7 @@ void merge_arrow_slices_into_column(
     });
 }
 
-Column WriteToSegmentTask::slice_column(
-        const SegmentInMemory& frame, size_t col_idx, size_t offset, StringPool& string_pool
-) const {
-    const auto& source_column = frame.column(col_idx);
+Column WriteToSegmentTask::slice_column(const Column& source_column, size_t offset, StringPool& string_pool) const {
     const auto type_size = get_type_size(source_column.type().data_type());
     const auto begin_pos = (slice_.rows().first - offset);
     const auto end_pos = (slice_.rows().second - offset);
@@ -323,7 +296,9 @@ Column WriteToSegmentTask::slice_column(
         const auto& slice = contiguous_slices.front();
         ChunkedBuffer chunked_buffer;
         chunked_buffer.add_external_block(slice.block->ptr(slice.start_pos * type_size), slice.size * type_size);
-        return {source_column.type(), Sparsity::NOT_PERMITTED, std::move(chunked_buffer)};
+        Column dest{source_column.type(), Sparsity::NOT_PERMITTED, std::move(chunked_buffer)};
+        dest.set_row_data(slice_.rows().diff() - 1);
+        return dest;
     }
     Column dest(
             dest_column_type,
@@ -343,78 +318,75 @@ Column WriteToSegmentTask::slice_column(
     return dest;
 }
 
-SegmentInMemory WriteToSegmentTask::slice_tensors() const {
-    return util::variant_match(index_, [this](auto& idx) {
-        using IdxType = std::decay_t<decltype(idx)>;
-        using SingleSegmentAggregator = Aggregator<IdxType, FixedSchema, NeverSegmentPolicy>;
+SegmentInMemory WriteToSegmentTask::slice() const {
+    SegmentInMemory seg;
+    seg.descriptor().set_index(slice_.desc()->index());
 
-        SegmentInMemory output;
-        SingleSegmentAggregator agg{
-                FixedSchema{*slice_.desc(), frame_->index},
-                [&output](auto&& segment) { output = std::move(segment); },
-                NeverSegmentPolicy{},
-                *slice_.desc()
-        };
+    const auto offset_in_frame = slice_begin_pos(slice_, *frame_);
+    seg.set_offset(offset_in_frame);
+    const auto rows_to_write = slice_.row_range.second - slice_.row_range.first;
+    const auto index_field_count = frame_->desc().index().field_count();
+    const auto regular_slice_size = util::variant_match(
+            slicing_,
+            [&](const NoSlicing&) { return rows_to_write; },
+            [&](const auto& slicer) { return slicer.row_per_slice(); }
+    );
 
-        auto regular_slice_size = util::variant_match(
-                slicing_,
-                [&](const NoSlicing&) { return slice_.row_range.second - slice_.row_range.first; },
-                [&](const auto& slicer) { return slicer.row_per_slice(); }
+    auto add_tensor_column = [&](size_t abs_col, const NativeTensor& tensor, const Field& fd, bool sparsify) {
+        seg.add_column(
+                FieldRef{fd.type(), fd.name()},
+                std::make_shared<Column>(fd.type(), 0, AllocationType::DYNAMIC, Sparsity::NOT_PERMITTED)
         );
-
-        // Offset is used for index value in row-count index
-        auto offset_in_frame = slice_begin_pos(slice_, *frame_);
-        agg.set_offset(offset_in_frame);
-
-        auto rows_to_write = slice_.row_range.second - slice_.row_range.first;
-        if (frame_->desc().index().field_count() > 0) {
-            const auto& opt_index_tensor = frame_->opt_index_tensor();
-            util::check(opt_index_tensor.has_value(), "Got null index tensor in WriteToSegmentTask");
-            auto opt_error = aggregator_set_data(
-                    frame_->desc().fields(0).type(),
-                    *opt_index_tensor,
-                    agg,
-                    0,
-                    rows_to_write,
-                    offset_in_frame,
-                    slice_num_for_column_,
-                    regular_slice_size,
-                    false
-            );
-            if (opt_error.has_value()) {
-                opt_error->raise(frame_->desc().fields(0).name(), offset_in_frame);
-            }
+        auto opt_error = segment_set_data(
+                fd.type(),
+                tensor,
+                seg,
+                abs_col,
+                rows_to_write,
+                offset_in_frame,
+                slice_num_for_column_,
+                regular_slice_size,
+                sparsify
+        );
+        if (opt_error.has_value()) {
+            opt_error->raise(fd.name(), offset_in_frame);
         }
+    };
 
-        const auto& field_tensors = frame_->field_tensors();
-        for (size_t col = 0, end = slice_.col_range.diff(); col < end; ++col) {
-            auto abs_col = col + frame_->desc().index().field_count();
-            auto& fd = slice_.non_index_field(col);
-            auto& tensor = field_tensors[slice_.absolute_field_col(col)];
-            auto opt_error = aggregator_set_data(
-                    fd.type(),
-                    tensor,
-                    agg,
-                    abs_col,
-                    rows_to_write,
-                    offset_in_frame,
-                    slice_num_for_column_,
-                    regular_slice_size,
-                    sparsify_floats_
-            );
-            if (opt_error.has_value()) {
-                opt_error->raise(fd.name(), offset_in_frame);
-            }
-        }
+    auto add_arrow_column = [&](const Column& source_column, const Field& fd) {
+        seg.add_column(
+                fd.name(), std::make_shared<Column>(slice_column(source_column, frame_->offset, seg.string_pool()))
+        );
+    };
 
-        agg.end_block_write(rows_to_write);
+    // Index column
+    if (frame_->has_index()) {
+        const auto& fd = frame_->desc().fields(0);
+        util::variant_match(
+                frame_->field_data(0),
+                [&](const NativeTensor& tensor) { add_tensor_column(0, tensor, fd, false); },
+                [&](const Column& source_column) { add_arrow_column(source_column, fd); }
+        );
+    }
 
-        if (ConfigsMap().instance()->get_int("Statistics.GenerateOnWrite", 0) == 1)
-            agg.segment().calculate_statistics();
+    // Non-index columns
+    for (size_t col = 0, end = slice_.col_range.diff(); col < end; ++col) {
+        const auto abs_col = col + index_field_count;
+        const auto& fd = slice_.non_index_field(col);
+        const auto col_idx = slice_.absolute_field_col(col) + index_field_count;
+        util::variant_match(
+                frame_->field_data(col_idx),
+                [&](const NativeTensor& tensor) { add_tensor_column(abs_col, tensor, fd, sparsify_floats_); },
+                [&](const Column& source_column) { add_arrow_column(source_column, fd); }
+        );
+    }
 
-        agg.finalize();
-        return output;
-    });
+    seg.end_block_write(rows_to_write);
+
+    if (ConfigsMap().instance()->get_int("Statistics.GenerateOnWrite", 0) == 1)
+        seg.calculate_statistics();
+
+    return seg;
 }
 
 std::vector<std::pair<FrameSlice, size_t>> get_slice_and_rowcount(const std::vector<FrameSlice>& slices) {
@@ -460,7 +432,6 @@ folly::SemiFuture<std::vector<folly::Try<SliceAndKey>>> write_slices(
                                                       slicing,
                                                       get_partial_key_gen(frame, key),
                                                       slice.second,
-                                                      frame->index,
                                                       sparsify_floats
                                               ))
                         .then([sink, de_dup_map](auto&& ks) {

@@ -35,7 +35,7 @@ static void BM_arrow_convert_single_record_batch_to_segment(benchmark::State& st
     std::vector<sparrow::record_batch> record_batches;
     record_batches.emplace_back(create_record_batch(columns));
     for (auto _ : state) {
-        arrow_data_to_segment(record_batches, has_index);
+        record_batches_to_columns(record_batches, has_index);
     }
 }
 
@@ -64,7 +64,7 @@ static void BM_arrow_convert_multiple_record_batches_to_segment(benchmark::State
         record_batches.emplace_back(create_record_batch(columns));
     }
     for (auto _ : state) {
-        arrow_data_to_segment(record_batches);
+        record_batches_to_columns(record_batches);
     }
 }
 

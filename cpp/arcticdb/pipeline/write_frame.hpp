@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include "column_store/memory_segment.hpp"
 #include <arcticdb/entity/index_range.hpp>
 
 #include <arcticdb/pipeline/input_frame.hpp>
@@ -30,22 +31,20 @@ struct WriteToSegmentTask : public async::BaseTask {
     const SlicingPolicy slicing_;
     folly::Function<PartialKey(const FrameSlice&)> partial_key_gen_;
     size_t slice_num_for_column_;
-    Index index_;
     bool sparsify_floats_;
     util::MagicNum<'W', 's', 'e', 'g'> magic_;
 
     WriteToSegmentTask(
             std::shared_ptr<InputFrame> frame, FrameSlice slice, const SlicingPolicy& slicing,
-            folly::Function<PartialKey(const FrameSlice&)>&& partial_key_gen, size_t slice_num_for_column, Index index,
+            folly::Function<PartialKey(const FrameSlice&)>&& partial_key_gen, size_t slice_num_for_column,
             bool sparsify_floats
     );
 
     std::tuple<PartialKey, SegmentInMemory, FrameSlice> operator()();
 
   private:
-    SegmentInMemory slice_tensors() const;
-    SegmentInMemory slice_segment() const;
-    Column slice_column(const SegmentInMemory& frame, size_t col_idx, size_t offset, StringPool& string_pool) const;
+    SegmentInMemory slice() const;
+    Column slice_column(const Column& source_column, size_t offset, StringPool& string_pool) const;
 };
 
 folly::Future<std::vector<SliceAndKey>> slice_and_write(

@@ -372,7 +372,7 @@ std::vector<std::vector<size_t>> MergeUpdateClause::structure_for_processing_log
     std::vector<std::vector<size_t>> offsets = structure_by_row_slice(ranges_and_keys);
     std::vector<size_t> row_slices_to_keep;
     // TODO: Arrow is not supported yet.
-    const TypedTensor<IndexType::DataTypeTag::raw_type> index_tensor(source_->opt_index_tensor().value());
+    const TypedTensor<IndexType::DataTypeTag::raw_type> index_tensor(source_->get_tensor(0));
     user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
             util::is_cstyle_array<IndexType::DataTypeTag::raw_type>(index_tensor),
             "Fortran-style arrays are not supported by merge update yet. The index column has data type {} of "
@@ -443,26 +443,31 @@ std::vector<EntityId> MergeUpdateClause::process(std::vector<EntityId>&& entity_
         std::optional<std::vector<std::vector<size_t>>> result;
         if (source_->has_index()) {
             using IndexType = ScalarTagType<DataTypeTag<DataType::NANOSECONDS_UTC64>>;
-            const TypedTensor<IndexType::DataTypeTag::raw_type> index_tensor(source_->opt_index_tensor().value());
+            const TypedTensor<IndexType::DataTypeTag::raw_type> index_tensor(source_->get_tensor(0));
             result.emplace(filter_index_match(
                     proc.segments_->front()->column(0), std::span(index_tensor.data(), source_->num_rows), proc
             ));
         }
         return result;
     }();
-    // TODO: Source and target descriptor can differ for dynamic schema
-    matched = filter_on_additional_columns_match(
-            source_->desc(), source_->desc(), source_->field_tensors(), proc, std::move(matched)
-    );
-    if (source_->has_segment()) {
+    if (!source_->has_only_tensors()) {
         user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Arrow format is not supported as input for merge update"
         );
-    } else if (source_->has_tensors()) {
-        if (update_and_insert(source_->field_tensors(), source_->desc(), proc, *matched)) {
-            return push_entities(*component_manager_, std::move(proc));
-        }
-    } else {
-        internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Input frame does not contain neither a segment nor tensors");
+    }
+    // source_tensors holds only data columns; the index (if any) sits at columns_[0] and is handled separately
+    // by filter_index_match above.
+    const auto index_fields = source_->desc().index().field_count();
+    std::vector<NativeTensor> source_tensors;
+    source_tensors.reserve(source_->num_columns() - index_fields);
+    for (size_t i = index_fields; i < source_->num_columns(); ++i) {
+        source_tensors.push_back(source_->get_tensor(i));
+    }
+    // TODO: Source and target descriptor can differ for dynamic schema
+    matched = filter_on_additional_columns_match(
+            source_->desc(), source_->desc(), source_tensors, proc, std::move(matched)
+    );
+    if (update_and_insert(source_tensors, source_->desc(), proc, *matched)) {
+        return push_entities(*component_manager_, std::move(proc));
     }
     return {};
 }
@@ -498,8 +503,7 @@ std::vector<std::vector<size_t>> MergeUpdateClause::initialize_rows_to_update_fo
                 const size_t column_position_in_source_tensors =
                         source_field_position - source_descriptor.index().field_count();
                 std::span source_data(
-                        static_cast<const SourceType*>(source_->field_tensors()[column_position_in_source_tensors].data(
-                        )),
+                        static_cast<const SourceType*>(source_->get_tensor(column_position_in_source_tensors).data()),
                         source_->num_rows
                 );
                 for (size_t source_row_idx = 0; source_row_idx < source_data.size(); ++source_row_idx) {
