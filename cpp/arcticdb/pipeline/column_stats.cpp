@@ -130,12 +130,12 @@ std::string stat_to_name(ColumnStatType stat) {
     }
 }
 
-std::optional<ColumnStatType> stat_name_to_stat(const std::string& name) {
-    if (name != "MINMAX") {
-        user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Unknown column stat type provided: {}", name);
+std::optional<ColumnStatType> stat_name_to_stat(const std::string& statName) {
+    if (statName == "MINMAX") {
+        return ColumnStatType::MINMAX;
     }
 
-    return ColumnStatType::MINMAX;
+    user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Unknown column stat type provided: {}", name);
 }
 
 std::string column_and_stat_to_segment_name(const std::string& column, ColumnStatTypeInternal stat) {
@@ -225,7 +225,7 @@ ColumnStats::ColumnStats(
             }
 
             auto it = offset_to_input_column_and_stats_.find(data_col_offset);
-            
+
             if (it != offset_to_input_column_and_stats_.end()) {
                 it->second.column_stats.insert(external_type);
             } else {
