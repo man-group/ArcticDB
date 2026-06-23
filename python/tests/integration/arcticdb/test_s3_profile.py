@@ -28,7 +28,7 @@ from arcticdb.storage_fixtures.s3 import (
 )
 from arcticdb.storage_fixtures.utils import safer_rmtree
 from arcticdb_ext.storage import NativeVariantStorage, AWSAuthMethod, S3Settings as NativeS3Settings
-from ...util.mark import REAL_S3_TESTS_MARK, ARCTICDB_USING_CONDA
+from ...util.mark import REAL_S3_TESTS_MARK
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -76,12 +76,6 @@ def _assert_profile_selects_credentials(s3_storage_default_auth, lib_name, profi
             ac_wrong.create_library(lib_name + "_wrong")
 
 
-@pytest.mark.skipif(
-    ARCTICDB_USING_CONDA,
-    reason="Reading profile credentials from the AWS config file needs aws-sdk-cpp >= 1.11.748 (CRT profile "
-    "provider, like boto3); conda-forge currently ships <= 1.11.747, whose provider reads only the credentials file. "
-    "test_s3_default_auth_with_profile_credentials_file covers the credentials-file path on every version.",
-)
 @pytest.mark.storage
 @pytest.mark.authentication
 def test_s3_default_auth_with_profile(s3_storage_default_auth, lib_name, tmp_path, monkeypatch, route_env_to_extension):
