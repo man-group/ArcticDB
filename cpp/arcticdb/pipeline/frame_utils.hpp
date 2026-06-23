@@ -87,11 +87,10 @@ TimeseriesDescriptor index_descriptor_from_frame(
 
 template<typename RawType>
 RawType* flatten_tensor(
-        std::optional<ChunkedBuffer>& flattened_buffer, size_t rows_to_write, const NativeTensor& tensor,
-        size_t slice_num, size_t regular_slice_size
+        std::optional<ChunkedBuffer>& flattened_buffer, size_t rows_to_write, const NativeTensor& tensor, size_t row
 ) {
     flattened_buffer = ChunkedBuffer::presized(rows_to_write * sizeof(RawType));
-    TypedTensor<RawType> t(tensor, slice_num, regular_slice_size, rows_to_write);
+    TypedTensor<RawType> t(tensor, row, rows_to_write);
     util::FlattenHelper flattener{t};
     auto dst = reinterpret_cast<RawType*>(flattened_buffer->data());
     flattener.flatten(dst, reinterpret_cast<RawType const*>(t.data()));
@@ -135,8 +134,7 @@ std::variant<position_t, convert::StringEncodingError> add_py_string_to_pool(
 
 template<typename TagType, typename RawType>
 std::optional<convert::StringEncodingError> set_sequence_type(
-        SegmentInMemory& seg, const entity::NativeTensor& tensor, size_t col, size_t rows_to_write, size_t row,
-        size_t slice_num, size_t regular_slice_size
+        SegmentInMemory& seg, const entity::NativeTensor& tensor, size_t col, size_t rows_to_write, size_t row
 ) {
     constexpr auto dt = TagType::DataTypeTag::data_type;
     const auto c_style = util::is_cstyle_array<RawType>(tensor);
@@ -157,8 +155,7 @@ std::optional<convert::StringEncodingError> set_sequence_type(
         auto ptr_data = static_cast<PyObject**>(data);
         ptr_data += row;
         if (!c_style)
-            ptr_data =
-                    flatten_tensor<PyObject*>(flattened_buffer, rows_to_write, tensor, slice_num, regular_slice_size);
+            ptr_data = flatten_tensor<PyObject*>(flattened_buffer, rows_to_write, tensor, row);
 
         // GIL will be acquired if there is a string that is not pure ASCII/UTF-8
         // In this case a PyObject will be allocated by convert::py_unicode_to_buffer
@@ -186,7 +183,7 @@ std::optional<convert::StringEncodingError> set_sequence_type(
 template<typename TagType, typename RawType>
 void set_integral_scalar_type(
         SegmentInMemory& seg, const entity::NativeTensor& tensor, size_t col, size_t rows_to_write, size_t row,
-        size_t slice_num, size_t regular_slice_size, bool sparsify_floats
+        bool sparsify_floats
 ) {
     constexpr auto dt = TagType::DataTypeTag::data_type;
     auto ptr = tensor.template ptr_cast<RawType>(row);
@@ -211,7 +208,7 @@ void set_integral_scalar_type(
                     sizeof(RawType)
             );
 
-            TypedTensor<RawType> t(tensor, slice_num, regular_slice_size, rows_to_write);
+            TypedTensor<RawType> t(tensor, row, rows_to_write);
             seg.set_array(col, t);
         }
     }
@@ -219,8 +216,7 @@ void set_integral_scalar_type(
 
 template<typename TagType, typename RawType>
 void set_bool_object_type(
-        SegmentInMemory& seg, const entity::NativeTensor& tensor, size_t col, size_t rows_to_write, size_t row,
-        size_t slice_num, size_t regular_slice_size
+        SegmentInMemory& seg, const entity::NativeTensor& tensor, size_t col, size_t rows_to_write, size_t row
 ) {
     const auto c_style = util::is_cstyle_array<RawType>(tensor);
     std::optional<ChunkedBuffer> flattened_buffer;
@@ -230,7 +226,7 @@ void set_bool_object_type(
     ptr_data += row;
 
     if (!c_style)
-        ptr_data = flatten_tensor<PyObject*>(flattened_buffer, rows_to_write, tensor, slice_num, regular_slice_size);
+        ptr_data = flatten_tensor<PyObject*>(flattened_buffer, rows_to_write, tensor, row);
 
     util::BitSet bitset = util::scan_object_type_to_sparse(ptr_data, rows_to_write);
 
@@ -325,7 +321,7 @@ std::optional<convert::StringEncodingError> set_array_type(
 
 inline std::optional<convert::StringEncodingError> segment_set_data(
         const TypeDescriptor& type_desc, const entity::NativeTensor& tensor, SegmentInMemory& seg, size_t col,
-        size_t rows_to_write, size_t row, size_t slice_num, size_t regular_slice_size, bool sparsify_floats
+        size_t rows_to_write, size_t row, bool sparsify_floats
 ) {
     return type_desc.visit_tag([&](auto tag) {
         using TagType = std::decay_t<decltype(tag)>;
@@ -344,20 +340,16 @@ inline std::optional<convert::StringEncodingError> segment_set_data(
             normalization::check<ErrorCode::E_UNIMPLEMENTED_INPUT_TYPE>(
                     tag.dimension() == Dimension::Dim0, "Multidimensional string types are not supported."
             );
-            auto maybe_error = set_sequence_type<TagType, RawType>(
-                    seg, tensor, col, rows_to_write, row, slice_num, regular_slice_size
-            );
+            auto maybe_error = set_sequence_type<TagType, RawType>(seg, tensor, col, rows_to_write, row);
             if (maybe_error)
                 return maybe_error;
         } else if constexpr ((is_numeric_type(dt) || is_bool_type(dt)) && tag.dimension() == Dimension::Dim0) {
-            set_integral_scalar_type<TagType, RawType>(
-                    seg, tensor, col, rows_to_write, row, slice_num, regular_slice_size, sparsify_floats
-            );
+            set_integral_scalar_type<TagType, RawType>(seg, tensor, col, rows_to_write, row, sparsify_floats);
         } else if constexpr (is_bool_object_type(dt)) {
             normalization::check<ErrorCode::E_UNIMPLEMENTED_INPUT_TYPE>(
                     tag.dimension() == Dimension::Dim0, "Multidimensional nullable booleans are not supported"
             );
-            set_bool_object_type<TagType, RawType>(seg, tensor, col, rows_to_write, row, slice_num, regular_slice_size);
+            set_bool_object_type<TagType, RawType>(seg, tensor, col, rows_to_write, row);
         } else if constexpr (is_array_type(TypeDescriptor(tag))) {
             auto maybe_error = set_array_type<TagType, RawType>(type_desc, seg, tensor, col, rows_to_write, row);
             if (maybe_error)
@@ -377,11 +369,9 @@ inline std::optional<convert::StringEncodingError> segment_set_data(
 template<typename Aggregator>
 inline std::optional<convert::StringEncodingError> aggregator_set_data(
         const TypeDescriptor& type_desc, const entity::NativeTensor& tensor, Aggregator& agg, size_t col,
-        size_t rows_to_write, size_t row, size_t slice_num, size_t regular_slice_size, bool sparsify_floats
+        size_t rows_to_write, size_t row, bool sparsify_floats
 ) {
-    return segment_set_data(
-            type_desc, tensor, agg.segment(), col, rows_to_write, row, slice_num, regular_slice_size, sparsify_floats
-    );
+    return segment_set_data(type_desc, tensor, agg.segment(), col, rows_to_write, row, sparsify_floats);
 }
 
 size_t adjust_slice_rowcounts(std::vector<pipelines::SliceAndKey>& slice_and_keys);

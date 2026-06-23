@@ -28,16 +28,14 @@ struct WriteToSegmentTask : public async::BaseTask {
   public:
     std::shared_ptr<InputFrame> frame_;
     const FrameSlice slice_;
-    const SlicingPolicy slicing_;
+    std::optional<TypedStreamVersion> typed_stream_version_;
     folly::Function<PartialKey(const FrameSlice&)> partial_key_gen_;
-    size_t slice_num_for_column_;
     bool sparsify_floats_;
     util::MagicNum<'W', 's', 'e', 'g'> magic_;
 
     WriteToSegmentTask(
-            std::shared_ptr<InputFrame> frame, FrameSlice slice, const SlicingPolicy& slicing,
-            folly::Function<PartialKey(const FrameSlice&)>&& partial_key_gen, size_t slice_num_for_column,
-            bool sparsify_floats
+            std::shared_ptr<InputFrame> frame, FrameSlice slice,
+            const std::optional<TypedStreamVersion>& typed_stream_version, bool sparsify_floats = false
     );
 
     std::tuple<PartialKey, SegmentInMemory, FrameSlice> operator()();
@@ -45,6 +43,7 @@ struct WriteToSegmentTask : public async::BaseTask {
   private:
     SegmentInMemory slice() const;
     Column slice_column(const Column& source_column, size_t offset, StringPool& string_pool) const;
+    PartialKey generate_partial_key(const SegmentInMemory& seg) const;
 };
 
 folly::Future<std::vector<SliceAndKey>> slice_and_write(
@@ -56,9 +55,9 @@ folly::Future<std::vector<SliceAndKey>> slice_and_write(
 int64_t write_window_size();
 
 folly::SemiFuture<std::vector<folly::Try<SliceAndKey>>> write_slices(
-        const std::shared_ptr<InputFrame>& frame, std::vector<FrameSlice>&& slices, const SlicingPolicy& slicing,
-        TypedStreamVersion&& partial_key, const std::shared_ptr<stream::StreamSink>& sink,
-        const std::shared_ptr<DeDupMap>& de_dup_map, bool sparsify_floats
+        const std::shared_ptr<InputFrame>& frame, std::vector<FrameSlice>&& slices, TypedStreamVersion&& partial_key,
+        const std::shared_ptr<stream::StreamSink>& sink, const std::shared_ptr<DeDupMap>& de_dup_map,
+        bool sparsify_floats
 );
 
 folly::Future<entity::AtomKey> write_frame(
@@ -93,8 +92,6 @@ folly::Future<SliceAndKey> async_rewrite_partial_segment(
 std::vector<SliceAndKey> flatten_and_fix_rows(
         const std::array<std::vector<SliceAndKey>, 5>& groups, size_t& global_count
 );
-
-std::vector<std::pair<FrameSlice, size_t>> get_slice_and_rowcount(const std::vector<FrameSlice>& slices);
 
 template<typename T>
 requires std::is_same_v<T, SliceAndKey> || std::is_same_v<T, std::vector<SliceAndKey>>

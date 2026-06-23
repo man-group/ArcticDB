@@ -32,15 +32,12 @@ using namespace arcticdb::stream;
 namespace ranges = std::ranges;
 
 WriteToSegmentTask::WriteToSegmentTask(
-        std::shared_ptr<InputFrame> frame, FrameSlice slice, const SlicingPolicy& slicing,
-        folly::Function<PartialKey(const FrameSlice&)>&& partial_key_gen, size_t slice_num_for_column,
-        bool sparsify_floats
+        std::shared_ptr<InputFrame> frame, FrameSlice slice,
+        const std::optional<TypedStreamVersion>& typed_stream_version, bool sparsify_floats
 ) :
     frame_(std::move(frame)),
     slice_(std::move(slice)),
-    slicing_(slicing),
-    partial_key_gen_(std::move(partial_key_gen)),
-    slice_num_for_column_(slice_num_for_column),
+    typed_stream_version_(typed_stream_version),
     sparsify_floats_(sparsify_floats) {
     slice_.check_magic();
 }
@@ -49,10 +46,27 @@ std::tuple<PartialKey, SegmentInMemory, FrameSlice> WriteToSegmentTask::operator
     ARCTICDB_SUBSAMPLE_AGG(WriteSliceCopyToSegment)
     slice_.check_magic();
     magic_.check();
-    auto key = partial_key_gen_(slice_);
     auto seg = slice();
+    auto key = generate_partial_key(seg);
     seg.descriptor().set_id(key.stream_id);
     return {std::move(key), std::move(seg), std::move(slice_)};
+}
+
+PartialKey WriteToSegmentTask::generate_partial_key(const SegmentInMemory& seg) const {
+    if (!typed_stream_version_.has_value()) {
+        return {};
+    }
+    const auto start_index = frame_->has_index()
+                                     ? *seg.column(0).scalar_at<timestamp>(0)
+                                     : entity::safe_convert_to_numeric_index(slice_.row_range.first, "Rows");
+    const auto end_index = frame_->has_index()
+                                   ? end_index_generator(*seg.column(0).scalar_at<timestamp>(seg.row_count() - 1))
+                                   : entity::safe_convert_to_numeric_index(slice_.row_range.second, "Rows");
+    return {typed_stream_version_->type,
+            typed_stream_version_->version_id,
+            typed_stream_version_->id,
+            start_index,
+            end_index};
 }
 
 struct ArrowInputContiguousSlice {
@@ -326,28 +340,13 @@ SegmentInMemory WriteToSegmentTask::slice() const {
     seg.set_offset(offset_in_frame);
     const auto rows_to_write = slice_.row_range.second - slice_.row_range.first;
     const auto index_field_count = frame_->desc().index().field_count();
-    const auto regular_slice_size = util::variant_match(
-            slicing_,
-            [&](const NoSlicing&) { return rows_to_write; },
-            [&](const auto& slicer) { return slicer.row_per_slice(); }
-    );
 
     auto add_tensor_column = [&](size_t abs_col, const NativeTensor& tensor, const Field& fd, bool sparsify) {
         seg.add_column(
                 FieldRef{fd.type(), fd.name()},
                 std::make_shared<Column>(fd.type(), 0, AllocationType::DYNAMIC, Sparsity::NOT_PERMITTED)
         );
-        auto opt_error = segment_set_data(
-                fd.type(),
-                tensor,
-                seg,
-                abs_col,
-                rows_to_write,
-                offset_in_frame,
-                slice_num_for_column_,
-                regular_slice_size,
-                sparsify
-        );
+        auto opt_error = segment_set_data(fd.type(), tensor, seg, abs_col, rows_to_write, offset_in_frame, sparsify);
         if (opt_error.has_value()) {
             opt_error->raise(fd.name(), offset_in_frame);
         }
@@ -389,24 +388,6 @@ SegmentInMemory WriteToSegmentTask::slice() const {
     return seg;
 }
 
-std::vector<std::pair<FrameSlice, size_t>> get_slice_and_rowcount(const std::vector<FrameSlice>& slices) {
-    std::vector<std::pair<FrameSlice, size_t>> slice_and_rowcount;
-    slice_and_rowcount.reserve(slices.size());
-    size_t slice_num_for_column = 0;
-    std::optional<size_t> first_row;
-    for (const auto& slice : slices) {
-        if (!first_row)
-            first_row = slice.row_range.first;
-
-        if (slice.row_range.first == *first_row)
-            slice_num_for_column = 0;
-
-        slice_and_rowcount.emplace_back(slice, slice_num_for_column);
-        ++slice_num_for_column;
-    }
-    return slice_and_rowcount;
-}
-
 int64_t write_window_size() {
     return ConfigsMap::instance()->get_int(
             "VersionStore.BatchWriteWindow", int64_t(2 * async::TaskScheduler::instance()->io_thread_count())
@@ -414,26 +395,17 @@ int64_t write_window_size() {
 }
 
 folly::SemiFuture<std::vector<folly::Try<SliceAndKey>>> write_slices(
-        const std::shared_ptr<InputFrame>& frame, std::vector<FrameSlice>&& slices, const SlicingPolicy& slicing,
-        TypedStreamVersion&& key, const std::shared_ptr<stream::StreamSink>& sink,
-        const std::shared_ptr<DeDupMap>& de_dup_map, bool sparsify_floats
+        const std::shared_ptr<InputFrame>& frame, std::vector<FrameSlice>&& slices, TypedStreamVersion&& key,
+        const std::shared_ptr<stream::StreamSink>& sink, const std::shared_ptr<DeDupMap>& de_dup_map,
+        bool sparsify_floats
 ) {
     ARCTICDB_SAMPLE(WriteSlices, 0)
 
-    auto slice_and_rowcount = get_slice_and_rowcount(slices);
-
     int64_t write_window = write_window_size();
     auto window = folly::window(
-            std::move(slice_and_rowcount),
-            [de_dup_map, frame, slicing, key = std::move(key), sink, sparsify_floats](auto&& slice) {
-                return async::submit_cpu_task(WriteToSegmentTask(
-                                                      frame,
-                                                      slice.first,
-                                                      slicing,
-                                                      get_partial_key_gen(frame, key),
-                                                      slice.second,
-                                                      sparsify_floats
-                                              ))
+            std::move(slices),
+            [de_dup_map, frame, key = std::move(key), sink, sparsify_floats](auto&& slice) {
+                return async::submit_cpu_task(WriteToSegmentTask(frame, slice, key, sparsify_floats))
                         .then([sink, de_dup_map](auto&& ks) {
                             return sink->async_write(std::forward<decltype(ks)>(ks), de_dup_map);
                         });
@@ -455,7 +427,7 @@ folly::Future<std::vector<SliceAndKey>> slice_and_write(
 
     ARCTICDB_SUBSAMPLE_DEFAULT(SliceAndWrite)
     TypedStreamVersion tsv{std::move(key.id), key.version_id, KeyType::TABLE_DATA};
-    return write_slices(frame, std::move(slices), slicing, std::move(tsv), sink, de_dup_map, sparsify_floats)
+    return write_slices(frame, std::move(slices), std::move(tsv), sink, de_dup_map, sparsify_floats)
             .via(&async::cpu_executor())
             .thenValue([sink](std::vector<folly::Try<SliceAndKey>>&& ks) {
                 return rollback_slices_on_quota_exceeded(std::move(ks), sink);
