@@ -1348,17 +1348,21 @@ void check_can_perform_processing(
             (!read_query.columns && !read_query.row_range &&
              std::holds_alternative<std::monostate>(read_query.row_filter) && read_query.clauses_.empty());
     const bool is_numpy_array = pipeline_context->norm_meta_ && pipeline_context->norm_meta_->has_np();
+    // We do not support processing over numpy arrays in general, but compact_data (either directly, or via the
+    // compact_data_inline argument to append[_batch]) must work with numpy arrays as well as Series/DataFrames
+    const bool is_compaction =
+            !read_query.clauses_.empty() && folly::poly_type(*read_query.clauses_.front()) == typeid(CompactDataClause);
     if (!is_query_empty) {
-        // Exception for filterig pickled data is skipped for now for backward compatibility
+        // Exception for filtering pickled data is skipped for now for backward compatibility
         if (pipeline_context->multi_key_) {
             schema::raise<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_RECURSIVE_NORMALIZED_DATA>(
                     "Cannot perform processing such as row/column filtering, projection, aggregation, resampling, "
                     "etc.. on recursively normalized data"
             );
-        } else if (is_numpy_array) {
+        } else if (is_numpy_array && !is_compaction) {
             schema::raise<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_NUMPY_ARRAY>(
                     "Cannot perform processing such as row/column filtering, projection, aggregation, resampling, "
-                    "etc.. on recursively numpy array"
+                    "etc.. on numpy array"
             );
         }
     }

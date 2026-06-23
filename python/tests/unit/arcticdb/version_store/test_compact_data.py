@@ -591,6 +591,17 @@ def test_compact_recursively_normalized_data(lmdb_version_store_v1):
     assert "recursive" in str(e.value) and sym in str(e.value)
 
 
+def test_compact_numpy_arrays(in_memory_store_factory):
+    lib = in_memory_store_factory()
+    sym = "test_compact_numpy_arrays"
+    lib.write(sym, np.arange(10))
+    lib.append(sym, np.arange(10, 20))
+    assert (lib.read(sym).data == np.arange(20)).all()
+    lib.compact_data(sym)
+    assert (lib.read(sym).data == np.arange(20)).all()
+    assert len(lib.read_index(sym)) == 1
+
+
 @pytest.mark.parametrize(
     "first_type", ["uint8", "uint16", "uint32", "uint64", "int8", "int16", "int32", "int64", "float32", "float64"]
 )
