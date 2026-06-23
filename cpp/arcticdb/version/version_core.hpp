@@ -26,7 +26,14 @@
 #include <arcticdb/entity/read_result.hpp>
 #include <arcticdb/util/constructors.hpp>
 #include <arcticdb/version/version_tasks.hpp>
+#include <arcticdb/pipeline/frame_slice.hpp>
+#include <folly/futures/Future.h>
+#include <folly/futures/Promise.h>
+#include <atomic>
+#include <functional>
+#include <memory>
 #include <string>
+#include <vector>
 
 namespace arcticdb::version_store {
 
@@ -102,11 +109,88 @@ folly::Future<std::vector<EntityId>> schedule_remaining_iterations(
         std::shared_ptr<std::vector<std::shared_ptr<Clause>>> clauses
 );
 
+using SegmentReader = std::function<folly::Future<pipelines::SegmentAndSlice>(pipelines::RangesAndKey&&)>;
+
+// Bounds memory use by keeping at most K processing units in flight. A unit's reads are launched together
+// (admit), the next unit is admitted when an outstanding one finishes processing (on_unit_complete). Never waits within
+// a unit, so progress holds for any K >= 1 regardless of the processing unit structure (for example, if there is
+// overlap between units). Construct via make_shared (fire captures shared_from_this to keep the controller alive across
+// the async reads).
+class ProcessingUnitAdmissionHandler : public std::enable_shared_from_this<ProcessingUnitAdmissionHandler> {
+  public:
+    ProcessingUnitAdmissionHandler(
+            SegmentReader reader, std::vector<pipelines::RangesAndKey>&& ranges_and_keys,
+            std::vector<std::vector<size_t>>&& processing_units, size_t k
+    ) :
+        reader_(std::move(reader)),
+        ranges_and_keys_(std::make_shared<std::vector<pipelines::RangesAndKey>>(std::move(ranges_and_keys))),
+        promises_(std::make_shared<std::vector<folly::Promise<pipelines::SegmentAndSlice>>>(ranges_and_keys_->size())),
+        launched_(std::make_shared<std::vector<std::atomic<bool>>>(ranges_and_keys_->size())),
+        processing_units_(std::move(processing_units)),
+        next_unit_(k) {}
+
+    // Used to chain downstream processing, possibly before any of the work is actually executing.
+    std::vector<folly::Future<pipelines::SegmentAndSlice>> futures() {
+        std::vector<folly::Future<pipelines::SegmentAndSlice>> res;
+        res.reserve(promises_->size());
+        for (auto& promise : *promises_) {
+            res.emplace_back(promise.getFuture());
+        }
+        return res;
+    }
+
+    void admit_initial(const size_t k) {
+        for (size_t u = 0; u < std::min(k, processing_units_.size()); ++u) {
+            admit(u);
+        }
+    }
+
+    void on_unit_complete() {
+        const auto u = next_unit_.fetch_add(1);
+        if (u < processing_units_.size()) {
+            admit(u);
+        }
+    }
+
+  private:
+    // Kick off a unit of work. This will resolve some of the futures and allow them to continue.
+    // A segment may belong to two units (e.g. resample boundaries), so the read must fire at most once.
+    void fire(size_t i) {
+        if (launched_->at(i).exchange(true)) {
+            return;
+        }
+        auto self = shared_from_this();
+        reader_(pipelines::RangesAndKey{ranges_and_keys_->at(i)})
+                .thenTryInline([self, i](folly::Try<pipelines::SegmentAndSlice>&& t) {
+                    self->promises_->at(i).setTry(std::move(t));
+                });
+    }
+
+    // Kick off all units of work within the u-th processing unit.
+    void admit(const size_t u) {
+        for (auto i : processing_units_.at(u)) {
+            fire(i);
+        }
+    }
+
+    SegmentReader reader_;
+    std::shared_ptr<std::vector<pipelines::RangesAndKey>> ranges_and_keys_;
+
+    // We accumulate promises for all processing units up front, but they do not start to execute
+    // until the `fire` call. This lets us set up chains of futures while controlling how many
+    // are actually executing at a given time.
+    std::shared_ptr<std::vector<folly::Promise<pipelines::SegmentAndSlice>>> promises_;
+    std::shared_ptr<std::vector<std::atomic<bool>>> launched_;
+    std::vector<std::vector<size_t>> processing_units_;
+    std::atomic<size_t> next_unit_;
+};
+
 folly::Future<std::vector<EntityId>> schedule_clause_processing(
         std::shared_ptr<ComponentManager> component_manager,
         std::vector<folly::Future<pipelines::SegmentAndSlice>>&& segment_and_slice_futures,
         std::vector<std::vector<size_t>>&& processing_unit_indexes,
-        std::shared_ptr<std::vector<std::shared_ptr<Clause>>> clauses
+        std::shared_ptr<std::vector<std::shared_ptr<Clause>>> clauses,
+        std::shared_ptr<ProcessingUnitAdmissionHandler> admission = nullptr
 );
 
 FrameAndDescriptor read_index_impl(const std::shared_ptr<Store>& store, const VersionedItem& version);
