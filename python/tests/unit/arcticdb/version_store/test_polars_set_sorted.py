@@ -133,6 +133,28 @@ def test_value_columns_not_sorted(lmdb_library):
     assert result["another"].flags["SORTED_ASC"] is False
 
 
+@pytest.mark.parametrize("first_level_is_timeseries", [True, False])
+def test_multiindex_sorted_only_if_timeseries(lmdb_library, first_level_is_timeseries):
+    """A sorted MultiIndex carries the Polars sorted flag on its first level only when that level is a
+    timeseries; ArcticDB does not track sortedness for non-datetime index levels."""
+    lib = lmdb_library
+    if first_level_is_timeseries:
+        first_level = pd.date_range("2024-01-01", periods=3, freq="h").repeat(2)
+    else:
+        first_level = np.repeat(np.arange(3), 2)
+    index = pd.MultiIndex.from_arrays([first_level, np.tile([0, 1], 3)], names=["l0", "l1"])
+    df = pd.DataFrame({"val": np.arange(6)}, index=index).sort_index()
+
+    lib.write("sym", df)
+    result = lib.read("sym", output_format="polars").data
+
+    assert isinstance(result, pl.DataFrame)
+    # The first index level is the first column; it is flagged sorted only for a timeseries first level.
+    first_level_col = result[result.columns[0]]
+    assert first_level_col.flags["SORTED_ASC"] is first_level_is_timeseries
+    assert first_level_col.flags["SORTED_DESC"] is False
+
+
 def _make_norm_meta(input_type="df", index_type="index", is_physically_stored=True):
     """Build a minimal mock normalization metadata object."""
     index = SimpleNamespace(is_physically_stored=is_physically_stored)
