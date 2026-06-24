@@ -24,6 +24,7 @@ from arcticdb.storage_fixtures.s3 import (
     MotoS3StorageFixtureFactory,
     BaseS3StorageFixtureFactory,
     S3Bucket,
+    Key,
     real_s3_from_environment_variables,
 )
 from arcticdb.storage_fixtures.utils import safer_rmtree
