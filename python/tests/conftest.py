@@ -664,7 +664,7 @@ def real_s3_sts_storage_factory() -> Generator[BaseS3StorageFixtureFactory, None
         f.default_key = Key(
             id="", secret="", user_name="unknown user"
         )  # Reset to ensure client can't fallback to default key+secret auth
-        # Windows resolves the profile from the default ~/.aws/config location, so no env override is needed (empty dict)
+        # Windows resolves the profile from the default ~/.aws/config location, so no env override is needed
         yield f
     else:
         working_dir = mkdtemp(suffix="S3STSStorageFixtureFactory")
