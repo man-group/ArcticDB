@@ -164,7 +164,7 @@ def real_s3_default_profile_from_environment_variables(
 
 
 @pytest.fixture(scope="session")
-def real_s3_default_profile_storage_factory(monkeypatch_session) -> Generator[BaseS3StorageFixtureFactory, None, None]:
+def real_s3_default_profile_storage_factory() -> Generator[BaseS3StorageFixtureFactory, None, None]:
     profile_name = "default_cred_test_profile"
     working_dir = mkdtemp(suffix="S3DefaultProfileStorageFixtureFactory")
     config_file_path = os.path.join(working_dir, "config")
@@ -172,25 +172,28 @@ def real_s3_default_profile_storage_factory(monkeypatch_session) -> Generator[Ba
         f = real_s3_default_profile_from_environment_variables(
             profile_name=profile_name, profile_file_path=config_file_path
         )
-        monkeypatch_session.setenv("AWS_CONFIG_FILE", config_file_path)
-        # Stop the default credentials provider chain finding credentials anywhere except the named profile, so a
-        # wrong profile deterministically fails to authenticate instead of falling back to env/IMDS credentials
-        monkeypatch_session.setenv("AWS_EC2_METADATA_DISABLED", "true")
+        # Applied per-test by the function-scoped storage fixture (not on a shared session monkeypatch) so a sibling
+        # profile fixture can't repoint AWS_CONFIG_FILE under this fixture's teardown cleanup. AWS_EC2_METADATA_DISABLED
+        # stops the default credentials provider chain finding credentials anywhere except the named profile, so a
+        # wrong profile deterministically fails to authenticate instead of falling back to env/IMDS credentials.
+        f.aws_profile_env = {"AWS_CONFIG_FILE": config_file_path, "AWS_EC2_METADATA_DISABLED": "true"}
         yield f
     finally:
         safer_rmtree(None, working_dir)
 
 
 @pytest.fixture
-def real_s3_default_profile_storage(real_s3_default_profile_storage_factory) -> Generator[S3Bucket, None, None]:
+def real_s3_default_profile_storage(
+    real_s3_default_profile_storage_factory, monkeypatch
+) -> Generator[S3Bucket, None, None]:
+    for env_var, value in real_s3_default_profile_storage_factory.aws_profile_env.items():
+        monkeypatch.setenv(env_var, value)
     with real_s3_default_profile_storage_factory.create_fixture() as f:
         yield f
 
 
 @pytest.fixture(scope="session")
-def real_s3_default_profile_credentials_storage_factory(
-    monkeypatch_session,
-) -> Generator[BaseS3StorageFixtureFactory, None, None]:
+def real_s3_default_profile_credentials_storage_factory() -> Generator[BaseS3StorageFixtureFactory, None, None]:
     # Same as real_s3_default_profile_storage_factory but the profile credentials live in an AWS *credentials* file
     # (AWS_SHARED_CREDENTIALS_FILE), which every supported aws-sdk-cpp version reads (the config file needs >= 1.11.748)
     profile_name = "default_cred_test_profile"
@@ -200,8 +203,7 @@ def real_s3_default_profile_credentials_storage_factory(
         f = real_s3_default_profile_from_environment_variables(
             profile_name=profile_name, profile_file_path=credentials_file_path, use_credentials_file=True
         )
-        monkeypatch_session.setenv("AWS_SHARED_CREDENTIALS_FILE", credentials_file_path)
-        monkeypatch_session.setenv("AWS_EC2_METADATA_DISABLED", "true")
+        f.aws_profile_env = {"AWS_SHARED_CREDENTIALS_FILE": credentials_file_path, "AWS_EC2_METADATA_DISABLED": "true"}
         yield f
     finally:
         safer_rmtree(None, working_dir)
@@ -209,8 +211,10 @@ def real_s3_default_profile_credentials_storage_factory(
 
 @pytest.fixture
 def real_s3_default_profile_credentials_storage(
-    real_s3_default_profile_credentials_storage_factory,
+    real_s3_default_profile_credentials_storage_factory, monkeypatch
 ) -> Generator[S3Bucket, None, None]:
+    for env_var, value in real_s3_default_profile_credentials_storage_factory.aws_profile_env.items():
+        monkeypatch.setenv(env_var, value)
     with real_s3_default_profile_credentials_storage_factory.create_fixture() as f:
         yield f
 

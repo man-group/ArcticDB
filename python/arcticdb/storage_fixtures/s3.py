@@ -21,7 +21,7 @@ import random
 from datetime import datetime
 
 import requests
-from typing import Optional, Any, Type
+from typing import Optional, Any, Dict, Type
 
 import werkzeug
 import botocore.exceptions
@@ -309,6 +309,7 @@ class BaseS3StorageFixtureFactory(StorageFixtureFactory):
         self.ssl = False
         self.aws_auth = None
         self.aws_profile = None
+        self.aws_profile_env: Dict[str, str] = {}
         self.aws_policy_name = None
         self.aws_role = None
         self.aws_role_arn = None
