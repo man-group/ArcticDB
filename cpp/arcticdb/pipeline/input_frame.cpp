@@ -64,8 +64,8 @@ void InputFrame::set_from_columns(
         desc_.set_index({IndexDescriptorImpl::Type::TIMESTAMP, 1});
         index = stream::TimeseriesIndex{std::string(desc_.field(0).name())};
         // Arrow input does not record sortedness up front (unlike pandas), so we have to compute it when required.
-        seg.descriptor().set_sorted(
-                sortedness_scan == SortednessScan::SCAN_IF_UNKNOWN ? compute_index_sortedness(seg.column(0))
+        desc_.set_sorted(
+                sortedness_scan == SortednessScan::SCAN_IF_UNKNOWN ? compute_index_sortedness(cols[0])
                                                                    : SortedValue::UNKNOWN
         );
     } else {
