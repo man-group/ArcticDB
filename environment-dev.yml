@@ -56,7 +56,7 @@ dependencies:
   - msgpack-c
   - recycle
   # Matches the version of lmdb as vendored in its submodule.
-  - lmdb==0.9.22
+  - lmdb==0.9.35
   - lmdbxx
   - aws-c-s3
   # Build dependencies for tests
