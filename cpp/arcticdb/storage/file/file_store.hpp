@@ -69,25 +69,19 @@ void write_dataframe_to_file_internal(
     auto slices = slice(*frame, slicing);
     ARCTICDB_SUBSAMPLE_DEFAULT(SliceAndWrite)
 
-    auto slice_and_rowcount = get_slice_and_rowcount(slices);
-    auto key_seg_futs = folly::collect(folly::window(
-                                               std::move(slice_and_rowcount),
-                                               [frame,
-                                                slicing,
-                                                key = std::move(partial_key),
-                                                sparsify_floats = options.sparsify_floats](auto&& slice) {
-                                                   return async::submit_cpu_task(pipelines::WriteToSegmentTask(
-                                                           frame,
-                                                           slice.first,
-                                                           slicing,
-                                                           get_partial_key_gen(frame, key),
-                                                           slice.second,
-                                                           sparsify_floats
-                                                   ));
-                                               },
-                                               write_window_size()
-                                       ))
-                                .via(&async::io_executor());
+    auto key_seg_futs =
+            folly::collect(folly::window(
+                                   std::move(slices),
+                                   [frame,
+                                    key = std::move(partial_key),
+                                    sparsify_floats = options.sparsify_floats](auto&& slice) {
+                                       return async::submit_cpu_task(
+                                               pipelines::WriteToSegmentTask(frame, slice, key, sparsify_floats)
+                                       );
+                                   },
+                                   write_window_size()
+                           ))
+                    .via(&async::io_executor());
     auto segments = std::move(key_seg_futs).get();
 
     auto data_size = max_data_size(segments, codec_opts, encoding_version);

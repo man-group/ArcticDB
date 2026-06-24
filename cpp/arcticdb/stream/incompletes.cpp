@@ -151,7 +151,6 @@ SegmentInMemory incomplete_segment_from_tensor_frame(
     );
 
     auto offset_in_frame = 0;
-    auto slice_num_for_column = 0;
     const auto num_rows = frame->num_rows;
     const auto index = std::move(frame->index);
 
@@ -200,8 +199,6 @@ SegmentInMemory incomplete_segment_from_tensor_frame(
                             col,
                             num_rows,
                             offset_in_frame,
-                            slice_num_for_column,
-                            num_rows,
                             allow_sparse
                     );
                     if (opt_error.has_value()) {
@@ -394,7 +391,6 @@ void do_sort(SegmentInMemory& mutable_seg, const std::vector<std::string> sort_c
     }
 
     util::check(!slices.empty(), "Unexpected empty slice in write_incomplete_frame");
-    auto slice_and_rowcount = get_slice_and_rowcount(slices);
 
     IndexPartialKey key{stream_id, VersionId(0)};
     auto de_dup_map = std::make_shared<DeDupMap>();
@@ -403,31 +399,21 @@ void do_sort(SegmentInMemory& mutable_seg, const std::vector<std::string> sort_c
     arcticdb::proto::descriptors::NormalizationMetadata norm_meta = frame->norm_meta;
     auto user_meta = frame->user_meta;
     auto bucketize_dynamic = frame->bucketize_dynamic;
-    bool sparsify_floats{false};
 
     TypedStreamVersion typed_stream_version{stream_id, VersionId{0}, KeyType::APPEND_DATA};
     return folly::collect(
                    folly::window(
-                           std::move(slice_and_rowcount),
+                           std::move(slices),
                            [frame,
-                            slicing_policy,
                             key = std::move(key),
                             store,
-                            sparsify_floats,
                             typed_stream_version = std::move(typed_stream_version),
                             bucketize_dynamic,
                             de_dup_map,
                             desc,
                             norm_meta,
                             user_meta](auto&& slice) {
-                               return async::submit_cpu_task(WriteToSegmentTask(
-                                                                     frame,
-                                                                     slice.first,
-                                                                     slicing_policy,
-                                                                     get_partial_key_gen(frame, typed_stream_version),
-                                                                     slice.second,
-                                                                     sparsify_floats
-                                                             ))
+                               return async::submit_cpu_task(WriteToSegmentTask(frame, slice, typed_stream_version))
                                        .thenValue([store, de_dup_map, bucketize_dynamic, desc, norm_meta, user_meta](
                                                           std::tuple<PartialKey, SegmentInMemory, FrameSlice>&& ks
                                                   ) {

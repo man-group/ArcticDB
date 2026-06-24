@@ -241,22 +241,36 @@ struct TypedTensor : public NativeTensor {
         // The new column shape * the column stride tells us how far to move the data pointer from the origin
 
         ptr = reinterpret_cast<const uint8_t*>(tensor.data()) + (slice_num * stride_offset);
-        check_ptr_within_bounds(tensor, slice_num, stride_offset);
+        check_ptr_within_bounds(tensor, slice_num * stride_offset);
+    }
+
+    TypedTensor(const NativeTensor& tensor, size_t row, ssize_t nvalues) :
+        NativeTensor(
+                nvalues * itemsize(), tensor.ndim(), tensor.strides(), tensor.shape(), tensor.data_type(),
+                tensor.elsize(), nullptr, tensor.expanded_dim()
+        ) {
+        // The above ctor that uses slice_num and regular_slice_size rather than just row is for ndarray column support,
+        // which is not yet available. It is only used in test_tensor.cpp.
+        util::check(ndim() <= 1, "TypedTensor rows ctor should not be called with dim 2 data");
+        shapes_[0] = nvalues;
+        // The new column shape * the column stride tells us how far to move the data pointer from the origin
+        ptr = reinterpret_cast<const uint8_t*>(tensor.data()) + (row * strides(0));
+        check_ptr_within_bounds(tensor, row);
     }
 
     const T* data() const { return static_cast<const T*>(NativeTensor::data()); }
 
   private:
-    void check_ptr_within_bounds(const NativeTensor& tensor, ssize_t slice_num, ssize_t stride_offset) {
+    void check_ptr_within_bounds(const NativeTensor& tensor, size_t rows) {
         if (tensor.extent(0) == 0) {
             // For empty tensors, we can't perform the normal bounds check
             // Just ensure we're not trying to access beyond the first element
-            util::check(slice_num == 0, "Cannot put slice pointer at position {} in an empty tensor", slice_num);
+            util::check(rows == 0, "Cannot put slice pointer at position {} in an empty tensor", rows);
         } else {
             util::check(
                     ptr < static_cast<const uint8_t*>(tensor.ptr) + std::abs(tensor.extent(0)),
                     "Tensor overflow, cannot put slice pointer at byte {} in a tensor of {} bytes",
-                    slice_num * stride_offset,
+                    rows,
                     tensor.extent(0)
             );
         }
