@@ -235,7 +235,7 @@ folly::Future<AtomKey> async_append_impl(
             log::version(), "append stream_id: {} , version_id: {}", frame->desc().id(), update_info.next_version_id_
     );
     return index::async_get_index_reader(*(update_info.previous_index_key_), store)
-            .via(&async::io_executor())
+            // This future will complete on the IO executor
             .thenValueInline([store, update_info, frame, options, validate_index, empty_types](
                                      index::IndexSegmentReader&& index_segment_reader
                              ) {
@@ -572,9 +572,14 @@ folly::Future<AtomKey> async_update_impl(
         const std::shared_ptr<InputFrame>& frame, WriteOptions&& options, bool dynamic_schema, bool empty_types
 ) {
     return index::async_get_index_reader(*(update_info.previous_index_key_), store)
-            .thenValue([store, update_info, query, frame, options = std::move(options), dynamic_schema, empty_types](
-                               index::IndexSegmentReader&& index_segment_reader
-                       ) {
+            // This future will complete on the IO executor
+            .thenValueInline([store,
+                              update_info,
+                              query,
+                              frame,
+                              options = std::move(options),
+                              dynamic_schema,
+                              empty_types](index::IndexSegmentReader&& index_segment_reader) {
                 check_can_update(*frame, index_segment_reader, dynamic_schema, empty_types);
                 ARCTICDB_DEBUG(
                         log::version(),
