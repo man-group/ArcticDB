@@ -184,7 +184,7 @@ def real_s3_default_profile_storage_factory() -> Generator[BaseS3StorageFixtureF
 
 @pytest.fixture
 def real_s3_default_profile_storage(
-    real_s3_default_profile_storage_factory, monkeypatch
+    real_s3_default_profile_storage_factory, monkeypatch, route_env_to_extension
 ) -> Generator[S3Bucket, None, None]:
     for env_var, value in real_s3_default_profile_storage_factory.aws_profile_env.items():
         monkeypatch.setenv(env_var, value)
@@ -211,7 +211,7 @@ def real_s3_default_profile_credentials_storage_factory() -> Generator[BaseS3Sto
 
 @pytest.fixture
 def real_s3_default_profile_credentials_storage(
-    real_s3_default_profile_credentials_storage_factory, monkeypatch
+    real_s3_default_profile_credentials_storage_factory, monkeypatch, route_env_to_extension
 ) -> Generator[S3Bucket, None, None]:
     for env_var, value in real_s3_default_profile_credentials_storage_factory.aws_profile_env.items():
         monkeypatch.setenv(env_var, value)
