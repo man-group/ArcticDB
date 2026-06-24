@@ -25,8 +25,8 @@ struct FrameSliceMap {
     FrameSliceMap(std::shared_ptr<PipelineContext> context, bool dynamic_schema) : context_(std::move(context)) {
         const entity::StreamDescriptor& descriptor = context_->descriptor();
         const auto true_index_field_count = descriptor.index().field_count();
-        const auto required_fields_count = static_cast<bool>(context_->norm_meta_)
-                                                   ? index::required_fields_count(descriptor, *context_->norm_meta_)
+        const auto required_fields_count = context_->has_norm_metadata()
+                                                   ? index::required_fields_count(descriptor, context_->norm_metadata())
                                                    : index::required_fields_count(descriptor);
         std::optional<size_t> min_col_index;
         for (const auto& context_row : *context_) {

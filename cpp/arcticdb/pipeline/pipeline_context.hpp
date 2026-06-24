@@ -10,6 +10,7 @@
 
 #include <arcticdb/column_store/string_pool.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
+#include <arcticdb/pipeline/index_segment_reader.hpp>
 #include <arcticdb/util/bitset.hpp>
 #include <memory>
 
@@ -111,8 +112,7 @@ struct PipelineContext : public std::enable_shared_from_this<PipelineContext> {
     VersionId version_id_ = 0;
     size_t total_rows_ = 0;
     size_t rows_ = 0;
-    std::shared_ptr<arcticdb::proto::descriptors::NormalizationMetadata> norm_meta_;
-    std::unique_ptr<arcticdb::proto::descriptors::UserDefinedMetadata> user_meta_;
+    std::optional<index::IndexSegmentReader> index_segment_reader_;
     std::vector<SliceAndKey> slice_and_keys_;
     util::BitSet fetch_index_;
     std::vector<std::shared_ptr<StringPool>> string_pools_;
@@ -182,6 +182,7 @@ struct PipelineContext : public std::enable_shared_from_this<PipelineContext> {
         swap(left.stream_id_, right.stream_id_);
         swap(left.version_id_, right.version_id_);
         swap(left.total_rows_, right.total_rows_);
+        swap(left.index_segment_reader_, right.index_segment_reader_);
         swap(left.norm_meta_, right.norm_meta_);
         swap(left.fetch_index_, right.fetch_index_);
         swap(left.string_pools_, right.string_pools_);
@@ -225,12 +226,50 @@ struct PipelineContext : public std::enable_shared_from_this<PipelineContext> {
     }
 
     bool is_pickled() const {
-        util::check(static_cast<bool>(norm_meta_), "No normalization metadata defined");
-        return norm_meta_->input_type_case() ==
-               arcticdb::proto::descriptors::NormalizationMetadata::InputTypeCase::kMsgPackFrame;
+        return util::variant_match(
+                norm_meta_,
+                [](proto::descriptors::NormalizationMetadata* norm_meta) {
+                    return norm_meta->input_type_case() ==
+                           arcticdb::proto::descriptors::NormalizationMetadata::InputTypeCase::kMsgPackFrame;
+                },
+                [](const proto::descriptors::NormalizationMetadata& norm_meta) {
+                    return norm_meta.input_type_case() ==
+                           arcticdb::proto::descriptors::NormalizationMetadata::InputTypeCase::kMsgPackFrame;
+                },
+                [](auto&&) -> bool {
+                    util::raise_rte("PipelineContext::is_pickled: No normalization metadata defined");
+                }
+        );
     }
 
     bool only_index_columns_selected() const;
+
+    std::optional<proto::descriptors::UserDefinedMetadata> release_user_defined_metadata();
+
+    bool has_norm_metadata() const;
+
+    const proto::descriptors::NormalizationMetadata& norm_metadata() const;
+
+    proto::descriptors::NormalizationMetadata& mutable_norm_metadata();
+
+    // Note this is pass by value deliberately, as sometimes we want copies
+    void set_norm_metadata(proto::descriptors::NormalizationMetadata norm_metadata);
+
+    void set_norm_metadata(proto::descriptors::NormalizationMetadata* norm_metadata);
+
+    proto::descriptors::NormalizationMetadata release_norm_metadata();
+
+  private:
+    // std::monostate implies we are in a streaming read scenario where there are no indexed versions, or
+    // release_norm_metadata() has been called.
+    // The pointer variant points to the protobuf in the IndexSegmentReader. If mutable_norm_metadata() is called, this
+    // is moved into the non-pointer variant. Otherwise, this avoids unnecessary copies in the common case where the
+    // norm metadata is never modified.
+    // The non-pointer variant arises either from the above, or from the norm metadata being explicitly set, e.g. in the
+    // processing pipeline. This could be achieved by creating an IndexSegmentReader from scratch, but all of the fields
+    // bar the norm metadata would then be unused.
+    std::variant<std::monostate, proto::descriptors::NormalizationMetadata*, proto::descriptors::NormalizationMetadata>
+            norm_meta_;
 };
 
 } // namespace arcticdb::pipelines

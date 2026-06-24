@@ -935,15 +935,15 @@ void set_output_descriptors(
         const ProcessingUnit& proc, const std::vector<std::shared_ptr<Clause>>& clauses,
         const std::shared_ptr<PipelineContext>& pipeline_context
 ) {
+    auto& norm_meta = pipeline_context->mutable_norm_metadata();
     std::optional<std::string> index_column;
     for (auto clause = clauses.rbegin(); clause != clauses.rend(); ++clause) {
         bool should_break = util::variant_match(
                 (*clause)->clause_info().index_,
                 [](const KeepCurrentIndex&) { return false; },
                 [&](const KeepCurrentTopLevelIndex&) {
-                    if (pipeline_context->norm_meta_->mutable_df()->mutable_common()->has_multi_index()) {
-                        const auto& multi_index =
-                                pipeline_context->norm_meta_->mutable_df()->mutable_common()->multi_index();
+                    if (norm_meta.df().common().has_multi_index()) {
+                        const auto& multi_index = norm_meta.df().common().multi_index();
                         auto name = multi_index.name();
                         auto tz = multi_index.tz();
                         bool fake_name{false};
@@ -953,8 +953,7 @@ void set_output_descriptors(
                                 break;
                             }
                         }
-                        auto mutable_index =
-                                pipeline_context->norm_meta_->mutable_df()->mutable_common()->mutable_index();
+                        auto mutable_index = norm_meta.mutable_df()->mutable_common()->mutable_index();
                         mutable_index->set_tz(tz);
                         mutable_index->set_is_physically_stored(true);
                         mutable_index->set_name(name);
@@ -964,7 +963,7 @@ void set_output_descriptors(
                 },
                 [&](const NewIndex& new_index) {
                     index_column = new_index;
-                    auto mutable_index = pipeline_context->norm_meta_->mutable_df()->mutable_common()->mutable_index();
+                    auto mutable_index = norm_meta.mutable_df()->mutable_common()->mutable_index();
                     mutable_index->set_name(new_index);
                     mutable_index->clear_fake_name();
                     mutable_index->set_is_physically_stored(true);
@@ -1146,10 +1145,7 @@ static StreamDescriptor generate_initial_output_schema_descriptor(const Pipeline
 }
 
 static OutputSchema create_initial_output_schema(PipelineContext& pipeline_context) {
-    internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-            pipeline_context.norm_meta_, "Normalization metadata should not be missing during read_and_process"
-    );
-    return OutputSchema{generate_initial_output_schema_descriptor(pipeline_context), *pipeline_context.norm_meta_};
+    return OutputSchema{generate_initial_output_schema_descriptor(pipeline_context), pipeline_context.norm_metadata()};
 }
 
 static OutputSchema generate_output_schema(PipelineContext& pipeline_context, const ReadQuery& read_query) {
@@ -1183,9 +1179,7 @@ static void generate_output_schema_and_save_to_pipeline(
     OutputSchema schema = generate_output_schema(pipeline_context, read_query);
     auto&& [descriptor, norm_meta, default_values] = schema.release();
     pipeline_context.set_descriptor(std::forward<StreamDescriptor>(descriptor));
-    pipeline_context.norm_meta_ = std::make_shared<proto::descriptors::NormalizationMetadata>(
-            std::forward<proto::descriptors::NormalizationMetadata>(norm_meta)
-    );
+    pipeline_context.set_norm_metadata(std::forward<proto::descriptors::NormalizationMetadata>(norm_meta));
     pipeline_context.default_values_ = std::forward<decltype(default_values)>(default_values);
 }
 
@@ -1318,7 +1312,7 @@ void check_can_perform_processing(
 ) {
     // To remain backward compatibility, pending new major release to merge into below section
     // Ticket: 18038782559
-    const bool is_pickled = pipeline_context->norm_meta_ && pipeline_context->is_pickled();
+    const bool is_pickled = pipeline_context->has_norm_metadata() && pipeline_context->is_pickled();
     util::check(
             !is_pickled ||
                     (!read_query.columns.has_value() && std::holds_alternative<std::monostate>(read_query.row_filter)),
@@ -1347,7 +1341,7 @@ void check_can_perform_processing(
     const bool is_query_empty =
             (!read_query.columns && !read_query.row_range &&
              std::holds_alternative<std::monostate>(read_query.row_filter) && read_query.clauses_.empty());
-    const bool is_numpy_array = pipeline_context->norm_meta_ && pipeline_context->norm_meta_->has_np();
+    const bool is_numpy_array = pipeline_context->has_norm_metadata() && pipeline_context->norm_metadata().has_np();
     // We do not support processing over numpy arrays in general, but compact_data (either directly, or via the
     // compact_data_inline argument to append[_batch]) must work with numpy arrays as well as Series/DataFrames
     const bool is_compaction =
@@ -1399,14 +1393,10 @@ static void read_indexed_keys_to_pipeline(
     pipeline_context->slice_and_keys_ = filter_index(index_segment_reader, combine_filter_functions(queries));
     pipeline_context->total_rows_ = pipeline_context->calc_rows();
     pipeline_context->rows_ = index_segment_reader.tsd().total_rows();
-    pipeline_context->norm_meta_ = std::make_unique<arcticdb::proto::descriptors::NormalizationMetadata>(
-            std::move(*index_segment_reader.mutable_tsd().mutable_proto().mutable_normalization())
-    );
-    pipeline_context->user_meta_ = std::make_unique<arcticdb::proto::descriptors::UserDefinedMetadata>(
-            std::move(*index_segment_reader.mutable_tsd().mutable_proto().mutable_user_meta())
-    );
+    pipeline_context->set_norm_metadata(index_segment_reader.mutable_tsd().mutable_proto().mutable_normalization());
     pipeline_context->bucketize_dynamic_ = bucketize_dynamic;
     check_can_perform_processing(pipeline_context, read_query);
+    pipeline_context->index_segment_reader_ = std::move(index_segment_reader);
     ARCTICDB_DEBUG(
             log::version(),
             "read_indexed_keys_to_pipeline: Symbol {} found {} keys with {} total rows",
@@ -1493,10 +1483,11 @@ static std::variant<bool, CompactionError> read_incompletes_to_pipeline(
     }
     ranges::copy(incomplete_segments, std::back_inserter(pipeline_context->slice_and_keys_));
 
-    if (!pipeline_context->norm_meta_) {
-        pipeline_context->norm_meta_ = std::make_unique<arcticdb::proto::descriptors::NormalizationMetadata>();
-        pipeline_context->norm_meta_->CopyFrom(seg.index_descriptor().proto().normalization());
-        ensure_timeseries_norm_meta(*pipeline_context->norm_meta_, pipeline_context->stream_id_, flags.sparsify);
+    if (!pipeline_context->has_norm_metadata()) {
+        pipeline_context->set_norm_metadata(seg.index_descriptor().proto().normalization());
+        ensure_timeseries_norm_meta(
+                pipeline_context->mutable_norm_metadata(), pipeline_context->stream_id_, flags.sparsify
+        );
     }
 
     const StreamDescriptor& staged_desc = incomplete_segments[0].segment(store).descriptor();
@@ -1910,7 +1901,7 @@ folly::Future<folly::Unit> copy_segments_to_frame(
         SegmentInMemory frame, std::shared_ptr<std::any> handler_data, const ReadOptions& read_options
 ) {
     const auto required_fields_count =
-            pipelines::index::required_fields_count(pipeline_context->descriptor(), *pipeline_context->norm_meta_);
+            pipelines::index::required_fields_count(pipeline_context->descriptor(), pipeline_context->norm_metadata());
     std::vector<folly::Future<folly::Unit>> copy_tasks;
     DecodePathData shared_data;
     for (auto context_row : folly::enumerate(*pipeline_context)) {
@@ -2283,7 +2274,7 @@ VersionedItem collate_and_write(
     tsd.set_stream_descriptor(pipeline_context->descriptor());
     tsd.set_total_rows(pipeline_context->total_rows_);
     auto& tsd_proto = tsd.mutable_proto();
-    tsd_proto.mutable_normalization()->CopyFrom(*pipeline_context->norm_meta_);
+    tsd_proto.mutable_normalization()->CopyFrom(pipeline_context->norm_metadata());
     if (user_meta)
         tsd_proto.mutable_user_meta()->CopyFrom(*user_meta);
 
@@ -3084,7 +3075,7 @@ folly::Future<VersionedItem> read_modify_write_impl(
                 const TimeseriesDescriptor tsd = make_timeseries_descriptor(
                         row_count,
                         pipeline_context->descriptor(),
-                        std::move(*pipeline_context->norm_meta_),
+                        pipeline_context->release_norm_metadata(),
                         std::move(user_meta_proto),
                         std::nullopt,
                         std::nullopt,
@@ -3135,7 +3126,7 @@ folly::Future<VersionedItem> merge_update_impl(
             "Merge update supports only ascending indexed data and row count indexed data"
     );
     folly::poly_cast<MergeUpdateClause>(*merge_update_clause).fake_index_name_ =
-            index_type == IndexDescriptor::Type::TIMESTAMP && is_fake_index_name(*pipeline_context->norm_meta_);
+            index_type == IndexDescriptor::Type::TIMESTAMP && is_fake_index_name(pipeline_context->norm_metadata());
     return read_modify_write_data_keys(store, read_query, read_options, target_partial_index_key, pipeline_context)
             .thenValue([pipeline_context = std::move(pipeline_context),
                         store,
@@ -3163,8 +3154,8 @@ folly::Future<VersionedItem> merge_update_impl(
                 const TimeseriesDescriptor tsd = make_timeseries_descriptor(
                         row_count,
                         pipeline_context->descriptor(),
-                        std::move(*pipeline_context->norm_meta_),
-                        pipeline_context->user_meta_ ? std::make_optional(std::move(source->user_meta)) : std::nullopt,
+                        pipeline_context->release_norm_metadata(),
+                        std::make_optional(std::move(source->user_meta)),
                         std::nullopt,
                         std::nullopt,
                         write_options.bucketize_dynamic
@@ -3313,10 +3304,8 @@ folly::Future<std::optional<VersionedItem>> compact_data_impl(
                         TimeseriesDescriptor tsd = make_timeseries_descriptor(
                                 row_count,
                                 std::move(*pipeline_context->desc_),
-                                std::move(*pipeline_context->norm_meta_),
-                                pipeline_context->user_meta_
-                                        ? std::make_optional(std::move(*pipeline_context->user_meta_))
-                                        : std::nullopt,
+                                pipeline_context->release_norm_metadata(),
+                                pipeline_context->release_user_defined_metadata(),
                                 std::nullopt,
                                 std::nullopt,
                                 write_options.bucketize_dynamic
@@ -3373,8 +3362,9 @@ folly::Future<SymbolProcessingResult> read_and_process(
                 // for a symbol, no indexed versions
                 return SymbolProcessingResult{
                         std::move(res_versioned_item),
-                        pipeline_context->user_meta_ ? std::move(*pipeline_context->user_meta_)
-                                                     : proto::descriptors::UserDefinedMetadata{},
+                        pipeline_context->release_user_defined_metadata().value_or(
+                                proto::descriptors::UserDefinedMetadata{}
+                        ),
                         std::move(output_schema),
                         std::move(entity_ids)
                 };

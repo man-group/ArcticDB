@@ -1550,9 +1550,7 @@ std::shared_ptr<PipelineContext> setup_join_pipeline_context(
     auto output_schema = modify_schema(clauses.front()->join_schemas(std::move(input_schemas)), clauses);
     auto pipeline_context = std::make_shared<PipelineContext>();
     pipeline_context->set_descriptor(output_schema.stream_descriptor());
-    pipeline_context->norm_meta_ =
-            std::make_shared<arcticdb::proto::descriptors::NormalizationMetadata>(std::move(output_schema.norm_metadata_
-            ));
+    pipeline_context->set_norm_metadata(std::move(output_schema.norm_metadata_));
     return pipeline_context;
 }
 

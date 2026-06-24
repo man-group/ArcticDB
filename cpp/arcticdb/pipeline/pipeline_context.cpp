@@ -45,6 +45,62 @@ bool PipelineContext::only_index_columns_selected() const {
     return overall_column_bitset_->count() == 1 && (*overall_column_bitset_)[0];
 }
 
+std::optional<proto::descriptors::UserDefinedMetadata> PipelineContext::release_user_defined_metadata() {
+    if (index_segment_reader_.has_value()) {
+        return std::move(*index_segment_reader_->mutable_tsd().mutable_proto().mutable_user_meta());
+    } else {
+        return std::nullopt;
+    }
+}
+
+bool PipelineContext::has_norm_metadata() const { return !std::holds_alternative<std::monostate>(norm_meta_); }
+
+const proto::descriptors::NormalizationMetadata& PipelineContext::norm_metadata() const {
+    if (std::holds_alternative<std::monostate>(norm_meta_)) {
+        util::raise_rte("PipelineContext::norm_metadata: No normalization metadata defined");
+    } else if (std::holds_alternative<proto::descriptors::NormalizationMetadata*>(norm_meta_)) {
+        return *std::get<proto::descriptors::NormalizationMetadata*>(norm_meta_);
+    } else { // std::holds_alternative<proto::descriptors::NormalizationMetadata>(norm_meta_)
+        return std::get<proto::descriptors::NormalizationMetadata>(norm_meta_);
+    }
+}
+
+proto::descriptors::NormalizationMetadata& PipelineContext::mutable_norm_metadata() {
+    if (std::holds_alternative<std::monostate>(norm_meta_)) {
+        util::raise_rte("PipelineContext::mutable_norm_metadata: No normalization metadata defined");
+    } else if (std::holds_alternative<proto::descriptors::NormalizationMetadata*>(norm_meta_)) {
+        norm_meta_ = std::move(*std::get<proto::descriptors::NormalizationMetadata*>(norm_meta_));
+    }
+    return std::get<proto::descriptors::NormalizationMetadata>(norm_meta_);
+}
+
+void PipelineContext::set_norm_metadata(proto::descriptors::NormalizationMetadata norm_metadata) {
+    norm_meta_ = std::move(norm_metadata);
+}
+
+void PipelineContext::set_norm_metadata(proto::descriptors::NormalizationMetadata* norm_metadata) {
+    norm_meta_ = norm_metadata;
+}
+
+proto::descriptors::NormalizationMetadata PipelineContext::release_norm_metadata() {
+    return util::variant_match(
+            norm_meta_,
+            [this](proto::descriptors::NormalizationMetadata* norm_meta) {
+                auto res = std::move(*norm_meta);
+                norm_meta_ = std::monostate();
+                return res;
+            },
+            [this](proto::descriptors::NormalizationMetadata& norm_meta) {
+                auto res = std::move(norm_meta);
+                norm_meta_ = std::monostate();
+                return res;
+            },
+            [](auto&&) -> proto::descriptors::NormalizationMetadata {
+                util::raise_rte("PipelineContext::release_norm_metadata: No normalization metadata defined");
+            }
+    );
+}
+
 const std::optional<util::BitSet>& PipelineContextRow::get_selected_columns() const {
     return parent_->selected_columns_;
 }

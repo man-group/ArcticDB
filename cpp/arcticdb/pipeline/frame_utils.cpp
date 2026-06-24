@@ -68,11 +68,8 @@ TimeseriesDescriptor timeseries_descriptor_from_pipeline_context(
     return make_timeseries_descriptor(
             pipeline_context->total_rows_,
             pipeline_context->descriptor(),
-            std::move(*pipeline_context->norm_meta_),
-            pipeline_context->user_meta_ ? std::make_optional<arcticdb::proto::descriptors::UserDefinedMetadata>(
-                                                   std::move(*pipeline_context->user_meta_)
-                                           )
-                                         : std::nullopt,
+            pipeline_context->release_norm_metadata(),
+            pipeline_context->release_user_defined_metadata(),
             std::move(prev_key),
             std::nullopt,
             bucketize_dynamic
