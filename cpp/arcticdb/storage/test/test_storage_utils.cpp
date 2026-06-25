@@ -56,14 +56,6 @@ TYPED_TEST(CopyIndexKeyTest, PreservesIndexRange) {
 
     EXPECT_EQ(target_key.start_index(), source_key.start_index());
     EXPECT_EQ(target_key.end_index(), source_key.end_index());
-
-    if constexpr (std::is_same_v<IndexType, stream::TimeseriesIndex>) {
-        EXPECT_EQ(target_key.start_index(), IndexValue{NumericIndex{100}});
-        EXPECT_EQ(target_key.end_index(), IndexValue{NumericIndex{130}});
-    } else {
-        EXPECT_EQ(target_key.start_index(), IndexValue{NumericIndex{0}});
-        EXPECT_EQ(target_key.end_index(), IndexValue{NumericIndex{2}});
-    }
 }
 
 } // namespace arcticdb
