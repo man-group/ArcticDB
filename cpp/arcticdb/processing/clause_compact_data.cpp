@@ -11,14 +11,19 @@
 #include <cstdint>
 #include <set>
 
+#include <arcticdb/column_store/column_reslicer.hpp>
 #include <arcticdb/column_store/segment_reslicer.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
+#include <arcticdb/pipeline/input_frame.hpp>
+#include <arcticdb/pipeline/write_frame.hpp>
 #include <arcticdb/processing/clause_utils.hpp>
 #include <arcticdb/util/collection_utils.hpp>
 
 namespace arcticdb {
 
-CompactDataClause::CompactDataClause(uint64_t rows_per_segment) : rows_per_segment_(rows_per_segment) {
+CompactDataClause::CompactDataClause(uint64_t rows_per_segment, std::shared_ptr<InputFrame> frame) :
+    rows_per_segment_(rows_per_segment),
+    frame_(std::move(frame)) {
     // Magic range of +-33% chosen so that:
     // - 2 row slices with < min_rows_per_segment_ cannot be combined into one row slice with > max_rows_per_segment_
     // - 1 row slice with a little more than max_rows_per_segment_ when split in half will still have
@@ -102,10 +107,22 @@ std::vector<std::vector<size_t>> CompactDataClause::structure_for_processing(std
     for (const auto& range_and_key : ranges_and_keys) {
         row_ranges.insert(range_and_key.row_range());
     }
+    if (frame_) {
+        // frame_ is non null when we have arrived here via the compact_data_inline argument to append[_batch]
+        // In this case, we treat the frame being appended as if it is ONE row-slice (even if it is larger than the
+        // library's default slicing policy). A consequence of this is that the resulting structure on-disk may not be
+        // identical to calling append with compact_data_inline=false, followed by an explicit compact_data call.
+        // However, the invariant that all row-slices will have rows_per_segments+-33% will be maintained in both cases
+        util::check(
+                frame_->offset == row_ranges.rbegin()->second,
+                "CompactDataClause expects the input frame offset to match the end of the existing data"
+        );
+        row_ranges.emplace(frame_->offset, frame_->offset + frame_->num_rows);
+    }
     // The greedy algorithm in structure_row_ranges can reslice data where all segments have an acceptable number of
     // rows, which is not desirable, so short-circuit out if this is the case
     if (row_ranges_all_acceptable_lengths(row_ranges)) {
-        log::version().info("No work to do in CompactDataClause, data is already compacted");
+        log::version().debug("No work to do in CompactDataClause, existing data is already compacted");
         ranges_and_keys.clear();
         return {};
     }
@@ -126,7 +143,7 @@ std::vector<std::vector<size_t>> CompactDataClause::structure_for_processing(std
             }
     );
     if (ranges_and_keys.empty()) {
-        log::version().info("No work to do in CompactDataClause, data is already compacted");
+        log::version().debug("No work to do in CompactDataClause, existing data is already compacted");
         return {};
     }
     // Order by column slice (i.e. all segments in first column slice from top to bottom, then second column slice, etc)
@@ -184,6 +201,12 @@ std::vector<EntityId> CompactDataClause::process(std::vector<EntityId>&& entity_
             proc.row_ranges_->back()->second
     );
     std::vector<SegmentInMemory> segments = util::extract_from_pointers(std::move(*proc.segments_));
+    // Presence of frame implies we are doing inline compaction in append. The second condition means we are processing
+    // the last row-slice of the existing data, and so it must be combined with the frame
+    if (frame_ && frame_->offset == proc.row_ranges_->back()->second) {
+        add_segment_from_frame(proc, col_range_start, segments);
+    }
+
     SegmentReslicer reslicer{max_rows_per_segment_};
     segments = reslicer.reslice_segments(std::move(segments));
 
@@ -214,9 +237,42 @@ std::vector<EntityId> CompactDataClause::process(std::vector<EntityId>&& entity_
     return push_entities(*component_manager_, std::move(proc));
 }
 
+void CompactDataClause::add_segment_from_frame(
+        const ProcessingUnit& proc, size_t col_range_start, std::vector<SegmentInMemory>& segments
+) const {
+    uint64_t total_rows_without_frame = std::accumulate(
+            segments.cbegin(),
+            segments.cend(),
+            uint64_t(0),
+            [](uint64_t n, const SegmentInMemory& segment) { return n + segment.row_count(); }
+    );
+    auto total_rows = total_rows_without_frame + (frame_ ? frame_->num_rows : 0);
+    ReslicingInfo reslicing_info{total_rows, max_rows_per_segment_};
+    // Work out how many rows of the frame we need to combine with segments from disk
+    uint64_t row_count{0};
+    for (size_t idx = 0; idx < reslicing_info.num_segments; ++idx) {
+        row_count += reslicing_info.rows_in_slice(idx);
+        if (row_count > total_rows_without_frame) {
+            break;
+        }
+    }
+    const SpecificSlicer slicer{
+            {RowRange{frame_->offset, frame_->offset + (row_count - total_rows_without_frame)}},
+            {ColRange{
+                    col_range_start, dynamic_schema_ ? frame_->desc().field_count() : proc.col_ranges_->front()->second
+            }}
+    };
+    // There is a check in SpecificSlicer that exactly 1 slice will be produced in this case
+    const auto frame_slice = std::move(slicer(*frame_)[0]);
+    WriteToSegmentTask write_to_segment_task{frame_, std::move(frame_slice)};
+    segments.emplace_back(std::get<SegmentInMemory>(write_to_segment_task()));
+}
+
 const ClauseInfo& CompactDataClause::clause_info() const { return clause_info_; }
 
-void CompactDataClause::set_processing_config(const ProcessingConfig&) {}
+void CompactDataClause::set_processing_config(const ProcessingConfig& processing_config) {
+    dynamic_schema_ = processing_config.dynamic_schema_;
+}
 
 void CompactDataClause::set_component_manager(std::shared_ptr<ComponentManager> component_manager) {
     component_manager_ = std::move(component_manager);

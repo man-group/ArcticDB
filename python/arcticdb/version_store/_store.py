@@ -352,20 +352,6 @@ def _assume_false(name, kwargs):
         return True
 
 
-def _has_physically_stored_index(norm):
-    input_type = norm.WhichOneof("input_type")
-    if input_type == "experimental_arrow":
-        return norm.experimental_arrow.has_index
-    if input_type in ("df", "series"):
-        common = norm.df.common if input_type == "df" else norm.series.common
-        index_type = common.WhichOneof("index_type")
-        if index_type == "index":
-            return common.index.is_physically_stored
-        if index_type == "multi_index":
-            return True
-    return False
-
-
 class NativeVersionStore:
     """
     NativeVersionStore objects provide access to ArcticDB libraries, enabling fundamental library operations
@@ -807,7 +793,7 @@ class NativeVersionStore:
         validate_index: bool, default=False
             If True, will verify that the index of `data` supports date range searches and update operations. This in effect tests that the data is sorted in ascending order.
             ArcticDB relies on Pandas to detect if data is sorted - you can call DataFrame.index.is_monotonic_increasing on your input DataFrame to see if Pandas believes the
-            data to be sorted. For Arrow input data, ArcticDB checks the index column directly.
+            data to be sorted. Note that no checks are performed for Arrow input data.
         index_column: bool, default=False
             Only applicable when data is a PyArrow Table or Polars DataFrame. If True, the first column
             is treated as the timeseries index.
@@ -956,6 +942,7 @@ class NativeVersionStore:
         prune_previous_version: Optional[bool] = None,
         validate_index: bool = False,
         index_column: bool = False,
+        compact_data_inline: bool = False,
         **kwargs,
     ) -> Optional[VersionedItem]:
         # FUTURE: use @overload and Literal for the existence of the return value once we ditch Python 3.6
@@ -981,10 +968,16 @@ class NativeVersionStore:
         validate_index: bool, default=False
             If True, will verify that resulting symbol will support date range searches and update operations. This in effect tests that the previous version of the
             data and `data` are both sorted in ascending order. ArcticDB relies on Pandas to detect if data is sorted - you can call DataFrame.index.is_monotonic_increasing
-            on your input DataFrame to see if Pandas believes the data to be sorted.  For Arrow input data, ArcticDB checks the index column directly.
+            on your input DataFrame to see if Pandas believes the data to be sorted.  Note that no checks are performed for Arrow input data.
         index_column: bool, default=False
             Only applicable when data is a PyArrow Table or Polars DataFrame. If True, the first column
             is treated as the timeseries index.
+        compact_data_inline: bool, default=False
+            If False, the data being appended will be sliced and written to disk without consideration for how
+            fragmented this may make the data.
+            If True, the data will also be compacted at the same time (see the `compact_data` method for more details).
+            Note that this will usually involve reading some data segments from disk and doing some in-memory
+            processing, and so will generally be slower than when this argument is False.
         kwargs :
             passed through to the write handler
 
@@ -1074,7 +1067,14 @@ class NativeVersionStore:
                 else:
                     call_time = time.time_ns()
                     vit = self.version_store.append(
-                        symbol, item, norm_meta, udm, write_if_missing, prune_previous_version, validate_index
+                        symbol,
+                        item,
+                        norm_meta,
+                        udm,
+                        write_if_missing,
+                        prune_previous_version,
+                        validate_index,
+                        compact_data_inline,
                     )
                     # This is a heuristic to check for the case of using append call to write an empty dataframe in that
                     # case we want to warn users that the processing pipeline might not work as expected. There are two
@@ -1819,7 +1819,7 @@ class NativeVersionStore:
             If set to True, it will verify for each entry in the batch whether the index of the data supports date range searches and update operations.
             This in effect tests that the data is sorted in ascending order. ArcticDB relies on Pandas to detect if data is sorted -
             you can call DataFrame.index.is_monotonic_increasing on your input DataFrame to see if Pandas believes the data to be sorted.
-            For Arrow input data, ArcticDB checks the index column directly.
+            Note that no checks are performed for Arrow input data.
         index_column_vector: Optional[List[bool]], default=None
             Only applicable when data is a PyArrow Table or Polars DataFrame. If True for a given entry,
             the first column is treated as the timeseries index.
@@ -2034,7 +2034,7 @@ class NativeVersionStore:
             If set to True, it will verify for each entry in the batch whether the index of the data supports date range searches and update operations.
             This in effect tests that the data is sorted in ascending order. ArcticDB relies on Pandas to detect if data is sorted -
             you can call DataFrame.index.is_monotonic_increasing on your input DataFrame to see if Pandas believes the data to be sorted.
-            For Arrow input data, ArcticDB checks the index column directly.
+            Note that no checks are performed for Arrow input data.
         index_column_vector: Optional[List[bool]], default=None
             Only applicable when data is a PyArrow Table or Polars DataFrame. If True for a given entry,
             the first column is treated as the timeseries index.
@@ -2667,7 +2667,7 @@ class NativeVersionStore:
         if len(read_result.node_read_results) > 0:
             meta_struct = denormalize_user_metadata(read_result.mmeta)
             key_map = {
-                v.sym: self._adapt_frame_data(v.frame_data, v.norm, output_format, v.sort_order)
+                v.sym: self._adapt_frame_data(v.frame_data, v.norm, output_format)
                 for v in read_result.node_read_results
             }
             original_data = Flattener().create_original_obj_from_metastruct(meta_struct, key_map)
@@ -2834,7 +2834,7 @@ class NativeVersionStore:
             If True, will verify that the index of the symbol after this operation supports date range searches and
             update operations. This requires that the indexes of the incomplete segments are non-overlapping with each
             other, and, in the case of append=True, fall after the last index value in the previous version.
-            For Arrow input data, ArcticDB checks the index column directly.
+            Note that no checks are performed for Arrow input data.
         delete_staged_data_on_failure : bool, default=False
             Determines the handling of staged data when an exception occurs during the execution of the
             ``compact_incomplete`` function.
@@ -2915,7 +2915,7 @@ class NativeVersionStore:
             return pa.Table.from_arrays([])
         return pa.Table.from_batches(record_batches)
 
-    def _adapt_frame_data(self, frame_data, norm, output_format, sort_order):
+    def _adapt_frame_data(self, frame_data, norm, output_format):
         if isinstance(frame_data, ArrowOutputFrame):
             table = self._arrow_output_frame_to_table(frame_data)
             data = self._normalizer.denormalize(table, norm)
@@ -2930,7 +2930,6 @@ class NativeVersionStore:
                 and not norm.WhichOneof("input_type") == "msg_pack_frame"
             ):
                 data = pl.from_arrow(data, rechunk=False)
-                data = self._apply_polars_sorted_flag_to_index(data, sort_order, norm)
         else:
             data = self._normalizer.denormalize(frame_data, norm)
             if norm.HasField("custom"):
@@ -2938,21 +2937,8 @@ class NativeVersionStore:
 
         return data
 
-    @staticmethod
-    def _apply_polars_sorted_flag_to_index(data, sort_order, norm):
-        # Only ASCENDING / DESCENDING are verified. UNKNOWN covers symbols written by paths that do not check
-        # monotonicity (e.g. Arrow writes) or by ArcticDB versions before sortedness was tracked, so we cannot
-        # safely tell Polars the column is sorted.
-        if sort_order not in (SortedValue.ASCENDING, SortedValue.DESCENDING):
-            return data
-        if not _has_physically_stored_index(norm) or len(data.columns) == 0:
-            return data
-        # The index column is always the first column.
-        index_col = data.columns[0]
-        return data.with_columns(pl.col(index_col).set_sorted(descending=(sort_order == SortedValue.DESCENDING)))
-
     def _adapt_read_res(self, read_result: ReadResult, output_format: OutputFormat) -> VersionedItem:
-        data = self._adapt_frame_data(read_result.frame_data, read_result.norm, output_format, read_result.sort_order)
+        data = self._adapt_frame_data(read_result.frame_data, read_result.norm, output_format)
 
         if isinstance(read_result.version, list):
             versions = []

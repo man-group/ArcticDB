@@ -132,7 +132,7 @@ class LocalVersionedEngine : public VersionedEngine {
 
     VersionedItem append_internal(
             const StreamId& stream_id, const std::shared_ptr<InputFrame>& frame, bool upsert,
-            bool prune_previous_versions, bool validate_index
+            bool prune_previous_versions, bool validate_index, bool compact_data_inline
     ) override;
 
     VersionedItem delete_range_internal(
@@ -193,12 +193,7 @@ class LocalVersionedEngine : public VersionedEngine {
             const std::vector<IndexTypeKey>& idx_to_be_deleted,
             const PreDeleteChecks& checks = default_pre_delete_checks
     ) override {
-        std::unordered_set<StreamId> stream_ids;
-        stream_ids.reserve(idx_to_be_deleted.size());
-        for (const auto& key : idx_to_be_deleted) {
-            stream_ids.insert(key.id());
-        }
-        auto snapshot_map = get_master_snapshots_map(store(), stream_ids);
+        auto snapshot_map = get_master_snapshots_map(store());
         delete_trees_responsibly(store(), version_map(), idx_to_be_deleted, snapshot_map, std::nullopt, checks).get();
     };
 
@@ -345,6 +340,11 @@ class LocalVersionedEngine : public VersionedEngine {
 
     CompactDataInfo compact_data_explain_plan_internal(
             const StreamId& stream_id, std::optional<uint64_t> rows_per_segment
+    ) override;
+
+    VersionedItem maybe_compact_data_and_write_version(
+            const UpdateInfo& update_info, uint64_t rows_per_segment, bool prune_previous_versions,
+            std::optional<CompactDataFrame> compact_data_frame = std::nullopt
     ) override;
 
     VersionedItem compact_data_internal(

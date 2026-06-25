@@ -1368,20 +1368,12 @@ CompactDataInfo LocalVersionedEngine::compact_data_explain_plan_internal(
             .get();
 }
 
-VersionedItem LocalVersionedEngine::compact_data_internal(
-        const StreamId& stream_id, std::optional<uint64_t> rows_per_segment, bool prune_previous_versions
+VersionedItem LocalVersionedEngine::maybe_compact_data_and_write_version(
+        const UpdateInfo& update_info, uint64_t rows_per_segment, bool prune_previous_versions,
+        std::optional<CompactDataFrame> compact_data_frame
 ) {
-    ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: compact_data");
-    py::gil_scoped_release release_gil;
-    UpdateInfo update_info = compact_data_preamble(stream_id);
-    auto versioned_item = compact_data_impl(
-                                  store(),
-                                  VersionedItem{*update_info.previous_index_key_},
-                                  get_write_options(),
-                                  IndexPartialKey{stream_id, update_info.next_version_id_},
-                                  rows_per_segment.value_or(get_write_options().segment_row_size)
-    )
-                                  .get();
+    auto versioned_item =
+            compact_data_impl(store(), update_info, get_write_options(), rows_per_segment, compact_data_frame).get();
     if (versioned_item.has_value()) {
         write_version_and_prune_previous(
                 prune_previous_versions, versioned_item->key_, update_info.previous_index_key_
@@ -1392,6 +1384,17 @@ VersionedItem LocalVersionedEngine::compact_data_internal(
         // return is for the existing version
         return {std::move(*update_info.previous_index_key_)};
     }
+}
+
+VersionedItem LocalVersionedEngine::compact_data_internal(
+        const StreamId& stream_id, std::optional<uint64_t> rows_per_segment, bool prune_previous_versions
+) {
+    ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: compact_data");
+    py::gil_scoped_release release_gil;
+    UpdateInfo update_info = compact_data_preamble(stream_id);
+    return maybe_compact_data_and_write_version(
+            update_info, rows_per_segment.value_or(get_write_options().segment_row_size), prune_previous_versions
+    );
 }
 
 bool LocalVersionedEngine::is_symbol_fragmented(const StreamId& stream_id, std::optional<size_t> segment_size) {
@@ -1862,27 +1865,48 @@ std::vector<std::variant<folly::Unit, DataError>> LocalVersionedEngine::batch_de
 
 VersionedItem LocalVersionedEngine::append_internal(
         const StreamId& stream_id, const std::shared_ptr<InputFrame>& frame, bool upsert, bool prune_previous_versions,
-        bool validate_index
+        bool validate_index, bool compact_data_inline
 ) {
     py::gil_scoped_release release_gil;
     auto update_info = get_latest_undeleted_version_and_next_version_id(store(), version_map(), stream_id);
 
+    // It would be nice if upsert also sliced into more evenly sized segments at least when compact_data_inline is true,
+    // but also when it isn't. However, ther ead-modify-write pipeline is all built around the PipelineContext class
+    // which assumes an existing version. Better if we just make the FixedSlicer smarter so that it's logic is more like
+    // ReslicingInfo
     if (update_info.previous_index_key_.has_value()) {
-        if (frame->empty()) {
-            ARCTICDB_RUNTIME_DEBUG(
-                    log::version(),
-                    "Appending an empty item to existing data has no effect. \n"
-                    "No new version has been created for symbol='{}', "
-                    "and the last version is returned",
-                    stream_id
+        auto compact_data_frame = frame->empty() ? std::optional<CompactDataFrame>()
+                                                 : std::make_optional<CompactDataFrame>(
+                                                           frame, validate_index, cfg().write_options().empty_types()
+                                                   );
+        if (compact_data_inline) {
+            return maybe_compact_data_and_write_version(
+                    update_info, get_write_options().segment_row_size, prune_previous_versions, compact_data_frame
             );
-            return VersionedItem(*std::move(update_info.previous_index_key_));
+        } else {
+            if (frame->empty() && !compact_data_inline) {
+                ARCTICDB_RUNTIME_DEBUG(
+                        log::version(),
+                        "Appending an empty item to existing data has no effect. \n"
+                        "No new version has been created for symbol='{}', "
+                        "and the last version is returned",
+                        stream_id
+                );
+                return VersionedItem(*std::move(update_info.previous_index_key_));
+            }
+            auto versioned_item = append_impl(
+                    store(),
+                    update_info,
+                    frame,
+                    get_write_options(),
+                    validate_index,
+                    cfg().write_options().empty_types()
+            );
+            write_version_and_prune_previous(
+                    prune_previous_versions, versioned_item.key_, update_info.previous_index_key_
+            );
+            return versioned_item;
         }
-        auto versioned_item = append_impl(
-                store(), update_info, frame, get_write_options(), validate_index, cfg().write_options().empty_types()
-        );
-        write_version_and_prune_previous(prune_previous_versions, versioned_item.key_, update_info.previous_index_key_);
-        return versioned_item;
     } else {
         if (upsert) {
             auto write_options = get_write_options();
@@ -1923,7 +1947,6 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
     for (const auto&& [idx, stream_update_info_fut] : folly::enumerate(stream_update_info_futures)) {
         append_versions_futs.push_back(
                 std::move(stream_update_info_fut)
-                        .via(&async::cpu_executor())
                         .thenValue(
                                 [this,
                                  frame = std::move(frames[idx]),
@@ -2007,7 +2030,6 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
     for (const auto&& [idx, stream_update_info_fut] : enumerate(stream_update_info_futures)) {
         update_versions_futs.push_back(
                 std::move(stream_update_info_fut)
-                        .via(&async::cpu_executor())
                         .thenValue(
                                 [this,
                                  frame = std::move(frames[idx]),
