@@ -41,8 +41,9 @@ ExpressionContext and_filter_expression_contexts(
                 std::holds_alternative<ExpressionName>(expression_context->root_node_name_),
                 "Only expect to be called with filter expressions"
         );
-        res.merge_from(*expression_context);
-        auto root_name = std::get<ExpressionName>(expression_context->root_node_name_);
+        auto prefix = fmt::format("c{}/", idx);
+        res.merge_from(*expression_context, prefix);
+        auto root_name = ExpressionName{prefix + std::get<ExpressionName>(expression_context->root_node_name_).value};
 
         if (!overall_root_name) {
             overall_root_name = root_name;
