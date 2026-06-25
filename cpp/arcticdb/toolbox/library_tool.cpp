@@ -93,9 +93,8 @@ SegmentInMemory LibraryTool::item_to_segment_in_memory(
             engine_.cfg().write_options().empty_types(),
             pipelines::SortednessScan::SKIP
     );
-    auto segment_in_memory = incomplete_segment_from_tensor_frame(
-            frame, 0, std::move(next_key), engine_.cfg().write_options().allow_sparse()
-    );
+    auto segment_in_memory =
+            incomplete_segment_from_frame(frame, std::move(next_key), engine_.cfg().write_options().allow_sparse());
     return segment_in_memory;
 }
 

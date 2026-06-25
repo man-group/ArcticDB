@@ -140,77 +140,31 @@ TimeseriesDescriptor pack_timeseries_descriptor(
     return tsd;
 }
 
-SegmentInMemory incomplete_segment_from_tensor_frame(
-        const std::shared_ptr<pipelines::InputFrame>& frame, size_t existing_rows,
-        std::optional<entity::AtomKey>&& prev_key, bool allow_sparse
+SegmentInMemory incomplete_segment_from_frame(
+        const std::shared_ptr<pipelines::InputFrame>& frame, std::optional<entity::AtomKey>&& prev_key,
+        bool sparsify_floats, CopyMode copy_mode
 ) {
     using namespace arcticdb::stream;
-    util::check(
-            frame->has_only_tensors(),
-            "incomplete_segment_from_tensor_frame should not be called with InputFrame backed by SegmentInMemory"
-    );
 
-    auto offset_in_frame = 0;
     const auto num_rows = frame->num_rows;
-    const auto index = std::move(frame->index);
+    auto copy_prev_key = prev_key;
+    auto timeseries_desc = index_descriptor_from_frame(frame, 0, std::move(prev_key));
+    util::check(!timeseries_desc.fields().empty(), "Expected fields not to be empty in incomplete segment");
+    auto norm_meta = timeseries_desc.proto().normalization();
+    auto descriptor = timeseries_desc.as_stream_descriptor();
 
-    auto output = std::visit(
-            [&](const auto& idx) {
-                using IdxType = std::decay_t<decltype(idx)>;
-                using SingleSegmentAggregator = Aggregator<IdxType, FixedSchema, NeverSegmentPolicy>;
-                auto copy_prev_key = prev_key;
-                auto timeseries_desc = index_descriptor_from_frame(frame, existing_rows, std::move(prev_key));
-                util::check(!timeseries_desc.fields().empty(), "Expected fields not to be empty in incomplete segment");
-                auto norm_meta = timeseries_desc.proto().normalization();
-                auto descriptor = timeseries_desc.as_stream_descriptor();
-
-                SegmentInMemory output;
-                if (num_rows == 0) {
-                    output = SegmentInMemory(
-                            FixedSchema{descriptor, index}.default_descriptor(),
-                            0,
-                            AllocationType::DYNAMIC,
-                            Sparsity::NOT_PERMITTED
-                    );
-                    output.set_timeseries_descriptor(pack_timeseries_descriptor(
-                            descriptor, existing_rows, std::move(copy_prev_key), std::move(norm_meta)
-                    ));
-                    return output;
-                }
-
-                SingleSegmentAggregator agg{FixedSchema{descriptor, index}, [&](auto&& segment) {
-                                                auto tsd = pack_timeseries_descriptor(
-                                                        descriptor,
-                                                        existing_rows + num_rows,
-                                                        std::move(copy_prev_key),
-                                                        std::move(norm_meta)
-                                                );
-                                                segment.set_timeseries_descriptor(tsd);
-                                                output = std::forward<SegmentInMemory>(segment);
-                                            }};
-
-                // columns_[0] is the index (if present), columns_[1..] are data — mirrors the descriptor.
-                for (auto col = 0u; col < frame->num_columns(); ++col) {
-                    const auto& tensor = frame->get_tensor(col);
-                    auto opt_error = aggregator_set_data(
-                            agg.descriptor().field(col).type(),
-                            tensor,
-                            agg,
-                            col,
-                            num_rows,
-                            offset_in_frame,
-                            allow_sparse
-                    );
-                    if (opt_error.has_value()) {
-                        opt_error->raise(agg.descriptor().field(col).name());
-                    }
-                }
-
-                agg.end_block_write(num_rows);
-                agg.commit();
-                return output;
-            },
-            index
+    const auto index_field_count = frame->desc().index().field_count();
+    const auto field_count = frame->desc().field_count();
+    FrameSlice full_slice{
+            std::make_shared<StreamDescriptor>(frame->desc().clone()),
+            ColRange{index_field_count, field_count},
+            RowRange{0, num_rows}
+    };
+    auto result = WriteToSegmentTask(frame, std::move(full_slice), std::nullopt, sparsify_floats, copy_mode)();
+    auto output = std::move(std::get<SegmentInMemory>(result));
+    output.descriptor().set_id(descriptor.id());
+    output.set_timeseries_descriptor(
+            pack_timeseries_descriptor(descriptor, num_rows, std::move(copy_prev_key), std::move(norm_meta))
     );
 
     ARCTICDB_DEBUG(
@@ -247,33 +201,15 @@ void do_sort(SegmentInMemory& mutable_seg, const std::vector<std::string> sort_c
     auto index_range = frame->index_range;
     const auto index = std::move(frame->index);
 
-    bool sparsify_floats{false};
-
-    auto next_key = std::nullopt;
-    // This clone is unnecessarily expensive. We should have a sort method that produces a new segment (current one is
-    // in-place)
-    // Note that we do not set `next_key` in the has_segment() case as that is only used by the library tool
-    // TODO: This clone is also insufficient if there are string columns in the input frame, fix with 18190648152
-    // Ideally remove incomplete_segment_from_tensor_frame entirely and just use WriteToSegmentTask
-    auto segment = [&]() -> SegmentInMemory {
-        if (frame->has_only_tensors()) {
-            return incomplete_segment_from_tensor_frame(frame, 0, next_key, sparsify_floats);
-        }
-        SegmentInMemory seg;
-        seg.descriptor().set_id(stream_id);
-        if (frame->has_index()) {
-            seg.descriptor().set_index({IndexDescriptorImpl::Type::TIMESTAMP, 1});
-        } else {
-            seg.descriptor().set_index({IndexDescriptorImpl::Type::ROWCOUNT, 0});
-        }
-        for (size_t i = 0; i < frame->num_columns(); ++i) {
-            seg.add_column(frame->desc().fields(i).name(), std::make_shared<Column>(frame->get_column(i).clone()));
-        }
-        if (frame->num_rows > 0) {
-            seg.set_row_data(frame->num_rows - 1);
-        }
-        return seg;
-    }();
+    // We use `CopyMode::ALWAYS` so that the resulting `segment` owns its buffers and we can sort inplace below.
+    // This is inefficient because `split` below would also copy the memory
+    // TODO: A better approach would be to:
+    // 1. Produce a JiveTable for the InputFrame directly
+    // 2. Modify WriteToSegmentTask to accept a JiveTable so it can copy from InputFrame and reorder according to the
+    // JiveTable This will avoid doing the extra copy and allocation we're doing here for sorting. It will also allow us
+    // to unify `write_incomplete_with_sorting` with `write_incomple_frame`
+    auto segment = incomplete_segment_from_frame(frame, std::nullopt, /*sparsify_floats=*/false, CopyMode::ALWAYS);
+    segment.descriptor().set_id(stream_id);
     if (options.sort_on_index) {
         util::check(frame->has_index(), "Sort requested on index but no index supplied");
         std::vector<std::string> cols;
@@ -592,7 +528,7 @@ void append_incomplete(
     auto desc = frame->desc().clone();
 
     auto index_range = frame->index_range;
-    auto segment = incomplete_segment_from_tensor_frame(frame, 0, std::move(next_key), false);
+    auto segment = incomplete_segment_from_frame(frame, std::move(next_key), false);
 
     auto new_key = store->write(KeyType::APPEND_DATA,
                                 VersionId(0),

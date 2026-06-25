@@ -335,8 +335,8 @@ class SegmentInMemoryImpl {
 
     template<class T>
     requires std::integral<T> || std::floating_point<T>
-    void set_external_block(position_t idx, T* val, size_t size) {
-        column_unchecked(idx).set_external_block(row_id_ + 1, val, size);
+    void set_external_block(position_t idx, T* val, size_t size, CopyMode copy_mode = CopyMode::IF_NEEDED) {
+        column_unchecked(idx).set_external_block(row_id_ + 1, val, size, copy_mode);
     }
 
     template<class T>
