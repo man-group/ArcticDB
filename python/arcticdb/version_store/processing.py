@@ -1292,46 +1292,71 @@ def visit_expression(expr):
                         valueset_keys[key] += 1
                     key = key + "-v" + str(valueset_keys[key])
                     expression_context.add_value_set(key, _ValueSet(node))
-                    return _ValueSetName(key)
+                    return _ValueSetName(key), key
                 elif isinstance(node, _RegexGeneric):
                     expression_context.add_regex(key, node)
-                    return _RegexName(key)
+                    return _RegexName(key), None
                 else:
                     expression_context.add_value(key, create_value(node))
-                    return _ValueName(key)
+                    return _ValueName(key), None
 
             if isinstance(node, ExpressionNode):
                 if node.operator == COLUMN:
                     input_columns.add(node.left)
-                    return _ColumnName(node.left)
+                    return _ColumnName(node.left), None
                 else:
-                    _visit(node)
-                    return _ExpressionName(node.get_name())
+                    child_key = _visit(node)
+                    return _ExpressionName(child_key), child_key
             else:
                 return _handle_leaf(node)
+
+        # Make sure we disambiguate non-leaf nodes - this is important for ISIN([V1]) - see the -vX
+        # remark above in the leaf node handling.
+        def _operand_name(operand, child_key, use_to_string):
+            if isinstance(operand, ExpressionNode):
+                if operand.operator == COLUMN:
+                    return 'Column["{}"]'.format(operand.left)
+                return child_key
+            if isinstance(operand, (np.ndarray, list)):
+                return child_key
+            return to_string(operand) if use_to_string else str(operand)
 
         if isinstance(node, bool):
             raise ArcticNativeException("Query is trivially {}".format(node))
 
-        left = _visit_child(node.left)
+        left, left_key = _visit_child(node.left)
+        condition_key = right_key = None
         if node.condition is not None:
             check(node.right is not None, "Ternary operator requires three inputs")
-            condition = _visit_child(node.condition)
-            right = _visit_child(node.right)
+            condition, condition_key = _visit_child(node.condition)
+            right, right_key = _visit_child(node.right)
             expression_node = _ExpressionNode(condition, left, right, node.operator)
         elif node.right is not None:
-            right = _visit_child(node.right)
+            right, right_key = _visit_child(node.right)
             expression_node = _ExpressionNode(left, right, node.operator)
         else:
             expression_node = _ExpressionNode(left, node.operator)
-        expression_context.add_expression_node(node.get_name(), expression_node)
+
+        if node.operator in [_OperationType.ABS, _OperationType.NEG, _OperationType.NOT]:
+            key = "{}({})".format(node.operator.name, _operand_name(node.left, left_key, False))
+        elif node.operator == _OperationType.TERNARY:
+            key = "{} if {} else {}".format(
+                _operand_name(node.left, left_key, False),
+                _operand_name(node.condition, condition_key, False),
+                _operand_name(node.right, right_key, False),
+            )
+        else:
+            right_name = to_string(None) if node.right is None else _operand_name(node.right, right_key, True)
+            key = "({} {} {})".format(_operand_name(node.left, left_key, True), node.operator.name, right_name)
+        expression_context.add_expression_node(key, expression_node)
+        return key
 
     expression_context = _ExpressionContext()
     input_columns = set()
     valueset_keys = dict()
     if isinstance(expr, ExpressionNode):
-        _visit(expr)
-        expression_context.root_node_name = _ExpressionName(expr.get_name())
+        root_key = _visit(expr)
+        expression_context.root_node_name = _ExpressionName(root_key)
     elif isinstance(expr, (np.ndarray, list)):
         raise ArcticNativeException("Query cannot create a new column from a list/set/array of values")
     else:

@@ -605,7 +605,7 @@ def test_column_stats_isin_and_isnotin_colliding_value_sets_nonreg(
     lib = in_memory_version_store
 
     # value_set_one contains 5; value_set_two does not. The differing element (index 5) lands in
-    # numpy's elided middle, so str() of the two arrays is the same:
+    # numpy's skipped middle (see comments in visit_expression), so str() of the two arrays is the same:
     #
     # >>> str(value_set_one)
     # '[    0     1     2 ... 99997 99998 99999]'
