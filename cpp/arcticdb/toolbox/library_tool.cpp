@@ -85,8 +85,14 @@ SegmentInMemory LibraryTool::item_to_segment_in_memory(
         const StreamId& stream_id, const py::tuple& item, const py::object& norm, const py::object& user_meta,
         std::optional<AtomKey> next_key
 ) {
-    auto frame =
-            convert::py_ndf_to_frame(stream_id, item, norm, user_meta, engine_.cfg().write_options().empty_types());
+    auto frame = convert::py_ndf_to_frame(
+            stream_id,
+            item,
+            norm,
+            user_meta,
+            engine_.cfg().write_options().empty_types(),
+            pipelines::SortednessScan::SKIP
+    );
     auto segment_in_memory = incomplete_segment_from_tensor_frame(
             frame, 0, std::move(next_key), engine_.cfg().write_options().allow_sparse()
     );

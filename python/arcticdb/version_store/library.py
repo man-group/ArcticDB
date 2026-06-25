@@ -975,7 +975,7 @@ class Library:
             Data to be written. Staged data must be normalizable.
         validate_index:
             Check that the index is sorted prior to writing. In the case of unsorted data, throw an UnsortedDataException.
-            Note that no checks are performed for Arrow input data.
+            For Arrow input data, ArcticDB checks the index column directly.
         sort_on_index:
             If an appropriate index is present, sort the data on it. In combination with sort_columns the
             index will be used as the primary sort column, and the others as secondaries.
@@ -1064,7 +1064,7 @@ class Library:
         validate_index: bool, default=True
             If True, verify that the index of `data` supports date range searches and update operations.
             This tests that the data is sorted in ascending order, using Pandas DataFrame.index.is_monotonic_increasing.
-            Note that no checks are performed for Arrow input data.
+            For Arrow input data, ArcticDB checks the index column directly.
         index_column: bool, default=False
             Only applicable when data is a PyArrow Table or Polars DataFrame. If True, the first column
             is treated as the timeseries index.
@@ -1253,7 +1253,7 @@ class Library:
         validate_index: bool, default=True
             Verify that each entry in the batch has an index that supports date range searches and update operations.
             This tests that the data is sorted in ascending order, using Pandas DataFrame.index.is_monotonic_increasing.
-            Note that no checks are performed for Arrow input data.
+            For Arrow input data, ArcticDB checks the index column directly.
 
         Returns
         -------
@@ -1395,7 +1395,7 @@ class Library:
         validate_index
             If True, verify that the index of `data` supports date range searches and update operations.
             This tests that the data is sorted in ascending order, using Pandas DataFrame.index.is_monotonic_increasing.
-            Note that no checks are performed for Arrow input data.
+            For Arrow input data, ArcticDB checks the index column directly.
         index_column: bool, default=False
             Only applicable when data is a PyArrow Table or Polars DataFrame. If True, the first column
             is treated as the timeseries index.
@@ -1476,7 +1476,7 @@ class Library:
         validate_index: bool, default=True
             Verify that each entry in the batch has an index that supports date range searches and update operations.
             This tests that the data is sorted in ascending order, using Pandas DataFrame.index.is_monotonic_increasing.
-            Note that no checks are performed for Arrow input data.
+            For Arrow input data, ArcticDB checks the index column directly.
 
         Returns
         -------
@@ -1774,7 +1774,7 @@ class Library:
             If True, and staged segments are timeseries, will verify that the index of the symbol after this operation
             supports date range searches and update operations. This requires that the indexes of the staged segments
             are non-overlapping with each other, and, in the case of `StagedDataFinalizeMethod.APPEND`, fall after the
-            last index value in the previous version.  Note that no checks are performed for Arrow input data.
+            last index value in the previous version.  For Arrow input data, ArcticDB checks the index column directly.
         delete_staged_data_on_failure : bool, default=False
             Determines the handling of staged data when an exception occurs during the execution of the
             ``finalize_staged_data`` function.
@@ -2178,6 +2178,8 @@ class Library:
             Output format for the returned dataframes.
             If `None`, uses the output format from the `Library` instance.
             See `OutputFormat` documentation for details on available formats.
+            When using ``POLARS`` output format, the index column (if physically stored) will automatically have
+            its Polars sorted flag set based on the sort order tracked by ArcticDB.
 
         arrow_string_format_default: Optional[Union[ArrowOutputStringFormat, "pa.DataType"]], default=None
             String column format when using `PYARROW` or `POLARS` output formats.

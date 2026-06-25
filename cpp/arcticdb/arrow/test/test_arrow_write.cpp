@@ -337,7 +337,7 @@ TEST(ArrowWriteMemoryLifetime, InputFrameKeepsBufferAlive) {
 
     auto input_frame = std::make_shared<pipelines::InputFrame>();
     input_frame->norm_meta.mutable_experimental_arrow()->set_has_index(false);
-    convert::record_batches_to_frame(record_batches, *input_frame);
+    convert::record_batches_to_frame(record_batches, *input_frame, pipelines::SortednessScan::SKIP);
     input_frame->desc().set_id(symbol);
     input_frame->set_index_range();
 
