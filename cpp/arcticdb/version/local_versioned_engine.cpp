@@ -1923,6 +1923,7 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
     for (const auto&& [idx, stream_update_info_fut] : folly::enumerate(stream_update_info_futures)) {
         append_versions_futs.push_back(
                 std::move(stream_update_info_fut)
+                        .via(&async::cpu_executor())
                         .thenValue(
                                 [this,
                                  frame = std::move(frames[idx]),
@@ -2006,6 +2007,7 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
     for (const auto&& [idx, stream_update_info_fut] : enumerate(stream_update_info_futures)) {
         update_versions_futs.push_back(
                 std::move(stream_update_info_fut)
+                        .via(&async::cpu_executor())
                         .thenValue(
                                 [this,
                                  frame = std::move(frames[idx]),
