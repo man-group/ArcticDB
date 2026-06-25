@@ -470,6 +470,17 @@ class AsyncStore : public Store {
         );
     }
 
+    std::function<folly::Future<pipelines::SegmentAndSlice>(pipelines::RangesAndKey&&)> make_uncompressed_reader(
+            std::shared_ptr<std::unordered_set<std::string>> columns_to_decode
+    ) override {
+        return [this, columns_to_decode](pipelines::RangesAndKey&& ranges_and_key) {
+            const auto key = ranges_and_key.key_;
+            return read_and_continue(
+                    key, library_, storage::ReadKeyOpts{}, DecodeSliceTask{std::move(ranges_and_key), columns_to_decode}
+            );
+        };
+    }
+
     std::vector<folly::Future<bool>> batch_key_exists(const std::vector<entity::VariantKey>& keys) override {
         std::vector<folly::Future<bool>> res;
         res.reserve(keys.size());

@@ -73,6 +73,12 @@ struct StreamSource {
             std::shared_ptr<std::unordered_set<std::string>> columns_to_decode
     ) = 0;
 
+    virtual std::function<folly::Future<pipelines::SegmentAndSlice>(pipelines::RangesAndKey&&)>
+    make_uncompressed_reader(std::shared_ptr<std::unordered_set<std::string>> /*columns_to_decode*/
+    ) {
+        util::raise_rte("make_uncompressed_reader not implemented");
+    }
+
     virtual folly::Future<std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>>> read_metadata(
             const entity::VariantKey& key, storage::ReadKeyOpts opts = storage::ReadKeyOpts{}
     ) = 0;

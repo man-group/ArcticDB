@@ -406,6 +406,7 @@ set(arcticdb_srcs
         util/preprocess.hpp
         util/ranges_from_future.hpp
         util/regex_filter.hpp
+        util/segment_residency_tracker.hpp
         util/simple_string_hash.hpp
         util/slab_allocator.hpp
         util/sparse_utils.hpp
@@ -1146,6 +1147,7 @@ if(${TEST})
             util/test/segment_generation_utils.hpp
             util/test/segment_generation_utils.cpp
             version/test/test_append.cpp
+            version/test/test_column_stats.cpp
             version/test/test_key_block.cpp
             version/test/test_sort_index.cpp
             version/test/test_sorting_info_state_machine.cpp
