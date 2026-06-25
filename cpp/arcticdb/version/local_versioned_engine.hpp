@@ -247,12 +247,13 @@ class LocalVersionedEngine : public VersionedEngine {
     );
 
     void create_column_stats_internal(
-            const VersionedItem& versioned_item, ColumnStats& column_stats, const ReadOptions& read_options
+            const VersionedItem& versioned_item, ColumnStats& column_stats, const ReadQuery& read_query,
+            const ReadOptions& read_options
     );
 
     void create_column_stats_version_internal(
             const StreamId& stream_id, ColumnStats& column_stats, const VersionQuery& version_query,
-            const ReadOptions& read_options
+            const ReadQuery& read_query, const ReadOptions& read_options
     );
 
     void drop_column_stats_internal(

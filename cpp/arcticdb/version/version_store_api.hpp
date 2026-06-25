@@ -105,7 +105,8 @@ class PythonVersionStore : public LocalVersionedEngine {
     VersionedItem write_metadata(const StreamId& stream_id, const py::object& user_meta, bool prune_previous_versions);
 
     void create_column_stats_version(
-            const StreamId& stream_id, ColumnStats& column_stats, const VersionQuery& version_query
+            const StreamId& stream_id, ColumnStats& column_stats, const VersionQuery& version_query,
+            const ReadQuery& read_query
     );
 
     void drop_column_stats_version(

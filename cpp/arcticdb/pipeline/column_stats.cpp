@@ -90,6 +90,51 @@ SegmentInMemory merge_column_stats_segments(const std::vector<SegmentInMemory>& 
     return merged;
 }
 
+SegmentInMemory merge_column_stats_with_range_replacement(
+        const SegmentInMemory& old_segment, SegmentInMemory new_segment, const entity::TimestampRange& range_replaced
+) {
+    const size_t old_row_count = old_segment.row_count();
+    std::vector<SegmentInMemory> to_merge;
+    to_merge.reserve(3);
+
+    size_t first_in_range = old_row_count;
+    size_t last_in_range = 0;
+    bool found_overlap = false;
+
+    for (size_t row = 0; row < old_row_count; ++row) {
+        auto start_opt = old_segment.scalar_at<entity::timestamp>(row, start_index_column_offset);
+        auto end_opt = old_segment.scalar_at<entity::timestamp>(row, end_index_column_offset);
+
+        util::check(
+                start_opt.has_value() && end_opt.has_value(),
+                "Missing start/end index in old column stats segment at row {}",
+                row
+        );
+        
+        entity::TimestampRange row_range{*start_opt, *end_opt};
+        if (entity::intersects(row_range, range_replaced)) {
+            if (!found_overlap) {
+                first_in_range = row;
+                found_overlap = true;
+            }
+            last_in_range = row;
+        }
+    }
+
+    if (!found_overlap) {
+        to_merge.emplace_back(old_segment.clone());
+    } else {
+        if (first_in_range > 0) {
+            to_merge.emplace_back(old_segment.truncate(0, first_in_range, false));
+        }
+        if (last_in_range + 1 < old_row_count) {
+            to_merge.emplace_back(old_segment.truncate(last_in_range + 1, old_row_count, false));
+        }
+    }
+    to_merge.emplace_back(std::move(new_segment));
+    return merge_column_stats_segments(to_merge);
+}
+
 std::string type_to_operator_string(ColumnStatTypeInternal type) {
     switch (type) {
     case ColumnStatTypeInternal::MIN_V1:
