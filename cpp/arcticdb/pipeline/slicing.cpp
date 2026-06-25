@@ -58,23 +58,24 @@ std::pair<size_t, size_t> get_first_and_last_row(const arcticdb::pipelines::Inpu
 std::vector<FrameSlice> FixedSlicer::operator()(const arcticdb::pipelines::InputFrame& frame) const {
     const auto [first_row, last_row] = get_first_and_last_row(frame);
     std::vector<RowRange> row_ranges;
+    row_ranges.reserve((last_row - first_row + row_per_slice_ - 1) / row_per_slice_);
     for (std::size_t r = first_row, end = last_row; r < end; r += row_per_slice_) {
         auto rdist = std::min(last_row - r, row_per_slice_);
         row_ranges.emplace_back(r, r + rdist);
     }
+    if (row_ranges.empty()) {
+        return {};
+    }
     std::vector<ColRange> col_ranges;
     const auto [index_count, total_field_count] = get_index_and_field_count(frame);
     auto start_col = index_count;
+    // We do not support writing frames with zero columns, and so there will always be at least one column range here
     do {
         auto col_count = std::min(total_field_count - start_col, col_per_slice_);
         col_ranges.emplace_back(start_col, start_col + col_count);
         start_col += col_count;
     } while (start_col < total_field_count);
-    if (row_ranges.empty() || col_ranges.empty()) {
-        return {};
-    } else {
-        return SpecificSlicer{std::move(row_ranges), std::move(col_ranges)}(frame);
-    }
+    return SpecificSlicer{std::move(row_ranges), std::move(col_ranges)}(frame);
 }
 
 SpecificSlicer::SpecificSlicer(std::vector<RowRange>&& row_ranges, std::vector<ColRange>&& col_ranges) :

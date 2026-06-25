@@ -1072,6 +1072,7 @@ if(${TEST})
             log/test/test_log.cpp
             pipeline/test/test_container.hpp
             pipeline/test/test_pipeline.cpp
+            pipeline/test/test_slicing.cpp
             pipeline/test/test_query.cpp
             pipeline/test/test_frame_allocation.cpp
             pipeline/test/test_rollback.cpp
