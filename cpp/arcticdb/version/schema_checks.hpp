@@ -2,6 +2,7 @@
 
 #include <arcticdb/pipeline/input_frame.hpp>
 #include <arcticdb/python/normalization_utils.hpp>
+#include <arcticdb/entity/timeseries_descriptor.hpp>
 
 namespace arcticdb {
 
@@ -25,7 +26,7 @@ bool columns_match(
 );
 
 void fix_descriptor_mismatch_or_throw(
-        NormalizationOperation operation, bool dynamic_schema, const pipelines::index::IndexSegmentReader& existing_isr,
+        NormalizationOperation operation, bool dynamic_schema, const TimeseriesDescriptor& existing_tsd,
         const pipelines::InputFrame& new_frame, bool empty_types
 );
 } // namespace arcticdb

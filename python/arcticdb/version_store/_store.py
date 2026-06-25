@@ -955,6 +955,7 @@ class NativeVersionStore:
         prune_previous_version: Optional[bool] = None,
         validate_index: bool = False,
         index_column: bool = False,
+        compact_data_inline: bool = False,
         **kwargs,
     ) -> Optional[VersionedItem]:
         # FUTURE: use @overload and Literal for the existence of the return value once we ditch Python 3.6
@@ -984,6 +985,13 @@ class NativeVersionStore:
         index_column: bool, default=False
             Only applicable when data is a PyArrow Table or Polars DataFrame. If True, the first column
             is treated as the timeseries index.
+        compact_data_inline: bool, default=False
+            If False, the data being appended will be sliced and written to disk without consideration for how
+            fragmented this may make the data.
+            If True, the data will also be compacted at the same time (see the `compact_data` method for more details).
+            Note that this will usually involve reading some data segments from disk and doing some in-memory
+            processing, and so will generally be slower than when this argument is False. However, subsequent reads of
+            the data will generally be faster.
         kwargs :
             passed through to the write handler
 
@@ -1073,7 +1081,14 @@ class NativeVersionStore:
                 else:
                     call_time = time.time_ns()
                     vit = self.version_store.append(
-                        symbol, item, norm_meta, udm, write_if_missing, prune_previous_version, validate_index
+                        symbol,
+                        item,
+                        norm_meta,
+                        udm,
+                        write_if_missing,
+                        prune_previous_version,
+                        validate_index,
+                        compact_data_inline,
                     )
                     # This is a heuristic to check for the case of using append call to write an empty dataframe in that
                     # case we want to warn users that the processing pipeline might not work as expected. There are two

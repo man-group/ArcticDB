@@ -226,10 +226,10 @@ void check_arrow_column_metadata(
 }
 
 void fix_normalization_or_throw(
-        bool is_append, const pipelines::index::IndexSegmentReader& existing_isr,
-        const pipelines::InputFrame& new_frame, bool dynamic_schema
+        bool is_append, const TimeseriesDescriptor& existing_tsd, const pipelines::InputFrame& new_frame,
+        bool dynamic_schema
 ) {
-    auto& old_norm = existing_isr.tsd().proto().normalization();
+    auto& old_norm = existing_tsd.proto().normalization();
     auto& new_norm = new_frame.norm_meta;
     normalization::check<ErrorCode::E_INCOMPATIBLE_OBJECTS>(
             old_norm.input_type_case() == new_frame.norm_meta.input_type_case(),
@@ -239,10 +239,10 @@ void fix_normalization_or_throw(
             new_frame.norm_meta.input_type_case()
     );
     if (check_pandas_like(old_norm, new_norm)) {
-        const IndexDescriptor::Type old_index_type = existing_isr.tsd().index().type();
+        const IndexDescriptor::Type old_index_type = existing_tsd.index().type();
         const IndexDescriptor::Type new_index_type = new_frame.desc().index().type();
         if (old_index_type == new_index_type && old_index_type == IndexDescriptor::Type::ROWCOUNT) {
-            update_rowcount_normalization_data(old_norm, new_norm, existing_isr.tsd().total_rows());
+            update_rowcount_normalization_data(old_norm, new_norm, existing_tsd.total_rows());
         }
         return;
     }

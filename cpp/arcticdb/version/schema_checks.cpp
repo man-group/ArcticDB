@@ -66,20 +66,18 @@ void check_multiindex_matches(
     }
 }
 
-void check_multiindex_matches(
-        const pipelines::index::IndexSegmentReader& existing_isr, const pipelines::InputFrame& frame
-) {
-    if (existing_isr.tsd().normalization().has_df()) {
+void check_multiindex_matches(const TimeseriesDescriptor& existing_tsd, const pipelines::InputFrame& frame) {
+    if (existing_tsd.normalization().has_df()) {
         check_multiindex_matches(
-                existing_isr.tsd().normalization().df().common(),
-                existing_isr.tsd().as_stream_descriptor(),
+                existing_tsd.normalization().df().common(),
+                existing_tsd.as_stream_descriptor(),
                 frame.norm_meta.df().common(),
                 frame.desc()
         );
-    } else if (existing_isr.tsd().normalization().has_series()) {
+    } else if (existing_tsd.normalization().has_series()) {
         check_multiindex_matches(
-                existing_isr.tsd().normalization().series().common(),
-                existing_isr.tsd().as_stream_descriptor(),
+                existing_tsd.normalization().series().common(),
+                existing_tsd.as_stream_descriptor(),
                 frame.norm_meta.series().common(),
                 frame.desc()
         );
@@ -87,15 +85,15 @@ void check_multiindex_matches(
 }
 
 void check_normalization_index_match(
-        NormalizationOperation operation, const pipelines::index::IndexSegmentReader& existing_isr,
-        const pipelines::InputFrame& frame, bool empty_types
+        NormalizationOperation operation, const TimeseriesDescriptor& existing_tsd, const pipelines::InputFrame& frame,
+        bool empty_types
 ) {
-    const IndexDescriptor::Type old_idx_kind = existing_isr.tsd().as_stream_descriptor().index().type();
+    const IndexDescriptor::Type old_idx_kind = existing_tsd.as_stream_descriptor().index().type();
     const IndexDescriptor::Type new_idx_kind = frame.desc().index().type();
 
     // In case of multiindex we require the multiindex fields in the input to match the mutliindex fields on disk even
     // when dynamic schema is used. This is because it's too hard to keep the normalization metadata in sync.
-    check_multiindex_matches(existing_isr, frame);
+    check_multiindex_matches(existing_tsd, frame);
 
     if (operation == UPDATE) {
         const bool new_is_timeseries = std::holds_alternative<stream::TimeseriesIndex>(frame.index);
@@ -225,14 +223,14 @@ bool columns_match(
 }
 
 void fix_descriptor_mismatch_or_throw(
-        NormalizationOperation operation, bool dynamic_schema, const pipelines::index::IndexSegmentReader& existing_isr,
+        NormalizationOperation operation, bool dynamic_schema, const TimeseriesDescriptor& existing_tsd,
         const pipelines::InputFrame& new_frame, bool empty_types
 ) {
 
-    fix_normalization_or_throw(operation == APPEND, existing_isr, new_frame, dynamic_schema);
-    check_normalization_index_match(operation, existing_isr, new_frame, empty_types);
+    fix_normalization_or_throw(operation == APPEND, existing_tsd, new_frame, dynamic_schema);
+    check_normalization_index_match(operation, existing_tsd, new_frame, empty_types);
 
-    const auto& old_sd = existing_isr.tsd().as_stream_descriptor();
+    const auto& old_sd = existing_tsd.as_stream_descriptor();
     // We need to check that the index names match regardless of the dynamic schema setting
     if (!index_names_match(old_sd, new_frame.desc())) {
         throw StreamDescriptorMismatch(
@@ -254,21 +252,20 @@ void fix_descriptor_mismatch_or_throw(
         );
     }
 
-    if (dynamic_schema && new_frame.norm_meta.has_series() && existing_isr.tsd().normalization().has_series()) {
+    if (dynamic_schema && new_frame.norm_meta.has_series() && existing_tsd.normalization().has_series()) {
         const bool both_dont_have_name = !new_frame.norm_meta.series().common().has_name() &&
-                                         !existing_isr.tsd().normalization().series().common().has_name();
+                                         !existing_tsd.normalization().series().common().has_name();
         const bool both_have_name = new_frame.norm_meta.series().common().has_name() &&
-                                    existing_isr.tsd().normalization().series().common().has_name();
+                                    existing_tsd.normalization().series().common().has_name();
         const auto name_or_default = [](const proto::descriptors::NormalizationMetadata& meta) {
             return meta.series().common().has_name() ? meta.series().common().name() : "<series_name_not_set>";
         };
         schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
-                both_dont_have_name ||
-                        (both_have_name && new_frame.norm_meta.series().common().name() ==
-                                                   existing_isr.tsd().normalization().series().common().name()),
+                both_dont_have_name || (both_have_name && new_frame.norm_meta.series().common().name(
+                                                          ) == existing_tsd.normalization().series().common().name()),
                 "Series are not allowed to have different names for append and update even for dynamic schema. "
                 "Existing name: {}, new name: {}",
-                name_or_default(existing_isr.tsd().normalization()),
+                name_or_default(existing_tsd.normalization()),
                 name_or_default(new_frame.norm_meta)
         );
     }

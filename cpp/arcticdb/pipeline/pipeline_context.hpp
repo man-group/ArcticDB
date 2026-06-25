@@ -9,6 +9,8 @@
 #pragma once
 
 #include <arcticdb/column_store/string_pool.hpp>
+#include <arcticdb/entity/index_range.hpp>
+#include <arcticdb/entity/timeseries_descriptor.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/util/bitset.hpp>
 #include <memory>
@@ -111,8 +113,8 @@ struct PipelineContext : public std::enable_shared_from_this<PipelineContext> {
     VersionId version_id_ = 0;
     size_t total_rows_ = 0;
     size_t rows_ = 0;
-    std::shared_ptr<arcticdb::proto::descriptors::NormalizationMetadata> norm_meta_;
-    std::unique_ptr<arcticdb::proto::descriptors::UserDefinedMetadata> user_meta_;
+    // Used in appends with compact_data_inline to check the data can be appended
+    std::optional<IndexValue> last_existing_index_value_;
     std::vector<SliceAndKey> slice_and_keys_;
     util::BitSet fetch_index_;
     std::vector<std::shared_ptr<StringPool>> string_pools_;
@@ -182,7 +184,8 @@ struct PipelineContext : public std::enable_shared_from_this<PipelineContext> {
         swap(left.stream_id_, right.stream_id_);
         swap(left.version_id_, right.version_id_);
         swap(left.total_rows_, right.total_rows_);
-        swap(left.norm_meta_, right.norm_meta_);
+        swap(left.tsd_, right.tsd_);
+        swap(left.last_existing_index_value_, right.last_existing_index_value_);
         swap(left.fetch_index_, right.fetch_index_);
         swap(left.string_pools_, right.string_pools_);
         swap(left.selected_columns_, right.selected_columns_);
@@ -225,12 +228,35 @@ struct PipelineContext : public std::enable_shared_from_this<PipelineContext> {
     }
 
     bool is_pickled() const {
-        util::check(static_cast<bool>(norm_meta_), "No normalization metadata defined");
-        return norm_meta_->input_type_case() ==
+        util::check(tsd_.has_value(), "No normalization metadata defined");
+        return tsd_->proto().normalization().input_type_case() ==
                arcticdb::proto::descriptors::NormalizationMetadata::InputTypeCase::kMsgPackFrame;
     }
 
+    void set_tsd(TimeseriesDescriptor&& tsd);
+
+    const TimeseriesDescriptor& tsd() const;
+
+    bool has_normalization() const;
+
+    const arcticdb::proto::descriptors::NormalizationMetadata& normalization() const;
+
+    arcticdb::proto::descriptors::NormalizationMetadata& mutable_normalization();
+
+    void set_normalization(arcticdb::proto::descriptors::NormalizationMetadata&& norm_meta);
+
+    arcticdb::proto::descriptors::NormalizationMetadata release_normalization();
+
     bool only_index_columns_selected() const;
+
+    std::optional<proto::descriptors::UserDefinedMetadata> release_opt_user_defined_metadata();
+
+  private:
+    // Carries the normalization metadata and user metadata for the pipeline. On indexed reads it is initialised from
+    // the existing on-disk version (the compact path additionally relies on its descriptor, total rows and sorted
+    // state being those of the existing version); on writes / incompletes / joins it is created solely to carry the
+    // working normalization metadata.
+    std::optional<TimeseriesDescriptor> tsd_;
 };
 
 } // namespace arcticdb::pipelines
