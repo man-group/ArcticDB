@@ -28,11 +28,22 @@ class FixedSlicer {
 
     std::vector<FrameSlice> operator()(const InputFrame& frame) const;
 
-    auto row_per_slice() const { return row_per_slice_; }
-
   private:
     size_t col_per_slice_;
     size_t row_per_slice_;
+};
+
+// Note that the input row_ranges and col_ranges are expected to cover contiguous row/col ranges
+// i.e. *_ranges[i].second == *_ranges[i+1].first
+class SpecificSlicer {
+  public:
+    SpecificSlicer(std::vector<RowRange>&& row_ranges, std::vector<ColRange>&& col_ranges);
+
+    std::vector<FrameSlice> operator()(const InputFrame& frame) const;
+
+  private:
+    std::vector<RowRange> row_ranges_;
+    std::vector<ColRange> col_ranges_;
 };
 
 class HashedSlicer {
@@ -45,8 +56,6 @@ class HashedSlicer {
 
     size_t num_buckets() const { return num_buckets_; }
 
-    auto row_per_slice() const { return row_per_slice_; }
-
   private:
     size_t num_buckets_;
     size_t row_per_slice_;
@@ -54,7 +63,7 @@ class HashedSlicer {
 
 class NoSlicing {};
 
-using SlicingPolicy = std::variant<NoSlicing, FixedSlicer, HashedSlicer>;
+using SlicingPolicy = std::variant<NoSlicing, FixedSlicer, SpecificSlicer, HashedSlicer>;
 
 SlicingPolicy get_slicing_policy(const WriteOptions& options, const arcticdb::pipelines::InputFrame& frame);
 
