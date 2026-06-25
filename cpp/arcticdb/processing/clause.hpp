@@ -939,10 +939,12 @@ struct CompactDataClause {
     ClauseInfo clause_info_;
     std::shared_ptr<ComponentManager> component_manager_;
     uint64_t rows_per_segment_;
+    std::shared_ptr<InputFrame> frame_;
     uint64_t min_rows_per_segment_;
     uint64_t max_rows_per_segment_;
+    bool dynamic_schema_;
 
-    explicit CompactDataClause(uint64_t rows_per_segment);
+    CompactDataClause(uint64_t rows_per_segment, std::shared_ptr<InputFrame> frame = std::shared_ptr<InputFrame>());
     ARCTICDB_MOVE_COPY_DEFAULT(CompactDataClause)
 
     [[nodiscard]] std::vector<std::vector<size_t>> structure_for_processing(std::vector<RangesAndKey>& ranges_and_keys);
@@ -955,7 +957,7 @@ struct CompactDataClause {
 
     [[nodiscard]] const ClauseInfo& clause_info() const;
 
-    void set_processing_config(const ProcessingConfig&);
+    void set_processing_config(const ProcessingConfig& processing_config);
 
     void set_component_manager(std::shared_ptr<ComponentManager> component_manager);
 
@@ -968,5 +970,10 @@ struct CompactDataClause {
     [[nodiscard]] bool row_ranges_all_acceptable_lengths(const std::set<RowRange>& row_ranges) const;
 
     [[nodiscard]] std::set<RowRange> structure_row_ranges(const std::set<RowRange>& row_ranges) const;
+
+  private:
+    void add_segment_from_frame(
+            const ProcessingUnit& proc, size_t col_range_start, std::vector<SegmentInMemory>& segments
+    ) const;
 };
 } // namespace arcticdb

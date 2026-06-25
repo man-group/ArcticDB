@@ -11,6 +11,7 @@
 #include <vector>
 #include <unordered_set>
 #include <arcticdb/entity/descriptors.hpp>
+#include <arcticdb/entity/timeseries_descriptor.hpp>
 
 namespace arcticdb {
 
@@ -20,16 +21,13 @@ struct OutputSchema;
 
 namespace pipelines {
 struct InputFrame;
-namespace index {
-struct IndexSegmentReader;
-} // namespace index
 } // namespace pipelines
 
 /**
  * The new frame for append/update is compatible with the existing index. Throws various exceptions if not.
  */
 void fix_normalization_or_throw(
-        bool is_append, const pipelines::index::IndexSegmentReader& existing_isr, const pipelines::InputFrame& new_frame
+        bool is_append, const TimeseriesDescriptor& existing_tsd, const pipelines::InputFrame& new_frame
 );
 
 proto::descriptors::NormalizationMetadata generate_norm_meta(

@@ -380,7 +380,7 @@ SegmentInMemory WriteToSegmentTask::slice() const {
         );
     }
 
-    seg.end_block_write(rows_to_write);
+    seg.set_row_data(rows_to_write - 1);
 
     if (ConfigsMap().instance()->get_int("Statistics.GenerateOnWrite", 0) == 1)
         seg.calculate_statistics();

@@ -15,6 +15,7 @@
 #include <arcticdb/stream/index.hpp>
 #include <folly/futures/Future.h>
 #include <arcticdb/pipeline/frame_slice.hpp>
+#include <arcticdb/pipeline/index_segment_reader.hpp>
 #include <arcticdb/pipeline/slicing.hpp>
 #include <arcticdb/stream/stream_sink.hpp>
 #include <arcticdb/storage/store.hpp>
@@ -35,7 +36,7 @@ struct WriteToSegmentTask : public async::BaseTask {
 
     WriteToSegmentTask(
             std::shared_ptr<InputFrame> frame, FrameSlice slice,
-            const std::optional<TypedStreamVersion>& typed_stream_version, bool sparsify_floats = false
+            const std::optional<TypedStreamVersion>& typed_stream_version = std::nullopt, bool sparsify_floats = false
     );
 
     std::tuple<PartialKey, SegmentInMemory, FrameSlice> operator()();

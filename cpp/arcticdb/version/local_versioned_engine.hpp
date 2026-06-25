@@ -132,7 +132,7 @@ class LocalVersionedEngine : public VersionedEngine {
 
     VersionedItem append_internal(
             const StreamId& stream_id, const std::shared_ptr<InputFrame>& frame, bool upsert,
-            bool prune_previous_versions, bool validate_index
+            bool prune_previous_versions, bool validate_index, bool compact_data_inline
     ) override;
 
     VersionedItem delete_range_internal(
@@ -346,6 +346,11 @@ class LocalVersionedEngine : public VersionedEngine {
     CompactDataInfo compact_data_explain_plan_internal(
             const StreamId& stream_id, std::optional<uint64_t> rows_per_segment
     ) override;
+
+    VersionedItem maybe_compact_data_and_write_version(
+            const UpdateInfo& update_info, uint64_t rows_per_segment, bool prune_previous_versions,
+            std::optional<CompactDataFrame> compact_data_frame = std::nullopt
+    );
 
     VersionedItem compact_data_internal(
             const StreamId& stream_id, std::optional<uint64_t> rows_per_segment, bool prune_previous_versions
