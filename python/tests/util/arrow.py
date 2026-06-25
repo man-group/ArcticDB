@@ -14,6 +14,14 @@ def to_format(table: Union[pa.Table, pl.DataFrame], arrow_output_format: OutputF
     return table
 
 
+def deep_copy(table: Union[pa.Table, pl.DataFrame]) -> Union[pa.Table, pl.DataFrame]:
+    """Deep copy of an arrow or polars table"""
+    if isinstance(table, pl.DataFrame):
+        return pl.from_arrow(deep_copy(table.to_arrow()))
+    # There is explicit no deep clone pyarrow api so we use `pyarrow.take(num_rows)`
+    return table.take(list(range(table.num_rows)))
+
+
 def assert_arrow_equal(expected: Union[pa.Table, pl.DataFrame], received: Union[pa.Table, pl.DataFrame]):
     # Convert expected to be the same type as received
     if isinstance(expected, pa.Table) and isinstance(received, pl.DataFrame):
