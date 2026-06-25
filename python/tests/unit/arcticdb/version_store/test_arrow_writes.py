@@ -7,6 +7,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 
 import gc
+from contextlib import contextmanager
 from hypothesis import given, settings
 import hypothesis.strategies as st
 import numpy as np
@@ -27,8 +28,17 @@ from arcticdb.util.test import (
 from arcticdb.util.hypothesis import use_of_function_scoped_fixtures_in_hypothesis_checked
 from arcticdb.version_store._normalization import ArrowTableNormalizer
 from arcticdb_ext.storage import KeyType
-from tests.util.arrow import assert_arrow_equal, string_format_kwargs, to_format
+from tests.util.arrow import assert_arrow_equal, deep_copy, string_format_kwargs, to_format
 from tests.util.naughty_strings import read_big_list_of_naughty_strings
+
+
+@contextmanager
+def assert_inputs_not_modified(*inputs):
+    """Staging must not modify the caller's data, e.g. by sorting the underlying buffers in place."""
+    originals = [deep_copy(inp) for inp in inputs]
+    yield
+    for inp, original in zip(inputs, originals):
+        assert_arrow_equal(original, inp)
 
 
 def test_record_batches_roundtrip():
@@ -775,6 +785,7 @@ def test_staging_with_sorting(in_memory_store_factory, arrow_output_format):
             "col0": pa.array([0, 1, 2], pa.uint16()),
             "col1": pa.array([10, 11, 12], pa.uint8()),
             "col2": pa.array([20, 21, 22], pa.uint32()),
+            "col3": pa.array(["three", "one", "two"], pa.string()),
         }
     )
     table_1 = pa.table(
@@ -783,46 +794,24 @@ def test_staging_with_sorting(in_memory_store_factory, arrow_output_format):
             "col0": pa.array([3, 4, 5], pa.uint16()),
             "col1": pa.array([13, 14, 15], pa.uint8()),
             "col2": pa.array([23, 24, 25], pa.uint32()),
+            "col3": pa.array(["four", "six", "five"], pa.string()),
         }
     )
-    lib.stage(sym, to_format(table_0, arrow_output_format), sort_on_index=True, index_column=True)
-    lib.stage(sym, to_format(table_1, arrow_output_format), sort_on_index=True, index_column=True)
+    input_0 = to_format(table_0, arrow_output_format)
+    input_1 = to_format(table_1, arrow_output_format)
+    with assert_inputs_not_modified(input_0, input_1):
+        lib.stage(sym, input_0, sort_on_index=True, index_column=True)
+        lib.stage(sym, input_1, sort_on_index=True, index_column=True)
 
     assert len(lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, sym)) == 4
     lib.compact_incomplete(sym, False, False)
     expected = pa.concat_tables([table_0, table_1]).sort_by("ts")
-    received = lib.read(sym, output_format=arrow_output_format).data
+    received = lib.read(
+        sym,
+        output_format=arrow_output_format,
+        **string_format_kwargs(arrow_output_format, default=ArrowOutputStringFormat.SMALL_STRING),
+    ).data
     assert_arrow_equal(expected, received)
-
-
-# Merge with test_staging_with_sorting when 18190648152 is done
-@pytest.mark.xfail(reason="Not implemented yet, see issue 18190648152")
-def test_staging_with_sorting_strings(in_memory_store_factory):
-    lib = in_memory_store_factory(segment_row_size=2, dynamic_schema=True)
-    lib_tool = lib.library_tool()
-    lib.set_output_format("pyarrow")
-    lib._set_allow_arrow_input()
-    sym = "test_staging_with_sorting_strings"
-    table_0 = pa.table(
-        {
-            "ts": pa.array([3, 1, 2], pa.timestamp("ns")),
-            "col": pa.array(["three", "one", "two"], pa.string()),
-        }
-    )
-    table_1 = pa.table(
-        {
-            "ts": pa.array([4, 6, 5], pa.timestamp("ns")),
-            "col": pa.array(["four", "six", "five"], pa.string()),
-        }
-    )
-    lib.stage(sym, table_0, sort_on_index=True, index_column=True)
-    lib.stage(sym, table_1, sort_on_index=True, index_column=True)
-
-    assert len(lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, sym)) == 4
-    lib.compact_incomplete(sym, False, False)
-    expected = pa.concat_tables([table_0, table_1]).sort_by("ts")
-    received = lib.read(sym, arrow_string_format_default=ArrowOutputStringFormat.SMALL_STRING).data
-    assert expected.equals(received)
 
 
 def test_recursive_normalizers(in_memory_version_store_arrow, all_recursive_metastructure_versions):
