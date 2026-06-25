@@ -31,11 +31,14 @@ struct WriteToSegmentTask : public async::BaseTask {
     std::optional<TypedStreamVersion> typed_stream_version_;
     folly::Function<PartialKey(const FrameSlice&)> partial_key_gen_;
     bool sparsify_floats_;
+    // Controls whether the result SegmentInMemory can share memory with frame_ or must be explicitly copied
+    CopyMode copy_mode_;
     util::MagicNum<'W', 's', 'e', 'g'> magic_;
 
     WriteToSegmentTask(
             std::shared_ptr<InputFrame> frame, FrameSlice slice,
-            const std::optional<TypedStreamVersion>& typed_stream_version, bool sparsify_floats = false
+            const std::optional<TypedStreamVersion>& typed_stream_version, bool sparsify_floats = false,
+            CopyMode copy_mode = CopyMode::IfNeeded
     );
 
     std::tuple<PartialKey, SegmentInMemory, FrameSlice> operator()();

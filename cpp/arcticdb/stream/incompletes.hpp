@@ -139,16 +139,18 @@ std::vector<AtomKey> write_parallel_impl(
 
 void write_head(const std::shared_ptr<Store>& store, const AtomKey& next_key, size_t total_rows);
 
+// Used by tick collector. Maintains a linked list of append_data keys
 void append_incomplete_segment(const std::shared_ptr<Store>& store, const StreamId& stream_id, SegmentInMemory&& seg);
 
+// Allows simulating tick collector appends from python. Not used by user facing APIs
 void append_incomplete(
         const std::shared_ptr<Store>& store, const StreamId& stream_id,
         const std::shared_ptr<pipelines::InputFrame>& frame, bool validate_index
 );
 
-SegmentInMemory incomplete_segment_from_tensor_frame(
-        const std::shared_ptr<pipelines::InputFrame>& frame, size_t existing_rows,
-        std::optional<entity::AtomKey>&& prev_key, bool allow_sparse
+SegmentInMemory incomplete_segment_from_frame(
+        const std::shared_ptr<pipelines::InputFrame>& frame, std::optional<entity::AtomKey>&& prev_key,
+        bool sparsify_floats, CopyMode copy_mode = CopyMode::IfNeeded
 );
 
 std::optional<int64_t> latest_incomplete_timestamp(const std::shared_ptr<Store>& store, const StreamId& stream_id);

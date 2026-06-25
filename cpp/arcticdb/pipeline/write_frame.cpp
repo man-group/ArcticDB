@@ -33,12 +33,13 @@ namespace ranges = std::ranges;
 
 WriteToSegmentTask::WriteToSegmentTask(
         std::shared_ptr<InputFrame> frame, FrameSlice slice,
-        const std::optional<TypedStreamVersion>& typed_stream_version, bool sparsify_floats
+        const std::optional<TypedStreamVersion>& typed_stream_version, bool sparsify_floats, CopyMode copy_mode
 ) :
     frame_(std::move(frame)),
     slice_(std::move(slice)),
     typed_stream_version_(typed_stream_version),
-    sparsify_floats_(sparsify_floats) {
+    sparsify_floats_(sparsify_floats),
+    copy_mode_(copy_mode) {
     slice_.check_magic();
 }
 
@@ -304,9 +305,10 @@ Column WriteToSegmentTask::slice_column(const Column& source_column, size_t offs
         dest_column_type = make_scalar_type(DataType::BOOL8);
     } else if (is_sequence_type(source_column.type().data_type())) {
         dest_column_type = make_scalar_type(DataType::UTF_DYNAMIC64);
-    } else if (num_nulls == 0 && contiguous_slices.size() == 1) {
+    } else if (copy_mode_ == CopyMode::IfNeeded && num_nulls == 0 && contiguous_slices.size() == 1) {
         // Dense numeric column consisting of a single contiguous slice of memory is the only
-        // case where we can zero copy construct the result column.
+        // case where we can zero copy construct the result column. When CopyMode::Always is requested we fall through
+        // to the general path below, which allocates an owned column and copies the data into it.
         const auto& slice = contiguous_slices.front();
         ChunkedBuffer chunked_buffer;
         chunked_buffer.add_external_block(slice.block->ptr(slice.start_pos * type_size), slice.size * type_size);
@@ -346,7 +348,8 @@ SegmentInMemory WriteToSegmentTask::slice() const {
                 FieldRef{fd.type(), fd.name()},
                 std::make_shared<Column>(fd.type(), 0, AllocationType::DYNAMIC, Sparsity::NOT_PERMITTED)
         );
-        auto opt_error = segment_set_data(fd.type(), tensor, seg, abs_col, rows_to_write, offset_in_frame, sparsify);
+        auto opt_error =
+                segment_set_data(fd.type(), tensor, seg, abs_col, rows_to_write, offset_in_frame, sparsify, copy_mode_);
         if (opt_error.has_value()) {
             opt_error->raise(fd.name(), offset_in_frame);
         }
