@@ -17,6 +17,7 @@ from arcticdb.version_store.helper import add_s3_library_to_env
 from arcticdb.config import _DEFAULT_ENV
 from arcticdb.version_store._store import NativeVersionStore
 from arcticdb.adapters.arctic_library_adapter import ArcticLibraryAdapter
+from arcticdb.log import version as log
 from arcticdb_ext.storage import (
     StorageOverride,
     S3Override,
@@ -124,16 +125,15 @@ class S3LibraryAdapter(ArcticLibraryAdapter):
     @property
     def config_library(self):
         env_cfg = EnvironmentConfigsMap()
-        _name = (
-            self._query_params.access
-            if self._query_params.aws_auth == AWSAuthMethod.DISABLED
-            else USE_AWS_CRED_PROVIDERS_TOKEN
-        )
-        _key = (
-            self._query_params.secret
-            if self._query_params.aws_auth == AWSAuthMethod.DISABLED
-            else USE_AWS_CRED_PROVIDERS_TOKEN
-        )
+        if self._query_params.aws_auth == AWSAuthMethod.DISABLED:
+            _name = self._query_params.access
+            _key = self._query_params.secret
+        else:
+            if self._query_params.access or self._query_params.secret:
+                log.warning("aws_auth is enabled. access and secret set will be ignored")
+            _name = USE_AWS_CRED_PROVIDERS_TOKEN
+            _key = USE_AWS_CRED_PROVIDERS_TOKEN
+
         with_prefix = (
             f"{self._query_params.path_prefix}/{CONFIG_LIBRARY_NAME}" if self._query_params.path_prefix else False
         )

@@ -629,10 +629,21 @@ def monkeypatch_session():
     m.undo()
 
 
+@pytest.fixture
+def route_env_to_extension(monkeypatch):
+    # We statically linked msvcrt which maintains a seprate copy of the environment
+    if os.name == "nt":
+        from arcticdb_ext.tools import putenv_s
+
+        monkeypatch.setattr(os, "putenv", putenv_s)
+        monkeypatch.setattr(os, "unsetenv", lambda n: putenv_s(n, ""))
+    yield
+
+
 @pytest.fixture(
     scope="session"
 )  # Config loaded at the first ArcticDB binary import, so we need to set it up before any tests
-def real_s3_sts_storage_factory(monkeypatch_session) -> Generator[BaseS3StorageFixtureFactory, None, None]:
+def real_s3_sts_storage_factory() -> Generator[BaseS3StorageFixtureFactory, None, None]:
     profile_name = "sts_test_profile"
     set_config_int("S3Storage.STSTokenExpiryMin", 15)
     # monkeypatch cannot runtime update environment variables in windows as copy of environment is made at startup
@@ -653,6 +664,7 @@ def real_s3_sts_storage_factory(monkeypatch_session) -> Generator[BaseS3StorageF
         f.default_key = Key(
             id="", secret="", user_name="unknown user"
         )  # Reset to ensure client can't fallback to default key+secret auth
+        # Windows resolves the profile from the default ~/.aws/config location, so no env override is needed
         yield f
     else:
         working_dir = mkdtemp(suffix="S3STSStorageFixtureFactory")
@@ -674,15 +686,21 @@ def real_s3_sts_storage_factory(monkeypatch_session) -> Generator[BaseS3StorageF
             real_s3_sts_resources_ready(
                 f
             )  # resources created in iam may not be ready immediately in s3; Could take 10+ seconds
-            monkeypatch_session.setenv("AWS_CONFIG_FILE", config_file_path)
+            f.aws_profile_env = {"AWS_CONFIG_FILE": config_file_path}
             yield f
         finally:
             real_s3_sts_clean_up(role_name, policy_name, username)
             safer_rmtree(None, working_dir)
 
 
-@pytest.fixture(scope="session")
-def real_s3_sts_storage(real_s3_sts_storage_factory) -> Generator[S3Bucket, None, None]:
+@pytest.fixture
+def real_s3_sts_storage(real_s3_sts_storage_factory, monkeypatch) -> Generator[S3Bucket, None, None]:
+    # Function-scoped so slow_cleanup() at teardown runs while AWS_CONFIG_FILE still points at the STS profile config.
+    # Depending on `monkeypatch` guarantees this fixture's cleanup (and that of real_s3_sts_store_factory) runs before
+    # monkeypatch undoes the env vars. Setting them on a shared session monkeypatch would instead leave them pointing at
+    # whichever sibling profile fixture (e.g. real_s3_default_profile_storage_factory) was set up last by teardown time.
+    for env_var, value in real_s3_sts_storage_factory.aws_profile_env.items():
+        monkeypatch.setenv(env_var, value)
     with real_s3_sts_storage_factory.create_fixture() as f:
         yield f
 

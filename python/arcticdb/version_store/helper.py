@@ -285,11 +285,12 @@ def get_s3_proto(
     if ssl is not None:
         s3.ssl = ssl
 
-    if aws_auth == AWSAuthMethod.STS_PROFILE_CREDENTIALS_PROVIDER or aws_profile:
-        if is_nfs_layout:
-            raise UserInputException("aws_auth and aws_profile can only be set for S3")
-        if aws_auth != AWSAuthMethod.STS_PROFILE_CREDENTIALS_PROVIDER or not aws_profile:
-            raise UserInputException("STS credential provider and aws_profile must be set together")
+    if is_nfs_layout and (aws_auth == AWSAuthMethod.STS_PROFILE_CREDENTIALS_PROVIDER or aws_profile):
+        raise UserInputException("aws_auth=sts and aws_profile can only be set for S3")
+    if aws_profile and aws_auth == AWSAuthMethod.DISABLED:
+        raise UserInputException("aws_profile can only be set when aws_auth is 'default' or 'sts'")
+    if aws_auth == AWSAuthMethod.STS_PROFILE_CREDENTIALS_PROVIDER and not aws_profile:
+        raise UserInputException("STS credential provider requires aws_profile to be set")
 
     if use_internal_client_wrapper_for_testing:
         assert (

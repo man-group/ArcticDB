@@ -1,6 +1,3 @@
-import os
-import sys
-
 import pytest
 
 from arcticdb import Arctic
@@ -69,18 +66,10 @@ def test_upgrade_script_s3(s3_storage: S3Bucket, lib_name):
 
 @pytest.mark.parametrize("default_credential_provider", ["1", "true"])  # true for testing backwards compatibility
 @SKIP_CONDA_MARK  # issue with fixture cleanup
-def test_upgrade_script_s3_rbac_ok(s3_clean_bucket: S3Bucket, monkeypatch, default_credential_provider, lib_name):
+def test_upgrade_script_s3_rbac_ok(
+    s3_clean_bucket: S3Bucket, monkeypatch, route_env_to_extension, default_credential_provider, lib_name
+):
     """Just _RBAC_ as creds is a placeholder. Leave config with that alone."""
-    if os.name == "nt":
-        if sys.version_info < (3, 9):
-            pytest.skip("Older Python don't support unsetenv on Windows")
-
-        # We statically linked msvcrt which maintains a seprate copy of the environment
-        from arcticdb_ext.tools import putenv_s
-
-        monkeypatch.setattr(os, "putenv", putenv_s)
-        monkeypatch.setattr(os, "unsetenv", lambda n: putenv_s(n, ""))
-
     monkeypatch.setenv("AWS_ACCESS_KEY_ID", s3_clean_bucket.key.id)
     monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", s3_clean_bucket.key.secret)
 
