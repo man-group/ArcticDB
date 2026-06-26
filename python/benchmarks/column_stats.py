@@ -153,7 +153,7 @@ class ColumnStatsQueryPerformance:
                     sym = _symbol_name(rows, ordered)
                     self.logger.info(f"Writing {sym} with {rows} rows")
                     lib.write(sym, df)
-                    lib._nvs.create_column_stats(sym, COLUMN_STATS)
+                    lib._nvs.create_column_stats_experimental(sym)
         self.logger.info(f"setup_cache time: {time.time() - start}")
         return lib_for_storage
 
@@ -329,7 +329,7 @@ class ColumnStatsDynamicSchema:
                 lib.append(sym, df)
                 self.logger.info(f"Wrote chunk {chunk_idx} for {sym}")
 
-            lib._nvs.create_column_stats(sym, {"sometimes_missing_col": {"MINMAX"}, **COLUMN_STATS})
+            lib._nvs.create_column_stats_experimental(sym)
             self.logger.info(f"Created column stats for {sym}")
 
         self.logger.info(f"setup_cache time: {time.time() - start}")
@@ -402,10 +402,10 @@ class ColumnStatsCreate:
         self.nvs = self.lib._nvs
         self.symbol = _symbol_name(num_rows, ordered=True)
         # Drop stats so time_ measures creation from scratch
-        self.nvs.drop_column_stats(self.symbol)
+        self.nvs.drop_column_stats_experimental(self.symbol)
 
     def time_create_column_stats(self, *args):
-        self.nvs.create_column_stats(self.symbol, COLUMN_STATS)
+        self.nvs.create_column_stats_experimental(self.symbol)
 
 
 class ColumnStatsWideFilter:
@@ -490,7 +490,7 @@ class ColumnStatsWideFilter:
                 all_stats[f"extra_int64_{i}"] = {"MINMAX"}
             for i in range(n_float):
                 all_stats[f"extra_float_{i}"] = {"MINMAX"}
-            lib._nvs.create_column_stats(sym, all_stats)
+            lib._nvs.create_column_stats_experimental(sym)
             self.logger.info(f"Created column stats for {sym}")
 
         self.logger.info(f"setup_cache time: {time.time() - start}")
@@ -585,8 +585,7 @@ class ColumnStatsManySegmentsZeroMatch:
             df.index.name = "ts"
 
             lib.write(sym, df)
-            stats = {f"float_{i}": {"MINMAX"} for i in range(self.NUM_COLS)}
-            lib._nvs.create_column_stats(sym, stats)
+            lib._nvs.create_column_stats_experimental(sym)
             self.logger.info(f"Wrote {sym} with {n} rows and created column stats")
 
         self.logger.info(f"setup_cache time: {time.time() - start}")

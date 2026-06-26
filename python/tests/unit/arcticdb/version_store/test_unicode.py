@@ -68,7 +68,7 @@ def test_write(lmdb_version_store_tiny_segment, parallel, multi_index):
     else:
         lib.write(symbol, df, metadata=metadata)
 
-    lib.create_column_stats(symbol, column_stats={trademark: {"MINMAX"}})
+    lib.create_column_stats_experimental(symbol)
     vit = lib.read(symbol)
     assert_frame_equal(vit.data, df)
     assert vit.metadata == metadata
