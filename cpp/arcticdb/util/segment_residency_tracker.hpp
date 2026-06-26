@@ -23,6 +23,8 @@ class SegmentResidencyTracker {
 
     void set_enabled(bool enabled) { enabled_.store(enabled, std::memory_order_relaxed); }
 
+    bool enabled() const { return enabled_.load(std::memory_order_relaxed); }
+
     void reset() {
         live_.store(0, std::memory_order_relaxed);
         high_water_.store(0, std::memory_order_relaxed);
