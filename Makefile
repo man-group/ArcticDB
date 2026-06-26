@@ -19,6 +19,17 @@ TMPDIR_OVERRIDE  ?=
 _RELEASE_BUILD_DIR := cpp/out/$(RELEASE_PRESET)-build
 _DEBUG_BUILD_DIR   := cpp/out/$(DEBUG_PRESET)-build
 
+# ── Compiler selection ───────────────────────────────────────────────────────
+# Pin the toolchain by passing CC and/or CXX on the command line or in the env,
+# e.g. `make build CC=gcc-12 CXX=g++-12`. The flag is only forwarded to cmake when
+# the variable was set explicitly (origin "command line"/"environment"), so make's
+# built-in defaults (cc/g++) are ignored and the preset's own default is used.
+# NOTE: changing the compiler requires a clean configure — wipe the build dir
+# (rm -rf $(_RELEASE_BUILD_DIR)) before rebuilding so cmake/vcpkg pick it up.
+_CC_ARG  := $(if $(filter-out default undefined,$(origin CC)),-DCMAKE_C_COMPILER=$(CC))
+_CXX_ARG := $(if $(filter-out default undefined,$(origin CXX)),-DCMAKE_CXX_COMPILER=$(CXX))
+_COMPILER_ARGS := $(strip $(_CC_ARG) $(_CXX_ARG))
+
 # ── Environment plumbing ─────────────────────────────────────────────────────
 # Prepend TMPDIR=... when TMPDIR_OVERRIDE is set
 _TMPDIR_ENV := $(if $(TMPDIR_OVERRIDE),TMPDIR=$(TMPDIR_OVERRIDE))
@@ -48,6 +59,8 @@ help: ## Show this help
 	@echo "  DEBUG_PRESET     $(DEBUG_PRESET)"
 	@echo "  PROXY_CMD        $(or $(PROXY_CMD),(unset))"
 	@echo "  CMAKE_JOBS       $(CMAKE_JOBS)"
+	@echo "  CC               $(if $(filter-out default undefined,$(origin CC)),$(CC),(preset default))"
+	@echo "  CXX              $(if $(filter-out default undefined,$(origin CXX)),$(CXX),(preset default))"
 	@echo "  PROTOC_VERS      $(or $(PROTOC_VERS),(unset))"
 	@echo "  VENV_DIR         $(VENV_DIR)"
 	@echo "  TMPDIR_OVERRIDE  $(or $(TMPDIR_OVERRIDE),(unset))"
@@ -103,19 +116,19 @@ _CMAKE_INPUTS := cpp/CMakeLists.txt cpp/CMakePresets.json cpp/vcpkg.json \
 # an initial build.
 .SECONDEXPANSION:
 $(_RELEASE_BUILD_DIR)/.configure-stamp: $(_CMAKE_INPUTS) $$(wildcard cpp/CMakeUserPresets.json)
-	$(_TMPDIR_ENV) $(PROXY_CMD) cmake -DTEST=ON --preset $(RELEASE_PRESET) cpp
+	$(_TMPDIR_ENV) $(PROXY_CMD) cmake -DTEST=ON $(_COMPILER_ARGS) --preset $(RELEASE_PRESET) cpp
 	@touch $@
 
 $(_DEBUG_BUILD_DIR)/.configure-stamp: $(_CMAKE_INPUTS) $$(wildcard cpp/CMakeUserPresets.json)
-	$(_TMPDIR_ENV) $(PROXY_CMD) cmake -DTEST=ON --preset $(DEBUG_PRESET) cpp
+	$(_TMPDIR_ENV) $(PROXY_CMD) cmake -DTEST=ON $(_COMPILER_ARGS) --preset $(DEBUG_PRESET) cpp
 	@touch $@
 
 configure: ## CMake configure (release) — always reconfigures
-	$(_TMPDIR_ENV) $(PROXY_CMD) cmake -DTEST=ON --preset $(RELEASE_PRESET) cpp
+	$(_TMPDIR_ENV) $(PROXY_CMD) cmake -DTEST=ON $(_COMPILER_ARGS) --preset $(RELEASE_PRESET) cpp
 	@touch $(_RELEASE_BUILD_DIR)/.configure-stamp
 
 configure-debug: ## CMake configure (debug) — always reconfigures
-	$(_TMPDIR_ENV) $(PROXY_CMD) cmake -DTEST=ON --preset $(DEBUG_PRESET) cpp
+	$(_TMPDIR_ENV) $(PROXY_CMD) cmake -DTEST=ON $(_COMPILER_ARGS) --preset $(DEBUG_PRESET) cpp
 	@touch $(_DEBUG_BUILD_DIR)/.configure-stamp
 
 # ── build ────────────────────────────────────────────────────────────────────
