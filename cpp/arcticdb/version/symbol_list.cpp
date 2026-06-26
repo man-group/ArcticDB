@@ -18,6 +18,7 @@
 #include <arcticdb/log/log.hpp>
 #include <arcticdb/storage/store.hpp>
 #include <arcticdb/stream/merge_utils.hpp>
+#include <arcticdb/async/task_scheduler.hpp>
 
 #include <ankerl/unordered_dense.h>
 
@@ -778,7 +779,7 @@ SegmentInMemory create_empty_segment(const StreamId& stream_id) {
 }
 
 VariantKey write_symbols(
-        const std::shared_ptr<Store>& store, CollectionType symbols, const StreamId& stream_id,
+        const std::shared_ptr<Store>& store, CollectionType&& symbols, const StreamId& stream_id,
         const StreamId& type_holder
 ) {
     ARCTICDB_RUNTIME_DEBUG(log::symbol(), "Writing {} symbols to symbol list cache", symbols.size());
@@ -862,6 +863,68 @@ size_t SymbolList::compact(const std::shared_ptr<Store>& store) {
     return num_symbol_list_keys;
 }
 
+// Number of keys to accumulate before issuing a delete. Each batch is handed to the async
+// remove_keys, which internally chunks it to the storage's delete limit and runs the chunks across
+// the IO threads — so io_thread_count * delete_batch_size keys per batch saturates the IO pool while
+// keeping the reconstructed-key memory bounded. Overridable via config for tuning.
+size_t compaction_delete_batch_size(const std::shared_ptr<Store>& store) {
+    constexpr size_t default_storage_batch = 1000; // assumed limit when the storage reports none
+    const auto io_threads = static_cast<size_t>(async::TaskScheduler::instance()->io_thread_count());
+    const auto storage_batch = store->max_delete_batch_size().value_or(default_storage_batch);
+    return static_cast<size_t>(ConfigsMap::instance()->get_int(
+            "SymbolList.CompactionDeleteBatchSize", static_cast<int64_t>(io_threads * storage_batch)
+    ));
+}
+
+// Deletes the symbol-list keys superseded by the newly written compaction key: the old compaction
+// keys (typically 0–1) and every journal key, all deleted through one batched flow. The freshly
+// written compaction key is excluded from the deletion (see the corner case below). Consumes
+// journal.compaction_keys and journal.update_map.
+void delete_superseded_keys(const std::shared_ptr<Store>& store, JournalResult& journal, const AtomKey& written_key) {
+    const size_t batch_size = compaction_delete_batch_size(store);
+    std::vector<VariantKey> batch;
+    batch.reserve(batch_size);
+
+    auto flush = [&] {
+        if (!batch.empty()) {
+            store->remove_keys(std::move(batch)).get();
+            batch.clear();
+        }
+    };
+    auto add = [&](AtomKey key) {
+        // Corner case: if the newly written Compaction key (written_key) has the same timestamp as an existing
+        // one (e.g. when a previous compaction round failed in the deletion step), we don't want to delete the former
+        // this can happen in the following scenario:
+        // 1. Process A writes a compaction key at timestamp T.
+        // 2. Process A fails to delete the old SL entries (e.g. due to a crash) and exits.
+        // 3. Process B attemps to compact the SL, incl. the compacted key from process A. 
+        // 4. Due to clock skew, process B writes a new compaction key at timestamp T (same as process A's key)
+        // ---> this results in the exact same compaction key which will overwrite the previous one, 
+        // 5. we DON'T want to delete the compaction key from process A, as it is the same as the one from process B, so we skip it here.
+        // ---> this would result in wiping out the whole SL cache
+        if (key == written_key)
+            return;
+        batch.emplace_back(std::move(key));
+        if (batch.size() >= batch_size)
+            flush();
+    };
+
+    for (const auto& ck : journal.compaction_keys) {
+        add(to_atom(ck));
+    }
+    journal.compaction_keys.clear();
+
+    // Reconstruct journal keys from the JournalMapType, freeing each symbol's entries as they are processed.
+    for (auto it = journal.update_map.begin(); it != journal.update_map.end();) {
+        const auto& [symbol, ck_entries] = *it;
+        for (const auto& ck : ck_entries) {
+            add(atom_key_from_journal_entry(symbol, ck));
+        }
+        it = journal.update_map.erase(it);
+    }
+    flush();
+}
+
 void SymbolList::compact_internal(const std::shared_ptr<Store>& store, LoadResult& load_result) const {
     if (has_recent_compaction(store, load_result.journal_.compaction_key)) {
         // legacy arcticc symbol list entries don't get correctly listed when doing `iterate_type`, so can mess
@@ -875,40 +938,7 @@ void SymbolList::compact_internal(const std::shared_ptr<Store>& store, LoadResul
     }
 
     auto written = write_symbols(store, std::move(load_result.symbols_), compaction_id, data_.type_holder_);
-    const auto& written_key = std::get<AtomKey>(written);
-
-    // Delete old compaction keys (typically 0–1 entries; exclude the newly written one).
-    auto& old_ck = load_result.journal_.compaction_keys;
-    old_ck.erase(
-            std::remove_if(
-                    old_ck.begin(),
-                    old_ck.end(),
-                    [&written_key](const VariantKey& vk) { return to_atom(vk) == written_key; }
-            ),
-            old_ck.end()
-    );
-    if (!old_ck.empty())
-        store->remove_keys_sync(std::move(old_ck));
-
-    // Reconstruct and delete journal keys in batches from the JournalMapType, freeing each symbol's
-    // entries as they are processed. Journal keys can never equal written_key (different id field).
-    static constexpr size_t kBatchSize = 10'000;
-    std::vector<VariantKey> batch;
-    batch.reserve(kBatchSize);
-    for (auto it = load_result.journal_.update_map.begin(); it != load_result.journal_.update_map.end();) {
-        const auto& [symbol, ck_entries] = *it;
-        for (const auto& ck : ck_entries) {
-            batch.emplace_back(atom_key_from_journal_entry(symbol, ck));
-            if (batch.size() == kBatchSize) {
-                store->remove_keys_sync(std::move(batch));
-                batch.clear();
-                batch.reserve(kBatchSize);
-            }
-        }
-        it = load_result.journal_.update_map.erase(it);
-    }
-    if (!batch.empty())
-        store->remove_keys_sync(std::move(batch));
+    delete_superseded_keys(store, load_result.journal_, std::get<AtomKey>(written));
 }
 
 } // namespace arcticdb
