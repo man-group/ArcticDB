@@ -527,6 +527,41 @@ CollectionType merge_existing_with_journal_map(
     return symbols;
 }
 
+CollectionType load_from_symbol_list_keys(
+        const std::shared_ptr<VersionMap>& version_map, const std::shared_ptr<Store>& store,
+        const JournalMapType& update_map, const AtomKey& compaction_key
+) {
+    ARCTICDB_RUNTIME_DEBUG(log::symbol(), "Loading symbols from symbol list keys");
+    auto existing = read_from_storage(store, compaction_key);
+    // If there are no journal entries, there is nothing to merge
+    // and we can return the existing entries directly
+    if (update_map.empty()) {
+        return CollectionType(std::make_move_iterator(existing.begin()), std::make_move_iterator(existing.end()));
+    }
+    return merge_existing_with_journal_map(version_map, store, update_map, std::move(existing));
+}
+
+CollectionType load_from_version_keys(
+        const std::shared_ptr<VersionMap>& version_map, const std::shared_ptr<Store>& store,
+        const JournalMapType& update_map, SymbolListData& data, WillAttemptCompaction will_attempt_compaction
+) {
+    ARCTICDB_RUNTIME_DEBUG(log::symbol(), "Loading symbols from version keys");
+    auto previous_entries = load_previous_from_version_keys(store, data, will_attempt_compaction);
+    auto symbols = merge_existing_with_journal_map(version_map, store, update_map, std::move(previous_entries));
+    if (will_attempt_compaction == WillAttemptCompaction::YES) {
+        // Verify every journal symbol we'd delete corresponds to a symbol in the merged output.
+        // Guards against silent data loss from merge bugs. The merged output holds one entry per
+        // symbol, so the set size is known exactly up front.
+        ankerl::unordered_dense::set<StreamId> symbols_in_merge;
+        symbols_in_merge.reserve(symbols.size());
+        for (const auto& entry : symbols)
+            symbols_in_merge.emplace(entry.stream_id_);
+        for (const auto& [symbol, _] : update_map)
+            util::check(symbols_in_merge.contains(symbol), "Would delete unseen symbol {}", symbol);
+    }
+    return symbols;
+}
+
 LoadResult attempt_load(
         const std::shared_ptr<VersionMap>& version_map, const std::shared_ptr<Store>& store, SymbolListData& data,
         WillAttemptCompaction will_attempt_compaction
@@ -539,31 +574,11 @@ LoadResult attempt_load(
     journal = load_journal_streaming(store, data, will_attempt_compaction);
 
     if (journal.compaction_key) {
-        ARCTICDB_RUNTIME_DEBUG(log::symbol(), "Loading symbols from symbol list keys");
-        auto existing = read_from_storage(store, *journal.compaction_key);
-        if (journal.update_map.empty()) {
-            load_result.symbols_ =
-                    CollectionType(std::make_move_iterator(existing.begin()), std::make_move_iterator(existing.end()));
-        } else {
-            load_result.symbols_ =
-                    merge_existing_with_journal_map(version_map, store, journal.update_map, std::move(existing));
-        }
-    } else {
-        ARCTICDB_RUNTIME_DEBUG(log::symbol(), "Loading symbols from version keys");
-        auto previous_entries = load_previous_from_version_keys(store, data, will_attempt_compaction);
         load_result.symbols_ =
-                merge_existing_with_journal_map(version_map, store, journal.update_map, std::move(previous_entries));
-        if (will_compact) {
-            // Verify every journal symbol we'd delete corresponds to a symbol in the merged output.
-            // Guards against silent data loss from merge bugs. The merged output holds one entry per
-            // symbol, so the set size is known exactly up front.
-            ankerl::unordered_dense::set<StreamId> symbols_in_merge;
-            symbols_in_merge.reserve(load_result.symbols_.size());
-            for (const auto& entry : load_result.symbols_)
-                symbols_in_merge.emplace(entry.stream_id_);
-            for (const auto& [symbol, _] : journal.update_map)
-                util::check(symbols_in_merge.contains(symbol), "Would delete unseen symbol {}", symbol);
-        }
+                load_from_symbol_list_keys(version_map, store, journal.update_map, *journal.compaction_key);
+    } else {
+        load_result.symbols_ =
+                load_from_version_keys(version_map, store, journal.update_map, data, will_attempt_compaction);
     }
 
     if (!will_compact) {
