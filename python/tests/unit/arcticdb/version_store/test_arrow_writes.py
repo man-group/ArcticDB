@@ -27,7 +27,7 @@ from arcticdb.util.test import (
 from arcticdb.util.hypothesis import use_of_function_scoped_fixtures_in_hypothesis_checked
 from arcticdb.version_store._normalization import ArrowTableNormalizer
 from arcticdb_ext.storage import KeyType
-from tests.util.arrow import assert_arrow_equal, string_format_kwargs, to_format
+from tests.util.arrow import assert_arrow_equal, string_format_kwargs, to_format, undictionarify_table
 from tests.util.naughty_strings import read_big_list_of_naughty_strings
 
 
@@ -297,13 +297,23 @@ def test_many_record_batches_many_slices(in_memory_store_factory, rows_per_slice
                     "float64": pa.array(rng.random(length), pa.float64()),
                     "bool": pa.array(rng.choice([True, False], length), pa.bool_()),
                     "string": pa.array([f"{i}" for i in range(length)], pa.string()),
+                    # Few distinct values so the dictionary genuinely encodes repeats
+                    "categorical": pa.compute.dictionary_encode(
+                        pa.array([f"{i % 3}" for i in range(length)], pa.large_string())
+                    ),
                 }
             )
         )
     table = pa.concat_tables(tables)
     lib.write(sym, table)
-    received = lib.read(sym, arrow_string_format_default=ArrowOutputStringFormat.SMALL_STRING).data
-    assert table.equals(received)
+    received = lib.read(
+        sym,
+        arrow_string_format_default=ArrowOutputStringFormat.SMALL_STRING,
+        arrow_string_format_per_column={"categorical": ArrowOutputStringFormat.CATEGORICAL},
+    ).data
+    # pyarrow.equals blindly compares the keys and dictionaries for dictionary encoded columns
+    # That fails if record batch structure is different between table and received, thus we undictionarify
+    assert undictionarify_table(table).equals(undictionarify_table(received))
 
 
 @pytest.mark.parametrize("rows_per_slice", [1, 2, 3, 5, 7])
@@ -443,11 +453,54 @@ def test_write_unsupported_types(in_memory_version_store_arrow):
         lib.write(sym, table)
     assert "unsupported" in str(e.value).lower()
 
-    table = pa.table({"col": pa.compute.dictionary_encode(pa.array(["hello", "goodbye"], pa.string()))})
-    assert pa.types.is_dictionary(table.column(0).type)
-    with pytest.raises(Exception) as e:
-        lib.write(sym, table)
-    assert "unsupported" in str(e.value).lower()
+
+@pytest.mark.parametrize("format", ["pyarrow", "polars"])
+@pytest.mark.parametrize("sparse", [False, True])
+def test_write_categorical_strings(in_memory_version_store_arrow, format, sparse):
+    lib = in_memory_version_store_arrow
+    sym = "test_write_categorical_strings"
+    # Repeated values so the dictionary genuinely encodes fewer entries than rows
+    values = (
+        ["hello", "goodbye", None, "hello", None, "goodbye"]
+        if sparse
+        else ["hello", "goodbye", "hello", "hello", "goodbye"]
+    )
+    if format == "pyarrow":
+        # pyarrow's dictionary_encode produces int32 keys
+        data = pa.table({"col": pa.compute.dictionary_encode(pa.array(values, pa.large_string()))})
+        assert pa.types.is_dictionary(data.column(0).type)
+    else:
+        # polars' Categorical produces uint32 keys
+        data = pl.DataFrame({"col": pl.Series(values, dtype=pl.Categorical)})
+    lib.write(sym, data)
+
+    # TODO: Remove string format once we store the input format used in normalization
+    received = lib.read(
+        sym,
+        output_format=format,
+        arrow_string_format_default=ArrowOutputStringFormat.CATEGORICAL,
+    ).data
+    assert_arrow_equal(data, received)
+
+
+def test_write_mixed_categorical_and_variable_length_columns(in_memory_version_store_arrow):
+    lib = in_memory_version_store_arrow
+    sym = "test_write_mixed_categorical_and_variable_length_columns"
+    data = pl.DataFrame(
+        {
+            "cat": pl.Series(["a", "b", None, "a", "b"], dtype=pl.Categorical),
+            "str": pl.Series(["x", None, "y", "x", None], dtype=pl.String),
+        }
+    )
+    lib.write(sym, data)
+
+    # TODO: Remove string format once we store the input format used in normalization
+    received = lib.read(
+        sym,
+        output_format="polars",
+        arrow_string_format_per_column={"cat": ArrowOutputStringFormat.CATEGORICAL},
+    ).data
+    assert_arrow_equal(data, received)
 
 
 # Reinstate if bounds check is re-added in WriteToSegmentTask::slice_column when 9951777416 is implemented
