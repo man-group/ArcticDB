@@ -3498,7 +3498,9 @@ folly::Future<SymbolProcessingResult> read_and_process(
                 // for a symbol, no indexed versions
                 return SymbolProcessingResult{
                         std::move(res_versioned_item),
-                        pipeline_context->release_user_defined_metadata().value_or(proto::descriptors::UserDefinedMetadata{}),
+                        pipeline_context->release_user_defined_metadata().value_or(
+                                proto::descriptors::UserDefinedMetadata{}
+                        ),
                         std::move(output_schema),
                         std::move(entity_ids)
                 };
