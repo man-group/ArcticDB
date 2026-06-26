@@ -25,7 +25,7 @@ from arcticdb.util.test import (
 from arcticdb.util.hypothesis import use_of_function_scoped_fixtures_in_hypothesis_checked
 from arcticdb.version_store._normalization import ArrowTableNormalizer
 from arcticdb_ext.storage import KeyType
-from tests.util.arrow import assert_arrow_equal, string_format_kwargs, to_format
+from tests.util.arrow import assert_arrow_equal, string_format_kwargs, to_format, undictionarify_table
 from tests.util.naughty_strings import read_big_list_of_naughty_strings
 
 
@@ -295,13 +295,23 @@ def test_many_record_batches_many_slices(in_memory_store_factory, rows_per_slice
                     "float64": pa.array(rng.random(length), pa.float64()),
                     "bool": pa.array(rng.choice([True, False], length), pa.bool_()),
                     "string": pa.array([f"{i}" for i in range(length)], pa.string()),
+                    # Few distinct values so the dictionary genuinely encodes repeats
+                    "categorical": pa.compute.dictionary_encode(
+                        pa.array([f"{i % 3}" for i in range(length)], pa.large_string())
+                    ),
                 }
             )
         )
     table = pa.concat_tables(tables)
     lib.write(sym, table)
-    received = lib.read(sym, arrow_string_format_default=ArrowOutputStringFormat.SMALL_STRING).data
-    assert table.equals(received)
+    received = lib.read(
+        sym,
+        arrow_string_format_default=ArrowOutputStringFormat.SMALL_STRING,
+        arrow_string_format_per_column={"categorical": ArrowOutputStringFormat.CATEGORICAL},
+    ).data
+    # pyarrow.equals blindly compares the keys and dictionaries for dictionary encoded columns
+    # That fails if record batch structure is different between table and received, thus we undictionarify
+    assert undictionarify_table(table).equals(undictionarify_table(received))
 
 
 @pytest.mark.parametrize("rows_per_slice", [1, 2, 3, 5, 7])
