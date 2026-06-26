@@ -504,3 +504,136 @@ def test_column_stats_isin_int64_min_not_treated_as_nat(
     expected = full_df[pandas_expr(full_df)]
     assert_frame_equal(expected, result)
     assert table_data_reads == expected_reads, f"Expected {expected_reads} TABLE_DATA read(s), got {table_data_reads}"
+
+
+def test_column_stats_isin_multiple_clauses(
+    in_memory_version_store,
+    clear_query_stats,
+    column_stats_filtering_enabled,
+):
+    lib = in_memory_version_store
+
+    df0 = pd.DataFrame({"col_1": [5, 10]}, index=pd.date_range("2000-01-01", periods=2))
+    df1 = pd.DataFrame({"col_1": [20, 30]}, index=pd.date_range("2000-01-03", periods=2))
+    df2 = pd.DataFrame({"col_1": [40, 50]}, index=pd.date_range("2000-01-05", periods=2))
+
+    lib.write(sym, df0)
+    lib.append(sym, df1)
+    lib.append(sym, df2)
+
+    lib.create_column_stats(sym, {"col_1": {"MINMAX"}})
+
+    qs.enable()
+    q = QueryBuilder()
+    q = q[q["col_1"].isin([5, 10])]
+    q = q[q["col_1"].isin([5, 20])]
+    qs.reset_stats()
+    result = lib.read(sym, query_builder=q).data
+    table_data_reads = get_table_data_read_count()
+
+    full_df = pd.concat([df0, df1, df2])
+    expected = full_df[full_df["col_1"].isin([5, 10])]
+    expected = expected[expected["col_1"].isin([5, 20])]
+    assert_frame_equal(expected, result)
+    expected_reads = 1
+    assert table_data_reads == expected_reads, f"Expected {expected_reads} TABLE_DATA read(s), got {table_data_reads}"
+
+
+def test_column_stats_isin_and_isnotin(
+    in_memory_version_store,
+    clear_query_stats,
+    column_stats_filtering_enabled,
+):
+    lib = in_memory_version_store
+
+    df0 = pd.DataFrame({"col_1": [5, 10]}, index=pd.date_range("2000-01-01", periods=2))
+    df1 = pd.DataFrame({"col_1": [20, 30]}, index=pd.date_range("2000-01-03", periods=2))
+    df2 = pd.DataFrame({"col_1": [40, 50]}, index=pd.date_range("2000-01-05", periods=2))
+
+    lib.write(sym, df0)
+    lib.append(sym, df1)
+    lib.append(sym, df2)
+
+    lib.create_column_stats(sym, {"col_1": {"MINMAX"}})
+
+    qs.enable()
+    q = QueryBuilder()
+    q = q[q["col_1"].isin([5, 20, 30])]
+    q = q[q["col_1"].isnotin([20, 21])]
+    qs.reset_stats()
+    result = lib.read(sym, query_builder=q).data
+    table_data_reads = get_table_data_read_count()
+
+    full_df = pd.concat([df0, df1, df2])
+    expected = full_df[full_df["col_1"].isin([5, 30])]
+    assert_frame_equal(expected, result)
+    expected_reads = 2
+    assert table_data_reads == expected_reads, f"Expected {expected_reads} TABLE_DATA read(s), got {table_data_reads}"
+
+
+def test_column_stats_isin_and_isnotin_single_valued(
+    in_memory_version_store,
+    clear_query_stats,
+    column_stats_filtering_enabled,
+):
+    lib = in_memory_version_store
+
+    df0 = pd.DataFrame({"col_1": [5, 5]}, index=pd.date_range("2000-01-01", periods=2))
+
+    lib.write(sym, df0)
+
+    lib.create_column_stats(sym, {"col_1": {"MINMAX"}})
+
+    qs.enable()
+    q = QueryBuilder()
+    q = q[q["col_1"].isin([5])]
+    q = q[q["col_1"].isnotin([6])]
+    qs.reset_stats()
+    result = lib.read(sym, query_builder=q).data
+    table_data_reads = get_table_data_read_count()
+
+    assert_frame_equal(df0, result)
+    expected_reads = 1
+    assert table_data_reads == expected_reads, f"Expected {expected_reads} TABLE_DATA read(s), got {table_data_reads}"
+
+
+def test_column_stats_isin_and_isnotin_colliding_value_sets_nonreg(
+    in_memory_version_store,
+    clear_query_stats,
+    column_stats_filtering_enabled,
+):
+    lib = in_memory_version_store
+
+    # value_set_one contains 5; value_set_two does not. The differing element (index 5) lands in
+    # numpy's skipped middle (see comments in visit_expression), so str() of the two arrays is the same:
+    #
+    # >>> str(value_set_one)
+    # '[    0     1     2 ... 99997 99998 99999]'
+    #
+    # This is a nonreg tests against a bug where when we merged the two filters together, we clashed on this
+    # value set name and incorrectly used it for both the isin and isnotin clause.
+    value_set_one = np.arange(0, 100000)
+    value_set_two = np.arange(0, 100000).copy()
+    value_set_two[5] = 100000
+    assert str(value_set_one) == str(value_set_two)
+    assert 5 in set(value_set_one.tolist())
+    assert 5 not in set(value_set_two.tolist())
+
+    df0 = pd.DataFrame({"col_1": [5, 5]}, index=pd.date_range("2000-01-01", periods=2))
+
+    lib.write(sym, df0)
+
+    lib.create_column_stats(sym, {"col_1": {"MINMAX"}})
+
+    qs.enable()
+    q = QueryBuilder()
+    q = q[q["col_1"].isin(value_set_one)]
+    q = q[q["col_1"].isnotin(value_set_two)]
+    qs.reset_stats()
+    result = lib.read(sym, query_builder=q).data
+    table_data_reads = get_table_data_read_count()
+
+    # 5 is in value_set_one and not in value_set_two, so both rows survive.
+    assert_frame_equal(df0, result)
+    expected_reads = 1
+    assert table_data_reads == expected_reads, f"Expected {expected_reads} TABLE_DATA read(s), got {table_data_reads}"
