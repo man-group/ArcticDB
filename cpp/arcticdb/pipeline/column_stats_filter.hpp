@@ -35,6 +35,10 @@ struct PairHasher {
 struct ColumnStatsValues {
     std::optional<Value> min;
     std::optional<Value> max;
+    // In-band sentinels (NaN for floats, NaT for time types) counted during write-time aggregation.
+    uint64_t nan_count = 0;
+    // Sparse-map gaps (rows genuinely absent from the data segment) counted during write-time aggregation.
+    uint64_t null_count = 0;
     bool column_absent = false;
 
     ColumnStatsValues() = default;

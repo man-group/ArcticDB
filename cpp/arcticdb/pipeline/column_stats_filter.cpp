@@ -230,6 +230,16 @@ ColumnStatsData::ColumnStatsData(SegmentInMemory&& segment, const TimeseriesDesc
             case MAX_V1:
                 stats.max = value;
                 break;
+            case NAN_COUNT_V1:
+                if (value.has_value()) {
+                    stats.nan_count = value->get<uint64_t>();
+                }
+                break;
+            case NULL_COUNT_V1:
+                if (value.has_value()) {
+                    stats.null_count = value->get<uint64_t>();
+                }
+                break;
             default:
                 log::version().warn(
                         "Unknown column stats type {} at offset {}, skipping", static_cast<int>(stat_type), col_idx
@@ -317,6 +327,7 @@ FilterQuery<index::IndexSegmentReader> create_column_stats_filter(
         // Evaluate the AST
         StatsVariantData result =
                 evaluate_ast_node_against_stats(expression_context.root_node_name_, expression_context, stats_rows);
+
         util::check(
                 std::holds_alternative<std::vector<StatsComparison>>(result),
                 "evaluate_ast_node_against_stats should evaluate to a vector<StatsComparison>"

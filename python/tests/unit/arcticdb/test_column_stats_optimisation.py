@@ -1828,7 +1828,6 @@ def test_column_stats_dynamic_schema_cross_column_backfilled_values_int(
     assert table_data_reads == 1
 
 
-@pytest.mark.xfail(reason="Need a NaN count or flag, Monday=11866077783")
 def test_column_stats_dynamic_schema_cross_column_backfilled_values_float(
     in_memory_version_store_dynamic_schema,
     clear_query_stats,
@@ -2073,3 +2072,140 @@ def test_column_stats_bool_vs_int_cross_type(
     q = q[q["bool_col"] > 0]
     with pytest.raises(UserInputException):
         lib.read(sym, query_builder=q)
+
+
+# Tests for the NaN/null-aware downgrade in the read pipeline.
+# When a segment's [min, max] suggest a verdict that NaN/null rows would change at the row
+# level (e.g. min == max == v says "all == v" but in-band NaN rows fail `==`), the verdict
+# must be downgraded to UNKNOWN so the segment is still read.
+
+
+# The four equivalent ways to express "a != 3.0" through the QueryBuilder. Each must
+# downgrade the prune verdict in the presence of in-band nulls, so the no-prune tests
+# below share this parameterization.
+NE_FLOAT_EXPRS = [
+    pytest.param(lambda q: q["a"] != 3.0, lambda df: df["a"] != 3.0, id="ne"),
+    pytest.param(lambda q: ~(q["a"] == 3.0), lambda df: ~(df["a"] == 3.0), id="not_eq"),
+    pytest.param(lambda q: q["a"].isnotin([3.0]), lambda df: ~df["a"].isin([3.0]), id="isnotin"),
+    pytest.param(lambda q: ~q["a"].isin([3.0]), lambda df: ~df["a"].isin([3.0]), id="negated_isin"),
+]
+
+
+@pytest.mark.parametrize("query_expr,pandas_expr", NE_FLOAT_EXPRS)
+def test_column_stats_no_prune_when_in_band_nan(
+    in_memory_version_store, clear_query_stats, column_stats_filtering_enabled, query_expr, pandas_expr
+):
+    """[3.0, NaN, NaN, 3.0] in one segment: min=max=3, nan_count=2.
+    Filters that would normally prune the segment must include the NaN rows."""
+    lib = in_memory_version_store
+
+    df = pd.DataFrame({"a": [3.0, np.nan, np.nan, 3.0]}, index=pd.date_range("2000-01-01", periods=4))
+    lib.write(sym, df)
+    lib.create_column_stats(sym, {"a": {"MINMAX"}})
+
+    qs.enable()
+    q = QueryBuilder()
+    q = q[query_expr(q)]
+    qs.reset_stats()
+    result = lib.read(sym, query_builder=q).data
+    table_data_reads = get_table_data_read_count()
+
+    expected = df[pandas_expr(df)]
+    assert_frame_equal(expected, result)
+    assert table_data_reads == 1, "Segment must be read because in-band NaN rows match the filter"
+
+
+# Time-type analogues of NE_FLOAT_EXPRS, expressing "a != pd.Timestamp("2025-01-01")".
+NE_TS_EXPRS = [
+    pytest.param(lambda q: q["a"] != pd.Timestamp("2025-01-01"), lambda df: df["a"] != pd.Timestamp("2025-01-01"), id="ne"),
+    pytest.param(lambda q: ~(q["a"] == pd.Timestamp("2025-01-01")), lambda df: ~(df["a"] == pd.Timestamp("2025-01-01")), id="not_eq"),
+    pytest.param(lambda q: q["a"].isnotin([pd.Timestamp("2025-01-01")]), lambda df: ~df["a"].isin([pd.Timestamp("2025-01-01")]), id="isnotin"),
+    pytest.param(lambda q: ~q["a"].isin([pd.Timestamp("2025-01-01")]), lambda df: ~df["a"].isin([pd.Timestamp("2025-01-01")]), id="negated_isin"),
+]
+
+
+@pytest.mark.parametrize("query_expr,pandas_expr", NE_TS_EXPRS)
+def test_column_stats_no_prune_ne_when_nat(
+    in_memory_version_store, clear_query_stats, column_stats_filtering_enabled, query_expr, pandas_expr
+):
+    """Time-type analogue of the in-band NaN case: min=max=ts, nan_count=2."""
+    lib = in_memory_version_store
+
+    df = pd.DataFrame(
+        {"a": [pd.Timestamp("2025-01-01"), pd.NaT, pd.NaT, pd.Timestamp("2025-01-01")]},
+        index=pd.date_range("2000-01-01", periods=4),
+    )
+    lib.write(sym, df)
+    lib.create_column_stats(sym, {"a": {"MINMAX"}})
+
+    qs.enable()
+    q = QueryBuilder()
+    q = q[query_expr(q)]
+    qs.reset_stats()
+    result = lib.read(sym, query_builder=q).data
+    table_data_reads = get_table_data_read_count()
+
+    expected = df[pandas_expr(df)]
+    assert_frame_equal(expected, result)
+    assert table_data_reads == 1
+
+
+@pytest.mark.parametrize("query_expr,pandas_expr", NE_FLOAT_EXPRS)
+def test_column_stats_no_prune_ne_when_sparse_null(
+    in_memory_version_store, clear_query_stats, column_stats_filtering_enabled, query_expr, pandas_expr
+):
+    """sparsify_floats stores NaN floats as sparse-map gaps -> null_count > 0, nan_count = 0.
+    The downgrade must still fire."""
+    lib = in_memory_version_store
+
+    df = pd.DataFrame({"a": [3.0, np.nan, np.nan, 3.0]}, index=pd.date_range("2000-01-01", periods=4))
+    lib.write(sym, df, sparsify_floats=True)
+    lib.create_column_stats(sym, {"a": {"MINMAX"}})
+
+    qs.enable()
+    q = QueryBuilder()
+    q = q[query_expr(q)]
+    qs.reset_stats()
+    result = lib.read(sym, query_builder=q).data
+    table_data_reads = get_table_data_read_count()
+
+    expected = df[pandas_expr(df)]
+    assert_frame_equal(expected, result)
+    assert table_data_reads == 1
+
+
+# Comparison operators (everything besides (in)equality). NaN/NaT rows never satisfy a
+# magnitude comparison, so a NONE_MATCH verdict must NOT be downgraded for these.
+@pytest.mark.parametrize(
+    "query_expr,pandas_expr",
+    [
+        pytest.param(lambda q: q["a"] < 1.0, lambda df: df["a"] < 1.0, id="lt"),
+        pytest.param(lambda q: q["a"] <= 1.0, lambda df: df["a"] <= 1.0, id="le"),
+        pytest.param(lambda q: q["a"] > 100.0, lambda df: df["a"] > 100.0, id="gt"),
+        pytest.param(lambda q: q["a"] >= 100.0, lambda df: df["a"] >= 100.0, id="ge"),
+    ],
+)
+def test_column_stats_still_prunes_when_nan_does_not_save_row(
+    in_memory_version_store, clear_query_stats, column_stats_filtering_enabled, query_expr, pandas_expr
+):
+    """Negative control: NaN rows do NOT satisfy a magnitude comparison, so NONE_MATCH must
+    stay NONE_MATCH and the segments must still be pruned even though nan_count > 0."""
+    lib = in_memory_version_store
+
+    df0 = pd.DataFrame({"a": [3.0, np.nan, np.nan, 3.0]}, index=pd.date_range("2000-01-01", periods=4))
+    df1 = pd.DataFrame({"a": [10.0, 20.0]}, index=pd.date_range("2000-01-05", periods=2))
+    lib.write(sym, df0)
+    lib.append(sym, df1)
+    lib.create_column_stats(sym, {"a": {"MINMAX"}})
+
+    qs.enable()
+    q = QueryBuilder()
+    q = q[query_expr(q)]
+    qs.reset_stats()
+    result = lib.read(sym, query_builder=q).data
+    table_data_reads = get_table_data_read_count()
+
+    full_df = pd.concat([df0, df1])
+    expected = full_df[pandas_expr(full_df)]
+    assert_frame_equal(expected, result)
+    assert table_data_reads == 0, "Both segments must still be pruned; NaN never satisfies a magnitude comparison"

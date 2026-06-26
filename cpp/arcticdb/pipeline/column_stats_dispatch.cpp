@@ -139,6 +139,14 @@ StatsComparison stats_membership_comparator(const ColumnStatsValues& stats, Valu
                     }
                 }
 
+                // Same idea as `adjust_for_missing` in column_stats_dispatch.hpp:
+                // when the segment has NaN/NaT/sparse-gap rows, an `isin` ALL_MATCH may overstate
+                // (NaN never matches isin), so the corresponding `isnotin` NONE_MATCH (after the
+                // flip below) would also be wrong. Downgrade before the flip so both paths agree.
+                if ((stats.nan_count + stats.null_count) > 0 && isin_result == StatsComparison::ALL_MATCH) {
+                    isin_result = StatsComparison::UNKNOWN;
+                }
+
                 if (!is_isin) {
                     if (isin_result == StatsComparison::ALL_MATCH)
                         return StatsComparison::NONE_MATCH;
