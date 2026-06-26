@@ -47,7 +47,7 @@ def test_filter_nat_values(in_memory_version_store, column_stats_filtering_enabl
 
     lib.write(sym, df0)
     lib.append(sym, df1)
-    lib.create_column_stats(sym, {"col": {"MINMAX"}})
+    lib.create_column_stats_experimental(sym)
 
     q = QueryBuilder()
     q = q[query_expr(q)]
@@ -89,7 +89,7 @@ def test_filter_nat_col_col(in_memory_version_store, column_stats_filtering_enab
         index=pd.date_range("2000-01-01", periods=5),
     )
     lib.write(sym, df)
-    lib.create_column_stats(sym, {"a": {"MINMAX"}, "b": {"MINMAX"}})
+    lib.create_column_stats_experimental(sym)
 
     q = QueryBuilder()
     q = q[query_expr(q)]
@@ -131,7 +131,7 @@ def test_filter_nat_col_col_all_nat_slice(
     )
     lib.write(sym, df0)
     lib.append(sym, df1)
-    lib.create_column_stats(sym, {"a": {"MINMAX"}, "b": {"MINMAX"}})
+    lib.create_column_stats_experimental(sym)
 
     qs.enable()
     q = QueryBuilder()
@@ -176,7 +176,7 @@ def test_filter_nat_isin(in_memory_version_store, column_stats_filtering_enabled
         index=pd.date_range("2000-01-01", periods=5),
     )
     lib.write(sym, df)
-    lib.create_column_stats(sym, {"col": {"MINMAX"}, "all_nat": {"MINMAX"}})
+    lib.create_column_stats_experimental(sym)
 
     q = QueryBuilder()
     q = q[getattr(q[column], method)(values)]
@@ -220,7 +220,7 @@ def test_filter_nat_dynamic_schema_missing_column(
     lib.write(symbol, df0)
     lib.append(symbol, df1)
     lib.append(symbol, df2)
-    lib.create_column_stats(symbol, {"col": {"MINMAX"}, "other": {"MINMAX"}})
+    lib.create_column_stats_experimental(symbol)
 
     full_df = lib.read(symbol).data
     assert full_df.loc[df1.index, "col"].isna().all()
@@ -258,7 +258,7 @@ def test_int64_min_value_not_treated_as_nat(
     lib.write(sym, df0)
     lib.append(sym, df1)
     lib.append(sym, df2)
-    lib.create_column_stats(sym, {"col": {"MINMAX"}})
+    lib.create_column_stats_experimental(sym)
 
     q = QueryBuilder()
     q = q[query_expr(q)]

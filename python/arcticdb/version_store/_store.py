@@ -1266,23 +1266,25 @@ class NativeVersionStore:
                 _log_warning_on_writing_empty_dataframe(data_vector[idx], symbols[idx])
         return result
 
-    def create_column_stats(
-        self, symbol: str, column_stats: Dict[str, Set[str]], as_of: Optional[VersionQueryInput] = None
+    def create_column_stats_experimental(
+        self,
+        symbol: str,
+        as_of: Optional[VersionQueryInput] = None,
     ) -> None:
         """
-        Calculates the specified column statistics for each row-slice for the given symbol. In the future, these
+        Calculates MINMAX column statistics for each row-slice for the given symbol. In the future, these
         statistics will be used by `QueryBuilder` filtering operations to reduce the number of data segments read out
         of storage.
 
+        MINMAX stats are built for every data column and every inner multiindex index level whose dtype is numeric
+        (uint/int/float/bool) or a UTC nanosecond timestamp. The outer/primary index is excluded, as it is already
+        pruned by the index mechanism. Any pre-existing stats are merged with the newly computed ones
+        (read-modify-write).
+
         Parameters
         ----------
         symbol: `str`
             Symbol name.
-        column_stats: `Dict[str, Set[str]]`
-            The column stats to create.
-            Keys are column names.
-            Values are sets of statistic types to build for that column. Options are:
-                "MINMAX" : store the minimum and maximum value for the column in each row-slice
         as_of : `Optional[VersionQueryInput]`, default=None
             See documentation of `read` method for more details.
 
@@ -1290,23 +1292,71 @@ class NativeVersionStore:
         -------
         None
         """
-        column_stats = self._get_column_stats(column_stats)
+        column_stats = self._get_eligible_column_stats_spec(symbol, as_of)
+        if not column_stats:
+            return
+
+        column_stats = self._convert_to_native_column_stats(column_stats)
         version_query = self._get_version_query(as_of)
+
         self.version_store.create_column_stats_version(symbol, column_stats, version_query)
 
-    def drop_column_stats(
-        self, symbol: str, column_stats: Optional[Dict[str, Set[str]]] = None, as_of: Optional[VersionQueryInput] = None
-    ) -> None:
+    def _get_eligible_column_stats_spec(self, symbol: str, as_of: Optional[VersionQueryInput]) -> Dict[str, Set[str]]:
+        numeric_value_types = {
+            TypeDescriptor.ValueType.UINT,
+            TypeDescriptor.ValueType.INT,
+            TypeDescriptor.ValueType.FLOAT,
+            TypeDescriptor.ValueType.BOOL,
+            TypeDescriptor.ValueType.NANOSECONDS_UTC,
+        }
+        timeseries_descriptor = self._get_info(symbol, as_of).timeseries_descriptor
+        fields = list(timeseries_descriptor.fields)
+        num_index_fields = self._num_physically_stored_index_fields(timeseries_descriptor)
+
+        start = 1 if num_index_fields > 0 else 0
+        eligible_fields = [field for field in fields[start:] if field.type.value_type in numeric_value_types]
+
+        self._reject_duplicated_data_columns(
+            [field for field in fields[num_index_fields:] if field.type.value_type in numeric_value_types],
+            timeseries_descriptor,
+        )
+
+        return {field.name: {"MINMAX"} for field in eligible_fields}
+
+    @staticmethod
+    def _num_physically_stored_index_fields(timeseries_descriptor) -> int:
+        num_index_fields = timeseries_descriptor.index.field_count()
+
+        normalization = timeseries_descriptor.normalization
+        if normalization.WhichOneof("input_type") != "df":
+            return num_index_fields
+
+        common = normalization.df.common
+        if common.WhichOneof("index_type") == "multi_index":
+            num_index_fields += common.multi_index.field_count
+
+        return num_index_fields
+
+    @staticmethod
+    def _reject_duplicated_data_columns(data_fields, timeseries_descriptor) -> None:
+        normalization = timeseries_descriptor.normalization
+        if normalization.WhichOneof("input_type") != "df":
+            return
+        names, _ = _denormalize_columns_names([field.name for field in data_fields], normalization.df)
+        seen = set()
+        for name in names:
+            if name in seen:
+                raise UserInputException(f"Cannot create column stats: symbol has duplicated column name [{name}]")
+            seen.add(name)
+
+    def drop_column_stats_experimental(self, symbol: str, as_of: Optional[VersionQueryInput] = None) -> None:
         """
-        Deletes the specified column statistics for the given symbol.
+        Deletes all column statistics for the given symbol.
 
         Parameters
         ----------
         symbol: `str`
             Symbol name.
-        column_stats: `Optional[Dict[str, Set[str]]], default=None`
-            The column stats to drop. If not provided, all column stats will be dropped.
-            See documentation of `create_column_stats` method for more details.
         as_of : `Optional[VersionQueryInput]`, default=None
             See documentation of `read` method for more details.
 
@@ -1314,11 +1364,12 @@ class NativeVersionStore:
         -------
         None
         """
-        column_stats = self._get_column_stats(column_stats)
         version_query = self._get_version_query(as_of)
-        self.version_store.drop_column_stats_version(symbol, column_stats, version_query)
+        self.version_store.drop_column_stats_version(symbol, None, version_query)
 
-    def read_column_stats(self, symbol: str, as_of: Optional[VersionQueryInput] = None, **kwargs) -> "pa.Table":
+    def read_column_stats_experimental(
+        self, symbol: str, as_of: Optional[VersionQueryInput] = None, **kwargs
+    ) -> "pa.Table":
         """
         Read all the column statistics data that has been generated for the given symbol.
 
@@ -1338,7 +1389,7 @@ class NativeVersionStore:
         read_result = ReadResult(*self.version_store.read_column_stats_version(symbol, version_query))
         return self._arrow_output_frame_to_table(read_result.frame_data)
 
-    def get_column_stats_info(
+    def get_column_stats_info_experimental(
         self, symbol: str, as_of: Optional[VersionQueryInput] = None, **kwargs
     ) -> Dict[str, Set[str]]:
         """
@@ -1355,7 +1406,6 @@ class NativeVersionStore:
         -------
         `Dict[str, Set[str]]`
             A dict from column names to sets of column stats that have been generated for that column.
-            In the same format as the `column_stats` argument provided to `create_column_stats` and `drop_column_stats`.
         """
         version_query = self._get_version_query(as_of, **kwargs)
         return self.version_store.get_column_stats_info_version(symbol, version_query).to_map()
@@ -2384,7 +2434,7 @@ class NativeVersionStore:
         )
         return version_query, read_options, read_query, output_format
 
-    def _get_column_stats(self, column_stats):
+    def _convert_to_native_column_stats(self, column_stats):
         if column_stats is None:
             return None
         for k, v in column_stats.items():

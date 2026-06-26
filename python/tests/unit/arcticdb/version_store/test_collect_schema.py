@@ -250,7 +250,7 @@ def test_collect_schema_and_collect_multiple_times(mem_library, create_column_st
         df = pd.concat([df0, df1])
 
         if create_column_stats:
-            lib._nvs.create_column_stats(sym, {"col1": {"MINMAX"}})
+            lib._nvs.create_column_stats_experimental(sym)
 
         with qs.query_stats():
             lazy_df = lib.read(sym, lazy=True)

@@ -114,7 +114,7 @@ class TestLazyDataFrame:
         full_df = pd.concat([df0, df1])
 
         if create_column_stats:
-            lib._nvs.create_column_stats(sym, {"col1": {"MINMAX"}})
+            lib._nvs.create_column_stats_experimental(sym)
 
         with config_context("ColumnStats.UseForQueries", int(create_column_stats)):
             lazy_df = lib.read(sym, lazy=True)

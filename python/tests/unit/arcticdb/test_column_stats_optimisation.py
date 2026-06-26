@@ -55,7 +55,7 @@ def test_column_stats_query_optimisation(
     lib.write(sym, df0)
     lib.append(sym, df1)
 
-    lib.create_column_stats(sym, {"col_1": {"MINMAX"}})
+    lib.create_column_stats_experimental(sym)
 
     qs.enable()
     q = QueryBuilder()
@@ -80,7 +80,7 @@ def test_column_stats_query_optimisation_disabled(in_memory_version_store, clear
     lib.write(sym, df0)
     lib.append(sym, df1)
 
-    lib.create_column_stats(sym, {"col_1": {"MINMAX"}})
+    lib.create_column_stats_experimental(sym)
 
     qs.enable()
     q = QueryBuilder()
@@ -129,7 +129,7 @@ def test_column_stats_query_optimisation_column_not_in_stats(
     lib.append(sym, df1)
 
     # Create column stats for col_2 only, not col_1
-    lib.create_column_stats(sym, {"col_2": {"MINMAX"}})
+    lib.create_column_stats_experimental(sym)
 
     # Query on col_1 (no stats) should still work
     q = QueryBuilder()
@@ -152,7 +152,7 @@ def test_column_stats_query_optimisation_empty_segment(
     lib.append(sym, df1)
     lib.append(sym, df2)
 
-    lib.create_column_stats(sym, {"col_1": {"MINMAX"}})
+    lib.create_column_stats_experimental(sym)
 
     qs.enable()
     q = QueryBuilder()
@@ -186,7 +186,7 @@ def test_column_stats_query_optimisation_multiple_filters(
     lib.append(sym, df1)
     lib.append(sym, df2)
 
-    lib.create_column_stats(sym, {"col_1": {"MINMAX"}, "col_2": {"MINMAX"}})
+    lib.create_column_stats_experimental(sym)
 
     qs.enable()
 
@@ -242,7 +242,7 @@ def test_column_stats_query_optimisation_different_types(
     lib.write(sym, df0)
     lib.append(sym, df1)
 
-    lib.create_column_stats(sym, {"col": {"MINMAX"}})
+    lib.create_column_stats_experimental(sym)
 
     qs.enable()
 
@@ -269,7 +269,7 @@ def test_column_stats_query_optimisation_with_date_range(
     lib.append(sym, df1)
     lib.append(sym, df2)
 
-    lib.create_column_stats(sym, {"col_1": {"MINMAX"}})
+    lib.create_column_stats_experimental(sym)
 
     qs.enable()
 
@@ -326,7 +326,7 @@ def test_column_stats_and_filter_one_column_with_stats(
     lib.append(sym, df1)
     lib.append(sym, df2)
 
-    lib.create_column_stats(sym, col_stats)
+    lib.create_column_stats_experimental(sym)
 
     qs.enable()
     q = QueryBuilder()
@@ -354,7 +354,7 @@ def test_column_stats_or_filter(in_memory_version_store, clear_query_stats, colu
     lib.append(sym, df1)
     lib.append(sym, df2)
 
-    lib.create_column_stats(sym, {"col_1": {"MINMAX"}})
+    lib.create_column_stats_experimental(sym)
 
     qs.enable()
 
@@ -384,7 +384,7 @@ def test_column_stats_negation(in_memory_version_store, clear_query_stats, colum
     lib.append(sym, df_1)
     lib.append(sym, df_2)
 
-    lib.create_column_stats(sym, {"col_1": {"MINMAX"}})
+    lib.create_column_stats_experimental(sym)
 
     qs.enable()
 
@@ -417,7 +417,7 @@ def test_column_stats_projection_before_filter_disables_pruning(
     lib.append(sym, df_1)
     lib.append(sym, df_2)
 
-    lib.create_column_stats(sym, {"col_1": {"MINMAX"}})
+    lib.create_column_stats_experimental(sym)
 
     qs.enable()
 
@@ -460,7 +460,7 @@ def test_column_stats_dynamic_schema_column_type_varies(
     lib.write(sym, df_int8)
     lib.append(sym, df_different_type)
 
-    lib.create_column_stats(sym, {"col_1": {"MINMAX"}})
+    lib.create_column_stats_experimental(sym)
     qs.enable()
     q = QueryBuilder()
     q = q[q["col_1"] > 50]
@@ -489,7 +489,7 @@ def test_column_stats_dynamic_schema_new_column_added(
     lib.append(sym, df1)
     lib.append(sym, df2)
 
-    lib.create_column_stats(sym, {"col_2": {"MINMAX"}})
+    lib.create_column_stats_experimental(sym)
 
     qs.enable()
 
@@ -555,7 +555,7 @@ def test_column_stats_comparison_operators(
     lib.append(sym, df1)
     lib.append(sym, df2)
 
-    lib.create_column_stats(sym, {"col_1": {"MINMAX"}})
+    lib.create_column_stats_experimental(sym)
 
     qs.enable()
     qs.reset_stats()
@@ -589,7 +589,7 @@ def test_column_stats_multiindex_index_col(in_memory_version_store):
     lib.append(sym, df1)
 
     column_stats_dict = {"category": {"MINMAX"}}
-    lib.create_column_stats(sym, column_stats_dict)
+    lib.create_column_stats_experimental(sym)
 
 
 ROWCOUNT_INDEXES = [
@@ -618,7 +618,7 @@ def test_column_stats_query_optimisation_index_types(
     lib.write(sym, df0)
     lib.append(sym, df1)
 
-    lib.create_column_stats(sym, {"col_1": {"MINMAX"}})
+    lib.create_column_stats_experimental(sym)
 
     qs.enable()
     # col_1 > 3 should only read segment 0
@@ -640,7 +640,7 @@ def test_column_stats_no_deadlock_single_thread(
     lib.write(sym, df0)
     lib.append(sym, df1)
     if create_stats:
-        lib.create_column_stats(sym, {"col_1": {"MINMAX"}})
+        lib.create_column_stats_experimental(sym)
 
     q = QueryBuilder()
     q = q[q["col_1"] > 2]
@@ -700,7 +700,7 @@ def test_column_stats_with_column_slicing(
     expected_data_keys = 9 if isinstance(indexes[0], pd.DatetimeIndex) or isinstance(indexes[0], pd.RangeIndex) else 12
     assert len(data_keys) == expected_data_keys
 
-    lib.create_column_stats(sym, {"col_1": {"MINMAX"}})
+    lib.create_column_stats_experimental(sym)
 
     q = QueryBuilder()
     q = q[q["col_1"] > 4]
@@ -734,7 +734,7 @@ def test_column_stats_with_row_range(
     lib.append(sym, df1)
     lib.append(sym, df2)
 
-    lib.create_column_stats(sym, {"col_1": {"MINMAX"}})
+    lib.create_column_stats_experimental(sym)
 
     q = QueryBuilder()
     q = q[q["col_1"] > 2]
@@ -749,6 +749,33 @@ def test_column_stats_with_row_range(
     if isinstance(indexes[0], pd.RangeIndex):
         expected.index = pd.RangeIndex(0, 2, 1)
     assert_frame_equal(result, expected)
+
+
+def test_column_stats_with_date_range(in_memory_version_store, clear_query_stats, column_stats_filtering_enabled):
+    lib = in_memory_version_store
+
+    df0 = pd.DataFrame({"col_1": [1, 2]}, index=pd.date_range("2000-01-01", periods=2), dtype=np.int64)
+    df1 = pd.DataFrame({"col_1": [3, 4]}, index=pd.date_range("2000-01-03", periods=2), dtype=np.int64)
+    df2 = pd.DataFrame({"col_1": [5, 6]}, index=pd.date_range("2000-01-05", periods=2), dtype=np.int64)
+
+    lib.write(sym, df0)
+    lib.append(sym, df1)
+    lib.append(sym, df2)
+
+    lib.create_column_stats_experimental(sym)
+
+    q = QueryBuilder()
+    q = q[q["col_1"] > 2]
+
+    date_range = (pd.Timestamp("2000-01-01"), pd.Timestamp("2000-01-04"))
+
+    qs.enable()
+    qs.reset_stats()
+    result = lib.read(sym, query_builder=q, date_range=date_range).data
+    table_data_reads = get_table_data_read_count()
+    assert table_data_reads == 1, f"Expected 1 TABLE_DATA read, got {table_data_reads}"
+
+    assert_frame_equal(result, df1)
 
 
 @pytest.mark.parametrize("negated", (True, False))
@@ -768,7 +795,7 @@ def test_column_stats_bool_column_filters(
     lib.append(sym, df_3)
     lib.append(sym, df_4)
 
-    lib.create_column_stats(sym, {"col_1": {"MINMAX"}})
+    lib.create_column_stats_experimental(sym)
 
     qs.enable()
 
@@ -813,7 +840,7 @@ def test_column_stats_three_chained_filter_clauses(
     lib.append(sym, df1)
     lib.append(sym, df2)
 
-    lib.create_column_stats(sym, {"col_1": {"MINMAX"}, "col_2": {"MINMAX"}, "col_3": {"MINMAX"}})
+    lib.create_column_stats_experimental(sym)
 
     qs.enable()
 
@@ -840,7 +867,7 @@ def test_column_stats_repeated_expressions(in_memory_version_store, clear_query_
     lib.write(sym, df0)
     lib.append(sym, df1)
 
-    lib.create_column_stats(sym, {"col_1": {"MINMAX"}})
+    lib.create_column_stats_experimental(sym)
 
     qs.enable()
 
@@ -866,7 +893,7 @@ def test_column_stats_nan_values(in_memory_version_store, clear_query_stats, col
     lib.write(sym, df0)
     lib.append(sym, df1)
 
-    lib.create_column_stats(sym, {"col": {"MINMAX"}})
+    lib.create_column_stats_experimental(sym)
 
     q = QueryBuilder()
     q = q[q["col"] > 2]
@@ -890,7 +917,7 @@ def test_column_stats_nat_values(in_memory_version_store, clear_query_stats, col
     lib.write(sym, df0)
     lib.append(sym, df1)
 
-    lib.create_column_stats(sym, {"col": {"MINMAX"}})
+    lib.create_column_stats_experimental(sym)
 
     qs.enable()
     qs.reset_stats()
@@ -941,7 +968,7 @@ def test_column_stats_nat_filter(
     lib.append(sym, df1)
     lib.append(sym, df2)
 
-    lib.create_column_stats(sym, {"col": {"MINMAX"}})
+    lib.create_column_stats_experimental(sym)
 
     qs.enable()
     q = QueryBuilder()
@@ -985,7 +1012,7 @@ def test_column_stats_cross_type_comparison(
     lib.write(sym, df0)
     lib.append(sym, df1)
 
-    lib.create_column_stats(sym, {"col": {"MINMAX"}})
+    lib.create_column_stats_experimental(sym)
 
     qs.enable()
 
@@ -1024,7 +1051,7 @@ def test_column_stats_negative_value_ranges(
     lib.append(sym, df1)
     lib.append(sym, df2)
 
-    lib.create_column_stats(sym, {"col": {"MINMAX"}})
+    lib.create_column_stats_experimental(sym)
 
     qs.enable()
     q = QueryBuilder()
@@ -1066,7 +1093,7 @@ def test_column_stats_single_value_segments(
     lib.append(sym, dfs[1])
     lib.append(sym, dfs[2])
 
-    lib.create_column_stats(sym, {"col": {"MINMAX"}})
+    lib.create_column_stats_experimental(sym)
 
     qs.enable()
     q = QueryBuilder()
@@ -1088,7 +1115,7 @@ def test_column_stats_snapshot_read(in_memory_version_store, clear_query_stats, 
 
     lib.write(sym, df0)
     lib.append(sym, df1)
-    lib.create_column_stats(sym, {"col": {"MINMAX"}})
+    lib.create_column_stats_experimental(sym)
     lib.snapshot("snap1")
 
     qs.enable()
@@ -1113,7 +1140,7 @@ def test_column_stats_batch_read(in_memory_version_store, clear_query_stats, col
         df1 = pd.DataFrame({"col": [3, 4]}, index=pd.date_range("2000-01-03", periods=2))
         lib.write(s, df0)
         lib.append(s, df1)
-        lib.create_column_stats(s, {"col": {"MINMAX"}})
+        lib.create_column_stats_experimental(s)
 
     sym3 = "batch_sym3"
     sym3_df = pd.DataFrame({"col": [5, 6]}, index=pd.date_range("2000-01-05", periods=2))
@@ -1182,7 +1209,7 @@ def test_column_stats_boundary_values_integral(
     lib.append(sym, df1)
     lib.append(sym, df2)
     lib.append(sym, df3)
-    lib.create_column_stats(sym, {"col": {"MINMAX"}})
+    lib.create_column_stats_experimental(sym)
 
     for filter_expr, expected_reads in test_cases:
         q = QueryBuilder()
@@ -1228,7 +1255,7 @@ def test_column_stats_boundary_values_float(
     lib.append(sym, df1)
     lib.append(sym, df2)
     lib.append(sym, df3)
-    lib.create_column_stats(sym, {"col": {"MINMAX"}})
+    lib.create_column_stats_experimental(sym)
 
     for filter_expr, expected_reads in test_cases:
         q = QueryBuilder()
@@ -1274,7 +1301,7 @@ def test_column_stats_boundary_values_ts(in_memory_version_store, clear_query_st
     lib.append(sym, df2)
     lib.append(sym, df3)
     full_df = pd.concat([df0, df1, df2, df3])
-    lib.create_column_stats(sym, {"col": {"MINMAX"}})
+    lib.create_column_stats_experimental(sym)
 
     for filter_expr, expected_reads in test_cases:
         q = QueryBuilder()
@@ -1314,7 +1341,7 @@ def test_column_stats_timestamp_column(
     lib.write(sym, df0)
     lib.append(sym, df1)
 
-    lib.create_column_stats(sym, {"ts": {"MINMAX"}})
+    lib.create_column_stats_experimental(sym)
 
     qs.enable()
     q = QueryBuilder()
@@ -1357,7 +1384,7 @@ def test_column_stats_duplicate_timestamp_index_drops_ambiguous_stats(
 
     lib.write(sym, df0)
     lib.append(sym, df1)
-    lib.create_column_stats(sym, {"col_1": {"MINMAX"}})
+    lib.create_column_stats_experimental(sym)
 
     qs.enable()
     q = QueryBuilder()
@@ -1392,7 +1419,7 @@ def test_column_stats_duplicate_timestamp_index_still_prunes_unique_keys(
     lib.write(sym, df0)
     lib.append(sym, df1)
     lib.append(sym, df2)
-    lib.create_column_stats(sym, {"col_1": {"MINMAX"}})
+    lib.create_column_stats_experimental(sym)
 
     qs.enable()
     q = QueryBuilder()
@@ -1445,7 +1472,7 @@ def test_column_stats_cross_column_comparison(
     lib.write(sym, df0)
     lib.append(sym, df1)
 
-    lib.create_column_stats(sym, {"a": {"MINMAX"}, "b": {"MINMAX"}, "c": {"MINMAX"}, "d": {"MINMAX"}, "e": {"MINMAX"}})
+    lib.create_column_stats_experimental(sym)
 
     qs.enable()
     q = QueryBuilder()
@@ -1491,7 +1518,7 @@ def test_column_stats_cross_column_comparison_nan(
     lib.write(sym, df0)
     lib.append(sym, df1)
 
-    lib.create_column_stats(sym, {"a": {"MINMAX"}, "b": {"MINMAX"}})
+    lib.create_column_stats_experimental(sym)
 
     qs.enable()
     q = QueryBuilder()
@@ -1530,7 +1557,7 @@ def test_column_stats_cross_column_comparison_nan_neq(
     lib.write(sym, df0)
     lib.append(sym, df1)
 
-    lib.create_column_stats(sym, {"a": {"MINMAX"}, "b": {"MINMAX"}})
+    lib.create_column_stats_experimental(sym)
 
     qs.enable()
     q = QueryBuilder()
@@ -1585,7 +1612,7 @@ def test_column_stats_cross_column_comparison_nat(
     lib.write(sym, df0)
     lib.append(sym, df1)
 
-    lib.create_column_stats(sym, {"a": {"MINMAX"}, "b": {"MINMAX"}})
+    lib.create_column_stats_experimental(sym)
 
     qs.enable()
     q = QueryBuilder()
@@ -1646,7 +1673,7 @@ def test_column_stats_cross_column_nat_range(
     lib.write(sym, df0)
     lib.append(sym, df1)
 
-    lib.create_column_stats(sym, {"a": {"MINMAX"}, "b": {"MINMAX"}})
+    lib.create_column_stats_experimental(sym)
 
     qs.enable()
     q = QueryBuilder()
@@ -1747,7 +1774,7 @@ def test_column_stats_dynamic_schema_cross_column(
     lib.append(sym, df6)
     lib.append(sym, df7)
 
-    lib.create_column_stats(sym, {"a": {"MINMAX"}, "b": {"MINMAX"}, "c": {"MINMAX"}})
+    lib.create_column_stats_experimental(sym)
 
     qs.enable()
     q = QueryBuilder()
@@ -1787,7 +1814,7 @@ def test_column_stats_dynamic_schema_cross_column_backfilled_values_int(
     lib.write(sym, df0)
     lib.append(sym, df1)
 
-    lib.create_column_stats(sym, {"a": {"MINMAX"}, "b": {"MINMAX"}})
+    lib.create_column_stats_experimental(sym)
 
     qs.enable()
     q = QueryBuilder()
@@ -1830,7 +1857,7 @@ def test_column_stats_dynamic_schema_cross_column_backfilled_values_float(
     lib.append(sym, df1)
     lib.append(sym, df2)
 
-    lib.create_column_stats(sym, {"a": {"MINMAX"}, "b": {"MINMAX"}})
+    lib.create_column_stats_experimental(sym)
 
     qs.enable()
     q = QueryBuilder()
@@ -1853,7 +1880,7 @@ def test_column_stats_empty_stats(in_memory_version_store, column_stats_filterin
 
     # This is a no-op at the moment, but this is still a useful regression test in case we ever
     # start writing empty column stats segments.
-    lib.create_column_stats(sym, {"col": set()})
+    lib.create_column_stats_experimental(sym)
 
     q = QueryBuilder()
     q = q[q["col"] > 0]
@@ -1885,7 +1912,7 @@ def test_column_stats_bool_comparison_operators(
     lib.append(sym, df1)
     lib.append(sym, df2)
 
-    lib.create_column_stats(sym, {"bool_col": {"MINMAX"}})
+    lib.create_column_stats_experimental(sym)
 
     qs.enable()
     q = QueryBuilder()
@@ -1920,7 +1947,7 @@ def test_column_stats_bool_col_combined_with_comparison(
     lib.write(sym, df0)
     lib.append(sym, df1)
 
-    lib.create_column_stats(sym, {"int_col": {"MINMAX"}, "bool_col": {"MINMAX"}})
+    lib.create_column_stats_experimental(sym)
 
     qs.enable()
     q = QueryBuilder()
@@ -1956,7 +1983,7 @@ def test_column_stats_bool_col_and_bool_value(
 
     lib.write(sym, df0)
     lib.append(sym, df1)
-    lib.create_column_stats(sym, {"b": {"MINMAX"}})
+    lib.create_column_stats_experimental(sym)
 
     qs.enable()
 
@@ -1978,7 +2005,7 @@ def test_column_stats_two_bool_cols(in_memory_version_store, clear_query_stats, 
 
     lib.write(sym, df0)
     lib.append(sym, df1)
-    lib.create_column_stats(sym, {"b1": {"MINMAX"}, "b2": {"MINMAX"}})
+    lib.create_column_stats_experimental(sym)
 
     qs.enable()
 
@@ -2003,7 +2030,7 @@ def test_column_stats_two_bool_cols_comparison(
 
     lib.write(sym, df0)
     lib.append(sym, df1)
-    lib.create_column_stats(sym, {"b1": {"MINMAX"}, "b2": {"MINMAX"}})
+    lib.create_column_stats_experimental(sym)
 
     qs.enable()
 
@@ -2029,7 +2056,7 @@ def test_column_stats_bool_vs_int_cross_type(
 
     lib.write(sym, df0)
     lib.append(sym, df1)
-    lib.create_column_stats(sym, {"bool_col": {"MINMAX"}})
+    lib.create_column_stats_experimental(sym)
 
     # When a surviving segment is processed, the cross-type comparison is rejected
     q = QueryBuilder()
@@ -2040,7 +2067,7 @@ def test_column_stats_bool_vs_int_cross_type(
     # When column stats prune ALL segments, schema validation still rejects it
     df_only_false = pd.DataFrame({"bool_col": [False, False]}, index=pd.date_range("2000-01-01", periods=2))
     lib.write(sym, df_only_false)
-    lib.create_column_stats(sym, {"bool_col": {"MINMAX"}})
+    lib.create_column_stats_experimental(sym)
 
     q = QueryBuilder()
     q = q[q["bool_col"] > 0]

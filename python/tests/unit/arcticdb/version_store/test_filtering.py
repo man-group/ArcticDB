@@ -59,7 +59,7 @@ def test_filter_column_attribute_syntax(
     symbol = "test_filter_column_attribute_syntax"
     df = pd.DataFrame({"a": [np.uint8(1), np.uint8(0)]})
     lib.write(symbol, df)
-    lib.create_column_stats(symbol, {"a": {"MINMAX"}})
+    lib.create_column_stats_experimental(symbol)
     q = QueryBuilder()
     q = q[q.a < np.uint8(1)]
     expected = df[df["a"] < np.uint8(1)]
@@ -104,7 +104,7 @@ def test_filter_explicit_index(lmdb_version_store_v1, any_output_format, column_
     pandas_query = "a < 1"
     symbol = "test_filter_explicit_index"
     lib.write(symbol, df)
-    lib.create_column_stats(symbol, {"a": {"MINMAX"}})
+    lib.create_column_stats_experimental(symbol)
     assert_frame_equal(df.query(pandas_query), lib.read(symbol, query_builder=q).data)
 
 
@@ -166,7 +166,7 @@ def test_filter_bool_column(lmdb_version_store_v1, any_output_format, column_sta
     symbol = "test_filter_bool_column"
     df = pd.DataFrame({"a": [True, False]}, index=np.arange(2))
     lib.write(symbol, df)
-    lib.create_column_stats(symbol, {"a": {"MINMAX"}})
+    lib.create_column_stats_experimental(symbol)
     q = QueryBuilder()
     q = q[q["a"]]
     expected = df[df["a"]]
@@ -179,7 +179,7 @@ def test_filter_bool_column_not(lmdb_version_store_v1, any_output_format, column
     symbol = "test_filter_bool_column_not"
     df = pd.DataFrame({"a": [True, False]}, index=np.arange(2))
     lib.write(symbol, df)
-    lib.create_column_stats(symbol, {"a": {"MINMAX"}})
+    lib.create_column_stats_experimental(symbol)
     q = QueryBuilder()
     q = q[~q["a"]]
     expected = df[~df["a"]]
@@ -194,7 +194,7 @@ def test_filter_bool_column_binary_boolean(
     symbol = "test_filter_bool_column_binary_boolean"
     df = pd.DataFrame({"a": [True, True, False, False], "b": [True, False, True, False]}, index=np.arange(4))
     lib.write(symbol, df)
-    lib.create_column_stats(symbol, {"a": {"MINMAX"}, "b": {"MINMAX"}})
+    lib.create_column_stats_experimental(symbol)
     q = QueryBuilder()
     q = q[q["a"] & q["b"]]
     expected = df[df["a"] & df["b"]]
@@ -209,7 +209,7 @@ def test_filter_bool_column_comparison(
     symbol = "test_filter_bool_column_comparison"
     df = pd.DataFrame({"a": [True, False]}, index=np.arange(2))
     lib.write(symbol, df)
-    lib.create_column_stats(symbol, {"a": {"MINMAX"}})
+    lib.create_column_stats_experimental(symbol)
     comparators = ["==", "!=", "<", "<=", ">", ">="]
     for comparator in comparators:
         for bool_value in [True, False]:
@@ -241,7 +241,7 @@ def test_filter_datetime_naive(lmdb_version_store_v1, any_output_format, column_
     symbol = "test_filter_datetime_simple"
     df = pd.DataFrame({"a": pd.date_range("2000-01-01", periods=10)})
     lib.write(symbol, df)
-    lib.create_column_stats(symbol, {"a": {"MINMAX"}})
+    lib.create_column_stats_experimental(symbol)
     pd_ts = pd.Timestamp("2000-01-05")
     for ts in [pd_ts, pd_ts.to_pydatetime()]:
         q = QueryBuilder()
@@ -262,7 +262,7 @@ def test_filter_datetime_col_against_numeric_value(
     symbol = "sym"
     df = pd.DataFrame({"a": [pd.Timestamp(0), pd.Timestamp(1)]})
     lib.write(symbol, df)
-    lib.create_column_stats(symbol, {"a": {"MINMAX"}})
+    lib.create_column_stats_experimental(symbol)
     value = dtype(pd.Timestamp(1).value)
     q = QueryBuilder()
     if flipped:
@@ -285,7 +285,7 @@ def test_filter_numeric_col_against_datetime_value(
     symbol = "sym"
     df = pd.DataFrame({"a": [0, 1]}, dtype=dtype)
     lib.write(symbol, df)
-    lib.create_column_stats(symbol, {"a": {"MINMAX"}})
+    lib.create_column_stats_experimental(symbol)
     value = pd.Timestamp(1)
     q = QueryBuilder()
     if flipped:
@@ -307,7 +307,7 @@ def test_filter_datetime_against_numeric_isin(
     symbol = "sym"
     df = pd.DataFrame({"a": [pd.Timestamp(0), pd.Timestamp(1)]})
     lib.write(symbol, df)
-    lib.create_column_stats(symbol, {"a": {"MINMAX"}})
+    lib.create_column_stats_experimental(symbol)
     q = QueryBuilder()
     q = q[getattr(q["a"], function)([dtype(pd.Timestamp(1).value)])]
     with pytest.raises(UserInputException):
@@ -325,7 +325,7 @@ def test_filter_numeric_against_datetime_isin(
     symbol = "sym"
     df = pd.DataFrame({"a": [0, 1]}, dtype=dtype)
     lib.write(symbol, df)
-    lib.create_column_stats(symbol, {"a": {"MINMAX"}})
+    lib.create_column_stats_experimental(symbol)
     q = QueryBuilder()
     q = q[getattr(q["a"], function)([pd.Timestamp(1)])]
     with pytest.raises(UserInputException):
@@ -343,7 +343,7 @@ def test_filter_datetime_col_against_numeric_col(
     symbol = "sym"
     df = pd.DataFrame({"a": [pd.Timestamp(0), pd.Timestamp(1)], "b": np.array([0, 1], dtype=dtype)})
     lib.write(symbol, df)
-    lib.create_column_stats(symbol, {"a": {"MINMAX"}, "b": {"MINMAX"}})
+    lib.create_column_stats_experimental(symbol)
     q = QueryBuilder()
     q = q[getattr(q["a"], function)(q["b"])]
     with pytest.raises(UserInputException):
@@ -361,7 +361,7 @@ def test_filter_numeric_col_against_datetime_col(
     symbol = "sym"
     df = pd.DataFrame({"a": np.array([0, 1], dtype=dtype), "b": [pd.Timestamp(0), pd.Timestamp(1)]})
     lib.write(symbol, df)
-    lib.create_column_stats(symbol, {"a": {"MINMAX"}, "b": {"MINMAX"}})
+    lib.create_column_stats_experimental(symbol)
     q = QueryBuilder()
     q = q[getattr(q["a"], function)(q["b"])]
     with pytest.raises(UserInputException):
@@ -374,7 +374,7 @@ def test_filter_datetime_isin(lmdb_version_store_v1, any_output_format, column_s
     symbol = "test_filter_datetime_isin"
     df = pd.DataFrame({"a": pd.date_range("2000-01-01", periods=10)})
     lib.write(symbol, df)
-    lib.create_column_stats(symbol, {"a": {"MINMAX"}})
+    lib.create_column_stats_experimental(symbol)
     pd_ts = pd.Timestamp("2000-01-05")
     for ts in [pd_ts, pd_ts.to_pydatetime()]:
         q = QueryBuilder()
@@ -397,7 +397,7 @@ def test_filter_datetime_timedelta(
             q = QueryBuilder()
             q = q[(q["a"] + td) < ts]
             lib.write(symbol, df)
-            lib.create_column_stats(symbol, {"a": {"MINMAX"}})
+            lib.create_column_stats_experimental(symbol)
             expected = df[(df["a"] + td) < ts]
             received = lib.read(symbol, query_builder=q).data
             if not np.array_equal(expected, received) and (not expected.empty and not received.empty):
@@ -418,7 +418,7 @@ def test_filter_datetime_timezone_aware(
     symbol = "test_filter_datetime_timezone_aware"
     df = pd.DataFrame({"a": pd.date_range("2000-01-01", periods=10, tz=timezone("Europe/Amsterdam"))})
     lib.write(symbol, df)
-    lib.create_column_stats(symbol, {"a": {"MINMAX"}})
+    lib.create_column_stats_experimental(symbol)
     pd_ts = pd.Timestamp("2000-01-05", tz=timezone("GMT"))
     for ts in [pd_ts, pd_ts.to_pydatetime()]:
         q = QueryBuilder()
@@ -502,7 +502,7 @@ def test_filter_datetime_nanoseconds(
     df = pd.DataFrame(data=[timestamp_0, timestamp_1, timestamp_2], columns=["col"])
 
     lib.write(sym, df)
-    lib.create_column_stats(sym, {"col": {"MINMAX"}})
+    lib.create_column_stats_experimental(sym)
 
     # Try to read all rows
     qb_all = QueryBuilder()
@@ -543,7 +543,7 @@ def test_filter_isin_clashing_sets(
     b_unique_val = 200000
     df = pd.DataFrame({"a": [-1, a_unique_val, -1], "b": [-1, -1, b_unique_val]}, index=np.arange(3))
     lib.write(symbol, df)
-    lib.create_column_stats(symbol, {"a": {"MINMAX"}, "b": {"MINMAX"}})
+    lib.create_column_stats_experimental(symbol)
     q = QueryBuilder()
     vals1 = np.arange(10000, dtype=np.uint64)
     np.put(vals1, 5000, a_unique_val)
@@ -576,7 +576,7 @@ def test_filter_numeric_isin_hashing_overflows(
     lib._set_output_format_for_pipeline_tests(any_output_format)
     df = pd.DataFrame({"a": df_col})
     lib.write("test_filter_numeric_isin_hashing_overflows", df)
-    lib.create_column_stats("test_filter_numeric_isin_hashing_overflows", {"a": {"MINMAX"}})
+    lib.create_column_stats_experimental("test_filter_numeric_isin_hashing_overflows")
 
     q = QueryBuilder()
     q = q[q["a"].isin(isin_vals)]
@@ -593,7 +593,7 @@ def test_filter_numeric_isin_unsigned(
     lib._set_output_format_for_pipeline_tests(any_output_format)
     df = pd.DataFrame({"a": [0, 1, 2**64 - 1]})
     lib.write("test_filter_numeric_isin_unsigned", df)
-    lib.create_column_stats("test_filter_numeric_isin_unsigned", {"a": {"MINMAX"}})
+    lib.create_column_stats_experimental("test_filter_numeric_isin_unsigned")
 
     q = QueryBuilder()
     q = q[q["a"].isin([0, 1, 2])]
@@ -617,7 +617,7 @@ def test_filter_numeric_isnotin_hashing_overflow(
     lib._set_output_format_for_pipeline_tests(any_output_format)
     df = pd.DataFrame({"a": [256]})
     lib.write("test_filter_numeric_isnotin_hashing_overflow", df)
-    lib.create_column_stats("test_filter_numeric_isnotin_hashing_overflow", {"a": {"MINMAX"}})
+    lib.create_column_stats_experimental("test_filter_numeric_isnotin_hashing_overflow")
 
     q = QueryBuilder()
     isnotin_vals = np.array([], np.uint8)
@@ -636,7 +636,7 @@ def test_filter_isin_with_nan_in_set(
     symbol = "test_filter_isin_with_nan_in_set"
     df = pd.DataFrame({"a": [1.0, np.nan, 3.0]})
     lib.write(symbol, df)
-    lib.create_column_stats(symbol, {"a": {"MINMAX"}})
+    lib.create_column_stats_experimental(symbol)
 
     q = QueryBuilder()
     q = q[q["a"].isin([np.nan, 3.0])]
@@ -660,7 +660,7 @@ def test_filter_isin_with_nat_in_set(
     symbol = "test_filter_isin_with_nat_in_set"
     df = pd.DataFrame({"a": [pd.Timestamp("2024-01-01"), pd.NaT, pd.Timestamp("2024-01-03")]})
     lib.write(symbol, df)
-    lib.create_column_stats(symbol, {"a": {"MINMAX"}})
+    lib.create_column_stats_experimental(symbol)
 
     q = QueryBuilder()
     q = q[q["a"].isin([pd.NaT, pd.Timestamp("2024-01-03")])]
@@ -693,7 +693,7 @@ def test_filter_numeric_membership_mixing_int64_and_uint64(
     else:
         df, vals = pd.DataFrame({"a": [signed]}), [_uint64_max]
     lib.write(symbol, df)
-    lib.create_column_stats(symbol, {"a": {"MINMAX"}})
+    lib.create_column_stats_experimental(symbol)
 
     q = QueryBuilder()
     q = q[q["a"].isin(vals) if op == "in" else q["a"].isnotin(vals)]
@@ -710,7 +710,7 @@ def test_filter_nones_and_nans_retained_in_string_column(
     df = pd.DataFrame({"filter_column": [1, 2, 1, 2, 1, 2], "string_column": ["1", "2", np.nan, "4", None, "6"]})
     lib.write(sym, df)
     # Cannot create stats for string column yet
-    lib.create_column_stats(sym, {"filter_column": {"MINMAX"}})
+    lib.create_column_stats_experimental(sym)
     q = QueryBuilder()
     q = q[q["filter_column"] == 1]
     q.optimise_for_memory()
@@ -805,17 +805,7 @@ def test_filter_explicit_type_promotion(
     )
     symbol = "test_filter_explicit_type_promotion"
     lib.write(symbol, df)
-    lib.create_column_stats(
-        symbol,
-        {
-            "uint8": {"MINMAX"},
-            "uint16": {"MINMAX"},
-            "uint32": {"MINMAX"},
-            "int8": {"MINMAX"},
-            "int16": {"MINMAX"},
-            "int32": {"MINMAX"},
-        },
-    )
+    lib.create_column_stats_experimental(symbol)
     # Plus
     q = QueryBuilder()
     q = q[
@@ -892,7 +882,7 @@ def test_filter_column_slicing_different_segments(
     df = pd.DataFrame({"a": np.arange(0, 10), "b": np.arange(10, 20), "c": np.arange(20, 30)}, index=np.arange(10))
     symbol = "test_filter_column_slicing_different_segments"
     lib.write(symbol, df)
-    lib.create_column_stats(symbol, {"a": {"MINMAX"}, "b": {"MINMAX"}, "c": {"MINMAX"}})
+    lib.create_column_stats_experimental(symbol)
     # Filter on column c (in second column slice), but only display column a (in first column slice)
     q = QueryBuilder()
     q = q[q["c"] == 22]
@@ -929,7 +919,7 @@ def test_filter_with_multi_index(lmdb_version_store_v1, any_output_format, colum
         data={"a": np.arange(10, 14)}, index=pd.MultiIndex.from_arrays([arr1, arr2], names=["datetime", "level"])
     )
     lib.write(symbol, df)
-    lib.create_column_stats(symbol, {"a": {"MINMAX"}})
+    lib.create_column_stats_experimental(symbol)
     q = QueryBuilder()
     q = q[(q["a"] == 11) | (q["a"] == 13)]
     expected = df[(df["a"] == 11) | (df["a"] == 13)]
@@ -969,7 +959,7 @@ def test_filter_complex_expression(
         index=np.arange(10),
     )
     lib.write(symbol, df)
-    lib.create_column_stats(symbol, {"a": {"MINMAX"}, "b": {"MINMAX"}, "c": {"MINMAX"}})
+    lib.create_column_stats_experimental(symbol)
     q = QueryBuilder()
     q = q[(((q["a"] * q["b"]) / 5) < (0.7 * q["c"])) & (q["b"] != 12)]
     expected = df[(((df["a"] * df["b"]) / 5) < (0.7 * df["c"])) & (df["b"] != 12)]
@@ -1385,21 +1375,7 @@ def test_float32_binary_comparison(
         }
     )
     lib.write(symbol, df)
-    lib.create_column_stats(
-        symbol,
-        {
-            "uint8": {"MINMAX"},
-            "uint16": {"MINMAX"},
-            "uint32": {"MINMAX"},
-            "uint64": {"MINMAX"},
-            "int8": {"MINMAX"},
-            "int16": {"MINMAX"},
-            "int32": {"MINMAX"},
-            "int64": {"MINMAX"},
-            "float32": {"MINMAX"},
-            "float64": {"MINMAX"},
-        },
-    )
+    lib.create_column_stats_experimental(symbol)
     for op in ["<", "<=", ">", ">=", "==", "!="]:
         for other_col in [
             "uint8",
@@ -1524,7 +1500,7 @@ def test_numeric_filter_dynamic_schema(
     expected, slices = make_dynamic(df)
     for df_slice in slices:
         lib.append(symbol, df_slice, write_if_missing=True)
-    lib.create_column_stats(symbol, {"int8": {"MINMAX"}})
+    lib.create_column_stats_experimental(symbol)
     val = 0
     q = QueryBuilder()
     q = q[q["int8"] < val]
@@ -1560,7 +1536,7 @@ def test_filter_column_present_in_some_segments(
 
     df = pd.DataFrame({"b": [1, 10]}, dtype="int64")
     lib.append(symbol, df)
-    lib.create_column_stats(symbol, {"a": {"MINMAX"}, "b": {"MINMAX"}})
+    lib.create_column_stats_experimental(symbol)
 
     q = QueryBuilder()
     q = q[q["b"] < 5]

@@ -34,7 +34,7 @@ def test_column_stats_isin_per_element_pruning(
     lib.write(sym, df0)
     lib.append(sym, df1)
 
-    lib.create_column_stats(sym, {"col_1": {"MINMAX"}})
+    lib.create_column_stats_experimental(sym)
 
     qs.enable()
     q = QueryBuilder()
@@ -89,7 +89,7 @@ def test_column_stats_isin_with_nan_in_set(
     lib.write(sym, df0)
     lib.append(sym, df1)
 
-    lib.create_column_stats(sym, {"col": {"MINMAX"}})
+    lib.create_column_stats_experimental(sym)
 
     qs.enable()
     q = QueryBuilder()
@@ -116,7 +116,7 @@ def test_column_stats_isin_all_nan_segment(
     lib.write(sym, df0)
     lib.append(sym, df1)
 
-    lib.create_column_stats(sym, {"col": {"MINMAX"}})
+    lib.create_column_stats_experimental(sym)
 
     qs.enable()
 
@@ -185,7 +185,7 @@ def test_column_stats_isin_isnotin(
     lib.write(sym, df0)
     lib.append(sym, df1)
 
-    lib.create_column_stats(sym, {"col_1": {"MINMAX"}})
+    lib.create_column_stats_experimental(sym)
 
     qs.enable()
     q = QueryBuilder()
@@ -307,7 +307,7 @@ def test_column_stats_isin_mixed_types(
     lib.write(sym, df0)
     lib.append(sym, df1)
 
-    lib.create_column_stats(sym, {"col_1": {"MINMAX"}})
+    lib.create_column_stats_experimental(sym)
 
     qs.enable()
     q = QueryBuilder()
@@ -333,7 +333,7 @@ def test_column_stats_isin_with_and(in_memory_version_store, clear_query_stats, 
     lib.append(sym, df1)
     lib.append(sym, df2)
 
-    lib.create_column_stats(sym, {"col_1": {"MINMAX"}, "col_2": {"MINMAX"}})
+    lib.create_column_stats_experimental(sym)
 
     qs.enable()
 
@@ -427,7 +427,7 @@ def test_column_stats_isin_nat_timestamp(
     lib.write(sym, df0)
     lib.append(sym, df1)
 
-    lib.create_column_stats(sym, {"col": {"MINMAX"}})
+    lib.create_column_stats_experimental(sym)
 
     qs.enable()
     q = QueryBuilder()
@@ -491,7 +491,7 @@ def test_column_stats_isin_int64_min_not_treated_as_nat(
     lib.write(sym, df0)
     lib.append(sym, df1)
 
-    lib.create_column_stats(sym, {"col": {"MINMAX"}})
+    lib.create_column_stats_experimental(sym)
 
     qs.enable()
     q = QueryBuilder()
