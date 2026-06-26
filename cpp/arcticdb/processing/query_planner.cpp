@@ -8,7 +8,89 @@
 
 #include <arcticdb/processing/query_planner.hpp>
 
+#include <algorithm>
+#include <string>
+#include <unordered_set>
+
 namespace arcticdb {
+
+namespace {
+
+bool is_filter(const ClauseVariant& clause) { return std::holds_alternative<std::shared_ptr<FilterClause>>(clause); }
+
+bool is_project(const ClauseVariant& clause) { return std::holds_alternative<std::shared_ptr<ProjectClause>>(clause); }
+
+bool is_date_range(const ClauseVariant& clause) {
+    return std::holds_alternative<std::shared_ptr<DateRangeClause>>(clause);
+}
+
+bool date_range_can_move_to_left_of(const ClauseVariant& clause) { return is_filter(clause) || is_project(clause); }
+
+// Move each DateRangeClause as far left as it can go, so that filters that were only separated by a
+// date range end up next to each other and can be merged. Each date range ends up at the front of the
+// run of clauses it is allowed to move past, keeping the original order, eg
+// [F1, F2, DR1, F3, F4, DR2] -> [DR1, DR2, F1, F2, F3, F4]
+void move_date_ranges_left(std::vector<ClauseVariant>& clauses) {
+    size_t insert_pos = 0; // location of the clause we can move a date range left to
+    // Move each date range we see left to insert_pos. If we have [F1, F2, DR1, F3] then we hit rotate(start=0,
+    // middle=2, last=3). This rotates within [0, 3) and makes index 2 the new start, that is it rotates [F1, F2, DR1]
+    // until DR1 is the new start. This results in [DR1, F1, F2, F3].
+    for (size_t i = 0; i < clauses.size(); ++i) {
+        if (is_date_range(clauses.at(i))) {
+            std::rotate(clauses.begin() + insert_pos, clauses.begin() + i, clauses.begin() + i + 1);
+            ++insert_pos;
+        } else if (!date_range_can_move_to_left_of(clauses.at(i))) {
+            insert_pos = i + 1;
+        }
+    }
+}
+
+std::shared_ptr<FilterClause> merge_filter_run(const std::vector<std::shared_ptr<FilterClause>>& filters) {
+    if (filters.size() == 1) {
+        return filters.front();
+    }
+    std::vector<std::shared_ptr<ExpressionContext>> expression_contexts;
+    std::unordered_set<std::string> input_columns;
+    bool any_memory = false;
+    for (const auto& filter : filters) {
+        expression_contexts.push_back(filter->expression_context_);
+        if (filter->clause_info_.input_columns_.has_value()) {
+            input_columns.insert(
+                    filter->clause_info_.input_columns_->begin(), filter->clause_info_.input_columns_->end()
+            );
+        }
+        any_memory = any_memory || filter->optimisation_ == PipelineOptimisation::MEMORY;
+    }
+    // Respect the (opt-in) memory request if any clause in the run asked for it (speed is the default if the user
+    // doesn't specify).
+    auto optimisation = any_memory ? PipelineOptimisation::MEMORY : PipelineOptimisation::SPEED;
+    return std::make_shared<FilterClause>(
+            std::move(input_columns), and_filter_expression_contexts(expression_contexts), optimisation
+    );
+}
+
+std::vector<ClauseVariant> merge_consecutive_filter_clauses(std::vector<ClauseVariant>&& clauses) {
+    std::vector<ClauseVariant> result;
+    std::vector<std::shared_ptr<FilterClause>> run;
+    auto flush_run = [&]() {
+        if (!run.empty()) {
+            result.emplace_back(merge_filter_run(run));
+        }
+        run.clear();
+    };
+    for (auto& clause : clauses) {
+        if (is_filter(clause)) {
+            run.push_back(std::get<std::shared_ptr<FilterClause>>(clause));
+        } else {
+            flush_run();
+            result.push_back(std::move(clause));
+        }
+    }
+    flush_run();
+    return result;
+}
+
+} // namespace
 
 std::vector<ClauseVariant> plan_query(std::vector<ClauseVariant>&& clauses) {
     if (clauses.size() >= 2 && std::holds_alternative<std::shared_ptr<DateRangeClause>>(clauses[0])) {
@@ -22,7 +104,8 @@ std::vector<ClauseVariant> plan_query(std::vector<ClauseVariant>&& clauses) {
             }
         });
     }
-    return clauses;
+    move_date_ranges_left(clauses);
+    return merge_consecutive_filter_clauses(std::move(clauses));
 }
 
 /**

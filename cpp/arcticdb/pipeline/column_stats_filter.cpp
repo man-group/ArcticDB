@@ -16,7 +16,6 @@
 #include <arcticdb/pipeline/value.hpp>
 #include <arcticdb/log/log.hpp>
 #include <arcticdb/stream/stream_utils.hpp>
-#include <arcticdb/processing/query_planner.hpp>
 
 #include <iterator>
 #include <unordered_set>
@@ -457,13 +456,16 @@ FilterQuery<index::IndexSegmentReader> create_column_stats_filter(
 }
 
 ColumnStatsQueryMetadata::ColumnStatsQueryMetadata(const std::vector<std::shared_ptr<Clause>>& clauses) {
-    // The clauses eligible for column stats use:
+    // We apply column stats filtering to a "prefix" of clauses that are eligible based on the rules below.
+    // Column stats are not used for any clauses after this "prefix".
     // - FilterClauses contribute filter expressions and columns of interest
     // - DateRangeClauses contribute their range
-    // - RowRangeClauses are skipped
+    // - A RowRangeClause ends the prefix unless it is the first clause, because a leading RowRangeClause
+    //   selects absolute row positions. A RowRangeClause anywhere else is over a changed dataset,
+    //   so a filter after it must not drive pruning (that would change which rows are "first/last N").
     // - Anything else (Resample / GroupBy / Project) ends the prefix because those clauses
     // transform the data so stats computed on the original segments are no longer valid.
-    for (const auto& clause : clauses) {
+    for (auto&& [idx, clause] : folly::enumerate(clauses)) {
         auto& clause_type = folly::poly_type(*clause);
         if (clause_type == typeid(DateRangeClause)) {
             const auto& date_range_clause = folly::poly_cast<DateRangeClause>(*clause);
@@ -476,7 +478,10 @@ ColumnStatsQueryMetadata::ColumnStatsQueryMetadata(const std::vector<std::shared
             continue;
         }
         if (clause_type == typeid(RowRangeClause)) {
-            continue;
+            if (idx == 0) {
+                continue;
+            }
+            break;
         }
         if (clause_type != typeid(FilterClause)) {
             break;
@@ -546,10 +551,12 @@ namespace {
 FilterQuery<index::IndexSegmentReader> build_filter_from_column_stats_data(
         ColumnStatsData&& column_stats, std::vector<std::shared_ptr<ExpressionContext>>&& filter_expressions
 ) {
-    util::check(!filter_expressions.empty(), "Expected at least one filter expression");
-    ARCTICDB_DEBUG(log::version(), "AND-ing expression contexts from filters");
-    ExpressionContext overall_context = and_filter_expression_contexts(filter_expressions);
-    ARCTICDB_DEBUG(log::version(), "Creating column stats filter");
+    util::check(
+            filter_expressions.size() == 1,
+            "Expected exactly one filter expression for column stats (filters are merged in plan_query), got {}",
+            filter_expressions.size()
+    );
+    ExpressionContext overall_context = *filter_expressions.front();
     return create_column_stats_filter(std::move(column_stats), std::move(overall_context));
 }
 
