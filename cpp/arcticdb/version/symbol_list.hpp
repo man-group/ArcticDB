@@ -19,17 +19,38 @@
 namespace arcticdb {
 enum class ActionType : uint8_t { ADD, DELETE };
 
-// Compact 32-byte representation of a SYMBOL_LIST journal AtomKey.
+constexpr VersionId unknown_version_id = std::numeric_limits<VersionId>::max();
+
+// Compact representation of a SYMBOL_LIST journal AtomKey, packed to a fixed 26 bytes so the size
+// is consistent across architectures (an unpacked layout would pad to 32+ depending on the target).
 // Stores only the fields needed to reconstruct the full AtomKey for deletion.
 // The symbol (start_index / map key) is held separately by the containing JournalMapType.
+#pragma pack(push)
+#pragma pack(1)
 struct JournalEntryData {
     entity::VersionId key_version_id; // 8 bytes
     timestamp creation_ts;            // 8 bytes
     entity::ContentHash content_hash; // 8 bytes
     ActionType action;                // 1 byte
     bool is_new_style;                // 1 byte
-    // 6 bytes implicit padding
+
+    explicit JournalEntryData(const AtomKey& key);
+
+    // Logical constructor from a (reference id, time, action) triple. content_hash is left zero as it
+    // is not part of the logical identity is_problematic cares about; use the AtomKey constructor when
+    // the entry must round-trip back to a deletable key.
+    JournalEntryData(entity::VersionId reference_id, timestamp creation_time, ActionType action_type) :
+        key_version_id(reference_id),
+        creation_ts(creation_time),
+        content_hash(0),
+        action(action_type),
+        is_new_style(reference_id != unknown_version_id) {}
+
+    // Old-style keys carry no usable version id, so they report unknown_version_id.
+    [[nodiscard]] entity::VersionId reference_id() const { return is_new_style ? key_version_id : unknown_version_id; }
 };
+static_assert(sizeof(JournalEntryData) == 26);
+#pragma pack(pop)
 
 using JournalMapType = std::unordered_map<StreamId, std::vector<JournalEntryData>>;
 
@@ -42,21 +63,21 @@ enum class WillAttemptCompaction : uint8_t {
     NO_DISABLED                  // compaction explicitly disabled by caller
 };
 
+// Result of the single-pass scan over SYMBOL_LIST keys. When compacting, update_map and
+// compaction_keys are consumed by compact_internal; otherwise they are cleared after the merge.
 struct JournalResult {
     std::optional<AtomKey> compaction_key;
-    JournalMapType update_map; // JournalEntryData (32B/entry) for all journal entries
     size_t total_key_count = 0;
-    std::vector<VariantKey> compaction_keys; // VariantKeys of all compaction keys found during scan
+    // Journal keys stored as JournalEntryData (26 B each); reconstructed in batches during compact_internal.
+    JournalMapType update_map;
+    // VariantKeys of all compaction keys found during scan (typically 0–1); the stale ones are
+    // freed immediately after compact_internal deletes them.
+    std::vector<VariantKey> compaction_keys;
 };
 
 struct LoadResult {
-    std::optional<AtomKey> compaction_key_;
+    JournalResult journal_;
     CollectionType symbols_;
-    size_t total_key_count_ = 0;
-    // Old compaction VariantKeys (typically 0–1); freed immediately after compact_internal deletes them.
-    std::vector<VariantKey> old_compaction_keys_;
-    // Journal keys stored as JournalEntryData (32 B each); reconstructed in batches during compact_internal.
-    JournalMapType update_map_;
 };
 
 struct SymbolListData {
@@ -74,8 +95,6 @@ constexpr std::string_view CompactionId = "__symbols__";
 constexpr std::string_view CompactionLockName = "SymbolListCompactionLock";
 constexpr std::string_view AddSymbol = "__add__";
 constexpr std::string_view DeleteSymbol = "__delete__";
-
-constexpr VersionId unknown_version_id = std::numeric_limits<VersionId>::max();
 
 inline StreamId action_id(ActionType action) {
     switch (action) {
@@ -98,6 +117,11 @@ struct SymbolEntryData {
         reference_id_(reference_id),
         timestamp_(time),
         action_(action) {}
+
+    explicit SymbolEntryData(const JournalEntryData& ck) :
+        reference_id_(ck.reference_id()),
+        timestamp_(ck.creation_ts),
+        action_(ck.action) {}
 
     void verify() const { magic_.check(); }
 };
@@ -143,10 +167,10 @@ struct SymbolVectorResult {
 };
 
 ProblematicResult is_problematic(
-        const SymbolListEntry& existing, const std::vector<SymbolEntryData>& updated, timestamp min_allowed_interval
+        const SymbolListEntry& existing, const std::vector<JournalEntryData>& updated, timestamp min_allowed_interval
 );
 
-ProblematicResult is_problematic(const std::vector<SymbolEntryData>& updated, timestamp min_allowed_interval);
+ProblematicResult is_problematic(const std::vector<JournalEntryData>& updated, timestamp min_allowed_interval);
 
 LoadResult attempt_load(
         const std::shared_ptr<VersionMap>& version_map, const std::shared_ptr<Store>& store, SymbolListData& data,
