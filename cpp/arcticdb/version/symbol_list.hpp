@@ -42,21 +42,21 @@ enum class WillAttemptCompaction : uint8_t {
     NO_DISABLED                  // compaction explicitly disabled by caller
 };
 
+// Result of the single-pass scan over SYMBOL_LIST keys. When compacting, update_map and
+// compaction_keys are consumed by compact_internal; otherwise they are cleared after the merge.
 struct JournalResult {
     std::optional<AtomKey> compaction_key;
-    JournalMapType update_map; // JournalEntryData (32B/entry) for all journal entries
     size_t total_key_count = 0;
-    std::vector<VariantKey> compaction_keys; // VariantKeys of all compaction keys found during scan
+    // Journal keys stored as JournalEntryData (32 B each); reconstructed in batches during compact_internal.
+    JournalMapType update_map;
+    // VariantKeys of all compaction keys found during scan (typically 0–1); the stale ones are
+    // freed immediately after compact_internal deletes them.
+    std::vector<VariantKey> compaction_keys;
 };
 
 struct LoadResult {
-    std::optional<AtomKey> compaction_key_;
+    JournalResult journal_;
     CollectionType symbols_;
-    size_t total_key_count_ = 0;
-    // Old compaction VariantKeys (typically 0–1); freed immediately after compact_internal deletes them.
-    std::vector<VariantKey> old_compaction_keys_;
-    // Journal keys stored as JournalEntryData (32 B each); reconstructed in batches during compact_internal.
-    JournalMapType update_map_;
 };
 
 struct SymbolListData {

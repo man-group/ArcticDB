@@ -504,14 +504,16 @@ CollectionType merge_existing_with_journal_map(
     }
 
     for (const auto& [symbol, ck_entries] : update_map) {
-        if (seen_in_existing.count(symbol) > 0)
+        if (seen_in_existing.contains(symbol))
             continue;
         std::vector<SymbolEntryData> entries;
         entries.reserve(ck_entries.size());
         for (const auto& ck : ck_entries)
             entries.push_back(to_symbol_entry_data(ck));
         if (auto problematic_entry = is_problematic(entries, min_allowed_interval); problematic_entry) {
-            problematic_symbols.try_emplace(symbol, problematic_entry.reference_id(), problematic_entry.time());
+            problematic_symbols.try_emplace(
+                    symbol, std::make_pair(problematic_entry.reference_id(), problematic_entry.time())
+            );
         } else {
             const auto last = to_symbol_entry_data(ck_entries.back());
             symbols.emplace_back(symbol, last.reference_id_, last.timestamp_, last.action_);
@@ -528,11 +530,10 @@ LoadResult attempt_load(
 ) {
     ARCTICDB_RUNTIME_DEBUG(log::symbol(), "Symbol list load attempt");
     const bool will_compact = will_attempt_compaction == WillAttemptCompaction::YES;
-    auto journal = load_journal_streaming(store, data, will_attempt_compaction);
 
     LoadResult load_result;
-    load_result.compaction_key_ = journal.compaction_key;
-    load_result.total_key_count_ = journal.total_key_count;
+    auto& journal = load_result.journal_;
+    journal = load_journal_streaming(store, data, will_attempt_compaction);
 
     if (journal.compaction_key) {
         ARCTICDB_RUNTIME_DEBUG(log::symbol(), "Loading symbols from symbol list keys");
@@ -560,9 +561,11 @@ LoadResult attempt_load(
         }
     }
 
-    if (will_compact) {
-        load_result.old_compaction_keys_ = std::move(journal.compaction_keys);
-        load_result.update_map_ = std::move(journal.update_map);
+    if (!will_compact) {
+        // Not compacting: release the journal entries and compaction keys now rather than
+        // carrying them in the returned LoadResult.
+        journal.update_map.clear();
+        journal.compaction_keys.clear();
     }
 
     return load_result;
@@ -651,12 +654,12 @@ StreamDescriptor delete_symbol_stream_descriptor(const StreamId& stream_id, cons
 }
 
 bool SymbolList::needs_compaction(const LoadResult& load_result) const {
-    if (!load_result.compaction_key_) {
+    if (!load_result.journal_.compaction_key) {
         log::version().debug("Symbol list: needs_compaction=[true] as no previous compaction");
         return true;
     }
 
-    auto n_keys = static_cast<int64_t>(load_result.total_key_count_);
+    auto n_keys = static_cast<int64_t>(load_result.journal_.total_key_count);
     if (auto fixed = ConfigsMap::instance()->get_int("SymbolList.MaxDelta")) {
         auto result = n_keys > *fixed;
         log::version().debug(
@@ -843,7 +846,7 @@ size_t SymbolList::compact(const std::shared_ptr<Store>& store) {
     LoadResult load_result = ExponentialBackoff<StorageException>(100, 2000).go([this, &version_map, &store]() {
         return attempt_load(version_map, store, data_, WillAttemptCompaction::YES);
     });
-    auto num_symbol_list_keys = load_result.total_key_count_;
+    auto num_symbol_list_keys = load_result.journal_.total_key_count;
 
     ARCTICDB_RUNTIME_DEBUG(log::symbol(), "Forcing compaction. Obtaining lock...");
     StorageLock lock{StringId{CompactionLockName}};
@@ -856,7 +859,7 @@ size_t SymbolList::compact(const std::shared_ptr<Store>& store) {
 }
 
 void SymbolList::compact_internal(const std::shared_ptr<Store>& store, LoadResult& load_result) const {
-    if (has_recent_compaction(store, load_result.compaction_key_)) {
+    if (has_recent_compaction(store, load_result.journal_.compaction_key)) {
         // legacy arcticc symbol list entries don't get correctly listed when doing `iterate_type`, so can mess
         // up racing symbol list compaction detection.
         ARCTICDB_RUNTIME_DEBUG(
@@ -871,7 +874,7 @@ void SymbolList::compact_internal(const std::shared_ptr<Store>& store, LoadResul
     const auto& written_key = std::get<AtomKey>(written);
 
     // Delete old compaction keys (typically 0–1 entries; exclude the newly written one).
-    auto& old_ck = load_result.old_compaction_keys_;
+    auto& old_ck = load_result.journal_.compaction_keys;
     old_ck.erase(
             std::remove_if(
                     old_ck.begin(),
@@ -888,7 +891,7 @@ void SymbolList::compact_internal(const std::shared_ptr<Store>& store, LoadResul
     static constexpr size_t kBatchSize = 10'000;
     std::vector<VariantKey> batch;
     batch.reserve(kBatchSize);
-    for (auto it = load_result.update_map_.begin(); it != load_result.update_map_.end();) {
+    for (auto it = load_result.journal_.update_map.begin(); it != load_result.journal_.update_map.end();) {
         const auto& [symbol, ck_entries] = *it;
         for (const auto& ck : ck_entries) {
             batch.emplace_back(atom_key_from_journal_entry(symbol, ck));
@@ -898,7 +901,7 @@ void SymbolList::compact_internal(const std::shared_ptr<Store>& store, LoadResul
                 batch.reserve(kBatchSize);
             }
         }
-        it = load_result.update_map_.erase(it);
+        it = load_result.journal_.update_map.erase(it);
     }
     if (!batch.empty())
         store->remove_keys_sync(std::move(batch));
