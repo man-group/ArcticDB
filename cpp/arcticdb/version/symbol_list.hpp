@@ -19,6 +19,8 @@
 namespace arcticdb {
 enum class ActionType : uint8_t { ADD, DELETE };
 
+constexpr VersionId unknown_version_id = std::numeric_limits<VersionId>::max();
+
 // Compact representation of a SYMBOL_LIST journal AtomKey, packed to a fixed 26 bytes so the size
 // is consistent across architectures (an unpacked layout would pad to 32+ depending on the target).
 // Stores only the fields needed to reconstruct the full AtomKey for deletion.
@@ -31,6 +33,9 @@ struct JournalEntryData {
     entity::ContentHash content_hash; // 8 bytes
     ActionType action;                // 1 byte
     bool is_new_style;                // 1 byte
+
+    // Old-style keys carry no usable version id, so they report unknown_version_id.
+    [[nodiscard]] entity::VersionId reference_id() const { return is_new_style ? key_version_id : unknown_version_id; }
 };
 static_assert(sizeof(JournalEntryData) == 26);
 #pragma pack(pop)
@@ -78,8 +83,6 @@ constexpr std::string_view CompactionId = "__symbols__";
 constexpr std::string_view CompactionLockName = "SymbolListCompactionLock";
 constexpr std::string_view AddSymbol = "__add__";
 constexpr std::string_view DeleteSymbol = "__delete__";
-
-constexpr VersionId unknown_version_id = std::numeric_limits<VersionId>::max();
 
 inline StreamId action_id(ActionType action) {
     switch (action) {
@@ -147,10 +150,10 @@ struct SymbolVectorResult {
 };
 
 ProblematicResult is_problematic(
-        const SymbolListEntry& existing, const std::vector<SymbolEntryData>& updated, timestamp min_allowed_interval
+        const SymbolListEntry& existing, const std::vector<JournalEntryData>& updated, timestamp min_allowed_interval
 );
 
-ProblematicResult is_problematic(const std::vector<SymbolEntryData>& updated, timestamp min_allowed_interval);
+ProblematicResult is_problematic(const std::vector<JournalEntryData>& updated, timestamp min_allowed_interval);
 
 LoadResult attempt_load(
         const std::shared_ptr<VersionMap>& version_map, const std::shared_ptr<Store>& store, SymbolListData& data,

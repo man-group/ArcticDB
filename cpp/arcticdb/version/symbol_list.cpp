@@ -305,15 +305,15 @@ JournalResult load_journal_streaming(
     return result;
 }
 
-auto tail_range(const std::vector<SymbolEntryData>& updated) {
+auto tail_range(const std::vector<JournalEntryData>& updated) {
     auto it = std::crbegin(updated);
-    const auto reference_id = it->reference_id_;
-    auto action = it->action_;
+    const auto reference_id = it->reference_id();
+    auto action = it->action;
     bool all_same_action = true;
     ++it;
 
-    while (it != std::crend(updated) && it->reference_id_ == reference_id) {
-        if (it->action_ != action)
+    while (it != std::crend(updated) && it->reference_id() == reference_id) {
+        if (it->action != action)
             all_same_action = false;
 
         ++it;
@@ -323,27 +323,27 @@ auto tail_range(const std::vector<SymbolEntryData>& updated) {
 }
 
 std::optional<SymbolEntryData> timestamps_too_close(
-        const std::vector<SymbolEntryData>::const_reverse_iterator& first, const std::vector<SymbolEntryData>& updated,
-        timestamp min_allowed_interval, bool all_same_action
+        const std::vector<JournalEntryData>::const_reverse_iterator& first,
+        const std::vector<JournalEntryData>& updated, timestamp min_allowed_interval, bool all_same_action
 ) {
     if (first == std::crend(updated))
         return std::nullopt;
 
     const auto& latest = *updated.rbegin();
-    const bool same_as_updates = all_same_action && latest.action_ == first->action_;
-    const auto diff = latest.timestamp_ - first->timestamp_;
+    const bool same_as_updates = all_same_action && latest.action == first->action;
+    const auto diff = latest.creation_ts - first->creation_ts;
 
     if (same_as_updates || diff >= min_allowed_interval)
         return std::nullopt;
 
-    return latest;
+    return to_symbol_entry_data(latest);
 }
 
 bool has_unknown_reference_id(const SymbolEntryData& data) { return data.reference_id_ == unknown_version_id; }
 
-bool contains_unknown_reference_ids(const std::vector<SymbolEntryData>& updated) {
+bool contains_unknown_reference_ids(const std::vector<JournalEntryData>& updated) {
     return std::any_of(std::begin(updated), std::end(updated), [](const auto& data) {
-        return has_unknown_reference_id(data);
+        return data.reference_id() == unknown_version_id;
     });
 }
 
@@ -355,7 +355,7 @@ SymbolVectorResult vector_okay(bool all_same_version, bool all_same_action, size
     return {ProblematicResult{false}, all_same_version, all_same_action, latest_id_count};
 }
 
-SymbolVectorResult is_problematic_vector(const std::vector<SymbolEntryData>& updated, timestamp min_allowed_interval) {
+SymbolVectorResult is_problematic_vector(const std::vector<JournalEntryData>& updated, timestamp min_allowed_interval) {
     if (contains_unknown_reference_ids(updated))
         return cannot_validate_symbol_vector();
 
@@ -370,22 +370,20 @@ SymbolVectorResult is_problematic_vector(const std::vector<SymbolEntryData>& upd
     if (latest_id_count <= 2 || all_same_action)
         return vector_okay(all_same_version, all_same_action, latest_id_count);
 
-    return vector_has_problem(*std::crbegin(updated));
+    return vector_has_problem(to_symbol_entry_data(*std::crbegin(updated)));
 }
 
-ProblematicResult is_problematic(const std::vector<SymbolEntryData>& updated, timestamp min_allowed_interval) {
+ProblematicResult is_problematic(const std::vector<JournalEntryData>& updated, timestamp min_allowed_interval) {
     return is_problematic_vector(updated, min_allowed_interval).problematic_result_;
 }
 
 ProblematicResult is_problematic(
-        const SymbolListEntry& existing, const std::vector<SymbolEntryData>& updated, timestamp min_allowed_interval
+        const SymbolListEntry& existing, const std::vector<JournalEntryData>& updated, timestamp min_allowed_interval
 ) {
-    ARCTICDB_DEBUG(
-            log::symbol(), "{} {} {}", existing.stream_id_, static_cast<const SymbolEntryData&>(existing), updated
-    );
+    ARCTICDB_DEBUG(log::symbol(), "{} {}", existing.stream_id_, static_cast<const SymbolEntryData&>(existing));
 
     const auto& latest = *std::crbegin(updated);
-    if (existing.reference_id_ > latest.reference_id_)
+    if (existing.reference_id_ > latest.reference_id())
         return ProblematicResult{existing};
 
     auto [problematic_result, vector_all_same_version, vector_all_same_action, last_id_count] =
@@ -396,12 +394,15 @@ ProblematicResult is_problematic(
     if (problematic_result.contains_unknown_reference_ids_ || has_unknown_reference_id(existing))
         return cannot_determine_validity();
 
-    const bool all_same_action = vector_all_same_action && existing.action_ == latest.action_;
+    const bool all_same_action = vector_all_same_action && existing.action_ == latest.action;
 
-    if (latest.timestamp_ - existing.timestamp_ < min_allowed_interval && !all_same_action)
-        return ProblematicResult{latest.reference_id_ > existing.reference_id_ ? latest : existing};
+    if (latest.creation_ts - existing.timestamp_ < min_allowed_interval && !all_same_action)
+        return ProblematicResult{
+                latest.reference_id() > existing.reference_id_ ? to_symbol_entry_data(latest)
+                                                               : static_cast<SymbolEntryData>(existing)
+        };
 
-    if (existing.reference_id_ < latest.reference_id_)
+    if (existing.reference_id_ < latest.reference_id())
         return not_a_problem();
 
     if (all_same_action)
@@ -410,7 +411,7 @@ ProblematicResult is_problematic(
     if (last_id_count == 1)
         return not_a_problem();
 
-    return ProblematicResult{latest};
+    return ProblematicResult{to_symbol_entry_data(latest)};
 }
 
 void resolve_problematic_symbols(
@@ -490,11 +491,7 @@ CollectionType merge_existing_with_journal_map(
         } else {
             util::check(!updated->second.empty(), "Unexpected empty entry for symbol {}", updated->first);
             seen_in_existing.insert(stream_id);
-            std::vector<SymbolEntryData> entries;
-            entries.reserve(updated->second.size());
-            for (const auto& ck : updated->second)
-                entries.push_back(to_symbol_entry_data(ck));
-            if (auto problematic_entry = is_problematic(previous_entry, entries, min_allowed_interval);
+            if (auto problematic_entry = is_problematic(previous_entry, updated->second, min_allowed_interval);
                 problematic_entry) {
                 problematic_symbols.try_emplace(
                         stream_id, std::make_pair(problematic_entry.reference_id(), problematic_entry.time())
@@ -509,11 +506,7 @@ CollectionType merge_existing_with_journal_map(
     for (const auto& [symbol, ck_entries] : update_map) {
         if (seen_in_existing.contains(symbol))
             continue;
-        std::vector<SymbolEntryData> entries;
-        entries.reserve(ck_entries.size());
-        for (const auto& ck : ck_entries)
-            entries.push_back(to_symbol_entry_data(ck));
-        if (auto problematic_entry = is_problematic(entries, min_allowed_interval); problematic_entry) {
+        if (auto problematic_entry = is_problematic(ck_entries, min_allowed_interval); problematic_entry) {
             problematic_symbols.try_emplace(
                     symbol, std::make_pair(problematic_entry.reference_id(), problematic_entry.time())
             );
@@ -912,10 +905,11 @@ void delete_superseded_keys(const std::shared_ptr<Store>& store, JournalResult& 
         // this can happen in the following scenario:
         // 1. Process A writes a compaction key at timestamp T.
         // 2. Process A fails to delete the old SL entries (e.g. due to a crash) and exits.
-        // 3. Process B attemps to compact the SL, incl. the compacted key from process A. 
+        // 3. Process B attemps to compact the SL, incl. the compacted key from process A.
         // 4. Due to clock skew, process B writes a new compaction key at timestamp T (same as process A's key)
-        // ---> this results in the exact same compaction key which will overwrite the previous one, 
-        // 5. we DON'T want to delete the compaction key from process A, as it is the same as the one from process B, so we skip it here.
+        // ---> this results in the exact same compaction key which will overwrite the previous one,
+        // 5. we DON'T want to delete the compaction key from process A, as it is the same as the one from process B, so
+        // we skip it here.
         // ---> this would result in wiping out the whole SL cache
         if (key == written_key)
             return;
