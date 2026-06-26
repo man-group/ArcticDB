@@ -757,7 +757,13 @@ TEST_F(SymbolListSuite, BackwardsCompat) {
 
     auto old_keys = backwards_compat_get_all_symbol_list_keys(store);
     auto old_symbols = backwards_compat_get_symbols(store);
+    std::set<AtomKey> old_key_set(old_keys.begin(), old_keys.end());
     backwards_compat_compact(store, std::move(old_keys), old_symbols);
+
+    // delete_keys must remove every old journal/compaction key, leaving only the freshly written compaction key
+    auto keys_after_compact = backwards_compat_get_all_symbol_list_keys(store);
+    ASSERT_EQ(keys_after_compact.size(), 1);
+    ASSERT_EQ(old_key_set.count(keys_after_compact.front()), 0);
 
     ASSERT_EQ(all_symbols_match(store, symbol_list, expected), true);
 
@@ -1057,3 +1063,95 @@ TEST_P(SymbolListRace, Run) {
 INSTANTIATE_TEST_SUITE_P(SymbolListSource, SymbolListRace, Combine(Values('S'), Bool(), Bool(), Bool()));
 // For version keys source (initial compaction), there's no old compaction key to remove:
 INSTANTIATE_TEST_SUITE_P(VersionKeysSource, SymbolListRace, Combine(Values('V'), Values(false), Bool(), Bool()));
+
+TEST_F(SymbolListSuite, DirectPathEquivalence) {
+    // Setup: add symbols and force compaction
+    for (int i = 0; i < 50; ++i) {
+        auto symbol = fmt::format("sym_{}", i);
+        SymbolList::add_symbol(store_, StreamId{symbol}, 0);
+        auto key = atom_key_builder().build(symbol, KeyType::TABLE_INDEX);
+        version_map_->write_version(store_, key, std::nullopt);
+    }
+
+    ConfigsMap::instance()->set_int("SymbolList.MaxDelta", 0);
+    {
+        SymbolList sl{version_map_};
+        sl.load<std::set<StreamId>>(version_map_, store_, false);
+    }
+
+    // Add journal entries: new symbols + deletes of existing ones
+    for (int i = 40; i < 60; ++i) {
+        auto symbol = fmt::format("sym_{}", i);
+        SymbolList::add_symbol(store_, StreamId{symbol}, 1);
+        auto key = atom_key_builder().version_id(1).build(symbol, KeyType::TABLE_INDEX);
+        version_map_->write_version(store_, key, std::nullopt);
+    }
+    for (int i = 0; i < 10; ++i) {
+        auto symbol = fmt::format("sym_{}", i);
+        SymbolList::remove_symbol(store_, StreamId{symbol}, 1);
+    }
+
+    ConfigsMap::instance()->unset_int("SymbolList.MaxDelta");
+
+    // Load via compaction-eligible path (will not actually compact since threshold is default)
+    SymbolList sl1{version_map_};
+    auto compaction_result = sl1.load<std::set<StreamId>>(version_map_, store_, false);
+
+    // Load via direct path (no_compaction=true)
+    SymbolList sl2{version_map_};
+    auto direct_result = sl2.load<std::set<StreamId>>(version_map_, store_, true);
+
+    EXPECT_EQ(compaction_result, direct_result);
+    // 50 original + 10 new = 60. The remove_symbol journal entries are resolved
+    // as ADD because the version map still shows those symbols as existing.
+    EXPECT_EQ(direct_result.size(), 60u);
+}
+
+TEST_F(SymbolListSuite, DirectPathEquivalenceWithTrueDeletes) {
+    // Setup: add symbols and force compaction
+    for (int i = 0; i < 50; ++i) {
+        auto symbol = fmt::format("sym_{}", i);
+        SymbolList::add_symbol(store_, StreamId{symbol}, 0);
+        auto key = atom_key_builder().build(symbol, KeyType::TABLE_INDEX);
+        version_map_->write_version(store_, key, std::nullopt);
+    }
+
+    ConfigsMap::instance()->set_int("SymbolList.MaxDelta", 0);
+    {
+        SymbolList sl{version_map_};
+        sl.load<std::set<StreamId>>(version_map_, store_, false);
+    }
+
+    // Add new symbols
+    for (int i = 50; i < 60; ++i) {
+        auto symbol = fmt::format("sym_{}", i);
+        SymbolList::add_symbol(store_, StreamId{symbol}, 1);
+        auto key = atom_key_builder().version_id(1).build(symbol, KeyType::TABLE_INDEX);
+        version_map_->write_version(store_, key, std::nullopt);
+    }
+
+    // Delete symbols 0-9 via both the symbol list journal AND the version map
+    for (int i = 0; i < 10; ++i) {
+        auto symbol = fmt::format("sym_{}", i);
+        SymbolList::remove_symbol(store_, StreamId{symbol}, 1);
+        version_map_->tombstone_from_key_or_all(store_, StreamId{symbol});
+    }
+
+    ConfigsMap::instance()->unset_int("SymbolList.MaxDelta");
+
+    SymbolList sl1{version_map_};
+    auto compaction_result = sl1.load<std::set<StreamId>>(version_map_, store_, false);
+
+    SymbolList sl2{version_map_};
+    auto direct_result = sl2.load<std::set<StreamId>>(version_map_, store_, true);
+
+    EXPECT_EQ(compaction_result, direct_result);
+    // 50 original - 10 deleted + 10 new = 50
+    EXPECT_EQ(direct_result.size(), 50u);
+    // Verify deleted symbols are absent
+    for (int i = 0; i < 10; ++i)
+        EXPECT_EQ(direct_result.count(StreamId{fmt::format("sym_{}", i)}), 0u);
+    // Verify new symbols are present
+    for (int i = 50; i < 60; ++i)
+        EXPECT_EQ(direct_result.count(StreamId{fmt::format("sym_{}", i)}), 1u);
+}

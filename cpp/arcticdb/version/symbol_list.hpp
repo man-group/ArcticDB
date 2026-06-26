@@ -17,12 +17,23 @@
 #include <util/storage_lock.hpp>
 
 namespace arcticdb {
-struct SymbolListEntry;
-struct SymbolEntryData;
+enum class ActionType : uint8_t { ADD, DELETE };
 
-using MapType = std::unordered_map<StreamId, std::vector<SymbolEntryData>>;
-using Compaction = std::vector<AtomKey>::const_iterator;
-using MaybeCompaction = std::optional<Compaction>;
+// Compact 32-byte representation of a SYMBOL_LIST journal AtomKey.
+// Stores only the fields needed to reconstruct the full AtomKey for deletion.
+// The symbol (start_index / map key) is held separately by the containing JournalMapType.
+struct JournalEntryData {
+    entity::VersionId key_version_id; // 8 bytes
+    timestamp creation_ts;            // 8 bytes
+    entity::ContentHash content_hash; // 8 bytes
+    ActionType action;                // 1 byte
+    bool is_new_style;                // 1 byte
+    // 6 bytes implicit padding
+};
+
+using JournalMapType = std::unordered_map<StreamId, std::vector<JournalEntryData>>;
+
+struct SymbolListEntry;
 using CollectionType = std::vector<SymbolListEntry>;
 
 enum class WillAttemptCompaction : uint8_t {
@@ -31,13 +42,21 @@ enum class WillAttemptCompaction : uint8_t {
     NO_DISABLED                  // compaction explicitly disabled by caller
 };
 
-struct LoadResult {
-    std::vector<AtomKey> symbol_list_keys_;
-    MaybeCompaction maybe_previous_compaction;
-    CollectionType symbols_;
-    timestamp timestamp_ = 0L;
+struct JournalResult {
+    std::optional<AtomKey> compaction_key;
+    JournalMapType update_map; // JournalEntryData (32B/entry) for all journal entries
+    size_t total_key_count = 0;
+    std::vector<VariantKey> compaction_keys; // VariantKeys of all compaction keys found during scan
+};
 
-    std::vector<AtomKey>&& detach_symbol_list_keys() { return std::move(symbol_list_keys_); }
+struct LoadResult {
+    std::optional<AtomKey> compaction_key_;
+    CollectionType symbols_;
+    size_t total_key_count_ = 0;
+    // Old compaction VariantKeys (typically 0–1); freed immediately after compact_internal deletes them.
+    std::vector<VariantKey> old_compaction_keys_;
+    // Journal keys stored as JournalEntryData (32 B each); reconstructed in batches during compact_internal.
+    JournalMapType update_map_;
 };
 
 struct SymbolListData {
@@ -57,8 +76,6 @@ constexpr std::string_view AddSymbol = "__add__";
 constexpr std::string_view DeleteSymbol = "__delete__";
 
 constexpr VersionId unknown_version_id = std::numeric_limits<VersionId>::max();
-
-enum class ActionType : uint8_t { ADD, DELETE };
 
 inline StreamId action_id(ActionType action) {
     switch (action) {
@@ -160,6 +177,13 @@ class SymbolList {
                 }
         );
 
+        // Build output before compaction — compact_internal moves symbols_ into write_symbols
+        R output;
+        for (const auto& entry : load_result.symbols_) {
+            if (entry.action_ == ActionType::ADD)
+                output.insert(entry.stream_id_);
+        }
+
         if (will_attempt_compaction == WillAttemptCompaction::YES && needs_compaction(load_result)) {
             ARCTICDB_RUNTIME_DEBUG(log::symbol(), "Compaction necessary. Obtaining lock...");
             try {
@@ -178,12 +202,6 @@ class SymbolList {
             } catch (const std::exception& ex) {
                 log::symbol().warn("Ignoring error while trying to compact the symbol list: {}", ex.what());
             }
-        }
-
-        R output;
-        for (const auto& entry : load_result.symbols_) {
-            if (entry.action_ == ActionType::ADD)
-                output.insert(entry.stream_id_);
         }
 
         return output;
