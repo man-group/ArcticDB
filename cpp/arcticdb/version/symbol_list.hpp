@@ -19,17 +19,21 @@
 namespace arcticdb {
 enum class ActionType : uint8_t { ADD, DELETE };
 
-// Compact 32-byte representation of a SYMBOL_LIST journal AtomKey.
+// Compact representation of a SYMBOL_LIST journal AtomKey, packed to a fixed 26 bytes so the size
+// is consistent across architectures (an unpacked layout would pad to 32+ depending on the target).
 // Stores only the fields needed to reconstruct the full AtomKey for deletion.
 // The symbol (start_index / map key) is held separately by the containing JournalMapType.
+#pragma pack(push)
+#pragma pack(1)
 struct JournalEntryData {
     entity::VersionId key_version_id; // 8 bytes
     timestamp creation_ts;            // 8 bytes
     entity::ContentHash content_hash; // 8 bytes
     ActionType action;                // 1 byte
     bool is_new_style;                // 1 byte
-    // 6 bytes implicit padding
 };
+static_assert(sizeof(JournalEntryData) == 26);
+#pragma pack(pop)
 
 using JournalMapType = std::unordered_map<StreamId, std::vector<JournalEntryData>>;
 
@@ -47,7 +51,7 @@ enum class WillAttemptCompaction : uint8_t {
 struct JournalResult {
     std::optional<AtomKey> compaction_key;
     size_t total_key_count = 0;
-    // Journal keys stored as JournalEntryData (32 B each); reconstructed in batches during compact_internal.
+    // Journal keys stored as JournalEntryData (26 B each); reconstructed in batches during compact_internal.
     JournalMapType update_map;
     // VariantKeys of all compaction keys found during scan (typically 0–1); the stale ones are
     // freed immediately after compact_internal deletes them.

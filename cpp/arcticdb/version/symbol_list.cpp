@@ -19,6 +19,8 @@
 #include <arcticdb/storage/store.hpp>
 #include <arcticdb/stream/merge_utils.hpp>
 
+#include <ankerl/unordered_dense.h>
+
 namespace arcticdb {
 
 using namespace arcticdb::stream;
@@ -263,7 +265,7 @@ void sort_journal_map(JournalMapType& update_map) {
 }
 
 /// Single-pass iteration over SYMBOL_LIST keys: builds the update map and locates the latest
-/// compaction key. Always uses JournalEntryData (32B/entry) for the update map.
+/// compaction key. Always uses JournalEntryData (26B/entry) for the update map.
 JournalResult load_journal_streaming(
         const std::shared_ptr<Store>& store, SymbolListData& data, WillAttemptCompaction will_attempt_compaction
 ) {
@@ -552,12 +554,14 @@ LoadResult attempt_load(
                 merge_existing_with_journal_map(version_map, store, journal.update_map, std::move(previous_entries));
         if (will_compact) {
             // Verify every journal symbol we'd delete corresponds to a symbol in the merged output.
-            // Guards against silent data loss from merge bugs.
-            std::unordered_set<StreamId> symbols_in_merge;
+            // Guards against silent data loss from merge bugs. The merged output holds one entry per
+            // symbol, so the set size is known exactly up front.
+            ankerl::unordered_dense::set<StreamId> symbols_in_merge;
+            symbols_in_merge.reserve(load_result.symbols_.size());
             for (const auto& entry : load_result.symbols_)
                 symbols_in_merge.emplace(entry.stream_id_);
             for (const auto& [symbol, _] : journal.update_map)
-                util::check(symbols_in_merge.count(symbol) > 0, "Would delete unseen symbol {}", symbol);
+                util::check(symbols_in_merge.contains(symbol), "Would delete unseen symbol {}", symbol);
         }
     }
 
