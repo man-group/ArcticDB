@@ -1094,6 +1094,7 @@ if(${TEST})
             processing/test/test_output_schema_ast_validity.cpp
             processing/test/test_output_schema_basic.cpp
             processing/test/test_parallel_processing.cpp
+            processing/test/test_query_planner.cpp
             processing/test/test_resample.cpp
             processing/test/test_set_membership.cpp
             processing/test/test_signed_unsigned_comparison.cpp

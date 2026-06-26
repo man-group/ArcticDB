@@ -751,6 +751,42 @@ def test_column_stats_with_row_range(
     assert_frame_equal(result, expected)
 
 
+def test_column_stats_filter_after_head_clause_not_pruned(
+    in_memory_version_store, clear_query_stats, column_stats_filtering_enabled
+):
+    """A filter after a head() clause must not contribute to pruning, because this
+    would change which rows are 'first N'."""
+    lib = in_memory_version_store
+
+    df0 = pd.DataFrame({"col_1": [1, 2], "col_2": [1, 2]}, index=pd.date_range("2000-01-01", periods=2))
+    df1 = pd.DataFrame({"col_1": [3, 4], "col_2": [3, 4]}, index=pd.date_range("2000-01-03", periods=2))
+    df2 = pd.DataFrame({"col_1": [5, 6], "col_2": [5, 6]}, index=pd.date_range("2000-01-05", periods=2))
+    lib.write(sym, df0)
+    lib.append(sym, df1)
+    lib.append(sym, df2)
+
+    lib.create_column_stats(sym, {"col_1": {"MINMAX"}, "col_2": {"MINMAX"}})
+
+    qs.enable()
+    q = QueryBuilder()
+    q = q[q["col_1"] >= 3]
+    q = q.head(2)
+    q = q[q["col_2"] > 4]
+    qs.reset_stats()
+    result = lib.read(sym, query_builder=q).data
+    table_data_reads = get_table_data_read_count()
+
+    # col_1 >= 3 keeps seg1 and seg2 (seg0 pruned); head(2) of those is [3, 4]; col_2 > 4 yields
+    # nothing. If col_2 > 4 were used to prune, only seg2 would survive and the result would wrongly
+    # be [5, 6]. The first filter still prunes seg0, so two segments are read.
+    expected = pd.concat([df0, df1, df2])
+    expected = expected[expected["col_1"] >= 3].head(2)
+    expected = expected[expected["col_2"] > 4]
+    assert expected.empty
+    assert_frame_equal(result, expected)
+    assert table_data_reads == 2, f"Expected 2 TABLE_DATA reads (seg0 pruned), got {table_data_reads}"
+
+
 @pytest.mark.parametrize("negated", (True, False))
 def test_column_stats_bool_column_filters(
     in_memory_version_store, clear_query_stats, column_stats_filtering_enabled, negated
