@@ -715,8 +715,7 @@ void add_slice_to_component_manager(
             std::make_shared<RowRange>(std::move(segment_and_slice.ranges_and_key_.row_range_)),
             std::make_shared<ColRange>(std::move(segment_and_slice.ranges_and_key_.col_range_)),
             std::make_shared<AtomKey>(std::move(segment_and_slice.ranges_and_key_.key_)),
-            fetch_count,
-            OnDiskSegment{}
+            fetch_count
     );
 }
 

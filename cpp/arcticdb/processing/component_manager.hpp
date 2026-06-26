@@ -24,9 +24,6 @@ using EntityId = entt::entity;
 using EntityFetchCount = uint64_t;
 using bucket_id = uint8_t;
 
-// Tag marking entities whose segment was decoded from storage, as opposed to materialized during processing.
-struct OnDiskSegment {};
-
 using namespace entt::literals;
 
 class ComponentManager {

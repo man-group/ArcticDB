@@ -13,7 +13,7 @@
 
 namespace arcticdb::util {
 
-// Test-only instrumentation for the number of decoded segments resident in the ComponentManager at once.
+// Test-only instrumentation for the number of segments decoded from storage that are resident in memory at once.
 class SegmentResidencyTracker {
   public:
     static SegmentResidencyTracker& instance() {

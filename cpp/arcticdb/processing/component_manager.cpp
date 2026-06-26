@@ -9,7 +9,6 @@
 #include <atomic>
 
 #include <arcticdb/processing/component_manager.hpp>
-#include <arcticdb/util/segment_residency_tracker.hpp>
 
 namespace arcticdb {
 
@@ -28,10 +27,6 @@ void ComponentManager::decrement_entity_fetch_count(EntityId id) {
         // shared_mutex, so just decrement the ref count of the only sizeable component, so that when the shared pointer
         // goes out of scope in the calling function, the memory is freed
         registry_.get<std::shared_ptr<SegmentInMemory>>(id).reset();
-        auto& residency_tracker = util::SegmentResidencyTracker::instance();
-        if (residency_tracker.enabled() && registry_.all_of<OnDiskSegment>(id)) {
-            residency_tracker.on_segment_released();
-        }
         ARCTICDB_DEBUG(log::memory(), "Releasing entity {}", id);
         ARCTICDB_DEBUG_CHECK(
                 ErrorCode::E_ASSERTION_FAILURE,

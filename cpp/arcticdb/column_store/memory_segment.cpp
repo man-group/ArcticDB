@@ -225,6 +225,8 @@ SegmentInMemory SegmentInMemory::clone() const {
     return SegmentInMemory(std::make_shared<SegmentInMemoryImpl>(impl_->clone()));
 }
 
+void SegmentInMemory::mark_from_disk() { impl_->mark_from_disk(); }
+
 void SegmentInMemory::set_string_pool(const std::shared_ptr<StringPool>& string_pool) {
     impl_->set_string_pool(string_pool);
 }
