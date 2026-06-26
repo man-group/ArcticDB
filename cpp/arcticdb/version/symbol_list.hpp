@@ -34,6 +34,8 @@ struct JournalEntryData {
     ActionType action;                // 1 byte
     bool is_new_style;                // 1 byte
 
+    explicit JournalEntryData(const AtomKey& key);
+
     // Old-style keys carry no usable version id, so they report unknown_version_id.
     [[nodiscard]] entity::VersionId reference_id() const { return is_new_style ? key_version_id : unknown_version_id; }
 };
@@ -105,6 +107,11 @@ struct SymbolEntryData {
         reference_id_(reference_id),
         timestamp_(time),
         action_(action) {}
+
+    explicit SymbolEntryData(const JournalEntryData& ck) :
+        reference_id_(ck.reference_id()),
+        timestamp_(ck.creation_ts),
+        action_(ck.action) {}
 
     void verify() const { magic_.check(); }
 };

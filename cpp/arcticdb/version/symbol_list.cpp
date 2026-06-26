@@ -219,13 +219,12 @@ std::vector<SymbolListEntry> read_from_storage(const std::shared_ptr<StreamSourc
         return read_new_style_list_from_storage(seg);
 }
 
-JournalEntryData journal_entry_from_atom(const AtomKey& key) {
-    return {key.version_id(),
-            key.creation_ts(),
-            key.content_hash(),
-            std::get<StringId>(key.id()) == DeleteSymbol ? ActionType::DELETE : ActionType::ADD,
-            is_new_style_key(key)};
-}
+JournalEntryData::JournalEntryData(const AtomKey& key) :
+    key_version_id(key.version_id()),
+    creation_ts(key.creation_ts()),
+    content_hash(key.content_hash()),
+    action(std::get<StringId>(key.id()) == DeleteSymbol ? ActionType::DELETE : ActionType::ADD),
+    is_new_style(is_new_style_key(key)) {}
 
 // Reconstructs the original AtomKey from a JournalEntryData + the owning symbol (map key).
 // For new-style keys the end_index encodes the version marker; for old-style it equals the symbol.
@@ -246,13 +245,8 @@ AtomKey atom_key_from_journal_entry(const StreamId& symbol, const JournalEntryDa
             .build(action_id(ck.action), KeyType::SYMBOL_LIST);
 }
 
-SymbolEntryData to_symbol_entry_data(const JournalEntryData& ck) {
-    const auto reference_id = ck.is_new_style ? ck.key_version_id : unknown_version_id;
-    return {reference_id, ck.creation_ts, ck.action};
-}
-
 void add_journal_entry(JournalMapType& update_map, const AtomKey& key) {
-    update_map[key.start_index()].emplace_back(journal_entry_from_atom(key));
+    update_map[key.start_index()].emplace_back(key);
 }
 
 void sort_journal_map(JournalMapType& update_map) {
@@ -336,7 +330,7 @@ std::optional<SymbolEntryData> timestamps_too_close(
     if (same_as_updates || diff >= min_allowed_interval)
         return std::nullopt;
 
-    return to_symbol_entry_data(latest);
+    return SymbolEntryData{latest};
 }
 
 bool has_unknown_reference_id(const SymbolEntryData& data) { return data.reference_id_ == unknown_version_id; }
@@ -370,7 +364,7 @@ SymbolVectorResult is_problematic_vector(const std::vector<JournalEntryData>& up
     if (latest_id_count <= 2 || all_same_action)
         return vector_okay(all_same_version, all_same_action, latest_id_count);
 
-    return vector_has_problem(to_symbol_entry_data(*std::crbegin(updated)));
+    return vector_has_problem(SymbolEntryData{*std::crbegin(updated)});
 }
 
 ProblematicResult is_problematic(const std::vector<JournalEntryData>& updated, timestamp min_allowed_interval) {
@@ -398,7 +392,7 @@ ProblematicResult is_problematic(
 
     if (latest.creation_ts - existing.timestamp_ < min_allowed_interval && !all_same_action)
         return ProblematicResult{
-                latest.reference_id() > existing.reference_id_ ? to_symbol_entry_data(latest)
+                latest.reference_id() > existing.reference_id_ ? SymbolEntryData{latest}
                                                                : static_cast<SymbolEntryData>(existing)
         };
 
@@ -411,7 +405,7 @@ ProblematicResult is_problematic(
     if (last_id_count == 1)
         return not_a_problem();
 
-    return ProblematicResult{to_symbol_entry_data(latest)};
+    return ProblematicResult{SymbolEntryData{latest}};
 }
 
 void resolve_problematic_symbols(
@@ -497,7 +491,7 @@ CollectionType merge_existing_with_journal_map(
                         stream_id, std::make_pair(problematic_entry.reference_id(), problematic_entry.time())
                 );
             } else {
-                const auto last = to_symbol_entry_data(updated->second.back());
+                const auto last = SymbolEntryData{updated->second.back()};
                 symbols.emplace_back(updated->first, last.reference_id_, last.timestamp_, last.action_);
             }
         }
@@ -511,7 +505,7 @@ CollectionType merge_existing_with_journal_map(
                     symbol, std::make_pair(problematic_entry.reference_id(), problematic_entry.time())
             );
         } else {
-            const auto last = to_symbol_entry_data(ck_entries.back());
+            const auto last = SymbolEntryData{ck_entries.back()};
             symbols.emplace_back(symbol, last.reference_id_, last.timestamp_, last.action_);
         }
     }
