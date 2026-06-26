@@ -25,6 +25,13 @@ void MinMaxAggregatorData::aggregate(const ColumnWithStrings& input_column) {
         using type_info = ScalarTypeInfo<decltype(col_tag)>;
         using RawType = typename type_info::RawType;
         if constexpr (!is_sequence_type(type_info::data_type)) {
+            // null_count_ tracks rows that are genuinely absent (sparse-map gaps from Arrow
+            // validity bitmaps). nan_count_ tracks in-band sentinel values found while iterating
+            // the dense values (NaN for floats, NaT for time types) - see the for_each below.
+            if (input_column.column_->is_sparse()) {
+                const auto sparse_gap_count = input_column.column_->last_row() + 1 - input_column.column_->row_count();
+                null_count_ += static_cast<uint64_t>(sparse_gap_count);
+            }
             auto is_nat_or_nan = []([[maybe_unused]] RawType v) {
                 if constexpr (is_floating_point_type(type_info::data_type)) {
                     return std::isnan(v);
@@ -45,20 +52,21 @@ void MinMaxAggregatorData::aggregate(const ColumnWithStrings& input_column) {
             };
             [[maybe_unused]] bool any_nan{false};
             arcticdb::for_each<typename type_info::TDT>(*input_column.column_, [&](auto value) {
-                const auto& curr = static_cast<RawType>(value);
+                // In-band sentinel (NaN for floats, NaT for time types) - count it and skip the
+                // min/max update so those reflect only real values.
                 if constexpr (is_floating_point_type(type_info::data_type) || is_time_type(type_info::data_type)) {
-                    // Skip NaN/NaT as they don't generate a stable ordering
-                    if (is_nat_or_nan(curr)) {
+                    if (is_nat_or_nan(value)) {
+                        ++nan_count_;
                         any_nan = true;
                         return;
                     }
                 }
                 if (ARCTICDB_UNLIKELY(!min_.has_value())) {
-                    min_ = Value{curr, type_info::data_type};
-                    max_ = Value{curr, type_info::data_type};
+                    min_ = Value{value, type_info::data_type};
+                    max_ = Value{value, type_info::data_type};
                 } else {
-                    min_->set(std::min(min_->get<RawType>(), curr));
-                    max_->set(std::max(max_->get<RawType>(), curr));
+                    min_->set(std::min(min_->get<RawType>(), value));
+                    max_->set(std::max(max_->get<RawType>(), value));
                 }
             });
             if constexpr (is_floating_point_type(type_info::data_type) || is_time_type(type_info::data_type)) {
@@ -78,8 +86,8 @@ void MinMaxAggregatorData::aggregate(const ColumnWithStrings& input_column) {
 
 SegmentInMemory MinMaxAggregatorData::finalize(const std::vector<ColumnName>& output_column_names) const {
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-            output_column_names.size() == 2,
-            "Expected 2 output column names in MinMaxAggregatorData::finalize, but got {}",
+            output_column_names.size() == 4,
+            "Expected 4 output column names in MinMaxAggregatorData::finalize, but got {}",
             output_column_names.size()
     );
     SegmentInMemory seg;
@@ -93,6 +101,12 @@ SegmentInMemory MinMaxAggregatorData::finalize(const std::vector<ColumnName>& ou
             auto max_col = std::make_shared<Column>(make_scalar_type(max_->data_type()), Sparsity::PERMITTED);
             max_col->push_back<RawType>(max_->get<RawType>());
 
+            auto nan_count_col = std::make_shared<Column>(make_scalar_type(DataType::UINT64), Sparsity::PERMITTED);
+            nan_count_col->push_back<uint64_t>(nan_count_);
+
+            auto null_count_col = std::make_shared<Column>(make_scalar_type(DataType::UINT64), Sparsity::PERMITTED);
+            null_count_col->push_back<uint64_t>(null_count_);
+
             auto& entry_list = (*header.mutable_stats_by_column())[data_col_offset_];
             auto* min_entry = entry_list.add_entries();
             min_entry->set_stats_seg_offset(0);
@@ -100,9 +114,17 @@ SegmentInMemory MinMaxAggregatorData::finalize(const std::vector<ColumnName>& ou
             auto* max_entry = entry_list.add_entries();
             max_entry->set_stats_seg_offset(1);
             max_entry->set_type(arcticc::pb2::column_stats_pb2::MAX_V1);
+            auto* nan_entry = entry_list.add_entries();
+            nan_entry->set_stats_seg_offset(2);
+            nan_entry->set_type(arcticc::pb2::column_stats_pb2::NAN_COUNT_V1);
+            auto* null_entry = entry_list.add_entries();
+            null_entry->set_stats_seg_offset(3);
+            null_entry->set_type(arcticc::pb2::column_stats_pb2::NULL_COUNT_V1);
 
             seg.add_column(scalar_field(min_col->type().data_type(), output_column_names[0].value), min_col);
             seg.add_column(scalar_field(max_col->type().data_type(), output_column_names[1].value), max_col);
+            seg.add_column(scalar_field(DataType::UINT64, output_column_names[2].value), nan_count_col);
+            seg.add_column(scalar_field(DataType::UINT64, output_column_names[3].value), null_count_col);
         });
     }
 
