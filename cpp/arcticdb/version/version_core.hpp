@@ -113,7 +113,7 @@ using SegmentReader = std::function<folly::Future<pipelines::SegmentAndSlice>(pi
 
 // Bounds memory use by keeping at most K processing units in flight. A unit's reads are launched together
 // (admit), the next unit is admitted when an outstanding one finishes processing (on_unit_complete). Never waits within
-// a unit, so progress holds for any K >= 1 regardless of the processing unit structure (for example, if there is
+// a unit, so progress continues for any K >= 1 regardless of the processing unit structure (for example, if there is
 // overlap between units). Construct via make_shared (fire captures shared_from_this to keep the controller alive across
 // the async reads).
 class ProcessingUnitAdmissionHandler : public std::enable_shared_from_this<ProcessingUnitAdmissionHandler> {
@@ -130,7 +130,8 @@ class ProcessingUnitAdmissionHandler : public std::enable_shared_from_this<Proce
         next_unit_(k) {}
 
     // Used to chain downstream processing, possibly before any of the work is actually executing.
-    std::vector<folly::Future<pipelines::SegmentAndSlice>> futures() {
+    // The work then gets kicked off by admit_initial or on_unit_complete.
+    std::vector<folly::Future<pipelines::SegmentAndSlice>> futures() const {
         std::vector<folly::Future<pipelines::SegmentAndSlice>> res;
         res.reserve(promises_->size());
         for (auto& promise : *promises_) {

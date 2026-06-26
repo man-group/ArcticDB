@@ -785,12 +785,6 @@ get_entity_ids_and_position_map(
     return std::make_pair(std::move(entity_work_units), std::move(id_to_pos));
 }
 
-// Presence of this on the read path turns on processing-unit admission (see ProcessingUnitAdmissionHandler) to
-// control memory use by throttling the segments loaded in to memory at a time. Absent by default so reads
-// keep the folly::window behaviour that eagerly loads segments. At time of writing only used for
-// manual column stats creation as this has to do a full table scan.
-struct ProcessingUnitAdmissionRequest {};
-
 std::shared_ptr<std::vector<folly::Future<std::vector<EntityId>>>> schedule_first_iteration(
         std::shared_ptr<ComponentManager> component_manager, size_t num_segments,
         std::vector<std::vector<EntityId>>&& entities_by_work_unit,
@@ -1125,18 +1119,6 @@ std::vector<folly::Future<pipelines::SegmentAndSlice>> add_schema_check(
     return res;
 }
 
-std::vector<folly::Future<pipelines::SegmentAndSlice>> generate_segment_and_slice_futures(
-        const std::shared_ptr<Store>& store, const std::shared_ptr<PipelineContext>& pipeline_context,
-        const ProcessingConfig& processing_config, std::vector<RangesAndKey>&& all_ranges
-) {
-    auto incomplete_bitset = get_incompletes_bitset(all_ranges);
-    auto segment_and_slice_futures =
-            store->batch_read_uncompressed(std::move(all_ranges), columns_to_decode(pipeline_context));
-    return add_schema_check(
-            pipeline_context, std::move(segment_and_slice_futures), std::move(incomplete_bitset), processing_config
-    );
-}
-
 static StreamDescriptor generate_initial_output_schema_descriptor(const PipelineContext& pipeline_context) {
     const StreamDescriptor& desc = pipeline_context.descriptor();
     // pipeline_context.overall_column_bitset_ can be different from std::nullopt only in case of static schema. We use
@@ -1228,8 +1210,7 @@ size_t num_processing_units_live(const std::vector<std::vector<size_t>>& process
 folly::Future<std::vector<EntityId>> read_and_schedule_processing(
         const std::shared_ptr<Store>& store, const std::shared_ptr<PipelineContext>& pipeline_context,
         const std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options,
-        std::shared_ptr<ComponentManager> component_manager,
-        std::optional<ProcessingUnitAdmissionRequest> admission_request = std::nullopt
+        std::shared_ptr<ComponentManager> component_manager
 ) {
     const ProcessingConfig processing_config{
             opt_false(read_options.dynamic_schema()),
@@ -1254,27 +1235,16 @@ folly::Future<std::vector<EntityId>> read_and_schedule_processing(
         processing_unit_indexes = read_query->clauses_[0]->structure_for_processing(ranges_and_keys);
     }
 
-    std::shared_ptr<ProcessingUnitAdmissionHandler> admission;
-    std::vector<folly::Future<pipelines::SegmentAndSlice>> segment_and_slice_futures;
-    size_t max_admitted_processing_units = 0;
-    if (admission_request) {
-        max_admitted_processing_units = num_processing_units_live(processing_unit_indexes);
-        auto incomplete_bitset = get_incompletes_bitset(ranges_and_keys);
-        admission = std::make_shared<ProcessingUnitAdmissionHandler>(
-                store->make_uncompressed_reader(columns_to_decode(pipeline_context)),
-                std::move(ranges_and_keys),
-                std::vector(processing_unit_indexes),
-                max_admitted_processing_units
-        );
-        segment_and_slice_futures = add_schema_check(
-                pipeline_context, admission->futures(), std::move(incomplete_bitset), processing_config
-        );
-    } else {
-        // Start reading as early as possible
-        segment_and_slice_futures = generate_segment_and_slice_futures(
-                store, pipeline_context, processing_config, std::move(ranges_and_keys)
-        );
-    }
+    const size_t max_admitted_processing_units = num_processing_units_live(processing_unit_indexes);
+    auto incomplete_bitset = get_incompletes_bitset(ranges_and_keys);
+    auto admission = std::make_shared<ProcessingUnitAdmissionHandler>(
+            store->make_uncompressed_reader(columns_to_decode(pipeline_context)),
+            std::move(ranges_and_keys),
+            std::vector(processing_unit_indexes),
+            max_admitted_processing_units
+    );
+    auto segment_and_slice_futures =
+            add_schema_check(pipeline_context, admission->futures(), std::move(incomplete_bitset), processing_config);
 
     auto processed = schedule_clause_processing(
             component_manager,
@@ -1286,9 +1256,7 @@ folly::Future<std::vector<EntityId>> read_and_schedule_processing(
 
     // Fire the first K units' reads only after the release path (.ensure -> on_unit_complete) is set up above, so a
     // completing unit always admits the next one.
-    if (admission) {
-        admission->admit_initial(max_admitted_processing_units);
-    }
+    admission->admit_initial(max_admitted_processing_units);
 
     return std::move(processed).via(&async::cpu_executor());
 }
@@ -1305,13 +1273,10 @@ folly::Future<std::vector<EntityId>> read_and_schedule_processing(
  */
 folly::Future<std::vector<SliceAndKey>> read_process_and_collect(
         const std::shared_ptr<Store>& store, const std::shared_ptr<PipelineContext>& pipeline_context,
-        const std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options,
-        std::optional<ProcessingUnitAdmissionRequest> admission_request = std::nullopt
+        const std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options
 ) {
     auto component_manager = std::make_shared<ComponentManager>();
-    return read_and_schedule_processing(
-                   store, pipeline_context, read_query, read_options, component_manager, admission_request
-    )
+    return read_and_schedule_processing(store, pipeline_context, read_query, read_options, component_manager)
             .thenValue([component_manager, pipeline_context, read_query](std::vector<EntityId>&& processed_entity_ids) {
                 generate_output_schema_and_save_to_pipeline(*pipeline_context, *read_query);
                 auto proc = gather_entities<
@@ -2118,10 +2083,7 @@ void create_column_stats_impl(
     auto read_query = std::make_shared<ReadQuery>(std::vector{std::make_shared<Clause>(std::move(*clause))});
     read_indexed_keys_to_pipeline(pipeline_context, *read_query, read_options, index_info);
 
-    auto segs = read_process_and_collect(
-                        store, pipeline_context, read_query, read_options, ProcessingUnitAdmissionRequest{}
-    )
-                        .get();
+    auto segs = read_process_and_collect(store, pipeline_context, read_query, read_options).get();
     schema::check<ErrorCode::E_COLUMN_DOESNT_EXIST>(
             !segs.empty(), "Cannot create column stats for nonexistent columns"
     );

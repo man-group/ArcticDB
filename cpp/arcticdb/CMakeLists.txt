@@ -1146,7 +1146,7 @@ if(${TEST})
             util/test/segment_generation_utils.hpp
             util/test/segment_generation_utils.cpp
             version/test/test_append.cpp
-            version/test/test_column_stats.cpp
+            version/test/test_column_stats_memory.cpp
             version/test/test_key_block.cpp
             version/test/test_sort_index.cpp
             version/test/test_sorting_info_state_machine.cpp

@@ -68,11 +68,6 @@ struct StreamSource {
     [[nodiscard]] virtual std::vector<folly::Future<bool>> batch_key_exists(const std::vector<entity::VariantKey>& keys
     ) = 0;
 
-    virtual std::vector<folly::Future<pipelines::SegmentAndSlice>> batch_read_uncompressed(
-            std::vector<pipelines::RangesAndKey>&& ranges_and_keys,
-            std::shared_ptr<std::unordered_set<std::string>> columns_to_decode
-    ) = 0;
-
     virtual std::function<folly::Future<pipelines::SegmentAndSlice>(pipelines::RangesAndKey&&)>
     make_uncompressed_reader(std::shared_ptr<std::unordered_set<std::string>> /*columns_to_decode*/
     ) {
