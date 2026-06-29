@@ -278,7 +278,7 @@ def test_parallel_write_chunking_dynamic(lmdb_version_store_tiny_segment_dynamic
 
     df1 = pd.DataFrame(
         {
-            "timestamp": pd.date_range("2023-01-01", periods=7, freq="H"),
+            "timestamp": pd.date_range("2023-01-01", periods=7, freq="h"),
             "col1": np.arange(1, 8, dtype=np.uint8),
             "col2": [f"a{i:02d}" for i in range(1, 8)],
             "col3": np.arange(1, 8, dtype=np.int32),
@@ -287,7 +287,7 @@ def test_parallel_write_chunking_dynamic(lmdb_version_store_tiny_segment_dynamic
 
     df2 = pd.DataFrame(
         {
-            "timestamp": pd.date_range("2023-01-04", periods=7, freq="H"),
+            "timestamp": pd.date_range("2023-01-04", periods=7, freq="h"),
             "col1": np.arange(8, 15, dtype=np.int32),
             "col2": [f"b{i:02d}" for i in range(8, 15)],
             "col3": np.arange(8, 15, dtype=np.uint16),
@@ -651,10 +651,10 @@ def test_parallel_all_same_index_values(lmdb_version_store, append):
     received = lib.read(sym).data
     # Index values in incompletes all the same, so order of values in col could be [3, 4, 5, 6] or [5, 6, 3, 4]
     if append:
-        expected = pd.concat([df_0, df_1, df_2]) if received["col"][2] == 3 else pd.concat([df_0, df_2, df_1])
+        expected = pd.concat([df_0, df_1, df_2]) if received["col"].iloc[2] == 3 else pd.concat([df_0, df_2, df_1])
         assert_frame_equal(expected, received)
     else:
-        expected = pd.concat([df_1, df_2]) if received["col"][0] == 3 else pd.concat([df_2, df_1])
+        expected = pd.concat([df_1, df_2]) if received["col"].iloc[0] == 3 else pd.concat([df_2, df_1])
         assert_frame_equal(expected, received)
     assert lib.get_info(sym)["sorted"] == "ASCENDING"
 
@@ -1480,8 +1480,8 @@ def test_chunks_match_at_ends(lmdb_storage, lib_name):
     assert result.index.is_monotonic_increasing
     # There is some non-determinism about where the overlap will end up
     assert set(result["a"].values) == set(range(7))
-    assert result["a"][0] == 0
-    assert result["a"][-1] == 6
+    assert result["a"].iloc[0] == 0
+    assert result["a"].iloc[-1] == 6
 
 
 @pytest.mark.parametrize("n_runs", range(10))

@@ -16,19 +16,10 @@ def create_numeric_df(num_rows=100_000, num_columns=100):
 
 def create_mixed_type_df(num_rows=100_000, num_columns=100):
     df = create_numeric_df(num_rows, num_columns)
-    for i, column in enumerate(df.columns):
-        if i % 5 == 0:
-            typ = np.int64
-        elif i % 5 == 1:
-            typ = np.float32
-        elif i % 5 == 2:
-            typ = bool
-        elif i % 5 == 3:
-            typ = str
-        elif i % 5 == 4:
-            typ = "datetime64[ns]"
-        df[column] = df[column].astype(typ)
-    return df
+    # The .copy() consolidates the one-block-per-column layout astype leaves behind,
+    # which otherwise triggers fragmentation PerformanceWarnings downstream
+    types = [np.int64, np.float32, bool, str, "datetime64[ns]"]
+    return df.astype({column: types[i % 5] for i, column in enumerate(df.columns)}).copy()
 
 
 def assert_write_allocates_small_fraction(lib, sym, create_obj_fn, acceptable_ratio=1.5):

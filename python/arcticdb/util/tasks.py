@@ -12,8 +12,14 @@ from arcticdb.util.test import assert_frame_equal, sample_dataframe, get_wide_da
 import pandas as pd
 import random
 import numpy as np
-from datetime import datetime
+from datetime import datetime, timezone
 from arcticdb import log
+
+
+def _utcnow() -> datetime:
+    # Naive UTC timestamp; datetime.utcnow is deprecated since Python 3.12
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
 
 LARGE_DF_SIZE = 100000
 SLEEP = 1
@@ -81,7 +87,7 @@ def delete_specific_version(lib, symbol=None):
 def snapshot_new_name(lib, _):
     if len(lib.list_symbols()) == 0:
         return "No symbols to snapshot"
-    snapshot_name = "snapshot-{}".format(datetime.utcnow().isoformat())
+    snapshot_name = "snapshot-{}".format(_utcnow().isoformat())
     lib.snapshot(snapshot_name)
     syms = lib.list_symbols()
     return f"Created snapshot {snapshot_name} with symbols {syms}"
@@ -178,7 +184,7 @@ def read_random_symbol_version(lib, unused):
 
 
 def get_new_symbol(func, lib):
-    return func.__name__ + datetime.utcnow().isoformat()
+    return func.__name__ + _utcnow().isoformat()
 
 
 def get_existing_symbol(func, lib):
@@ -207,11 +213,11 @@ def run_scenario(func, lib, with_snapshots, verbose):
             log.storage.info("Tasks - Function {} symbol {} returned {}".format(func.__name__, symbol, res))
         if with_snapshots and lib.list_symbols():
             rand_id = "".join(random.choices(string.ascii_letters, k=5))
-            lib.snapshot(rand_id + "snapshot" + datetime.utcnow().isoformat())
+            lib.snapshot(rand_id + "snapshot" + _utcnow().isoformat())
             # clean up old snapshots - more than 3 hours old
             for s in lib.list_snapshots():
                 t = datetime.strptime(s[len(rand_id) :], "snapshot%Y-%m-%dT%H:%M:%S.%f")
-                if (datetime.utcnow() - t).seconds > 60 * 60 * 3:
+                if (_utcnow() - t).seconds > 60 * 60 * 3:
                     lib.delete_snapshot(s)
     except Exception as e:
         log.storage.error("Tasks - Running", func.__name__, "failed due to: ", e)

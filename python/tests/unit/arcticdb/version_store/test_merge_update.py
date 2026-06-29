@@ -754,6 +754,7 @@ class TestMergeTimeseriesUpdate:
         expected = target.copy()
         generic_merge_test(lib, "sym", target, source, self.strategy, expected, on=["a", "b"])
 
+    @pytest.mark.filterwarnings("ignore:Mismatched null-like values:FutureWarning")
     def test_match_on_string_none_nan_indistinguishable(self, lmdb_version_store_v1):
         lib = lmdb_version_store_v1
         target = pd.DataFrame(
@@ -1875,6 +1876,7 @@ class TestMergeRowrangeUpdate:
         expected = pd.DataFrame({"a": [1.0, np.nan, 3.0], "b": [1, 20, 3]})
         generic_merge_test(lib, "sym", target, source, self.strategy, expected, on=["a"])
 
+    @pytest.mark.filterwarnings("ignore:Mismatched null-like values:FutureWarning")
     def test_match_on_string_none_nan_indistinguishable(self, lmdb_version_store_v1):
         lib = lmdb_version_store_v1
         target = pd.DataFrame({"a": ["x", np.nan, None, np.nan, None], "b": [1, 2, 3, 4, 5], "c": [1, 2, 3, 4, 5]})

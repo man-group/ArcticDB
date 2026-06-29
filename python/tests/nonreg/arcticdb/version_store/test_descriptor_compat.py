@@ -8,7 +8,7 @@ def test_value_type_is_protobuf(lmdb_version_store):
     symbol = "test_value_type_proto"
     df = pd.DataFrame(
         {
-            "timestamp": pd.date_range("2023-01-01", periods=25, freq="H").repeat(2),
+            "timestamp": pd.date_range("2023-01-01", periods=25, freq="h").repeat(2),
             "col1": np.arange(1, 51),
             "col2": [f"a{i:02d}" for i in range(1, 51)],
         }

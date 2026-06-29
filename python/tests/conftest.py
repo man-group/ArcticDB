@@ -25,7 +25,7 @@ import time
 import requests
 import uuid
 import multiprocessing
-from datetime import datetime
+from datetime import datetime, timezone
 from functools import partial
 from tempfile import mkdtemp
 
@@ -140,11 +140,89 @@ def _set_multiprocessing_start_method_for_macos():
 _faulthandler_file = None  # kept open so faulthandler can write to the fd
 
 
-# silence warnings about custom markers
+# Markers are registered here rather than in pyproject.toml because CI
+# (build_tooling/parallel_test.sh) runs pytest from a temp dir where
+# pyproject.toml is not visible, so ini-file registration is ignored there.
+_MARKERS = [
+    "storage: marks a test as a test against real storage (deselect with: -m 'not storage')",
+    "dedup: marks deduplication tests",
+    "authentication: marks a test for authentication group (deselect with: -m 'not authentication')",
+    "pipeline: Pipeline tests (deselect with: -m 'not pipeline')",
+    "skip_fixture_params: will instruct fixture that supports excluding fixture values, which values to be excluded",
+    "only_fixture_params: will instruct fixture supporting that to include only parameters from the list",
+    "bug_ids: allows specifying bug ids list the tests is based on or depends",
+    "priority0: Most important tests group",
+    "compat: Mark from physical folder",
+    "integration: Mark from physical folder",
+    "unit: Mark from physical folder",
+    "stress: Mark from physical folder",
+    "nonreg: Mark from physical folder",
+    "sanitizers: Mark from physical folder",
+    "hypothesis: Mark from physical folder",
+    "arcticdb: Mark from physical folder",
+    "version_store: Mark from physical folder",
+    "toolbox: Mark from physical folder",
+    "lmdb: Mark from test usage for execution against LMDB storage",
+    "mem: Mark from test usage for execution against In-memory storage",
+    "s3: Mark from test usage for execution against Simulated S3 storage",
+    "gcp: Mark from test usage for execution against Simulated GCP storage",
+    "azurite: Mark from test usage for execution against Simulated Azurite storage",
+    "nfs: Mark from test usage for execution against Simulated NFS S3 storage",
+    "mongo: Mark from test usage for execution against Mongo storage",
+    "merge_update: Merge update tests across unit, hypothesis, and stress",
+    "real_s3: Mark from test usage for execution against AWS S3 storage",
+    "real_azure: Mark from test usage for execution against Azure storage",
+    "real_gcp: Mark from test usage for execution against GCP storage",
+    "dynamic_schema: marks test using dynamic_schema=True",
+    "empty_types: marks test using empty_types=True",
+    "delayed_deletes: marks test using delayed_deletes=True",
+    "sync_passive: marks test using sync_passive=True",
+    "use_tombstones: marks test using use_tombstones=True",
+    "segment_size: marks test using any of library segment size settings",
+    "dynamic_strings: marks tests using dynamic_strings=True",
+    "bucketize_dynamic: marks tests using bucketize_dynamic=True",
+    "prune_previous: marks tests using prune_previous_version=True",
+    "encoding_v2: marks tests that use V2 encoding",
+]
+
+
 def pytest_configure(config):
-    config.addinivalue_line("markers", "storage: Mark tests related to storage functionality")
-    config.addinivalue_line("markers", "authentication: Mark tests related to authentication functionality")
-    config.addinivalue_line("markers", "pipeline: Mark tests related to pipeline functionality")
+    for marker in _MARKERS:
+        config.addinivalue_line("markers", marker)
+
+    # Many tests deliberately cover the deprecated staging APIs (write/append with
+    # parallel/incomplete, write with staged=True), so the deprecation is suppressed globally
+    config.addinivalue_line("filterwarnings", "ignore:Staging data with:DeprecationWarning")
+
+    # ArcticDB's zero-copy read path constructs DataFrames from a BlockManager subclass;
+    # replacing that is tracked separately, so silence the noise it generates in every read test
+    config.addinivalue_line(
+        "filterwarnings",
+        "ignore:Passing a BlockManagerUnconsolidated to DataFrame is deprecated:DeprecationWarning",
+    )
+
+    # Environment-level noise, suppressed pending investigation in #3170: storage fixture
+    # teardown failures (LMDB file deletion on Windows, Mongo server shutdown races),
+    # fork()-while-multi-threaded on Python 3.12+, unverified HTTPS to the localhost storage
+    # simulators, and boto3's Python 3.9 EOL notice
+    config.addinivalue_line("filterwarnings", "ignore::arcticdb.storage_fixtures.utils.ExceptionInCleanUpWarning")
+    config.addinivalue_line(
+        "filterwarnings",
+        "ignore:This process \\(pid=\\d+\\) is multi-threaded, use of fork\\(\\) may lead to deadlocks"
+        ":DeprecationWarning",
+    )
+    config.addinivalue_line("filterwarnings", "ignore::urllib3.exceptions.InsecureRequestWarning")
+    config.addinivalue_line("filterwarnings", "ignore:Boto3 will no longer support Python 3.9:")
+
+    # Third-party noise we cannot fix: hypothesis is pinned <6.73 (newer versions cause
+    # disruptive test failures) and internally uses deprecated pandas APIs
+    config.addinivalue_line("filterwarnings", "ignore:is_categorical_dtype is deprecated:DeprecationWarning")
+    config.addinivalue_line(
+        "filterwarnings",
+        "ignore:Series.__setitem__ treating keys as positions is deprecated"
+        ":FutureWarning"
+        ":hypothesis\\.extra\\.pandas\\.impl",
+    )
 
     # Arm a session-level faulthandler watchdog on xdist workers only.
     # Workers collect tests and run session fixtures before pytest_runtest_protocol
@@ -248,7 +326,7 @@ def single_threaded_config(request):
 
 @pytest.fixture()
 def sym(request: "pytest.FixtureRequest"):
-    return request.node.name + datetime.utcnow().strftime("%Y-%m-%dT%H_%M_%S_%f")
+    return request.node.name + datetime.now(timezone.utc).strftime("%Y-%m-%dT%H_%M_%S_%f")
 
 
 @pytest.fixture()
@@ -258,7 +336,7 @@ def lib_name(request: "pytest.FixtureRequest") -> str:
     thread_id = threading.get_ident()
     # There is limit to the name length, and note that without
     # the dot (.) in the name mongo will not work!
-    hashed = hash(f"{pid}_{thread_id}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S')}_{uuid.uuid4()}")
+    hashed = hash(f"{pid}_{thread_id}_{datetime.now(timezone.utc).strftime('%Y-%m-%dT%H_%M_%S')}_{uuid.uuid4()}")
     return f"{name}.{hashed}"
 
 
@@ -528,7 +606,7 @@ def mock_s3_storage_with_error_simulation(mock_s3_storage_with_error_simulation_
 def real_s3_storage_factory() -> BaseS3StorageFixtureFactory:
     return real_s3_from_environment_variables(
         shared_path=False,
-        additional_suffix=f"{random.randint(0, 999)}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_%f')}",
+        additional_suffix=f"{random.randint(0, 999)}_{datetime.now(timezone.utc).strftime('%Y-%m-%dT%H_%M_%S_%f')}",
     )
 
 
@@ -536,7 +614,7 @@ def real_s3_storage_factory() -> BaseS3StorageFixtureFactory:
 def real_gcp_storage_factory() -> BaseGCPStorageFixtureFactory:
     return real_gcp_from_environment_variables(
         shared_path=False,
-        additional_suffix=f"{random.randint(0, 999)}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_%f')}",
+        additional_suffix=f"{random.randint(0, 999)}_{datetime.now(timezone.utc).strftime('%Y-%m-%dT%H_%M_%S_%f')}",
     )
 
 
@@ -544,7 +622,7 @@ def real_gcp_storage_factory() -> BaseGCPStorageFixtureFactory:
 def real_azure_storage_factory() -> AzureStorageFixtureFactory:
     return real_azure_from_environment_variables(
         shared_path=False,
-        additional_suffix=f"{random.randint(0, 999)}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_%f')}",
+        additional_suffix=f"{random.randint(0, 999)}_{datetime.now(timezone.utc).strftime('%Y-%m-%dT%H_%M_%S_%f')}",
     )
 
 
@@ -567,7 +645,7 @@ def real_storage_factory(
 def real_s3_shared_path_storage_factory() -> BaseS3StorageFixtureFactory:
     return real_s3_from_environment_variables(
         shared_path=True,
-        additional_suffix=f"{random.randint(0, 999)}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_%f')}",
+        additional_suffix=f"{random.randint(0, 999)}_{datetime.now(timezone.utc).strftime('%Y-%m-%dT%H_%M_%S_%f')}",
     )
 
 
@@ -575,7 +653,7 @@ def real_s3_shared_path_storage_factory() -> BaseS3StorageFixtureFactory:
 def real_gcp_shared_path_storage_factory() -> BaseGCPStorageFixtureFactory:
     return real_gcp_from_environment_variables(
         shared_path=True,
-        additional_suffix=f"{random.randint(0, 999)}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_%f')}",
+        additional_suffix=f"{random.randint(0, 999)}_{datetime.now(timezone.utc).strftime('%Y-%m-%dT%H_%M_%S_%f')}",
     )
 
 
@@ -583,7 +661,7 @@ def real_gcp_shared_path_storage_factory() -> BaseGCPStorageFixtureFactory:
 def real_azure_shared_path_storage_factory() -> AzureStorageFixtureFactory:
     return real_azure_from_environment_variables(
         shared_path=True,
-        additional_suffix=f"{random.randint(0, 999)}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_%f')}",
+        additional_suffix=f"{random.randint(0, 999)}_{datetime.now(timezone.utc).strftime('%Y-%m-%dT%H_%M_%S_%f')}",
     )
 
 
@@ -669,7 +747,9 @@ def real_s3_sts_storage_factory() -> Generator[BaseS3StorageFixtureFactory, None
     else:
         working_dir = mkdtemp(suffix="S3STSStorageFixtureFactory")
         config_file_path = os.path.join(working_dir, "config")
-        sts_test_credentials_prefix = f"{random.randint(0, 999)}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_%f')}"
+        sts_test_credentials_prefix = (
+            f"{random.randint(0, 999)}_{datetime.now(timezone.utc).strftime('%Y-%m-%dT%H_%M_%S_%f')}"
+        )
         username = f"gh_sts_test_user_{sts_test_credentials_prefix}"
         role_name = f"gh_sts_test_role_{sts_test_credentials_prefix}"
         policy_name = f"gh_sts_test_policy_name_{sts_test_credentials_prefix}"

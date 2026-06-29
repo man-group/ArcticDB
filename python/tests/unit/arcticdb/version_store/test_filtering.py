@@ -423,7 +423,7 @@ def test_filter_datetime_timezone_aware(
     for ts in [pd_ts, pd_ts.to_pydatetime()]:
         q = QueryBuilder()
         q = q[q["a"] < ts]
-        expected = df[df["a"] < ts]
+        expected = df[df["a"] < ts].copy()
         # Convert to UTC and strip tzinfo to match behaviour of roundtripping through Arctic
         expected["a"] = expected["a"].apply(lambda x: x.tz_convert(timezone("utc")).tz_localize(None))
         generic_filter_test(lib, symbol, q, expected)
@@ -464,13 +464,13 @@ def test_df_query_wrong_type(lmdb_version_store_v1, any_output_format):
     q = QueryBuilder()
     q = q[q["col1"] + "1" == 3]
     with pytest.raises(
-        UserInputException, match='Non-numeric type provided to binary operation: col1.*type=INT.*\+ "1".*type=STRING'
+        UserInputException, match=r'Non-numeric type provided to binary operation: col1.*type=INT.*\+ "1".*type=STRING'
     ):
         lib.read(sym, query_builder=q)
 
     q = QueryBuilder()
     q = q[-q["col_str"] == 3]
-    with pytest.raises(UserInputException, match="Cannot perform unary operation -\(col_str\).*type=STRING"):
+    with pytest.raises(UserInputException, match=r"Cannot perform unary operation -\(col_str\).*type=STRING"):
         lib.read(sym, query_builder=q)
 
     q = QueryBuilder()
@@ -483,7 +483,7 @@ def test_df_query_wrong_type(lmdb_version_store_v1, any_output_format):
     # check that ((1 + (col1 * col2)) + col3) is generated as a column name and shown in the error message
     with pytest.raises(
         UserInputException,
-        match="Invalid comparison.*\(1 \+ \(col1 \* col2\)\) - col3.*type=INT.*==.*col_str .*type=STRING",
+        match=r"Invalid comparison.*\(1 \+ \(col1 \* col2\)\) - col3.*type=INT.*==.*col_str .*type=STRING",
     ):
         lib.read(sym, query_builder=q)
 
@@ -1117,6 +1117,7 @@ def test_filter_string_nans_col_col(lmdb_version_store_v1, any_output_format):
 
 @pytest.mark.parametrize("method", ("isna", "notna", "isnull", "notnull"))
 @pytest.mark.parametrize("dtype", (np.int64, np.float32, np.float64, np.datetime64, str, bool))
+@pytest.mark.filterwarnings("ignore:Mismatched null-like values:FutureWarning")
 def test_filter_null_filtering(lmdb_version_store_v1, method, dtype, any_output_format):
     lib = lmdb_version_store_v1
     lib._set_output_format_for_pipeline_tests(any_output_format)
@@ -1582,6 +1583,7 @@ def test_filter_column_type_change(lmdb_version_store_dynamic_schema_v1, any_out
 
 @pytest.mark.parametrize("method", ("isna", "notna", "isnull", "notnull"))
 @pytest.mark.parametrize("dtype", (np.int64, np.float32, np.float64, np.datetime64, str))
+@pytest.mark.filterwarnings("ignore:Mismatched null-like values:FutureWarning")
 def test_filter_null_filtering_dynamic(lmdb_version_store_dynamic_schema_v1, method, dtype, any_output_format):
     lib = lmdb_version_store_dynamic_schema_v1
     lib._set_output_format_for_pipeline_tests(any_output_format)
@@ -1668,6 +1670,7 @@ def test_filter_ne_dynamic_missing_column_drops_missing_rows(
 
 
 # Defrag removes column slicing and therefore basically makes any symbol dynamic
+@pytest.mark.filterwarnings("ignore:(defragment_symbol_data|is_symbol_fragmented) is deprecated:DeprecationWarning")
 def test_filter_with_column_slicing_defragmented(lmdb_version_store_tiny_segment, any_output_format):
     lib = lmdb_version_store_tiny_segment
     lib._set_output_format_for_pipeline_tests(any_output_format)
@@ -1773,6 +1776,7 @@ def test_filter_regex_match_empty_match(lmdb_version_store_v1, sym, dynamic_stri
     assert lib.read(sym, query_builder=q2).data.empty
 
 
+@pytest.mark.filterwarnings("ignore:Mismatched null-like values:FutureWarning")
 def test_filter_regex_match_nans_nones(lmdb_version_store_v1, sym, any_output_format):
     lib = lmdb_version_store_v1
     lib._set_output_format_for_pipeline_tests(any_output_format)

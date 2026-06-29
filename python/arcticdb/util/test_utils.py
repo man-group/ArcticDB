@@ -540,8 +540,10 @@ class ListGenerators:
         # Higher numbers will trigger overflow in numpy uniform (-1e307 - 1e307)
         # Get the minimum and maximum values for np.float32
         info = np.finfo(dtype)
-        _max = info.max
-        _min = info.min
+        # Convert to Python floats so comparisons with literals below don't cast them to
+        # the narrower dtype (which overflows to inf and warns)
+        _max = float(info.max)
+        _min = float(info.min)
         if seed is not None:
             np.random.seed(seed)
         if min_value is None:

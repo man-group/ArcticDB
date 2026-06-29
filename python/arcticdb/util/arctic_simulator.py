@@ -50,14 +50,16 @@ def apply_dynamic_schema_changes(to_df: pd.DataFrame, from_df: pd.DataFrame):
         return np.full(num_rows, default_value, dtype=dtype)
 
     def add_missing_columns_at_end(to_df, from_df):
+        # TODO: Can do schema checks on shared columns if we want friendly error messages.
+        # Not strictly needed as pandas.concat will raise errors if types are incompatible
         cols_to_df = set(to_df.columns)
-        for col in from_df.columns:
-            if col in cols_to_df:
-                # TODO: Can do schema checks here if we want friendly error messages.
-                # Not strictly needed as pandas.concat will raise errors if types are incompatible
-                continue
-            dtype = from_df[col].dtype
-            to_df[col] = empty_column_of_type(len(to_df), dtype)
+        missing = {
+            col: empty_column_of_type(len(to_df), from_df[col].dtype)
+            for col in from_df.columns
+            if col not in cols_to_df
+        }
+        if missing:
+            to_df = pd.concat([to_df, pd.DataFrame(missing, index=to_df.index)], axis=1)
         return to_df
 
     to_df = add_missing_columns_at_end(to_df, from_df)

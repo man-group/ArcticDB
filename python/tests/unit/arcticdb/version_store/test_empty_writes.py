@@ -11,7 +11,7 @@ import pandas as pd
 import numpy as np
 
 from arcticdb.version_store._common import TimeFrame
-from arcticdb.util.test import assert_frame_equal, assert_series_equal
+from arcticdb.util.test import assert_frame_equal, assert_series_equal, nans_to_none
 
 
 def test_write_no_rows(lmdb_version_store, sym):
@@ -56,14 +56,14 @@ def test_write_no_columns_dynamic_schema(lmdb_version_store_dynamic_schema, sym)
     df3["b"] = df3["b"].astype("int64")
     lmdb_version_store_dynamic_schema.append(sym, df2)
     ans = lmdb_version_store_dynamic_schema.read(sym).data
-    assert_frame_equal(ans, df3)
+    assert_frame_equal(ans, nans_to_none(df3))
 
     df4 = pd.DataFrame(
         [[3.3, 8, None, 3.5], [2.3, 10, "test2"]],
         columns=column_names + ["d"],
         index=[pd.Timestamp(3), pd.Timestamp(4)],
     )
-    df5 = pd.concat((df3, df4))
+    df5 = nans_to_none(pd.concat((df3, df4)))
     lmdb_version_store_dynamic_schema.append(sym, df4, dynamic_strings=True)
     assert_frame_equal(lmdb_version_store_dynamic_schema.read(sym).data, df5)
 
@@ -122,7 +122,9 @@ def test_update_no_columns_dynamic_schema(lmdb_version_store_dynamic_schema, sym
     df2 = pd.DataFrame([[1.3, 6, "test"]], columns=column_names, index=[pd.Timestamp(0)])
     lmdb_version_store_dynamic_schema.update(sym, df2)
     # update in arctic native (outer join) behaves a bit differently than DataFrame.update (left join)
-    df2 = pd.concat((df2, pd.DataFrame([[np.nan, 0, np.nan]], columns=column_names, index=[pd.Timestamp(1)])))
+    df2 = nans_to_none(
+        pd.concat((df2, pd.DataFrame([[np.nan, 0, np.nan]], columns=column_names, index=[pd.Timestamp(1)])))
+    )
     ans = lmdb_version_store_dynamic_schema.read(sym).data
     assert_frame_equal(ans, df2)
 
@@ -163,7 +165,9 @@ def test_append_empty_series(lmdb_version_store_dynamic_schema, sym, dtype, seri
     # if the series is empty.
     assert_series_equal(lmdb_version_store_dynamic_schema.read(sym).data, series, check_index_type=(len(series) > 0))
     lmdb_version_store_dynamic_schema.append(sym, append_series)
-    result_ser = pd.concat([series, append_series])
+    # Exclude empty entries before concat: pandas is deprecating their exclusion from result dtype inference
+    to_concat = [s for s in (series, append_series) if not s.empty]
+    result_ser = pd.concat(to_concat) if to_concat else series
     assert_series_equal(
         lmdb_version_store_dynamic_schema.read(sym).data, result_ser, check_index_type=(len(result_ser) > 0)
     )

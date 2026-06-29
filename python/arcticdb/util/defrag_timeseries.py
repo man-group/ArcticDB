@@ -35,6 +35,6 @@ def _defrag_timeseries(lib: Union[Library, NativeVersionStore], sym: str):
             idx += 1
         else:
             break
-    if idx < len(index) and index["start_row"][idx] != index["start_row"][-1]:
-        df = lib.read(sym, row_range=(index["start_row"][idx], index["end_row"][-1])).data
+    if idx < len(index) and index["start_row"].iloc[idx] != index["start_row"].iloc[-1]:
+        df = lib.read(sym, row_range=(index["start_row"].iloc[idx], index["end_row"].iloc[-1])).data
         lib.update(sym, df)

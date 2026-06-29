@@ -4,7 +4,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from pandas.testing import assert_frame_equal
 
 from arcticdb.util.test import sample_dataframe
@@ -29,8 +29,8 @@ def check_no_keys(library):
 @pytest.mark.storage
 def test_stress_delete(object_store_factory):
     store_factory = object_store_factory
-    lib1 = store_factory(name=f"delete_me_{datetime.utcnow().isoformat()}")
-    lib2 = store_factory(name=f"leave_me_{datetime.utcnow().isoformat()}")
+    lib1 = store_factory(name=f"delete_me_{datetime.now(timezone.utc).replace(tzinfo=None).isoformat()}")
+    lib2 = store_factory(name=f"leave_me_{datetime.now(timezone.utc).replace(tzinfo=None).isoformat()}")
     num_tests = 100
     dataframe_size = 1000
 

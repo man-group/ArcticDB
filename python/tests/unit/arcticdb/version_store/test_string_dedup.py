@@ -26,7 +26,7 @@ def generate_dataframe(columns, number_of_rows, strings, index_start="2000-1-1")
     data = {}
     for column in columns:
         data[column] = random.choices(strings, k=number_of_rows)
-    idx = pd.date_range(index_start, periods=number_of_rows, freq="S")
+    idx = pd.date_range(index_start, periods=number_of_rows, freq="s")
     return pd.DataFrame(data, index=idx)
 
 

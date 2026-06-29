@@ -117,7 +117,7 @@ def test_querybuilder_pickling_all_clauses():
 
     # PythonResampleClause
     q = QueryBuilder()
-    q = q.resample("T", "right", "left")
+    q = q.resample("min", "right", "left")
 
     assert pickle.loads(pickle.dumps(q)) == q
 
@@ -146,7 +146,7 @@ def test_reuse_querybuilder(lmdb_version_store_tiny_segment, any_output_format):
     assert_frame_equal(expected, received)
 
     q = q.apply("new_col", (q["col1"] * q["col2"]) + 13)
-    expected = df.query("col1 in [2, 3, 7]")
+    expected = df.query("col1 in [2, 3, 7]").copy()
     received = lib.read(symbol, query_builder=q).data
 
     expected["new_col"] = (expected["col1"] * expected["col2"]) + 13
@@ -407,7 +407,7 @@ def test_querybuilder_date_range_then_project(
             received = lib.batch_read([symbol], date_ranges=[date_range], query_builder=q)[symbol].data
         else:
             received = lib.read(symbol, date_range=date_range, query_builder=q).data
-    expected = df.iloc[3:-3]
+    expected = df.iloc[3:-3].copy()
     expected["new_col"] = expected["col1"] * expected["col2"] + 13
     assert_frame_equal(expected, received)
 
@@ -639,7 +639,7 @@ def test_querybuilder_row_range_then_project(
             received = lib.batch_read([symbol], row_ranges=[row_range], query_builder=q)[symbol].data
         else:
             received = lib.read(symbol, row_range=row_range, query_builder=q).data
-    expected = df.iloc[3:-3]
+    expected = df.iloc[3:-3].copy()
     expected["new_col"] = expected["col1"] * expected["col2"] + 13
     assert_frame_equal(expected, received)
 
@@ -833,7 +833,7 @@ def test_querybuilder_filter_then_project(
     q = q.apply("new_col", (q["col1"] * q["col2"]) + 13)
     received = lib.read(symbol, query_builder=q).data
 
-    expected = df.query("col1 in [2, 3, 7]")
+    expected = df.query("col1 in [2, 3, 7]").copy()
     expected["new_col"] = expected["col1"] * expected["col2"] + 13
     assert_frame_equal(expected, received)
 

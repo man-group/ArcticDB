@@ -169,6 +169,11 @@ def test_resample(lmdb_version_store_v1, any_output_format, df, rule, origin, of
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @given(df_list=dynamic_schema_column_list(), rule=rule(), origin=origin(), offset=offset())
 @settings(deadline=None, suppress_health_check=[HealthCheck.data_too_large])
+# Hypothesis generates frames with differing column sets, so the expected-frame concat
+# can legitimately contain all-NA entries
+@pytest.mark.filterwarnings(
+    "ignore:The behavior of DataFrame concatenation with empty or all-NA entries is deprecated:FutureWarning"
+)
 def test_resample_dynamic_schema(
     lmdb_version_store_dynamic_schema_v1, any_output_format, df_list, rule, origin, offset
 ):

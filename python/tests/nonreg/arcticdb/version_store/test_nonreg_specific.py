@@ -414,6 +414,7 @@ def test_prune_previous_delete_date_range(version_store_factory, monkeypatch, li
 @pytest.mark.parametrize("lib_config", (True, False))
 @pytest.mark.parametrize("env_var", (True, False))
 @pytest.mark.parametrize("arg", (True, False, None))
+@pytest.mark.filterwarnings("ignore:(defragment_symbol_data|is_symbol_fragmented) is deprecated:DeprecationWarning")
 def test_prune_previous_defragment_symbol_data(version_store_factory, monkeypatch, lib_config, env_var, arg):
     lib = version_store_factory(prune_previous_version=lib_config, use_tombstones=True)
     should_be_pruned = lib_config

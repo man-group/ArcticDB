@@ -535,6 +535,7 @@ def test_resampling_batch_read_query(lmdb_version_store_v1, use_date_range, sing
         "C",
     ),
 )
+@pytest.mark.filterwarnings("ignore:'[A-Z]+' is deprecated:FutureWarning")
 def test_resample_rejects_unsupported_frequency_strings(freq):
     with pytest.raises(ArcticDbNotYetImplemented):
         QueryBuilder().resample(freq)
@@ -912,7 +913,7 @@ def test_max_with_one_infinity_element(lmdb_version_store_v1, any_output_format)
     lib.write(sym, pd.DataFrame({"col": [np.inf]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-01")])))
     q = QueryBuilder()
     q = q.resample("1min").agg({"col_max": ("col", "max")})
-    assert np.isinf(lib.read(sym, query_builder=q).data["col_max"][0])
+    assert np.isinf(lib.read(sym, query_builder=q).data["col_max"].iloc[0])
 
 
 def test_min_with_one_infinity_element(lmdb_version_store_v1, any_output_format):
@@ -923,7 +924,7 @@ def test_min_with_one_infinity_element(lmdb_version_store_v1, any_output_format)
     lib.write(sym, pd.DataFrame({"col": [-np.inf]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-01")])))
     q = QueryBuilder()
     q = q.resample("1min").agg({"col_min": ("col", "min")})
-    assert np.isneginf(lib.read(sym, query_builder=q).data["col_min"][0])
+    assert np.isneginf(lib.read(sym, query_builder=q).data["col_min"].iloc[0])
 
 
 def test_date_range_outside_symbol_timerange(lmdb_version_store_v1, any_output_format):
@@ -1262,7 +1263,7 @@ class TestResampleDynamicSchema:
             data = lib.read("sym", query_builder=q).data
             expected_type = common_sum_aggregation_dtype(first_dtype, second_dtype)
             assert np.dtype(data["to_sum"].dtype) == np.dtype(expected_type)
-            assert data["to_sum"][0] == 2
+            assert data["to_sum"].iloc[0] == 2
 
     @pytest.mark.parametrize("label", ["left", "right"])
     @pytest.mark.parametrize("closed", ["left", "right"])

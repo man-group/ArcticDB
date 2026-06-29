@@ -6,6 +6,7 @@ import hypothesis.strategies as st
 from hypothesis.stateful import RuleBasedStateMachine, rule, initialize, run_state_machine_as_test, precondition
 from collections import namedtuple
 from pandas.testing import assert_frame_equal
+from arcticdb.util.test import nans_to_none
 from arcticdb.version_store.library import StagedDataFinalizeMethod
 from arcticdb.exceptions import (
     UserInputException,
@@ -73,6 +74,9 @@ def assert_equal(left, right, dynamic=False):
     result from our sorting and the result from Pandas' sort might differ where the index
     values are repeated.
     """
+    # ArcticDB returns None for missing/null strings while pandas-built frames may hold NaN
+    nans_to_none(left)
+    nans_to_none(right)
     if any(left.index.duplicated()):
         assert left.index.equals(right.index), f"Indexes are different {left.index} != {right.index}"
         assert set(left.columns) == set(
