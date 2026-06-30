@@ -43,6 +43,8 @@ class ValueSet {
 
     bool empty() const;
 
+    size_t size() const;
+
     const entity::TypeDescriptor& base_type() const;
 
     const std::optional<Value>& min_value() const;

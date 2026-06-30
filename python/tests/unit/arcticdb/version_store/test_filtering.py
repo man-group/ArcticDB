@@ -570,7 +570,7 @@ def test_filter_isin_clashing_sets_same_column_nonreg(
     vals2_unique_val = 200000
     df = pd.DataFrame({"a": [vals1_unique_val, vals2_unique_val, 5000]}, index=np.arange(3))
     lib.write(symbol, df)
-    lib.create_column_stats(symbol, {"a": {"MINMAX"}})
+    lib.create_column_stats_experimental(symbol)
     q = QueryBuilder()
     vals1 = np.arange(10000, dtype=np.uint64)
     np.put(vals1, 5000, vals1_unique_val)
@@ -580,6 +580,23 @@ def test_filter_isin_clashing_sets_same_column_nonreg(
     q = q[(q["a"].isin(vals1)) | (q["a"].isin(vals2))]
     expected = df[(df["a"].isin(vals1)) | (df["a"].isin(vals2))]
     generic_filter_test(lib, symbol, q, expected)
+
+
+def test_filter_reused_derived_expression(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    sym = "test_filter_reused_derived_expression"
+    df = pd.DataFrame({"bid": np.arange(10, dtype=np.int64), "ask": np.arange(5, 15, dtype=np.int64)})
+    lib.write(sym, df)
+
+    limit = 3
+    q = QueryBuilder()
+    spread = q["bid"] - q["ask"]
+    q = q[(spread > 0) & (spread < limit)]
+
+    pandas_spread = df["bid"] - df["ask"]
+    expected = df[(pandas_spread > 0) & (pandas_spread < limit)].reset_index(drop=True)
+    received = lib.read(sym, query_builder=q).data
+    assert_frame_equal(expected, received)
 
 
 @pytest.mark.parametrize(

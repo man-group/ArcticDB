@@ -1240,11 +1240,11 @@ def test_to_strings():
 
     q = QueryBuilder()
     q["def"] = 2 * q["abc"]
-    assert str(q) == 'PROJECT Column["def"] = (Num(2) MUL Column["abc"])'
+    assert str(q) == 'PROJECT Column["def"] = (Val(UINT8:2) MUL Column["abc"])'
 
     q = QueryBuilder()
     q = q[q["abc"] > 3]
-    assert str(q) == 'WHERE (Column["abc"] GT Num(3))'
+    assert str(q) == 'WHERE (Column["abc"] GT Val(UINT8:3))'
 
     q = QueryBuilder()
     q = q[q["abc"] > 3]
@@ -1252,7 +1252,7 @@ def test_to_strings():
     q.row_range((1, 10))
     assert (
         str(q)
-        == 'WHERE (Column["abc"] GT Num(3)) | WHERE (Column["def"] GT Column["ghi"]) | ROWRANGE: RANGE, start=1, end=10'
+        == 'WHERE (Column["abc"] GT Val(UINT8:3)) | WHERE (Column["def"] GT Column["ghi"]) | ROWRANGE: RANGE, start=1, end=10'
     )
 
     q = QueryBuilder().resample("1min").agg({"col": "sum"})

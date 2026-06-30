@@ -564,27 +564,21 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                                      left,
                              std::shared_ptr<ExpressionNode>
                                      right,
-                             OperationType operation_type,
-                             std::string label) {
+                             OperationType operation_type) {
                 return std::make_shared<ExpressionNode>(
-                        std::move(condition), std::move(left), std::move(right), operation_type, std::move(label)
+                        std::move(condition), std::move(left), std::move(right), operation_type
                 );
             }))
             .def(py::init([](std::shared_ptr<ExpressionNode> left,
                              std::shared_ptr<ExpressionNode>
                                      right,
-                             OperationType operation_type,
-                             std::string label) {
-                return std::make_shared<ExpressionNode>(
-                        std::move(left), std::move(right), operation_type, std::move(label)
-                );
+                             OperationType operation_type) {
+                return std::make_shared<ExpressionNode>(std::move(left), std::move(right), operation_type);
             }))
-            .def(py::init([](std::shared_ptr<ExpressionNode> left, OperationType operation_type, std::string label) {
-                return std::make_shared<ExpressionNode>(std::move(left), operation_type, std::move(label));
+            .def(py::init([](std::shared_ptr<ExpressionNode> left, OperationType operation_type) {
+                return std::make_shared<ExpressionNode>(std::move(left), operation_type);
             }))
-            .def(py::init([](ExpressionNode::Leaf leaf, std::string label) {
-                return std::make_shared<ExpressionNode>(std::move(leaf), std::move(label));
-            }));
+            .def(py::init([](ExpressionNode::Leaf leaf) { return std::make_shared<ExpressionNode>(std::move(leaf)); }));
 
     py::enum_<PipelineOptimisation>(version, "PipelineOptimisation")
             .value("SPEED", PipelineOptimisation::SPEED)

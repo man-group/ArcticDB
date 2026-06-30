@@ -521,7 +521,7 @@ def test_column_stats_isin_multiple_clauses(
     lib.append(sym, df1)
     lib.append(sym, df2)
 
-    lib.create_column_stats(sym, {"col_1": {"MINMAX"}})
+    lib.create_column_stats_experimental(sym)
 
     qs.enable()
     q = QueryBuilder()
@@ -554,7 +554,7 @@ def test_column_stats_isin_and_isnotin(
     lib.append(sym, df1)
     lib.append(sym, df2)
 
-    lib.create_column_stats(sym, {"col_1": {"MINMAX"}})
+    lib.create_column_stats_experimental(sym)
 
     qs.enable()
     q = QueryBuilder()
@@ -582,7 +582,7 @@ def test_column_stats_isin_and_isnotin_single_valued(
 
     lib.write(sym, df0)
 
-    lib.create_column_stats(sym, {"col_1": {"MINMAX"}})
+    lib.create_column_stats_experimental(sym)
 
     qs.enable()
     q = QueryBuilder()
@@ -623,7 +623,7 @@ def test_column_stats_isin_and_isnotin_colliding_value_sets_nonreg(
 
     lib.write(sym, df0)
 
-    lib.create_column_stats(sym, {"col_1": {"MINMAX"}})
+    lib.create_column_stats_experimental(sym)
 
     qs.enable()
     q = QueryBuilder()
