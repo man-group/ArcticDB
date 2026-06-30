@@ -387,6 +387,9 @@ std::vector<ColumnStatsValues> ColumnStatsData::values_for_column(
             result_entry.max = stats.maxes.at(r);
             result_entry.nan_count = stats.nan_counts.at(r);
             result_entry.null_count = stats.null_counts.at(r);
+        } else if (stats.nan_counts.at(r) > 0 || stats.null_counts.at(r) > 0) {
+            result_entry.nan_count = stats.nan_counts.at(r);
+            result_entry.null_count = stats.null_counts.at(r);
         } else {
             result_entry.column_absent = true;
         }

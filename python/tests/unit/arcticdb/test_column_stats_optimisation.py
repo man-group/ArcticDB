@@ -569,6 +569,34 @@ def test_column_stats_comparison_operators(
     assert table_data_reads == expected_reads, f"Expected {expected_reads} TABLE_DATA reads but got {table_data_reads}"
 
 
+def test_column_stats_not_equals_does_not_prune_all_null_slice(
+    in_memory_store_factory, clear_query_stats, column_stats_filtering_enabled
+):
+    """A wholly-null row-slice has no MIN/MAX, only NAN_COUNT/NULL_COUNT. A `!=` filter matches
+    every null row (NaN != x is True in pandas), so the slice must NOT be pruned. Regression test
+    for the all-null slice being marked column_absent and pruned to NONE_MATCH."""
+    lib = in_memory_store_factory(column_group_size=2, segment_row_size=2)
+    # segment_row_size=2 splits into 3 row-slices: [1,2], [NaN,NaN], [5,6]. sparsify_floats stores
+    # the NaNs as sparse-map gaps, so the middle slice is wholly null with no MIN/MAX.
+    df = pd.DataFrame({"col_1": [1.0, 2.0, np.nan, np.nan, 5.0, 6.0]}, index=pd.date_range("2000-01-01", periods=6))
+    lib.write(sym, df, sparsify_floats=True)
+
+    lib.create_column_stats_experimental(sym)
+
+    qs.enable()
+    qs.reset_stats()
+
+    q = QueryBuilder()
+    q = q[q["col_1"] != 99.0]
+    result = lib.read(sym, query_builder=q).data
+    table_data_reads = get_table_data_read_count()
+
+    expected = df[df["col_1"] != 99.0]
+    assert_frame_equal(expected, result)
+    # No slice can be pruned: every real value and every null row satisfies != 99.0.
+    assert table_data_reads == 3, f"Expected 3 TABLE_DATA reads but got {table_data_reads}"
+
+
 @pytest.mark.xfail(reason="Creating column stats on multi-indexed symbols is not supported yet")
 def test_column_stats_multiindex_index_col(in_memory_version_store):
     """Test column stats creation and usage with a multi-index DataFrame, with column stats created
@@ -2117,10 +2145,24 @@ def test_column_stats_no_prune_when_in_band_nan(
 
 # Time-type analogues of NE_FLOAT_EXPRS, expressing "a != pd.Timestamp("2025-01-01")".
 NE_TS_EXPRS = [
-    pytest.param(lambda q: q["a"] != pd.Timestamp("2025-01-01"), lambda df: df["a"] != pd.Timestamp("2025-01-01"), id="ne"),
-    pytest.param(lambda q: ~(q["a"] == pd.Timestamp("2025-01-01")), lambda df: ~(df["a"] == pd.Timestamp("2025-01-01")), id="not_eq"),
-    pytest.param(lambda q: q["a"].isnotin([pd.Timestamp("2025-01-01")]), lambda df: ~df["a"].isin([pd.Timestamp("2025-01-01")]), id="isnotin"),
-    pytest.param(lambda q: ~q["a"].isin([pd.Timestamp("2025-01-01")]), lambda df: ~df["a"].isin([pd.Timestamp("2025-01-01")]), id="negated_isin"),
+    pytest.param(
+        lambda q: q["a"] != pd.Timestamp("2025-01-01"), lambda df: df["a"] != pd.Timestamp("2025-01-01"), id="ne"
+    ),
+    pytest.param(
+        lambda q: ~(q["a"] == pd.Timestamp("2025-01-01")),
+        lambda df: ~(df["a"] == pd.Timestamp("2025-01-01")),
+        id="not_eq",
+    ),
+    pytest.param(
+        lambda q: q["a"].isnotin([pd.Timestamp("2025-01-01")]),
+        lambda df: ~df["a"].isin([pd.Timestamp("2025-01-01")]),
+        id="isnotin",
+    ),
+    pytest.param(
+        lambda q: ~q["a"].isin([pd.Timestamp("2025-01-01")]),
+        lambda df: ~df["a"].isin([pd.Timestamp("2025-01-01")]),
+        id="negated_isin",
+    ),
 ]
 
 
