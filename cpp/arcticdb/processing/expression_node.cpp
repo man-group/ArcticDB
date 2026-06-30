@@ -7,6 +7,7 @@
  */
 
 #include <arcticdb/util/preconditions.hpp>
+#include <arcticdb/log/log.hpp>
 #include <arcticdb/processing/expression_node.hpp>
 #include <arcticdb/processing/processing_unit.hpp>
 #include <arcticdb/processing/operation_types.hpp>
@@ -75,29 +76,127 @@ ColumnWithStrings::ColumnWithStrings(
     return std::nullopt;
 }
 
-ExpressionNode::ExpressionNode(Leaf leaf, std::string label) : kind_(std::move(leaf)), label_(std::move(label)) {}
+namespace {
+
+std::string label_for(const ExpressionNode::Leaf& leaf) {
+    return util::variant_match(
+            leaf,
+            [](const ColumnName& column_name) { return fmt::format("Column[\"{}\"]", column_name.value); },
+            [](const std::shared_ptr<Value>& value) {
+                return details::visit_type(value->data_type(), [&value](auto tag) {
+                    using info = ScalarTypeInfo<decltype(tag)>;
+                    return fmt::format(
+                            "Val({}:{})", value->data_type(), value->template to_string<typename info::RawType>()
+                    );
+                });
+            },
+            [](const std::shared_ptr<ValueSet>& value_set) {
+                return fmt::format("ValueSet({},n={})", value_set->base_type().data_type(), value_set->size());
+            },
+            [](const std::shared_ptr<util::RegexGeneric>& regex) { return fmt::format("Regex({})", regex->text()); }
+    );
+}
+
+std::string label_for(const ExpressionNode::Operation& op) {
+    if (is_ternary_operation(op.operation_type_)) {
+        return fmt::format("{} if {} else {}", op.left_->label_, op.condition_->label_, op.right_->label_);
+    } else if (is_binary_operation(op.operation_type_)) {
+        return fmt::format("({} {} {})", op.left_->label_, op.operation_type_, op.right_->label_);
+    } else {
+        return fmt::format("{}({})", op.operation_type_, op.left_->label_);
+    }
+}
+
+bool value_sets_equal(ValueSet& a, ValueSet& b) {
+    if (a.empty() != b.empty()) {
+        return false;
+    }
+    if (a.base_type() != b.base_type()) {
+        // This might cause some false negatives but the simplicity is worth it
+        return false;
+    }
+    return details::visit_type(a.base_type().data_type(), [&a, &b](auto tag) {
+        using info = ScalarTypeInfo<decltype(tag)>;
+        if constexpr (is_sequence_type(info::data_type)) {
+            return *a.get_set<std::string>() == *b.get_set<std::string>();
+        } else {
+            return *a.get_set<typename info::RawType>() == *b.get_set<typename info::RawType>();
+        }
+    });
+}
+
+bool nodes_equal(const ExpressionNode& a, const ExpressionNode& b);
+
+bool equal_child(const std::shared_ptr<ExpressionNode>& a, const std::shared_ptr<ExpressionNode>& b) {
+    if (!a && !b) {
+        return true;
+    }
+    if (!a || !b) {
+        return false;
+    }
+    return nodes_equal(*a, *b);
+}
+
+bool nodes_equal(const ExpressionNode& a, const ExpressionNode& b) {
+    if (a.kind_.index() != b.kind_.index()) {
+        return false;
+    }
+    // Now we know that a and b hold the same variant type member
+    if (std::holds_alternative<ExpressionNode::Leaf>(a.kind_)) {
+        const auto& leaf_a = std::get<ExpressionNode::Leaf>(a.kind_);
+        const auto& leaf_b = std::get<ExpressionNode::Leaf>(b.kind_);
+        if (leaf_a.index() != leaf_b.index()) {
+            return false;
+        }
+        // Now we know that leaf_a and leaf_b hold the same variant type member
+        return util::variant_match(
+                leaf_a,
+                [&leaf_b](const ColumnName& a_col) { return a_col.value == std::get<ColumnName>(leaf_b).value; },
+                [&leaf_b](const std::shared_ptr<Value>& a_val) {
+                    return *a_val == *std::get<std::shared_ptr<Value>>(leaf_b);
+                },
+                [&leaf_b](const std::shared_ptr<ValueSet>& a_set) {
+                    return value_sets_equal(*a_set, *std::get<std::shared_ptr<ValueSet>>(leaf_b));
+                },
+                [&leaf_b](const std::shared_ptr<util::RegexGeneric>& a_regex) {
+                    return a_regex->text() == std::get<std::shared_ptr<util::RegexGeneric>>(leaf_b)->text();
+                }
+        );
+    }
+    const auto& oa = std::get<ExpressionNode::Operation>(a.kind_);
+    const auto& ob = std::get<ExpressionNode::Operation>(b.kind_);
+    if (oa.operation_type_ != ob.operation_type_) {
+        return false;
+    }
+    return equal_child(oa.condition_, ob.condition_) && equal_child(oa.left_, ob.left_) &&
+           equal_child(oa.right_, ob.right_);
+}
+
+} // namespace
+
+ExpressionNode::ExpressionNode(Leaf leaf) : kind_(std::move(leaf)), label_(label_for(std::get<Leaf>(kind_))) {}
 
 ExpressionNode::ExpressionNode(
         std::shared_ptr<ExpressionNode> condition, std::shared_ptr<ExpressionNode> left,
-        std::shared_ptr<ExpressionNode> right, OperationType op, std::string label
+        std::shared_ptr<ExpressionNode> right, OperationType op
 ) :
-    kind_(Operation{op, std::move(condition), std::move(left), std::move(right)}),
-    label_(std::move(label)) {
+    kind_(Operation{op, std::move(condition), std::move(left), std::move(right)}) {
     util::check(is_ternary_operation(op), "Non-ternary expression provided with three arguments");
+    label_ = label_for(std::get<Operation>(kind_));
 }
 
 ExpressionNode::ExpressionNode(
-        std::shared_ptr<ExpressionNode> left, std::shared_ptr<ExpressionNode> right, OperationType op, std::string label
+        std::shared_ptr<ExpressionNode> left, std::shared_ptr<ExpressionNode> right, OperationType op
 ) :
-    kind_(Operation{op, nullptr, std::move(left), std::move(right)}),
-    label_(std::move(label)) {
+    kind_(Operation{op, nullptr, std::move(left), std::move(right)}) {
     util::check(is_binary_operation(op), "Non-binary expression provided with two arguments");
+    label_ = label_for(std::get<Operation>(kind_));
 }
 
-ExpressionNode::ExpressionNode(std::shared_ptr<ExpressionNode> left, OperationType op, std::string label) :
-    kind_(Operation{op, nullptr, std::move(left), nullptr}),
-    label_(std::move(label)) {
+ExpressionNode::ExpressionNode(std::shared_ptr<ExpressionNode> left, OperationType op) :
+    kind_(Operation{op, nullptr, std::move(left), nullptr}) {
     util::check(is_unary_operation(op), "Non-unary expression provided with single argument");
+    label_ = label_for(std::get<Operation>(kind_));
 }
 
 VariantData ExpressionNode::compute(ProcessingUnit& seg) const {
@@ -112,19 +211,34 @@ VariantData ExpressionNode::compute(ProcessingUnit& seg) const {
                         [](const std::shared_ptr<util::RegexGeneric>& regex) -> VariantData { return regex; }
                 );
             },
-            [&seg](const Operation& op) -> VariantData {
-                if (is_ternary_operation(op.operation_type_)) {
-                    return dispatch_ternary(
-                            op.condition_->compute(seg),
-                            op.left_->compute(seg),
-                            op.right_->compute(seg),
-                            op.operation_type_
-                    );
-                } else if (is_binary_operation(op.operation_type_)) {
-                    return dispatch_binary(op.left_->compute(seg), op.right_->compute(seg), op.operation_type_);
-                } else {
-                    return dispatch_unary(op.left_->compute(seg), op.operation_type_);
+            [&seg, this](const Operation& op) -> VariantData {
+                if (auto it = seg.computed_data_.find(label_); it != seg.computed_data_.end()) {
+                    const auto& [other, cached] = it->second;
+                    if (other == this || nodes_equal(*this, *other)) {
+                        log::version().debug("Memoization hit for {}", label_);
+                        return cached;
+                    }
+                    log::version().debug("Memoization label collision for {}", label_);
                 }
+                log::version().debug("Memoization miss, computing {}", label_);
+                VariantData result = [&seg, &op]() -> VariantData {
+                    if (is_ternary_operation(op.operation_type_)) {
+                        return dispatch_ternary(
+                                op.condition_->compute(seg),
+                                op.left_->compute(seg),
+                                op.right_->compute(seg),
+                                op.operation_type_
+                        );
+                    } else if (is_binary_operation(op.operation_type_)) {
+                        return dispatch_binary(op.left_->compute(seg), op.right_->compute(seg), op.operation_type_);
+                    } else {
+                        return dispatch_unary(op.left_->compute(seg), op.operation_type_);
+                    }
+                }();
+                // On a label collision the slot is already held by a structurally-different node; try_emplace is a
+                // no-op there, so that node keeps the slot and this result simply isn't memoized.
+                seg.computed_data_.try_emplace(label_, this, result);
+                return result;
             }
     );
 }

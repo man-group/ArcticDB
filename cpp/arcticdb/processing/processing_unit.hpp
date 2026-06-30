@@ -46,6 +46,12 @@ struct ProcessingUnit {
 
     std::shared_ptr<ExpressionContext> expression_context_;
 
+    /*
+     * Memoization of results after applying an ExpressionNode to this processing unit. Keyed on the node's label_ with
+     * a deep comparison on hits. One slot per label, colliding writes are dropped.
+     */
+    std::unordered_map<std::string, std::pair<const ExpressionNode*, VariantData>> computed_data_;
+
     ProcessingUnit() = default;
 
     ProcessingUnit(

@@ -81,22 +81,19 @@ struct ExpressionNode {
 
     std::variant<Leaf, Operation> kind_;
 
-    // Should be used for debugging only
+    // Used as a memoization hash key and for debugging
     std::string label_;
 
-    explicit ExpressionNode(Leaf leaf, std::string label = "");
+    explicit ExpressionNode(Leaf leaf);
 
     ExpressionNode(
             std::shared_ptr<ExpressionNode> condition, std::shared_ptr<ExpressionNode> left,
-            std::shared_ptr<ExpressionNode> right, OperationType op, std::string label = ""
+            std::shared_ptr<ExpressionNode> right, OperationType op
     );
 
-    ExpressionNode(
-            std::shared_ptr<ExpressionNode> left, std::shared_ptr<ExpressionNode> right, OperationType op,
-            std::string label = ""
-    );
+    ExpressionNode(std::shared_ptr<ExpressionNode> left, std::shared_ptr<ExpressionNode> right, OperationType op);
 
-    ExpressionNode(std::shared_ptr<ExpressionNode> left, OperationType op, std::string label = "");
+    ExpressionNode(std::shared_ptr<ExpressionNode> left, OperationType op);
 
     [[nodiscard]] bool is_operation() const { return std::holds_alternative<Operation>(kind_); }
 

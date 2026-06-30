@@ -1278,14 +1278,14 @@ def visit_expression(expr):
         if isinstance(node, ExpressionNode):
             if node.operator == COLUMN:
                 input_columns.add(node.left)
-                return _ExpressionNode(_ColumnName(node.left), 'Column["{}"]'.format(node.left))
+                return _ExpressionNode(_ColumnName(node.left))
             return _visit(node)
         elif isinstance(node, (np.ndarray, list)):
-            return _ExpressionNode(_ValueSet(node), to_string(node))
+            return _ExpressionNode(_ValueSet(node))
         elif isinstance(node, _RegexGeneric):
-            return _ExpressionNode(node, to_string(node))
+            return _ExpressionNode(node)
         else:
-            return _ExpressionNode(create_value(node), to_string(node))
+            return _ExpressionNode(create_value(node))
 
     def _visit(node):
         if isinstance(node, bool):
@@ -1296,12 +1296,12 @@ def visit_expression(expr):
             check(node.right is not None, "Ternary operator requires three inputs")
             condition = _visit_child(node.condition)
             right = _visit_child(node.right)
-            return _ExpressionNode(condition, left, right, node.operator, node.get_name())
+            return _ExpressionNode(condition, left, right, node.operator)
         elif node.right is not None:
             right = _visit_child(node.right)
-            return _ExpressionNode(left, right, node.operator, node.get_name())
+            return _ExpressionNode(left, right, node.operator)
         else:
-            return _ExpressionNode(left, node.operator, node.get_name())
+            return _ExpressionNode(left, node.operator)
 
     expression_context = _ExpressionContext()
     input_columns = set()
@@ -1310,5 +1310,5 @@ def visit_expression(expr):
     elif isinstance(expr, (np.ndarray, list)):
         raise ArcticNativeException("Query cannot create a new column from a list/set/array of values")
     else:
-        expression_context.root = _ExpressionNode(create_value(expr), to_string(expr))
+        expression_context.root = _ExpressionNode(create_value(expr))
     return input_columns, expression_context
