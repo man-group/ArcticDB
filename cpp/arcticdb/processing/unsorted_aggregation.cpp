@@ -126,6 +126,25 @@ SegmentInMemory MinMaxAggregatorData::finalize(const std::vector<ColumnName>& ou
             seg.add_column(scalar_field(DataType::UINT64, output_column_names[2].value), nan_count_col);
             seg.add_column(scalar_field(DataType::UINT64, output_column_names[3].value), null_count_col);
         });
+    } else if (null_count_ > 0) { // The whole col in the slice is null
+        auto nan_count_col = std::make_shared<Column>(make_scalar_type(DataType::UINT64), Sparsity::PERMITTED);
+        nan_count_col->push_back<uint64_t>(nan_count_);
+
+        auto null_count_col = std::make_shared<Column>(make_scalar_type(DataType::UINT64), Sparsity::PERMITTED);
+        null_count_col->push_back<uint64_t>(null_count_);
+
+        auto& entry_list = (*header.mutable_stats_by_column())[data_col_offset_];
+
+        auto* nan_entry = entry_list.add_entries();
+        nan_entry->set_stats_seg_offset(0);
+        nan_entry->set_type(arcticc::pb2::column_stats_pb2::NAN_COUNT_V1);
+
+        auto* null_entry = entry_list.add_entries();
+        null_entry->set_stats_seg_offset(1);
+        null_entry->set_type(arcticc::pb2::column_stats_pb2::NULL_COUNT_V1);
+
+        seg.add_column(scalar_field(DataType::UINT64, output_column_names[2].value), nan_count_col);
+        seg.add_column(scalar_field(DataType::UINT64, output_column_names[3].value), null_count_col);
     }
 
     google::protobuf::Any any;

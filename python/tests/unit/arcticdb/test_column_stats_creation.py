@@ -6,11 +6,14 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 
+import math
+
 import numpy as np
 import pandas as pd
 import polars as pl
 import pyarrow as pa
 import pytest
+from hypothesis import given, settings, strategies as st
 from polars.testing import assert_frame_equal as pl_assert_frame_equal
 
 from arcticc.pb2.column_stats_pb2 import ColumnStatsHeader, ColumnStatsType
@@ -20,6 +23,7 @@ from arcticdb_ext.exceptions import SchemaException, StorageException, UserInput
 from arcticdb_ext.storage import KeyType
 from arcticdb_ext.version_store import NoSuchVersionException
 from arcticdb import QueryBuilder
+from arcticdb.util.hypothesis import use_of_function_scoped_fixtures_in_hypothesis_checked
 
 pytestmark = pytest.mark.pipeline
 
@@ -379,9 +383,7 @@ def test_column_stats_null_count_sparse_floats(version_store_factory, lib_name, 
     sym = "test_column_stats_null_count_sparse_floats"
     # Segment 0 (rows 0-2): [1.0, nan, 2.0] -> 1 null, min 1.0, max 2.0
     # Segment 1 (rows 3-5): [nan, nan, 4.0] -> 2 nulls, min 4.0, max 4.0
-    df = pd.DataFrame(
-        {"col_1": [1.0, np.nan, 2.0, np.nan, np.nan, 4.0]}, index=pd.date_range("2000-01-01", periods=6)
-    )
+    df = pd.DataFrame({"col_1": [1.0, np.nan, 2.0, np.nan, np.nan, 4.0]}, index=pd.date_range("2000-01-01", periods=6))
     lib.write(sym, df, sparsify_floats=True)
     lib.create_column_stats_experimental(sym)
 
@@ -390,6 +392,69 @@ def test_column_stats_null_count_sparse_floats(version_store_factory, lib_name, 
     assert cs["v1_NAN_COUNT(col_1)"].to_list() == [0, 0]
     assert cs["v1_MIN(col_1)"].to_list() == [1.0, 4.0]
     assert cs["v1_MAX(col_1)"].to_list() == [2.0, 4.0]
+
+
+def test_column_stats_arrow_nan_and_null_same_column(lmdb_version_store_arrow):
+    lib = lmdb_version_store_arrow
+    lib._cfg.write_options.segment_row_size = 100
+    sym = "test_column_stats_arrow_nan_and_null_same_column"
+
+    def table(values):
+        return pa.table({"f": pa.array(values, pa.float64())})
+
+    lib.write(sym, table([1.0, np.nan, None, 2.0]))  # nan=1, null=1, min=1, max=2
+    lib.append(sym, table([np.nan, np.nan, None]))  # nan=2, null=1, all stored values are NaN
+    lib.append(sym, table([None, None]))  # all null: nan=0, null=2, no min/max
+    lib.append(sym, table([3.0, None, np.nan, 4.0, None]))  # nan=1, null=2, min=3, max=4
+
+    lib.create_column_stats_experimental(sym)
+    cs = pl.from_arrow(lib.read_column_stats_experimental(sym)).sort("start_index")
+
+    assert cs["v1_NAN_COUNT(f)"].to_list() == [1, 2, 0, 1]
+    assert cs["v1_NULL_COUNT(f)"].to_list() == [1, 1, 2, 2]
+
+    mins = cs["v1_MIN(f)"].to_list()
+    maxs = cs["v1_MAX(f)"].to_list()
+    assert mins[0] == 1.0 and maxs[0] == 2.0
+    assert math.isnan(mins[1]) and math.isnan(maxs[1])  # all-NaN block keeps NaN min/max
+    assert mins[2] is None and maxs[2] is None  # all-null block has no min/max
+    assert mins[3] == 3.0 and maxs[3] == 4.0
+
+
+def _segment_values():
+    element = st.one_of(
+        st.floats(min_value=-1e9, max_value=1e9, allow_nan=False, allow_infinity=False),
+        st.just(float("nan")),
+        st.none(),
+    )
+    return st.lists(element, min_size=1, max_size=10)
+
+
+@use_of_function_scoped_fixtures_in_hypothesis_checked
+@settings(deadline=None)
+@given(segments=st.lists(_segment_values(), min_size=1, max_size=6))
+def test_column_stats_arrow_nan_null_counts_hypothesis(lmdb_version_store_arrow, segments):
+    lib = lmdb_version_store_arrow
+    lib._cfg.write_options.segment_row_size = 100
+    lib.version_store.clear()
+    sym = "test_column_stats_arrow_nan_null_counts_hypothesis"
+
+    def table(values):
+        return pa.table({"f": pa.array(values, pa.float64())})
+
+    lib.write(sym, table(segments[0]))
+    for seg in segments[1:]:
+        lib.append(sym, table(seg))
+
+    lib.create_column_stats_experimental(sym)
+    cs = pl.from_arrow(lib.read_column_stats_experimental(sym))
+
+    # NaN is the only float not equal to itself; null is None.
+    expected_nan = sum(1 for seg in segments for v in seg if v is not None and v != v)
+    expected_null = sum(1 for seg in segments for v in seg if v is None)
+
+    assert cs["v1_NAN_COUNT(f)"].sum() == expected_nan
+    assert cs["v1_NULL_COUNT(f)"].sum() == expected_null
 
 
 def test_column_stats_as_of(version_store_factory, lib_name, encoding_version, any_output_format):
