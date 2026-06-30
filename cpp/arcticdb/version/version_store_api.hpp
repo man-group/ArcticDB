@@ -42,8 +42,8 @@ class PythonVersionStore : public LocalVersionedEngine {
         LocalVersionedEngine(store, ct) {}
 
     VersionedItem write_dataframe_specific_version(
-            const StreamId& stream_id, const py::tuple& item, const py::object& norm, const py::object& user_meta,
-            VersionId version_id
+            const StreamId& stream_id, const std::shared_ptr<convert::PandasData>& item, const py::object& norm,
+            const py::object& user_meta, VersionId version_id
     );
 
     VersionedItem write_versioned_dataframe(
@@ -62,7 +62,7 @@ class PythonVersionStore : public LocalVersionedEngine {
     );
 
     VersionedItem write_partitioned_dataframe(
-            const StreamId& stream_id, const py::tuple& item, const py::object& norm_meta,
+            const StreamId& stream_id, const std::shared_ptr<convert::PandasData>& item, const py::object& norm_meta,
             const std::vector<std::string>& partition_cols
     );
 
@@ -85,8 +85,8 @@ class PythonVersionStore : public LocalVersionedEngine {
     );
 
     void append_incomplete(
-            const StreamId& stream_id, const py::tuple& item, const py::object& norm, const py::object& user_meta,
-            bool validate_index
+            const StreamId& stream_id, const std::shared_ptr<convert::PandasData>& item, const py::object& norm,
+            const py::object& user_meta, bool validate_index
     ) const;
 
     std::variant<VersionedItem, CompactionError> compact_incomplete(
@@ -292,9 +292,9 @@ class PythonVersionStore : public LocalVersionedEngine {
     std::vector<AtomKey> get_version_history(const StreamId& stream_id);
 
     VersionedItem merge(
-            const StreamId& stream_id, const py::tuple& source, const py::object& norm, const py::object& user_meta,
-            const bool prune_previous_versions, const bool upsert, const py::tuple& py_strategy,
-            std::vector<std::string> on
+            const StreamId& stream_id, const std::shared_ptr<convert::PandasData>& source, const py::object& norm,
+            const py::object& user_meta, const bool prune_previous_versions, const bool upsert,
+            const py::tuple& py_strategy, std::vector<std::string> on
     );
 
     CompactDataInfo compact_data_explain_plan(const StreamId& stream_id, std::optional<uint64_t> rows_per_segment);
@@ -308,8 +308,8 @@ class PythonVersionStore : public LocalVersionedEngine {
 };
 
 void write_dataframe_to_file(
-        const StreamId& stream_id, const std::string& path, const py::tuple& item, const py::object& norm,
-        const py::object& user_meta
+        const StreamId& stream_id, const std::string& path, const std::shared_ptr<convert::PandasData>& item,
+        const py::object& norm, const py::object& user_meta
 );
 
 ReadResult read_dataframe_from_file(

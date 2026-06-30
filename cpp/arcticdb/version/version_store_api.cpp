@@ -45,8 +45,8 @@ template PythonVersionStore::PythonVersionStore(
 );
 
 VersionedItem PythonVersionStore::write_dataframe_specific_version(
-        const StreamId& stream_id, const py::tuple& item, const py::object& norm, const py::object& user_meta,
-        VersionId version_id
+        const StreamId& stream_id, const std::shared_ptr<convert::PandasData>& item, const py::object& norm,
+        const py::object& user_meta, VersionId version_id
 ) {
     ARCTICDB_SAMPLE(WriteDataFrame, 0)
 
@@ -689,7 +689,7 @@ std::unordered_set<StreamId> PythonVersionStore::list_streams_unordered(
 size_t PythonVersionStore::compact_symbol_list() { return compact_symbol_list_internal(); }
 
 VersionedItem PythonVersionStore::write_partitioned_dataframe(
-        const StreamId& stream_id, const py::tuple& item, const py::object& norm_meta,
+        const StreamId& stream_id, const std::shared_ptr<convert::PandasData>& item, const py::object& norm_meta,
         const std::vector<std::string>& partition_value
 ) {
     ARCTICDB_SAMPLE(WritePartitionedDataFrame, 0)
@@ -697,7 +697,7 @@ VersionedItem PythonVersionStore::write_partitioned_dataframe(
     auto version_id = get_next_version_from_key(maybe_prev);
 
     //    TODO: We are not actually partitioning stuff atm, just assuming a single partition is passed for now.
-    std::array<py::object, 1> partitioned_dfs{item};
+    std::array<std::shared_ptr<convert::PandasData>, 1> partitioned_dfs{item};
 
     auto write_options = get_write_options();
     auto de_dup_map = std::make_shared<DeDupMap>();
@@ -876,8 +876,8 @@ VersionedItem PythonVersionStore::delete_range(
 }
 
 void PythonVersionStore::append_incomplete(
-        const StreamId& stream_id, const py::tuple& item, const py::object& norm, const py::object& user_meta,
-        bool validate_index
+        const StreamId& stream_id, const std::shared_ptr<convert::PandasData>& item, const py::object& norm,
+        const py::object& user_meta, bool validate_index
 ) const {
 
     using namespace arcticdb::entity;
@@ -1531,8 +1531,8 @@ bool PythonVersionStore::is_empty_excluding_key_types(const std::vector<KeyType>
 }
 
 void write_dataframe_to_file(
-        const StreamId& stream_id, const std::string& path, const py::tuple& item, const py::object& norm,
-        const py::object& user_meta
+        const StreamId& stream_id, const std::string& path, const std::shared_ptr<convert::PandasData>& item,
+        const py::object& norm, const py::object& user_meta
 ) {
     ARCTICDB_SAMPLE(WriteDataframeToFile, 0)
     auto frame = convert::py_ndf_to_frame(stream_id, item, norm, user_meta, false, pipelines::SortednessScan::SKIP);
@@ -1565,8 +1565,9 @@ void PythonVersionStore::force_delete_symbol(const StreamId& stream_id) {
 }
 
 VersionedItem PythonVersionStore::merge(
-        const StreamId& stream_id, const py::tuple& source, const py::object& norm, const py::object& user_meta,
-        const bool prune_previous_versions, const bool upsert, const py::tuple& py_strategy, std::vector<std::string> on
+        const StreamId& stream_id, const std::shared_ptr<convert::PandasData>& source, const py::object& norm,
+        const py::object& user_meta, const bool prune_previous_versions, const bool upsert,
+        const py::tuple& py_strategy, std::vector<std::string> on
 ) {
     const MergeStrategy strategy{
             .matched = py_strategy[0].cast<MergeAction>(), .not_matched_by_target = py_strategy[1].cast<MergeAction>()

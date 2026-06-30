@@ -41,7 +41,7 @@ from arcticdb.exceptions import (
 )
 from arcticdb.supported_types import DateRangeInput, time_types as supported_time_types
 from arcticdb.util._versions import IS_PANDAS_TWO, IS_PANDAS_ZERO
-from arcticdb_ext.version_store import RecordBatchData, SortedValue as _SortedValue
+from arcticdb_ext.version_store import PandasData, RecordBatchData, SortedValue as _SortedValue
 from pandas.core.internals import make_block
 
 from pandas import DataFrame, MultiIndex, Series, DatetimeIndex, Index, RangeIndex
@@ -93,19 +93,7 @@ def _tz_error_context():
         ) from e
 
 
-NPDDataFrame = NamedTuple(
-    "NPDDataFrame",
-    [
-        # DO NOT REORDER, positional access used in c++
-        ("index_names", List[str]),
-        ("column_names", List[str]),
-        ("index_values", List[np.ndarray]),
-        ("columns_values", List[np.ndarray]),
-        ("sorted", _SortedValue),
-    ],
-)
-
-NormalizedInput = NamedTuple("NormalizedInput", [("item", NPDDataFrame), ("metadata", NormalizationMetadata)])
+NormalizedInput = NamedTuple("NormalizedInput", [("item", PandasData), ("metadata", NormalizationMetadata)])
 
 
 _PICKLED_METADATA_LOGLEVEL = None  # set lazily with function below
@@ -146,8 +134,8 @@ class FrameData(
     )
 ):
     @staticmethod
-    def from_npd_df(df):
-        # type: (NPDDataFrame)->FrameData
+    def from_pandas_data(df):
+        # type: (PandasData)->FrameData
         return FrameData(
             data=df.index_values + df.columns_values,
             names=df.column_names,
@@ -1047,7 +1035,7 @@ class NdArrayNormalizer(Normalizer):
         # the protobuf which is used during denorm. This can be problematic as this might lead to a lot of
         # (MAX_ROWS x 1) segments instead of an even distribution for now.
         return NormalizedInput(
-            item=NPDDataFrame(
+            item=PandasData(
                 index_names=[],
                 index_values=[],
                 column_names=["ndarray"],
@@ -1357,7 +1345,7 @@ class DataFrameNormalizer(_PandasNormalizer):
                 sort_status = _SortedValue.UNSORTED
 
         return NormalizedInput(
-            item=NPDDataFrame(
+            item=PandasData(
                 index_names=index_names,
                 index_values=ix_vals,
                 column_names=columns,
@@ -1388,7 +1376,7 @@ class MsgPackNormalizer(Normalizer):
         column_val = np.array(memoryview(packed), np.uint8).view(np.uint64)
 
         return NormalizedInput(
-            item=NPDDataFrame(
+            item=PandasData(
                 index_names=[],
                 index_values=[],
                 column_names=["bytes"],
@@ -1510,7 +1498,7 @@ class TimeFrameNormalizer(Normalizer):
         )
 
         return NormalizedInput(
-            item=NPDDataFrame(
+            item=PandasData(
                 index_names=index_names,
                 index_values=ix_vals,
                 column_names=columns_names,

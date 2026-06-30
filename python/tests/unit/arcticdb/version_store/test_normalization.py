@@ -50,7 +50,7 @@ from arcticdb.version_store._normalization import (
     _from_tz_timestamp,
     DataFrameNormalizer,
     NdArrayNormalizer,
-    NPDDataFrame,
+    PandasData,
 )
 from arcticdb.version_store._common import TimeFrame
 from arcticdb.util.test import (
@@ -77,7 +77,7 @@ def test_msg_pack(d):
     norm = test_msgpack_normalizer
 
     df, norm_meta = norm.normalize(d)
-    fd = FrameData.from_npd_df(df)
+    fd = FrameData.from_pandas_data(df)
     D = norm.denormalize(fd, norm_meta)
 
     assert d == D
@@ -246,7 +246,7 @@ def test_empty_df():
 
     norm = CompositeNormalizer()
     df, norm_meta = norm.normalize(d)
-    fd = FrameData.from_npd_df(df)
+    fd = FrameData.from_pandas_data(df)
     D = norm.denormalize(fd, norm_meta)
     if not IS_PANDAS_ZERO:
         assert_equal(d.index.to_numpy(), D.index.to_numpy())
@@ -391,7 +391,7 @@ def test_multiindex_with_tz(tz):
     d = get_multiindex_df_with_tz(tz)
     norm = CompositeNormalizer(use_norm_failure_handler_known_types=True, fallback_normalizer=test_msgpack_normalizer)
     df, norm_meta = norm.normalize(d)
-    fd = FrameData.from_npd_df(df)
+    fd = FrameData.from_pandas_data(df)
     denorm = norm.denormalize(fd, norm_meta)
     if pd.__version__.startswith("0"):
         assert_equal(d.index.get_values(), denorm.index.get_values())
@@ -408,7 +408,7 @@ def test_empty_df_with_multiindex_with_tz(tz):
     norm_df, norm_meta = norm.normalize(orig_df)
 
     # Slice the normalized df to an empty df (this can happen after date range slicing)
-    sliced_norm_df = NPDDataFrame(
+    sliced_norm_df = PandasData(
         index_names=norm_df.index_names,
         column_names=norm_df.column_names,
         index_values=[norm_df.index_values[0][0:0]],
@@ -416,7 +416,7 @@ def test_empty_df_with_multiindex_with_tz(tz):
         sorted=_SortedValue.UNKNOWN,
     )
 
-    fd = FrameData.from_npd_df(sliced_norm_df)
+    fd = FrameData.from_pandas_data(sliced_norm_df)
     sliced_denorm_df = norm.denormalize(fd, norm_meta)
 
     for index_level_num in [0, 1, 2]:
@@ -505,7 +505,7 @@ def test_namedtuple_inside_df():
     d = pd.DataFrame({"A": [NT(1, "b"), NT(2, "a")]})
     norm = CompositeNormalizer(use_norm_failure_handler_known_types=True, fallback_normalizer=test_msgpack_normalizer)
     df, norm_meta = norm.normalize(d)
-    fd = FrameData.from_npd_df(df)
+    fd = FrameData.from_pandas_data(df)
     denorm = norm.denormalize(fd, norm_meta)
     if pd.__version__.startswith("0"):
         assert_equal(d.index.get_values(), denorm.index.get_values())
@@ -576,7 +576,7 @@ def test_numpy_array_normalization_composite():
     norm = CompositeNormalizer(use_norm_failure_handler_known_types=False, fallback_normalizer=test_msgpack_normalizer)
     arr = np.random.rand(10, 10, 10)
     df, norm_meta = norm.normalize(arr)
-    fd = FrameData.from_npd_df(df)
+    fd = FrameData.from_pandas_data(df)
     d = norm.denormalize(fd, norm_meta)
     assert np.array_equal(d, arr)
 
@@ -585,7 +585,7 @@ def test_numpy_array_normalizer():
     norm = NdArrayNormalizer()
     arr = np.random.rand(10, 10)
     df, norm_meta = norm.normalize(arr)
-    fd = FrameData.from_npd_df(df)
+    fd = FrameData.from_pandas_data(df)
     d = norm.denormalize(fd, norm_meta.np)
     assert np.array_equal(d, arr)
 
@@ -595,7 +595,7 @@ def test_ndarray_arbitrary_shape():
     shape = np.random.randint(1, 5, 5)
     arr = np.random.rand(*shape)
     df, norm_meta = norm.normalize(arr)
-    fd = FrameData.from_npd_df(df)
+    fd = FrameData.from_pandas_data(df)
     d = norm.denormalize(fd, norm_meta.np)
     assert np.array_equal(d, arr)
 
@@ -605,7 +605,7 @@ def test_dict_with_tuples():
     data = {(1, 2): [1, 24, 55]}
     norm = CompositeNormalizer(use_norm_failure_handler_known_types=False, fallback_normalizer=test_msgpack_normalizer)
     df, norm_meta = norm.normalize(data)
-    fd = FrameData.from_npd_df(df)
+    fd = FrameData.from_pandas_data(df)
     denormalized_data = norm.denormalize(fd, norm_meta)
     assert denormalized_data == data
     assert isinstance(denormalized_data, dict)
@@ -654,7 +654,7 @@ def test_numpy_ts_col_with_none(lmdb_version_store):
     df.loc[0, "a"] = pd.Timestamp(0)
     norm = CompositeNormalizer(use_norm_failure_handler_known_types=False, fallback_normalizer=test_msgpack_normalizer)
     df, norm_meta = norm.normalize(df)
-    fd = FrameData.from_npd_df(df)
+    fd = FrameData.from_pandas_data(df)
     df_denormed = norm.denormalize(fd, norm_meta)
     assert df_denormed["a"][0] == pd.Timestamp(0)
     # None's should be converted to NaT's now.

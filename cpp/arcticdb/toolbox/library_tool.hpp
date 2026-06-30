@@ -15,6 +15,7 @@
 #include <arcticdb/async/async_store.hpp>
 #include <arcticdb/entity/read_result.hpp>
 #include <arcticdb/version/local_versioned_engine.hpp>
+#include <arcticdb/python/python_to_tensor_frame.hpp>
 #include <memory>
 
 namespace arcticdb::toolbox::apy {
@@ -43,12 +44,13 @@ class LibraryTool {
     void overwrite_segment_in_memory(VariantKey key, const SegmentInMemory& segment_in_memory);
 
     SegmentInMemory item_to_segment_in_memory(
-            const StreamId& stream_id, const py::tuple& item, const py::object& norm, const py::object& user_meta,
-            std::optional<AtomKey> next_key = std::nullopt
+            const StreamId& stream_id, const std::shared_ptr<convert::PandasData>& item, const py::object& norm,
+            const py::object& user_meta, std::optional<AtomKey> next_key = std::nullopt
     );
 
     SegmentInMemory overwrite_append_data(
-            VariantKey key, const py::tuple& item, const py::object& norm, const py::object& user_meta
+            VariantKey key, const std::shared_ptr<convert::PandasData>& item, const py::object& norm,
+            const py::object& user_meta
     );
 
     void remove(VariantKey key);
