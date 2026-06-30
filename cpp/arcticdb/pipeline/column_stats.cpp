@@ -96,6 +96,10 @@ std::string type_to_operator_string(ColumnStatTypeInternal type) {
         return "v1_MIN";
     case ColumnStatTypeInternal::MAX_V1:
         return "v1_MAX";
+    case ColumnStatTypeInternal::NAN_COUNT_V1:
+        return "v1_NAN_COUNT";
+    case ColumnStatTypeInternal::NULL_COUNT_V1:
+        return "v1_NULL_COUNT";
     default:
         internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Unknown column stat type requested");
     }
@@ -160,7 +164,9 @@ ColumnStats::ColumnStats(
             switch (entry.type()) {
             case MIN_V1:
             case MAX_V1:
-                external_type = ColumnStatType::MINMAX;
+            case NAN_COUNT_V1:
+            case NULL_COUNT_V1:
+                external_type = ColumnStatType::MINMAX; // null and nan are calculated inline with minmax
                 break;
             case UNKNOWN:
             default:
@@ -209,7 +215,10 @@ namespace {
 std::unordered_set<ColumnStatTypeInternal> external_to_internal(ColumnStatType type) {
     switch (type) {
     case ColumnStatType::MINMAX:
-        return {ColumnStatTypeInternal::MIN_V1, ColumnStatTypeInternal::MAX_V1};
+        return {ColumnStatTypeInternal::MIN_V1,
+                ColumnStatTypeInternal::MAX_V1,
+                ColumnStatTypeInternal::NAN_COUNT_V1,
+                ColumnStatTypeInternal::NULL_COUNT_V1};
     default:
         internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Unknown column stat type");
     }
@@ -294,7 +303,13 @@ std::optional<Clause> ColumnStats::clause() const {
                         ),
                         ColumnName(
                                 to_segment_column_name(name_and_stat_types.mangled_name, ColumnStatTypeInternal::MAX_V1)
-                        )
+                        ),
+                        ColumnName(to_segment_column_name(
+                                name_and_stat_types.mangled_name, ColumnStatTypeInternal::NAN_COUNT_V1
+                        )),
+                        ColumnName(to_segment_column_name(
+                                name_and_stat_types.mangled_name, ColumnStatTypeInternal::NULL_COUNT_V1
+                        ))
                 ));
                 break;
             default:

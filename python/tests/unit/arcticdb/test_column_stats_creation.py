@@ -6,11 +6,14 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 
+import math
+
 import numpy as np
 import pandas as pd
 import polars as pl
 import pyarrow as pa
 import pytest
+from hypothesis import given, settings, strategies as st
 from polars.testing import assert_frame_equal as pl_assert_frame_equal
 
 from arcticc.pb2.column_stats_pb2 import ColumnStatsHeader, ColumnStatsType
@@ -20,6 +23,7 @@ from arcticdb_ext.exceptions import SchemaException, StorageException, UserInput
 from arcticdb_ext.storage import KeyType
 from arcticdb_ext.version_store import NoSuchVersionException
 from arcticdb import QueryBuilder
+from arcticdb.util.hypothesis import use_of_function_scoped_fixtures_in_hypothesis_checked
 
 pytestmark = pytest.mark.pipeline
 
@@ -55,6 +59,12 @@ def assert_stats_equal(received, expected):
     assert isinstance(received, pa.Table)
     assert isinstance(expected, pl.DataFrame)
     received_pl = pl.from_arrow(received)
+    # The C++ aggregator always emits v1_NAN_COUNT and v1_NULL_COUNT columns alongside MIN/MAX.
+    # Tests that aren't exercising the count behaviour omit those columns from `expected`;
+    # subselect `received` down to the expected columns so the comparison stays focused.
+    missing = set(expected.columns) - set(received_pl.columns)
+    assert not missing, f"Expected columns missing from received: {missing}"
+    received_pl = received_pl.select(expected.columns)
     pl_assert_frame_equal(received_pl, expected, check_column_order=False, check_dtypes=False)
 
 
@@ -264,6 +274,189 @@ def test_column_stats_only_nat_values(lmdb_version_store, any_output_format):
     assert raw_stats["v1_MAX(col_1)"].values.view("int64")[0] == nat_sentinel
 
 
+def test_column_stats_nan_and_null_counts(lmdb_version_store, any_output_format):
+    lib = lmdb_version_store
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    sym = "test_column_stats_nan_and_null_counts"
+
+    # Each write/append produces a separate segment, so we get one row per dataframe in the stats.
+    # Both NaN (float) and NaT (timestamp) are in-band sentinels and count toward v1_NAN_COUNT.
+    df0 = pd.DataFrame(
+        {"float_col": [1.0, 2.0], "ts_col": [pd.Timestamp("2020-01-01"), pd.Timestamp("2020-06-01")]},
+        index=pd.date_range("2000-01-01", periods=2),
+    )
+    df1 = pd.DataFrame(
+        {"float_col": [np.nan, 5.0], "ts_col": [pd.NaT, pd.Timestamp("2021-01-01")]},
+        index=pd.date_range("2000-01-03", periods=2),
+    )
+    df2 = pd.DataFrame(
+        {"float_col": [np.nan, np.nan], "ts_col": [pd.NaT, pd.NaT]},
+        index=pd.date_range("2000-01-05", periods=2),
+    )
+    df3 = pd.DataFrame(
+        {"float_col": [1.0, np.nan, 2.0], "ts_col": [pd.Timestamp("2022-01-01"), pd.NaT, pd.Timestamp("2022-06-01")]},
+        index=pd.date_range("2000-01-07", periods=3),
+    )
+    lib.write(sym, df0)
+    lib.append(sym, df1)
+    lib.append(sym, df2)
+    lib.append(sym, df3)
+
+    lib.create_column_stats_experimental(sym)
+
+    expected_column_stats = index_columns_to_pl(lib, sym).with_columns(
+        pl.Series("v1_MIN(float_col)", [1.0, 5.0, np.nan, 1.0]),
+        pl.Series("v1_MAX(float_col)", [2.0, 5.0, np.nan, 2.0]),
+        pl.Series("v1_NAN_COUNT(float_col)", [0, 1, 2, 1], dtype=pl.UInt64),
+        pl.Series("v1_NULL_COUNT(float_col)", [0, 0, 0, 0], dtype=pl.UInt64),
+        pl.Series(
+            "v1_MIN(ts_col)",
+            [
+                pd.Timestamp("2020-01-01").value,
+                pd.Timestamp("2021-01-01").value,
+                None,
+                pd.Timestamp("2022-01-01").value,
+            ],
+            dtype=pl.Int64,
+        ).cast(pl.Datetime("ns")),
+        pl.Series(
+            "v1_MAX(ts_col)",
+            [
+                pd.Timestamp("2020-06-01").value,
+                pd.Timestamp("2021-01-01").value,
+                None,
+                pd.Timestamp("2022-06-01").value,
+            ],
+            dtype=pl.Int64,
+        ).cast(pl.Datetime("ns")),
+        pl.Series("v1_NAN_COUNT(ts_col)", [0, 1, 2, 1], dtype=pl.UInt64),
+        pl.Series("v1_NULL_COUNT(ts_col)", [0, 0, 0, 0], dtype=pl.UInt64),
+    )
+
+    column_stats = lib.read_column_stats_experimental(sym)
+    assert_stats_equal(column_stats, expected_column_stats)
+
+
+def test_column_stats_nan_count_single_segment(lmdb_version_store, any_output_format):
+    """In-band sentinels (NaN in a float column, NaT in a timestamp column) count towards
+    v1_NAN_COUNT. v1_NULL_COUNT is reserved for genuinely-missing rows (sparse-map gaps)."""
+    lib = lmdb_version_store
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    sym = "test_column_stats_nan_count_single_segment"
+    df = pd.DataFrame(
+        {
+            "float_col": [1.0, np.nan, 2.0, np.nan, np.nan],
+            "ts_col": [
+                pd.Timestamp("2020-01-01"),
+                pd.NaT,
+                pd.Timestamp("2020-06-01"),
+                pd.NaT,
+                pd.Timestamp("2020-12-01"),
+            ],
+        },
+        index=pd.date_range("2000-01-01", periods=5),
+    )
+    lib.write(sym, df)
+    lib.create_column_stats_experimental(sym)
+
+    cs = pl.from_arrow(lib.read_column_stats_experimental(sym))
+    assert cs["v1_NAN_COUNT(float_col)"].to_list() == [3]
+    assert cs["v1_NULL_COUNT(float_col)"].to_list() == [0]
+    assert cs["v1_NAN_COUNT(ts_col)"].to_list() == [2]
+    assert cs["v1_NULL_COUNT(ts_col)"].to_list() == [0]
+
+
+def test_column_stats_null_count_sparse_floats(version_store_factory, lib_name, encoding_version, any_output_format):
+    """sparsify_floats=True stores NaN floats as sparse-map gaps rather than dense NaN values.
+    Those gaps are counted as nulls (v1_NULL_COUNT), not NaNs (v1_NAN_COUNT).
+
+    The 6 rows span multiple segments (segment_row_size=3) with a different null count in each,
+    so the per-segment null calculation is exercised rather than a single-segment case."""
+    lib = version_store_factory(
+        column_group_size=2,
+        segment_row_size=3,
+        encoding_version=int(encoding_version),
+        lmdb_config={"map_size": 2**30},
+        name=lib_name + f"_{encoding_version.name}",
+    )
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    sym = "test_column_stats_null_count_sparse_floats"
+    # Segment 0 (rows 0-2): [1.0, nan, 2.0] -> 1 null, min 1.0, max 2.0
+    # Segment 1 (rows 3-5): [nan, nan, 4.0] -> 2 nulls, min 4.0, max 4.0
+    df = pd.DataFrame({"col_1": [1.0, np.nan, 2.0, np.nan, np.nan, 4.0]}, index=pd.date_range("2000-01-01", periods=6))
+    lib.write(sym, df, sparsify_floats=True)
+    lib.create_column_stats_experimental(sym)
+
+    cs = pl.from_arrow(lib.read_column_stats_experimental(sym)).sort("start_index")
+    assert cs["v1_NULL_COUNT(col_1)"].to_list() == [1, 2]
+    assert cs["v1_NAN_COUNT(col_1)"].to_list() == [0, 0]
+    assert cs["v1_MIN(col_1)"].to_list() == [1.0, 4.0]
+    assert cs["v1_MAX(col_1)"].to_list() == [2.0, 4.0]
+
+
+def test_column_stats_arrow_nan_and_null_same_column(lmdb_version_store_arrow):
+    lib = lmdb_version_store_arrow
+    lib._cfg.write_options.segment_row_size = 100
+    sym = "test_column_stats_arrow_nan_and_null_same_column"
+
+    def table(values):
+        return pa.table({"f": pa.array(values, pa.float64())})
+
+    lib.write(sym, table([1.0, np.nan, None, 2.0]))  # nan=1, null=1, min=1, max=2
+    lib.append(sym, table([np.nan, np.nan, None]))  # nan=2, null=1, all stored values are NaN
+    lib.append(sym, table([None, None]))  # all null: nan=0, null=2, no min/max
+    lib.append(sym, table([3.0, None, np.nan, 4.0, None]))  # nan=1, null=2, min=3, max=4
+
+    lib.create_column_stats_experimental(sym)
+    cs = pl.from_arrow(lib.read_column_stats_experimental(sym)).sort("start_index")
+
+    assert cs["v1_NAN_COUNT(f)"].to_list() == [1, 2, 0, 1]
+    assert cs["v1_NULL_COUNT(f)"].to_list() == [1, 1, 2, 2]
+
+    mins = cs["v1_MIN(f)"].to_list()
+    maxs = cs["v1_MAX(f)"].to_list()
+    assert mins[0] == 1.0 and maxs[0] == 2.0
+    assert math.isnan(mins[1]) and math.isnan(maxs[1])  # all-NaN block keeps NaN min/max
+    assert mins[2] is None and maxs[2] is None  # all-null block has no min/max
+    assert mins[3] == 3.0 and maxs[3] == 4.0
+
+
+def _segment_values():
+    element = st.one_of(
+        st.floats(min_value=-1e9, max_value=1e9, allow_nan=False, allow_infinity=False),
+        st.just(float("nan")),
+        st.none(),
+    )
+    return st.lists(element, min_size=1, max_size=10)
+
+
+@use_of_function_scoped_fixtures_in_hypothesis_checked
+@settings(deadline=None)
+@given(segments=st.lists(_segment_values(), min_size=1, max_size=6))
+def test_column_stats_arrow_nan_null_counts_hypothesis(lmdb_version_store_arrow, segments):
+    lib = lmdb_version_store_arrow
+    lib._cfg.write_options.segment_row_size = 100
+    lib.version_store.clear()
+    sym = "test_column_stats_arrow_nan_null_counts_hypothesis"
+
+    def table(values):
+        return pa.table({"f": pa.array(values, pa.float64())})
+
+    lib.write(sym, table(segments[0]))
+    for seg in segments[1:]:
+        lib.append(sym, table(seg))
+
+    lib.create_column_stats_experimental(sym)
+    cs = pl.from_arrow(lib.read_column_stats_experimental(sym))
+
+    # NaN is the only float not equal to itself; null is None.
+    expected_nan = sum(1 for seg in segments for v in seg if v is not None and v != v)
+    expected_null = sum(1 for seg in segments for v in seg if v is None)
+
+    assert cs["v1_NAN_COUNT(f)"].sum() == expected_nan
+    assert cs["v1_NULL_COUNT(f)"].sum() == expected_null
+
+
 def test_column_stats_as_of(version_store_factory, lib_name, encoding_version, any_output_format):
     lib = version_store_factory(
         column_group_size=2,
@@ -409,6 +602,9 @@ def test_column_stats_dynamic_schema_missing_data(version_store_factory, lib_nam
 
     # Slices that are missing the column come back as null via the validity bitmap. df4["col_2"] is
     # all-NaN but the column is present so the stat is computed and stored as NaN, not null.
+    # The count columns follow the same rule: a fully-missing column has no aggregator run for that
+    # slice, so its NAN_COUNT/NULL_COUNT are null (not 0). Present columns count their NaNs in
+    # NAN_COUNT and leave NULL_COUNT at 0 (NaN floats are stored densely here, not as sparse gaps).
     expected_column_stats = index_columns_to_pl(lib, sym).with_columns(
         pl.Series(
             "v1_MIN(col_1)",
@@ -418,6 +614,8 @@ def test_column_stats_dynamic_schema_missing_data(version_store_factory, lib_nam
             "v1_MAX(col_1)",
             [df0["col_1"].max(), None, df2["col_1"].max(), None, df4["col_1"].max(), None],
         ),
+        pl.Series("v1_NAN_COUNT(col_1)", [0, None, 0, None, 1, None], dtype=pl.UInt64),
+        pl.Series("v1_NULL_COUNT(col_1)", [0, None, 0, None, 0, None], dtype=pl.UInt64),
         pl.Series(
             "v1_MIN(col_2)",
             [df0["col_2"].min(), df1["col_2"].min(), None, None, df4["col_2"].min(), None],
@@ -426,8 +624,12 @@ def test_column_stats_dynamic_schema_missing_data(version_store_factory, lib_nam
             "v1_MAX(col_2)",
             [df0["col_2"].max(), df1["col_2"].max(), None, None, df4["col_2"].max(), None],
         ),
+        pl.Series("v1_NAN_COUNT(col_2)", [0, 0, None, None, 2, None], dtype=pl.UInt64),
+        pl.Series("v1_NULL_COUNT(col_2)", [0, 0, None, None, 0, None], dtype=pl.UInt64),
         pl.Series("v1_MIN(col_5)", [None, None, None, None, None, df5["col_5"].min()], dtype=pl.Int64),
         pl.Series("v1_MAX(col_5)", [None, None, None, None, None, df5["col_5"].max()], dtype=pl.Int64),
+        pl.Series("v1_NAN_COUNT(col_5)", [None, None, None, None, None, 0], dtype=pl.UInt64),
+        pl.Series("v1_NULL_COUNT(col_5)", [None, None, None, None, None, 0], dtype=pl.UInt64),
     )
     lib.create_column_stats_experimental(sym)
     assert lib.get_column_stats_info_experimental(sym) == {
@@ -739,35 +941,39 @@ def test_column_stats_header_metadata(version_store_factory, lib_name, encoding_
     sym = "test_column_stats_header_metadata"
     generate_symbol(lib, sym)
 
-    # Auto-discovery creates stats for all eligible columns (col_1 at offset 2, col_2 at offset 3)
+    # Auto-discovery creates stats for all eligible columns (col_1 at offset 2, col_2 at offset 3).
+    # MINMAX emits 4 stat entries per column: MIN, MAX, NAN_COUNT, NULL_COUNT.
+    minmax_types = {
+        ColumnStatsType.MIN_V1,
+        ColumnStatsType.MAX_V1,
+        ColumnStatsType.NAN_COUNT_V1,
+        ColumnStatsType.NULL_COUNT_V1,
+    }
     lib.create_column_stats_experimental(sym)
     header = read_column_stats_header(lib, sym)
 
     assert header.version == 1
     # if you change the structure, consider whether you need to change header.version too
     assert len(header.ListFields()) == 2
-    assert header_stat_count(header) == 4
-    assert header_stat_pairs(header) == {
-        (2, ColumnStatsType.MIN_V1),
-        (2, ColumnStatsType.MAX_V1),
-        (3, ColumnStatsType.MIN_V1),
-        (3, ColumnStatsType.MAX_V1),
-    }
+    assert header_stat_count(header) == 8
+    assert header_stat_pairs(header) == {(2, t) for t in minmax_types} | {(3, t) for t in minmax_types}
     offsets = [entry.stats_seg_offset for _, entry in header_all_entries(header)]
-    assert len(set(offsets)) == 4
+    assert len(set(offsets)) == 8
 
     # Verify descriptor field names match the offsets
+    field_name_by_type = {
+        ColumnStatsType.MIN_V1: "v1_MIN",
+        ColumnStatsType.MAX_V1: "v1_MAX",
+        ColumnStatsType.NAN_COUNT_V1: "v1_NAN_COUNT",
+        ColumnStatsType.NULL_COUNT_V1: "v1_NULL_COUNT",
+    }
+    col_name_by_offset = {2: "col_1", 3: "col_2"}
     lib_tool = lib.library_tool()
     keys = lib_tool.find_keys_for_symbol(KeyType.COLUMN_STATS, sym)
     fields = lib_tool.read_descriptor(keys[0]).fields()
-    expected_field_names = {
-        (2, ColumnStatsType.MIN_V1): "v1_MIN(col_1)",
-        (2, ColumnStatsType.MAX_V1): "v1_MAX(col_1)",
-        (3, ColumnStatsType.MIN_V1): "v1_MIN(col_2)",
-        (3, ColumnStatsType.MAX_V1): "v1_MAX(col_2)",
-    }
     for data_col_offset, entry in header_all_entries(header):
-        assert fields[entry.stats_seg_offset].name == expected_field_names[(data_col_offset, entry.type)]
+        expected = f"{field_name_by_type[entry.type]}({col_name_by_offset[data_col_offset]})"
+        assert fields[entry.stats_seg_offset].name == expected
 
 
 def test_column_stats_duplicated_column_names(version_store_factory, lib_name, encoding_version, any_output_format):

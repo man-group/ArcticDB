@@ -411,4 +411,95 @@ TEST(ColumnStatsDataTest, SparseColumnAbsentMarkedCorrectly) {
     ASSERT_FALSE(v1.max.has_value());
     ASSERT_TRUE(v1.column_absent);
 }
+
+// A wholly-null row-slice has NAN_COUNT/NULL_COUNT entries but no MIN/MAX (no real value to
+// min/max over). values_for_column must propagate the counts and leave column_absent false, so
+// downstream comparators fall through to UNKNOWN rather than pruning the slice
+TEST(ColumnStatsDataTest, AllNullSliceKeepsCountsAndNotAbsent) {
+    using namespace arcticc::pb2::column_stats_pb2;
+
+    // Stats segment layout:
+    //   col 0: start_index
+    //   col 1: end_index
+    //   col 2: v1_MIN(price)
+    //   col 3: v1_MAX(price)
+    //   col 4: v1_NAN_COUNT(price)
+    //   col 5: v1_NULL_COUNT(price)
+    //
+    // Row 0: price=[10,20]            (real values)
+    // Row 1: price all null           (no MIN/MAX, null_count=3)
+
+    auto start_col = std::make_shared<Column>(make_scalar_type(DataType::NANOSECONDS_UTC64), Sparsity::PERMITTED);
+    auto end_col = std::make_shared<Column>(make_scalar_type(DataType::NANOSECONDS_UTC64), Sparsity::PERMITTED);
+    auto min_price_col = std::make_shared<Column>(make_scalar_type(DataType::INT64), Sparsity::PERMITTED);
+    auto max_price_col = std::make_shared<Column>(make_scalar_type(DataType::INT64), Sparsity::PERMITTED);
+    auto nan_count_col = std::make_shared<Column>(make_scalar_type(DataType::UINT64), Sparsity::PERMITTED);
+    auto null_count_col = std::make_shared<Column>(make_scalar_type(DataType::UINT64), Sparsity::PERMITTED);
+
+    // Row 0: real values present, no nulls
+    start_col->push_back<timestamp>(100);
+    end_col->push_back<timestamp>(200);
+    min_price_col->push_back<int64_t>(10);
+    max_price_col->push_back<int64_t>(20);
+    nan_count_col->push_back<uint64_t>(0);
+    null_count_col->push_back<uint64_t>(0);
+
+    // Row 1: all null - min/max absent, counts present
+    start_col->push_back<timestamp>(300);
+    end_col->push_back<timestamp>(400);
+    min_price_col->mark_absent_rows(1);
+    max_price_col->mark_absent_rows(1);
+    nan_count_col->push_back<uint64_t>(0);
+    null_count_col->push_back<uint64_t>(3);
+
+    ssize_t last_row = 1;
+    SegmentInMemory seg;
+    seg.descriptor().set_index(IndexDescriptorImpl(IndexDescriptorImpl::Type::ROWCOUNT, 0));
+    seg.add_column(scalar_field(DataType::NANOSECONDS_UTC64, start_index_column_name), start_col);
+    seg.add_column(scalar_field(DataType::NANOSECONDS_UTC64, end_index_column_name), end_col);
+    seg.add_column(scalar_field(DataType::INT64, "v1_MIN(price)"), min_price_col);
+    seg.add_column(scalar_field(DataType::INT64, "v1_MAX(price)"), max_price_col);
+    seg.add_column(scalar_field(DataType::UINT64, "v1_NAN_COUNT(price)"), nan_count_col);
+    seg.add_column(scalar_field(DataType::UINT64, "v1_NULL_COUNT(price)"), null_count_col);
+    seg.set_row_data(last_row);
+
+    ColumnStatsHeader header;
+    header.set_version(1);
+    auto& price_entries = (*header.mutable_stats_by_column())[price_data_col_offset];
+    auto* p_min = price_entries.add_entries();
+    p_min->set_stats_seg_offset(2);
+    p_min->set_type(MIN_V1);
+    auto* p_max = price_entries.add_entries();
+    p_max->set_stats_seg_offset(3);
+    p_max->set_type(MAX_V1);
+    auto* p_nan = price_entries.add_entries();
+    p_nan->set_stats_seg_offset(4);
+    p_nan->set_type(NAN_COUNT_V1);
+    auto* p_null = price_entries.add_entries();
+    p_null->set_stats_seg_offset(5);
+    p_null->set_type(NULL_COUNT_V1);
+
+    google::protobuf::Any any;
+    any.PackFrom(header);
+    seg.set_metadata(std::move(any));
+
+    ColumnStatsData data(std::move(seg), build_test_tsd());
+    ASSERT_FALSE(data.empty());
+
+    auto row0 = data.find_row(100, 200);
+    ASSERT_TRUE(row0.has_value());
+    auto v0 = stats_for(data, "price", *row0);
+    ASSERT_TRUE(v0.min.has_value());
+    ASSERT_EQ(v0.min->get<int64_t>(), 10);
+    ASSERT_FALSE(v0.column_absent);
+
+    auto row1 = data.find_row(300, 400);
+    ASSERT_TRUE(row1.has_value());
+    auto v1 = stats_for(data, "price", *row1);
+    ASSERT_FALSE(v1.min.has_value());
+    ASSERT_FALSE(v1.max.has_value());
+    ASSERT_FALSE(v1.column_absent); // present-but-all-null, not absent
+    ASSERT_EQ(v1.nan_count, 0u);
+    ASSERT_EQ(v1.null_count, 3u);
+}
 } // namespace arcticdb
