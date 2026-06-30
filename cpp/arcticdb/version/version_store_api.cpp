@@ -1535,7 +1535,8 @@ void write_dataframe_to_file(
         const py::object& norm, const py::object& user_meta
 ) {
     ARCTICDB_SAMPLE(WriteDataframeToFile, 0)
-    auto frame = convert::py_input_item_to_frame(stream_id, item, norm, user_meta, false, pipelines::SortednessScan::SKIP);
+    auto frame =
+            convert::py_input_item_to_frame(stream_id, item, norm, user_meta, false, pipelines::SortednessScan::SKIP);
     write_dataframe_to_file_internal(
             stream_id, frame, path, WriteOptions{}, codec::default_lz4_codec(), EncodingVersion::V2
     );
