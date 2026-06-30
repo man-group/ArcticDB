@@ -29,7 +29,8 @@ DatetimeIndex variations    →                 Nanosecond timestamps
 ## NormalizedInput
 
 `NormalizedInput` is a named tuple with:
-- `item` - NPDDataFrame ready for C++ (numpy arrays in structured format)
+- `item` - `PandasData` ready for C++ (a pybind-bound struct holding the column/index names and
+  references to the numpy arrays)
 - `metadata` - NormalizationMetadata protobuf containing df/ts/np/msg_pack_frame metadata
 
 ### Conversion Flow
@@ -38,7 +39,7 @@ DatetimeIndex variations    →                 Nanosecond timestamps
 pandas.DataFrame / pa.Table / pl.DataFrame
         │
         ▼ normalize()
-NormalizedInput (NPDDataFrame or RecordBatches + NormalizationMetadata)
+NormalizedInput (PandasData or RecordBatches + NormalizationMetadata)
         │
         ▼ to C++
 InputFrame
@@ -58,7 +59,7 @@ pandas.DataFrame / pa.Table / pl.DataFrame (based on OutputFormat)
 
 ### Input Normalization
 
-`normalize(data, string_max_len)` converts input data to the internal format. For pandas DataFrames this produces an NPDDataFrame (numpy arrays). For PyArrow Tables and polars DataFrames this produces a vector of record batches.
+`normalize(data, string_max_len)` converts input data to the internal format. For pandas DataFrames this produces a `PandasData` (column/index names plus references to the numpy arrays). For PyArrow Tables and polars DataFrames this produces a vector of record batches.
 
 ### Type Conversion
 
