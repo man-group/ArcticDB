@@ -277,15 +277,26 @@ class ArrowStrings:
         self._setup_cache()
         self.logger.info(f"SETUP_CACHE TIME: {time.time() - start}")
 
-    def _generate_table(self, num_rows, num_cols, unique_string_count):
+    def _string_array(self, values, arrow_string_format):
+        if arrow_string_format == ArrowOutputStringFormat.SMALL_STRING:
+            return pa.array(values, pa.string())
+        if arrow_string_format == ArrowOutputStringFormat.LARGE_STRING:
+            return pa.array(values, pa.large_string())
+        # CATEGORICAL and DICTIONARY_ENCODED are aliases for dictionary-encoded strings (int32 keys, large_string values)
+        return pa.array(values, pa.large_string()).dictionary_encode()
+
+    def _generate_table(
+        self, num_rows, num_cols, unique_string_count, arrow_string_format=ArrowOutputStringFormat.SMALL_STRING
+    ):
         np.random.seed(42)
         random.seed(42)
         strings = np.array(random_strings_of_length(unique_string_count, 10, unique=True, kind="ascii"))
         names = ["ts"] + [f"col{idx}" for idx in range(num_cols)]
         index = pd.date_range("1970-01-01", freq="ns", periods=num_rows)
-        return pa.Table.from_arrays(
-            [index] + [np.random.choice(strings, num_rows) for _ in range(num_cols)], names=names
-        )
+        columns = [index] + [
+            self._string_array(np.random.choice(strings, num_rows), arrow_string_format) for _ in range(num_cols)
+        ]
+        return pa.Table.from_arrays(columns, names=names)
 
     def _setup_cache(self):
         self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)
@@ -317,7 +328,7 @@ class ArrowStrings:
             self.date_range = (pd.Timestamp(10), pd.Timestamp(rows - 10))
         self.fresh_lib = self.get_fresh_lib()
         self.fresh_lib._nvs._set_allow_arrow_input()
-        self.table = self._generate_table(rows, self.num_cols, unique_string_count)
+        self.table = self._generate_table(rows, self.num_cols, unique_string_count, arrow_string_format)
 
     def get_fresh_lib(self):
         self.ac.delete_library(self.lib_name_fresh)
@@ -325,14 +336,14 @@ class ArrowStrings:
 
     def time_write(self, rows, date_range, unique_string_count, arrow_string_format):
         # No point in running with all read time options
-        if date_range is None and arrow_string_format == ArrowOutputStringFormat.CATEGORICAL:
+        if date_range is None:
             self.fresh_lib.write(self.symbol_name(rows, unique_string_count), self.table, index_column=True)
         else:
             raise SkipNotImplemented
 
     def peakmem_write(self, rows, date_range, unique_string_count, arrow_string_format):
         # No point in running with all read time options
-        if date_range is None and arrow_string_format == ArrowOutputStringFormat.CATEGORICAL:
+        if date_range is None:
             self.fresh_lib.write(self.symbol_name(rows, unique_string_count), self.table, index_column=True)
         else:
             raise SkipNotImplemented

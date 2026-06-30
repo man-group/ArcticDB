@@ -381,9 +381,21 @@ std::vector<sparrow::record_batch> segment_to_arrow_data(SegmentInMemory& segmen
 }
 
 DataType arcticdb_type_from_arrow_array(const sparrow::array& array) {
-    schema::check<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
-            !array.dictionary().has_value(), "Dictionary-encoded Arrow data unsupported"
-    );
+    if (auto dictionary = array.dictionary(); dictionary.has_value()) {
+        // pyarrow stores dictionary encoded strings with int32 keys
+        // polars stores dictionary encoded strings with uint32 keys
+        // In both cases we need the 4 byte UTF_DYNAMIC32.
+        const auto index_type = array.data_type();
+        schema::check<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
+                (index_type == sparrow::data_type::INT32 || index_type == sparrow::data_type::UINT32) &&
+                        dictionary.value().data_type() == sparrow::data_type::LARGE_STRING,
+                "Dictionary-encoded Arrow data is supported only for int32/uint32 -> large_string mapping. Instead got "
+                "{} -> {}",
+                sparrow::data_type_to_format(index_type),
+                sparrow::data_type_to_format(dictionary.value().data_type())
+        );
+        return DataType::UTF_DYNAMIC32;
+    }
     switch (array.data_type()) {
     case sparrow::data_type::BOOL:
         return DataType::BOOL8;
@@ -461,19 +473,33 @@ std::pair<std::vector<Column>, entity::StreamDescriptor> record_batches_to_colum
             } else { // Numeric and string types
                 data += array.offset() * get_type_size(data_type);
                 const auto bytes = array.size() * get_type_size(data_type);
-                if (is_sequence_type(data_type)) {
-                    // For string columns, we add an external block with extra bytes for the last offset.
-                    // This is needed to keep our indexing into the column's ChunkedBuffer accurate.
-                    column.buffer().add_external_block(data, bytes, get_type_size(data_type));
-                    // arrow_array_buffers[2] is the buffer that contains the actual strings. The data pointer
-                    // represents offsets into this buffer
-                    ChunkedBuffer strings_buffer;
-                    const auto string_bytes = arrow_array_buffers[2].size();
-                    strings_buffer.add_external_block(arrow_array_buffers[2].data<uint8_t>(), string_bytes);
-                    column.set_extra_buffer(
-                            start_row * get_type_size(data_type), ExtraBufferType::STRING, std::move(strings_buffer)
-                    );
-                } else {
+                if (is_sequence_type(data_type)) { // String types
+                    auto add_extra_buffer = [&](sparrow::buffer_view<uint8_t> arrow_array_buffer,
+                                                ExtraBufferType buffer_type) {
+                        ChunkedBuffer extra_buffer;
+                        extra_buffer.add_external_block(arrow_array_buffer.data<uint8_t>(), arrow_array_buffer.size());
+                        column.set_extra_buffer(
+                                start_row * get_type_size(data_type), buffer_type, std::move(extra_buffer)
+                        );
+                    };
+                    if (auto dictionary = array.dictionary(); dictionary.has_value()) {
+                        // Dictionary-encoded (categorical) strings.
+                        // arrow_array_buffers[1] (data): int32/uint32 keys into dictionary
+                        // dictionary_buffers[1]: int64 offsets, one per entry plus a trailing end offset
+                        // dictionary_buffers[2]: string buffer containing concatenated strings
+                        column.buffer().add_external_block(data, bytes);
+                        auto [dict_array, dict_schema] = sparrow::get_arrow_structures(dictionary.value());
+                        auto dictionary_buffers = sparrow::get_arrow_array_buffers(*dict_array, *dict_schema);
+                        add_extra_buffer(dictionary_buffers[1], ExtraBufferType::OFFSET);
+                        add_extra_buffer(dictionary_buffers[2], ExtraBufferType::STRING);
+                    } else {
+                        // Variable-length strings.
+                        // arrow_array_buffers[1] (data): int32/int64 offsets in string buffer, one extra offset
+                        // arrow_array_buffers[2]: string buffer containing concatenated strings
+                        column.buffer().add_external_block(data, bytes, get_type_size(data_type));
+                        add_extra_buffer(arrow_array_buffers[2], ExtraBufferType::STRING);
+                    }
+                } else { // Numeric types
                     column.buffer().add_external_block(data, bytes);
                 }
             }
