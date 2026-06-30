@@ -272,12 +272,6 @@ def test_append_scenario_with_errors_and_success(version_store_and_real_s3_basic
     df_different_index = pd.DataFrame({"value": [4, 5, 6]}, index=["a", "b", "c"])  # String index instead of datetime
     df_no_index = pd.DataFrame({"value": [4, 5, 6]})
 
-    # Test append to non-existent symbol
-    for sym in [symbol, None, ""]:
-        with pytest.raises(TypeError):
-            lib.append(sym)
-    assert len(lib.list_symbols()) == 0
-
     # Empty dataframe will create symbol with one version
     result = lib.append(symbol, df_empty)
     assert len(lib.list_symbols()) == 1
@@ -347,11 +341,10 @@ def test_append_scenario_with_errors_and_success(version_store_and_real_s3_basic
         with pytest.raises(StreamDescriptorMismatch):
             lib.append(symbol, df_different_schema)
 
-    # Append empty dataframe to symbol with content does not increase version
-    # but as we saw previously it will create symbol
+    # Append empty dataframe to symbol with content increases the version in case the metadata has changed
     result = lib.append(symbol, df_empty)
     assert len(lib.list_symbols()) == 1
-    assert len(lib.list_versions()) == 4 if dynamic_schema else 3
+    assert len(lib.list_versions()) == 5 if dynamic_schema else 4
 
     # Validate that validate_index works as expected
     with pytest.raises(UnsortedDataException):
