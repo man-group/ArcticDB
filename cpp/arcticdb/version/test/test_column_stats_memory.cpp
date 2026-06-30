@@ -378,4 +378,44 @@ TEST(ColumnStatsMixedColSlicing, ResidencyBoundedWithUnevenUnitsWiderFirst) {
     EXPECT_EQ(info.to_map(), expected);
 }
 
+namespace {
+struct ScopedThreadCounts {
+    ScopedThreadCounts(int64_t cpu, int64_t io) {
+        ConfigsMap::instance()->set_int("VersionStore.NumCPUThreads", cpu);
+        ConfigsMap::instance()->set_int("VersionStore.NumIOThreads", io);
+        async::TaskScheduler::reattach_instance();
+    }
+    ~ScopedThreadCounts() {
+        ConfigsMap::instance()->unset_int("VersionStore.NumCPUThreads");
+        ConfigsMap::instance()->unset_int("VersionStore.NumIOThreads");
+        async::TaskScheduler::reattach_instance();
+    }
+};
+} // namespace
+
+// Many column slices in each processing unit make the IO read-ahead term go to 1. The 2*cpu_thread_count floor must keep the default
+// from starving the CPU pool.
+TEST(NumProcessingUnitsLive, CpuFloorAppliesForWideUnits) {
+    ScopedThreadCounts threads{/*cpu=*/4, /*io=*/2};
+    const std::vector<std::vector<size_t>> wide_units{{0, 1, 2, 3, 4, 5, 6, 7}}; // max_unit_size = 8
+    // io_read_ahead = ceil(2*2 / 8) = 1; cpu floor = 2*4 = 8
+    EXPECT_EQ(version_store::num_processing_units_live(wide_units), 8u);
+}
+
+// Narrow units keep the IO read-ahead term large, so it wins over the cpu floor.
+TEST(NumProcessingUnitsLive, IoReadAheadDominatesForNarrowUnits) {
+    ScopedThreadCounts threads{/*cpu=*/2, /*io=*/8};
+    const std::vector<std::vector<size_t>> narrow_units{{0}, {1}, {2}}; // max_unit_size = 1
+    // io_read_ahead = ceil(2*8 / 1) = 16; cpu floor = 2*2 = 4
+    EXPECT_EQ(version_store::num_processing_units_live(narrow_units), 16u);
+}
+
+// An explicit config override takes precedence over the default.
+TEST(NumProcessingUnitsLive, ConfigOverrideTakesPrecedence) {
+    ScopedThreadCounts threads{/*cpu=*/4, /*io=*/8};
+    ScopedConfig override_guard{"VersionStore.NumProcessingUnitsLive", 3};
+    const std::vector<std::vector<size_t>> units{{0, 1}, {2, 3}};
+    EXPECT_EQ(version_store::num_processing_units_live(units), 3u);
+}
+
 } // namespace arcticdb

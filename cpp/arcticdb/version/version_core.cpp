@@ -1188,8 +1188,10 @@ static void generate_output_schema_and_save_to_pipeline(
     pipeline_context.default_values_ = std::forward<decltype(default_values)>(default_values);
 }
 
-// Number of processing units allowed in flight at once during admission.
-// Always >= 1 and <= number of processing units.
+// Number of processing units allowed in flight at once during admission. Always >= 1.
+// The default tries to keep both thread pools busy. The IO term ceil(2*io_thread_count / max_unit_size)
+// keeps the IO pool busy with headroom. The 2*cpu_thread_count floor ensures a CPU worker that finishes a unit finds a
+// decoded unit ready rather than stalling on the next unit's read.
 size_t num_processing_units_live(const std::vector<std::vector<size_t>>& processing_unit_indexes) {
     size_t max_unit_size = 0;
     for (const auto& unit : processing_unit_indexes) {
@@ -1199,9 +1201,10 @@ size_t num_processing_units_live(const std::vector<std::vector<size_t>>& process
         return 1;
     }
     const int64_t io_thread_count = static_cast<int64_t>(async::TaskScheduler::instance()->io_thread_count());
-    // default_processing_units_limit = ceil(2*io_thread_count / max_unit_size), so ~ 2*io_thread_count segments
-    const int64_t default_processing_units_limit =
+    const int64_t cpu_thread_count = static_cast<int64_t>(async::TaskScheduler::instance()->cpu_thread_count());
+    const int64_t io_read_ahead =
             (2 * io_thread_count + static_cast<int64_t>(max_unit_size) - 1) / static_cast<int64_t>(max_unit_size);
+    const int64_t default_processing_units_limit = std::max(2 * cpu_thread_count, io_read_ahead);
     const int64_t configured =
             ConfigsMap::instance()->get_int("VersionStore.NumProcessingUnitsLive", default_processing_units_limit);
     return static_cast<size_t>(std::max<int64_t>(1, configured));

@@ -194,6 +194,8 @@ folly::Future<std::vector<EntityId>> schedule_clause_processing(
         std::shared_ptr<ProcessingUnitAdmissionHandler> admission = nullptr
 );
 
+size_t num_processing_units_live(const std::vector<std::vector<size_t>>& processing_unit_indexes);
+
 FrameAndDescriptor read_index_impl(const std::shared_ptr<Store>& store, const VersionedItem& version);
 
 std::variant<VersionedItem, CompactionError> compact_incomplete_impl(
