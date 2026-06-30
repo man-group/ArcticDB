@@ -1664,7 +1664,7 @@ class NativeVersionStore:
             * If the first clause in `query_builder` is not a multi-symbol join
             * If any subsequent clauses in `query_builder` are not single-symbol clauses
             * If any of the specified symbols are recursively normalized
-        MissingDataException
+        NoSuchVersionException
             * If a symbol or the version of symbol specified in as_ofs does not exist or has been deleted
         SchemaException
             * If the schema of symbols to be joined are incompatible. Examples of incompatible schemas include:

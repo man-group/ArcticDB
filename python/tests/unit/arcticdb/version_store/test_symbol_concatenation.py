@@ -756,6 +756,33 @@ def test_symbol_concat_non_existent_symbol(lmdb_library, any_output_format):
         concat(lib.read_batch([sym, "non-existent symbol"], lazy=True)).collect()
 
 
+def test_symbol_concat_non_existent_version_of_symbol(lmdb_library, any_output_format):
+    lib = lmdb_library
+    lib._nvs._set_output_format_for_pipeline_tests(any_output_format)
+    sym_0 = "test_symbol_concat_non_existent_version_of_symbol"
+    lib.write(sym_0, pd.DataFrame({"col": [0]}))
+    lib.snapshot("snap")
+    sym_1 = "deleted"
+    lib.write(sym_1, pd.DataFrame({"col": [0]}))
+    lib.delete(sym_1)
+    # Reading latest version, no live versions
+    with pytest.raises(NoSuchVersionException):
+        concat(lib.read_batch([sym_0, sym_1], lazy=True)).collect()
+    lib.write(sym_1, pd.DataFrame({"col": [0]}))
+    # Reading specific deleted version
+    read_requests = [ReadRequest(sym_0), ReadRequest(sym_1, as_of=0)]
+    with pytest.raises(NoSuchVersionException):
+        concat(lib.read_batch(read_requests, lazy=True)).collect()
+    # Reading from a snapshot that exists, but does not contain this symbol
+    read_requests = [ReadRequest(sym_0), ReadRequest(sym_1, as_of="snap")]
+    with pytest.raises(NoSuchVersionException):
+        concat(lib.read_batch(read_requests, lazy=True)).collect()
+    # Reading from a snapshot that doesn't exist
+    read_requests = [ReadRequest(sym_0), ReadRequest(sym_1, as_of="non-existent-snap")]
+    with pytest.raises(NoSuchVersionException):
+        concat(lib.read_batch(read_requests, lazy=True)).collect()
+
+
 def test_symbol_concat_pickled_data(lmdb_library, any_output_format):
     lib = lmdb_library
     lib._nvs._set_output_format_for_pipeline_tests(any_output_format)
