@@ -57,17 +57,18 @@ inline size_t get_max_string_size(
 
 TimeseriesDescriptor make_timeseries_descriptor(
         size_t total_rows, const StreamDescriptor& desc,
-        arcticdb::proto::descriptors::NormalizationMetadata&& norm_meta,
-        std::optional<arcticdb::proto::descriptors::UserDefinedMetadata>&& um, std::optional<AtomKey>&& prev_key,
-        std::optional<AtomKey>&& next_key, bool bucketize_dynamic
+        const arcticdb::proto::descriptors::NormalizationMetadata& norm_meta,
+        std::optional<arcticdb::proto::descriptors::UserDefinedMetadata>&& um, std::optional<AtomKey>&& next_key,
+        bool bucketize_dynamic
 );
 
 // The overload above returns a TSD that shares a std::shared_ptr<FieldCollection> with the input StreamDescriptor,
 // which is error-prone. However, it is sometimes the desired behaviour, so needs to still be available.
 TimeseriesDescriptor make_timeseries_descriptor(
-        size_t total_rows, StreamDescriptor&& desc, arcticdb::proto::descriptors::NormalizationMetadata&& norm_meta,
-        std::optional<arcticdb::proto::descriptors::UserDefinedMetadata>&& um, std::optional<AtomKey>&& prev_key,
-        std::optional<AtomKey>&& next_key, bool bucketize_dynamic
+        size_t total_rows, StreamDescriptor&& desc,
+        const arcticdb::proto::descriptors::NormalizationMetadata& norm_meta,
+        std::optional<arcticdb::proto::descriptors::UserDefinedMetadata>&& um, std::optional<AtomKey>&& next_key,
+        bool bucketize_dynamic
 );
 
 TimeseriesDescriptor timseries_descriptor_from_index_segment(
@@ -76,13 +77,13 @@ TimeseriesDescriptor timseries_descriptor_from_index_segment(
 );
 
 TimeseriesDescriptor timeseries_descriptor_from_pipeline_context(
-        const std::shared_ptr<pipelines::PipelineContext>& pipeline_context, std::optional<AtomKey>&& prev_key,
+        const std::shared_ptr<pipelines::PipelineContext>& pipeline_context, std::optional<AtomKey>&& next_key,
         bool bucketize_dynamic
 );
 
 TimeseriesDescriptor index_descriptor_from_frame(
         const std::shared_ptr<pipelines::InputFrame>& frame, size_t existing_rows,
-        std::optional<entity::AtomKey>&& prev_key = {}
+        std::optional<entity::AtomKey>&& next_key = {}
 );
 
 template<typename RawType>
