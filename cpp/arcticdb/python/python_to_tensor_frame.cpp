@@ -370,7 +370,12 @@ std::shared_ptr<InputFrame> py_input_item_to_frame(
 
     util::variant_match(
             item,
-            [&](const std::shared_ptr<PandasData>& pandas_data) { pandas_data_to_frame(*pandas_data, empty_types, *res); },
+            [&](const std::shared_ptr<PandasData>& pandas_data) {
+                user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                        pandas_data, "Expected pandas input data but received nullptr"
+                );
+                pandas_data_to_frame(*pandas_data, empty_types, *res);
+            },
             [&](const std::vector<std::shared_ptr<RecordBatchData>>& record_batches) {
                 record_batches_to_frame(record_batches, *res, sortedness_scan);
             }
