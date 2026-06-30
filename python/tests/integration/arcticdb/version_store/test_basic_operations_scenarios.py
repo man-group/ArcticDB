@@ -726,7 +726,6 @@ def test_batch_read_and_join_scenarios_errors(basic_store):
 
 
 @pytest.mark.storage
-@pytest.mark.xfail(True, reason="Filtering of columns does not work for dynamic schema 18023047637")
 def test_batch_read_and_join_scenarios_dynamic_schema_filtering_error(lmdb_version_store_dynamic_schema_v1):
     lib: NativeVersionStore = lmdb_version_store_dynamic_schema_v1
 
@@ -762,10 +761,6 @@ def test_batch_read_and_join_scenarios_dynamic_schema_filtering_error(lmdb_versi
     expected = pd.concat([df0_subset, df1], ignore_index=True)
     # Pandas concat will fill NaN for bools, Arcticdb is using False
     expected["bool"] = expected["bool"].fillna(False)
-    ## ERROR: With dynamic schema filtering of the columns will fail
-    #  here in the 'data' df instead of None/Na values for first 19 rows for
-    #  bool and B column we will see values, which should not have been there
-    #  If this was static schema - ie 'basic_store' fixture all would be fine
     assert_frame_equal(expected, data)
 
     data: pd.DataFrame = lib.batch_read_and_join(
@@ -774,7 +769,6 @@ def test_batch_read_and_join_scenarios_dynamic_schema_filtering_error(lmdb_versi
     df0_subset = df0.loc[2:2, ["A"]]
     df1_subset = df1.loc[10:df1_len, ["B"]]
     expected = pd.concat([df0_subset, df1_subset], ignore_index=True)
-    # ERROR - here we observe that -/+ inf is added for int column "A"
     assert_frame_equal(expected, data)
 
 
