@@ -690,9 +690,8 @@ VersionedItem LocalVersionedEngine::sort_index(
     auto time_series = make_timeseries_descriptor(
             total_rows,
             StreamDescriptor{tsd.as_stream_descriptor()},
-            std::move(*tsd.mutable_proto().mutable_normalization()),
+            tsd.proto().normalization(),
             std::move(*tsd.mutable_proto().mutable_user_meta()),
-            std::nullopt,
             std::nullopt,
             bucketize_dynamic
     );

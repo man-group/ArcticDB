@@ -86,9 +86,10 @@ struct InputFrame {
     );
     StreamDescriptor& desc();
     const StreamDescriptor& desc() const;
-    // The descriptor of the input frame can differ than that for the timeseries descriptor in the index key for Arrow
-    // at least if there are string columns, and potentially in other cases as more type support is added
-    const StreamDescriptor& desc_for_tsd();
+    // The descriptor of the input frame can differ from that for the timeseries descriptor in the index key for
+    // Arrow string columns. Namely InputFrame may store offsets as 32bit integers, whereas on storage we always store
+    // 64bit offsets.
+    StreamDescriptor desc_for_tsd() const;
     void set_offset(ssize_t off) const;
     bool has_index() const;
     bool empty() const;
@@ -115,7 +116,6 @@ struct InputFrame {
     std::vector<FieldData> columns_;
     std::vector<sparrow::record_batch> arrow_buffer_owners_;
     StreamDescriptor desc_;
-    std::optional<StreamDescriptor> desc_for_tsd_;
 
     bool has_only_tensors_{true};
 };

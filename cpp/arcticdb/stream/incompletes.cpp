@@ -132,23 +132,20 @@ std::set<StreamId> get_active_incomplete_refs(const std::shared_ptr<Store>& stor
 
 TimeseriesDescriptor pack_timeseries_descriptor(
         const StreamDescriptor& descriptor, size_t total_rows, std::optional<AtomKey>&& next_key,
-        arcticdb::proto::descriptors::NormalizationMetadata&& norm_meta
+        const arcticdb::proto::descriptors::NormalizationMetadata& norm_meta
 ) {
-    auto tsd = make_timeseries_descriptor(
-            total_rows, descriptor, std::move(norm_meta), std::nullopt, std::nullopt, std::move(next_key), false
-    );
-    return tsd;
+    return make_timeseries_descriptor(total_rows, descriptor, norm_meta, std::nullopt, std::move(next_key), false);
 }
 
 SegmentInMemory incomplete_segment_from_frame(
-        const std::shared_ptr<pipelines::InputFrame>& frame, std::optional<entity::AtomKey>&& prev_key,
+        const std::shared_ptr<pipelines::InputFrame>& frame, std::optional<entity::AtomKey>&& next_key,
         bool sparsify_floats, CopyMode copy_mode
 ) {
     using namespace arcticdb::stream;
 
     const auto num_rows = frame->num_rows;
-    auto copy_prev_key = prev_key;
-    auto timeseries_desc = index_descriptor_from_frame(frame, 0, std::move(prev_key));
+    auto copy_next_key = next_key;
+    auto timeseries_desc = index_descriptor_from_frame(frame, 0, std::move(next_key));
     util::check(!timeseries_desc.fields().empty(), "Expected fields not to be empty in incomplete segment");
     auto norm_meta = timeseries_desc.proto().normalization();
     auto descriptor = timeseries_desc.as_stream_descriptor();
@@ -164,7 +161,7 @@ SegmentInMemory incomplete_segment_from_frame(
     auto output = std::move(std::get<SegmentInMemory>(result));
     output.descriptor().set_id(descriptor.id());
     output.set_timeseries_descriptor(
-            pack_timeseries_descriptor(descriptor, num_rows, std::move(copy_prev_key), std::move(norm_meta))
+            pack_timeseries_descriptor(descriptor, num_rows, std::move(copy_next_key), norm_meta)
     );
 
     ARCTICDB_DEBUG(
@@ -209,7 +206,6 @@ void do_sort(SegmentInMemory& mutable_seg, const std::vector<std::string> sort_c
     // JiveTable This will avoid doing the extra copy and allocation we're doing here for sorting. It will also allow us
     // to unify `write_incomplete_with_sorting` with `write_incomple_frame`
     auto segment = incomplete_segment_from_frame(frame, std::nullopt, /*sparsify_floats=*/false, CopyMode::ALWAYS);
-    segment.descriptor().set_id(stream_id);
     if (options.sort_on_index) {
         util::check(frame->has_index(), "Sort requested on index but no index supplied");
         std::vector<std::string> cols;
@@ -227,11 +223,8 @@ void do_sort(SegmentInMemory& mutable_seg, const std::vector<std::string> sort_c
         do_sort(segment, *options.sort_columns);
     }
 
-    auto timeseries_desc = index_descriptor_from_frame(frame, 0, std::nullopt);
     auto stream_desc = frame->desc();
-    auto norm_meta = timeseries_desc.proto().normalization();
-    auto tsd = pack_timeseries_descriptor(frame->desc(), frame->num_rows, std::nullopt, std::move(norm_meta));
-    segment.set_timeseries_descriptor(tsd);
+    auto norm_meta = frame->norm_meta;
 
     bool is_timestamp_index = std::holds_alternative<stream::TimeseriesIndex>(frame->index);
     bool is_sorted = is_timestamp_index &&
@@ -247,10 +240,9 @@ void do_sort(SegmentInMemory& mutable_seg, const std::vector<std::string> sort_c
 
                 return folly::window(
                         std::move(segments),
-                        [is_sorted, stream_id, store, norm_meta, stream_desc](SegmentInMemory&& seg) mutable {
-                            auto tsd = pack_timeseries_descriptor(
-                                    stream_desc, seg.row_count(), std::nullopt, std::move(norm_meta)
-                            );
+                        [is_sorted, stream_id, store, norm_meta, stream_desc](SegmentInMemory&& seg) {
+                            auto tsd =
+                                    pack_timeseries_descriptor(stream_desc, seg.row_count(), std::nullopt, norm_meta);
                             seg.set_timeseries_descriptor(tsd);
                             if (is_sorted) {
                                 seg.descriptor().set_sorted(SortedValue::ASCENDING);
@@ -313,8 +305,7 @@ void do_sort(SegmentInMemory& mutable_seg, const std::vector<std::string> sort_c
         SegmentInMemory output{
                 FixedSchema{descriptor, index}.default_descriptor(), 0, AllocationType::DYNAMIC, Sparsity::NOT_PERMITTED
         };
-        output.set_timeseries_descriptor(
-                pack_timeseries_descriptor(descriptor, existing_rows, std::nullopt, std::move(norm_meta))
+        output.set_timeseries_descriptor(pack_timeseries_descriptor(descriptor, existing_rows, std::nullopt, norm_meta)
         );
         return store
                 ->write(KeyType::APPEND_DATA,
@@ -354,16 +345,12 @@ void do_sort(SegmentInMemory& mutable_seg, const std::vector<std::string> sort_c
                                                           std::tuple<PartialKey, SegmentInMemory, FrameSlice>&& ks
                                                   ) {
                                            auto& seg = std::get<SegmentInMemory>(ks);
-                                           auto norm_meta_copy = norm_meta;
-                                           auto prev_key = std::nullopt;
-                                           auto next_key = std::nullopt;
                                            TimeseriesDescriptor tsd = make_timeseries_descriptor(
                                                    seg.row_count(),
                                                    desc,
-                                                   std::move(norm_meta_copy),
+                                                   norm_meta,
                                                    user_meta,
-                                                   prev_key,
-                                                   next_key,
+                                                   std::nullopt,
                                                    bucketize_dynamic
                                            );
                                            seg.set_timeseries_descriptor(tsd);

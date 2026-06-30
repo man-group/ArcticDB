@@ -149,7 +149,7 @@ void append_incomplete(
 );
 
 SegmentInMemory incomplete_segment_from_frame(
-        const std::shared_ptr<pipelines::InputFrame>& frame, std::optional<entity::AtomKey>&& prev_key,
+        const std::shared_ptr<pipelines::InputFrame>& frame, std::optional<entity::AtomKey>&& next_key,
         bool sparsify_floats, CopyMode copy_mode = CopyMode::IF_NEEDED
 );
 
