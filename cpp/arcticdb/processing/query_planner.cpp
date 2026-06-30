@@ -33,35 +33,21 @@ ExpressionContext and_filter_expression_contexts(
         const std::vector<std::shared_ptr<ExpressionContext>>& expression_contexts
 ) {
     util::check(!expression_contexts.empty(), "Expression context cannot be empty");
-    std::optional<ExpressionName> overall_root_name;
-
-    ExpressionContext res;
-    for (auto&& [idx, expression_context] : folly::enumerate(expression_contexts)) {
+    std::shared_ptr<ExpressionNode> root;
+    for (const auto& expression_context : expression_contexts) {
         util::check(
-                std::holds_alternative<ExpressionName>(expression_context->root_node_name_),
+                expression_context->root_ && expression_context->root_->is_operation(),
                 "Only expect to be called with filter expressions"
         );
-        auto prefix = fmt::format("c{}/", idx);
-        res.merge_from(*expression_context, prefix);
-        auto root_name = ExpressionName{prefix + std::get<ExpressionName>(expression_context->root_node_name_).value};
-
-        if (!overall_root_name) {
-            overall_root_name = root_name;
-            continue;
+        if (root) {
+            root = std::make_shared<ExpressionNode>(root, expression_context->root_, OperationType::AND);
+        } else {
+            root = expression_context->root_;
         }
-
-        auto and_node = ExpressionNode{*overall_root_name, root_name, OperationType::AND};
-        auto intermediate_name = fmt::format("combined-{}", idx);
-        util::check(
-                !res.expression_nodes_.contains(intermediate_name),
-                "Expression nodes already contains {}",
-                intermediate_name
-        );
-        res.add_expression_node(intermediate_name, std::make_shared<ExpressionNode>(and_node));
-        overall_root_name = ExpressionName{intermediate_name};
     }
 
-    res.root_node_name_ = *overall_root_name;
+    ExpressionContext res;
+    res.root_ = std::move(root);
     return res;
 }
 

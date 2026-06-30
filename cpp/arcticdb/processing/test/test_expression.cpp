@@ -10,6 +10,7 @@
 #include <arcticdb/processing/expression_context.hpp>
 #include <arcticdb/processing/expression_node.hpp>
 #include <arcticdb/processing/processing_unit.hpp>
+#include <arcticdb/processing/test/ast_test_helpers.hpp>
 #include <arcticdb/util/test/generators.hpp>
 
 TEST(ExpressionNode, AddBasic) {
@@ -28,19 +29,18 @@ TEST(ExpressionNode, AddBasic) {
     wrapper.aggregator_.commit();
     auto& seg = wrapper.segment();
     ProcessingUnit proc(std::move(seg));
-    auto node = std::make_shared<ExpressionNode>(ColumnName("thing1"), ColumnName("thing2"), OperationType::ADD);
+    auto root = node(col("thing1"), col("thing2"), OperationType::ADD);
     auto expression_context = std::make_shared<ExpressionContext>();
-    expression_context->root_node_name_ = ExpressionName("new_thing");
-    expression_context->add_expression_node("new_thing", node);
+    expression_context->root_ = root;
     proc.set_expression_context(expression_context);
-    auto ret = proc.get(ExpressionName("new_thing"));
-    const auto& col = std::get<ColumnWithStrings>(ret).column_;
+    auto ret = root->compute(proc);
+    const auto& result_col = std::get<ColumnWithStrings>(ret).column_;
 
     for (auto j = 0; j < 20; ++j) {
         auto v1 = proc.segments_->at(0)->scalar_at<uint64_t>(j, 1);
         ASSERT_EQ(v1.value(), j);
         auto v2 = proc.segments_->at(0)->scalar_at<uint64_t>(j, 2);
         ASSERT_EQ(v2.value(), j + 1);
-        ASSERT_EQ(col->scalar_at<uint64_t>(j), v1.value() + v2.value());
+        ASSERT_EQ(result_col->scalar_at<uint64_t>(j), v1.value() + v2.value());
     }
 }

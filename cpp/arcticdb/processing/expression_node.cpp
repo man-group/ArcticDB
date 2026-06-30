@@ -75,43 +75,73 @@ ColumnWithStrings::ColumnWithStrings(
     return std::nullopt;
 }
 
-ExpressionNode::ExpressionNode(VariantNode condition, VariantNode left, VariantNode right, OperationType op) :
-    condition_(std::move(condition)),
-    left_(std::move(left)),
-    right_(std::move(right)),
-    operation_type_(op) {
+ExpressionNode::ExpressionNode(Leaf leaf, std::string label) : kind_(std::move(leaf)), label_(std::move(label)) {}
+
+ExpressionNode::ExpressionNode(
+        std::shared_ptr<ExpressionNode> condition, std::shared_ptr<ExpressionNode> left,
+        std::shared_ptr<ExpressionNode> right, OperationType op, std::string label
+) :
+    kind_(Operation{op, std::move(condition), std::move(left), std::move(right)}),
+    label_(std::move(label)) {
     util::check(is_ternary_operation(op), "Non-ternary expression provided with three arguments");
 }
 
-ExpressionNode::ExpressionNode(VariantNode left, VariantNode right, OperationType op) :
-    left_(std::move(left)),
-    right_(std::move(right)),
-    operation_type_(op) {
+ExpressionNode::ExpressionNode(
+        std::shared_ptr<ExpressionNode> left, std::shared_ptr<ExpressionNode> right, OperationType op, std::string label
+) :
+    kind_(Operation{op, nullptr, std::move(left), std::move(right)}),
+    label_(std::move(label)) {
     util::check(is_binary_operation(op), "Non-binary expression provided with two arguments");
 }
 
-ExpressionNode::ExpressionNode(VariantNode left, OperationType op) : left_(std::move(left)), operation_type_(op) {
+ExpressionNode::ExpressionNode(std::shared_ptr<ExpressionNode> left, OperationType op, std::string label) :
+    kind_(Operation{op, nullptr, std::move(left), nullptr}),
+    label_(std::move(label)) {
     util::check(is_unary_operation(op), "Non-unary expression provided with single argument");
 }
 
 VariantData ExpressionNode::compute(ProcessingUnit& seg) const {
-    if (is_ternary_operation(operation_type_)) {
-        return dispatch_ternary(seg.get(condition_), seg.get(left_), seg.get(right_), operation_type_);
-    } else if (is_binary_operation(operation_type_)) {
-        return dispatch_binary(seg.get(left_), seg.get(right_), operation_type_);
-    } else {
-        return dispatch_unary(seg.get(left_), operation_type_);
-    }
+    return util::variant_match(
+            kind_,
+            [&seg](const Leaf& leaf) -> VariantData {
+                return util::variant_match(
+                        leaf,
+                        [&seg](const ColumnName& column_name) -> VariantData { return seg.get(column_name); },
+                        [](const std::shared_ptr<Value>& value) -> VariantData { return value; },
+                        [](const std::shared_ptr<ValueSet>& value_set) -> VariantData { return value_set; },
+                        [](const std::shared_ptr<util::RegexGeneric>& regex) -> VariantData { return regex; }
+                );
+            },
+            [&seg](const Operation& op) -> VariantData {
+                if (is_ternary_operation(op.operation_type_)) {
+                    return dispatch_ternary(
+                            op.condition_->compute(seg),
+                            op.left_->compute(seg),
+                            op.right_->compute(seg),
+                            op.operation_type_
+                    );
+                } else if (is_binary_operation(op.operation_type_)) {
+                    return dispatch_binary(op.left_->compute(seg), op.right_->compute(seg), op.operation_type_);
+                } else {
+                    return dispatch_unary(op.left_->compute(seg), op.operation_type_);
+                }
+            }
+    );
 }
 
 std::variant<BitSetTag, DataType> ExpressionNode::compute(
-        const ExpressionContext& expression_context,
         const ankerl::unordered_dense::map<std::string, DataType>& column_types
 ) const {
+    if (std::holds_alternative<Leaf>(kind_)) {
+        ValueSetState value_set_state;
+        return leaf_return_type(std::get<Leaf>(kind_), column_types, value_set_state);
+    }
+    const auto& operation = std::get<Operation>(kind_);
+    const OperationType operation_type_ = operation.operation_type_;
     // Default to BitSetTag
     std::variant<BitSetTag, DataType> res;
     ValueSetState left_value_set_state;
-    auto left_type = child_return_type(left_, expression_context, column_types, left_value_set_state);
+    auto left_type = child_return_type(*operation.left_, column_types, left_value_set_state);
     user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
             left_value_set_state == ValueSetState::NOT_A_SET, "Unexpected value set input to {}", operation_type_
     );
@@ -122,7 +152,7 @@ std::variant<BitSetTag, DataType> ExpressionNode::compute(
             user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
                     std::holds_alternative<DataType>(left_type), "Unexpected bitset input to {}", operation_type_
             );
-            details::visit_type(std::get<DataType>(left_type), [this, &res](auto tag) {
+            details::visit_type(std::get<DataType>(left_type), [operation_type_, &res](auto tag) {
                 using type_info = ScalarTypeInfo<decltype(tag)>;
                 if constexpr (is_numeric_type(type_info::data_type)) {
                     if (operation_type_ == OperationType::ABS) {
@@ -166,7 +196,7 @@ std::variant<BitSetTag, DataType> ExpressionNode::compute(
         }
     } else if (is_binary_operation(operation_type_)) {
         ValueSetState right_value_set_state;
-        auto right_type = child_return_type(right_, expression_context, column_types, right_value_set_state);
+        auto right_type = child_return_type(*operation.right_, column_types, right_value_set_state);
         switch (operation_type_) {
         case OperationType::ADD:
         case OperationType::SUB:
@@ -188,9 +218,9 @@ std::variant<BitSetTag, DataType> ExpressionNode::compute(
                     "Unexpected value set input to {}",
                     operation_type_
             );
-            details::visit_type(std::get<DataType>(left_type), [this, &res, right_type](auto left_tag) {
+            details::visit_type(std::get<DataType>(left_type), [operation_type_, &res, right_type](auto left_tag) {
                 using left_type_info = ScalarTypeInfo<decltype(left_tag)>;
-                details::visit_type(std::get<DataType>(right_type), [this, &res](auto right_tag) {
+                details::visit_type(std::get<DataType>(right_type), [operation_type_, &res](auto right_tag) {
                     using right_type_info = ScalarTypeInfo<decltype(right_tag)>;
                     if constexpr (is_numeric_type(left_type_info::data_type) &&
                                   is_numeric_type(right_type_info::data_type)) {
@@ -372,10 +402,9 @@ std::variant<BitSetTag, DataType> ExpressionNode::compute(
     } else {
         // Ternary operation
         ValueSetState condition_value_set_state;
-        auto condition_type =
-                child_return_type(condition_, expression_context, column_types, condition_value_set_state);
+        auto condition_type = child_return_type(*operation.condition_, column_types, condition_value_set_state);
         ValueSetState right_value_set_state;
-        auto right_type = child_return_type(right_, expression_context, column_types, right_value_set_state);
+        auto right_type = child_return_type(*operation.right_, column_types, right_value_set_state);
         user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
                 condition_value_set_state == ValueSetState::NOT_A_SET &&
                         right_value_set_state == ValueSetState::NOT_A_SET,
@@ -391,9 +420,9 @@ std::variant<BitSetTag, DataType> ExpressionNode::compute(
             );
         }
         if (std::holds_alternative<DataType>(left_type) && std::holds_alternative<DataType>(right_type)) {
-            details::visit_type(std::get<DataType>(left_type), [this, &res, right_type](auto left_tag) {
+            details::visit_type(std::get<DataType>(left_type), [operation_type_, &res, right_type](auto left_tag) {
                 using left_type_info = ScalarTypeInfo<decltype(left_tag)>;
-                details::visit_type(std::get<DataType>(right_type), [this, &res](auto right_tag) {
+                details::visit_type(std::get<DataType>(right_type), [operation_type_, &res](auto right_tag) {
                     using right_type_info = ScalarTypeInfo<decltype(right_tag)>;
                     if constexpr (is_sequence_type(left_type_info::data_type) &&
                                   is_sequence_type(right_type_info::data_type)) {
@@ -449,13 +478,13 @@ std::variant<BitSetTag, DataType> ExpressionNode::compute(
     return res;
 }
 
-std::variant<BitSetTag, DataType> ExpressionNode::child_return_type(
-        const VariantNode& child, const ExpressionContext& expression_context,
-        const ankerl::unordered_dense::map<std::string, DataType>& column_types, ValueSetState& value_set_state
-) const {
+std::variant<BitSetTag, DataType> ExpressionNode::leaf_return_type(
+        const Leaf& leaf, const ankerl::unordered_dense::map<std::string, DataType>& column_types,
+        ValueSetState& value_set_state
+) {
     value_set_state = ValueSetState::NOT_A_SET;
     return util::variant_match(
-            child,
+            leaf,
             [&column_types](const ColumnName& column_name) -> std::variant<BitSetTag, DataType> {
                 auto it = column_types.find(column_name.value);
                 if (it == column_types.end()) {
@@ -470,26 +499,26 @@ std::variant<BitSetTag, DataType> ExpressionNode::child_return_type(
                 );
                 return it->second;
             },
-            [&expression_context](const ValueName& value_name) -> std::variant<BitSetTag, DataType> {
-                return expression_context.values_.get_value(value_name.value)->data_type();
-            },
-            [&expression_context,
-             &value_set_state](const ValueSetName& value_set_name) -> std::variant<BitSetTag, DataType> {
-                const auto value_set = expression_context.value_sets_.get_value(value_set_name.value);
+            [](const std::shared_ptr<Value>& value) -> std::variant<BitSetTag, DataType> { return value->data_type(); },
+            [&value_set_state](const std::shared_ptr<ValueSet>& value_set) -> std::variant<BitSetTag, DataType> {
                 value_set_state = value_set->empty() ? ValueSetState::EMPTY_SET : ValueSetState::NON_EMPTY_SET;
                 return value_set->base_type().data_type();
             },
-            [&expression_context,
-             &column_types](const ExpressionName& expression_name) -> std::variant<BitSetTag, DataType> {
-                const auto expr = expression_context.expression_nodes_.get_value(expression_name.value);
-                return expr->compute(expression_context, column_types);
-            },
-            [](const RegexName&) -> std::variant<BitSetTag, DataType> { return DataType::UTF_DYNAMIC64; },
-            [](auto&&) -> std::variant<BitSetTag, DataType> {
-                internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Unexpected expression argument type");
-                return {};
+            [](const std::shared_ptr<util::RegexGeneric>&) -> std::variant<BitSetTag, DataType> {
+                return DataType::UTF_DYNAMIC64;
             }
     );
+}
+
+std::variant<BitSetTag, DataType> ExpressionNode::child_return_type(
+        const ExpressionNode& child, const ankerl::unordered_dense::map<std::string, DataType>& column_types,
+        ValueSetState& value_set_state
+) {
+    value_set_state = ValueSetState::NOT_A_SET;
+    if (std::holds_alternative<Leaf>(child.kind_)) {
+        return leaf_return_type(std::get<Leaf>(child.kind_), column_types, value_set_state);
+    }
+    return child.compute(column_types);
 }
 
 } // namespace arcticdb

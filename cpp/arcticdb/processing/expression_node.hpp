@@ -19,24 +19,8 @@
 
 namespace arcticdb {
 
-struct ExpressionContext;
-
 struct ColumnNameTag {};
 using ColumnName = util::StringWrappingValue<ColumnNameTag>;
-
-struct ValueNameTag {};
-using ValueName = util::StringWrappingValue<ValueNameTag>;
-
-struct ValueSetNameTag {};
-using ValueSetName = util::StringWrappingValue<ValueSetNameTag>;
-
-struct ExpressionNameTag {};
-using ExpressionName = util::StringWrappingValue<ExpressionNameTag>;
-
-struct RegexNameTag {};
-using RegexName = util::StringWrappingValue<RegexNameTag>;
-
-using VariantNode = std::variant<std::monostate, ColumnName, ValueName, ValueSetName, ExpressionName, RegexName>;
 
 struct ProcessingUnit;
 class Column;
@@ -85,31 +69,59 @@ struct BitSetTag {};
  * Basic AST node.
  */
 struct ExpressionNode {
-    VariantNode condition_;
-    VariantNode left_;
-    VariantNode right_;
-    OperationType operation_type_;
+    using Leaf = std::variant<
+            ColumnName, std::shared_ptr<Value>, std::shared_ptr<ValueSet>, std::shared_ptr<util::RegexGeneric>>;
 
-    ExpressionNode(VariantNode condition, VariantNode left, VariantNode right, OperationType op);
+    struct Operation {
+        OperationType operation_type_;
+        std::shared_ptr<ExpressionNode> condition_;
+        std::shared_ptr<ExpressionNode> left_;
+        std::shared_ptr<ExpressionNode> right_;
+    };
 
-    ExpressionNode(VariantNode left, VariantNode right, OperationType op);
+    std::variant<Leaf, Operation> kind_;
 
-    ExpressionNode(VariantNode left, OperationType op);
+    // Should be used for debugging only
+    std::string label_;
+
+    explicit ExpressionNode(Leaf leaf, std::string label = "");
+
+    ExpressionNode(
+            std::shared_ptr<ExpressionNode> condition, std::shared_ptr<ExpressionNode> left,
+            std::shared_ptr<ExpressionNode> right, OperationType op, std::string label = ""
+    );
+
+    ExpressionNode(
+            std::shared_ptr<ExpressionNode> left, std::shared_ptr<ExpressionNode> right, OperationType op,
+            std::string label = ""
+    );
+
+    ExpressionNode(std::shared_ptr<ExpressionNode> left, OperationType op, std::string label = "");
+
+    [[nodiscard]] bool is_operation() const { return std::holds_alternative<Operation>(kind_); }
+
+    [[nodiscard]] bool is_value() const {
+        return std::holds_alternative<Leaf>(kind_) &&
+               std::holds_alternative<std::shared_ptr<Value>>(std::get<Leaf>(kind_));
+    }
 
     VariantData compute(ProcessingUnit& seg) const;
 
-    std::variant<BitSetTag, DataType> compute(
-            const ExpressionContext& expression_context,
-            const ankerl::unordered_dense::map<std::string, DataType>& column_types
+    std::variant<BitSetTag, DataType> compute(const ankerl::unordered_dense::map<std::string, DataType>& column_types
     ) const;
 
   private:
     enum class ValueSetState { NOT_A_SET, EMPTY_SET, NON_EMPTY_SET };
 
-    std::variant<BitSetTag, DataType> child_return_type(
-            const VariantNode& child, const ExpressionContext& expression_context,
-            const ankerl::unordered_dense::map<std::string, DataType>& column_types, ValueSetState& value_set_state
-    ) const;
+    static std::variant<BitSetTag, DataType> leaf_return_type(
+            const Leaf& leaf, const ankerl::unordered_dense::map<std::string, DataType>& column_types,
+            ValueSetState& value_set_state
+    );
+
+    static std::variant<BitSetTag, DataType> child_return_type(
+            const ExpressionNode& child, const ankerl::unordered_dense::map<std::string, DataType>& column_types,
+            ValueSetState& value_set_state
+    );
 };
 
 } // namespace arcticdb
