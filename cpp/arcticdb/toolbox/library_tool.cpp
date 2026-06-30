@@ -85,7 +85,7 @@ SegmentInMemory LibraryTool::item_to_segment_in_memory(
         const StreamId& stream_id, const std::shared_ptr<convert::PandasData>& item, const py::object& norm,
         const py::object& user_meta, std::optional<AtomKey> next_key
 ) {
-    auto frame = convert::py_ndf_to_frame(
+    auto frame = convert::py_input_item_to_frame(
             stream_id,
             item,
             norm,

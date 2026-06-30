@@ -240,7 +240,7 @@ NativeTensor obj_to_tensor(PyObject* ptr, bool empty_types, std::optional<std::s
     return {nbytes, desc.arr_->nd, strides.data(), shapes.data(), dt, desc.elsize_, data, desc.ndim_};
 }
 
-void tensors_to_frame(const PandasData& pandas_data, const bool empty_types, InputFrame& frame) {
+void pandas_data_to_frame(const PandasData& pandas_data, const bool empty_types, InputFrame& frame) {
     frame.num_rows = 0u;
     // Fill index
     const auto& idx_names = pandas_data.index_names;
@@ -357,7 +357,7 @@ void record_batches_to_frame(
     );
 }
 
-std::shared_ptr<InputFrame> py_ndf_to_frame(
+std::shared_ptr<InputFrame> py_input_item_to_frame(
         const StreamId& stream_name, const InputItem& item, const py::object& norm_meta, const py::object& user_meta,
         bool empty_types, pipelines::SortednessScan sortedness_scan
 ) {
@@ -370,7 +370,7 @@ std::shared_ptr<InputFrame> py_ndf_to_frame(
 
     util::variant_match(
             item,
-            [&](const std::shared_ptr<PandasData>& pandas_data) { tensors_to_frame(*pandas_data, empty_types, *res); },
+            [&](const std::shared_ptr<PandasData>& pandas_data) { pandas_data_to_frame(*pandas_data, empty_types, *res); },
             [&](const std::vector<std::shared_ptr<RecordBatchData>>& record_batches) {
                 record_batches_to_frame(record_batches, *res, sortedness_scan);
             }

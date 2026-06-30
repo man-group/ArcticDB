@@ -62,7 +62,7 @@ VersionedItem PythonVersionStore::write_dataframe_specific_version(
     auto versioned_item = write_dataframe_impl(
             store(),
             VersionId(version_id),
-            convert::py_ndf_to_frame(
+            convert::py_input_item_to_frame(
                     stream_id,
                     item,
                     norm,
@@ -88,7 +88,7 @@ std::vector<std::shared_ptr<InputFrame>> create_input_tensor_frames(
     std::vector<std::shared_ptr<InputFrame>> output;
     output.reserve(stream_ids.size());
     for (size_t idx = 0; idx < stream_ids.size(); idx++) {
-        output.emplace_back(convert::py_ndf_to_frame(
+        output.emplace_back(convert::py_input_item_to_frame(
                 stream_ids[idx], items[idx], norms[idx], user_metas[idx], empty_types, sortedness_scan
         ));
     }
@@ -708,7 +708,7 @@ VersionedItem PythonVersionStore::write_partitioned_dataframe(
         auto versioned_item = write_dataframe_impl(
                 store(),
                 version_id,
-                convert::py_ndf_to_frame(
+                convert::py_input_item_to_frame(
                         subkeyname,
                         partitioned_dfs[idx],
                         norm_meta,
@@ -806,7 +806,7 @@ VersionedItem PythonVersionStore::write_versioned_dataframe(
         bool prune_previous_versions, bool sparsify_floats, bool validate_index
 ) {
     ARCTICDB_SAMPLE(WriteVersionedDataframe, 0)
-    auto frame = convert::py_ndf_to_frame(
+    auto frame = convert::py_input_item_to_frame(
             stream_id, item, norm, user_meta, cfg().write_options().empty_types(), sortedness_scan_for(validate_index)
     );
     auto versioned_item = write_versioned_dataframe_internal(
@@ -832,7 +832,7 @@ VersionedItem PythonVersionStore::append(
 ) {
     return append_internal(
             stream_id,
-            convert::py_ndf_to_frame(
+            convert::py_input_item_to_frame(
                     stream_id,
                     item,
                     norm,
@@ -855,7 +855,7 @@ VersionedItem PythonVersionStore::update(
             query,
             // update always requires a sorted index (both the upsert-to-write path and updating existing data),
             // so always determine the Arrow index sort order.
-            convert::py_ndf_to_frame(
+            convert::py_input_item_to_frame(
                     stream_id,
                     item,
                     norm,
@@ -885,7 +885,7 @@ void PythonVersionStore::append_incomplete(
     using namespace arcticdb::pipelines;
 
     // Turn the input into a standardised frame object
-    auto frame = convert::py_ndf_to_frame(
+    auto frame = convert::py_input_item_to_frame(
             stream_id, item, norm, user_meta, cfg().write_options().empty_types(), SortednessScan::SKIP
     );
     append_incomplete_frame(stream_id, frame, validate_index);
@@ -1012,7 +1012,7 @@ StageResult PythonVersionStore::write_parallel(
     // When the data will be sorted for us (sort_on_index or sort_columns) the input order is irrelevant, so only
     // determine the Arrow index sort order when the unsorted input itself must be validated.
     const bool verify = validate_index && !sort_on_index && (!sort_columns || sort_columns->empty());
-    auto frame = convert::py_ndf_to_frame(
+    auto frame = convert::py_input_item_to_frame(
             stream_id, item, norm, py::none(), cfg().write_options().empty_types(), sortedness_scan_for(verify)
     );
     return write_parallel_frame(stream_id, frame, validate_index, sort_on_index, sort_columns);
@@ -1535,7 +1535,7 @@ void write_dataframe_to_file(
         const py::object& norm, const py::object& user_meta
 ) {
     ARCTICDB_SAMPLE(WriteDataframeToFile, 0)
-    auto frame = convert::py_ndf_to_frame(stream_id, item, norm, user_meta, false, pipelines::SortednessScan::SKIP);
+    auto frame = convert::py_input_item_to_frame(stream_id, item, norm, user_meta, false, pipelines::SortednessScan::SKIP);
     write_dataframe_to_file_internal(
             stream_id, frame, path, WriteOptions{}, codec::default_lz4_codec(), EncodingVersion::V2
     );
@@ -1574,7 +1574,7 @@ VersionedItem PythonVersionStore::merge(
     };
     return merge_internal(
             stream_id,
-            convert::py_ndf_to_frame(
+            convert::py_input_item_to_frame(
                     stream_id,
                     source,
                     norm,

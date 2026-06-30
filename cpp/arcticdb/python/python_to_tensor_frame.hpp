@@ -103,7 +103,7 @@ void record_batches_to_frame(
         pipelines::SortednessScan sortedness_scan
 );
 
-std::shared_ptr<pipelines::InputFrame> py_ndf_to_frame(
+std::shared_ptr<pipelines::InputFrame> py_input_item_to_frame(
         const StreamId& stream_name, const InputItem& item, const py::object& norm_meta, const py::object& user_meta,
         bool empty_types, pipelines::SortednessScan sortedness_scan
 );
