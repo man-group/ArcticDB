@@ -38,11 +38,7 @@ from arcticdb_ext.version_store import DateRangeClause as _DateRangeClause
 from arcticdb_ext.version_store import ConcatClause as _ConcatClause
 from arcticdb_ext.version_store import JoinType as _JoinType
 from arcticdb_ext.version_store import RowRangeType as _RowRangeType
-from arcticdb_ext.version_store import ExpressionName as _ExpressionName
 from arcticdb_ext.version_store import ColumnName as _ColumnName
-from arcticdb_ext.version_store import ValueName as _ValueName
-from arcticdb_ext.version_store import ValueSetName as _ValueSetName
-from arcticdb_ext.version_store import RegexName as _RegexName
 from arcticdb_ext.version_store import Value as _Value
 from arcticdb_ext.version_store import ValueSet as _ValueSet
 from arcticdb_ext.version_store import (
@@ -1278,38 +1274,20 @@ def to_string(leaf):
 
 
 def visit_expression(expr):
+    def _visit_child(node):
+        if isinstance(node, ExpressionNode):
+            if node.operator == COLUMN:
+                input_columns.add(node.left)
+                return _ExpressionNode(_ColumnName(node.left))
+            return _visit(node)
+        elif isinstance(node, (np.ndarray, list)):
+            return _ExpressionNode(_ValueSet(node))
+        elif isinstance(node, _RegexGeneric):
+            return _ExpressionNode(node)
+        else:
+            return _ExpressionNode(create_value(node))
+
     def _visit(node):
-        def _visit_child(node):
-            def _handle_leaf(node):
-                key = to_string(node)
-                if isinstance(node, (np.ndarray, list)):
-                    # There is a possibility that two distinct value sets have the same repr, eiter if the first 100
-                    # chars match, or if the repr is truncated like '[   0    1    2 ... 9997 9998 9999]'
-                    # Append -vX to handle this case, while keeping ValueSet keys short and readable in most cases
-                    if key not in valueset_keys:
-                        valueset_keys[key] = 0
-                    else:
-                        valueset_keys[key] += 1
-                    key = key + "-v" + str(valueset_keys[key])
-                    expression_context.add_value_set(key, _ValueSet(node))
-                    return _ValueSetName(key)
-                elif isinstance(node, _RegexGeneric):
-                    expression_context.add_regex(key, node)
-                    return _RegexName(key)
-                else:
-                    expression_context.add_value(key, create_value(node))
-                    return _ValueName(key)
-
-            if isinstance(node, ExpressionNode):
-                if node.operator == COLUMN:
-                    input_columns.add(node.left)
-                    return _ColumnName(node.left)
-                else:
-                    _visit(node)
-                    return _ExpressionName(node.get_name())
-            else:
-                return _handle_leaf(node)
-
         if isinstance(node, bool):
             raise ArcticNativeException("Query is trivially {}".format(node))
 
@@ -1318,24 +1296,19 @@ def visit_expression(expr):
             check(node.right is not None, "Ternary operator requires three inputs")
             condition = _visit_child(node.condition)
             right = _visit_child(node.right)
-            expression_node = _ExpressionNode(condition, left, right, node.operator)
+            return _ExpressionNode(condition, left, right, node.operator)
         elif node.right is not None:
             right = _visit_child(node.right)
-            expression_node = _ExpressionNode(left, right, node.operator)
+            return _ExpressionNode(left, right, node.operator)
         else:
-            expression_node = _ExpressionNode(left, node.operator)
-        expression_context.add_expression_node(node.get_name(), expression_node)
+            return _ExpressionNode(left, node.operator)
 
     expression_context = _ExpressionContext()
     input_columns = set()
-    valueset_keys = dict()
     if isinstance(expr, ExpressionNode):
-        _visit(expr)
-        expression_context.root_node_name = _ExpressionName(expr.get_name())
+        expression_context.root = _visit(expr)
     elif isinstance(expr, (np.ndarray, list)):
         raise ArcticNativeException("Query cannot create a new column from a list/set/array of values")
     else:
-        key = to_string(expr)
-        expression_context.add_value(key, create_value(expr))
-        expression_context.root_node_name = _ValueName(key)
+        expression_context.root = _ExpressionNode(create_value(expr))
     return input_columns, expression_context

@@ -9,71 +9,21 @@
 #pragma once
 
 #include <memory>
-#include <string>
-#include <unordered_map>
 
 #include <arcticdb/processing/expression_node.hpp>
-#include <arcticdb/pipeline/value.hpp>
-#include <arcticdb/pipeline/value_set.hpp>
+#include <arcticdb/util/preconditions.hpp>
 
 namespace arcticdb {
 
 /*
- * Contains an expression tree as a map of string node names to nodes. Nodes contain leaves which may be references
- * to node names.
- *
- * ExpressionContext also contains the name of the root node as well as a map of node names to constant values.
- *
- * This class effectively contains as AST - there is likely a frontend implementation in a higher level language (for
- * example Python).
+ * An expression tree (an AST).
  */
 struct ExpressionContext {
     ExpressionContext() = default;
 
     ARCTICDB_MOVE_COPY_DEFAULT(ExpressionContext)
 
-    template<class T>
-    class ConstantMap {
-        std::unordered_map<std::string, std::shared_ptr<T>> map_;
-
-      public:
-        void set_value(const std::string& name, std::shared_ptr<T> val) { map_.try_emplace(name, val); }
-        std::shared_ptr<T> get_value(const std::string& name) const { return map_.at(name); }
-        bool contains(const std::string& name) const { return map_.contains(name); }
-
-        void merge_from(const ConstantMap& other) {
-            for (const auto& [name, val] : other.map_) {
-                map_.try_emplace(name, val);
-            }
-        }
-    };
-
-    void add_expression_node(const std::string& name, std::shared_ptr<ExpressionNode> expression_node) {
-        expression_nodes_.set_value(name, std::move(expression_node));
-    }
-
-    void add_value(const std::string& name, std::shared_ptr<Value> value) { values_.set_value(name, std::move(value)); }
-
-    void add_value_set(const std::string& name, std::shared_ptr<ValueSet> value_set) {
-        value_sets_.set_value(name, std::move(value_set));
-    }
-
-    void add_regex(const std::string& name, std::shared_ptr<util::RegexGeneric> regex) {
-        regex_matches_.set_value(name, std::move(regex));
-    }
-
-    void merge_from(const ExpressionContext& other) {
-        expression_nodes_.merge_from(other.expression_nodes_);
-        values_.merge_from(other.values_);
-        value_sets_.merge_from(other.value_sets_);
-        regex_matches_.merge_from(other.regex_matches_);
-    }
-
-    ConstantMap<ExpressionNode> expression_nodes_;
-    ConstantMap<Value> values_;
-    ConstantMap<ValueSet> value_sets_;
-    ConstantMap<util::RegexGeneric> regex_matches_;
-    VariantNode root_node_name_;
+    std::shared_ptr<ExpressionNode> root_;
     bool dynamic_schema_{false};
 };
 

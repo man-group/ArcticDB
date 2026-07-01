@@ -8,6 +8,7 @@
 
 #include <gtest/gtest.h>
 #include <arcticdb/processing/processing_unit.hpp>
+#include <arcticdb/processing/test/ast_test_helpers.hpp>
 #include <arcticdb/util/test/generators.hpp>
 
 using namespace arcticdb;
@@ -26,22 +27,14 @@ class FilterProjectSparse : public testing::Test {
     }
 
     std::shared_ptr<Column> unary_projection(std::string_view input_column_name, OperationType op) {
-        const std::string output_column("unary projection");
-        expression_context->root_node_name_ = ExpressionName(output_column);
-        auto expression_node = std::make_shared<ExpressionNode>(ColumnName(input_column_name), op);
-        expression_context->add_expression_node(output_column, expression_node);
-
-        auto variant_data = proc_unit.get(expression_context->root_node_name_);
+        auto root = node(col(input_column_name), op);
+        auto variant_data = root->compute(proc_unit);
         return std::get<ColumnWithStrings>(variant_data).column_;
     }
 
     util::BitSet unary_filter(std::string_view input_column_name, OperationType op) {
-        const std::string root_node_name("unary filter");
-        expression_context->root_node_name_ = ExpressionName(root_node_name);
-        auto expression_node = std::make_shared<ExpressionNode>(ColumnName(input_column_name), op);
-        expression_context->add_expression_node(root_node_name, expression_node);
-
-        auto variant_data = proc_unit.get(expression_context->root_node_name_);
+        auto root = node(col(input_column_name), op);
+        auto variant_data = root->compute(proc_unit);
         return std::get<util::BitSet>(variant_data);
     }
 
@@ -49,36 +42,17 @@ class FilterProjectSparse : public testing::Test {
             std::string_view left_column_name,
             const std::variant<std::string_view, double, std::unordered_set<double>>& right_input, OperationType op
     ) {
-        const std::string root_node_name("binary filter");
-        const std::string value_name("value");
-        const std::string value_set_name("value set");
-        expression_context->root_node_name_ = ExpressionName(root_node_name);
-        std::shared_ptr<ExpressionNode> expression_node;
+        ExpressionChild right;
         util::variant_match(
                 right_input,
-                [&](std::string_view right_column_name) {
-                    expression_node = std::make_shared<ExpressionNode>(
-                            ColumnName(left_column_name), ColumnName(right_column_name), op
-                    );
-                },
-                [&](double value) {
-                    expression_node =
-                            std::make_shared<ExpressionNode>(ColumnName(left_column_name), ValueName(value_name), op);
-                    expression_context->add_value(value_name, std::make_shared<Value>(value, DataType::FLOAT64));
-                },
+                [&](std::string_view right_column_name) { right = col(right_column_name); },
+                [&](double value) { right = val(std::make_shared<Value>(value, DataType::FLOAT64)); },
                 [&](std::unordered_set<double> value_set) {
-                    expression_node = std::make_shared<ExpressionNode>(
-                            ColumnName(left_column_name), ValueSetName(value_set_name), op
-                    );
-                    expression_context->add_value_set(
-                            value_set_name,
-                            std::make_shared<ValueSet>(std::make_shared<std::unordered_set<double>>(value_set))
-                    );
+                    right = vset(std::make_shared<ValueSet>(std::make_shared<std::unordered_set<double>>(value_set)));
                 }
         );
-        expression_context->add_expression_node(root_node_name, expression_node);
-
-        auto variant_data = proc_unit.get(expression_context->root_node_name_);
+        auto root = node(col(left_column_name), right, op);
+        auto variant_data = root->compute(proc_unit);
         return std::get<util::BitSet>(variant_data);
     }
 
@@ -86,26 +60,14 @@ class FilterProjectSparse : public testing::Test {
             std::string_view left_column_name, const std::variant<std::string_view, double>& right_input,
             OperationType op
     ) {
-        const std::string output_column("binary filter");
-        const std::string value_name("value");
-        expression_context->root_node_name_ = ExpressionName(output_column);
-        std::shared_ptr<ExpressionNode> expression_node;
+        ExpressionChild right;
         util::variant_match(
                 right_input,
-                [&](std::string_view right_column_name) {
-                    expression_node = std::make_shared<ExpressionNode>(
-                            ColumnName(left_column_name), ColumnName(right_column_name), op
-                    );
-                },
-                [&](double value) {
-                    expression_node =
-                            std::make_shared<ExpressionNode>(ColumnName(left_column_name), ValueName(value_name), op);
-                    expression_context->add_value(value_name, std::make_shared<Value>(value, DataType::FLOAT64));
-                }
+                [&](std::string_view right_column_name) { right = col(right_column_name); },
+                [&](double value) { right = val(std::make_shared<Value>(value, DataType::FLOAT64)); }
         );
-        expression_context->add_expression_node(output_column, expression_node);
-
-        auto variant_data = proc_unit.get(expression_context->root_node_name_);
+        auto root = node(col(left_column_name), right, op);
+        auto variant_data = root->compute(proc_unit);
         return std::get<ColumnWithStrings>(variant_data).column_;
     }
 
