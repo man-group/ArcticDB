@@ -16,6 +16,7 @@ import random
 
 from arcticdb import Arctic
 from arcticdb import QueryBuilder
+from arcticdb.exceptions import LibraryNotFound
 from arcticdb.util.logger import get_logger
 from arcticdb.util.test import random_strings_of_length
 from asv_runner.benchmarks.mark import skip_for_params
@@ -91,7 +92,7 @@ class Resample:
 
     def teardown(self, num_rows, downsampling_factor, col_type, aggregation):
         if not self.skipped:
-            del self.lib
+            self.ac.delete_library(self.LIB_NAME)
             del self.ac
 
     def setup(self, num_rows, downsampling_factor, col_type, aggregation):
@@ -106,17 +107,16 @@ class Resample:
 
         self.skipped = False
         self.ac = Arctic(self.CONNECTION_STRING)
-        self.lib = self.ac[self.LIB_NAME]
         self.date_range = (pd.Timestamp(0), pd.Timestamp(num_rows, unit="us"))
         self.query_builder = QueryBuilder().resample(f"{downsampling_factor}us").agg({"col": aggregation})
 
     @skip_for_params(PEAKMEM_PARAMS)
     def time_resample(self, num_rows, downsampling_factor, col_type, aggregation):
-        self.lib.read(col_type, date_range=self.date_range, query_builder=self.query_builder)
+        self.ac[self.LIB_NAME].read(col_type, date_range=self.date_range, query_builder=self.query_builder)
 
     @skip_for_params(TIME_PARAMS)
     def peakmem_resample(self, num_rows, downsampling_factor, col_type, aggregation):
-        self.lib.read(col_type, date_range=self.date_range, query_builder=self.query_builder)
+        self.ac[self.LIB_NAME].read(col_type, date_range=self.date_range, query_builder=self.query_builder)
 
 
 class ResampleWide:
@@ -140,19 +140,18 @@ class ResampleWide:
         lib.write(self.SYM, df)
 
     def teardown(self):
-        del self.lib
+        self.ac.delete_library(self.LIB_NAME)
         del self.ac
 
     def setup(self):
         self.ac = Arctic(self.CONNECTION_STRING)
-        self.lib = self.ac[self.LIB_NAME]
         aggs = dict()
         for col in self.COLS:
             aggs[col] = "last"
         self.query_builder = QueryBuilder().resample("30us").agg(aggs)
 
     def time_resample_wide(self):
-        self.lib.read(self.SYM, query_builder=self.query_builder)
+        self.ac[self.LIB_NAME].read(self.SYM, query_builder=self.query_builder)
 
     def peakmem_resample_wide(self):
-        self.lib.read(self.SYM, query_builder=self.query_builder)
+        self.ac[self.LIB_NAME].read(self.SYM, query_builder=self.query_builder)
