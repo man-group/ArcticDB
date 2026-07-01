@@ -798,3 +798,25 @@ def test_append_after_delete_range(sym, lmdb_version_store):
 
     sliced_data = lib.read("sym", date_range=(datetime(2025, 9, 1), datetime(2025, 9, 4))).data
     assert_frame_equal(sliced_data, expected_data)
+
+
+@pytest.mark.parametrize("batch", [True, False])
+def test_append_empty_frame_metadata(lmdb_version_store_v1, batch):
+    lib = lmdb_version_store_v1
+    sym = "test_append_empty_frame_metadata"
+    write_df = pd.DataFrame({"col": np.arange(1)})
+    metadata_v0 = "v0"
+    lib.write(sym, write_df, metadata=metadata_v0)
+    empty_df = pd.DataFrame({"col": np.arange(0)})  # Using arange guarantees the dtype matches the written df
+    metadata_v1 = "v1"
+    append_vit = (
+        lib.batch_append([sym], [empty_df], metadata_vector=[metadata_v1])[0]
+        if batch
+        else lib.append(sym, empty_df, metadata=metadata_v1)
+    )
+    assert append_vit.version == 1
+    assert append_vit.metadata == metadata_v1
+    read_vit = lib.read(sym)
+    assert read_vit.version == 1
+    assert read_vit.metadata == metadata_v1
+    assert_frame_equal(read_vit.data, write_df)
