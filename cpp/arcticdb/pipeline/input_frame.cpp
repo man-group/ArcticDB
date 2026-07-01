@@ -75,13 +75,6 @@ void InputFrame::set_from_columns(
     }
 
     num_rows = cols.empty() ? 0 : cols[0].row_count();
-    desc_for_tsd_ = desc_.clone();
-    for (auto& field : desc_for_tsd_->fields()) {
-        if (field.type().data_type() == DataType::UTF_DYNAMIC32) {
-            field.mutable_type() = TypeDescriptor(DataType::UTF_DYNAMIC64, field.type().dimension());
-        }
-    }
-
     columns_ = std::vector<FieldData>(std::make_move_iterator(cols.begin()), std::make_move_iterator(cols.end()));
     arrow_buffer_owners_ = std::move(arrow_buffer_owners);
     has_only_tensors_ = false;
@@ -91,7 +84,17 @@ StreamDescriptor& InputFrame::desc() { return desc_; }
 
 const StreamDescriptor& InputFrame::desc() const { return const_cast<InputFrame*>(this)->desc(); }
 
-const StreamDescriptor& InputFrame::desc_for_tsd() { return desc_for_tsd_.has_value() ? *desc_for_tsd_ : desc_; }
+StreamDescriptor InputFrame::desc_for_tsd() const {
+    if (has_only_tensors_)
+        return desc_;
+    auto result = desc_.clone();
+    for (auto& field : result.fields()) {
+        if (field.type().data_type() == DataType::UTF_DYNAMIC32) {
+            field.mutable_type() = TypeDescriptor(DataType::UTF_DYNAMIC64, field.type().dimension());
+        }
+    }
+    return result;
+}
 
 void InputFrame::set_offset(ssize_t off) const { offset = off; }
 

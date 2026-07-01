@@ -128,13 +128,7 @@ void append_incomplete_segment_backwards_compat(
     auto desc = stream_descriptor(stream_id, RowCountIndex{}, {});
 
     auto tsd = arcticdb::make_timeseries_descriptor(
-            seg_row_count,
-            std::move(desc),
-            NormalizationMetadata{},
-            std::nullopt,
-            std::nullopt,
-            std::move(next_key),
-            false
+            seg_row_count, std::move(desc), NormalizationMetadata{}, std::nullopt, std::move(next_key), false
     );
 
     seg.set_timeseries_descriptor(std::move(tsd));
