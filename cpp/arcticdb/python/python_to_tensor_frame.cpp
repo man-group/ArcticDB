@@ -21,14 +21,15 @@ constexpr const char none_char[8] = {'\300', '\000', '\000', '\000', '\000', '\0
 using namespace arcticdb::pipelines;
 using namespace arcticdb::stream;
 
-[[nodiscard]] static inline bool is_unicode(PyObject* obj) { return PyUnicode_Check(obj); }
+[[nodiscard]] static inline bool is_unicode(PyObject* obj) { return PyUnicode_CheckExact(obj); }
+
+[[nodiscard]] static inline bool is_bytes(PyObject* obj) { return PyBytes_CheckExact(obj); }
 
 [[nodiscard]] static inline bool is_py_boolean(PyObject* obj) { return PyBool_Check(obj); }
 
 std::variant<StringEncodingError, PyStringWrapper> pystring_to_buffer(PyObject* obj, bool is_owned) {
-    if (is_unicode(obj)) {
-        return StringEncodingError(
-                fmt::format("Unexpected unicode in Python object with type {}", obj->ob_type->tp_name)
+    if (!is_bytes(obj)) {
+        return StringEncodingError(fmt::format("Unexpected non-bytes Python object with type {}", obj->ob_type->tp_name)
         );
     }
     char* buffer;
@@ -215,7 +216,7 @@ NativeTensor obj_to_tensor(PyObject* ptr, bool empty_types, std::optional<std::s
                 desc.val_type_ = empty_types ? ValueType::EMPTY : ValueType::UTF_DYNAMIC;
             } else if (is_unicode(sample)) {
                 desc.val_type_ = ValueType::UTF_DYNAMIC;
-            } else if (PYBIND11_BYTES_CHECK(sample)) {
+            } else if (is_bytes(sample)) {
                 desc.val_type_ = ValueType::ASCII_DYNAMIC;
             } else if (is_py_array(sample)) {
                 normalization::raise<ErrorCode::E_UNIMPLEMENTED_INPUT_TYPE>(
