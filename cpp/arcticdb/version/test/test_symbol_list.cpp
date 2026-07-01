@@ -428,7 +428,9 @@ TEST(SymbolList, IsProblematic) {
     ASSERT_EQ(static_cast<bool>(result), false);
 
     // No conflict with delete
-    std::vector<JournalEntryData> vec2{{0, 0, ActionType::ADD}, {1, 1_s, ActionType::ADD}, {1, 2_s, ActionType::DELETE}};
+    std::vector<JournalEntryData> vec2{
+            {0, 0, ActionType::ADD}, {1, 1_s, ActionType::ADD}, {1, 2_s, ActionType::DELETE}
+    };
     result = is_problematic(vec2, min_interval);
     ASSERT_EQ(static_cast<bool>(result), false);
 
@@ -470,7 +472,9 @@ TEST(SymbolList, IsProblematic) {
     ASSERT_EQ(result_equals(result, expected2), true);
 
     // Timestamps too close but not more recent is okay
-    std::vector<JournalEntryData> vec7{{0, 0, ActionType::ADD}, {1, 100, ActionType::DELETE}, {2, 2_s, ActionType::ADD}};
+    std::vector<JournalEntryData> vec7{
+            {0, 0, ActionType::ADD}, {1, 100, ActionType::DELETE}, {2, 2_s, ActionType::ADD}
+    };
     result = is_problematic(vec7, min_interval);
     ASSERT_EQ(static_cast<bool>(result), false);
 
