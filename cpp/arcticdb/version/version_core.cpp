@@ -1207,6 +1207,10 @@ size_t num_processing_units_live(const std::vector<std::vector<size_t>>& process
     const int64_t default_processing_units_limit = std::max(2 * cpu_thread_count, io_read_ahead);
     const int64_t configured =
             ConfigsMap::instance()->get_int("VersionStore.NumProcessingUnitsLive", default_processing_units_limit);
+    if (configured == 0) {
+        // A configured value of 0 is a kill switch
+        return processing_unit_indexes.size();
+    }
     return static_cast<size_t>(std::max<int64_t>(1, configured));
 }
 

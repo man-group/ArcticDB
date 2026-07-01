@@ -1339,7 +1339,8 @@ def test_column_stats_drop_tiny_thread_pool(
         lib.get_column_stats_info(sym)
 
 
-@pytest.mark.parametrize("k", [1, 2, 1000])
+# k=0 is the kill switch: it admits every processing unit at once, disabling the memory bound.
+@pytest.mark.parametrize("k", [0, 1, 2, 1000])
 def test_column_stats_create_independent_of_admission_ceiling(
     version_store_factory, lib_name, encoding_version, any_output_format, k
 ):

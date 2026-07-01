@@ -393,8 +393,8 @@ struct ScopedThreadCounts {
 };
 } // namespace
 
-// Many column slices in each processing unit make the IO read-ahead term go to 1. The 2*cpu_thread_count floor must keep the default
-// from starving the CPU pool.
+// Many column slices in each processing unit make the IO read-ahead term go to 1. The 2*cpu_thread_count floor must
+// keep the default from starving the CPU pool.
 TEST(NumProcessingUnitsLive, CpuFloorAppliesForWideUnits) {
     ScopedThreadCounts threads{/*cpu=*/4, /*io=*/2};
     const std::vector<std::vector<size_t>> wide_units{{0, 1, 2, 3, 4, 5, 6, 7}}; // max_unit_size = 8
@@ -416,6 +416,15 @@ TEST(NumProcessingUnitsLive, ConfigOverrideTakesPrecedence) {
     ScopedConfig override_guard{"VersionStore.NumProcessingUnitsLive", 3};
     const std::vector<std::vector<size_t>> units{{0, 1}, {2, 3}};
     EXPECT_EQ(version_store::num_processing_units_live(units), 3u);
+}
+
+// A configured value of 0 is a kill switch: the limit becomes the total number of processing units, so every unit is
+// admitted at once and the memory bound is disabled.
+TEST(NumProcessingUnitsLive, ZeroAdmitsAllUnits) {
+    ScopedThreadCounts threads{/*cpu=*/4, /*io=*/8};
+    ScopedConfig override_guard{"VersionStore.NumProcessingUnitsLive", 0};
+    const std::vector<std::vector<size_t>> units{{0, 1}, {2, 3}, {4, 5}};
+    EXPECT_EQ(version_store::num_processing_units_live(units), units.size());
 }
 
 } // namespace arcticdb
