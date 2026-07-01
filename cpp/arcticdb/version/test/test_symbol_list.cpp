@@ -1064,8 +1064,11 @@ INSTANTIATE_TEST_SUITE_P(SymbolListSource, SymbolListRace, Combine(Values('S'), 
 // For version keys source (initial compaction), there's no old compaction key to remove:
 INSTANTIATE_TEST_SUITE_P(VersionKeysSource, SymbolListRace, Combine(Values('V'), Values(false), Bool(), Bool()));
 
-TEST_F(SymbolListSuite, DirectPathEquivalence) {
-    // Setup: add symbols and force compaction
+// Loading with no_compaction=true (skip the compaction write/delete, just merge and return) must
+// produce the same symbols as the compaction-eligible path. Here the journal mixes new symbols,
+// re-adds of already-present symbols, and removes of symbols still live in the version map.
+TEST_F(SymbolListSuite, NoCompactionLoadMatchesCompactionPath) {
+    // Setup: add symbols and force a compaction so we have a compaction key to load from.
     for (int i = 0; i < 50; ++i) {
         auto symbol = fmt::format("sym_{}", i);
         SymbolList::add_symbol(store_, StreamId{symbol}, 0);
@@ -1074,12 +1077,11 @@ TEST_F(SymbolListSuite, DirectPathEquivalence) {
     }
 
     ConfigsMap::instance()->set_int("SymbolList.MaxDelta", 0);
-    {
-        SymbolList sl{version_map_};
-        sl.load<std::set<StreamId>>(version_map_, store_, false);
-    }
+    SymbolList sl{version_map_};
+    sl.load<std::set<StreamId>>(version_map_, store_, false);
 
-    // Add journal entries: new symbols + deletes of existing ones
+    // Journal entries on top of the compaction key: sym_40..49 re-add already-present symbols,
+    // sym_50..59 are new, and sym_0..9 are removed (but kept in the version map, see below).
     for (int i = 40; i < 60; ++i) {
         auto symbol = fmt::format("sym_{}", i);
         SymbolList::add_symbol(store_, StreamId{symbol}, 1);
@@ -1097,18 +1099,21 @@ TEST_F(SymbolListSuite, DirectPathEquivalence) {
     SymbolList sl1{version_map_};
     auto compaction_result = sl1.load<std::set<StreamId>>(version_map_, store_, false);
 
-    // Load via direct path (no_compaction=true)
+    // Load with compaction disabled (no_compaction=true)
     SymbolList sl2{version_map_};
     auto direct_result = sl2.load<std::set<StreamId>>(version_map_, store_, true);
 
     EXPECT_EQ(compaction_result, direct_result);
-    // 50 original + 10 new = 60. The remove_symbol journal entries are resolved
-    // as ADD because the version map still shows those symbols as existing.
+    // 50 original + 10 new (sym_50..59) = 60. The sym_0..9 removes land close in time to their
+    // original adds, so the merge flags them as problematic and resolves them against the version
+    // map; since we never tombstoned them there, they resolve back to ADD and remain present.
     EXPECT_EQ(direct_result.size(), 60u);
 }
 
-TEST_F(SymbolListSuite, DirectPathEquivalenceWithTrueDeletes) {
-    // Setup: add symbols and force compaction
+// Same equivalence check, but the removed symbols are also tombstoned in the version map, so they
+// resolve to true DELETEs and drop out of both load paths.
+TEST_F(SymbolListSuite, NoCompactionLoadMatchesCompactionPathWithTrueDeletes) {
+    // Setup: add symbols and force a compaction so we have a compaction key to load from.
     for (int i = 0; i < 50; ++i) {
         auto symbol = fmt::format("sym_{}", i);
         SymbolList::add_symbol(store_, StreamId{symbol}, 0);
@@ -1117,10 +1122,8 @@ TEST_F(SymbolListSuite, DirectPathEquivalenceWithTrueDeletes) {
     }
 
     ConfigsMap::instance()->set_int("SymbolList.MaxDelta", 0);
-    {
-        SymbolList sl{version_map_};
-        sl.load<std::set<StreamId>>(version_map_, store_, false);
-    }
+    SymbolList sl{version_map_};
+    sl.load<std::set<StreamId>>(version_map_, store_, false);
 
     // Add new symbols
     for (int i = 50; i < 60; ++i) {

@@ -410,7 +410,8 @@ ProblematicResult is_problematic(
 
 void resolve_problematic_symbols(
         const std::shared_ptr<VersionMap>& version_map, const std::shared_ptr<Store>& store,
-        std::map<StreamId, std::pair<VersionId, timestamp>>& problematic_symbols, CollectionType& symbols
+        ankerl::unordered_dense::map<StreamId, std::pair<VersionId, timestamp>>& problematic_symbols,
+        CollectionType& symbols
 ) {
     if (problematic_symbols.empty())
         return;
@@ -466,7 +467,7 @@ CollectionType merge_existing_with_journal_map(
     auto existing_keys = std::move(existing);
 
     CollectionType symbols;
-    std::map<StreamId, std::pair<VersionId, timestamp>> problematic_symbols;
+    ankerl::unordered_dense::map<StreamId, std::pair<VersionId, timestamp>> problematic_symbols;
     std::unordered_set<StreamId> seen_in_existing;
     const auto min_allowed_interval = ConfigsMap::instance()->get_int("SymbolList.MinIntervalNs", 100'000'000LL);
 
