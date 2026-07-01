@@ -9,6 +9,9 @@ on:
       arcticdb_version:  {default: "", type: string, description: The version of ArcticDB that will be installed and used for seed/verify }
       persistent_storage: {required: true, default: "no", type: string, description: Specifies whether the python tests should tests against real storages e.g. AWS S3  }
 
+permissions:
+  contents: read
+
 jobs:
   setup:
     if: inputs.job_type != 'cleanup'
