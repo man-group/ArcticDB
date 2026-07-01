@@ -36,6 +36,16 @@ struct JournalEntryData {
 
     explicit JournalEntryData(const AtomKey& key);
 
+    // Logical constructor from a (reference id, time, action) triple. content_hash is left zero as it
+    // is not part of the logical identity is_problematic cares about; use the AtomKey constructor when
+    // the entry must round-trip back to a deletable key.
+    JournalEntryData(entity::VersionId reference_id, timestamp creation_time, ActionType action_type) :
+        key_version_id(reference_id),
+        creation_ts(creation_time),
+        content_hash(0),
+        action(action_type),
+        is_new_style(reference_id != unknown_version_id) {}
+
     // Old-style keys carry no usable version id, so they report unknown_version_id.
     [[nodiscard]] entity::VersionId reference_id() const { return is_new_style ? key_version_id : unknown_version_id; }
 };
