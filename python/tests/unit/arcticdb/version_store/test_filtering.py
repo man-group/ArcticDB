@@ -582,6 +582,20 @@ def test_filter_isin_clashing_sets_same_column_nonreg(
     generic_filter_test(lib, symbol, q, expected)
 
 
+def test_filter_isin_same_values_different_columns(lmdb_version_store_v1, any_output_format):
+    # Check we don't conflate them.
+    lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol = "test_filter_isin_same_values_different_columns"
+    df = pd.DataFrame({"a": [1, 2, 3, 4], "b": [3, 4, 1, 2]}, index=np.arange(4))
+    lib.write(symbol, df)
+    vals = [1, 2]
+    q = QueryBuilder()
+    q = q[q["a"].isin(vals) | q["b"].isin(vals)]
+    expected = df[df["a"].isin(vals) | df["b"].isin(vals)]
+    generic_filter_test(lib, symbol, q, expected)
+
+
 def test_filter_reused_derived_expression(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
     sym = "test_filter_reused_derived_expression"
