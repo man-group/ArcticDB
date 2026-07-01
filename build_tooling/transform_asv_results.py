@@ -186,6 +186,19 @@ def extract_most_recent_result(lib, json_path) -> int:
         return 1
 
 
+def extract_time(r):
+    """r looks like the "results" mentioned in the docstring of analyze_asv_results. Using eval as the results can
+    contain nan, inf etc which json.loads cannot parse.
+
+    ASV drops trailing fields (including "duration" at index 4) for benchmarks that did not produce a result, e.g.
+    because setup_cache failed, so the list can be shorter than expected.
+    """
+    as_list = eval(r)
+    if as_list is None or len(as_list) <= 4:
+        return nan
+    return as_list[4]
+
+
 def analyze_asv_results(lib, hash):
     """This function is designed to analyze the performance of our ASV benchmarks, so we can keep their runtime under control.
 
@@ -226,11 +239,6 @@ def analyze_asv_results(lib, hash):
     cache_setup_df = pd.DataFrame.from_dict(cache_setup_dict, orient="index", columns=["Duration (s)"])
     cache_setup_df = cache_setup_df.reset_index().rename(columns={'index': 'Step'})
     cache_setup_df = cache_setup_df.sort_values(by="Duration (s)", ascending=False)
-
-    def extract_time(r):
-        """r looks like the "results" mentioned in the docstring above. Using eval as the results can contain nan, inf etc which json.loads cannot parse"""
-        as_list = eval(r)
-        return as_list[4]
 
     benchmark_results["Duration (s)"] = benchmark_results.results.map(extract_time)
     benchmark_results = benchmark_results[["test_name", "Duration (s)"]]
