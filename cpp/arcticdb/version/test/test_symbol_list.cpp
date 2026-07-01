@@ -423,24 +423,26 @@ TEST(SymbolList, IsProblematic) {
     const timestamp min_interval = 100000;
 
     // No conflict - all adds
-    std::vector<SymbolEntryData> vec1{{0, 0, ActionType::ADD}, {1, 1_s, ActionType::ADD}, {2, 2_s, ActionType::ADD}};
+    std::vector<JournalEntryData> vec1{{0, 0, ActionType::ADD}, {1, 1_s, ActionType::ADD}, {2, 2_s, ActionType::ADD}};
     auto result = is_problematic(vec1, min_interval);
     ASSERT_EQ(static_cast<bool>(result), false);
 
     // No conflict with delete
-    std::vector<SymbolEntryData> vec2{{0, 0, ActionType::ADD}, {1, 1_s, ActionType::ADD}, {1, 2_s, ActionType::DELETE}};
+    std::vector<JournalEntryData> vec2{
+            {0, 0, ActionType::ADD}, {1, 1_s, ActionType::ADD}, {1, 2_s, ActionType::DELETE}
+    };
     result = is_problematic(vec2, min_interval);
     ASSERT_EQ(static_cast<bool>(result), false);
 
     // Version conflict not in the most recent is okay
-    std::vector<SymbolEntryData> vec3{
+    std::vector<JournalEntryData> vec3{
             {0, 0, ActionType::ADD}, {0, 1_s, ActionType::DELETE}, {0, 2_s, ActionType::ADD}, {1, 3_s, ActionType::ADD}
     };
     result = is_problematic(vec3, min_interval);
     ASSERT_EQ(static_cast<bool>(result), false);
 
     // Version conflict with same action also fine
-    std::vector<SymbolEntryData> vec4{
+    std::vector<JournalEntryData> vec4{
             {0, 0, ActionType::ADD},
             {0, 1_s, ActionType::DELETE},
             {1, 2_s, ActionType::ADD},
@@ -451,7 +453,7 @@ TEST(SymbolList, IsProblematic) {
     ASSERT_EQ(static_cast<bool>(result), false);
 
     // Version conflict at end returns latest
-    std::vector<SymbolEntryData> vec5{
+    std::vector<JournalEntryData> vec5{
             {0, 0, ActionType::ADD},
             {1, 1_s, ActionType::DELETE},
             {1, 2_s, ActionType::DELETE},
@@ -462,7 +464,7 @@ TEST(SymbolList, IsProblematic) {
     ASSERT_EQ(result_equals(result, expected1), true);
 
     // As above but with the first version
-    std::vector<SymbolEntryData> vec6{
+    std::vector<JournalEntryData> vec6{
             {0, 1_s, ActionType::DELETE}, {0, 2_s, ActionType::DELETE}, {0, 3_s, ActionType::ADD}
     };
     result = is_problematic(vec6, min_interval);
@@ -470,12 +472,14 @@ TEST(SymbolList, IsProblematic) {
     ASSERT_EQ(result_equals(result, expected2), true);
 
     // Timestamps too close but not more recent is okay
-    std::vector<SymbolEntryData> vec7{{0, 0, ActionType::ADD}, {1, 100, ActionType::DELETE}, {2, 2_s, ActionType::ADD}};
+    std::vector<JournalEntryData> vec7{
+            {0, 0, ActionType::ADD}, {1, 100, ActionType::DELETE}, {2, 2_s, ActionType::ADD}
+    };
     result = is_problematic(vec7, min_interval);
     ASSERT_EQ(static_cast<bool>(result), false);
 
     // Timestamp clash in most recent returns latest entry
-    std::vector<SymbolEntryData> vec8{
+    std::vector<JournalEntryData> vec8{
             {0, 0, ActionType::ADD}, {0, 1_s, ActionType::DELETE}, {0, 1_s + 100, ActionType::ADD}
     };
     result = is_problematic(vec8, min_interval);
@@ -483,7 +487,7 @@ TEST(SymbolList, IsProblematic) {
     ASSERT_EQ(result_equals(result, expected3), true);
 
     // Contains unknown reference ids
-    std::vector<SymbolEntryData> vec9{
+    std::vector<JournalEntryData> vec9{
             {0, 0, ActionType::ADD}, {unknown_version_id, 1_s, ActionType::DELETE}, {2, 2_s, ActionType::ADD}
     };
     result = is_problematic(vec9, min_interval);
@@ -495,13 +499,13 @@ TEST(SymbolList, IsProblematicWithStored) {
 
     // No conflict
     SymbolListEntry entry1{"test", 0, 0, ActionType::ADD};
-    std::vector<SymbolEntryData> vec1{{1, 1_s, ActionType::ADD}, {2, 2_s, ActionType::ADD}, {3, 3_s, ActionType::ADD}};
+    std::vector<JournalEntryData> vec1{{1, 1_s, ActionType::ADD}, {2, 2_s, ActionType::ADD}, {3, 3_s, ActionType::ADD}};
     auto result = is_problematic(entry1, vec1, min_interval);
     ASSERT_EQ(static_cast<bool>(result), false);
 
     // No conflict with delete
     SymbolListEntry entry2{"test", 0, 0, ActionType::ADD};
-    std::vector<SymbolEntryData> vec2{
+    std::vector<JournalEntryData> vec2{
             {0, 1_s, ActionType::DELETE},
             {1, 2_s, ActionType::ADD},
             {1, 3_s, ActionType::DELETE},
@@ -513,7 +517,7 @@ TEST(SymbolList, IsProblematicWithStored) {
 
     // Conflict between stored and update, but not most recent is okay
     SymbolListEntry entry3{"test", 0, 0, ActionType::ADD};
-    std::vector<SymbolEntryData> vec3{
+    std::vector<JournalEntryData> vec3{
             {0, 1_s, ActionType::ADD},
             {0, 2_s, ActionType::DELETE},
             {1, 3_s, ActionType::ADD},
@@ -525,13 +529,13 @@ TEST(SymbolList, IsProblematicWithStored) {
 
     // Version conflict but same action is fine
     SymbolListEntry entry4{"test", 0, 0, ActionType::ADD};
-    std::vector<SymbolEntryData> vec4{{0, 1_s, ActionType::ADD}, {0, 2_s, ActionType::ADD}};
+    std::vector<JournalEntryData> vec4{{0, 1_s, ActionType::ADD}, {0, 2_s, ActionType::ADD}};
     result = is_problematic(entry4, vec4, min_interval);
     ASSERT_EQ(static_cast<bool>(result), false);
 
     // Conflicting version in update returns most recent update
     SymbolListEntry entry5{"test", 0, 0, ActionType::ADD};
-    std::vector<SymbolEntryData> vec5{
+    std::vector<JournalEntryData> vec5{
             {0, 1_s, ActionType::DELETE},
             {1, 2_s, ActionType::DELETE},
             {1, 3_s, ActionType::ADD},
@@ -543,7 +547,7 @@ TEST(SymbolList, IsProblematicWithStored) {
 
     // Conflict exists but there is an old-style symbol list key
     SymbolListEntry entry6{"test", 0, 0, ActionType::ADD};
-    std::vector<SymbolEntryData> vec6{
+    std::vector<JournalEntryData> vec6{
             {unknown_version_id, 1_s, ActionType::ADD}, {0, 2_s, ActionType::ADD}, {0, 3_s, ActionType::DELETE}
     };
     result = is_problematic(entry6, vec6, min_interval);
@@ -552,21 +556,21 @@ TEST(SymbolList, IsProblematicWithStored) {
 
     // Simple conflict between update and existing
     SymbolListEntry entry7{"test", 0, 0, ActionType::ADD};
-    std::vector<SymbolEntryData> vec7{{0, 2_s, ActionType::ADD}, {0, 3_s, ActionType::DELETE}};
+    std::vector<JournalEntryData> vec7{{0, 2_s, ActionType::ADD}, {0, 3_s, ActionType::DELETE}};
     result = is_problematic(entry7, vec7, min_interval);
     expected = SymbolEntryData{0, 3_s, ActionType::DELETE};
     ASSERT_EQ(result_equals(result, expected), true);
 
     // Update conflicts with existing
     SymbolListEntry entry8{"test", 0, 0, ActionType::DELETE};
-    std::vector<SymbolEntryData> vec8{{0, 1_s, ActionType::ADD}, {0, 2_s, ActionType::ADD}};
+    std::vector<JournalEntryData> vec8{{0, 1_s, ActionType::ADD}, {0, 2_s, ActionType::ADD}};
     result = is_problematic(entry8, vec8, min_interval);
     expected = SymbolEntryData{0, 2_s, ActionType::ADD};
     ASSERT_EQ(result_equals(result, expected), true);
 
     // Update and existing timestamps too close
     SymbolListEntry entry9{"test", 0, 0, ActionType::DELETE};
-    std::vector<SymbolEntryData> vec9{{1, 100, ActionType::ADD}};
+    std::vector<JournalEntryData> vec9{{1, 100, ActionType::ADD}};
 
     result = is_problematic(entry9, vec9, min_interval);
     expected = SymbolEntryData{1, 100, ActionType::ADD};
@@ -574,14 +578,14 @@ TEST(SymbolList, IsProblematicWithStored) {
 
     // Update and existing timestamps too close, same action is okay
     SymbolListEntry entry10{"test", 0, 0, ActionType::DELETE};
-    std::vector<SymbolEntryData> vec10{{1, 100, ActionType::DELETE}};
+    std::vector<JournalEntryData> vec10{{1, 100, ActionType::DELETE}};
 
     result = is_problematic(entry10, vec10, min_interval);
     ASSERT_EQ(static_cast<bool>(result), false);
 
     // Timestamps too close, but not most recent
     SymbolListEntry entry11{"test", 0, 0, ActionType::DELETE};
-    std::vector<SymbolEntryData> vec11{
+    std::vector<JournalEntryData> vec11{
             {1, 100, ActionType::ADD},
             {2, 2_s, ActionType::ADD},
     };
@@ -592,7 +596,7 @@ TEST(SymbolList, IsProblematicWithStored) {
 
 TEST(Problematic, RealTimestamps2) {
     // SymbolListEntry entry1{"test", 0, 1694701083539622714, ActionType::ADD};
-    std::vector<SymbolEntryData> vec1{
+    std::vector<JournalEntryData> vec1{
             {0, 1696255639552055287, ActionType::ADD}, {0, 1696255639570862954, ActionType::ADD}
     };
 
@@ -602,7 +606,7 @@ TEST(Problematic, RealTimestamps2) {
 
 TEST(Problematic, RealTimestamps) {
     SymbolListEntry entry1{"test", 0, 1694701083539622714, ActionType::ADD};
-    std::vector<SymbolEntryData> vec1{
+    std::vector<JournalEntryData> vec1{
             {0, 1694701083516771231, ActionType::ADD},
             {0, 1694701083531817347, ActionType::ADD},
             {0, 1694701083541496287, ActionType::ADD},
@@ -616,7 +620,7 @@ TEST(Problematic, RealTimestamps) {
     ASSERT_EQ(result_equals(result, expected), true);
 
     SymbolListEntry entry2{"test", 2, 1694779989680380390, ActionType::ADD};
-    std::vector<SymbolEntryData> vec2{
+    std::vector<JournalEntryData> vec2{
             {0, 1694779976040611297, ActionType::ADD}, {0, 1694779976054908858, ActionType::ADD},
             {0, 1694779976062913894, ActionType::ADD}, {0, 1694779976086496686, ActionType::ADD},
             {0, 1694779976095000098, ActionType::ADD}, {0, 1694779976098613575, ActionType::ADD},
@@ -633,7 +637,7 @@ TEST(Problematic, RealTimestamps) {
     ASSERT_EQ(static_cast<bool>(result), false);
 
     SymbolListEntry entry3{"test", 0, 1696510154249460459, ActionType::ADD};
-    std::vector<SymbolEntryData> vec3{
+    std::vector<JournalEntryData> vec3{
             {0, 1696510154081738353, ActionType::ADD},
             {0, 1696510154273679131, ActionType::ADD},
             {0, 1696510154277544441, ActionType::ADD},
@@ -757,7 +761,13 @@ TEST_F(SymbolListSuite, BackwardsCompat) {
 
     auto old_keys = backwards_compat_get_all_symbol_list_keys(store);
     auto old_symbols = backwards_compat_get_symbols(store);
+    std::set<AtomKey> old_key_set(old_keys.begin(), old_keys.end());
     backwards_compat_compact(store, std::move(old_keys), old_symbols);
+
+    // delete_keys must remove every old journal/compaction key, leaving only the freshly written compaction key
+    auto keys_after_compact = backwards_compat_get_all_symbol_list_keys(store);
+    ASSERT_EQ(keys_after_compact.size(), 1);
+    ASSERT_EQ(old_key_set.count(keys_after_compact.front()), 0);
 
     ASSERT_EQ(all_symbols_match(store, symbol_list, expected), true);
 
@@ -1057,3 +1067,98 @@ TEST_P(SymbolListRace, Run) {
 INSTANTIATE_TEST_SUITE_P(SymbolListSource, SymbolListRace, Combine(Values('S'), Bool(), Bool(), Bool()));
 // For version keys source (initial compaction), there's no old compaction key to remove:
 INSTANTIATE_TEST_SUITE_P(VersionKeysSource, SymbolListRace, Combine(Values('V'), Values(false), Bool(), Bool()));
+
+// Loading with no_compaction=true (skip the compaction write/delete, just merge and return) must
+// produce the same symbols as the compaction-eligible path. Here the journal mixes new symbols,
+// re-adds of already-present symbols, and removes of symbols still live in the version map.
+TEST_F(SymbolListSuite, NoCompactionLoadMatchesCompactionPath) {
+    // Setup: add symbols and force a compaction so we have a compaction key to load from.
+    for (int i = 0; i < 50; ++i) {
+        auto symbol = fmt::format("sym_{}", i);
+        SymbolList::add_symbol(store_, StreamId{symbol}, 0);
+        auto key = atom_key_builder().build(symbol, KeyType::TABLE_INDEX);
+        version_map_->write_version(store_, key, std::nullopt);
+    }
+
+    ConfigsMap::instance()->set_int("SymbolList.MaxDelta", 0);
+    SymbolList sl{version_map_};
+    sl.load<std::set<StreamId>>(version_map_, store_, false);
+
+    // Journal entries on top of the compaction key: sym_40..49 re-add already-present symbols,
+    // sym_50..59 are new, and sym_0..9 are removed (but kept in the version map, see below).
+    for (int i = 40; i < 60; ++i) {
+        auto symbol = fmt::format("sym_{}", i);
+        SymbolList::add_symbol(store_, StreamId{symbol}, 1);
+        auto key = atom_key_builder().version_id(1).build(symbol, KeyType::TABLE_INDEX);
+        version_map_->write_version(store_, key, std::nullopt);
+    }
+    for (int i = 0; i < 10; ++i) {
+        auto symbol = fmt::format("sym_{}", i);
+        SymbolList::remove_symbol(store_, StreamId{symbol}, 1);
+    }
+
+    ConfigsMap::instance()->unset_int("SymbolList.MaxDelta");
+
+    // Load via compaction-eligible path (will not actually compact since threshold is default)
+    SymbolList sl1{version_map_};
+    auto compaction_result = sl1.load<std::set<StreamId>>(version_map_, store_, false);
+
+    // Load with compaction disabled (no_compaction=true)
+    SymbolList sl2{version_map_};
+    auto direct_result = sl2.load<std::set<StreamId>>(version_map_, store_, true);
+
+    EXPECT_EQ(compaction_result, direct_result);
+    // 50 original + 10 new (sym_50..59) = 60. The sym_0..9 removes land close in time to their
+    // original adds, so the merge flags them as problematic and resolves them against the version
+    // map; since we never tombstoned them there, they resolve back to ADD and remain present.
+    EXPECT_EQ(direct_result.size(), 60u);
+}
+
+// Same equivalence check, but the removed symbols are also tombstoned in the version map, so they
+// resolve to true DELETEs and drop out of both load paths.
+TEST_F(SymbolListSuite, NoCompactionLoadMatchesCompactionPathWithTrueDeletes) {
+    // Setup: add symbols and force a compaction so we have a compaction key to load from.
+    for (int i = 0; i < 50; ++i) {
+        auto symbol = fmt::format("sym_{}", i);
+        SymbolList::add_symbol(store_, StreamId{symbol}, 0);
+        auto key = atom_key_builder().build(symbol, KeyType::TABLE_INDEX);
+        version_map_->write_version(store_, key, std::nullopt);
+    }
+
+    ConfigsMap::instance()->set_int("SymbolList.MaxDelta", 0);
+    SymbolList sl{version_map_};
+    sl.load<std::set<StreamId>>(version_map_, store_, false);
+
+    // Add new symbols
+    for (int i = 50; i < 60; ++i) {
+        auto symbol = fmt::format("sym_{}", i);
+        SymbolList::add_symbol(store_, StreamId{symbol}, 1);
+        auto key = atom_key_builder().version_id(1).build(symbol, KeyType::TABLE_INDEX);
+        version_map_->write_version(store_, key, std::nullopt);
+    }
+
+    // Delete symbols 0-9 via both the symbol list journal AND the version map
+    for (int i = 0; i < 10; ++i) {
+        auto symbol = fmt::format("sym_{}", i);
+        SymbolList::remove_symbol(store_, StreamId{symbol}, 1);
+        version_map_->tombstone_from_key_or_all(store_, StreamId{symbol});
+    }
+
+    ConfigsMap::instance()->unset_int("SymbolList.MaxDelta");
+
+    SymbolList sl1{version_map_};
+    auto compaction_result = sl1.load<std::set<StreamId>>(version_map_, store_, false);
+
+    SymbolList sl2{version_map_};
+    auto direct_result = sl2.load<std::set<StreamId>>(version_map_, store_, true);
+
+    EXPECT_EQ(compaction_result, direct_result);
+    // 50 original - 10 deleted + 10 new = 50
+    EXPECT_EQ(direct_result.size(), 50u);
+    // Verify deleted symbols are absent
+    for (int i = 0; i < 10; ++i)
+        EXPECT_EQ(direct_result.count(StreamId{fmt::format("sym_{}", i)}), 0u);
+    // Verify new symbols are present
+    for (int i = 50; i < 60; ++i)
+        EXPECT_EQ(direct_result.count(StreamId{fmt::format("sym_{}", i)}), 1u);
+}

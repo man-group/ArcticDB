@@ -1264,6 +1264,7 @@ if(${TEST})
             processing/test/benchmark_ternary.cpp
             util/test/benchmark_bitset.cpp
             version/test/benchmark_write.cpp
+            version/test/benchmark_symbol_list.cpp
     )
     set_pdb_name_per_translation_unit(${benchmark_srcs})
 

@@ -430,6 +430,8 @@ class AsyncStore : public Store {
         }
     }
 
+    std::optional<size_t> max_delete_batch_size() const override { return library_->max_delete_batch_size(); }
+
     std::vector<folly::Future<VariantKey>> batch_read_compressed(
             std::vector<std::pair<entity::VariantKey, ReadContinuation>>&& keys_and_continuations,
             const BatchReadArgs& args
