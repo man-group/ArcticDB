@@ -92,7 +92,6 @@ class Resample:
 
     def teardown(self, num_rows, downsampling_factor, col_type, aggregation):
         if not self.skipped:
-            self.ac.delete_library(self.LIB_NAME)
             del self.ac
 
     def setup(self, num_rows, downsampling_factor, col_type, aggregation):
@@ -140,7 +139,6 @@ class ResampleWide:
         lib.write(self.SYM, df)
 
     def teardown(self):
-        self.ac.delete_library(self.LIB_NAME)
         del self.ac
 
     def setup(self):
