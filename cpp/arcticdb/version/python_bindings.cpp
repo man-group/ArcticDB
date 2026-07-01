@@ -276,10 +276,10 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
 
     py::class_<convert::PandasData, std::shared_ptr<convert::PandasData>>(version, "PandasData")
             .def(py::init<
-                         std::vector<std::string>,
-                         std::vector<std::string>,
-                         std::vector<py::object>,
-                         std::vector<py::object>,
+                         std::vector<std::string>&&,
+                         std::vector<std::string>&&,
+                         std::vector<py::object>&&,
+                         std::vector<py::object>&&,
                          SortedValue>(),
                  py::arg("index_names"),
                  py::arg("column_names"),

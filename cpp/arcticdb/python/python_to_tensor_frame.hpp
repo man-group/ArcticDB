@@ -22,16 +22,17 @@ namespace py = pybind11;
 using namespace arcticdb::entity;
 
 struct ARCTICDB_VISIBILITY_HIDDEN PandasData {
-    PandasData() = default;
     PandasData(
-            std::vector<std::string> index_names, std::vector<std::string> column_names,
-            std::vector<py::object> index_values, std::vector<py::object> columns_values, SortedValue sorted
+            std::vector<std::string>&& index_names, std::vector<std::string>&& column_names,
+            std::vector<py::object>&& index_values, std::vector<py::object>&& columns_values, SortedValue sorted
     ) :
         index_names(std::move(index_names)),
         column_names(std::move(column_names)),
         index_values(std::move(index_values)),
         columns_values(std::move(columns_values)),
         sorted(sorted) {}
+
+    ARCTICDB_MOVE_ONLY_DEFAULT(PandasData)
 
     std::vector<std::string> index_names;
     std::vector<std::string> column_names;
