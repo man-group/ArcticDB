@@ -96,7 +96,7 @@ TestTensorFrame append_with_three_segments(version_store::PythonVersionStore& st
     constexpr size_t update_val{1};
     auto append_frame =
             get_test_frame<TimeseriesIndex>(stream_id, get_test_timeseries_fields(), 30, start_index, update_val);
-    store.append_internal(stream_id, append_frame.frame_, false, false, false);
+    store.append_internal(stream_id, append_frame.frame_, false, false, false, false);
     start_index += 30; // To avoid sameappends
     return append_frame;
 }

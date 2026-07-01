@@ -52,7 +52,7 @@ class VersionedEngine {
 
     virtual VersionedItem append_internal(
             const StreamId& stream_id, const std::shared_ptr<InputFrame>& frame, bool upsert,
-            bool prune_previous_versions, bool validate_index
+            bool prune_previous_versions, bool validate_index, bool compact_data_inline
     ) = 0;
 
     virtual VersionedItem delete_range_internal(
