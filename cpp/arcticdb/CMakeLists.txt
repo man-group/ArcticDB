@@ -1101,6 +1101,7 @@ if(${TEST})
             processing/test/test_type_comparison.cpp
             processing/test/test_unsorted_aggregation.cpp
             processing/test/test_merge_update.cpp
+            storage/test/test_lmdb_cve.cpp
             storage/test/test_local_storages.cpp
             storage/test/test_memory_storage.cpp
             storage/test/test_s3_storage.cpp
