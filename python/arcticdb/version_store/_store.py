@@ -87,7 +87,7 @@ from arcticdb.flattener import Flattener
 from arcticdb.log import version as log
 from arcticdb.version_store._custom_normalizers import get_custom_normalizer, CompositeCustomNormalizer
 from arcticdb.version_store._normalization import (
-    NPDDataFrame,
+    PandasData,
     normalize_metadata,
     normalize_recursive_metastruct,
     denormalize_user_metadata,
@@ -677,7 +677,7 @@ class NativeVersionStore:
 
     @staticmethod
     def _valid_item_type(item):
-        return isinstance(item, NPDDataFrame) or (
+        return isinstance(item, PandasData) or (
             isinstance(item, list) and all(isinstance(el, RecordBatchData) for el in item)
         )
 

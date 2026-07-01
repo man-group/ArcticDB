@@ -241,11 +241,11 @@ NativeTensor obj_to_tensor(PyObject* ptr, bool empty_types, std::optional<std::s
     return {nbytes, desc.arr_->nd, strides.data(), shapes.data(), dt, desc.elsize_, data, desc.ndim_};
 }
 
-void tensors_to_frame(const py::tuple& tuple, const bool empty_types, InputFrame& frame) {
+void pandas_data_to_frame(const PandasData& pandas_data, const bool empty_types, InputFrame& frame) {
     frame.num_rows = 0u;
     // Fill index
-    auto idx_names = tuple[0].cast<std::vector<std::string>>();
-    auto idx_vals = tuple[2].cast<std::vector<py::object>>();
+    const auto& idx_names = pandas_data.index_names;
+    const auto& idx_vals = pandas_data.index_values;
     util::check(
             idx_names.size() == idx_vals.size(),
             "Number idx names {} and values {} do not match",
@@ -280,9 +280,9 @@ void tensors_to_frame(const py::tuple& tuple, const bool empty_types, InputFrame
     }
 
     // Fill tensors
-    auto col_names = tuple[1].cast<std::vector<std::string>>();
-    auto col_vals = tuple[3].cast<std::vector<py::object>>();
-    auto sorted = tuple[4].cast<SortedValue>();
+    const auto& col_names = pandas_data.column_names;
+    const auto& col_vals = pandas_data.columns_values;
+    const auto sorted = pandas_data.sorted;
 
     for (auto i = 0u; i < col_vals.size(); ++i) {
         auto tensor = [&] {
@@ -358,7 +358,7 @@ void record_batches_to_frame(
     );
 }
 
-std::shared_ptr<InputFrame> py_ndf_to_frame(
+std::shared_ptr<InputFrame> py_input_item_to_frame(
         const StreamId& stream_name, const InputItem& item, const py::object& norm_meta, const py::object& user_meta,
         bool empty_types, pipelines::SortednessScan sortedness_scan
 ) {
@@ -371,7 +371,12 @@ std::shared_ptr<InputFrame> py_ndf_to_frame(
 
     util::variant_match(
             item,
-            [&](const py::tuple& tensors) { tensors_to_frame(tensors, empty_types, *res); },
+            [&](const std::shared_ptr<PandasData>& pandas_data) {
+                user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                        pandas_data, "Expected pandas input data but received nullptr"
+                );
+                pandas_data_to_frame(*pandas_data, empty_types, *res);
+            },
             [&](const std::vector<std::shared_ptr<RecordBatchData>>& record_batches) {
                 record_batches_to_frame(record_batches, *res, sortedness_scan);
             }

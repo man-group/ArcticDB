@@ -45,8 +45,8 @@ template PythonVersionStore::PythonVersionStore(
 );
 
 VersionedItem PythonVersionStore::write_dataframe_specific_version(
-        const StreamId& stream_id, const py::tuple& item, const py::object& norm, const py::object& user_meta,
-        VersionId version_id
+        const StreamId& stream_id, const std::shared_ptr<convert::PandasData>& item, const py::object& norm,
+        const py::object& user_meta, VersionId version_id
 ) {
     ARCTICDB_SAMPLE(WriteDataFrame, 0)
 
@@ -62,7 +62,7 @@ VersionedItem PythonVersionStore::write_dataframe_specific_version(
     auto versioned_item = write_dataframe_impl(
             store(),
             VersionId(version_id),
-            convert::py_ndf_to_frame(
+            convert::py_input_item_to_frame(
                     stream_id,
                     item,
                     norm,
@@ -88,7 +88,7 @@ std::vector<std::shared_ptr<InputFrame>> create_input_tensor_frames(
     std::vector<std::shared_ptr<InputFrame>> output;
     output.reserve(stream_ids.size());
     for (size_t idx = 0; idx < stream_ids.size(); idx++) {
-        output.emplace_back(convert::py_ndf_to_frame(
+        output.emplace_back(convert::py_input_item_to_frame(
                 stream_ids[idx], items[idx], norms[idx], user_metas[idx], empty_types, sortedness_scan
         ));
     }
@@ -689,7 +689,7 @@ std::unordered_set<StreamId> PythonVersionStore::list_streams_unordered(
 size_t PythonVersionStore::compact_symbol_list() { return compact_symbol_list_internal(); }
 
 VersionedItem PythonVersionStore::write_partitioned_dataframe(
-        const StreamId& stream_id, const py::tuple& item, const py::object& norm_meta,
+        const StreamId& stream_id, const std::shared_ptr<convert::PandasData>& item, const py::object& norm_meta,
         const std::vector<std::string>& partition_value
 ) {
     ARCTICDB_SAMPLE(WritePartitionedDataFrame, 0)
@@ -697,7 +697,7 @@ VersionedItem PythonVersionStore::write_partitioned_dataframe(
     auto version_id = get_next_version_from_key(maybe_prev);
 
     //    TODO: We are not actually partitioning stuff atm, just assuming a single partition is passed for now.
-    std::array<py::object, 1> partitioned_dfs{item};
+    std::array<std::shared_ptr<convert::PandasData>, 1> partitioned_dfs{item};
 
     auto write_options = get_write_options();
     auto de_dup_map = std::make_shared<DeDupMap>();
@@ -708,7 +708,7 @@ VersionedItem PythonVersionStore::write_partitioned_dataframe(
         auto versioned_item = write_dataframe_impl(
                 store(),
                 version_id,
-                convert::py_ndf_to_frame(
+                convert::py_input_item_to_frame(
                         subkeyname,
                         partitioned_dfs[idx],
                         norm_meta,
@@ -806,7 +806,7 @@ VersionedItem PythonVersionStore::write_versioned_dataframe(
         bool prune_previous_versions, bool sparsify_floats, bool validate_index
 ) {
     ARCTICDB_SAMPLE(WriteVersionedDataframe, 0)
-    auto frame = convert::py_ndf_to_frame(
+    auto frame = convert::py_input_item_to_frame(
             stream_id, item, norm, user_meta, cfg().write_options().empty_types(), sortedness_scan_for(validate_index)
     );
     auto versioned_item = write_versioned_dataframe_internal(
@@ -832,7 +832,7 @@ VersionedItem PythonVersionStore::append(
 ) {
     return append_internal(
             stream_id,
-            convert::py_ndf_to_frame(
+            convert::py_input_item_to_frame(
                     stream_id,
                     item,
                     norm,
@@ -855,7 +855,7 @@ VersionedItem PythonVersionStore::update(
             query,
             // update always requires a sorted index (both the upsert-to-write path and updating existing data),
             // so always determine the Arrow index sort order.
-            convert::py_ndf_to_frame(
+            convert::py_input_item_to_frame(
                     stream_id,
                     item,
                     norm,
@@ -876,8 +876,8 @@ VersionedItem PythonVersionStore::delete_range(
 }
 
 void PythonVersionStore::append_incomplete(
-        const StreamId& stream_id, const py::tuple& item, const py::object& norm, const py::object& user_meta,
-        bool validate_index
+        const StreamId& stream_id, const std::shared_ptr<convert::PandasData>& item, const py::object& norm,
+        const py::object& user_meta, bool validate_index
 ) const {
 
     using namespace arcticdb::entity;
@@ -885,7 +885,7 @@ void PythonVersionStore::append_incomplete(
     using namespace arcticdb::pipelines;
 
     // Turn the input into a standardised frame object
-    auto frame = convert::py_ndf_to_frame(
+    auto frame = convert::py_input_item_to_frame(
             stream_id, item, norm, user_meta, cfg().write_options().empty_types(), SortednessScan::SKIP
     );
     append_incomplete_frame(stream_id, frame, validate_index);
@@ -1012,7 +1012,7 @@ StageResult PythonVersionStore::write_parallel(
     // When the data will be sorted for us (sort_on_index or sort_columns) the input order is irrelevant, so only
     // determine the Arrow index sort order when the unsorted input itself must be validated.
     const bool verify = validate_index && !sort_on_index && (!sort_columns || sort_columns->empty());
-    auto frame = convert::py_ndf_to_frame(
+    auto frame = convert::py_input_item_to_frame(
             stream_id, item, norm, py::none(), cfg().write_options().empty_types(), sortedness_scan_for(verify)
     );
     return write_parallel_frame(stream_id, frame, validate_index, sort_on_index, sort_columns);
@@ -1531,11 +1531,12 @@ bool PythonVersionStore::is_empty_excluding_key_types(const std::vector<KeyType>
 }
 
 void write_dataframe_to_file(
-        const StreamId& stream_id, const std::string& path, const py::tuple& item, const py::object& norm,
-        const py::object& user_meta
+        const StreamId& stream_id, const std::string& path, const std::shared_ptr<convert::PandasData>& item,
+        const py::object& norm, const py::object& user_meta
 ) {
     ARCTICDB_SAMPLE(WriteDataframeToFile, 0)
-    auto frame = convert::py_ndf_to_frame(stream_id, item, norm, user_meta, false, pipelines::SortednessScan::SKIP);
+    auto frame =
+            convert::py_input_item_to_frame(stream_id, item, norm, user_meta, false, pipelines::SortednessScan::SKIP);
     write_dataframe_to_file_internal(
             stream_id, frame, path, WriteOptions{}, codec::default_lz4_codec(), EncodingVersion::V2
     );
@@ -1565,15 +1566,16 @@ void PythonVersionStore::force_delete_symbol(const StreamId& stream_id) {
 }
 
 VersionedItem PythonVersionStore::merge(
-        const StreamId& stream_id, const py::tuple& source, const py::object& norm, const py::object& user_meta,
-        const bool prune_previous_versions, const bool upsert, const py::tuple& py_strategy, std::vector<std::string> on
+        const StreamId& stream_id, const std::shared_ptr<convert::PandasData>& source, const py::object& norm,
+        const py::object& user_meta, const bool prune_previous_versions, const bool upsert,
+        const py::tuple& py_strategy, std::vector<std::string> on
 ) {
     const MergeStrategy strategy{
             .matched = py_strategy[0].cast<MergeAction>(), .not_matched_by_target = py_strategy[1].cast<MergeAction>()
     };
     return merge_internal(
             stream_id,
-            convert::py_ndf_to_frame(
+            convert::py_input_item_to_frame(
                     stream_id,
                     source,
                     norm,
