@@ -16,7 +16,6 @@ import random
 
 from arcticdb import Arctic
 from arcticdb import QueryBuilder
-from arcticdb.exceptions import LibraryNotFound
 from arcticdb.util.logger import get_logger
 from arcticdb.util.test import random_strings_of_length
 from asv_runner.benchmarks.mark import skip_for_params
