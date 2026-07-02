@@ -16,6 +16,7 @@ import pytest
 from pytz import timezone
 import random
 import string
+import unicodedata
 
 from arcticdb import OutputFormat
 from arcticdb.exceptions import ArcticNativeException, InternalException, UserInputException, SchemaException
@@ -35,8 +36,25 @@ from arcticdb.util.test import (
     equals,
 )
 from arcticdb.util._versions import IS_PANDAS_TWO, PANDAS_VERSION, IS_NUMPY_TWO
+from tests.util.naughty_strings import read_big_list_of_naughty_strings
 
 pytestmark = pytest.mark.pipeline
+
+# A spread of unicode strings: ASCII, accented latin, CJK (3 bytes/char), 4-byte emoji,
+# Greek, and pairs sharing a long multibyte prefix (relevant to byte-truncation logic).
+UNICODE_FILTER_VALUES = [
+    "apple",
+    "café",
+    "caff",
+    "naïve",
+    "日本語",
+    "日本語A",
+    "😀grin",
+    "😀grip",
+    "Ωmega",
+    "",
+    "zzz",
+]
 
 
 def test_filter_column_not_present(lmdb_version_store_v1, any_output_format):
@@ -990,6 +1008,127 @@ def test_filter_string_single_quote(lmdb_version_store_v1, any_output_format):
     expected = pd.DataFrame({"a": ["'"]}, index=np.arange(1, 2))
     received = lib.read(symbol, query_builder=q).data
     assert np.array_equal(expected, received)
+
+
+# Unicode support in string filtering. These use dynamic strings only: fixed-width string
+# columns store UTF-32 and their comparison path (ascii_to_padded_utf32) does not handle
+# non-ASCII query values.
+def test_filter_string_equals_unicode(lmdb_version_store_v1, any_output_format):
+    lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol = "test_filter_string_equals_unicode"
+    df = pd.DataFrame({"a": UNICODE_FILTER_VALUES, "b": np.arange(len(UNICODE_FILTER_VALUES))})
+    lib.write(symbol, df, dynamic_strings=True)
+    for value in UNICODE_FILTER_VALUES:
+        q = QueryBuilder()
+        q = q[q["a"] == value]
+        expected = df[df["a"] == value]
+        generic_filter_test(lib, symbol, q, expected)
+
+
+def test_filter_string_not_equal_unicode(lmdb_version_store_v1, any_output_format):
+    lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol = "test_filter_string_not_equal_unicode"
+    df = pd.DataFrame({"a": UNICODE_FILTER_VALUES, "b": np.arange(len(UNICODE_FILTER_VALUES))})
+    lib.write(symbol, df, dynamic_strings=True)
+    for value in ["café", "日本語", "😀grin", "missing"]:
+        q = QueryBuilder()
+        q = q[q["a"] != value]
+        expected = df[df["a"] != value]
+        generic_filter_test(lib, symbol, q, expected)
+
+
+def test_filter_string_isin_unicode(lmdb_version_store_v1, any_output_format):
+    lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol = "test_filter_string_isin_unicode"
+    df = pd.DataFrame({"a": UNICODE_FILTER_VALUES, "b": np.arange(len(UNICODE_FILTER_VALUES))})
+    lib.write(symbol, df, dynamic_strings=True)
+    value_set = ["café", "日本語", "😀grip", "not-present"]
+
+    q = QueryBuilder()
+    q = q[q["a"].isin(value_set)]
+    generic_filter_test(lib, symbol, q, df[df["a"].isin(value_set)])
+
+    q = QueryBuilder()
+    q = q[q["a"].isnotin(value_set)]
+    generic_filter_test(lib, symbol, q, df[~df["a"].isin(value_set)])
+
+
+# Distinct unicode normalization forms have distinct bytes and must not be conflated:
+# ArcticDB does not normalize on write, and Python str equality is by codepoint.
+def test_filter_string_unicode_normalization(lmdb_version_store_v1, any_output_format):
+    lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol = "test_filter_string_unicode_normalization"
+    composed = unicodedata.normalize("NFC", "café")
+    decomposed = unicodedata.normalize("NFD", "café")
+    assert composed != decomposed and composed.encode() != decomposed.encode()
+    df = pd.DataFrame({"a": [composed, decomposed], "b": [0, 1]})
+    lib.write(symbol, df, dynamic_strings=True)
+    for value in [composed, decomposed]:
+        q = QueryBuilder()
+        q = q[q["a"] == value]
+        expected = df[df["a"] == value]
+        assert len(expected) == 1
+        generic_filter_test(lib, symbol, q, expected)
+
+
+# Regression marker for a pre-existing bug: fixed-width (UTF-32) string columns compare
+# a non-ASCII query value via ascii_to_padded_utf32, which copies UTF-8 bytes into UTF-32
+# slots and so silently matches nothing (verified identical under pandas and arrow output).
+# Dynamic strings are correct. If this ever starts passing, the bug has been fixed and the
+# xfail (strict) will flag it.
+@pytest.mark.xfail(reason="Fixed-width string columns mishandle non-ASCII equality", strict=True)
+def test_filter_string_equals_unicode_fixed_width(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    symbol = "test_filter_string_equals_unicode_fixed_width"
+    df = pd.DataFrame({"a": ["café", "apple", "日本語"], "b": np.arange(3)})
+    lib.write(symbol, df, dynamic_strings=False)
+    q = QueryBuilder()
+    q = q[q["a"] == "café"]
+    expected = df[df["a"] == "café"]
+    received = lib.read(symbol, query_builder=q).data
+    assert np.array_equal(expected, received)
+
+
+def test_filter_string_equals_blns(lmdb_version_store_v1, any_output_format):
+    lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol = "test_filter_string_equals_blns"
+    strings = list(dict.fromkeys(read_big_list_of_naughty_strings()))
+    df = pd.DataFrame({"a": strings, "b": np.arange(len(strings))})
+    lib.write(symbol, df, dynamic_strings=True)
+    # Query a spread including the longest values (exercising >64 byte strings) and
+    # non-ASCII entries.
+    by_len = sorted(strings, key=lambda s: len(s.encode("utf-8")))
+    non_ascii = [s for s in strings if any(ord(c) > 127 for c in s)]
+    queries = by_len[-10:] + non_ascii[:10] + strings[:5]
+    for value in queries:
+        q = QueryBuilder()
+        q = q[q["a"] == value]
+        expected = df[df["a"] == value]
+        generic_filter_test(lib, symbol, q, expected)
+
+
+def test_filter_string_isin_blns(lmdb_version_store_v1, any_output_format):
+    lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol = "test_filter_string_isin_blns"
+    strings = list(dict.fromkeys(read_big_list_of_naughty_strings()))
+    df = pd.DataFrame({"a": strings, "b": np.arange(len(strings))})
+    lib.write(symbol, df, dynamic_strings=True)
+    non_ascii = [s for s in strings if any(ord(c) > 127 for c in s)]
+    value_set = non_ascii[:15] + ["not-in-the-dataframe"]
+
+    q = QueryBuilder()
+    q = q[q["a"].isin(value_set)]
+    generic_filter_test(lib, symbol, q, df[df["a"].isin(value_set)])
+
+    q = QueryBuilder()
+    q = q[q["a"].isnotin(value_set)]
+    generic_filter_test(lib, symbol, q, df[~df["a"].isin(value_set)])
 
 
 def test_filter_string_less_than(lmdb_version_store_v1, any_output_format):
