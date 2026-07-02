@@ -175,8 +175,8 @@ class SegmentInMemory {
 
     template<class T>
     requires std::integral<T> || std::floating_point<T>
-    void set_external_block(position_t idx, T* val, size_t size, CopyMode copy_mode = CopyMode::IF_NEEDED) {
-        impl_->set_external_block(idx, val, size, copy_mode);
+    void set_dense_block(position_t idx, T* val, size_t size, CopyMode copy_mode = CopyMode::IF_NEEDED) {
+        impl_->set_dense_block(idx, val, size, copy_mode);
     }
 
     template<class T>

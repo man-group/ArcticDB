@@ -198,7 +198,7 @@ void set_integral_scalar_type(
         const auto c_style = util::is_cstyle_array<RawType>(tensor);
         if (c_style) {
             ARCTICDB_SAMPLE_DEFAULT(SetDataZeroCopy)
-            seg.set_external_block(col, ptr, rows_to_write, copy_mode);
+            seg.set_dense_block(col, ptr, rows_to_write, copy_mode);
         } else {
             ARCTICDB_SAMPLE_DEFAULT(SetDataFlatten)
             ARCTICDB_DEBUG(

@@ -89,7 +89,7 @@ struct InputFrame {
     // The descriptor of the input frame can differ from that for the timeseries descriptor in the index key for
     // Arrow string columns. Namely InputFrame may store offsets as 32bit integers, whereas on storage we always store
     // 64bit offsets.
-    StreamDescriptor desc_for_tsd() const;
+    StreamDescriptor compute_desc_for_tsd() const;
     void set_offset(ssize_t off) const;
     bool has_index() const;
     bool empty() const;

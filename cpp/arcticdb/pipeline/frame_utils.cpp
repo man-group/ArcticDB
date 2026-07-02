@@ -75,7 +75,7 @@ TimeseriesDescriptor index_descriptor_from_frame(
 ) {
     return make_timeseries_descriptor(
             frame->num_rows + existing_rows,
-            frame->desc_for_tsd(),
+            frame->compute_desc_for_tsd(),
             frame->norm_meta,
             std::move(frame->user_meta),
             std::move(next_key),

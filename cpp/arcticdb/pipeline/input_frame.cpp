@@ -84,7 +84,7 @@ StreamDescriptor& InputFrame::desc() { return desc_; }
 
 const StreamDescriptor& InputFrame::desc() const { return const_cast<InputFrame*>(this)->desc(); }
 
-StreamDescriptor InputFrame::desc_for_tsd() const {
+StreamDescriptor InputFrame::compute_desc_for_tsd() const {
     if (has_only_tensors_)
         return desc_;
     auto result = desc_.clone();

@@ -156,7 +156,7 @@ TimeseriesDescriptor get_merged_tsd(
 ) {
     auto existing_descriptor = existing_tsd.as_stream_descriptor();
     auto merged_descriptor = existing_descriptor;
-    const auto new_frame_desc = new_frame->desc_for_tsd();
+    const auto new_frame_desc = new_frame->compute_desc_for_tsd();
     if (existing_tsd.total_rows() == 0) {
         // If the existing dataframe is empty, we use the descriptor of the new_frame
         merged_descriptor = new_frame_desc;

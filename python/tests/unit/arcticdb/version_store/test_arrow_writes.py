@@ -867,6 +867,45 @@ def test_staging_with_sorting(in_memory_store_factory, arrow_output_format):
     assert_arrow_equal(expected, received)
 
 
+def test_staging_with_sorting_secondary_column(in_memory_store_factory, arrow_output_format):
+    lib = in_memory_store_factory(segment_row_size=2, dynamic_schema=True)
+    lib.set_output_format("pyarrow")
+    lib._set_allow_arrow_input()
+    sym = "test_staging_with_sorting_secondary_column"
+    # ts has duplicate values so the non-index sort column col0 breaks ties.
+    table = pa.table(
+        {
+            "ts": pa.array([2, 2, 1, 1], pa.timestamp("ns")),
+            "col0": pa.array([40, 30, 20, 10], pa.uint16()),
+            "col1": pa.array(["d", "c", "b", "a"], pa.string()),
+        }
+    )
+    input_table = to_format(table, arrow_output_format)
+    with assert_inputs_not_modified(input_table):
+        lib.stage(sym, input_table, sort_on_index=True, sort_columns=["col0"], index_column=True)
+    lib.compact_incomplete(sym, False, False)
+    expected = table.sort_by([("ts", "ascending"), ("col0", "ascending")])
+    received = lib.read(
+        sym,
+        output_format=arrow_output_format,
+        **string_format_kwargs(arrow_output_format, default=ArrowOutputStringFormat.SMALL_STRING),
+    ).data
+    assert_arrow_equal(expected, received)
+
+
+def test_staging_with_sorting_empty(in_memory_store_factory, arrow_output_format):
+    lib = in_memory_store_factory(segment_row_size=2, dynamic_schema=True)
+    lib.set_output_format("pyarrow")
+    lib._set_allow_arrow_input()
+    sym = "test_staging_with_sorting_empty"
+    table = pa.table({"ts": pa.array([], pa.timestamp("ns")), "col0": pa.array([], pa.uint16())})
+    input_table = to_format(table, arrow_output_format)
+    lib.stage(sym, input_table, sort_on_index=True, index_column=True)
+    lib.compact_incomplete(sym, False, False)
+    received = lib.read(sym, output_format=arrow_output_format).data
+    assert received.shape[0] == 0
+
+
 def test_recursive_normalizers(in_memory_version_store_arrow, all_recursive_metastructure_versions):
     lib = in_memory_version_store_arrow
     sym = "test_recursive_normalizers"

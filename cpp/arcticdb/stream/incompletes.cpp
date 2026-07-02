@@ -137,6 +137,15 @@ TimeseriesDescriptor pack_timeseries_descriptor(
     return make_timeseries_descriptor(total_rows, descriptor, norm_meta, std::nullopt, std::move(next_key), false);
 }
 
+static SegmentInMemory create_empty_segment(const StreamDescriptor& descriptor) {
+    return SegmentInMemory{
+            FixedSchema{descriptor, stream::index_type_from_descriptor(descriptor)}.default_descriptor(),
+            0,
+            AllocationType::DYNAMIC,
+            Sparsity::NOT_PERMITTED
+    };
+}
+
 SegmentInMemory incomplete_segment_from_frame(
         const std::shared_ptr<pipelines::InputFrame>& frame, std::optional<entity::AtomKey>&& next_key,
         bool sparsify_floats, CopyMode copy_mode
@@ -150,15 +159,20 @@ SegmentInMemory incomplete_segment_from_frame(
     auto norm_meta = timeseries_desc.proto().normalization();
     auto descriptor = timeseries_desc.as_stream_descriptor();
 
-    const auto index_field_count = frame->desc().index().field_count();
-    const auto field_count = frame->desc().field_count();
-    FrameSlice full_slice{
-            std::make_shared<StreamDescriptor>(frame->desc().clone()),
-            ColRange{index_field_count, field_count},
-            RowRange{0, num_rows}
-    };
-    auto result = WriteToSegmentTask(frame, std::move(full_slice), std::nullopt, sparsify_floats, copy_mode)();
-    auto output = std::move(std::get<SegmentInMemory>(result));
+    SegmentInMemory output;
+    if (frame->empty()) {
+        output = create_empty_segment(descriptor);
+    } else {
+        const auto index_field_count = frame->desc().index().field_count();
+        const auto field_count = frame->desc().field_count();
+        FrameSlice full_slice{
+                std::make_shared<StreamDescriptor>(frame->desc().clone()),
+                ColRange{index_field_count, field_count},
+                RowRange{0, num_rows}
+        };
+        auto result = WriteToSegmentTask(frame, std::move(full_slice), std::nullopt, sparsify_floats, copy_mode)();
+        output = std::move(std::get<SegmentInMemory>(result));
+    }
     output.descriptor().set_id(descriptor.id());
     output.set_timeseries_descriptor(
             pack_timeseries_descriptor(descriptor, num_rows, std::move(copy_next_key), norm_meta)
@@ -181,6 +195,21 @@ void do_sort(SegmentInMemory& mutable_seg, const std::vector<std::string> sort_c
         mutable_seg.sort(sort_columns);
 }
 
+static folly::Future<std::vector<AtomKey>> write_empty_incomplete_frame(
+        const std::shared_ptr<Store>& store, const StreamId& stream_id, const std::shared_ptr<InputFrame>& frame,
+        const IndexRange& index_range
+) {
+    auto segment = incomplete_segment_from_frame(frame, std::nullopt, /*sparsify_floats=*/false);
+    return store
+            ->write(KeyType::APPEND_DATA,
+                    VersionId(0),
+                    stream_id,
+                    index_range.start_,
+                    index_range.end_,
+                    std::move(segment))
+            .thenValueInline([](VariantKey&& res) { return std::vector<AtomKey>{to_atom(std::move(res))}; });
+}
+
 [[nodiscard]] folly::Future<std::vector<arcticdb::entity::AtomKey>> write_incomplete_frame_with_sorting(
         const std::shared_ptr<Store>& store, const StreamId& stream_id, const std::shared_ptr<InputFrame>& frame,
         const WriteIncompleteOptions& options
@@ -197,6 +226,11 @@ void do_sort(SegmentInMemory& mutable_seg, const std::vector<std::string> sort_c
 
     auto index_range = frame->index_range;
     const auto index = std::move(frame->index);
+
+    if (frame->empty())
+        // We still write in this case because a user might only stage empty segments. After the user finalizes
+        // they will just get an empty dataframe.
+        return write_empty_incomplete_frame(store, stream_id, frame, index_range);
 
     // We use `CopyMode::ALWAYS` so that the resulting `segment` owns its buffers and we can sort inplace below.
     // This is inefficient because `split` below would also copy the memory
@@ -284,7 +318,6 @@ void do_sort(SegmentInMemory& mutable_seg, const std::vector<std::string> sort_c
     );
 
     auto index_range = frame->index_range;
-    const auto index = frame->index;
 
     WriteOptions write_options = options.write_options;
     write_options.column_group_size =
@@ -297,24 +330,7 @@ void do_sort(SegmentInMemory& mutable_seg, const std::vector<std::string> sort_c
     if (slices.empty()) {
         // We still write in this case because a user might only stage empty segments. After the user finalizes
         // they will just get an empty dataframe.
-        size_t existing_rows = 0;
-        auto timeseries_desc = index_descriptor_from_frame(frame, existing_rows, std::nullopt);
-        util::check(!timeseries_desc.fields().empty(), "Expected fields not to be empty in incomplete segment");
-        auto norm_meta = timeseries_desc.proto().normalization();
-        auto descriptor = timeseries_desc.as_stream_descriptor();
-        SegmentInMemory output{
-                FixedSchema{descriptor, index}.default_descriptor(), 0, AllocationType::DYNAMIC, Sparsity::NOT_PERMITTED
-        };
-        output.set_timeseries_descriptor(pack_timeseries_descriptor(descriptor, existing_rows, std::nullopt, norm_meta)
-        );
-        return store
-                ->write(KeyType::APPEND_DATA,
-                        VersionId(0),
-                        stream_id,
-                        index_range.start_,
-                        index_range.end_,
-                        std::move(output))
-                .thenValueInline([](VariantKey&& res) { return std::vector<AtomKey>{to_atom(std::move(res))}; });
+        return write_empty_incomplete_frame(store, stream_id, frame, index_range);
     }
 
     util::check(!slices.empty(), "Unexpected empty slice in write_incomplete_frame");

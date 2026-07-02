@@ -319,10 +319,10 @@ class Column {
     }
 
     template<class T, std::enable_if_t<std::is_integral_v<T> || std::is_floating_point_v<T>, int> = 0>
-    void set_external_block(ssize_t row_offset, T* val, size_t size, CopyMode copy_mode = CopyMode::IF_NEEDED) {
+    void set_dense_block(ssize_t row_offset, T* val, size_t size, CopyMode copy_mode = CopyMode::IF_NEEDED) {
         util::check_arg(
                 last_logical_row_ + 1 == row_offset,
-                "set_external_block expected row {}, actual {} ",
+                "set_dense_block expected row {}, actual {} ",
                 last_logical_row_ + 1,
                 row_offset
         );

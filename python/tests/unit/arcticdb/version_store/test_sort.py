@@ -199,6 +199,15 @@ def test_stage_finalize_sort_index(arctic_library):
     pd.testing.assert_frame_equal(result, expected)
 
 
+@pytest.mark.storage
+def test_stage_finalize_empty_with_sort_on_index(arctic_library):
+    symbol = "sym"
+    df = pd.DataFrame({"col": []}, index=pd.DatetimeIndex([], name="timestamp"))
+    arctic_library.stage(symbol, df, validate_index=False, sort_on_index=True)
+    arctic_library.finalize_staged_data(symbol)
+    assert_frame_equal(arctic_library.read(symbol).data, df)
+
+
 def test_stage_with_sort_index_chunking(lmdb_version_store_tiny_segment):
     symbol = "AAPL"
     lib = lmdb_version_store_tiny_segment  # 2 rows per segment, 2 cols per segment
