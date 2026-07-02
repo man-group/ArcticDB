@@ -872,6 +872,51 @@ class TestBatchUpdate:
         assert "symbol_1" in str(ex_info.value)
         assert "symbol_2" not in str(ex_info.value)
 
+    @pytest.mark.parametrize("upsert", [True, False])
+    def test_empty_dataframe_increases_version(self, lmdb_library, upsert):
+        lib = lmdb_library
+        lib_tool = lib._dev_tools.library_tool()
+        df1 = pd.DataFrame({"a": range(5)}, index=pd.date_range("2024-01-01", periods=5))
+        df2 = pd.DataFrame({"b": range(5)}, index=pd.date_range("2023-01-01", periods=5))
+        lib.write_batch([UpdatePayload("symbol_1", df1), UpdatePayload("symbol_2", df2)])
+        for symbol in ["symbol_1", "symbol_2"]:
+            assert len(lib_tool.find_keys_for_symbol(KeyType.VERSION, symbol)) == 1
+            assert len(lib_tool.find_keys_for_symbol(KeyType.TABLE_INDEX, symbol)) == 1
+            assert len(lib_tool.find_keys_for_symbol(KeyType.TABLE_DATA, symbol)) == 1
+        # One symbol list entry for symbol_1 and one for symbol_2
+        assert len(lib_tool.find_keys(KeyType.SYMBOL_LIST)) == 2
+        update_1 = pd.DataFrame({"a": []}, index=pd.date_range("2024-01-01", periods=0))
+        update_2 = pd.DataFrame({"b": [10, 20]}, index=pd.date_range("2023-01-02", periods=2))
+        res = lib.update_batch(
+            [UpdatePayload("symbol_1", update_1), UpdatePayload("symbol_2", update_2)], upsert=upsert
+        )
+
+        assert res[0].version == 1
+        assert res[1].version == 1
+
+        sym_1_vit, sym_2_vit = lib.read("symbol_1"), lib.read("symbol_2")
+
+        assert sym_1_vit.version == 1
+        assert_frame_equal(sym_1_vit.data, df1)
+        assert len(lib_tool.find_keys_for_symbol(KeyType.VERSION, "symbol_1")) == 2
+        assert len(lib_tool.find_keys_for_symbol(KeyType.TABLE_INDEX, "symbol_1")) == 2
+        assert len(lib_tool.find_keys_for_symbol(KeyType.TABLE_DATA, "symbol_1")) == 1
+
+        assert sym_2_vit.version == 1
+        assert_frame_equal(
+            sym_2_vit.data, pd.DataFrame({"b": [0, 10, 20, 3, 4]}, index=pd.date_range("2023-01-01", periods=5))
+        )
+        assert len(lib_tool.find_keys_for_symbol(KeyType.VERSION, "symbol_2")) == 2
+        assert len(lib_tool.find_keys_for_symbol(KeyType.TABLE_INDEX, "symbol_2")) == 2
+        # Update happens in the middle of the dataframe. Data prior the update range (value 0) is in one segment, then
+        # there's one segment for the new data (values 10, 20) then there's one segment for the data that's pas the
+        # update range (values 3, 4). The fourth segment is the original data segment
+        assert len(lib_tool.find_keys_for_symbol(KeyType.TABLE_DATA, "symbol_2")) == 4
+        assert len(lib_tool.read_index("symbol_2")) == 3
+
+        # Updating already existing symbols (i.e. non-upsert path) does not add a symbol list key
+        assert len(lib_tool.find_keys(KeyType.SYMBOL_LIST)) == 2
+
     def test_empty_dataframe_with_daterange_does_not_delete_data(self, lmdb_library):
         sym = "symbol_1"
         input_df = pd.DataFrame({"a": [1, 2]}, index=pd.date_range(start=pd.Timestamp("2024-01-02"), periods=2))

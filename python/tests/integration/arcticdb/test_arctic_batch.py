@@ -762,9 +762,8 @@ def test_append_batch_empty_dataframe_increases_version(lmdb_version_store_v1):
     assert len(lib_tool.find_keys_for_symbol(KeyType.TABLE_INDEX, "sym2")) == 2
     assert len(lib_tool.find_keys_for_symbol(KeyType.TABLE_DATA, "sym2")) == 1
 
-    # This result is wrong. The correct value is 2. This is due to a bug Monday: 9682041273, append_batch and
-    # update_batch should not create symbol list keys for already existing symbols.
-    assert len(lib_tool.find_keys(KeyType.SYMBOL_LIST)) == 4
+    # Appending already existing symbols (i.e. non-upsert path) does not add a symbol list key
+    assert len(lib_tool.find_keys(KeyType.SYMBOL_LIST)) == 2
 
 
 @pytest.mark.storage

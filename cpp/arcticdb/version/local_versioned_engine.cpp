@@ -1928,6 +1928,7 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
                                  prune_previous_versions](auto&& update_info) -> folly::Future<VersionedItem> {
                                     auto index_key_fut = folly::Future<AtomKey>::makeEmpty();
                                     auto write_options = get_write_options();
+                                    bool add_new_symbol_list_entry{!update_info.previous_index_key_.has_value()};
                                     if (update_info.previous_index_key_.has_value()) {
                                         index_key_fut =
                                                 frame->empty()
@@ -1960,13 +1961,15 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
                                             .thenValue(
                                                     [this,
                                                      prune_previous_versions,
+                                                     add_new_symbol_list_entry,
                                                      update_info = std::move(update_info)](AtomKey&& index_key
                                                     ) mutable -> folly::Future<VersionedItem> {
                                                         return write_index_key_to_version_map_async(
                                                                 version_map(),
                                                                 std::move(index_key),
                                                                 std::move(update_info),
-                                                                prune_previous_versions
+                                                                prune_previous_versions,
+                                                                add_new_symbol_list_entry
                                                         );
                                                     }
                                             );
@@ -2007,6 +2010,7 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
                                  prune_previous_versions](UpdateInfo&& update_info) -> folly::Future<VersionedItem> {
                                     auto index_key_fut = folly::Future<AtomKey>::makeEmpty();
                                     auto write_options = get_write_options();
+                                    bool add_new_symbol_list_entry{!update_info.previous_index_key_.has_value()};
                                     if (update_info.previous_index_key_.has_value()) {
                                         const bool dynamic_schema = cfg().write_options().dynamic_schema();
                                         const bool empty_types = cfg().write_options().empty_types();
@@ -2045,12 +2049,14 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
                                     return std::move(index_key_fut)
                                             .thenValue([this,
                                                         update_info = std::move(update_info),
-                                                        prune_previous_versions](auto&& index_key) mutable {
+                                                        prune_previous_versions,
+                                                        add_new_symbol_list_entry](auto&& index_key) mutable {
                                                 return write_index_key_to_version_map_async(
                                                         version_map(),
                                                         std::move(index_key),
                                                         std::move(update_info),
-                                                        prune_previous_versions
+                                                        prune_previous_versions,
+                                                        add_new_symbol_list_entry
                                                 );
                                             });
                                 }
