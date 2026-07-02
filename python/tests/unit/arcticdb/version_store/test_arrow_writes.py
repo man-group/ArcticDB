@@ -401,25 +401,243 @@ def test_write_owned_and_non_owned_buffers(in_memory_version_store_tiny_segment_
     assert table.equals(received)
 
 
-@pytest.mark.xfail(reason="Not implemented yet, issue number 9929831600")
-def test_write_with_timezone(in_memory_version_store_arrow):
+def test_roundtrip_timezones(in_memory_version_store_arrow):
     lib = in_memory_version_store_arrow
-    sym = "test_write_with_timezone"
+    sym = "test_roundtrip_timezones"
     table = pa.table(
         {
             "ts": pa.Array.from_pandas(
                 pd.date_range("2025-01-01", periods=2, tz="America/New_York"),
                 type=pa.timestamp("ns", tz="America/New_York"),
             ),
-            "col": pa.Array.from_pandas(
-                pd.date_range("2025-01-03", periods=2, tz="Europe/Amsterdam"),
-                type=pa.timestamp("ns", tz="Europe/Amsterdam"),
+            "col_utc": pa.Array.from_pandas(
+                pd.date_range("2025-01-03", periods=2, tz="Etc/UTC"),
+                type=pa.timestamp("ns", tz="Etc/UTC"),
+            ),
+            "col_with_tz": pa.Array.from_pandas(
+                pd.date_range("2025-01-03", periods=2, tz="Europe/Brussels"),
+                type=pa.timestamp("ns", tz="Europe/Brussels"),
+            ),
+            "col_without_tz": pa.Array.from_pandas(
+                pd.date_range("2025-01-03", periods=2),
+                type=pa.timestamp("ns"),
             ),
         }
     )
-    lib.write(sym, table)
+    lib.write(sym, table, index_column=True)
     received = lib.read(sym).data
     assert table.equals(received)
+
+
+def test_roundtrip_timezones_zero_rows(in_memory_version_store_arrow):
+    lib = in_memory_version_store_arrow
+    sym = "test_roundtrip_timezones_zero_rows"
+    table = pa.table(
+        {
+            "ts": pa.Array.from_pandas(
+                pd.date_range("2025-01-01", periods=2, tz="America/New_York"),
+                type=pa.timestamp("ns", tz="America/New_York"),
+            ),
+            "col_utc": pa.Array.from_pandas(
+                pd.date_range("2025-01-03", periods=2, tz="Etc/UTC"),
+                type=pa.timestamp("ns", tz="Etc/UTC"),
+            ),
+            "col_with_tz": pa.Array.from_pandas(
+                pd.date_range("2025-01-03", periods=2, tz="Europe/Brussels"),
+                type=pa.timestamp("ns", tz="Europe/Brussels"),
+            ),
+            "col_without_tz": pa.Array.from_pandas(
+                pd.date_range("2025-01-03", periods=2),
+                type=pa.timestamp("ns"),
+            ),
+        }
+    )
+    lib.write(sym, table, index_column=True)
+    # Choose a date range that filters out all rows
+    received = lib.read(sym, date_range=(pd.Timestamp("2026-01-01"), pd.Timestamp("2026-01-02"))).data
+    assert table.slice(0, 0).equals(received)
+
+
+def test_append_valid_timezones_static(in_memory_version_store_arrow):
+    lib = in_memory_version_store_arrow
+    sym = "test_append_valid_timezones_static"
+    table = pa.table(
+        {
+            "col_with_tz": pa.Array.from_pandas(
+                pd.date_range("2025-01-01", periods=4, tz="Europe/Brussels"),
+                type=pa.timestamp("ns", tz="Europe/Brussels"),
+            ),
+            "col_without_tz": pa.Array.from_pandas(
+                pd.date_range("2025-01-01", periods=4),
+                type=pa.timestamp("ns"),
+            ),
+        }
+    )
+    lib.write(sym, table.slice(length=2))
+    lib.append(sym, table.slice(offset=2))
+    received = lib.read(sym).data
+    assert table.equals(received)
+
+
+@pytest.mark.parametrize("method", ["append", "update"])
+@pytest.mark.parametrize(
+    "col_with_tz_timezone,col_without_tz_timezone",
+    [
+        pytest.param("America/New_York", None, id="col_with_tz has wrong timezone"),
+        pytest.param(None, None, id="col_with_tz has no timezone"),
+        pytest.param("Europe/Brussels", "America/New_York", id="col_without_tz has a timezone"),
+    ],
+)
+def test_append_and_update_invalid_timezones_static(
+    in_memory_version_store_arrow, method, col_with_tz_timezone, col_without_tz_timezone
+):
+    lib = in_memory_version_store_arrow
+    sym = "test_append_and_update_invalid_timezones_static"
+    # Initial table has Europe/Brussels as the timezone for col_with_tz and col_without_tz is timezone-naive
+    write_table = pa.table(
+        {
+            "col_with_tz": pa.Array.from_pandas(
+                pd.date_range("2025-01-01", periods=2, tz="Europe/Brussels"),
+                type=pa.timestamp("ns", tz="Europe/Brussels"),
+            ),
+            "col_without_tz": pa.Array.from_pandas(
+                pd.date_range("2025-01-01", periods=2),
+                type=pa.timestamp("ns"),
+            ),
+        }
+    )
+    lib.write(sym, write_table.slice(length=2), index_column=True)
+    mismatch_table = pa.table(
+        {
+            "col_with_tz": pa.Array.from_pandas(
+                pd.date_range("2025-01-03", periods=2, tz=col_with_tz_timezone),
+                type=pa.timestamp("ns", tz=col_with_tz_timezone),
+            ),
+            "col_without_tz": pa.Array.from_pandas(
+                pd.date_range("2025-01-03", periods=2, tz=col_without_tz_timezone),
+                type=pa.timestamp("ns", tz=col_without_tz_timezone),
+            ),
+        }
+    )
+    with pytest.raises(SchemaException):
+        getattr(lib, method)(sym, mismatch_table, index_column=True)
+
+
+@pytest.mark.parametrize("method", ["append", "update"])
+@pytest.mark.parametrize(
+    "col_with_tz_timezone,col_without_tz_timezone",
+    [
+        pytest.param("America/New_York", None, id="col_with_tz_has different timezone"),
+        pytest.param(None, None, id="col_with_tz has no timezone"),
+        pytest.param("Europe/Brussels", "America/New_York", id="col_without_tz has a timezone"),
+    ],
+)
+def test_append_and_update_changing_timezones_dynamic(
+    in_memory_version_store_dynamic_schema_arrow, method, col_with_tz_timezone, col_without_tz_timezone
+):
+    lib = in_memory_version_store_dynamic_schema_arrow
+    sym = "test_append_and_update_changing_timezones_dynamic"
+    # Initial table has Europe/Brussels as the timezone for col_with_tz and col_without_tz is timezone-naive
+    write_table = pa.table(
+        {
+            "col_with_tz": pa.Array.from_pandas(
+                pd.date_range("2025-01-01", periods=2, tz="Europe/Brussels"),
+                type=pa.timestamp("ns", tz="Europe/Brussels"),
+            ),
+            "col_without_tz": pa.Array.from_pandas(
+                pd.date_range("2025-01-01", periods=2),
+                type=pa.timestamp("ns"),
+            ),
+        }
+    )
+    lib.write(sym, write_table, index_column=True)
+    append_table = pa.table(
+        {
+            "col_with_tz": pa.Array.from_pandas(
+                pd.date_range("2025-01-03", periods=2, tz=col_with_tz_timezone),
+                type=pa.timestamp("ns", tz=col_with_tz_timezone),
+            ),
+            "col_without_tz": pa.Array.from_pandas(
+                pd.date_range("2025-01-03", periods=2, tz=col_without_tz_timezone),
+                type=pa.timestamp("ns", tz=col_without_tz_timezone),
+            ),
+        }
+    )
+    getattr(lib, method)(sym, append_table, index_column=True)
+    received = lib.read(sym).data
+    # pyarrow will not concat timezone-aware and timezone-naive arrays together, so cast to result timezone first
+    first_col_timezone = "Europe/Brussels" if col_with_tz_timezone == "Europe/Brussels" else None
+    write_table = write_table.set_column(
+        0, "col_with_tz", write_table.column(0).cast(pa.timestamp("ns", tz=first_col_timezone))
+    )
+    append_table = append_table.set_column(
+        0, "col_with_tz", append_table.column(0).cast(pa.timestamp("ns", tz=first_col_timezone))
+    )
+    # Casting to timezone-naive returns the time as if it was UTC
+    append_table = append_table.set_column(1, "col_without_tz", append_table.column(1).cast(pa.timestamp("ns")))
+    expected = pa.concat_tables([write_table, append_table], promote_options="permissive")
+    assert expected.equals(received)
+
+
+def test_append_timezones_changing_col_order_dynamic(in_memory_version_store_dynamic_schema_arrow):
+    lib = in_memory_version_store_dynamic_schema_arrow
+    sym = "test_append_timezones_changing_col_order_dynamic"
+    write_table = pa.table(
+        {
+            "col_a": pa.Array.from_pandas(
+                pd.date_range("2025-01-01", periods=2, tz="Europe/Brussels"),
+                type=pa.timestamp("ns", tz="Europe/Brussels"),
+            ),
+            "col_b": pa.Array.from_pandas(
+                pd.date_range("2025-01-01", periods=2, tz="America/New_York"),
+                type=pa.timestamp("ns", tz="America/New_York"),
+            ),
+            "col_c": pa.Array.from_pandas(
+                pd.date_range("2025-01-01", periods=2, tz="Etc/UTC"),
+                type=pa.timestamp("ns", tz="Etc/UTC"),
+            ),
+        }
+    )
+    lib.write(sym, write_table)
+    append_table = pa.table(
+        {
+            "col_b": pa.Array.from_pandas(
+                pd.date_range("2025-01-03", periods=2, tz="America/New_York"),
+                type=pa.timestamp("ns", tz="America/New_York"),
+            ),
+            "col_a": pa.Array.from_pandas(
+                pd.date_range("2025-01-03", periods=2, tz="Europe/Brussels"),
+                type=pa.timestamp("ns", tz="Europe/Brussels"),
+            ),
+            "col_d": pa.Array.from_pandas(
+                pd.date_range("2025-01-03", periods=2, tz="Europe/Malta"),
+                type=pa.timestamp("ns", tz="Europe/Malta"),
+            ),
+        }
+    )
+    lib.append(sym, append_table)
+    expected = pa.table(
+        {
+            "col_a": pa.Array.from_pandas(
+                pd.date_range("2025-01-01", periods=4, tz="Europe/Brussels"),
+                type=pa.timestamp("ns", tz="Europe/Brussels"),
+            ),
+            "col_b": pa.Array.from_pandas(
+                pd.date_range("2025-01-01", periods=4, tz="America/New_York"),
+                type=pa.timestamp("ns", tz="America/New_York"),
+            ),
+            "col_c": pa.Array.from_pandas(
+                pd.date_range("2025-01-01", periods=2, tz="Etc/UTC").append(pd.DatetimeIndex([pd.NaT, pd.NaT])),
+                type=pa.timestamp("ns", tz="Etc/UTC"),
+            ),
+            "col_d": pa.Array.from_pandas(
+                pd.DatetimeIndex([pd.NaT, pd.NaT]).append(pd.date_range("2025-01-03", periods=2, tz="Europe/Malta")),
+                type=pa.timestamp("ns", tz="Europe/Malta"),
+            ),
+        }
+    )
+    received = lib.read(sym).data
+    assert expected.equals(received)
 
 
 def test_write_with_index_and_read_with_column_slicing(in_memory_version_store_arrow):
@@ -606,7 +824,7 @@ def test_wrong_index_name(in_memory_version_store_arrow, method, arrow_output_fo
             "col": pa.array([3, 4], pa.int64()),
         }
     )
-    with pytest.raises(StreamDescriptorMismatch):
+    with pytest.raises(SchemaException):
         getattr(lib, method)(sym, to_format(table_1, arrow_output_format), index_column=True)
 
 

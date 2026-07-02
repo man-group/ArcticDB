@@ -23,6 +23,7 @@
 
 namespace arcticdb::proto {
 
+namespace descriptors = arcticc::pb2::descriptors_pb2;
 namespace encoding = arcticc::pb2::encoding_pb2;
 namespace storage = arcticc::pb2::storage_pb2;
 namespace s3_storage = arcticc::pb2::s3_storage_pb2;

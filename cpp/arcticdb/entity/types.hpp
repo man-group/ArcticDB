@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/util/constructors.hpp>
 #include <arcticdb/storage/memory_layout.hpp>
@@ -23,12 +24,6 @@
 #include <BaseTsd.h>
 using ssize_t = SSIZE_T;
 #endif
-
-#include <descriptors.pb.h>
-
-namespace arcticdb::proto {
-namespace descriptors = arcticc::pb2::descriptors_pb2;
-}
 
 namespace arcticdb {
 

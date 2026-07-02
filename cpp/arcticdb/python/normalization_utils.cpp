@@ -6,6 +6,8 @@
  * will be governed by the Apache License, version 2.0.
  */
 
+#include <google/protobuf/util/message_differencer.h>
+
 #include <arcticdb/python/normalization_utils.hpp>
 #include <arcticdb/log/log.hpp>
 #include <arcticdb/util/preconditions.hpp>
@@ -195,8 +197,37 @@ bool check_ndarray_append(const NormalizationMetadata& old_norm, NormalizationMe
     return false;
 }
 
+void check_arrow_column_metadata(
+        const proto::descriptors::NormalizationMetadata::ExperimentalArrow& old_norm,
+        proto::descriptors::NormalizationMetadata::ExperimentalArrow& new_norm, bool dynamic_schema
+) {
+    if (!dynamic_schema) {
+        const auto& old_col_meta_map = old_norm.columns();
+        auto& new_col_meta_map = *new_norm.mutable_columns();
+        // Column metadata must match exactly
+        bool should_raise{old_col_meta_map.size() != new_col_meta_map.size()};
+        if (!should_raise) {
+            for (const auto& [col_name, old_col_meta] : old_col_meta_map) {
+                if (auto it = new_col_meta_map.find(col_name); it == new_col_meta_map.end()) {
+                    should_raise = true;
+                    break;
+                } else {
+                    if (!google::protobuf::util::MessageDifferencer::Equals(old_col_meta, it->second)) {
+                        should_raise = true;
+                        break;
+                    }
+                }
+            }
+        }
+        schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
+                !should_raise, "Column metadata does not match between existing data and input frame"
+        );
+    }
+}
+
 void fix_normalization_or_throw(
-        bool is_append, const pipelines::index::IndexSegmentReader& existing_isr, const pipelines::InputFrame& new_frame
+        bool is_append, const pipelines::index::IndexSegmentReader& existing_isr,
+        const pipelines::InputFrame& new_frame, bool dynamic_schema
 ) {
     auto& old_norm = existing_isr.tsd().proto().normalization();
     auto& new_norm = new_frame.norm_meta;
@@ -222,6 +253,11 @@ void fix_normalization_or_throw(
         // ndarray normalizes to a ROWCOUNT frame and we don't support update on those
         normalization::check<ErrorCode::E_UPDATE_NOT_SUPPORTED>(
                 !old_norm.has_np() && !new_norm.has_np(), "current normalization scheme doesn't allow update of ndarray"
+        );
+    }
+    if (old_norm.has_experimental_arrow() && new_norm.has_experimental_arrow()) {
+        check_arrow_column_metadata(
+                old_norm.experimental_arrow(), *new_norm.mutable_experimental_arrow(), dynamic_schema
         );
     }
 }
