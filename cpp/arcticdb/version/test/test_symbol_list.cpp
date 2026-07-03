@@ -1071,6 +1071,9 @@ INSTANTIATE_TEST_SUITE_P(VersionKeysSource, SymbolListRace, Combine(Values('V'),
 // Loading with no_compaction=true (skip the compaction write/delete, just merge and return) must
 // produce the same symbols as the compaction-eligible path. Here the journal mixes new symbols,
 // re-adds of already-present symbols, and removes of symbols still live in the version map.
+// Only the sym_0..9 removes conflict with the compacted ADD entry, so only those go through the
+// problematic path and get resolved against the version map's ground truth, ignoring reference_id.
+// The re-adds/new-adds never hit that path, but reference_ids are still kept realistic throughout.
 TEST_F(SymbolListSuite, NoCompactionLoadMatchesCompactionPath) {
     // Setup: add symbols and force a compaction so we have a compaction key to load from.
     for (int i = 0; i < 50; ++i) {
@@ -1084,17 +1087,29 @@ TEST_F(SymbolListSuite, NoCompactionLoadMatchesCompactionPath) {
     SymbolList sl{version_map_};
     sl.load<std::set<StreamId>>(version_map_, store_, false);
 
-    // Journal entries on top of the compaction key: sym_40..49 re-add already-present symbols,
-    // sym_50..59 are new, and sym_0..9 are removed (but kept in the version map, see below).
-    for (int i = 40; i < 60; ++i) {
+    // Journal entries on top of the compaction key, split by scenario:
+
+    // sym_40..49 already exist at version 0 (from the setup above); write a genuine second
+    // version for them, so the reference_id on the new ADD entry is 1 (the version just written).
+    for (int i = 40; i < 50; ++i) {
         auto symbol = fmt::format("sym_{}", i);
-        SymbolList::add_symbol(store_, StreamId{symbol}, 1);
         auto key = atom_key_builder().version_id(1).build(symbol, KeyType::TABLE_INDEX);
         version_map_->write_version(store_, key, std::nullopt);
+        SymbolList::add_symbol(store_, StreamId{symbol}, 1);
     }
+    // sym_50..59 are brand new symbols; their first version is 0, so the reference_id matches that.
+    for (int i = 50; i < 60; ++i) {
+        auto symbol = fmt::format("sym_{}", i);
+        auto key = atom_key_builder().version_id(0).build(symbol, KeyType::TABLE_INDEX);
+        version_map_->write_version(store_, key, std::nullopt);
+        SymbolList::add_symbol(store_, StreamId{symbol}, 0);
+    }
+    // sym_0..9 are removed, but their only version (0) is left live in the version map below -
+    // the reference_id on the DELETE entry must match that still-live version, not a version that
+    // was never written.
     for (int i = 0; i < 10; ++i) {
         auto symbol = fmt::format("sym_{}", i);
-        SymbolList::remove_symbol(store_, StreamId{symbol}, 1);
+        SymbolList::remove_symbol(store_, StreamId{symbol}, 0);
     }
 
     ConfigsMap::instance()->unset_int("SymbolList.MaxDelta");
@@ -1116,6 +1131,9 @@ TEST_F(SymbolListSuite, NoCompactionLoadMatchesCompactionPath) {
 
 // Same equivalence check, but the removed symbols are also tombstoned in the version map, so they
 // resolve to true DELETEs and drop out of both load paths.
+// As above, only the sym_0..9 removes go through the problematic path (resolved against the
+// version map's ground truth); the sym_50..59 new adds never do, but reference_ids are still kept
+// realistic throughout.
 TEST_F(SymbolListSuite, NoCompactionLoadMatchesCompactionPathWithTrueDeletes) {
     // Setup: add symbols and force a compaction so we have a compaction key to load from.
     for (int i = 0; i < 50; ++i) {
@@ -1129,18 +1147,19 @@ TEST_F(SymbolListSuite, NoCompactionLoadMatchesCompactionPathWithTrueDeletes) {
     SymbolList sl{version_map_};
     sl.load<std::set<StreamId>>(version_map_, store_, false);
 
-    // Add new symbols
+    // Add new symbols; their first version is 0, so the reference_id matches that.
     for (int i = 50; i < 60; ++i) {
         auto symbol = fmt::format("sym_{}", i);
-        SymbolList::add_symbol(store_, StreamId{symbol}, 1);
-        auto key = atom_key_builder().version_id(1).build(symbol, KeyType::TABLE_INDEX);
+        auto key = atom_key_builder().version_id(0).build(symbol, KeyType::TABLE_INDEX);
         version_map_->write_version(store_, key, std::nullopt);
+        SymbolList::add_symbol(store_, StreamId{symbol}, 0);
     }
 
-    // Delete symbols 0-9 via both the symbol list journal AND the version map
+    // Delete symbols 0-9 via both the symbol list journal AND the version map. Their only version
+    // is 0, so that's the version being tombstoned and the reference_id the DELETE entry must carry.
     for (int i = 0; i < 10; ++i) {
         auto symbol = fmt::format("sym_{}", i);
-        SymbolList::remove_symbol(store_, StreamId{symbol}, 1);
+        SymbolList::remove_symbol(store_, StreamId{symbol}, 0);
         version_map_->tombstone_from_key_or_all(store_, StreamId{symbol});
     }
 
