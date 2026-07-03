@@ -1,0 +1,13 @@
+rows,measure,io,cpu,K,peak_mib,wall_s,status
+100000000,filter,8,12,default,753.8,3.85,ok
+100000000,filter,16,24,default,1309.9,2.73,ok
+100000000,filter,64,96,default,4781.7,1.96,ok
+100000000,resample,8,12,default,27737.7,4.41,ok
+100000000,resample,16,24,default,36420.1,3.58,ok
+100000000,resample,64,96,default,67304.9,2.73,ok
+100000000,groupby,8,12,default,100647.5,17.63,ok
+100000000,groupby,16,24,default,106685.0,19.40,ok
+100000000,groupby,64,96,default,114505.5,18.82,ok
+100000000,column_stats,8,12,default,2420.2,5.22,ok
+100000000,column_stats,16,24,default,4101.7,3.19,ok
+100000000,column_stats,64,96,default,33745.3,2.89,ok
