@@ -1083,6 +1083,7 @@ if(${TEST})
             pipeline/test/test_column_stats_dispatch_range_vs_range.cpp
             pipeline/test/test_column_stats_isin.cpp
             util/test/test_regex.cpp
+            processing/test/ast_test_helpers.hpp
             processing/test/test_arithmetic_type_promotion.cpp
             processing/test/test_clause.cpp
             processing/test/test_compact_data.cpp
@@ -1094,6 +1095,7 @@ if(${TEST})
             processing/test/test_operation_dispatch.cpp
             processing/test/test_output_schema_aggregator_types.cpp
             processing/test/test_output_schema_ast_validity.cpp
+            processing/test/test_query_planner.cpp
             processing/test/test_output_schema_basic.cpp
             processing/test/test_parallel_processing.cpp
             processing/test/test_resample.cpp

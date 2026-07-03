@@ -163,13 +163,13 @@ bool nodes_equal(const ExpressionNode& a, const ExpressionNode& b) {
                 }
         );
     }
-    const auto& oa = std::get<ExpressionNode::Operation>(a.kind_);
-    const auto& ob = std::get<ExpressionNode::Operation>(b.kind_);
-    if (oa.operation_type_ != ob.operation_type_) {
+    const auto& operation_a = std::get<ExpressionNode::Operation>(a.kind_);
+    const auto& operation_b = std::get<ExpressionNode::Operation>(b.kind_);
+    if (operation_a.operation_type_ != operation_b.operation_type_) {
         return false;
     }
-    return equal_child(oa.condition_, ob.condition_) && equal_child(oa.left_, ob.left_) &&
-           equal_child(oa.right_, ob.right_);
+    return equal_child(operation_a.condition_, operation_b.condition_) &&
+           equal_child(operation_a.left_, operation_b.left_) && equal_child(operation_a.right_, operation_b.right_);
 }
 
 } // namespace
@@ -180,7 +180,7 @@ ExpressionNode::ExpressionNode(
         std::shared_ptr<ExpressionNode> condition, std::shared_ptr<ExpressionNode> left,
         std::shared_ptr<ExpressionNode> right, OperationType op
 ) :
-    kind_(Operation{op, std::move(condition), std::move(left), std::move(right)}) {
+    kind_(Operation{op, std::move(left), std::move(right), std::move(condition)}) {
     util::check(is_ternary_operation(op), "Non-ternary expression provided with three arguments");
     label_ = label_for(std::get<Operation>(kind_));
 }
@@ -188,13 +188,13 @@ ExpressionNode::ExpressionNode(
 ExpressionNode::ExpressionNode(
         std::shared_ptr<ExpressionNode> left, std::shared_ptr<ExpressionNode> right, OperationType op
 ) :
-    kind_(Operation{op, nullptr, std::move(left), std::move(right)}) {
+    kind_(Operation{op, std::move(left), std::move(right)}) {
     util::check(is_binary_operation(op), "Non-binary expression provided with two arguments");
     label_ = label_for(std::get<Operation>(kind_));
 }
 
 ExpressionNode::ExpressionNode(std::shared_ptr<ExpressionNode> left, OperationType op) :
-    kind_(Operation{op, nullptr, std::move(left), nullptr}) {
+    kind_(Operation{op, std::move(left)}) {
     util::check(is_unary_operation(op), "Non-unary expression provided with single argument");
     label_ = label_for(std::get<Operation>(kind_));
 }
@@ -215,12 +215,9 @@ VariantData ExpressionNode::compute(ProcessingUnit& seg) const {
                 if (auto it = seg.computed_data_.find(label_); it != seg.computed_data_.end()) {
                     const auto& [other, cached] = it->second;
                     if (other == this || nodes_equal(*this, *other)) {
-                        log::version().debug("Memoization hit for {}", label_);
                         return cached;
                     }
-                    log::version().debug("Memoization label collision for {}", label_);
                 }
-                log::version().debug("Memoization miss, computing {}", label_);
                 VariantData result = [&seg, &op]() -> VariantData {
                     if (is_ternary_operation(op.operation_type_)) {
                         return dispatch_ternary(
@@ -237,7 +234,13 @@ VariantData ExpressionNode::compute(ProcessingUnit& seg) const {
                 }();
                 // On a label collision the slot is already held by a structurally-different node; try_emplace is a
                 // no-op there, so that node keeps the slot and this result simply isn't memoized.
-                seg.computed_data_.try_emplace(label_, this, result);
+                if (!seg.computed_data_.try_emplace(label_, this, result).second) {
+                    log::version().debug(
+                            "Expression label collision for {}; result not memoized, similar queries may see "
+                            "redundant recomputation",
+                            label_
+                    );
+                }
                 return result;
             }
     );

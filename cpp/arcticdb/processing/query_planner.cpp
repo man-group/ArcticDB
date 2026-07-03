@@ -34,10 +34,15 @@ ExpressionContext and_filter_expression_contexts(
 ) {
     util::check(!expression_contexts.empty(), "Expression context cannot be empty");
     std::shared_ptr<ExpressionNode> root;
+    const bool dynamic_schema = expression_contexts.front()->dynamic_schema_;
     for (const auto& expression_context : expression_contexts) {
         util::check(
                 expression_context->root_ && expression_context->root_->is_operation(),
                 "Only expect to be called with filter expressions"
+        );
+        util::check(
+                expression_context->dynamic_schema_ == dynamic_schema,
+                "Cannot AND-together filter expressions with differing dynamic_schema_"
         );
         if (root) {
             root = std::make_shared<ExpressionNode>(root, expression_context->root_, OperationType::AND);
@@ -48,6 +53,7 @@ ExpressionContext and_filter_expression_contexts(
 
     ExpressionContext res;
     res.root_ = std::move(root);
+    res.dynamic_schema_ = dynamic_schema;
     return res;
 }
 

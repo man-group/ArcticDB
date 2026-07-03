@@ -11,7 +11,7 @@
 #include <memory>
 
 #include <arcticdb/processing/expression_node.hpp>
-#include <arcticdb/util/preconditions.hpp>
+#include <arcticdb/util/constructors.hpp>
 
 namespace arcticdb {
 

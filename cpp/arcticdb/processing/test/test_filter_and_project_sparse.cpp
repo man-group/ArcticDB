@@ -42,13 +42,12 @@ class FilterProjectSparse : public testing::Test {
             std::string_view left_column_name,
             const std::variant<std::string_view, double, std::unordered_set<double>>& right_input, OperationType op
     ) {
-        ExpressionChild right;
-        util::variant_match(
+        ExpressionChild right = util::variant_match(
                 right_input,
-                [&](std::string_view right_column_name) { right = col(right_column_name); },
-                [&](double value) { right = val(std::make_shared<Value>(value, DataType::FLOAT64)); },
+                [&](std::string_view right_column_name) { return col(right_column_name); },
+                [&](double value) { return val(std::make_shared<Value>(value, DataType::FLOAT64)); },
                 [&](std::unordered_set<double> value_set) {
-                    right = vset(std::make_shared<ValueSet>(std::make_shared<std::unordered_set<double>>(value_set)));
+                    return vset(std::make_shared<ValueSet>(std::make_shared<std::unordered_set<double>>(value_set)));
                 }
         );
         auto root = node(col(left_column_name), right, op);
@@ -60,11 +59,10 @@ class FilterProjectSparse : public testing::Test {
             std::string_view left_column_name, const std::variant<std::string_view, double>& right_input,
             OperationType op
     ) {
-        ExpressionChild right;
-        util::variant_match(
+        ExpressionChild right = util::variant_match(
                 right_input,
-                [&](std::string_view right_column_name) { right = col(right_column_name); },
-                [&](double value) { right = val(std::make_shared<Value>(value, DataType::FLOAT64)); }
+                [&](std::string_view right_column_name) { return col(right_column_name); },
+                [&](double value) { return val(std::make_shared<Value>(value, DataType::FLOAT64)); }
         );
         auto root = node(col(left_column_name), right, op);
         auto variant_data = root->compute(proc_unit);

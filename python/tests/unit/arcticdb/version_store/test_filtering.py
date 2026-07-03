@@ -599,7 +599,7 @@ def test_filter_isin_same_values_different_columns(lmdb_version_store_v1, any_ou
 def test_filter_reused_derived_expression(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
     sym = "test_filter_reused_derived_expression"
-    df = pd.DataFrame({"bid": np.arange(10, dtype=np.int64), "ask": np.arange(5, 15, dtype=np.int64)})
+    df = pd.DataFrame({"bid": np.arange(0, 20, 2, dtype=np.int64), "ask": np.arange(10, dtype=np.int64)})
     lib.write(sym, df)
 
     limit = 3

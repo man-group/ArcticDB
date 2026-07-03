@@ -260,13 +260,29 @@ class ExpressionNode:
                 if isinstance(self.left, ExpressionNode):
                     left = str(self.left)
                 else:
-                    left = to_string(self.left)
+                    left = self.to_string(self.left)
                 if isinstance(self.right, ExpressionNode):
                     right = str(self.right)
                 else:
-                    right = to_string(self.right)
+                    right = self.to_string(self.right)
                 self.name = "({} {} {})".format(left, self.operator.name, right)
         return self.name
+
+    @staticmethod
+    def to_string(leaf):
+        if isinstance(leaf, (np.ndarray, list)):
+            # Truncate value set keys to first 100 characters
+            key = str(leaf)[:100]
+        elif isinstance(leaf, _RegexGeneric):
+            key = "Regex({})".format(leaf.text())
+        else:
+            if isinstance(leaf, str):
+                key = "Str({})".format(leaf)
+            elif isinstance(leaf, bool):
+                key = "Bool({})".format(leaf)
+            else:
+                key = "Num({})".format(leaf)
+        return key
 
 
 def where(condition: Any, left: Any, right: Any) -> ExpressionNode:
@@ -1255,22 +1271,6 @@ def create_value(value):
     else:
         f = _Value
     return f(value)
-
-
-def to_string(leaf):
-    if isinstance(leaf, (np.ndarray, list)):
-        # Truncate value set keys to first 100 characters
-        key = str(leaf)[:100]
-    elif isinstance(leaf, _RegexGeneric):
-        key = "Regex({})".format(leaf.text())
-    else:
-        if isinstance(leaf, str):
-            key = "Str({})".format(leaf)
-        elif isinstance(leaf, bool):
-            key = "Bool({})".format(leaf)
-        else:
-            key = "Num({})".format(leaf)
-    return key
 
 
 def visit_expression(expr):

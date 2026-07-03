@@ -13,24 +13,22 @@
 #include <arcticdb/processing/test/ast_test_helpers.hpp>
 #include <arcticdb/pipeline/value_set.hpp>
 #include <arcticdb/util/test/generators.hpp>
+#include <arcticdb/util/test/segment_generation_utils.hpp>
 
 #include <unordered_set>
 
 TEST(ExpressionNode, AddBasic) {
     using namespace arcticdb;
     StreamId symbol("test_add");
-    auto wrapper =
-            SinkWrapper(symbol, {scalar_field(DataType::UINT64, "thing1"), scalar_field(DataType::UINT64, "thing2")});
-
-    for (auto j = 0; j < 20; ++j) {
-        wrapper.aggregator_.start_row(timestamp(j))([&](auto&& rb) {
-            rb.set_scalar(1, j);
-            rb.set_scalar(2, j + 1);
-        });
-    }
-
-    wrapper.aggregator_.commit();
-    auto& seg = wrapper.segment();
+    SegmentInMemory seg = create_dense_segment(
+            stream_descriptor(
+                    symbol,
+                    stream::RowCountIndex{},
+                    {scalar_field(DataType::UINT64, "thing1"), scalar_field(DataType::UINT64, "thing2")}
+            ),
+            std::views::iota(uint64_t{0}, uint64_t{20}),
+            std::views::iota(uint64_t{1}, uint64_t{21})
+    );
     ProcessingUnit proc(std::move(seg));
     auto root = node(col("thing1"), col("thing2"), OperationType::ADD);
     auto expression_context = std::make_shared<ExpressionContext>();
@@ -40,9 +38,9 @@ TEST(ExpressionNode, AddBasic) {
     const auto& result_col = std::get<ColumnWithStrings>(ret).column_;
 
     for (auto j = 0; j < 20; ++j) {
-        auto v1 = proc.segments_->at(0)->scalar_at<uint64_t>(j, 1);
+        auto v1 = proc.segments_->at(0)->scalar_at<uint64_t>(j, 0);
         ASSERT_EQ(v1.value(), j);
-        auto v2 = proc.segments_->at(0)->scalar_at<uint64_t>(j, 2);
+        auto v2 = proc.segments_->at(0)->scalar_at<uint64_t>(j, 1);
         ASSERT_EQ(v2.value(), j + 1);
         ASSERT_EQ(result_col->scalar_at<uint64_t>(j), v1.value() + v2.value());
     }
@@ -51,18 +49,15 @@ TEST(ExpressionNode, AddBasic) {
 TEST(ExpressionNode, SubexpressionMemoized) {
     using namespace arcticdb;
     StreamId symbol("test_longhand");
-    auto wrapper =
-            SinkWrapper(symbol, {scalar_field(DataType::UINT64, "thing1"), scalar_field(DataType::UINT64, "thing2")});
-
-    for (auto j = 0; j < 20; ++j) {
-        wrapper.aggregator_.start_row(timestamp(j))([&](auto&& rb) {
-            rb.set_scalar(1, j);
-            rb.set_scalar(2, j + 1);
-        });
-    }
-
-    wrapper.aggregator_.commit();
-    auto& seg = wrapper.segment();
+    SegmentInMemory seg = create_dense_segment(
+            stream_descriptor(
+                    symbol,
+                    stream::RowCountIndex{},
+                    {scalar_field(DataType::UINT64, "thing1"), scalar_field(DataType::UINT64, "thing2")}
+            ),
+            std::views::iota(uint64_t{0}, uint64_t{20}),
+            std::views::iota(uint64_t{1}, uint64_t{21})
+    );
     ProcessingUnit proc(std::move(seg));
 
     auto add1 = node(col("thing1"), col("thing2"), OperationType::ADD);
@@ -77,15 +72,15 @@ TEST(ExpressionNode, SubexpressionMemoized) {
     const auto& result_col = std::get<ColumnWithStrings>(ret).column_;
 
     for (auto j = 0; j < 20; ++j) {
-        auto v1 = proc.segments_->at(0)->scalar_at<uint64_t>(j, 1).value();
-        auto v2 = proc.segments_->at(0)->scalar_at<uint64_t>(j, 2).value();
+        auto v1 = proc.segments_->at(0)->scalar_at<uint64_t>(j, 0).value();
+        auto v2 = proc.segments_->at(0)->scalar_at<uint64_t>(j, 1).value();
         ASSERT_EQ(result_col->scalar_at<uint64_t>(j), (v1 + v2) * (v1 + v2));
     }
 
     const std::string add_label = R"((Column["thing1"] ADD Column["thing2"]))";
     ASSERT_EQ(add1->label_, add_label);
     ASSERT_EQ(add2->label_, add_label);
-    ASSERT_EQ(proc.computed_data_.count(add_label), 1);
+    ASSERT_TRUE(proc.computed_data_.contains(add_label));
     const auto* cached_node = proc.computed_data_.at(add_label).first;
     ASSERT_TRUE(cached_node == add1.get() || cached_node == add2.get());
     ASSERT_EQ(proc.computed_data_.size(), 2);
@@ -94,14 +89,10 @@ TEST(ExpressionNode, SubexpressionMemoized) {
 TEST(ExpressionNode, NoFalseReuseOnLabelClash) {
     using namespace arcticdb;
     StreamId symbol("test_label_clash");
-    auto wrapper = SinkWrapper(symbol, {scalar_field(DataType::INT64, "thing1")});
-
-    for (auto j = 0; j < 20; ++j) {
-        wrapper.aggregator_.start_row(timestamp(j))([&](auto&& rb) { rb.set_scalar(1, static_cast<int64_t>(j)); });
-    }
-
-    wrapper.aggregator_.commit();
-    auto& seg = wrapper.segment();
+    SegmentInMemory seg = create_dense_segment(
+            stream_descriptor(symbol, stream::RowCountIndex{}, {scalar_field(DataType::INT64, "thing1")}),
+            std::views::iota(int64_t{0}, int64_t{20})
+    );
     ProcessingUnit proc(std::move(seg));
 
     auto set_a = std::make_shared<ValueSet>(
@@ -125,7 +116,7 @@ TEST(ExpressionNode, NoFalseReuseOnLabelClash) {
     auto bitset_b = std::get<util::BitSet>(isin_b->compute(proc));
 
     for (size_t idx = 0; idx < 20; ++idx) {
-        ASSERT_EQ(set_a->get_set<int64_t>()->count(static_cast<int64_t>(idx)) > 0, bitset_a.get_bit(idx));
-        ASSERT_EQ(set_b->get_set<int64_t>()->count(static_cast<int64_t>(idx)) > 0, bitset_b.get_bit(idx));
+        ASSERT_EQ(set_a->get_set<int64_t>()->contains(static_cast<int64_t>(idx)), bitset_a.get_bit(idx));
+        ASSERT_EQ(set_b->get_set<int64_t>()->contains(static_cast<int64_t>(idx)), bitset_b.get_bit(idx));
     }
 }

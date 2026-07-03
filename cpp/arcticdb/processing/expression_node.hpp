@@ -73,10 +73,19 @@ struct ExpressionNode {
             ColumnName, std::shared_ptr<Value>, std::shared_ptr<ValueSet>, std::shared_ptr<util::RegexGeneric>>;
 
     struct Operation {
+        Operation(
+                OperationType operation_type, std::shared_ptr<ExpressionNode> left,
+                std::shared_ptr<ExpressionNode> right = nullptr, std::shared_ptr<ExpressionNode> condition = nullptr
+        ) :
+            operation_type_(operation_type),
+            left_(std::move(left)),
+            right_(std::move(right)),
+            condition_(std::move(condition)) {}
+
         OperationType operation_type_;
-        std::shared_ptr<ExpressionNode> condition_;
         std::shared_ptr<ExpressionNode> left_;
         std::shared_ptr<ExpressionNode> right_;
+        std::shared_ptr<ExpressionNode> condition_;
     };
 
     std::variant<Leaf, Operation> kind_;
