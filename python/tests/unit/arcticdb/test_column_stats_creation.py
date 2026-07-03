@@ -20,8 +20,22 @@ from arcticdb_ext.exceptions import SchemaException, StorageException, UserInput
 from arcticdb_ext.storage import KeyType
 from arcticdb_ext.version_store import NoSuchVersionException
 from arcticdb import QueryBuilder
+from arcticdb.util.test import config_context
 
 pytestmark = pytest.mark.pipeline
+
+ADMISSION_KEY = "VersionStore.NumProcessingUnitsLive"
+
+
+def write_many_slices(lib, sym, n_appends):
+    """Writes a symbol of n_appends row slices, each two rows of col_0/col_1/col_2."""
+    base = pd.Timestamp("2000-01-01")
+    for i in range(n_appends):
+        df = pd.DataFrame(
+            {"col_0": [f"a{i}", f"b{i}"], "col_1": [2 * i, 2 * i + 1], "col_2": [i, i + 1]},
+            index=pd.date_range(base + pd.Timedelta(days=2 * i), periods=2),
+        )
+        lib.write(sym, df) if i == 0 else lib.append(sym, df)
 
 
 df0 = pd.DataFrame(
@@ -1096,3 +1110,76 @@ def test_column_stats_drop_tiny_thread_pool(
     lib.drop_column_stats_experimental(sym)
     with pytest.raises(StorageException):
         lib.get_column_stats_info_experimental(sym)
+
+
+# k=0 is the kill switch: it admits every processing unit at once, disabling the memory bound.
+@pytest.mark.parametrize("k", [0, 1, 2, 1000])
+def test_column_stats_create_independent_of_admission_ceiling(
+    version_store_factory, lib_name, encoding_version, any_output_format, k
+):
+    lib = version_store_factory(
+        column_group_size=2,
+        segment_row_size=2,
+        encoding_version=int(encoding_version),
+        lmdb_config={"map_size": 2**30},
+        name=lib_name + f"_{encoding_version.name}_{k}",
+    )
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    sym = "test_column_stats_admission_ceiling"
+    expected_column_stats = generate_symbol(lib, sym)
+
+    with config_context(ADMISSION_KEY, k):
+        lib.create_column_stats_experimental(sym)
+
+    assert lib.get_column_stats_info_experimental(sym) == {"col_1": {"MINMAX"}, "col_2": {"MINMAX"}}
+    assert_stats_equal(lib.read_column_stats_experimental(sym), expected_column_stats)
+
+
+@pytest.mark.parametrize("k", [1, 2])
+def test_column_stats_create_admission_tiny_thread_pool(
+    version_store_factory, lib_name, encoding_version, any_output_format, tiny_thread_pool, k
+):
+    """Test against deadlock with a small admission limit and single thread pools."""
+    lib = version_store_factory(
+        column_group_size=2,
+        segment_row_size=2,
+        encoding_version=int(encoding_version),
+        lmdb_config={"map_size": 2**30},
+        name=lib_name + f"_{encoding_version.name}_{k}",
+    )
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    sym = "test_column_stats_admission_tiny_thread_pool"
+    n_appends = 10
+    write_many_slices(lib, sym, n_appends)
+
+    with config_context(ADMISSION_KEY, k):
+        lib.create_column_stats_experimental(sym)
+
+    assert lib.get_column_stats_info_experimental(sym) == {"col_1": {"MINMAX"}, "col_2": {"MINMAX"}}
+    # One stats row per row slice.
+    assert lib.read_column_stats_experimental(sym).num_rows == n_appends
+
+
+def test_column_stats_create_single_unit(
+    version_store_factory, lib_name, encoding_version, any_output_format, tiny_thread_pool
+):
+    lib = version_store_factory(
+        column_group_size=2,
+        segment_row_size=2,
+        encoding_version=int(encoding_version),
+        lmdb_config={"map_size": 2**30},
+        name=lib_name + f"_{encoding_version.name}",
+    )
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    sym = "test_column_stats_single_unit"
+    df = pd.DataFrame({"col_1": [1.0, 3.0]}, index=pd.date_range("2000-01-01", periods=2))
+    lib.write(sym, df)
+    expected_column_stats = index_columns_to_pl(lib, sym).with_columns(
+        pl.Series("v1_MIN(col_1)", [df["col_1"].min()]),
+        pl.Series("v1_MAX(col_1)", [df["col_1"].max()]),
+    )
+
+    with config_context(ADMISSION_KEY, 1):
+        lib.create_column_stats_experimental(sym)
+
+    assert_stats_equal(lib.read_column_stats_experimental(sym), expected_column_stats)
