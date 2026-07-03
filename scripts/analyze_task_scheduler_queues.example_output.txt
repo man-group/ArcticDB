@@ -1,0 +1,52 @@
+
+=== CPU pool ===
+  tasks:        107
+  peak depth:   4  (tasks waiting, not yet started)
+  wait:         p50 29.44us  p90 215.42us  p99 337.90us  max 343.25us
+  run:          p50 2.67ms  p90 8.58ms  p99 8.80ms  max 8.82ms
+  depth over time: ▁▁▃▁▁▁▃▃▃▃▃▃▃▁▃▃▃▃▃▃▃▃▃▃▁▃▃▁▃▃▁▁▃▃▁▁▅▁▁▁▃▃▃▁▁▃▃▁▁▃▃▃▃▃▁▁▃█▆▆
+  wait histogram:
+          <1us      0 
+        1-10us      3 █
+      10-100us     84 ████████████████████████████████████████
+     100us-1ms     20 ██████████
+        1-10ms      0 
+      10-100ms      0 
+        >100ms      0 
+  run histogram:
+          <1us      0 
+        1-10us      0 
+      10-100us      2 █
+     100us-1ms      6 ██
+        1-10ms     99 ████████████████████████████████████████
+      10-100ms      0 
+        >100ms      0 
+
+=== IO pool ===
+  tasks:        56
+  peak depth:   6  (tasks waiting, not yet started)
+  wait:         p50 10.26ms  p90 14.06ms  p99 25.48ms  max 27.30ms
+  run:          p50 10.65ms  p90 13.39ms  p99 16.35ms  max 17.30ms
+  depth over time: ▂▂▆▁▁▁▇▇▇▇▇▇▇▁▇▇▇▇▇▇▇▇▇▁▇▇▇▁▇▇▁▁▇▇▁▁█▁▁▁▇▇▇▁▁▇▅▁▁▃▁▁▁▁▁▁▂▁▁▂
+  wait histogram:
+          <1us      0 
+        1-10us      0 
+      10-100us     13 █████████████████
+     100us-1ms      1 █
+        1-10ms     11 ██████████████
+      10-100ms     31 ████████████████████████████████████████
+        >100ms      0 
+  run histogram:
+          <1us      0 
+        1-10us      0 
+      10-100us      2 ██
+     100us-1ms      3 ███
+        1-10ms     15 █████████████████
+      10-100ms     36 ████████████████████████████████████████
+        >100ms      0 
+
+  per-thread load (bar = busy time, round-robin imbalance shows here):
+    IOPool0          17 tasks  busy  149.44ms  wait p99   22.39ms  ████████████████████████████████████████
+    IOPool1          13 tasks  busy  140.44ms  wait p99   25.71ms  ██████████████████████████████████████
+    IOPool2          13 tasks  busy  136.31ms  wait p99   22.62ms  ████████████████████████████████████
+    IOPool3          13 tasks  busy  143.66ms  wait p99   19.76ms  ██████████████████████████████████████
