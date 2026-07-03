@@ -286,8 +286,8 @@ TEST(ColumnData, IteratorSkipsTrailingEmptyBlock) {
 
     Column col(static_cast<TypeDescriptor>(TDT{}), 0, AllocationType::DYNAMIC, Sparsity::PERMITTED);
     std::array<int64_t, 3> data{10, 20, 30};
-    col.set_external_block(0, data.data(), data.size());
-    col.set_external_block(static_cast<ssize_t>(data.size()), static_cast<int64_t*>(nullptr), 0);
+    col.set_dense_block(0, data.data(), data.size());
+    col.set_dense_block(static_cast<ssize_t>(data.size()), static_cast<int64_t*>(nullptr), 0);
     ASSERT_EQ(col.buffer().num_blocks(), 2u);
     ASSERT_EQ(col.buffer().blocks()[0]->logical_size(), data.size() * sizeof(int64_t));
     ASSERT_EQ(col.buffer().blocks()[1]->logical_size(), 0u);
@@ -310,7 +310,7 @@ TEST(ColumnData, IteratorOnAllEmptyColumn) {
 
     // A single zero-size external block. begin must compare equal to end.
     Column empty_col(static_cast<TypeDescriptor>(TDT{}), 0, AllocationType::DYNAMIC, Sparsity::PERMITTED);
-    empty_col.set_external_block(0, static_cast<int64_t*>(nullptr), 0);
+    empty_col.set_dense_block(0, static_cast<int64_t*>(nullptr), 0);
     ASSERT_EQ(empty_col.buffer().num_blocks(), 1u);
     ASSERT_EQ(empty_col.buffer().blocks()[0]->logical_size(), 0u);
     auto empty_data = empty_col.data();
@@ -327,8 +327,8 @@ TEST(ColumnData, IteratorEqualityAcrossSharedExternalMemory) {
     Column col(static_cast<TypeDescriptor>(TDT{}), 0, AllocationType::DYNAMIC, Sparsity::NOT_PERMITTED);
 
     std::array<int64_t, 3> shared{100, 200, 300};
-    col.set_external_block(0, shared.data(), shared.size());
-    col.set_external_block(static_cast<ssize_t>(shared.size()), shared.data(), shared.size());
+    col.set_dense_block(0, shared.data(), shared.size());
+    col.set_dense_block(static_cast<ssize_t>(shared.size()), shared.data(), shared.size());
 
     auto column_data = col.data();
     auto it_in_block0 = column_data.citerator_at<TDT>(1);                 // (block 0, offset 1)

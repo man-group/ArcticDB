@@ -53,6 +53,12 @@ struct JiveTable {
 
 enum class ExtraBufferType : uint8_t { OFFSET, STRING, ARRAY, BITMAP };
 
+// Controls whether external blocks get constructed via owning memcpy or with a non owning pointer assignment
+// ALWAYS - Always copies, result owns its memory
+// IF_NEEDED - Uses a non owning view when possible (e.g. numeric types). Copies when memory layout is different (e.g.
+// strings)
+enum class CopyMode : uint8_t { ALWAYS, IF_NEEDED };
+
 // Specifies a way to index extra buffers.
 // We can attach extra buffers to each offset and type. This is used for OutputFormat::ARROW to store the extra buffers
 // required to construct a string buffer.
@@ -313,15 +319,23 @@ class Column {
     }
 
     template<class T, std::enable_if_t<std::is_integral_v<T> || std::is_floating_point_v<T>, int> = 0>
-    void set_external_block(ssize_t row_offset, T* val, size_t size) {
+    void set_dense_block(ssize_t row_offset, T* val, size_t size, CopyMode copy_mode = CopyMode::IF_NEEDED) {
         util::check_arg(
                 last_logical_row_ + 1 == row_offset,
-                "set_external_block expected row {}, actual {} ",
+                "set_dense_block expected row {}, actual {} ",
                 last_logical_row_ + 1,
                 row_offset
         );
         auto bytes = sizeof(T) * size;
-        const_cast<ChunkedBuffer&>(data_.buffer()).add_external_block(reinterpret_cast<const uint8_t*>(val), bytes);
+        const auto* val_bytes_ptr = reinterpret_cast<const uint8_t*>(val);
+        if (copy_mode == CopyMode::ALWAYS) {
+            auto owned_data = allocate_data(bytes);
+            memcpy(owned_data, val_bytes_ptr, bytes);
+        } else {
+            auto& buffer = const_cast<ChunkedBuffer&>(data_.buffer());
+            buffer.add_external_block(val_bytes_ptr, bytes);
+        }
+        advance_data(bytes);
         last_logical_row_ += static_cast<ssize_t>(size);
         last_physical_row_ = last_logical_row_;
     }

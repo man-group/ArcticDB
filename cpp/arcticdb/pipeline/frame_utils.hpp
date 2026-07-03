@@ -57,17 +57,18 @@ inline size_t get_max_string_size(
 
 TimeseriesDescriptor make_timeseries_descriptor(
         size_t total_rows, const StreamDescriptor& desc,
-        arcticdb::proto::descriptors::NormalizationMetadata&& norm_meta,
-        std::optional<arcticdb::proto::descriptors::UserDefinedMetadata>&& um, std::optional<AtomKey>&& prev_key,
-        std::optional<AtomKey>&& next_key, bool bucketize_dynamic
+        const arcticdb::proto::descriptors::NormalizationMetadata& norm_meta,
+        std::optional<arcticdb::proto::descriptors::UserDefinedMetadata>&& um, std::optional<AtomKey>&& next_key,
+        bool bucketize_dynamic
 );
 
 // The overload above returns a TSD that shares a std::shared_ptr<FieldCollection> with the input StreamDescriptor,
 // which is error-prone. However, it is sometimes the desired behaviour, so needs to still be available.
 TimeseriesDescriptor make_timeseries_descriptor(
-        size_t total_rows, StreamDescriptor&& desc, arcticdb::proto::descriptors::NormalizationMetadata&& norm_meta,
-        std::optional<arcticdb::proto::descriptors::UserDefinedMetadata>&& um, std::optional<AtomKey>&& prev_key,
-        std::optional<AtomKey>&& next_key, bool bucketize_dynamic
+        size_t total_rows, StreamDescriptor&& desc,
+        const arcticdb::proto::descriptors::NormalizationMetadata& norm_meta,
+        std::optional<arcticdb::proto::descriptors::UserDefinedMetadata>&& um, std::optional<AtomKey>&& next_key,
+        bool bucketize_dynamic
 );
 
 TimeseriesDescriptor timseries_descriptor_from_index_segment(
@@ -76,13 +77,13 @@ TimeseriesDescriptor timseries_descriptor_from_index_segment(
 );
 
 TimeseriesDescriptor timeseries_descriptor_from_pipeline_context(
-        const std::shared_ptr<pipelines::PipelineContext>& pipeline_context, std::optional<AtomKey>&& prev_key,
+        const std::shared_ptr<pipelines::PipelineContext>& pipeline_context, std::optional<AtomKey>&& next_key,
         bool bucketize_dynamic
 );
 
 TimeseriesDescriptor index_descriptor_from_frame(
         const std::shared_ptr<pipelines::InputFrame>& frame, size_t existing_rows,
-        std::optional<entity::AtomKey>&& prev_key = {}
+        std::optional<entity::AtomKey>&& next_key = {}
 );
 
 template<typename RawType>
@@ -183,7 +184,7 @@ std::optional<convert::StringEncodingError> set_sequence_type(
 template<typename TagType, typename RawType>
 void set_integral_scalar_type(
         SegmentInMemory& seg, const entity::NativeTensor& tensor, size_t col, size_t rows_to_write, size_t row,
-        bool sparsify_floats
+        bool sparsify_floats, CopyMode copy_mode
 ) {
     constexpr auto dt = TagType::DataTypeTag::data_type;
     auto ptr = tensor.template ptr_cast<RawType>(row);
@@ -197,7 +198,7 @@ void set_integral_scalar_type(
         const auto c_style = util::is_cstyle_array<RawType>(tensor);
         if (c_style) {
             ARCTICDB_SAMPLE_DEFAULT(SetDataZeroCopy)
-            seg.set_external_block(col, ptr, rows_to_write);
+            seg.set_dense_block(col, ptr, rows_to_write, copy_mode);
         } else {
             ARCTICDB_SAMPLE_DEFAULT(SetDataFlatten)
             ARCTICDB_DEBUG(
@@ -321,7 +322,7 @@ std::optional<convert::StringEncodingError> set_array_type(
 
 inline std::optional<convert::StringEncodingError> segment_set_data(
         const TypeDescriptor& type_desc, const entity::NativeTensor& tensor, SegmentInMemory& seg, size_t col,
-        size_t rows_to_write, size_t row, bool sparsify_floats
+        size_t rows_to_write, size_t row, bool sparsify_floats, CopyMode copy_mode = CopyMode::IF_NEEDED
 ) {
     return type_desc.visit_tag([&](auto tag) {
         using TagType = std::decay_t<decltype(tag)>;
@@ -344,7 +345,9 @@ inline std::optional<convert::StringEncodingError> segment_set_data(
             if (maybe_error)
                 return maybe_error;
         } else if constexpr ((is_numeric_type(dt) || is_bool_type(dt)) && tag.dimension() == Dimension::Dim0) {
-            set_integral_scalar_type<TagType, RawType>(seg, tensor, col, rows_to_write, row, sparsify_floats);
+            set_integral_scalar_type<TagType, RawType>(
+                    seg, tensor, col, rows_to_write, row, sparsify_floats, copy_mode
+            );
         } else if constexpr (is_bool_object_type(dt)) {
             normalization::check<ErrorCode::E_UNIMPLEMENTED_INPUT_TYPE>(
                     tag.dimension() == Dimension::Dim0, "Multidimensional nullable booleans are not supported"
