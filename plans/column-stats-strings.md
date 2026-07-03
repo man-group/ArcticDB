@@ -9,6 +9,16 @@ membership queries on string columns (`==`, `!=`, `isin`, `isnotin` — the only
 string predicates the engine supports; ordering predicates raise in
 `operation_types.hpp:444-450`) to prune row-slices that cannot match.
 
+UTF-8 - Encode each character as between 1 and 4 "code points".
+So a UTF-8 character is between 1 and 4 bytes (it's variable width).
+For "ASCII" characters like "b", the UTF-8 encoding is 1 byte, and it matches ASCII.
+For "weird" characters like an emoji, the encoding uses more bytes - up to 4 bytes total.
+UTF-32 is like UTF-8 but actually fixed width - each character is 4 bytes.
+Can't remember how the metadata is stored in UTF-8 (ie how wide is everything)
+
+Particular test: what happens if we truncate halfway through a code point eg three chinese characters that take 3 bytes, and we truncate at 8 bytes, check we 
+can still read the stats segment and that pruning works
+
 Design decisions:
 
 - **Always store stats as `UTF_DYNAMIC64` (UTF-8), transcoding at generation.** Regardless
@@ -56,6 +66,8 @@ Design decisions:
   statistic is truncated or not.
 - New proto stat types `MIN_STR_V1`/`MAX_STR_V1` (distinct on-disk format from
   numeric `MIN_V1`/`MAX_V1` so that we have a slot to record the truncation width).
+    Note: We might not need this if we do the special IS_TRUNCATED column, why else would readers need to know the truncation width?
+    
 - Record null counts for strings for `!=`/`isnotin` to work properly and test it
 
 ### Dynamic schema interaction
