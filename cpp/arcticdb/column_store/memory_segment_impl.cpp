@@ -9,6 +9,7 @@
 #include <arcticdb/column_store/column_algorithms.hpp>
 #include <arcticdb/column_store/memory_segment_impl.hpp>
 #include <arcticdb/column_store/string_pool.hpp>
+#include <arcticdb/util/segment_residency_tracker.hpp>
 #include <arcticdb/entity/type_utils.hpp>
 #include <arcticdb/pipeline/string_pool_utils.hpp>
 #include <arcticdb/util/preconditions.hpp>
@@ -336,7 +337,18 @@ SegmentInMemoryImpl::SegmentInMemoryImpl(
     on_descriptor_change(desc, expected_column_size, allocation_type, allow_sparse, block_config_per_column);
 }
 
-SegmentInMemoryImpl::~SegmentInMemoryImpl() { ARCTICDB_TRACE(log::version(), "Destroying segment in memory"); }
+SegmentInMemoryImpl::~SegmentInMemoryImpl() {
+    ARCTICDB_TRACE(log::version(), "Destroying segment in memory");
+    auto& residency_tracker = util::SegmentResidencyTracker::instance();
+    if (from_disk_.value_ && residency_tracker.enabled()) {
+        residency_tracker.on_segment_released();
+    }
+}
+
+void SegmentInMemoryImpl::mark_from_disk() {
+    from_disk_.value_ = true;
+    util::SegmentResidencyTracker::instance().on_segment_resident();
+}
 
 // Append any columns that exist both in this segment and in the 'other' segment onto the
 // end of the column in this segment. Any columns that exist in this segment but not in the

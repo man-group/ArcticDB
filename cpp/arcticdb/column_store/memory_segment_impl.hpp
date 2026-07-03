@@ -523,6 +523,10 @@ class SegmentInMemoryImpl {
 
     SegmentInMemoryImpl clone() const;
 
+    // Marks this segment as having been decoded from storage, so SegmentResidencyTracker counts it from here until
+    // this object is destroyed. clone() and processing outputs are left unmarked.
+    void mark_from_disk();
+
     void set_string_pool(std::shared_ptr<StringPool> string_pool);
 
     std::shared_ptr<SegmentInMemoryImpl> get_output_segment(size_t num_values, bool pre_allocate = true) const;
@@ -577,6 +581,22 @@ class SegmentInMemoryImpl {
     bool compacted_ = false;
     util::MagicNum<'M', 'S', 'e', 'g'> magic_;
     std::optional<TimeseriesDescriptor> tsd_;
+
+    // Just used for memory tracking in tests, see SegmentResidencyTracker
+    // Clears on move so we do not double count the moved-from instance
+    struct OnDiskFlag {
+        bool value_ = false;
+        OnDiskFlag() = default;
+        OnDiskFlag(OnDiskFlag&& other) noexcept : value_(other.value_) { other.value_ = false; }
+        OnDiskFlag& operator=(OnDiskFlag&& other) noexcept {
+            value_ = other.value_;
+            other.value_ = false;
+            return *this;
+        }
+        OnDiskFlag(const OnDiskFlag&) = delete;
+        OnDiskFlag& operator=(const OnDiskFlag&) = delete;
+    };
+    OnDiskFlag from_disk_;
 };
 
 } // namespace arcticdb
