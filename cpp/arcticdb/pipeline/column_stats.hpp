@@ -40,7 +40,7 @@ std::string to_segment_column_name(const std::string& column, ColumnStatTypeInte
 
 class ColumnStats {
   public:
-    explicit ColumnStats(const std::unordered_map<std::string, std::unordered_set<std::string>>& column_stats);
+    explicit ColumnStats(const TimeseriesDescriptor& tsd);
     explicit ColumnStats(
             const arcticc::pb2::column_stats_pb2::ColumnStatsHeader& header, const TimeseriesDescriptor& tsd
     );

@@ -2,6 +2,7 @@
 #include <arcticdb/pipeline/index_fields.hpp>
 #include <arcticdb/processing/aggregation_interface.hpp>
 #include <arcticdb/processing/unsorted_aggregation.hpp>
+#include <arcticdb/entity/timeseries_descriptor.hpp>
 #include <arcticdb/entity/type_utils.hpp>
 #include <arcticdb/util/preconditions.hpp>
 
@@ -133,21 +134,6 @@ void validate_column_stats_header_version(const arcticc::pb2::column_stats_pb2::
     }
 }
 
-ColumnStats::ColumnStats(const std::unordered_map<std::string, std::unordered_set<std::string>>& column_stats) {
-    for (const auto& [column, column_stat_names] : column_stats) {
-        if (!column_stat_names.empty()) {
-            user_specified_column_stats_[column] = {};
-            for (const auto& column_stat_name : column_stat_names) {
-                auto opt_index_type = name_to_type(column_stat_name);
-                user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
-                        opt_index_type.has_value(), "Unknown column stat type provided: {}", column_stat_name
-                );
-                user_specified_column_stats_[column].emplace(*opt_index_type);
-            }
-        }
-    }
-}
-
 ColumnStats::ColumnStats(
         const arcticc::pb2::column_stats_pb2::ColumnStatsHeader& header, const TimeseriesDescriptor& tsd
 ) {
@@ -176,6 +162,65 @@ ColumnStats::ColumnStats(
                 offset_to_stat_info_.emplace(data_col_offset, NameAndStatTypes{name, {external_type}});
             }
         }
+    }
+    offset_to_stat_info_set_ = true;
+}
+
+namespace {
+bool is_col_eligible_for_stats(DataType col_data_type) { return is_numeric_type(col_data_type) || is_bool_type(col_data_type); }
+
+std::string to_user_facing_name_key(
+        const std::string& field_name, const arcticdb::proto::descriptors::NormalizationMetadata::Pandas& common
+) {
+    auto it = common.col_names().find(field_name);
+
+    if (it == common.col_names().end())
+        return "str:" + field_name;
+
+    const auto& info = it->second;
+
+    if (info.is_none())
+        return "none:";
+    if (info.is_empty())
+        return "empty:";
+    if (info.is_int())
+        return "int:" + info.original_name();
+    if (!info.original_name().empty())
+        return "str:" + info.original_name();
+
+    return {};
+}
+
+} // namespace
+
+// Build MINMAX stats for every eligible column, computed directly from the TSD.
+// The outer/primary index is skipped.
+// Rejects symbols with duplicated data-column names.
+ColumnStats::ColumnStats(const TimeseriesDescriptor& tsd) {
+    const auto& fields = tsd.fields();
+    const auto& norm = tsd.normalization();
+
+    const bool has_outer_index = tsd.index().field_count() > 0;
+    const size_t start_filed_index = has_outer_index ? 1 : 0;
+
+    std::unordered_set<std::string> seen_user_names;
+
+    for (size_t field_index = start_filed_index; field_index < fields.size(); ++field_index) {
+        if (!is_col_eligible_for_stats(fields.at(field_index).type().data_type())) {
+            continue;
+        }
+
+        std::string field_name{fields.at(field_index).name()};
+
+        if (norm.has_df()) {
+            user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                    seen_user_names.insert(to_user_facing_name_key(field_name, norm.df().common())).second,
+                    "Cannot create column stats: symbol has duplicated data column name [{}]",
+                    field_name
+            );
+        }
+
+        offset_to_stat_info_.emplace(field_index, NameAndStatTypes{std::move(field_name), {ColumnStatType::MINMAX}});
     }
     offset_to_stat_info_set_ = true;
 }

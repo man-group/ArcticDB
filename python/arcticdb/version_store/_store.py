@@ -68,7 +68,6 @@ from arcticdb_ext.version_store import PythonVersionStoreUpdateQuery as _PythonV
 from arcticdb_ext.version_store import PythonVersionStoreReadOptions as _PythonVersionStoreReadOptions
 from arcticdb_ext.version_store import PythonVersionStoreBatchReadOptions as _PythonVersionStoreBatchReadOptions
 from arcticdb_ext.version_store import PythonVersionStoreVersionQuery as _PythonVersionStoreVersionQuery
-from arcticdb_ext.version_store import ColumnStats as _ColumnStats
 from arcticdb_ext.version_store import StreamDescriptorMismatch
 from arcticdb_ext.version_store import DataError, KeyNotFoundInStageResultInfo
 from arcticdb_ext.version_store import sorted_value_name, PreloadedIndexQuery as _PreloadedIndexQuery
@@ -1306,62 +1305,10 @@ class NativeVersionStore:
         -------
         None
         """
-        column_stats = self._get_eligible_column_stats_spec(symbol, as_of)
-        if not column_stats:
-            return
-
-        column_stats = self._convert_to_native_column_stats(column_stats)
+        # Eligible-column detection is done in the C++ layer so that the symbol's index key is
+        # read only once (during stats generation) rather than an extra time here.
         version_query = self._get_version_query(as_of)
-
-        self.version_store.create_column_stats_version(symbol, column_stats, version_query)
-
-    def _get_eligible_column_stats_spec(self, symbol: str, as_of: Optional[VersionQueryInput]) -> Dict[str, Set[str]]:
-        numeric_value_types = {
-            TypeDescriptor.ValueType.UINT,
-            TypeDescriptor.ValueType.INT,
-            TypeDescriptor.ValueType.FLOAT,
-            TypeDescriptor.ValueType.BOOL,
-            TypeDescriptor.ValueType.NANOSECONDS_UTC,
-        }
-        timeseries_descriptor = self._get_info(symbol, as_of).timeseries_descriptor
-        fields = list(timeseries_descriptor.fields)
-        num_index_fields = self._num_physically_stored_index_fields(timeseries_descriptor)
-
-        start = 1 if num_index_fields > 0 else 0
-        eligible_fields = [field for field in fields[start:] if field.type.value_type in numeric_value_types]
-
-        self._reject_duplicated_data_columns(
-            [field for field in fields[num_index_fields:] if field.type.value_type in numeric_value_types],
-            timeseries_descriptor,
-        )
-
-        return {field.name: {"MINMAX"} for field in eligible_fields}
-
-    @staticmethod
-    def _num_physically_stored_index_fields(timeseries_descriptor) -> int:
-        num_index_fields = timeseries_descriptor.index.field_count()
-
-        normalization = timeseries_descriptor.normalization
-        if normalization.WhichOneof("input_type") != "df":
-            return num_index_fields
-
-        common = normalization.df.common
-        if common.WhichOneof("index_type") == "multi_index":
-            num_index_fields += common.multi_index.field_count
-
-        return num_index_fields
-
-    @staticmethod
-    def _reject_duplicated_data_columns(data_fields, timeseries_descriptor) -> None:
-        normalization = timeseries_descriptor.normalization
-        if normalization.WhichOneof("input_type") != "df":
-            return
-        names, _ = _denormalize_columns_names([field.name for field in data_fields], normalization.df)
-        seen = set()
-        for name in names:
-            if name in seen:
-                raise UserInputException(f"Cannot create column stats: symbol has duplicated column name [{name}]")
-            seen.add(name)
+        self.version_store.create_column_stats_version(symbol, version_query)
 
     def drop_column_stats_experimental(self, symbol: str, as_of: Optional[VersionQueryInput] = None) -> None:
         """
@@ -2447,16 +2394,6 @@ class NativeVersionStore:
             date_range=date_range, row_range=row_range, columns=columns, query_builder=query_builder
         )
         return version_query, read_options, read_query, output_format
-
-    def _convert_to_native_column_stats(self, column_stats):
-        if column_stats is None:
-            return None
-        for k, v in column_stats.items():
-            if k is None:
-                raise UserInputException("Found None key in provided column_stats")
-            if not isinstance(k, str):
-                raise UserInputException(f"Found non-str key in provided column_stats [{k}]")
-        return _ColumnStats(column_stats)
 
     def _postprocess_df_with_only_rowcount_idx(self, read_result, row_range):
         index_meta = read_result.norm.df.common.index

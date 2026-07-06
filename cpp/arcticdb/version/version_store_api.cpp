@@ -899,12 +899,10 @@ VersionedItem PythonVersionStore::write_metadata(
     return write_versioned_metadata_internal(stream_id, prune_previous_versions, std::move(user_meta_proto));
 }
 
-void PythonVersionStore::create_column_stats_version(
-        const StreamId& stream_id, ColumnStats& column_stats, const VersionQuery& version_query
-) {
+void PythonVersionStore::create_column_stats_version(const StreamId& stream_id, const VersionQuery& version_query) {
     ReadOptions read_options;
     read_options.set_dynamic_schema(cfg().write_options().dynamic_schema());
-    create_column_stats_version_internal(stream_id, column_stats, version_query, read_options);
+    create_column_stats_version_internal(stream_id, version_query, read_options);
 }
 
 void PythonVersionStore::drop_column_stats_version(
