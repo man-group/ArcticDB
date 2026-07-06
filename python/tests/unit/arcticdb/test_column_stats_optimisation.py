@@ -46,18 +46,11 @@ def _write_multi_segment(lib):
 
 
 def _write_multi_index(lib):
-    index = pd.MultiIndex.from_arrays(
-        [pd.date_range("2000-01-01", periods=2), [10, 20]], names=["dt", "level"]
-    )
+    index = pd.MultiIndex.from_arrays([pd.date_range("2000-01-01", periods=2), [10, 20]], names=["dt", "level"])
     df = pd.DataFrame({"col_1": [1, 2], "col_2": ["a", "b"]}, index=index)
     lib.write(sym, df)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="Eligibility computation does a separate descriptor read; to be removed once the "
-    "eligible-column detection is moved into the C++ stats-generation path.",
-)
 @pytest.mark.parametrize(
     "writer",
     [_write_single_segment, _write_multi_segment, _write_multi_index],

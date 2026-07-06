@@ -569,9 +569,7 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
             .value("ASCENDING", SortedValue::ASCENDING)
             .value("DESCENDING", SortedValue::DESCENDING);
 
-    py::class_<ColumnStats>(version, "ColumnStats")
-            .def(py::init<std::unordered_map<std::string, std::unordered_set<std::string>>>())
-            .def("to_map", &ColumnStats::to_map);
+    py::class_<ColumnStats>(version, "ColumnStats").def("to_map", &ColumnStats::to_map);
 
     py::class_<ColumnName>(version, "ColumnName").def(py::init([](const std::string& name) {
         return ColumnName(name);

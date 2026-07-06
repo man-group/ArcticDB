@@ -1987,8 +1987,7 @@ AtomKey index_key_to_column_stats_key(const IndexTypeKey& index_key) {
 }
 
 void create_column_stats_impl(
-        const std::shared_ptr<Store>& store, const VersionedItem& versioned_item, ColumnStats& column_stats,
-        const ReadOptions& read_options
+        const std::shared_ptr<Store>& store, const VersionedItem& versioned_item, const ReadOptions& read_options
 ) {
     using namespace arcticdb::pipelines;
     auto column_stats_key = index_key_to_column_stats_key(versioned_item.key_);
@@ -2027,9 +2026,10 @@ void create_column_stats_impl(
             "Cannot create column stats on pickled data"
     );
 
-    // column_stats contains a user-specified map of string col names to stats. Map these to offsets in to the TSD's
-    // fields.
-    column_stats.calculate_offsets(tsd);
+    ColumnStats column_stats{tsd};
+    if (column_stats.empty()) {
+        return;
+    }
 
     std::optional<SegmentInMemory> old_segment;
     if (column_stats_try.hasException()) {
