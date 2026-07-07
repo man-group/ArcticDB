@@ -303,6 +303,22 @@ def encoding_version(request):
     return request.param
 
 
+@pytest.fixture(params=[False, True], ids=["numpy_strings", "infer_strings"])
+def infer_string(request):
+    try:
+        with pd.option_context("future.infer_string", request.param):
+            yield request.param
+    except pd.errors.OptionError:
+        if request.param:
+            pytest.skip("pandas too old for future.infer_string")
+        yield request.param
+
+
+@pytest.fixture(params=[False, True], ids=["consolidate", "skip_consolidation"])
+def skip_consolidation(request):
+    return request.param
+
+
 def check_local_storage_enabled():
     if not LOCAL_STORAGE_TESTS_ENABLED:
         pytest.skip("Local storage not enabled")

@@ -29,7 +29,7 @@ from abc import ABCMeta, abstractmethod
 from arcticdb.dependencies import _PYARROW_AVAILABLE, _POLARS_AVAILABLE, pyarrow as pa, polars as pl
 from arcticdb.preconditions import check
 from arcticdb_ext import get_config_string
-from pandas.api.types import is_integer_dtype
+from pandas.api.types import infer_dtype, is_integer_dtype
 from arcticc.pb2.descriptors_pb2 import UserDefinedMetadata, NormalizationMetadata, MsgPackSerialization
 from arcticc.pb2.storage_pb2 import VersionStoreConfig
 from collections import Counter
@@ -1077,6 +1077,14 @@ class BlockManagerUnconsolidated(BlockManager):
         return self.blocks
 
 
+def _infer_string_enabled():
+    """Whether pandas' future.infer_string option is on, i.e. the reader wants string columns as the str dtype."""
+    try:
+        return bool(pd.get_option("future.infer_string"))
+    except pd.errors.OptionError:  # pandas < 2.1 does not have the option
+        return False
+
+
 class DataFrameNormalizer(_PandasNormalizer):
     TYPE = "df"
 
@@ -1102,9 +1110,15 @@ class DataFrameNormalizer(_PandasNormalizer):
         def df_from_arrays(arrays, cols, ind, n_ind):
             def gen_blocks():
                 _len = len(index)
+                infer_string = _infer_string_enabled()
                 column_placement_in_block = 0
                 for idx, a in enumerate(arrays):
                     if idx < n_ind:
+                        continue
+                    #TEMPORARY
+                    if infer_string and a.dtype == np.dtype("object") and infer_dtype(a, skipna=True) == "string":
+                        yield make_block(pd.array(a, dtype="str"), placement=(column_placement_in_block,)) # TODO: this creates a copy, figure out how to pass arrow data directly
+                        column_placement_in_block += 1
                         continue
                     # In Pandas 1 the dtype param of make_block is ignored for empty blocks and the dtype is always object
                     # Pre-empty type Arctic has a default dtype of float64 for empty columns. Thus a casting to float64

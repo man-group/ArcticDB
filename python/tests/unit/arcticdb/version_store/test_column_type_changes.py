@@ -55,7 +55,7 @@ def test_changing_numeric_type(version_store_factory, dynamic_schema):
 
 @pytest.mark.parametrize("dynamic_schema", [True, False])
 @pytest.mark.parametrize("dynamic_strings_first", [True, False])
-def test_changing_string_type(version_store_factory, dynamic_schema, dynamic_strings_first):
+def test_changing_string_type(version_store_factory, dynamic_schema, dynamic_strings_first, infer_string):
     lib = version_store_factory(dynamic_strings=True, dynamic_schema=dynamic_schema)
     sym_append = "test_changing_string_type_append"
     sym_update = "test_changing_string_type_update"
