@@ -44,39 +44,19 @@ struct InputFrame {
 
     InputFrame();
 
-    template<ValidIndex Index, typename DescriptorT>
-    requires std::same_as<std::decay_t<DescriptorT>, StreamDescriptor>
-    InputFrame(
-            DescriptorT&& desc, std::vector<NativeTensor>&& field_tensors, Index&& index,
-            std::optional<NativeTensor>&& index_tensor
-    ) :
+    template<ValidIndex Index>
+    InputFrame(StreamDescriptor&& desc, std::vector<NativeTensor>&& field_tensors, Index&& index) :
         index(std::forward<Index>(index)) {
-        if constexpr (std::same_as<Index, stream::TimeseriesIndex>) {
-            internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-                    index_tensor.has_value(), "Timeseries index tensor required"
-            );
-        }
-        set_from_tensors(std::forward<DescriptorT>(desc), std::move(field_tensors), std::move(index_tensor));
+        set_from_tensors(std::move(desc), std::move(field_tensors));
     }
 
-    // Index, when present, is unified into columns_[0]; data tensors follow.
-    template<typename DescriptorT>
-    requires std::same_as<std::decay_t<DescriptorT>, StreamDescriptor>
-    void set_from_tensors(
-            DescriptorT&& desc, std::vector<NativeTensor>&& field_tensors, std::optional<NativeTensor>&& index_tensor
-    ) {
-        desc_ = std::forward<DescriptorT>(desc);
-        columns_.clear();
-        columns_.reserve(field_tensors.size() + (index_tensor.has_value() ? 1 : 0));
-        if (index_tensor.has_value()) {
-            columns_.emplace_back(std::move(*index_tensor));
-        }
-        columns_.insert(
-                columns_.end(),
-                std::make_move_iterator(field_tensors.begin()),
-                std::make_move_iterator(field_tensors.end())
-        );
-    };
+    // field_tensors are stored in order; the index column, when present, must be at field_tensors[0].
+    void set_from_tensors(StreamDescriptor&& desc, std::vector<NativeTensor>&& field_tensors);
+
+    void set_from_frame_data(
+            StreamDescriptor&& desc, std::vector<FieldData>&& columns,
+            std::vector<sparrow::record_batch>&& arrow_buffer_owners, bool has_only_tensors
+    );
 
     // With SortednessScan::SCAN_IF_UNKNOWN we do an O(n) verification of the sortedness of a timeseries index and
     // use it to populate SortedValue. Otherwise the sort order is left as SortedValue::UNKNOWN.

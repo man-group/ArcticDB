@@ -54,26 +54,27 @@ auto input_frame_from_tensors(const StreamDescriptor& desc, T&&... input) {
                 "Input data raw type sizes do not match descriptor field raw type sizes"
         );
     }(std::make_index_sequence<sizeof...(T)>{});
-    std::vector<NativeTensor> tensors = [&]<size_t... Is>(std::index_sequence<Is...>) {
-        std::vector<NativeTensor> result_tensors;
-        result_tensors.reserve(data_columns);
-        (result_tensors.push_back(one_dimensional_tensor(
+    std::vector<NativeTensor> tensors;
+    tensors.reserve(sizeof...(T));
+    if constexpr (Index::field_count() == 1) {
+        tensors.push_back(one_dimensional_tensor(std::get<0>(materialized_input), desc.field(0).type().data_type()));
+    }
+    [&]<size_t... Is>(std::index_sequence<Is...>) {
+        (tensors.push_back(one_dimensional_tensor(
                  std::get<Is + Index::field_count()>(materialized_input),
                  desc.field(Is + Index::field_count()).type().data_type()
          )),
          ...);
-        return result_tensors;
     }(std::make_index_sequence<data_columns>{});
     const size_t num_rows = std::ranges::size(std::get<0>(materialized_input));
+    auto desc_copy = desc;
     if constexpr (Index::field_count() == 1) {
-        NativeTensor index_tensor =
-                one_dimensional_tensor(std::get<0>(materialized_input), desc.field(0).type().data_type());
-        InputFrame result_frame(desc, std::move(tensors), Index{desc.field(0).name()}, std::move(index_tensor));
+        InputFrame result_frame(std::move(desc_copy), std::move(tensors), Index{desc.field(0).name()});
         result_frame.num_rows = num_rows;
         result_frame.set_index_range();
         return std::pair{std::move(result_frame), std::move(materialized_input)};
     } else {
-        InputFrame result_frame(desc, std::move(tensors), Index{}, std::nullopt);
+        InputFrame result_frame(std::move(desc_copy), std::move(tensors), Index{});
         result_frame.num_rows = num_rows;
         result_frame.set_index_range();
         return std::pair{std::move(result_frame), std::move(materialized_input)};

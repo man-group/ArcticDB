@@ -460,20 +460,16 @@ struct SegmentToInputFrameAdapter {
     explicit SegmentToInputFrameAdapter(SegmentInMemory&& segment) : segment_(std::move(segment)) {
         input_frame_->num_rows = segment_.row_count();
         size_t col{0};
-        std::optional<entity::NativeTensor> index_tensor;
+        std::vector<entity::NativeTensor> field_tensors;
         if (segment_.descriptor().index().type() != IndexDescriptorImpl::Type::ROWCOUNT) {
             for (size_t i = 0; i < segment_.descriptor().index().field_count(); ++i) {
-                index_tensor = tensor_from_column(segment_.column(col));
+                field_tensors.emplace_back(tensor_from_column(segment_.column(col)));
                 ++col;
             }
         }
-
-        std::vector<entity::NativeTensor> field_tensors;
         while (col < segment_.num_columns())
             field_tensors.emplace_back(tensor_from_column(segment_.column(col++)));
-        input_frame_->set_from_tensors(
-                std::move(segment_.descriptor()), std::move(field_tensors), std::move(index_tensor)
-        );
+        input_frame_->set_from_tensors(std::move(segment_.descriptor()), std::move(field_tensors));
 
         input_frame_->set_index_range();
     }

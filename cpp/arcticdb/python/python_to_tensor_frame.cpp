@@ -6,6 +6,7 @@
  * will be governed by the Apache License, version 2.0.
  */
 
+#include "pipeline/input_frame.hpp"
 #include <arcticdb/python/python_to_tensor_frame.hpp>
 #include <arcticdb/entity/performance_tracing.hpp>
 #include <arcticdb/entity/native_tensor.hpp>
@@ -241,9 +242,13 @@ NativeTensor obj_to_tensor(PyObject* ptr, bool empty_types, std::optional<std::s
 
 void pandas_data_to_frame(const PandasData& pandas_data, const bool empty_types, InputFrame& frame) {
     frame.num_rows = 0u;
-    // Fill index
     const auto& idx_names = pandas_data.index_names;
     const auto& idx_vals = pandas_data.index_values;
+    const auto& col_names = pandas_data.column_names;
+    const auto& col_vals = pandas_data.columns_values;
+    const auto sorted = pandas_data.sorted;
+
+    // Fill index
     util::check(
             idx_names.size() == idx_vals.size(),
             "Number idx names {} and values {} do not match",
@@ -252,8 +257,9 @@ void pandas_data_to_frame(const PandasData& pandas_data, const bool empty_types,
     );
 
     StreamDescriptor desc;
-    std::vector<entity::NativeTensor> field_tensors;
-    std::optional<entity::NativeTensor> opt_index_tensor;
+    std::vector<InputFrame::FieldData> columns;
+    columns.reserve(idx_names.size() + col_vals.size());
+    bool has_only_tensors{true};
     if (!idx_names.empty()) {
         util::check(idx_names.size() == 1, "Multi-indexed dataframes not handled");
         auto index_tensor = util::variant_match(
@@ -264,6 +270,7 @@ void pandas_data_to_frame(const PandasData& pandas_data, const bool empty_types,
                             "Arrow-backed index '{}' (e.g. the pandas string dtype) is not yet supported on write",
                             idx_names[0]
                     );
+                    has_only_tensors = false;
                 }
         );
         util::check(index_tensor.ndim() == 1, "Multi-dimensional indexes not handled");
@@ -277,20 +284,15 @@ void pandas_data_to_frame(const PandasData& pandas_data, const bool empty_types,
 
             desc.add_scalar_field(index_tensor.dt_, index_column_name);
             frame.index = stream::TimeseriesIndex(index_column_name);
-            opt_index_tensor = std::move(index_tensor);
         } else {
             frame.index = stream::RowCountIndex();
             desc.set_index_type(IndexDescriptor::Type::ROWCOUNT);
             desc.add_scalar_field(index_tensor.dt_, index_column_name);
-            field_tensors.push_back(std::move(index_tensor));
         }
+        columns.emplace_back(std::move(index_tensor));
     }
 
     // Fill tensors
-    const auto& col_names = pandas_data.column_names;
-    const auto& col_vals = pandas_data.columns_values;
-    const auto sorted = pandas_data.sorted;
-
     for (auto i = 0u; i < col_vals.size(); ++i) {
         util::variant_match(
                 col_vals[i],
@@ -331,13 +333,14 @@ void pandas_data_to_frame(const PandasData& pandas_data, const bool empty_types,
                     } else if (tensor.expanded_dim() == 2) {
                         desc.add_field(FieldRef{TypeDescriptor{tensor.data_type(), Dimension::Dim1}, col_names[i]});
                     }
-                    field_tensors.push_back(std::move(tensor));
+                    columns.push_back(std::move(tensor));
                 },
                 [&](const std::vector<std::shared_ptr<RecordBatchData>>&) {
                     normalization::raise<ErrorCode::E_UNIMPLEMENTED_INPUT_TYPE>(
                             "Arrow-backed column '{}' (e.g. the pandas string dtype) is not yet supported on write",
                             col_names[i]
                     );
+                    has_only_tensors = false;
                 }
         );
     }
@@ -356,7 +359,7 @@ void pandas_data_to_frame(const PandasData& pandas_data, const bool empty_types,
         desc.set_index_type(IndexDescriptor::Type::EMPTY);
     }
     desc.set_sorted(sorted);
-    frame.set_from_tensors(std::move(desc), std::move(field_tensors), std::move(opt_index_tensor));
+    frame.set_from_frame_data(std::move(desc), std::move(columns), {}, has_only_tensors);
 }
 
 void record_batches_to_frame(
@@ -436,7 +439,7 @@ std::shared_ptr<InputFrame> py_none_to_frame() {
     res->num_rows = std::max(res->num_rows, static_cast<size_t>(tensor.shape(0)));
     desc.add_field(scalar_field(tensor.data_type(), col_name));
 
-    res->set_from_tensors(std::move(desc), {tensor}, std::nullopt);
+    res->set_from_tensors(std::move(desc), {tensor});
 
     ARCTICDB_DEBUG(log::version(), "Received frame with descriptor {}", res->desc());
     res->set_index_range();
