@@ -260,6 +260,7 @@ void pandas_data_to_frame(const PandasData& pandas_data, const bool empty_types,
     std::vector<InputFrame::FieldData> columns;
     columns.reserve(idx_names.size() + col_vals.size());
     bool has_only_tensors{true};
+    std::vector<sparrow::record_batch> arrow_owners;
     if (!idx_names.empty()) {
         util::check(idx_names.size() == 1, "Multi-indexed dataframes not handled");
         auto index_tensor = util::variant_match(
@@ -335,10 +336,26 @@ void pandas_data_to_frame(const PandasData& pandas_data, const bool empty_types,
                     }
                     columns.push_back(std::move(tensor));
                 },
-                [&](const std::vector<std::shared_ptr<RecordBatchData>>&) {
-                    normalization::raise<ErrorCode::E_UNIMPLEMENTED_INPUT_TYPE>(
-                            "Arrow-backed column '{}' (e.g. the pandas string dtype) is not yet supported on write",
-                            col_names[i]
+                [&](const std::vector<std::shared_ptr<RecordBatchData>>& chunks) {
+                    std::vector<sparrow::record_batch> owners;
+                    owners.reserve(chunks.size());
+                    for (const auto& rbd : chunks) {
+                        owners.emplace_back(std::move(rbd->array_), std::move(rbd->schema_));
+                    }
+                    auto [cols, col_desc] = record_batches_to_columns(owners, /*has_index=*/false);
+                    util::check(
+                            cols.size() == 1,
+                            "Expected exactly one column from Arrow column '{}', got {}",
+                            col_names[i],
+                            cols.size()
+                    );
+                    frame.num_rows = std::max(frame.num_rows, static_cast<size_t>(cols[0].row_count()));
+                    desc.add_field(FieldRef{cols[0].type(), col_names[i]});
+                    columns.emplace_back(std::move(cols[0]));
+                    arrow_owners.insert(
+                            arrow_owners.end(),
+                            std::make_move_iterator(owners.begin()),
+                            std::make_move_iterator(owners.end())
                     );
                     has_only_tensors = false;
                 }
@@ -359,7 +376,7 @@ void pandas_data_to_frame(const PandasData& pandas_data, const bool empty_types,
         desc.set_index_type(IndexDescriptor::Type::EMPTY);
     }
     desc.set_sorted(sorted);
-    frame.set_from_frame_data(std::move(desc), std::move(columns), {}, has_only_tensors);
+    frame.set_from_frame_data(std::move(desc), std::move(columns), std::move(arrow_owners), has_only_tensors);
 }
 
 void record_batches_to_frame(
