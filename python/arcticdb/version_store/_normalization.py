@@ -237,11 +237,12 @@ def _to_primitive(arr, arr_name, dynamic_strings, string_max_len=None, coerce_co
     if "str" in arr_dtype_as_str:
         chunked = arr._pa_array              # pa.ChunkedArray
         batches = []
-        for chunk in chunked.chunks:         # each chunk is a pa.Array
+        for chunk in chunked.chunks:         # each chunk is a pa.Array (large_string)
+            record_batch = pa.RecordBatch.from_arrays([chunk], names=[str(arr_name)])
             rbd = RecordBatchData()
-            chunk._export_to_c(rbd.array(), rbd.schema())
+            record_batch._export_to_c(rbd.array(), rbd.schema())
             batches.append(rbd)
-        
+
         return batches
     # This check has to come after the categorical check above, as Categoricals are a Pandas concept, not numpy, which
     # causes issubdtype to throw if arr.dtype == CategoricalDtype
