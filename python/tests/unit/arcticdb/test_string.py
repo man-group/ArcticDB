@@ -8,6 +8,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 
 import numpy as np
 from numpy.testing import assert_equal
+from contextlib import contextmanager
 import platform
 import pandas as pd
 import pytest
@@ -160,7 +161,7 @@ def test_fixed_string_simple():
         assert_equal(s2, rs2)
 
 
-def test_write_fixed_coerce_dynamic(lmdb_version_store):
+def test_write_fixed_coerce_dynamic(lmdb_version_store, infer_string):
     row = pd.Series(["Aaba", "A", "B", "C", "Baca", "CABA", "dog", "cat"])
     df = pd.DataFrame({"x": row})
     lmdb_version_store.write("strings", df, dynamic_strings=False)
@@ -318,6 +319,37 @@ def test_read_dynamic_schema_backfilled_string_column_truncation(version_store_f
     assert r["s"].iloc[:50].isna().all()
     assert list(r["s"].iloc[50:]) == [f"s{i}" for i in range(100, 150)]
     assert (str(r["s"].dtype) == "str") == read_string_dtype
+
+
+@contextmanager
+def infer_string_option(value):
+    try:
+        with pd.option_context("future.infer_string", value):
+            yield
+    except pd.errors.OptionError:
+        if value:
+            pytest.skip("pandas too old for future.infer_string")
+        yield
+
+
+# The read dtype must depend only on the reader's option, not on what was written: object data written by
+# pandas 2 reads back as "str" under pandas 3, and "str" data reads back as object on old readers. Missing
+# values stay missing across every combination.
+@pytest.mark.parametrize("read_infer", [False, True])
+@pytest.mark.parametrize("write_infer", [False, True])
+def test_string_dtype_reader_decides(lmdb_version_store_v2, write_infer, read_infer, skip_consolidation):
+    lib = lmdb_version_store_v2
+    if skip_consolidation:
+        lib._normalizer.df.set_skip_df_consolidation()
+    with infer_string_option(write_infer):
+        df = pd.DataFrame({"x": ["Aaba", None, "here is a very long one"]})
+    lib.write("strings", df, dynamic_strings=True)
+    with infer_string_option(read_infer):
+        col = lib.read("strings").data["x"]
+    assert (str(col.dtype) == "str") == read_infer
+    assert col.iloc[0] == "Aaba"
+    assert col.iloc[2] == "here is a very long one"
+    assert pd.isna(col.iloc[1])
 
 
 class ArbitraryClass:

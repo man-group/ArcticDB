@@ -145,12 +145,12 @@ class TestMissingStringPlaceholders:
         assert_frame_equal(data, pd.DataFrame({"a": [None, np.nan]}, dtype=dtype))
 
     @pytest.mark.parametrize("dtype", [None, object])
-    def test_write_with_nan_none_and_a_string(self, lmdb_version_store, dtype):
+    def test_write_with_nan_none_and_a_string(self, lmdb_version_store, dtype, infer_string):
         lib = lmdb_version_store
         sym = "nan"
         lib.write(sym, pd.DataFrame({"a": [None, np.nan, "string"]}, dtype=dtype))
         data = lib.read(sym).data
-        assert_frame_equal(data, pd.DataFrame({"a": [None, np.nan, "string"]}, dtype=dtype))
+        assert_frame_equal(data, pd.DataFrame({"a": [None, np.nan, "string"]}))
 
     @pytest.mark.parametrize("dtype", [None, object, np.double, np.float32])
     def test_write_only_nan_column(self, lmdb_version_store, dtype):
