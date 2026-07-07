@@ -19,6 +19,7 @@ from arcticdb.util.test import (
     random_string,
     random_floats,
     assert_frame_equal,
+    assert_series_equal,
 )
 from arcticdb.exceptions import InternalException, UnsortedDataException, NormalizationException, SchemaException
 from arcticdb_ext.version_store import StreamDescriptorMismatch
@@ -1038,26 +1039,49 @@ def test_update_new_data_contains_old(version_store_factory):
     assert len(lib_tool.read_index("sym")) == 30
 
 
+@pytest.mark.parametrize("data_class", ["dataframe", "series"])
 @pytest.mark.parametrize("batch", [True, False])
-def test_update_empty_frame_metadata(lmdb_library, batch):
+@pytest.mark.parametrize("metadata_v1", ["v1", None])
+def test_update_empty_frame_metadata(lmdb_library, data_class, batch, metadata_v1):
     # Need to use a V2 API fixture as there is no batch_update on the V1 API
     lib = lmdb_library
     sym = "test_update_empty_frame_metadata"
-    write_df = pd.DataFrame({"col": np.arange(1)}, index=[pd.Timestamp("2026-01-01")])
+    write_data = pd.DataFrame({"col": np.arange(1)}) if data_class == "dataframe" else pd.Series(np.arange(1))
+    write_data.index = [pd.Timestamp("2026-01-01")]
     metadata_v0 = "v0"
-    lib.write(sym, write_df, metadata=metadata_v0)
-    empty_df = pd.DataFrame(
-        {"col": np.arange(0)}, index=pd.DatetimeIndex([])
-    )  # Using arange guarantees the dtype matches the written df
-    metadata_v1 = "v1"
+    lib.write(sym, write_data, metadata=metadata_v0)
+    # Using arange guarantees the dtype matches the written df
+    update_data = pd.DataFrame({"col": np.arange(0)}) if data_class == "dataframe" else pd.Series(np.arange(0))
+    update_data.index = pd.DatetimeIndex([])
     update_vit = (
-        lib.update_batch([UpdatePayload(sym, empty_df, metadata_v1)])[0]
+        lib.update_batch([UpdatePayload(sym, update_data, metadata_v1)])[0]
         if batch
-        else lib.update(sym, empty_df, metadata=metadata_v1)
+        else lib.update(sym, update_data, metadata=metadata_v1)
     )
     assert update_vit.version == 1
     assert update_vit.metadata == metadata_v1
     read_vit = lib.read(sym)
     assert read_vit.version == 1
     assert read_vit.metadata == metadata_v1
-    assert_frame_equal(read_vit.data, write_df)
+    assert_func = assert_frame_equal if data_class == "dataframe" else assert_series_equal
+    assert_func(read_vit.data, write_data)
+
+
+@pytest.mark.parametrize("batch", [True, False])
+def test_symbol_list_key_added_on_upsert(lmdb_library, batch):
+    # Need to use a V2 API fixture as there is no batch_update on the V1 API
+    lib = lmdb_library
+    sym = "test_symbol_list_key_added_on_upsert"
+    lib.write_pickle(sym, 0)
+    lib.delete(sym)
+    lib_tool = lib._dev_tools.library_tool()
+    assert not len(lib.list_symbols())
+    num_symbol_list_keys = len(lib_tool.find_keys(KeyType.SYMBOL_LIST))
+    update_df = pd.DataFrame({"col": np.arange(0)}, index=pd.DatetimeIndex([]))
+    (
+        lib.update_batch([UpdatePayload(sym, update_df)], upsert=True)
+        if batch
+        else lib.update(sym, update_df, upsert=True)
+    )
+    assert len(lib_tool.find_keys(KeyType.SYMBOL_LIST)) == num_symbol_list_keys + 1
+    assert lib.list_symbols() == [sym]

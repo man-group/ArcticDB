@@ -697,6 +697,8 @@ def test_prune_previous_versions_append_batch(basic_store):
 
     # When
     lib.batch_write(syms, [df0, df0])
+    # One symbol list key for each symbol
+    assert len(lib_tool.find_keys(KeyType.SYMBOL_LIST)) == 2
     lib.batch_append(syms, [df1, df1])
 
     for sym in syms:
@@ -724,8 +726,8 @@ def test_prune_previous_versions_append_batch(basic_store):
         assert len(keys_for_sym) == 3
         latest_ver_key = max(keys_for_sym, key=lambda x: x.version_id)
         check_write_and_prune_previous_version_keys(lib_tool, sym, latest_ver_key)
-    # Then - we got 6 symbol keys: 1 for each of the writes
-    assert len(lib_tool.find_keys(KeyType.SYMBOL_LIST)) == 6
+    # Still only 2 symbol list keys [batch_]append only writes symbol list keys on upsert
+    assert len(lib_tool.find_keys(KeyType.SYMBOL_LIST)) == 2
 
 
 def test_batch_append_after_delete_upsert(lmdb_version_store_v1):
