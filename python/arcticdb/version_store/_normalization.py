@@ -237,7 +237,7 @@ def _to_primitive(arr, arr_name, dynamic_strings, string_max_len=None, coerce_co
     if "str" in arr_dtype_as_str:
         chunked = arr._pa_array              # pa.ChunkedArray
         batches = []
-        for chunk in chunked.chunks:         # each chunk is a pa.Array (large_string)
+        for chunk in chunked.chunks:         # each chunk is a pa.Array
             rbd = RecordBatchData()
             chunk._export_to_c(rbd.array(), rbd.schema())
             batches.append(rbd)
@@ -1317,7 +1317,7 @@ class DataFrameNormalizer(_PandasNormalizer):
         if isinstance(item.columns, MultiIndex):
             raise ArcticDbNotYetImplemented("MultiIndex column are not supported yet")
 
-        index_names, ix_vals = self._index_to_records(
+        index_names, index_values = self._index_to_records(
             item, norm_meta.df.common, dynamic_strings, string_max_len=string_max_len, empty_types=empty_types
         )
         # The first branch of this if is faster, but does not work with null/duplicated column names
@@ -1325,7 +1325,7 @@ class DataFrameNormalizer(_PandasNormalizer):
             columns_vals = [item[col].values for col in item.columns]
         else:
             columns_vals = [item.iloc[:, idx].values for idx in range(len(item.columns))]
-        columns, column_vals = _normalize_columns(
+        column_names, column_vals = _normalize_columns(
             item.columns,
             columns_vals,
             norm_meta.df,
@@ -1356,8 +1356,8 @@ class DataFrameNormalizer(_PandasNormalizer):
         return NormalizedInput(
             item=PandasData(
                 index_names=index_names,
-                index_values=ix_vals,
-                column_names=columns,
+                index_values=index_values,
+                column_names=column_names,
                 columns_values=column_vals,
                 sorted=sort_status,
             ),

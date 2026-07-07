@@ -100,8 +100,6 @@ static std::tuple<char, int> parse_array_descriptor(PyObject* obj) {
 
 struct PyArrayDescriptor {
     PyArrayDescriptor(PyObject* ptr, bool empty_types) {
-        auto& api = pybind11::detail::npy_api::get();
-        util::check(api.PyArray_Check_(ptr), "Expected Python array");
         arr_ = pybind11::detail::array_proxy(ptr);
         std::tie(kind_, elsize_) = parse_array_descriptor(arr_->descr);
         ndim_ = arr_->nd;
@@ -258,7 +256,16 @@ void pandas_data_to_frame(const PandasData& pandas_data, const bool empty_types,
     std::optional<entity::NativeTensor> opt_index_tensor;
     if (!idx_names.empty()) {
         util::check(idx_names.size() == 1, "Multi-indexed dataframes not handled");
-        auto index_tensor = obj_to_tensor(idx_vals[0].ptr(), empty_types);
+        auto index_tensor = util::variant_match(
+                idx_vals[0],
+                [&](const py::array& arr) { return obj_to_tensor(arr.ptr(), empty_types); },
+                [&](const std::vector<std::shared_ptr<RecordBatchData>>&) -> entity::NativeTensor {
+                    normalization::raise<ErrorCode::E_UNIMPLEMENTED_INPUT_TYPE>(
+                            "Arrow-backed index '{}' (e.g. the pandas string dtype) is not yet supported on write",
+                            idx_names[0]
+                    );
+                }
+        );
         util::check(index_tensor.ndim() == 1, "Multi-dimensional indexes not handled");
         util::check(index_tensor.shape() != nullptr, "Index tensor expected to contain shapes");
         std::string index_column_name = !idx_names.empty() ? idx_names[0] : "index";
@@ -285,38 +292,54 @@ void pandas_data_to_frame(const PandasData& pandas_data, const bool empty_types,
     const auto sorted = pandas_data.sorted;
 
     for (auto i = 0u; i < col_vals.size(); ++i) {
-        auto tensor = [&] {
-            try {
-                return obj_to_tensor(col_vals[i].ptr(), empty_types, col_names[i]);
-            } catch (...) {
-                log::storage().debug(
-                        "ArcticDB encountered error when parsing the input data in column[{}]: \"{}\".Printing column "
-                        "info for all columns in the input:\n{}",
-                        i,
-                        col_names[i],
-                        [&] {
-                            std::string all_column_info;
-                            for (size_t col = 0; col < col_names.size(); ++col) {
-                                all_column_info += fmt::format(
-                                        "Column [{}] \"{}\": {}\n",
-                                        col,
-                                        col_names[col],
-                                        column_info(PyArrayDescriptor(col_vals[col].ptr(), empty_types))
-                                );
-                            }
-                            return all_column_info;
-                        }()
-                );
-                throw;
-            }
-        }();
-        frame.num_rows = std::max(frame.num_rows, static_cast<size_t>(tensor.shape(0)));
-        if (tensor.expanded_dim() == 1) {
-            desc.add_field(scalar_field(tensor.data_type(), col_names[i]));
-        } else if (tensor.expanded_dim() == 2) {
-            desc.add_field(FieldRef{TypeDescriptor{tensor.data_type(), Dimension::Dim1}, col_names[i]});
-        }
-        field_tensors.push_back(std::move(tensor));
+        util::variant_match(
+                col_vals[i],
+                [&](const py::array& arr) {
+                    auto tensor = [&] {
+                        try {
+                            return obj_to_tensor(arr.ptr(), empty_types, col_names[i]);
+                        } catch (...) {
+                            log::storage().debug(
+                                    "ArcticDB encountered error when parsing the input data in column[{}]: \"{}\"."
+                                    "Printing column info for all columns in the input:\n{}",
+                                    i,
+                                    col_names[i],
+                                    [&] {
+                                        std::string all_column_info;
+                                        for (size_t col = 0; col < col_names.size(); ++col) {
+                                            auto info = util::variant_match(
+                                                    col_vals[col],
+                                                    [empty_types](const py::array& a) {
+                                                        return column_info(PyArrayDescriptor(a.ptr(), empty_types));
+                                                    },
+                                                    [](const std::vector<std::shared_ptr<RecordBatchData>>&) {
+                                                        return std::string("Arrow record batches");
+                                                    }
+                                            );
+                                            all_column_info +=
+                                                    fmt::format("Column [{}] \"{}\": {}\n", col, col_names[col], info);
+                                        }
+                                        return all_column_info;
+                                    }()
+                            );
+                            throw;
+                        }
+                    }();
+                    frame.num_rows = std::max(frame.num_rows, static_cast<size_t>(tensor.shape(0)));
+                    if (tensor.expanded_dim() == 1) {
+                        desc.add_field(scalar_field(tensor.data_type(), col_names[i]));
+                    } else if (tensor.expanded_dim() == 2) {
+                        desc.add_field(FieldRef{TypeDescriptor{tensor.data_type(), Dimension::Dim1}, col_names[i]});
+                    }
+                    field_tensors.push_back(std::move(tensor));
+                },
+                [&](const std::vector<std::shared_ptr<RecordBatchData>>&) {
+                    normalization::raise<ErrorCode::E_UNIMPLEMENTED_INPUT_TYPE>(
+                            "Arrow-backed column '{}' (e.g. the pandas string dtype) is not yet supported on write",
+                            col_names[i]
+                    );
+                }
+        );
     }
 
     // idx_names are passed by the python layer. They are empty in case row count index is used see:
