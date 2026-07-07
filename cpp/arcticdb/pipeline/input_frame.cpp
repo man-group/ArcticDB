@@ -46,12 +46,28 @@ SortedValue compute_index_sortedness(const Column& index_column) {
 
 InputFrame::InputFrame() : index(stream::empty_index()) {}
 
+void InputFrame::set_from_tensors(StreamDescriptor&& desc, std::vector<NativeTensor>&& field_tensors) {
+    std::vector<FieldData> columns(
+            std::make_move_iterator(field_tensors.begin()), std::make_move_iterator(field_tensors.end())
+    );
+    set_from_frame_data(std::move(desc), std::move(columns), {}, /*has_only_tensors=*/true);
+}
+
+void InputFrame::set_from_frame_data(
+        StreamDescriptor&& desc, std::vector<FieldData>&& columns,
+        std::vector<sparrow::record_batch>&& arrow_buffer_owners, bool has_only_tensors
+) {
+    desc_ = std::move(desc);
+    columns_ = std::move(columns);
+    arrow_buffer_owners_ = std::move(arrow_buffer_owners);
+    has_only_tensors_ = has_only_tensors;
+}
+
 void InputFrame::set_from_columns(
         std::vector<Column>&& cols, StreamDescriptor&& desc, std::vector<sparrow::record_batch>&& arrow_buffer_owners,
         SortednessScan sortedness_scan
 ) {
     util::check(norm_meta.has_experimental_arrow(), "Unexpected non-Arrow norm metadata provided with Arrow data");
-    desc_ = std::move(desc);
     if (norm_meta.experimental_arrow().has_index()) {
         user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
                 !cols.empty(), "Arrow index column specified but there are zero columns"
@@ -61,23 +77,22 @@ void InputFrame::set_from_columns(
                 "Specified Arrow index column has non-time type {}",
                 cols[0].type().data_type()
         );
-        desc_.set_index({IndexDescriptorImpl::Type::TIMESTAMP, 1});
-        index = stream::TimeseriesIndex{std::string(desc_.field(0).name())};
+        desc.set_index({IndexDescriptorImpl::Type::TIMESTAMP, 1});
+        index = stream::TimeseriesIndex{std::string(desc.field(0).name())};
         // Arrow input does not record sortedness up front (unlike pandas), so we have to compute it when required.
-        desc_.set_sorted(
+        desc.set_sorted(
                 sortedness_scan == SortednessScan::SCAN_IF_UNKNOWN ? compute_index_sortedness(cols[0])
                                                                    : SortedValue::UNKNOWN
         );
     } else {
-        desc_.set_index({IndexDescriptorImpl::Type::ROWCOUNT, 0});
+        desc.set_index({IndexDescriptorImpl::Type::ROWCOUNT, 0});
         index = stream::RowCountIndex{};
-        desc_.set_sorted(SortedValue::UNKNOWN);
+        desc.set_sorted(SortedValue::UNKNOWN);
     }
 
     num_rows = cols.empty() ? 0 : cols[0].row_count();
-    columns_ = std::vector<FieldData>(std::make_move_iterator(cols.begin()), std::make_move_iterator(cols.end()));
-    arrow_buffer_owners_ = std::move(arrow_buffer_owners);
-    has_only_tensors_ = false;
+    std::vector<FieldData> columns(std::make_move_iterator(cols.begin()), std::make_move_iterator(cols.end()));
+    set_from_frame_data(std::move(desc), std::move(columns), std::move(arrow_buffer_owners), false);
 }
 
 StreamDescriptor& InputFrame::desc() { return desc_; }
