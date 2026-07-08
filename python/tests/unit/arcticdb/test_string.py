@@ -12,6 +12,7 @@ import platform
 import pandas as pd
 import pytest
 
+from arcticdb.exceptions import ArcticDbNotYetImplemented
 from arcticdb_ext.exceptions import UserInputException
 from arcticdb_ext.types import (
     TypeDescriptor,
@@ -211,3 +212,41 @@ def test_write_dynamic_simple(lmdb_version_store_v2):
     lmdb_version_store_v2.write("strings", df, dynamic_strings=True)
     vit = lmdb_version_store_v2.read("strings")
     assert_frame_equal(df, vit.data)
+
+
+class ArbitraryClass:
+    def __init__(self):
+        self.x = "blah"
+
+
+class StringInheritingClass(str):
+    def __init__(self):
+        super().__init__()
+
+
+class BytesInheritingClass(bytes):
+    def __init__(self):
+        super().__init__()
+
+
+@pytest.mark.parametrize(
+    "first_value", [b"blah", "blah", ArbitraryClass(), StringInheritingClass(), BytesInheritingClass()]
+)
+@pytest.mark.parametrize(
+    "second_value", [b"blah", "blah", ArbitraryClass(), StringInheritingClass(), BytesInheritingClass()]
+)
+def test_mixed_types_errors(lmdb_version_store_v1, first_value, second_value):
+    lib = lmdb_version_store_v1
+    sym = "test_mixed_types_errors"
+    df = pd.DataFrame({"col": [first_value, second_value]})
+    if first_value == second_value:
+        pytest.skip()
+    # The first value is used to determine the dtype, so we get a different exception when the first value is of a
+    # non-normalizable type
+    exception_type = (
+        ArcticDbNotYetImplemented
+        if isinstance(first_value, (ArbitraryClass, StringInheritingClass, BytesInheritingClass))
+        else UserInputException
+    )
+    with pytest.raises(exception_type):
+        lib.write(sym, df)

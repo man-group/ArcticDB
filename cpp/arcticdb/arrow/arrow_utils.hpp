@@ -37,7 +37,9 @@ std::vector<sparrow::array> arrow_arrays_from_column(const Column& column, std::
 
 std::vector<sparrow::record_batch> segment_to_arrow_data(SegmentInMemory& segment);
 
-SegmentInMemory arrow_data_to_segment(const std::vector<sparrow::record_batch>& record_batches, bool has_index = false);
+std::pair<std::vector<Column>, entity::StreamDescriptor> record_batches_to_columns(
+        const std::vector<sparrow::record_batch>& record_batches, bool has_index = false
+);
 
 // We only really need the ArrowSchema from here, but we return a zero-row record batch instead because:
 // - it makes it easy to reuse our normalization metadata handling in the Python layer for things like multiindex

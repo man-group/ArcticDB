@@ -1,3 +1,4 @@
+import copy
 from typing import Union
 
 import polars as pl
@@ -12,6 +13,14 @@ def to_format(table: Union[pa.Table, pl.DataFrame], arrow_output_format: OutputF
     if isinstance(table, pl.DataFrame) and arrow_output_format == OutputFormat.PYARROW:
         return table.to_arrow()
     return table
+
+
+def deep_copy(table: Union[pa.Table, pl.DataFrame]) -> Union[pa.Table, pl.DataFrame]:
+    """Deep copy of an arrow or polars table"""
+    if isinstance(table, pl.DataFrame):
+        # copy.deepcopy on a polars DataFrame shares the underlying Arrow buffers, so round-trip through pyarrow.
+        return pl.from_arrow(copy.deepcopy(table.to_arrow()))
+    return copy.deepcopy(table)
 
 
 def assert_arrow_equal(expected: Union[pa.Table, pl.DataFrame], received: Union[pa.Table, pl.DataFrame]):

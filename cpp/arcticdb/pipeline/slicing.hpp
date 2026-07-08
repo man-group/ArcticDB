@@ -28,11 +28,22 @@ class FixedSlicer {
 
     std::vector<FrameSlice> operator()(const InputFrame& frame) const;
 
-    auto row_per_slice() const { return row_per_slice_; }
-
   private:
     size_t col_per_slice_;
     size_t row_per_slice_;
+};
+
+// Note that the input row_ranges and col_ranges are expected to cover contiguous row/col ranges
+// i.e. *_ranges[i].second == *_ranges[i+1].first
+class SpecificSlicer {
+  public:
+    SpecificSlicer(std::vector<RowRange>&& row_ranges, std::vector<ColRange>&& col_ranges);
+
+    std::vector<FrameSlice> operator()(const InputFrame& frame) const;
+
+  private:
+    std::vector<RowRange> row_ranges_;
+    std::vector<ColRange> col_ranges_;
 };
 
 class HashedSlicer {
@@ -45,8 +56,6 @@ class HashedSlicer {
 
     size_t num_buckets() const { return num_buckets_; }
 
-    auto row_per_slice() const { return row_per_slice_; }
-
   private:
     size_t num_buckets_;
     size_t row_per_slice_;
@@ -54,7 +63,7 @@ class HashedSlicer {
 
 class NoSlicing {};
 
-using SlicingPolicy = std::variant<NoSlicing, FixedSlicer, HashedSlicer>;
+using SlicingPolicy = std::variant<NoSlicing, FixedSlicer, SpecificSlicer, HashedSlicer>;
 
 SlicingPolicy get_slicing_policy(const WriteOptions& options, const arcticdb::pipelines::InputFrame& frame);
 
@@ -85,29 +94,6 @@ inline auto end_index_generator(T end_index) { // works for both rawtype and raw
     } else {
         return end_index;
     }
-}
-
-inline auto get_partial_key_gen(std::shared_ptr<InputFrame> frame, const TypedStreamVersion& key) {
-    using PartialKey = stream::PartialKey;
-
-    return [frame = std::move(frame), &key](const FrameSlice& s) {
-        if (frame->has_index()) {
-            // This is a bit inefficient if the input data is multiple Arrow record batches, as it has to do a binary
-            // search for the relevant block. An alternative would be to look at the segment that was just generated in
-            // WriteToSegmentTask and similar methods, but this is unlikely to be a bottleneck
-            auto start = frame->index_value_at(slice_begin_pos(s, *frame));
-            const auto end = frame->index_value_at(slice_end_pos(s, *frame));
-            return PartialKey{key.type, key.version_id, key.id, start, end_index_generator(end)};
-        } else {
-            return PartialKey{
-                    key.type,
-                    key.version_id,
-                    key.id,
-                    entity::safe_convert_to_numeric_index(s.row_range.first, "Rows"),
-                    entity::safe_convert_to_numeric_index(s.row_range.second, "Rows")
-            };
-        }
-    };
 }
 
 inline stream::PartialKey get_partial_key_for_segment_slice(

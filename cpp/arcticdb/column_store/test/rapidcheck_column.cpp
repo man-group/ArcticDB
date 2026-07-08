@@ -151,30 +151,35 @@ RC_GTEST_PROP(Column, SearchSorted, (const std::vector<int64_t>& input, int64_t 
     auto n = sorted_input.size();
     auto smallest_value = sorted_input[0];
     auto largest_value = sorted_input[n - 1];
-    using TDT = TypeDescriptorTag<DataTypeTag<DataType::INT64>, DimensionTag<Dimension::Dim0>>;
-    Column column(static_cast<TypeDescriptor>(TDT{}), 0, AllocationType::DYNAMIC, Sparsity::NOT_PERMITTED);
-    for (size_t idx = 0; idx < n; ++idx) {
-        column.set_scalar<int64_t>(idx, sorted_input[idx]);
-    }
-    auto left_idx = lower_bound_idx<int64_t>(column, value_to_find);
-    auto right_idx = upper_bound_idx<int64_t>(column, value_to_find);
-    RC_ASSERT(left_idx <= n);
-    RC_ASSERT(right_idx <= n);
-    if (left_idx == 0) {
-        RC_ASSERT(value_to_find <= smallest_value);
-    } else if (left_idx == n) {
-        RC_ASSERT(value_to_find > largest_value);
-    } else {
-        RC_ASSERT(value_to_find > sorted_input[left_idx - 1]);
-        RC_ASSERT(value_to_find <= sorted_input[left_idx]);
-    }
-    if (right_idx == 0) {
-        RC_ASSERT(value_to_find <= smallest_value);
-    } else if (right_idx == n) {
-        RC_ASSERT(value_to_find >= largest_value);
-    } else {
-        RC_ASSERT(value_to_find >= sorted_input[right_idx - 1]);
-        RC_ASSERT(value_to_find < sorted_input[right_idx]);
+
+    // Run against single / regular / irregular block layouts so block-jumping is exercised, not just
+    // the contiguous case.
+    std::vector<Column> columns;
+    columns.push_back(make_single_block_column<int64_t>(sorted_input, DataType::INT64));
+    columns.push_back(make_regular_blocks_column<int64_t>(sorted_input, DataType::INT64));
+    columns.push_back(make_irregular_blocks_column<int64_t>(sorted_input, DataType::INT64));
+
+    for (const auto& column : columns) {
+        auto left_idx = lower_bound_idx<int64_t>(column, value_to_find);
+        auto right_idx = upper_bound_idx<int64_t>(column, value_to_find);
+        RC_ASSERT(left_idx <= n);
+        RC_ASSERT(right_idx <= n);
+        if (left_idx == 0) {
+            RC_ASSERT(value_to_find <= smallest_value);
+        } else if (left_idx == n) {
+            RC_ASSERT(value_to_find > largest_value);
+        } else {
+            RC_ASSERT(value_to_find > sorted_input[left_idx - 1]);
+            RC_ASSERT(value_to_find <= sorted_input[left_idx]);
+        }
+        if (right_idx == 0) {
+            RC_ASSERT(value_to_find <= smallest_value);
+        } else if (right_idx == n) {
+            RC_ASSERT(value_to_find >= largest_value);
+        } else {
+            RC_ASSERT(value_to_find >= sorted_input[right_idx - 1]);
+            RC_ASSERT(value_to_find < sorted_input[right_idx]);
+        }
     }
 }
 

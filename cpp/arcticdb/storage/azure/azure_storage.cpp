@@ -21,6 +21,8 @@
 #include <arcticdb/storage/mock/azure_mock_client.hpp>
 #include <arcticdb/storage/storage_exceptions.hpp>
 
+#include <set>
+
 #undef GetMessage
 
 namespace arcticdb::storage {
@@ -362,6 +364,23 @@ std::string AzureStorage::do_key_path(const VariantKey& key) const {
     auto key_type_dir = key_type_folder(root_folder_, variant_key_type(key));
     return object_path(b.bucketize(key_type_dir, key), key);
 }
+
+static const std::set<char>& azure_unsupported_chars() {
+    // '\' is silently converted to '/' by the Azure Blob service (it is built on .NET's Uri class), so a name
+    // containing it would be stored under a path that no longer matches the recorded name. Disallow it on top of the
+    // globally unsupported characters. The library name forms part of the same blob path, so the restriction applies
+    // equally to symbol keys and library names.
+    static const std::set<char> chars = [] {
+        std::set<char> result = GLOBALLY_UNSUPPORTED_CHARS;
+        result.insert('\\');
+        return result;
+    }();
+    return chars;
+}
+
+const std::set<char>& AzureStorage::do_unsupported_symbol_chars() const { return azure_unsupported_chars(); }
+
+const std::set<char>& AzureStorage::do_unsupported_library_chars() const { return azure_unsupported_chars(); }
 
 } // namespace azure
 

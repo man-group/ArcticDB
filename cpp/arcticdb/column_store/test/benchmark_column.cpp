@@ -13,6 +13,7 @@
 #include <benchmark/benchmark.h>
 #include <arcticdb/column_store/column.hpp>
 #include <arcticdb/column_store/column_algorithms.hpp>
+#include <arcticdb/util/test/test_utils.hpp>
 
 using namespace arcticdb;
 
@@ -25,7 +26,7 @@ static std::mt19937 gen(rd());
 
 // ─── Sorted-search benchmarks across block layouts ────────────────────────────────────────────────
 //
-// Four column shapes — single-block (PRESIZED memcpy), regular blocks (presized_in_blocks),
+// Four column shapes — single-block (PRESIZED), regular blocks (presized_in_blocks),
 // irregular blocks of size 1000 (DETACHABLE), irregular blocks of size 1 (DETACHABLE).
 
 namespace {
@@ -41,51 +42,21 @@ std::vector<timestamp> make_sorted_data(size_t num_rows, std::mt19937& rng) {
     return data;
 }
 
-void populate(Column& col, const std::vector<timestamp>& data) {
-    for (size_t i = 0; i < data.size(); ++i) {
-        col.reference_at<timestamp>(i) = data[i];
-    }
-}
+// NANOSECONDS_UTC64 keeps the column type consistent with BenchTDT.
+constexpr DataType index_data_type = DataType::NANOSECONDS_UTC64;
 
-Column make_single_block(const std::vector<timestamp>& data) {
-    Column col(
-            make_scalar_type(DataType::NANOSECONDS_UTC64),
-            data.size(),
-            AllocationType::PRESIZED,
-            Sparsity::NOT_PERMITTED
-    );
-    memcpy(col.ptr(), data.data(), data.size() * sizeof(timestamp));
-    col.set_row_data(data.size() - 1);
-    return col;
-}
-
-Column make_regular_blocks(const std::vector<timestamp>& data) {
-    Column col(
-            make_scalar_type(DataType::NANOSECONDS_UTC64),
-            Sparsity::NOT_PERMITTED,
-            ChunkedBuffer::presized_in_blocks(data.size() * sizeof(timestamp))
-    );
-    populate(col, data);
-    return col;
-}
-
-// DETACHABLE allocation routes lookups through ChunkedBuffer::block_offsets_ even with uniform
-// block sizes, so these stress the irregular path while keeping block sizes consistent.
-Column make_irregular_blocks(const std::vector<timestamp>& data, size_t block_size) {
-    Column col(make_scalar_type(DataType::NANOSECONDS_UTC64), 0, AllocationType::DETACHABLE, Sparsity::NOT_PERMITTED);
-    size_t remaining = data.size();
-    while (remaining > 0) {
-        const size_t alloc = std::min(remaining, block_size);
-        col.allocate_data(alloc * sizeof(timestamp));
-        col.advance_data(alloc * sizeof(timestamp));
-        remaining -= alloc;
-    }
-    populate(col, data);
-    return col;
-}
-
-auto make_irregular_blocks_1000 = [](const std::vector<timestamp>& data) { return make_irregular_blocks(data, 1000); };
-auto make_irregular_blocks_1 = [](const std::vector<timestamp>& data) { return make_irregular_blocks(data, 1); };
+auto make_single_block = [](const std::vector<timestamp>& data) {
+    return make_single_block_column<timestamp>(data, index_data_type);
+};
+auto make_regular_blocks = [](const std::vector<timestamp>& data) {
+    return make_regular_blocks_column<timestamp>(data, index_data_type);
+};
+auto make_irregular_blocks_1000 = [](const std::vector<timestamp>& data) {
+    return make_irregular_blocks_column<timestamp>(data, uniform_block_sizes(data.size(), 1000), index_data_type);
+};
+auto make_irregular_blocks_1 = [](const std::vector<timestamp>& data) {
+    return make_irregular_blocks_column<timestamp>(data, uniform_block_sizes(data.size(), 1), index_data_type);
+};
 
 } // namespace
 

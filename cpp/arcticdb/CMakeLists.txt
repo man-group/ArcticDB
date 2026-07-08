@@ -832,6 +832,9 @@ if (NOT WIN32)
             )
 endif ()
 
+find_package(Boost REQUIRED COMPONENTS thread)
+list (APPEND arcticdb_core_libraries Boost::thread)
+
 list (APPEND arcticdb_core_libraries Threads::Threads) # comes last for weakreference resolution pthread_atexit in folly
 
 set(arcticdb_core_includes
@@ -973,8 +976,18 @@ set_pdb_name_per_translation_unit(${arcticdb_pybind_module_src})
 
 if (HIDE_LINKED_SYMBOLS AND NOT WIN32)
     if(CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
-        # AppleClang does not support --exclude-libs,ALL. -dead_strip is the equivalent for --gc-sections.
-        target_link_options(arcticdb_ext PRIVATE -Wl,-dead_strip)
+        # ld64 has no --exclude-libs,ALL. Restrict exports to the Python module init
+        # symbol so statically-linked deps (AWS SDK, folly, ...) are localized and
+        # cannot be coalesced/preempted by another extension's copy — e.g. pyarrow's
+        # bundled AWS SDK in libarrow, which otherwise causes an aws_fatal_assert
+        # abort when libarrow is loaded first. 
+        set(_arcticdb_exported_symbols "${CMAKE_CURRENT_BINARY_DIR}/exported_symbols.txt")
+        file(WRITE "${_arcticdb_exported_symbols}" "_PyInit_arcticdb_ext\n")
+        
+        # -dead_strip == --gc-sections.
+        target_link_options(arcticdb_ext PRIVATE
+            -Wl,-dead_strip
+            -Wl,-exported_symbols_list,${_arcticdb_exported_symbols})
     else()
         target_link_options(arcticdb_ext PRIVATE
             -Wl,--exclude-libs,ALL
@@ -1060,6 +1073,7 @@ if(${TEST})
             log/test/test_log.cpp
             pipeline/test/test_container.hpp
             pipeline/test/test_pipeline.cpp
+            pipeline/test/test_slicing.cpp
             pipeline/test/test_query.cpp
             pipeline/test/test_frame_allocation.cpp
             pipeline/test/test_rollback.cpp
@@ -1096,8 +1110,10 @@ if(${TEST})
             storage/test/common.hpp
             storage/test/test_storage_exceptions.cpp
             storage/test/test_azure_storage.cpp
+            storage/test/test_path_validation.cpp
             storage/test/common.hpp
             storage/test/test_storage_operations.cpp
+            storage/test/test_storage_utils.cpp
             stream/test/stream_test_common.cpp
             stream/test/test_aggregator.cpp
             stream/test/test_incompletes.cpp

@@ -1206,7 +1206,7 @@ class TestResampleDynamicSchema:
         )
 
     @pytest.mark.parametrize(
-        "first_dtype,",
+        "first_dtype",
         [
             np.int8,
             np.int16,

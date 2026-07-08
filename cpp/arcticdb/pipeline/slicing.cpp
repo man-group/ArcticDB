@@ -13,7 +13,7 @@
 
 namespace arcticdb::pipelines {
 
-std::pair<int64_t, int64_t> get_index_and_field_count(const arcticdb::pipelines::InputFrame& frame) {
+std::pair<size_t, size_t> get_index_and_field_count(const arcticdb::pipelines::InputFrame& frame) {
     return {frame.desc().index().field_count(), frame.desc().fields().size()};
 }
 
@@ -56,25 +56,60 @@ std::pair<size_t, size_t> get_first_and_last_row(const arcticdb::pipelines::Inpu
 }
 
 std::vector<FrameSlice> FixedSlicer::operator()(const arcticdb::pipelines::InputFrame& frame) const {
+    const auto [first_row, last_row] = get_first_and_last_row(frame);
+    std::vector<RowRange> row_ranges;
+    row_ranges.reserve((last_row - first_row + row_per_slice_ - 1) / row_per_slice_);
+    for (std::size_t r = first_row, end = last_row; r < end; r += row_per_slice_) {
+        auto rdist = std::min(last_row - r, row_per_slice_);
+        row_ranges.emplace_back(r, r + rdist);
+    }
+    if (row_ranges.empty()) {
+        return {};
+    }
+    std::vector<ColRange> col_ranges;
     const auto [index_count, total_field_count] = get_index_and_field_count(frame);
-    auto field_count = total_field_count - index_count;
+    auto start_col = index_count;
+    // We do not support writing frames with zero columns, and so there will always be at least one column range here
+    do {
+        auto col_count = std::min(total_field_count - start_col, col_per_slice_);
+        col_ranges.emplace_back(start_col, start_col + col_count);
+        start_col += col_count;
+    } while (start_col < total_field_count);
+    return SpecificSlicer{std::move(row_ranges), std::move(col_ranges)}(frame);
+}
+
+SpecificSlicer::SpecificSlicer(std::vector<RowRange>&& row_ranges, std::vector<ColRange>&& col_ranges) :
+    row_ranges_(std::move(row_ranges)),
+    col_ranges_(std::move(col_ranges)) {
+    util::check(
+            !row_ranges_.empty() && !col_ranges_.empty(), "Expected non-empty row and col ranges in SpecificSlicer ctor"
+    );
+    ARCTICDB_DEBUG_CHECK(
+            ErrorCode::E_ASSERTION_FAILURE,
+            std::ranges::is_sorted(row_ranges_) && std::ranges::is_sorted(col_ranges_),
+            "SpecificSlicer ctor expects sorted input row and col ranges"
+    );
+}
+
+std::vector<FrameSlice> SpecificSlicer::operator()(const arcticdb::pipelines::InputFrame& frame) const {
+    util::check(
+            row_ranges_.front().first >= frame.offset && row_ranges_.back().second <= frame.offset + frame.num_rows,
+            "SpecificSlicer expected row ranges to lie within input frame"
+    );
     auto fields_pos = std::begin(frame.desc().fields());
-    std::advance(fields_pos, index_count);
+    std::advance(fields_pos, col_ranges_.front().first);
 
     auto id = frame.desc().id();
     auto index = frame.desc().index();
 
     std::vector<FrameSlice> slices;
-    slices.reserve((field_count + col_per_slice_ - 1) / col_per_slice_);
-
-    const auto [first_row, last_row] = get_first_and_last_row(frame);
-
+    slices.reserve(row_ranges_.size() * col_ranges_.size());
     // order of the frame slices is used in the mark_index_slices impl. If slices are not grouped and ordered the same
     // way, one will need to modify the mark_index_slices method to use two passes instead of one
-    auto col = index_count;
-    do {
+    auto col = col_ranges_.front().first;
+    for (const auto& col_range : col_ranges_) {
         auto fields_next = fields_pos;
-        auto distance = std::min(size_t(std::distance(fields_pos, std::end(frame.desc().fields()))), col_per_slice_);
+        auto distance = std::min(size_t(std::distance(fields_pos, std::end(frame.desc().fields()))), col_range.diff());
         std::advance(fields_next, distance);
 
         // systematically writing the index in the column group
@@ -87,14 +122,18 @@ std::vector<FrameSlice> FixedSlicer::operator()(const arcticdb::pipelines::Input
         }
 
         auto desc = std::make_shared<StreamDescriptor>(id, index, current_fields);
-        for (std::size_t r = first_row, end = last_row; r < end; r += row_per_slice_) {
-            auto rdist = std::min(last_row - r, row_per_slice_);
-            slices.push_back(FrameSlice(desc, ColRange{col, col + distance}, RowRange{r, r + rdist}));
+        for (const auto& row_range : row_ranges_) {
+            slices.push_back(FrameSlice(desc, ColRange{col, col + distance}, row_range));
         }
-
-        col += col_per_slice_;
+        col += col_range.diff();
         fields_pos = fields_next;
-    } while (fields_pos != std::end(frame.desc().fields()));
+    }
+    util::check(
+            slices.size() == row_ranges_.size() * col_ranges_.size(),
+            "SpecificSlicer produced wrong number of slices {} != {}",
+            slices.size(),
+            row_ranges_.size() * col_ranges_.size()
+    );
     return slices;
 }
 

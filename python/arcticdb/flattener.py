@@ -14,11 +14,11 @@ import sys
 from arcticdb.exceptions import DataTooNestedException, UnsupportedKeyInDictionary
 
 try:
-    from msgpack.fallback import DEFAULT_RECURSE_LIMIT
+    from msgpack.fallback import DEFAULT_RECURSE_LIMIT as _DEFAULT_RECURSE_LIMIT
 except ImportError:
     # The default as of msgpack 1.1.0 - handle the import error in case the msgpack wheel stops exporting this constant.
     # Want to keep compatibility with a wide range of msgpack versions.
-    DEFAULT_RECURSE_LIMIT = 511
+    _DEFAULT_RECURSE_LIMIT = 511
 
 from arcticdb import _msgpack_compat
 from arcticdb.log import version as log
@@ -26,6 +26,19 @@ from arcticdb.version_store._custom_normalizers import get_custom_normalizer
 from arcticdb.version_store._normalization import MsgPackNormalizer, CompositeNormalizer
 from arcticdb.preconditions import check
 from arcticdb_ext import get_config_int
+
+# Two separate limits govern maximum nesting depth:
+#   Write (msgpack packer): uses ~2 Python stack frames per level; capped at DEFAULT_RECURSE_LIMIT // 2.
+#   Read (create_original_obj_from_metastruct): uses ~3 Python stack frames per level, so reads
+#   fail above sys.getrecursionlimit() // 3 ≈ 333 with Python's default limit of 1000.
+#
+# The read path is tighter, so we pin msgpack's DEFAULT_RECURSE_LIMIT at 511, giving a write
+# cap of 511 // 2 == 255 — safely below the ~333 read ceiling. msgpack 1.2.0 raised its own
+# constant DEFAULT_RECURSE_LIMIT to 1024, which silently allowed writes that the reader could not
+# reconstruct. We keep 511 regardless of what msgpack exports.
+# TODO: once the metastruct reader is non-recursive, raise to (sys.getrecursionlimit() - 10) // 2.
+# https://man312219.monday.com/boards/7852509418/pulses/12254825163
+DEFAULT_RECURSE_LIMIT = min(511, _DEFAULT_RECURSE_LIMIT)
 
 
 class Flattener:

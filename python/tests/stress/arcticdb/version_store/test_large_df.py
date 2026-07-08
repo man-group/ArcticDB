@@ -12,6 +12,7 @@ import pytest
 
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 
 from tests.util.mark import SLOW_TESTS_MARK
 
@@ -82,3 +83,28 @@ def test_write_large_df_in_chunks(lmdb_version_store_big_map):
     assert lib.get_num_rows(symbol) == chunk_size * num_chunks
 
     assert_frame_equal(lib.head(symbol).data, all_zeros.head(5))
+
+
+@pytest.mark.skip(reason="Allocates ~16GB for the dictionary offsets buffer; too much for GitHub runners")
+def test_write_dictionary_encoded_over_int32_max_keys(in_memory_version_store_arrow):
+    """Polars Categorical uses uint32 dictionary keys, so a key of 2**31 must be read as uint32, not int32 (which
+    would make it a negative, out-of-bounds index). We build the dictionary buffers directly with that key rather
+    than a 2**31+1-value polars frame, which is much more expensive to construct"""
+    lib = in_memory_version_store_arrow
+    sym = "test_write_dictionary_encoded_over_int32_max_keys"
+    n_dict = 2**31 + 1  # max valid dictionary index is 2**31, the first that overflows int32
+    # All dictionary entries are empty except 2**31-1 ("lo") and 2**31 ("hi"), encoded directly in the buffers.
+    strings = b"lohi"
+    offsets = np.zeros(n_dict + 1, dtype=np.int64)
+    offsets[n_dict - 1] = 2  # dict[2**31 - 1] = strings[0:2] = "lo"
+    offsets[n_dict] = 4  # dict[2**31]     = strings[2:4] = "hi"
+    # pa.LargeStringArray.from_buffers caps its length at a C int, so use the generic int64-length constructor.
+    values = pa.Array.from_buffers(pa.large_string(), n_dict, [None, pa.py_buffer(offsets), pa.py_buffer(strings)])
+    keys = pa.array([n_dict - 2, n_dict - 1], pa.uint32())  # 2**31-1 and 2**31
+    table = pa.table({"col": pa.DictionaryArray.from_arrays(keys, values)})
+
+    lib.write(sym, table)
+
+    received = lib.read(sym, arrow_string_format_default=pa.large_string()).data
+    expected = pa.table({"col": pa.array(["lo", "hi"], pa.large_string())})
+    assert expected.equals(received)

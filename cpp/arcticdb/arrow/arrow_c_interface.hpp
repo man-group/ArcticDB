@@ -20,7 +20,7 @@ namespace arcticdb {
 // Write path (Python -> C++):
 //   1. Python calls _export_to_c into array_/schema_, setting release callbacks that decref
 //      the underlying PyArrow buffers.
-//   2. py_ndf_to_frame moves array_/schema_ into owning sparrow::record_batches via
+//   2. py_input_item_to_frame moves array_/schema_ into owning sparrow::record_batches via
 //      record_batch(ArrowArray&&, ArrowSchema&&). Sparrow takes ownership and will call
 //      release (decref) on destruction.
 //   3. The sparrow record batches are used to construct a SegmentInMemory whose external blocks

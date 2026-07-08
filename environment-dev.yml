@@ -31,7 +31,7 @@ dependencies:
   - pybind11
   - pcre2
   - cyrus-sasl
-  - aws-sdk-cpp >=1.11.405
+  - aws-sdk-cpp >=1.11.833
   - prometheus-cpp
   - libprotobuf <7
   - openssl
@@ -44,7 +44,8 @@ dependencies:
   - azure-identity-cpp
   - azure-storage-blobs-cpp
   - fmt
-  - folly==2025.04.14.00
+  - sel(unix): folly==2026.06.08.00
+  - sel(win): folly==2025.04.14.00 # Pending Windows build in the more recent folly version
   - unordered_dense
   - entt
   # Vendored build dependencies (see `cpp/thirdparty` and `cpp/vcpkg.json`)

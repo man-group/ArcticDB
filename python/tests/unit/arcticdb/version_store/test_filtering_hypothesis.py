@@ -61,7 +61,7 @@ def test_filter_numeric_binary_comparison(
     lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_filter_numeric_binary_comparison"
     lib.write(symbol, df)
-    lib.create_column_stats(symbol, {"a": {"MINMAX"}, "b": {"MINMAX"}})
+    lib.create_column_stats_experimental(symbol)
     # Would be cleaner to use pytest.parametrize, but the expensive bit is generating/writing the df, so make sure we
     # only do these operations once to save time
     for op in ["<", "<=", ">", ">=", "==", "!="]:
@@ -141,7 +141,7 @@ def test_filter_numeric_set_membership(
     lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_filter_numeric_set_membership"
     lib.write(symbol, df)
-    lib.create_column_stats(symbol, {"a": {"MINMAX"}})
+    lib.create_column_stats_experimental(symbol)
     # Would be cleaner to use pytest.parametrize, but the expensive bit is generating/writing the df, so make sure we
     # only do these operations once to save time
     for op in ["isin", "isnotin"]:
@@ -185,7 +185,7 @@ def test_filter_numeric_empty_set_membership(
     lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_filter_numeric_empty_set_membership"
     lib.write(symbol, df)
-    lib.create_column_stats(symbol, {"a": {"MINMAX"}})
+    lib.create_column_stats_experimental(symbol)
     # Would be cleaner to use pytest.parametrize, but the expensive bit is generating/writing the df, so make sure we
     # only do these operations once to save time
     for op in ["isin", "isnotin"]:
@@ -229,7 +229,7 @@ def test_filter_datetime_timezone_aware_hypothesis(
     symbol = "test_filter_datetime_timezone_aware_hypothesis"
     df = pd.DataFrame({"a": [df_dt]})
     lib.write(symbol, df)
-    lib.create_column_stats(symbol, {"a": {"MINMAX"}})
+    lib.create_column_stats_experimental(symbol)
     for ts in [comparison_dt, pd.Timestamp(comparison_dt)]:
         q = QueryBuilder()
         q = q[q["a"] < ts]
@@ -263,7 +263,7 @@ def test_filter_binary_boolean(
     lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_filter_binary_boolean"
     lib.write(symbol, df)
-    lib.create_column_stats(symbol, {"a": {"MINMAX"}, "b": {"MINMAX"}})
+    lib.create_column_stats_experimental(symbol)
     # Would be cleaner to use pytest.parametrize, but the expensive bit is generating/writing the df, so make sure we
     # only do these operations once to save time
     for op in ["&", "|", "^"]:
@@ -292,7 +292,7 @@ def test_filter_not(lmdb_version_store_v1, any_output_format, column_stats_filte
     lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_filter_not"
     lib.write(symbol, df)
-    lib.create_column_stats(symbol, {"a": {"MINMAX"}})
+    lib.create_column_stats_experimental(symbol)
     q = QueryBuilder()
     q = q[~(q["a"] < val)]
     expected = df[~(df["a"] < val)]
@@ -318,7 +318,7 @@ def test_filter_more_columns_than_fit_in_one_segment(
     lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_filter_more_columns_than_fit_in_one_segment"
     lib.write(symbol, df)
-    lib.create_column_stats(symbol, {"a": {"MINMAX"}, "b": {"MINMAX"}, "c": {"MINMAX"}})
+    lib.create_column_stats_experimental(symbol)
     q = QueryBuilder()
     q = q[(q["a"] < q["c"]) | (q["a"] < q["b"]) | (q["b"] < q["c"])]
     expected = df[(df["a"] < df["c"]) | (df["a"] < df["b"]) | (df["b"] < df["c"])]
@@ -341,7 +341,7 @@ def test_filter_with_column_slicing(lmdb_version_store_tiny_segment, column_stat
     lib = lmdb_version_store_tiny_segment
     symbol = "test_filter_with_column_filtering"
     lib.write(symbol, df)
-    lib.create_column_stats(symbol, {"a": {"MINMAX"}, "b": {"MINMAX"}, "c": {"MINMAX"}})
+    lib.create_column_stats_experimental(symbol)
     q = QueryBuilder()
     q = q[(q["a"] < q["c"]) | (q["a"] < q["b"]) | (q["b"] < q["c"])]
     expected = df[(df["a"] < df["c"]) | (df["a"] < df["b"]) | (df["b"] < df["c"])].drop(columns=["b"])
@@ -386,7 +386,7 @@ def test_filter_numeric_binary_comparison_dynamic(
     ]
     for slice in slices:
         lib.append(symbol, slice)
-    lib.create_column_stats(symbol, {"a": {"MINMAX"}, "b": {"MINMAX"}})
+    lib.create_column_stats_experimental(symbol)
     # Would be cleaner to use pytest.parametrize, but the expensive bit is generating/writing the df, so make sure we
     # only do these operations once to save time
     for op in ["<", "<=", ">", ">=", "==", "!="]:
@@ -544,7 +544,7 @@ def test_filter_numeric_set_membership_dynamic(
     ]
     for slice in slices:
         lib.append(symbol, slice)
-    lib.create_column_stats(symbol, {"a": {"MINMAX"}})
+    lib.create_column_stats_experimental(symbol)
     # Would be cleaner to use pytest.parametrize, but the expensive bit is generating/writing the df, so make sure we
     # only do these operations once to save time
     for op in ["isin", "isnotin"]:

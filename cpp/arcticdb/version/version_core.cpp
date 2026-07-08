@@ -101,10 +101,11 @@ VersionedItem write_dataframe_impl(
 }
 
 std::tuple<IndexPartialKey, SlicingPolicy> get_partial_key_and_slicing_policy(
-        const WriteOptions& options, const InputFrame& frame, VersionId version_id, bool validate_index
+        const std::shared_ptr<Store>& store, const WriteOptions& options, const InputFrame& frame, VersionId version_id,
+        bool validate_index
 ) {
     if (version_id == 0) {
-        auto check_outcome = verify_symbol_key(frame.desc().id());
+        auto check_outcome = verify_symbol_key(frame.desc().id(), store);
         if (std::holds_alternative<Error>(check_outcome)) {
             std::get<Error>(check_outcome).throw_error();
         }
@@ -130,11 +131,11 @@ folly::Future<entity::AtomKey> async_write_dataframe_impl(
     ARCTICDB_SAMPLE(DoWrite, 0)
     frame->set_bucketize_dynamic(options.bucketize_dynamic);
     auto [partial_key, slicing_policy] =
-            get_partial_key_and_slicing_policy(options, *frame, version_id, validate_index);
+            get_partial_key_and_slicing_policy(store, options, *frame, version_id, validate_index);
     return write_frame(std::move(partial_key), frame, slicing_policy, store, de_dup_map, sparsify_floats);
 }
 
-void sorted_data_check_append(const InputFrame& frame, index::IndexSegmentReader& index_segment_reader) {
+void sorted_data_check_append(const InputFrame& frame, const index::IndexSegmentReader& index_segment_reader) {
     if (!index_is_not_timeseries_or_is_sorted_ascending(frame)) {
         sorting::raise<ErrorCode::E_UNSORTED_DATA>(
                 "When calling append with validate_index enabled, input data must be sorted"
@@ -147,37 +148,112 @@ void sorted_data_check_append(const InputFrame& frame, index::IndexSegmentReader
     );
 }
 
+void check_index_match(const Index& index, const IndexDescriptorImpl& desc) {
+    if (std::holds_alternative<TimeseriesIndex>(index))
+        util::check(
+                desc.type() == IndexDescriptor::Type::TIMESTAMP || desc.type() == IndexDescriptor::Type::EMPTY,
+                "Index mismatch, cannot update a non-timeseries-indexed frame with a timeseries"
+        );
+    else
+        util::check(
+                desc.type() == IndexDescriptorImpl::Type::ROWCOUNT,
+                "Index mismatch, cannot update a timeseries with a non-timeseries-indexed frame"
+        );
+}
+
+void check_update_data_is_sorted(const InputFrame& frame, const index::IndexSegmentReader& index_segment_reader) {
+    bool is_time_series = std::holds_alternative<stream::TimeseriesIndex>(frame.index);
+    sorting::check<ErrorCode::E_UNSORTED_DATA>(
+            is_time_series, "When calling update, the input data must be a time series."
+    );
+    bool input_data_is_sorted =
+            frame.desc().sorted() == SortedValue::ASCENDING || frame.desc().sorted() == SortedValue::UNKNOWN;
+    // If changing this error message, the corresponding message in _normalization.py::restrict_data_to_date_range_only
+    // should also be updated
+    sorting::check<ErrorCode::E_UNSORTED_DATA>(
+            input_data_is_sorted, "When calling update, the input data must be sorted."
+    );
+    bool existing_data_is_sorted = index_segment_reader.sorted() == SortedValue::ASCENDING ||
+                                   index_segment_reader.sorted() == SortedValue::UNKNOWN;
+    sorting::check<ErrorCode::E_UNSORTED_DATA>(
+            existing_data_is_sorted, "When calling update, the existing data must be sorted."
+    );
+}
+
+static void check_can_append(
+        const InputFrame& frame, const index::IndexSegmentReader& index_segment_reader,
+        const WriteOptions& write_options, bool validate_index, bool empty_types
+) {
+    util::check_rte(!index_segment_reader.is_pickled(), "Cannot append to pickled data");
+    fix_descriptor_mismatch_or_throw(APPEND, write_options.dynamic_schema, index_segment_reader, frame, empty_types);
+    if (validate_index) {
+        sorted_data_check_append(frame, index_segment_reader);
+    }
+    util::variant_match(
+            frame.index,
+            [&index_segment_reader, &frame, &write_options](const TimeseriesIndex&) {
+                util::check(frame.has_index(), "Cannot append timeseries without index");
+                if (index_segment_reader.tsd().total_rows() != 0 && frame.num_rows != 0) {
+                    auto first_index = NumericIndex{frame.index_value_at(0)};
+                    auto prev = std::get<NumericIndex>(index_segment_reader.last()->key().end_index());
+                    util::check(
+                            write_options.ignore_sort_order || prev - 1 <= first_index,
+                            "Can't append dataframe with start index {} to existing sequence "
+                            "ending at {}",
+                            util::format_timestamp(first_index),
+                            util::format_timestamp(prev)
+                    );
+                }
+            },
+            [](const auto&) {
+                // Do whatever, but you can't range search it
+            }
+    );
+}
+
+static void check_can_update(
+        const InputFrame& frame, const index::IndexSegmentReader& index_segment_reader, bool dynamic_schema,
+        bool empty_types
+) {
+    util::check_rte(!index_segment_reader.is_pickled(), "Cannot update to pickled data");
+    check_index_match(frame.index, index_segment_reader.tsd().index());
+    const auto index_desc = index_segment_reader.tsd().index();
+    util::check(index::is_timeseries_index(index_desc), "Update not supported for non-timeseries indexes");
+    check_update_data_is_sorted(frame, index_segment_reader);
+    (void)check_and_mark_slices(index_segment_reader, false, std::nullopt);
+    fix_descriptor_mismatch_or_throw(UPDATE, dynamic_schema, index_segment_reader, frame, empty_types);
+}
+
 folly::Future<AtomKey> async_append_impl(
         const std::shared_ptr<Store>& store, const UpdateInfo& update_info, const std::shared_ptr<InputFrame>& frame,
         const WriteOptions& options, bool validate_index, bool empty_types
 ) {
-
     util::check(
             update_info.previous_index_key_.has_value(), "Cannot append as there is no previous index key to append to"
     );
-    const StreamId stream_id = frame->desc().id();
-    ARCTICDB_DEBUG(log::version(), "append stream_id: {} , version_id: {}", stream_id, update_info.next_version_id_);
-    auto index_segment_reader = index::get_index_reader(*(update_info.previous_index_key_), store);
-    bool bucketize_dynamic = index_segment_reader.bucketize_dynamic();
-    auto row_offset = index_segment_reader.tsd().total_rows();
-    util::check_rte(!index_segment_reader.is_pickled(), "Cannot append to pickled data");
-    frame->set_offset(static_cast<ssize_t>(row_offset));
-    fix_descriptor_mismatch_or_throw(APPEND, options.dynamic_schema, index_segment_reader, *frame, empty_types);
-    if (validate_index) {
-        sorted_data_check_append(*frame, index_segment_reader);
-    }
-
-    frame->set_bucketize_dynamic(bucketize_dynamic);
-    auto slicing_arg = get_slicing_policy(options, *frame);
-    return append_frame(
-            IndexPartialKey{stream_id, update_info.next_version_id_},
-            frame,
-            slicing_arg,
-            index_segment_reader,
-            store,
-            options.dynamic_schema,
-            options.ignore_sort_order
+    ARCTICDB_DEBUG(
+            log::version(), "append stream_id: {} , version_id: {}", frame->desc().id(), update_info.next_version_id_
     );
+    return index::async_get_index_reader(*(update_info.previous_index_key_), store)
+            // This future will complete on the IO executor
+            .thenValueInline([store, update_info, frame, options, validate_index, empty_types](
+                                     index::IndexSegmentReader&& index_segment_reader
+                             ) {
+                check_can_append(*frame, index_segment_reader, options, validate_index, empty_types);
+                bool bucketize_dynamic = index_segment_reader.bucketize_dynamic();
+                auto row_offset = index_segment_reader.tsd().total_rows();
+                frame->set_offset(static_cast<ssize_t>(row_offset));
+                frame->set_bucketize_dynamic(bucketize_dynamic);
+                auto slicing_arg = get_slicing_policy(options, *frame);
+                return append_frame(
+                        IndexPartialKey{frame->desc().id(), update_info.next_version_id_},
+                        frame,
+                        slicing_arg,
+                        index_segment_reader,
+                        store,
+                        options.dynamic_schema
+                );
+            });
 }
 
 VersionedItem append_impl(
@@ -201,19 +277,6 @@ namespace {
 bool is_before(const IndexRange& a, const IndexRange& b) { return a.start_ < b.start_; }
 
 bool is_after(const IndexRange& a, const IndexRange& b) { return a.end_ > b.end_; }
-
-void check_index_match(const Index& index, const IndexDescriptorImpl& desc) {
-    if (std::holds_alternative<TimeseriesIndex>(index))
-        util::check(
-                desc.type() == IndexDescriptor::Type::TIMESTAMP || desc.type() == IndexDescriptor::Type::EMPTY,
-                "Index mismatch, cannot update a non-timeseries-indexed frame with a timeseries"
-        );
-    else
-        util::check(
-                desc.type() == IndexDescriptorImpl::Type::ROWCOUNT,
-                "Index mismatch, cannot update a timeseries with a non-timeseries-indexed frame"
-        );
-}
 
 /// Represents all slices which are intersecting (but not overlapping) with range passed to update
 /// First member is a vector of all segments intersecting with the first row-slice of the update range
@@ -417,25 +480,6 @@ VersionedItem delete_range_impl(
     return versioned_item;
 }
 
-void check_update_data_is_sorted(const InputFrame& frame, const index::IndexSegmentReader& index_segment_reader) {
-    bool is_time_series = std::holds_alternative<stream::TimeseriesIndex>(frame.index);
-    sorting::check<ErrorCode::E_UNSORTED_DATA>(
-            is_time_series, "When calling update, the input data must be a time series."
-    );
-    bool input_data_is_sorted =
-            frame.desc().sorted() == SortedValue::ASCENDING || frame.desc().sorted() == SortedValue::UNKNOWN;
-    // If changing this error message, the corresponding message in _normalization.py::restrict_data_to_date_range_only
-    // should also be updated
-    sorting::check<ErrorCode::E_UNSORTED_DATA>(
-            input_data_is_sorted, "When calling update, the input data must be sorted."
-    );
-    bool existing_data_is_sorted = index_segment_reader.sorted() == SortedValue::ASCENDING ||
-                                   index_segment_reader.sorted() == SortedValue::UNKNOWN;
-    sorting::check<ErrorCode::E_UNSORTED_DATA>(
-            existing_data_is_sorted, "When calling update, the existing data must be sorted."
-    );
-}
-
 struct UpdateRanges {
     IndexRange front;
     IndexRange back;
@@ -468,23 +512,6 @@ static UpdateRanges compute_update_ranges(
                 return {};
             }
     );
-}
-
-static void check_can_update(
-        const InputFrame& frame, const index::IndexSegmentReader& index_segment_reader, const UpdateInfo& update_info,
-        bool dynamic_schema, bool empty_types
-) {
-    util::check(
-            update_info.previous_index_key_.has_value(),
-            "Cannot update as there is no previous index key to update into"
-    );
-    util::check_rte(!index_segment_reader.is_pickled(), "Cannot update pickled data");
-    check_index_match(frame.index, index_segment_reader.tsd().index());
-    const auto index_desc = index_segment_reader.tsd().index();
-    util::check(index::is_timeseries_index(index_desc), "Update not supported for non-timeseries indexes");
-    check_update_data_is_sorted(frame, index_segment_reader);
-    (void)check_and_mark_slices(index_segment_reader, false, std::nullopt);
-    fix_descriptor_mismatch_or_throw(UPDATE, dynamic_schema, index_segment_reader, frame, empty_types);
 }
 
 static std::shared_ptr<std::vector<SliceAndKey>> get_keys_affected_by_update(
@@ -545,10 +572,15 @@ folly::Future<AtomKey> async_update_impl(
         const std::shared_ptr<InputFrame>& frame, WriteOptions&& options, bool dynamic_schema, bool empty_types
 ) {
     return index::async_get_index_reader(*(update_info.previous_index_key_), store)
-            .thenValue([store, update_info, query, frame, options = std::move(options), dynamic_schema, empty_types](
-                               index::IndexSegmentReader&& index_segment_reader
-                       ) {
-                check_can_update(*frame, index_segment_reader, update_info, dynamic_schema, empty_types);
+            // This future will complete on the IO executor
+            .thenValueInline([store,
+                              update_info,
+                              query,
+                              frame,
+                              options = std::move(options),
+                              dynamic_schema,
+                              empty_types](index::IndexSegmentReader&& index_segment_reader) {
+                check_can_update(*frame, index_segment_reader, dynamic_schema, empty_types);
                 ARCTICDB_DEBUG(
                         log::version(),
                         "Update versioned dataframe for stream_id: {} , version_id = {}",
@@ -556,6 +588,10 @@ folly::Future<AtomKey> async_update_impl(
                         update_info.previous_index_key_->version_id()
                 );
                 frame->set_bucketize_dynamic(index_segment_reader.bucketize_dynamic());
+                // This also checks that types are compatible, so create with a dummy row-count here, and then modify
+                // the row count later once it is known. This avoids orphaning data keys if this function throws
+                // because of incompatible schemas
+                auto tsd = index::get_merged_tsd(1, dynamic_schema, index_segment_reader.tsd(), frame);
                 return slice_and_write(
                                frame,
                                get_slicing_policy(options, *frame),
@@ -568,8 +604,8 @@ folly::Future<AtomKey> async_update_impl(
                                     query,
                                     frame,
                                     dynamic_schema,
-                                    index_segment_reader = std::move(index_segment_reader
-                                    )](std::vector<SliceAndKey>&& new_slice_and_keys) mutable {
+                                    index_segment_reader = std::move(index_segment_reader),
+                                    tsd = std::move(tsd)](std::vector<SliceAndKey>&& new_slice_and_keys) mutable {
                             std::sort(std::begin(new_slice_and_keys), std::end(new_slice_and_keys));
                             auto affected_keys =
                                     get_keys_affected_by_update(index_segment_reader, *frame, query, dynamic_schema);
@@ -601,7 +637,7 @@ folly::Future<AtomKey> async_update_impl(
                                                 affected_keys = std::move(affected_keys),
                                                 index_segment_reader = std::move(index_segment_reader),
                                                 frame,
-                                                dynamic_schema,
+                                                tsd = std::move(tsd),
                                                 update_info,
                                                 store](IntersectingSegments&& intersecting_segments) mutable {
                                         auto [flattened_slice_and_keys, row_count] = get_slice_and_keys_for_update(
@@ -611,9 +647,7 @@ folly::Future<AtomKey> async_update_impl(
                                                 std::move(intersecting_segments),
                                                 std::move(*new_slice_and_keys_ptr)
                                         );
-                                        auto tsd = index::get_merged_tsd(
-                                                row_count, dynamic_schema, index_segment_reader.tsd(), frame
-                                        );
+                                        tsd.set_total_rows(row_count);
                                         return index::write_index(
                                                 index_type_from_descriptor(tsd.as_stream_descriptor()),
                                                 std::move(tsd),
@@ -1324,17 +1358,21 @@ void check_can_perform_processing(
             (!read_query.columns && !read_query.row_range &&
              std::holds_alternative<std::monostate>(read_query.row_filter) && read_query.clauses_.empty());
     const bool is_numpy_array = pipeline_context->norm_meta_ && pipeline_context->norm_meta_->has_np();
+    // We do not support processing over numpy arrays in general, but compact_data (either directly, or via the
+    // compact_data_inline argument to append[_batch]) must work with numpy arrays as well as Series/DataFrames
+    const bool is_compaction =
+            !read_query.clauses_.empty() && folly::poly_type(*read_query.clauses_.front()) == typeid(CompactDataClause);
     if (!is_query_empty) {
-        // Exception for filterig pickled data is skipped for now for backward compatibility
+        // Exception for filtering pickled data is skipped for now for backward compatibility
         if (pipeline_context->multi_key_) {
             schema::raise<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_RECURSIVE_NORMALIZED_DATA>(
                     "Cannot perform processing such as row/column filtering, projection, aggregation, resampling, "
                     "etc.. on recursively normalized data"
             );
-        } else if (is_numpy_array) {
+        } else if (is_numpy_array && !is_compaction) {
             schema::raise<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_NUMPY_ARRAY>(
                     "Cannot perform processing such as row/column filtering, projection, aggregation, resampling, "
-                    "etc.. on recursively numpy array"
+                    "etc.. on numpy array"
             );
         }
     }
@@ -3056,9 +3094,8 @@ folly::Future<VersionedItem> read_modify_write_impl(
                 const TimeseriesDescriptor tsd = make_timeseries_descriptor(
                         row_count,
                         pipeline_context->descriptor(),
-                        std::move(*pipeline_context->norm_meta_),
+                        *pipeline_context->norm_meta_,
                         std::move(user_meta_proto),
-                        std::nullopt,
                         std::nullopt,
                         write_options.bucketize_dynamic
                 );
@@ -3135,9 +3172,8 @@ folly::Future<VersionedItem> merge_update_impl(
                 const TimeseriesDescriptor tsd = make_timeseries_descriptor(
                         row_count,
                         pipeline_context->descriptor(),
-                        std::move(*pipeline_context->norm_meta_),
+                        *pipeline_context->norm_meta_,
                         pipeline_context->user_meta_ ? std::make_optional(std::move(source->user_meta)) : std::nullopt,
-                        std::nullopt,
                         std::nullopt,
                         write_options.bucketize_dynamic
                 );
@@ -3285,11 +3321,10 @@ folly::Future<std::optional<VersionedItem>> compact_data_impl(
                         TimeseriesDescriptor tsd = make_timeseries_descriptor(
                                 row_count,
                                 std::move(*pipeline_context->desc_),
-                                std::move(*pipeline_context->norm_meta_),
+                                *pipeline_context->norm_meta_,
                                 pipeline_context->user_meta_
                                         ? std::make_optional(std::move(*pipeline_context->user_meta_))
                                         : std::nullopt,
-                                std::nullopt,
                                 std::nullopt,
                                 write_options.bucketize_dynamic
                         );

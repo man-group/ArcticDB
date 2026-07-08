@@ -6,17 +6,18 @@ vcpkg_from_github(
     OUT_SOURCE_PATH SOURCE_PATH
     REPO facebook/folly
     REF "v${VERSION}"
-    SHA512 884bd663c50ee2965679808fa67926226d46105f0b7d90d5d76731abe2435b519d0efcd1054f3b59012588b99f94ae88bc2230b7cbeb71d8a0085525da2c0de9
+    SHA512 8ee08591724fb1f6183cc0456c13cd00474e425d41824add2751fd3823e23b95ea69ec1b246bc85c95d30add854ee53dafd2bc1b824d0b555917dcbaf6943a6f
     HEAD_REF main
     PATCHES
         0001-fix-deps.patch
         0002-disable-uninitialized-resize-on-new-stl.patch
         0003-fix-unistd-include.patch
-        0004-fix-absolute-dir.patch
+        0004-fix-perf_scoped-target.patch
         0005-Deactivate-libunwind-features.patch
         0006-fix-Ignore-features-based-on-demangle.h.patch
         0007-fix-windows-minmax.patch
         0008-win-dont-propagate-cpp-version.patch
+        0009-guard-SO_INCOMING_NAPI_ID.patch
 )
 file(REMOVE "${SOURCE_PATH}/CMake/FindFastFloat.cmake")
 file(REMOVE "${SOURCE_PATH}/CMake/FindFmt.cmake")
@@ -54,7 +55,7 @@ vcpkg_cmake_configure(
         -DVCPKG_LOCK_FIND_PACKAGE_fmt=ON
         -DVCPKG_LOCK_FIND_PACKAGE_LibDwarf=OFF
         -DVCPKG_LOCK_FIND_PACKAGE_Libiberty=OFF
-        -DVCPKG_LOCK_FIND_PACKAGE_LibUnwind=${VCPKG_TARGET_IS_LINUX}
+        -DVCPKG_LOCK_FIND_PACKAGE_LibUnwind=OFF
         -DVCPKG_LOCK_FIND_PACKAGE_ZLIB=ON
         ${FEATURE_OPTIONS}
     MAYBE_UNUSED_VARIABLES

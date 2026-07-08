@@ -7,6 +7,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 
 import gc
+from contextlib import contextmanager
 from hypothesis import given, settings
 import hypothesis.strategies as st
 import numpy as np
@@ -14,7 +15,9 @@ import pandas as pd
 import pyarrow as pa
 import polars as pl
 import pytest
+from arcticdb import DataError
 from arcticdb.exceptions import SchemaException, StreamDescriptorMismatch, UserInputException
+from arcticdb_ext.exceptions import UnsortedDataException
 from arcticdb.options import ArrowOutputStringFormat
 from arcticdb.util.arrow import cast_string_columns
 from arcticdb.util.test import (
@@ -25,8 +28,17 @@ from arcticdb.util.test import (
 from arcticdb.util.hypothesis import use_of_function_scoped_fixtures_in_hypothesis_checked
 from arcticdb.version_store._normalization import ArrowTableNormalizer
 from arcticdb_ext.storage import KeyType
-from tests.util.arrow import assert_arrow_equal, string_format_kwargs, to_format
+from tests.util.arrow import assert_arrow_equal, deep_copy, string_format_kwargs, to_format, undictionarify_table
 from tests.util.naughty_strings import read_big_list_of_naughty_strings
+
+
+@contextmanager
+def assert_inputs_not_modified(*inputs):
+    """Staging must not modify the caller's data, e.g. by sorting the underlying buffers in place."""
+    originals = [deep_copy(inp) for inp in inputs]
+    yield
+    for inp, original in zip(inputs, originals):
+        assert_arrow_equal(original, inp)
 
 
 def test_record_batches_roundtrip():
@@ -295,13 +307,23 @@ def test_many_record_batches_many_slices(in_memory_store_factory, rows_per_slice
                     "float64": pa.array(rng.random(length), pa.float64()),
                     "bool": pa.array(rng.choice([True, False], length), pa.bool_()),
                     "string": pa.array([f"{i}" for i in range(length)], pa.string()),
+                    # Few distinct values so the dictionary genuinely encodes repeats
+                    "categorical": pa.compute.dictionary_encode(
+                        pa.array([f"{i % 3}" for i in range(length)], pa.large_string())
+                    ),
                 }
             )
         )
     table = pa.concat_tables(tables)
     lib.write(sym, table)
-    received = lib.read(sym, arrow_string_format_default=ArrowOutputStringFormat.SMALL_STRING).data
-    assert table.equals(received)
+    received = lib.read(
+        sym,
+        arrow_string_format_default=ArrowOutputStringFormat.SMALL_STRING,
+        arrow_string_format_per_column={"categorical": ArrowOutputStringFormat.CATEGORICAL},
+    ).data
+    # pyarrow.equals blindly compares the keys and dictionaries for dictionary encoded columns
+    # That fails if record batch structure is different between table and received, thus we undictionarify
+    assert undictionarify_table(table).equals(undictionarify_table(received))
 
 
 @pytest.mark.parametrize("rows_per_slice", [1, 2, 3, 5, 7])
@@ -441,11 +463,54 @@ def test_write_unsupported_types(in_memory_version_store_arrow):
         lib.write(sym, table)
     assert "unsupported" in str(e.value).lower()
 
-    table = pa.table({"col": pa.compute.dictionary_encode(pa.array(["hello", "goodbye"], pa.string()))})
-    assert pa.types.is_dictionary(table.column(0).type)
-    with pytest.raises(Exception) as e:
-        lib.write(sym, table)
-    assert "unsupported" in str(e.value).lower()
+
+@pytest.mark.parametrize("format", ["pyarrow", "polars"])
+@pytest.mark.parametrize("sparse", [False, True])
+def test_write_categorical_strings(in_memory_version_store_arrow, format, sparse):
+    lib = in_memory_version_store_arrow
+    sym = "test_write_categorical_strings"
+    # Repeated values so the dictionary genuinely encodes fewer entries than rows
+    values = (
+        ["hello", "goodbye", None, "hello", None, "goodbye"]
+        if sparse
+        else ["hello", "goodbye", "hello", "hello", "goodbye"]
+    )
+    if format == "pyarrow":
+        # pyarrow's dictionary_encode produces int32 keys
+        data = pa.table({"col": pa.compute.dictionary_encode(pa.array(values, pa.large_string()))})
+        assert pa.types.is_dictionary(data.column(0).type)
+    else:
+        # polars' Categorical produces uint32 keys
+        data = pl.DataFrame({"col": pl.Series(values, dtype=pl.Categorical)})
+    lib.write(sym, data)
+
+    # TODO: Remove string format once we store the input format used in normalization
+    received = lib.read(
+        sym,
+        output_format=format,
+        arrow_string_format_default=ArrowOutputStringFormat.CATEGORICAL,
+    ).data
+    assert_arrow_equal(data, received)
+
+
+def test_write_mixed_categorical_and_variable_length_columns(in_memory_version_store_arrow):
+    lib = in_memory_version_store_arrow
+    sym = "test_write_mixed_categorical_and_variable_length_columns"
+    data = pl.DataFrame(
+        {
+            "cat": pl.Series(["a", "b", None, "a", "b"], dtype=pl.Categorical),
+            "str": pl.Series(["x", None, "y", "x", None], dtype=pl.String),
+        }
+    )
+    lib.write(sym, data)
+
+    # TODO: Remove string format once we store the input format used in normalization
+    received = lib.read(
+        sym,
+        output_format="polars",
+        arrow_string_format_per_column={"cat": ArrowOutputStringFormat.CATEGORICAL},
+    ).data
+    assert_arrow_equal(data, received)
 
 
 # Reinstate if bounds check is re-added in WriteToSegmentTask::slice_column when 9951777416 is implemented
@@ -773,6 +838,7 @@ def test_staging_with_sorting(in_memory_store_factory, arrow_output_format):
             "col0": pa.array([0, 1, 2], pa.uint16()),
             "col1": pa.array([10, 11, 12], pa.uint8()),
             "col2": pa.array([20, 21, 22], pa.uint32()),
+            "col3": pa.array(["three", "one", "two"], pa.string()),
         }
     )
     table_1 = pa.table(
@@ -781,46 +847,63 @@ def test_staging_with_sorting(in_memory_store_factory, arrow_output_format):
             "col0": pa.array([3, 4, 5], pa.uint16()),
             "col1": pa.array([13, 14, 15], pa.uint8()),
             "col2": pa.array([23, 24, 25], pa.uint32()),
+            "col3": pa.array(["four", "six", "five"], pa.string()),
         }
     )
-    lib.stage(sym, to_format(table_0, arrow_output_format), sort_on_index=True, index_column=True)
-    lib.stage(sym, to_format(table_1, arrow_output_format), sort_on_index=True, index_column=True)
+    input_0 = to_format(table_0, arrow_output_format)
+    input_1 = to_format(table_1, arrow_output_format)
+    with assert_inputs_not_modified(input_0, input_1):
+        lib.stage(sym, input_0, sort_on_index=True, index_column=True)
+        lib.stage(sym, input_1, sort_on_index=True, index_column=True)
 
     assert len(lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, sym)) == 4
     lib.compact_incomplete(sym, False, False)
     expected = pa.concat_tables([table_0, table_1]).sort_by("ts")
-    received = lib.read(sym, output_format=arrow_output_format).data
+    received = lib.read(
+        sym,
+        output_format=arrow_output_format,
+        **string_format_kwargs(arrow_output_format, default=ArrowOutputStringFormat.SMALL_STRING),
+    ).data
     assert_arrow_equal(expected, received)
 
 
-# Merge with test_staging_with_sorting when 18190648152 is done
-@pytest.mark.xfail(reason="Not implemented yet, see issue 18190648152")
-def test_staging_with_sorting_strings(in_memory_store_factory):
+def test_staging_with_sorting_secondary_column(in_memory_store_factory, arrow_output_format):
     lib = in_memory_store_factory(segment_row_size=2, dynamic_schema=True)
-    lib_tool = lib.library_tool()
     lib.set_output_format("pyarrow")
     lib._set_allow_arrow_input()
-    sym = "test_staging_with_sorting_strings"
-    table_0 = pa.table(
+    sym = "test_staging_with_sorting_secondary_column"
+    # ts has duplicate values so the non-index sort column col0 breaks ties.
+    table = pa.table(
         {
-            "ts": pa.array([3, 1, 2], pa.timestamp("ns")),
-            "col": pa.array(["three", "one", "two"], pa.string()),
+            "ts": pa.array([2, 2, 1, 1], pa.timestamp("ns")),
+            "col0": pa.array([40, 30, 20, 10], pa.uint16()),
+            "col1": pa.array(["d", "c", "b", "a"], pa.string()),
         }
     )
-    table_1 = pa.table(
-        {
-            "ts": pa.array([4, 6, 5], pa.timestamp("ns")),
-            "col": pa.array(["four", "six", "five"], pa.string()),
-        }
-    )
-    lib.stage(sym, table_0, sort_on_index=True, index_column=True)
-    lib.stage(sym, table_1, sort_on_index=True, index_column=True)
-
-    assert len(lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, sym)) == 4
+    input_table = to_format(table, arrow_output_format)
+    with assert_inputs_not_modified(input_table):
+        lib.stage(sym, input_table, sort_on_index=True, sort_columns=["col0"], index_column=True)
     lib.compact_incomplete(sym, False, False)
-    expected = pa.concat_tables([table_0, table_1]).sort_by("ts")
-    received = lib.read(sym, arrow_string_format_default=ArrowOutputStringFormat.SMALL_STRING).data
-    assert expected.equals(received)
+    expected = table.sort_by([("ts", "ascending"), ("col0", "ascending")])
+    received = lib.read(
+        sym,
+        output_format=arrow_output_format,
+        **string_format_kwargs(arrow_output_format, default=ArrowOutputStringFormat.SMALL_STRING),
+    ).data
+    assert_arrow_equal(expected, received)
+
+
+def test_staging_with_sorting_empty(in_memory_store_factory, arrow_output_format):
+    lib = in_memory_store_factory(segment_row_size=2, dynamic_schema=True)
+    lib.set_output_format("pyarrow")
+    lib._set_allow_arrow_input()
+    sym = "test_staging_with_sorting_empty"
+    table = pa.table({"ts": pa.array([], pa.timestamp("ns")), "col0": pa.array([], pa.uint16())})
+    input_table = to_format(table, arrow_output_format)
+    lib.stage(sym, input_table, sort_on_index=True, index_column=True)
+    lib.compact_incomplete(sym, False, False)
+    received = lib.read(sym, output_format=arrow_output_format).data
+    assert received.shape[0] == 0
 
 
 def test_recursive_normalizers(in_memory_version_store_arrow, all_recursive_metastructure_versions):
@@ -1383,3 +1466,80 @@ def test_arrow_buffer_released_after_write(in_memory_version_store_arrow):
     del tables, t
     gc.collect()
     assert sorted(released) == [0, 1, 2, 3, 4]
+
+
+def _ts_arrow_table(days):
+    return pa.table(
+        {
+            "ts": pa.array([pd.Timestamp(d) for d in days], pa.timestamp("ns")),
+            "col": pa.array(list(range(len(days))), pa.int64()),
+        }
+    )
+
+
+_SORTED_DAYS = ["2024-01-01", "2024-01-02", "2024-01-03"]
+_UNSORTED_DAYS = ["2024-01-03", "2024-01-01", "2024-01-02"]
+
+
+@pytest.mark.parametrize("method", ["write", "append", "update", "stage"])
+@pytest.mark.parametrize("validate_index", [True, False])
+@pytest.mark.parametrize("sorted_data", [True, False])
+def test_validate_index_arrow(lmdb_version_store_arrow, method, validate_index, sorted_data):
+    lib = lmdb_version_store_arrow
+    sym = "test_validate_index_arrow"
+    table = _ts_arrow_table(_SORTED_DAYS if sorted_data else _UNSORTED_DAYS)
+    if method == "append":
+        lib.write(sym, _ts_arrow_table(["2023-12-01", "2023-12-02"]), index_column=True, validate_index=True)
+    elif method == "update":
+        lib.write(sym, _ts_arrow_table(_SORTED_DAYS), index_column=True, validate_index=True)
+
+    ops = {
+        "write": lambda: lib.write(sym, table, validate_index=validate_index, index_column=True),
+        "append": lambda: lib.append(sym, table, validate_index=validate_index, index_column=True),
+        "update": lambda: lib.update(sym, table, index_column=True),
+        "stage": lambda: lib.stage(sym, table, validate_index=validate_index, index_column=True),
+    }
+    # update always validates the index; the other methods only when validate_index is set
+    if not sorted_data and (validate_index or method == "update"):
+        with pytest.raises(UnsortedDataException):
+            ops[method]()
+    else:
+        ops[method]()
+
+
+def _batch_rejected_as_unsorted(fn):
+    # batch_write/batch_append raise; batch_update surfaces per-symbol failures as DataError entries
+    try:
+        result = fn()
+    except UnsortedDataException:
+        return True
+    return any(isinstance(r, DataError) for r in result)
+
+
+@pytest.mark.parametrize("method", ["batch_write", "batch_append", "batch_update"])
+@pytest.mark.parametrize("validate_index", [True, False])
+@pytest.mark.parametrize("sorted_data", [True, False])
+def test_validate_index_arrow_batch(lmdb_version_store_arrow, method, validate_index, sorted_data):
+    lib = lmdb_version_store_arrow
+    sym = "test_validate_index_arrow_batch"
+    table = _ts_arrow_table(_SORTED_DAYS if sorted_data else _UNSORTED_DAYS)
+    if method == "batch_append":
+        lib.write(sym, _ts_arrow_table(["2023-12-01", "2023-12-02"]), index_column=True, validate_index=True)
+    elif method == "batch_update":
+        lib.write(sym, _ts_arrow_table(_SORTED_DAYS), index_column=True, validate_index=True)
+
+    ops = {
+        "batch_write": lambda: lib.batch_write(
+            [sym], [table], validate_index=validate_index, index_column_vector=[True]
+        ),
+        "batch_append": lambda: lib.batch_append(
+            [sym], [table], validate_index=validate_index, index_column_vector=[True]
+        ),
+        "batch_update": lambda: lib._batch_update_internal([sym], [table], [None], [None], index_column_vector=[True]),
+    }
+    # batch_update always validates the index; the others only when validate_index is set
+    if not sorted_data and (validate_index or method == "batch_update"):
+        assert _batch_rejected_as_unsorted(ops[method])
+    else:
+        result = ops[method]()
+        assert all(not isinstance(r, DataError) for r in result)

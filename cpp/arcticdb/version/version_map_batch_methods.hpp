@@ -281,7 +281,12 @@ inline BatchGetVersionResult<SymbolVersion> batch_get_specific_versions(
     );
 
     if (!tombstoned_vers->empty()) {
-        const auto snap_map = get_master_snapshots_map(store);
+        std::unordered_set<StreamId> stream_ids;
+        stream_ids.reserve(tombstoned_vers->size());
+        for (const auto& [sym_version, key] : *tombstoned_vers) {
+            stream_ids.insert(sym_version.first);
+        }
+        const auto snap_map = get_master_snapshots_map(store, stream_ids);
         for (const auto& [sym_version, key] : *tombstoned_vers) {
             auto cit = snap_map.find(sym_version.first);
             if (cit != snap_map.cend() &&

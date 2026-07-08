@@ -40,7 +40,8 @@ VersionedItem write_dataframe_impl(
 );
 
 std::tuple<IndexPartialKey, SlicingPolicy> get_partial_key_and_slicing_policy(
-        const WriteOptions& options, const InputFrame& frame, VersionId version_id, bool validate_index
+        const std::shared_ptr<Store>& store, const WriteOptions& options, const InputFrame& frame, VersionId version_id,
+        bool validate_index
 );
 
 folly::Future<entity::AtomKey> async_write_dataframe_impl(

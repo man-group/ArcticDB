@@ -412,7 +412,7 @@ TEST_F(SymbolListSuite, AddDeleteReadd) {
     state.do_list_symbols(symbol_list);
 }
 
-constexpr timestamp operator"" _s(unsigned long long t) { return static_cast<timestamp>(t) * 1000'000'000; }
+constexpr timestamp operator""_s(unsigned long long t) { return static_cast<timestamp>(t) * 1000'000'000; }
 
 bool result_equals(const ProblematicResult& got, const SymbolEntryData& expected) {
     return got.reference_id() == expected.reference_id_ && got.action() == expected.action_ &&

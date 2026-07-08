@@ -137,7 +137,11 @@ class InMemoryStore : public Store {
         return key;
     }
 
-    bool is_path_valid(const std::string_view) const override { return true; }
+    const std::set<char>& unsupported_symbol_chars() const override { return storage::GLOBALLY_UNSUPPORTED_CHARS; }
+
+    const std::set<char>& unsupported_library_chars() const override { return storage::GLOBALLY_UNSUPPORTED_CHARS; }
+
+    std::optional<char> verify_library_suffix(std::string_view) const override { return std::nullopt; }
 
     folly::Future<entity::VariantKey> write(
             stream::KeyType key_type, const StreamId& stream_id, SegmentInMemory&& segment

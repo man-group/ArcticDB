@@ -95,8 +95,12 @@ def test_simple_flow(basic_store_no_symbol_list, symbol):
 def test_special_chars(object_version_store):
     """Test chars with special URI encoding under RFC 3986"""
     errors = []
+    special_chars = list("$@=;/:+ ,?{^}%`[]\"'~#|!-_.()")
+    # Azure silently maps '\' to '/', so it's rejected on new symbol writes
+    if object_version_store.get_backing_store() != "azure_storage":
+        special_chars += "\\"
     # we are doing manual iteration due to a limitation that should be fixed by issue #1053
-    for special_char in list("$@=;/:+ ,?\\{^}%`[]\"'~#|!-_.()"):
+    for special_char in special_chars:
         try:
             sym = f"prefix{special_char}postfix"
             df = sample_dataframe()
@@ -693,6 +697,8 @@ def test_prune_previous_versions_append_batch(basic_store):
 
     # When
     lib.batch_write(syms, [df0, df0])
+    # One symbol list key for each symbol
+    assert len(lib_tool.find_keys(KeyType.SYMBOL_LIST)) == 2
     lib.batch_append(syms, [df1, df1])
 
     for sym in syms:
@@ -720,8 +726,8 @@ def test_prune_previous_versions_append_batch(basic_store):
         assert len(keys_for_sym) == 3
         latest_ver_key = max(keys_for_sym, key=lambda x: x.version_id)
         check_write_and_prune_previous_version_keys(lib_tool, sym, latest_ver_key)
-    # Then - we got 6 symbol keys: 1 for each of the writes
-    assert len(lib_tool.find_keys(KeyType.SYMBOL_LIST)) == 6
+    # Still only 2 symbol list keys [batch_]append only writes symbol list keys on upsert
+    assert len(lib_tool.find_keys(KeyType.SYMBOL_LIST)) == 2
 
 
 def test_batch_append_after_delete_upsert(lmdb_version_store_v1):

@@ -279,16 +279,15 @@ TEST(ColumnData, Iterator) {
     }
 }
 
-TEST(ColumnData, IteratorSkipsEmptyBlocks) {
+TEST(ColumnData, IteratorSkipsTrailingEmptyBlock) {
     using namespace arcticdb;
 
     using TDT = TypeDescriptorTag<DataTypeTag<DataType::INT64>, DimensionTag<Dimension::Dim0>>;
 
-    // Trailing empty block
     Column col(static_cast<TypeDescriptor>(TDT{}), 0, AllocationType::DYNAMIC, Sparsity::PERMITTED);
     std::array<int64_t, 3> data{10, 20, 30};
-    col.set_external_block(0, data.data(), data.size());
-    col.set_external_block(static_cast<ssize_t>(data.size()), static_cast<int64_t*>(nullptr), 0);
+    col.set_dense_block(0, data.data(), data.size());
+    col.set_dense_block(static_cast<ssize_t>(data.size()), static_cast<int64_t*>(nullptr), 0);
     ASSERT_EQ(col.buffer().num_blocks(), 2u);
     ASSERT_EQ(col.buffer().blocks()[0]->logical_size(), data.size() * sizeof(int64_t));
     ASSERT_EQ(col.buffer().blocks()[1]->logical_size(), 0u);
@@ -302,10 +301,16 @@ TEST(ColumnData, IteratorSkipsEmptyBlocks) {
         visited.push_back(*it);
     }
     EXPECT_EQ(visited, (std::vector<int64_t>{10, 20, 30}));
+}
 
-    // All-empty column: a single zero-size external block. begin must compare equal to end.
+TEST(ColumnData, IteratorOnAllEmptyColumn) {
+    using namespace arcticdb;
+
+    using TDT = TypeDescriptorTag<DataTypeTag<DataType::INT64>, DimensionTag<Dimension::Dim0>>;
+
+    // A single zero-size external block. begin must compare equal to end.
     Column empty_col(static_cast<TypeDescriptor>(TDT{}), 0, AllocationType::DYNAMIC, Sparsity::PERMITTED);
-    empty_col.set_external_block(0, static_cast<int64_t*>(nullptr), 0);
+    empty_col.set_dense_block(0, static_cast<int64_t*>(nullptr), 0);
     ASSERT_EQ(empty_col.buffer().num_blocks(), 1u);
     ASSERT_EQ(empty_col.buffer().blocks()[0]->logical_size(), 0u);
     auto empty_data = empty_col.data();
@@ -322,8 +327,8 @@ TEST(ColumnData, IteratorEqualityAcrossSharedExternalMemory) {
     Column col(static_cast<TypeDescriptor>(TDT{}), 0, AllocationType::DYNAMIC, Sparsity::NOT_PERMITTED);
 
     std::array<int64_t, 3> shared{100, 200, 300};
-    col.set_external_block(0, shared.data(), shared.size());
-    col.set_external_block(static_cast<ssize_t>(shared.size()), shared.data(), shared.size());
+    col.set_dense_block(0, shared.data(), shared.size());
+    col.set_dense_block(static_cast<ssize_t>(shared.size()), shared.data(), shared.size());
 
     auto column_data = col.data();
     auto it_in_block0 = column_data.citerator_at<TDT>(1);                 // (block 0, offset 1)
@@ -477,56 +482,20 @@ namespace {
 using namespace arcticdb;
 using SearchTDT = TypeDescriptorTag<DataTypeTag<DataType::INT64>, DimensionTag<Dimension::Dim0>>;
 
-void populate(Column& col, const std::vector<int64_t>& values) {
-    for (size_t i = 0; i < values.size(); ++i) {
-        col.reference_at<int64_t>(i) = values[i];
-    }
-}
-
-// Three column shapes exercise the three random_accessor paths: SINGLE / REGULAR / IRREGULAR.
 Column make_single_block(const std::vector<int64_t>& values) {
-    Column col(
-            static_cast<TypeDescriptor>(SearchTDT{}), values.size(), AllocationType::PRESIZED, Sparsity::NOT_PERMITTED
-    );
-    populate(col, values);
-    return col;
+    return make_single_block_column<int64_t>(values, DataType::INT64);
 }
 
 Column make_regular_blocks(const std::vector<int64_t>& values) {
-    Column col(
-            static_cast<TypeDescriptor>(SearchTDT{}),
-            Sparsity::NOT_PERMITTED,
-            ChunkedBuffer::presized_in_blocks(values.size() * sizeof(int64_t))
-    );
-    populate(col, values);
-    return col;
+    return make_regular_blocks_column<int64_t>(values, DataType::INT64);
 }
 
 Column make_irregular_blocks(const std::vector<int64_t>& values, const std::vector<size_t>& block_sizes) {
-    Column col(static_cast<TypeDescriptor>(SearchTDT{}), 0, AllocationType::DETACHABLE, Sparsity::NOT_PERMITTED);
-    for (size_t block_size : block_sizes) {
-        col.allocate_data(block_size * sizeof(int64_t));
-        col.advance_data(block_size * sizeof(int64_t));
-    }
-    populate(col, values);
-    return col;
-}
-
-// Default irregular pattern: [1, 1, 1, 3, 1, 5, 1, 7, ...] — alternates 1-element and i-element blocks.
-std::vector<size_t> default_irregular_sizes(size_t total) {
-    std::vector<size_t> sizes;
-    size_t remaining = total;
-    for (size_t i = 0; remaining > 0; ++i) {
-        size_t current = i % 2 == 0 ? 1 : i;
-        current = std::min(current, remaining);
-        sizes.push_back(current);
-        remaining -= current;
-    }
-    return sizes;
+    return make_irregular_blocks_column<int64_t>(values, block_sizes, DataType::INT64);
 }
 
 Column make_irregular_blocks(const std::vector<int64_t>& values) {
-    return make_irregular_blocks(values, default_irregular_sizes(values.size()));
+    return make_irregular_blocks_column<int64_t>(values, DataType::INT64);
 }
 
 // Cross-checks our search functions against std::lower_bound / upper_bound on the reference vector.
@@ -585,10 +554,14 @@ TEST(ColumnSearch, BasicRegular) {
     auto column_data = col.data();
     auto begin = column_data.cbegin<SearchTDT, IteratorType::REGULAR, IteratorDensity::DENSE>();
     auto end = column_data.cend<SearchTDT, IteratorType::REGULAR, IteratorDensity::DENSE>();
+    // 20 is duplicated at indices 4 and 5; lower_bound must land on the first (4) and upper_bound past
+    // the last (6).
     auto lb = lower_bound<SearchTDT, IteratorType::REGULAR, IteratorDensity::DENSE>(begin, end, int64_t{20});
     ASSERT_EQ(*lb, 20);
+    ASSERT_EQ(std::distance(begin, lb), 4);
     auto ub = upper_bound<SearchTDT, IteratorType::REGULAR, IteratorDensity::DENSE>(begin, end, int64_t{20});
     ASSERT_EQ(*ub, 25);
+    ASSERT_EQ(std::distance(begin, ub), 6);
 }
 
 TEST(ColumnSearch, BasicEnumerated) {

@@ -10,51 +10,90 @@
 
 #include <arcticdb/pipeline/input_frame.hpp>
 #include <arcticdb/entity/types.hpp>
+#include <arcticdb/entity/stream_descriptor.hpp>
 #include <arcticdb/stream/index.hpp>
+#include <variant>
 
 namespace arcticdb::pipelines {
 
+namespace {
+SortedValue compute_index_sortedness(const Column& index_column) {
+    using TimeseriesTDT = stream::TimeseriesIndex::TypeDescTag;
+    auto column_data = index_column.data();
+    auto it = column_data.cbegin<TimeseriesTDT>();
+    const auto end = column_data.cend<TimeseriesTDT>();
+    if (it == end) {
+        return SortedValue::ASCENDING;
+    }
+    bool ascending = true;
+    bool descending = true;
+    auto prev = *it;
+    for (++it; it != end; ++it) {
+        const auto curr = *it;
+        if (curr < prev) {
+            ascending = false;
+        } else if (curr > prev) {
+            descending = false;
+        }
+        if (!ascending && !descending) {
+            return SortedValue::UNSORTED;
+        }
+        prev = curr;
+    }
+    return ascending ? SortedValue::ASCENDING : SortedValue::DESCENDING;
+}
+} // namespace
+
 InputFrame::InputFrame() : index(stream::empty_index()) {}
 
-void InputFrame::set_segment(SegmentInMemory&& seg, std::vector<sparrow::record_batch>&& arrow_buffer_owners) {
-    num_rows = seg.row_count();
+void InputFrame::set_from_columns(
+        std::vector<Column>&& cols, StreamDescriptor&& desc, std::vector<sparrow::record_batch>&& arrow_buffer_owners,
+        SortednessScan sortedness_scan
+) {
     util::check(norm_meta.has_experimental_arrow(), "Unexpected non-Arrow norm metadata provided with Arrow data");
+    desc_ = std::move(desc);
     if (norm_meta.experimental_arrow().has_index()) {
         user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
-                !seg.columns().empty(), "Arrow index column specified but there are zero columns"
+                !cols.empty(), "Arrow index column specified but there are zero columns"
         );
         user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
-                is_time_type(seg.column(0).type().data_type()),
+                is_time_type(cols[0].type().data_type()),
                 "Specified Arrow index column has non-time type {}",
-                seg.column(0).type().data_type()
+                cols[0].type().data_type()
         );
-        seg.descriptor().set_index({IndexDescriptorImpl::Type::TIMESTAMP, 1});
-        index = stream::TimeseriesIndex{std::string(seg.descriptor().field(0).name())};
-        seg.descriptor().set_sorted(SortedValue::ASCENDING);
+        desc_.set_index({IndexDescriptorImpl::Type::TIMESTAMP, 1});
+        index = stream::TimeseriesIndex{std::string(desc_.field(0).name())};
+        // Arrow input does not record sortedness up front (unlike pandas), so we have to compute it when required.
+        desc_.set_sorted(
+                sortedness_scan == SortednessScan::SCAN_IF_UNKNOWN ? compute_index_sortedness(cols[0])
+                                                                   : SortedValue::UNKNOWN
+        );
     } else {
-        seg.descriptor().set_index({IndexDescriptorImpl::Type::ROWCOUNT, 0});
+        desc_.set_index({IndexDescriptorImpl::Type::ROWCOUNT, 0});
         index = stream::RowCountIndex{};
-        seg.descriptor().set_sorted(SortedValue::UNKNOWN);
+        desc_.set_sorted(SortedValue::UNKNOWN);
     }
-    input_data.emplace<InputSegment>(std::move(seg), std::move(arrow_buffer_owners));
+
+    num_rows = cols.empty() ? 0 : cols[0].row_count();
+    columns_ = std::vector<FieldData>(std::make_move_iterator(cols.begin()), std::make_move_iterator(cols.end()));
+    arrow_buffer_owners_ = std::move(arrow_buffer_owners);
+    has_only_tensors_ = false;
 }
 
-StreamDescriptor& InputFrame::desc() {
-    if (has_tensors()) {
-        return std::get<InputTensors>(input_data).desc;
-    } else {
-        return std::get<InputSegment>(input_data).seg.descriptor();
-    }
-}
+StreamDescriptor& InputFrame::desc() { return desc_; }
 
 const StreamDescriptor& InputFrame::desc() const { return const_cast<InputFrame*>(this)->desc(); }
 
-const StreamDescriptor& InputFrame::desc_for_tsd() {
-    if (has_segment()) {
-        return std::get<InputSegment>(input_data).desc_for_tsd;
-    } else {
-        return desc();
+StreamDescriptor InputFrame::compute_desc_for_tsd() const {
+    if (has_only_tensors_)
+        return desc_;
+    auto result = desc_.clone();
+    for (auto& field : result.fields()) {
+        if (field.type().data_type() == DataType::UTF_DYNAMIC32) {
+            field.mutable_type() = TypeDescriptor(DataType::UTF_DYNAMIC64, field.type().dimension());
+        }
     }
+    return result;
 }
 
 void InputFrame::set_offset(ssize_t off) const { offset = off; }
@@ -63,36 +102,32 @@ bool InputFrame::has_index() const { return desc().index().field_count() != 0ULL
 
 bool InputFrame::empty() const { return num_rows == 0; }
 
-timestamp InputFrame::index_value_at(size_t row) {
+timestamp InputFrame::index_value_at(size_t row) const {
     util::check(has_index(), "InputFrame::index_value_at should only be called on timeseries data");
+    util::check(!columns_.empty(), "InputFrame::index_value_at called but no columns are present");
     return util::variant_match(
-            input_data,
-            [row](const InputSegment& input_segment) {
-                const auto& seg = input_segment.seg;
+            columns_[0],
+            [row](const NativeTensor& tensor) {
                 util::check(
-                        row < seg.row_count(),
-                        "Out of range row {} requested in InputFrame::index_value_at with segment of length",
-                        row,
-                        seg.row_count()
+                        tensor.data_type() == DataType::NANOSECONDS_UTC64,
+                        "Expected timestamp index in append, got type {}",
+                        tensor.data_type()
                 );
-                const auto& index_column = seg.column(0);
+                return *tensor.ptr_cast<timestamp>(row);
+            },
+            [row](const Column& col) {
+                util::check(
+                        static_cast<position_t>(row) < col.row_count(),
+                        "Out of range row {} requested in InputFrame::index_value_at with column of length {}",
+                        row,
+                        col.row_count()
+                );
                 // Note that scalar_at is O(log(n)) where n is the number of chunks in the underlying buffer, which is
                 // equal to the number of input record batches for Arrow
-                return *index_column.scalar_at<timestamp>(row);
-            },
-            [row](const InputTensors& input_tensors) {
-                util::check(
-                        input_tensors.index_tensor.has_value(), "InputFrame::index_value_at call with null index tensor"
-                );
-                util::check(
-                        input_tensors.index_tensor->data_type() == DataType::NANOSECONDS_UTC64,
-                        "Expected timestamp index in append, got type {}",
-                        input_tensors.index_tensor->data_type()
-                );
-                return *input_tensors.index_tensor->ptr_cast<timestamp>(row);
+                return *col.scalar_at<timestamp>(row);
             }
     );
-}
+};
 
 void InputFrame::set_index_range() {
     // Fill index range
@@ -111,23 +146,35 @@ void InputFrame::set_index_range() {
 
 void InputFrame::set_bucketize_dynamic(bool bucketize) { bucketize_dynamic = bucketize; }
 
-bool InputFrame::has_segment() const { return std::holds_alternative<InputSegment>(input_data); }
+bool InputFrame::has_only_tensors() const { return has_only_tensors_; };
 
-bool InputFrame::has_tensors() const { return std::holds_alternative<InputTensors>(input_data); }
+size_t InputFrame::num_columns() const { return columns_.size(); }
 
-const std::optional<entity::NativeTensor>& InputFrame::opt_index_tensor() const {
-    util::check(has_tensors(), "InputFrame index_tensor requested but holds SegmentInMemory");
-    return std::get<InputTensors>(input_data).index_tensor;
+const InputFrame::FieldData& InputFrame::field_data(size_t idx) const {
+    util::check(idx < columns_.size(), "InputFrame::field_data index {} out of range (size {})", idx, columns_.size());
+    return columns_[idx];
 }
 
-const std::vector<entity::NativeTensor>& InputFrame::field_tensors() const {
-    util::check(has_tensors(), "InputFrame field_tensors requested but holds SegmentInMemory");
-    return std::get<InputTensors>(input_data).field_tensors;
+const NativeTensor& InputFrame::get_tensor(size_t idx) const {
+    util::check(idx < columns_.size(), "InputFrame::get_tensor index {} out of range (size {})", idx, columns_.size());
+    auto& variant_column = columns_[idx];
+    util::check(
+            std::holds_alternative<NativeTensor>(variant_column),
+            "InputFrame::get_tensor called for index {}, but that is not a NativeTensor.",
+            idx
+    );
+    return std::get<NativeTensor>(variant_column);
 }
 
-const SegmentInMemory& InputFrame::segment() const {
-    util::check(has_segment(), "InputFrame segment requested but holds InputTensors");
-    return std::get<InputSegment>(input_data).seg;
+const Column& InputFrame::get_column(size_t idx) const {
+    util::check(idx < columns_.size(), "InputFrame::get_column index {} out of range (size {})", idx, columns_.size());
+    auto& variant_column = columns_[idx];
+    util::check(
+            std::holds_alternative<Column>(variant_column),
+            "InputFrame::get_column called for index {}, but that is not a Column.",
+            idx
+    );
+    return std::get<Column>(variant_column);
 }
 
 } // namespace arcticdb::pipelines

@@ -13,8 +13,9 @@ import arcticdb
 import arcticdb.exceptions
 from arcticdb.version_store import NativeVersionStore
 from arcticdb_ext.exceptions import InternalException, NormalizationException, UnsortedDataException, SchemaException
+from arcticdb_ext.storage import KeyType
 from arcticdb_ext import set_config_int
-from arcticdb.util.test import random_integers, assert_frame_equal
+from arcticdb.util.test import random_integers, assert_frame_equal, assert_series_equal
 from arcticdb.config import set_log_level
 from arcticdb.util.test_utils import generate_random_numpy_array, supported_types_list
 from arcticdb.util.logger import get_logger
@@ -798,3 +799,43 @@ def test_append_after_delete_range(sym, lmdb_version_store):
 
     sliced_data = lib.read("sym", date_range=(datetime(2025, 9, 1), datetime(2025, 9, 4))).data
     assert_frame_equal(sliced_data, expected_data)
+
+
+@pytest.mark.parametrize("data_class", ["dataframe", "series"])
+@pytest.mark.parametrize("batch", [True, False])
+@pytest.mark.parametrize("metadata_v1", ["v1", None])
+def test_append_empty_frame_metadata(lmdb_version_store_v1, data_class, batch, metadata_v1):
+    lib = lmdb_version_store_v1
+    sym = "test_append_empty_frame_metadata"
+    write_data = pd.DataFrame({"col": np.arange(1)}) if data_class == "dataframe" else pd.Series(np.arange(1))
+    metadata_v0 = "v0"
+    lib.write(sym, write_data, metadata=metadata_v0)
+    # Using arange guarantees the dtype matches the written df
+    append_data = pd.DataFrame({"col": np.arange(0)}) if data_class == "dataframe" else pd.Series(np.arange(0))
+    append_vit = (
+        lib.batch_append([sym], [append_data], metadata_vector=[metadata_v1])[0]
+        if batch
+        else lib.append(sym, append_data, metadata=metadata_v1)
+    )
+    assert append_vit.version == 1
+    assert append_vit.metadata == metadata_v1
+    read_vit = lib.read(sym)
+    assert read_vit.version == 1
+    assert read_vit.metadata == metadata_v1
+    assert_func = assert_frame_equal if data_class == "dataframe" else assert_series_equal
+    assert_func(read_vit.data, write_data)
+
+
+@pytest.mark.parametrize("batch", [True, False])
+def test_symbol_list_key_added_on_upsert(lmdb_version_store_v1, batch):
+    lib = lmdb_version_store_v1
+    sym = "test_symbol_list_key_added_on_upsert"
+    lib.write(sym, 0)
+    lib.delete(sym)
+    lib_tool = lib.library_tool()
+    assert not len(lib.list_symbols())
+    num_symbol_list_keys = len(lib_tool.find_keys(KeyType.SYMBOL_LIST))
+    append_df = pd.DataFrame({"col": np.arange(0)})
+    (lib.batch_append([sym], [append_df]) if batch else lib.append(sym, append_df))
+    assert len(lib_tool.find_keys(KeyType.SYMBOL_LIST)) == num_symbol_list_keys + 1
+    assert lib.list_symbols() == [sym]

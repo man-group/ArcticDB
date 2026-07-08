@@ -21,7 +21,7 @@ import random
 from datetime import datetime
 
 import requests
-from typing import Optional, Any, Type
+from typing import Optional, Any, Dict, Type
 
 import werkzeug
 import botocore.exceptions
@@ -95,29 +95,7 @@ class S3Bucket(StorageFixture):
         else:
             self.key = factory.default_key
 
-        secure, host, port = re.match(r"(?:http(s?)://)?([^:/]+)(?::(\d+))?", factory.endpoint).groups()
-        self.arctic_uri = f"s3{secure or ''}://{host}:{self.bucket}?"
-
-        if factory.aws_auth == None or factory.aws_auth == AWSAuthMethod.DISABLED:
-            self.arctic_uri += f"access={self.key.id}&secret={self.key.secret}"
-        elif factory.aws_auth == AWSAuthMethod.STS_PROFILE_CREDENTIALS_PROVIDER:
-            assert factory.aws_profile is not None
-            self.arctic_uri += "aws_auth=sts"
-            self.arctic_uri += f"&aws_profile={factory.aws_profile}"
-        else:
-            self.arctic_uri += "aws_auth=default"
-        if port:
-            self.arctic_uri += f"&port={port}"
-        if factory.default_prefix:
-            self.arctic_uri += f"&path_prefix={factory.default_prefix}"
-        if factory.ssl:
-            self.arctic_uri += "&ssl=True"
-        if factory._test_only_is_nfs_layout:
-            self.arctic_uri += "&_test_only_is_nfs_layout=True"
-        if platform.system() == "Linux":
-            if factory.client_cert_file:
-                self.arctic_uri += f"&CA_cert_path={self.factory.client_cert_file}"
-            # client_cert_dir is skipped on purpose; It will be tested manually in other tests
+        self.arctic_uri = self.get_arctic_uri()
 
     def __exit__(self, exc_type, exc_value, traceback):
         if self.factory.clean_bucket_on_fixture_exit:
@@ -154,6 +132,37 @@ class S3Bucket(StorageFixture):
             native_cfg=self.native_config,
         )  # client_cert_dir is skipped on purpose; It will be tested manually in other tests
         return cfg, self.native_config
+
+    def get_arctic_uri(self, profile: Optional[str] = None):
+        secure, host, port = re.match(r"(?:http(s?)://)?([^:/]+)(?::(\d+))?", self.factory.endpoint).groups()
+        arctic_uri = f"s3{secure or ''}://{host}:{self.bucket}?"
+
+        if self.factory.aws_auth == None or self.factory.aws_auth == AWSAuthMethod.DISABLED:
+            arctic_uri += f"access={self.key.id}&secret={self.key.secret}"
+        elif self.factory.aws_auth == AWSAuthMethod.STS_PROFILE_CREDENTIALS_PROVIDER:
+            assert self.factory.aws_profile is not None
+            arctic_uri += "aws_auth=sts"
+            arctic_uri += f"&aws_profile={self.factory.aws_profile}"
+        else:
+            arctic_uri += "aws_auth=default"
+            profile = profile or self.factory.aws_profile
+            if profile:
+                arctic_uri += f"&aws_profile={profile}"
+
+        if port:
+            arctic_uri += f"&port={port}"
+        if self.factory.default_prefix:
+            arctic_uri += f"&path_prefix={self.factory.default_prefix}"
+        if self.factory.ssl:
+            arctic_uri += "&ssl=True"
+        if self.factory._test_only_is_nfs_layout:
+            arctic_uri += "&_test_only_is_nfs_layout=True"
+        if platform.system() == "Linux":
+            if self.factory.client_cert_file:
+                arctic_uri += f"&CA_cert_path={self.factory.client_cert_file}"
+            # client_cert_dir is skipped on purpose; It will be tested manually in other tests
+
+        return arctic_uri
 
     def set_permission(self, *, read: bool, write: bool):
         factory = self.factory
@@ -300,6 +309,7 @@ class BaseS3StorageFixtureFactory(StorageFixtureFactory):
         self.ssl = False
         self.aws_auth = None
         self.aws_profile = None
+        self.aws_profile_env: Dict[str, str] = {}
         self.aws_policy_name = None
         self.aws_role = None
         self.aws_role_arn = None
@@ -675,6 +685,15 @@ def mock_s3_with_error_simulation():
 
 class HostDispatcherApplication(DomainDispatcherApplication):
     _reqs_till_rate_limit = -1
+    # When set to an access key id, any S3 request not signed with that key is rejected with 403. None disables.
+    _enforced_access_key = None
+
+    @staticmethod
+    def _request_access_key(environ):
+        # SigV4 Authorization header: "AWS4-HMAC-SHA256 Credential=<access_key_id>/<date>/<region>/s3/aws4_request, ..."
+        auth = environ.get("HTTP_AUTHORIZATION", "")
+        match = re.search(r"Credential=([^/,\s]+)/", auth)
+        return match.group(1) if match else None
 
     def get_backend_for_host(self, host):
         """The stand-alone server needs a way to distinguish between S3 and IAM. We use the host for that"""
@@ -720,6 +739,14 @@ class HostDispatcherApplication(DomainDispatcherApplication):
                 start_response("200 OK", [("Content-Type", "text/plain")])
                 return [b"Limit accepted"]
 
+            # Allow enforcing that requests are signed with a specific access key id (empty body disables)
+            if path_info in ("/enforce_access_key", b"/enforce_access_key"):
+                length = int(environ["CONTENT_LENGTH"])
+                body = environ["wsgi.input"].read(length).decode("ascii")
+                self._enforced_access_key = body or None
+                start_response("200 OK", [("Content-Type", "text/plain")])
+                return [b"Access key enforcement set"]
+
             if self._reqs_till_rate_limit == 0:
                 response_body = (
                     b'<?xml version="1.0" encoding="UTF-8"?><Error><Code>SlowDown</Code><Message>Please reduce your request rate.</Message>'
@@ -736,6 +763,16 @@ class HostDispatcherApplication(DomainDispatcherApplication):
             if "/whoami" in path_info:
                 start_response("200 OK", [("Content-Type", "text/plain")])
                 return [b"Moto AWS S3"]
+
+            if self._enforced_access_key is not None and self._request_access_key(environ) != self._enforced_access_key:
+                response_body = (
+                    b'<?xml version="1.0" encoding="UTF-8"?><Error><Code>AccessDenied</Code>'
+                    b"<Message>Access Denied</Message></Error>"
+                )
+                start_response(
+                    "403 Forbidden", [("Content-Type", "text/xml"), ("Content-Length", str(len(response_body)))]
+                )
+                return [response_body]
 
         return super().__call__(environ, start_response)
 

@@ -276,3 +276,73 @@ Column create_dense_column(const Input& data) {
     result.set_row_data(data.size());
     return result;
 }
+
+// Column builders that lay the same values out across different block topologies, exercising the
+// SINGLE / REGULAR / IRREGULAR random_accessor paths. `dt` selects the column's data type (e.g. INT64
+// or NANOSECONDS_UTC64); the raw type `T` must match its width.
+
+template<typename T>
+void populate_column_from_vector(Column& col, const std::vector<T>& values) {
+    for (size_t i = 0; i < values.size(); ++i) {
+        col.reference_at<T>(i) = values[i];
+    }
+}
+
+template<typename T>
+Column make_single_block_column(const std::vector<T>& values, DataType dt) {
+    Column col(make_scalar_type(dt), values.size(), AllocationType::PRESIZED, Sparsity::NOT_PERMITTED);
+    populate_column_from_vector(col, values);
+    return col;
+}
+
+template<typename T>
+Column make_regular_blocks_column(const std::vector<T>& values, DataType dt) {
+    Column col(
+            make_scalar_type(dt), Sparsity::NOT_PERMITTED, ChunkedBuffer::presized_in_blocks(values.size() * sizeof(T))
+    );
+    populate_column_from_vector(col, values);
+    return col;
+}
+
+// DETACHABLE allocation routes lookups through ChunkedBuffer::block_offsets_, so this stresses the
+// irregular path regardless of whether the supplied block sizes are uniform.
+template<typename T>
+Column make_irregular_blocks_column(const std::vector<T>& values, const std::vector<size_t>& block_sizes, DataType dt) {
+    Column col(make_scalar_type(dt), 0, AllocationType::DETACHABLE, Sparsity::NOT_PERMITTED);
+    for (size_t block_size : block_sizes) {
+        col.allocate_data(block_size * sizeof(T));
+        col.advance_data(block_size * sizeof(T));
+    }
+    populate_column_from_vector(col, values);
+    return col;
+}
+
+// Default irregular pattern: [1, 1, 1, 3, 1, 5, 1, 7, ...] — alternates 1-element and i-element blocks.
+inline std::vector<size_t> default_irregular_block_sizes(size_t total) {
+    std::vector<size_t> sizes;
+    size_t remaining = total;
+    for (size_t i = 0; remaining > 0; ++i) {
+        size_t current = i % 2 == 0 ? 1 : i;
+        current = std::min(current, remaining);
+        sizes.push_back(current);
+        remaining -= current;
+    }
+    return sizes;
+}
+
+// Blocks of `block_size` elements each, with a smaller trailing block for the remainder.
+inline std::vector<size_t> uniform_block_sizes(size_t total, size_t block_size) {
+    std::vector<size_t> sizes;
+    size_t remaining = total;
+    while (remaining > 0) {
+        const size_t current = std::min(remaining, block_size);
+        sizes.push_back(current);
+        remaining -= current;
+    }
+    return sizes;
+}
+
+template<typename T>
+Column make_irregular_blocks_column(const std::vector<T>& values, DataType dt) {
+    return make_irregular_blocks_column(values, default_irregular_block_sizes(values.size()), dt);
+}

@@ -322,7 +322,7 @@ def test_querybuilder_date_range_then_filter(
         {"col1": np.arange(10), "col2": np.arange(100, 110)}, index=pd.date_range("2000-01-01", periods=10)
     )
     lib.write(symbol, df)
-    lib.create_column_stats(symbol, {"col1": {"MINMAX"}, "col2": {"MINMAX"}})
+    lib.create_column_stats_experimental(symbol)
 
     date_range = (pd.Timestamp("2000-01-04"), pd.Timestamp("2000-01-07"))
 
@@ -364,7 +364,7 @@ def test_querybuilder_date_range_then_filter_then_resample(
         index=pd.date_range("2000-01-01", periods=100, freq="h"),
     )
     lib.write(symbol, df)
-    lib.create_column_stats(symbol, {"filter_col": {"MINMAX"}, "agg_col": {"MINMAX"}})
+    lib.create_column_stats_experimental(symbol)
 
     date_range = (pd.Timestamp("2000-01-02"), pd.Timestamp("2000-01-04"))
     q = QueryBuilder()
@@ -585,7 +585,7 @@ def test_querybuilder_row_range_then_filter(
     symbol = "test_querybuilder_row_range_then_filter"
     df = pd.DataFrame({"col1": np.arange(10), "col2": np.arange(100, 110)}, index=np.arange(10))
     lib.write(symbol, df)
-    lib.create_column_stats(symbol, {"col1": {"MINMAX"}, "col2": {"MINMAX"}})
+    lib.create_column_stats_experimental(symbol)
 
     row_range = (3, 7)
 
@@ -728,7 +728,7 @@ def test_querybuilder_filter_then_date_range(
     symbol = "test_querybuilder_filter_then_date_range"
     df = pd.DataFrame({"col": np.arange(1, 11)}, index=pd.date_range("2024-01-01", periods=10))
     lib.write(symbol, df)
-    lib.create_column_stats(symbol, {"col": {"MINMAX"}})
+    lib.create_column_stats_experimental(symbol)
     q = QueryBuilder()
     q = q[q["col"].isin(2, 3, 7)]
     q = q.date_range((pd.Timestamp("2024-01-03"), pd.Timestamp("2024-01-08")))
@@ -747,7 +747,7 @@ def test_querybuilder_filter_then_head(
     symbol = "test_querybuilder_filter_then_head"
     df = pd.DataFrame({"col": np.arange(1, 11)}, index=pd.date_range("2024-01-01", periods=10))
     lib.write(symbol, df)
-    lib.create_column_stats(symbol, {"col": {"MINMAX"}})
+    lib.create_column_stats_experimental(symbol)
     q = QueryBuilder()
     q = q[q["col"].isin(4, 5, 6, 8, 10)]
     q = q.head(n)
@@ -767,7 +767,7 @@ def test_querybuilder_filter_then_tail(
     symbol = "test_querybuilder_filter_then_head"
     df = pd.DataFrame({"col": np.arange(1, 11)}, index=pd.date_range("2024-01-01", periods=10))
     lib.write(symbol, df)
-    lib.create_column_stats(symbol, {"col": {"MINMAX"}})
+    lib.create_column_stats_experimental(symbol)
     q = QueryBuilder()
     q = q[q["col"].isin(4, 5, 6, 8, 10)]
     q = q.tail(n)
@@ -786,7 +786,7 @@ def test_querybuilder_filter_then_row_range(
     symbol = "test_querybuilder_filter_then_row_range"
     df = pd.DataFrame({"col": np.arange(1, 11)}, index=pd.date_range("2024-01-01", periods=10))
     lib.write(symbol, df)
-    lib.create_column_stats(symbol, {"col": {"MINMAX"}})
+    lib.create_column_stats_experimental(symbol)
     q = QueryBuilder()
     q = q[q["col"].isin(4, 5, 6, 8, 10)]
     q = q.row_range((1, 4))
@@ -805,7 +805,7 @@ def test_querybuilder_filter_then_filter(
     symbol = "test_querybuilder_filter_then_filter"
     df = pd.DataFrame({"col1": np.arange(10), "col2": np.arange(100, 110)}, index=np.arange(10))
     lib.write(symbol, df)
-    lib.create_column_stats(symbol, {"col1": {"MINMAX"}, "col2": {"MINMAX"}})
+    lib.create_column_stats_experimental(symbol)
 
     q = QueryBuilder()
     q = q[q["col1"].isin(2, 3, 7)]
@@ -826,7 +826,7 @@ def test_querybuilder_filter_then_project(
         {"col1": np.arange(10, dtype=np.int64), "col2": np.arange(100, 110, dtype=np.int64)}, index=np.arange(10)
     )
     lib.write(symbol, df)
-    lib.create_column_stats(symbol, {"col1": {"MINMAX"}, "col2": {"MINMAX"}})
+    lib.create_column_stats_experimental(symbol)
 
     q = QueryBuilder()
     q = q[q["col1"].isin(2, 3, 7)]
@@ -866,7 +866,7 @@ def test_querybuilder_filter_then_resample(
     idx = np.array(idx, dtype="datetime64[ns]")
     df = pd.DataFrame({"col": np.arange(6)}, index=idx)
     lib.write(symbol, df)
-    lib.create_column_stats(symbol, {"col": {"MINMAX"}})
+    lib.create_column_stats_experimental(symbol)
 
     q = QueryBuilder()
     q = q[(q["col"] != 1) & (q["col"] != 5)]
@@ -923,7 +923,7 @@ def test_querybuilder_project_then_filter(
         {"col1": np.arange(10, dtype=np.int64), "col2": np.arange(100, 110, dtype=np.int64)}, index=np.arange(10)
     )
     lib.write(symbol, df)
-    lib.create_column_stats(symbol, {"col1": {"MINMAX"}, "col2": {"MINMAX"}})
+    lib.create_column_stats_experimental(symbol)
 
     q = QueryBuilder()
     q = q.apply("new_col", (q["col1"] * q["col2"]) + 13)
@@ -1009,7 +1009,7 @@ def test_querybuilder_groupby_then_filter(
         index=np.arange(10),
     )
     lib.write(symbol, df)
-    lib.create_column_stats(symbol, {"col2": {"MINMAX"}})
+    lib.create_column_stats_experimental(symbol)
     q = QueryBuilder()
     q = q.groupby("col1").agg({"col2": "sum"})
     q = q[(q["col1"] != "b") & (q["col2"] != 9)]
@@ -1105,7 +1105,7 @@ def test_querybuilder_resample_then_filter(
     idx = np.array(idx, dtype="datetime64[ns]")
     df = pd.DataFrame({"col": np.arange(6)}, index=idx)
     lib.write(symbol, df)
-    lib.create_column_stats(symbol, {"col": {"MINMAX"}})
+    lib.create_column_stats_experimental(symbol)
 
     q = QueryBuilder()
     q = q.resample("us").agg({"col": "sum"})

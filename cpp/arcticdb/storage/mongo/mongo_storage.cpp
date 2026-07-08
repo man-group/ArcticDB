@@ -19,8 +19,6 @@
 
 namespace arcticdb::storage::mongo {
 
-const auto UNSUPPORTED_MONGO_CHARS = std::unordered_set<char>{'/'};
-
 std::string MongoStorage::collection_name(KeyType k) { return (fmt::format("{}{}", prefix_, k)); }
 
 /*
@@ -201,8 +199,16 @@ bool MongoStorage::do_iterate_type_until_match(
     return false;
 }
 
-bool MongoStorage::do_is_path_valid(std::string_view path) const {
-    return std::none_of(path.cbegin(), path.cend(), [](auto c) { return UNSUPPORTED_MONGO_CHARS.contains(c); });
+const std::set<char>& MongoStorage::do_unsupported_library_chars() const {
+    // (Part of) Library name forms the name of mongo database. '/' is not allowed there, on top of the globally
+    // unsupported characters.
+    // https://www.mongodb.com/docs/manual/reference/limits/?atlas-provider=aws&atlas-class=general#mongodb-limit-Restrictions-on-Database-Names-for-Unix-and-Linux-Systems
+    static const std::set<char> chars = [] {
+        std::set<char> result = GLOBALLY_UNSUPPORTED_CHARS;
+        result.insert('/');
+        return result;
+    }();
+    return chars;
 }
 
 bool MongoStorage::do_key_exists(const VariantKey& key) {

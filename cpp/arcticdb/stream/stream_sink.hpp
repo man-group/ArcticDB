@@ -109,7 +109,11 @@ struct StreamSink {
             const std::shared_ptr<DeDupMap>& de_dup_map
     ) = 0;
 
-    virtual bool is_path_valid(const std::string_view path) const = 0;
+    virtual const std::set<char>& unsupported_symbol_chars() const = 0;
+
+    virtual const std::set<char>& unsupported_library_chars() const = 0;
+
+    virtual std::optional<char> verify_library_suffix(std::string_view path) const = 0;
 
     [[nodiscard]] virtual folly::Future<folly::Unit> batch_write_compressed(std::vector<storage::KeySegmentPair> kvs
     ) = 0;

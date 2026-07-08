@@ -6,6 +6,8 @@
  * will be governed by the Apache License, version 2.0.
  */
 
+#include "codec/segment.hpp"
+#include "column_store/memory_segment.hpp"
 #include <arcticdb/pipeline/input_frame.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/pipeline/index_utils.hpp>
@@ -20,6 +22,8 @@
 #include <arcticdb/async/tasks.hpp>
 #include <arcticdb/util/format_date.hpp>
 
+#include <ankerl/unordered_dense.h>
+
 #include <vector>
 #include <array>
 
@@ -30,17 +34,14 @@ using namespace arcticdb::stream;
 namespace ranges = std::ranges;
 
 WriteToSegmentTask::WriteToSegmentTask(
-        std::shared_ptr<InputFrame> frame, FrameSlice slice, const SlicingPolicy& slicing,
-        folly::Function<PartialKey(const FrameSlice&)>&& partial_key_gen, size_t slice_num_for_column, Index index,
-        bool sparsify_floats
+        std::shared_ptr<InputFrame> frame, FrameSlice slice,
+        const std::optional<TypedStreamVersion>& typed_stream_version, bool sparsify_floats, CopyMode copy_mode
 ) :
     frame_(std::move(frame)),
     slice_(std::move(slice)),
-    slicing_(slicing),
-    partial_key_gen_(std::move(partial_key_gen)),
-    slice_num_for_column_(slice_num_for_column),
-    index_(std::move(index)),
-    sparsify_floats_(sparsify_floats) {
+    typed_stream_version_(typed_stream_version),
+    sparsify_floats_(sparsify_floats),
+    copy_mode_(copy_mode) {
     slice_.check_magic();
 }
 
@@ -48,35 +49,27 @@ std::tuple<PartialKey, SegmentInMemory, FrameSlice> WriteToSegmentTask::operator
     ARCTICDB_SUBSAMPLE_AGG(WriteSliceCopyToSegment)
     slice_.check_magic();
     magic_.check();
-    auto key = partial_key_gen_(slice_);
-    auto seg = frame_->has_segment() ? slice_segment() : slice_tensors();
+    auto seg = slice();
+    auto key = generate_partial_key(seg);
     seg.descriptor().set_id(key.stream_id);
     return {std::move(key), std::move(seg), std::move(slice_)};
 }
 
-SegmentInMemory WriteToSegmentTask::slice_segment() const {
-    const auto& frame = frame_->segment();
-    const auto offset = frame_->offset;
-    SegmentInMemory seg;
-    if (frame.descriptor().index().field_count() > 0) {
-        seg.descriptor().set_index({IndexDescriptorImpl::Type::TIMESTAMP, 1});
-    } else {
-        seg.descriptor().set_index({IndexDescriptorImpl::Type::ROWCOUNT, 0});
+PartialKey WriteToSegmentTask::generate_partial_key(const SegmentInMemory& seg) const {
+    if (!typed_stream_version_.has_value()) {
+        return {};
     }
-    for (size_t col_idx = 0; col_idx < frame.descriptor().index().field_count(); ++col_idx) {
-        seg.add_column(
-                frame.field(col_idx).name(),
-                std::make_shared<Column>(slice_column(frame, col_idx, offset, seg.string_pool()))
-        );
-    }
-    for (size_t col_idx = slice_.columns().first; col_idx < slice_.columns().second; ++col_idx) {
-        seg.add_column(
-                frame.field(col_idx).name(),
-                std::make_shared<Column>(slice_column(frame, col_idx, offset, seg.string_pool()))
-        );
-    }
-    seg.set_row_data((slice_.rows().second - slice_.rows().first) - 1);
-    return seg;
+    const auto start_index = frame_->has_index()
+                                     ? *seg.column(0).scalar_at<timestamp>(0)
+                                     : entity::safe_convert_to_numeric_index(slice_.row_range.first, "Rows");
+    const auto end_index = frame_->has_index()
+                                   ? end_index_generator(*seg.column(0).scalar_at<timestamp>(seg.row_count() - 1))
+                                   : entity::safe_convert_to_numeric_index(slice_.row_range.second, "Rows");
+    return {typed_stream_version_->type,
+            typed_stream_version_->version_id,
+            typed_stream_version_->id,
+            start_index,
+            end_index};
 }
 
 struct ArrowInputContiguousSlice {
@@ -87,6 +80,7 @@ struct ArrowInputContiguousSlice {
     size_t size;
     IMemBlock* block;
     std::optional<ExternalPackedMemBlock*> bitmap_block;
+    std::optional<ExternalMemBlock*> offsets_block;
     std::optional<ExternalMemBlock*> strings_block;
 };
 
@@ -111,6 +105,7 @@ std::vector<ArrowInputContiguousSlice> arrow_contiguous_slices_in_range(const Co
                 .size = num_bytes_in_arrow_slice / type_size,
                 .block = block,
                 .bitmap_block = std::nullopt,
+                .offsets_block = std::nullopt,
                 .strings_block = std::nullopt
         };
         if (col.has_extra_buffer(block_offset, ExtraBufferType::BITMAP)) {
@@ -127,6 +122,21 @@ std::vector<ArrowInputContiguousSlice> arrow_contiguous_slices_in_range(const Co
                     bitmap_block->get_type()
             );
             slice.bitmap_block = static_cast<ExternalPackedMemBlock*>(bitmap_block);
+        }
+        if (col.has_extra_buffer(block_offset, ExtraBufferType::OFFSET)) {
+            const auto& offsets_buffer = col.get_extra_buffer(block_offset, ExtraBufferType::OFFSET);
+            util::check(
+                    offsets_buffer.num_blocks() == 1,
+                    "Expected exactly one offsets block but got {}",
+                    offsets_buffer.num_blocks()
+            );
+            auto offsets_block = offsets_buffer.blocks()[0];
+            util::check(
+                    offsets_block->get_type() == MemBlockType::EXTERNAL_WITH_EXTRA_BYTES,
+                    "Expected to see an external block but got: {}",
+                    offsets_block->get_type()
+            );
+            slice.offsets_block = static_cast<ExternalMemBlock*>(offsets_block);
         }
         if (col.has_extra_buffer(block_offset, ExtraBufferType::STRING)) {
             const auto& strings_buffer = col.get_extra_buffer(block_offset, ExtraBufferType::STRING);
@@ -264,33 +274,62 @@ void merge_arrow_slices_into_column(
         if constexpr (is_sequence_type(source_type_info::data_type)) {
             auto logical_pos = 0u;
             for (const auto& slice : slices) {
-                util::check(
-                        slice.block->physical_bytes() == slice.block->logical_size() + sizeof(SourceType),
-                        "Expected offsets buffer to have one extra offset value but instead got physical: {}, "
-                        "logical: {}",
-                        slice.block->physical_bytes(),
-                        slice.block->logical_size()
-                );
-                auto offsets = reinterpret_cast<SourceType*>(slice.block->data());
                 util::check(slice.strings_block.has_value(), "Expected to have strings block in strings arrow column");
-                auto strings = reinterpret_cast<char*>(slice.strings_block.value()->data());
-                auto add_dense_string = [&] ARCTICDB_LAMBDA_INLINE(size_t pos) {
-                    auto pos_in_offsets = (pos - logical_pos) + slice.start_pos;
-                    auto strings_buffer_offset = offsets[pos_in_offsets];
-                    // offsets[pos_in_offsets + 1] is not out of bounds because that is an ExternalMemBlock with
-                    // extra bytes as asserted above.
-                    auto string_length = offsets[pos_in_offsets + 1] - strings_buffer_offset;
-                    std::string_view str(&strings[strings_buffer_offset], string_length);
-                    *dest_dense_ptr++ = string_pool.get(str).offset();
-                };
-                if (slice.bitmap_block.has_value() && dest.is_sparse()) {
-                    iterate_over_set_positions(
-                            dest.sparse_map(), logical_pos, logical_pos + slice.size, std::move(add_dense_string)
-                    );
-                } else {
-                    for (auto pos = logical_pos; pos < logical_pos + slice.size; ++pos) {
-                        add_dense_string(pos);
+                auto strings = reinterpret_cast<const char*>(slice.strings_block.value()->data());
+
+                auto apply_to_every_set_position_in_slice = [&](auto&& f) {
+                    if (slice.bitmap_block.has_value() && dest.is_sparse()) {
+                        iterate_over_set_positions(
+                                dest.sparse_map(), logical_pos, logical_pos + slice.size, std::forward<decltype(f)>(f)
+                        );
+                    } else {
+                        for (auto pos = logical_pos; pos < logical_pos + slice.size; ++pos) {
+                            f(pos);
+                        }
                     }
+                };
+
+                if (slice.offsets_block.has_value()) {
+                    // Dictionary-encoded strings
+                    // keys can be int32 >= 0 (from pyarrow) or uint32 (from polars). reinterpret_cast<uint32_t*> works
+                    // for both
+                    auto keys = reinterpret_cast<const uint32_t*>(slice.block->data());
+                    auto offsets = reinterpret_cast<const int64_t*>(slice.offsets_block.value()->data());
+                    // Use the pool_offsets cache to not repeatedly call `string_pool.get` on duplicate strings
+                    ankerl::unordered_dense::map<uint32_t, DestType> pool_offsets;
+                    auto add_dense_string = [&] ARCTICDB_LAMBDA_INLINE(size_t pos) {
+                        auto key = keys[(pos - logical_pos) + slice.start_pos];
+                        if (auto it = pool_offsets.find(key); it != pool_offsets.end()) {
+                            *dest_dense_ptr++ = it->second;
+                        } else {
+                            auto string_start = offsets[key];
+                            auto string_length = offsets[key + 1] - string_start;
+                            std::string_view str(&strings[string_start], string_length);
+                            auto dest_offset = static_cast<DestType>(string_pool.get(str).offset());
+                            pool_offsets.emplace(key, dest_offset);
+                            *dest_dense_ptr++ = dest_offset;
+                        }
+                    };
+                    apply_to_every_set_position_in_slice(std::move(add_dense_string));
+                } else {
+                    // Variable-length strings
+                    util::check(
+                            slice.block->physical_bytes() == slice.block->logical_size() + sizeof(SourceType),
+                            "Expected offsets buffer to have one extra offset value but instead got physical: {}, "
+                            "logical: {}",
+                            slice.block->physical_bytes(),
+                            slice.block->logical_size()
+                    );
+                    auto offsets = reinterpret_cast<const SourceType*>(slice.block->data());
+                    auto add_dense_string = [&] ARCTICDB_LAMBDA_INLINE(size_t pos) {
+                        auto pos_in_offsets = (pos - logical_pos) + slice.start_pos;
+                        auto strings_buffer_offset = offsets[pos_in_offsets];
+                        // offsets[pos_in_offsets + 1] is in bounds because the block carries one extra offset.
+                        auto string_length = offsets[pos_in_offsets + 1] - strings_buffer_offset;
+                        std::string_view str(&strings[strings_buffer_offset], string_length);
+                        *dest_dense_ptr++ = string_pool.get(str).offset();
+                    };
+                    apply_to_every_set_position_in_slice(std::move(add_dense_string));
                 }
                 logical_pos += slice.size;
             }
@@ -298,10 +337,7 @@ void merge_arrow_slices_into_column(
     });
 }
 
-Column WriteToSegmentTask::slice_column(
-        const SegmentInMemory& frame, size_t col_idx, size_t offset, StringPool& string_pool
-) const {
-    const auto& source_column = frame.column(col_idx);
+Column WriteToSegmentTask::slice_column(const Column& source_column, size_t offset, StringPool& string_pool) const {
     const auto type_size = get_type_size(source_column.type().data_type());
     const auto begin_pos = (slice_.rows().first - offset);
     const auto end_pos = (slice_.rows().second - offset);
@@ -317,13 +353,16 @@ Column WriteToSegmentTask::slice_column(
         dest_column_type = make_scalar_type(DataType::BOOL8);
     } else if (is_sequence_type(source_column.type().data_type())) {
         dest_column_type = make_scalar_type(DataType::UTF_DYNAMIC64);
-    } else if (num_nulls == 0 && contiguous_slices.size() == 1) {
+    } else if (copy_mode_ == CopyMode::IF_NEEDED && num_nulls == 0 && contiguous_slices.size() == 1) {
         // Dense numeric column consisting of a single contiguous slice of memory is the only
-        // case where we can zero copy construct the result column.
+        // case where we can zero copy construct the result column. When CopyMode::ALWAYS is requested we fall through
+        // to the general path below, which allocates an owned column and copies the data into it.
         const auto& slice = contiguous_slices.front();
         ChunkedBuffer chunked_buffer;
         chunked_buffer.add_external_block(slice.block->ptr(slice.start_pos * type_size), slice.size * type_size);
-        return {source_column.type(), Sparsity::NOT_PERMITTED, std::move(chunked_buffer)};
+        Column dest{source_column.type(), Sparsity::NOT_PERMITTED, std::move(chunked_buffer)};
+        dest.set_row_data(slice_.rows().diff() - 1);
+        return dest;
     }
     Column dest(
             dest_column_type,
@@ -343,96 +382,61 @@ Column WriteToSegmentTask::slice_column(
     return dest;
 }
 
-SegmentInMemory WriteToSegmentTask::slice_tensors() const {
-    return util::variant_match(index_, [this](auto& idx) {
-        using IdxType = std::decay_t<decltype(idx)>;
-        using SingleSegmentAggregator = Aggregator<IdxType, FixedSchema, NeverSegmentPolicy>;
+SegmentInMemory WriteToSegmentTask::slice() const {
+    SegmentInMemory seg;
+    seg.descriptor().set_index(slice_.desc()->index());
 
-        SegmentInMemory output;
-        SingleSegmentAggregator agg{
-                FixedSchema{*slice_.desc(), frame_->index},
-                [&output](auto&& segment) { output = std::move(segment); },
-                NeverSegmentPolicy{},
-                *slice_.desc()
-        };
+    const auto offset_in_frame = slice_begin_pos(slice_, *frame_);
+    seg.set_offset(offset_in_frame);
+    const auto rows_to_write = slice_.row_range.second - slice_.row_range.first;
+    const auto index_field_count = frame_->desc().index().field_count();
 
-        auto regular_slice_size = util::variant_match(
-                slicing_,
-                [&](const NoSlicing&) { return slice_.row_range.second - slice_.row_range.first; },
-                [&](const auto& slicer) { return slicer.row_per_slice(); }
+    auto add_tensor_column = [&](size_t abs_col, const NativeTensor& tensor, const Field& fd, bool sparsify) {
+        seg.add_column(
+                FieldRef{fd.type(), fd.name()},
+                std::make_shared<Column>(fd.type(), 0, AllocationType::DYNAMIC, Sparsity::NOT_PERMITTED)
         );
-
-        // Offset is used for index value in row-count index
-        auto offset_in_frame = slice_begin_pos(slice_, *frame_);
-        agg.set_offset(offset_in_frame);
-
-        auto rows_to_write = slice_.row_range.second - slice_.row_range.first;
-        if (frame_->desc().index().field_count() > 0) {
-            const auto& opt_index_tensor = frame_->opt_index_tensor();
-            util::check(opt_index_tensor.has_value(), "Got null index tensor in WriteToSegmentTask");
-            auto opt_error = aggregator_set_data(
-                    frame_->desc().fields(0).type(),
-                    *opt_index_tensor,
-                    agg,
-                    0,
-                    rows_to_write,
-                    offset_in_frame,
-                    slice_num_for_column_,
-                    regular_slice_size,
-                    false
-            );
-            if (opt_error.has_value()) {
-                opt_error->raise(frame_->desc().fields(0).name(), offset_in_frame);
-            }
+        auto opt_error =
+                segment_set_data(fd.type(), tensor, seg, abs_col, rows_to_write, offset_in_frame, sparsify, copy_mode_);
+        if (opt_error.has_value()) {
+            opt_error->raise(fd.name(), offset_in_frame);
         }
+    };
 
-        const auto& field_tensors = frame_->field_tensors();
-        for (size_t col = 0, end = slice_.col_range.diff(); col < end; ++col) {
-            auto abs_col = col + frame_->desc().index().field_count();
-            auto& fd = slice_.non_index_field(col);
-            auto& tensor = field_tensors[slice_.absolute_field_col(col)];
-            auto opt_error = aggregator_set_data(
-                    fd.type(),
-                    tensor,
-                    agg,
-                    abs_col,
-                    rows_to_write,
-                    offset_in_frame,
-                    slice_num_for_column_,
-                    regular_slice_size,
-                    sparsify_floats_
-            );
-            if (opt_error.has_value()) {
-                opt_error->raise(fd.name(), offset_in_frame);
-            }
-        }
+    auto add_arrow_column = [&](const Column& source_column, const Field& fd) {
+        seg.add_column(
+                fd.name(), std::make_shared<Column>(slice_column(source_column, frame_->offset, seg.string_pool()))
+        );
+    };
 
-        agg.end_block_write(rows_to_write);
-
-        if (ConfigsMap().instance()->get_int("Statistics.GenerateOnWrite", 0) == 1)
-            agg.segment().calculate_statistics();
-
-        agg.finalize();
-        return output;
-    });
-}
-
-std::vector<std::pair<FrameSlice, size_t>> get_slice_and_rowcount(const std::vector<FrameSlice>& slices) {
-    std::vector<std::pair<FrameSlice, size_t>> slice_and_rowcount;
-    slice_and_rowcount.reserve(slices.size());
-    size_t slice_num_for_column = 0;
-    std::optional<size_t> first_row;
-    for (const auto& slice : slices) {
-        if (!first_row)
-            first_row = slice.row_range.first;
-
-        if (slice.row_range.first == *first_row)
-            slice_num_for_column = 0;
-
-        slice_and_rowcount.emplace_back(slice, slice_num_for_column);
-        ++slice_num_for_column;
+    // Index column
+    if (frame_->has_index()) {
+        const auto& fd = frame_->desc().fields(0);
+        util::variant_match(
+                frame_->field_data(0),
+                [&](const NativeTensor& tensor) { add_tensor_column(0, tensor, fd, false); },
+                [&](const Column& source_column) { add_arrow_column(source_column, fd); }
+        );
     }
-    return slice_and_rowcount;
+
+    // Non-index columns
+    for (size_t col = 0, end = slice_.col_range.diff(); col < end; ++col) {
+        const auto abs_col = col + index_field_count;
+        const auto& fd = slice_.non_index_field(col);
+        const auto col_idx = slice_.absolute_field_col(col) + index_field_count;
+        util::variant_match(
+                frame_->field_data(col_idx),
+                [&](const NativeTensor& tensor) { add_tensor_column(abs_col, tensor, fd, sparsify_floats_); },
+                [&](const Column& source_column) { add_arrow_column(source_column, fd); }
+        );
+    }
+
+    seg.end_block_write(rows_to_write);
+
+    if (ConfigsMap().instance()->get_int("Statistics.GenerateOnWrite", 0) == 1)
+        seg.calculate_statistics();
+
+    return seg;
 }
 
 int64_t write_window_size() {
@@ -442,27 +446,17 @@ int64_t write_window_size() {
 }
 
 folly::SemiFuture<std::vector<folly::Try<SliceAndKey>>> write_slices(
-        const std::shared_ptr<InputFrame>& frame, std::vector<FrameSlice>&& slices, const SlicingPolicy& slicing,
-        TypedStreamVersion&& key, const std::shared_ptr<stream::StreamSink>& sink,
-        const std::shared_ptr<DeDupMap>& de_dup_map, bool sparsify_floats
+        const std::shared_ptr<InputFrame>& frame, std::vector<FrameSlice>&& slices, TypedStreamVersion&& key,
+        const std::shared_ptr<stream::StreamSink>& sink, const std::shared_ptr<DeDupMap>& de_dup_map,
+        bool sparsify_floats
 ) {
     ARCTICDB_SAMPLE(WriteSlices, 0)
 
-    auto slice_and_rowcount = get_slice_and_rowcount(slices);
-
     int64_t write_window = write_window_size();
     auto window = folly::window(
-            std::move(slice_and_rowcount),
-            [de_dup_map, frame, slicing, key = std::move(key), sink, sparsify_floats](auto&& slice) {
-                return async::submit_cpu_task(WriteToSegmentTask(
-                                                      frame,
-                                                      slice.first,
-                                                      slicing,
-                                                      get_partial_key_gen(frame, key),
-                                                      slice.second,
-                                                      frame->index,
-                                                      sparsify_floats
-                                              ))
+            std::move(slices),
+            [de_dup_map, frame, key = std::move(key), sink, sparsify_floats](auto&& slice) {
+                return async::submit_cpu_task(WriteToSegmentTask(frame, slice, key, sparsify_floats))
                         .then([sink, de_dup_map](auto&& ks) {
                             return sink->async_write(std::forward<decltype(ks)>(ks), de_dup_map);
                         });
@@ -484,7 +478,7 @@ folly::Future<std::vector<SliceAndKey>> slice_and_write(
 
     ARCTICDB_SUBSAMPLE_DEFAULT(SliceAndWrite)
     TypedStreamVersion tsv{std::move(key.id), key.version_id, KeyType::TABLE_DATA};
-    return write_slices(frame, std::move(slices), slicing, std::move(tsv), sink, de_dup_map, sparsify_floats)
+    return write_slices(frame, std::move(slices), std::move(tsv), sink, de_dup_map, sparsify_floats)
             .via(&async::cpu_executor())
             .thenValue([sink](std::vector<folly::Try<SliceAndKey>>&& ks) {
                 return rollback_slices_on_quota_exceeded(std::move(ks), sink);
@@ -508,33 +502,14 @@ folly::Future<entity::AtomKey> write_frame(
 
 folly::Future<AtomKey> append_frame(
         IndexPartialKey&& key, const std::shared_ptr<InputFrame>& frame, const SlicingPolicy& slicing,
-        index::IndexSegmentReader& index_segment_reader, const std::shared_ptr<Store>& store, bool dynamic_schema,
-        bool ignore_sort_order
+        index::IndexSegmentReader& index_segment_reader, const std::shared_ptr<Store>& store, bool dynamic_schema
 ) {
     ARCTICDB_SAMPLE_DEFAULT(AppendFrame)
-    util::variant_match(
-            frame->index,
-            [&index_segment_reader, &frame, ignore_sort_order](const TimeseriesIndex&) {
-                util::check(frame->has_index(), "Cannot append timeseries without index");
-                if (index_segment_reader.tsd().total_rows() != 0 && frame->num_rows != 0) {
-                    auto first_index = NumericIndex{frame->index_value_at(0)};
-                    auto prev = std::get<NumericIndex>(index_segment_reader.last()->key().end_index());
-                    util::check(
-                            ignore_sort_order || prev - 1 <= first_index,
-                            "Can't append dataframe with start index {} to existing sequence ending at {}",
-                            util::format_timestamp(first_index),
-                            util::format_timestamp(prev)
-                    );
-                }
-            },
-            [](const auto&) {
-                // Do whatever, but you can't range search it
-            }
-    );
-
     auto existing_slices = unfiltered_index(index_segment_reader);
+    const auto tsd =
+            index::get_merged_tsd(frame->num_rows + frame->offset, dynamic_schema, index_segment_reader.tsd(), frame);
     auto keys_fut = slice_and_write(frame, slicing, IndexPartialKey{key}, store);
-    return std::move(keys_fut).thenValue([dynamic_schema,
+    return std::move(keys_fut).thenValue([tsd = std::move(tsd),
                                           slices_to_write = std::move(existing_slices),
                                           frame = frame,
                                           index_segment_reader = std::move(index_segment_reader),
@@ -546,9 +521,6 @@ folly::Future<AtomKey> append_frame(
                 std::make_move_iterator(std::end(slice_and_keys_to_append))
         );
         ranges::sort(slices_to_write);
-        const auto tsd = index::get_merged_tsd(
-                frame->num_rows + frame->offset, dynamic_schema, index_segment_reader.tsd(), frame
-        );
         return index::write_index(
                 index_type_from_descriptor(tsd.as_stream_descriptor()), tsd, std::move(slices_to_write), key, store
         );

@@ -87,7 +87,7 @@ from arcticdb.flattener import Flattener
 from arcticdb.log import version as log
 from arcticdb.version_store._custom_normalizers import get_custom_normalizer, CompositeCustomNormalizer
 from arcticdb.version_store._normalization import (
-    NPDDataFrame,
+    PandasData,
     normalize_metadata,
     normalize_recursive_metastruct,
     denormalize_user_metadata,
@@ -350,6 +350,20 @@ def _assume_false(name, kwargs):
         return False
     else:
         return True
+
+
+def _has_physically_stored_index(norm):
+    input_type = norm.WhichOneof("input_type")
+    if input_type == "experimental_arrow":
+        return norm.experimental_arrow.has_index
+    if input_type in ("df", "series"):
+        common = norm.df.common if input_type == "df" else norm.series.common
+        index_type = common.WhichOneof("index_type")
+        if index_type == "index":
+            return common.index.is_physically_stored
+        if index_type == "multi_index":
+            return True
+    return False
 
 
 class NativeVersionStore:
@@ -663,7 +677,7 @@ class NativeVersionStore:
 
     @staticmethod
     def _valid_item_type(item):
-        return isinstance(item, NPDDataFrame) or (
+        return isinstance(item, PandasData) or (
             isinstance(item, list) and all(isinstance(el, RecordBatchData) for el in item)
         )
 
@@ -793,7 +807,7 @@ class NativeVersionStore:
         validate_index: bool, default=False
             If True, will verify that the index of `data` supports date range searches and update operations. This in effect tests that the data is sorted in ascending order.
             ArcticDB relies on Pandas to detect if data is sorted - you can call DataFrame.index.is_monotonic_increasing on your input DataFrame to see if Pandas believes the
-            data to be sorted. Note that no checks are performed for Arrow input data.
+            data to be sorted. For Arrow input data, ArcticDB checks the index column directly.
         index_column: bool, default=False
             Only applicable when data is a PyArrow Table or Polars DataFrame. If True, the first column
             is treated as the timeseries index.
@@ -967,7 +981,7 @@ class NativeVersionStore:
         validate_index: bool, default=False
             If True, will verify that resulting symbol will support date range searches and update operations. This in effect tests that the previous version of the
             data and `data` are both sorted in ascending order. ArcticDB relies on Pandas to detect if data is sorted - you can call DataFrame.index.is_monotonic_increasing
-            on your input DataFrame to see if Pandas believes the data to be sorted.  Note that no checks are performed for Arrow input data.
+            on your input DataFrame to see if Pandas believes the data to be sorted.  For Arrow input data, ArcticDB checks the index column directly.
         index_column: bool, default=False
             Only applicable when data is a PyArrow Table or Polars DataFrame. If True, the first column
             is treated as the timeseries index.
@@ -1266,23 +1280,25 @@ class NativeVersionStore:
                 _log_warning_on_writing_empty_dataframe(data_vector[idx], symbols[idx])
         return result
 
-    def create_column_stats(
-        self, symbol: str, column_stats: Dict[str, Set[str]], as_of: Optional[VersionQueryInput] = None
+    def create_column_stats_experimental(
+        self,
+        symbol: str,
+        as_of: Optional[VersionQueryInput] = None,
     ) -> None:
         """
-        Calculates the specified column statistics for each row-slice for the given symbol. In the future, these
+        Calculates MINMAX column statistics for each row-slice for the given symbol. In the future, these
         statistics will be used by `QueryBuilder` filtering operations to reduce the number of data segments read out
         of storage.
 
+        MINMAX stats are built for every data column and every inner multiindex index level whose dtype is numeric
+        (uint/int/float/bool) or a UTC nanosecond timestamp. The outer/primary index is excluded, as it is already
+        pruned by the index mechanism. Any pre-existing stats are merged with the newly computed ones
+        (read-modify-write).
+
         Parameters
         ----------
         symbol: `str`
             Symbol name.
-        column_stats: `Dict[str, Set[str]]`
-            The column stats to create.
-            Keys are column names.
-            Values are sets of statistic types to build for that column. Options are:
-                "MINMAX" : store the minimum and maximum value for the column in each row-slice
         as_of : `Optional[VersionQueryInput]`, default=None
             See documentation of `read` method for more details.
 
@@ -1290,23 +1306,71 @@ class NativeVersionStore:
         -------
         None
         """
-        column_stats = self._get_column_stats(column_stats)
+        column_stats = self._get_eligible_column_stats_spec(symbol, as_of)
+        if not column_stats:
+            return
+
+        column_stats = self._convert_to_native_column_stats(column_stats)
         version_query = self._get_version_query(as_of)
+
         self.version_store.create_column_stats_version(symbol, column_stats, version_query)
 
-    def drop_column_stats(
-        self, symbol: str, column_stats: Optional[Dict[str, Set[str]]] = None, as_of: Optional[VersionQueryInput] = None
-    ) -> None:
+    def _get_eligible_column_stats_spec(self, symbol: str, as_of: Optional[VersionQueryInput]) -> Dict[str, Set[str]]:
+        numeric_value_types = {
+            TypeDescriptor.ValueType.UINT,
+            TypeDescriptor.ValueType.INT,
+            TypeDescriptor.ValueType.FLOAT,
+            TypeDescriptor.ValueType.BOOL,
+            TypeDescriptor.ValueType.NANOSECONDS_UTC,
+        }
+        timeseries_descriptor = self._get_info(symbol, as_of).timeseries_descriptor
+        fields = list(timeseries_descriptor.fields)
+        num_index_fields = self._num_physically_stored_index_fields(timeseries_descriptor)
+
+        start = 1 if num_index_fields > 0 else 0
+        eligible_fields = [field for field in fields[start:] if field.type.value_type in numeric_value_types]
+
+        self._reject_duplicated_data_columns(
+            [field for field in fields[num_index_fields:] if field.type.value_type in numeric_value_types],
+            timeseries_descriptor,
+        )
+
+        return {field.name: {"MINMAX"} for field in eligible_fields}
+
+    @staticmethod
+    def _num_physically_stored_index_fields(timeseries_descriptor) -> int:
+        num_index_fields = timeseries_descriptor.index.field_count()
+
+        normalization = timeseries_descriptor.normalization
+        if normalization.WhichOneof("input_type") != "df":
+            return num_index_fields
+
+        common = normalization.df.common
+        if common.WhichOneof("index_type") == "multi_index":
+            num_index_fields += common.multi_index.field_count
+
+        return num_index_fields
+
+    @staticmethod
+    def _reject_duplicated_data_columns(data_fields, timeseries_descriptor) -> None:
+        normalization = timeseries_descriptor.normalization
+        if normalization.WhichOneof("input_type") != "df":
+            return
+        names, _ = _denormalize_columns_names([field.name for field in data_fields], normalization.df)
+        seen = set()
+        for name in names:
+            if name in seen:
+                raise UserInputException(f"Cannot create column stats: symbol has duplicated column name [{name}]")
+            seen.add(name)
+
+    def drop_column_stats_experimental(self, symbol: str, as_of: Optional[VersionQueryInput] = None) -> None:
         """
-        Deletes the specified column statistics for the given symbol.
+        Deletes all column statistics for the given symbol.
 
         Parameters
         ----------
         symbol: `str`
             Symbol name.
-        column_stats: `Optional[Dict[str, Set[str]]], default=None`
-            The column stats to drop. If not provided, all column stats will be dropped.
-            See documentation of `create_column_stats` method for more details.
         as_of : `Optional[VersionQueryInput]`, default=None
             See documentation of `read` method for more details.
 
@@ -1314,11 +1378,12 @@ class NativeVersionStore:
         -------
         None
         """
-        column_stats = self._get_column_stats(column_stats)
         version_query = self._get_version_query(as_of)
-        self.version_store.drop_column_stats_version(symbol, column_stats, version_query)
+        self.version_store.drop_column_stats_version(symbol, None, version_query)
 
-    def read_column_stats(self, symbol: str, as_of: Optional[VersionQueryInput] = None, **kwargs) -> "pa.Table":
+    def read_column_stats_experimental(
+        self, symbol: str, as_of: Optional[VersionQueryInput] = None, **kwargs
+    ) -> "pa.Table":
         """
         Read all the column statistics data that has been generated for the given symbol.
 
@@ -1338,7 +1403,7 @@ class NativeVersionStore:
         read_result = ReadResult(*self.version_store.read_column_stats_version(symbol, version_query))
         return self._arrow_output_frame_to_table(read_result.frame_data)
 
-    def get_column_stats_info(
+    def get_column_stats_info_experimental(
         self, symbol: str, as_of: Optional[VersionQueryInput] = None, **kwargs
     ) -> Dict[str, Set[str]]:
         """
@@ -1355,7 +1420,6 @@ class NativeVersionStore:
         -------
         `Dict[str, Set[str]]`
             A dict from column names to sets of column stats that have been generated for that column.
-            In the same format as the `column_stats` argument provided to `create_column_stats` and `drop_column_stats`.
         """
         version_query = self._get_version_query(as_of, **kwargs)
         return self.version_store.get_column_stats_info_version(symbol, version_query).to_map()
@@ -1600,7 +1664,7 @@ class NativeVersionStore:
             * If the first clause in `query_builder` is not a multi-symbol join
             * If any subsequent clauses in `query_builder` are not single-symbol clauses
             * If any of the specified symbols are recursively normalized
-        MissingDataException
+        NoSuchVersionException
             * If a symbol or the version of symbol specified in as_ofs does not exist or has been deleted
         SchemaException
             * If the schema of symbols to be joined are incompatible. Examples of incompatible schemas include:
@@ -1805,7 +1869,7 @@ class NativeVersionStore:
             If set to True, it will verify for each entry in the batch whether the index of the data supports date range searches and update operations.
             This in effect tests that the data is sorted in ascending order. ArcticDB relies on Pandas to detect if data is sorted -
             you can call DataFrame.index.is_monotonic_increasing on your input DataFrame to see if Pandas believes the data to be sorted.
-            Note that no checks are performed for Arrow input data.
+            For Arrow input data, ArcticDB checks the index column directly.
         index_column_vector: Optional[List[bool]], default=None
             Only applicable when data is a PyArrow Table or Polars DataFrame. If True for a given entry,
             the first column is treated as the timeseries index.
@@ -2020,7 +2084,7 @@ class NativeVersionStore:
             If set to True, it will verify for each entry in the batch whether the index of the data supports date range searches and update operations.
             This in effect tests that the data is sorted in ascending order. ArcticDB relies on Pandas to detect if data is sorted -
             you can call DataFrame.index.is_monotonic_increasing on your input DataFrame to see if Pandas believes the data to be sorted.
-            Note that no checks are performed for Arrow input data.
+            For Arrow input data, ArcticDB checks the index column directly.
         index_column_vector: Optional[List[bool]], default=None
             Only applicable when data is a PyArrow Table or Polars DataFrame. If True for a given entry,
             the first column is treated as the timeseries index.
@@ -2384,7 +2448,7 @@ class NativeVersionStore:
         )
         return version_query, read_options, read_query, output_format
 
-    def _get_column_stats(self, column_stats):
+    def _convert_to_native_column_stats(self, column_stats):
         if column_stats is None:
             return None
         for k, v in column_stats.items():
@@ -2653,7 +2717,7 @@ class NativeVersionStore:
         if len(read_result.node_read_results) > 0:
             meta_struct = denormalize_user_metadata(read_result.mmeta)
             key_map = {
-                v.sym: self._adapt_frame_data(v.frame_data, v.norm, output_format)
+                v.sym: self._adapt_frame_data(v.frame_data, v.norm, output_format, v.sort_order)
                 for v in read_result.node_read_results
             }
             original_data = Flattener().create_original_obj_from_metastruct(meta_struct, key_map)
@@ -2820,7 +2884,7 @@ class NativeVersionStore:
             If True, will verify that the index of the symbol after this operation supports date range searches and
             update operations. This requires that the indexes of the incomplete segments are non-overlapping with each
             other, and, in the case of append=True, fall after the last index value in the previous version.
-            Note that no checks are performed for Arrow input data.
+            For Arrow input data, ArcticDB checks the index column directly.
         delete_staged_data_on_failure : bool, default=False
             Determines the handling of staged data when an exception occurs during the execution of the
             ``compact_incomplete`` function.
@@ -2901,7 +2965,7 @@ class NativeVersionStore:
             return pa.Table.from_arrays([])
         return pa.Table.from_batches(record_batches)
 
-    def _adapt_frame_data(self, frame_data, norm, output_format):
+    def _adapt_frame_data(self, frame_data, norm, output_format, sort_order):
         if isinstance(frame_data, ArrowOutputFrame):
             table = self._arrow_output_frame_to_table(frame_data)
             data = self._normalizer.denormalize(table, norm)
@@ -2916,6 +2980,7 @@ class NativeVersionStore:
                 and not norm.WhichOneof("input_type") == "msg_pack_frame"
             ):
                 data = pl.from_arrow(data, rechunk=False)
+                data = self._apply_polars_sorted_flag_to_index(data, sort_order, norm)
         else:
             data = self._normalizer.denormalize(frame_data, norm)
             if norm.HasField("custom"):
@@ -2923,8 +2988,21 @@ class NativeVersionStore:
 
         return data
 
+    @staticmethod
+    def _apply_polars_sorted_flag_to_index(data, sort_order, norm):
+        # Only ASCENDING / DESCENDING are verified. UNKNOWN covers symbols written by paths that do not check
+        # monotonicity (e.g. Arrow writes) or by ArcticDB versions before sortedness was tracked, so we cannot
+        # safely tell Polars the column is sorted.
+        if sort_order not in (SortedValue.ASCENDING, SortedValue.DESCENDING):
+            return data
+        if not _has_physically_stored_index(norm) or len(data.columns) == 0:
+            return data
+        # The index column is always the first column.
+        index_col = data.columns[0]
+        return data.with_columns(pl.col(index_col).set_sorted(descending=(sort_order == SortedValue.DESCENDING)))
+
     def _adapt_read_res(self, read_result: ReadResult, output_format: OutputFormat) -> VersionedItem:
-        data = self._adapt_frame_data(read_result.frame_data, read_result.norm, output_format)
+        data = self._adapt_frame_data(read_result.frame_data, read_result.norm, output_format, read_result.sort_order)
 
         if isinstance(read_result.version, list):
             versions = []

@@ -21,14 +21,15 @@ constexpr const char none_char[8] = {'\300', '\000', '\000', '\000', '\000', '\0
 using namespace arcticdb::pipelines;
 using namespace arcticdb::stream;
 
-[[nodiscard]] static inline bool is_unicode(PyObject* obj) { return PyUnicode_Check(obj); }
+[[nodiscard]] static inline bool is_unicode(PyObject* obj) { return PyUnicode_CheckExact(obj); }
+
+[[nodiscard]] static inline bool is_bytes(PyObject* obj) { return PyBytes_CheckExact(obj); }
 
 [[nodiscard]] static inline bool is_py_boolean(PyObject* obj) { return PyBool_Check(obj); }
 
 std::variant<StringEncodingError, PyStringWrapper> pystring_to_buffer(PyObject* obj, bool is_owned) {
-    if (is_unicode(obj)) {
-        return StringEncodingError(
-                fmt::format("Unexpected unicode in Python object with type {}", obj->ob_type->tp_name)
+    if (!is_bytes(obj)) {
+        return StringEncodingError(fmt::format("Unexpected non-bytes Python object with type {}", obj->ob_type->tp_name)
         );
     }
     char* buffer;
@@ -215,7 +216,7 @@ NativeTensor obj_to_tensor(PyObject* ptr, bool empty_types, std::optional<std::s
                 desc.val_type_ = empty_types ? ValueType::EMPTY : ValueType::UTF_DYNAMIC;
             } else if (is_unicode(sample)) {
                 desc.val_type_ = ValueType::UTF_DYNAMIC;
-            } else if (PYBIND11_BYTES_CHECK(sample)) {
+            } else if (is_bytes(sample)) {
                 desc.val_type_ = ValueType::ASCII_DYNAMIC;
             } else if (is_py_array(sample)) {
                 normalization::raise<ErrorCode::E_UNIMPLEMENTED_INPUT_TYPE>(
@@ -240,11 +241,11 @@ NativeTensor obj_to_tensor(PyObject* ptr, bool empty_types, std::optional<std::s
     return {nbytes, desc.arr_->nd, strides.data(), shapes.data(), dt, desc.elsize_, data, desc.ndim_};
 }
 
-void tensors_to_frame(const py::tuple& tuple, const bool empty_types, InputFrame& frame) {
+void pandas_data_to_frame(const PandasData& pandas_data, const bool empty_types, InputFrame& frame) {
     frame.num_rows = 0u;
     // Fill index
-    auto idx_names = tuple[0].cast<std::vector<std::string>>();
-    auto idx_vals = tuple[2].cast<std::vector<py::object>>();
+    const auto& idx_names = pandas_data.index_names;
+    const auto& idx_vals = pandas_data.index_values;
     util::check(
             idx_names.size() == idx_vals.size(),
             "Number idx names {} and values {} do not match",
@@ -279,9 +280,9 @@ void tensors_to_frame(const py::tuple& tuple, const bool empty_types, InputFrame
     }
 
     // Fill tensors
-    auto col_names = tuple[1].cast<std::vector<std::string>>();
-    auto col_vals = tuple[3].cast<std::vector<py::object>>();
-    auto sorted = tuple[4].cast<SortedValue>();
+    const auto& col_names = pandas_data.column_names;
+    const auto& col_vals = pandas_data.columns_values;
+    const auto sorted = pandas_data.sorted;
 
     for (auto i = 0u; i < col_vals.size(); ++i) {
         auto tensor = [&] {
@@ -335,7 +336,10 @@ void tensors_to_frame(const py::tuple& tuple, const bool empty_types, InputFrame
     frame.set_from_tensors(std::move(desc), std::move(field_tensors), std::move(opt_index_tensor));
 }
 
-void record_batches_to_frame(const std::vector<std::shared_ptr<RecordBatchData>>& record_batches, InputFrame& frame) {
+void record_batches_to_frame(
+        const std::vector<std::shared_ptr<RecordBatchData>>& record_batches, InputFrame& frame,
+        pipelines::SortednessScan sortedness_scan
+) {
     util::check(
             frame.norm_meta.has_experimental_arrow(), "Unexpected non-Arrow norm metadata provided with Arrow data"
     );
@@ -348,13 +352,15 @@ void record_batches_to_frame(const std::vector<std::shared_ptr<RecordBatchData>>
     for (const auto& rbd : record_batches) {
         sparrow_record_batches.emplace_back(std::move(rbd->array_), std::move(rbd->schema_));
     }
-    auto seg = arrow_data_to_segment(sparrow_record_batches, arrow_norm_metadata.has_index());
-    frame.set_segment(std::move(seg), std::move(sparrow_record_batches));
+    auto [columns, descriptor] = record_batches_to_columns(sparrow_record_batches, arrow_norm_metadata.has_index());
+    frame.set_from_columns(
+            std::move(columns), std::move(descriptor), std::move(sparrow_record_batches), sortedness_scan
+    );
 }
 
-std::shared_ptr<InputFrame> py_ndf_to_frame(
+std::shared_ptr<InputFrame> py_input_item_to_frame(
         const StreamId& stream_name, const InputItem& item, const py::object& norm_meta, const py::object& user_meta,
-        bool empty_types
+        bool empty_types, pipelines::SortednessScan sortedness_scan
 ) {
     ARCTICDB_SUBSAMPLE_DEFAULT(NormalizeFrame)
     auto res = std::make_shared<InputFrame>();
@@ -365,9 +371,14 @@ std::shared_ptr<InputFrame> py_ndf_to_frame(
 
     util::variant_match(
             item,
-            [&](const py::tuple& tensors) { tensors_to_frame(tensors, empty_types, *res); },
+            [&](const std::shared_ptr<PandasData>& pandas_data) {
+                user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                        pandas_data, "Expected pandas input data but received nullptr"
+                );
+                pandas_data_to_frame(*pandas_data, empty_types, *res);
+            },
             [&](const std::vector<std::shared_ptr<RecordBatchData>>& record_batches) {
-                record_batches_to_frame(record_batches, *res);
+                record_batches_to_frame(record_batches, *res, sortedness_scan);
             }
     );
     res->set_index_range();

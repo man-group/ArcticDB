@@ -12,6 +12,7 @@
 #include <pybind11/operators.h>
 #include <arcticdb/entity/data_error.hpp>
 #include <arcticdb/entity/protobuf_mappings.hpp>
+#include <arcticdb/python/python_to_tensor_frame.hpp>
 #include <arcticdb/version/version_store_api.hpp>
 #include <arcticdb/version/version_constants.hpp>
 #include <arcticdb/version/python_bindings_common.hpp>
@@ -272,6 +273,24 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
             .def(py::init<>())
             .def("array", &RecordBatchData::array)
             .def("schema", &RecordBatchData::schema);
+
+    py::class_<convert::PandasData, std::shared_ptr<convert::PandasData>>(version, "PandasData")
+            .def(py::init<
+                         std::vector<std::string>&&,
+                         std::vector<std::string>&&,
+                         std::vector<py::object>&&,
+                         std::vector<py::object>&&,
+                         SortedValue>(),
+                 py::arg("index_names"),
+                 py::arg("column_names"),
+                 py::arg("index_values"),
+                 py::arg("columns_values"),
+                 py::arg("sorted"))
+            .def_readonly("index_names", &convert::PandasData::index_names)
+            .def_readonly("column_names", &convert::PandasData::column_names)
+            .def_readonly("index_values", &convert::PandasData::index_values)
+            .def_readonly("columns_values", &convert::PandasData::columns_values)
+            .def_readonly("sorted", &convert::PandasData::sorted);
 
     py::enum_<VersionRequestType>(version, "VersionRequestType", R"pbdoc(
         Enum of possible version request types passed to as_of.
@@ -955,6 +974,8 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                                 tsd_proto.normalization(),
                                 tsd_proto.user_meta(),
                                 tsd_proto.multi_key_meta(),
+                                {},
+                                tsd.sorted(),
                         };
                         return adapt_read_df(std::move(res), nullptr);
                     },
@@ -1109,7 +1130,9 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                                     read_options.output_format(),
                                     tsd_proto.normalization(),
                                     tsd_proto.user_meta(),
-                                    tsd_proto.multi_key_meta()
+                                    tsd_proto.multi_key_meta(),
+                                    {},
+                                    tsd.sorted(),
                             };
                             output.emplace_back(std::move(res));
                         }

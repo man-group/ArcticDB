@@ -333,22 +333,30 @@ bool LmdbStorage::do_iterate_type_until_match(
     return false;
 }
 
-bool LmdbStorage::do_is_path_valid(std::string_view path ARCTICDB_UNUSED) const {
+const std::set<char>& LmdbStorage::do_unsupported_library_chars() const {
+    // The library name maps onto a Windows directory path, so on Windows the characters disallowed in file/directory
+    // names are rejected on top of the globally unsupported ones. Note that \ and / are valid as they create
+    // subdirectories which are expected to work, and reserved names (COM1, LPT1, AUX, CON, ...) are not disallowed.
+    static const std::set<char> chars = [] {
+        std::set<char> result = GLOBALLY_UNSUPPORTED_CHARS;
 #ifdef _WIN32
-    // Note that \ and / are valid characters as they will create subdirectories which are expected to work.
-    // The filenames such as COM1, LPT1, AUX, CON etc. are reserved but not strictly disallowed by Windows as directory
-    // names. Therefore, paths with these names are allowed.
-    std::string_view invalid_win32_chars = "<>:\"|?*";
-    auto found = path.find_first_of(invalid_win32_chars);
-    if (found != std::string::npos) {
-        return false;
-    }
+        for (char c : {':', '"', '|', '?'}) {
+            result.insert(c);
+        }
+#endif
+        return result;
+    }();
+    return chars;
+}
 
+std::optional<char> LmdbStorage::do_verify_library_suffix(std::string_view path ARCTICDB_UNUSED) const {
+#ifdef _WIN32
+    // Windows directory names cannot end in '.' or whitespace.
     if (!path.empty() && (path.back() == '.' || std::isspace(path.back()))) {
-        return false;
+        return path.back();
     }
 #endif
-    return true;
+    return std::nullopt;
 }
 
 void remove_db_files(const fs::path& lib_path) {

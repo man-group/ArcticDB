@@ -604,11 +604,11 @@ class TestCanAppendToEmptyColumn:
         assert_frame_equal(lmdb_version_store_static_and_dynamic.read("sym").data, df_to_append)
 
 
-class TestAppendAndUpdateWithEmptyToColumnDoesNothing:
+class TestAppendAndUpdateWithEmptyToColumnOnlyIncrementsVersionNumber:
     """
     Test if it is possible to append/update empty column to an already existing column. The append/update should not
-    change anything. If dynamic schema is used the append/update should not create new columns. The append/update
-    should not even reach the C++ layer and the version should not be changed.
+    change anything about the data, but will always create a new version in case the metadata has changed. If dynamic
+    schema is used the append/update should not create new columns.
     """
 
     @pytest.fixture(params=[pd.RangeIndex(0, 3), list(pd.date_range(start="1/1/2024", end="1/3/2024"))])
@@ -620,53 +620,73 @@ class TestAppendAndUpdateWithEmptyToColumnDoesNothing:
         yield pd.DataFrame({"col": []}, dtype=dtype, index=empty_index)
 
     @staticmethod
-    def assert_append_empty_does_nothing(initial_df, store, empty):
+    def assert_append_empty_only_increments_version_number(initial_df, store, empty):
+        # Use read_metadata over read to avoid some IO
+        version_before = store.read_metadata("sym").version
         store.append("sym", empty)
         read_result = store.read("sym")
         assert_frame_equal(read_result.data, initial_df)
-        assert read_result.version == 0
+        assert read_result.version == version_before + 1
 
     @staticmethod
-    def assert_update_empty_does_nothing(initial_df, store, empty):
+    def assert_update_empty_only_increments_version_number(initial_df, store, empty):
+        # Use read_metadata over read to avoid some IO
+        version_before = store.read_metadata("sym").version
         store.update("sym", empty)
         read_result = store.read("sym")
         assert_frame_equal(read_result.data, initial_df)
-        assert read_result.version == 0
+        assert read_result.version == version_before + 1
 
     def test_integer(self, lmdb_version_store_static_and_dynamic, index, int_dtype, empty_dataframe):
         df = pd.DataFrame({"col": [1, 2, 3]}, dtype=int_dtype, index=index)
         lmdb_version_store_static_and_dynamic.write("sym", df)
-        self.assert_append_empty_does_nothing(df, lmdb_version_store_static_and_dynamic, empty_dataframe)
-        self.assert_update_empty_does_nothing(df, lmdb_version_store_static_and_dynamic, empty_dataframe)
+        self.assert_append_empty_only_increments_version_number(
+            df, lmdb_version_store_static_and_dynamic, empty_dataframe
+        )
+        self.assert_update_empty_only_increments_version_number(
+            df, lmdb_version_store_static_and_dynamic, empty_dataframe
+        )
 
     def test_float(self, lmdb_version_store_static_and_dynamic, index, float_dtype, empty_dataframe):
         df = pd.DataFrame({"col": [1, 2, 3]}, dtype=float_dtype, index=index)
         lmdb_version_store_static_and_dynamic.write("sym", df)
-        self.assert_append_empty_does_nothing(df, lmdb_version_store_static_and_dynamic, empty_dataframe)
-        self.assert_update_empty_does_nothing(df, lmdb_version_store_static_and_dynamic, empty_dataframe)
+        self.assert_append_empty_only_increments_version_number(
+            df, lmdb_version_store_static_and_dynamic, empty_dataframe
+        )
+        self.assert_update_empty_only_increments_version_number(
+            df, lmdb_version_store_static_and_dynamic, empty_dataframe
+        )
 
     def test_bool(self, lmdb_version_store_static_and_dynamic, index, boolean_dtype, empty_dataframe):
         df = pd.DataFrame({"col": [False, True, None]}, dtype=boolean_dtype, index=index)
         lmdb_version_store_static_and_dynamic.write("sym", df)
-        self.assert_append_empty_does_nothing(df, lmdb_version_store_static_and_dynamic, empty_dataframe)
-        self.assert_update_empty_does_nothing(df, lmdb_version_store_static_and_dynamic, empty_dataframe)
+        self.assert_append_empty_only_increments_version_number(
+            df, lmdb_version_store_static_and_dynamic, empty_dataframe
+        )
+        self.assert_update_empty_only_increments_version_number(
+            df, lmdb_version_store_static_and_dynamic, empty_dataframe
+        )
 
     def test_nones(self, lmdb_version_store_static_and_dynamic, index, empty_dataframe):
         df = pd.DataFrame({"col": [None, None, None]}, index=index)
         lmdb_version_store_static_and_dynamic.write("sym", df)
-        self.assert_append_empty_does_nothing(df, lmdb_version_store_static_and_dynamic, empty_dataframe)
-        self.assert_update_empty_does_nothing(df, lmdb_version_store_static_and_dynamic, empty_dataframe)
+        self.assert_append_empty_only_increments_version_number(
+            df, lmdb_version_store_static_and_dynamic, empty_dataframe
+        )
+        self.assert_update_empty_only_increments_version_number(
+            df, lmdb_version_store_static_and_dynamic, empty_dataframe
+        )
 
     @pytest.mark.parametrize("initial_empty_index", [pd.RangeIndex(0, 0), pd.DatetimeIndex([])])
     def test_empty(self, lmdb_version_store_static_and_dynamic, initial_empty_index, empty_dataframe):
         df = pd.DataFrame({"col": []}, index=initial_empty_index)
         lmdb_version_store_static_and_dynamic.write("sym", df)
-        self.assert_append_empty_does_nothing(
+        self.assert_append_empty_only_increments_version_number(
             lmdb_version_store_static_and_dynamic.read("sym").data,
             lmdb_version_store_static_and_dynamic,
             empty_dataframe,
         )
-        self.assert_update_empty_does_nothing(
+        self.assert_update_empty_only_increments_version_number(
             lmdb_version_store_static_and_dynamic.read("sym").data,
             lmdb_version_store_static_and_dynamic,
             empty_dataframe,
@@ -675,8 +695,12 @@ class TestAppendAndUpdateWithEmptyToColumnDoesNothing:
     def test_string(self, lmdb_version_store_static_and_dynamic, index, empty_dataframe):
         df = pd.DataFrame({"col": ["short", 20 * "long", None]}, index=index)
         lmdb_version_store_static_and_dynamic.write("sym", df)
-        self.assert_append_empty_does_nothing(df, lmdb_version_store_static_and_dynamic, empty_dataframe)
-        self.assert_update_empty_does_nothing(df, lmdb_version_store_static_and_dynamic, empty_dataframe)
+        self.assert_append_empty_only_increments_version_number(
+            df, lmdb_version_store_static_and_dynamic, empty_dataframe
+        )
+        self.assert_update_empty_only_increments_version_number(
+            df, lmdb_version_store_static_and_dynamic, empty_dataframe
+        )
 
     def test_date(self, lmdb_version_store_static_and_dynamic, date_dtype, index, empty_dataframe):
         df = pd.DataFrame(
@@ -685,8 +709,12 @@ class TestAppendAndUpdateWithEmptyToColumnDoesNothing:
             index=index,
         )
         lmdb_version_store_static_and_dynamic.write("sym", df)
-        self.assert_append_empty_does_nothing(df, lmdb_version_store_static_and_dynamic, empty_dataframe)
-        self.assert_update_empty_does_nothing(df, lmdb_version_store_static_and_dynamic, empty_dataframe)
+        self.assert_append_empty_only_increments_version_number(
+            df, lmdb_version_store_static_and_dynamic, empty_dataframe
+        )
+        self.assert_update_empty_only_increments_version_number(
+            df, lmdb_version_store_static_and_dynamic, empty_dataframe
+        )
 
     def test_empty_df_does_not_create_new_columns_in_dynamic_schema(self, lmdb_version_store_dynamic_schema, index):
         df = pd.DataFrame({"col": [1, 2, 3]}, dtype="int32", index=index)
@@ -702,7 +730,7 @@ class TestAppendAndUpdateWithEmptyToColumnDoesNothing:
         lmdb_version_store_dynamic_schema.append("sym", to_append)
         read_result = lmdb_version_store_dynamic_schema.read("sym")
         assert_frame_equal(read_result.data, df)
-        assert read_result.version == 0
+        assert read_result.version == 1
 
 
 class TestCanUpdateEmptyColumn:

@@ -14,6 +14,7 @@
 #include <arcticdb/util/allocator.hpp>
 #include <sparrow/layout/primitive_data_access.hpp>
 #include <sparrow/record_batch.hpp>
+#include <utility>
 
 namespace arcticdb {
 
@@ -380,9 +381,21 @@ std::vector<sparrow::record_batch> segment_to_arrow_data(SegmentInMemory& segmen
 }
 
 DataType arcticdb_type_from_arrow_array(const sparrow::array& array) {
-    schema::check<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
-            !array.dictionary().has_value(), "Dictionary-encoded Arrow data unsupported"
-    );
+    if (auto dictionary = array.dictionary(); dictionary.has_value()) {
+        // pyarrow stores dictionary encoded strings with int32 keys
+        // polars stores dictionary encoded strings with uint32 keys
+        // In both cases we need the 4 byte UTF_DYNAMIC32.
+        const auto index_type = array.data_type();
+        schema::check<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
+                (index_type == sparrow::data_type::INT32 || index_type == sparrow::data_type::UINT32) &&
+                        dictionary.value().data_type() == sparrow::data_type::LARGE_STRING,
+                "Dictionary-encoded Arrow data is supported only for int32/uint32 -> large_string mapping. Instead got "
+                "{} -> {}",
+                sparrow::data_type_to_format(index_type),
+                sparrow::data_type_to_format(dictionary.value().data_type())
+        );
+        return DataType::UTF_DYNAMIC32;
+    }
     switch (array.data_type()) {
     case sparrow::data_type::BOOL:
         return DataType::BOOL8;
@@ -420,31 +433,27 @@ DataType arcticdb_type_from_arrow_array(const sparrow::array& array) {
     }
 }
 
-SegmentInMemory arrow_data_to_segment(const std::vector<sparrow::record_batch>& record_batches, bool has_index) {
-    SegmentInMemory seg;
+std::pair<std::vector<Column>, entity::StreamDescriptor> record_batches_to_columns(
+        const std::vector<sparrow::record_batch>& record_batches, bool has_index
+) {
     if (record_batches.empty()) {
-        return seg;
+        return {};
     }
     const auto& first_batch = record_batches.front();
     schema::check<ErrorCode::E_COLUMN_DOESNT_EXIST>(
             !has_index || first_batch.nb_columns() > 0, "Cannot use index_column=True on a table with no columns"
     );
-    uint64_t total_rows = std::accumulate(
-            record_batches.cbegin(),
-            record_batches.cend(),
-            uint64_t(0),
-            [](const uint64_t& accum, const sparrow::record_batch& record_batch) {
-                return accum + record_batch.nb_rows();
-            }
-    );
     auto column_names = first_batch.names();
     std::vector<Column> columns;
     columns.reserve(first_batch.nb_columns());
+    StreamDescriptor desc;
     for (size_t idx = 0; idx < first_batch.nb_columns(); ++idx) {
         auto data_type = arcticdb_type_from_arrow_array(first_batch.get_column(idx));
         // The Arrow data may be semantically sparse, but this buffer is still dense, hence Sparsity::NOT_PERMITTED
         columns.emplace_back(make_scalar_type(data_type), Sparsity::NOT_PERMITTED, ChunkedBuffer());
+        desc.add_field(scalar_field(data_type, column_names[idx]));
     }
+
     uint64_t start_row{0};
     for (const auto& batch : record_batches) {
         for (size_t idx = 0; idx < batch.nb_columns(); ++idx) {
@@ -464,19 +473,33 @@ SegmentInMemory arrow_data_to_segment(const std::vector<sparrow::record_batch>& 
             } else { // Numeric and string types
                 data += array.offset() * get_type_size(data_type);
                 const auto bytes = array.size() * get_type_size(data_type);
-                if (is_sequence_type(data_type)) {
-                    // For string columns, we add an external block with extra bytes for the last offset.
-                    // This is needed to keep our indexing into the column's ChunkedBuffer accurate.
-                    column.buffer().add_external_block(data, bytes, get_type_size(data_type));
-                    // arrow_array_buffers[2] is the buffer that contains the actual strings. The data pointer
-                    // represents offsets into this buffer
-                    ChunkedBuffer strings_buffer;
-                    const auto string_bytes = arrow_array_buffers[2].size();
-                    strings_buffer.add_external_block(arrow_array_buffers[2].data<uint8_t>(), string_bytes);
-                    column.set_extra_buffer(
-                            start_row * get_type_size(data_type), ExtraBufferType::STRING, std::move(strings_buffer)
-                    );
-                } else {
+                if (is_sequence_type(data_type)) { // String types
+                    auto add_extra_buffer = [&](sparrow::buffer_view<uint8_t> arrow_array_buffer,
+                                                ExtraBufferType buffer_type) {
+                        ChunkedBuffer extra_buffer;
+                        extra_buffer.add_external_block(arrow_array_buffer.data<uint8_t>(), arrow_array_buffer.size());
+                        column.set_extra_buffer(
+                                start_row * get_type_size(data_type), buffer_type, std::move(extra_buffer)
+                        );
+                    };
+                    if (auto dictionary = array.dictionary(); dictionary.has_value()) {
+                        // Dictionary-encoded (categorical) strings.
+                        // arrow_array_buffers[1] (data): int32/uint32 keys into dictionary
+                        // dictionary_buffers[1]: int64 offsets, one per entry plus a trailing end offset
+                        // dictionary_buffers[2]: string buffer containing concatenated strings
+                        column.buffer().add_external_block(data, bytes);
+                        auto [dict_array, dict_schema] = sparrow::get_arrow_structures(dictionary.value());
+                        auto dictionary_buffers = sparrow::get_arrow_array_buffers(*dict_array, *dict_schema);
+                        add_extra_buffer(dictionary_buffers[1], ExtraBufferType::OFFSET);
+                        add_extra_buffer(dictionary_buffers[2], ExtraBufferType::STRING);
+                    } else {
+                        // Variable-length strings.
+                        // arrow_array_buffers[1] (data): int32/int64 offsets in string buffer, one extra offset
+                        // arrow_array_buffers[2]: string buffer containing concatenated strings
+                        column.buffer().add_external_block(data, bytes, get_type_size(data_type));
+                        add_extra_buffer(arrow_array_buffers[2], ExtraBufferType::STRING);
+                    }
+                } else { // Numeric types
                     column.buffer().add_external_block(data, bytes);
                 }
             }
@@ -500,11 +523,10 @@ SegmentInMemory arrow_data_to_segment(const std::vector<sparrow::record_batch>& 
         }
         start_row += batch.nb_rows();
     }
-    for (size_t idx = 0; idx < column_names.size(); ++idx) {
-        seg.add_column(column_names[idx], std::make_shared<Column>(std::move(columns[idx])));
+    for (auto& col : columns) {
+        col.set_row_data(start_row - 1);
     }
-    seg.set_row_data(static_cast<ssize_t>(total_rows) - 1);
-    return seg;
+    return std::make_pair(std::move(columns), std::move(desc));
 }
 
 RecordBatchData empty_record_batch_from_descriptor(

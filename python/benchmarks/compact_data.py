@@ -12,13 +12,15 @@ import time
 
 import numpy as np
 import pandas as pd
+import random
 
 from arcticdb import Arctic, LibraryOptions
 from arcticdb.options import ModifiableLibraryOption
 from arcticdb.util.logger import get_logger
 from arcticdb.util.test import random_strings_of_length
 
-rng = np.random.default_rng()
+random.seed(42)
+rng = np.random.default_rng(42)
 
 
 class CompactDataBase:
@@ -77,6 +79,8 @@ class CompactDataBase:
         self.lib = self.ac.get_library(lib_name)
         # Check the compaction will actually do something!
         assert self.lib.compact_data_explain_plan(self.SYM, rows_per_segment=target_rows_per_segment).will_do_work
+        # read the symbol to warm up the cache
+        self.lib.read(self.SYM)
 
     def _teardown(self):
         shutil.rmtree(self.LMDB_DIR)
@@ -174,9 +178,8 @@ class CompactDataStringsStaticSchema(CompactDataBase):
                     for num_unique_strings in self.params[3]:
                         # Create one library per combination of benchmark parameters, as they don't all use the same
                         # slicing
-                        df = pd.DataFrame(
-                            {f"col_{i}": rng.choice(num_unique_strings, num_rows) for i in range(num_columns)}
-                        )
+                        strings = self.unique_strings[:num_unique_strings]
+                        df = pd.DataFrame({f"col_{i}": rng.choice(strings, num_rows) for i in range(num_columns)})
                         self._setup_cache_base(
                             ac,
                             self.lib_name(row_params, num_columns, column_slicing, num_unique_strings),

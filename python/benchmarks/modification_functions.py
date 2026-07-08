@@ -11,7 +11,7 @@ import random
 import time
 from shutil import copytree, rmtree
 
-from arcticdb import Arctic
+from arcticdb import Arctic, WritePayload
 from arcticdb.util.test import config_context
 
 import pandas as pd
@@ -288,3 +288,39 @@ class DeleteBatchVersions:
 
     def time_delete_batch_versions(self, *args):
         self.lib.delete_batch(self.delete_requests)
+
+
+class DeleteSymbolWithSnapshots:
+    """Benchmark deleting a single symbol in a library where every version is pinned by snapshots."""
+
+    number = 1  # the deleted symbol is gone after one run, so setup rebuilds the library for each run
+    warmup_time = 0
+    timeout = 600
+
+    NUM_SYMBOLS = 5_000
+    NUM_SNAPSHOTS = 20
+
+    storages = [Storage.LMDB, Storage.AMAZON]
+    params = [storages]
+    param_names = ["storage"]
+
+    def setup_cache(self):
+        return create_libraries_across_storages(DeleteSymbolWithSnapshots.storages)
+
+    def setup(self, lib_for_storage, storage):
+        lib = lib_for_storage[storage]
+        if lib is None:
+            raise SkipNotImplemented
+        self.lib = lib
+        self.lib._nvs.version_store.clear()
+
+        df = pd.DataFrame({"a": [1]})
+        self.lib.write_batch([WritePayload(f"sym_{i}", df) for i in range(self.NUM_SYMBOLS)])
+        for i in range(self.NUM_SNAPSHOTS):
+            self.lib.snapshot(f"snap_{i}")
+
+    def time_delete(self, *args):
+        self.lib.delete("sym_0")
+
+    def peakmem_delete(self, *args):
+        self.lib.delete("sym_0")

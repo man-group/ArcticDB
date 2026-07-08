@@ -1,3 +1,5 @@
+from contextlib import contextmanager
+
 import pandas as pd
 import numpy as np
 import pytest
@@ -7,6 +9,15 @@ from arcticdb_ext.storage import KeyType
 from arcticdb_ext.version_store import SortedValue
 
 from arcticdb.util.test import random_strings_of_length
+
+
+@contextmanager
+def assert_inputs_not_modified(*dfs):
+    """Staging must not modify the caller's input in place, e.g. by sorting the underlying buffers."""
+    originals = [df.copy(deep=True) for df in dfs]
+    yield
+    for df, original in zip(dfs, originals):
+        assert_frame_equal(df, original)
 
 
 @pytest.mark.storage
@@ -33,8 +44,9 @@ def test_stage_finalize(arctic_library):
     df1_shuffled = df1.sample(frac=1)
     df2_shuffled = df2.sample(frac=1)
 
-    arctic_library.stage(symbol, df1_shuffled, False, False, sort_cols)
-    arctic_library.stage(symbol, df2_shuffled, False, False, sort_cols)
+    with assert_inputs_not_modified(df1_shuffled, df2_shuffled):
+        arctic_library.stage(symbol, df1_shuffled, False, False, sort_cols)
+        arctic_library.stage(symbol, df2_shuffled, False, False, sort_cols)
     arctic_library.finalize_staged_data(symbol)
     result = arctic_library.read(symbol).data
 
@@ -69,8 +81,9 @@ def test_stage_finalize_dynamic(arctic_library_dynamic):
     df1_shuffled = df1.sample(frac=1)
     df2_shuffled = df2.sample(frac=1)
 
-    arctic_library.stage(symbol, df1_shuffled, False, False, sort_cols)
-    arctic_library.stage(symbol, df2_shuffled, False, False, sort_cols)
+    with assert_inputs_not_modified(df1_shuffled, df2_shuffled):
+        arctic_library.stage(symbol, df1_shuffled, False, False, sort_cols)
+        arctic_library.stage(symbol, df2_shuffled, False, False, sort_cols)
     arctic_library.finalize_staged_data(symbol)
     result = arctic_library.read(symbol).data
 
@@ -104,8 +117,9 @@ def test_stage_finalize_strings(arctic_library):
     df1_shuffled = df1.sample(frac=1)
     df2_shuffled = df2.sample(frac=1)
 
-    arctic_library.stage(symbol, df1_shuffled, False, False, sort_cols)
-    arctic_library.stage(symbol, df2_shuffled, False, False, sort_cols)
+    with assert_inputs_not_modified(df1_shuffled, df2_shuffled):
+        arctic_library.stage(symbol, df1_shuffled, False, False, sort_cols)
+        arctic_library.stage(symbol, df2_shuffled, False, False, sort_cols)
     arctic_library.finalize_staged_data(symbol)
     result = arctic_library.read(symbol).data
 
@@ -141,8 +155,9 @@ def test_stage_finalize_strings_dynamic(arctic_library_dynamic):
     df1_shuffled = df1.sample(frac=1)
     df2_shuffled = df2.sample(frac=1)
 
-    arctic_library.stage(symbol, df1_shuffled, False, False, sort_cols)
-    arctic_library.stage(symbol, df2_shuffled, False, False, sort_cols)
+    with assert_inputs_not_modified(df1_shuffled, df2_shuffled):
+        arctic_library.stage(symbol, df1_shuffled, False, False, sort_cols)
+        arctic_library.stage(symbol, df2_shuffled, False, False, sort_cols)
     arctic_library.finalize_staged_data(symbol)
     result = arctic_library.read(symbol).data
 
@@ -174,13 +189,23 @@ def test_stage_finalize_sort_index(arctic_library):
     df1_shuffled = df1.sample(frac=1)
     df2_shuffled = df2.sample(frac=1)
 
-    arctic_library.stage(symbol, df1_shuffled, False, True, None)
-    arctic_library.stage(symbol, df2_shuffled, False, True, None)
+    with assert_inputs_not_modified(df1_shuffled, df2_shuffled):
+        arctic_library.stage(symbol, df1_shuffled, False, True, None)
+        arctic_library.stage(symbol, df2_shuffled, False, True, None)
     arctic_library.finalize_staged_data(symbol)
     result = arctic_library.read(symbol).data
 
     expected = pd.concat([df1, df2]).sort_values(sort_cols)
     pd.testing.assert_frame_equal(result, expected)
+
+
+@pytest.mark.storage
+def test_stage_finalize_empty_with_sort_on_index(arctic_library):
+    symbol = "sym"
+    df = pd.DataFrame({"col": []}, index=pd.DatetimeIndex([], name="timestamp"))
+    arctic_library.stage(symbol, df, validate_index=False, sort_on_index=True)
+    arctic_library.finalize_staged_data(symbol)
+    assert_frame_equal(arctic_library.read(symbol).data, df)
 
 
 def test_stage_with_sort_index_chunking(lmdb_version_store_tiny_segment):
@@ -197,7 +222,8 @@ def test_stage_with_sort_index_chunking(lmdb_version_store_tiny_segment):
     ).set_index("timestamp")
     df1_shuffled = df1.sample(frac=1)
 
-    lib.stage(symbol, df1_shuffled, validate_index=False, sort_on_index=True, sort_columns=None)
+    with assert_inputs_not_modified(df1_shuffled):
+        lib.stage(symbol, df1_shuffled, validate_index=False, sort_on_index=True, sort_columns=None)
 
     lib_tool = lib.library_tool()
     data_keys = lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, symbol)
@@ -232,7 +258,8 @@ def test_stage_with_sort_columns_not_ts(lmdb_version_store_v1):
     ).set_index("idx")
     df1_shuffled = df1.sample(frac=1)
 
-    lib.stage(symbol, df1_shuffled, validate_index=False, sort_on_index=False, sort_columns=["idx"])
+    with assert_inputs_not_modified(df1_shuffled):
+        lib.stage(symbol, df1_shuffled, validate_index=False, sort_on_index=False, sort_columns=["idx"])
 
     lib_tool = lib.library_tool()
     data_keys = lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, symbol)
@@ -273,8 +300,9 @@ def test_stage_finalize_dynamic_with_chunking(arctic_client, lib_name):
     df1_shuffled = df1.sample(frac=1)
     df2_shuffled = df2.sample(frac=1)
 
-    lib.stage(symbol, df1_shuffled, False, False, sort_cols)
-    lib.stage(symbol, df2_shuffled, False, False, sort_cols)
+    with assert_inputs_not_modified(df1_shuffled, df2_shuffled):
+        lib.stage(symbol, df1_shuffled, False, False, sort_cols)
+        lib.stage(symbol, df2_shuffled, False, False, sort_cols)
 
     lib_tool = lib._dev_tools.library_tool()
     data_keys = lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, symbol)
@@ -317,8 +345,9 @@ def test_stage_finalize_index_and_additional(arctic_library):
     df1_shuffled = df1.sample(frac=1)
     df2_shuffled = df2.sample(frac=1)
 
-    arctic_library.stage(symbol, df1_shuffled, False, True, sort_cols)
-    arctic_library.stage(symbol, df2_shuffled, False, True, sort_cols)
+    with assert_inputs_not_modified(df1_shuffled, df2_shuffled):
+        arctic_library.stage(symbol, df1_shuffled, False, True, sort_cols)
+        arctic_library.stage(symbol, df2_shuffled, False, True, sort_cols)
     arctic_library.finalize_staged_data(symbol)
     result = arctic_library.read(symbol).data
 

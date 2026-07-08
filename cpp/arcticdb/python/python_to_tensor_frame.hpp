@@ -12,15 +12,37 @@
 #include <arcticdb/python/gil_lock.hpp>
 #include <arcticdb/pipeline/input_frame.hpp>
 #include <arcticdb/entity/native_tensor.hpp>
+#include <memory>
 #include <string>
+#include <vector>
 
 namespace arcticdb::convert {
 
 namespace py = pybind11;
 using namespace arcticdb::entity;
 
-// py::tuple for Pandas data, record batches for Arrow data
-using InputItem = std::variant<py::tuple, std::vector<std::shared_ptr<RecordBatchData>>>;
+struct ARCTICDB_VISIBILITY_HIDDEN PandasData {
+    PandasData(
+            std::vector<std::string>&& index_names, std::vector<std::string>&& column_names,
+            std::vector<py::object>&& index_values, std::vector<py::object>&& columns_values, SortedValue sorted
+    ) :
+        index_names(std::move(index_names)),
+        column_names(std::move(column_names)),
+        index_values(std::move(index_values)),
+        columns_values(std::move(columns_values)),
+        sorted(sorted) {}
+
+    ARCTICDB_MOVE_ONLY_DEFAULT(PandasData)
+
+    std::vector<std::string> index_names;
+    std::vector<std::string> column_names;
+    std::vector<py::object> index_values;
+    std::vector<py::object> columns_values;
+    SortedValue sorted{SortedValue::UNKNOWN};
+};
+
+// PandasData for Pandas data, record batches for Arrow data
+using InputItem = std::variant<std::shared_ptr<PandasData>, std::vector<std::shared_ptr<RecordBatchData>>>;
 
 struct ARCTICDB_VISIBILITY_HIDDEN PyStringWrapper {
     char* buffer_;
@@ -78,12 +100,13 @@ std::variant<StringEncodingError, PyStringWrapper> py_unicode_to_buffer(
 NativeTensor obj_to_tensor(PyObject* ptr, bool empty_types, std::optional<std::string_view> column_name = std::nullopt);
 
 void record_batches_to_frame(
-        const std::vector<std::shared_ptr<RecordBatchData>>& record_batches, pipelines::InputFrame& frame
+        const std::vector<std::shared_ptr<RecordBatchData>>& record_batches, pipelines::InputFrame& frame,
+        pipelines::SortednessScan sortedness_scan
 );
 
-std::shared_ptr<pipelines::InputFrame> py_ndf_to_frame(
+std::shared_ptr<pipelines::InputFrame> py_input_item_to_frame(
         const StreamId& stream_name, const InputItem& item, const py::object& norm_meta, const py::object& user_meta,
-        bool empty_types
+        bool empty_types, pipelines::SortednessScan sortedness_scan
 );
 
 std::shared_ptr<pipelines::InputFrame> py_none_to_frame();

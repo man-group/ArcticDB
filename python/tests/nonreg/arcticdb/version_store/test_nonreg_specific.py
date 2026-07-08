@@ -20,6 +20,7 @@ from arcticdb.version_store.library import Library
 from arcticdb_ext import set_config_int
 import arcticdb_ext.cpp_async as adb_async
 from arcticdb_ext.storage import KeyType
+from arcticdb_ext.exceptions import SchemaException
 from arcticc.pb2.descriptors_pb2 import TypeDescriptor
 from tests.conftest import Marks
 from tests.util.date import DateRange
@@ -249,15 +250,15 @@ def test_update_with_empty_series_or_dataframe(
 
     assert first_operation.version == 0
 
-    # Has no effect, but must not fail.
+    # Has no effect on data, but must not fail.
     second_operation = lib.append(symbol, empty)
 
-    # No new version is created.
-    assert second_operation.version == first_operation.version
+    # A new version is created.
+    assert second_operation.version == first_operation.version + 1
 
     third_operation = lib.update(symbol, one_row)
 
-    # A new version is created in this case.
+    # A new version is created.
     assert third_operation.version == second_operation.version + 1
 
     received = lib.read(symbol).data
@@ -267,17 +268,17 @@ def test_update_with_empty_series_or_dataframe(
 
     first_operation = lib.write(symbol, one_row)
 
-    # Has no effect, but must not fail.
+    # Has no effect on data, but must not fail.
     second_operation = lib.append(symbol, empty)
 
-    # No new version is created.
-    assert first_operation.version == second_operation.version
+    # A new version is created.
+    assert second_operation.version == first_operation.version + 1
 
-    # Has no effect, but must not fail.
+    # Has no effect on data, but must not fail.
     third_operation = lib.update(symbol, empty)
 
-    # No new version is created as well.
-    assert third_operation.version == first_operation.version
+    # A new version is created.
+    assert third_operation.version == second_operation.version + 1
 
     received = lib.read(symbol).data
     assert_pandas_container_equal(one_row, received)
@@ -543,3 +544,15 @@ def test_all_snapshots_not_loaded_for_tombstoned_as_of(in_memory_store_factory, 
     assert query_stats_operation_count(stats, "Memory_ListObjects", "SNAPSHOT_REF") == 1
     assert query_stats_operation_count(stats, "Memory_ListObjects", "SNAPSHOT") == 1
     assert query_stats_operation_count(stats, "Memory_GetObject", "SNAPSHOT_REF") == 1
+
+
+@pytest.mark.parametrize("method", ["append", "update"])
+def test_dynamic_schema_incompatible_types_do_not_orphan_data_keys(in_memory_store_factory, clear_query_stats, method):
+    lib = in_memory_store_factory(dynamic_schema=True)
+    sym = "test_dynamic_schema_incompatible_types_do_not_orphan_data_keys"
+    lib.write(sym, pd.DataFrame({"col": [0]}, index=[pd.Timestamp("2026-01-01")]))
+    lt = lib.library_tool()
+    assert len(lt.find_keys(KeyType.TABLE_DATA)) == 1
+    with pytest.raises(SchemaException):
+        getattr(lib, method)(sym, pd.DataFrame({"col": ["hello"]}, index=[pd.Timestamp("2026-01-02")]))
+    assert len(lt.find_keys(KeyType.TABLE_DATA)) == 1

@@ -10,6 +10,7 @@
 
 #include <arcticdb/pipeline/pipeline_context.hpp>
 #include <arcticdb/column_store/chunked_buffer.hpp>
+#include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/entity/atom_key.hpp>
 #include <arcticdb/pipeline/input_frame.hpp>
@@ -56,17 +57,18 @@ inline size_t get_max_string_size(
 
 TimeseriesDescriptor make_timeseries_descriptor(
         size_t total_rows, const StreamDescriptor& desc,
-        arcticdb::proto::descriptors::NormalizationMetadata&& norm_meta,
-        std::optional<arcticdb::proto::descriptors::UserDefinedMetadata>&& um, std::optional<AtomKey>&& prev_key,
-        std::optional<AtomKey>&& next_key, bool bucketize_dynamic
+        const arcticdb::proto::descriptors::NormalizationMetadata& norm_meta,
+        std::optional<arcticdb::proto::descriptors::UserDefinedMetadata>&& um, std::optional<AtomKey>&& next_key,
+        bool bucketize_dynamic
 );
 
 // The overload above returns a TSD that shares a std::shared_ptr<FieldCollection> with the input StreamDescriptor,
 // which is error-prone. However, it is sometimes the desired behaviour, so needs to still be available.
 TimeseriesDescriptor make_timeseries_descriptor(
-        size_t total_rows, StreamDescriptor&& desc, arcticdb::proto::descriptors::NormalizationMetadata&& norm_meta,
-        std::optional<arcticdb::proto::descriptors::UserDefinedMetadata>&& um, std::optional<AtomKey>&& prev_key,
-        std::optional<AtomKey>&& next_key, bool bucketize_dynamic
+        size_t total_rows, StreamDescriptor&& desc,
+        const arcticdb::proto::descriptors::NormalizationMetadata& norm_meta,
+        std::optional<arcticdb::proto::descriptors::UserDefinedMetadata>&& um, std::optional<AtomKey>&& next_key,
+        bool bucketize_dynamic
 );
 
 TimeseriesDescriptor timseries_descriptor_from_index_segment(
@@ -75,22 +77,21 @@ TimeseriesDescriptor timseries_descriptor_from_index_segment(
 );
 
 TimeseriesDescriptor timeseries_descriptor_from_pipeline_context(
-        const std::shared_ptr<pipelines::PipelineContext>& pipeline_context, std::optional<AtomKey>&& prev_key,
+        const std::shared_ptr<pipelines::PipelineContext>& pipeline_context, std::optional<AtomKey>&& next_key,
         bool bucketize_dynamic
 );
 
 TimeseriesDescriptor index_descriptor_from_frame(
         const std::shared_ptr<pipelines::InputFrame>& frame, size_t existing_rows,
-        std::optional<entity::AtomKey>&& prev_key = {}
+        std::optional<entity::AtomKey>&& next_key = {}
 );
 
 template<typename RawType>
 RawType* flatten_tensor(
-        std::optional<ChunkedBuffer>& flattened_buffer, size_t rows_to_write, const NativeTensor& tensor,
-        size_t slice_num, size_t regular_slice_size
+        std::optional<ChunkedBuffer>& flattened_buffer, size_t rows_to_write, const NativeTensor& tensor, size_t row
 ) {
     flattened_buffer = ChunkedBuffer::presized(rows_to_write * sizeof(RawType));
-    TypedTensor<RawType> t(tensor, slice_num, regular_slice_size, rows_to_write);
+    TypedTensor<RawType> t(tensor, row, rows_to_write);
     util::FlattenHelper flattener{t};
     auto dst = reinterpret_cast<RawType*>(flattened_buffer->data());
     flattener.flatten(dst, reinterpret_cast<RawType const*>(t.data()));
@@ -132,10 +133,9 @@ std::variant<position_t, convert::StringEncodingError> add_py_string_to_pool(
     }
 }
 
-template<typename AggregatorType, typename TagType, typename RawType>
+template<typename TagType, typename RawType>
 std::optional<convert::StringEncodingError> set_sequence_type(
-        AggregatorType& agg, const entity::NativeTensor& tensor, size_t col, size_t rows_to_write, size_t row,
-        size_t slice_num, size_t regular_slice_size
+        SegmentInMemory& seg, const entity::NativeTensor& tensor, size_t col, size_t rows_to_write, size_t row
 ) {
     constexpr auto dt = TagType::DataTypeTag::data_type;
     const auto c_style = util::is_cstyle_array<RawType>(tensor);
@@ -150,24 +150,23 @@ std::optional<convert::StringEncodingError> set_sequence_type(
         auto str_len = tensor.elsize();
 
         for (size_t s = 0; s < rows_to_write; ++s, char_data += str_stride) {
-            agg.set_string_at(col, s, char_data, str_len);
+            seg.set_string_at(col, s, char_data, str_len);
         }
     } else {
         auto ptr_data = static_cast<PyObject**>(data);
         ptr_data += row;
         if (!c_style)
-            ptr_data =
-                    flatten_tensor<PyObject*>(flattened_buffer, rows_to_write, tensor, slice_num, regular_slice_size);
+            ptr_data = flatten_tensor<PyObject*>(flattened_buffer, rows_to_write, tensor, row);
 
         // GIL will be acquired if there is a string that is not pure ASCII/UTF-8
         // In this case a PyObject will be allocated by convert::py_unicode_to_buffer
         // If such a string is encountered in a column, then the GIL will be held until that whole column has
         // been processed, on the assumption that if a column has one such string it will probably have many.
         std::optional<ScopedGILLock> scoped_gil_lock;
-        auto& column = agg.segment().column(col);
+        auto& column = seg.column(col);
         column.allocate_data(rows_to_write * sizeof(entity::position_t));
         auto out_ptr = reinterpret_cast<entity::position_t*>(column.buffer().data());
-        auto& string_pool = agg.segment().string_pool();
+        auto& string_pool = seg.string_pool();
         for (size_t s = 0; s < rows_to_write; ++s, ++ptr_data) {
             std::variant<position_t, convert::StringEncodingError> string_pool_entry =
                     add_py_string_to_pool<dt>(*ptr_data, scoped_gil_lock, string_pool);
@@ -182,16 +181,16 @@ std::optional<convert::StringEncodingError> set_sequence_type(
     return std::optional<convert::StringEncodingError>{};
 }
 
-template<typename AggregatorType, typename TagType, typename RawType>
+template<typename TagType, typename RawType>
 void set_integral_scalar_type(
-        AggregatorType& agg, const entity::NativeTensor& tensor, size_t col, size_t rows_to_write, size_t row,
-        size_t slice_num, size_t regular_slice_size, bool sparsify_floats
+        SegmentInMemory& seg, const entity::NativeTensor& tensor, size_t col, size_t rows_to_write, size_t row,
+        bool sparsify_floats, CopyMode copy_mode
 ) {
     constexpr auto dt = TagType::DataTypeTag::data_type;
     auto ptr = tensor.template ptr_cast<RawType>(row);
     if (sparsify_floats) {
         if constexpr (is_floating_point_type(dt)) {
-            agg.set_sparse_block(col, ptr, rows_to_write);
+            seg.set_sparse_block(col, ptr, rows_to_write);
         } else {
             util::raise_rte("sparse currently supported for floating point columns only.");
         }
@@ -199,7 +198,7 @@ void set_integral_scalar_type(
         const auto c_style = util::is_cstyle_array<RawType>(tensor);
         if (c_style) {
             ARCTICDB_SAMPLE_DEFAULT(SetDataZeroCopy)
-            agg.set_external_block(col, ptr, rows_to_write);
+            seg.set_dense_block(col, ptr, rows_to_write, copy_mode);
         } else {
             ARCTICDB_SAMPLE_DEFAULT(SetDataFlatten)
             ARCTICDB_DEBUG(
@@ -210,16 +209,15 @@ void set_integral_scalar_type(
                     sizeof(RawType)
             );
 
-            TypedTensor<RawType> t(tensor, slice_num, regular_slice_size, rows_to_write);
-            agg.set_array(col, t);
+            TypedTensor<RawType> t(tensor, row, rows_to_write);
+            seg.set_array(col, t);
         }
     }
 }
 
-template<typename AggregatorType, typename TagType, typename RawType>
+template<typename TagType, typename RawType>
 void set_bool_object_type(
-        AggregatorType& agg, const entity::NativeTensor& tensor, size_t col, size_t rows_to_write, size_t row,
-        size_t slice_num, size_t regular_slice_size
+        SegmentInMemory& seg, const entity::NativeTensor& tensor, size_t col, size_t rows_to_write, size_t row
 ) {
     const auto c_style = util::is_cstyle_array<RawType>(tensor);
     std::optional<ChunkedBuffer> flattened_buffer;
@@ -229,7 +227,7 @@ void set_bool_object_type(
     ptr_data += row;
 
     if (!c_style)
-        ptr_data = flatten_tensor<PyObject*>(flattened_buffer, rows_to_write, tensor, slice_num, regular_slice_size);
+        ptr_data = flatten_tensor<PyObject*>(flattened_buffer, rows_to_write, tensor, row);
 
     util::BitSet bitset = util::scan_object_type_to_sparse(ptr_data, rows_to_write);
 
@@ -241,12 +239,12 @@ void set_bool_object_type(
         ++bool_ptr;
     }
     if (bitset.count() > 0)
-        agg.set_sparse_block(col, std::move(bool_buffer), std::move(bitset));
+        seg.set_sparse_block(col, std::move(bool_buffer), std::move(bitset));
 }
 
-template<typename AggregatorType, typename TagType, typename RawType>
+template<typename TagType, typename RawType>
 std::optional<convert::StringEncodingError> set_array_type(
-        const TypeDescriptor& type_desc, AggregatorType& agg, const entity::NativeTensor& tensor, size_t col,
+        const TypeDescriptor& type_desc, SegmentInMemory& seg, const entity::NativeTensor& tensor, size_t col,
         size_t rows_to_write, size_t row
 ) {
     constexpr auto dt = TagType::DataTypeTag::data_type;
@@ -267,7 +265,7 @@ std::optional<convert::StringEncodingError> set_array_type(
         // read.
         if (values_bitset.size() == values_bitset.count()) {
             Column arr_col{TypeDescriptor{DataType::EMPTYVAL, Dimension::Dim2}, Sparsity::PERMITTED};
-            agg.set_sparse_block(col, arr_col.release_buffer(), arr_col.release_shapes(), std::move(values_bitset));
+            seg.set_sparse_block(col, arr_col.release_buffer(), arr_col.release_shapes(), std::move(values_bitset));
             return std::optional<convert::StringEncodingError>();
         }
     }
@@ -318,14 +316,13 @@ std::optional<convert::StringEncodingError> set_array_type(
         last_logical_row++;
     }
     arr_col.set_type(TypeDescriptor{secondary_type.data_type(), column_type_descriptor.dimension()});
-    agg.set_sparse_block(col, arr_col.release_buffer(), arr_col.release_shapes(), std::move(values_bitset));
+    seg.set_sparse_block(col, arr_col.release_buffer(), arr_col.release_shapes(), std::move(values_bitset));
     return std::optional<convert::StringEncodingError>{};
 }
 
-template<typename Aggregator>
-std::optional<convert::StringEncodingError> aggregator_set_data(
-        const TypeDescriptor& type_desc, const entity::NativeTensor& tensor, Aggregator& agg, size_t col,
-        size_t rows_to_write, size_t row, size_t slice_num, size_t regular_slice_size, bool sparsify_floats
+inline std::optional<convert::StringEncodingError> segment_set_data(
+        const TypeDescriptor& type_desc, const entity::NativeTensor& tensor, SegmentInMemory& seg, size_t col,
+        size_t rows_to_write, size_t row, bool sparsify_floats, CopyMode copy_mode = CopyMode::IF_NEEDED
 ) {
     return type_desc.visit_tag([&](auto tag) {
         using TagType = std::decay_t<decltype(tag)>;
@@ -344,25 +341,20 @@ std::optional<convert::StringEncodingError> aggregator_set_data(
             normalization::check<ErrorCode::E_UNIMPLEMENTED_INPUT_TYPE>(
                     tag.dimension() == Dimension::Dim0, "Multidimensional string types are not supported."
             );
-            auto maybe_error = set_sequence_type<Aggregator, TagType, RawType>(
-                    agg, tensor, col, rows_to_write, row, slice_num, regular_slice_size
-            );
+            auto maybe_error = set_sequence_type<TagType, RawType>(seg, tensor, col, rows_to_write, row);
             if (maybe_error)
                 return maybe_error;
         } else if constexpr ((is_numeric_type(dt) || is_bool_type(dt)) && tag.dimension() == Dimension::Dim0) {
-            set_integral_scalar_type<Aggregator, TagType, RawType>(
-                    agg, tensor, col, rows_to_write, row, slice_num, regular_slice_size, sparsify_floats
+            set_integral_scalar_type<TagType, RawType>(
+                    seg, tensor, col, rows_to_write, row, sparsify_floats, copy_mode
             );
         } else if constexpr (is_bool_object_type(dt)) {
             normalization::check<ErrorCode::E_UNIMPLEMENTED_INPUT_TYPE>(
                     tag.dimension() == Dimension::Dim0, "Multidimensional nullable booleans are not supported"
             );
-            set_bool_object_type<Aggregator, TagType, RawType>(
-                    agg, tensor, col, rows_to_write, row, slice_num, regular_slice_size
-            );
+            set_bool_object_type<TagType, RawType>(seg, tensor, col, rows_to_write, row);
         } else if constexpr (is_array_type(TypeDescriptor(tag))) {
-            auto maybe_error =
-                    set_array_type<Aggregator, TagType, RawType>(type_desc, agg, tensor, col, rows_to_write, row);
+            auto maybe_error = set_array_type<TagType, RawType>(type_desc, seg, tensor, col, rows_to_write, row);
             if (maybe_error)
                 return maybe_error;
         } else if constexpr (tag.dimension() == Dimension::Dim2) {
@@ -375,6 +367,14 @@ std::optional<convert::StringEncodingError> aggregator_set_data(
         }
         return std::optional<convert::StringEncodingError>();
     });
+}
+
+template<typename Aggregator>
+inline std::optional<convert::StringEncodingError> aggregator_set_data(
+        const TypeDescriptor& type_desc, const entity::NativeTensor& tensor, Aggregator& agg, size_t col,
+        size_t rows_to_write, size_t row, bool sparsify_floats
+) {
+    return segment_set_data(type_desc, tensor, agg.segment(), col, rows_to_write, row, sparsify_floats);
 }
 
 size_t adjust_slice_rowcounts(std::vector<pipelines::SliceAndKey>& slice_and_keys);

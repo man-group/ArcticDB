@@ -21,7 +21,7 @@ from arcticdb.util.tasks import (
 from arcticdb_ext.exceptions import InternalException
 from arcticdb_ext.storage import KeyType, NoDataFoundException
 from arcticdb_ext.version_store import ManualClockVersionStore
-from arcticdb.version_store._normalization import NPDDataFrame
+from arcticdb.version_store._normalization import PandasData
 from arcticdb.util.test import sample_dataframe
 from arcticdb.version_store._store import resolve_defaults
 
@@ -164,6 +164,39 @@ def test_delete_snapshot(version_store_factory):
     data_keys = lt.find_keys_for_id(KeyType.TABLE_DATA, symbol)
     for k in data_keys:
         assert k.version_id != 0
+
+
+def test_delete_snapshot_key_shared_with_another_snapshot(version_store_factory):
+    lib = version_store_factory(use_tombstones=True, delayed_deletes=False)
+    lt = lib.library_tool()
+
+    symbol = "test_delete_snapshot_key_shared_with_another_snapshot"
+    snap1 = "snap1"
+    snap2 = "snap2"
+
+    df = sample_dataframe(100)
+    lib.write(symbol, df)  # v0
+    lib.snapshot(snap1)  # snap1 -> v0
+    lib.snapshot(snap2)  # snap2 -> v0
+
+    # Tombstone v0. It survives physically because both snapshots still reference it.
+    lib.delete_version(symbol, 0)
+    versions = lib.list_versions(symbol)
+    assert len(versions) == 1 and versions[0]["deleted"]
+    assert len(lt.find_keys_for_id(KeyType.TABLE_INDEX, symbol)) == 1
+    assert len(lt.find_keys_for_id(KeyType.TABLE_DATA, symbol)) > 0
+
+    # Deleting snap1 must not remove v0's keys: snap2 still references them.
+    lib.delete_snapshot(snap1)
+    assert lib.list_snapshots().keys() == {snap2}
+    assert_frame_equal(lib.read(symbol, as_of=snap2).data, df)
+    assert len(lt.find_keys_for_id(KeyType.TABLE_INDEX, symbol)) == 1
+    assert len(lt.find_keys_for_id(KeyType.TABLE_DATA, symbol)) > 0
+
+    # Deleting the last snapshot referencing v0 removes its keys, as v0 is tombstoned.
+    lib.delete_snapshot(snap2)
+    assert len(lt.find_keys_for_id(KeyType.TABLE_INDEX, symbol)) == 0
+    assert len(lt.find_keys_for_id(KeyType.TABLE_DATA, symbol)) == 0
 
 
 def test_tombstones_deleted_data_keys_prune(lmdb_version_store_prune_previous, sym):
@@ -418,7 +451,7 @@ def test_tombstone_of_non_existing_version(lmdb_version_store_tombstone, sym):
         dynamic_strings = resolve_defaults("dynamic_strings", proto_cfg, False)
         pickle_on_failure = resolve_defaults("pickle_on_failure", proto_cfg, False)
         udm, item, norm_meta = lib._try_normalize(sym, data, None, pickle_on_failure, dynamic_strings, None)
-        if isinstance(item, NPDDataFrame):
+        if isinstance(item, PandasData):
             lib.version_store.write_dataframe_specific_version(sym, item, norm_meta, udm, version)
 
     lib = lmdb_version_store_tombstone
@@ -457,7 +490,7 @@ def test_tombstone_of_non_existing_version(lmdb_version_store_tombstone, sym):
 def test_tombstone_of_non_existing_version_multiple_deletes(lmdb_version_store_tombstone, sym):
     def write_specific_version(data, version):
         udm, item, norm_meta = lib._try_normalize(sym, data, None, False, False, None)
-        if isinstance(item, NPDDataFrame):
+        if isinstance(item, PandasData):
             lib.version_store.write_dataframe_specific_version(sym, item, norm_meta, udm, version)
 
     lib = lmdb_version_store_tombstone

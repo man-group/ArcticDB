@@ -272,12 +272,6 @@ def test_append_scenario_with_errors_and_success(version_store_and_real_s3_basic
     df_different_index = pd.DataFrame({"value": [4, 5, 6]}, index=["a", "b", "c"])  # String index instead of datetime
     df_no_index = pd.DataFrame({"value": [4, 5, 6]})
 
-    # Test append to non-existent symbol
-    for sym in [symbol, None, ""]:
-        with pytest.raises(TypeError):
-            lib.append(sym)
-    assert len(lib.list_symbols()) == 0
-
     # Empty dataframe will create symbol with one version
     result = lib.append(symbol, df_empty)
     assert len(lib.list_symbols()) == 1
@@ -347,11 +341,10 @@ def test_append_scenario_with_errors_and_success(version_store_and_real_s3_basic
         with pytest.raises(StreamDescriptorMismatch):
             lib.append(symbol, df_different_schema)
 
-    # Append empty dataframe to symbol with content does not increase version
-    # but as we saw previously it will create symbol
+    # Append empty dataframe to symbol with content increases the version in case the metadata has changed
     result = lib.append(symbol, df_empty)
     assert len(lib.list_symbols()) == 1
-    assert len(lib.list_versions()) == 4 if dynamic_schema else 3
+    assert len(lib.list_versions()) == 5 if dynamic_schema else 4
 
     # Validate that validate_index works as expected
     with pytest.raises(UnsortedDataException):
@@ -726,7 +719,6 @@ def test_batch_read_and_join_scenarios_errors(basic_store):
 
 
 @pytest.mark.storage
-@pytest.mark.xfail(True, reason="Filtering of columns does not work for dynamic schema 18023047637")
 def test_batch_read_and_join_scenarios_dynamic_schema_filtering_error(lmdb_version_store_dynamic_schema_v1):
     lib: NativeVersionStore = lmdb_version_store_dynamic_schema_v1
 
@@ -762,10 +754,6 @@ def test_batch_read_and_join_scenarios_dynamic_schema_filtering_error(lmdb_versi
     expected = pd.concat([df0_subset, df1], ignore_index=True)
     # Pandas concat will fill NaN for bools, Arcticdb is using False
     expected["bool"] = expected["bool"].fillna(False)
-    ## ERROR: With dynamic schema filtering of the columns will fail
-    #  here in the 'data' df instead of None/Na values for first 19 rows for
-    #  bool and B column we will see values, which should not have been there
-    #  If this was static schema - ie 'basic_store' fixture all would be fine
     assert_frame_equal(expected, data)
 
     data: pd.DataFrame = lib.batch_read_and_join(
@@ -774,7 +762,6 @@ def test_batch_read_and_join_scenarios_dynamic_schema_filtering_error(lmdb_versi
     df0_subset = df0.loc[2:2, ["A"]]
     df1_subset = df1.loc[10:df1_len, ["B"]]
     expected = pd.concat([df0_subset, df1_subset], ignore_index=True)
-    # ERROR - here we observe that -/+ inf is added for int column "A"
     assert_frame_equal(expected, data)
 
 

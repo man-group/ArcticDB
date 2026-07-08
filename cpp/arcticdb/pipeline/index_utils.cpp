@@ -156,16 +156,17 @@ TimeseriesDescriptor get_merged_tsd(
 ) {
     auto existing_descriptor = existing_tsd.as_stream_descriptor();
     auto merged_descriptor = existing_descriptor;
+    const auto new_frame_desc = new_frame->compute_desc_for_tsd();
     if (existing_tsd.total_rows() == 0) {
         // If the existing dataframe is empty, we use the descriptor of the new_frame
-        merged_descriptor = new_frame->desc_for_tsd();
+        merged_descriptor = new_frame_desc;
     } else if (dynamic_schema) {
         // In case of dynamic schema
-        const std::array fields_ptr = {new_frame->desc_for_tsd().fields_ptr()};
+        const std::array fields_ptr = {new_frame_desc.fields_ptr()};
         merged_descriptor = merge_descriptors(existing_descriptor, fields_ptr, {});
     } else {
         // In case of static schema, we only promote empty types and fixed->dynamic strings
-        const auto& new_fields = new_frame->desc_for_tsd().fields();
+        const auto& new_fields = new_frame_desc.fields();
         for (size_t i = 0; i < new_fields.size(); ++i) {
             const auto& new_type = new_fields.at(i).type();
             TypeDescriptor& result_type = merged_descriptor.mutable_field(i).mutable_type();
@@ -181,13 +182,12 @@ TimeseriesDescriptor get_merged_tsd(
             }
         }
     }
-    merged_descriptor.set_sorted(deduce_sorted(existing_descriptor.sorted(), new_frame->desc_for_tsd().sorted()));
+    merged_descriptor.set_sorted(deduce_sorted(existing_descriptor.sorted(), new_frame_desc.sorted()));
     return make_timeseries_descriptor(
             row_count,
             std::move(merged_descriptor),
             merge_normalization_metadata(existing_tsd, *new_frame),
             std::move(new_frame->user_meta),
-            std::nullopt,
             std::nullopt,
             new_frame->bucketize_dynamic
     );
