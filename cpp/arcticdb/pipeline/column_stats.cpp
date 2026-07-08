@@ -205,19 +205,24 @@ ColumnStats::ColumnStats(const TimeseriesDescriptor& tsd) {
 
     std::unordered_set<std::string> seen_user_names;
 
-    for (size_t field_index = start_filed_index; field_index < fields.size(); ++field_index) {
-        if (!is_col_eligible_for_stats(fields.at(field_index).type().data_type())) {
+    for (const auto& [field_index, field] : folly::enumerate(fields)) {
+        if (field_index < start_field_index) {
+            continue;
+        }
+        if (!is_col_eligible_for_stats(field.type().data_type())) {
             continue;
         }
 
-        std::string field_name{fields.at(field_index).name()};
+        std::string field_name{field.name()};
 
         if (norm.has_df()) {
-            user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
-                    seen_user_names.insert(to_user_facing_name_key(field_name, norm.df().common())).second,
-                    "Cannot create column stats: symbol has duplicated data column name [{}]",
-                    field_name
-            );
+            const auto& common = norm.df().common();
+            if (!seen_user_names.insert(to_user_facing_name_key(field.name(), common)).second) {
+                user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                        "Cannot create column stats: symbol has duplicated data column name [{}]",
+                        to_user_facing_display_name(field.name(), common)
+                );
+            }
         }
 
         offset_to_stat_info_.emplace(field_index, NameAndStatTypes{std::move(field_name), {ColumnStatType::MINMAX}});
