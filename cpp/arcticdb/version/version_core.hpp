@@ -82,10 +82,7 @@ void create_column_stats_impl(
         const std::shared_ptr<Store>& store, const VersionedItem& versioned_item, const ReadOptions& read_options
 );
 
-void drop_column_stats_impl(
-        const std::shared_ptr<Store>& store, const VersionedItem& versioned_item,
-        const std::optional<ColumnStats>& column_stats_to_drop
-);
+void drop_column_stats_impl(const std::shared_ptr<Store>& store, const VersionedItem& versioned_item);
 
 FrameAndDescriptor read_column_stats_impl(const std::shared_ptr<Store>& store, const VersionedItem& versioned_item);
 

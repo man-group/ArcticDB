@@ -106,10 +106,7 @@ class PythonVersionStore : public LocalVersionedEngine {
 
     void create_column_stats_version(const StreamId& stream_id, const VersionQuery& version_query);
 
-    void drop_column_stats_version(
-            const StreamId& stream_id, const std::optional<ColumnStats>& column_stats_to_drop,
-            const VersionQuery& version_query
-    );
+    void drop_column_stats_version(const StreamId& stream_id, const VersionQuery& version_query);
 
     ReadResult read_column_stats_version(
             const StreamId& stream_id, const VersionQuery& version_query, std::any& handler_data

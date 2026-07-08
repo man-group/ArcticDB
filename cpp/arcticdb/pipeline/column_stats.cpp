@@ -251,31 +251,6 @@ ColumnStats::ColumnStats(const TimeseriesDescriptor& tsd) {
     offset_to_stat_info_set_ = true;
 }
 
-void ColumnStats::calculate_offsets(const TimeseriesDescriptor& tsd, utils::MissingColumnsBehavior missing_columns) {
-    util::check(!offset_to_stat_info_set_, "Should not calculate offsets twice");
-    std::unordered_set<std::string> unmangled_names;
-    for (const auto& k : user_specified_column_stats_ | ranges::views::keys) {
-        unmangled_names.insert(k);
-    }
-    auto offsets_and_mangled_names =
-            utils::find_offset_and_mangled_name(unmangled_names, tsd.as_stream_descriptor(), missing_columns);
-    util::check(
-            missing_columns == utils::MissingColumnsBehavior::IGNORE_MISSING ||
-                    offsets_and_mangled_names.size() == user_specified_column_stats_.size(),
-            "Expect calculated offsets_and_mangled_names to match column_stats_"
-    );
-    for (auto& offset_and_mangled_name : offsets_and_mangled_names) {
-        offset_to_stat_info_.emplace(
-                offset_and_mangled_name.offset,
-                NameAndStatTypes{
-                        offset_and_mangled_name.mangled_name,
-                        user_specified_column_stats_.at(offset_and_mangled_name.unmangled_name)
-                }
-        );
-    }
-    offset_to_stat_info_set_ = true;
-}
-
 namespace {
 std::unordered_set<ColumnStatTypeInternal> external_to_internal(ColumnStatType type) {
     switch (type) {
@@ -328,7 +303,6 @@ std::vector<std::string> ColumnStats::drop(const ColumnStats& to_drop, bool warn
             ++it;
         }
     }
-    user_specified_column_stats_ = {};
     return dropped_names;
 }
 
@@ -376,14 +350,10 @@ std::optional<Clause> ColumnStats::clause() const {
     return ColumnStatsGenerationClause(std::move(input_columns), index_generation_aggregators);
 }
 
-bool ColumnStats::empty() const { return user_specified_column_stats_.empty() && offset_to_stat_info_.empty(); }
+bool ColumnStats::empty() const { return offset_to_stat_info_.empty(); }
 
 bool ColumnStats::operator==(const ColumnStats& right) const {
-    if (offset_to_stat_info_set_) {
-        return offset_to_stat_info_ == right.offset_to_stat_info_;
-    } else {
-        return user_specified_column_stats_ == right.user_specified_column_stats_;
-    }
+    return offset_to_stat_info_ == right.offset_to_stat_info_;
 }
 
 } // namespace arcticdb

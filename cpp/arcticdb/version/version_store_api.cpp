@@ -905,11 +905,8 @@ void PythonVersionStore::create_column_stats_version(const StreamId& stream_id, 
     create_column_stats_version_internal(stream_id, version_query, read_options);
 }
 
-void PythonVersionStore::drop_column_stats_version(
-        const StreamId& stream_id, const std::optional<ColumnStats>& column_stats_to_drop,
-        const VersionQuery& version_query
-) {
-    drop_column_stats_version_internal(stream_id, column_stats_to_drop, version_query);
+void PythonVersionStore::drop_column_stats_version(const StreamId& stream_id, const VersionQuery& version_query) {
+    drop_column_stats_version_internal(stream_id, version_query);
 }
 
 ReadResult PythonVersionStore::read_column_stats_version(

@@ -48,12 +48,6 @@ class ColumnStats {
     // Returns the segment column names of the dropped stats (e.g. "v1_MIN(col)", "v1_MAX(col)")
     std::vector<std::string> drop(const ColumnStats& to_drop, bool warn_if_missing = true);
 
-    // Calculate the fields to which the column stats refer.
-    void calculate_offsets(
-            const TimeseriesDescriptor& tsd,
-            utils::MissingColumnsBehavior missing_columns = utils::MissingColumnsBehavior::RAISE
-    );
-
     std::unordered_map<std::string, std::unordered_set<std::string>> to_map() const;
     std::optional<Clause> clause() const;
     bool empty() const;
@@ -61,8 +55,6 @@ class ColumnStats {
     bool operator==(const ColumnStats& right) const;
 
   private:
-    // Use ordered map/set here for consistent ordering in the resulting stats objects
-    std::map<std::string, std::set<ColumnStatType>> user_specified_column_stats_;
     std::unordered_map<size_t, NameAndStatTypes> offset_to_stat_info_;
     bool offset_to_stat_info_set_{false};
 };
