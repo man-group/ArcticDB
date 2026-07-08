@@ -250,15 +250,15 @@ def test_update_with_empty_series_or_dataframe(
 
     assert first_operation.version == 0
 
-    # Has no effect, but must not fail.
+    # Has no effect on data, but must not fail.
     second_operation = lib.append(symbol, empty)
 
-    # No new version is created.
-    assert second_operation.version == first_operation.version
+    # A new version is created.
+    assert second_operation.version == first_operation.version + 1
 
     third_operation = lib.update(symbol, one_row)
 
-    # A new version is created in this case.
+    # A new version is created.
     assert third_operation.version == second_operation.version + 1
 
     received = lib.read(symbol).data
@@ -268,17 +268,17 @@ def test_update_with_empty_series_or_dataframe(
 
     first_operation = lib.write(symbol, one_row)
 
-    # Has no effect, but must not fail.
+    # Has no effect on data, but must not fail.
     second_operation = lib.append(symbol, empty)
 
-    # No new version is created.
-    assert first_operation.version == second_operation.version
+    # A new version is created.
+    assert second_operation.version == first_operation.version + 1
 
-    # Has no effect, but must not fail.
+    # Has no effect on data, but must not fail.
     third_operation = lib.update(symbol, empty)
 
-    # No new version is created as well.
-    assert third_operation.version == first_operation.version
+    # A new version is created.
+    assert third_operation.version == second_operation.version + 1
 
     received = lib.read(symbol).data
     assert_pandas_container_equal(one_row, received)

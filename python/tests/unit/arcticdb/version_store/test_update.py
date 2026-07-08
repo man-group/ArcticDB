@@ -19,6 +19,7 @@ from arcticdb.util.test import (
     random_string,
     random_floats,
     assert_frame_equal,
+    assert_series_equal,
 )
 from arcticdb.exceptions import InternalException, UnsortedDataException, NormalizationException, SchemaException
 from arcticdb_ext.version_store import StreamDescriptorMismatch
@@ -873,7 +874,7 @@ class TestBatchUpdate:
         assert "symbol_2" not in str(ex_info.value)
 
     @pytest.mark.parametrize("upsert", [True, False])
-    def test_empty_dataframe_does_not_increase_version(self, lmdb_library, upsert):
+    def test_empty_dataframe_increases_version(self, lmdb_library, upsert):
         lib = lmdb_library
         lib_tool = lib._dev_tools.library_tool()
         df1 = pd.DataFrame({"a": range(5)}, index=pd.date_range("2024-01-01", periods=5))
@@ -891,15 +892,15 @@ class TestBatchUpdate:
             [UpdatePayload("symbol_1", update_1), UpdatePayload("symbol_2", update_2)], upsert=upsert
         )
 
-        assert res[0].version == 0
+        assert res[0].version == 1
         assert res[1].version == 1
 
         sym_1_vit, sym_2_vit = lib.read("symbol_1"), lib.read("symbol_2")
 
-        assert sym_1_vit.version == 0
+        assert sym_1_vit.version == 1
         assert_frame_equal(sym_1_vit.data, df1)
-        assert len(lib_tool.find_keys_for_symbol(KeyType.VERSION, "symbol_1")) == 1
-        assert len(lib_tool.find_keys_for_symbol(KeyType.TABLE_INDEX, "symbol_1")) == 1
+        assert len(lib_tool.find_keys_for_symbol(KeyType.VERSION, "symbol_1")) == 2
+        assert len(lib_tool.find_keys_for_symbol(KeyType.TABLE_INDEX, "symbol_1")) == 2
         assert len(lib_tool.find_keys_for_symbol(KeyType.TABLE_DATA, "symbol_1")) == 1
 
         assert sym_2_vit.version == 1
@@ -914,10 +915,8 @@ class TestBatchUpdate:
         assert len(lib_tool.find_keys_for_symbol(KeyType.TABLE_DATA, "symbol_2")) == 4
         assert len(lib_tool.read_index("symbol_2")) == 3
 
-        # This result is wrong. The correct value is 2. This is due to a bug Monday: 9682041273, append_batch and
-        # update_batch should not create symbol list keys for already existing symbols. Since update_batch is noop when
-        # the input is empty, there is no key for symbol_1, but there is a new key for symbol_2 and that is wrong.
-        assert len(lib_tool.find_keys(KeyType.SYMBOL_LIST)) == 3
+        # Updating already existing symbols (i.e. non-upsert path) does not add a symbol list key
+        assert len(lib_tool.find_keys(KeyType.SYMBOL_LIST)) == 2
 
     def test_empty_dataframe_with_daterange_does_not_delete_data(self, lmdb_library):
         sym = "symbol_1"
@@ -930,7 +929,7 @@ class TestBatchUpdate:
         )
         lmdb_library.update_batch([payload])
         vit = lmdb_library.read(sym)
-        assert vit.version == 0
+        assert vit.version == 1
         assert_frame_equal(vit.data, input_df)
 
 
@@ -1038,3 +1037,51 @@ def test_update_new_data_contains_old(version_store_factory):
     lib_tool = lib.library_tool()
     assert len(lib_tool.find_keys_for_symbol(KeyType.TABLE_DATA, "sym")) == 55
     assert len(lib_tool.read_index("sym")) == 30
+
+
+@pytest.mark.parametrize("data_class", ["dataframe", "series"])
+@pytest.mark.parametrize("batch", [True, False])
+@pytest.mark.parametrize("metadata_v1", ["v1", None])
+def test_update_empty_frame_metadata(lmdb_library, data_class, batch, metadata_v1):
+    # Need to use a V2 API fixture as there is no batch_update on the V1 API
+    lib = lmdb_library
+    sym = "test_update_empty_frame_metadata"
+    write_data = pd.DataFrame({"col": np.arange(1)}) if data_class == "dataframe" else pd.Series(np.arange(1))
+    write_data.index = [pd.Timestamp("2026-01-01")]
+    metadata_v0 = "v0"
+    lib.write(sym, write_data, metadata=metadata_v0)
+    # Using arange guarantees the dtype matches the written df
+    update_data = pd.DataFrame({"col": np.arange(0)}) if data_class == "dataframe" else pd.Series(np.arange(0))
+    update_data.index = pd.DatetimeIndex([])
+    update_vit = (
+        lib.update_batch([UpdatePayload(sym, update_data, metadata_v1)])[0]
+        if batch
+        else lib.update(sym, update_data, metadata=metadata_v1)
+    )
+    assert update_vit.version == 1
+    assert update_vit.metadata == metadata_v1
+    read_vit = lib.read(sym)
+    assert read_vit.version == 1
+    assert read_vit.metadata == metadata_v1
+    assert_func = assert_frame_equal if data_class == "dataframe" else assert_series_equal
+    assert_func(read_vit.data, write_data)
+
+
+@pytest.mark.parametrize("batch", [True, False])
+def test_symbol_list_key_added_on_upsert(lmdb_library, batch):
+    # Need to use a V2 API fixture as there is no batch_update on the V1 API
+    lib = lmdb_library
+    sym = "test_symbol_list_key_added_on_upsert"
+    lib.write_pickle(sym, 0)
+    lib.delete(sym)
+    lib_tool = lib._dev_tools.library_tool()
+    assert not len(lib.list_symbols())
+    num_symbol_list_keys = len(lib_tool.find_keys(KeyType.SYMBOL_LIST))
+    update_df = pd.DataFrame({"col": np.arange(0)}, index=pd.DatetimeIndex([]))
+    (
+        lib.update_batch([UpdatePayload(sym, update_df)], upsert=True)
+        if batch
+        else lib.update(sym, update_df, upsert=True)
+    )
+    assert len(lib_tool.find_keys(KeyType.SYMBOL_LIST)) == num_symbol_list_keys + 1
+    assert lib.list_symbols() == [sym]
