@@ -194,14 +194,14 @@ std::string to_user_facing_name_key(
 } // namespace
 
 // Build MINMAX stats for every eligible column, computed directly from the TSD.
-// The outer/primary index is skipped.
+// The timeseries index is skipped.
 // Rejects symbols with duplicated data-column names.
 ColumnStats::ColumnStats(const TimeseriesDescriptor& tsd) {
     const auto& fields = tsd.fields();
     const auto& norm = tsd.normalization();
 
-    const bool has_outer_index = tsd.index().field_count() > 0;
-    const size_t start_filed_index = has_outer_index ? 1 : 0;
+    const bool has_timeseries_index = tsd.index().field_count() > 0;
+    const size_t start_field_index = has_timeseries_index ? 1 : 0;
 
     std::unordered_set<std::string> seen_user_names;
 
