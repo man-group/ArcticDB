@@ -54,10 +54,8 @@ dependencies:
   - rapidcheck
   - msgpack-c
   - recycle
-  # Matches the version of lmdb as vendored in its submodule.
-  - lmdb==0.9.35
-  - lmdbxx
   - aws-c-s3
+  - lmdbxx
   # Build dependencies for tests
   - libarrow
   # Python dependences
