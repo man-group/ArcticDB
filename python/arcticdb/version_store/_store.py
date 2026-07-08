@@ -1305,8 +1305,6 @@ class NativeVersionStore:
         -------
         None
         """
-        # Eligible-column detection is done in the C++ layer so that the symbol's index key is
-        # read only once (during stats generation) rather than an extra time here.
         version_query = self._get_version_query(as_of)
         self.version_store.create_column_stats_version(symbol, version_query)
 
@@ -1326,7 +1324,7 @@ class NativeVersionStore:
         None
         """
         version_query = self._get_version_query(as_of)
-        self.version_store.drop_column_stats_version(symbol, None, version_query)
+        self.version_store.drop_column_stats_version(symbol, version_query)
 
     def read_column_stats_experimental(
         self, symbol: str, as_of: Optional[VersionQueryInput] = None, **kwargs
