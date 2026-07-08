@@ -252,14 +252,9 @@ class LocalVersionedEngine : public VersionedEngine {
             const StreamId& stream_id, const VersionQuery& version_query, const ReadOptions& read_options
     );
 
-    void drop_column_stats_internal(
-            const VersionedItem& versioned_item, const std::optional<ColumnStats>& column_stats_to_drop
-    );
+    void drop_column_stats_internal(const VersionedItem& versioned_item);
 
-    void drop_column_stats_version_internal(
-            const StreamId& stream_id, const std::optional<ColumnStats>& column_stats_to_drop,
-            const VersionQuery& version_query
-    );
+    void drop_column_stats_version_internal(const StreamId& stream_id, const VersionQuery& version_query);
 
     FrameAndDescriptor read_column_stats_internal(const VersionedItem& versioned_item);
 

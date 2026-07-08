@@ -191,17 +191,14 @@ void LocalVersionedEngine::create_column_stats_version_internal(
     create_column_stats_internal(versioned_item.value(), read_options);
 }
 
-void LocalVersionedEngine::drop_column_stats_internal(
-        const VersionedItem& versioned_item, const std::optional<ColumnStats>& column_stats_to_drop
-) {
+void LocalVersionedEngine::drop_column_stats_internal(const VersionedItem& versioned_item) {
     ARCTICDB_RUNTIME_SAMPLE(DropColumnStatsInternal, 0)
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: drop_column_stats");
-    drop_column_stats_impl(store(), versioned_item, column_stats_to_drop);
+    drop_column_stats_impl(store(), versioned_item);
 }
 
 void LocalVersionedEngine::drop_column_stats_version_internal(
-        const StreamId& stream_id, const std::optional<ColumnStats>& column_stats_to_drop,
-        const VersionQuery& version_query
+        const StreamId& stream_id, const VersionQuery& version_query
 ) {
     auto versioned_item = get_version_to_read(stream_id, version_query);
     missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(
@@ -209,7 +206,7 @@ void LocalVersionedEngine::drop_column_stats_version_internal(
             "drop_column_stats_version_internal: version not found for stream '{}'",
             stream_id
     );
-    drop_column_stats_internal(versioned_item.value(), column_stats_to_drop);
+    drop_column_stats_internal(versioned_item.value());
 }
 
 FrameAndDescriptor LocalVersionedEngine::read_column_stats_internal(const VersionedItem& versioned_item) {

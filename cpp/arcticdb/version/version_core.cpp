@@ -2124,86 +2124,11 @@ void create_column_stats_impl(
     }
 }
 
-void drop_column_stats_impl(
-        const std::shared_ptr<Store>& store, const VersionedItem& versioned_item,
-        const std::optional<ColumnStats>& column_stats_to_drop
-) {
+void drop_column_stats_impl(const std::shared_ptr<Store>& store, const VersionedItem& versioned_item) {
     storage::RemoveOpts remove_opts;
     remove_opts.ignores_missing_key_ = true;
     auto column_stats_key = index_key_to_column_stats_key(versioned_item.key_);
-    if (!column_stats_to_drop.has_value()) {
-        // Drop all column stats
-        store->remove_key(column_stats_key, remove_opts).get();
-        return;
-    }
-
-    storage::ReadKeyOpts read_opts;
-    read_opts.dont_warn_about_missing_key = true;
-    auto stats_future = store->read(column_stats_key, read_opts);
-    auto tsd_future = store->read_timeseries_descriptor(versioned_item.key_, read_opts);
-    auto [stats_try, tsd_try] = folly::collectAll(std::move(stats_future), std::move(tsd_future)).get();
-
-    if (stats_try.hasException()) {
-        log::version().warn("No column stats exist to drop: {}", stats_try.exception().what());
-        return;
-    }
-    if (tsd_try.hasException()) {
-        log::version().warn(
-                "Could not find index key associated with stats - cannot drop: key={} error={}",
-                versioned_item.key_,
-                tsd_try.exception().what()
-        );
-        return;
-    }
-
-    auto segment_in_memory = std::move(stats_try).value().second;
-    auto tsd = std::move(tsd_try).value().second;
-
-    arcticc::pb2::column_stats_pb2::ColumnStatsHeader column_stats_header;
-    auto* metadata = segment_in_memory.metadata();
-    if (!metadata) {
-        log::version().warn("Found Column Stats key without metadata? {}", column_stats_key);
-        return;
-    }
-    bool unpacked = metadata->UnpackTo(&column_stats_header);
-    util::check(unpacked, "Failed to unpack column stats header while dropping column stats");
-    ColumnStats column_stats{column_stats_header, tsd};
-    // Ignore missing columns since dropping a non-existent column is a no-op
-    ColumnStats to_drop = *column_stats_to_drop;
-    to_drop.calculate_offsets(tsd, utils::MissingColumnsBehavior::IGNORE_MISSING);
-    auto dropped_names = column_stats.drop(to_drop);
-    if (column_stats.empty()) {
-        // Drop all column stats
-        store->remove_key(column_stats_key, remove_opts).get();
-    } else {
-        ankerl::unordered_dense::set<std::string> dropped_names_set(dropped_names.begin(), dropped_names.end());
-        arcticc::pb2::column_stats_pb2::ColumnStatsHeader new_header;
-        new_header.set_version(column_stats_header.version());
-        // Stats columns start at field index 2 (after start_index=0 and end_index=1)
-        auto new_offset = static_cast<size_t>(index::Fields::end_index) + 1;
-        for (const auto& [data_col_offset, entry_list] : column_stats_header.stats_by_column()) {
-            for (const auto& entry : entry_list.entries()) {
-                auto field_name = std::string{segment_in_memory.descriptor().field(entry.stats_seg_offset()).name()};
-                if (dropped_names_set.count(field_name) == 0) {
-                    auto& new_entry_list = (*new_header.mutable_stats_by_column())[data_col_offset];
-                    auto* new_entry = new_entry_list.add_entries();
-                    new_entry->set_type(entry.type());
-                    new_entry->set_stats_seg_offset(new_offset++);
-                }
-            }
-        }
-        google::protobuf::Any any;
-        any.PackFrom(new_header);
-        segment_in_memory.reset_metadata();
-        segment_in_memory.set_metadata(std::move(any));
-
-        for (const auto& name : dropped_names) {
-            segment_in_memory.drop_column(name);
-        }
-        storage::UpdateOpts update_opts;
-        update_opts.upsert_ = true;
-        store->update(column_stats_key, std::move(segment_in_memory), update_opts).get();
-    }
+    store->remove_key(column_stats_key, remove_opts).get();
 }
 
 FrameAndDescriptor read_column_stats_impl(const std::shared_ptr<Store>& store, const VersionedItem& versioned_item) {
