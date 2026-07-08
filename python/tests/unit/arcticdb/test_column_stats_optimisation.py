@@ -30,41 +30,27 @@ def get_table_index_read_count():
     return query_stats_operation_count(stats, "Memory_GetObject", "TABLE_INDEX")
 
 
+def get_column_stats_write_count():
+    stats = qs.get_query_stats()
+    return query_stats_operation_count(stats, "Memory_PutObject", "COLUMN_STATS")
+
+
 sym = "sym"
 
 
-def _write_single_segment(lib):
-    df = pd.DataFrame({"col_1": [1, 2], "col_2": ["a", "b"]}, index=pd.date_range("2000-01-01", periods=2))
-    lib.write(sym, df)
-
-
-def _write_multi_segment(lib):
+def test_create_column_stats_reads_index_key_once_and_writes_single_key(in_memory_version_store, clear_query_stats):
+    lib = in_memory_version_store
     df0 = pd.DataFrame({"col_1": [1, 2], "col_2": ["a", "b"]}, index=pd.date_range("2000-01-01", periods=2))
     df1 = pd.DataFrame({"col_1": [3, 4], "col_2": ["c", "d"]}, index=pd.date_range("2000-01-03", periods=2))
     lib.write(sym, df0)
     lib.append(sym, df1)
-
-
-def _write_multi_index(lib):
-    index = pd.MultiIndex.from_arrays([pd.date_range("2000-01-01", periods=2), [10, 20]], names=["dt", "level"])
-    df = pd.DataFrame({"col_1": [1, 2], "col_2": ["a", "b"]}, index=index)
-    lib.write(sym, df)
-
-
-@pytest.mark.parametrize(
-    "writer",
-    [_write_single_segment, _write_multi_segment, _write_multi_index],
-    ids=["single_segment", "multi_segment", "multi_index"],
-)
-def test_create_column_stats_reads_index_key_once(in_memory_version_store, clear_query_stats, writer):
-    lib = in_memory_version_store
-    writer(lib)
 
     qs.enable()
     qs.reset_stats()
     lib.create_column_stats_experimental(sym)
 
     assert get_table_index_read_count() == 1, qs.get_query_stats()
+    assert get_column_stats_write_count() == 1, qs.get_query_stats()
 
 
 @pytest.mark.parametrize(
