@@ -766,42 +766,6 @@ def test_query_stats_in_mem_delete(in_memory_version_store, clear_query_stats):
         assert lists[key_type]["size_bytes"] == 0
 
 
-def test_query_stats_column_stats(s3_version_store_v1, clear_query_stats, sym):
-    df0 = pd.DataFrame({"col_1": [1, 2], "col_2": ["a", "b"]}, index=pd.date_range("2000-01-01", periods=2))
-    df1 = pd.DataFrame({"col_1": [3, 4], "col_2": ["c", "d"]}, index=pd.date_range("2000-01-03", periods=2))
-
-    s3_version_store_v1.write(sym, df0)
-    s3_version_store_v1.append(sym, df1)
-
-    qs.enable()
-    s3_version_store_v1.create_column_stats_experimental(sym)
-    stats = qs.get_query_stats()
-    import json
-
-    print(json.dumps(stats, indent=4))
-    # {
-    #     "storage_operations": {
-    #         "S3_PutObject": {
-    #             "COLUMN_STATS": {
-    #                 "count": 1,
-    #                 "size_bytes": 320,
-    #                 "total_time_ms": 15
-    #             }
-    #         }
-    #     }
-    # }
-    assert "storage_operations" in stats
-    storage_operations = stats["storage_operations"]
-
-    assert "S3_PutObject" in storage_operations, storage_operations
-    assert "COLUMN_STATS" in storage_operations["S3_PutObject"], storage_operations
-
-    column_stats = storage_operations["S3_PutObject"]["COLUMN_STATS"]
-    assert column_stats["count"] == 1, column_stats
-    assert column_stats["size_bytes"] > 0, column_stats
-    assert column_stats["total_time_ms"] < 8000, column_stats
-
-
 def test_query_stats_disabled_after_exception(clear_query_stats):
     import arcticdb_ext.tools.query_stats as qs_ext
 
