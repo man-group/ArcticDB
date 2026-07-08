@@ -167,18 +167,20 @@ ColumnStats::ColumnStats(
 }
 
 namespace {
-bool is_col_eligible_for_stats(DataType col_data_type) { return is_numeric_type(col_data_type) || is_bool_type(col_data_type); }
+bool is_col_eligible_for_stats(DataType col_data_type) {
+    return is_numeric_type(col_data_type) || is_bool_type(col_data_type);
+}
 
+// Type-disambiguated key for duplicate detection, so that e.g. an integer column labelled 2
+// and a string column labelled "2" are not treated as duplicates.
 std::string to_user_facing_name_key(
-        const std::string& field_name, const arcticdb::proto::descriptors::NormalizationMetadata::Pandas& common
+        std::string_view field_name, const arcticdb::proto::descriptors::NormalizationMetadata::Pandas& common
 ) {
-    auto it = common.col_names().find(field_name);
-
+    auto it = common.col_names().find(std::string{field_name});
     if (it == common.col_names().end())
-        return "str:" + field_name;
+        return "str:" + std::string{field_name};
 
     const auto& info = it->second;
-
     if (info.is_none())
         return "none:";
     if (info.is_empty())
@@ -188,7 +190,26 @@ std::string to_user_facing_name_key(
     if (!info.original_name().empty())
         return "str:" + info.original_name();
 
-    return {};
+    return "str:" + std::string{field_name};
+}
+
+// The denormalized column name as the user sees it, for error messages.
+std::string to_user_facing_display_name(
+        std::string_view field_name, const arcticdb::proto::descriptors::NormalizationMetadata::Pandas& common
+) {
+    auto it = common.col_names().find(std::string{field_name});
+    if (it == common.col_names().end())
+        return std::string{field_name};
+
+    const auto& info = it->second;
+    if (info.is_none())
+        return "None";
+    if (info.is_empty())
+        return "";
+    if (info.is_int() || !info.original_name().empty())
+        return info.original_name();
+
+    return std::string{field_name};
 }
 
 } // namespace
