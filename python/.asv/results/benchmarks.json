@@ -2136,7 +2136,7 @@
                 "10000"
             ]
         ],
-        "setup_cache_key": "compact_data:217",
+        "setup_cache_key": "compact_data:220",
         "type": "peakmemory",
         "unit": "bytes",
         "version": "310049835bc1f2bbaa094caa69c3d1a21e1858b58ef43a2e878480bf72785195"
@@ -2163,7 +2163,7 @@
         "repeat": 15,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "compact_data:217",
+        "setup_cache_key": "compact_data:220",
         "type": "time",
         "unit": "seconds",
         "version": "2d0282bafa3f8ae8121eb1529f89761519c7b9509a7a8a5b341a807aedc2197d",
@@ -2192,7 +2192,7 @@
                 "True"
             ]
         ],
-        "setup_cache_key": "compact_data:106",
+        "setup_cache_key": "compact_data:110",
         "type": "peakmemory",
         "unit": "bytes",
         "version": "7ddde650100a4d862d7f8695176b37976f15d863d33961be34678a636d14286f"
@@ -2225,7 +2225,7 @@
         "repeat": 15,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "compact_data:106",
+        "setup_cache_key": "compact_data:110",
         "type": "time",
         "unit": "seconds",
         "version": "22560f846d485befae82958fd482315fb72e650d867e9ffc509eace6a2b93f03",
@@ -2259,7 +2259,7 @@
                 "100000"
             ]
         ],
-        "setup_cache_key": "compact_data:162",
+        "setup_cache_key": "compact_data:166",
         "type": "peakmemory",
         "unit": "bytes",
         "version": "a99039af2df70f85781dd519ac84c641eef72187661d78c10a7db379f500b5c7"
@@ -2297,7 +2297,7 @@
         "repeat": 15,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "compact_data:162",
+        "setup_cache_key": "compact_data:166",
         "type": "time",
         "unit": "seconds",
         "version": "dd92a93207202dec280ad9849eeb15da6c3ebc0bea0dc490759473feb42ee3a5",

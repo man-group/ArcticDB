@@ -15,9 +15,9 @@ namespace arcticdb {
 TimeseriesDescriptor make_timeseries_descriptor(
         // TODO: It would be more explicit to use uint64_t instead of size_t. Not doing now as it involves a lot of type
         // changes and needs to be done carefully.
-        size_t total_rows, const StreamDescriptor& desc, proto::descriptors::NormalizationMetadata&& norm_meta,
-        std::optional<proto::descriptors::UserDefinedMetadata>&& um, std::optional<AtomKey>&& prev_key,
-        std::optional<AtomKey>&& next_key, bool bucketize_dynamic
+        size_t total_rows, const StreamDescriptor& desc, const proto::descriptors::NormalizationMetadata& norm_meta,
+        std::optional<proto::descriptors::UserDefinedMetadata>&& um, std::optional<AtomKey>&& next_key,
+        bool bucketize_dynamic
 ) {
     auto frame_desc = std::make_shared<FrameDescriptorImpl>();
     frame_desc->total_rows_ = total_rows;
@@ -33,9 +33,6 @@ TimeseriesDescriptor make_timeseries_descriptor(
     if (user_meta)
         *proto->mutable_user_meta() = std::move(*user_meta);
 
-    if (prev_key)
-        proto->mutable_next_key()->CopyFrom(key_to_proto(prev_key.value()));
-
     if (next_key)
         proto->mutable_next_key()->CopyFrom(key_to_proto(next_key.value()));
 
@@ -46,50 +43,42 @@ TimeseriesDescriptor make_timeseries_descriptor(
 }
 
 TimeseriesDescriptor make_timeseries_descriptor(
-        size_t total_rows, StreamDescriptor&& desc, proto::descriptors::NormalizationMetadata&& norm_meta,
-        std::optional<proto::descriptors::UserDefinedMetadata>&& um, std::optional<AtomKey>&& prev_key,
-        std::optional<AtomKey>&& next_key, bool bucketize_dynamic
+        size_t total_rows, StreamDescriptor&& desc, const proto::descriptors::NormalizationMetadata& norm_meta,
+        std::optional<proto::descriptors::UserDefinedMetadata>&& um, std::optional<AtomKey>&& next_key,
+        bool bucketize_dynamic
 ) {
     return make_timeseries_descriptor(
-            total_rows,
-            desc,
-            std::move(norm_meta),
-            std::move(um),
-            std::move(prev_key),
-            std::move(next_key),
-            bucketize_dynamic
+            total_rows, desc, norm_meta, std::move(um), std::move(next_key), bucketize_dynamic
     );
 }
 
 TimeseriesDescriptor timeseries_descriptor_from_pipeline_context(
-        const std::shared_ptr<pipelines::PipelineContext>& pipeline_context, std::optional<AtomKey>&& prev_key,
+        const std::shared_ptr<pipelines::PipelineContext>& pipeline_context, std::optional<AtomKey>&& next_key,
         bool bucketize_dynamic
 ) {
     return make_timeseries_descriptor(
             pipeline_context->total_rows_,
             pipeline_context->descriptor(),
-            std::move(*pipeline_context->norm_meta_),
+            *pipeline_context->norm_meta_,
             pipeline_context->user_meta_ ? std::make_optional<arcticdb::proto::descriptors::UserDefinedMetadata>(
                                                    std::move(*pipeline_context->user_meta_)
                                            )
                                          : std::nullopt,
-            std::move(prev_key),
-            std::nullopt,
+            std::move(next_key),
             bucketize_dynamic
     );
 }
 
 TimeseriesDescriptor index_descriptor_from_frame(
         const std::shared_ptr<pipelines::InputFrame>& frame, size_t existing_rows,
-        std::optional<entity::AtomKey>&& prev_key
+        std::optional<entity::AtomKey>&& next_key
 ) {
     return make_timeseries_descriptor(
             frame->num_rows + existing_rows,
-            frame->desc_for_tsd(),
-            std::move(frame->norm_meta),
+            frame->compute_desc_for_tsd(),
+            frame->norm_meta,
             std::move(frame->user_meta),
-            std::move(prev_key),
-            std::nullopt,
+            std::move(next_key),
             frame->bucketize_dynamic
     );
 }

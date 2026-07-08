@@ -3094,9 +3094,8 @@ folly::Future<VersionedItem> read_modify_write_impl(
                 const TimeseriesDescriptor tsd = make_timeseries_descriptor(
                         row_count,
                         pipeline_context->descriptor(),
-                        std::move(*pipeline_context->norm_meta_),
+                        *pipeline_context->norm_meta_,
                         std::move(user_meta_proto),
-                        std::nullopt,
                         std::nullopt,
                         write_options.bucketize_dynamic
                 );
@@ -3173,9 +3172,8 @@ folly::Future<VersionedItem> merge_update_impl(
                 const TimeseriesDescriptor tsd = make_timeseries_descriptor(
                         row_count,
                         pipeline_context->descriptor(),
-                        std::move(*pipeline_context->norm_meta_),
+                        *pipeline_context->norm_meta_,
                         pipeline_context->user_meta_ ? std::make_optional(std::move(source->user_meta)) : std::nullopt,
-                        std::nullopt,
                         std::nullopt,
                         write_options.bucketize_dynamic
                 );
@@ -3323,11 +3321,10 @@ folly::Future<std::optional<VersionedItem>> compact_data_impl(
                         TimeseriesDescriptor tsd = make_timeseries_descriptor(
                                 row_count,
                                 std::move(*pipeline_context->desc_),
-                                std::move(*pipeline_context->norm_meta_),
+                                *pipeline_context->norm_meta_,
                                 pipeline_context->user_meta_
                                         ? std::make_optional(std::move(*pipeline_context->user_meta_))
                                         : std::nullopt,
-                                std::nullopt,
                                 std::nullopt,
                                 write_options.bucketize_dynamic
                         );

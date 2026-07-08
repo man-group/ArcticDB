@@ -219,8 +219,8 @@ class Aggregator {
     auto& segment() { return segment_; }
 
     template<class T, std::enable_if_t<std::is_integral_v<T> || std::is_floating_point_v<T>, int> = 0>
-    void set_external_block(std::size_t pos, T* val, size_t size) {
-        segment_.set_external_block(pos, val, size);
+    void set_dense_block(std::size_t pos, T* val, size_t size) {
+        segment_.set_dense_block(pos, val, size);
     }
 
     template<class T, std::enable_if_t<std::is_integral_v<T> || std::is_floating_point_v<T>, int> = 0>

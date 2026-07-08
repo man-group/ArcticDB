@@ -44,6 +44,22 @@ TEST(Append, Simple) {
     ASSERT_EQ(allocated_frame.row_count(), frame->num_rows);
 }
 
+TEST(Append, Empty) {
+    using namespace arcticdb;
+    using namespace arcticdb::pipelines;
+
+    // An empty (0-row) frame must not throw when building the incomplete segment: its tensors have null data pointers,
+    // so incomplete_segment_from_frame builds an empty segment directly rather than reading the tensors.
+    auto store = std::make_shared<InMemoryStore>();
+    StreamId stream_id{"test_append_empty"};
+    auto wrapper = get_test_simple_frame(stream_id, 0, 0);
+    append_incomplete(store, stream_id, wrapper.frame_, true);
+
+    auto entries = load_via_list(store, stream_id, false);
+    ASSERT_EQ(entries.size(), 1);
+    ASSERT_EQ(entries[0].total_rows_, 0);
+}
+
 TEST(Append, MergeDescriptorsPromote) {
     using namespace arcticdb;
 

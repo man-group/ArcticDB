@@ -690,9 +690,8 @@ VersionedItem LocalVersionedEngine::sort_index(
     auto time_series = make_timeseries_descriptor(
             total_rows,
             StreamDescriptor{tsd.as_stream_descriptor()},
-            std::move(*tsd.mutable_proto().mutable_normalization()),
+            tsd.proto().normalization(),
             std::move(*tsd.mutable_proto().mutable_user_meta()),
-            std::nullopt,
             std::nullopt,
             bucketize_dynamic
     );
@@ -729,26 +728,21 @@ VersionedItem LocalVersionedEngine::update_internal(
     py::gil_scoped_release release_gil;
     auto update_info = get_latest_undeleted_version_and_next_version_id(store(), version_map(), stream_id);
     if (update_info.previous_index_key_.has_value()) {
-        if (frame->empty()) {
-            ARCTICDB_RUNTIME_DEBUG(
-                    log::version(),
-                    "Updating existing data with an empty item has no effect. \n"
-                    "No new version is being created for symbol='{}', "
-                    "and the last version is returned",
-                    stream_id
-            );
-            return VersionedItem{*std::move(update_info.previous_index_key_)};
-        }
-
-        auto versioned_item = update_impl(
-                store(),
-                update_info,
-                query,
-                frame,
-                get_write_options(),
-                dynamic_schema,
-                cfg().write_options().empty_types()
-        );
+        const auto versioned_item =
+                frame->empty()
+                        ? VersionedItem{async::submit_io_task(
+                                                UpdateMetadataTask{store(), update_info, std::move(frame->user_meta)}
+                          )
+                                                .get()}
+                        : update_impl(
+                                  store(),
+                                  update_info,
+                                  query,
+                                  frame,
+                                  get_write_options(),
+                                  dynamic_schema,
+                                  cfg().write_options().empty_types()
+                          );
         write_version_and_prune_previous(prune_previous_versions, versioned_item.key_, update_info.previous_index_key_);
         return versioned_item;
     } else {
@@ -1868,19 +1862,20 @@ VersionedItem LocalVersionedEngine::append_internal(
     auto update_info = get_latest_undeleted_version_and_next_version_id(store(), version_map(), stream_id);
 
     if (update_info.previous_index_key_.has_value()) {
-        if (frame->empty()) {
-            ARCTICDB_RUNTIME_DEBUG(
-                    log::version(),
-                    "Appending an empty item to existing data has no effect. \n"
-                    "No new version has been created for symbol='{}', "
-                    "and the last version is returned",
-                    stream_id
-            );
-            return VersionedItem(*std::move(update_info.previous_index_key_));
-        }
-        auto versioned_item = append_impl(
-                store(), update_info, frame, get_write_options(), validate_index, cfg().write_options().empty_types()
-        );
+        const auto versioned_item =
+                frame->empty()
+                        ? VersionedItem{async::submit_io_task(
+                                                UpdateMetadataTask{store(), update_info, std::move(frame->user_meta)}
+                          )
+                                                .get()}
+                        : append_impl(
+                                  store(),
+                                  update_info,
+                                  frame,
+                                  get_write_options(),
+                                  validate_index,
+                                  cfg().write_options().empty_types()
+                          );
         write_version_and_prune_previous(prune_previous_versions, versioned_item.key_, update_info.previous_index_key_);
         return versioned_item;
     } else {
@@ -1933,25 +1928,21 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
                                  prune_previous_versions](auto&& update_info) -> folly::Future<VersionedItem> {
                                     auto index_key_fut = folly::Future<AtomKey>::makeEmpty();
                                     auto write_options = get_write_options();
+                                    bool add_new_symbol_list_entry{!update_info.previous_index_key_.has_value()};
                                     if (update_info.previous_index_key_.has_value()) {
-                                        if (frame->empty()) {
-                                            ARCTICDB_DEBUG(
-                                                    log::version(),
-                                                    "Appending an empty item to existing data has no effect. \n"
-                                                    "No new version has been created for symbol='{}', "
-                                                    "and the last version is returned",
-                                                    stream_id
-                                            );
-                                            return VersionedItem{*std::move(update_info.previous_index_key_)};
-                                        }
-                                        index_key_fut = async_append_impl(
-                                                store(),
-                                                update_info,
-                                                frame,
-                                                write_options,
-                                                validate_index,
-                                                cfg().write_options().empty_types()
-                                        );
+                                        index_key_fut =
+                                                frame->empty()
+                                                        ? async::submit_io_task(UpdateMetadataTask{
+                                                                  store(), update_info, std::move(frame->user_meta)
+                                                          })
+                                                        : async_append_impl(
+                                                                  store(),
+                                                                  update_info,
+                                                                  frame,
+                                                                  write_options,
+                                                                  validate_index,
+                                                                  cfg().write_options().empty_types()
+                                                          );
                                     } else {
                                         missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(
                                                 upsert, "Cannot append to non-existent symbol {}", stream_id
@@ -1970,13 +1961,15 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
                                             .thenValue(
                                                     [this,
                                                      prune_previous_versions,
+                                                     add_new_symbol_list_entry,
                                                      update_info = std::move(update_info)](AtomKey&& index_key
                                                     ) mutable -> folly::Future<VersionedItem> {
                                                         return write_index_key_to_version_map_async(
                                                                 version_map(),
                                                                 std::move(index_key),
                                                                 std::move(update_info),
-                                                                prune_previous_versions
+                                                                prune_previous_versions,
+                                                                add_new_symbol_list_entry
                                                         );
                                                     }
                                             );
@@ -2017,28 +2010,24 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
                                  prune_previous_versions](UpdateInfo&& update_info) -> folly::Future<VersionedItem> {
                                     auto index_key_fut = folly::Future<AtomKey>::makeEmpty();
                                     auto write_options = get_write_options();
+                                    bool add_new_symbol_list_entry{!update_info.previous_index_key_.has_value()};
                                     if (update_info.previous_index_key_.has_value()) {
-                                        if (frame->empty()) {
-                                            ARCTICDB_DEBUG(
-                                                    log::version(),
-                                                    "Updating existing data with an empty item has no effect. \n"
-                                                    "No new version is being created for symbol='{}', "
-                                                    "and the last version is returned",
-                                                    stream_id
-                                            );
-                                            return VersionedItem(*std::move(update_info.previous_index_key_));
-                                        }
                                         const bool dynamic_schema = cfg().write_options().dynamic_schema();
                                         const bool empty_types = cfg().write_options().empty_types();
-                                        index_key_fut = async_update_impl(
-                                                store(),
-                                                update_info,
-                                                update_query,
-                                                std::move(frame),
-                                                std::move(write_options),
-                                                dynamic_schema,
-                                                empty_types
-                                        );
+                                        index_key_fut =
+                                                frame->empty()
+                                                        ? async::submit_io_task(UpdateMetadataTask{
+                                                                  store(), update_info, std::move(frame->user_meta)
+                                                          })
+                                                        : async_update_impl(
+                                                                  store(),
+                                                                  update_info,
+                                                                  update_query,
+                                                                  std::move(frame),
+                                                                  std::move(write_options),
+                                                                  dynamic_schema,
+                                                                  empty_types
+                                                          );
                                     } else {
                                         missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(
                                                 upsert,
@@ -2060,12 +2049,14 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
                                     return std::move(index_key_fut)
                                             .thenValue([this,
                                                         update_info = std::move(update_info),
-                                                        prune_previous_versions](auto&& index_key) mutable {
+                                                        prune_previous_versions,
+                                                        add_new_symbol_list_entry](auto&& index_key) mutable {
                                                 return write_index_key_to_version_map_async(
                                                         version_map(),
                                                         std::move(index_key),
                                                         std::move(update_info),
-                                                        prune_previous_versions
+                                                        prune_previous_versions,
+                                                        add_new_symbol_list_entry
                                                 );
                                             });
                                 }
