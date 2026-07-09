@@ -121,31 +121,33 @@ message NormalizationMetadata {
     additions here.
    */
 
+    // Metadata for a single-level pandas Index.
     message PandasIndex {
-        string name = 1; // RangeIndex are not represented as a field, hence no name is associated
-        string tz = 2;
-        bool fake_name = 3;
-        // True if the index is stored on disk. False if it can be reconstructed from the metadata at read time.
+        string name = 1; // Index name; empty when unnamed, see fake_name.
+        string tz = 2; // Index timezone; empty if tz-naive.
+        bool fake_name = 3; // The index had no name; stored under a synthetic name, restored to None on read.
+        // True if the index is stored on disk as a column. False if it can be reconstructed from the
+        // metadata at read time (a RangeIndex, rebuilt from start/step).
         bool is_physically_stored = 4;
-        int64 start = 5; // Used for RangeIndex
-        int64 step = 6; // Used for RangeIndex
-        bool is_int = 7;
+        int64 start = 5; // RangeIndex start (used when not physically stored).
+        int64 step = 6; // RangeIndex step (used when not physically stored).
+        bool is_int = 7; // The index name was an integer; cast back from its string form on read.
     }
 
+    // Metadata for a pandas MultiIndex. The first level is the primary (physically stored) index;
+    // higher levels are stored as additional columns.
     message PandasMultiIndex {
-        uint32 version = 1;
-        map<uint32,string> timezone = 2; // timezone by index field
-        uint32 field_count = 3;
-        string name = 4; // RangeIndex are not represented as a field, hence no name is associated
-        string tz = 5;
-        repeated uint32 fake_field_pos = 6;
-        bool is_int = 7;
+        uint32 version = 1; // Unused
+        map<uint32,string> timezone = 2; // Per-level timezone for levels >= 1 (level 0 uses `tz`).
+        uint32 field_count = 3; // Number of index levels beyond the first.
+        string name = 4; // First level name; empty when unnamed, see fake_field_pos.
+        string tz = 5; // First level (level 0) timezone.
+        repeated uint32 fake_field_pos = 6; // Positions of unnamed levels (0 == first level).
+        bool is_int = 7; // The first level index name was an integer (as of July 2026 - never populated)
     }
 
+    // MultiIndex columns. Not implemented
     message PandasMultiColumn {
-        // mapping the structure of the multi column.
-        // unlike the multi index where the data can be stored inside the block
-
         message Labels {
             repeated uint64 val = 1;
         }
@@ -161,51 +163,49 @@ message NormalizationMetadata {
         which are shared between series and dataframes.
         */
 
-        // Pandas series support arbitrary objects but restricting to a string seems reasonable
-        string name = 1;
-        // Backwards-compatible way of treating name as optional
-        bool has_name = 9;
+        string name = 1; // Series name only (empty for DataFrames).
+        bool has_name = 9; // Distinguishes a None series name from an empty-string name 
 
         oneof index_type {
             PandasIndex index = 2;
             PandasMultiIndex multi_index = 3;
         }
 
-       // only here to have one field to set if nothing else is necessary
-        bool mark = 4;
+        bool mark = 4; // Sentinel: set so the message is non-empty even when nothing else needs setting.
         message Categories {
             repeated string category = 1;
         }
-        // This shouldn't be used much
         message IntCategories {
             repeated uint64 category = 1;
         }
-        map<string, Categories> categories = 5;
-        map<string, IntCategories> int_categories = 6;
+        map<string, Categories> categories = 5; // Category values for string categorical columns, by column name.
+        map<string, IntCategories> int_categories = 6; // Category values for integer categorical columns, by column name.
 
+        // Records the original label of a column whose on-disk name had to be sanitized.
         message ColumnName {
-            bool is_none = 1;
-            bool is_empty = 2;
-            string original_name = 3;
-            bool is_int = 4;
+            bool is_none = 1; // Original column name was None.
+            bool is_empty = 2; // Original column name was an empty string.
+            string original_name = 3; // Original column label as a string.
+            bool is_int = 4; // Original column name was an integer; cast back on read.
         }
 
-        map<string, ColumnName> col_names = 7;
-        PandasIndex columns = 8;
+        map<string, ColumnName> col_names = 7; // On-disk column name -> original label. Populated only for columns that were sanitized.
+        PandasIndex columns = 8; // Columns-axis metadata; only name and fake_name are used.
         // Note that 9 is taken above by has_name, so the next added field should be 10
     }
 
     message PandasDataFrame {
         Pandas common = 1;
-        PandasMultiColumn multi_columns = 2;
-        bool has_synthetic_columns = 3;
+        PandasMultiColumn multi_columns = 2; // Unused (MultiIndex columns are unimplemented).
+        bool has_synthetic_columns = 3; // Columns were an unnamed RangeIndex (0..n).
     }
 
+    // Metadata for an arcticdb TimeFrame; mirrors PandasDataFrame.
     message NormalisedTimeSeries {
         bool mark = 1;
         Pandas common = 2;
-        PandasMultiColumn multi_columns = 3;
-        bool has_synthetic_columns = 4;
+        PandasMultiColumn multi_columns = 3; // Unused (MultiIndex columns are unimplemented).
+        bool has_synthetic_columns = 4; // Columns were an unnamed RangeIndex (0..n).
     }
 
     message MsgPackFrame {
