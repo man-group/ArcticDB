@@ -40,7 +40,10 @@
 #include <arcticdb/processing/component_manager.hpp>
 #include <arcticdb/util/collection_utils.hpp>
 #include <arcticdb/util/format_date.hpp>
+#include <atomic>
+#include <functional>
 #include <iterator>
+#include <optional>
 #include <aws/core/utils/stream/ResponseStream.h>
 
 namespace arcticdb::version_store {
@@ -763,7 +766,7 @@ void remove_processed_clauses(std::vector<std::shared_ptr<Clause>>& clauses) {
 std::pair<std::vector<std::vector<EntityId>>, std::shared_ptr<ankerl::unordered_dense::map<EntityId, size_t>>>
 get_entity_ids_and_position_map(
         std::shared_ptr<ComponentManager>& component_manager, size_t num_segments,
-        std::vector<std::vector<size_t>>&& processing_unit_indexes
+        const std::vector<std::vector<size_t>>& processing_unit_indexes
 ) {
     // Map from entity id to position in segment_and_slice_futures
     auto id_to_pos = std::make_shared<ankerl::unordered_dense::map<EntityId, size_t>>();
@@ -798,8 +801,12 @@ std::shared_ptr<std::vector<folly::Future<std::vector<EntityId>>>> schedule_firs
         std::shared_ptr<std::vector<EntityFetchCount>>&& segment_fetch_counts,
         std::vector<FutureOrSplitter>&& segment_and_slice_future_splitters,
         std::shared_ptr<ankerl::unordered_dense::map<EntityId, size_t>>&& id_to_pos,
-        std::shared_ptr<std::vector<std::shared_ptr<Clause>>>& clauses
+        std::shared_ptr<std::vector<std::shared_ptr<Clause>>>& clauses,
+        std::shared_ptr<ProcessingUnitAdmissionHandler> admission
 ) {
+    internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+            static_cast<bool>(admission), "schedule_first_iteration requires an admission handler"
+    );
     // Used to make sure each entity is only added into the component manager once
     auto slice_added_mtx = std::make_shared<std::vector<std::mutex>>(num_segments);
     auto slice_added = std::make_shared<std::vector<bool>>(num_segments, false);
@@ -825,34 +832,37 @@ std::shared_ptr<std::vector<folly::Future<std::vector<EntityId>>>> schedule_firs
 
         // Switch to the CPU executor for reasons detailed in the PR description
         // https://github.com/man-group/ArcticDB/pull/3086
-        futures->emplace_back(folly::collect(local_futs)
-                                      .via(&async::cpu_executor())
-                                      .thenValueInline([component_manager,
-                                                        segment_fetch_counts,
-                                                        id_to_pos,
-                                                        slice_added_mtx,
-                                                        slice_added,
-                                                        clauses,
-                                                        entity_ids = std::move(entity_ids
-                                                        )](std::vector<pipelines::SegmentAndSlice>&& segment_and_slices
-                                                       ) mutable {
-                                          for (auto&& [idx, segment_and_slice] : folly::enumerate(segment_and_slices)) {
-                                              auto entity_id = entity_ids[idx];
-                                              auto pos = id_to_pos->at(entity_id);
-                                              std::lock_guard lock{slice_added_mtx->at(pos)};
-                                              if (!(*slice_added)[pos]) {
-                                                  ARCTICDB_DEBUG(log::version(), "Adding entity {}", entity_id);
-                                                  add_slice_to_component_manager(
-                                                          entity_id,
-                                                          segment_and_slice,
-                                                          component_manager,
-                                                          segment_fetch_counts->at(pos)
-                                                  );
-                                                  (*slice_added)[pos] = true;
-                                              }
-                                          }
-                                          return async::MemSegmentProcessingTask(*clauses, std::move(entity_ids))();
-                                      }));
+        auto processing_fut =
+                folly::collect(local_futs)
+                        .via(&async::cpu_executor())
+                        .thenValueInline([component_manager,
+                                          segment_fetch_counts,
+                                          id_to_pos,
+                                          slice_added_mtx,
+                                          slice_added,
+                                          clauses,
+                                          entity_ids = std::move(entity_ids
+                                          )](std::vector<pipelines::SegmentAndSlice>&& segment_and_slices) mutable {
+                            for (auto&& [idx, segment_and_slice] : folly::enumerate(segment_and_slices)) {
+                                auto entity_id = entity_ids[idx];
+                                auto pos = id_to_pos->at(entity_id);
+                                std::lock_guard lock{slice_added_mtx->at(pos)};
+                                if (!(*slice_added)[pos]) {
+                                    ARCTICDB_DEBUG(log::version(), "Adding entity {}", entity_id);
+                                    add_slice_to_component_manager(
+                                            entity_id,
+                                            segment_and_slice,
+                                            component_manager,
+                                            segment_fetch_counts->at(pos)
+                                    );
+                                    (*slice_added)[pos] = true;
+                                }
+                            }
+                            return async::MemSegmentProcessingTask(*clauses, std::move(entity_ids))();
+                        });
+        // Make sure we always mark a unit complete even if it fails, so we don't block loading the next one.
+        processing_fut = std::move(processing_fut).ensure([admission]() { admission->on_processing_unit_complete(); });
+        futures->emplace_back(std::move(processing_fut));
     }
     return futures;
 }
@@ -901,13 +911,16 @@ folly::Future<std::vector<EntityId>> schedule_remaining_iterations(
 }
 
 folly::Future<std::vector<EntityId>> schedule_clause_processing(
-        std::shared_ptr<ComponentManager> component_manager,
-        std::vector<folly::Future<pipelines::SegmentAndSlice>>&& segment_and_slice_futures,
-        std::vector<std::vector<size_t>>&& processing_unit_indexes,
+        std::shared_ptr<ComponentManager> component_manager, std::shared_ptr<ProcessingUnitAdmissionHandler> admission,
         std::shared_ptr<std::vector<std::shared_ptr<Clause>>> clauses
 ) {
+    internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+            static_cast<bool>(admission), "schedule_clause_processing requires an admission handler"
+    );
     // All the shared pointers as arguments to this function and created within it are to ensure that resources are
     // correctly kept alive after this function returns its future
+    auto segment_and_slice_futures = admission->futures();
+    const auto& processing_unit_indexes = admission->processing_units();
     const auto num_segments = segment_and_slice_futures.size();
 
     // Map from index in segment_and_slice_future_splitters to the number of calls to process in the first clause that
@@ -918,7 +931,7 @@ folly::Future<std::vector<EntityId>> schedule_clause_processing(
             split_futures(std::move(segment_and_slice_futures), *segment_fetch_counts);
 
     auto [entities_by_work_unit, entity_id_to_segment_pos] =
-            get_entity_ids_and_position_map(component_manager, num_segments, std::move(processing_unit_indexes));
+            get_entity_ids_and_position_map(component_manager, num_segments, processing_unit_indexes);
 
     // At this point we have a set of entity ids grouped by the work units produced by the original
     // structure_for_processing, and a map of those ids to the position in the vector of futures or future-splitters
@@ -932,8 +945,13 @@ folly::Future<std::vector<EntityId>> schedule_clause_processing(
             std::move(segment_fetch_counts),
             std::move(segment_and_slice_future_splitters),
             std::move(entity_id_to_segment_pos),
-            clauses
+            clauses,
+            admission
     );
+
+    // Fire the first K units' reads only after the release path (.ensure -> on_unit_complete) is set up in
+    // schedule_first_iteration, so a completing unit always admits the next one.
+    admission->admit_initial_processing_units();
 
     return folly::collect(*futures).via(&async::io_executor()).thenValueInline([clauses](auto&& entity_ids_vec) {
         remove_processed_clauses(*clauses);
@@ -1078,58 +1096,6 @@ std::vector<RangesAndKey> generate_ranges_and_keys(PipelineContext& pipeline_con
     return res;
 }
 
-util::BitSet get_incompletes_bitset(const std::vector<RangesAndKey>& all_ranges) {
-    util::BitSet output(all_ranges.size());
-    util::BitSet::bulk_insert_iterator it(output);
-    for (auto&& [index, range] : folly::enumerate(all_ranges)) {
-        if (range.is_incomplete())
-            it = index;
-    }
-    it.flush();
-    return output;
-}
-
-std::vector<folly::Future<pipelines::SegmentAndSlice>> add_schema_check(
-        const std::shared_ptr<PipelineContext>& pipeline_context,
-        std::vector<folly::Future<pipelines::SegmentAndSlice>>&& segment_and_slice_futures,
-        util::BitSet&& incomplete_bitset, const ProcessingConfig& processing_config
-) {
-    std::vector<folly::Future<pipelines::SegmentAndSlice>> res;
-    res.reserve(segment_and_slice_futures.size());
-    for (size_t i = 0; i < segment_and_slice_futures.size(); ++i) {
-        auto&& fut = segment_and_slice_futures.at(i);
-        const bool is_incomplete = incomplete_bitset[i];
-        if (is_incomplete) {
-            res.push_back(std::move(fut).thenValueInline([pipeline_desc = pipeline_context->descriptor(),
-                                                          processing_config](SegmentAndSlice&& read_result) {
-                if (!processing_config.dynamic_schema_) {
-                    auto check =
-                            check_schema_matches_incomplete(read_result.segment_in_memory_.descriptor(), pipeline_desc);
-                    if (std::holds_alternative<Error>(check)) {
-                        std::get<Error>(check).throw_error();
-                    }
-                }
-                return std::move(read_result);
-            }));
-        } else {
-            res.push_back(std::move(fut));
-        }
-    }
-    return res;
-}
-
-std::vector<folly::Future<pipelines::SegmentAndSlice>> generate_segment_and_slice_futures(
-        const std::shared_ptr<Store>& store, const std::shared_ptr<PipelineContext>& pipeline_context,
-        const ProcessingConfig& processing_config, std::vector<RangesAndKey>&& all_ranges
-) {
-    auto incomplete_bitset = get_incompletes_bitset(all_ranges);
-    auto segment_and_slice_futures =
-            store->batch_read_uncompressed(std::move(all_ranges), columns_to_decode(pipeline_context));
-    return add_schema_check(
-            pipeline_context, std::move(segment_and_slice_futures), std::move(incomplete_bitset), processing_config
-    );
-}
-
 static StreamDescriptor generate_initial_output_schema_descriptor(const PipelineContext& pipeline_context) {
     const StreamDescriptor& desc = pipeline_context.descriptor();
     // pipeline_context.overall_column_bitset_ can be different from std::nullopt only in case of static schema. We use
@@ -1199,6 +1165,15 @@ static void generate_output_schema_and_save_to_pipeline(
     pipeline_context.default_values_ = std::forward<decltype(default_values)>(default_values);
 }
 
+// Read window: the number of segment reads submitted but not completed at any given time. Always >= 1. Defaults to
+// 2*io_thread_count.
+size_t segment_read_window() {
+    const int64_t io_thread_count = static_cast<int64_t>(async::TaskScheduler::instance()->io_thread_count());
+    const int64_t default_window = 2 * io_thread_count;
+    const int64_t configured = ConfigsMap::instance()->get_int("VersionStore.SegmentReadWindow", default_window);
+    return static_cast<size_t>(std::max<int64_t>(1, configured));
+}
+
 folly::Future<std::vector<EntityId>> read_and_schedule_processing(
         const std::shared_ptr<Store>& store, const std::shared_ptr<PipelineContext>& pipeline_context,
         const std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options,
@@ -1227,17 +1202,39 @@ folly::Future<std::vector<EntityId>> read_and_schedule_processing(
         processing_unit_indexes = read_query->clauses_[0]->structure_for_processing(ranges_and_keys);
     }
 
-    // Start reading as early as possible
-    auto segment_and_slice_futures =
-            generate_segment_and_slice_futures(store, pipeline_context, processing_config, std::move(ranges_and_keys));
+    const size_t max_processing_units_in_flight = max_resident_processing_units(processing_unit_indexes);
+    const size_t read_window = segment_read_window();
 
-    return schedule_clause_processing(
-                   component_manager,
-                   std::move(segment_and_slice_futures),
-                   std::move(processing_unit_indexes),
-                   std::make_shared<std::vector<std::shared_ptr<Clause>>>(read_query->clauses_)
-    )
-            .via(&async::cpu_executor());
+    auto base_reader = store->make_uncompressed_reader(columns_to_decode(pipeline_context));
+    SegmentReader reader = [base_reader = std::move(base_reader),
+                            pipeline_desc = pipeline_context->descriptor(),
+                            processing_config](pipelines::RangesAndKey&& rk) {
+        const bool is_incomplete = rk.is_incomplete();
+        return base_reader(std::move(rk))
+                .thenValueInline([pipeline_desc, processing_config, is_incomplete](pipelines::SegmentAndSlice&& r) {
+                    if (is_incomplete && !processing_config.dynamic_schema_) {
+                        auto check = check_schema_matches_incomplete(r.segment_in_memory_.descriptor(), pipeline_desc);
+                        if (std::holds_alternative<Error>(check)) {
+                            std::get<Error>(check).throw_error();
+                        }
+                    }
+                    return std::move(r);
+                });
+    };
+
+    auto admission = std::make_shared<ProcessingUnitAdmissionHandler>(
+            std::move(reader),
+            std::move(ranges_and_keys),
+            std::move(processing_unit_indexes),
+            max_processing_units_in_flight,
+            read_window
+    );
+
+    auto processed = schedule_clause_processing(
+            component_manager, admission, std::make_shared<std::vector<std::shared_ptr<Clause>>>(read_query->clauses_)
+    );
+
+    return std::move(processed).via(&async::cpu_executor());
 }
 
 /*

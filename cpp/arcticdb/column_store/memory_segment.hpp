@@ -243,6 +243,8 @@ class SegmentInMemory {
 
     [[nodiscard]] SegmentInMemory clone() const;
 
+    void mark_from_disk();
+
     void set_string_pool(const std::shared_ptr<StringPool>& string_pool);
 
     SegmentInMemory filter(util::BitSet&& filter_bitset, bool filter_down_stringpool = false, bool validate = false)

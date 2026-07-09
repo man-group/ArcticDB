@@ -10,6 +10,7 @@
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/processing/clause.hpp>
 #include <arcticdb/processing/component_manager.hpp>
+#include <arcticdb/version/admission_handler.hpp>
 #include <arcticdb/version/version_core.hpp>
 #include <arcticdb/storage/test/in_memory_store.hpp>
 #include <ranges>
@@ -26,6 +27,28 @@ std::shared_ptr<ComponentManager> set_component_manager(const std::span<std::sha
         clause->set_component_manager(component_manager);
     }
     return component_manager;
+}
+
+std::shared_ptr<version_store::ProcessingUnitAdmissionHandler> make_admission_handler(
+        const std::span<folly::Promise<SegmentAndSlice>> segment_and_slice_promises
+) {
+    const size_t num_segments = segment_and_slice_promises.size();
+    std::vector<RangesAndKey> ranges;
+    std::vector<std::vector<size_t>> processing_unit_indexes;
+    for (size_t idx = 0; idx < num_segments; ++idx) {
+        ranges.emplace_back(RowRange{idx, idx + 1}, ColRange{0, 1}, entity::AtomKey{});
+        processing_unit_indexes.emplace_back(std::vector<size_t>{idx});
+    }
+    version_store::SegmentReader reader = [segment_and_slice_promises](RangesAndKey&& rk) {
+        return segment_and_slice_promises[rk.row_range().first].getFuture();
+    };
+    return std::make_shared<version_store::ProcessingUnitAdmissionHandler>(
+            std::move(reader),
+            std::move(ranges),
+            std::move(processing_unit_indexes),
+            /*max_processing_units_in_flight=*/num_segments,
+            /*read_window=*/num_segments
+    );
 }
 
 void push_segments(const std::span<folly::Promise<SegmentAndSlice>> segment_and_slice_promises) {
@@ -208,23 +231,10 @@ TEST(Clause, ScheduleClauseProcessingStress) {
 
     constexpr static size_t num_segments{2};
     std::array<folly::Promise<SegmentAndSlice>, num_segments> segment_and_slice_promises;
-    std::vector<folly::Future<SegmentAndSlice>> segment_and_slice_futures;
-    std::vector<std::vector<size_t>> processing_unit_indexes;
-    for (size_t idx = 0; idx < num_segments; ++idx) {
-        segment_and_slice_futures.emplace_back(segment_and_slice_promises[idx].getFuture());
-        processing_unit_indexes.emplace_back(std::vector<size_t>{idx});
-    }
 
-    // Map from index in segment_and_slice_future_splitters to the number of calls to process in the first clause that
-    // will require that segment
-    auto segment_fetch_counts = generate_segment_fetch_counts(processing_unit_indexes, num_segments);
+    auto admission = make_admission_handler(segment_and_slice_promises);
 
-    auto processed_entity_ids_fut = schedule_clause_processing(
-            component_manager,
-            std::move(segment_and_slice_futures),
-            std::move(processing_unit_indexes),
-            std::move(clauses)
-    );
+    auto processed_entity_ids_fut = schedule_clause_processing(component_manager, admission, std::move(clauses));
     push_segments(segment_and_slice_promises);
     auto processed_entity_ids = std::move(processed_entity_ids_fut).get();
     const auto proc =
@@ -253,19 +263,10 @@ TEST(Clause, ScheduleRowSliceProcessingAndWrite) {
 
     constexpr static size_t num_segments{2};
     std::array<folly::Promise<SegmentAndSlice>, num_segments> segment_and_slice_promises;
-    std::vector<folly::Future<SegmentAndSlice>> segment_and_slice_futures;
-    std::vector<std::vector<size_t>> processing_unit_indexes;
-    for (size_t idx = 0; idx < num_segments; ++idx) {
-        segment_and_slice_futures.emplace_back(segment_and_slice_promises[idx].getFuture());
-        processing_unit_indexes.emplace_back(std::vector<size_t>{idx});
-    }
 
-    auto processed_entity_ids_fut = schedule_clause_processing(
-            component_manager,
-            std::move(segment_and_slice_futures),
-            std::move(processing_unit_indexes),
-            std::move(clauses)
-    );
+    auto admission = make_admission_handler(segment_and_slice_promises);
+
+    auto processed_entity_ids_fut = schedule_clause_processing(component_manager, admission, std::move(clauses));
     push_segments(segment_and_slice_promises);
     const auto processed_entity_ids = std::move(processed_entity_ids_fut).get();
     std::vector<folly::Future<SliceAndKey>> write_segments_futures;
