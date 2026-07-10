@@ -36,8 +36,10 @@ df2 = pd.DataFrame(
 
 
 def index_columns_to_pl(lib, sym):
+    # Column stats are keyed by the row-slice's start_row (unique per row-slice), so the stats segment
+    # exposes a single "start_row" index column rather than (start_index, end_index).
     pdf = lib.read_index(sym).reset_index()
-    return pl.from_pandas(pdf[["start_index", "end_index"]]).unique(maintain_order=True)
+    return pl.from_pandas(pdf[["start_row"]]).unique(maintain_order=True)
 
 
 def generate_symbol(lib, sym):
@@ -74,9 +76,7 @@ def test_column_stats_basic_flow(version_store_factory, lib_name, encoding_versi
     )
     lib._set_output_format_for_pipeline_tests(any_output_format)
     sym = "test_column_stats_basic_flow"
-    expected_column_stats = generate_symbol(lib, sym).select(
-        ["start_index", "end_index", "v1_MIN(col_1)", "v1_MAX(col_1)"]
-    )
+    expected_column_stats = generate_symbol(lib, sym).select(["start_row", "v1_MIN(col_1)", "v1_MAX(col_1)"])
 
     column_stats_dict = {"col_1": {"MINMAX"}}
 
@@ -400,9 +400,7 @@ def test_column_stats_as_of(version_store_factory, lib_name, encoding_version, a
     )
     lib._set_output_format_for_pipeline_tests(any_output_format)
     sym = "test_column_stats_as_of"
-    expected_column_stats = generate_symbol(lib, sym)[[0]].select(
-        ["start_index", "end_index", "v1_MIN(col_1)", "v1_MAX(col_1)"]
-    )
+    expected_column_stats = generate_symbol(lib, sym)[[0]].select(["start_row", "v1_MIN(col_1)", "v1_MAX(col_1)"])
     column_stats_dict = {"col_1": {"MINMAX"}}
     lib.create_column_stats(sym, column_stats_dict, as_of=0)
     assert lib.get_column_stats_info(sym, as_of=0) == column_stats_dict
@@ -469,7 +467,7 @@ def test_column_stats_multiple_indexes_different_columns(
     lib.drop_column_stats(sym, {"col_2": {"MINMAX"}})
     assert lib.get_column_stats_info(sym) == {"col_1": {"MINMAX"}}
 
-    expected_column_stats = expected_column_stats.select(["start_index", "end_index", "v1_MIN(col_1)", "v1_MAX(col_1)"])
+    expected_column_stats = expected_column_stats.select(["start_row", "v1_MIN(col_1)", "v1_MAX(col_1)"])
     column_stats = lib.read_column_stats(sym)
     assert_stats_equal(column_stats, expected_column_stats)
 
@@ -614,9 +612,7 @@ def test_column_stats_multiple_creates(version_store_factory, lib_name, encoding
     lib.create_column_stats(sym, column_stats_dict_1)
     assert lib.get_column_stats_info(sym) == column_stats_dict_1
 
-    expected_column_stats = base_expected_column_stats.select(
-        ["start_index", "end_index", "v1_MIN(col_1)", "v1_MAX(col_1)"]
-    )
+    expected_column_stats = base_expected_column_stats.select(["start_row", "v1_MIN(col_1)", "v1_MAX(col_1)"])
     column_stats = lib.read_column_stats(sym)
     assert_stats_equal(column_stats, expected_column_stats)
 
@@ -1140,12 +1136,7 @@ def test_column_stats_duplicated_column_names(version_store_factory, lib_name, e
     res = lib.read_column_stats(sym)
     expected = pl.DataFrame(
         {
-            "start_index": pl.Series([pd.Timestamp("2000-01-01").value], dtype=pl.Int64).cast(pl.Datetime("ns")),
-            "end_index": (
-                pl.Series([(pd.Timestamp("2000-01-02") + pd.Timedelta(1)).value], dtype=pl.Int64).cast(
-                    pl.Datetime("ns")
-                )
-            ),
+            "start_row": pl.Series([0], dtype=pl.UInt64),
             "v1_MIN(col_0)": [7],
             "v1_MAX(col_0)": [8],
         }
@@ -1184,12 +1175,7 @@ def test_column_stats_col_called_index(
     res = lib.read_column_stats(sym)
     expected = pl.DataFrame(
         {
-            "start_index": pl.Series([pd.Timestamp("2000-01-01").value], dtype=pl.Int64).cast(pl.Datetime("ns")),
-            "end_index": (
-                pl.Series([(pd.Timestamp("2000-01-02") + pd.Timedelta(1)).value], dtype=pl.Int64).cast(
-                    pl.Datetime("ns")
-                )
-            ),
+            "start_row": pl.Series([0], dtype=pl.UInt64),
             f"v1_MIN({expected_title})": [0],
             f"v1_MAX({expected_title})": [1],
         }

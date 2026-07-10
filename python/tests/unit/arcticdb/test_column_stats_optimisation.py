@@ -1107,6 +1107,52 @@ def test_column_stats_single_value_segments(
     assert table_data_reads == expected_reads, f"Expected {expected_reads} reads, got {table_data_reads}"
 
 
+@pytest.mark.parametrize(
+    "query_expr,expected_result_segs,expected_reads",
+    [
+        pytest.param(lambda q: q["col"] > 4, [2], 1, id="gt_4_prunes_two"),
+        pytest.param(lambda q: q["col"] < 3, [0], 1, id="lt_3_prunes_two"),
+        pytest.param(lambda q: q["col"] > 6, [], 0, id="gt_6_prunes_all"),
+        pytest.param(lambda q: q["col"] >= 1, [0, 1, 2], 3, id="gte_1_no_pruning"),
+    ],
+)
+def test_column_stats_identical_index_across_row_slices(
+    in_memory_store_factory,
+    clear_query_stats,
+    column_stats_filtering_enabled,
+    query_expr,
+    expected_result_segs,
+    expected_reads,
+):
+    """Multiple row-slices sharing the same index value must each keep their own stats.
+
+    All rows share a single timestamp, so every row-slice has identical (start_index, end_index).
+    Keying column stats by (start_index, end_index) collapses them into one ambiguous key and
+    disables pruning; keying by start_row keeps each slice distinct so pruning works.
+    """
+    lib = in_memory_store_factory(segment_row_size=2)
+
+    ts = pd.Timestamp("2020-01-01")
+    index = pd.DatetimeIndex([ts] * 6)
+    df = pd.DataFrame({"col": [1, 2, 3, 4, 5, 6]}, index=index, dtype=np.int64)
+    # 6 rows / segment_row_size 2 => 3 row-slices, all with the same start/end index.
+    seg_dfs = [df.iloc[0:2], df.iloc[2:4], df.iloc[4:6]]
+
+    lib.write(sym, df)
+    lib.create_column_stats(sym, {"col": {"MINMAX"}})
+
+    qs.enable()
+    q = QueryBuilder()
+    q = q[query_expr(q)]
+    qs.reset_stats()
+    result = lib.read(sym, query_builder=q).data
+    table_data_reads = get_table_data_read_count()
+
+    expected = pd.concat([seg_dfs[i] for i in expected_result_segs]) if expected_result_segs else df.iloc[0:0]
+    assert_frame_equal(result, expected)
+    assert table_data_reads == expected_reads, f"Expected {expected_reads} TABLE_DATA read(s), got {table_data_reads}"
+
+
 def test_column_stats_snapshot_read(in_memory_version_store, clear_query_stats, column_stats_filtering_enabled):
     lib = in_memory_version_store
 
@@ -1368,12 +1414,12 @@ def test_column_stats_empty_dataframe(in_memory_version_store, column_stats_filt
     assert len(result) == 0
 
 
-def test_column_stats_duplicate_timestamp_index_drops_ambiguous_stats(
+def test_column_stats_duplicate_timestamp_index_prunes(
     in_memory_version_store, clear_query_stats, column_stats_filtering_enabled
 ):
     """
-    When two row-slices share the same (start_index, end_index) the stats for that key are
-    ambiguous and we should not use them.
+    Two row-slices sharing the same (start_index, end_index) are no longer ambiguous: stats are
+    keyed by the row-slice's start_row, so pruning works even with duplicate timestamps.
     """
     lib = in_memory_version_store
 
@@ -1392,20 +1438,18 @@ def test_column_stats_duplicate_timestamp_index_drops_ambiguous_stats(
     qs.reset_stats()
     result = lib.read(sym, query_builder=q).data
 
-    # Both segments are read (stats are ambiguous for the duplicate key) and the filter in the
-    # processing pipeline keeps only rows where col_1 < 3.
     expected = pd.DataFrame({"col_1": [1, 2]}, index=[ts, ts])
     assert_frame_equal(expected, result)
-    # Both segments must be read because their stats were dropped.
-    assert get_table_data_read_count() == 2
+    # seg0 (min=1) is read, seg1 (min=5 >= 3) is pruned thanks to per-start_row stats.
+    assert get_table_data_read_count() == 1
 
 
-def test_column_stats_duplicate_timestamp_index_still_prunes_unique_keys(
+def test_column_stats_duplicate_timestamp_index_prunes_multiple(
     in_memory_version_store, clear_query_stats, column_stats_filtering_enabled
 ):
     """
-    When some row-slices share the same (start_index, end_index) but others are unique, only the
-    ambiguous entries are dropped. The unique entries should still be used for pruning.
+    Multiple row-slices sharing the same timestamp each keep their own stats (keyed by start_row),
+    so every slice that cannot match is pruned independently.
     """
     lib = in_memory_version_store
 
@@ -1429,8 +1473,8 @@ def test_column_stats_duplicate_timestamp_index_still_prunes_unique_keys(
 
     expected = pd.DataFrame({"col_1": [1, 2]}, index=[ts1, ts1])
     assert_frame_equal(expected, result)
-    # seg0 and seg1 read (duplicate key, no pruning), seg2 pruned (unique key, min=100 > 3)
-    assert get_table_data_read_count() == 2
+    # Only seg0 (min=1) is read; seg1 (min=10) and seg2 (min=100) are both pruned.
+    assert get_table_data_read_count() == 1
 
 
 @pytest.mark.parametrize(
