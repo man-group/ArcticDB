@@ -20,12 +20,8 @@ enum class ColumnStatType { MINMAX };
 // Total universe of column stats we support - min and max are treated separately here
 using ColumnStatTypeInternal = arcticc::pb2::column_stats_pb2::ColumnStatsType;
 
-// Column stats rows are keyed by the row-slice's starting row offset (start_row), which is unique per
-// row-slice. This avoids the ambiguity of keying by (start_index, end_index) when multiple row-slices
-// share the same index value.
 static const char* const start_row_column_name = "start_row";
 static constexpr size_t start_row_column_offset = 0;
-// Per-column stat data columns begin immediately after the single start_row index column.
 static constexpr size_t first_stat_column_offset = 1;
 
 struct NameAndStats {
