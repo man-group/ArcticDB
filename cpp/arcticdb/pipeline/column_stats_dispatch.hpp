@@ -34,7 +34,7 @@ using StatsVariantData = std::variant<
         // A value set from an isin/isnotin expression
         std::shared_ptr<ValueSet>>;
 
-using StatsRowVector = std::vector<const ColumnStatsRow*>;
+using StatsRowVector = std::vector<const CalculatedColumnStats*>;
 
 StatsVariantData evaluate_ast_node_against_stats(
         const VariantNode& node, const ExpressionContext& expression_context, const StatsRowVector& stats_rows

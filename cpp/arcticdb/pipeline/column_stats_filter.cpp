@@ -74,7 +74,7 @@ StatsVariantData evaluate_ast_node_against_stats(
                         result.emplace_back(std::nullopt, std::nullopt);
                         continue;
                     }
-                    if (auto it = row->stats_for_column.find(column_name.value); it != row->stats_for_column.end()) {
+                    if (auto it = row->col_name_to_stat.find(column_name.value); it != row->col_name_to_stat.end()) {
                         result.push_back(it->second);
                     } else {
                         result.emplace_back(std::nullopt, std::nullopt);
@@ -195,25 +195,21 @@ ColumnStatsData::ColumnStatsData(SegmentInMemory&& segment, const TimeseriesDesc
 
     // Future aseaton consider iterating column-wise rather than row-wise?
     const auto& fields = segment.descriptor().fields();
-    rows_.reserve(segment.row_count());
+    start_row_to_calculated_column_stats.reserve(segment.row_count());
     for (auto it = segment.begin(); it != segment.end(); ++it) {
-        ColumnStatsRow stats_row;
+        CalculatedColumnStats calculated_stats;
 
-        // The index values in the column stats segment are just rowcounts if the symbol is string-indexed
-        auto start_index = it->scalar_at<timestamp>(start_index_column_offset);
-        auto end_index = it->scalar_at<timestamp>(end_index_column_offset);
+        auto start_row = it->scalar_at<uint64_t>(start_row_column_offset);
 
-        if (!start_index || !end_index) {
-            log::version().warn("Saw column stats row without start_index or end_index, discarding all column stats");
-            rows_.clear();
-            index_to_row_.clear();
+        if (!start_row) {
+            log::version().warn("Saw column stats row without start_row, discarding all column stats");
+            start_row_to_calculated_column_stats.clear();
             return;
         }
 
-        stats_row.start_index = *start_index;
-        stats_row.end_index = *end_index;
+        calculated_stats.start_row = *start_row;
 
-        for (size_t col_idx = end_index_column_offset + 1; col_idx < fields.size(); ++col_idx) {
+        for (size_t col_idx = first_stat_column_offset; col_idx < fields.size(); ++col_idx) {
             const auto& field = fields[col_idx];
             auto lookup_it = stats_at_column_index.find(col_idx);
             if (lookup_it == stats_at_column_index.end()) {
@@ -222,7 +218,7 @@ ColumnStatsData::ColumnStatsData(SegmentInMemory&& segment, const TimeseriesDesc
             const auto& [col_name, stat_type] = lookup_it->second;
             auto value = extract_value_from_column(it, col_idx, field.type().data_type());
 
-            auto& stats = stats_row.stats_for_column[col_name];
+            auto& stats = calculated_stats.col_name_to_stat[col_name];
             switch (stat_type) {
             case MIN_V1:
                 stats.min = value;
@@ -250,7 +246,7 @@ ColumnStatsData::ColumnStatsData(SegmentInMemory&& segment, const TimeseriesDesc
 
         // If a column's min and max are both absent (sparse bitmap), the column was not present
         // in the data segment.
-        for (auto& [col_name, stats] : stats_row.stats_for_column) {
+        for (auto& [col_name, stats] : calculated_stats.col_name_to_stat) {
             util::check(
                     stats.min.has_value() == stats.max.has_value(),
                     "MIN and MAX should both be present or both be absent, col_name={}",
@@ -261,29 +257,29 @@ ColumnStatsData::ColumnStatsData(SegmentInMemory&& segment, const TimeseriesDesc
             }
         }
 
-        auto key = std::make_pair(stats_row.start_index, stats_row.end_index);
-        if (auto [_, inserted] = index_to_row_.emplace(key, rows_.size()); !inserted) {
-            // Duplicate (start_index, end_index). This can happen with timestamp indices where
-            // multiple segments span the same time range.
-            duplicate_keys_.insert(key);
+        auto start_row_value = calculated_stats.start_row;
+        if (auto [_, inserted] =
+                    start_row_to_calculated_column_stats.emplace(start_row_value, std::move(calculated_stats));
+            !inserted) {
+            // start_row uniquely identifies a row-slice, so a duplicate indicates a corrupt stats segment.
+            log::version().warn(
+                    "Duplicate start_row {} in column stats segment, discarding all column stats", start_row_value
+            );
+            start_row_to_calculated_column_stats.clear();
+            return;
         }
-        rows_.push_back(std::move(stats_row));
-    }
-
-    for (const auto& key : duplicate_keys_) {
-        log::version().debug("Duplicate key detected in column stats - dropping {}", key);
-        index_to_row_.erase(key);
     }
 }
 
-const ColumnStatsRow* ColumnStatsData::find_stats(timestamp start_index, timestamp end_index) const {
-    if (auto it = index_to_row_.find({start_index, end_index}); it != index_to_row_.end()) {
-        return &rows_[it->second];
+const CalculatedColumnStats* ColumnStatsData::find_stats(uint64_t start_row) const {
+    if (auto it = start_row_to_calculated_column_stats.find(start_row);
+        it != start_row_to_calculated_column_stats.end()) {
+        return &it->second;
     }
     return nullptr;
 }
 
-bool ColumnStatsData::empty() const { return rows_.empty(); }
+bool ColumnStatsData::empty() const { return start_row_to_calculated_column_stats.empty(); }
 
 FilterQuery<index::IndexSegmentReader> create_column_stats_filter(
         ColumnStatsData&& column_stats_data, ExpressionContext&& expression_context
@@ -301,8 +297,7 @@ FilterQuery<index::IndexSegmentReader> create_column_stats_filter(
             res->invert();
         }
 
-        auto start_index_col = isr.column(Fields::start_index).begin<stream::TimeseriesIndex::TypeDescTag>();
-        auto end_index_col = isr.column(Fields::end_index).begin<stream::TimeseriesIndex::TypeDescTag>();
+        auto start_row_col = isr.column(Fields::start_row).begin<stream::SliceTypeDescriptorTag>();
 
         StatsRowVector stats_rows;
         stats_rows.reserve(isr.size());
@@ -314,9 +309,8 @@ FilterQuery<index::IndexSegmentReader> create_column_stats_filter(
                 continue;
             }
             total_count++;
-            timestamp start_idx = *(start_index_col + row);
-            timestamp end_idx = *(end_index_col + row);
-            if (const ColumnStatsRow* stats = column_stats_data.find_stats(start_idx, end_idx)) {
+            auto start_row = static_cast<uint64_t>(*(start_row_col + row));
+            if (const CalculatedColumnStats* stats = column_stats_data.find_stats(start_row)) {
                 stats_rows.push_back(stats);
             } else {
                 stats_rows.push_back(nullptr);

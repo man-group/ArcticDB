@@ -21,17 +21,6 @@
 
 namespace arcticdb {
 
-namespace util {
-
-struct PairHasher {
-    template<typename T1, typename T2>
-    std::size_t operator()(const std::pair<T1, T2>& p) const {
-        return folly::hash::hash_combine(p.first, p.second);
-    }
-};
-
-} // namespace util
-
 struct ColumnStatsValues {
     std::optional<Value> min;
     std::optional<Value> max;
@@ -49,13 +38,12 @@ struct ColumnStatsValues {
 };
 
 /**
- * Represents column statistics for a single row-slice.
+ * The calculated column statistics for a single row-slice, keyed by its starting row offset.
  */
-struct ColumnStatsRow {
-    timestamp start_index;
-    timestamp end_index;
+struct CalculatedColumnStats {
+    uint64_t start_row;
     // Map from column name to its stats
-    std::unordered_map<std::string, ColumnStatsValues> stats_for_column;
+    std::unordered_map<std::string, ColumnStatsValues> col_name_to_stat;
 };
 
 /**
@@ -68,21 +56,16 @@ class ColumnStatsData {
     ARCTICDB_MOVE_ONLY_DEFAULT(ColumnStatsData)
 
     /**
-     * Find the column stats for a given row-slice identified by start_index and end_index.
+     * Find the column stats for a given row-slice identified by its starting row offset.
      * Returns nullptr if no matching stats found.
      */
-    const ColumnStatsRow* find_stats(timestamp start_index, timestamp end_index) const;
+    const CalculatedColumnStats* find_stats(uint64_t start_row) const;
 
     bool empty() const;
 
   private:
-    std::vector<ColumnStatsRow> rows_;
-    // (start_index, end_index) -> row index
-    // The index values in the column stats segment are just rowcounts if the symbol is string-indexed
-    std::unordered_map<std::pair<timestamp, timestamp>, size_t, util::PairHasher> index_to_row_;
-    // Keys that appeared more than once in the stats segment. Entries for these keys are removed, forcing the segments
-    // to be read without pruning.
-    std::unordered_set<std::pair<timestamp, timestamp>, util::PairHasher> duplicate_keys_;
+    // start_row uniquely identifies a row-slice, so no duplicate handling is needed.
+    std::unordered_map<uint64_t, CalculatedColumnStats> start_row_to_calculated_column_stats;
 };
 
 /**

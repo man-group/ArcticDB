@@ -2049,9 +2049,9 @@ void create_column_stats_impl(
     if (!old_segment.has_value()) {
         store->update(column_stats_key, std::move(new_segment), update_opts).get();
     } else {
-        // Check that the start and end index columns match
+        // Check that the start_row index column matches
         internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-                new_segment.column(0) == old_segment->column(0) && new_segment.column(1) == old_segment->column(1),
+                new_segment.column(0) == old_segment->column(0),
                 "Cannot create column stats, existing column stats row-groups do not match"
         );
         // Merge the ColumnStatsHeader metadata from old and new segments
@@ -2144,8 +2144,8 @@ void drop_column_stats_impl(
         ankerl::unordered_dense::set<std::string> dropped_names_set(dropped_names.begin(), dropped_names.end());
         arcticc::pb2::column_stats_pb2::ColumnStatsHeader new_header;
         new_header.set_version(column_stats_header.version());
-        // Stats columns start at field index 2 (after start_index=0 and end_index=1)
-        auto new_offset = static_cast<size_t>(index::Fields::end_index) + 1;
+        // Stats columns start immediately after the single start_row index column (offset 0).
+        auto new_offset = first_stat_column_offset;
         for (const auto& [data_col_offset, entry_list] : column_stats_header.stats_by_column()) {
             for (const auto& entry : entry_list.entries()) {
                 auto field_name = std::string{segment_in_memory.descriptor().field(entry.stats_seg_offset()).name()};

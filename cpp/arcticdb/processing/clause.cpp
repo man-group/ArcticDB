@@ -289,12 +289,14 @@ AggregationClause::AggregationClause(
     clause_info_.input_columns_ = std::make_optional<std::unordered_set<std::string>>({grouping_column_});
     str_ = "AGGREGATE {";
     for (const auto& named_aggregator : named_aggregators) {
-        str_.append(fmt::format(
-                "{}: ({}, {}), ",
-                named_aggregator.output_column_name_,
-                named_aggregator.input_column_name_,
-                named_aggregator.aggregation_operator_
-        ));
+        str_.append(
+                fmt::format(
+                        "{}: ({}, {}), ",
+                        named_aggregator.output_column_name_,
+                        named_aggregator.input_column_name_,
+                        named_aggregator.aggregation_operator_
+                )
+        );
         clause_info_.input_columns_->insert(named_aggregator.input_column_name_);
         auto typed_input_column_name = ColumnName(named_aggregator.input_column_name_);
         auto typed_output_column_name = ColumnName(named_aggregator.output_column_name_);
@@ -439,8 +441,7 @@ std::vector<EntityId> AggregationClause::process(std::vector<EntityId>&& entity_
                 ssize_t previous_value_index = 0;
 
                 arcticdb::for_each_enumerated<typename col_type_info::TDT>(
-                        *col.column_,
-                        [&] ARCTICDB_LAMBDA_INLINE(auto enumerating_it) {
+                        *col.column_, [&] ARCTICDB_LAMBDA_INLINE(auto enumerating_it) {
                             typename col_type_info::RawType val;
                             if constexpr (is_sequence_type(col_type_info::data_type)) {
                                 auto offset = enumerating_it.value();
@@ -667,14 +668,14 @@ void merge_impl(
     using SegmentationPolicy = stream::RowCountSegmentPolicy;
     SegmentationPolicy segmentation_policy{static_cast<size_t>(num_segment_rows)};
 
-    auto commit_callback = [&component_manager, &ret, &col_range, start_row = row_range.first](SegmentInMemory&& segment
-                           ) mutable {
-        const size_t end_row = start_row + segment.row_count();
-        ret.emplace_back(push_entities(
-                *component_manager, ProcessingUnit{std::move(segment), RowRange{start_row, end_row}, col_range}
-        ));
-        start_row = end_row;
-    };
+    auto commit_callback =
+            [&component_manager, &ret, &col_range, start_row = row_range.first](SegmentInMemory&& segment) mutable {
+                const size_t end_row = start_row + segment.row_count();
+                ret.emplace_back(push_entities(
+                        *component_manager, ProcessingUnit{std::move(segment), RowRange{start_row, end_row}, col_range}
+                ));
+                start_row = end_row;
+            };
 
     using Schema = std::conditional_t<dynamic_schema, stream::DynamicSchema, stream::FixedSchema>;
     using AggregatorType = stream::Aggregator<IndexType, Schema, SegmentationPolicy, DensityPolicy>;
@@ -833,56 +834,37 @@ void aggregate_input_columns(
     }
 }
 
-// Collect the start and end indexes from every atom key in the processing unit.
-// Assert if there two different indexes or return the single start/end index pair.
-std::pair<IndexValue, IndexValue> extract_start_and_end_index(const std::vector<std::shared_ptr<AtomKey>>& atom_keys) {
-    ankerl::unordered_dense::set<IndexValue> start_indexes;
-    ankerl::unordered_dense::set<IndexValue> end_indexes;
-
-    for (const auto& key : atom_keys) {
-        start_indexes.insert(key->start_index());
-        end_indexes.insert(key->end_index());
-    }
-
+// All column-slices fed into one column-stats process() call share the same row-slice, so they share
+// the same starting row offset. Assert this and return that single start_row, which uniquely identifies
+// the row-slice (unlike the start/end index, which can collide across row-slices with equal index values).
+uint64_t extract_slice_start_row(const std::vector<std::shared_ptr<pipelines::RowRange>>& row_ranges) {
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-            start_indexes.size() == 1 && end_indexes.size() == 1,
-            "Expected all data segments in one processing unit to have same start and end indexes"
+            !row_ranges.empty(), "Expected at least one row range in a column stats processing unit"
     );
 
-    return {*start_indexes.begin(), *end_indexes.begin()};
+    const auto start_row = row_ranges.front()->start();
+    for (const auto& row_range : row_ranges) {
+        internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+                row_range->start() == start_row,
+                "Expected all column slices in one processing unit to share the same start row"
+        );
+    }
+    return start_row;
 }
 
-// All segments fed into one column-stats process() call share the same
-// row-slice, which means they share the same start/end index.
-std::pair<NumericIndex, NumericIndex> extract_slice_index_bounds(const std::vector<std::shared_ptr<AtomKey>>& atom_keys
-) {
-    const auto [start_index, end_index] = extract_start_and_end_index(atom_keys);
-
-    schema::check<ErrorCode::E_UNSUPPORTED_INDEX_TYPE>(
-            std::holds_alternative<NumericIndex>(start_index) && std::holds_alternative<NumericIndex>(end_index),
-            "Cannot build column stats over string-indexed symbol"
-    );
-
-    return {std::get<NumericIndex>(start_index), std::get<NumericIndex>(end_index)};
-}
-
-std::shared_ptr<Column> make_single_row_index_column(NumericIndex value) {
-    auto col = std::make_shared<Column>(make_scalar_type(DataType::NANOSECONDS_UTC64), Sparsity::PERMITTED);
-    col->template push_back<NumericIndex>(value);
+std::shared_ptr<Column> make_single_row_start_row_column(uint64_t value) {
+    auto col = std::make_shared<Column>(make_scalar_type(DataType::UINT64), Sparsity::PERMITTED);
+    col->template push_back<uint64_t>(value);
     col->set_row_data(0);
     return col;
 }
 
-SegmentInMemory build_per_slice_result_segment(NumericIndex start_index, NumericIndex end_index) {
+SegmentInMemory build_per_slice_result_segment(uint64_t start_row) {
     SegmentInMemory result_segment;
 
     result_segment.descriptor().set_index(IndexDescriptorImpl(IndexDescriptorImpl::Type::ROWCOUNT, 0));
     result_segment.add_column(
-            scalar_field(DataType::NANOSECONDS_UTC64, start_index_column_name),
-            make_single_row_index_column(start_index)
-    );
-    result_segment.add_column(
-            scalar_field(DataType::NANOSECONDS_UTC64, end_index_column_name), make_single_row_index_column(end_index)
+            scalar_field(DataType::UINT64, start_row_column_name), make_single_row_start_row_column(start_row)
     );
     return result_segment;
 }
@@ -922,12 +904,13 @@ void append_aggregated_stats_as_columns_to_result(
     });
 }
 
+// This function is called for each slice that is processed
 // First: finalize every aggregator_data and collect the aggregated col stats
 // Second: append the aggregated col stats to result_segment as columns
 // Note: aggregators that produced no min/max, do not append any columns to the result_segment
 // Returns: ColumnStatsHeader describing: <input_column_offset -> [{stat_segment_offset, stat_type}]>
-arcticc::pb2::column_stats_pb2::ColumnStatsHeader finalize_and_append_stats_cols_to_result(
-        SegmentInMemory& result_segment, std::vector<ColumnStatsAggregatorData>& aggregators_data,
+arcticc::pb2::column_stats_pb2::ColumnStatsHeader finalize_and_append_stats_as_columns_to_result(
+        SegmentInMemory& per_slice_result_segment, std::vector<ColumnStatsAggregatorData>& aggregators_data,
         const std::vector<ColumnStatsAggregator>& aggregators
 ) {
     using namespace arcticc::pb2::column_stats_pb2;
@@ -942,10 +925,10 @@ arcticc::pb2::column_stats_pb2::ColumnStatsHeader finalize_and_append_stats_cols
             continue; // Slice had no aggregatable values for this column - no stat column will be created
         }
 
-        const auto& output_column_names = aggregators.at(agg_data.index).get_output_column_names();
-        const auto current_stat_start_offset = result_segment.descriptor().field_count();
+        const auto& output_column_names = aggregators[agg_data.index].get_output_column_names();
+        // const auto current_stat_start_offset = per_slice_result_segment.descriptor().field_count();
 
-        append_aggregated_stats_as_columns_to_result(result_segment, aggregated_stats, output_column_names);
+        append_aggregated_stats_as_columns_to_result(per_slice_result_segment, aggregated_stats, output_column_names);
 
         // checks if entry exists for the 'input_column_offset' (create if not)
         auto& entry_list = (*header.mutable_stats_by_column())[aggregated_stats.input_column_offset];
@@ -960,7 +943,7 @@ arcticc::pb2::column_stats_pb2::ColumnStatsHeader finalize_and_append_stats_cols
             // {stats_seg_offset: 5, NULL_COUNT_V1} (for "price" the NULL_COUNT stat is at offset 2+2 in stats_segment)]
 
             auto* entry = entry_list.add_entries();
-            entry->set_stats_seg_offset(current_stat_start_offset + i);
+            entry->set_stats_seg_offset(first_stat_column_offset + i);
             entry->set_type(stat_type);
         }
     }
@@ -988,23 +971,28 @@ std::vector<EntityId> ColumnStatsGenerationClause::process(std::vector<EntityId>
     auto aggregators_data = build_per_slice_aggregators_data(*column_stats_aggregators_);
     aggregate_input_columns(proc, aggregators_data, *column_stats_aggregators_, processing_config_.dynamic_schema_);
 
-    auto [start_index, end_index] = extract_slice_index_bounds(proc.atom_keys_.value());
+    internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+            proc.row_ranges_.has_value(), "Expected row ranges to be present in ColumnStatsGenerationClause::process"
+    );
+    auto start_row = extract_slice_start_row(proc.row_ranges_.value());
 
-    // for now only with index columns: |start_index|end_index|
-    auto result_segment = build_per_slice_result_segment(start_index, end_index);
+    // for now the result_segment is :
+    // |start_row|
+    auto per_slice_result_segment = build_per_slice_result_segment(start_row);
 
     // now the result_segment becomes:
-    // |start_index|end_index|v1_min(col1)|v1_max(col1)|v1_nan_count(col1)|v1_null_count(col1)|v2_min(col2)|...
-    auto header =
-            finalize_and_append_stats_cols_to_result(result_segment, aggregators_data, *column_stats_aggregators_);
+    // |start_row|v1_min(col1)|v1_max(col1)|v1_nan_count(col1)|v1_null_count(col1)|v2_min(col2)|...
+    auto header = finalize_and_append_stats_as_columns_to_result(
+            per_slice_result_segment, aggregators_data, *column_stats_aggregators_
+    );
 
     google::protobuf::Any any;
     bool packed = any.PackFrom(header);
     util::check(packed, "Failed to pack column stats header into Any in ColumnStatsGenerationClause::process");
-    result_segment.set_metadata(std::move(any));
+    per_slice_result_segment.set_metadata(std::move(any));
 
-    result_segment.set_row_id(0);
-    return push_entities(*component_manager_, ProcessingUnit(std::move(result_segment)));
+    per_slice_result_segment.set_row_id(0);
+    return push_entities(*component_manager_, ProcessingUnit(std::move(per_slice_result_segment)));
 }
 
 std::vector<std::vector<size_t>> RowRangeClause::structure_for_processing(std::vector<RangesAndKey>& ranges_and_keys) {
@@ -1424,7 +1412,8 @@ std::set<RowRange> CompactDataClause::structure_row_ranges(const std::set<RowRan
     return res;
 }
 
-std::vector<std::vector<size_t>> CompactDataClause::structure_for_processing(std::vector<RangesAndKey>& ranges_and_keys
+std::vector<std::vector<size_t>> CompactDataClause::structure_for_processing(
+        std::vector<RangesAndKey>& ranges_and_keys
 ) {
     log::version().debug("CompactDataClause structuring {} data keys for processing", ranges_and_keys.size());
     // Extract the unique row ranges
@@ -1523,9 +1512,11 @@ std::vector<EntityId> CompactDataClause::process(std::vector<EntityId>&& entity_
     auto row_range_start = proc.row_ranges_->front()->first;
     const auto index_field_count = segment_ptrs.front()->descriptor().index().field_count();
     for (const auto& segment : segment_ptrs) {
-        col_ranges.emplace_back(std::make_shared<ColRange>(
-                col_range_start, col_range_start + segment->num_columns() - index_field_count
-        ));
+        col_ranges.emplace_back(
+                std::make_shared<ColRange>(
+                        col_range_start, col_range_start + segment->num_columns() - index_field_count
+                )
+        );
         row_ranges.emplace_back(std::make_shared<RowRange>(row_range_start, row_range_start + segment->row_count()));
         row_range_start += segment->row_count();
     }

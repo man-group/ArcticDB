@@ -126,7 +126,7 @@ SegmentInMemory merge_column_stats_segments(const std::vector<SegmentInMemory>& 
         merged.append(segment);
     }
     merged.set_compacted(true);
-    merged.sort(start_index_column_name);
+    merged.sort(start_row_column_name);
 
     auto header = build_column_stats_header(schema);
     google::protobuf::Any any;
