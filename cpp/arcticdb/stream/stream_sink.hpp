@@ -140,6 +140,10 @@ struct StreamSink {
             std::vector<entity::VariantKey>&& keys, storage::RemoveOpts opts = storage::RemoveOpts{}
     ) = 0;
 
+    // Largest number of keys the underlying storage will delete in a single request, or nullopt when
+    // there is no such limit. Callers can use this to size the key batches they submit for deletion.
+    [[nodiscard]] virtual std::optional<size_t> max_delete_batch_size() const { return std::nullopt; }
+
     virtual timestamp current_timestamp() = 0;
 };
 
