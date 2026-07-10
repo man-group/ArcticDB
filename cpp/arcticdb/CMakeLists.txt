@@ -72,8 +72,6 @@ else()
 
     find_package(recycle REQUIRED)
     find_package(msgpack-c REQUIRED)
-    find_package(LMDB REQUIRED)
-    find_package(LMDBXX REQUIRED)
 
     find_package(EnTT REQUIRED)
 
@@ -791,7 +789,11 @@ if(${ARCTICDB_USING_CONDA})
 
     list (APPEND arcticdb_core_libraries
         msgpack-c
-        ${LMDB_LIBRARIES}
+        # Use the patched static lmdb target (cpp/third_party/lmdbcxx) rather than
+        # the conda-provided shared library.  The conda-forge lmdb package does not
+        # include the CVE-2019-16224..16228 security patches (they were never
+        # upstreamed), so we must use our own patched build on all platforms.
+        lmdb
     )
     if(${BUILD_WITH_REMOTERY})
         list (APPEND arcticdb_core_libraries
@@ -950,7 +952,6 @@ target_include_directories(arcticdb_python PRIVATE
         ${LIBMONGOCXX_STATIC_INCLUDE_DIRS}
         ${LIBBSONCXX_STATIC_INCLUDE_DIRS}
         ${BITMAGIC_INCLUDE_DIRS}
-        ${LMDB_INCLUDE_DIR}
         )
 
 
@@ -1101,6 +1102,7 @@ if(${TEST})
             processing/test/test_type_comparison.cpp
             processing/test/test_unsorted_aggregation.cpp
             processing/test/test_merge_update.cpp
+            storage/test/test_lmdb_cve.cpp
             storage/test/test_local_storages.cpp
             storage/test/test_memory_storage.cpp
             storage/test/test_s3_storage.cpp
