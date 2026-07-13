@@ -751,4 +751,59 @@ jobs:
           path: |
             ${{runner.temp}}/*test*
         continue-on-error: true
+
+  # ========================= macOS forward-compatibility gate =========================
+  # The macOS wheel is COMPILED on the macos-26 runner but TAGGED macosx_15_0_arm64.
+  # The regular python_tests above also run on macos-26, so they share the build host's
+  # newer libc++ and cannot detect when the wheel references a libc++ symbol that is
+  # absent from the macOS 15 system libc++
+  #
+  # This job installs the SAME freshly-built wheel on a real macOS 15 runner (older
+  # system libc++) and verifies it imports and does a basic read/write. If the wheel
+  # requires a newer libc++ than macOS 15 provides, `import arcticdb` fails here and
+  # blocks the build — which is exactly the regression we want to catch.
+  #
+  # Runs once, off the Python 3.14 macOS compile job
+  macos_forward_compat:
+    if: inputs.job_type == 'build-python-wheels' && inputs.python3 == 14 && fromJSON(inputs.matrix)[0].os == 'macos'
+    needs: [compile]
+    runs-on: macos-15 
+    defaults:
+      run: {shell: bash}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3.3.0
+        with:
+          fetch-depth: 1
+          ref: ${{ inputs.ref }}
+
+      - name: Runner environment
+        run: |
+          sw_vers
+          uname -m
+
+      - name: Get the freshly-built macOS wheel
+        uses: actions/download-artifact@v8
+        with:
+          name: wheel-${{needs.compile.outputs.cibw_build}} 
+          path: ${{runner.temp}}/wheel
+
+      - name: Select Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.${{inputs.python3}}"
+
+      - name: Install the wheel
+        run: |
+          python -V
+          python -m pip install --upgrade pip
+          python -m pip install --force-reinstall --retries 3 --timeout 500 "$(ls ${{runner.temp}}/wheel/*.whl)[Testing]"
+          python -m pip list
+
+      - name: Run a basic read/write test suite on macOS 15
+        run: |
+          build_tooling/parallel_test.sh tests/unit/arcticdb/version_store/test_write.py
+        env:
+          TEST_OUTPUT_DIR: ${{runner.temp}}
+          PYTEST_XDIST_MODE: ""   # single file, run serially
             

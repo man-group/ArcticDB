@@ -1,0 +1,21 @@
+Keep libc++ availability annotations enabled on Apple for ArcticDB back-deploy.
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -143,7 +143,14 @@
+ 
+     # Allow the use of not visible yet availabile features, such
+     # as some formatter for new types.
+-    add_compile_definitions(_LIBCPP_DISABLE_AVAILABILITY)
++    # ArcticDB patch: keep libc++ availability annotations enabled on Apple so the
++    # macOS wheel back-deploys correctly. Disabling them makes libc++ assume newer
++    # system-dylib symbols (e.g. std::__hash_memory) exist and emit strong references
++    # to them, which are absent on the deployment target and break dlopen on older
++    # macOS. Linux libc++ has no vendor availability annotations, so keep it there.
++    if(NOT APPLE)
++        add_compile_definitions(_LIBCPP_DISABLE_AVAILABILITY)
++    endif()
+ endif()
+ 
+ # Linter options
