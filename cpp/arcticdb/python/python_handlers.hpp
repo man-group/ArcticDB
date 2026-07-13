@@ -134,7 +134,7 @@ inline void register_python_array_types() {
 
 inline void register_python_string_types() {
     using namespace arcticdb;
-    constexpr std::array<entity::DataType, 5> string_data_types = {
+    constexpr std::array<entity::DataType, 2> string_data_types = {
             entity::DataType::ASCII_DYNAMIC64, entity::DataType::UTF_DYNAMIC64
     };
 

@@ -35,7 +35,14 @@ import time
 from arcticdb.dependencies import pyarrow as pa
 from arcticdb.dependencies import polars as pl
 from arcticc.pb2.descriptors_pb2 import IndexDescriptor, TypeDescriptor
-from arcticdb_ext.version_store import CompactDataInfo, RecordBatchData, SortedValue, StageResult
+from arcticdb_ext.version_store import (
+    ArrowOutputConfig,
+    CompactDataInfo,
+    PandasOutputConfig,
+    RecordBatchData,
+    SortedValue,
+    StageResult,
+)
 from arcticc.pb2.storage_pb2 import LibraryConfig, EnvironmentConfigsMap
 from arcticdb.preconditions import check
 from arcticdb.supported_types import DateRangeInput, ExplicitlySupportedDates
@@ -2318,13 +2325,12 @@ class NativeVersionStore:
         output_format = self.resolve_runtime_defaults(
             "output_format", proto_cfg, global_default=OutputFormat.PANDAS, **kwargs
         )
-        read_options.set_output_format(output_format_to_internal(output_format))
         read_options.set_dynamic_schema(resolve_defaults("dynamic_schema", proto_cfg, global_default=False, **kwargs))
         read_options.set_set_tz(resolve_defaults("set_tz", proto_cfg, global_default=False, **kwargs))
         read_options.set_allow_sparse(resolve_defaults("allow_sparse", proto_cfg, global_default=False, **kwargs))
         read_options.set_incompletes(resolve_defaults("incomplete", proto_cfg, global_default=False, **kwargs))
-        if read_options.output_format == InternalOutputFormat.ARROW:
-            read_options.set_arrow_output_default_string_format(
+        if output_format_to_internal(output_format) == InternalOutputFormat.ARROW:
+            output_config = ArrowOutputConfig(
                 arrow_output_string_format_to_internal(
                     self.resolve_runtime_defaults(
                         "arrow_string_format_default",
@@ -2333,16 +2339,17 @@ class NativeVersionStore:
                         **kwargs,
                     ),
                     output_format,
-                )
-            )
-            read_options.set_arrow_output_per_column_string_format(
+                ),
                 {
                     key: arrow_output_string_format_to_internal(value, output_format)
                     for key, value in resolve_defaults(
                         "arrow_string_format_per_column", proto_cfg, global_default={}, **kwargs
                     ).items()
-                }
+                },
             )
+        else:
+            output_config = PandasOutputConfig()
+        read_options.set_output_config(output_config)
         return read_options, output_format
 
     def _get_batch_read_options(

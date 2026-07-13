@@ -62,7 +62,9 @@ std::pair<StreamDescriptor, BlockConfigPerColumn> get_filtered_descriptor_and_bl
                 auto handlers = TypeHandlerRegistry::instance();
 
                 for (auto& field : *fields) {
-                    if (auto handler = handlers->get_handler(read_options.output_format(), field.type())) {
+                    if (auto handler = handlers->get_handler(
+                                read_options.output_format_for_column_type(field.type()), field.type()
+                        )) {
                         auto [output_type, block_config] =
                                 handler->output_type_and_block_config(field.type(), field.name(), read_options);
                         block_config_per_column.emplace_back(block_config);
@@ -155,7 +157,7 @@ SegmentInMemory allocate_contiguous_frame(
 }
 
 SegmentInMemory allocate_frame(const std::shared_ptr<PipelineContext>& context, const ReadOptions& read_options) {
-    if (read_options.output_format() == OutputFormat::ARROW)
+    if (read_options.output_format_for_frame() == OutputFormat::ARROW)
         return allocate_chunked_frame(context, read_options);
     else
         return allocate_contiguous_frame(context, read_options);
@@ -345,7 +347,9 @@ void decode_or_expand(
 ) {
     const auto source_type_desc = mapping.source_type_desc_;
     const auto dest_type_desc = mapping.dest_type_desc_;
-    if (auto handler = get_type_handler(read_options.output_format(), source_type_desc, dest_type_desc)) {
+    if (auto handler = get_type_handler(
+                read_options.output_format_for_column_type(dest_type_desc), source_type_desc, dest_type_desc
+        )) {
         handler->handle_type(
                 data,
                 dest_column,
@@ -369,7 +373,7 @@ void decode_or_expand(
         // hence `ndarray().sparse_map_bytes() > 0` is not enough. We check whether the uncompressed size matches
         // the expected number of rows.
         const bool is_sparse = dense_num_rows < mapping.num_rows_;
-        const bool is_arrow = read_options.output_format() == OutputFormat::ARROW;
+        const bool is_arrow = read_options.output_format_for_column_type(dest_type_desc) == OutputFormat::ARROW;
 
         if (is_sparse) {
             // We explicitly allocate an intermediate dense_buffer to decode the dense data into.
@@ -470,7 +474,7 @@ ColumnTruncation get_truncate_range(
     const auto& row_range = context.slice_and_key().slice().row_range;
     const auto& first_row_offset = frame.offset();
     auto adjusted_row_range = RowRange(row_range.first - first_row_offset, row_range.second - first_row_offset);
-    if (read_options.output_format() == OutputFormat::ARROW) {
+    if (read_options.output_format_for_frame() == OutputFormat::ARROW) {
         util::variant_match(
                 read_query.row_filter,
                 [&truncate_rows,
@@ -998,6 +1002,7 @@ struct ReduceColumnTask : async::BaseTask {
             return {};
         }();
 
+        auto output_format_for_column = read_options_.output_format_for_column_type(column.type());
         if (dynamic_schema && column_data == slice_map_->columns_.end()) {
             if (is_fixed_string_type(field_type)) {
                 // Special case where we have a fixed-width string column that is all null (e.g. dynamic schema
@@ -1014,26 +1019,14 @@ struct ReduceColumnTask : async::BaseTask {
                 swap(prev_buffer, new_buffer);
             } else {
                 NullValueReducer null_reducer{
-                        column,
-                        context_,
-                        frame_,
-                        shared_data_,
-                        handler_data_,
-                        read_options_.output_format(),
-                        default_value
+                        column, context_, frame_, shared_data_, handler_data_, output_format_for_column, default_value
                 };
                 null_reducer.finalize();
             }
         } else if (column_data != slice_map_->columns_.end()) {
             if (dynamic_schema) {
                 NullValueReducer null_reducer{
-                        column,
-                        context_,
-                        frame_,
-                        shared_data_,
-                        handler_data_,
-                        read_options_.output_format(),
-                        default_value
+                        column, context_, frame_, shared_data_, handler_data_, output_format_for_column, default_value
                 };
                 for (const auto& row : column_data->second) {
                     PipelineContextRow context_row{context_, row.second.context_index_};

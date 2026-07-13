@@ -26,8 +26,7 @@ static void BM_arrow_string_handler(benchmark::State& state) {
     const auto string_output_format = ArrowOutputStringFormat(state.range(3));
     const bool fixed_width_strings = state.range(4);
     auto read_options = ReadOptions{};
-    read_options.set_output_format(OutputFormat::ARROW);
-    read_options.set_arrow_output_default_string_format(string_output_format);
+    read_options.set_output_config(ArrowOutputConfig{string_output_format, {}});
 
     auto handler = ArrowStringHandler();
 
@@ -167,7 +166,7 @@ static void BM_arrow_timestamp_handler(benchmark::State& state) {
     const auto num_source_chunks = static_cast<size_t>(state.range(4));
 
     auto read_options = ReadOptions{};
-    read_options.set_output_format(OutputFormat::ARROW);
+    read_options.set_output_config(ArrowOutputConfig{});
 
     auto handler = ArrowTimestampHandler{};
     auto source_type_desc = make_scalar_type(DataType::NANOSECONDS_UTC64);

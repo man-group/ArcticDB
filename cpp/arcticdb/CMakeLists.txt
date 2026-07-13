@@ -184,7 +184,6 @@ set(arcticdb_srcs
         # header files
         arrow/arrow_handlers.hpp
         arrow/arrow_c_interface.hpp
-        arrow/arrow_output_options.hpp
         arrow/arrow_utils.hpp
         async/async_store.hpp
         async/batch_read_args.hpp
@@ -263,6 +262,7 @@ set(arcticdb_srcs
         pipeline/index_writer.hpp
         pipeline/input_frame.hpp
         pipeline/pandas_output_frame.hpp
+        pipeline/output_config.hpp
         pipeline/pipeline_common.hpp
         pipeline/pipeline_utils.hpp
         pipeline/query.hpp

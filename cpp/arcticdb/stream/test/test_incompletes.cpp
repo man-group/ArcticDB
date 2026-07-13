@@ -39,7 +39,7 @@ TEST(Append, Simple) {
     generate_filtered_field_descriptors(pipeline_context, {});
 
     auto read_options = ReadOptions{};
-    read_options.set_output_format(OutputFormat::NATIVE);
+    read_options.set_output_config(PandasOutputConfig{});
     SegmentInMemory allocated_frame = allocate_frame(pipeline_context, read_options);
     ASSERT_EQ(allocated_frame.row_count(), frame->num_rows);
 }
