@@ -105,15 +105,48 @@ struct FlippedComparator<NotEqualsOperator> {
 };
 
 template<typename Func>
+StatsComparison adjust_for_missing(StatsComparison result, uint64_t missing_count) {
+    if (missing_count == 0) { // no nulls or nans
+        return result;
+    }
+
+    using F = std::remove_cvref_t<Func>;
+
+    if constexpr (std::is_same_v<F, NotEqualsOperator>) {
+        if (result == StatsComparison::NONE_MATCH) {
+            // col = [3, NaN, NaN, 3], due to min=3 and max=3:
+            // Filter [col != 3] returns NONE_MATCH, but [NaN != 3] is a match, downgrade to UNKNOWN
+            return StatsComparison::UNKNOWN;
+        }
+    } else {
+        if (result == StatsComparison::ALL_MATCH) {
+            // col = [3, NaN, NaN, 3], due to min=3 and max=3:
+            // Filter [col == 3] returns ALL_MATCH, but [NaN == 3] is not a match, downgrade to UNKNOWN
+
+            // col = [5, 8, NaN], due to min=5 and max=8:
+            // Filter [col < 100] returns ALL_MATCH, but [NaN < 100] is not a match, downgrade to UNKNOWN
+            return StatsComparison::UNKNOWN;
+        }
+    }
+
+    return result;
+}
+
+template<typename Func>
 StatsComparison stats_comparator(const ColumnStatsValues& stats_lhs, const Value& val_rhs, Func&& func) {
     if (stats_lhs.column_absent) {
         return StatsComparison::NONE_MATCH;
+    }
+    if (stats_lhs.only_nulls()) {
+        // Every row is null: `!=` matches all of them, every other comparison matches none.
+        return std::is_same_v<std::remove_cvref_t<Func>, NotEqualsOperator> ? StatsComparison::ALL_MATCH
+                                                                            : StatsComparison::NONE_MATCH;
     }
     if (!stats_lhs.min) {
         return StatsComparison::UNKNOWN;
     }
 
-    return details::visit_type(stats_lhs.min->data_type(), [&](auto stats_tag) -> StatsComparison {
+    auto result = details::visit_type(stats_lhs.min->data_type(), [&](auto stats_tag) -> StatsComparison {
         using StatsTag = std::remove_reference_t<decltype(stats_tag)>;
 
         return details::visit_type(val_rhs.data_type(), [&](auto val_tag) -> StatsComparison {
@@ -152,6 +185,7 @@ StatsComparison stats_comparator(const ColumnStatsValues& stats_lhs, const Value
             return StatsComparison::UNKNOWN;
         });
     });
+    return adjust_for_missing<Func>(result, stats_lhs.nan_count + stats_lhs.null_count);
 }
 
 template<typename Func>
@@ -163,7 +197,7 @@ StatsComparison stats_comparator(const ColumnStatsValues& stats_lhs, const Colum
         return StatsComparison::UNKNOWN;
     }
 
-    return details::visit_type(stats_lhs.min->data_type(), [&](auto lhs_tag) -> StatsComparison {
+    auto result = details::visit_type(stats_lhs.min->data_type(), [&](auto lhs_tag) -> StatsComparison {
         using LhsTag = std::remove_reference_t<decltype(lhs_tag)>;
 
         return details::visit_type(stats_rhs.min->data_type(), [&](auto rhs_tag) -> StatsComparison {
@@ -202,6 +236,9 @@ StatsComparison stats_comparator(const ColumnStatsValues& stats_lhs, const Colum
             return StatsComparison::UNKNOWN;
         });
     });
+    return adjust_for_missing<Func>(
+            result, stats_lhs.nan_count + stats_lhs.null_count + stats_rhs.nan_count + stats_rhs.null_count
+    );
 }
 
 template<typename Func>

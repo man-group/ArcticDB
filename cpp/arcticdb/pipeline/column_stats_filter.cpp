@@ -143,32 +143,40 @@ std::vector<StatsMetadataForColumn> calculate_stats_metadata(
         );
         stats_metadata_for_column.col_name = std::string{tsd.fields().at(data_col_offset).name()};
         for (const auto& entry : entry_list.entries()) {
-            if (entry.type() != arcticc::pb2::column_stats_pb2::MIN_V1 &&
-                entry.type() != arcticc::pb2::column_stats_pb2::MAX_V1) {
+            const auto entry_type = entry.type();
+            const bool is_min_max = entry_type == arcticc::pb2::column_stats_pb2::MIN_V1 ||
+                                    entry_type == arcticc::pb2::column_stats_pb2::MAX_V1;
+            const bool is_count = entry_type == arcticc::pb2::column_stats_pb2::NAN_COUNT_V1 ||
+                                  entry_type == arcticc::pb2::column_stats_pb2::NULL_COUNT_V1;
+            if (!is_min_max && !is_count) {
                 log::version().warn(
                         "Unknown column stats type {} for column {}, skipping",
-                        static_cast<int>(entry.type()),
+                        static_cast<int>(entry_type),
                         stats_metadata_for_column.col_name
                 );
                 continue;
             }
-            const auto field_name = to_segment_column_name(stats_metadata_for_column.col_name, entry.type());
+            const auto field_name = to_segment_column_name(stats_metadata_for_column.col_name, entry_type);
             const auto col_index = segment.column_index(field_name);
             if (!col_index.has_value()) {
                 // Column was filtered out at decode time, or never present in this segment.
                 continue;
             }
-            const auto entry_data_type = fields.at(*col_index).type().data_type();
-            if (stats_metadata_for_column.data_type == DataType::UNKNOWN) {
-                stats_metadata_for_column.data_type = entry_data_type;
-            } else {
-                util::check(
-                        stats_metadata_for_column.data_type == entry_data_type,
-                        "MIN/MAX stats columns for {} disagree on data type",
-                        stats_metadata_for_column.col_name
-                );
+            // NAN_COUNT/NULL_COUNT are always UINT64 and tracked separately; only MIN/MAX define the
+            // column's value data type.
+            if (is_min_max) {
+                const auto entry_data_type = fields.at(*col_index).type().data_type();
+                if (stats_metadata_for_column.data_type == DataType::UNKNOWN) {
+                    stats_metadata_for_column.data_type = entry_data_type;
+                } else {
+                    util::check(
+                            stats_metadata_for_column.data_type == entry_data_type,
+                            "MIN/MAX stats columns for {} disagree on data type",
+                            stats_metadata_for_column.col_name
+                    );
+                }
             }
-            stats_metadata_for_column.entries.push_back({*col_index, entry.type()});
+            stats_metadata_for_column.entries.push_back({*col_index, entry_type});
         }
         if (!stats_metadata_for_column.entries.empty()) {
             stats_metadata.emplace_back(std::move(stats_metadata_for_column));
@@ -181,19 +189,31 @@ std::unordered_map<std::string, StatsForColumn> load_stats_by_column(
         const SegmentInMemory& segment, std::vector<StatsMetadataForColumn> stats_metadata, size_t first_kept,
         size_t last_kept_excl, size_t num_rows
 ) {
+    using namespace arcticc::pb2::column_stats_pb2;
     std::unordered_map<std::string, StatsForColumn> stats_by_column;
     for (auto& stats_metadata_for_column : stats_metadata) {
         StatsForColumn stats_for_column;
         stats_for_column.mins.resize(num_rows);
         stats_for_column.maxes.resize(num_rows);
+        stats_for_column.nan_counts.resize(num_rows, 0);
+        stats_for_column.null_counts.resize(num_rows, 0);
+
+        internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+                stats_metadata_for_column.data_type != DataType::UNKNOWN,
+                "Column stats for {} have no MIN/MAX and therefore an unknown data type",
+                stats_metadata_for_column.col_name
+        );
 
         details::visit_type(stats_metadata_for_column.data_type, [&]<typename T>(T) {
             using type_info = ScalarTypeInfo<T>;
             if constexpr (is_numeric_type(type_info::data_type) || is_time_type(type_info::data_type) ||
                           is_bool_type(type_info::data_type)) {
                 for (const auto& entry : stats_metadata_for_column.entries) {
+                    if (entry.stat_type != MIN_V1 && entry.stat_type != MAX_V1) {
+                        continue;
+                    }
                     const auto& column = segment.column(static_cast<position_t>(entry.segment_col_idx));
-                    const bool is_min = entry.stat_type == arcticc::pb2::column_stats_pb2::MIN_V1;
+                    const bool is_min = entry.stat_type == MIN_V1;
                     auto& dest = is_min ? stats_for_column.mins : stats_for_column.maxes;
                     for_each_enumerated<typename type_info::TDT>(
                             column,
@@ -207,6 +227,22 @@ std::unordered_map<std::string, StatsForColumn> load_stats_by_column(
                 }
             }
         });
+
+        // NaN/NaT and null (sparse-gap) counts are stored inline with min/max as dense UINT64 columns.
+        using CountTDT = ScalarTagType<DataTypeTag<DataType::UINT64>>;
+        for (const auto& entry : stats_metadata_for_column.entries) {
+            if (entry.stat_type != NAN_COUNT_V1 && entry.stat_type != NULL_COUNT_V1) {
+                continue;
+            }
+            auto& dest = entry.stat_type == NAN_COUNT_V1 ? stats_for_column.nan_counts : stats_for_column.null_counts;
+            const auto& column = segment.column(static_cast<position_t>(entry.segment_col_idx));
+            for_each_enumerated<CountTDT>(column, [&](const ColumnData::Enumeration<uint64_t>& enumerating_it) {
+                auto idx = static_cast<size_t>(enumerating_it.idx());
+                if (idx >= first_kept && idx < last_kept_excl) {
+                    dest.at(idx - first_kept) = enumerating_it.value();
+                }
+            });
+        }
 
         stats_by_column.emplace(std::move(stats_metadata_for_column.col_name), std::move(stats_for_column));
     }
@@ -353,6 +389,11 @@ std::vector<ColumnStatsValues> ColumnStatsData::values_for_column(
         if (min_set) {
             result_entry.min = stats.mins.at(r);
             result_entry.max = stats.maxes.at(r);
+            result_entry.nan_count = stats.nan_counts.at(r);
+            result_entry.null_count = stats.null_counts.at(r);
+        } else if (stats.nan_counts.at(r) > 0 || stats.null_counts.at(r) > 0) {
+            result_entry.nan_count = stats.nan_counts.at(r);
+            result_entry.null_count = stats.null_counts.at(r);
         } else {
             result_entry.column_absent = true;
         }
