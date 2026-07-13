@@ -226,6 +226,15 @@ jobs:
         run: bash build_tooling/vcpkg_upload_assets.sh
         continue-on-error: true
 
+      # Windows ships no IANA tz database, so the date library used by the C++ tests
+      # (via date::locate_zone) can't resolve named timezones without it. pyarrow's helper
+      # downloads it to %USERPROFILE%\Downloads\tzdata, where the date library looks.
+      - name: Download Windows timezone data for the C++ tests
+        if: inputs.job_type == 'cpp-tests' && matrix.os == 'windows'
+        run: |
+          python -m pip install --retries 3 --timeout 180 pyarrow
+          python -c "from pyarrow.util import download_tzdata_on_windows; download_tzdata_on_windows()"
+
       - name: Compile C++ rapidcheck tests
         if: inputs.job_type == 'cpp-tests'
         run: cd cpp; cmake --build --preset $ARCTIC_CMAKE_PRESET --target arcticdb_rapidcheck_tests -j $CMAKE_BUILD_PARALLEL_LEVEL

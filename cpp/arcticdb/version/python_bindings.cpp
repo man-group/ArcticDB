@@ -1248,8 +1248,9 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                         return std::nullopt;
                     }
                 }();
-                auto record_batch =
-                        empty_record_batch_from_descriptor(stream_desc, read_options.arrow_output_config(), columns);
+                auto record_batch = empty_record_batch_from_descriptor(
+                        stream_desc, read_options.arrow_output_config(), columns, norm
+                );
                 return std::make_pair(std::move(record_batch), python_util::pb_to_python(schema.norm_metadata_));
             }
     );

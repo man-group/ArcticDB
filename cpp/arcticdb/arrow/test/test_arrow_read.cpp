@@ -102,6 +102,32 @@ void fill_chunked_string_column(
     }
 }
 
+TEST(ColumnMetadata, NonArrow) {
+    proto::descriptors::NormalizationMetadata norm_meta;
+    // Accessing like this sets the oneof to df
+    norm_meta.mutable_df();
+    ASSERT_FALSE(column_metadata(norm_meta, "col").has_value());
+}
+
+TEST(ColumnMetadata, MissingColumn) {
+    proto::descriptors::NormalizationMetadata norm_meta;
+    (*norm_meta.mutable_experimental_arrow()->mutable_columns())["col"] =
+            proto::descriptors::NormalizationMetadata::ExperimentalArrow::ColumnMeta();
+    ASSERT_FALSE(column_metadata(norm_meta, "missing col").has_value());
+}
+
+TEST(ColumnMetadata, PresentColumn) {
+    std::string tz{"Europe/Brussels"};
+    proto::descriptors::NormalizationMetadata norm_meta;
+    proto::descriptors::NormalizationMetadata::ExperimentalArrow::ColumnMeta col_meta;
+    col_meta.set_timezone(tz);
+    (*norm_meta.mutable_experimental_arrow()->mutable_columns())["col"] = col_meta;
+    auto new_col_meta = column_metadata(norm_meta, "col");
+    ASSERT_TRUE(new_col_meta.has_value());
+    ASSERT_TRUE(new_col_meta->has_timezone());
+    ASSERT_EQ(new_col_meta->timezone(), tz);
+}
+
 TEST(ArrowRead, ZeroCopy) {
     size_t num_rows{10};
     uint8_t* data_ptr = get_detachable_allocator().allocate(sizeof(uint64_t) * num_rows);
@@ -273,7 +299,8 @@ TEST(ArrowRead, ConvertSegmentBasic) {
     // Verify the index column has the expected number of chunks
     EXPECT_EQ(segment.column(0).num_blocks(), num_chunks);
 
-    auto arrow_data = segment_to_arrow_data(segment);
+    proto::descriptors::NormalizationMetadata norm_meta;
+    auto arrow_data = segment_to_arrow_data(segment, norm_meta);
     // We expect to see num_chunks record batches
     EXPECT_EQ(arrow_data.size(), num_chunks);
     for (const auto& record_batch : arrow_data) {
@@ -290,6 +317,51 @@ TEST(ArrowRead, ConvertSegmentBasic) {
         EXPECT_EQ(columns[2].data_type(), sparrow::data_type::INT64);
         EXPECT_EQ(names[3], "floats");
         EXPECT_EQ(columns[3].data_type(), sparrow::data_type::DOUBLE);
+        for (const auto& col : columns) {
+            EXPECT_EQ(col.size(), chunk_size);
+        }
+    }
+}
+
+TEST(ArrowRead, ConvertSegmentWithTimezones) {
+    const auto num_rows = 100u;
+    const auto chunk_size = 10u;
+    const auto num_chunks = num_rows / chunk_size;
+    const auto fields = std::array{
+            scalar_field(DataType::NANOSECONDS_UTC64, "col_with_tz"),
+            scalar_field(DataType::NANOSECONDS_UTC64, "col_without_tz"),
+    };
+    auto segment = get_detachable_segment(fields, num_rows, chunk_size, ReadOptions{});
+    // Verify the index column has the expected number of chunks
+    EXPECT_EQ(segment.column(0).num_blocks(), num_chunks);
+
+    std::string tz_str{"Europe/Brussels"};
+    proto::descriptors::NormalizationMetadata norm_meta;
+    proto::descriptors::NormalizationMetadata::ExperimentalArrow::ColumnMeta column_meta;
+    column_meta.set_timezone(tz_str);
+    (*norm_meta.mutable_experimental_arrow()->mutable_columns())["col_with_tz"] = column_meta;
+    auto arrow_data = segment_to_arrow_data(segment, norm_meta);
+    // We expect to see num_chunks record batches
+    EXPECT_EQ(arrow_data.size(), num_chunks);
+    for (const auto& record_batch : arrow_data) {
+        auto names = record_batch.names();
+        auto columns = record_batch.columns();
+        // Each record batch should have all columns for the row range (including the index)
+        EXPECT_EQ(names.size(), fields.size() + 1);
+        EXPECT_EQ(columns.size(), fields.size() + 1);
+        EXPECT_EQ(names[0], "time");
+        EXPECT_EQ(columns[0].data_type(), sparrow::data_type::TIMESTAMP_NANOSECONDS);
+        const date::time_zone* dtz = sparrow::get_timezone(sparrow::detail::array_access::get_arrow_proxy(columns[0]));
+        ASSERT_TRUE(dtz == nullptr);
+        EXPECT_EQ(names[1], "col_with_tz");
+        EXPECT_EQ(columns[1].data_type(), sparrow::data_type::TIMESTAMP_NANOSECONDS);
+        dtz = sparrow::get_timezone(sparrow::detail::array_access::get_arrow_proxy(columns[1]));
+        ASSERT_FALSE(dtz == nullptr);
+        ASSERT_EQ(dtz->name(), tz_str);
+        EXPECT_EQ(names[2], "col_without_tz");
+        EXPECT_EQ(columns[2].data_type(), sparrow::data_type::TIMESTAMP_NANOSECONDS);
+        dtz = sparrow::get_timezone(sparrow::detail::array_access::get_arrow_proxy(columns[2]));
+        ASSERT_TRUE(dtz == nullptr);
         for (const auto& col : columns) {
             EXPECT_EQ(col.size(), chunk_size);
         }
@@ -338,7 +410,8 @@ TEST(ArrowRead, ConvertSegmentMultipleStringColumns) {
     segment.set_string_pool(string_pool);
 
     // Convert to arrow
-    auto arrow_data = segment_to_arrow_data(segment);
+    proto::descriptors::NormalizationMetadata norm_meta;
+    auto arrow_data = segment_to_arrow_data(segment, norm_meta);
     EXPECT_EQ(arrow_data.size(), num_chunks);
     for (auto i = 0u; i < num_chunks; ++i) {
         auto row_count = std::min(chunk_size, num_rows - i * chunk_size);

@@ -77,7 +77,7 @@ inline ReadResult create_python_read_result(
 
     auto get_python_frame = [output_format](auto& result) -> OutputFrame {
         if (output_format == OutputFormat::ARROW) {
-            return ArrowOutputFrame{segment_to_arrow_data(result.frame_)};
+            return ArrowOutputFrame{segment_to_arrow_data(result.frame_, result.desc_.proto().normalization())};
         } else {
             return pipelines::PandasOutputFrame{result.frame_};
         }

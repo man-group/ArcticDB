@@ -34,8 +34,10 @@ static void BM_arrow_convert_single_record_batch_to_segment(benchmark::State& st
     }
     std::vector<sparrow::record_batch> record_batches;
     record_batches.emplace_back(create_record_batch(columns));
+    proto::descriptors::NormalizationMetadata::ExperimentalArrow arrow_meta;
+    arrow_meta.set_has_index(has_index);
     for (auto _ : state) {
-        record_batches_to_columns(record_batches, has_index);
+        record_batches_to_columns(record_batches, arrow_meta);
     }
 }
 
@@ -63,8 +65,10 @@ static void BM_arrow_convert_multiple_record_batches_to_segment(benchmark::State
         }
         record_batches.emplace_back(create_record_batch(columns));
     }
+    proto::descriptors::NormalizationMetadata::ExperimentalArrow arrow_meta;
+    arrow_meta.set_has_index(false);
     for (auto _ : state) {
-        record_batches_to_columns(record_batches);
+        record_batches_to_columns(record_batches, arrow_meta);
     }
 }
 

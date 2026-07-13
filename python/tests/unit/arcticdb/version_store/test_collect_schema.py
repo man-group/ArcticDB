@@ -105,6 +105,41 @@ def test_collect_schema_index_with_timezone(lmdb_library):
     assert lib.read(sym, columns=["col2"], lazy=True)._collect_schema() == lib.read(sym, columns=["col2"]).data.schema
 
 
+def test_collect_schema_with_timezones(lmdb_library):
+    lib = lmdb_library
+    lib._nvs.set_output_format(OutputFormat.POLARS)
+    lib._nvs._set_allow_arrow_input()
+    sym = "test_collect_schema_with_timezones"
+    # No column selection
+    table = pa.table(
+        {
+            "ts": pa.Array.from_pandas(
+                pd.date_range("2025-01-01", periods=2, tz="America/New_York"),
+                type=pa.timestamp("ns", tz="America/New_York"),
+            ),
+            "col_utc": pa.Array.from_pandas(
+                pd.date_range("2025-01-03", periods=2, tz="Etc/UTC"),
+                type=pa.timestamp("ns", tz="Etc/UTC"),
+            ),
+            "col_with_tz": pa.Array.from_pandas(
+                pd.date_range("2025-01-03", periods=2, tz="Europe/Brussels"),
+                type=pa.timestamp("ns", tz="Europe/Brussels"),
+            ),
+            "col_without_tz": pa.Array.from_pandas(
+                pd.date_range("2025-01-03", periods=2),
+                type=pa.timestamp("ns"),
+            ),
+        }
+    )
+    lib.write(sym, table, index_column=True)
+    assert lib.read(sym, lazy=True)._collect_schema() == lib.read(sym).data.schema
+    # With column selection
+    assert (
+        lib.read(sym, columns=["col_with_tz", "col_without_tz"], lazy=True)._collect_schema()
+        == lib.read(sym, columns=["col_with_tz", "col_without_tz"]).data.schema
+    )
+
+
 def test_collect_schema_multiindex(lmdb_library):
     lib = lmdb_library
     lib._nvs.set_output_format(OutputFormat.POLARS)

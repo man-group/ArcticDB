@@ -225,7 +225,12 @@ message NormalizationMetadata {
     }
 
     message ExperimentalArrow {
+        message ColumnMeta {
+            optional string timezone = 1;
+        }
+
         bool has_index = 1;
+        map<string, ColumnMeta> columns = 2;
     }
 
     oneof input_type {

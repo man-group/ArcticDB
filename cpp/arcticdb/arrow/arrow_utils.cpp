@@ -12,11 +12,15 @@
 #include <arcticdb/column_store/column.hpp>
 #include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/util/allocator.hpp>
+#include <sparrow/layout/array_access.hpp>
 #include <sparrow/layout/primitive_data_access.hpp>
+#include <sparrow/utils/temporal.hpp>
 #include <sparrow/record_batch.hpp>
 #include <utility>
 
 namespace arcticdb {
+
+using ArrowMeta = proto::descriptors::NormalizationMetadata::ExperimentalArrow;
 
 std::optional<sparrow::validity_bitmap> create_validity_bitmap(
         size_t offset, const Column& column, size_t bitmap_size
@@ -37,14 +41,14 @@ std::optional<sparrow::validity_bitmap> create_validity_bitmap(
 }
 
 template<typename T>
-sparrow::primitive_array<T> create_primitive_array(
+sparrow::array create_primitive_array(
         T* data_ptr, size_t data_size, std::optional<sparrow::validity_bitmap>&& validity_bitmap
 ) {
     sparrow::u8_buffer<T> buffer(data_ptr, data_size, get_detachable_allocator());
     if (validity_bitmap) {
-        return sparrow::primitive_array<T>{std::move(buffer), data_size, std::move(*validity_bitmap)};
+        return sparrow::array{sparrow::primitive_array<T>{std::move(buffer), data_size, std::move(*validity_bitmap)}};
     } else {
-        return sparrow::primitive_array<T>{std::move(buffer), data_size};
+        return sparrow::array{sparrow::primitive_array<T>{std::move(buffer), data_size}};
     }
 }
 
@@ -80,43 +84,57 @@ sparrow::array create_packed_bool_array(
     return arr;
 }
 
-template<typename T>
-sparrow::timestamp_without_timezone_nanoseconds_array create_timestamp_array(
-        T* data_ptr, size_t data_size, std::optional<sparrow::validity_bitmap>&& validity_bitmap
+sparrow::array create_timestamp_array(
+        timestamp* data_ptr, size_t data_size, std::optional<sparrow::validity_bitmap>&& validity_bitmap,
+        const date::time_zone* tz = nullptr
 ) {
-    static_assert(sizeof(T) == sizeof(sparrow::zoned_time_without_timezone_nanoseconds));
-    // We default to using timestamps without timezones. If the normalization metadata contains a timezone it will be
-    // applied during normalization in python layer.
-    sparrow::u8_buffer<sparrow::zoned_time_without_timezone_nanoseconds> buffer(
-            reinterpret_cast<sparrow::zoned_time_without_timezone_nanoseconds*>(data_ptr),
-            data_size,
-            get_detachable_allocator()
-    );
-    if (validity_bitmap) {
-        return sparrow::timestamp_without_timezone_nanoseconds_array{
-                std::move(buffer), data_size, std::move(*validity_bitmap)
-        };
+    static_assert(sizeof(timestamp) == sizeof(sparrow::zoned_time_without_timezone_nanoseconds));
+    if (tz == nullptr) {
+        // Timezone naive
+        sparrow::u8_buffer<sparrow::zoned_time_without_timezone_nanoseconds> buffer(
+                reinterpret_cast<sparrow::zoned_time_without_timezone_nanoseconds*>(data_ptr),
+                data_size,
+                get_detachable_allocator()
+        );
+        if (validity_bitmap) {
+            return sparrow::array{sparrow::timestamp_without_timezone_nanoseconds_array{
+                    std::move(buffer), data_size, std::move(*validity_bitmap)
+            }};
+        } else {
+            return sparrow::array{sparrow::timestamp_without_timezone_nanoseconds_array{std::move(buffer), data_size}};
+        }
     } else {
-        return sparrow::timestamp_without_timezone_nanoseconds_array{std::move(buffer), data_size};
+        // Timezone aware. Arrow stores the timestamp in UTC regardless of timezone, so no transformations are required
+        // from our internal format
+        sparrow::u8_buffer<timestamp> buffer(
+                reinterpret_cast<timestamp*>(data_ptr), data_size, get_detachable_allocator()
+        );
+        if (validity_bitmap) {
+            return sparrow::array{
+                    sparrow::timestamp_nanoseconds_array{tz, std::move(buffer), std::move(*validity_bitmap)}
+            };
+        } else {
+            return sparrow::array{sparrow::timestamp_nanoseconds_array{tz, std::move(buffer)}};
+        }
     }
 }
 
 template<typename T>
-sparrow::dictionary_encoded_array<T> create_dict_array(
+sparrow::array create_dict_array(
         sparrow::array&& dict_values_array, sparrow::u8_buffer<T>&& dict_keys_buffer,
         std::optional<sparrow::validity_bitmap>&& validity_bitmap
 ) {
     if (validity_bitmap) {
-        return sparrow::dictionary_encoded_array<T>{
+        return sparrow::array{sparrow::dictionary_encoded_array<T>{
                 typename sparrow::dictionary_encoded_array<T>::keys_buffer_type(std::move(dict_keys_buffer)),
                 std::move(dict_values_array),
                 std::move(*validity_bitmap)
-        };
+        }};
     } else {
-        return sparrow::dictionary_encoded_array<T>{
+        return sparrow::array{sparrow::dictionary_encoded_array<T>{
                 typename sparrow::dictionary_encoded_array<T>::keys_buffer_type(std::move(dict_keys_buffer)),
                 std::move(dict_values_array),
-        };
+        }};
     }
 }
 
@@ -239,13 +257,20 @@ sparrow::array string_dict_from_block(
     auto dict_encoded = create_dict_array<int32_t>(
             sparrow::array{std::move(dict_values_array)}, std::move(dict_keys_buffer), std::move(maybe_bitmap)
     );
+    dict_encoded.set_name(name);
+    return dict_encoded;
+}
 
-    sparrow::array arr{std::move(dict_encoded)};
-    arr.set_name(name);
-    return arr;
+const date::time_zone* timezone(const std::optional<ArrowMeta::ColumnMeta>& column_meta) {
+    if (column_meta.has_value() && column_meta->has_timezone()) {
+        return date::locate_zone(column_meta->timezone());
+    } else {
+        return nullptr;
+    }
 }
 
 template<typename TagType>
+requires(!is_time_type(TagType::DataTypeTag::data_type))
 sparrow::array arrow_array_from_block(
         TypedBlockData<TagType>& block, std::string_view name, std::optional<sparrow::validity_bitmap>&& maybe_bitmap
 ) {
@@ -253,20 +278,14 @@ sparrow::array arrow_array_from_block(
     using RawType = typename DataTagType::raw_type;
     auto* data_ptr = block.release();
     const auto data_size = block.row_count();
-    auto arr = [&]() {
-        if constexpr (is_time_type(TagType::DataTypeTag::data_type)) {
-            auto timestamp_array = create_timestamp_array<RawType>(data_ptr, data_size, std::move(maybe_bitmap));
-            return sparrow::array{std::move(timestamp_array)};
-        } else {
-            auto primitive_array = create_primitive_array<RawType>(data_ptr, data_size, std::move(maybe_bitmap));
-            return sparrow::array{std::move(primitive_array)};
-        }
-    }();
+    auto arr = create_primitive_array<RawType>(data_ptr, data_size, std::move(maybe_bitmap));
     arr.set_name(name);
     return arr;
 }
 
-sparrow::array empty_arrow_array_for_column(const Column& column, std::string_view name) {
+sparrow::array empty_arrow_array_for_column(
+        const Column& column, std::string_view name, const std::optional<ArrowMeta::ColumnMeta>& opt_column_meta
+) {
     auto res = details::visit_scalar(column.type(), [&](auto&& tdt) {
         using TagType = std::decay_t<decltype(tdt)>;
         using DataTagType = typename TagType::DataTypeTag;
@@ -279,37 +298,42 @@ sparrow::array empty_arrow_array_for_column(const Column& column, std::string_vi
             } else {
                 sparrow::u8_buffer<int32_t> dict_keys_buffer{nullptr, 0, get_detachable_allocator()};
                 auto dict_values_array = minimal_strings_for_dict();
-                return sparrow::array{create_dict_array<int32_t>(
+                return create_dict_array<int32_t>(
                         sparrow::array{std::move(dict_values_array)},
                         std::move(dict_keys_buffer),
                         std::move(validity_bitmap)
-                )};
+                );
             }
         } else if constexpr (is_time_type(TagType::DataTypeTag::data_type)) {
-            return sparrow::array{create_timestamp_array<RawType>(nullptr, 0, std::move(validity_bitmap))};
+            return create_timestamp_array(nullptr, 0, std::move(validity_bitmap), timezone(opt_column_meta));
         } else {
-            return sparrow::array{create_primitive_array<RawType>(nullptr, 0, std::move(validity_bitmap))};
+            return create_primitive_array<RawType>(nullptr, 0, std::move(validity_bitmap));
         }
     });
     res.set_name(name);
     return res;
 }
 
-std::vector<sparrow::array> arrow_arrays_from_column(const Column& column, std::string_view name) {
+std::vector<sparrow::array> arrow_arrays_from_column(
+        const Column& column, std::string_view name, const std::optional<ArrowMeta::ColumnMeta>& opt_column_meta
+) {
     std::vector<sparrow::array> vec;
     auto column_data = column.data();
     vec.reserve(column.num_blocks());
-    details::visit_scalar(column.type(), [&vec, &column_data, &column, name](auto&& impl) {
+    details::visit_scalar(column.type(), [&vec, &column_data, &column, name, &opt_column_meta](auto&& impl) {
         using TagType = std::decay_t<decltype(impl)>;
         if (column_data.num_blocks() == 0) {
             // For empty columns we want to return one empty array instead of no arrays.
-            vec.emplace_back(empty_arrow_array_for_column(column, name));
+            vec.emplace_back(empty_arrow_array_for_column(column, name, opt_column_meta));
+            return;
         }
+        // Only used with timestamp columns
+        const date::time_zone* tz = timezone(opt_column_meta);
         while (auto block = column_data.next<TagType>()) {
             if (block->row_count() == 0) {
                 // Empty blocks should produce empty arrays, without reading extra buffers, because they share the same
                 // offset as the next block.
-                vec.emplace_back(empty_arrow_array_for_column(column, name));
+                vec.emplace_back(empty_arrow_array_for_column(column, name, opt_column_meta));
                 continue;
             }
             if constexpr (is_bool_type(TagType::DataTypeTag::data_type)) {
@@ -330,6 +354,10 @@ std::vector<sparrow::array> arrow_arrays_from_column(const Column& column, std::
                     } else {
                         vec.emplace_back(string_dict_from_block<TagType>(*block, column, name, std::move(bitmap)));
                     }
+                } else if constexpr (is_time_type(TagType::DataTypeTag::data_type)) {
+                    vec.emplace_back(create_timestamp_array(block->release(), block->row_count(), std::move(bitmap), tz)
+                    );
+                    vec.back().set_name(name);
                 } else {
                     vec.emplace_back(arrow_array_from_block<TagType>(*block, name, std::move(bitmap)));
                 }
@@ -339,7 +367,21 @@ std::vector<sparrow::array> arrow_arrays_from_column(const Column& column, std::
     return vec;
 }
 
-std::vector<sparrow::record_batch> segment_to_arrow_data(SegmentInMemory& segment) {
+std::optional<ArrowMeta::ColumnMeta> column_metadata(
+        const proto::descriptors::NormalizationMetadata& norm_meta, std::string_view column_name
+) {
+    if (norm_meta.has_experimental_arrow()) {
+        if (const auto it = norm_meta.experimental_arrow().columns().find(column_name);
+            it != norm_meta.experimental_arrow().columns().end()) {
+            return it->second;
+        }
+    }
+    return std::nullopt;
+}
+
+std::vector<sparrow::record_batch> segment_to_arrow_data(
+        SegmentInMemory& segment, const proto::descriptors::NormalizationMetadata& norm_meta
+) {
     const auto total_blocks = segment.num_blocks();
     const auto num_columns = segment.num_columns();
     if (num_columns == 0) {
@@ -354,6 +396,7 @@ std::vector<sparrow::record_batch> segment_to_arrow_data(SegmentInMemory& segmen
     // provided outside of the time range covered by the symbol)
     std::vector<sparrow::record_batch> output{column_blocks == 0 ? 1 : column_blocks, sparrow::record_batch{}};
     for (auto i = 0UL; i < num_columns; ++i) {
+        const auto& column_name = segment.field(i).name();
         auto& column = segment.column(static_cast<position_t>(i));
         util::check(
                 column.num_blocks() == column_blocks,
@@ -361,8 +404,8 @@ std::vector<sparrow::record_batch> segment_to_arrow_data(SegmentInMemory& segmen
                 column.num_blocks(),
                 column_blocks
         );
-
-        auto column_arrays = arrow_arrays_from_column(column, segment.field(i).name());
+        const auto opt_column_meta = column_metadata(norm_meta, column_name);
+        auto column_arrays = arrow_arrays_from_column(column, column_name, opt_column_meta);
         util::check(
                 column_arrays.size() == output.size(),
                 "Unexpected number of arrow arrays returned: {} != {}",
@@ -372,9 +415,7 @@ std::vector<sparrow::record_batch> segment_to_arrow_data(SegmentInMemory& segmen
 
         for (auto block_idx = 0UL; block_idx < column_arrays.size(); ++block_idx) {
             util::check(block_idx < output.size(), "Block index overflow {} > {}", block_idx, output.size());
-            output[block_idx].add_column(
-                    static_cast<std::string>(segment.field(i).name()), std::move(column_arrays[block_idx])
-            );
+            output[block_idx].add_column(static_cast<std::string>(column_name), std::move(column_arrays[block_idx]));
         }
     }
     return output;
@@ -433,25 +474,49 @@ DataType arcticdb_type_from_arrow_array(const sparrow::array& array) {
     }
 }
 
+std::optional<ArrowMeta::ColumnMeta> generate_column_metadata(const sparrow::array& array, DataType data_type) {
+    std::optional<ArrowMeta::ColumnMeta> opt_column_meta;
+    switch (data_type) {
+    case DataType::NANOSECONDS_UTC64: {
+        opt_column_meta.emplace();
+        const auto& proxy = sparrow::detail::array_access::get_arrow_proxy(array);
+        if (const date::time_zone* dtz = sparrow::get_timezone(proxy); dtz != nullptr) {
+            opt_column_meta->set_timezone(dtz->name());
+        }
+        break;
+    }
+    default:
+        break;
+    }
+    return opt_column_meta;
+}
+
 std::pair<std::vector<Column>, entity::StreamDescriptor> record_batches_to_columns(
-        const std::vector<sparrow::record_batch>& record_batches, bool has_index
+        const std::vector<sparrow::record_batch>& record_batches, ArrowMeta& norm_meta
 ) {
     if (record_batches.empty()) {
         return {};
     }
     const auto& first_batch = record_batches.front();
     schema::check<ErrorCode::E_COLUMN_DOESNT_EXIST>(
-            !has_index || first_batch.nb_columns() > 0, "Cannot use index_column=True on a table with no columns"
+            !norm_meta.has_index() || first_batch.nb_columns() > 0,
+            "Cannot use index_column=True on a table with no columns"
     );
     auto column_names = first_batch.names();
     std::vector<Column> columns;
     columns.reserve(first_batch.nb_columns());
     StreamDescriptor desc;
     for (size_t idx = 0; idx < first_batch.nb_columns(); ++idx) {
-        auto data_type = arcticdb_type_from_arrow_array(first_batch.get_column(idx));
+        const auto& column_name = column_names[idx];
+        const auto& array = first_batch.get_column(idx);
+        auto data_type = arcticdb_type_from_arrow_array(array);
+        auto opt_column_meta = generate_column_metadata(array, data_type);
+        if (opt_column_meta.has_value()) {
+            (*norm_meta.mutable_columns())[column_name] = std::move(*opt_column_meta);
+        }
         // The Arrow data may be semantically sparse, but this buffer is still dense, hence Sparsity::NOT_PERMITTED
         columns.emplace_back(make_scalar_type(data_type), Sparsity::NOT_PERMITTED, ChunkedBuffer());
-        desc.add_field(scalar_field(data_type, column_names[idx]));
+        desc.add_field(scalar_field(data_type, column_name));
     }
 
     uint64_t start_row{0};
@@ -506,7 +571,7 @@ std::pair<std::vector<Column>, entity::StreamDescriptor> record_batches_to_colum
 
             if (array.null_count() > 0) {
                 schema::check<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
-                        !(has_index && idx == 0),
+                        !(norm_meta.has_index() && idx == 0),
                         "Index column '{}' cannot contain null values, but {} nulls were found",
                         column_names[idx],
                         array.null_count()
@@ -531,7 +596,8 @@ std::pair<std::vector<Column>, entity::StreamDescriptor> record_batches_to_colum
 
 RecordBatchData empty_record_batch_from_descriptor(
         const entity::StreamDescriptor& stream_desc, const ArrowOutputConfig& arrow_output_config,
-        const std::optional<ankerl::unordered_dense::set<std::string_view>>& columns
+        const std::optional<ankerl::unordered_dense::set<std::string_view>>& columns,
+        const proto::descriptors::NormalizationMetadata& norm_meta
 ) {
     // The logic here is similar to empty_arrow_array_for_column, but there the string format is dictated by the
     // column's buffers, whereas here we rely on the ArrowOutputConfig
@@ -565,11 +631,11 @@ RecordBatchData empty_record_batch_from_descriptor(
                     case ArrowOutputStringFormat::CATEGORICAL: {
                         sparrow::u8_buffer<int32_t> dict_keys_buffer{nullptr, 0, get_detachable_allocator()};
                         auto dict_values_array = minimal_strings_for_dict();
-                        return sparrow::array{create_dict_array<int32_t>(
+                        return create_dict_array<int32_t>(
                                 sparrow::array{std::move(dict_values_array)},
                                 std::move(dict_keys_buffer),
                                 std::move(validity_bitmap)
-                        )};
+                        );
                     }
                     default:
                         util::raise_rte("Unknown ArrowOutputStringFormat {}", static_cast<uint64_t>(string_format));
@@ -578,9 +644,10 @@ RecordBatchData empty_record_batch_from_descriptor(
                         return sparrow::array{};
                     }
                 } else if constexpr (is_time_type(TagType::DataTypeTag::data_type)) {
-                    return sparrow::array{create_timestamp_array<RawType>(nullptr, 0, std::move(validity_bitmap))};
+                    auto opt_column_meta = column_metadata(norm_meta, field.name());
+                    return create_timestamp_array(nullptr, 0, std::move(validity_bitmap), timezone(opt_column_meta));
                 } else {
-                    return sparrow::array{create_primitive_array<RawType>(nullptr, 0, std::move(validity_bitmap))};
+                    return create_primitive_array<RawType>(nullptr, 0, std::move(validity_bitmap));
                 }
             });
             arr.set_name(field.name());

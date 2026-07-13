@@ -343,7 +343,7 @@ void record_batches_to_frame(
     util::check(
             frame.norm_meta.has_experimental_arrow(), "Unexpected non-Arrow norm metadata provided with Arrow data"
     );
-    const auto& arrow_norm_metadata = frame.norm_meta.experimental_arrow();
+    auto& arrow_norm_metadata = *frame.norm_meta.mutable_experimental_arrow();
     // Move the ArrowArray/ArrowSchema out of each RecordBatchData into owning sparrow record_batches.
     // sparrow::record_batch(ArrowArray&&, ArrowSchema&&) takes ownership and will decref the arrow buffers on
     // destruction.
@@ -352,7 +352,7 @@ void record_batches_to_frame(
     for (const auto& rbd : record_batches) {
         sparrow_record_batches.emplace_back(std::move(rbd->array_), std::move(rbd->schema_));
     }
-    auto [columns, descriptor] = record_batches_to_columns(sparrow_record_batches, arrow_norm_metadata.has_index());
+    auto [columns, descriptor] = record_batches_to_columns(sparrow_record_batches, arrow_norm_metadata);
     frame.set_from_columns(
             std::move(columns), std::move(descriptor), std::move(sparrow_record_batches), sortedness_scan
     );

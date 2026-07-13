@@ -29,7 +29,8 @@ struct IndexSegmentReader;
  * The new frame for append/update is compatible with the existing index. Throws various exceptions if not.
  */
 void fix_normalization_or_throw(
-        bool is_append, const pipelines::index::IndexSegmentReader& existing_isr, const pipelines::InputFrame& new_frame
+        bool is_append, const pipelines::index::IndexSegmentReader& existing_isr,
+        const pipelines::InputFrame& new_frame, bool dynamic_schema
 );
 
 proto::descriptors::NormalizationMetadata generate_norm_meta(

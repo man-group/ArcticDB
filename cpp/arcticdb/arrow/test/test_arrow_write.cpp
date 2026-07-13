@@ -24,25 +24,69 @@ using namespace arcticdb;
 
 // Duplicated from arrow_utils.cpp to keep build times down until sparrow array formatting is moved out of
 // sparrow/array.hpp
-template<typename T>
-sparrow::timestamp_without_timezone_nanoseconds_array create_timestamp_array(
-        T* data_ptr, size_t data_size, std::optional<sparrow::validity_bitmap>&& validity_bitmap
+sparrow::array create_timestamp_array(
+        timestamp* data_ptr, size_t data_size, std::optional<sparrow::validity_bitmap>&& validity_bitmap,
+        const date::time_zone* tz = nullptr
 ) {
-    static_assert(sizeof(T) == sizeof(sparrow::zoned_time_without_timezone_nanoseconds));
-    // We default to using timestamps without timezones. If the normalization metadata contains a timezone it will be
-    // applied during normalization in python layer.
-    sparrow::u8_buffer<sparrow::zoned_time_without_timezone_nanoseconds> buffer(
-            reinterpret_cast<sparrow::zoned_time_without_timezone_nanoseconds*>(data_ptr),
-            data_size,
-            get_detachable_allocator()
-    );
-    if (validity_bitmap) {
-        return sparrow::timestamp_without_timezone_nanoseconds_array{
-                std::move(buffer), data_size, std::move(*validity_bitmap)
-        };
+    static_assert(sizeof(timestamp) == sizeof(sparrow::zoned_time_without_timezone_nanoseconds));
+    if (tz == nullptr) {
+        // Timezone naive
+        sparrow::u8_buffer<sparrow::zoned_time_without_timezone_nanoseconds> buffer(
+                reinterpret_cast<sparrow::zoned_time_without_timezone_nanoseconds*>(data_ptr),
+                data_size,
+                get_detachable_allocator()
+        );
+        if (validity_bitmap) {
+            return sparrow::array{sparrow::timestamp_without_timezone_nanoseconds_array{
+                    std::move(buffer), data_size, std::move(*validity_bitmap)
+            }};
+        } else {
+            return sparrow::array{sparrow::timestamp_without_timezone_nanoseconds_array{std::move(buffer), data_size}};
+        }
     } else {
-        return sparrow::timestamp_without_timezone_nanoseconds_array{std::move(buffer), data_size};
+        // Timezone aware. Arrow stores the timestamp in UTC regardless of timezone, so no transformations are required
+        // from our internal format
+        sparrow::u8_buffer<timestamp> buffer(
+                reinterpret_cast<timestamp*>(data_ptr), data_size, get_detachable_allocator()
+        );
+        if (validity_bitmap) {
+            return sparrow::array{
+                    sparrow::timestamp_nanoseconds_array{tz, std::move(buffer), std::move(*validity_bitmap)}
+            };
+        } else {
+            return sparrow::array{sparrow::timestamp_nanoseconds_array{tz, std::move(buffer)}};
+        }
     }
+}
+
+TEST(ArrowGenerateColumnMetadata, NonTimestamp) {
+    std::vector<uint8_t> data(10);
+    std::iota(data.begin(), data.end(), 0U);
+    auto array = create_array(data);
+    ASSERT_FALSE(generate_column_metadata(array, DataType::UINT8).has_value());
+}
+
+TEST(ArrowGenerateColumnMetadata, TimezoneNaive) {
+    size_t num_rows = 10;
+    auto* data_ptr = reinterpret_cast<timestamp*>(allocate_detachable_memory(num_rows * sizeof(timestamp)));
+    std::iota(data_ptr, data_ptr + num_rows, 0UL);
+    auto array = create_timestamp_array(data_ptr, num_rows, std::optional<sparrow::validity_bitmap>());
+    auto opt_column_metadata = generate_column_metadata(array, DataType::NANOSECONDS_UTC64);
+    ASSERT_TRUE(opt_column_metadata.has_value());
+    ASSERT_FALSE(opt_column_metadata->has_timezone());
+}
+
+TEST(ArrowGenerateColumnMetadata, TimezoneAware) {
+    size_t num_rows = 10;
+    auto* data_ptr = reinterpret_cast<timestamp*>(allocate_detachable_memory(num_rows * sizeof(timestamp)));
+    std::iota(data_ptr, data_ptr + num_rows, 0UL);
+    std::string tz_str("Europe/Brussels");
+    const auto* tz = date::locate_zone(tz_str);
+    auto array = create_timestamp_array(data_ptr, num_rows, std::optional<sparrow::validity_bitmap>(), tz);
+    auto opt_column_metadata = generate_column_metadata(array, DataType::NANOSECONDS_UTC64);
+    ASSERT_TRUE(opt_column_metadata.has_value());
+    ASSERT_TRUE(opt_column_metadata->has_timezone());
+    ASSERT_EQ(opt_column_metadata->timezone(), tz_str);
 }
 
 template<typename types>
@@ -69,7 +113,8 @@ TYPED_TEST(ArrowDataToSegmentNumeric, Simple) {
 
     std::vector<sparrow::record_batch> record_batches;
     record_batches.emplace_back(std::move(record_batch));
-    auto [cols, desc] = record_batches_to_columns(record_batches);
+    proto::descriptors::NormalizationMetadata::ExperimentalArrow arrow_meta;
+    auto [cols, desc] = record_batches_to_columns(record_batches, arrow_meta);
 
     ASSERT_EQ(desc.fields().size(), 1);
     ASSERT_EQ(cols.size(), 1);
@@ -112,7 +157,8 @@ TYPED_TEST(ArrowDataToSegmentNumeric, MultiColumn) {
 
     std::vector<sparrow::record_batch> record_batches;
     record_batches.emplace_back(std::move(record_batch));
-    auto [cols, desc] = record_batches_to_columns(record_batches);
+    proto::descriptors::NormalizationMetadata::ExperimentalArrow arrow_meta;
+    auto [cols, desc] = record_batches_to_columns(record_batches, arrow_meta);
 
     ASSERT_EQ(desc.fields().size(), num_columns);
     ASSERT_EQ(cols.size(), num_columns);
@@ -152,7 +198,8 @@ TYPED_TEST(ArrowDataToSegmentNumeric, MultipleRecordBatches) {
         auto array = create_array(data);
         record_batches.emplace_back(create_record_batch({{"col", array}}));
     }
-    auto [cols, desc] = record_batches_to_columns(record_batches);
+    proto::descriptors::NormalizationMetadata::ExperimentalArrow arrow_meta;
+    auto [cols, desc] = record_batches_to_columns(record_batches, arrow_meta);
 
     ASSERT_EQ(desc.fields().size(), 1);
     ASSERT_EQ(cols.size(), 1);
@@ -187,16 +234,17 @@ TYPED_TEST(ArrowDataToSegmentNumeric, MultipleRecordBatches) {
     ASSERT_EQ(buffer.block_offsets().back(), size);
 }
 
-TEST(ArrowDataToSegmentTimestamp, Simple) {
+TEST(ArrowDataToSegmentTimestamp, TimezoneNaive) {
     size_t num_rows = 10;
     auto* data_ptr = reinterpret_cast<timestamp*>(allocate_detachable_memory(num_rows * sizeof(timestamp)));
     std::iota(data_ptr, data_ptr + num_rows, 0UL);
-    auto array = sparrow::array{create_timestamp_array(data_ptr, num_rows, std::nullopt)};
+    auto array = create_timestamp_array(data_ptr, num_rows, std::nullopt);
     auto record_batch = create_record_batch({{"col", array}});
 
     std::vector<sparrow::record_batch> record_batches;
     record_batches.emplace_back(std::move(record_batch));
-    auto [cols, desc] = record_batches_to_columns(record_batches);
+    proto::descriptors::NormalizationMetadata::ExperimentalArrow arrow_meta;
+    auto [cols, desc] = record_batches_to_columns(record_batches, arrow_meta);
 
     ASSERT_EQ(desc.fields().size(), 1);
     ASSERT_EQ(cols.size(), 1);
@@ -208,6 +256,51 @@ TEST(ArrowDataToSegmentTimestamp, Simple) {
     ASSERT_FALSE(col.is_sparse());
     for (size_t idx = 0; idx < num_rows; ++idx) {
         ASSERT_EQ(*col.scalar_at<timestamp>(idx), idx);
+    }
+}
+
+TEST(ArrowDataToSegmentTimestamp, TimezoneAware) {
+    size_t num_rows = 10;
+    auto* data_ptr = reinterpret_cast<timestamp*>(allocate_detachable_memory(num_rows * sizeof(timestamp)));
+    std::iota(data_ptr, data_ptr + num_rows, 0UL);
+    std::string tz_str("Europe/Brussels");
+    const auto* tz = date::locate_zone(tz_str);
+    auto array_with_tz = create_timestamp_array(data_ptr, num_rows, std::nullopt, tz);
+    data_ptr = reinterpret_cast<timestamp*>(allocate_detachable_memory(num_rows * sizeof(timestamp)));
+    std::iota(data_ptr, data_ptr + num_rows, 10UL);
+    auto array_without_tz = create_timestamp_array(data_ptr, num_rows, std::nullopt);
+    auto record_batch = create_record_batch({{"col_with_tz", array_with_tz}, {"col_without_tz", array_without_tz}});
+
+    std::vector<sparrow::record_batch> record_batches;
+    record_batches.emplace_back(std::move(record_batch));
+    proto::descriptors::NormalizationMetadata::ExperimentalArrow arrow_meta;
+    auto [cols, desc] = record_batches_to_columns(record_batches, arrow_meta);
+
+    ASSERT_TRUE(arrow_meta.columns().contains("col_without_tz"));
+    ASSERT_FALSE(arrow_meta.columns().at("col_without_tz").has_timezone());
+    ASSERT_TRUE(arrow_meta.columns().contains("col_with_tz"));
+    const auto& col_meta = arrow_meta.columns().at("col_with_tz");
+    ASSERT_TRUE(col_meta.has_timezone());
+    ASSERT_EQ(col_meta.timezone(), tz_str);
+
+    ASSERT_EQ(desc.fields().size(), 2);
+    ASSERT_EQ(cols.size(), 2);
+    ASSERT_EQ(desc.field(0).name(), "col_with_tz");
+    const auto& col_with_tz = cols[0];
+    ASSERT_EQ(col_with_tz.type(), make_scalar_type(DataType::NANOSECONDS_UTC64));
+    ASSERT_EQ(col_with_tz.row_count(), num_rows);
+    ASSERT_EQ(col_with_tz.last_row(), num_rows - 1);
+    ASSERT_FALSE(col_with_tz.is_sparse());
+    for (size_t idx = 0; idx < num_rows; ++idx) {
+        ASSERT_EQ(*col_with_tz.scalar_at<timestamp>(idx), idx);
+    }
+    const auto& col_without_tz = cols[1];
+    ASSERT_EQ(col_without_tz.type(), make_scalar_type(DataType::NANOSECONDS_UTC64));
+    ASSERT_EQ(col_without_tz.row_count(), num_rows);
+    ASSERT_EQ(col_without_tz.last_row(), num_rows - 1);
+    ASSERT_FALSE(col_without_tz.is_sparse());
+    for (size_t idx = 0; idx < num_rows; ++idx) {
+        ASSERT_EQ(*col_without_tz.scalar_at<timestamp>(idx), idx + 10);
     }
 }
 
@@ -239,7 +332,8 @@ TEST(ArrowDataToSegment, MultiColumnDifferentTypes) {
 
     std::vector<sparrow::record_batch> record_batches;
     record_batches.emplace_back(std::move(record_batch));
-    auto [cols, desc] = record_batches_to_columns(record_batches);
+    proto::descriptors::NormalizationMetadata::ExperimentalArrow arrow_meta;
+    auto [cols, desc] = record_batches_to_columns(record_batches, arrow_meta);
 
     auto num_columns = numeric_data_types.size();
     ASSERT_EQ(desc.fields().size(), num_columns);

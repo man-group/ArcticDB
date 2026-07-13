@@ -229,7 +229,7 @@ void fix_descriptor_mismatch_or_throw(
         const pipelines::InputFrame& new_frame, bool empty_types
 ) {
 
-    fix_normalization_or_throw(operation == APPEND, existing_isr, new_frame);
+    fix_normalization_or_throw(operation == APPEND, existing_isr, new_frame, dynamic_schema);
     check_normalization_index_match(operation, existing_isr, new_frame, empty_types);
 
     const auto& old_sd = existing_isr.tsd().as_stream_descriptor();

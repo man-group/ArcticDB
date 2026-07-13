@@ -114,7 +114,7 @@ class CompileProto(Command):
     # The upper bound on "6" keeps the bundled protoc at major 6: grpcio-tools>=1.82 bundles a
     # protoc that emits protobuf-7 gencode while still accepting a protobuf 6.* runtime, which would
     # bake gencode 7.x into proto/6 and fail to load against a protobuf<7 runtime.
-    _PROTOBUF_TO_GRPC_VERSION = {"3": "<1.31", "4": ">=1.49", "5": ">=1.68.1", "6": ">=1.73.0,<1.82"}
+    _PROTOBUF_TO_GRPC_VERSION = {"3": ">=1.46", "4": ">=1.49", "5": ">=1.68.1", "6": ">=1.73.0,<1.82"}
 
     description = '"protoc" generate code _pb2.py from .proto files'
     user_options = [

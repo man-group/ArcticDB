@@ -140,6 +140,28 @@ proto::descriptors::NormalizationMetadata merge_normalization_metadata(
     if (result.has_np()) {
         // Only append is allowed for numpy arrays, and it's checked up the callstack.
         (*result.mutable_np()->mutable_shape())[0] += new_frame.norm_meta.np().shape()[0];
+    } else if (result.has_experimental_arrow()) {
+        // With static schema, there is an earlier check that all timezones match exactly between the existing data and
+        // the new frame
+        result = new_frame.norm_meta;
+        auto& new_col_meta_map = *result.mutable_experimental_arrow()->mutable_columns();
+        const auto& old_col_meta_map = existing_tsd.normalization().experimental_arrow().columns();
+        // We only need to iterate over the old norm meta, as anything present in the new norm meta that is missing from
+        // the old norm meta is a new column with dynamic schema, so we just leave it's column metadata as is
+        for (const auto& [col_name, old_col_meta] : old_col_meta_map) {
+            if (auto it = new_col_meta_map.find(col_name); it != new_col_meta_map.end()) {
+                auto& new_col_meta = it->second;
+                // Column has metadata in both the old and new norm metadata
+                if (!google::protobuf::util::MessageDifferencer::Equals(old_col_meta, new_col_meta)) {
+                    // Column metadata differed between the old and new, so set to timezone naive
+                    new_col_meta.clear_timezone();
+                } // else column meta is same in old and new, so new is already correct
+            } else {
+                // Column had metadata in the old, but not the new norm meta. That implies the column is missing from
+                // the new data, so maintain the metadata from the previous version
+                new_col_meta_map[col_name] = old_col_meta;
+            }
+        }
     }
 
     if (existing_tsd.index().type() == IndexDescriptor::Type::ROWCOUNT) {
