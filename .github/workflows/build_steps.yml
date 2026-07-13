@@ -183,6 +183,11 @@ jobs:
 
       - name: Setup cmake
         uses: jwlawson/actions-setup-cmake@v2
+        with:
+          # Pin to a known-good release. CMake 4.4.0 made -Werror=<category> validation
+          # stricter, which broke the vcpkg `benchmark` port's -Werror=old-style-cast
+          # option and fails CI. Bump deliberately once the port is fixed upstream.
+          cmake-version: '3.31.6'
 
       - name: Use cmake
         run: cmake --version
