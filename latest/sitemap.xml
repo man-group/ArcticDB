@@ -1,199 +1,199 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
     <url>
-         <loc>https://docs.arcticdb.io/6.18.5/</loc>
+         <loc>https://docs.arcticdb.io/6.18.6/</loc>
          <lastmod>2026-07-13</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.18.5/aws/</loc>
+         <loc>https://docs.arcticdb.io/6.18.6/aws/</loc>
          <lastmod>2026-07-13</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.18.5/aws_permissions/</loc>
+         <loc>https://docs.arcticdb.io/6.18.6/aws_permissions/</loc>
          <lastmod>2026-07-13</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.18.5/azure/</loc>
+         <loc>https://docs.arcticdb.io/6.18.6/azure/</loc>
          <lastmod>2026-07-13</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.18.5/error_messages/</loc>
+         <loc>https://docs.arcticdb.io/6.18.6/error_messages/</loc>
          <lastmod>2026-07-13</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.18.5/faq/</loc>
+         <loc>https://docs.arcticdb.io/6.18.6/faq/</loc>
          <lastmod>2026-07-13</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.18.5/history/</loc>
+         <loc>https://docs.arcticdb.io/6.18.6/history/</loc>
          <lastmod>2026-07-13</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.18.5/lib_config/</loc>
+         <loc>https://docs.arcticdb.io/6.18.6/lib_config/</loc>
          <lastmod>2026-07-13</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.18.5/licensing/</loc>
+         <loc>https://docs.arcticdb.io/6.18.6/licensing/</loc>
          <lastmod>2026-07-13</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.18.5/runtime_config/</loc>
+         <loc>https://docs.arcticdb.io/6.18.6/runtime_config/</loc>
          <lastmod>2026-07-13</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.18.5/api/</loc>
+         <loc>https://docs.arcticdb.io/6.18.6/api/</loc>
          <lastmod>2026-07-13</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.18.5/api/admin_tools/</loc>
+         <loc>https://docs.arcticdb.io/6.18.6/api/admin_tools/</loc>
          <lastmod>2026-07-13</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.18.5/api/arctic/</loc>
+         <loc>https://docs.arcticdb.io/6.18.6/api/arctic/</loc>
          <lastmod>2026-07-13</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.18.5/api/arctic_uri/</loc>
+         <loc>https://docs.arcticdb.io/6.18.6/api/arctic_uri/</loc>
          <lastmod>2026-07-13</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.18.5/api/config/</loc>
+         <loc>https://docs.arcticdb.io/6.18.6/api/config/</loc>
          <lastmod>2026-07-13</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.18.5/api/exceptions/</loc>
+         <loc>https://docs.arcticdb.io/6.18.6/api/exceptions/</loc>
          <lastmod>2026-07-13</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.18.5/api/library/</loc>
+         <loc>https://docs.arcticdb.io/6.18.6/api/library/</loc>
          <lastmod>2026-07-13</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.18.5/api/library_types/</loc>
+         <loc>https://docs.arcticdb.io/6.18.6/api/library_types/</loc>
          <lastmod>2026-07-13</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.18.5/api/processing/</loc>
+         <loc>https://docs.arcticdb.io/6.18.6/api/processing/</loc>
          <lastmod>2026-07-13</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.18.5/api/query_stats/</loc>
+         <loc>https://docs.arcticdb.io/6.18.6/api/query_stats/</loc>
          <lastmod>2026-07-13</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.18.5/notebooks/ArcticDB_aws_public_blockchain/</loc>
+         <loc>https://docs.arcticdb.io/6.18.6/notebooks/ArcticDB_aws_public_blockchain/</loc>
          <lastmod>2026-07-13</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.18.5/notebooks/ArcticDB_billion_row_challenge/</loc>
+         <loc>https://docs.arcticdb.io/6.18.6/notebooks/ArcticDB_billion_row_challenge/</loc>
          <lastmod>2026-07-13</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.18.5/notebooks/ArcticDB_demo_compact_data/</loc>
+         <loc>https://docs.arcticdb.io/6.18.6/notebooks/ArcticDB_demo_compact_data/</loc>
          <lastmod>2026-07-13</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.18.5/notebooks/ArcticDB_demo_concat/</loc>
+         <loc>https://docs.arcticdb.io/6.18.6/notebooks/ArcticDB_demo_concat/</loc>
          <lastmod>2026-07-13</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.18.5/notebooks/ArcticDB_demo_equity_analytics/</loc>
+         <loc>https://docs.arcticdb.io/6.18.6/notebooks/ArcticDB_demo_equity_analytics/</loc>
          <lastmod>2026-07-13</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.18.5/notebooks/ArcticDB_demo_equity_options/</loc>
+         <loc>https://docs.arcticdb.io/6.18.6/notebooks/ArcticDB_demo_equity_options/</loc>
          <lastmod>2026-07-13</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.18.5/notebooks/ArcticDB_demo_lazydataframe/</loc>
+         <loc>https://docs.arcticdb.io/6.18.6/notebooks/ArcticDB_demo_lazydataframe/</loc>
          <lastmod>2026-07-13</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.18.5/notebooks/ArcticDB_demo_lmdb/</loc>
+         <loc>https://docs.arcticdb.io/6.18.6/notebooks/ArcticDB_demo_lmdb/</loc>
          <lastmod>2026-07-13</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.18.5/notebooks/ArcticDB_demo_querybuilder/</loc>
+         <loc>https://docs.arcticdb.io/6.18.6/notebooks/ArcticDB_demo_querybuilder/</loc>
          <lastmod>2026-07-13</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.18.5/notebooks/ArcticDB_demo_read_as_arrow/</loc>
+         <loc>https://docs.arcticdb.io/6.18.6/notebooks/ArcticDB_demo_read_as_arrow/</loc>
          <lastmod>2026-07-13</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.18.5/notebooks/ArcticDB_demo_recursive_normalizers/</loc>
+         <loc>https://docs.arcticdb.io/6.18.6/notebooks/ArcticDB_demo_recursive_normalizers/</loc>
          <lastmod>2026-07-13</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.18.5/notebooks/ArcticDB_demo_resample/</loc>
+         <loc>https://docs.arcticdb.io/6.18.6/notebooks/ArcticDB_demo_resample/</loc>
          <lastmod>2026-07-13</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.18.5/notebooks/ArcticDB_demo_snapshots/</loc>
+         <loc>https://docs.arcticdb.io/6.18.6/notebooks/ArcticDB_demo_snapshots/</loc>
          <lastmod>2026-07-13</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.18.5/notebooks/ArcticDB_merge/</loc>
+         <loc>https://docs.arcticdb.io/6.18.6/notebooks/ArcticDB_merge/</loc>
          <lastmod>2026-07-13</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.18.5/notebooks/ArcticDB_pythagorean_won_loss_formula_notebook/</loc>
+         <loc>https://docs.arcticdb.io/6.18.6/notebooks/ArcticDB_pythagorean_won_loss_formula_notebook/</loc>
          <lastmod>2026-07-13</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.18.5/notebooks/ArcticDB_staged_data_with_tokens/</loc>
+         <loc>https://docs.arcticdb.io/6.18.6/notebooks/ArcticDB_staged_data_with_tokens/</loc>
          <lastmod>2026-07-13</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.18.5/technical/architecture/</loc>
+         <loc>https://docs.arcticdb.io/6.18.6/technical/architecture/</loc>
          <lastmod>2026-07-13</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.18.5/technical/contributing/</loc>
+         <loc>https://docs.arcticdb.io/6.18.6/technical/contributing/</loc>
          <lastmod>2026-07-13</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.18.5/technical/migration/</loc>
+         <loc>https://docs.arcticdb.io/6.18.6/technical/migration/</loc>
          <lastmod>2026-07-13</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.18.5/technical/on_disk_storage/</loc>
+         <loc>https://docs.arcticdb.io/6.18.6/technical/on_disk_storage/</loc>
          <lastmod>2026-07-13</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.18.5/technical/upgrade_storage/</loc>
+         <loc>https://docs.arcticdb.io/6.18.6/technical/upgrade_storage/</loc>
          <lastmod>2026-07-13</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.18.5/tutorials/data_organisation/</loc>
+         <loc>https://docs.arcticdb.io/6.18.6/tutorials/data_organisation/</loc>
          <lastmod>2026-07-13</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.18.5/tutorials/fundamentals/</loc>
+         <loc>https://docs.arcticdb.io/6.18.6/tutorials/fundamentals/</loc>
          <lastmod>2026-07-13</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.18.5/tutorials/library_sizes/</loc>
+         <loc>https://docs.arcticdb.io/6.18.6/tutorials/library_sizes/</loc>
          <lastmod>2026-07-13</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.18.5/tutorials/lmdb_and_in_memory/</loc>
+         <loc>https://docs.arcticdb.io/6.18.6/tutorials/lmdb_and_in_memory/</loc>
          <lastmod>2026-07-13</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.18.5/tutorials/metadata/</loc>
+         <loc>https://docs.arcticdb.io/6.18.6/tutorials/metadata/</loc>
          <lastmod>2026-07-13</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.18.5/tutorials/parallel_writes/</loc>
+         <loc>https://docs.arcticdb.io/6.18.6/tutorials/parallel_writes/</loc>
          <lastmod>2026-07-13</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.18.5/tutorials/query_stats/</loc>
+         <loc>https://docs.arcticdb.io/6.18.6/tutorials/query_stats/</loc>
          <lastmod>2026-07-13</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.18.5/tutorials/snapshots/</loc>
+         <loc>https://docs.arcticdb.io/6.18.6/tutorials/snapshots/</loc>
          <lastmod>2026-07-13</lastmod>
     </url>
 </urlset>
