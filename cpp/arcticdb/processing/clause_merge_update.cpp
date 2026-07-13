@@ -1461,16 +1461,18 @@ void MergeUpdateClause::MatchRechord::validate_rows_to_update(const MergeStrateg
     }
     util::BitSet matched_rows;
     for (size_t row_slice_idx = 0; row_slice_idx < matched_target_rows_.size(); ++row_slice_idx) {
-        matched_rows.resize(matched_target_rows_[row_slice_idx].size());
+        const RowRange row_range = *row_slices_[row_slice_idx].row_ranges_->front();
+        matched_rows.resize(row_range.diff());
         for (size_t source_row_idx = 0; source_row_idx < matched_target_rows_[row_slice_idx].size(); ++source_row_idx) {
             for (const size_t target_row : matched_target_rows_[row_slice_idx][source_row_idx]) {
                 user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
                         matched_rows[target_row] == false,
                         "Multiple source rows match the same target row: {}. Second source index to match is {} Final "
                         "value is ambiguous.",
-                        row_slices_[row_slice_idx].row_ranges_->front()->start() + target_row,
+                        row_range.start() + target_row,
                         source_row_idx
                 );
+                matched_rows[target_row] = true;
             }
         }
         matched_rows.clear();
