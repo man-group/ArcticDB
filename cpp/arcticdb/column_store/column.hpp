@@ -400,6 +400,8 @@ class Column {
         update_offsets(val.nbytes());
         data_.commit();
         shapes_.commit();
+        // This seems incorrect for when Fortran-ordered is being set this way. last_physical_row_ is also not updated
+        // at all
         ++last_logical_row_;
     }
 

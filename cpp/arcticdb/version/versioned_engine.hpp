@@ -32,6 +32,13 @@ struct DeleteRangeOptions {
     bool prune_previous_versions_;
 };
 
+struct AppendOptions {
+    bool upsert = false;
+    bool prune_previous_versions = false;
+    bool validate_index = false;
+    bool compact_data_inline = false;
+};
+
 enum class Slicing { NoSlicing, RowSlicing };
 
 /**
@@ -51,8 +58,7 @@ class VersionedEngine {
     ) = 0;
 
     virtual VersionedItem append_internal(
-            const StreamId& stream_id, const std::shared_ptr<InputFrame>& frame, bool upsert,
-            bool prune_previous_versions, bool validate_index
+            const StreamId& stream_id, const std::shared_ptr<InputFrame>& frame, const AppendOptions& append_options
     ) = 0;
 
     virtual VersionedItem delete_range_internal(

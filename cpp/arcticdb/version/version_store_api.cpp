@@ -119,6 +119,9 @@ std::vector<std::variant<VersionedItem, DataError>> PythonVersionStore::batch_ap
         const std::vector<py::object>& norms, const std::vector<py::object>& user_metas, bool prune_previous_versions,
         bool validate_index, bool upsert, bool throw_on_error
 ) {
+    AppendOptions append_options{
+            .upsert = upsert, .prune_previous_versions = prune_previous_versions, .validate_index = validate_index
+    };
     auto frames = create_input_tensor_frames(
             stream_ids,
             items,
@@ -127,9 +130,7 @@ std::vector<std::variant<VersionedItem, DataError>> PythonVersionStore::batch_ap
             cfg().write_options().empty_types(),
             sortedness_scan_for(validate_index)
     );
-    return batch_append_internal(
-            stream_ids, std::move(frames), prune_previous_versions, validate_index, upsert, throw_on_error
-    );
+    return batch_append_internal(stream_ids, std::move(frames), append_options, throw_on_error);
 }
 
 void PythonVersionStore::_clear_symbol_list_keys() { symbol_list().clear(store()); }
@@ -828,8 +829,14 @@ VersionedItem PythonVersionStore::test_write_versioned_segment(
 
 VersionedItem PythonVersionStore::append(
         const StreamId& stream_id, const convert::InputItem& item, const py::object& norm, const py::object& user_meta,
-        bool upsert, bool prune_previous_versions, bool validate_index
+        bool upsert, bool prune_previous_versions, bool validate_index, bool compact_data_inline
 ) {
+    AppendOptions append_options{
+            .upsert = upsert,
+            .prune_previous_versions = prune_previous_versions,
+            .validate_index = validate_index,
+            .compact_data_inline = compact_data_inline
+    };
     return append_internal(
             stream_id,
             convert::py_input_item_to_frame(
@@ -840,9 +847,7 @@ VersionedItem PythonVersionStore::append(
                     cfg().write_options().empty_types(),
                     sortedness_scan_for(validate_index)
             ),
-            upsert,
-            prune_previous_versions,
-            validate_index
+            append_options
     );
 }
 

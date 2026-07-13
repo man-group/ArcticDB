@@ -22,147 +22,69 @@ from arcticdb.util.logger import get_logger
 from tests.util.mark import WINDOWS
 
 
-def test_append_simple(lmdb_version_store):
-    symbol = "test_append_simple"
-    df1 = pd.DataFrame({"x": np.arange(1, 10, dtype=np.int64)})
-    lmdb_version_store.write(symbol, df1)
-    vit = lmdb_version_store.read(symbol)
-    assert_frame_equal(vit.data, df1)
+def get_next_business_date(d: datetime) -> datetime:
+    """Returns next business date from datetime 'd' (uses pandas BDay)."""
 
-    df2 = pd.DataFrame({"x": np.arange(11, 20, dtype=np.int64)})
-    lmdb_version_store.append(symbol, df2)
-    vit = lmdb_version_store.read(symbol)
-    expected = pd.concat([df1, df2], ignore_index=True)
-    assert_frame_equal(vit.data, expected)
+    return (d + BDay(1)).to_pydatetime()
 
 
-@pytest.mark.parametrize("empty_types", (True, False))
-@pytest.mark.parametrize("dynamic_schema", (True, False))
-def test_append_range_index(version_store_factory, empty_types, dynamic_schema):
-    lib = version_store_factory(empty_types=empty_types, dynamic_schema=dynamic_schema)
-    sym = "test_append_range_index"
-    df_0 = pd.DataFrame({"col": [0, 1]}, index=pd.RangeIndex(0, 4, 2))
-    lib.write(sym, df_0)
-
-    # Appending another range index following on from what is there should work
-    df_1 = pd.DataFrame({"col": [2, 3]}, index=pd.RangeIndex(4, 8, 2))
-    lib.append(sym, df_1)
-    expected = pd.concat([df_0, df_1])
-    received = lib.read(sym).data
-    assert_frame_equal(expected, received)
-
-    # Appending a range starting earlier or later, or with a different step size, should fail
-    for idx in [
-        pd.RangeIndex(6, 10, 2),
-        pd.RangeIndex(10, 14, 2),
-        pd.RangeIndex(8, 14, 3),
-    ]:
-        with pytest.raises(NormalizationException):
-            lib.append(sym, pd.DataFrame({"col": [4, 5]}, index=idx))
-
-
-@pytest.mark.parametrize("empty_types", (True, False))
-@pytest.mark.parametrize("dynamic_schema", (True, False))
-def test_append_range_index_from_zero(version_store_factory, empty_types, dynamic_schema):
-    lib = version_store_factory(empty_types=empty_types, dynamic_schema=dynamic_schema)
-    sym = "test_append_range_index_from_zero"
-    df_0 = pd.DataFrame({"col": [0, 1]}, index=pd.RangeIndex(-6, -2, 2))
-    lib.write(sym, df_0)
-
-    with pytest.raises(NormalizationException):
-        lib.append(sym, pd.DataFrame({"col": [2, 3]}, index=pd.RangeIndex(0, 4, 2)))
-
-
-def test_append_indexed(s3_version_store):
-    symbol = "test_append_simple"
-    idx1 = np.arange(0, 10)
-    d1 = {"x": np.arange(10, 20, dtype=np.int64)}
-    df1 = pd.DataFrame(data=d1, index=idx1)
-    s3_version_store.write(symbol, df1)
-    vit = s3_version_store.read(symbol)
-    assert_frame_equal(vit.data, df1)
-
-    idx2 = np.arange(10, 20)
-    d2 = {"x": np.arange(20, 30, dtype=np.int64)}
-    df2 = pd.DataFrame(data=d2, index=idx2)
-    s3_version_store.append(symbol, df2)
-    vit = s3_version_store.read(symbol)
-    expected = pd.concat([df1, df2])
-    assert_frame_equal(vit.data, expected)
-
-
-def test_append_string_of_different_sizes(lmdb_version_store):
-    symbol = "test_append_simple"
-    df1 = pd.DataFrame(data={"x": ["cat", "dog"]}, index=np.arange(0, 2))
-    lmdb_version_store.write(symbol, df1)
-    vit = lmdb_version_store.read(symbol)
-    assert_frame_equal(vit.data, df1)
-
-    df2 = pd.DataFrame(
-        data={"x": ["catandsomethingelse", "dogandsomethingevenlonger"]},
-        index=np.arange(2, 4),
+def create_random_data(at_date: datetime, num_cols: int = 5) -> pd.DataFrame:
+    date_range = pd.date_range(
+        start=at_date.replace(hour=0, minute=0, second=0, microsecond=0),
+        end=at_date.replace(hour=18, minute=0, second=0, microsecond=0),
+        freq="s",
     )
-    lmdb_version_store.append(symbol, df2)
-    vit = lmdb_version_store.read(symbol)
-    expected = pd.concat([df1, df2])
-    assert_frame_equal(vit.data, expected)
+    data = np.round(np.random.random(size=(len(date_range), num_cols)) * 100, 2)
+
+    return pd.DataFrame(data=data, index=date_range, columns=[f"c{i + 1}" for i in range(num_cols)])
 
 
-def test_append_dynamic_schema_add_column(lmdb_version_store_dynamic_schema):
-    symbol = "symbol"
-    lib = lmdb_version_store_dynamic_schema
-    df_1 = pd.DataFrame(data={"a": [1.0, 2.0]}, index=pd.date_range("2018-01-01", periods=2))
-    df_2 = pd.DataFrame(data={"b": [3.0, 4.0]}, index=pd.date_range("2018-01-03", periods=2))
+@pytest.mark.xfail(reason="Needs to be fixed with issue #496")
+def test_append_with_cont_mem_problem(sym, lmdb_version_store_tiny_segment_dynamic):
+    set_config_int("SymbolDataCompact.SegmentCount", 1)
+    df0 = pd.DataFrame({"0": ["01234567890123456"]}, index=[pd.Timestamp(0)])
+    df1 = pd.DataFrame({"0": ["012345678901234567"]}, index=[pd.Timestamp(1)])
+    df2 = pd.DataFrame({"0": ["0123456789012345678"]}, index=[pd.Timestamp(2)])
+    df3 = pd.DataFrame({"0": ["01234567890123456789"]}, index=[pd.Timestamp(3)])
+    df = pd.concat([df0, df1, df2, df3])
 
-    lib.write(symbol, df_1)
-    lib.append(symbol, df_2)
-
-    expected_df = pd.concat([df_1, df_2])
-    result_df = lib.read(symbol).data
-    assert_frame_equal(result_df, expected_df)
-
-
-def test_append_snapshot_delete(lmdb_version_store):
-    symbol = "test_append_snapshot_delete"
-    if sys.platform == "win32":
-        # Keep it smaller on Windows due to restricted LMDB size
-        row_count = 1000
-    else:
-        row_count = 1000000
-    idx1 = np.arange(0, row_count)
-    d1 = {"x": np.arange(row_count, 2 * row_count, dtype=np.int64)}
-    df1 = pd.DataFrame(data=d1, index=idx1)
-    lmdb_version_store.write(symbol, df1)
-    vit = lmdb_version_store.read(symbol)
-    assert_frame_equal(vit.data, df1)
-
-    lmdb_version_store.snapshot("my_snap")
-
-    idx2 = np.arange(row_count, 2 * row_count)
-    d2 = {"x": np.arange(2 * row_count, 3 * row_count, dtype=np.int64)}
-    df2 = pd.DataFrame(data=d2, index=idx2)
-    lmdb_version_store.append(symbol, df2)
-    vit = lmdb_version_store.read(symbol)
-    expected = pd.concat([df1, df2])
-    assert_frame_equal(vit.data, expected)
-
-    lmdb_version_store.delete(symbol)
-    versions = lmdb_version_store.list_versions()
-    assert len(versions) == 1
-    version = versions[0]
-    version.pop("date")
-    assert version == {"deleted": True, "snapshots": ["my_snap"], "symbol": symbol, "version": 0}
-
-    assert_frame_equal(lmdb_version_store.read(symbol, as_of="my_snap").data, df1)
+    for _ in range(100):
+        lib = lmdb_version_store_tiny_segment_dynamic
+        lib.write(sym, df0).version
+        lib.append(sym, df1).version
+        lib.append(sym, df2).version
+        lib.append(sym, df3).version
+        assert lib.get_info(sym)["sorted"] == "ASCENDING"
+        lib.version_store.defragment_symbol_data(sym, None)
+        assert lib.get_info(sym)["sorted"] == "ASCENDING"
+        res = lib.read(sym).data
+        assert_frame_equal(df, res)
 
 
-def test_append_out_of_order_throws(lmdb_version_store):
-    lib: NativeVersionStore = lmdb_version_store
-    lib.write("a", pd.DataFrame({"c": [1, 2, 3]}, index=pd.date_range(0, periods=3)))
-    with pytest.raises(Exception, match="1970-01-03"):
-        lib.append("a", pd.DataFrame({"c": [4]}, index=pd.date_range(1, periods=1)))
+def test_read_incomplete_no_warning(s3_store_factory, sym, get_stderr):
+    pytest.skip("This test is flaky due to trying to retrieve the log messages")
+    lib = s3_store_factory(dynamic_strings=True, incomplete=True)
+    lib_tool = lib.library_tool()
+    symbol = sym
+
+    write_df = pd.DataFrame({"a": [1, 2, 3]}, index=pd.DatetimeIndex([1, 2, 3]))
+    lib_tool.append_incomplete(symbol, write_df)
+    # Need to compact so that the APPEND_REF points to a non-existent APPEND_DATA (intentionally)
+    lib.compact_incomplete(symbol, True, False, False, True)
+    set_log_level("DEBUG")
+
+    try:
+        read_df = lib.read(symbol, date_range=(pd.to_datetime(0), pd.to_datetime(10))).data
+        assert_frame_equal(read_df, write_df.tz_localize("UTC"))
+
+        err = get_stderr()
+        assert err.count("W arcticdb.storage | Failed to find segment for key") == 0
+        assert err.count("D arcticdb.storage | Failed to find segment for key") == 1
+    finally:
+        set_log_level()
 
 
+# sort_index assumes segments are internally sorted, which is not the case when appending with compact_data_inline=True
 @pytest.mark.parametrize("prune_previous_versions", [True, False])
 def test_append_out_of_order_and_sort(lmdb_version_store_ignore_order, prune_previous_versions):
     symbol = "out_of_order"
@@ -233,406 +155,6 @@ def test_sort_index(version_store_factory, dynamic_schema, prune_previous_versio
     assert_frame_equal(lib.read(symbol).data, sorted_df)
 
 
-def test_upsert_with_delete(lmdb_version_store_big_map):
-    lib = lmdb_version_store_big_map
-    symbol = "upsert_with_delete"
-    lib.version_store.remove_incomplete(symbol)
-    lib.version_store._set_validate_version_map()
-
-    num_rows = 1111
-    dtidx = pd.date_range("1970-01-01", periods=num_rows)
-    test = pd.DataFrame(
-        {
-            "uint8": random_integers(num_rows, np.uint8),
-            "uint32": random_integers(num_rows, np.uint32),
-        },
-        index=dtidx,
-    )
-    chunk_size = 100
-    list_df = [test[i : i + chunk_size] for i in range(0, test.shape[0], chunk_size)]
-
-    for idx, df in enumerate(list_df):
-        if idx % 3 == 0:
-            lib.delete(symbol)
-
-        lib.append(symbol, df, write_if_missing=True)
-
-    first = list_df[len(list_df) - 3]
-    second = list_df[len(list_df) - 2]
-    third = list_df[len(list_df) - 1]
-
-    expected = pd.concat([first, second, third])
-    vit = lib.read(symbol)
-    assert_frame_equal(vit.data, expected)
-
-
-@pytest.mark.xfail(
-    condition=WINDOWS, raises=arcticdb.exceptions.ArcticDbNotYetImplemented, reason="Not implemented on Windows"
-)
-@pytest.mark.parametrize("dtype", supported_types_list)
-def test_append_numpy_array(lmdb_version_store, dtype):
-    """Tests append with all supported by arctic data types"""
-    sym = f"test_append_numpy_array"
-    np1 = generate_random_numpy_array(10, dtype)
-    lmdb_version_store.write(sym, np1)
-    np2 = generate_random_numpy_array(10, dtype)
-    lmdb_version_store.append(sym, np2)
-    expected = np.concatenate((np1, np2))
-    assert_array_equal(lmdb_version_store.read(sym).data, expected)
-
-
-def test_append_pickled_symbol(lmdb_version_store):
-    symbol = "test_append_pickled_symbol"
-    lmdb_version_store.write(symbol, np.arange(100).tolist())
-    assert lmdb_version_store.is_symbol_pickled(symbol)
-    with pytest.raises(InternalException):
-        _ = lmdb_version_store.append(symbol, np.arange(100).tolist())
-
-
-def test_append_not_sorted_exception(lmdb_version_store):
-    symbol = "bad_append"
-
-    num_initial_rows = 20
-    initial_timestamp = pd.Timestamp("2019-01-01")
-    dtidx = pd.date_range(initial_timestamp, periods=num_initial_rows)
-    df = pd.DataFrame({"c": np.arange(0, num_initial_rows, dtype=np.int64)}, index=dtidx)
-    assert df.index.is_monotonic_increasing == True
-
-    lmdb_version_store.write(symbol, df)
-    info = lmdb_version_store.get_info(symbol)
-    assert info["sorted"] == "ASCENDING"
-
-    num_rows = 20
-    initial_timestamp = pd.Timestamp("2020-01-01")
-    dtidx = np.roll(pd.date_range(initial_timestamp, periods=num_rows), 3)
-    df2 = pd.DataFrame({"c": np.arange(0, num_rows, dtype=np.int64)}, index=dtidx)
-    assert df2.index.is_monotonic_increasing == False
-
-    with pytest.raises(UnsortedDataException):
-        lmdb_version_store.append(symbol, df2, validate_index=True)
-
-
-@pytest.mark.parametrize("validate_index", (True, False))
-def test_append_same_index_value(lmdb_version_store_v1, validate_index):
-    lib = lmdb_version_store_v1
-    sym = "test_append_same_index_value"
-    df_0 = pd.DataFrame({"col": [1, 2]}, index=pd.date_range("2024-01-01", periods=2))
-    lib.write(sym, df_0)
-
-    df_1 = pd.DataFrame({"col": [3, 4]}, index=pd.date_range(df_0.index[-1], periods=2))
-    lib.append(sym, df_1, validate_index=validate_index)
-    expected = pd.concat([df_0, df_1])
-    received = lib.read(sym).data
-    assert_frame_equal(expected, received)
-    assert lib.get_info(sym)["sorted"] == "ASCENDING"
-
-
-def test_append_existing_not_sorted_exception(lmdb_version_store):
-    symbol = "bad_append"
-
-    num_initial_rows = 20
-    initial_timestamp = pd.Timestamp("2019-01-01")
-    dtidx = np.roll(pd.date_range(initial_timestamp, periods=num_initial_rows), 3)
-    df = pd.DataFrame({"c": np.arange(0, num_initial_rows, dtype=np.int64)}, index=dtidx)
-    assert df.index.is_monotonic_increasing == False
-
-    lmdb_version_store.write(symbol, df)
-    info = lmdb_version_store.get_info(symbol)
-    assert info["sorted"] == "UNSORTED"
-
-    num_rows = 20
-    initial_timestamp = pd.Timestamp("2020-01-01")
-    dtidx = pd.date_range(initial_timestamp, periods=num_rows)
-    df2 = pd.DataFrame({"c": np.arange(0, num_rows, dtype=np.int64)}, index=dtidx)
-    assert df2.index.is_monotonic_increasing == True
-
-    with pytest.raises(UnsortedDataException):
-        lmdb_version_store.append(symbol, df2, validate_index=True)
-
-
-def test_append_not_sorted_non_validate_index(lmdb_version_store):
-    symbol = "bad_append"
-
-    num_initial_rows = 20
-    initial_timestamp = pd.Timestamp("2019-01-01")
-    dtidx = pd.date_range(initial_timestamp, periods=num_initial_rows)
-    df = pd.DataFrame({"c": np.arange(0, num_initial_rows, dtype=np.int64)}, index=dtidx)
-    assert df.index.is_monotonic_increasing == True
-
-    lmdb_version_store.write(symbol, df)
-    info = lmdb_version_store.get_info(symbol)
-    assert info["sorted"] == "ASCENDING"
-
-    num_rows = 20
-    initial_timestamp = pd.Timestamp("2020-01-01")
-    dtidx = np.roll(pd.date_range(initial_timestamp, periods=num_rows), 3)
-    df2 = pd.DataFrame({"c": np.arange(0, num_rows, dtype=np.int64)}, index=dtidx)
-    assert df2.index.is_monotonic_increasing == False
-    lmdb_version_store.append(symbol, df2)
-
-
-def test_append_not_sorted_multi_index_exception(lmdb_version_store):
-    symbol = "bad_append"
-
-    num_initial_rows = 20
-    initial_timestamp = pd.Timestamp("2019-01-01")
-    dtidx1 = pd.date_range(initial_timestamp, periods=num_initial_rows)
-    dtidx2 = np.roll(np.arange(0, num_initial_rows), 3)
-    df = pd.DataFrame(
-        {"c": np.arange(0, num_initial_rows, dtype=np.int64)},
-        index=pd.MultiIndex.from_arrays([dtidx1, dtidx2], names=["datetime", "level"]),
-    )
-    assert isinstance(df.index, MultiIndex) == True
-    assert df.index.is_monotonic_increasing == True
-
-    lmdb_version_store.write(symbol, df)
-    info = lmdb_version_store.get_info(symbol)
-    assert info["sorted"] == "ASCENDING"
-
-    num_rows = 20
-    initial_timestamp = pd.Timestamp("2020-01-01")
-    dtidx1 = np.roll(pd.date_range(initial_timestamp, periods=num_rows), 3)
-    dtidx2 = np.arange(0, num_rows)
-    df2 = pd.DataFrame(
-        {"c": np.arange(0, num_rows, dtype=np.int64)},
-        index=pd.MultiIndex.from_arrays([dtidx1, dtidx2], names=["datetime", "level"]),
-    )
-    assert df2.index.is_monotonic_increasing == False
-    assert isinstance(df.index, MultiIndex) == True
-
-    with pytest.raises(UnsortedDataException):
-        lmdb_version_store.append(symbol, df2, validate_index=True)
-
-
-def test_append_not_sorted_range_index_non_exception(lmdb_version_store):
-    symbol = "bad_append"
-
-    num_initial_rows = 20
-    dtidx = pd.RangeIndex(0, num_initial_rows, 1)
-    df = pd.DataFrame({"c": np.arange(0, num_initial_rows, dtype=np.int64)}, index=dtidx)
-
-    lmdb_version_store.write(symbol, df)
-    info = lmdb_version_store.get_info(symbol)
-    assert info["sorted"] == "UNKNOWN"
-
-    num_rows = 20
-    dtidx = pd.RangeIndex(num_initial_rows, num_initial_rows + num_rows, 1)
-    dtidx = np.roll(dtidx, 3)
-    df2 = pd.DataFrame({"c": np.arange(0, num_rows, dtype=np.int64)}, index=dtidx)
-    assert df2.index.is_monotonic_increasing == False
-    with pytest.raises(NormalizationException):
-        lmdb_version_store.append(symbol, df2)
-
-
-def test_append_mix_ascending_not_sorted(lmdb_version_store):
-    symbol = "bad_append"
-
-    num_initial_rows = 20
-    initial_timestamp = pd.Timestamp("2019-01-01")
-    dtidx = pd.date_range(initial_timestamp, periods=num_initial_rows)
-    df = pd.DataFrame({"c": np.arange(0, num_initial_rows, dtype=np.int64)}, index=dtidx)
-    assert df.index.is_monotonic_increasing == True
-
-    lmdb_version_store.write(symbol, df, validate_index=True)
-    info = lmdb_version_store.get_info(symbol)
-    assert info["sorted"] == "ASCENDING"
-
-    num_rows = 20
-    initial_timestamp = pd.Timestamp("2020-01-01")
-    dtidx = pd.date_range(initial_timestamp, periods=num_rows)
-    df2 = pd.DataFrame({"c": np.arange(0, num_rows, dtype=np.int64)}, index=dtidx)
-    assert df2.index.is_monotonic_increasing == True
-    lmdb_version_store.append(symbol, df2, validate_index=True)
-    info = lmdb_version_store.get_info(symbol)
-    assert info["sorted"] == "ASCENDING"
-
-    num_rows = 20
-    initial_timestamp = pd.Timestamp("2021-01-01")
-    dtidx = np.roll(pd.date_range(initial_timestamp, periods=num_rows), 3)
-    df2 = pd.DataFrame({"c": np.arange(0, num_rows, dtype=np.int64)}, index=dtidx)
-    assert df2.index.is_monotonic_increasing == False
-    lmdb_version_store.append(symbol, df2)
-    info = lmdb_version_store.get_info(symbol)
-    assert info["sorted"] == "UNSORTED"
-
-    num_rows = 20
-    initial_timestamp = pd.Timestamp("2022-01-01")
-    dtidx = pd.date_range(initial_timestamp, periods=num_rows)
-    df2 = pd.DataFrame({"c": np.arange(0, num_rows, dtype=np.int64)}, index=dtidx)
-    assert df2.index.is_monotonic_increasing == True
-    lmdb_version_store.append(symbol, df2)
-    info = lmdb_version_store.get_info(symbol)
-    assert info["sorted"] == "UNSORTED"
-
-
-def test_append_mix_descending_not_sorted(lmdb_version_store):
-    symbol = "bad_append"
-
-    num_initial_rows = 20
-    initial_timestamp = pd.Timestamp("2019-01-01")
-    dtidx = pd.date_range(initial_timestamp, periods=num_initial_rows)
-    df = pd.DataFrame({"c": np.arange(0, num_initial_rows, dtype=np.int64)}, index=reversed(dtidx))
-    assert df.index.is_monotonic_decreasing == True
-
-    lmdb_version_store.write(symbol, df)
-    info = lmdb_version_store.get_info(symbol)
-    assert info["sorted"] == "DESCENDING"
-
-    num_rows = 20
-    initial_timestamp = pd.Timestamp("2020-01-01")
-    dtidx = pd.date_range(initial_timestamp, periods=num_rows)
-    df2 = pd.DataFrame({"c": np.arange(0, num_rows, dtype=np.int64)}, index=reversed(dtidx))
-    assert df2.index.is_monotonic_decreasing == True
-    lmdb_version_store.append(symbol, df2)
-    info = lmdb_version_store.get_info(symbol)
-    assert info["sorted"] == "DESCENDING"
-
-    num_rows = 20
-    initial_timestamp = pd.Timestamp("2021-01-01")
-    dtidx = np.roll(pd.date_range(initial_timestamp, periods=num_rows), 3)
-    df2 = pd.DataFrame({"c": np.arange(0, num_rows, dtype=np.int64)}, index=dtidx)
-    assert df2.index.is_monotonic_decreasing == False
-    lmdb_version_store.append(symbol, df2)
-    info = lmdb_version_store.get_info(symbol)
-    assert info["sorted"] == "UNSORTED"
-
-    num_rows = 20
-    initial_timestamp = pd.Timestamp("2022-01-01")
-    dtidx = pd.date_range(initial_timestamp, periods=num_rows)
-    df2 = pd.DataFrame({"c": np.arange(0, num_rows, dtype=np.int64)}, index=reversed(dtidx))
-    assert df2.index.is_monotonic_decreasing == True
-    lmdb_version_store.append(symbol, df2)
-    info = lmdb_version_store.get_info(symbol)
-    assert info["sorted"] == "UNSORTED"
-
-
-def test_append_mix_ascending_descending(lmdb_version_store):
-    symbol = "bad_append"
-
-    num_initial_rows = 20
-    initial_timestamp = pd.Timestamp("2019-01-01")
-    dtidx = pd.date_range(initial_timestamp, periods=num_initial_rows)
-    df = pd.DataFrame({"c": np.arange(0, num_initial_rows, dtype=np.int64)}, index=reversed(dtidx))
-    assert df.index.is_monotonic_decreasing == True
-
-    lmdb_version_store.write(symbol, df)
-    info = lmdb_version_store.get_info(symbol)
-    assert info["sorted"] == "DESCENDING"
-
-    num_rows = 20
-    initial_timestamp = pd.Timestamp("2020-01-01")
-    dtidx = pd.date_range(initial_timestamp, periods=num_rows)
-    df2 = pd.DataFrame({"c": np.arange(0, num_rows, dtype=np.int64)}, index=dtidx)
-    assert df2.index.is_monotonic_increasing == True
-    lmdb_version_store.append(symbol, df2)
-    info = lmdb_version_store.get_info(symbol)
-    assert info["sorted"] == "UNSORTED"
-
-    num_rows = 20
-    initial_timestamp = pd.Timestamp("2022-01-01")
-    dtidx = pd.date_range(initial_timestamp, periods=num_rows)
-    df2 = pd.DataFrame({"c": np.arange(0, num_rows, dtype=np.int64)}, index=reversed(dtidx))
-    assert df2.index.is_monotonic_decreasing == True
-    lmdb_version_store.append(symbol, df2)
-    info = lmdb_version_store.get_info(symbol)
-    assert info["sorted"] == "UNSORTED"
-
-
-@pytest.mark.xfail(reason="Needs to be fixed with issue #496")
-def test_append_with_cont_mem_problem(sym, lmdb_version_store_tiny_segment_dynamic):
-    set_config_int("SymbolDataCompact.SegmentCount", 1)
-    df0 = pd.DataFrame({"0": ["01234567890123456"]}, index=[pd.Timestamp(0)])
-    df1 = pd.DataFrame({"0": ["012345678901234567"]}, index=[pd.Timestamp(1)])
-    df2 = pd.DataFrame({"0": ["0123456789012345678"]}, index=[pd.Timestamp(2)])
-    df3 = pd.DataFrame({"0": ["01234567890123456789"]}, index=[pd.Timestamp(3)])
-    df = pd.concat([df0, df1, df2, df3])
-
-    for _ in range(100):
-        lib = lmdb_version_store_tiny_segment_dynamic
-        lib.write(sym, df0).version
-        lib.append(sym, df1).version
-        lib.append(sym, df2).version
-        lib.append(sym, df3).version
-        assert lib.get_info(sym)["sorted"] == "ASCENDING"
-        lib.version_store.defragment_symbol_data(sym, None)
-        assert lib.get_info(sym)["sorted"] == "ASCENDING"
-        res = lib.read(sym).data
-        assert_frame_equal(df, res)
-
-
-def test_append_docs_example(lmdb_version_store):
-    # This test is really just the append example from the docs.
-    # Other examples are included so that outputs can be easily re-generated.
-    lib = lmdb_version_store
-
-    # Write example
-    cols = ["COL_%d" % i for i in range(50)]
-    df = pd.DataFrame(np.random.randint(0, 50, size=(25, 50)), columns=cols)
-    df.index = pd.date_range(datetime(2000, 1, 1, 5), periods=25, freq="H")
-    print(df.head(2))
-    lib.write("test_frame", df)
-
-    # Read it back
-    from_storage_df = lib.read("test_frame").data
-    print(from_storage_df.head(2))
-
-    # Slicing and filtering examples
-    print(lib.read("test_frame", date_range=(df.index[5], df.index[8])).data)
-    _range = (df.index[5], df.index[8])
-    _cols = ["COL_30", "COL_31"]
-    print(lib.read("test_frame", date_range=_range, columns=_cols).data)
-    from arcticdb import QueryBuilder
-
-    q = QueryBuilder()
-    q = q[(q["COL_30"] > 30) & (q["COL_31"] < 50)]
-    print(lib.read("test_frame", date_range=_range, columns=_cols, query_builder=q).data)
-
-    # Update example
-    random_data = np.random.randint(0, 50, size=(25, 50))
-    df2 = pd.DataFrame(random_data, columns=["COL_%d" % i for i in range(50)])
-    df2.index = pd.date_range(datetime(2000, 1, 1, 5), periods=25, freq="H")
-    df2 = df2.iloc[[0, 2]]
-    print(df2)
-    lib.update("test_frame", df2)
-    print(lib.head("test_frame", 2))
-
-    # Append example
-    random_data = np.random.randint(0, 50, size=(5, 50))
-    df_append = pd.DataFrame(random_data, columns=["COL_%d" % i for i in range(50)])
-    print(df_append)
-    df_append.index = pd.date_range(datetime(2000, 1, 2, 7), periods=5, freq="H")
-
-    lib.append("test_frame", df_append)
-    print(lib.tail("test_frame", 7).data)
-    expected = pd.concat([df2, df.drop(df.index[:3]), df_append])
-    assert_frame_equal(lib.read("test_frame").data, expected)
-
-    print(lib.tail("test_frame", 7, as_of=0).data)
-
-
-def test_read_incomplete_no_warning(s3_store_factory, sym, get_stderr):
-    pytest.skip("This test is flaky due to trying to retrieve the log messages")
-    lib = s3_store_factory(dynamic_strings=True, incomplete=True)
-    lib_tool = lib.library_tool()
-    symbol = sym
-
-    write_df = pd.DataFrame({"a": [1, 2, 3]}, index=pd.DatetimeIndex([1, 2, 3]))
-    lib_tool.append_incomplete(symbol, write_df)
-    # Need to compact so that the APPEND_REF points to a non-existent APPEND_DATA (intentionally)
-    lib.compact_incomplete(symbol, True, False, False, True)
-    set_log_level("DEBUG")
-
-    try:
-        read_df = lib.read(symbol, date_range=(pd.to_datetime(0), pd.to_datetime(10))).data
-        assert_frame_equal(read_df, write_df.tz_localize("UTC"))
-
-        err = get_stderr()
-        assert err.count("W arcticdb.storage | Failed to find segment for key") == 0
-        assert err.count("D arcticdb.storage | Failed to find segment for key") == 1
-    finally:
-        set_log_level()
-
-
 @pytest.mark.parametrize("prune_previous_versions", [True, False])
 def test_defragment_read_prev_versions(sym, lmdb_version_store, prune_previous_versions):
     start_time, end_time = pd.to_datetime(("1990-1-1", "1995-1-1"))
@@ -688,154 +210,637 @@ def test_defragment_no_work_to_do(sym, lmdb_version_store):
         lmdb_version_store.defragment_symbol_data(sym)
 
 
-@pytest.mark.parametrize(
-    "to_write, to_append",
-    [
-        (pd.DataFrame({"a": [1]}), pd.Series([2])),
-        (pd.DataFrame({"a": [1]}), np.array([2])),
-        (pd.Series([1]), pd.DataFrame({"a": [2]})),
-        (pd.Series([1]), np.array([2])),
-        (np.array([1]), pd.DataFrame({"a": [2]})),
-        (np.array([1]), pd.Series([2])),
-        (pd.DataFrame({"a": [1], "b": [2]}), pd.Series([2])),
-        (pd.DataFrame({"a": [1], "b": [2]}), np.array([2])),
-        (pd.Series([1]), pd.DataFrame({"a": [2], "b": [2]})),
-        (np.array([1]), pd.DataFrame({"a": [2], "b": [2]})),
-    ],
-)
-def test_append_mismatched_object_kind(to_write, to_append, lmdb_version_store_dynamic_schema_v1):
-    lib = lmdb_version_store_dynamic_schema_v1
-    lib.write("sym", to_write)
-    with pytest.raises(NormalizationException) as e:
-        lib.append("sym", to_append)
-    assert "Append" in str(e.value)
+@pytest.mark.parametrize("compact_data_inline", [True, False])
+class TestAppend:
+    def test_append_simple(self, lmdb_version_store, compact_data_inline):
+        symbol = "test_append_simple"
+        df1 = pd.DataFrame({"x": np.arange(1, 10, dtype=np.int64)})
+        lmdb_version_store.write(symbol, df1)
+        vit = lmdb_version_store.read(symbol)
+        assert_frame_equal(vit.data, df1)
 
+        df2 = pd.DataFrame({"x": np.arange(11, 20, dtype=np.int64)})
+        lmdb_version_store.append(symbol, df2, compact_data_inline=compact_data_inline)
+        vit = lmdb_version_store.read(symbol)
+        expected = pd.concat([df1, df2], ignore_index=True)
+        assert_frame_equal(vit.data, expected)
 
-@pytest.mark.parametrize(
-    "to_write, to_append",
-    [
-        (pd.Series([1, 2, 3], name="name_1"), pd.Series([4, 5, 6], name="name_2")),
+    @pytest.mark.parametrize("empty_types", (True, False))
+    @pytest.mark.parametrize("dynamic_schema", (True, False))
+    def test_append_range_index(self, version_store_factory, empty_types, dynamic_schema, compact_data_inline):
+        lib = version_store_factory(empty_types=empty_types, dynamic_schema=dynamic_schema)
+        sym = "test_append_range_index"
+        df_0 = pd.DataFrame({"col": [0, 1]}, index=pd.RangeIndex(0, 4, 2))
+        lib.write(sym, df_0)
+
+        # Appending another range index following on from what is there should work
+        df_1 = pd.DataFrame({"col": [2, 3]}, index=pd.RangeIndex(4, 8, 2))
+        lib.append(sym, df_1, compact_data_inline=compact_data_inline)
+        expected = pd.concat([df_0, df_1])
+        received = lib.read(sym).data
+        assert_frame_equal(expected, received)
+
+        # Appending a range starting earlier or later, or with a different step size, should fail
+        for idx in [
+            pd.RangeIndex(6, 10, 2),
+            pd.RangeIndex(10, 14, 2),
+            pd.RangeIndex(8, 14, 3),
+        ]:
+            with pytest.raises(NormalizationException):
+                lib.append(sym, pd.DataFrame({"col": [4, 5]}, index=idx), compact_data_inline=compact_data_inline)
+
+    @pytest.mark.parametrize("empty_types", (True, False))
+    @pytest.mark.parametrize("dynamic_schema", (True, False))
+    def test_append_range_index_from_zero(
+        self, version_store_factory, empty_types, dynamic_schema, compact_data_inline
+    ):
+        lib = version_store_factory(empty_types=empty_types, dynamic_schema=dynamic_schema)
+        sym = "test_append_range_index_from_zero"
+        df_0 = pd.DataFrame({"col": [0, 1]}, index=pd.RangeIndex(-6, -2, 2))
+        lib.write(sym, df_0)
+
+        with pytest.raises(NormalizationException):
+            lib.append(
+                sym,
+                pd.DataFrame({"col": [2, 3]}, index=pd.RangeIndex(0, 4, 2)),
+                compact_data_inline=compact_data_inline,
+            )
+
+    def test_append_indexed(self, s3_version_store, compact_data_inline):
+        symbol = "test_append_simple"
+        idx1 = np.arange(0, 10)
+        d1 = {"x": np.arange(10, 20, dtype=np.int64)}
+        df1 = pd.DataFrame(data=d1, index=idx1)
+        s3_version_store.write(symbol, df1)
+        vit = s3_version_store.read(symbol)
+        assert_frame_equal(vit.data, df1)
+
+        idx2 = np.arange(10, 20)
+        d2 = {"x": np.arange(20, 30, dtype=np.int64)}
+        df2 = pd.DataFrame(data=d2, index=idx2)
+        s3_version_store.append(symbol, df2, compact_data_inline=compact_data_inline)
+        vit = s3_version_store.read(symbol)
+        expected = pd.concat([df1, df2])
+        assert_frame_equal(vit.data, expected)
+
+    def test_append_string_of_different_sizes(self, lmdb_version_store, compact_data_inline):
+        symbol = "test_append_simple"
+        df1 = pd.DataFrame(data={"x": ["cat", "dog"]}, index=np.arange(0, 2))
+        lmdb_version_store.write(symbol, df1)
+        vit = lmdb_version_store.read(symbol)
+        assert_frame_equal(vit.data, df1)
+
+        df2 = pd.DataFrame(
+            data={"x": ["catandsomethingelse", "dogandsomethingevenlonger"]},
+            index=np.arange(2, 4),
+        )
+        lmdb_version_store.append(symbol, df2, compact_data_inline=compact_data_inline)
+        vit = lmdb_version_store.read(symbol)
+        expected = pd.concat([df1, df2])
+        assert_frame_equal(vit.data, expected)
+
+    def test_append_dynamic_schema_add_column(self, lmdb_version_store_dynamic_schema, compact_data_inline):
+        symbol = "symbol"
+        lib = lmdb_version_store_dynamic_schema
+        df_1 = pd.DataFrame(data={"a": [1.0, 2.0]}, index=pd.date_range("2018-01-01", periods=2))
+        df_2 = pd.DataFrame(data={"b": [3.0, 4.0]}, index=pd.date_range("2018-01-03", periods=2))
+
+        lib.write(symbol, df_1)
+        lib.append(symbol, df_2, compact_data_inline=compact_data_inline)
+
+        expected_df = pd.concat([df_1, df_2])
+        result_df = lib.read(symbol).data
+        assert_frame_equal(result_df, expected_df)
+
+    def test_append_snapshot_delete(self, lmdb_version_store, compact_data_inline):
+        symbol = "test_append_snapshot_delete"
+        if sys.platform == "win32":
+            # Keep it smaller on Windows due to restricted LMDB size
+            row_count = 1000
+        else:
+            row_count = 1000000
+        idx1 = np.arange(0, row_count)
+        d1 = {"x": np.arange(row_count, 2 * row_count, dtype=np.int64)}
+        df1 = pd.DataFrame(data=d1, index=idx1)
+        lmdb_version_store.write(symbol, df1)
+        vit = lmdb_version_store.read(symbol)
+        assert_frame_equal(vit.data, df1)
+
+        lmdb_version_store.snapshot("my_snap")
+
+        idx2 = np.arange(row_count, 2 * row_count)
+        d2 = {"x": np.arange(2 * row_count, 3 * row_count, dtype=np.int64)}
+        df2 = pd.DataFrame(data=d2, index=idx2)
+        lmdb_version_store.append(symbol, df2, compact_data_inline=compact_data_inline)
+        vit = lmdb_version_store.read(symbol)
+        expected = pd.concat([df1, df2])
+        assert_frame_equal(vit.data, expected)
+
+        lmdb_version_store.delete(symbol)
+        versions = lmdb_version_store.list_versions()
+        assert len(versions) == 1
+        version = versions[0]
+        version.pop("date")
+        assert version == {"deleted": True, "snapshots": ["my_snap"], "symbol": symbol, "version": 0}
+
+        assert_frame_equal(lmdb_version_store.read(symbol, as_of="my_snap").data, df1)
+
+    def test_append_out_of_order_throws(self, lmdb_version_store, compact_data_inline):
+        lib: NativeVersionStore = lmdb_version_store
+        lib.write("a", pd.DataFrame({"c": [1, 2, 3]}, index=pd.date_range(0, periods=3)))
+        with pytest.raises(Exception, match="1970-01-03"):
+            lib.append(
+                "a",
+                pd.DataFrame({"c": [4]}, index=pd.date_range(1, periods=1)),
+                compact_data_inline=compact_data_inline,
+            )
+
+    def test_upsert_with_delete(self, lmdb_version_store_big_map, compact_data_inline):
+        lib = lmdb_version_store_big_map
+        symbol = "upsert_with_delete"
+        lib.version_store.remove_incomplete(symbol)
+        lib.version_store._set_validate_version_map()
+
+        num_rows = 1111
+        dtidx = pd.date_range("1970-01-01", periods=num_rows)
+        test = pd.DataFrame(
+            {
+                "uint8": random_integers(num_rows, np.uint8),
+                "uint32": random_integers(num_rows, np.uint32),
+            },
+            index=dtidx,
+        )
+        chunk_size = 100
+        list_df = [test[i : i + chunk_size] for i in range(0, test.shape[0], chunk_size)]
+
+        for idx, df in enumerate(list_df):
+            if idx % 3 == 0:
+                lib.delete(symbol)
+
+            lib.append(symbol, df, write_if_missing=True, compact_data_inline=compact_data_inline)
+
+        first = list_df[len(list_df) - 3]
+        second = list_df[len(list_df) - 2]
+        third = list_df[len(list_df) - 1]
+
+        expected = pd.concat([first, second, third])
+        vit = lib.read(symbol)
+        assert_frame_equal(vit.data, expected)
+
+    @pytest.mark.xfail(
+        condition=WINDOWS, raises=arcticdb.exceptions.ArcticDbNotYetImplemented, reason="Not implemented on Windows"
+    )
+    @pytest.mark.parametrize("dtype", supported_types_list)
+    def test_append_numpy_array(self, lmdb_version_store, dtype, compact_data_inline):
+        """Tests append with all supported by arctic data types"""
+        sym = f"test_append_numpy_array"
+        np1 = generate_random_numpy_array(10, dtype)
+        lmdb_version_store.write(sym, np1)
+        np2 = generate_random_numpy_array(10, dtype)
+        lmdb_version_store.append(sym, np2, compact_data_inline=compact_data_inline)
+        expected = np.concatenate((np1, np2))
+        assert_array_equal(lmdb_version_store.read(sym).data, expected)
+
+    def test_append_pickled_symbol(self, lmdb_version_store, compact_data_inline):
+        symbol = "test_append_pickled_symbol"
+        lmdb_version_store.write(symbol, np.arange(100).tolist())
+        assert lmdb_version_store.is_symbol_pickled(symbol)
+        with pytest.raises(InternalException):
+            _ = lmdb_version_store.append(symbol, np.arange(100).tolist(), compact_data_inline=compact_data_inline)
+
+    def test_append_not_sorted_exception(self, lmdb_version_store, compact_data_inline):
+        symbol = "bad_append"
+
+        num_initial_rows = 20
+        initial_timestamp = pd.Timestamp("2019-01-01")
+        dtidx = pd.date_range(initial_timestamp, periods=num_initial_rows)
+        df = pd.DataFrame({"c": np.arange(0, num_initial_rows, dtype=np.int64)}, index=dtidx)
+        assert df.index.is_monotonic_increasing == True
+
+        lmdb_version_store.write(symbol, df)
+        info = lmdb_version_store.get_info(symbol)
+        assert info["sorted"] == "ASCENDING"
+
+        num_rows = 20
+        initial_timestamp = pd.Timestamp("2020-01-01")
+        dtidx = np.roll(pd.date_range(initial_timestamp, periods=num_rows), 3)
+        df2 = pd.DataFrame({"c": np.arange(0, num_rows, dtype=np.int64)}, index=dtidx)
+        assert df2.index.is_monotonic_increasing == False
+
+        with pytest.raises(UnsortedDataException):
+            lmdb_version_store.append(symbol, df2, validate_index=True, compact_data_inline=compact_data_inline)
+
+    @pytest.mark.parametrize("validate_index", (True, False))
+    def test_append_same_index_value(self, lmdb_version_store_v1, validate_index, compact_data_inline):
+        lib = lmdb_version_store_v1
+        sym = "test_append_same_index_value"
+        df_0 = pd.DataFrame({"col": [1, 2]}, index=pd.date_range("2024-01-01", periods=2))
+        lib.write(sym, df_0)
+
+        df_1 = pd.DataFrame({"col": [3, 4]}, index=pd.date_range(df_0.index[-1], periods=2))
+        lib.append(sym, df_1, validate_index=validate_index, compact_data_inline=compact_data_inline)
+        expected = pd.concat([df_0, df_1])
+        received = lib.read(sym).data
+        assert_frame_equal(expected, received)
+        assert lib.get_info(sym)["sorted"] == "ASCENDING"
+
+    def test_append_existing_not_sorted_exception(self, lmdb_version_store, compact_data_inline):
+        symbol = "bad_append"
+
+        num_initial_rows = 20
+        initial_timestamp = pd.Timestamp("2019-01-01")
+        dtidx = np.roll(pd.date_range(initial_timestamp, periods=num_initial_rows), 3)
+        df = pd.DataFrame({"c": np.arange(0, num_initial_rows, dtype=np.int64)}, index=dtidx)
+        assert df.index.is_monotonic_increasing == False
+
+        lmdb_version_store.write(symbol, df)
+        info = lmdb_version_store.get_info(symbol)
+        assert info["sorted"] == "UNSORTED"
+
+        num_rows = 20
+        initial_timestamp = pd.Timestamp("2020-01-01")
+        dtidx = pd.date_range(initial_timestamp, periods=num_rows)
+        df2 = pd.DataFrame({"c": np.arange(0, num_rows, dtype=np.int64)}, index=dtidx)
+        assert df2.index.is_monotonic_increasing == True
+
+        with pytest.raises(UnsortedDataException):
+            lmdb_version_store.append(symbol, df2, validate_index=True, compact_data_inline=compact_data_inline)
+
+    def test_append_not_sorted_non_validate_index(self, lmdb_version_store, compact_data_inline):
+        symbol = "bad_append"
+
+        num_initial_rows = 20
+        initial_timestamp = pd.Timestamp("2019-01-01")
+        dtidx = pd.date_range(initial_timestamp, periods=num_initial_rows)
+        df = pd.DataFrame({"c": np.arange(0, num_initial_rows, dtype=np.int64)}, index=dtidx)
+        assert df.index.is_monotonic_increasing == True
+
+        lmdb_version_store.write(symbol, df)
+        info = lmdb_version_store.get_info(symbol)
+        assert info["sorted"] == "ASCENDING"
+
+        num_rows = 20
+        initial_timestamp = pd.Timestamp("2020-01-01")
+        dtidx = np.roll(pd.date_range(initial_timestamp, periods=num_rows), 3)
+        df2 = pd.DataFrame({"c": np.arange(0, num_rows, dtype=np.int64)}, index=dtidx)
+        assert df2.index.is_monotonic_increasing == False
+        lmdb_version_store.append(symbol, df2, compact_data_inline=compact_data_inline)
+
+    def test_append_not_sorted_multi_index_exception(self, lmdb_version_store, compact_data_inline):
+        symbol = "bad_append"
+
+        num_initial_rows = 20
+        initial_timestamp = pd.Timestamp("2019-01-01")
+        dtidx1 = pd.date_range(initial_timestamp, periods=num_initial_rows)
+        dtidx2 = np.roll(np.arange(0, num_initial_rows), 3)
+        df = pd.DataFrame(
+            {"c": np.arange(0, num_initial_rows, dtype=np.int64)},
+            index=pd.MultiIndex.from_arrays([dtidx1, dtidx2], names=["datetime", "level"]),
+        )
+        assert isinstance(df.index, MultiIndex) == True
+        assert df.index.is_monotonic_increasing == True
+
+        lmdb_version_store.write(symbol, df)
+        info = lmdb_version_store.get_info(symbol)
+        assert info["sorted"] == "ASCENDING"
+
+        num_rows = 20
+        initial_timestamp = pd.Timestamp("2020-01-01")
+        dtidx1 = np.roll(pd.date_range(initial_timestamp, periods=num_rows), 3)
+        dtidx2 = np.arange(0, num_rows)
+        df2 = pd.DataFrame(
+            {"c": np.arange(0, num_rows, dtype=np.int64)},
+            index=pd.MultiIndex.from_arrays([dtidx1, dtidx2], names=["datetime", "level"]),
+        )
+        assert df2.index.is_monotonic_increasing == False
+        assert isinstance(df.index, MultiIndex) == True
+
+        with pytest.raises(UnsortedDataException):
+            lmdb_version_store.append(symbol, df2, validate_index=True, compact_data_inline=compact_data_inline)
+
+    def test_append_not_sorted_range_index_non_exception(self, lmdb_version_store, compact_data_inline):
+        symbol = "bad_append"
+
+        num_initial_rows = 20
+        dtidx = pd.RangeIndex(0, num_initial_rows, 1)
+        df = pd.DataFrame({"c": np.arange(0, num_initial_rows, dtype=np.int64)}, index=dtidx)
+
+        lmdb_version_store.write(symbol, df)
+        info = lmdb_version_store.get_info(symbol)
+        assert info["sorted"] == "UNKNOWN"
+
+        num_rows = 20
+        dtidx = pd.RangeIndex(num_initial_rows, num_initial_rows + num_rows, 1)
+        dtidx = np.roll(dtidx, 3)
+        df2 = pd.DataFrame({"c": np.arange(0, num_rows, dtype=np.int64)}, index=dtidx)
+        assert df2.index.is_monotonic_increasing == False
+        with pytest.raises(NormalizationException):
+            lmdb_version_store.append(symbol, df2, compact_data_inline=compact_data_inline)
+
+    def test_append_mix_ascending_not_sorted(self, lmdb_version_store, compact_data_inline):
+        symbol = "bad_append"
+
+        num_initial_rows = 20
+        initial_timestamp = pd.Timestamp("2019-01-01")
+        dtidx = pd.date_range(initial_timestamp, periods=num_initial_rows)
+        df = pd.DataFrame({"c": np.arange(0, num_initial_rows, dtype=np.int64)}, index=dtidx)
+        assert df.index.is_monotonic_increasing == True
+
+        lmdb_version_store.write(symbol, df, validate_index=True)
+        info = lmdb_version_store.get_info(symbol)
+        assert info["sorted"] == "ASCENDING"
+
+        num_rows = 20
+        initial_timestamp = pd.Timestamp("2020-01-01")
+        dtidx = pd.date_range(initial_timestamp, periods=num_rows)
+        df2 = pd.DataFrame({"c": np.arange(0, num_rows, dtype=np.int64)}, index=dtidx)
+        assert df2.index.is_monotonic_increasing == True
+        lmdb_version_store.append(symbol, df2, validate_index=True, compact_data_inline=compact_data_inline)
+        info = lmdb_version_store.get_info(symbol)
+        assert info["sorted"] == "ASCENDING"
+
+        num_rows = 20
+        initial_timestamp = pd.Timestamp("2021-01-01")
+        dtidx = np.roll(pd.date_range(initial_timestamp, periods=num_rows), 3)
+        df2 = pd.DataFrame({"c": np.arange(0, num_rows, dtype=np.int64)}, index=dtidx)
+        assert df2.index.is_monotonic_increasing == False
+        lmdb_version_store.append(symbol, df2, compact_data_inline=compact_data_inline)
+        info = lmdb_version_store.get_info(symbol)
+        assert info["sorted"] == "UNSORTED"
+
+        num_rows = 20
+        initial_timestamp = pd.Timestamp("2022-01-01")
+        dtidx = pd.date_range(initial_timestamp, periods=num_rows)
+        df2 = pd.DataFrame({"c": np.arange(0, num_rows, dtype=np.int64)}, index=dtidx)
+        assert df2.index.is_monotonic_increasing == True
+        lmdb_version_store.append(symbol, df2, compact_data_inline=compact_data_inline)
+        info = lmdb_version_store.get_info(symbol)
+        assert info["sorted"] == "UNSORTED"
+
+    def test_append_mix_descending_not_sorted(self, lmdb_version_store, compact_data_inline):
+        symbol = "bad_append"
+
+        num_initial_rows = 20
+        initial_timestamp = pd.Timestamp("2019-01-01")
+        dtidx = pd.date_range(initial_timestamp, periods=num_initial_rows)
+        df = pd.DataFrame({"c": np.arange(0, num_initial_rows, dtype=np.int64)}, index=reversed(dtidx))
+        assert df.index.is_monotonic_decreasing == True
+
+        lmdb_version_store.write(symbol, df)
+        info = lmdb_version_store.get_info(symbol)
+        assert info["sorted"] == "DESCENDING"
+
+        num_rows = 20
+        initial_timestamp = pd.Timestamp("2020-01-01")
+        dtidx = pd.date_range(initial_timestamp, periods=num_rows)
+        df2 = pd.DataFrame({"c": np.arange(0, num_rows, dtype=np.int64)}, index=reversed(dtidx))
+        assert df2.index.is_monotonic_decreasing == True
+        lmdb_version_store.append(symbol, df2, compact_data_inline=compact_data_inline)
+        info = lmdb_version_store.get_info(symbol)
+        assert info["sorted"] == "DESCENDING"
+
+        num_rows = 20
+        initial_timestamp = pd.Timestamp("2021-01-01")
+        dtidx = np.roll(pd.date_range(initial_timestamp, periods=num_rows), 3)
+        df2 = pd.DataFrame({"c": np.arange(0, num_rows, dtype=np.int64)}, index=dtidx)
+        assert df2.index.is_monotonic_decreasing == False
+        lmdb_version_store.append(symbol, df2, compact_data_inline=compact_data_inline)
+        info = lmdb_version_store.get_info(symbol)
+        assert info["sorted"] == "UNSORTED"
+
+        num_rows = 20
+        initial_timestamp = pd.Timestamp("2022-01-01")
+        dtidx = pd.date_range(initial_timestamp, periods=num_rows)
+        df2 = pd.DataFrame({"c": np.arange(0, num_rows, dtype=np.int64)}, index=reversed(dtidx))
+        assert df2.index.is_monotonic_decreasing == True
+        lmdb_version_store.append(symbol, df2, compact_data_inline=compact_data_inline)
+        info = lmdb_version_store.get_info(symbol)
+        assert info["sorted"] == "UNSORTED"
+
+    def test_append_mix_ascending_descending(self, lmdb_version_store, compact_data_inline):
+        symbol = "bad_append"
+
+        num_initial_rows = 20
+        initial_timestamp = pd.Timestamp("2019-01-01")
+        dtidx = pd.date_range(initial_timestamp, periods=num_initial_rows)
+        df = pd.DataFrame({"c": np.arange(0, num_initial_rows, dtype=np.int64)}, index=reversed(dtidx))
+        assert df.index.is_monotonic_decreasing == True
+
+        lmdb_version_store.write(symbol, df)
+        info = lmdb_version_store.get_info(symbol)
+        assert info["sorted"] == "DESCENDING"
+
+        num_rows = 20
+        initial_timestamp = pd.Timestamp("2020-01-01")
+        dtidx = pd.date_range(initial_timestamp, periods=num_rows)
+        df2 = pd.DataFrame({"c": np.arange(0, num_rows, dtype=np.int64)}, index=dtidx)
+        assert df2.index.is_monotonic_increasing == True
+        lmdb_version_store.append(symbol, df2, compact_data_inline=compact_data_inline)
+        info = lmdb_version_store.get_info(symbol)
+        assert info["sorted"] == "UNSORTED"
+
+        num_rows = 20
+        initial_timestamp = pd.Timestamp("2022-01-01")
+        dtidx = pd.date_range(initial_timestamp, periods=num_rows)
+        df2 = pd.DataFrame({"c": np.arange(0, num_rows, dtype=np.int64)}, index=reversed(dtidx))
+        assert df2.index.is_monotonic_decreasing == True
+        lmdb_version_store.append(symbol, df2, compact_data_inline=compact_data_inline)
+        info = lmdb_version_store.get_info(symbol)
+        assert info["sorted"] == "UNSORTED"
+
+    def test_append_docs_example(self, lmdb_version_store, compact_data_inline):
+        # This test is really just the append example from the docs.
+        # Other examples are included so that outputs can be easily re-generated.
+        lib = lmdb_version_store
+
+        # Write example
+        cols = ["COL_%d" % i for i in range(50)]
+        df = pd.DataFrame(np.random.randint(0, 50, size=(25, 50)), columns=cols)
+        df.index = pd.date_range(datetime(2000, 1, 1, 5), periods=25, freq="H")
+        print(df.head(2))
+        lib.write("test_frame", df)
+
+        # Read it back
+        from_storage_df = lib.read("test_frame").data
+        print(from_storage_df.head(2))
+
+        # Slicing and filtering examples
+        print(lib.read("test_frame", date_range=(df.index[5], df.index[8])).data)
+        _range = (df.index[5], df.index[8])
+        _cols = ["COL_30", "COL_31"]
+        print(lib.read("test_frame", date_range=_range, columns=_cols).data)
+        from arcticdb import QueryBuilder
+
+        q = QueryBuilder()
+        q = q[(q["COL_30"] > 30) & (q["COL_31"] < 50)]
+        print(lib.read("test_frame", date_range=_range, columns=_cols, query_builder=q).data)
+
+        # Update example
+        random_data = np.random.randint(0, 50, size=(25, 50))
+        df2 = pd.DataFrame(random_data, columns=["COL_%d" % i for i in range(50)])
+        df2.index = pd.date_range(datetime(2000, 1, 1, 5), periods=25, freq="H")
+        df2 = df2.iloc[[0, 2]]
+        print(df2)
+        lib.update("test_frame", df2)
+        print(lib.head("test_frame", 2))
+
+        # Append example
+        random_data = np.random.randint(0, 50, size=(5, 50))
+        df_append = pd.DataFrame(random_data, columns=["COL_%d" % i for i in range(50)])
+        print(df_append)
+        df_append.index = pd.date_range(datetime(2000, 1, 2, 7), periods=5, freq="H")
+
+        lib.append("test_frame", df_append, compact_data_inline=compact_data_inline)
+        print(lib.tail("test_frame", 7).data)
+        expected = pd.concat([df2, df.drop(df.index[:3]), df_append])
+        assert_frame_equal(lib.read("test_frame").data, expected)
+
+        print(lib.tail("test_frame", 7, as_of=0).data)
+
+    @pytest.mark.parametrize(
+        "to_write, to_append",
+        [
+            (pd.DataFrame({"a": [1]}), pd.Series([2])),
+            (pd.DataFrame({"a": [1]}), np.array([2])),
+            (pd.Series([1]), pd.DataFrame({"a": [2]})),
+            (pd.Series([1]), np.array([2])),
+            (np.array([1]), pd.DataFrame({"a": [2]})),
+            (np.array([1]), pd.Series([2])),
+            (pd.DataFrame({"a": [1], "b": [2]}), pd.Series([2])),
+            (pd.DataFrame({"a": [1], "b": [2]}), np.array([2])),
+            (pd.Series([1]), pd.DataFrame({"a": [2], "b": [2]})),
+            (np.array([1]), pd.DataFrame({"a": [2], "b": [2]})),
+        ],
+    )
+    def test_append_mismatched_object_kind(
+        self, to_write, to_append, lmdb_version_store_dynamic_schema_v1, compact_data_inline
+    ):
+        lib = lmdb_version_store_dynamic_schema_v1
+        lib.write("sym", to_write)
+        with pytest.raises(NormalizationException) as e:
+            lib.append("sym", to_append, compact_data_inline=compact_data_inline)
+        assert "Append" in str(e.value)
+
+    @pytest.mark.parametrize(
+        "to_write, to_append",
+        [
+            (pd.Series([1, 2, 3], name="name_1"), pd.Series([4, 5, 6], name="name_2")),
+            (
+                pd.Series(
+                    [1, 2, 3],
+                    name="name_1",
+                    index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(1), pd.Timestamp(2)]),
+                ),
+                pd.Series(
+                    [4, 5, 6],
+                    name="name_2",
+                    index=pd.DatetimeIndex([pd.Timestamp(3), pd.Timestamp(4), pd.Timestamp(5)]),
+                ),
+            ),
+        ],
+    )
+    def test_append_series_with_different_column_name_throws(
+        self, lmdb_version_store_dynamic_schema_v1, to_write, to_append, compact_data_inline
+    ):
+        # It makes sense to create a new column and turn the whole thing into a dataframe. This would require changes in the
+        # logic for storing normalization metadata which is tricky. Noone has requested this, so we just throw.
+        lib = lmdb_version_store_dynamic_schema_v1
+        lib.write("sym", to_write)
+        with pytest.raises(SchemaException) as e:
+            lib.append("sym", to_append, compact_data_inline=compact_data_inline)
+        assert "name_1" in str(e.value) and "name_2" in str(e.value)
+
+    def test_append_series_with_different_row_range_index_name(
+        self, lmdb_version_store_dynamic_schema_v1, compact_data_inline
+    ):
+        lib = lmdb_version_store_dynamic_schema_v1
+        to_write = pd.Series([1, 2, 3])
+        to_write.index.name = "index_name_1"
+        to_append = pd.Series([4, 5, 6])
+        to_append.index.name = "index_name_2"
+        lib.write("sym", to_write)
+        lib.append("sym", to_append, compact_data_inline=compact_data_inline)
+        # The current behavior is the last modification operation is setting the index name.
+        # See Monday 9797097831, it would be best to require that index names are always matching. This is the case for
+        # datetime index because it's a physical column. It's a potentially breaking change.
+        assert lib.read("sym").data.index.name == "index_name_2"
+
+    def test_append_after_delete_range(self, sym, lmdb_version_store, compact_data_inline):
+        lib = lmdb_version_store
+
+        start_date = datetime(2025, 9, 1)
+        end_date = datetime(2025, 9, 2)
+        cur_date = start_date
+
+        # create data
+        while cur_date <= end_date:
+            df = create_random_data(at_date=cur_date)
+            lib.append("sym", df, compact_data_inline=compact_data_inline)
+            cur_date = get_next_business_date(cur_date)
+
+        # remove date
+        lib.delete("sym", date_range=(datetime(2025, 9, 2), datetime(2025, 9, 3)))
+
+        # re-insert data
+        start_date = datetime(2025, 9, 2)
+        end_date = datetime(2025, 9, 3)
+        cur_date = start_date
+
+        expected_data = lib.read("sym", date_range=(datetime(2025, 9, 1), datetime(2025, 9, 2))).data
+
+        while cur_date <= end_date:
+            df = create_random_data(at_date=cur_date)
+            expected_data = pd.concat([expected_data, df])
+            lib.append("sym", df, compact_data_inline=compact_data_inline)
+            cur_date = get_next_business_date(cur_date)
+
+        assert_frame_equal(lib.read("sym").data, expected_data)
+
+        sliced_data = lib.read("sym", date_range=(datetime(2025, 9, 1), datetime(2025, 9, 4))).data
+        assert_frame_equal(sliced_data, expected_data)
+
+    @pytest.mark.parametrize("data_class", ["dataframe", "series"])
+    @pytest.mark.parametrize("batch", [True, False])
+    @pytest.mark.parametrize("metadata_v1", ["v1", None])
+    def test_append_empty_frame_metadata(
+        self, lmdb_version_store_v1, data_class, batch, metadata_v1, compact_data_inline
+    ):
+        lib = lmdb_version_store_v1
+        sym = "test_append_empty_frame_metadata"
+        write_data = pd.DataFrame({"col": np.arange(1)}) if data_class == "dataframe" else pd.Series(np.arange(1))
+        metadata_v0 = "v0"
+        lib.write(sym, write_data, metadata=metadata_v0)
+        # Using arange guarantees the dtype matches the written df
+        append_data = pd.DataFrame({"col": np.arange(0)}) if data_class == "dataframe" else pd.Series(np.arange(0))
+        append_vit = (
+            # TODO: 12033601732 test with batch and compact_data_inline=True as well
+            lib.batch_append([sym], [append_data], metadata_vector=[metadata_v1])[0]
+            if batch
+            else lib.append(sym, append_data, metadata=metadata_v1, compact_data_inline=compact_data_inline)
+        )
+        assert append_vit.version == 1
+        assert append_vit.metadata == metadata_v1
+        read_vit = lib.read(sym)
+        assert read_vit.version == 1
+        assert read_vit.metadata == metadata_v1
+        assert_func = assert_frame_equal if data_class == "dataframe" else assert_series_equal
+        assert_func(read_vit.data, write_data)
+
+    @pytest.mark.parametrize("batch", [True, False])
+    def test_symbol_list_key_added_on_upsert(self, lmdb_version_store_v1, batch, compact_data_inline):
+        lib = lmdb_version_store_v1
+        sym = "test_symbol_list_key_added_on_upsert"
+        lib.write(sym, 0)
+        lib.delete(sym)
+        lib_tool = lib.library_tool()
+        assert not len(lib.list_symbols())
+        num_symbol_list_keys = len(lib_tool.find_keys(KeyType.SYMBOL_LIST))
+        append_df = pd.DataFrame({"col": np.arange(0)})
+        # TODO: 12033601732 test with batch and compact_data_inline=True as well
         (
-            pd.Series(
-                [1, 2, 3], name="name_1", index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(1), pd.Timestamp(2)])
-            ),
-            pd.Series(
-                [4, 5, 6], name="name_2", index=pd.DatetimeIndex([pd.Timestamp(3), pd.Timestamp(4), pd.Timestamp(5)])
-            ),
-        ),
-    ],
-)
-def test_append_series_with_different_column_name_throws(lmdb_version_store_dynamic_schema_v1, to_write, to_append):
-    # It makes sense to create a new column and turn the whole thing into a dataframe. This would require changes in the
-    # logic for storing normalization metadata which is tricky. Noone has requested this, so we just throw.
-    lib = lmdb_version_store_dynamic_schema_v1
-    lib.write("sym", to_write)
-    with pytest.raises(SchemaException) as e:
-        lib.append("sym", to_append)
-    assert "name_1" in str(e.value) and "name_2" in str(e.value)
-
-
-def test_append_series_with_different_row_range_index_name(lmdb_version_store_dynamic_schema_v1):
-    lib = lmdb_version_store_dynamic_schema_v1
-    to_write = pd.Series([1, 2, 3])
-    to_write.index.name = "index_name_1"
-    to_append = pd.Series([4, 5, 6])
-    to_append.index.name = "index_name_2"
-    lib.write("sym", to_write)
-    lib.append("sym", to_append)
-    # The current behavior is the last modification operation is setting the index name.
-    # See Monday 9797097831, it would be best to require that index names are always matching. This is the case for
-    # datetime index because it's a physical column. It's a potentially breaking change.
-    assert lib.read("sym").data.index.name == "index_name_2"
-
-
-def get_next_business_date(d: datetime) -> datetime:
-    """Returns next business date from datetime 'd' (uses pandas BDay)."""
-
-    return (d + BDay(1)).to_pydatetime()
-
-
-def create_random_data(at_date: datetime, num_cols: int = 5) -> pd.DataFrame:
-    date_range = pd.date_range(
-        start=at_date.replace(hour=0, minute=0, second=0, microsecond=0),
-        end=at_date.replace(hour=18, minute=0, second=0, microsecond=0),
-        freq="s",
-    )
-    data = np.round(np.random.random(size=(len(date_range), num_cols)) * 100, 2)
-
-    return pd.DataFrame(data=data, index=date_range, columns=[f"c{i + 1}" for i in range(num_cols)])
-
-
-def test_append_after_delete_range(sym, lmdb_version_store):
-    lib = lmdb_version_store
-
-    start_date = datetime(2025, 9, 1)
-    end_date = datetime(2025, 9, 2)
-    cur_date = start_date
-
-    # create data
-    while cur_date <= end_date:
-        df = create_random_data(at_date=cur_date)
-        lib.append("sym", df)
-        cur_date = get_next_business_date(cur_date)
-
-    # remove date
-    lib.delete("sym", date_range=(datetime(2025, 9, 2), datetime(2025, 9, 3)))
-
-    # re-insert data
-    start_date = datetime(2025, 9, 2)
-    end_date = datetime(2025, 9, 3)
-    cur_date = start_date
-
-    expected_data = lib.read("sym", date_range=(datetime(2025, 9, 1), datetime(2025, 9, 2))).data
-
-    while cur_date <= end_date:
-        df = create_random_data(at_date=cur_date)
-        expected_data = pd.concat([expected_data, df])
-        lib.append("sym", df)
-        cur_date = get_next_business_date(cur_date)
-
-    assert_frame_equal(lib.read("sym").data, expected_data)
-
-    sliced_data = lib.read("sym", date_range=(datetime(2025, 9, 1), datetime(2025, 9, 4))).data
-    assert_frame_equal(sliced_data, expected_data)
-
-
-@pytest.mark.parametrize("data_class", ["dataframe", "series"])
-@pytest.mark.parametrize("batch", [True, False])
-@pytest.mark.parametrize("metadata_v1", ["v1", None])
-def test_append_empty_frame_metadata(lmdb_version_store_v1, data_class, batch, metadata_v1):
-    lib = lmdb_version_store_v1
-    sym = "test_append_empty_frame_metadata"
-    write_data = pd.DataFrame({"col": np.arange(1)}) if data_class == "dataframe" else pd.Series(np.arange(1))
-    metadata_v0 = "v0"
-    lib.write(sym, write_data, metadata=metadata_v0)
-    # Using arange guarantees the dtype matches the written df
-    append_data = pd.DataFrame({"col": np.arange(0)}) if data_class == "dataframe" else pd.Series(np.arange(0))
-    append_vit = (
-        lib.batch_append([sym], [append_data], metadata_vector=[metadata_v1])[0]
-        if batch
-        else lib.append(sym, append_data, metadata=metadata_v1)
-    )
-    assert append_vit.version == 1
-    assert append_vit.metadata == metadata_v1
-    read_vit = lib.read(sym)
-    assert read_vit.version == 1
-    assert read_vit.metadata == metadata_v1
-    assert_func = assert_frame_equal if data_class == "dataframe" else assert_series_equal
-    assert_func(read_vit.data, write_data)
-
-
-@pytest.mark.parametrize("batch", [True, False])
-def test_symbol_list_key_added_on_upsert(lmdb_version_store_v1, batch):
-    lib = lmdb_version_store_v1
-    sym = "test_symbol_list_key_added_on_upsert"
-    lib.write(sym, 0)
-    lib.delete(sym)
-    lib_tool = lib.library_tool()
-    assert not len(lib.list_symbols())
-    num_symbol_list_keys = len(lib_tool.find_keys(KeyType.SYMBOL_LIST))
-    append_df = pd.DataFrame({"col": np.arange(0)})
-    (lib.batch_append([sym], [append_df]) if batch else lib.append(sym, append_df))
-    assert len(lib_tool.find_keys(KeyType.SYMBOL_LIST)) == num_symbol_list_keys + 1
-    assert lib.list_symbols() == [sym]
+            lib.batch_append([sym], [append_df])
+            if batch
+            else lib.append(sym, append_df, compact_data_inline=compact_data_inline)
+        )
+        assert len(lib_tool.find_keys(KeyType.SYMBOL_LIST)) == num_symbol_list_keys + 1
+        assert lib.list_symbols() == [sym]

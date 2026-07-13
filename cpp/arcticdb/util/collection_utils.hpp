@@ -58,6 +58,13 @@ std::vector<std::shared_ptr<T>> extract_to_pointers(std::vector<T>&& input) {
     return res;
 }
 
+template<typename T>
+std::vector<T> reserve_vector(size_t size) {
+    std::vector<T> res;
+    res.reserve(size);
+    return res;
+}
+
 } // namespace util
 
 } // namespace arcticdb

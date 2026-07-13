@@ -203,9 +203,15 @@ folly::Future<CompactDataInfo> compact_data_explain_plan_impl(
         const std::shared_ptr<Store>& store, const UpdateInfo& update_info, uint64_t rows_per_segment
 );
 
+struct CompactDataFrame {
+    std::shared_ptr<InputFrame> frame_;
+    bool validate_index_;
+    bool empty_types_;
+};
+
 folly::Future<std::optional<VersionedItem>> compact_data_impl(
-        const std::shared_ptr<Store>& store, const VersionedItem& versioned_item, const WriteOptions& write_options,
-        const IndexPartialKey& target_partial_index_key, uint64_t rows_per_segment
+        const std::shared_ptr<Store>& store, const UpdateInfo& update_info, const WriteOptions& write_options,
+        uint64_t rows_per_segment, std::optional<CompactDataFrame> compact_data_frame = std::nullopt
 );
 
 std::shared_ptr<PipelineContext> setup_pipeline_context(

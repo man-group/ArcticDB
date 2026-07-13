@@ -42,16 +42,6 @@ TimeseriesDescriptor make_timeseries_descriptor(
     };
 }
 
-TimeseriesDescriptor make_timeseries_descriptor(
-        size_t total_rows, StreamDescriptor&& desc, const proto::descriptors::NormalizationMetadata& norm_meta,
-        std::optional<proto::descriptors::UserDefinedMetadata>&& um, std::optional<AtomKey>&& next_key,
-        bool bucketize_dynamic
-) {
-    return make_timeseries_descriptor(
-            total_rows, desc, norm_meta, std::move(um), std::move(next_key), bucketize_dynamic
-    );
-}
-
 TimeseriesDescriptor timeseries_descriptor_from_pipeline_context(
         const std::shared_ptr<pipelines::PipelineContext>& pipeline_context, std::optional<AtomKey>&& next_key,
         bool bucketize_dynamic
@@ -59,11 +49,8 @@ TimeseriesDescriptor timeseries_descriptor_from_pipeline_context(
     return make_timeseries_descriptor(
             pipeline_context->total_rows_,
             pipeline_context->descriptor(),
-            *pipeline_context->norm_meta_,
-            pipeline_context->user_meta_ ? std::make_optional<arcticdb::proto::descriptors::UserDefinedMetadata>(
-                                                   std::move(*pipeline_context->user_meta_)
-                                           )
-                                         : std::nullopt,
+            pipeline_context->normalization(),
+            pipeline_context->release_opt_user_defined_metadata(),
             std::move(next_key),
             bucketize_dynamic
     );

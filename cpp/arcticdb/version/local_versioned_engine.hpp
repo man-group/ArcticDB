@@ -131,8 +131,7 @@ class LocalVersionedEngine : public VersionedEngine {
     ) override;
 
     VersionedItem append_internal(
-            const StreamId& stream_id, const std::shared_ptr<InputFrame>& frame, bool upsert,
-            bool prune_previous_versions, bool validate_index
+            const StreamId& stream_id, const std::shared_ptr<InputFrame>& frame, const AppendOptions& append_options
     ) override;
 
     VersionedItem delete_range_internal(
@@ -289,7 +288,7 @@ class LocalVersionedEngine : public VersionedEngine {
 
     std::vector<std::variant<VersionedItem, DataError>> batch_append_internal(
             const std::vector<StreamId>& stream_ids, std::vector<std::shared_ptr<pipelines::InputFrame>>&& frames,
-            bool prune_previous_versions, bool validate_index, bool upsert, bool throw_on_error
+            const AppendOptions& append_options, bool throw_on_error
     );
 
     std::vector<std::variant<VersionedItem, DataError>> batch_update_internal(
@@ -338,6 +337,11 @@ class LocalVersionedEngine : public VersionedEngine {
     CompactDataInfo compact_data_explain_plan_internal(
             const StreamId& stream_id, std::optional<uint64_t> rows_per_segment
     ) override;
+
+    VersionedItem maybe_compact_data_and_write_version(
+            const UpdateInfo& update_info, uint64_t rows_per_segment, bool prune_previous_versions,
+            std::optional<CompactDataFrame> compact_data_frame = std::nullopt
+    );
 
     VersionedItem compact_data_internal(
             const StreamId& stream_id, std::optional<uint64_t> rows_per_segment, bool prune_previous_versions

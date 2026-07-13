@@ -65,7 +65,7 @@ TimeseriesDescriptor make_timeseries_descriptor(
 // The overload above returns a TSD that shares a std::shared_ptr<FieldCollection> with the input StreamDescriptor,
 // which is error-prone. However, it is sometimes the desired behaviour, so needs to still be available.
 TimeseriesDescriptor make_timeseries_descriptor(
-        size_t total_rows, StreamDescriptor&& desc,
+        size_t total_rows, const StreamDescriptor& desc,
         const arcticdb::proto::descriptors::NormalizationMetadata& norm_meta,
         std::optional<arcticdb::proto::descriptors::UserDefinedMetadata>&& um, std::optional<AtomKey>&& next_key,
         bool bucketize_dynamic
