@@ -59,25 +59,15 @@ VersionedItem PythonVersionStore::write_dataframe_specific_version(
         return {std::move(*version_key)};
     }
 
-    auto versioned_item = write_dataframe_impl(
-            store(),
-            VersionId(version_id),
-            convert::py_input_item_to_frame(
-                    stream_id,
-                    item,
-                    norm,
-                    user_meta,
-                    cfg().write_options().empty_types(),
-                    pipelines::SortednessScan::SKIP
-            ),
-            get_write_options()
+    auto input_frame = convert::py_input_item_to_frame(
+            stream_id, item, norm, user_meta, cfg().write_options().empty_types(), pipelines::SortednessScan::SKIP
     );
-
-    version_map()->write_version(store(), versioned_item.key_, std::nullopt);
+    auto index_key = async_write_dataframe_impl(store(), VersionId(version_id), input_frame, get_write_options()).get();
+    version_map()->write_version(store(), index_key, std::nullopt);
     if (cfg().symbol_list())
         symbol_list().add_symbol(store(), stream_id, version_id);
 
-    return versioned_item;
+    return {std::move(index_key)};
 }
 
 std::vector<std::shared_ptr<InputFrame>> create_input_tensor_frames(
@@ -701,27 +691,20 @@ VersionedItem PythonVersionStore::write_partitioned_dataframe(
     std::array<std::shared_ptr<convert::PandasData>, 1> partitioned_dfs{item};
 
     auto write_options = get_write_options();
-    auto de_dup_map = std::make_shared<DeDupMap>();
 
     std::vector<entity::AtomKey> index_keys;
     for (size_t idx = 0; idx < partitioned_dfs.size(); idx++) {
         auto subkeyname = fmt::format("{}-{}", stream_id, partition_value[idx]);
-        auto versioned_item = write_dataframe_impl(
-                store(),
-                version_id,
-                convert::py_input_item_to_frame(
-                        subkeyname,
-                        partitioned_dfs[idx],
-                        norm_meta,
-                        py::none(),
-                        cfg().write_options().empty_types(),
-                        pipelines::SortednessScan::SKIP
-                ),
-                write_options,
-                de_dup_map,
-                false
+        auto input_frame = convert::py_input_item_to_frame(
+                subkeyname,
+                partitioned_dfs[idx],
+                norm_meta,
+                py::none(),
+                cfg().write_options().empty_types(),
+                pipelines::SortednessScan::SKIP
         );
-        index_keys.emplace_back(versioned_item.key_);
+        auto index_key = async_write_dataframe_impl(store(), version_id, input_frame, write_options).get();
+        index_keys.emplace_back(std::move(index_key));
     }
 
     folly::Future<VariantKey> multi_key_fut = folly::Future<VariantKey>::makeEmpty();
@@ -755,10 +738,14 @@ VersionedItem PythonVersionStore::write_versioned_composite_data(
     ARCTICDB_SAMPLE(WriteVersionedMultiKey, 0)
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: write_versioned_composite_data");
 
-    auto [maybe_prev, deleted] = ::arcticdb::get_latest_version(store(), version_map(), stream_id);
-    auto version_id = get_next_version_from_key(maybe_prev);
+    auto update_info = get_next_version_id_and_optionally_latest_undeleted_version(
+            store(), version_map(), stream_id, cfg().write_options().de_duplication()
+    );
     ARCTICDB_DEBUG(
-            log::version(), "write_versioned_composite_data for stream_id: {} , version_id = {}", stream_id, version_id
+            log::version(),
+            "write_versioned_composite_data for stream_id: {} , version_id = {}",
+            stream_id,
+            update_info.next_version_id_
     );
     // TODO: Assuming each sub key is always going to have the same version attached to it.
     std::vector<VersionId> version_ids;
@@ -771,9 +758,9 @@ VersionedItem PythonVersionStore::write_versioned_composite_data(
     de_dup_maps.reserve(sub_keys.size());
 
     auto write_options = get_write_options();
-    auto de_dup_map = get_de_dup_map(stream_id, maybe_prev, write_options);
+    auto de_dup_map = get_de_dup_map(stream_id, update_info, write_options);
     for (auto i = 0u; i < sub_keys.size(); ++i) {
-        version_ids.emplace_back(version_id);
+        version_ids.emplace_back(update_info.next_version_id_);
         user_metas.emplace_back(py::none());
         de_dup_maps.emplace_back(de_dup_map);
     }
@@ -792,12 +779,14 @@ VersionedItem PythonVersionStore::write_versioned_composite_data(
             batch_write_internal(std::move(version_ids), sub_keys, std::move(frames), std::move(de_dup_maps), false)
                     .get();
     release_gil.reset();
-    auto multi_key = write_multi_index_entry(store(), index_keys, stream_id, metastruct, user_meta, version_id);
+    auto multi_key = write_multi_index_entry(
+            store(), index_keys, stream_id, metastruct, user_meta, update_info.next_version_id_
+    );
     auto versioned_item = VersionedItem(to_atom(std::move(multi_key)));
-    write_version_and_prune_previous(prune_previous_versions, versioned_item.key_, maybe_prev);
+    write_version_and_prune_previous(prune_previous_versions, versioned_item.key_, update_info.previous_index_key_);
 
     if (cfg().symbol_list())
-        symbol_list().add_symbol(store(), stream_id, version_id);
+        symbol_list().add_symbol(store(), stream_id, update_info.next_version_id_);
 
     return versioned_item;
 }

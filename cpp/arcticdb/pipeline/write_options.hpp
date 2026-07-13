@@ -24,7 +24,9 @@ struct WriteOptions {
                 opt.snapshot_dedup(),
                 opt.dynamic_schema(),
                 opt.ignore_sort_order(),
-                opt.bucketize_dynamic()};
+                opt.bucketize_dynamic(),
+                opt.empty_types(),
+                opt.delayed_deletes()};
     }
 
     size_t column_group_size = 127;
@@ -36,6 +38,7 @@ struct WriteOptions {
     bool dynamic_schema = false;
     bool ignore_sort_order = false;
     bool bucketize_dynamic = false;
-    bool sparsify_floats = false;
+    bool empty_types = false;
+    bool delayed_deletes = false;
 };
 } // namespace arcticdb
