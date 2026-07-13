@@ -14,6 +14,7 @@
 #include <arcticdb/stream/stream_sink.hpp>
 #include <arcticdb/stream/index_aggregator.hpp>
 #include <arcticdb/version/version_map_entry.hpp>
+#include <arcticdb/version/version_store_objects.hpp>
 #include <arcticdb/entity/frame_and_descriptor.hpp>
 #include <utility>
 #include <memory>
@@ -356,13 +357,16 @@ inline bool key_exists_in_ref_entry(
         const LoadStrategy& load_strategy, const VersionMapEntry& ref_entry,
         std::optional<AtomKey>& cached_penultimate_key
 ) {
+    // If we are looking for the latest version, deleted or undeleted, then an index key in the ref key is always
+    // the answer. By construction, any index or tombstone keys further down the chain will have lower version IDs than
+    // this one
+    if (load_strategy.load_type_ == LoadType::LATEST && is_index_key_type(ref_entry.keys_[0].type()))
+        return true;
+
     // The 3 item ref key bypass can be used only when we are loading undeleted versions
     // because otherwise it might skip versions that are deleted but part of snapshots
     if (load_strategy.load_objective_ != LoadObjective::UNDELETED_ONLY)
         return false;
-
-    if (load_strategy.load_type_ == LoadType::LATEST && is_index_key_type(ref_entry.keys_[0].type()))
-        return true;
 
     if (cached_penultimate_key && is_partial_load_type(load_strategy.load_type_)) {
         load_strategy.validate();
@@ -422,5 +426,7 @@ inline SortedValue deduce_sorted(SortedValue existing_frame, SortedValue input_f
 }
 
 FrameAndDescriptor frame_and_descriptor_from_segment(SegmentInMemory&& seg);
+
+version_store::UpdateInfo populate_update_info(const VersionMapEntry& entry);
 
 } // namespace arcticdb

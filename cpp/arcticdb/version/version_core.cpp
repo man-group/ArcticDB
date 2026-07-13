@@ -82,24 +82,6 @@ static void modify_descriptor(
     }
 }
 
-VersionedItem write_dataframe_impl(
-        const std::shared_ptr<Store>& store, VersionId version_id, const std::shared_ptr<InputFrame>& frame,
-        const WriteOptions& options, const std::shared_ptr<DeDupMap>& de_dup_map, bool sparsify_floats,
-        bool validate_index
-) {
-    ARCTICDB_SUBSAMPLE_DEFAULT(WaitForWriteCompletion)
-    ARCTICDB_DEBUG(
-            log::version(),
-            "write_dataframe_impl stream_id: {} , version_id: {}, {} rows",
-            frame->desc().id(),
-            version_id,
-            frame->num_rows
-    );
-    auto atom_key_fut =
-            async_write_dataframe_impl(store, version_id, frame, options, de_dup_map, sparsify_floats, validate_index);
-    return {std::move(atom_key_fut).get()};
-}
-
 std::tuple<IndexPartialKey, SlicingPolicy> get_partial_key_and_slicing_policy(
         const std::shared_ptr<Store>& store, const WriteOptions& options, const InputFrame& frame, VersionId version_id,
         bool validate_index
@@ -273,23 +255,6 @@ folly::Future<AtomKey> async_append_impl(
             });
 }
 
-VersionedItem append_impl(
-        const std::shared_ptr<Store>& store, const UpdateInfo& update_info, const std::shared_ptr<InputFrame>& frame,
-        const WriteOptions& options, bool validate_index, bool empty_types
-) {
-
-    ARCTICDB_SUBSAMPLE_DEFAULT(WaitForWriteCompletion)
-    auto version_key_fut = async_append_impl(store, update_info, frame, options, validate_index, empty_types);
-    auto versioned_item = VersionedItem(std::move(version_key_fut).get());
-    ARCTICDB_DEBUG(
-            log::version(),
-            "write_dataframe_impl stream_id: {} , version_id: {}",
-            versioned_item.symbol(),
-            update_info.next_version_id_
-    );
-    return versioned_item;
-}
-
 namespace {
 bool is_before(const IndexRange& a, const IndexRange& b) { return a.start_ < b.start_; }
 
@@ -419,7 +384,7 @@ bool is_fake_index_name(const arcticc::pb2::descriptors_pb2::NormalizationMetada
 
 VersionedItem delete_range_impl(
         const std::shared_ptr<Store>& store, const StreamId& stream_id, const UpdateInfo& update_info,
-        const UpdateQuery& query, const WriteOptions&&, bool dynamic_schema
+        const UpdateQuery& query, bool dynamic_schema
 ) {
 
     util::check(update_info.previous_index_key_.has_value(), "Cannot delete from non-existent symbol {}", stream_id);
@@ -586,17 +551,13 @@ static std::pair<std::vector<SliceAndKey>, size_t> get_slice_and_keys_for_update
 
 folly::Future<AtomKey> async_update_impl(
         const std::shared_ptr<Store>& store, const UpdateInfo& update_info, const UpdateQuery& query,
-        const std::shared_ptr<InputFrame>& frame, WriteOptions&& options, bool dynamic_schema, bool empty_types
+        const std::shared_ptr<InputFrame>& frame, const WriteOptions& options, bool dynamic_schema, bool empty_types
 ) {
     return index::async_get_index_reader(*(update_info.previous_index_key_), store)
             // This future will complete on the IO executor
-            .thenValueInline([store,
-                              update_info,
-                              query,
-                              frame,
-                              options = std::move(options),
-                              dynamic_schema,
-                              empty_types](index::IndexSegmentReader&& index_segment_reader) {
+            .thenValueInline([store, update_info, query, frame, options, dynamic_schema, empty_types](
+                                     index::IndexSegmentReader&& index_segment_reader
+                             ) {
                 check_can_update(*frame, index_segment_reader, dynamic_schema, empty_types);
                 ARCTICDB_DEBUG(
                         log::version(),
@@ -687,17 +648,37 @@ folly::Future<AtomKey> async_update_impl(
             });
 }
 
-VersionedItem update_impl(
-        const std::shared_ptr<Store>& store, const UpdateInfo& update_info, const UpdateQuery& query,
-        const std::shared_ptr<InputFrame>& frame, WriteOptions&& options, bool dynamic_schema, bool empty_types
+folly::Future<AtomKey> async_write_metadata_impl(
+        const std::shared_ptr<Store>& store, const UpdateInfo& update_info,
+        arcticdb::proto::descriptors::UserDefinedMetadata&& user_meta
 ) {
-    auto versioned_item = VersionedItem(
-            async_update_impl(store, update_info, query, frame, std::move(options), dynamic_schema, empty_types).get()
+    util::check(
+            update_info.previous_index_key_.has_value(),
+            "Cannot write metadata as there is no previous index key to update"
     );
     ARCTICDB_DEBUG(
-            log::version(), "updated stream_id: {} , version_id: {}", frame->desc().id(), update_info.next_version_id_
+            log::version(),
+            "write metadata for stream_id: {} , version_id: {}",
+            update_info.previous_index_key_->id(),
+            update_info.next_version_id_
     );
-    return versioned_item;
+    return store->read(*update_info.previous_index_key_)
+            .thenValue([store, update_info, user_meta = std::move(user_meta)](
+                               std::pair<VariantKey, SegmentInMemory>&& key_segment
+                       ) mutable {
+                auto& segment = key_segment.second;
+                *segment.mutable_index_descriptor().mutable_proto().mutable_user_meta() = std::move(user_meta);
+                const auto& index_key = *update_info.previous_index_key_;
+                return store->write(
+                        index_key.type(),
+                        update_info.next_version_id_,
+                        index_key.id(),
+                        index_key.start_index(),
+                        index_key.end_index(),
+                        std::move(segment)
+                );
+            })
+            .thenValueInline([](VariantKey&& key) { return to_atom(std::move(key)); });
 }
 
 folly::Future<ReadVersionOutput> read_multi_key(

@@ -156,7 +156,7 @@ def test_delete_over_time(lib_name, s3_and_nfs_storage_bucket, clear_query_stats
 
 
 def test_write_and_prune_previous_over_time(lib_name, s3_and_nfs_storage_bucket, clear_query_stats):
-    expected_ops = 17
+    expected_ops = 15
     with config_context("VersionMap.ReloadInterval", 0):
         lib = s3_and_nfs_storage_bucket.create_version_store_factory(lib_name)()
         qs.enable()
@@ -448,11 +448,10 @@ def test_update_num_reads(s3_store_factory, clear_query_stats, dynamic_schema, u
             # - Second time to construct the new slice after the updated range
             expected_data_keys *= 2
 
-        # Update does 4 extra reads to the data keys:
+        # Update does 3 extra reads to the data keys:
         # - 2 reads of VERSION_REF
-        # - read VERSION
         # - read TABLE_INDEX
-        assert sum_operations_by_type(stats, "S3_GetObject") == expected_data_keys + 4
+        assert sum_operations_by_type(stats, "S3_GetObject") == expected_data_keys + 3
 
         expected_df = ArcticSymbolSimulator.simulate_arctic_update(init_df, update_df, dynamic_schema=False)
         result_df = lib.read(sym).data
