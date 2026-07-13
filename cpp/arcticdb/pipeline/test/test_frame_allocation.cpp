@@ -41,7 +41,7 @@ TEST(OutputFrame, AllocateChunked) {
 
     context->set_on_disk_descriptor(std::move(desc));
     auto read_options = ReadOptions{};
-    read_options.set_output_format(OutputFormat::ARROW);
+    read_options.set_output_config(ArrowOutputConfig{});
     auto frame = allocate_frame(context, read_options);
     ASSERT_EQ(frame.row_count(), 720);
 }
