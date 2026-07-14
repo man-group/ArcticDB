@@ -15,7 +15,7 @@ import sys
 from arcticdb import QueryBuilder
 from arcticdb.exceptions import UserInputException
 import arcticdb.toolbox.query_stats as qs
-from arcticdb.util.test import assert_frame_equal, assert_series_equal, config_context_multi
+from arcticdb.util.test import assert_frame_equal, assert_series_equal, config_context
 from arcticdb.version_store.library import Library
 from arcticdb_ext import set_config_int
 import arcticdb_ext.cpp_async as adb_async
@@ -579,3 +579,112 @@ def test_dynamic_schema_incompatible_types_do_not_orphan_data_keys(in_memory_sto
     with pytest.raises(SchemaException):
         getattr(lib, method)(sym, pd.DataFrame({"col": ["hello"]}, index=[pd.Timestamp("2026-01-02")]))
     assert len(lt.find_keys(KeyType.TABLE_DATA)) == 1
+
+
+@pytest.mark.parametrize(
+    "batch",
+    [pytest.param(True, marks=pytest.mark.xfail(reason="Raises E_NON_INCREASING_INDEX_VERSION", strict=True)), False],
+)
+def test_write_metadata_version_number_when_no_live_versions(in_memory_version_store, batch):
+    lib = in_memory_version_store
+    sym = "test_write_metadata_version_number_when_no_live_versions"
+    lib.write(sym, 0)  # Create version 0
+    lib.delete(sym)
+    # Should create version 1
+    # Batch raises E_NON_INCREASING_INDEX_VERSION as it resets the version number to 0
+    lib.batch_write_metadata([sym], ["metadata"]) if batch else lib.write_metadata(sym, "metadata")
+    assert lib.read_metadata(sym).version == 1
+
+
+@pytest.mark.parametrize(
+    "batch", [True, pytest.param(False, marks=pytest.mark.xfail(reason="Writes 2 symbol list keys", strict=True))]
+)
+def test_write_metadata_symbol_list_key_count(in_memory_version_store, batch):
+    lib = in_memory_version_store
+    sym = "test_write_metadata_symbol_list_key_count"
+    lib.batch_write_metadata([sym], ["metadata"]) if batch else lib.write_metadata(sym, "metadata")
+    lt = lib.library_tool()
+    # Non-batch writes 2 symbol list keys
+    assert lt.count_keys(KeyType.SYMBOL_LIST) == 1
+
+
+@pytest.mark.parametrize(
+    "batch", [pytest.param(True, marks=pytest.mark.xfail(reason="Writes a symbol list key", strict=True)), False]
+)
+def test_write_metadata_symbol_list_written_when_symbol_list_disabled(in_memory_store_factory, batch):
+    lib = in_memory_store_factory(symbol_list=False)
+    sym = "test_write_metadata_symbol_list_written_when_symbol_list_disabled"
+    lib.batch_write_metadata([sym], ["metadata"]) if batch else lib.write_metadata(sym, "metadata")
+    lt = lib.library_tool()
+    # Batch writes a symbol list key
+    assert lt.count_keys(KeyType.SYMBOL_LIST) == 0
+
+
+@pytest.mark.parametrize(
+    "batch", [pytest.param(True, marks=pytest.mark.xfail(reason="Writes a symbol list key", strict=True)), False]
+)
+def test_write_symbol_list_written_when_symbol_list_disabled(in_memory_store_factory, batch):
+    lib = in_memory_store_factory(symbol_list=False)
+    sym = "test_write_symbol_list_written_when_symbol_list_disabled"
+    lib.batch_write([sym], [0]) if batch else lib.write(sym, 0)
+    lt = lib.library_tool()
+    # Batch writes a symbol list key
+    assert lt.count_keys(KeyType.SYMBOL_LIST) == 0
+
+
+@pytest.mark.parametrize(
+    "batch", [pytest.param(True, marks=pytest.mark.xfail(reason="Writes a symbol list key", strict=True)), False]
+)
+def test_append_upsert_symbol_list_written_when_symbol_list_disabled(in_memory_store_factory, batch):
+    lib = in_memory_store_factory(symbol_list=False)
+    sym = "test_append_upsert_symbol_list_written_when_symbol_list_disabled"
+    lib.batch_append([sym], [pd.DataFrame({"col": [1]})]) if batch else lib.append(sym, pd.DataFrame({"col": [1]}))
+    lt = lib.library_tool()
+    # Batch writes a symbol list key
+    assert lt.count_keys(KeyType.SYMBOL_LIST) == 0
+
+
+@pytest.mark.parametrize(
+    "batch", [pytest.param(True, marks=pytest.mark.xfail(reason="Writes a symbol list key", strict=True)), False]
+)
+def test_update_upsert_symbol_list_written_when_symbol_list_disabled(in_memory_store_factory, batch):
+    lib = in_memory_store_factory(symbol_list=False)
+    sym = "test_update_upsert_symbol_list_written_when_symbol_list_disabled"
+    (
+        lib._batch_update_internal(
+            [sym], [pd.DataFrame({"col": [1]}, index=[pd.Timestamp(0)])], [None], [None], upsert=True
+        )
+        if batch
+        else lib.update(sym, pd.DataFrame({"col": [1]}, index=[pd.Timestamp(0)]), upsert=True)
+    )
+    lt = lib.library_tool()
+    # Batch writes a symbol list key
+    assert lt.count_keys(KeyType.SYMBOL_LIST) == 0
+
+
+@pytest.mark.parametrize(
+    "batch",
+    [pytest.param(True, marks=pytest.mark.xfail(reason="Latest live version is always loaded", strict=True)), False],
+)
+def test_write_version_chain_minimal_io(in_memory_version_store, clear_query_stats, batch):
+    with config_context("VersionMap.ReloadInterval", 0):
+        lib = in_memory_version_store
+        lib.version_store.clear()
+        sym = "test_write_version_chain_minimal_io"
+        # Create 10 versions
+        for version in range(10):
+            lib.write(sym, version)
+        # Delete all except version 0
+        lib.delete_versions(sym, list(range(1, 10)))
+        qs.reset_stats()
+        with qs.query_stats():
+            lib.batch_write([sym], [10]) if batch else lib.write(sym, 10)
+            stats = qs.get_query_stats()
+        qs.reset_stats()
+        # The head version key contains 9 TOMBSTONE keys for the deleted versions
+        # The next entry contains TABLE_INDEX key with version 9, which is all we need to read for write with no dedup
+        # to know that the next version id is 10
+        # The version chain is loaded twice with the cache disabled, once to identify the version number to write, and
+        # again when the version map is being written. Ideally this would only be loaded once and the 4 below would be a
+        # 2
+        assert query_stats_operation_count(stats, "Memory_GetObject", "VERSION") == 4
