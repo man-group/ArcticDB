@@ -10,6 +10,8 @@ import pytest
 import pandas as pd
 import numpy as np
 
+from arcticdb import QueryBuilder
+from arcticdb_ext.exceptions import InternalException
 from arcticdb.version_store._common import TimeFrame
 from arcticdb.util.test import assert_frame_equal, assert_series_equal
 
@@ -167,6 +169,55 @@ def test_append_empty_series(lmdb_version_store_dynamic_schema, sym, dtype, seri
     assert_series_equal(
         lmdb_version_store_dynamic_schema.read(sym).data, result_ser, check_index_type=(len(result_ser) > 0)
     )
+
+
+def test_append_empty_dataframe_does_not_add_its_columns(lmdb_version_store_dynamic_schema):
+    # A zero-row frame contributes no columns, in either direction. Pandas would union them, so this is a
+    # deliberate divergence; concat matches it - see
+    # test_symbol_concatenation.py::test_symbol_concat_empty_dataframe_does_not_contribute_its_columns.
+    # Monday 12781487305.
+    lib = lmdb_version_store_dynamic_schema
+    rows = pd.DataFrame({"col1": np.arange(2, dtype=np.float64)}, index=pd.date_range("2025-01-01", periods=2))
+    empty_with_extra_column = pd.DataFrame(
+        {"col1": np.array([], dtype=np.float64), "col2": np.array([], dtype=np.float64)}, index=pd.DatetimeIndex([])
+    )
+
+    lib.write("rows_first", rows)
+    lib.append("rows_first", empty_with_extra_column)
+    assert list(lib.read("rows_first").data.columns) == ["col1"]
+    assert_frame_equal(rows, lib.read("rows_first").data)
+
+    lib.write("empty_first", empty_with_extra_column)
+    lib.append("empty_first", rows)
+    assert list(lib.read("empty_first").data.columns) == ["col1"]
+    assert_frame_equal(rows, lib.read("empty_first").data)
+
+
+def test_append_rowcount_series_onto_non_empty_timeseries_series(lmdb_version_store_dynamic_schema, sym):
+    lib = lmdb_version_store_dynamic_schema
+    lib.write(sym, pd.Series([1.0, 2.0], index=pd.date_range("2025-01-01", periods=2)))
+    # This should raise a NormalizationException. Currently this slips through the normalization check in schema_checks:125 incorrectly
+    # In the follow up commits which unify schema operations this will be changed to a normalization exception.
+    with pytest.raises(InternalException):
+        lib.append(sym, pd.Series([3.0, 4.0]))
+
+
+@pytest.mark.parametrize("join", ["outer", "inner"])
+@pytest.mark.parametrize("empty_first", [True, False])
+@pytest.mark.xfail(
+    strict=True,
+    reason="Concat rejects an empty index combined with a non-empty one where append accepts it. Concat should "
+    "be at least as permissive.",
+)
+def test_concat_empty_index_with_timeseries_index(lmdb_version_store_empty_types_dynamic_schema_v1, join, empty_first):
+    lib = lmdb_version_store_empty_types_dynamic_schema_v1
+    expected = pd.DataFrame({"a": [1.0, 2.0]}, index=pd.date_range("2025-01-01", periods=2))
+    lib.write("empty_sym", pd.DataFrame({"a": []}))
+    lib.write("ts_sym", expected)
+
+    symbols = ["empty_sym", "ts_sym"] if empty_first else ["ts_sym", "empty_sym"]
+    received = lib.batch_read_and_join(symbols, QueryBuilder().concat(join)).data
+    assert_frame_equal(expected, received)
 
 
 def test_entirely_empty_column(lmdb_version_store):

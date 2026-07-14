@@ -32,6 +32,7 @@ from arcticdb.exceptions import (
     ArcticException,
     NormalizationException,
     ArcticNativeException,
+    SchemaException,
 )
 from arcticdb.version_store._custom_normalizers import (
     register_normalizer,
@@ -329,6 +330,84 @@ class TestTimezoneIsOverwritten:
         )
         action(lib, sym, series2)
         assert lib.read(sym).data.index.tz == series2.index.tz
+
+    # Neither timezone describes the combined data. Under dynamic schema both should be dropped and the result
+    # read back naive; under static schema dropping one would silently change what the stored column means, so it
+    # should raise, as arrow-written data already does.
+    @pytest.mark.xfail(
+        strict=True,
+        reason="Monday 12029540807: a mismatched timezone should be cleared under dynamic schema and raise under "
+        "static, not be overwritten by the newer one. Remove this and the overwrite assertions above together.",
+    )
+    @pytest.mark.parametrize("dynamic_schema", [True, False])
+    @pytest.mark.parametrize("frame_type", ["dataframe", "series"])
+    def test_mismatched_index_timezone(self, in_memory_store_factory, action, frame_type, dynamic_schema):
+        lib = in_memory_store_factory(dynamic_schema=dynamic_schema)
+        sym = "test_mismatched_index_timezone"
+        index_1 = pd.date_range(pd.Timestamp("2025-01-01"), periods=1, tz="America/New_York")
+        index_2 = pd.date_range(pd.Timestamp("2025-01-02"), periods=1, tz="Europe/London")
+        if frame_type == "dataframe":
+            first, second = pd.DataFrame({"value": [1]}, index=index_1), pd.DataFrame({"value": [2]}, index=index_2)
+        else:
+            first, second = pd.Series([1], index=index_1), pd.Series([2], index=index_2)
+        lib.write(sym, first)
+        if dynamic_schema:
+            action(lib, sym, second)
+            assert lib.read(sym).data.index.tz is None
+        else:
+            with pytest.raises(SchemaException):
+                action(lib, sym, second)
+
+    @pytest.mark.parametrize("dynamic_schema", [True, False])
+    def test_matching_index_timezone_is_preserved(self, in_memory_store_factory, action, dynamic_schema):
+        # The companion to the above: a shared timezone must survive under either schema.
+        lib = in_memory_store_factory(dynamic_schema=dynamic_schema)
+        sym = "test_matching_index_timezone_is_preserved"
+        first = pd.DataFrame({"value": [1]}, index=pd.date_range("2025-01-01", periods=1, tz="Europe/London"))
+        second = pd.DataFrame({"value": [2]}, index=pd.date_range("2025-01-02", periods=1, tz="Europe/London"))
+        lib.write(sym, first)
+        action(lib, sym, second)
+        assert str(lib.read(sym).data.index.tz) == "Europe/London"
+
+    @pytest.mark.xfail(
+        strict=True,
+        reason="Monday 12029540807: a mismatched multi-index level timezone should be cleared under dynamic schema "
+        "and raise under static. Remove this and the overwrite assertions below together.",
+    )
+    @pytest.mark.parametrize("dynamic_schema", [True, False])
+    @pytest.mark.parametrize("frame_type", ["dataframe", "series"])
+    def test_mismatched_multiindex_level_timezone(self, in_memory_store_factory, action, frame_type, dynamic_schema):
+        lib = in_memory_store_factory(dynamic_schema=dynamic_schema)
+        sym = "multiindex_with_different_index_timezone"
+        index_1 = pd.MultiIndex.from_tuples([(pd.Timestamp(0, tz="America/New_York"), 1)], names=["date", "value"])
+        index_2 = pd.MultiIndex.from_tuples([(pd.Timestamp(1, tz="Europe/London"), 2)], names=["date", "value"])
+        if frame_type == "dataframe":
+            first, second = pd.DataFrame({"a": [1]}, index=index_1), pd.DataFrame({"a": [2]}, index=index_2)
+        else:
+            first, second = pd.Series([1], index=index_1), pd.Series([2], index=index_2)
+        lib.write(sym, first)
+        if dynamic_schema:
+            action(lib, sym, second)
+            assert lib.read(sym).data.index.levels[0].tz is None
+        else:
+            with pytest.raises(SchemaException):
+                action(lib, sym, second)
+
+    @pytest.mark.parametrize("dynamic_schema", [True, False])
+    def test_matching_multiindex_level_timezone_is_preserved(self, in_memory_store_factory, action, dynamic_schema):
+        lib = in_memory_store_factory(dynamic_schema=dynamic_schema)
+        sym = "multiindex_with_matching_index_timezone"
+        first = pd.DataFrame(
+            {"a": [1]},
+            index=pd.MultiIndex.from_tuples([(pd.Timestamp(0, tz="Europe/London"), 1)], names=["date", "value"]),
+        )
+        second = pd.DataFrame(
+            {"a": [2]},
+            index=pd.MultiIndex.from_tuples([(pd.Timestamp(1, tz="Europe/London"), 2)], names=["date", "value"]),
+        )
+        lib.write(sym, first)
+        action(lib, sym, second)
+        assert str(lib.read(sym).data.index.levels[0].tz) == "Europe/London"
 
     def test_dataframe_multiindex_with_different_index_timezone(self, in_memory_store_factory, action):
         lib = in_memory_store_factory()

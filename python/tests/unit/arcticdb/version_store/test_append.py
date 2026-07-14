@@ -406,6 +406,93 @@ class TestAppend:
         with pytest.raises(InternalException):
             _ = lmdb_version_store.append(symbol, np.arange(100).tolist(), compact_data=compact_data)
 
+    @pytest.mark.parametrize("pickled_first", [True, False])
+    def test_append_pickled_and_unpickled_symbol(self, lmdb_version_store, compact_data, pickled_first):
+        symbol = "test_append_pickled_and_unpickled_symbol"
+        pickled = np.arange(100).tolist()
+        df = pd.DataFrame({"col": np.arange(2, dtype=np.int64)})
+        lmdb_version_store.write(symbol, pickled if pickled_first else df)
+        # Appending to a pickled symbol is caught by a separate runtime check, so only the reverse order is
+        # reported as the object-kind mismatch it is.
+        expected = InternalException if pickled_first else NormalizationException
+        with pytest.raises(expected):
+            lmdb_version_store.append(symbol, df if pickled_first else pickled, compact_data=compact_data)
+
+    @pytest.mark.parametrize("mismatch", ["step", "start"])
+    def test_append_rangeindex_not_contiguous_raises(self, lmdb_version_store, compact_data, mismatch):
+        symbol = f"test_append_rangeindex_not_contiguous_raises_{mismatch}"
+        lmdb_version_store.write(symbol, pd.DataFrame({"col": np.arange(4, dtype=np.int64)}))
+        index = pd.RangeIndex(start=4, stop=10, step=2) if mismatch == "step" else pd.RangeIndex(start=7, stop=9)
+        df = pd.DataFrame({"col": np.arange(len(index), dtype=np.int64)}, index=index)
+        with pytest.raises(NormalizationException):
+            lmdb_version_store.append(symbol, df, compact_data=compact_data)
+
+    # A default RangeIndex - start 0, step 1 - is what pandas hands you for any frame you did not index
+    # yourself, so it is accepted whatever the existing data stops at. Only an explicit start has to line up.
+    @pytest.mark.parametrize("rows_written", [4, 7])
+    def test_append_rangeindex_default_start_is_always_accepted(self, lmdb_version_store, compact_data, rows_written):
+        symbol = "test_append_rangeindex_default_start_is_always_accepted"
+        lmdb_version_store.write(symbol, pd.DataFrame({"col": np.arange(rows_written, dtype=np.int64)}))
+        second = pd.DataFrame({"col": np.arange(2, dtype=np.int64)})
+        lmdb_version_store.append(symbol, second, compact_data=compact_data)
+        expected = pd.DataFrame({"col": np.concatenate((np.arange(rows_written), np.arange(2))).astype(np.int64)})
+        assert_frame_equal(lmdb_version_store.read(symbol).data, expected)
+
+    def test_append_rangeindex_contiguous(self, lmdb_version_store, compact_data):
+        symbol = "test_append_rangeindex_contiguous"
+        lmdb_version_store.write(symbol, pd.DataFrame({"col": np.arange(4, dtype=np.int64)}))
+        df = pd.DataFrame({"col": np.arange(4, 6, dtype=np.int64)}, index=pd.RangeIndex(start=4, stop=6))
+        lmdb_version_store.append(symbol, df, compact_data=compact_data)
+        expected = pd.DataFrame({"col": np.arange(6, dtype=np.int64)})
+        assert_frame_equal(lmdb_version_store.read(symbol).data, expected)
+
+    def test_append_rangeindex_with_non_unit_step(self, lmdb_version_store, compact_data):
+        symbol = "test_append_rangeindex_with_non_unit_step"
+        first = pd.DataFrame({"col": np.arange(2, dtype=np.int64)}, index=pd.RangeIndex(start=0, stop=4, step=2))
+        lmdb_version_store.write(symbol, first)
+        second = pd.DataFrame({"col": np.arange(2, 4, dtype=np.int64)}, index=pd.RangeIndex(start=4, stop=8, step=2))
+        lmdb_version_store.append(symbol, second, compact_data=compact_data)
+        expected = pd.DataFrame({"col": np.arange(4, dtype=np.int64)}, index=pd.RangeIndex(start=0, stop=8, step=2))
+        assert_frame_equal(lmdb_version_store.read(symbol).data, expected)
+
+    @pytest.mark.parametrize("dtype", ["int64", "float64"])
+    def test_append_numpy_array_records_combined_shape(self, lmdb_version_store, compact_data, dtype):
+        sym = "test_append_numpy_array_records_combined_shape"
+        first = generate_random_numpy_array(10, dtype)
+        second = generate_random_numpy_array(4, dtype)
+        lmdb_version_store.write(sym, first)
+        lmdb_version_store.append(sym, second, compact_data=compact_data)
+        received = lmdb_version_store.read(sym).data
+        assert received.shape == (14,)
+        assert_array_equal(received, np.concatenate((first, second)))
+
+    def test_append_multidimensional_numpy_array_records_combined_shape(self, lmdb_version_store, compact_data):
+        sym = "test_append_multidimensional_numpy_array_records_combined_shape"
+        first = np.arange(24, dtype=np.int64).reshape(2, 3, 4)
+        second = np.arange(100, 160, dtype=np.int64).reshape(5, 3, 4)
+        lmdb_version_store.write(sym, first)
+        lmdb_version_store.append(sym, second, compact_data=compact_data)
+        received = lmdb_version_store.read(sym).data
+        assert received.shape == (7, 3, 4)
+        assert_array_equal(received, np.concatenate((first, second)))
+
+    # Only the leading dimension may grow; every trailing one has to match.
+    @pytest.mark.parametrize("second_shape", [(5, 4, 4), (5, 3, 5), (5, 4, 5)])
+    def test_append_numpy_array_mismatched_trailing_dimensions_raises(
+        self, lmdb_version_store, compact_data, second_shape
+    ):
+        sym = "test_append_numpy_array_mismatched_trailing_dimensions_raises"
+        lmdb_version_store.write(sym, np.arange(24, dtype=np.int64).reshape(2, 3, 4))
+        second = np.arange(int(np.prod(second_shape)), dtype=np.int64).reshape(second_shape)
+        with pytest.raises(NormalizationException):
+            lmdb_version_store.append(sym, second, compact_data=compact_data)
+
+    def test_append_numpy_array_to_dataframe_raises(self, lmdb_version_store, compact_data):
+        sym = "test_append_numpy_array_to_dataframe_raises"
+        lmdb_version_store.write(sym, pd.DataFrame({"col": np.arange(2, dtype=np.int64)}))
+        with pytest.raises(NormalizationException):
+            lmdb_version_store.append(sym, generate_random_numpy_array(4, "int64"), compact_data=compact_data)
+
     def test_append_not_sorted_exception(self, lmdb_version_store, compact_data):
         symbol = "bad_append"
 
@@ -762,6 +849,42 @@ class TestAppend:
         # See Monday 9797097831, it would be best to require that index names are always matching. This is the case for
         # datetime index because it's a physical column. It's a potentially breaking change.
         assert lib.read("sym").data.index.name == "index_name_2"
+
+    @pytest.mark.parametrize("frame_type", ["series", "dataframe"])
+    @pytest.mark.xfail(
+        strict=True,
+        reason="Monday 9797097831: a RangeIndex name is held only in the metadata, so a mismatch goes unnoticed "
+        "and the last write wins, unlike every other index name. Remove this and the last-write-wins assertion in "
+        "test_append_series_with_different_row_range_index_name together.",
+    )
+    def test_append_with_different_row_range_index_name_raises(
+        self, lmdb_version_store_dynamic_schema_v1, compact_data, frame_type
+    ):
+        lib = lmdb_version_store_dynamic_schema_v1
+        if frame_type == "series":
+            to_write, to_append = pd.Series([1, 2, 3]), pd.Series([4, 5, 6])
+        else:
+            to_write, to_append = pd.DataFrame({"col": [1, 2, 3]}), pd.DataFrame({"col": [4, 5, 6]})
+        to_write.index.name = "index_name_1"
+        to_append.index.name = "index_name_2"
+        lib.write("sym", to_write)
+        with pytest.raises(SchemaException):
+            lib.append("sym", to_append, compact_data=compact_data)
+
+    def test_append_with_matching_row_range_index_name_succeeds(
+        self, lmdb_version_store_dynamic_schema_v1, compact_data
+    ):
+        # A name both frames agree on must keep working, including no name at all, which is the pandas default
+        # and so the path almost every append takes.
+        lib = lmdb_version_store_dynamic_schema_v1
+        for sym, index_name in (("named", "index_name"), ("unnamed", None)):
+            to_write = pd.Series([1, 2, 3])
+            to_append = pd.Series([4, 5, 6])
+            to_write.index.name = index_name
+            to_append.index.name = index_name
+            lib.write(sym, to_write)
+            lib.append(sym, to_append, compact_data=compact_data)
+            assert lib.read(sym).data.index.name == index_name
 
     def test_append_after_delete_range(self, sym, lmdb_version_store, compact_data):
         lib = lmdb_version_store

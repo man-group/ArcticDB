@@ -57,17 +57,29 @@ def test_changing_numeric_type(version_store_factory, dynamic_schema):
 @pytest.mark.parametrize("dynamic_strings_first", [True, False])
 def test_changing_string_type(version_store_factory, dynamic_schema, dynamic_strings_first):
     lib = version_store_factory(dynamic_strings=True, dynamic_schema=dynamic_schema)
+    lib_tool = lib.library_tool()
     sym_append = "test_changing_string_type_append"
     sym_update = "test_changing_string_type_update"
     df_write = pd.DataFrame({"col": ["a", "bb", "ccc"]}, index=pd.date_range("2024-01-01", periods=3))
     df_append = pd.DataFrame({"col": ["dddd"]}, index=pd.date_range("2024-01-04", periods=1))
     df_update = pd.DataFrame({"col": ["dddd"]}, index=pd.date_range("2024-01-02", periods=1))
 
+    def stored_type(sym):
+        index_key = lib_tool.find_keys_for_symbol(KeyType.TABLE_INDEX, sym)[-1]
+        tsd = lib_tool.read_timeseries_descriptor(index_key)
+        return [field.type.data_type() for field in tsd.fields if field.name == "col"][0]
+
     lib.write(sym_append, df_write, dynamic_strings=dynamic_strings_first)
     lib.write(sym_update, df_write, dynamic_strings=dynamic_strings_first)
+    written_type = DataType.UTF_DYNAMIC64 if dynamic_strings_first else DataType.UTF_FIXED64
+    assert stored_type(sym_append) == written_type
+    assert stored_type(sym_update) == written_type
 
     lib.append(sym_append, df_append, dynamic_strings=not dynamic_strings_first)
     lib.update(sym_update, df_update, dynamic_strings=not dynamic_strings_first)
+    # Mixing fixed and dynamic strings promotes the stored column to dynamic
+    assert stored_type(sym_append) == DataType.UTF_DYNAMIC64
+    assert stored_type(sym_update) == DataType.UTF_DYNAMIC64
 
     expected_append = pd.concat([df_write, df_append])
     received_append = lib.read(sym_append).data
