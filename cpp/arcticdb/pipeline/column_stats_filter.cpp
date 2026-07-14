@@ -156,7 +156,7 @@ std::vector<StatsMetadataForColumn> calculate_stats_metadata(
                 );
                 continue;
             }
-            const auto field_name = to_segment_column_name(stats_metadata_for_column.col_name, entry_type);
+            const auto field_name = column_and_stat_to_segment_name(stats_metadata_for_column.col_name, entry_type);
             const auto col_index = segment.column_index(field_name);
             if (!col_index.has_value()) {
                 // Column was filtered out at decode time, or never present in this segment.
@@ -437,8 +437,6 @@ FilterQuery<index::IndexSegmentReader> create_column_stats_filter(
         util::check(row_indices.size() == isr.size(), "Expected row_indices.size() == isr.size()");
 
         // Evaluate the AST
-        StatsVariantData result =
-                evaluate_ast_node_against_stats(expression_context.root_node_name_, expression_context, stats_rows);
         StatsVariantData result = evaluate_ast_node_against_stats(
                 expression_context.root_node_name_, expression_context, row_indices, column_stats_data
         );
@@ -522,7 +520,7 @@ SegmentInMemory partial_decode_column_stats_segment(
             continue;
         }
         for (const auto& entry : entry_list.entries()) {
-            retain_field_names.insert(to_segment_column_name(col_name, entry.type()));
+            retain_field_names.insert(column_and_stat_to_segment_name(col_name, entry.type()));
         }
     }
 

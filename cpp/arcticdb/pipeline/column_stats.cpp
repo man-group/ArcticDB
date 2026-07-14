@@ -214,7 +214,6 @@ ColumnStats::ColumnStats(
             }
         }
     }
-    offset_to_input_column_and_stats_calculated_ = true;
 }
 
 namespace {
@@ -297,13 +296,10 @@ ColumnStats::ColumnStats(const TimeseriesDescriptor& tsd) {
             }
         }
 
-        offset_to_input_column_and_stats.emplace(
-                field_index, NameAndStatTypes{std::move(field_name), {ColumnStatType::MINMAX}}
+        offset_to_input_column_and_stats_.emplace(
+                field_index, NameAndStats{std::move(field_name), {ColumnStatType::MINMAX}}
         );
     }
-    offset_to_stat_info_set_ = true;
-}
-
 }
 
 namespace {
@@ -413,17 +409,15 @@ std::vector<std::string> ColumnStats::drop_old_stats(const ColumnStats& old_stat
 }
 
 std::unordered_map<std::string, std::unordered_set<std::string>> ColumnStats::to_map() const {
-    util::check(
-            offset_to_input_column_and_stats_calculated_, "Expect offset_to_input_column_and_stats to be set in to_map"
-    );
-    std::unordered_map<std::string, std::unordered_set<std::string>> res;
+    std::unordered_map<std::string, std::unordered_set<std::string>> input_name_to_stats_names;
     for (const auto& [offset, input_column_and_stats] : offset_to_input_column_and_stats_) {
-        auto& entry = res[input_column_and_stats.mangled_name];
+        auto& stats_names = input_name_to_stats_names[input_column_and_stats.mangled_name];
+
         for (const auto& stat : input_column_and_stats.column_stats) {
-            entry.emplace(stat_to_name(stat));
+            stats_names.emplace(stat_to_name(stat));
         }
     }
-    return res;
+    return input_name_to_stats_names;
 }
 
 std::optional<Clause> ColumnStats::clause() const {
@@ -431,7 +425,6 @@ std::optional<Clause> ColumnStats::clause() const {
         return std::nullopt;
     }
 
-    util::check(offset_to_input_column_and_stats_calculated_, "Expect offset_to_input_column_and_stats to be set");
     std::unordered_set<std::string> input_columns;
     auto aggregators = std::make_shared<std::vector<ColumnStatsAggregator>>();
 
@@ -451,7 +444,7 @@ std::optional<Clause> ColumnStats::clause() const {
 bool ColumnStats::empty() const { return offset_to_input_column_and_stats_.empty(); }
 
 bool ColumnStats::operator==(const ColumnStats& right) const {
-        return offset_to_input_column_and_stats_ == right.offset_to_input_column_and_stats_;
+    return offset_to_input_column_and_stats_ == right.offset_to_input_column_and_stats_;
 }
 
 } // namespace arcticdb

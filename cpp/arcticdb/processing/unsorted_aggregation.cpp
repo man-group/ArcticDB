@@ -33,8 +33,7 @@ void MinMaxAggregatorData::aggregate(const ColumnWithStrings& input_column) {
 
         if (input_column.column_->is_sparse()) {
             const auto sparse_gap_count = input_column.column_->last_row() + 1 - input_column.column_->row_count();
-                null_count_ += static_cast<uint64_t>(sparse_gap_count);
-            }
+            null_count_ += static_cast<uint64_t>(sparse_gap_count);
         }
 
         auto is_nan_or_nat_sentinel = []([[maybe_unused]] RawType scalar_value) {
@@ -46,6 +45,7 @@ void MinMaxAggregatorData::aggregate(const ColumnWithStrings& input_column) {
                 return false;
             }
         };
+
         auto get_sentinel_value = []() -> RawType {
             if constexpr (is_floating_point_type(type_info::data_type)) {
                 return std::numeric_limits<RawType>::quiet_NaN();

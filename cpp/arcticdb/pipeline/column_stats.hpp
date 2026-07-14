@@ -58,7 +58,6 @@ class ColumnStats {
 
   private:
     std::unordered_map<size_t, NameAndStats> offset_to_input_column_and_stats_;
-    bool offset_to_input_column_and_stats_calculated_{false};
 };
 
 } // namespace arcticdb
