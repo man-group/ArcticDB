@@ -2542,13 +2542,14 @@ VersionedItem LocalVersionedEngine::merge_internal(
         const WriteOptions write_options = get_write_options();
         VersionedItem versioned_item = merge_update_impl(
                                                store(),
-                                               VersionedItem{*update_info.previous_index_key_},
+                                               update_info,
                                                read_options,
                                                write_options,
                                                IndexPartialKey{stream_id, update_info.next_version_id_},
                                                std::move(on),
                                                strategy,
-                                               std::move(source)
+                                               std::move(source),
+                                               get_de_dup_map(stream_id, update_info.previous_index_key_, write_options)
         )
                                                .get();
         write_version_and_prune_previous(prune_previous_versions, versioned_item.key_, update_info.previous_index_key_);

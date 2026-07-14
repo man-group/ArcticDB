@@ -49,7 +49,6 @@ struct ColumnWithStrings {
     std::shared_ptr<Column> column_;
     const std::shared_ptr<StringPool> string_pool_;
     std::string column_name_;
-
     ColumnWithStrings(std::unique_ptr<Column>&& col, std::string_view col_name);
 
     ColumnWithStrings(

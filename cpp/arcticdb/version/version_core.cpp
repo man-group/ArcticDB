@@ -415,6 +415,49 @@ bool is_fake_index_name(const arcticc::pb2::descriptors_pb2::NormalizationMetada
     return is_fake_datetime_index_name || is_fake_mutliindex_name;
 }
 
+std::vector<SliceAndKey> merge_slices_and_keys(
+        std::vector<SliceAndKey>&& old_slices, std::vector<SliceAndKey>&& new_slices,
+        ankerl::unordered_dense::map<RowRange, size_t>&& inserted_rows_per_row_range
+) {
+    ranges::sort(new_slices);
+    std::vector<SliceAndKey> merged_ranges_and_keys;
+    auto new_slice_and_key_it = new_slices.begin();
+    auto old_slice_and_key_it = old_slices.begin();
+    while (old_slice_and_key_it != old_slices.end()) {
+        size_t total_inserted_rows{};
+        ColRange current_col_range = old_slice_and_key_it->slice().col_range;
+        while (old_slice_and_key_it != old_slices.end() && current_col_range == old_slice_and_key_it->slice().col_range
+        ) {
+            if (new_slice_and_key_it == new_slices.end() ||
+                old_slice_and_key_it->slice() < new_slice_and_key_it->slice()) {
+                old_slice_and_key_it->slice().row_range.first += total_inserted_rows;
+                old_slice_and_key_it->slice().row_range.second += total_inserted_rows;
+                merged_ranges_and_keys.emplace_back(std::move(*old_slice_and_key_it));
+                ++old_slice_and_key_it;
+            } else {
+                const RowRange new_row_range = new_slice_and_key_it->slice().row_range;
+                const size_t inserted_rows = inserted_rows_per_row_range[new_row_range];
+                new_slice_and_key_it->slice().row_range.first += total_inserted_rows;
+                new_slice_and_key_it->slice().row_range.second += total_inserted_rows + inserted_rows;
+                total_inserted_rows += inserted_rows;
+                merged_ranges_and_keys.emplace_back(std::move(*new_slice_and_key_it));
+                ++new_slice_and_key_it;
+                while (old_slice_and_key_it != old_slices.end() &&
+                       old_slice_and_key_it->slice().col_range == current_col_range &&
+                       old_slice_and_key_it->slice().row_range.first < new_row_range.second) {
+                    ++old_slice_and_key_it;
+                }
+            }
+        }
+    }
+    internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+            new_slice_and_key_it == new_slices.end(), "Not all new slices were merged"
+    );
+    internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+            old_slice_and_key_it == old_slices.end(), "Not all old slices were merged"
+    );
+    return merged_ranges_and_keys;
+}
 } // namespace
 
 VersionedItem delete_range_impl(
@@ -2979,18 +3022,18 @@ folly::Future<ReadVersionOutput> read_frame_for_version(
 
 folly::Future<std::vector<SliceAndKey>> read_modify_write_data_keys(
         const std::shared_ptr<Store>& store, std::shared_ptr<ReadQuery> read_query, const ReadOptions& read_options,
-        const IndexPartialKey& target_partial_index_key, const std::shared_ptr<PipelineContext>& pipeline_context
+        const IndexPartialKey& target_partial_index_key, const std::shared_ptr<PipelineContext>& pipeline_context,
+        std::shared_ptr<ComponentManager> component_manager, std::shared_ptr<DeDupMap> de_dup_map
 ) {
     auto write_clause_processing_structure = read_query->clauses_.empty()
                                                      ? ProcessingStructure::ROW_SLICE
                                                      : read_query->clauses_.back()->clause_info().output_structure_;
-    read_query->clauses_.push_back(std::make_shared<Clause>(WriteClause(
-            target_partial_index_key, std::make_shared<DeDupMap>(), store, write_clause_processing_structure
-    )));
+    read_query->clauses_.push_back(std::make_shared<Clause>(
+            WriteClause(target_partial_index_key, std::move(de_dup_map), store, write_clause_processing_structure)
+    ));
 
-    auto component_manager = std::make_shared<ComponentManager>();
     return read_and_schedule_processing(store, pipeline_context, read_query, read_options, component_manager)
-            .thenValue([component_manager,
+            .thenValue([component_manager = std::move(component_manager),
                         pipeline_context,
                         read_query = std::move(read_query)](std::vector<EntityId>&& processed_entity_ids) {
                 generate_output_schema_and_save_to_pipeline(*pipeline_context, *read_query);
@@ -3017,7 +3060,15 @@ folly::Future<VersionedItem> read_modify_write_impl(
         const IndexPartialKey& target_partial_index_key, const std::shared_ptr<PipelineContext>& pipeline_context,
         std::optional<proto::descriptors::UserDefinedMetadata>&& user_meta_proto
 ) {
-    return read_modify_write_data_keys(store, read_query, read_options, target_partial_index_key, pipeline_context)
+    return read_modify_write_data_keys(
+                   store,
+                   read_query,
+                   read_options,
+                   target_partial_index_key,
+                   pipeline_context,
+                   std::make_shared<ComponentManager>(),
+                   std::make_shared<DeDupMap>()
+    )
             .thenValue([&](std::vector<SliceAndKey>&& data_keys_and_slices) {
                 ARCTICDB_DEBUG_CHECK(
                         ErrorCode::E_ASSERTION_FAILURE,
@@ -3054,20 +3105,43 @@ folly::Future<VersionedItem> read_modify_write_impl(
 }
 
 folly::Future<VersionedItem> merge_update_impl(
-        const std::shared_ptr<Store>& store, const VersionIdentifier& version_info, const ReadOptions& read_options,
+        const std::shared_ptr<Store>& store, const UpdateInfo& update_info, const ReadOptions& read_options,
         const WriteOptions& write_options, const IndexPartialKey& target_partial_index_key,
-        std::vector<std::string>&& on, const MergeStrategy& strategy, std::shared_ptr<InputFrame> source
+        std::vector<std::string>&& on, const MergeStrategy& strategy, std::shared_ptr<InputFrame> source,
+        std::shared_ptr<DeDupMap> de_dup_map
 ) {
     auto read_query = std::make_shared<ReadQuery>();
     const StreamDescriptor& source_descriptor = source->desc();
     auto merge_update_clause = std::make_shared<Clause>(MergeUpdateClause(std::move(on), strategy, source));
     read_query->clauses_.push_back(merge_update_clause);
-    VersionIdentifier resolved = version_info;
+    VersionIdentifier resolved = VersionedItem{*update_info.previous_index_key_};
     if (auto* vi = std::get_if<VersionedItem>(&resolved)) {
         resolved = std::make_shared<IndexInformation>(read_index_key_without_column_stats(store, vi->key_));
     }
     std::shared_ptr<PipelineContext> pipeline_context =
             setup_pipeline_context(store, std::move(resolved), *read_query, read_options);
+    // The target is empty.
+    if (pipeline_context->rows_ == 0) {
+        if (strategy.insert()) {
+            return write_dataframe_impl(store, update_info.next_version_id_, source, write_options, de_dup_map);
+        } else if (strategy.update_only()) {
+            const TimeseriesDescriptor tsd = make_timeseries_descriptor(
+                    0,
+                    pipeline_context->descriptor(),
+                    pipeline_context->release_normalization(),
+                    pipeline_context->release_opt_user_defined_metadata(),
+                    std::nullopt,
+                    write_options.bucketize_dynamic
+            );
+            return index::write_index(
+                    index_type_from_descriptor(pipeline_context->descriptor()),
+                    tsd,
+                    std::vector<SliceAndKey>{},
+                    target_partial_index_key,
+                    store
+            );
+        }
+    }
     // TODO: Rely on modify_schema for this https://man312219.monday.com/boards/7852509418/pulses/10997979275
     schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
             columns_match(pipeline_context->descriptor(), source_descriptor),
@@ -3079,6 +3153,11 @@ folly::Future<VersionedItem> merge_update_impl(
     user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
             !write_options.dynamic_schema, "Cannot merge update with dynamic schema"
     );
+    internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+            strategy.not_matched_by_target != MergeAction::INSERT ||
+                    pipeline_context->descriptor().index().type() == IndexDescriptor::Type::TIMESTAMP,
+            "Merge update with INSERT strategy is not implemented for ROWRANGE indexes yet."
+    );
     const IndexDescriptor::Type index_type = pipeline_context->descriptor().index().type();
     user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
             (index_type == IndexDescriptor::Type::TIMESTAMP &&
@@ -3089,25 +3168,32 @@ folly::Future<VersionedItem> merge_update_impl(
     );
     folly::poly_cast<MergeUpdateClause>(*merge_update_clause).fake_index_name_ =
             index_type == IndexDescriptor::Type::TIMESTAMP && is_fake_index_name(pipeline_context->normalization());
-    return read_modify_write_data_keys(store, read_query, read_options, target_partial_index_key, pipeline_context)
+    auto component_manager = std::make_shared<ComponentManager>();
+    return read_modify_write_data_keys(
+                   store,
+                   read_query,
+                   read_options,
+                   target_partial_index_key,
+                   pipeline_context,
+                   component_manager,
+                   std::move(de_dup_map)
+    )
             .thenValue([pipeline_context = std::move(pipeline_context),
+                        component_manager = std::move(component_manager),
                         store,
                         write_options,
                         source = std::move(source),
                         target_partial_index_key](std::vector<SliceAndKey>&& data_keys_and_slices) {
-                // TODO: This needs to be changed to account for the INSERT option of merge update. Insert can
-                // create new segments and shift row slices.
-                ranges::sort(data_keys_and_slices);
-                std::vector<SliceAndKey> merged_ranges_and_keys;
-                auto new_slice = data_keys_and_slices.begin();
-                for (SliceAndKey& slice : pipeline_context->slice_and_keys_) {
-                    if (new_slice != data_keys_and_slices.end() && new_slice->slice_ == slice.slice_) {
-                        merged_ranges_and_keys.push_back(std::move(*new_slice));
-                        ++new_slice;
-                    } else {
-                        merged_ranges_and_keys.push_back(std::move(slice));
-                    }
-                }
+                ankerl::unordered_dense::map<RowRange, size_t> inserted_rows_per_row_range;
+                component_manager->process_entities([&](const MergeUpdateInsertedRowsEntity& inserted_rows,
+                                                        const std::shared_ptr<RowRange>& row_range) {
+                    inserted_rows_per_row_range.emplace(*row_range, inserted_rows.inserted_rows);
+                });
+                std::vector<SliceAndKey> merged_ranges_and_keys = merge_slices_and_keys(
+                        std::move(pipeline_context->slice_and_keys_),
+                        std::move(data_keys_and_slices),
+                        std::move(inserted_rows_per_row_range)
+                );
                 pipeline_context->slice_and_keys_.clear();
                 const size_t row_count = merged_ranges_and_keys.empty()
                                                  ? 0
@@ -3344,7 +3430,6 @@ folly::Future<std::optional<VersionedItem>> compact_data_impl(
     } else {
         read_query->clauses_.push_back(std::make_shared<Clause>(CompactDataClause(rows_per_segment)));
     }
-
     return folly::via(
                    &async::io_executor(),
                    [store, read_query, update_info]() {
@@ -3369,7 +3454,13 @@ folly::Future<std::optional<VersionedItem>> compact_data_impl(
                 ReadOptions read_options;
                 read_options.set_dynamic_schema(dynamic_schema);
                 return read_modify_write_data_keys(
-                               store, read_query, read_options, target_partial_index_key, pipeline_context
+                               store,
+                               read_query,
+                               read_options,
+                               target_partial_index_key,
+                               pipeline_context,
+                               std::make_shared<ComponentManager>(),
+                               std::make_shared<DeDupMap>()
                 )
                         .thenValue(
                                 [pipeline_context = std::move(pipeline_context),

@@ -8,6 +8,8 @@
 
 #include <arcticdb/processing/processing_unit.hpp>
 
+#include <ranges>
+
 namespace arcticdb {
 
 void ProcessingUnit::apply_filter(util::BitSet&& bitset, PipelineOptimisation optimisation) {
@@ -110,13 +112,12 @@ std::vector<ProcessingUnit> split_by_row_slice(ProcessingUnit&& proc) {
             input.col_ranges_.has_value(), "split_by_row_slice needs ColRanges"
     );
     auto include_entity_fetch_count = input.entity_fetch_count_.has_value();
+    const bool has_atom_keys = input.atom_keys_.has_value();
 
     std::vector<ProcessingUnit> output;
     // Some clauses (e.g. AggregationClause) are lossy about row-ranges. We can assume that if all of the input column
     // ranges start with zero, that every segment belongs to a different logical row-slice
-    if (std::all_of(input.col_ranges_->begin(), input.col_ranges_->end(), [](const auto& col_range) {
-            return col_range->start() == 0;
-        })) {
+    if (std::ranges::all_of(*input.col_ranges_, [](const auto& col_range) { return col_range->start() == 0; })) {
         output.reserve(input.segments_->size());
         for (size_t idx = 0; idx < input.segments_->size(); ++idx) {
             ProcessingUnit proc_tmp(
@@ -126,6 +127,9 @@ std::vector<ProcessingUnit> split_by_row_slice(ProcessingUnit&& proc) {
             );
             if (include_entity_fetch_count) {
                 proc_tmp.set_entity_fetch_count({input.entity_fetch_count_->at(idx)});
+            }
+            if (has_atom_keys) {
+                proc_tmp.set_atom_keys({input.atom_keys_->at(idx)});
             }
             output.emplace_back(std::move(proc_tmp));
         }
@@ -139,6 +143,9 @@ std::vector<ProcessingUnit> split_by_row_slice(ProcessingUnit&& proc) {
                 if (include_entity_fetch_count) {
                     it->second.entity_fetch_count_->emplace_back(input.entity_fetch_count_->at(idx));
                 }
+                if (has_atom_keys) {
+                    it->second.atom_keys_->emplace_back(input.atom_keys_->at(idx));
+                }
             } else {
                 auto [inserted_it, _] = output_map.emplace(*row_range_ptr, ProcessingUnit{});
                 inserted_it->second.segments_.emplace(1, input.segments_->at(idx));
@@ -147,10 +154,13 @@ std::vector<ProcessingUnit> split_by_row_slice(ProcessingUnit&& proc) {
                 if (include_entity_fetch_count) {
                     inserted_it->second.entity_fetch_count_.emplace(1, input.entity_fetch_count_->at(idx));
                 }
+                if (has_atom_keys) {
+                    inserted_it->second.atom_keys_.emplace(1, input.atom_keys_->at(idx));
+                }
             }
         }
         output.reserve(output_map.size());
-        for (auto&& [_, processing_unit] : output_map) {
+        for (auto& processing_unit : output_map | std::views::values) {
             output.emplace_back(std::move(processing_unit));
         }
     }
@@ -169,9 +179,8 @@ std::vector<ProcessingUnit> split_by_row_slice(ProcessingUnit&& proc) {
                     entity_fetch_count
             );
             internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-                    std::all_of(
-                            row_slice->entity_fetch_count_->begin(),
-                            row_slice->entity_fetch_count_->end(),
+                    std::ranges::all_of(
+                            *row_slice->entity_fetch_count_,
                             [&entity_fetch_count](uint64_t i) { return i == entity_fetch_count; }
                     ),
                     "All segments in same row slice should have same entity_fetch_count in split_by_row_slice"
