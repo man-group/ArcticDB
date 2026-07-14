@@ -57,9 +57,6 @@ class ColumnStats {
     bool operator==(const ColumnStats& right) const;
 
   private:
-    void map_stats_to_column_name(const std::string& column_name, const std::unordered_set<std::string>& stats_names);
-
-    std::map<std::string, std::set<ColumnStatType>> input_column_name_to_stats_;
     std::unordered_map<size_t, NameAndStats> offset_to_input_column_and_stats_;
     bool offset_to_input_column_and_stats_calculated_{false};
 };

@@ -164,14 +164,6 @@ std::string stat_to_name(ColumnStatType stat) {
     }
 }
 
-std::optional<ColumnStatType> stat_name_to_stat(const std::string& statName) {
-    if (statName == "MINMAX") {
-        return ColumnStatType::MINMAX;
-    }
-
-    user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Unknown column stat type provided: {}", statName);
-}
-
 std::string column_and_stat_to_segment_name(const std::string& column, ColumnStatTypeInternal stat) {
     return fmt::format("{}({})", stat_to_operator_string(stat), column);
 }
@@ -310,16 +302,6 @@ ColumnStats::ColumnStats(const TimeseriesDescriptor& tsd) {
         );
     }
     offset_to_stat_info_set_ = true;
-}
-
-std::unordered_set<std::string> get_unmangled_column_names(
-        const std::map<std::string, std::set<ColumnStatType>>& column_name_to_stats
-) {
-    std::unordered_set<std::string> unmangled_names;
-    for (const auto& k : column_name_to_stats | ranges::views::keys) {
-        unmangled_names.insert(k);
-    }
-    return unmangled_names;
 }
 
 }
