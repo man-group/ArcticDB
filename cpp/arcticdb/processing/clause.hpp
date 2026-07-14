@@ -888,9 +888,9 @@ struct MergeUpdateClause {
     OutputSchema join_schemas(std::vector<OutputSchema>&&) const;
 
     [[nodiscard]] std::string to_string() const;
-    class MatchRechord {
+    class MatchRecord {
       public:
-        MatchRechord(std::span<ProcessingUnit> row_slices, size_t num_source_rows);
+        MatchRecord(std::span<ProcessingUnit> row_slices, size_t num_source_rows);
         void add_match(size_t source_row, size_t target_row_slice, size_t target_row);
         void add_match(size_t source_row, size_t target_row_slice, std::span<size_t> target_rows);
         void filter_matching_rows(
@@ -913,26 +913,26 @@ struct MergeUpdateClause {
 
   private:
     std::pair<std::vector<ProcessingUnit>, bool> update_and_insert(
-            const MatchRechord& match_record, const StreamDescriptor& target_descriptor,
+            const MatchRecord& match_record, const StreamDescriptor& target_descriptor,
             std::vector<ProcessingUnit>&& row_slices
     ) const;
 
     std::pair<std::vector<ProcessingUnit>, bool> update(
-            const MatchRechord& match_record, std::vector<ProcessingUnit>&& row_slices
+            const MatchRecord& match_record, std::vector<ProcessingUnit>&& row_slices
     ) const;
 
     /// Filter segments which will be affected by the merge. The complexity is O(m * log(n)) where n is the number
     /// of rows in the source data and m is the number of row slices in the library
     std::vector<std::vector<size_t>> structure_for_processing_log(std::vector<RangesAndKey>& ranges_and_keys);
 
-    MatchRechord match(std::span<ProcessingUnit> row_slices) const;
+    MatchRecord match(std::span<ProcessingUnit> row_slices) const;
 
-    MatchRechord filter_on_additional_columns_match(
+    MatchRecord filter_on_additional_columns_match(
             const StreamDescriptor& source_descriptor, const StreamDescriptor& target_descriptor,
-            std::span<ProcessingUnit> proc, std::optional<MatchRechord>&& match_record
+            std::span<ProcessingUnit> proc, std::optional<MatchRecord>&& match_record
     ) const;
 
-    MatchRechord initialize_rows_to_update_for_row_range_indexed_data(
+    MatchRecord initialize_rows_to_update_for_row_range_indexed_data(
             std::span<ProcessingUnit> row_slices, const StreamDescriptor& source_descriptor
     ) const;
 

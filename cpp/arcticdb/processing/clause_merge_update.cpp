@@ -283,7 +283,7 @@ template<util::type_descriptor_tag TargetColumnTypeDescriptorTag, typename Sourc
 requires(TargetColumnTypeDescriptorTag::dimension() == Dimension::Dim0)
 Column merge(
         const InsertSourceData<SourceRawType>& source, const InsertTargetData& target,
-        const MergeUpdateClause::MatchRechord& match_record, const MergeStrategy& strategy
+        const MergeUpdateClause::MatchRecord& match_record, const MergeStrategy& strategy
 ) {
     using IndexType = ScalarTagType<DataTypeTag<DataType::NANOSECONDS_UTC64>>;
     // One index value can appear in more than one row slice. In that case it can be shared by two processing units
@@ -623,11 +623,11 @@ TargetRange get_target_start_end(std::span<const ProcessingUnit> row_slices) {
 ///
 /// Complexity: $$O(m * log_2(n) + n)$$ where: m is the count of source rows in the bounds of the segment, n is the
 /// number of target rows in the segment.
-MergeUpdateClause::MatchRechord filter_index_match(
+MergeUpdateClause::MatchRecord filter_index_match(
         std::span<const timestamp> source_index, std::span<ProcessingUnit> row_slices
 ) {
     using IndexType = ScalarTagType<DataTypeTag<DataType::NANOSECONDS_UTC64>>;
-    MergeUpdateClause::MatchRechord result(row_slices, source_index.size());
+    MergeUpdateClause::MatchRecord result(row_slices, source_index.size());
     if (source_index.empty()) {
         return result;
     }
@@ -829,7 +829,7 @@ std::vector<EntityId> MergeUpdateClause::process(std::vector<EntityId>&& entity_
             EntityFetchCount>(*component_manager_, std::move(entity_ids));
     std::vector<ProcessingUnit> row_slices =
             must_structure_by_time_slice() ? split_by_row_slice(std::move(proc)) : std::vector{std::move(proc)};
-    const MatchRechord matched = match(row_slices);
+    const MatchRecord matched = match(row_slices);
     matched.validate_rows_to_update(strategy_);
     if (strategy_.update_only()) {
         if (auto [new_row_slices, time_slice_changed] = update(matched, std::move(row_slices)); time_slice_changed) {
@@ -869,7 +869,7 @@ std::vector<EntityId> MergeUpdateClause::process(std::vector<EntityId>&& entity_
     return {};
 }
 
-MergeUpdateClause::MatchRechord MergeUpdateClause::initialize_rows_to_update_for_row_range_indexed_data(
+MergeUpdateClause::MatchRecord MergeUpdateClause::initialize_rows_to_update_for_row_range_indexed_data(
         std::span<ProcessingUnit> row_slices, const StreamDescriptor& source_descriptor
 ) const {
     user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
@@ -878,7 +878,7 @@ MergeUpdateClause::MatchRechord MergeUpdateClause::initialize_rows_to_update_for
             "timeseries"
     );
     const std::pair<size_t, size_t> source_range = get_source_start_end(row_slices);
-    MatchRechord result(row_slices, source_range.second - source_range.first);
+    MatchRecord result(row_slices, source_range.second - source_range.first);
     // GIL will be acquired if there is a string that is not pure ASCII/UTF-8
     // In this case a PyObject will be allocated by convert::py_unicode_to_buffer
     // If such a string is encountered in a column, then the GIL will be held until that whole column has
@@ -995,7 +995,7 @@ std::pair<size_t, size_t> MergeUpdateClause::get_source_start_end(std::span<cons
 }
 
 std::pair<std::vector<ProcessingUnit>, bool> MergeUpdateClause::update_and_insert(
-        const MatchRechord& match_record, const StreamDescriptor& target_descriptor,
+        const MatchRecord& match_record, const StreamDescriptor& target_descriptor,
         std::vector<ProcessingUnit>&& row_slices
 
 ) const {
@@ -1118,7 +1118,7 @@ std::pair<std::vector<ProcessingUnit>, bool> MergeUpdateClause::update_and_inser
 }
 
 std::pair<std::vector<ProcessingUnit>, bool> MergeUpdateClause::update(
-        const MatchRechord& match_record, std::vector<ProcessingUnit>&& row_slices
+        const MatchRecord& match_record, std::vector<ProcessingUnit>&& row_slices
 ) const {
     ARCTICDB_DEBUG_CHECK(
             ErrorCode::E_ASSERTION_FAILURE,
@@ -1198,8 +1198,8 @@ std::pair<std::vector<ProcessingUnit>, bool> MergeUpdateClause::update(
     return {std::move(result), time_slice_changed};
 }
 
-MergeUpdateClause::MatchRechord MergeUpdateClause::match(std::span<ProcessingUnit> row_slices) const {
-    std::optional<MatchRechord> maybe_index_match;
+MergeUpdateClause::MatchRecord MergeUpdateClause::match(std::span<ProcessingUnit> row_slices) const {
+    std::optional<MatchRecord> maybe_index_match;
     if (source_->has_index()) {
         maybe_index_match.emplace(filter_index_match(get_source_index(row_slices), row_slices));
     }
@@ -1221,12 +1221,12 @@ std::span<const std::byte> MergeUpdateClause::get_source_data_bytes(size_t field
 /// Complexity: $$O(c * n * m)$$ m is the count of source rows in the bounds of the segment, n is the  number of target
 /// rows in the segment. c is the number of columns in MergeUpdateClause::on_. It can be reached if the data in source
 /// and target is the same up to the very last column in MergeUpdateClause::on_.
-MergeUpdateClause::MatchRechord MergeUpdateClause::filter_on_additional_columns_match(
+MergeUpdateClause::MatchRecord MergeUpdateClause::filter_on_additional_columns_match(
         const StreamDescriptor& source_descriptor, const StreamDescriptor& target_descriptor,
-        std::span<ProcessingUnit> row_slices, std::optional<MatchRechord>&& index_match
+        std::span<ProcessingUnit> row_slices, std::optional<MatchRecord>&& index_match
 ) const {
     ranges::subrange on = on_;
-    MatchRechord matched_rows = [&] {
+    MatchRecord matched_rows = [&] {
         const IndexDescriptor::Type source_index_type = source_descriptor.index().type();
         const IndexDescriptor::Type target_index_type = target_descriptor.index().type();
         if (index_match) {
@@ -1347,17 +1347,17 @@ std::span<const timestamp> MergeUpdateClause::get_source_index(std::span<const P
     return source_->get_tensor(0).span<timestamp>(start, end - start);
 }
 
-MergeUpdateClause::MatchRechord::MatchRechord(std::span<ProcessingUnit> row_slices, const size_t num_source_rows) :
+MergeUpdateClause::MatchRecord::MatchRecord(std::span<ProcessingUnit> row_slices, const size_t num_source_rows) :
     matched_target_rows_(row_slices.size(), std::vector<std::vector<size_t>>(num_source_rows)),
     row_slices_(row_slices),
     source_row_matched_count_(num_source_rows) {}
 
-void MergeUpdateClause::MatchRechord::add_match(size_t source_row, size_t target_row_slice, size_t target_row) {
+void MergeUpdateClause::MatchRecord::add_match(size_t source_row, size_t target_row_slice, size_t target_row) {
     ++source_row_matched_count_[source_row];
     matched_target_rows_[target_row_slice][source_row].push_back(target_row);
     ++total_matched_target_rows_count_;
 }
-void MergeUpdateClause::MatchRechord::add_match(
+void MergeUpdateClause::MatchRecord::add_match(
         size_t source_row, size_t target_row_slice, std::span<size_t> target_rows
 ) {
     ++source_row_matched_count_[source_row];
@@ -1366,7 +1366,7 @@ void MergeUpdateClause::MatchRechord::add_match(
     total_matched_target_rows_count_ += target_rows.size();
 }
 
-void MergeUpdateClause::MatchRechord::filter_matching_rows(
+void MergeUpdateClause::MatchRecord::filter_matching_rows(
         std::string_view column_name, const DataType source_type, const DataType target_type,
         const size_t source_offset, const std::span<const std::byte> opaque_source_data
 ) {
@@ -1441,7 +1441,7 @@ void MergeUpdateClause::MatchRechord::filter_matching_rows(
     });
 }
 
-void MergeUpdateClause::MatchRechord::clone_source_match(
+void MergeUpdateClause::MatchRecord::clone_source_match(
         size_t source_row_src, size_t source_row_dst, size_t row_slice
 ) {
     source_row_matched_count_[source_row_dst] = source_row_matched_count_[source_row_src];
@@ -1449,10 +1449,10 @@ void MergeUpdateClause::MatchRechord::clone_source_match(
     total_matched_target_rows_count_ += source_row_matched_count_[source_row_dst];
 }
 
-size_t MergeUpdateClause::MatchRechord::total_unmatched_source_rows() const {
+size_t MergeUpdateClause::MatchRecord::total_unmatched_source_rows() const {
     return std::ranges::count_if(source_row_matched_count_, [](const size_t count) { return count == 0; });
 }
-void MergeUpdateClause::MatchRechord::validate_rows_to_update(const MergeStrategy& strategy) const {
+void MergeUpdateClause::MatchRecord::validate_rows_to_update(const MergeStrategy& strategy) const {
     // TODO: This can be inlined in the loop iterating over all columns to avoid iterating the source one more
     // time. The loop structure makes it not intuitive. The performance cost must be evaluated. Monday:
     // 10655963947
@@ -1479,11 +1479,11 @@ void MergeUpdateClause::MatchRechord::validate_rows_to_update(const MergeStrateg
     }
 }
 
-std::span<const std::vector<size_t>> MergeUpdateClause::MatchRechord::matched_rows(size_t target_row_slice) const {
+std::span<const std::vector<size_t>> MergeUpdateClause::MatchRecord::matched_rows(size_t target_row_slice) const {
     return matched_target_rows_[target_row_slice];
 }
 
-bool MergeUpdateClause::MatchRechord::is_source_row_matched(size_t source_row) const {
+bool MergeUpdateClause::MatchRecord::is_source_row_matched(size_t source_row) const {
     return source_row_matched_count_[source_row] > 0;
 }
 
