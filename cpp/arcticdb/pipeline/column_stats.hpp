@@ -48,7 +48,7 @@ class ColumnStats {
     );
 
     // Returns the segment column names of the dropped stats (e.g. "v1_MIN(col)", "v1_MAX(col)")
-    std::vector<std::string> drop(const ColumnStats& to_drop, bool warn_if_missing = true);
+    std::vector<std::string> drop_old_stats(const ColumnStats& old_stats, bool warn_if_missing = true);
 
     std::unordered_map<std::string, std::unordered_set<std::string>> to_map() const;
     std::optional<Clause> clause() const;

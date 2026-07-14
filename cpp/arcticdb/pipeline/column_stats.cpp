@@ -340,55 +340,76 @@ ColumnStatsAggregator create_aggregator(
         internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Unrecognised ColumnStatType");
     }
 }
-} // namespace
 
-std::vector<std::string> ColumnStats::drop(const ColumnStats& to_drop, bool warn_if_missing) {
-    util::check(
-            offset_to_input_column_and_stats_calculated_, "Expect this->offset to input column and stats to be set"
-    );
-    util::check(
-            to_drop.offset_to_input_column_and_stats_calculated_,
-            "Expect to_drop.offset to input column and stats to be set"
-    );
-    std::vector<std::string> dropped_names;
-    for (const auto& [offset, input_column_and_stats] : to_drop.offset_to_input_column_and_stats_) {
-        if (auto it = offset_to_input_column_and_stats_.find(offset); it == offset_to_input_column_and_stats_.end()) {
-            if (warn_if_missing) {
-                log::version().warn(
-                        "Requested column stats drop but column '{}' does not have any column stats",
-                        input_column_and_stats.mangled_name
-                );
-            }
-        } else {
-            for (const auto& column_stat : input_column_and_stats.column_stats) {
-                bool none_erased = it->second.column_stats.erase(column_stat) == 0;
-                if (none_erased) {
-                    if (warn_if_missing) {
-                        log::version().warn(
-                                "Requested column stats drop but column '{}' does not have the specified column stat "
-                                "'{}'",
-                                input_column_and_stats.mangled_name,
-                                stat_to_name(column_stat)
-                        );
-                    }
-                } else {
-                    for (const auto& internal_type : external_to_internal(column_stat)) {
-                        dropped_names.emplace_back(
-                                column_and_stat_to_segment_name(input_column_and_stats.mangled_name, internal_type)
-                        );
-                    }
-                }
-            }
-        }
+void warn_if_old_offset_is_not_found(const NameAndStats& old_input_column_and_stats, bool warn_if_missing) {
+    if (warn_if_missing) {
+        log::version().warn(
+                "Old column '{}'s offset is not present in the new column stats offsets!",
+                old_input_column_and_stats.mangled_name
+        );
     }
-    for (auto it = offset_to_input_column_and_stats_.begin(); it != offset_to_input_column_and_stats_.end();) {
+}
+
+void add_erased_column_and_stat_names(
+        std::vector<std::string>& erased_column_and_stat, const std::string& mangled_name, ColumnStatType stat
+) {
+    for (const auto& internal_type : external_to_internal(stat)) {
+        erased_column_and_stat.emplace_back(column_and_stat_to_segment_name(mangled_name, internal_type));
+    }
+}
+
+void warn_if_old_stat_is_missing(const std::string& mangled_name, ColumnStatType stat, bool warn_if_missing) {
+    if (warn_if_missing) {
+        log::version().warn("New column '{}' does not have the old stat '{}'", mangled_name, stat_to_name(stat));
+    }
+}
+
+// Erase the requested stats from an existing column entry, appending the segment names that were actually removed to
+// erased_names.
+void erase_old_stats(
+        NameAndStats& new_column_stats, const std::set<ColumnStatType>& old_column_stats, bool warn_if_missing,
+        std::vector<std::string>& erased_columns_and_stats
+) {
+    for (const auto& old_column_stat : old_column_stats) {
+        bool is_erased = (new_column_stats.column_stats.erase(old_column_stat) != 0);
+
+        if (is_erased) {
+            add_erased_column_and_stat_names(erased_columns_and_stats, new_column_stats.mangled_name, old_column_stat);
+            continue;
+        }
+
+        warn_if_old_stat_is_missing(new_column_stats.mangled_name, old_column_stat, warn_if_missing);
+    }
+}
+
+void remove_columns_without_stats(std::unordered_map<size_t, NameAndStats>& columns) {
+    for (auto it = columns.begin(); it != columns.end();) {
         if (it->second.column_stats.empty()) {
-            it = offset_to_input_column_and_stats_.erase(it);
+            it = columns.erase(it);
         } else {
             ++it;
         }
     }
-    return dropped_names;
+}
+} // namespace
+
+std::vector<std::string> ColumnStats::drop_old_stats(const ColumnStats& old_stats, bool warn_if_missing) {
+    std::vector<std::string> erased_names;
+    for (const auto& [old_offset, old_input_column_and_stats] : old_stats.offset_to_input_column_and_stats_) {
+        auto it = offset_to_input_column_and_stats_.find(old_offset);
+
+        if (it == offset_to_input_column_and_stats_.end()) {
+            warn_if_old_offset_is_not_found(old_input_column_and_stats, warn_if_missing);
+            continue;
+        }
+
+        auto& new_column_stats = it->second;
+        const auto old_column_stats = old_input_column_and_stats.column_stats;
+
+        erase_old_stats(new_column_stats, old_column_stats, warn_if_missing, erased_names);
+    }
+    remove_columns_without_stats(offset_to_input_column_and_stats_);
+    return erased_names;
 }
 
 std::unordered_map<std::string, std::unordered_set<std::string>> ColumnStats::to_map() const {

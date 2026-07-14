@@ -2067,7 +2067,7 @@ void create_column_stats_impl(
         );
         ColumnStats old_column_stats(old_header, tsd);
         // No need to redo work for any stats that already exist
-        column_stats.drop(old_column_stats, false);
+        column_stats.drop_old_stats(old_column_stats, false);
         // If all the column stats we are being asked to create already exist, there's no work to do
         if (column_stats.empty()) {
             return;
