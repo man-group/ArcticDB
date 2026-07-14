@@ -1766,6 +1766,28 @@ def in_memory_library_dynamic() -> Library:
 
 
 @pytest.fixture
+def arrow_library(in_memory_library) -> Library:
+    """Static-schema in-memory V2 library configured for arrow input and arrow output."""
+    in_memory_library._nvs.set_output_format(OutputFormat.PYARROW)
+    in_memory_library._nvs._set_allow_arrow_input()
+    return in_memory_library
+
+
+@pytest.fixture
+def arrow_library_dynamic(in_memory_library_dynamic) -> Library:
+    """Dynamic-schema in-memory V2 library configured for arrow input and arrow output."""
+    in_memory_library_dynamic._nvs.set_output_format(OutputFormat.PYARROW)
+    in_memory_library_dynamic._nvs._set_allow_arrow_input()
+    return in_memory_library_dynamic
+
+
+@pytest.fixture(params=["arrow_library", "arrow_library_dynamic"])
+def arrow_library_any_schema(request) -> Library:
+    """Parametrizes a test over both static and dynamic schema arrow libraries."""
+    return request.getfixturevalue(request.param)
+
+
+@pytest.fixture
 def in_memory_library_tiny_segment() -> Library:
     library_options = LibraryOptions(rows_per_segment=2, columns_per_segment=2)
     ac = Arctic("mem://")
