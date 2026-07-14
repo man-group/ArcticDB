@@ -564,6 +564,55 @@ def test_symbol_concat_querybuilder_syntax(lmdb_library, any_output_format):
     assert_frame_equal(expected, received)
 
 
+@pytest.mark.parametrize(
+    "dtype",
+    [
+        np.int64,
+        pytest.param(
+            np.float64,
+            marks=pytest.mark.xfail(
+                reason="default_values not preserved with concat (Monday ref: 12529266849)",
+                strict=True,
+            ),
+        ),
+    ],
+)
+def test_concat_groupby_sum_matches_append_groupby_sum(lmdb_library_factory, dtype, any_output_format):
+    # Three routes that should combine two symbols and sum a column per group must agree:
+    #   A) concat the symbols, then groupby-sum;
+    #   B) write+append every row into one symbol, then read with a groupby-sum query;
+    #   C) groupby-sum each symbol, then concat the results. (same output as A because groups are distinct between symbols)
+    lib = lmdb_library_factory(LibraryOptions(dynamic_schema=True))
+    lib._nvs._set_output_format_for_pipeline_tests(any_output_format)
+    agg = {"agg_column": "sum"}
+    df_0 = pd.DataFrame({"grouping": ["a", "b"], "agg_column": np.array([10, 20], dtype=dtype)})
+    df_1_write = pd.DataFrame({"grouping": ["c"], "agg_column": np.array([30], dtype=dtype)})
+    df_1_append = pd.DataFrame({"grouping": ["d"]})  # missing agg_column; backfilled on append
+
+    lib.write("sym0", df_0)
+    lib.write("sym1", df_1_write)
+    lib.append("sym1", df_1_append)
+
+    # Route A: concat then aggregate.
+    concat_then_agg = (
+        concat(lib.read_batch(["sym0", "sym1"], lazy=True), join="outer").groupby("grouping").agg(agg).collect().data
+    )
+
+    # Route B: single symbol built from the same rows, aggregated on read.
+    lib.write("sym_combined", df_0)
+    lib.append("sym_combined", df_1_write)
+    lib.append("sym_combined", df_1_append)
+    append_then_agg = lib.read("sym_combined", query_builder=QueryBuilder().groupby("grouping").agg(agg)).data
+
+    # Route C: aggregate each symbol then concat.
+    agg_0 = lib.read("sym0", lazy=True).groupby("grouping").agg(agg)
+    agg_1 = lib.read("sym1", lazy=True).groupby("grouping").agg(agg)
+    agg_then_concat = concat([agg_0, agg_1], join="outer").collect().data
+
+    assert_frame_equal(concat_then_agg.sort_index(), append_then_agg.sort_index())
+    assert_frame_equal(concat_then_agg.sort_index(), agg_then_concat.sort_index())
+
+
 @pytest.mark.parametrize("index_name_0", [None, "ts1", "ts2"])
 @pytest.mark.parametrize("index_name_1", [None, "ts1", "ts2"])
 @pytest.mark.parametrize("join", ["inner", "outer"])
