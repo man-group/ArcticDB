@@ -67,7 +67,7 @@ class ReadOptions {
 
     [[nodiscard]] const std::optional<bool>& incompletes() const { return data_->incompletes_; }
 
-    void set_output_config(OutputConfig output_config) { data_->output_config_ = std::move(output_config); }
+    void set_output_config(OutputConfig&& output_config) { data_->output_config_ = std::move(output_config); }
 
     [[nodiscard]] OutputFormat output_format_for_frame() const {
         return util::variant_match(
@@ -83,7 +83,7 @@ class ReadOptions {
                 [](const ArrowOutputConfig&) { return OutputFormat::ARROW; },
                 [&](const PandasOutputConfig& pandas) {
                     if (entity::is_sequence_type(type.data_type()) &&
-                        pandas.default_string_format_ == PandasStringFormat::ARROW) {
+                        pandas.default_string_format_ == PandasStringFormat::ARROW_LARGE_STRING) {
                         return OutputFormat::ARROW;
                     }
                     return OutputFormat::PANDAS;
@@ -117,10 +117,10 @@ class ReadOptions {
                 },
                 [](const PandasOutputConfig& pandas) -> ArrowOutputStringFormat {
                     util::check(
-                            pandas.default_string_format_ == PandasStringFormat::ARROW,
+                            pandas.default_string_format_ == PandasStringFormat::ARROW_LARGE_STRING,
                             "Arrow string format requested for a non-arrow column"
                     );
-                    return ArrowOutputStringFormat::LARGE_STRING;
+                    return ArrowOutputStringFormat::LARGE_STRING; 
                 }
         );
     }
