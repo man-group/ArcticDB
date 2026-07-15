@@ -400,7 +400,7 @@ std::vector<std::string> ColumnStats::drop_old_stats(const ColumnStats& old_stat
         }
 
         auto& new_column_stats = it->second;
-        const auto old_column_stats = old_input_column_and_stats.column_stats;
+        const auto& old_column_stats = old_input_column_and_stats.column_stats;
 
         erase_old_stats(new_column_stats, old_column_stats, warn_if_missing, erased_names);
     }
