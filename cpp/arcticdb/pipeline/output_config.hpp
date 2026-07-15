@@ -17,7 +17,7 @@ namespace arcticdb {
 
 enum class ArrowOutputStringFormat : uint8_t { CATEGORICAL, LARGE_STRING, SMALL_STRING };
 
-enum class PandasStringFormat : uint8_t { OBJECT, ARROW };
+enum class PandasStringFormat : uint8_t { OBJECT, ARROW_LARGE_STRING };
 
 struct PandasOutputConfig {
     PandasStringFormat default_string_format_ = PandasStringFormat::OBJECT;
