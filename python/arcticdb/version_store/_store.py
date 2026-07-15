@@ -1181,6 +1181,12 @@ class NativeVersionStore:
             },
             kwargs,
         )
+        if "dynamic_schema" in kwargs:
+            log.warning(
+                "update() received 'dynamic_schema' parameter which overrides the library setting "
+                "and may cause data corruption. Please remove it from the call site. "
+                "Support for this parameter override is scheduled to be removed in June 2026."
+            )
 
         update_query = _PythonVersionStoreUpdateQuery()
         dynamic_strings = self._resolve_dynamic_strings(kwargs)
