@@ -297,6 +297,61 @@ def random_unicode_string(length: int) -> str:
     return "".join(random.choices(string.ascii_uppercase + unicode_symbols(), k=length))
 
 
+@contextmanager
+def arrow_string_read(enabled: bool):
+    """Read strings back as the pandas arrow-backed ``str`` dtype (``future.infer_string``) or as ``object``.
+
+    Wrap only the read call, not the write: writing that dtype is not supported yet. Skips when ``enabled`` is
+    requested on pandas that lacks either ``future.infer_string`` (< 2.1) or the ``str`` dtype (StringDtype na_value,
+    added in 2.3).
+    """
+    from arcticdb.version_store._normalization import _ARROW_BACKED_STR_DTYPE_SUPPORTED
+
+    if enabled and not _ARROW_BACKED_STR_DTYPE_SUPPORTED:
+        import pytest
+
+        pytest.skip("pandas too old for the arrow-backed str dtype (StringDtype na_value, added in 2.3)")
+    try:
+        with pd.option_context("future.infer_string", enabled):
+            yield
+    except pd.errors.OptionError:
+        if enabled:
+            import pytest
+
+            pytest.skip("pandas too old for future.infer_string")
+        yield
+
+
+def _expected_index_for_read_string_dtype(index):
+    str_dtype = pd.StringDtype(storage="pyarrow", na_value=np.nan)
+    if isinstance(index, pd.MultiIndex):
+        levels = [
+            pd.array(list(vals), dtype=str_dtype) if vals.dtype == object else vals
+            for vals in (index.get_level_values(i) for i in range(index.nlevels))
+        ]
+        return pd.MultiIndex.from_arrays(levels, names=index.names)
+    if index.dtype == object:
+        return pd.Index(pd.array(list(index), dtype=str_dtype), name=index.name)
+    return index
+
+
+def expected_for_read_string_dtype(df, read_string_dtype: bool):
+    """Return ``df`` with its object columns and object index levels converted to the arrow-backed ``str`` dtype.
+
+    Use to build an expected frame that matches a read performed under ``arrow_string_read``. Numeric columns and
+    index levels are left untouched; None and np.nan both map to the str dtype's np.nan na_value.
+    """
+    if not read_string_dtype:
+        return df
+    out = df.copy()
+    for col in out.columns:
+        if out[col].dtype == object:
+            out[col] = pd.array(list(out[col]), dtype=pd.StringDtype(storage="pyarrow", na_value=np.nan))
+    out.index = _expected_index_for_read_string_dtype(out.index)
+    out.columns = _expected_index_for_read_string_dtype(out.columns)
+    return out
+
+
 def random_string(length: int):
     # (probably) Give a unicode string one time in three, we have special handling in C++ for unicode
     return random_unicode_string(length) if random.randint(0, 3) == 0 else random_ascii_string(length)
@@ -829,10 +884,11 @@ def get_query_processing_functions(lib, symbol, arctic_query, date_range=None):
     return processing_functions
 
 
-def generic_filter_test(lib, symbol, arctic_query, expected):
+def generic_filter_test(lib, symbol, arctic_query, expected, read_string_dtype=False):
     query_processing_functions = get_query_processing_functions(lib, symbol, arctic_query)
     for processing in query_processing_functions:
-        received = processing()
+        with arrow_string_read(read_string_dtype):
+            received = processing()
         if not np.array_equal(expected, received):
             original_df = lib.read(symbol).data
             print(
@@ -843,12 +899,12 @@ def generic_filter_test(lib, symbol, arctic_query, expected):
 
 
 # For string queries, test both with and without dynamic strings, and with the query both optimised for speed and memory
-def generic_filter_test_strings(lib, base_symbol, arctic_query, expected):
+def generic_filter_test_strings(lib, base_symbol, arctic_query, expected, read_string_dtype=False):
     for symbol in [f"{base_symbol}_{DYNAMIC_STRINGS_SUFFIX}", f"{base_symbol}_{FIXED_STRINGS_SUFFIX}"]:
         arctic_query.optimise_for_speed()
-        generic_filter_test(lib, symbol, arctic_query, expected)
+        generic_filter_test(lib, symbol, arctic_query, expected, read_string_dtype)
         arctic_query.optimise_for_memory()
-        generic_filter_test(lib, symbol, arctic_query, expected)
+        generic_filter_test(lib, symbol, arctic_query, expected, read_string_dtype)
 
 
 def generic_filter_test_dynamic(lib, symbol, arctic_query, queried_slices):
@@ -914,13 +970,15 @@ def generic_filter_test_nans(lib, symbol, arctic_query, expected, output_format=
                         assert received_val is None
 
 
-def generic_aggregation_test(lib, symbol, df, grouping_column, aggs_dict):
+def generic_aggregation_test(lib, symbol, df, grouping_column, aggs_dict, read_string_dtype=False):
     expected = df.groupby(grouping_column).agg(aggs_dict)
+    expected = expected_for_read_string_dtype(expected, read_string_dtype)
     expected = expected.reindex(columns=sorted(expected.columns))
     q = QueryBuilder().groupby(grouping_column).agg(aggs_dict)
     query_processing_functions = get_query_processing_functions(lib, symbol, q)
     for proccessing_function in query_processing_functions:
-        received = proccessing_function()
+        with arrow_string_read(read_string_dtype):
+            received = proccessing_function()
         received = received.reindex(columns=sorted(received.columns))
         received.sort_index(inplace=True)
         assert_frame_equal(expected, received, check_dtype=False)
@@ -1086,6 +1144,7 @@ def generic_resample_test(
     origin=None,
     drop_empty_buckets_for=None,
     expected_types=None,
+    read_string_dtype=False,
 ):
     """
     Perform a resampling in ArcticDB and compare it against the same query in Pandas.
@@ -1109,12 +1168,14 @@ def generic_resample_test(
     expected = expected_pandas_resample_generic(
         original_data, rule, aggregations, closed, label, offset, origin, drop_empty_buckets_for, expected_types
     )
+    expected = expected_for_read_string_dtype(expected, read_string_dtype)
 
     check_dtype = expected_types is not None
 
     query_processing_functions = get_query_processing_functions(lib, sym, q, date_range=date_range)
     for proccessing_function in query_processing_functions:
-        received = proccessing_function()
+        with arrow_string_read(read_string_dtype):
+            received = proccessing_function()
         received = received.reindex(columns=sorted(received.columns))
         try:
             assert_resampled_dataframes_are_equal(received, expected, check_dtype=check_dtype)
@@ -1145,6 +1206,7 @@ def generic_resample_test(
                     drop_empty_buckets_for,
                     expected_types,
                 )
+                expected = expected_for_read_string_dtype(expected, read_string_dtype)
                 assert_resampled_dataframes_are_equal(received, expected, check_dtype=check_dtype)
             else:
                 raise

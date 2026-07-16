@@ -12,7 +12,7 @@ import pandas as pd
 import datetime as dt
 import pytest
 
-from arcticdb import QueryBuilder
+from arcticdb import QueryBuilder, OutputFormat
 from arcticdb.exceptions import ArcticDbNotYetImplemented, SchemaException, UserInputException
 from arcticdb.util.test import (
     assert_frame_equal,
@@ -229,7 +229,9 @@ def test_resampling_timezones(lmdb_version_store_v1, any_output_format):
     generic_resample_test(lib, sym, "h", {"sum": ("col", "sum")}, df)
 
 
-def test_resampling_nan_correctness(version_store_factory, any_output_format):
+def test_resampling_nan_correctness(version_store_factory, any_output_format, read_string_dtype):
+    if read_string_dtype and any_output_format != OutputFormat.PANDAS:
+        pytest.skip("infer_string only affects pandas output")
     lib = version_store_factory(
         column_group_size=2, segment_row_size=2, dynamic_strings=True, lmdb_config={"map_size": 2**30}
     )
@@ -282,7 +284,7 @@ def test_resampling_nan_correctness(version_store_factory, any_output_format):
             }
         )
 
-    generic_resample_test(lib, sym, "us", agg_dict, df)
+    generic_resample_test(lib, sym, "us", agg_dict, df, read_string_dtype=read_string_dtype)
 
 
 def test_resampling_bool_columns(lmdb_version_store_tiny_segment, any_output_format):

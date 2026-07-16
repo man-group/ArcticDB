@@ -11,6 +11,7 @@ import numpy as np
 import pandas as pd
 from pandas import DataFrame
 
+from arcticdb import OutputFormat
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb_ext.exceptions import InternalException, SchemaException
 from arcticdb.util.test import (
@@ -339,7 +340,11 @@ def test_group_column_splitting_strings(lmdb_version_store_tiny_segment, any_out
     )
 
 
-def test_aggregation_with_nones_and_nans_in_string_grouping_column(version_store_factory, any_output_format):
+def test_aggregation_with_nones_and_nans_in_string_grouping_column(
+    version_store_factory, any_output_format, read_string_dtype
+):
+    if read_string_dtype and any_output_format != OutputFormat.PANDAS:
+        pytest.skip("infer_string only affects pandas output")
     lib = version_store_factory(column_group_size=2, segment_row_size=2, dynamic_strings=True)
     lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_aggregation_with_nones_and_nans_in_string_grouping_column"
@@ -371,7 +376,7 @@ def test_aggregation_with_nones_and_nans_in_string_grouping_column(version_store
         index=np.arange(12),
     )
     lib.write(symbol, df, dynamic_strings=True)
-    generic_aggregation_test(lib, symbol, df, "grouping_column", {"to_sum": "sum"})
+    generic_aggregation_test(lib, symbol, df, "grouping_column", {"to_sum": "sum"}, read_string_dtype)
 
 
 def test_doctring_example_query_builder_groupby_max(lmdb_version_store_v1, any_output_format):

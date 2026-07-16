@@ -15,7 +15,13 @@ from arcticdb.version_store._custom_normalizers import (
 
 import numpy as np
 import pandas as pd
-from arcticdb.util.test import assert_frame_equal, assert_series_equal, CustomDictNormalizer, CustomDict
+from arcticdb.util.test import (
+    assert_frame_equal,
+    assert_series_equal,
+    CustomDictNormalizer,
+    CustomDict,
+    arrow_string_read,
+)
 
 fl = Flattener()
 separator = fl.SEPARATOR
@@ -109,7 +115,7 @@ def test_dict_record_keys():
     assert sub_keys[3]["symbol"] == f"sym__{'e' * 95}"
 
 
-def test_pandas_series(lmdb_version_store, all_recursive_metastructure_versions):
+def test_pandas_series(lmdb_version_store, all_recursive_metastructure_versions, read_string_dtype):
     test_data = [pd.Series(["hello", "good morning"])]
     meta, flattened = fl.create_meta_structure(test_data, "sym")
 
@@ -117,7 +123,10 @@ def test_pandas_series(lmdb_version_store, all_recursive_metastructure_versions)
 
     lib = lmdb_version_store
     lib.write("sym", test_data, recursive_normalizers=True)
-    assert_series_equal(lib.read("sym").data[0], test_data[0])
+    with arrow_string_read(read_string_dtype):
+        expected = pd.Series(["hello", "good morning"])
+        result = lib.read("sym").data[0]
+    assert_series_equal(result, expected)
 
 
 def test_multiindex_recursive_normalizer(lmdb_version_store, all_recursive_metastructure_versions):

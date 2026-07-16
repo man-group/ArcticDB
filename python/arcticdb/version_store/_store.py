@@ -38,6 +38,7 @@ from arcticc.pb2.descriptors_pb2 import IndexDescriptor, TypeDescriptor
 from arcticdb_ext.version_store import (
     ArrowOutputConfig,
     CompactDataInfo,
+    InternalPandasStringFormat,
     PandasOutputConfig,
     RecordBatchData,
     SortedValue,
@@ -94,6 +95,8 @@ from arcticdb.log import version as log
 from arcticdb.version_store._custom_normalizers import get_custom_normalizer, CompositeCustomNormalizer
 from arcticdb.version_store._normalization import (
     PandasData,
+    _is_arrow_string_column,
+    _use_pyarrow_strings_in_pandas,
     normalize_metadata,
     normalize_recursive_metastruct,
     denormalize_user_metadata,
@@ -2347,8 +2350,13 @@ class NativeVersionStore:
                     ).items()
                 },
             )
-        else:
-            output_config = PandasOutputConfig()
+        else:  # Pandas
+            string_format = (
+                InternalPandasStringFormat.ARROW_LARGE_STRING
+                if _use_pyarrow_strings_in_pandas()
+                else InternalPandasStringFormat.OBJECT
+            )
+            output_config = PandasOutputConfig(default_string_format=string_format)
         read_options.set_output_config(output_config)
         return read_options, output_format
 
@@ -2656,10 +2664,11 @@ class NativeVersionStore:
             if read_query.row_filter is not None and read_query.needs_post_processing:
                 # post filter
                 start_idx, end_idx = self._compute_filter_start_end_row(read_result, read_query)
+                row_count = end_idx - start_idx
                 data = []
                 for c in read_result.frame_data.data:
-                    data.append(c[start_idx:end_idx])
-                row_count = len(data[0]) if len(data) else 0
+                    # Arrow string columns are a list of RecordBatchData already truncated in C++ so only numpy columns are trimmed here.
+                    data.append(c if _is_arrow_string_column(c) else c[start_idx:end_idx])
                 read_result.frame_data = FrameData(
                     data,
                     read_result.frame_data.names,
@@ -2703,7 +2712,8 @@ class NativeVersionStore:
                 end_idx = index.searchsorted(datetime64(read_query.row_filter.end_ts, "ns"), side="right")
         else:
             raise ArcticNativeException("Unrecognised row_filter type: {}".format(type(read_query.row_filter)))
-        return (start_idx, end_idx)
+        start, stop, _ = slice(start_idx, end_idx).indices(read_result.frame_data.row_count)
+        return (start, stop)
 
     def _find_version(
         self, symbol: str, as_of: Optional[VersionQueryInput] = None, raise_on_missing: Optional[bool] = False, **kwargs

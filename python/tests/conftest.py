@@ -57,7 +57,7 @@ from arcticdb_ext.storage import NativeVariantStorage, AWSAuthMethod, S3Settings
 from arcticdb_ext import set_config_int, unset_config_int
 import arcticdb_ext.cpp_async as adb_async
 from arcticdb_ext.cpp_async import reinit_task_scheduler
-from arcticdb.version_store._normalization import MsgPackNormalizer
+from arcticdb.version_store._normalization import MsgPackNormalizer, _ARROW_BACKED_STR_DTYPE_SUPPORTED
 from arcticdb.util.test import create_df, CustomThing, TestCustomNormalizer
 from arcticdb.arctic import Arctic
 from tests.util.marking import Mark
@@ -300,6 +300,36 @@ def only_test_encoding_version_v1(request):
     ],
 )
 def encoding_version(request):
+    return request.param
+
+
+@pytest.fixture(params=[False, True], ids=["numpy_strings", "infer_strings"])
+def infer_string(request):
+    try:
+        with pd.option_context("future.infer_string", request.param):
+            yield request.param
+    except pd.errors.OptionError:
+        if request.param:
+            pytest.skip("pandas too old for future.infer_string")
+        yield request.param
+
+
+@pytest.fixture(params=[False, True], ids=["consolidate", "skip_consolidation"])
+def skip_consolidation(request):
+    return request.param
+
+
+@pytest.fixture(params=[False, True], ids=["write_object", "write_str"])
+def write_string_dtype(request):
+    if request.param:
+        pytest.skip("writing the pandas arrow-backed str dtype is not yet supported")
+    return request.param
+
+
+@pytest.fixture(params=[False, True], ids=["read_object", "read_str"])
+def read_string_dtype(request):
+    if request.param and not _ARROW_BACKED_STR_DTYPE_SUPPORTED:
+        pytest.skip("pandas too old for the arrow-backed str dtype (StringDtype na_value, added in 2.3)")
     return request.param
 
 

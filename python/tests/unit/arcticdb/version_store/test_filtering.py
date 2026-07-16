@@ -31,6 +31,7 @@ from arcticdb.util.test import (
     generic_filter_test,
     generic_filter_test_strings,
     generic_filter_test_nans,
+    arrow_string_read,
     unicode_symbols,
     equals,
 )
@@ -760,8 +761,10 @@ def test_filter_numeric_membership_mixing_int64_and_uint64(
 
 
 def test_filter_nones_and_nans_retained_in_string_column(
-    lmdb_version_store_v1, any_output_format, column_stats_filtering_enabled_and_disabled
+    lmdb_version_store_v1, any_output_format, read_string_dtype, column_stats_filtering_enabled_and_disabled
 ):
+    if read_string_dtype and any_output_format != OutputFormat.PANDAS:
+        pytest.skip("infer_string only affects pandas output")
     lib = lmdb_version_store_v1
     lib._set_output_format_for_pipeline_tests(any_output_format)
     sym = "test_filter_nones_and_nans_retained_in_string_column"
@@ -773,16 +776,21 @@ def test_filter_nones_and_nans_retained_in_string_column(
     q = q[q["filter_column"] == 1]
     q.optimise_for_memory()
     expected = df.query("filter_column == 1")
-    received = lib.read(sym, query_builder=q).data
+    with arrow_string_read(read_string_dtype):
+        received = lib.read(sym, query_builder=q).data
     assert np.array_equal(expected["filter_column"], received["filter_column"])
     assert received["string_column"].iloc[0] == "1"
-    if any_output_format == OutputFormat.PANDAS:
+    if any_output_format == OutputFormat.PANDAS and read_string_dtype:
+        # The arrow-backed str dtype maps both np.nan and None to its np.nan na_value.
         assert np.isnan(received["string_column"].iloc[1])
+        assert np.isnan(received["string_column"].iloc[2])
+    elif any_output_format == OutputFormat.PANDAS:
+        assert np.isnan(received["string_column"].iloc[1])
+        assert received["string_column"].iloc[2] is None
     else:
-        # When reading as arrow `None` vs `NaN` information is lost. It's all stored as arrow `null`s which then is
-        # converted to pandas `None`s
+        # Reading as arrow loses None vs NaN: both are stored as arrow nulls and come back as pandas None.
         assert received["string_column"].iloc[1] is None
-    assert received["string_column"].iloc[2] is None
+        assert received["string_column"].iloc[2] is None
 
 
 # Tests that false matches aren't generated when list members truncate to column values
@@ -799,7 +807,9 @@ def test_filter_fixed_width_string_isin_truncation(lmdb_version_store_v1, any_ou
     generic_filter_test(lib, symbol, q, expected)
 
 
-def test_filter_stringpool_shrinking_basic(lmdb_version_store_tiny_segment, any_output_format):
+def test_filter_stringpool_shrinking_basic(lmdb_version_store_tiny_segment, any_output_format, read_string_dtype):
+    if read_string_dtype and any_output_format != OutputFormat.PANDAS:
+        pytest.skip("infer_string only affects pandas output")
     # Construct a dataframe and QueryBuilder pair with the following properties:
     # - original dataframe spanning multiple segments horizontally and vertically (tiny segment == 2x2)
     # - strings of varying lengths to exercise fixed width strings more completely
@@ -824,10 +834,12 @@ def test_filter_stringpool_shrinking_basic(lmdb_version_store_tiny_segment, any_
     q = q[q["a"] != "a1"]
     q.optimise_for_memory()
     expected = df[df["a"] != "a1"]
-    generic_filter_test_strings(lib, base_symbol, q, expected)
+    generic_filter_test_strings(lib, base_symbol, q, expected, read_string_dtype)
 
 
-def test_filter_stringpool_shrinking_block_alignment(lmdb_version_store_v1, any_output_format):
+def test_filter_stringpool_shrinking_block_alignment(lmdb_version_store_v1, any_output_format, read_string_dtype):
+    if read_string_dtype and any_output_format != OutputFormat.PANDAS:
+        pytest.skip("infer_string only affects pandas output")
     lib = lmdb_version_store_v1
     lib._set_output_format_for_pipeline_tests(any_output_format)
     base_symbol = "test_filter_stringpool_shrinking_block_alignment"
@@ -842,7 +854,7 @@ def test_filter_stringpool_shrinking_block_alignment(lmdb_version_store_v1, any_
     string_to_find = data[3]
     q = q[q["a"] == string_to_find]
     expected = df[df["a"] == string_to_find]
-    generic_filter_test_strings(lib, base_symbol, q, expected)
+    generic_filter_test_strings(lib, base_symbol, q, expected, read_string_dtype)
 
 
 def test_filter_explicit_type_promotion(

@@ -120,7 +120,7 @@ class ReadOptions {
                             pandas.default_string_format_ == PandasStringFormat::ARROW_LARGE_STRING,
                             "Arrow string format requested for a non-arrow column"
                     );
-                    return ArrowOutputStringFormat::LARGE_STRING; 
+                    return ArrowOutputStringFormat::LARGE_STRING;
                 }
         );
     }

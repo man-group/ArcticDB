@@ -443,7 +443,7 @@ def _denormalize_single_index(item, norm_meta):
         if norm_meta.WhichOneof("index_type") == "index" and not norm_meta.index.is_physically_stored:
             if len(item.data) > 0:
                 if hasattr(norm_meta.index, "step") and norm_meta.index.step != 0:
-                    stop = norm_meta.index.start + norm_meta.index.step * len(item.data[0])
+                    stop = norm_meta.index.start + norm_meta.index.step * item.row_count
                     name = norm_meta.index.name if norm_meta.index.name else None
                     return RangeIndex(start=norm_meta.index.start, stop=stop, step=norm_meta.index.step, name=name)
                 else:
@@ -455,7 +455,8 @@ def _denormalize_single_index(item, norm_meta):
 
     if len(item.index_columns) == 1:
         name = int(item.index_columns[0]) if norm_meta.index.is_int else item.index_columns[0]
-        rtn = Index(item.data[0] if len(item.data) > 0 else [], name=name)
+        index_data = _adopt_arrow_strings(item.data[0]) if len(item.data) > 0 else []
+        rtn = Index(index_data, name=name)
 
         tz = get_timezone_from_metadata(norm_meta)
         if isinstance(rtn, DatetimeIndex) and tz:
@@ -1067,6 +1068,41 @@ class BlockManagerUnconsolidated(BlockManager):
         return self.blocks
 
 
+def _arrow_backed_str_dtype_supported():
+    # The pandas arrow-backed "str" dtype (StringDtype with na_value) was added in pandas 2.3. future.infer_string
+    # exists from pandas 2.1, so the option can be set on 2.1/2.2 but there this dtype cannot be constructed.
+    try:
+        pd.StringDtype(storage="pyarrow", na_value=np.nan)
+        return True
+    except (TypeError, ImportError):
+        return False
+
+
+_ARROW_BACKED_STR_DTYPE_SUPPORTED = _arrow_backed_str_dtype_supported()
+
+
+def _use_pyarrow_strings_in_pandas():
+    if not _PYARROW_AVAILABLE or not _ARROW_BACKED_STR_DTYPE_SUPPORTED:
+        return False
+    return bool(pd.get_option("future.infer_string"))
+
+
+def _is_arrow_string_column(value):
+    return isinstance(value, list) and (len(value) == 0 or isinstance(value[0], RecordBatchData))
+
+
+def _arrow_string_arrays_to_pd_array(arrays):
+    dtype = pd.StringDtype(storage="pyarrow", na_value=np.nan)
+    if not arrays:
+        return pd.array([], dtype=dtype)
+    imported = [pa.Array._import_from_c(a.array(), a.schema()) for a in arrays]
+    return pd.array(pa.chunked_array(imported), dtype=dtype)
+
+
+def _adopt_arrow_strings(column):
+    return _arrow_string_arrays_to_pd_array(column) if _is_arrow_string_column(column) else column
+
+
 class DataFrameNormalizer(_PandasNormalizer):
     TYPE = "df"
 
@@ -1095,6 +1131,10 @@ class DataFrameNormalizer(_PandasNormalizer):
                 column_placement_in_block = 0
                 for idx, a in enumerate(arrays):
                     if idx < n_ind:
+                        continue
+                    if _is_arrow_string_column(a):
+                        yield make_block(_arrow_string_arrays_to_pd_array(a), placement=(column_placement_in_block,))
+                        column_placement_in_block += 1
                         continue
                     # In Pandas 1 the dtype param of make_block is ignored for empty blocks and the dtype is always object
                     # Pre-empty type Arctic has a default dtype of float64 for empty columns. Thus a casting to float64
@@ -1155,6 +1195,8 @@ class DataFrameNormalizer(_PandasNormalizer):
         )
 
         if not self._skip_df_consolidation:
+            if data is not None:
+                data = {name: _adopt_arrow_strings(value) for name, value in data.items()}
             df = DataFrame(data, index=index, columns=columns)
             # Setting the columns' dtype manually, since pandas might just convert the dtype of some
             # (empty) columns to another one and since the `dtype` keyword for `pd.DataFrame` constructor

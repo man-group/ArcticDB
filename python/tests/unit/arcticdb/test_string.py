@@ -12,6 +12,7 @@ import platform
 import pandas as pd
 import pytest
 
+from arcticdb import QueryBuilder
 from arcticdb.exceptions import ArcticDbNotYetImplemented
 from arcticdb_ext.exceptions import UserInputException
 from arcticdb_ext.types import (
@@ -24,7 +25,7 @@ from arcticdb_ext.types import (
     IndexKind,
 )
 from arcticdb_ext.stream import FixedTickRowBuilder, SegmentHolder, FixedTimestampAggregator, TickReader
-from arcticdb.util.test import assert_frame_equal
+from arcticdb.util.test import assert_frame_equal, arrow_string_read
 
 
 def test_vl_string_simple():
@@ -206,12 +207,117 @@ def test_string_encoding_error_message(lmdb_version_store_tiny_segment):
     assert all(string in exception_message for string in ["broken_column", "row 2", "float"])
 
 
-def test_write_dynamic_simple(lmdb_version_store_v2):
-    row = pd.Series(["Aaba", "A", "B", "C", "Baca", "CABA", "dog", "cat", "here is a very long one"])
-    df = pd.DataFrame({"x": row})
-    lmdb_version_store_v2.write("strings", df, dynamic_strings=True)
-    vit = lmdb_version_store_v2.read("strings")
-    assert_frame_equal(df, vit.data)
+def test_write_dynamic_simple(lmdb_version_store_v2, write_string_dtype, read_string_dtype):
+    values = ["Aaba", "A", "B", "C", "Baca", "CABA", "dog", "cat", "here is a very long one"]
+    lmdb_version_store_v2.write("strings", pd.DataFrame({"x": values}), dynamic_strings=True)
+    with arrow_string_read(read_string_dtype):
+        expected = pd.DataFrame({"x": values})
+        vit = lmdb_version_store_v2.read("strings")
+    assert_frame_equal(expected, vit.data)
+    assert (str(vit.data["x"].dtype) == "str") == read_string_dtype
+
+
+@pytest.mark.parametrize("filter_kind", ["date_range", "row_range"])
+@pytest.mark.parametrize("expect_empty", [False, True])
+def test_read_filtered_string_column(
+    lmdb_version_store_v2, write_string_dtype, read_string_dtype, filter_kind, expect_empty, skip_consolidation
+):
+    lib = lmdb_version_store_v2
+    if skip_consolidation:
+        lib._normalizer.df.set_skip_df_consolidation()
+    index = pd.date_range("2026-01-01", periods=10)
+    values = [f"str_{i}" for i in range(10)]
+    lib.write("strings", pd.DataFrame({"x": values}, index=index), dynamic_strings=True)
+    if expect_empty:
+        read_kwargs = (
+            {"date_range": (pd.Timestamp("2027-01-01"), pd.Timestamp("2027-01-02"))}
+            if filter_kind == "date_range"
+            else {"row_range": (100, 110)}
+        )
+        expected_slice = slice(0, 0)
+    else:
+        read_kwargs = {"date_range": (index[3], index[7])} if filter_kind == "date_range" else {"row_range": (3, 8)}
+        expected_slice = slice(3, 8)
+    with arrow_string_read(read_string_dtype):
+        received = lib.read("strings", **read_kwargs).data
+    assert list(received.index) == list(index[expected_slice])
+    assert list(received["x"]) == values[expected_slice]
+    assert (str(received["x"].dtype) == "str") == read_string_dtype
+
+
+def test_read_row_range_default_index_string_first_column(
+    lmdb_version_store_v2, write_string_dtype, read_string_dtype, skip_consolidation
+):
+    lib = lmdb_version_store_v2
+    if skip_consolidation:
+        lib._normalizer.df.set_skip_df_consolidation()
+    values = [f"str_{i}" for i in range(10)]
+    lib.write("strings", pd.DataFrame({"x": values}), dynamic_strings=True)
+    with arrow_string_read(read_string_dtype):
+        received = lib.read("strings", row_range=(3, 8)).data
+    assert len(received) == 5
+    assert list(received.index) == list(range(5))
+    assert list(received["x"]) == values[3:8]
+    assert (str(received["x"].dtype) == "str") == read_string_dtype
+
+
+def test_none_and_nan_string_semantics(lmdb_version_store_v2, write_string_dtype, read_string_dtype):
+    lib = lmdb_version_store_v2
+    lib.write("s", pd.DataFrame({"x": ["a", None, np.nan, "b"]}), dynamic_strings=True)
+    with arrow_string_read(read_string_dtype):
+        col = lib.read("s").data["x"]
+    assert list(col.isna()) == [False, True, True, False]
+    assert col.iloc[0] == "a" and col.iloc[3] == "b"
+    assert np.isnan(col.iloc[2])
+    if read_string_dtype:
+        assert str(col.dtype) == "str"
+        assert np.isnan(col.iloc[1])
+    else:
+        assert col.iloc[1] is None
+
+
+def test_isnull_filter_string_column_dtype_independent(lmdb_version_store_v2, write_string_dtype, read_string_dtype):
+    lib = lmdb_version_store_v2
+    lib.write("s", pd.DataFrame({"x": ["a", None, np.nan, "b"]}), dynamic_strings=True)
+    q = QueryBuilder()
+    q = q[q["x"].isnull()]
+    with arrow_string_read(read_string_dtype):
+        col = lib.read("s", query_builder=q).data["x"]
+    assert len(col) == 2
+    assert list(col.isna()) == [True, True]
+    assert (str(col.dtype) == "str") == read_string_dtype
+
+
+def test_read_string_index(lmdb_version_store_v2, write_string_dtype, read_string_dtype, skip_consolidation):
+    lib = lmdb_version_store_v2
+    if skip_consolidation:
+        lib._normalizer.df.set_skip_df_consolidation()
+    df = pd.DataFrame({"v": [1, 2, 3]}, index=pd.Index(["a", "b", "c"], name="k"))
+    lib.write("s", df, dynamic_strings=True)
+    with arrow_string_read(read_string_dtype):
+        r = lib.read("s").data
+    assert list(r.index) == ["a", "b", "c"]
+    assert list(r["v"]) == [1, 2, 3]
+    assert (str(r.index.dtype) == "str") == read_string_dtype
+
+
+def test_read_dynamic_schema_backfilled_string_column_truncation(version_store_factory, read_string_dtype):
+    lib = version_store_factory(dynamic_schema=True, segment_row_size=100, dynamic_strings=True)
+    idx = pd.date_range("2026-01-01", periods=200, freq="D")
+    lib.write("sym", pd.DataFrame({"a": np.arange(100)}, index=idx[:100]))
+    lib.append(
+        "sym",
+        pd.DataFrame({"a": np.arange(100, 200), "s": [f"s{i}" for i in range(100, 200)]}, index=idx[100:]),
+    )
+    # Trims inside the first (0-99) slice, where `s` is absent and backfilled.
+    with arrow_string_read(read_string_dtype):
+        r = lib.read("sym", date_range=(idx[50], idx[149])).data
+    assert len(r) == 100
+    assert list(r.index) == list(idx[50:150])
+    assert list(r["a"]) == list(range(50, 150))
+    assert r["s"].iloc[:50].isna().all()
+    assert list(r["s"].iloc[50:]) == [f"s{i}" for i in range(100, 150)]
+    assert (str(r["s"].dtype) == "str") == read_string_dtype
 
 
 class ArbitraryClass:

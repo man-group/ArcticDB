@@ -361,6 +361,47 @@ class ArrowStrings:
             arrow_string_format_default=arrow_string_format,
         )
 
+    def _check_should_run_pandas_benchmark(self, arrow_string_format):
+        # arrow_string_format only affects pyarrow output; the pandas paths ignore it, so only run once.
+        if arrow_string_format != ArrowOutputStringFormat.LARGE_STRING:
+            raise SkipNotImplemented
+
+    def time_read_pandas_object(self, rows, date_range, unique_string_count, arrow_string_format):
+        self._check_should_run_pandas_benchmark(arrow_string_format=arrow_string_format)
+        with pd.option_context("future.infer_string", False):
+            self.lib.read(
+                self.symbol_name(rows, unique_string_count),
+                date_range=self.date_range,
+                output_format=OutputFormat.PANDAS,
+            )
+
+    def peakmem_read_pandas_object(self, rows, date_range, unique_string_count, arrow_string_format):
+        self._check_should_run_pandas_benchmark(arrow_string_format=arrow_string_format)
+        with pd.option_context("future.infer_string", False):
+            self.lib.read(
+                self.symbol_name(rows, unique_string_count),
+                date_range=self.date_range,
+                output_format=OutputFormat.PANDAS,
+            )
+
+    def time_read_pandas_str(self, rows, date_range, unique_string_count, arrow_string_format):
+        self._check_should_run_pandas_benchmark(arrow_string_format=arrow_string_format)
+        with pd.option_context("future.infer_string", True):
+            self.lib.read(
+                self.symbol_name(rows, unique_string_count),
+                date_range=self.date_range,
+                output_format=OutputFormat.PANDAS,
+            )
+
+    def peakmem_read_pandas_str(self, rows, date_range, unique_string_count, arrow_string_format):
+        self._check_should_run_pandas_benchmark(arrow_string_format=arrow_string_format)
+        with pd.option_context("future.infer_string", True):
+            self.lib.read(
+                self.symbol_name(rows, unique_string_count),
+                date_range=self.date_range,
+                output_format=OutputFormat.PANDAS,
+            )
+
     def peakmem_read(self, rows, date_range, unique_string_count, arrow_string_format):
         self._check_should_run_benchmark(date_range=date_range, arrow_string_format=arrow_string_format)
         self.lib.read(
