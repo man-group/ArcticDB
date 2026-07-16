@@ -110,10 +110,10 @@ std::vector<std::vector<size_t>> CompactDataClause::structure_for_processing(std
         row_ranges.insert(range_and_key.row_range());
     }
     if (frame_) {
-        // frame_ is non null when we have arrived here via the compact_data_inline argument to append[_batch]
+        // frame_ is non null when we have arrived here via the compact_data argument to append[_batch]
         // In this case, we treat the frame being appended as if it is ONE row-slice (even if it is larger than the
         // library's default slicing policy). A consequence of this is that the resulting structure on-disk may not be
-        // identical to calling append with compact_data_inline=false, followed by an explicit compact_data call.
+        // identical to calling append with compact_data=false, followed by an explicit compact_data call.
         // However, the invariant that all row-slices will have rows_per_segments+-33% will be maintained in both cases
         util::check(
                 frame_->offset == (row_ranges.empty() ? 0 : row_ranges.rbegin()->second),

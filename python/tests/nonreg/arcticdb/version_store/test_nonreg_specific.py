@@ -441,7 +441,7 @@ def test_prune_previous_defragment_symbol_data(version_store_factory, monkeypatc
 @pytest.mark.parametrize("lib_config", (True, False))
 @pytest.mark.parametrize("env_var", (True, False))
 @pytest.mark.parametrize("arg", (True, False, None))
-def test_prune_previous_append_compact_data_inline(version_store_factory, monkeypatch, lib_config, env_var, arg):
+def test_prune_previous_append_compact_data(version_store_factory, monkeypatch, lib_config, env_var, arg):
     lib = version_store_factory(prune_previous_version=lib_config, use_tombstones=True)
     should_be_pruned = lib_config
     if env_var:
@@ -451,12 +451,12 @@ def test_prune_previous_append_compact_data_inline(version_store_factory, monkey
         should_be_pruned = arg
 
     lt = lib.library_tool()
-    sym = f"test_prune_previous_append_compact_data_inline"
+    sym = f"test_prune_previous_append_compact_data"
     df_0 = pd.DataFrame({"col": np.arange(10)}, index=pd.date_range("2024-01-01", periods=10))
     lib.write(sym, df_0)
 
     df_1 = pd.DataFrame({"col": np.arange(10)}, index=pd.date_range("2024-01-11", periods=10))
-    lib.append(sym, df_1, prune_previous_version=arg, compact_data_inline=True)
+    lib.append(sym, df_1, prune_previous_version=arg, compact_data=True)
 
     assert len(lt.find_keys(KeyType.TABLE_INDEX)) == (1 if should_be_pruned else 2)
 

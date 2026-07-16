@@ -829,13 +829,13 @@ VersionedItem PythonVersionStore::test_write_versioned_segment(
 
 VersionedItem PythonVersionStore::append(
         const StreamId& stream_id, const convert::InputItem& item, const py::object& norm, const py::object& user_meta,
-        bool upsert, bool prune_previous_versions, bool validate_index, bool compact_data_inline
+        bool upsert, bool prune_previous_versions, bool validate_index, bool compact_data
 ) {
     AppendOptions append_options{
             .upsert = upsert,
             .prune_previous_versions = prune_previous_versions,
             .validate_index = validate_index,
-            .compact_data_inline = compact_data_inline
+            .compact_data = compact_data
     };
     return append_internal(
             stream_id,
