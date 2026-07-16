@@ -758,18 +758,25 @@ jobs:
   # libraries (libc++ / MSVC runtime / glibc) and cannot detect when the wheel references
   # a symbol that is absent from the older target platform.
   #
-  # This job installs the SAME freshly-built wheel on an OLDER runner and verifies it
-  # imports and does a basic read/write. If the wheel requires newer system libraries than
+  # This job installs the SAME freshly-built wheel on an different runner and verifies it
+  # imports and does a basic read/write. If the wheel requires different system libraries than
   # the target platform provides, `import arcticdb` fails here and blocks the build — which
   # is exactly the regression we want to catch.
   #
-  # The runner is derived per-OS from the build matrix. Runs once, off the Python 3.14
-  # compile job.
-  backward_compat:
-    # Skiping windows as the windows build has already been made at the oldest available windows runner (2022)
-    if: inputs.job_type == 'build-python-wheels' && inputs.python3 == 14 && fromJSON(inputs.matrix)[0].os != 'windows'
+  compat:
+    if: inputs.job_type == 'build-python-wheels' && inputs.python3 == 14
     needs: [compile]
-    runs-on: ${{ fromJSON(inputs.matrix)[0].os == 'macos' && 'macos-15' || 'ubuntu-22.04' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # Each platform is exercised against the older/target runners it must remain
+        # forward-compatible with: windows -> windows-2025, macos -> macos-15,
+        # linux -> ubuntu-22.04, ubuntu-24.04 and ubuntu-26.04.
+        runner: ${{ fromJSON(
+          (fromJSON(inputs.matrix)[0].os == 'windows' && '["windows-2025"]') ||
+          (fromJSON(inputs.matrix)[0].os == 'macos' && '["macos-15"]') ||
+          '["ubuntu-22.04","ubuntu-24.04","ubuntu-26.04"]') }}
+    runs-on: ${{ matrix.runner }}
     defaults:
       run: {shell: bash}
     env:
