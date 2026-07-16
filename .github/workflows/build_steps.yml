@@ -765,10 +765,11 @@ jobs:
   #
   # The runner is derived per-OS from the build matrix. Runs once, off the Python 3.14
   # compile job.
-  forward_compat:
-    if: inputs.job_type == 'build-python-wheels' && inputs.python3 == 14
+  backward_compat:
+    # Skiping windows as the windows build has already been made at the oldest available windows runner (2022)
+    if: inputs.job_type == 'build-python-wheels' && inputs.python3 == 14&& fromJSON(inputs.matrix)[0].os == 'windows'
     needs: [compile]
-    runs-on: ${{ fromJSON(inputs.matrix)[0].os == 'macos' && 'macos-15' || fromJSON(inputs.matrix)[0].os == 'windows' && 'windows-2019' || 'ubuntu-22.04' }}
+    runs-on: ${{ fromJSON(inputs.matrix)[0].os == 'macos' && 'macos-15' || 'ubuntu-22.04' }}
     defaults:
       run: {shell: bash}
     env:
