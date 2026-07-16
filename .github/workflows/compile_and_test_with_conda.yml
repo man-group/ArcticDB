@@ -347,7 +347,7 @@ jobs:
         continue-on-error: true
 
   os_compat:
-    name: OS forward-compat (${{inputs.platform}}) - ${{matrix.runner}}
+    name: OS compat (${{inputs.platform}}) - ${{matrix.runner}}
     needs: [compile]
     strategy:
       fail-fast: false
