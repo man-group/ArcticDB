@@ -61,7 +61,11 @@ endif()
 # on older macOS with "Symbol not found: __ZNSt3__113__hash_memoryEPKvm". Leaving the
 # annotations enabled lets libc++ back-deploy correctly for the deployment target.
 if(${ARCTICDB_USING_CONDA})
-    add_compile_definitions(_LIBCPP_DISABLE_AVAILABILITY)
+    if(APPLE)
+        if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
+            add_compile_definitions(_LIBCPP_DISABLE_AVAILABILITY)
+        endif()
+    endif()
 endif()
 
 if(NOT ${ARCTICDB_USING_CONDA})

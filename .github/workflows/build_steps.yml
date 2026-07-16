@@ -752,24 +752,27 @@ jobs:
             ${{runner.temp}}/*test*
         continue-on-error: true
 
-  # ========================= macOS forward-compatibility gate =========================
-  # The macOS wheel is COMPILED on the macos-26 runner but TAGGED macosx_15_0_arm64.
-  # The regular python_tests above also run on macos-26, so they share the build host's
-  # newer libc++ and cannot detect when the wheel references a libc++ symbol that is
-  # absent from the macOS 15 system libc++
+  # ========================= forward-compatibility gate =========================
+  # Wheels are COMPILED on a newer runner/toolchain than the minimum platform they are
+  # The regular python_tests above run on the build host, so they share its newer system
+  # libraries (libc++ / MSVC runtime / glibc) and cannot detect when the wheel references
+  # a symbol that is absent from the older target platform.
   #
-  # This job installs the SAME freshly-built wheel on a real macOS 15 runner (older
-  # system libc++) and verifies it imports and does a basic read/write. If the wheel
-  # requires a newer libc++ than macOS 15 provides, `import arcticdb` fails here and
-  # blocks the build — which is exactly the regression we want to catch.
+  # This job installs the SAME freshly-built wheel on an OLDER runner and verifies it
+  # imports and does a basic read/write. If the wheel requires newer system libraries than
+  # the target platform provides, `import arcticdb` fails here and blocks the build — which
+  # is exactly the regression we want to catch.
   #
-  # Runs once, off the Python 3.14 macOS compile job
-  macos_forward_compat:
-    if: inputs.job_type == 'build-python-wheels' && inputs.python3 == 14 && fromJSON(inputs.matrix)[0].os == 'macos'
+  # The runner is derived per-OS from the build matrix. Runs once, off the Python 3.14
+  # compile job.
+  forward_compat:
+    if: inputs.job_type == 'build-python-wheels' && inputs.python3 == 14
     needs: [compile]
-    runs-on: macos-15 
+    runs-on: ${{ fromJSON(inputs.matrix)[0].os == 'macos' && 'macos-15' || fromJSON(inputs.matrix)[0].os == 'windows' && 'windows-2019' || 'ubuntu-22.04' }}
     defaults:
       run: {shell: bash}
+    env:
+      os: ${{ fromJSON(inputs.matrix)[0].os }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -779,13 +782,14 @@ jobs:
 
       - name: Runner environment
         run: |
-          sw_vers
-          uname -m
+          uname -a || true
+          uname -m || true
+          [[ "$os" == "macos" ]] && sw_vers || true
 
-      - name: Get the freshly-built macOS wheel
+      - name: Get the freshly-built wheel
         uses: actions/download-artifact@v8
         with:
-          name: wheel-${{needs.compile.outputs.cibw_build}} 
+          name: wheel-${{needs.compile.outputs.cibw_build}}
           path: ${{runner.temp}}/wheel
 
       - name: Select Python
@@ -800,10 +804,10 @@ jobs:
           python -m pip install --force-reinstall --retries 3 --timeout 500 "$(ls ${{runner.temp}}/wheel/*.whl)[Testing]"
           python -m pip list
 
-      - name: Run a basic read/write test suite on macOS 15
+      - name: Run a basic read/write test suite on the older runner
         run: |
           build_tooling/parallel_test.sh tests/unit/arcticdb/version_store/test_write.py
         env:
           TEST_OUTPUT_DIR: ${{runner.temp}}
           PYTEST_XDIST_MODE: ""   # single file, run serially
-            
+
