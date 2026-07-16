@@ -752,26 +752,19 @@ jobs:
             ${{runner.temp}}/*test*
         continue-on-error: true
 
-  # ========================= forward-compatibility gate =========================
-  # Wheels are COMPILED on a newer runner/toolchain than the minimum platform they are
-  # The regular python_tests above run on the build host, so they share its newer system
-  # libraries (libc++ / MSVC runtime / glibc) and cannot detect when the wheel references
-  # a symbol that is absent from the older target platform.
-  #
   # This job installs the SAME freshly-built wheel on an different runner and verifies it
   # imports and does a basic read/write. If the wheel requires different system libraries than
   # the target platform provides, `import arcticdb` fails here and blocks the build — which
   # is exactly the regression we want to catch.
   #
-  compat:
+  os_compat:
     if: inputs.job_type == 'build-python-wheels' && inputs.python3 == 14
     needs: [compile]
     strategy:
       fail-fast: false
       matrix:
-        # Each platform is exercised against the older/target runners it must remain
-        # forward-compatible with: windows -> windows-2025, macos -> macos-15,
-        # linux -> ubuntu-22.04, ubuntu-24.04 and ubuntu-26.04.
+        # Each platform is exercised against the runners different from
+        # the one building wheels
         runner: ${{ fromJSON(
           (fromJSON(inputs.matrix)[0].os == 'windows' && '["windows-2025"]') ||
           (fromJSON(inputs.matrix)[0].os == 'macos' && '["macos-15"]') ||
@@ -806,10 +799,14 @@ jobs:
           python-version: "3.${{inputs.python3}}"
 
       - name: Install the wheel
+        env:
+          WHEEL_DIR: ${{runner.temp}}/wheel
         run: |
           python -V
           python -m pip install --upgrade pip
-          python -m pip install --force-reinstall --retries 3 --timeout 500 "$(ls ${{runner.temp}}/wheel/*.whl)[Testing]"
+          # Resolve the wheel via Python glob as bash mangles the backslashes.
+          wheel_path=$(python -c "import glob, os; print(glob.glob(os.path.join(os.environ['WHEEL_DIR'], '*.whl'))[0])")
+          python -m pip install --force-reinstall --retries 3 --timeout 500 "${wheel_path}[Testing]"
           python -m pip list
 
       - name: Run a basic read/write test suite on the older runner
