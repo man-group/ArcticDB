@@ -84,7 +84,7 @@ def test_read_incomplete_no_warning(s3_store_factory, sym, get_stderr):
         set_log_level()
 
 
-# sort_index assumes segments are internally sorted, which is not the case when appending with compact_data_inline=True
+# sort_index assumes segments are internally sorted, which is not the case when appending with compact_data=True
 @pytest.mark.parametrize("prune_previous_versions", [True, False])
 def test_append_out_of_order_and_sort(lmdb_version_store_ignore_order, prune_previous_versions):
     symbol = "out_of_order"
@@ -210,9 +210,9 @@ def test_defragment_no_work_to_do(sym, lmdb_version_store):
         lmdb_version_store.defragment_symbol_data(sym)
 
 
-@pytest.mark.parametrize("compact_data_inline", [True, False])
+@pytest.mark.parametrize("compact_data", [True, False])
 class TestAppend:
-    def test_append_simple(self, lmdb_version_store, compact_data_inline):
+    def test_append_simple(self, lmdb_version_store, compact_data):
         symbol = "test_append_simple"
         df1 = pd.DataFrame({"x": np.arange(1, 10, dtype=np.int64)})
         lmdb_version_store.write(symbol, df1)
@@ -220,14 +220,14 @@ class TestAppend:
         assert_frame_equal(vit.data, df1)
 
         df2 = pd.DataFrame({"x": np.arange(11, 20, dtype=np.int64)})
-        lmdb_version_store.append(symbol, df2, compact_data_inline=compact_data_inline)
+        lmdb_version_store.append(symbol, df2, compact_data=compact_data)
         vit = lmdb_version_store.read(symbol)
         expected = pd.concat([df1, df2], ignore_index=True)
         assert_frame_equal(vit.data, expected)
 
     @pytest.mark.parametrize("empty_types", (True, False))
     @pytest.mark.parametrize("dynamic_schema", (True, False))
-    def test_append_range_index(self, version_store_factory, empty_types, dynamic_schema, compact_data_inline):
+    def test_append_range_index(self, version_store_factory, empty_types, dynamic_schema, compact_data):
         lib = version_store_factory(empty_types=empty_types, dynamic_schema=dynamic_schema)
         sym = "test_append_range_index"
         df_0 = pd.DataFrame({"col": [0, 1]}, index=pd.RangeIndex(0, 4, 2))
@@ -235,7 +235,7 @@ class TestAppend:
 
         # Appending another range index following on from what is there should work
         df_1 = pd.DataFrame({"col": [2, 3]}, index=pd.RangeIndex(4, 8, 2))
-        lib.append(sym, df_1, compact_data_inline=compact_data_inline)
+        lib.append(sym, df_1, compact_data=compact_data)
         expected = pd.concat([df_0, df_1])
         received = lib.read(sym).data
         assert_frame_equal(expected, received)
@@ -247,13 +247,11 @@ class TestAppend:
             pd.RangeIndex(8, 14, 3),
         ]:
             with pytest.raises(NormalizationException):
-                lib.append(sym, pd.DataFrame({"col": [4, 5]}, index=idx), compact_data_inline=compact_data_inline)
+                lib.append(sym, pd.DataFrame({"col": [4, 5]}, index=idx), compact_data=compact_data)
 
     @pytest.mark.parametrize("empty_types", (True, False))
     @pytest.mark.parametrize("dynamic_schema", (True, False))
-    def test_append_range_index_from_zero(
-        self, version_store_factory, empty_types, dynamic_schema, compact_data_inline
-    ):
+    def test_append_range_index_from_zero(self, version_store_factory, empty_types, dynamic_schema, compact_data):
         lib = version_store_factory(empty_types=empty_types, dynamic_schema=dynamic_schema)
         sym = "test_append_range_index_from_zero"
         df_0 = pd.DataFrame({"col": [0, 1]}, index=pd.RangeIndex(-6, -2, 2))
@@ -263,10 +261,10 @@ class TestAppend:
             lib.append(
                 sym,
                 pd.DataFrame({"col": [2, 3]}, index=pd.RangeIndex(0, 4, 2)),
-                compact_data_inline=compact_data_inline,
+                compact_data=compact_data,
             )
 
-    def test_append_indexed(self, s3_version_store, compact_data_inline):
+    def test_append_indexed(self, s3_version_store, compact_data):
         symbol = "test_append_simple"
         idx1 = np.arange(0, 10)
         d1 = {"x": np.arange(10, 20, dtype=np.int64)}
@@ -278,12 +276,12 @@ class TestAppend:
         idx2 = np.arange(10, 20)
         d2 = {"x": np.arange(20, 30, dtype=np.int64)}
         df2 = pd.DataFrame(data=d2, index=idx2)
-        s3_version_store.append(symbol, df2, compact_data_inline=compact_data_inline)
+        s3_version_store.append(symbol, df2, compact_data=compact_data)
         vit = s3_version_store.read(symbol)
         expected = pd.concat([df1, df2])
         assert_frame_equal(vit.data, expected)
 
-    def test_append_string_of_different_sizes(self, lmdb_version_store, compact_data_inline):
+    def test_append_string_of_different_sizes(self, lmdb_version_store, compact_data):
         symbol = "test_append_simple"
         df1 = pd.DataFrame(data={"x": ["cat", "dog"]}, index=np.arange(0, 2))
         lmdb_version_store.write(symbol, df1)
@@ -294,25 +292,25 @@ class TestAppend:
             data={"x": ["catandsomethingelse", "dogandsomethingevenlonger"]},
             index=np.arange(2, 4),
         )
-        lmdb_version_store.append(symbol, df2, compact_data_inline=compact_data_inline)
+        lmdb_version_store.append(symbol, df2, compact_data=compact_data)
         vit = lmdb_version_store.read(symbol)
         expected = pd.concat([df1, df2])
         assert_frame_equal(vit.data, expected)
 
-    def test_append_dynamic_schema_add_column(self, lmdb_version_store_dynamic_schema, compact_data_inline):
+    def test_append_dynamic_schema_add_column(self, lmdb_version_store_dynamic_schema, compact_data):
         symbol = "symbol"
         lib = lmdb_version_store_dynamic_schema
         df_1 = pd.DataFrame(data={"a": [1.0, 2.0]}, index=pd.date_range("2018-01-01", periods=2))
         df_2 = pd.DataFrame(data={"b": [3.0, 4.0]}, index=pd.date_range("2018-01-03", periods=2))
 
         lib.write(symbol, df_1)
-        lib.append(symbol, df_2, compact_data_inline=compact_data_inline)
+        lib.append(symbol, df_2, compact_data=compact_data)
 
         expected_df = pd.concat([df_1, df_2])
         result_df = lib.read(symbol).data
         assert_frame_equal(result_df, expected_df)
 
-    def test_append_snapshot_delete(self, lmdb_version_store, compact_data_inline):
+    def test_append_snapshot_delete(self, lmdb_version_store, compact_data):
         symbol = "test_append_snapshot_delete"
         if sys.platform == "win32":
             # Keep it smaller on Windows due to restricted LMDB size
@@ -331,7 +329,7 @@ class TestAppend:
         idx2 = np.arange(row_count, 2 * row_count)
         d2 = {"x": np.arange(2 * row_count, 3 * row_count, dtype=np.int64)}
         df2 = pd.DataFrame(data=d2, index=idx2)
-        lmdb_version_store.append(symbol, df2, compact_data_inline=compact_data_inline)
+        lmdb_version_store.append(symbol, df2, compact_data=compact_data)
         vit = lmdb_version_store.read(symbol)
         expected = pd.concat([df1, df2])
         assert_frame_equal(vit.data, expected)
@@ -345,17 +343,17 @@ class TestAppend:
 
         assert_frame_equal(lmdb_version_store.read(symbol, as_of="my_snap").data, df1)
 
-    def test_append_out_of_order_throws(self, lmdb_version_store, compact_data_inline):
+    def test_append_out_of_order_throws(self, lmdb_version_store, compact_data):
         lib: NativeVersionStore = lmdb_version_store
         lib.write("a", pd.DataFrame({"c": [1, 2, 3]}, index=pd.date_range(0, periods=3)))
         with pytest.raises(Exception, match="1970-01-03"):
             lib.append(
                 "a",
                 pd.DataFrame({"c": [4]}, index=pd.date_range(1, periods=1)),
-                compact_data_inline=compact_data_inline,
+                compact_data=compact_data,
             )
 
-    def test_upsert_with_delete(self, lmdb_version_store_big_map, compact_data_inline):
+    def test_upsert_with_delete(self, lmdb_version_store_big_map, compact_data):
         lib = lmdb_version_store_big_map
         symbol = "upsert_with_delete"
         lib.version_store.remove_incomplete(symbol)
@@ -377,7 +375,7 @@ class TestAppend:
             if idx % 3 == 0:
                 lib.delete(symbol)
 
-            lib.append(symbol, df, write_if_missing=True, compact_data_inline=compact_data_inline)
+            lib.append(symbol, df, write_if_missing=True, compact_data=compact_data)
 
         first = list_df[len(list_df) - 3]
         second = list_df[len(list_df) - 2]
@@ -391,24 +389,24 @@ class TestAppend:
         condition=WINDOWS, raises=arcticdb.exceptions.ArcticDbNotYetImplemented, reason="Not implemented on Windows"
     )
     @pytest.mark.parametrize("dtype", supported_types_list)
-    def test_append_numpy_array(self, lmdb_version_store, dtype, compact_data_inline):
+    def test_append_numpy_array(self, lmdb_version_store, dtype, compact_data):
         """Tests append with all supported by arctic data types"""
         sym = f"test_append_numpy_array"
         np1 = generate_random_numpy_array(10, dtype)
         lmdb_version_store.write(sym, np1)
         np2 = generate_random_numpy_array(10, dtype)
-        lmdb_version_store.append(sym, np2, compact_data_inline=compact_data_inline)
+        lmdb_version_store.append(sym, np2, compact_data=compact_data)
         expected = np.concatenate((np1, np2))
         assert_array_equal(lmdb_version_store.read(sym).data, expected)
 
-    def test_append_pickled_symbol(self, lmdb_version_store, compact_data_inline):
+    def test_append_pickled_symbol(self, lmdb_version_store, compact_data):
         symbol = "test_append_pickled_symbol"
         lmdb_version_store.write(symbol, np.arange(100).tolist())
         assert lmdb_version_store.is_symbol_pickled(symbol)
         with pytest.raises(InternalException):
-            _ = lmdb_version_store.append(symbol, np.arange(100).tolist(), compact_data_inline=compact_data_inline)
+            _ = lmdb_version_store.append(symbol, np.arange(100).tolist(), compact_data=compact_data)
 
-    def test_append_not_sorted_exception(self, lmdb_version_store, compact_data_inline):
+    def test_append_not_sorted_exception(self, lmdb_version_store, compact_data):
         symbol = "bad_append"
 
         num_initial_rows = 20
@@ -428,23 +426,23 @@ class TestAppend:
         assert df2.index.is_monotonic_increasing == False
 
         with pytest.raises(UnsortedDataException):
-            lmdb_version_store.append(symbol, df2, validate_index=True, compact_data_inline=compact_data_inline)
+            lmdb_version_store.append(symbol, df2, validate_index=True, compact_data=compact_data)
 
     @pytest.mark.parametrize("validate_index", (True, False))
-    def test_append_same_index_value(self, lmdb_version_store_v1, validate_index, compact_data_inline):
+    def test_append_same_index_value(self, lmdb_version_store_v1, validate_index, compact_data):
         lib = lmdb_version_store_v1
         sym = "test_append_same_index_value"
         df_0 = pd.DataFrame({"col": [1, 2]}, index=pd.date_range("2024-01-01", periods=2))
         lib.write(sym, df_0)
 
         df_1 = pd.DataFrame({"col": [3, 4]}, index=pd.date_range(df_0.index[-1], periods=2))
-        lib.append(sym, df_1, validate_index=validate_index, compact_data_inline=compact_data_inline)
+        lib.append(sym, df_1, validate_index=validate_index, compact_data=compact_data)
         expected = pd.concat([df_0, df_1])
         received = lib.read(sym).data
         assert_frame_equal(expected, received)
         assert lib.get_info(sym)["sorted"] == "ASCENDING"
 
-    def test_append_existing_not_sorted_exception(self, lmdb_version_store, compact_data_inline):
+    def test_append_existing_not_sorted_exception(self, lmdb_version_store, compact_data):
         symbol = "bad_append"
 
         num_initial_rows = 20
@@ -464,9 +462,9 @@ class TestAppend:
         assert df2.index.is_monotonic_increasing == True
 
         with pytest.raises(UnsortedDataException):
-            lmdb_version_store.append(symbol, df2, validate_index=True, compact_data_inline=compact_data_inline)
+            lmdb_version_store.append(symbol, df2, validate_index=True, compact_data=compact_data)
 
-    def test_append_not_sorted_non_validate_index(self, lmdb_version_store, compact_data_inline):
+    def test_append_not_sorted_non_validate_index(self, lmdb_version_store, compact_data):
         symbol = "bad_append"
 
         num_initial_rows = 20
@@ -484,9 +482,9 @@ class TestAppend:
         dtidx = np.roll(pd.date_range(initial_timestamp, periods=num_rows), 3)
         df2 = pd.DataFrame({"c": np.arange(0, num_rows, dtype=np.int64)}, index=dtidx)
         assert df2.index.is_monotonic_increasing == False
-        lmdb_version_store.append(symbol, df2, compact_data_inline=compact_data_inline)
+        lmdb_version_store.append(symbol, df2, compact_data=compact_data)
 
-    def test_append_not_sorted_multi_index_exception(self, lmdb_version_store, compact_data_inline):
+    def test_append_not_sorted_multi_index_exception(self, lmdb_version_store, compact_data):
         symbol = "bad_append"
 
         num_initial_rows = 20
@@ -516,9 +514,9 @@ class TestAppend:
         assert isinstance(df.index, MultiIndex) == True
 
         with pytest.raises(UnsortedDataException):
-            lmdb_version_store.append(symbol, df2, validate_index=True, compact_data_inline=compact_data_inline)
+            lmdb_version_store.append(symbol, df2, validate_index=True, compact_data=compact_data)
 
-    def test_append_not_sorted_range_index_non_exception(self, lmdb_version_store, compact_data_inline):
+    def test_append_not_sorted_range_index_non_exception(self, lmdb_version_store, compact_data):
         symbol = "bad_append"
 
         num_initial_rows = 20
@@ -535,9 +533,9 @@ class TestAppend:
         df2 = pd.DataFrame({"c": np.arange(0, num_rows, dtype=np.int64)}, index=dtidx)
         assert df2.index.is_monotonic_increasing == False
         with pytest.raises(NormalizationException):
-            lmdb_version_store.append(symbol, df2, compact_data_inline=compact_data_inline)
+            lmdb_version_store.append(symbol, df2, compact_data=compact_data)
 
-    def test_append_mix_ascending_not_sorted(self, lmdb_version_store, compact_data_inline):
+    def test_append_mix_ascending_not_sorted(self, lmdb_version_store, compact_data):
         symbol = "bad_append"
 
         num_initial_rows = 20
@@ -555,7 +553,7 @@ class TestAppend:
         dtidx = pd.date_range(initial_timestamp, periods=num_rows)
         df2 = pd.DataFrame({"c": np.arange(0, num_rows, dtype=np.int64)}, index=dtidx)
         assert df2.index.is_monotonic_increasing == True
-        lmdb_version_store.append(symbol, df2, validate_index=True, compact_data_inline=compact_data_inline)
+        lmdb_version_store.append(symbol, df2, validate_index=True, compact_data=compact_data)
         info = lmdb_version_store.get_info(symbol)
         assert info["sorted"] == "ASCENDING"
 
@@ -564,7 +562,7 @@ class TestAppend:
         dtidx = np.roll(pd.date_range(initial_timestamp, periods=num_rows), 3)
         df2 = pd.DataFrame({"c": np.arange(0, num_rows, dtype=np.int64)}, index=dtidx)
         assert df2.index.is_monotonic_increasing == False
-        lmdb_version_store.append(symbol, df2, compact_data_inline=compact_data_inline)
+        lmdb_version_store.append(symbol, df2, compact_data=compact_data)
         info = lmdb_version_store.get_info(symbol)
         assert info["sorted"] == "UNSORTED"
 
@@ -573,11 +571,11 @@ class TestAppend:
         dtidx = pd.date_range(initial_timestamp, periods=num_rows)
         df2 = pd.DataFrame({"c": np.arange(0, num_rows, dtype=np.int64)}, index=dtidx)
         assert df2.index.is_monotonic_increasing == True
-        lmdb_version_store.append(symbol, df2, compact_data_inline=compact_data_inline)
+        lmdb_version_store.append(symbol, df2, compact_data=compact_data)
         info = lmdb_version_store.get_info(symbol)
         assert info["sorted"] == "UNSORTED"
 
-    def test_append_mix_descending_not_sorted(self, lmdb_version_store, compact_data_inline):
+    def test_append_mix_descending_not_sorted(self, lmdb_version_store, compact_data):
         symbol = "bad_append"
 
         num_initial_rows = 20
@@ -595,7 +593,7 @@ class TestAppend:
         dtidx = pd.date_range(initial_timestamp, periods=num_rows)
         df2 = pd.DataFrame({"c": np.arange(0, num_rows, dtype=np.int64)}, index=reversed(dtidx))
         assert df2.index.is_monotonic_decreasing == True
-        lmdb_version_store.append(symbol, df2, compact_data_inline=compact_data_inline)
+        lmdb_version_store.append(symbol, df2, compact_data=compact_data)
         info = lmdb_version_store.get_info(symbol)
         assert info["sorted"] == "DESCENDING"
 
@@ -604,7 +602,7 @@ class TestAppend:
         dtidx = np.roll(pd.date_range(initial_timestamp, periods=num_rows), 3)
         df2 = pd.DataFrame({"c": np.arange(0, num_rows, dtype=np.int64)}, index=dtidx)
         assert df2.index.is_monotonic_decreasing == False
-        lmdb_version_store.append(symbol, df2, compact_data_inline=compact_data_inline)
+        lmdb_version_store.append(symbol, df2, compact_data=compact_data)
         info = lmdb_version_store.get_info(symbol)
         assert info["sorted"] == "UNSORTED"
 
@@ -613,11 +611,11 @@ class TestAppend:
         dtidx = pd.date_range(initial_timestamp, periods=num_rows)
         df2 = pd.DataFrame({"c": np.arange(0, num_rows, dtype=np.int64)}, index=reversed(dtidx))
         assert df2.index.is_monotonic_decreasing == True
-        lmdb_version_store.append(symbol, df2, compact_data_inline=compact_data_inline)
+        lmdb_version_store.append(symbol, df2, compact_data=compact_data)
         info = lmdb_version_store.get_info(symbol)
         assert info["sorted"] == "UNSORTED"
 
-    def test_append_mix_ascending_descending(self, lmdb_version_store, compact_data_inline):
+    def test_append_mix_ascending_descending(self, lmdb_version_store, compact_data):
         symbol = "bad_append"
 
         num_initial_rows = 20
@@ -635,7 +633,7 @@ class TestAppend:
         dtidx = pd.date_range(initial_timestamp, periods=num_rows)
         df2 = pd.DataFrame({"c": np.arange(0, num_rows, dtype=np.int64)}, index=dtidx)
         assert df2.index.is_monotonic_increasing == True
-        lmdb_version_store.append(symbol, df2, compact_data_inline=compact_data_inline)
+        lmdb_version_store.append(symbol, df2, compact_data=compact_data)
         info = lmdb_version_store.get_info(symbol)
         assert info["sorted"] == "UNSORTED"
 
@@ -644,11 +642,11 @@ class TestAppend:
         dtidx = pd.date_range(initial_timestamp, periods=num_rows)
         df2 = pd.DataFrame({"c": np.arange(0, num_rows, dtype=np.int64)}, index=reversed(dtidx))
         assert df2.index.is_monotonic_decreasing == True
-        lmdb_version_store.append(symbol, df2, compact_data_inline=compact_data_inline)
+        lmdb_version_store.append(symbol, df2, compact_data=compact_data)
         info = lmdb_version_store.get_info(symbol)
         assert info["sorted"] == "UNSORTED"
 
-    def test_append_docs_example(self, lmdb_version_store, compact_data_inline):
+    def test_append_docs_example(self, lmdb_version_store, compact_data):
         # This test is really just the append example from the docs.
         # Other examples are included so that outputs can be easily re-generated.
         lib = lmdb_version_store
@@ -690,7 +688,7 @@ class TestAppend:
         print(df_append)
         df_append.index = pd.date_range(datetime(2000, 1, 2, 7), periods=5, freq="H")
 
-        lib.append("test_frame", df_append, compact_data_inline=compact_data_inline)
+        lib.append("test_frame", df_append, compact_data=compact_data)
         print(lib.tail("test_frame", 7).data)
         expected = pd.concat([df2, df.drop(df.index[:3]), df_append])
         assert_frame_equal(lib.read("test_frame").data, expected)
@@ -713,12 +711,12 @@ class TestAppend:
         ],
     )
     def test_append_mismatched_object_kind(
-        self, to_write, to_append, lmdb_version_store_dynamic_schema_v1, compact_data_inline
+        self, to_write, to_append, lmdb_version_store_dynamic_schema_v1, compact_data
     ):
         lib = lmdb_version_store_dynamic_schema_v1
         lib.write("sym", to_write)
         with pytest.raises(NormalizationException) as e:
-            lib.append("sym", to_append, compact_data_inline=compact_data_inline)
+            lib.append("sym", to_append, compact_data=compact_data)
         assert "Append" in str(e.value)
 
     @pytest.mark.parametrize(
@@ -740,18 +738,18 @@ class TestAppend:
         ],
     )
     def test_append_series_with_different_column_name_throws(
-        self, lmdb_version_store_dynamic_schema_v1, to_write, to_append, compact_data_inline
+        self, lmdb_version_store_dynamic_schema_v1, to_write, to_append, compact_data
     ):
         # It makes sense to create a new column and turn the whole thing into a dataframe. This would require changes in the
         # logic for storing normalization metadata which is tricky. Noone has requested this, so we just throw.
         lib = lmdb_version_store_dynamic_schema_v1
         lib.write("sym", to_write)
         with pytest.raises(SchemaException) as e:
-            lib.append("sym", to_append, compact_data_inline=compact_data_inline)
+            lib.append("sym", to_append, compact_data=compact_data)
         assert "name_1" in str(e.value) and "name_2" in str(e.value)
 
     def test_append_series_with_different_row_range_index_name(
-        self, lmdb_version_store_dynamic_schema_v1, compact_data_inline
+        self, lmdb_version_store_dynamic_schema_v1, compact_data
     ):
         lib = lmdb_version_store_dynamic_schema_v1
         to_write = pd.Series([1, 2, 3])
@@ -759,13 +757,13 @@ class TestAppend:
         to_append = pd.Series([4, 5, 6])
         to_append.index.name = "index_name_2"
         lib.write("sym", to_write)
-        lib.append("sym", to_append, compact_data_inline=compact_data_inline)
+        lib.append("sym", to_append, compact_data=compact_data)
         # The current behavior is the last modification operation is setting the index name.
         # See Monday 9797097831, it would be best to require that index names are always matching. This is the case for
         # datetime index because it's a physical column. It's a potentially breaking change.
         assert lib.read("sym").data.index.name == "index_name_2"
 
-    def test_append_after_delete_range(self, sym, lmdb_version_store, compact_data_inline):
+    def test_append_after_delete_range(self, sym, lmdb_version_store, compact_data):
         lib = lmdb_version_store
 
         start_date = datetime(2025, 9, 1)
@@ -775,7 +773,7 @@ class TestAppend:
         # create data
         while cur_date <= end_date:
             df = create_random_data(at_date=cur_date)
-            lib.append("sym", df, compact_data_inline=compact_data_inline)
+            lib.append("sym", df, compact_data=compact_data)
             cur_date = get_next_business_date(cur_date)
 
         # remove date
@@ -791,7 +789,7 @@ class TestAppend:
         while cur_date <= end_date:
             df = create_random_data(at_date=cur_date)
             expected_data = pd.concat([expected_data, df])
-            lib.append("sym", df, compact_data_inline=compact_data_inline)
+            lib.append("sym", df, compact_data=compact_data)
             cur_date = get_next_business_date(cur_date)
 
         assert_frame_equal(lib.read("sym").data, expected_data)
@@ -802,9 +800,7 @@ class TestAppend:
     @pytest.mark.parametrize("data_class", ["dataframe", "series"])
     @pytest.mark.parametrize("batch", [True, False])
     @pytest.mark.parametrize("metadata_v1", ["v1", None])
-    def test_append_empty_frame_metadata(
-        self, lmdb_version_store_v1, data_class, batch, metadata_v1, compact_data_inline
-    ):
+    def test_append_empty_frame_metadata(self, lmdb_version_store_v1, data_class, batch, metadata_v1, compact_data):
         lib = lmdb_version_store_v1
         sym = "test_append_empty_frame_metadata"
         write_data = pd.DataFrame({"col": np.arange(1)}) if data_class == "dataframe" else pd.Series(np.arange(1))
@@ -813,10 +809,10 @@ class TestAppend:
         # Using arange guarantees the dtype matches the written df
         append_data = pd.DataFrame({"col": np.arange(0)}) if data_class == "dataframe" else pd.Series(np.arange(0))
         append_vit = (
-            # TODO: 12033601732 test with batch and compact_data_inline=True as well
+            # TODO: 12033601732 test with batch and compact_data=True as well
             lib.batch_append([sym], [append_data], metadata_vector=[metadata_v1])[0]
             if batch
-            else lib.append(sym, append_data, metadata=metadata_v1, compact_data_inline=compact_data_inline)
+            else lib.append(sym, append_data, metadata=metadata_v1, compact_data=compact_data)
         )
         assert append_vit.version == 1
         assert append_vit.metadata == metadata_v1
@@ -827,7 +823,7 @@ class TestAppend:
         assert_func(read_vit.data, write_data)
 
     @pytest.mark.parametrize("batch", [True, False])
-    def test_symbol_list_key_added_on_upsert(self, lmdb_version_store_v1, batch, compact_data_inline):
+    def test_symbol_list_key_added_on_upsert(self, lmdb_version_store_v1, batch, compact_data):
         lib = lmdb_version_store_v1
         sym = "test_symbol_list_key_added_on_upsert"
         lib.write(sym, 0)
@@ -836,11 +832,7 @@ class TestAppend:
         assert not len(lib.list_symbols())
         num_symbol_list_keys = len(lib_tool.find_keys(KeyType.SYMBOL_LIST))
         append_df = pd.DataFrame({"col": np.arange(0)})
-        # TODO: 12033601732 test with batch and compact_data_inline=True as well
-        (
-            lib.batch_append([sym], [append_df])
-            if batch
-            else lib.append(sym, append_df, compact_data_inline=compact_data_inline)
-        )
+        # TODO: 12033601732 test with batch and compact_data=True as well
+        (lib.batch_append([sym], [append_df]) if batch else lib.append(sym, append_df, compact_data=compact_data))
         assert len(lib_tool.find_keys(KeyType.SYMBOL_LIST)) == num_symbol_list_keys + 1
         assert lib.list_symbols() == [sym]

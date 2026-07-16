@@ -31,19 +31,19 @@ from tests.util.naughty_strings import read_big_list_of_naughty_strings
 pytestmark = pytest.mark.pipeline
 
 
-def generic_compact_data_inline_test(lib, sym, df, **append_kwargs):
+def generic_append_compact_data_test(lib, sym, df, **append_kwargs):
     qs.reset_stats()  # Clear any leftover stats from a previous failed run
     vit_before_compaction = lib.read(sym, output_format="PANDAS" if isinstance(df, pd.DataFrame) else "POLARS")
     oracle_sym = sym + "_oracle"
     lib.write(oracle_sym, vit_before_compaction.data)
-    lib.append(oracle_sym, df, compact_data_inline=False, **append_kwargs)
+    lib.append(oracle_sym, df, compact_data=False, **append_kwargs)
     # Use Polars so that sparse data checking is proper
     expected = lib.read(oracle_sym, output_format="POLARS").data
     pre_compaction_index = lib.read_index(sym)
     pre_compaction_data_keys = len(pre_compaction_index)
 
     with qs.query_stats():
-        lib.append(sym, df, compact_data_inline=True, **append_kwargs)
+        lib.append(sym, df, compact_data=True, **append_kwargs)
         stats = qs.get_query_stats()
     qs.reset_stats()
     rows_per_segment = lib.lib_cfg().lib_desc.version.write_options.segment_row_size
@@ -83,7 +83,7 @@ def test_basic(in_memory_store_factory, clear_query_stats, index):
     df_1 = pd.DataFrame(
         {"col": np.arange(20, 30)}, index=None if index is None else pd.date_range("2026-01-21", periods=10)
     )
-    generic_compact_data_inline_test(lib, sym, df_1)
+    generic_append_compact_data_test(lib, sym, df_1)
 
 
 def test_frequent_append_io_counts_compact_once(in_memory_store_factory, clear_query_stats):
@@ -93,7 +93,7 @@ def test_frequent_append_io_counts_compact_once(in_memory_store_factory, clear_q
     for idx in range(99):
         lib.append(sym, df[idx * 2_000 : (idx + 1) * 2_000])
     with qs.query_stats():
-        lib.append(sym, df[99 * 2_000 :], compact_data_inline=True)
+        lib.append(sym, df[99 * 2_000 :], compact_data=True)
         stats = qs.get_query_stats()
     qs.reset_stats()
     received = lib.read(sym).data
@@ -111,7 +111,7 @@ def test_frequent_append_io_counts_compact_every_time(in_memory_store_factory, c
     df = pd.DataFrame({"col": np.arange(200_000)}, index=pd.date_range("2026-01-01", freq="s", periods=200_000))
     for idx in range(100):
         with qs.query_stats():
-            lib.append(sym, df[idx * 2_000 : (idx + 1) * 2_000], compact_data_inline=True)
+            lib.append(sym, df[idx * 2_000 : (idx + 1) * 2_000], compact_data=True)
             stats = qs.get_query_stats()
         qs.reset_stats()
         received = lib.read(sym).data
@@ -130,7 +130,7 @@ def test_pyarrow_tables(in_memory_version_store_arrow, clear_query_stats):
     lib.write(sym, table_0)
     table_1 = pa.table({"col": pa.array(np.arange(20, 30))})
     with qs.query_stats():
-        lib.append(sym, table_1, compact_data_inline=True)
+        lib.append(sym, table_1, compact_data=True)
         stats = qs.get_query_stats()
     qs.reset_stats()
     vit = lib.read(sym)
@@ -150,7 +150,7 @@ def test_series(in_memory_store_factory, clear_query_stats, index):
     lib.write(sym, series_0)
     series_1 = pd.Series(np.arange(20, 30), index=None if index is None else pd.date_range("2026-01-21", periods=10))
     with qs.query_stats():
-        lib.append(sym, series_1, compact_data_inline=True)
+        lib.append(sym, series_1, compact_data=True)
         stats = qs.get_query_stats()
     qs.reset_stats()
     vit = lib.read(sym)
@@ -171,7 +171,7 @@ def test_numpy_arrays(in_memory_store_factory, clear_query_stats):
     lib.write(sym, array_0)
     array_1 = np.arange(20, 30)
     with qs.query_stats():
-        lib.append(sym, array_1, compact_data_inline=True)
+        lib.append(sym, array_1, compact_data=True)
         stats = qs.get_query_stats()
     qs.reset_stats()
     vit = lib.read(sym)
@@ -190,33 +190,33 @@ def test_existing_zero_rows(in_memory_store_factory, clear_query_stats):
     df_0 = pd.DataFrame({"col": np.arange(0)})
     lib.write(sym, df_0)
     df_1 = pd.DataFrame({"col": np.arange(15)}, index=pd.date_range("2026-01-21", periods=15))
-    generic_compact_data_inline_test(lib, sym, df_1)
+    generic_append_compact_data_test(lib, sym, df_1)
 
 
 @pytest.mark.parametrize("write_if_missing", [True, False])
-@pytest.mark.parametrize("compact_data_inline", [True, False])
-def test_write_if_missing(in_memory_store_factory, write_if_missing, compact_data_inline):
+@pytest.mark.parametrize("compact_data", [True, False])
+def test_write_if_missing(in_memory_store_factory, write_if_missing, compact_data):
     lib = in_memory_store_factory(segment_row_size=10)
     sym = "test_write_if_missing"
     df = pd.DataFrame({"col": np.arange(15)})
     if write_if_missing:
-        lib.append(sym, df, compact_data_inline=compact_data_inline, write_if_missing=write_if_missing)
+        lib.append(sym, df, compact_data=compact_data, write_if_missing=write_if_missing)
         assert_frame_equal(df, lib.read(sym).data)
         index = lib.read_index(sym)
         row_counts = (index["end_row"] - index["start_row"]).to_list()
-        # See comment in LocalVersionedEngine::append_internal as to why this isn't [8, 7] when compact_data_inline is
+        # See comment in LocalVersionedEngine::append_internal as to why this isn't [8, 7] when compact_data is
         # True
         assert row_counts == [10, 5]
     else:
         with pytest.raises(InternalException):
-            lib.append(sym, df, compact_data_inline=compact_data_inline, write_if_missing=write_if_missing)
+            lib.append(sym, df, compact_data=compact_data, write_if_missing=write_if_missing)
 
 
 def test_metadata(in_memory_store_factory):
     lib = in_memory_store_factory()
     sym = "test_metadata"
     lib.write(sym, pd.DataFrame({"col": [0]}), metadata="0")
-    lib.append(sym, pd.DataFrame({"col": [1]}), metadata="1", compact_data_inline=True)
+    lib.append(sym, pd.DataFrame({"col": [1]}), metadata="1", compact_data=True)
     vit = lib.read(sym)
     assert vit.metadata == "1"
     assert_frame_equal(vit.data, pd.DataFrame({"col": [0, 1]}))
@@ -231,7 +231,7 @@ def test_compact_whole_symbol(in_memory_store_factory, clear_query_stats, index)
     lib.write(sym, df[:5])
     lib.append(sym, df[5:10])
     lib.append(sym, df[10:15])
-    generic_compact_data_inline_test(lib, sym, df[15:])
+    generic_append_compact_data_test(lib, sym, df[15:])
 
 
 @pytest.mark.parametrize("index", [None, "ts"])
@@ -240,7 +240,7 @@ def test_compact_leftover_slices(in_memory_store_factory, clear_query_stats, ind
     sym = "test_compact_leftover_slices"
     df = pd.DataFrame({"col": np.arange(20)}, index=None if index is None else pd.date_range("2026-01-01", periods=20))
     lib.write(sym, df[:5])
-    generic_compact_data_inline_test(lib, sym, df[5:])
+    generic_append_compact_data_test(lib, sym, df[5:])
 
 
 def test_existing_data_compacted(in_memory_store_factory, clear_query_stats):
@@ -248,7 +248,7 @@ def test_existing_data_compacted(in_memory_store_factory, clear_query_stats):
     sym = "test_existing_data_compacted"
     df = pd.DataFrame({"col": np.arange(20)})
     lib.write(sym, df[:10])
-    generic_compact_data_inline_test(lib, sym, df[10:])
+    generic_append_compact_data_test(lib, sym, df[10:])
 
 
 @pytest.mark.parametrize("total_rows", [25, 30, 35])
@@ -260,7 +260,7 @@ def test_tail_of_existing_data_already_compacted(in_memory_store_factory, clear_
     lib.append(sym, df[5:10])
     lib.append(sym, df[10:20])
     assert len(lib.read_index(sym)) == 3
-    generic_compact_data_inline_test(lib, sym, df[20:])
+    generic_append_compact_data_test(lib, sym, df[20:])
 
 
 @pytest.mark.parametrize("index", [None, "ts"])
@@ -285,7 +285,7 @@ def test_dynamic_schema_col_ordering(in_memory_store_factory, clear_query_stats,
         },
         index=None if index is None else pd.date_range("2026-01-21", periods=10),
     )
-    generic_compact_data_inline_test(lib, sym, df_1)
+    generic_append_compact_data_test(lib, sym, df_1)
 
 
 @pytest.mark.parametrize("segment_row_size", [100_000, 10, 5, 2])
@@ -307,7 +307,7 @@ def test_dynamic_schema_type_promotion(in_memory_store_factory, clear_query_stat
             "col_2": np.arange(40, 50, dtype=np.uint16),
         },
     )
-    generic_compact_data_inline_test(lib, sym, df_1)
+    generic_append_compact_data_test(lib, sym, df_1)
 
 
 @pytest.mark.parametrize("index", [None, "ts"])
@@ -324,7 +324,7 @@ def test_column_slicing(in_memory_store_factory, clear_query_stats, index, segme
         {f"col_{idx}": np.arange(20, 30) for idx in range(5)},
         index=None if index is None else pd.date_range("2026-01-21", periods=10),
     )
-    generic_compact_data_inline_test(lib, sym, df_1)
+    generic_append_compact_data_test(lib, sym, df_1)
 
 
 @pytest.mark.parametrize("names", [None, ["ts", None], [None, "level 2"], ["ts", "level 2"]])
@@ -340,7 +340,7 @@ def test_multiindex(in_memory_store_factory, clear_query_stats, names):
     )
     lib.write(sym, df[:5])
     with qs.query_stats():
-        lib.append(sym, df[5:], compact_data_inline=True)
+        lib.append(sym, df[5:], compact_data=True)
         stats = qs.get_query_stats()
     qs.reset_stats()
     vit = lib.read(sym)
@@ -356,7 +356,7 @@ def test_string_none_nan_handling(in_memory_store_factory, clear_query_stats):
     sym = "test_string_none_nan_handling"
     df = pd.DataFrame({"col": ["hello", np.nan, np.nan, None, None, None, np.nan, np.nan, None, None]})
     lib.write(sym, df[:5], coerce_columns={"col": object})
-    generic_compact_data_inline_test(lib, sym, df[5:], coerce_columns={"col": object})
+    generic_append_compact_data_test(lib, sym, df[5:], coerce_columns={"col": object})
 
 
 @pytest.mark.parametrize("dynamic_strings_first", [True, False])
@@ -368,7 +368,7 @@ def test_fixed_width_and_dynamic_strings(in_memory_store_factory, clear_query_st
     lib.write(sym, df[:3], dynamic_strings=dynamic_strings_first)
     lib.append(sym, df[3:5], dynamic_strings=dynamic_strings_first)
     lib.append(sym, df[5:7], dynamic_strings=not dynamic_strings_first)
-    generic_compact_data_inline_test(lib, sym, df[7:], dynamic_strings=not dynamic_strings_first)
+    generic_append_compact_data_test(lib, sym, df[7:], dynamic_strings=not dynamic_strings_first)
 
 
 @pytest.mark.parametrize("dynamic_strings_first", [True, False])
@@ -377,7 +377,7 @@ def test_blns(in_memory_store_factory, clear_query_stats, dynamic_strings_first)
     sym = "test_blns"
     df = pd.DataFrame({"col": read_big_list_of_naughty_strings()})
     lib.write(sym, df[: len(df) // 2], dynamic_strings=dynamic_strings_first)
-    generic_compact_data_inline_test(lib, sym, df[len(df) // 2 :], dynamic_strings=not dynamic_strings_first)
+    generic_append_compact_data_test(lib, sym, df[len(df) // 2 :], dynamic_strings=not dynamic_strings_first)
 
 
 def test_append_empty_frame_compacts_existing_data(in_memory_store_factory, clear_query_stats):
@@ -395,7 +395,7 @@ def test_append_empty_frame_compacts_existing_data(in_memory_store_factory, clea
     assert query_stats_operation_count(stats, "Memory_PutObject", "TABLE_DATA") == 0
     assert query_stats_operation_count(stats, "Memory_PutObject", "TABLE_INDEX") == 1
     with qs.query_stats():
-        lib.append(sym, pd.DataFrame(), compact_data_inline=True)
+        lib.append(sym, pd.DataFrame(), compact_data=True)
         stats = qs.get_query_stats()
     qs.reset_stats()
     assert lib.read(sym).version == 3
@@ -413,7 +413,7 @@ def test_fortran_ordered_data(in_memory_store_factory, clear_query_stats, rows_t
     df_0 = pd.DataFrame(np.random.randint(0, 100, size=(5, 2)), columns=cols)
     lib.write(sym, df_0)
     df_1 = pd.DataFrame(np.random.randint(0, 100, size=(rows_to_append, 2)), columns=cols)
-    generic_compact_data_inline_test(lib, sym, df_1)
+    generic_append_compact_data_test(lib, sym, df_1)
 
 
 @pytest.mark.parametrize("index", [None, "ts"])
@@ -431,7 +431,7 @@ def test_column_filtered_read(in_memory_store_factory, clear_query_stats, index)
     )
     lib.write(sym, df[:5])
     for i in range(1, 4):
-        generic_compact_data_inline_test(lib, sym, df[i * 5 : (i + 1) * 5])
+        generic_append_compact_data_test(lib, sym, df[i * 5 : (i + 1) * 5])
     expected_col_a = df[["col_a"]]
     expected_col_bc = df[["col_b", "col_c"]]
     assert_frame_equal(expected_col_a, lib.read(sym, columns=["col_a"]).data)
@@ -449,7 +449,7 @@ def test_date_range_read(in_memory_store_factory, clear_query_stats, rows_per_se
     )
     lib.write(sym, df[:5])
     for i in range(1, 20):
-        generic_compact_data_inline_test(lib, sym, df[i * 5 : (i + 1) * 5])
+        generic_append_compact_data_test(lib, sym, df[i * 5 : (i + 1) * 5])
     mid = index[num_rows // 2]
     expected_first_half = df[:mid]
     expected_second_half = df[mid:]
@@ -462,7 +462,7 @@ def test_read_previous_version(in_memory_store_factory, clear_query_stats):
     sym = "test_read_previous_version"
     df = pd.DataFrame({"col": np.arange(10)})
     lib.write(sym, df[:5])
-    generic_compact_data_inline_test(lib, sym, df[5:])
+    generic_append_compact_data_test(lib, sym, df[5:])
     assert_frame_equal(df[:5], lib.read(sym, as_of=0).data)
     assert_frame_equal(df, lib.read(sym, as_of=1).data)
     assert_frame_equal(df, lib.read(sym).data)
@@ -478,7 +478,7 @@ def test_schema_mismatch_static(in_memory_store_factory):
     with pytest.raises(Exception) as e_without_arg:
         lib.append(sym, df_1)
     with pytest.raises(Exception) as e_with_arg:
-        lib.append(sym, df_1, compact_data_inline=True)
+        lib.append(sym, df_1, compact_data=True)
     assert e_with_arg.type == e_without_arg.type
     assert e_with_arg.typename == e_without_arg.typename
     assert e_with_arg.value.args[0] == e_without_arg.value.args[0]
@@ -487,7 +487,7 @@ def test_schema_mismatch_static(in_memory_store_factory):
     with pytest.raises(Exception) as e_without_arg:
         lib.append(sym, df_1)
     with pytest.raises(Exception) as e_with_arg:
-        lib.append(sym, df_1, compact_data_inline=True)
+        lib.append(sym, df_1, compact_data=True)
     assert e_with_arg.type == e_without_arg.type
     assert e_with_arg.typename == e_without_arg.typename
     assert e_with_arg.value.args[0] == e_without_arg.value.args[0]
@@ -502,7 +502,7 @@ def test_schema_mismatch_dynamic(in_memory_store_factory):
     with pytest.raises(Exception) as e_without_arg:
         lib.append(sym, df_1)
     with pytest.raises(Exception) as e_with_arg:
-        lib.append(sym, df_1, compact_data_inline=True)
+        lib.append(sym, df_1, compact_data=True)
     assert e_with_arg.type == e_without_arg.type
     assert e_with_arg.typename == e_without_arg.typename
     assert e_with_arg.value.args[0] == e_without_arg.value.args[0]
@@ -589,9 +589,9 @@ def test_hypothesis_static_schema(
             lib.write(sym, table.slice(length=rows_to_take))
             first_iteration = False
         else:
-            # This basically does lib.append(sym, table.slice(length=rows_to_take), compact_data_inline=True), plus some
+            # This basically does lib.append(sym, table.slice(length=rows_to_take), compact_data=True), plus some
             # read-only checks
-            generic_compact_data_inline_test(lib, sym, table.slice(length=rows_to_take))
+            generic_append_compact_data_test(lib, sym, table.slice(length=rows_to_take))
         table = table.slice(offset=rows_to_take)
         remaining_rows -= rows_to_take
 
@@ -673,6 +673,6 @@ def test_hypothesis_dynamic_schema(in_memory_store_factory, clear_query_stats, n
             lib.write(sym, table)
             first_iteration = False
         else:
-            # This basically does lib.append(sym, table, compact_data_inline=True), plus some read-only checks
-            generic_compact_data_inline_test(lib, sym, table)
+            # This basically does lib.append(sym, table, compact_data=True), plus some read-only checks
+            generic_append_compact_data_test(lib, sym, table)
         remaining_rows -= rows_to_take

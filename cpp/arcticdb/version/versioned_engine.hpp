@@ -36,7 +36,7 @@ struct AppendOptions {
     bool upsert = false;
     bool prune_previous_versions = false;
     bool validate_index = false;
-    bool compact_data_inline = false;
+    bool compact_data = false;
 };
 
 enum class Slicing { NoSlicing, RowSlicing };

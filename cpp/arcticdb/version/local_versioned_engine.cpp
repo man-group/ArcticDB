@@ -1857,12 +1857,12 @@ VersionedItem LocalVersionedEngine::append_internal(
     py::gil_scoped_release release_gil;
     auto update_info = get_latest_undeleted_version_and_next_version_id(store(), version_map(), stream_id);
 
-    // It would be nice if upsert also sliced into more evenly sized segments at least when compact_data_inline is true,
+    // It would be nice if upsert also sliced into more evenly sized segments at least when compact_data is true,
     // but also when it isn't. However, the read-modify-write pipeline is all built around the PipelineContext class
     // which assumes an existing version. Better if we just make the FixedSlicer smarter so that its logic is more like
     // ReslicingInfo
     if (update_info.previous_index_key_.has_value()) {
-        if (append_options.compact_data_inline) {
+        if (append_options.compact_data) {
             auto compact_data_frame = std::make_optional<CompactDataFrame>(
                     frame, append_options.validate_index, cfg().write_options().empty_types()
             );

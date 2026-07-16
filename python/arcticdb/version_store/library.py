@@ -1366,7 +1366,7 @@ class Library:
         prune_previous_versions: bool = False,
         validate_index: bool = True,
         index_column: bool = False,
-        compact_data_inline: bool = False,
+        compact_data: bool = False,
     ) -> VersionedItem:
         """
         Appends the given data to the existing, stored data. Append always appends along the index. A new version will
@@ -1400,7 +1400,7 @@ class Library:
         index_column: bool, default=False
             Only applicable when data is a PyArrow Table or Polars DataFrame. If True, the first column
             is treated as the timeseries index.
-        compact_data_inline: bool, default=False
+        compact_data: bool, default=False
             If False, the data being appended will be sliced and written to disk without consideration for how
             fragmented this may make the data.
             If True, the data will also be compacted at the same time (see the `compact_data` method for more details).
@@ -1463,7 +1463,7 @@ class Library:
             prune_previous_version=prune_previous_versions,
             validate_index=validate_index,
             index_column=index_column,
-            compact_data_inline=compact_data_inline,
+            compact_data=compact_data,
         )
 
     def append_batch(

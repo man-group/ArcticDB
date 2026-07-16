@@ -221,11 +221,11 @@ def test_append_with_defragmentation(
         )
 
 
-@pytest.mark.parametrize("compact_data_inline", [True, False])
+@pytest.mark.parametrize("compact_data", [True, False])
 class TestAppendHypothesis:
     @pytest.mark.parametrize("colnum,periods,rownum,cols,tsbounds,append_point", gen_params_append())
     def test_append_partial_read(
-        self, version_store_factory, colnum, periods, rownum, cols, tsbounds, append_point, compact_data_inline
+        self, version_store_factory, colnum, periods, rownum, cols, tsbounds, append_point, compact_data
     ):
         tz = "America/New_York"
         version_store = version_store_factory(col_per_group=colnum, row_per_segment=rownum)
@@ -238,7 +238,7 @@ class TestAppendHypothesis:
         sid = "XXX"
         version_store.write(sid, tf1)
         tf2 = tf.tsloc[c2:]
-        version_store.append(sid, tf2, compact_data_inline=compact_data_inline)
+        version_store.append(sid, tf2, compact_data=compact_data)
 
         dtr = (dtidx[tsbounds[0]], dtidx[tsbounds[1]])
         vit = version_store.read(sid, date_range=dtr, columns=list(cols))
@@ -271,7 +271,7 @@ class TestAppendHypothesis:
         match,
         swap,
         lmdb_version_store: NativeVersionStore,
-        compact_data_inline,
+        compact_data,
     ):
         lib = lmdb_version_store
         if swap:
@@ -281,12 +281,10 @@ class TestAppendHypothesis:
 
         to_append, _ = append.make(abs(next_start), 1)
         with pytest.raises(NormalizationException) as e:
-            lib.append("s", to_append, compact_data_inline=compact_data_inline)
+            lib.append("s", to_append, compact_data=compact_data)
         assert match in str(e.value)
 
-    def test_regular_append_dynamic_schema_named_index(
-        self, lmdb_version_store_tiny_segment_dynamic, compact_data_inline
-    ):
+    def test_regular_append_dynamic_schema_named_index(self, lmdb_version_store_tiny_segment_dynamic, compact_data):
         lib = lmdb_version_store_tiny_segment_dynamic
         sym = "test_parallel_append_dynamic_schema_named_index"
         df_0 = pd.DataFrame({"col_0": [0], "col_1": [0.5]}, index=pd.date_range("2024-01-01", periods=1))
@@ -294,14 +292,14 @@ class TestAppendHypothesis:
         df_1 = pd.DataFrame({"col_0": [1]}, index=pd.date_range("2024-01-02", periods=1))
         lib.write(sym, df_0)
         with pytest.raises(StreamDescriptorMismatch) as exception_info:
-            lib.append(sym, df_1, compact_data_inline=compact_data_inline)
+            lib.append(sym, df_1, compact_data=compact_data)
 
         assert "date" in str(exception_info.value)
 
     @pytest.mark.parametrize(
         "idx", [pd.date_range(pd.Timestamp("2020-01-01"), periods=3), pd.RangeIndex(start=0, stop=3, step=1)]
     )
-    def test_append_bool_named_col(self, lmdb_version_store_dynamic_schema, idx, compact_data_inline):
+    def test_append_bool_named_col(self, lmdb_version_store_dynamic_schema, idx, compact_data):
         symbol = "bad_append"
 
         initial = pd.DataFrame({"col": [1, 2, 3]}, index=idx)
@@ -311,6 +309,6 @@ class TestAppendHypothesis:
 
         # The normalization exception is getting reraised as an ArcticNativeException so we check for that
         with pytest.raises(ArcticNativeException):
-            lmdb_version_store_dynamic_schema.append(symbol, bad_df, compact_data_inline=compact_data_inline)
+            lmdb_version_store_dynamic_schema.append(symbol, bad_df, compact_data=compact_data)
 
         assert_frame_equal(lmdb_version_store_dynamic_schema.read(symbol).data, initial)

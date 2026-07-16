@@ -113,7 +113,7 @@ struct PipelineContext : public std::enable_shared_from_this<PipelineContext> {
     VersionId version_id_ = 0;
     size_t total_rows_ = 0;
     size_t rows_ = 0;
-    // Used in appends with compact_data_inline to check the data can be appended
+    // Used in appends with compact_data to check the data can be appended
     std::optional<IndexValue> last_existing_index_value_;
     std::vector<SliceAndKey> slice_and_keys_;
     util::BitSet fetch_index_;
