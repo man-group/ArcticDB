@@ -132,24 +132,19 @@ class TestMergeTimeseriesCommon:
         assert len(lt.find_keys_for_symbol(KeyType.VERSION, "sym")) == 2
 
     @pytest.mark.parametrize("metadata", ({"meta": "data"}, None))
-    def test_merge_does_not_write_new_version_with_empty_source(self, lmdb_library, metadata, strategy):
+    def test_merge_writes_new_version_with_empty_source(self, lmdb_library, metadata, strategy):
         lib = lmdb_library
         target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]}, index=pd.date_range("2024-01-01", periods=3))
-        write_vit = lib.write("sym", target)
+        lib.write("sym", target, metadata="v0")
         merge_vit = lib.merge_experimental("sym", pd.DataFrame(), metadata=metadata, strategy=strategy)
-        # There's a bug in append, update, and merge when there's an empty source. All of them return the passed
-        # metadata even though it's not used.
-        merge_vit.metadata = write_vit.metadata
-        assert_vit_equals_except_data(write_vit, merge_vit)
-        assert merge_vit.data is None and write_vit.data is None
+        assert merge_vit.metadata is None if metadata is None else merge_vit.metadata == metadata
         lt = lib._dev_tools.library_tool()
         assert len(lt.find_keys_for_symbol(KeyType.TABLE_DATA, "sym")) == 1
-        assert len(lt.find_keys_for_symbol(KeyType.TABLE_INDEX, "sym")) == 1
-        assert len(lt.find_keys_for_symbol(KeyType.VERSION, "sym")) == 1
-
+        assert len(lt.find_keys_for_symbol(KeyType.TABLE_INDEX, "sym")) == 2
+        assert len(lt.find_keys_for_symbol(KeyType.VERSION, "sym")) == 2
         read_vit = lib.read("sym")
-        assert read_vit.version == 0
-        assert read_vit.metadata is None
+        assert read_vit.version == 1
+        assert merge_vit.metadata is None if metadata is None else merge_vit.metadata == metadata
         assert_frame_equal(read_vit.data, target)
 
     @pytest.mark.parametrize(
@@ -536,20 +531,22 @@ class TestMergeTimeseriesUpdate:
             lib.merge_experimental("sym", source, strategy=self.strategy)
 
     @pytest.mark.parametrize("merge_metadata", (None, "meta"))
-    @pytest.mark.xfail(reason="Monday: 12518592426")
     def test_target_is_empty(self, lmdb_library, merge_metadata):
         lib = lmdb_library
         target = pd.DataFrame({"a": np.array([], dtype=np.int64)}, index=pd.DatetimeIndex([]))
         lib.write("sym", target)
-
         source = pd.DataFrame({"a": np.array([1, 2], dtype=np.int64)}, index=pd.date_range("2024-01-01", periods=2))
         merge_vit = lib.merge_experimental(
             "sym", source, strategy=MergeStrategy(not_matched_by_target=MergeAction.DO_NOTHING), metadata=merge_metadata
         )
-        expected = target
+        assert merge_vit.metadata is None if merge_metadata is None else merge_vit.metadata == merge_metadata
+        lt = lib._dev_tools.library_tool()
+        assert len(lt.find_keys_for_symbol(KeyType.TABLE_DATA, "sym")) == 0
+        assert len(lt.find_keys_for_symbol(KeyType.TABLE_INDEX, "sym")) == 2
+        assert len(lt.find_keys_for_symbol(KeyType.VERSION, "sym")) == 2
         read_vit = lib.read("sym")
         assert read_vit.metadata is None if merge_metadata is None else read_vit.metadata == merge_metadata
-        assert_frame_equal(read_vit.data, expected)
+        assert_frame_equal(read_vit.data, target)
 
     @pytest.mark.parametrize(
         "source",
@@ -2695,24 +2692,20 @@ class TestMergeRowrangeCommon:
         assert len(lt.find_keys_for_symbol(KeyType.VERSION, "sym")) == 2
 
     @pytest.mark.parametrize("metadata", ({"meta": "data"}, None))
-    def test_merge_does_not_write_new_version_with_empty_source(self, lmdb_library, metadata, strategy):
+    def test_merge_writes_new_version_with_empty_source(self, lmdb_library, metadata, strategy):
         lib = lmdb_library
         target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]})
-        write_vit = lib.write("sym", target)
+        lib.write("sym", target)
         merge_vit = lib.merge_experimental("sym", pd.DataFrame(), metadata=metadata, strategy=strategy, on=["a"])
-        # There's a bug in append, update, and merge when there's an empty source. All of them return the passed
-        # metadata even though it's not used.
-        merge_vit.metadata = write_vit.metadata
-        assert_vit_equals_except_data(write_vit, merge_vit)
-        assert merge_vit.data is None and write_vit.data is None
+        assert merge_vit.metadata is None if metadata is None else merge_vit.metadata == metadata
         lt = lib._dev_tools.library_tool()
         assert len(lt.find_keys_for_symbol(KeyType.TABLE_DATA, "sym")) == 1
-        assert len(lt.find_keys_for_symbol(KeyType.TABLE_INDEX, "sym")) == 1
-        assert len(lt.find_keys_for_symbol(KeyType.VERSION, "sym")) == 1
+        assert len(lt.find_keys_for_symbol(KeyType.TABLE_INDEX, "sym")) == 2
+        assert len(lt.find_keys_for_symbol(KeyType.VERSION, "sym")) == 2
 
         read_vit = lib.read("sym")
-        assert read_vit.version == 0
-        assert read_vit.metadata is None
+        assert read_vit.version == 1
+        assert read_vit.metadata is None if metadata is None else read_vit.metadata == metadata
         assert_frame_equal(read_vit.data, target)
 
     @pytest.mark.parametrize(
