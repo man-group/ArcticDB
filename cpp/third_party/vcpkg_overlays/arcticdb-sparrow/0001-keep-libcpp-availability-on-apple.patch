@@ -8,7 +8,7 @@ macOS. Linux libc++ has no vendor availability annotations, so keep it there.
 diff --git a/CMakeLists.txt b/CMakeLists.txt
 --- a/CMakeLists.txt
 +++ b/CMakeLists.txt
-@@ -143,7 +143,14 @@
+@@ -143,7 +143,6 @@
  
      # Allow the use of not visible yet availabile features, such
      # as some formatter for new types.
