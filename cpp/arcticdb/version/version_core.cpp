@@ -1980,7 +1980,27 @@ folly::Future<SegmentInMemory> prepare_output_frame(
             .thenValue([frame](auto&&) { return frame; });
 }
 
-IndexInformation read_index_key_without_column_stats(const std::shared_ptr<Store>& store, const AtomKey& key) {
+// This future will complete on an IO thread
+folly::Future<IndexInformation> read_index_key_without_column_stats(
+        const std::shared_ptr<Store>& store, const AtomKey& key
+) {
+    return store->read(key).thenTryInline([key = std::move(key)](auto&& key_seg_pair_try) {
+        if (key_seg_pair_try.hasValue()) {
+            auto column_stats = std::nullopt;
+            return IndexInformation{std::move(key_seg_pair_try.value()), column_stats};
+        } else {
+            throw storage::NoDataFoundException(fmt::format(
+                    "When trying to read version {} of symbol `{}`, failed to read key {}: {}",
+                    key.version_id(),
+                    key.id(),
+                    key,
+                    key_seg_pair_try.exception().what()
+            ));
+        }
+    });
+}
+
+IndexInformation read_index_key_without_column_stats_sync(const std::shared_ptr<Store>& store, const AtomKey& key) {
     try {
         auto column_stats = std::nullopt;
         return IndexInformation{store->read_sync(key), column_stats};
@@ -2347,7 +2367,7 @@ static void read_indexed_keys_for_compaction(
     const bool append_to_existing = parameters.append_ && update_info.previous_index_key_.has_value();
     if (append_to_existing) {
         const auto& key = *(update_info.previous_index_key_);
-        IndexInformation index_info = read_index_key_without_column_stats(store, key);
+        IndexInformation index_info = read_index_key_without_column_stats(store, key).get();
         read_indexed_keys_to_pipeline(pipeline_context, read_query, read_options, index_info);
     }
 }
@@ -2644,7 +2664,7 @@ PredefragmentationInfo get_pre_defragmentation_info(
 
     auto read_query = std::make_shared<ReadQuery>();
     const auto& key = *(update_info.previous_index_key_);
-    IndexInformation index_info = read_index_key_without_column_stats(store, key);
+    IndexInformation index_info = read_index_key_without_column_stats(store, key).get();
     read_indexed_keys_to_pipeline(
             pipeline_context, *read_query, defragmentation_read_options_generator(options), index_info
     );
@@ -3064,7 +3084,8 @@ folly::Future<VersionedItem> merge_update_impl(
     read_query->clauses_.push_back(merge_update_clause);
     VersionIdentifier resolved = version_info;
     if (auto* vi = std::get_if<VersionedItem>(&resolved)) {
-        resolved = std::make_shared<IndexInformation>(read_index_key_without_column_stats(store, vi->key_));
+        // TODO: Swap this out for the async version and chain futures from it
+        resolved = std::make_shared<IndexInformation>(read_index_key_without_column_stats_sync(store, vi->key_));
     }
     std::shared_ptr<PipelineContext> pipeline_context =
             setup_pipeline_context(store, std::move(resolved), *read_query, read_options);
@@ -3134,67 +3155,73 @@ folly::Future<VersionedItem> merge_update_impl(
 folly::Future<CompactDataInfo> compact_data_explain_plan_impl(
         const std::shared_ptr<Store>& store, const UpdateInfo& update_info, uint64_t rows_per_segment
 ) {
-    VersionIdentifier resolved_version = std::make_shared<IndexInformation>(
-            read_index_key_without_column_stats(store, *update_info.previous_index_key_)
-    );
-    return async::submit_io_task(
-                   SetupPipelineContextTask{store, std::move(resolved_version), std::make_shared<ReadQuery>(), {}}
-    ).thenValueInline([update_info, rows_per_segment](auto&& pipeline_context) -> CompactDataInfo {
-        auto ranges_and_keys = generate_ranges_and_keys(*pipeline_context);
-        if (ranges_and_keys.empty()) {
-            return {{}, {}, update_info.previous_index_key_->version_id(), update_info.previous_index_key_->version_id()
-            };
-        }
-        // Extract the unique row ranges
-        std::set<RowRange> row_ranges;
-        std::vector<uint64_t> row_slices_before;
-        for (const auto& range_and_key : ranges_and_keys) {
-            const auto& row_range = range_and_key.row_range();
-            if (row_ranges.insert(row_range).second) {
-                if (row_slices_before.empty()) {
-                    util::check(row_range.first == 0, "Unexpected non-zero first row-range entry {}", row_range.first);
-                    row_slices_before.emplace_back(0);
+    return read_index_key_without_column_stats(store, *update_info.previous_index_key_)
+            .thenValueInline([store, update_info, rows_per_segment](auto&& index_information) -> CompactDataInfo {
+                VersionIdentifier resolved_version = std::make_shared<IndexInformation>(std::move(index_information));
+                ReadQuery read_query;
+                auto pipeline_context = setup_pipeline_context(store, std::move(resolved_version), read_query, {});
+                auto ranges_and_keys = generate_ranges_and_keys(*pipeline_context);
+                if (ranges_and_keys.empty()) {
+                    return {{},
+                            {},
+                            update_info.previous_index_key_->version_id(),
+                            update_info.previous_index_key_->version_id()};
+                }
+                // Extract the unique row ranges
+                std::set<RowRange> row_ranges;
+                std::vector<uint64_t> row_slices_before;
+                for (const auto& range_and_key : ranges_and_keys) {
+                    const auto& row_range = range_and_key.row_range();
+                    if (row_ranges.insert(row_range).second) {
+                        if (row_slices_before.empty()) {
+                            util::check(
+                                    row_range.first == 0,
+                                    "Unexpected non-zero first row-range entry {}",
+                                    row_range.first
+                            );
+                            row_slices_before.emplace_back(0);
+                        } else {
+                            util::check(
+                                    row_range.first == row_slices_before.back(),
+                                    "Unexpected mismatch between row ranges {} != {}",
+                                    row_range.first,
+                                    row_slices_before.back()
+                            );
+                        }
+                        row_slices_before.emplace_back(row_range.second);
+                    }
+                }
+                CompactDataClause clause{rows_per_segment};
+                std::vector<uint64_t> row_slices_after;
+                VersionId version_id_after;
+                // If there is only 1 segment, and it has fewer than min_rows_per_segment, then the compaction will be a
+                // no-op
+                if (clause.row_ranges_all_acceptable_lengths(row_ranges) ||
+                    (row_ranges.size() == 1 && row_ranges.cbegin()->diff() < clause.min_rows_per_segment_)) {
+                    version_id_after = update_info.previous_index_key_->version_id();
+                    row_slices_after = row_slices_before;
                 } else {
-                    util::check(
-                            row_range.first == row_slices_before.back(),
-                            "Unexpected mismatch between row ranges {} != {}",
-                            row_range.first,
-                            row_slices_before.back()
-                    );
+                    version_id_after = update_info.next_version_id_;
+                    auto processing_row_ranges = clause.structure_row_ranges(row_ranges);
+                    row_slices_after.emplace_back(0);
+                    for (const auto& row_range : processing_row_ranges) {
+                        ReslicingInfo reslicing_info(row_range.diff(), clause.max_rows_per_segment_);
+                        for (uint64_t idx = 0; idx < reslicing_info.num_segments; ++idx) {
+                            row_slices_after.emplace_back(row_slices_after.back() + reslicing_info.rows_in_slice(idx));
+                        }
+                    }
                 }
-                row_slices_before.emplace_back(row_range.second);
-            }
-        }
-        CompactDataClause clause{rows_per_segment};
-        std::vector<uint64_t> row_slices_after;
-        VersionId version_id_after;
-        // If there is only 1 segment, and it has fewer than min_rows_per_segment, then the compaction will be a no-op
-        if (clause.row_ranges_all_acceptable_lengths(row_ranges) ||
-            (row_ranges.size() == 1 && row_ranges.cbegin()->diff() < clause.min_rows_per_segment_)) {
-            version_id_after = update_info.previous_index_key_->version_id();
-            row_slices_after = row_slices_before;
-        } else {
-            version_id_after = update_info.next_version_id_;
-            auto processing_row_ranges = clause.structure_row_ranges(row_ranges);
-            row_slices_after.emplace_back(0);
-            for (const auto& row_range : processing_row_ranges) {
-                ReslicingInfo reslicing_info(row_range.diff(), clause.max_rows_per_segment_);
-                for (uint64_t idx = 0; idx < reslicing_info.num_segments; ++idx) {
-                    row_slices_after.emplace_back(row_slices_after.back() + reslicing_info.rows_in_slice(idx));
-                }
-            }
-        }
-        util::check(
-                row_slices_before.back() == row_slices_after.back(),
-                "Mismatching row counts in compact_data_explain_plan {} != {}",
-                row_slices_before.back(),
-                row_slices_after.back()
-        );
-        return {std::move(row_slices_before),
-                std::move(row_slices_after),
-                update_info.previous_index_key_->version_id(),
-                version_id_after};
-    });
+                util::check(
+                        row_slices_before.back() == row_slices_after.back(),
+                        "Mismatching row counts in compact_data_explain_plan {} != {}",
+                        row_slices_before.back(),
+                        row_slices_after.back()
+                );
+                return {std::move(row_slices_before),
+                        std::move(row_slices_after),
+                        update_info.previous_index_key_->version_id(),
+                        version_id_after};
+            });
 }
 
 static folly::Future<std::vector<SliceAndKey>> slice_and_write_frame_remainder(
@@ -3336,30 +3363,23 @@ folly::Future<std::optional<VersionedItem>> compact_data_impl(
         const std::shared_ptr<Store>& store, const UpdateInfo& update_info, const WriteOptions& write_options,
         uint64_t rows_per_segment, std::optional<CompactDataFrame> compact_data_frame
 ) {
-    auto read_query = std::make_shared<ReadQuery>();
-    if (compact_data_frame.has_value()) {
-        read_query->clauses_.push_back(
-                std::make_shared<Clause>(CompactDataClause(rows_per_segment, compact_data_frame->frame_))
-        );
-    } else {
-        read_query->clauses_.push_back(std::make_shared<Clause>(CompactDataClause(rows_per_segment)));
-    }
-
-    return folly::via(
-                   &async::io_executor(),
-                   [store, read_query, update_info]() {
-                       VersionIdentifier resolved = std::make_shared<IndexInformation>(
-                               read_index_key_without_column_stats(store, *update_info.previous_index_key_)
-                       );
-                       return setup_pipeline_context(store, std::move(resolved), *read_query, {});
-                   }
-    )
+    return read_index_key_without_column_stats(store, *update_info.previous_index_key_)
             .via(&async::cpu_executor())
             .thenValue([store,
                         update_info,
                         write_options,
-                        compact_data_frame = std::move(compact_data_frame),
-                        read_query](std::shared_ptr<PipelineContext>&& pipeline_context) mutable {
+                        rows_per_segment,
+                        compact_data_frame = std::move(compact_data_frame)](auto&& index_information) mutable {
+                VersionIdentifier resolved = std::make_shared<IndexInformation>(std::move(index_information));
+                auto read_query = std::make_shared<ReadQuery>();
+                if (compact_data_frame.has_value()) {
+                    read_query->clauses_.push_back(
+                            std::make_shared<Clause>(CompactDataClause(rows_per_segment, compact_data_frame->frame_))
+                    );
+                } else {
+                    read_query->clauses_.push_back(std::make_shared<Clause>(CompactDataClause(rows_per_segment)));
+                }
+                auto pipeline_context = setup_pipeline_context(store, std::move(resolved), *read_query, {});
                 const auto& stream_id = update_info.previous_index_key_->id();
                 const auto dynamic_schema = write_options.dynamic_schema;
                 auto tsd = compact_data_tsd(compact_data_frame, *pipeline_context, write_options);
@@ -3450,43 +3470,56 @@ folly::Future<SymbolProcessingResult> read_and_process(
         const std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options,
         std::shared_ptr<ComponentManager> component_manager
 ) {
-    VersionIdentifier resolved = version_info;
-    if (auto* vi = std::get_if<VersionedItem>(&resolved)) {
-        resolved = std::make_shared<IndexInformation>(read_index_key_without_column_stats(store, vi->key_));
+    folly::Future<VersionIdentifier> resolved{version_info};
+    if (auto* vi = std::get_if<VersionedItem>(&version_info)) {
+        resolved = read_index_key_without_column_stats(store, vi->key_).thenValueInline([](auto&& index_information) {
+            return std::make_shared<IndexInformation>(std::move(index_information));
+        });
     }
-    auto res_versioned_item = generate_result_versioned_item(resolved);
-    auto pipeline_context = setup_pipeline_context(store, std::move(resolved), *read_query, read_options);
+    return std::move(resolved)
+            .via(&async::cpu_executor())
+            .thenValueInline(
+                    [store, version_info, read_query, read_options, component_manager](auto&& resolved_version
+                    ) -> folly::Future<SymbolProcessingResult> {
+                        auto res_versioned_item = generate_result_versioned_item(resolved_version);
+                        auto pipeline_context =
+                                setup_pipeline_context(store, std::move(resolved_version), *read_query, read_options);
 
-    user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
-            !pipeline_context->multi_key_, "Multi-symbol joins not supported with recursively normalized data"
-    );
+                        user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                                !pipeline_context->multi_key_,
+                                "Multi-symbol joins not supported with recursively normalized data"
+                        );
 
-    if (std::holds_alternative<StreamId>(version_info) && !pipeline_context->incompletes_after_) {
-        return SymbolProcessingResult{std::move(res_versioned_item), {}, {}, {}};
-    }
+                        if (std::holds_alternative<StreamId>(version_info) && !pipeline_context->incompletes_after_) {
+                            return SymbolProcessingResult{std::move(res_versioned_item), {}, {}, {}};
+                        }
 
-    schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
-            !pipeline_context->is_pickled(), "Cannot perform multi-symbol join on pickled data"
-    );
+                        schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
+                                !pipeline_context->is_pickled(), "Cannot perform multi-symbol join on pickled data"
+                        );
 
-    OutputSchema output_schema = generate_output_schema(*pipeline_context, *read_query);
-    ARCTICDB_DEBUG(log::version(), "Fetching data to frame");
+                        OutputSchema output_schema = generate_output_schema(*pipeline_context, *read_query);
+                        ARCTICDB_DEBUG(log::version(), "Fetching data to frame");
 
-    return read_and_schedule_processing(store, pipeline_context, read_query, read_options, std::move(component_manager))
-            .thenValueInline([res_versioned_item = std::move(res_versioned_item),
-                              pipeline_context,
-                              output_schema = std::move(output_schema)](auto&& entity_ids) mutable {
-                // Pipeline context user metadata is not populated in the case that only incomplete segments exist
-                // for a symbol, no indexed versions
-                return SymbolProcessingResult{
-                        std::move(res_versioned_item),
-                        pipeline_context->release_opt_user_defined_metadata().value_or(
-                                proto::descriptors::UserDefinedMetadata{}
-                        ),
-                        std::move(output_schema),
-                        std::move(entity_ids)
-                };
-            });
+                        return read_and_schedule_processing(
+                                       store, pipeline_context, read_query, read_options, std::move(component_manager)
+                        )
+                                .thenValueInline([res_versioned_item = std::move(res_versioned_item),
+                                                  pipeline_context,
+                                                  output_schema = std::move(output_schema)](auto&& entity_ids) mutable {
+                                    // Pipeline context user metadata is not populated in the case that only incomplete
+                                    // segments exist for a symbol, no indexed versions
+                                    return SymbolProcessingResult{
+                                            std::move(res_versioned_item),
+                                            pipeline_context->release_opt_user_defined_metadata().value_or(
+                                                    proto::descriptors::UserDefinedMetadata{}
+                                            ),
+                                            std::move(output_schema),
+                                            std::move(entity_ids)
+                                    };
+                                });
+                    }
+            );
 }
 } // namespace arcticdb::version_store
 
