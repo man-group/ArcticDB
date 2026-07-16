@@ -379,6 +379,17 @@ std::optional<ArrowMeta::ColumnMeta> column_metadata(
     return std::nullopt;
 }
 
+std::vector<std::shared_ptr<RecordBatchData>> column_to_arrow_arrays(const Column& column, std::string_view name) {
+    auto column_arrays = arrow_arrays_from_column(column, name);
+    std::vector<std::shared_ptr<RecordBatchData>> output;
+    output.reserve(column_arrays.size());
+    for (auto& column_array : column_arrays) {
+        auto [arr, schema] = sparrow::extract_arrow_structures(std::move(column_array));
+        output.emplace_back(std::make_shared<RecordBatchData>(arr, schema));
+    }
+    return output;
+}
+
 std::vector<sparrow::record_batch> segment_to_arrow_data(
         SegmentInMemory& segment, const proto::descriptors::NormalizationMetadata& norm_meta
 ) {

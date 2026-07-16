@@ -14,7 +14,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from arcticdb.util.test import assert_frame_equal, random_strings_of_length
+from arcticdb.util.test import assert_frame_equal, random_strings_of_length, arrow_string_read, expected_for_read_string_dtype
 
 from arcticdb.version_store.library import Library
 from arcticdb.version_store.library import UpdatePayload
@@ -42,7 +42,7 @@ def unicode_strs_df(start_date: pd.Timestamp, num_rows: int) -> pd.DataFrame:
 
 @pytest.mark.parametrize("parallel", (True, False))
 @pytest.mark.parametrize("multi_index", (True, False))
-def test_write(lmdb_version_store_tiny_segment, parallel, multi_index):
+def test_write(lmdb_version_store_tiny_segment, parallel, multi_index, write_string_dtype, read_string_dtype):
     lib = lmdb_version_store_tiny_segment
     start = pd.Timestamp("2018-01-02")
     num_rows = 100
@@ -69,8 +69,9 @@ def test_write(lmdb_version_store_tiny_segment, parallel, multi_index):
         lib.write(symbol, df, metadata=metadata)
 
     lib.create_column_stats_experimental(symbol)
-    vit = lib.read(symbol)
-    assert_frame_equal(vit.data, df)
+    with arrow_string_read(read_string_dtype):
+        vit = lib.read(symbol)
+    assert_frame_equal(vit.data, expected_for_read_string_dtype(df, read_string_dtype))
     assert vit.metadata == metadata
 
 

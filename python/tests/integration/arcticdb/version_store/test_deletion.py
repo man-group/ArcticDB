@@ -14,7 +14,7 @@ import random
 
 from arcticdb_ext.exceptions import UserInputException
 from arcticdb_ext.storage import KeyType, NoDataFoundException
-from arcticdb.util.test import config_context, random_string, assert_frame_equal, distinct_timestamps
+from arcticdb.util.test import config_context, random_string, assert_frame_equal, distinct_timestamps, arrow_string_read
 
 
 def eprint(*args, **kwargs):
@@ -866,27 +866,28 @@ def test_delete_multi_keys_snapshot(basic_store, map_timeout, sym, all_recursive
 
 
 @pytest.mark.parametrize("index_start", range(10))
-def test_delete_date_range_with_strings(version_store_factory, index_start):
+def test_delete_date_range_with_strings(version_store_factory, index_start, write_string_dtype, read_string_dtype):
     lib = version_store_factory(column_group_size=3, segment_row_size=3)
 
     symbol = "delete_daterange"
     periods = 100
     idx = pd.date_range("1970-01-01", periods=periods, freq="D")
-    df = pd.DataFrame({"a": [random_string(10) for _ in range(len(idx))]}, index=idx)
-    lib.write(symbol, df)
+    values = [random_string(10) for _ in range(len(idx))]
+    lib.write(symbol, pd.DataFrame({"a": values}, index=idx), dynamic_strings=True)
 
     start = random.randrange(index_start, periods - 2)
     end = random.randrange(start, periods - 1)
 
-    start_time = idx[start]
-    end_time = idx[end]
+    range_to_delete = pd.date_range(start=idx[start], end=idx[end])
+    lib.delete(symbol, date_range=range_to_delete)  # end date inclusive
+    surviving_values = values[:start] + values[end + 1 :]
+    surviving_index = idx.delete(range(start, end + 1))
 
-    range_to_delete = pd.date_range(start=start_time, end=end_time)
-    lib.delete(symbol, date_range=range_to_delete)
-    df = df.drop(df.index[start : end + 1])  # Arctic is end date inclusive
-
-    vit = lib.read(symbol)
-    assert_frame_equal(vit.data, df)
+    with arrow_string_read(read_string_dtype):
+        expected = pd.DataFrame({"a": surviving_values}, index=surviving_index)
+        vit = lib.read(symbol)
+    assert_frame_equal(vit.data, expected)
+    assert (str(vit.data["a"].dtype) == "str") == read_string_dtype
 
 
 @pytest.mark.parametrize("prune_previous_versions", [True, False])
