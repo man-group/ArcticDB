@@ -2488,39 +2488,57 @@ VersionedItem LocalVersionedEngine::merge_internal(
     );
     py::gil_scoped_release release_gil;
     auto update_info = get_next_version_id_and_optionally_latest_undeleted_version(store(), version_map(), stream_id);
+    auto index_key_fut = folly::Future<AtomKey>::makeEmpty();
+    const bool add_new_symbol_list_entry = !update_info.previous_index_key_.has_value() && cfg().symbol_list();
     if (update_info.previous_index_key_.has_value()) {
-        if (source->empty()) {
-            ARCTICDB_RUNTIME_DEBUG(
-                    log::version(),
-                    "Merging into existing data with an empty source has no effect. \n No new version is being "
-                    "created "
-                    "for symbol='{}', and the last version is returned",
-                    stream_id
-            );
-            return VersionedItem{*std::move(update_info.previous_index_key_)};
-        }
         const ReadOptions read_options;
-        VersionedItem versioned_item =
-                merge_update_impl(
-                        store(),
-                        update_info,
-                        read_options,
-                        write_options_,
-                        IndexPartialKey{.id = stream_id, .version_id = update_info.next_version_id_},
-                        std::move(on),
-                        strategy,
-                        std::move(source),
-                        get_de_dup_map(stream_id, update_info, write_options_)
-                )
-                        .get();
-        write_version_and_prune_previous(prune_previous_versions, versioned_item.key_, update_info.previous_index_key_);
-        return versioned_item;
+        const WriteOptions write_options = get_write_options();
+        index_key_fut = source->empty() ? async_write_metadata_impl(store(), update_info, std::move(source->user_meta))
+                                        : merge_update_impl(
+                                                  store(),
+                                                  update_info,
+                                                  read_options,
+                                                  write_options,
+                                                  IndexPartialKey{stream_id, update_info.next_version_id_},
+                                                  std::move(on),
+                                                  strategy,
+                                                  std::move(source),
+                                                  get_de_dup_map(stream_id, update_info, write_options)
+                                          );
     } else if (upsert) {
-        internal::raise<ErrorCode::E_NOT_SUPPORTED>(
-                "Error upserting symbol \"{}\". Upsert is not supported for merge yet.", stream_id
+        user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                strategy.insert(),
+                "Error upserting non-existent symbol \"{}\". {} never inserts rows that are not matched by the "
+                "target, so the new symbol would be empty. Either use a merge strategy with "
+                "not_matched_by_target=insert or create the symbol before merging.",
+                stream_id,
+                strategy
         );
+        index_key_fut = async_write_dataframe_impl(
+                store(),
+                update_info.next_version_id_,
+                source,
+                get_write_options(),
+                std::make_shared<DeDupMap>(),
+                false,
+                true
+        );
+    } else {
+        storage::raise<ErrorCode::E_SYMBOL_NOT_FOUND>("Cannot merge into non-existent symbol \"{}\".", stream_id);
     }
-    storage::raise<ErrorCode::E_SYMBOL_NOT_FOUND>("Cannot merge into non-existent symbol \"{}\".", stream_id);
+    return std::move(index_key_fut)
+            .thenValue([this, update_info = std::move(update_info), prune_previous_versions, add_new_symbol_list_entry](
+                               AtomKey&& index_key
+                       ) mutable {
+                return write_index_key_to_version_map_async(
+                        version_map(),
+                        std::move(index_key),
+                        std::move(update_info),
+                        prune_previous_versions,
+                        add_new_symbol_list_entry
+                );
+            })
+            .get();
 }
 
 } // namespace arcticdb::version_store
