@@ -2630,6 +2630,386 @@
         "version": "2238d0faf29b5206ab9dd61d1acea68ae7883b8ac95bc8c0fafaefb85ff1527b",
         "warmup_time": 0.1
     },
+    "merge_functions.MergeLongWide.peakmem_merge": {
+        "code": "class MergeLongWide:\n    def peakmem_merge(self, scenario, strategy, index_kind, on_count, source_size, matched_pct):\n        self.merge(strategy)\n\n    def setup(self, scenario, strategy, index_kind, on_count, source_size, matched_pct):\n        num_rows, num_value_cols = scenario\n        if index_kind == \"rowrange\" and strategy != \"update\":\n            raise SkipNotImplemented  # not_matched_by_target=insert has no row-range implementation\n        if index_kind == \"rowrange\" and on_count == 0:\n            raise SkipNotImplemented  # row-range indexes cannot be a join key on their own\n        if index_kind == \"datetime\" and on_count == 1:\n            raise SkipNotImplemented  # grid-size cost decision: datetime measures on_count 0 and 50 only\n        self._setup(self.lib_name(scenario, index_kind))\n        matched_count = round(source_size * matched_pct / 100)\n        self.on = None if on_count == 0 else self._select_on(on_count, num_value_cols)\n        self.source = generate_merge_source(\n            self.target, source_size, matched_count, on=self.on, value_dtype=self.value_dtype\n        )\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "name": "merge_functions.MergeLongWide.peakmem_merge",
+        "param_names": [
+            "scenario",
+            "strategy",
+            "index_kind",
+            "on_count",
+            "source_size",
+            "matched_pct"
+        ],
+        "params": [
+            [
+                "(2000000, 130)"
+            ],
+            [
+                "'update'",
+                "'insert'",
+                "'update_and_insert'"
+            ],
+            [
+                "'datetime'",
+                "'rowrange'"
+            ],
+            [
+                "0",
+                "1",
+                "50"
+            ],
+            [
+                "1000",
+                "500000"
+            ],
+            [
+                "20",
+                "80"
+            ]
+        ],
+        "setup_cache_key": "merge_functions:350",
+        "timeout": 600,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "715afbaf66e9850edffb0e11f0593da841dd4ddea8ab11833e46159eae35014d"
+    },
+    "merge_functions.MergeLongWide.time_merge": {
+        "code": "class MergeLongWide:\n    def time_merge(self, scenario, strategy, index_kind, on_count, source_size, matched_pct):\n        self.merge(strategy)\n\n    def setup(self, scenario, strategy, index_kind, on_count, source_size, matched_pct):\n        num_rows, num_value_cols = scenario\n        if index_kind == \"rowrange\" and strategy != \"update\":\n            raise SkipNotImplemented  # not_matched_by_target=insert has no row-range implementation\n        if index_kind == \"rowrange\" and on_count == 0:\n            raise SkipNotImplemented  # row-range indexes cannot be a join key on their own\n        if index_kind == \"datetime\" and on_count == 1:\n            raise SkipNotImplemented  # grid-size cost decision: datetime measures on_count 0 and 50 only\n        self._setup(self.lib_name(scenario, index_kind))\n        matched_count = round(source_size * matched_pct / 100)\n        self.on = None if on_count == 0 else self._select_on(on_count, num_value_cols)\n        self.source = generate_merge_source(\n            self.target, source_size, matched_count, on=self.on, value_dtype=self.value_dtype\n        )\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "min_run_count": 2,
+        "name": "merge_functions.MergeLongWide.time_merge",
+        "number": 1,
+        "param_names": [
+            "scenario",
+            "strategy",
+            "index_kind",
+            "on_count",
+            "source_size",
+            "matched_pct"
+        ],
+        "params": [
+            [
+                "(2000000, 130)"
+            ],
+            [
+                "'update'",
+                "'insert'",
+                "'update_and_insert'"
+            ],
+            [
+                "'datetime'",
+                "'rowrange'"
+            ],
+            [
+                "0",
+                "1",
+                "50"
+            ],
+            [
+                "1000",
+                "500000"
+            ],
+            [
+                "20",
+                "80"
+            ]
+        ],
+        "repeat": 5,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "merge_functions:350",
+        "timeout": 600,
+        "type": "time",
+        "unit": "seconds",
+        "version": "53e6cfb44fcf93b60dbed317f206bccbc3615b0878d96ca2ce5633607c5df51a",
+        "warmup_time": 0
+    },
+    "merge_functions.MergeThin.peakmem_merge": {
+        "code": "class MergeThin:\n    def peakmem_merge(self, scenario, strategy, index_kind, on_count, source_size, matched_pct):\n        self.merge(strategy)\n\n    def setup(self, scenario, strategy, index_kind, on_count, source_size, matched_pct):\n        num_rows, num_value_cols = scenario\n        if index_kind == \"rowrange\" and strategy != \"update\":\n            raise SkipNotImplemented  # not_matched_by_target=insert has no row-range implementation\n        if index_kind == \"rowrange\" and on_count == 0:\n            raise SkipNotImplemented  # row-range indexes cannot be a join key on their own\n        self._setup(self.lib_name(scenario, index_kind))\n        matched_count = round(source_size * matched_pct / 100)\n        self.on = None if on_count == 0 else self._select_on(on_count, num_value_cols)\n        self.source = generate_merge_source(\n            self.target, source_size, matched_count, on=self.on, value_dtype=self.value_dtype\n        )\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "name": "merge_functions.MergeThin.peakmem_merge",
+        "param_names": [
+            "scenario",
+            "strategy",
+            "index_kind",
+            "on_count",
+            "source_size",
+            "matched_pct"
+        ],
+        "params": [
+            [
+                "(10000000, 2)"
+            ],
+            [
+                "'update'",
+                "'insert'",
+                "'update_and_insert'"
+            ],
+            [
+                "'datetime'",
+                "'rowrange'"
+            ],
+            [
+                "0",
+                "1"
+            ],
+            [
+                "1000",
+                "500000"
+            ],
+            [
+                "20",
+                "80"
+            ]
+        ],
+        "setup_cache_key": "merge_functions:165",
+        "timeout": 600,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "ddb075bfc3caee58d4689977821a7152c10f6476e9df384d955a692275115375"
+    },
+    "merge_functions.MergeThin.time_merge": {
+        "code": "class MergeThin:\n    def time_merge(self, scenario, strategy, index_kind, on_count, source_size, matched_pct):\n        self.merge(strategy)\n\n    def setup(self, scenario, strategy, index_kind, on_count, source_size, matched_pct):\n        num_rows, num_value_cols = scenario\n        if index_kind == \"rowrange\" and strategy != \"update\":\n            raise SkipNotImplemented  # not_matched_by_target=insert has no row-range implementation\n        if index_kind == \"rowrange\" and on_count == 0:\n            raise SkipNotImplemented  # row-range indexes cannot be a join key on their own\n        self._setup(self.lib_name(scenario, index_kind))\n        matched_count = round(source_size * matched_pct / 100)\n        self.on = None if on_count == 0 else self._select_on(on_count, num_value_cols)\n        self.source = generate_merge_source(\n            self.target, source_size, matched_count, on=self.on, value_dtype=self.value_dtype\n        )\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "min_run_count": 2,
+        "name": "merge_functions.MergeThin.time_merge",
+        "number": 1,
+        "param_names": [
+            "scenario",
+            "strategy",
+            "index_kind",
+            "on_count",
+            "source_size",
+            "matched_pct"
+        ],
+        "params": [
+            [
+                "(10000000, 2)"
+            ],
+            [
+                "'update'",
+                "'insert'",
+                "'update_and_insert'"
+            ],
+            [
+                "'datetime'",
+                "'rowrange'"
+            ],
+            [
+                "0",
+                "1"
+            ],
+            [
+                "1000",
+                "500000"
+            ],
+            [
+                "20",
+                "80"
+            ]
+        ],
+        "repeat": 10,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "merge_functions:165",
+        "timeout": 600,
+        "type": "time",
+        "unit": "seconds",
+        "version": "9ae34757c3f6ce6a5d7f22a8f4714f650976b2e0079ad2f7d31579df92d326d3",
+        "warmup_time": 0
+    },
+    "merge_functions.MergeThinString.peakmem_merge": {
+        "code": "class MergeThinString:\n    def peakmem_merge(self, scenario, strategy, index_kind, on_count, source_size, matched_pct, num_unique_strings):\n        self.merge(strategy)\n\n    def setup(self, scenario, strategy, index_kind, on_count, source_size, matched_pct, num_unique_strings):\n        num_rows, num_value_cols = scenario\n        if index_kind == \"rowrange\" and strategy != \"update\":\n            raise SkipNotImplemented  # not_matched_by_target=insert has no row-range implementation\n        if index_kind == \"rowrange\" and on_count == 0:\n            raise SkipNotImplemented  # row-range indexes cannot be a join key on their own\n        self._setup(self.lib_name(scenario, index_kind, num_unique_strings))\n        matched_count = round(source_size * matched_pct / 100)\n        self.on = None if on_count == 0 else self._select_on(on_count, num_value_cols)\n        self.source = generate_merge_source(\n            self.target,\n            source_size,\n            matched_count,\n            on=self.on,\n            value_dtype=self.value_dtype,\n            num_unique_strings=num_unique_strings,\n        )\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "name": "merge_functions.MergeThinString.peakmem_merge",
+        "param_names": [
+            "scenario",
+            "strategy",
+            "index_kind",
+            "on_count",
+            "source_size",
+            "matched_pct",
+            "num_unique_strings"
+        ],
+        "params": [
+            [
+                "(1000000, 2)"
+            ],
+            [
+                "'update'",
+                "'insert'",
+                "'update_and_insert'"
+            ],
+            [
+                "'datetime'",
+                "'rowrange'"
+            ],
+            [
+                "0",
+                "1"
+            ],
+            [
+                "1000",
+                "500000"
+            ],
+            [
+                "20",
+                "80"
+            ],
+            [
+                "100",
+                "100000"
+            ]
+        ],
+        "setup_cache_key": "merge_functions:227",
+        "timeout": 600,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "06036af93ea6a3fcd12bf055a74a96a6429a572cd56de081c07f038dfc6f8d58"
+    },
+    "merge_functions.MergeThinString.time_merge": {
+        "code": "class MergeThinString:\n    def time_merge(self, scenario, strategy, index_kind, on_count, source_size, matched_pct, num_unique_strings):\n        self.merge(strategy)\n\n    def setup(self, scenario, strategy, index_kind, on_count, source_size, matched_pct, num_unique_strings):\n        num_rows, num_value_cols = scenario\n        if index_kind == \"rowrange\" and strategy != \"update\":\n            raise SkipNotImplemented  # not_matched_by_target=insert has no row-range implementation\n        if index_kind == \"rowrange\" and on_count == 0:\n            raise SkipNotImplemented  # row-range indexes cannot be a join key on their own\n        self._setup(self.lib_name(scenario, index_kind, num_unique_strings))\n        matched_count = round(source_size * matched_pct / 100)\n        self.on = None if on_count == 0 else self._select_on(on_count, num_value_cols)\n        self.source = generate_merge_source(\n            self.target,\n            source_size,\n            matched_count,\n            on=self.on,\n            value_dtype=self.value_dtype,\n            num_unique_strings=num_unique_strings,\n        )\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "min_run_count": 2,
+        "name": "merge_functions.MergeThinString.time_merge",
+        "number": 1,
+        "param_names": [
+            "scenario",
+            "strategy",
+            "index_kind",
+            "on_count",
+            "source_size",
+            "matched_pct",
+            "num_unique_strings"
+        ],
+        "params": [
+            [
+                "(1000000, 2)"
+            ],
+            [
+                "'update'",
+                "'insert'",
+                "'update_and_insert'"
+            ],
+            [
+                "'datetime'",
+                "'rowrange'"
+            ],
+            [
+                "0",
+                "1"
+            ],
+            [
+                "1000",
+                "500000"
+            ],
+            [
+                "20",
+                "80"
+            ],
+            [
+                "100",
+                "100000"
+            ]
+        ],
+        "repeat": 10,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "merge_functions:227",
+        "timeout": 600,
+        "type": "time",
+        "unit": "seconds",
+        "version": "9f1d106a1639d04a9923b4bca867ab6c0810fc0d4436f375b21a1bdf9a983a30",
+        "warmup_time": 0
+    },
+    "merge_functions.MergeWide.peakmem_merge": {
+        "code": "class MergeWide:\n    def peakmem_merge(self, scenario, strategy, index_kind, on_count, source_size, matched_pct):\n        self.merge(strategy)\n\n    def setup(self, scenario, strategy, index_kind, on_count, source_size, matched_pct):\n        if strategy != \"update\" and on_count == 1:\n            raise SkipNotImplemented  # see class docstring: grid-size cost decision, not unsupported\n        num_rows, num_value_cols = scenario\n        if index_kind == \"rowrange\" and strategy != \"update\":\n            raise SkipNotImplemented  # not_matched_by_target=insert has no row-range implementation\n        if index_kind == \"rowrange\" and on_count == 0:\n            raise SkipNotImplemented  # row-range indexes cannot be a join key on their own\n        self._setup(self.lib_name(scenario, index_kind))\n        matched_count = round(source_size * matched_pct / 100)\n        self.on = None if on_count == 0 else self._select_on(on_count, num_value_cols)\n        self.source = generate_merge_source(\n            self.target, source_size, matched_count, on=self.on, value_dtype=self.value_dtype\n        )\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "name": "merge_functions.MergeWide.peakmem_merge",
+        "param_names": [
+            "scenario",
+            "strategy",
+            "index_kind",
+            "on_count",
+            "source_size",
+            "matched_pct"
+        ],
+        "params": [
+            [
+                "(5000, 10000)"
+            ],
+            [
+                "'update'",
+                "'insert'",
+                "'update_and_insert'"
+            ],
+            [
+                "'datetime'",
+                "'rowrange'"
+            ],
+            [
+                "0",
+                "1",
+                "1000"
+            ],
+            [
+                "100"
+            ],
+            [
+                "20",
+                "80"
+            ]
+        ],
+        "setup_cache_key": "merge_functions:291",
+        "timeout": 600,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "643cd0a754e8c9317cec05e85ba7ca022b39b251a93206f91f1db271f50e6e02"
+    },
+    "merge_functions.MergeWide.time_merge": {
+        "code": "class MergeWide:\n    def time_merge(self, scenario, strategy, index_kind, on_count, source_size, matched_pct):\n        self.merge(strategy)\n\n    def setup(self, scenario, strategy, index_kind, on_count, source_size, matched_pct):\n        if strategy != \"update\" and on_count == 1:\n            raise SkipNotImplemented  # see class docstring: grid-size cost decision, not unsupported\n        num_rows, num_value_cols = scenario\n        if index_kind == \"rowrange\" and strategy != \"update\":\n            raise SkipNotImplemented  # not_matched_by_target=insert has no row-range implementation\n        if index_kind == \"rowrange\" and on_count == 0:\n            raise SkipNotImplemented  # row-range indexes cannot be a join key on their own\n        self._setup(self.lib_name(scenario, index_kind))\n        matched_count = round(source_size * matched_pct / 100)\n        self.on = None if on_count == 0 else self._select_on(on_count, num_value_cols)\n        self.source = generate_merge_source(\n            self.target, source_size, matched_count, on=self.on, value_dtype=self.value_dtype\n        )\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "min_run_count": 2,
+        "name": "merge_functions.MergeWide.time_merge",
+        "number": 1,
+        "param_names": [
+            "scenario",
+            "strategy",
+            "index_kind",
+            "on_count",
+            "source_size",
+            "matched_pct"
+        ],
+        "params": [
+            [
+                "(5000, 10000)"
+            ],
+            [
+                "'update'",
+                "'insert'",
+                "'update_and_insert'"
+            ],
+            [
+                "'datetime'",
+                "'rowrange'"
+            ],
+            [
+                "0",
+                "1",
+                "1000"
+            ],
+            [
+                "100"
+            ],
+            [
+                "20",
+                "80"
+            ]
+        ],
+        "repeat": 5,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "merge_functions:291",
+        "timeout": 600,
+        "type": "time",
+        "unit": "seconds",
+        "version": "6a446c76d65096adc4c8dd19e25d046b28304e7e73d0487dc99b02a03a503cfb",
+        "warmup_time": 0
+    },
     "modification_functions.DeleteBatchSymbols.time_delete_batch_symbols": {
         "code": "class DeleteBatchSymbols:\n    def time_delete_batch_symbols(self, *args):\n        self.lib.delete_batch(self.syms)\n\n    def setup(self, num_symbols, storage):\n        if not is_storage_enabled(storage):\n            raise SkipNotImplemented\n    \n        if storage == Storage.LMDB:\n            self.ac = Arctic(f\"lmdb://{self.ARCTIC_DIR}\")\n        elif storage == Storage.AMAZON:\n            from arcticdb.storage_fixtures.s3 import real_s3_from_environment_variables\n    \n            factory = real_s3_from_environment_variables(shared_path=True, validate=True, log=True)\n            self.ac = factory.create_fixture().create_arctic()\n    \n        self.ac.delete_library(\"test_lib\")\n        self.lib = self.ac.create_library(\"test_lib\")\n    \n        df = pd.DataFrame({\"col\": range(1000)})\n        self.syms = [f\"sym_{i}\" for i in range(num_symbols)]\n        for sym in self.syms:\n            self.lib.write(sym, df)",
         "min_run_count": 2,
