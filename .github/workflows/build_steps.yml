@@ -767,7 +767,7 @@ jobs:
   # compile job.
   backward_compat:
     # Skiping windows as the windows build has already been made at the oldest available windows runner (2022)
-    if: inputs.job_type == 'build-python-wheels' && inputs.python3 == 14&& fromJSON(inputs.matrix)[0].os == 'windows'
+    if: inputs.job_type == 'build-python-wheels' && inputs.python3 == 14 && fromJSON(inputs.matrix)[0].os != 'windows'
     needs: [compile]
     runs-on: ${{ fromJSON(inputs.matrix)[0].os == 'macos' && 'macos-15' || 'ubuntu-22.04' }}
     defaults:
