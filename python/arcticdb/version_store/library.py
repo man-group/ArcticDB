@@ -3468,10 +3468,9 @@ class Library:
         prune_previous_versions : bool, default False
             If True, removes previous versions from the version list.
         upsert : bool, default False
-            !!! warning
-                Not yet implemented
-
-            If True and `not_matched_by_target="insert"`, creates the symbol if it does not exist.
+            If True and the symbol does not exist, create it by writing `source` to the store. Requires a strategy
+            with `not_matched_by_target="insert"`; combining it with an update-only strategy raises
+            `UserInputException` as the newly created symbol would be empty.
 
         Returns
         -------
@@ -3484,7 +3483,8 @@ class Library:
         StorageException
             If symbol doesn't exist and `upsert=False`
         UserInputException
-            If strategy is not one of the supported strategies listed above
+            If strategy is not one of the supported strategies listed above or if `upsert=True` is used with an
+            update-only strategy and the symbol doesn't exist
         UnsortedDataException
             If date-time index is used and source or target are not sorted
         SchemaException

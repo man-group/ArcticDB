@@ -2553,9 +2553,27 @@ VersionedItem LocalVersionedEngine::merge_internal(
         write_version_and_prune_previous(prune_previous_versions, versioned_item.key_, update_info.previous_index_key_);
         return versioned_item;
     } else if (upsert) {
-        internal::raise<ErrorCode::E_NOT_SUPPORTED>(
-                "Error upserting symbol \"{}\". Upsert is not supported for merge yet.", stream_id
+        user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                strategy.insert(),
+                "Error upserting non-existent symbol \"{}\". {} never inserts rows that are not matched by the "
+                "target, so the new symbol would be empty. Either use a merge strategy with "
+                "not_matched_by_target=insert or create the symbol before merging.",
+                stream_id,
+                strategy
         );
+        VersionedItem versioned_item = write_dataframe_impl(
+                store(),
+                update_info.next_version_id_,
+                source,
+                get_write_options(),
+                std::make_shared<DeDupMap>(),
+                false,
+                true
+        );
+        if (cfg().symbol_list())
+            symbol_list().add_symbol(store(), stream_id, update_info.next_version_id_);
+        version_map()->write_version(store(), versioned_item.key_, std::nullopt);
+        return versioned_item;
     }
     storage::raise<ErrorCode::E_SYMBOL_NOT_FOUND>("Cannot merge into non-existent symbol \"{}\".", stream_id);
 }
