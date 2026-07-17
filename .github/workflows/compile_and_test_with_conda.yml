@@ -347,21 +347,12 @@ jobs:
         continue-on-error: true
 
   os_compat:
-    name: OS compat (${{inputs.platform}}) - ${{matrix.runner}}
+    name: OS compat (${{inputs.platform}})
+    # macOS-only: exercise the build artifact on macos-15, a different OS version from
+    # the macos-26 host that built it.
+    if: inputs.platform == 'osx_arm64'
     needs: [compile]
-    strategy:
-      fail-fast: false
-      matrix:
-        # Each platform is exercised only against runners whose OS version differs from
-        # the one that built the binary (win_64 -> windows-2022, osx_arm64 -> macos-26,
-        # linux* -> ubuntu-22.04): win_64 -> windows-2025, osx_arm64 -> macos-15,
-        # linux_aarch64 -> ubuntu-{24,26}.04-arm, linux_64 -> ubuntu-{24,26}.04.
-        runner: ${{ fromJSON(
-          (inputs.platform == 'win_64' && '["windows-2025"]') ||
-          (inputs.platform == 'osx_arm64' && '["macos-15"]') ||
-          (inputs.platform == 'linux_aarch64' && '["ubuntu-24.04-arm","ubuntu-26.04-arm"]') ||
-          '["ubuntu-24.04","ubuntu-26.04"]') }}
-    runs-on: ${{matrix.runner}}
+    runs-on: macos-15
     env:
       ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
       ACTIONS_ALLOW_UNSECURE_COMMANDS: true

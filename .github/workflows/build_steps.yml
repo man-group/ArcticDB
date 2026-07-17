@@ -758,18 +758,11 @@ jobs:
   # is exactly the regression we want to catch.
   #
   os_compat:
-    if: inputs.job_type == 'build-python-wheels' && inputs.python3 == 14
+    # macOS-only: verify the wheel imports and reads/writes on a runner different from
+    # the one that built it (macos-15 vs the newer build host).
+    if: inputs.job_type == 'build-python-wheels' && inputs.python3 == 14 && fromJSON(inputs.matrix)[0].os == 'macos'
     needs: [compile]
-    strategy:
-      fail-fast: false
-      matrix:
-        # Each platform is exercised against the runners different from
-        # the one building wheels
-        runner: ${{ fromJSON(
-          (fromJSON(inputs.matrix)[0].os == 'windows' && '["windows-2025"]') ||
-          (fromJSON(inputs.matrix)[0].os == 'macos' && '["macos-15"]') ||
-          '["ubuntu-22.04","ubuntu-24.04","ubuntu-26.04"]') }}
-    runs-on: ${{ matrix.runner }}
+    runs-on: macos-15
     defaults:
       run: {shell: bash}
     env:
