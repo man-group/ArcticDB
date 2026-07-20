@@ -2235,24 +2235,7 @@ TEST(MergeUpdateInsertIndexSpansMultipleSegments, LastIndexValueSameAsNextSegmen
     };
     MergeUpdateClause clause = create_clause(strategy, component_manager, std::move(input_frame), {"a"});
     const std::vector<std::vector<size_t>> structure_indices = clause.structure_for_processing(ranges_and_keys);
-    ASSERT_EQ(structure_indices.size(), 1);
-    ASSERT_EQ(structure_indices[0].size(), 4);
-    constexpr static std::array expected_row_ranges{
-            RowRange{5, 10}, RowRange{5, 10}, RowRange{10, 15}, RowRange{10, 15}
-    };
-    constexpr static std::array expected_col_ranges{ColRange{1, 2}, ColRange{2, 3}, ColRange{1, 2}, ColRange{2, 3}};
-    constexpr static std::array expected_time_ranges{
-            TimestampRange{6, 10}, TimestampRange{6, 10}, TimestampRange{9, 13}, TimestampRange{9, 13}
-    };
-    static_assert(
-            expected_row_ranges.size() == expected_col_ranges.size() &&
-            expected_row_ranges.size() == expected_time_ranges.size()
-    );
-    for (size_t i : std::views::join(structure_indices)) {
-        ASSERT_EQ(ranges_and_keys[i].row_range(), expected_row_ranges[i]);
-        ASSERT_EQ(ranges_and_keys[i].col_range(), expected_col_ranges[i]);
-        ASSERT_EQ(ranges_and_keys[i].key_.time_range(), expected_time_ranges[i]);
-    }
+    ASSERT_EQ(structure_indices.size(), 2);
     std::vector<EntityId> entities = push_selected_entities(
             *component_manager,
             structure_indices,
@@ -2261,27 +2244,83 @@ TEST(MergeUpdateInsertIndexSpansMultipleSegments, LastIndexValueSameAsNextSegmen
             std::vector{row_ranges},
             std::move(ranges_and_keys)
     );
-    ASSERT_EQ(entities.size(), 4);
     std::vector<std::vector<EntityId>> structured_entities = structure_entities(structure_indices, entities);
-    ASSERT_EQ(structured_entities.size(), 1);
-    ASSERT_EQ(structured_entities[0].size(), 4);
-    const ProcessingUnit& processing_unit =
-            gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(
-                    *component_manager, clause.process(std::move(structured_entities[0]))
-            );
-    ASSERT_EQ(processing_unit.segments_->size(), 2);
-    ASSERT_EQ(processing_unit.row_ranges_->size(), 2);
-    ASSERT_EQ(processing_unit.col_ranges_->size(), 2);
-    auto [expected_segments, _c, _r] = slice_data_into_segments<TimeseriesIndex>(
-            desc,
-            std::numeric_limits<size_t>::max(),
-            cols_per_segment,
-            std::array<timestamp, 11>{6, 7, 8, 9, 9, 9, 9, 9, 10, 11, 12},
-            std::array<int64_t, 11>{5, 6, 7, 8, 9, 10, 11, 120, 12, 13, 14},
-            std::array{5, 6, 7, 200, 9, 100, 11, 300, 12, 13, 14}
-    );
-    ASSERT_EQ(*processing_unit.segments_->at(0), expected_segments[0]);
-    ASSERT_EQ(*processing_unit.segments_->at(1), expected_segments[1]);
+    ASSERT_EQ(structured_entities.size(), 2);
+
+    {
+        ASSERT_EQ(structure_indices[0].size(), 4);
+        ASSERT_TRUE(std::ranges::equal(
+                structure_indices[0] |
+                        std::views::transform([&](const size_t idx) { return ranges_and_keys[idx].row_range(); }),
+                std::array{RowRange{5, 10}, RowRange{5, 10}, RowRange{10, 15}, RowRange{10, 15}}
+        ));
+        ASSERT_TRUE(std::ranges::equal(
+                structure_indices[0] |
+                        std::views::transform([&](const size_t idx) { return ranges_and_keys[idx].col_range(); }),
+                std::array{ColRange{1, 2}, ColRange{2, 3}, ColRange{1, 2}, ColRange{2, 3}}
+        ));
+        ASSERT_TRUE(std::ranges::equal(
+                structure_indices[0] |
+                        std::views::transform([&](const size_t idx) { return ranges_and_keys[idx].key_.time_range(); }),
+                std::array{TimestampRange{6, 10}, TimestampRange{6, 10}, TimestampRange{9, 13}, TimestampRange{9, 13}}
+        ));
+
+        ASSERT_EQ(entities.size(), 4);
+        ASSERT_EQ(structured_entities[0].size(), 4);
+        const ProcessingUnit& processing_unit =
+                gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(
+                        *component_manager, clause.process(std::move(structured_entities[0]))
+                );
+        ASSERT_EQ(processing_unit.segments_->size(), 2);
+        ASSERT_EQ(processing_unit.row_ranges_->size(), 2);
+        ASSERT_EQ(processing_unit.col_ranges_->size(), 2);
+        auto [expected_segments, _c, _r] = slice_data_into_segments<TimeseriesIndex>(
+                desc,
+                std::numeric_limits<size_t>::max(),
+                cols_per_segment,
+                std::array<timestamp, 8>{6, 7, 8, 9, 9, 9, 9, 9},
+                std::array<int64_t, 8>{5, 6, 7, 8, 9, 10, 11, 120},
+                std::array{5, 6, 7, 200, 9, 100, 11, 300}
+        );
+        ASSERT_EQ(*processing_unit.segments_->at(0), expected_segments[0]);
+        ASSERT_EQ(*processing_unit.segments_->at(1), expected_segments[1]);
+    }
+    {
+        ASSERT_EQ(structure_indices[1].size(), 2);
+        ASSERT_TRUE(std::ranges::equal(
+                structure_indices[1] |
+                        std::views::transform([&](const size_t idx) { return ranges_and_keys[idx].row_range(); }),
+                std::array{RowRange{10, 15}, RowRange{10, 15}}
+        ));
+        ASSERT_TRUE(std::ranges::equal(
+                structure_indices[1] |
+                        std::views::transform([&](const size_t idx) { return ranges_and_keys[idx].col_range(); }),
+                std::array{ColRange{1, 2}, ColRange{2, 3}}
+        ));
+        ASSERT_TRUE(std::ranges::equal(
+                structure_indices[1] |
+                        std::views::transform([&](const size_t idx) { return ranges_and_keys[idx].key_.time_range(); }),
+                std::array{TimestampRange{9, 13}, TimestampRange{9, 13}}
+        ));
+        ASSERT_EQ(structured_entities[1].size(), 2);
+        const ProcessingUnit& processing_unit =
+                gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(
+                        *component_manager, clause.process(std::move(structured_entities[1]))
+                );
+        ASSERT_EQ(processing_unit.segments_->size(), 2);
+        ASSERT_EQ(processing_unit.row_ranges_->size(), 2);
+        ASSERT_EQ(processing_unit.col_ranges_->size(), 2);
+        auto [expected_segments, _c, _r] = slice_data_into_segments<TimeseriesIndex>(
+                desc,
+                std::numeric_limits<size_t>::max(),
+                cols_per_segment,
+                std::array<timestamp, 3>{10, 11, 12},
+                std::array<int64_t, 3>{12, 13, 14},
+                std::array{12, 13, 14}
+        );
+        ASSERT_EQ(*processing_unit.segments_->at(0), expected_segments[0]);
+        ASSERT_EQ(*processing_unit.segments_->at(1), expected_segments[1]);
+    }
 }
 
 TEST(MergeUpdateInsertIndexSpansMultipleSegments, LastIndexValueSameAsNextSegmentFirstThreeOverlappingSegments) {
@@ -2305,13 +2344,6 @@ TEST(MergeUpdateInsertIndexSpansMultipleSegments, LastIndexValueSameAsNextSegmen
             iota_view{0, int{num_rows}}
     );
     ASSERT_EQ(segments.size(), 12);
-    // insert {8, 100, 100} in seg 1
-    // update {9, 10, 200} in seg 2
-    // update {9, 8, 300} in seg 1
-    // insert {9, 120, 400} in seg 3
-    // update {9, 14, 500} in seg 3
-    // update {10, 17, 600} in seg 3
-    // insert {11, 100, 600} in seg 3
     auto [input_frame, input_frame_owner] = input_frame_from_tensors<TimeseriesIndex>(
             desc,
             std::array<timestamp, 7>{8, 9, 9, 9, 9, 10, 11},
@@ -2326,31 +2358,7 @@ TEST(MergeUpdateInsertIndexSpansMultipleSegments, LastIndexValueSameAsNextSegmen
     };
     MergeUpdateClause clause = create_clause(strategy, component_manager, std::move(input_frame), {"a"});
     const std::vector<std::vector<size_t>> structure_indices = clause.structure_for_processing(ranges_and_keys);
-    ASSERT_EQ(structure_indices.size(), 1);
-    ASSERT_EQ(structure_indices[0].size(), 6);
-    constexpr static std::array expected_row_ranges{
-            RowRange{5, 10}, RowRange{5, 10}, RowRange{10, 15}, RowRange{10, 15}, RowRange{15, 20}, RowRange{15, 20}
-    };
-    constexpr static std::array expected_col_ranges{
-            ColRange{1, 2}, ColRange{2, 3}, ColRange{1, 2}, ColRange{2, 3}, ColRange{1, 2}, ColRange{2, 3}
-    };
-    constexpr static std::array expected_time_ranges{
-            TimestampRange{6, 10},
-            TimestampRange{6, 10},
-            TimestampRange{9, 10},
-            TimestampRange{9, 10},
-            TimestampRange{9, 13},
-            TimestampRange{9, 13}
-    };
-    static_assert(
-            expected_row_ranges.size() == expected_col_ranges.size() &&
-            expected_row_ranges.size() == expected_time_ranges.size()
-    );
-    for (size_t i : std::views::join(structure_indices)) {
-        ASSERT_EQ(ranges_and_keys[i].row_range(), expected_row_ranges[i]);
-        ASSERT_EQ(ranges_and_keys[i].col_range(), expected_col_ranges[i]);
-        ASSERT_EQ(ranges_and_keys[i].key_.time_range(), expected_time_ranges[i]);
-    }
+    ASSERT_EQ(structure_indices.size(), 2);
     std::vector<EntityId> entities = push_selected_entities(
             *component_manager,
             structure_indices,
@@ -2361,25 +2369,98 @@ TEST(MergeUpdateInsertIndexSpansMultipleSegments, LastIndexValueSameAsNextSegmen
     );
     ASSERT_EQ(entities.size(), 6);
     std::vector<std::vector<EntityId>> structured_entities = structure_entities(structure_indices, entities);
-    ASSERT_EQ(structured_entities.size(), 1);
-    ASSERT_EQ(structured_entities[0].size(), 6);
-    const ProcessingUnit& processing_unit =
-            gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(
-                    *component_manager, clause.process(std::move(structured_entities[0]))
-            );
-    ASSERT_EQ(processing_unit.segments_->size(), 2);
-    ASSERT_EQ(processing_unit.row_ranges_->size(), 2);
-    ASSERT_EQ(processing_unit.col_ranges_->size(), 2);
-    const auto expected = slice_data_into_segments<TimeseriesIndex>(
-            desc,
-            std::numeric_limits<size_t>::max(), // Slicing is not implemented for insertion
-            cols_per_segment,
-            std::array<timestamp, 18>{6, 7, 8, 8, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 10, 11, 11, 12},
-            std::array<int64_t, 18>{5, 6, 7, 100, 8, 9, 10, 11, 12, 13, 14, 15, 16, 120, 17, 18, 100, 19},
-            std::array{5, 6, 7, 100, 300, 9, 200, 11, 12, 13, 14, 500, 16, 400, 600, 18, 700, 19}
-    );
-    for (size_t i = 0; i < std::get<0>(expected).size(); ++i) {
-        ASSERT_EQ(*(processing_unit.segments_->at(i)), std::get<0>(expected)[i]);
+    ASSERT_EQ(structured_entities.size(), 2);
+
+    {
+        ASSERT_EQ(structure_indices[0].size(), 6);
+        ASSERT_TRUE(std::ranges::equal(
+                structure_indices[0] |
+                        std::views::transform([&](const size_t idx) { return ranges_and_keys[idx].row_range(); }),
+                std::array{
+                        RowRange{5, 10},
+                        RowRange{5, 10},
+                        RowRange{10, 15},
+                        RowRange{10, 15},
+                        RowRange{15, 20},
+                        RowRange{15, 20}
+                }
+        ));
+        ASSERT_TRUE(std::ranges::equal(
+                structure_indices[0] |
+                        std::views::transform([&](const size_t idx) { return ranges_and_keys[idx].col_range(); }),
+                std::array{
+                        ColRange{1, 2}, ColRange{2, 3}, ColRange{1, 2}, ColRange{2, 3}, ColRange{1, 2}, ColRange{2, 3}
+                }
+        ));
+        ASSERT_TRUE(std::ranges::equal(
+                structure_indices[0] |
+                        std::views::transform([&](const size_t idx) { return ranges_and_keys[idx].key_.time_range(); }),
+                std::array{
+                        TimestampRange{6, 10},
+                        TimestampRange{6, 10},
+                        TimestampRange{9, 10},
+                        TimestampRange{9, 10},
+                        TimestampRange{9, 13},
+                        TimestampRange{9, 13}
+                }
+        ));
+
+        ASSERT_EQ(structured_entities[0].size(), 6);
+        const ProcessingUnit& processing_unit =
+                gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(
+                        *component_manager, clause.process(std::move(structured_entities[0]))
+                );
+        ASSERT_EQ(processing_unit.segments_->size(), 2);
+        ASSERT_EQ(processing_unit.row_ranges_->size(), 2);
+        ASSERT_EQ(processing_unit.col_ranges_->size(), 2);
+        const auto expected = slice_data_into_segments<TimeseriesIndex>(
+                desc,
+                std::numeric_limits<size_t>::max(), // Slicing is not implemented for insertion
+                cols_per_segment,
+                std::array<timestamp, 14>{6, 7, 8, 8, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9},
+                std::array<int64_t, 14>{5, 6, 7, 100, 8, 9, 10, 11, 12, 13, 14, 15, 16, 120},
+                std::array{5, 6, 7, 100, 300, 9, 200, 11, 12, 13, 14, 500, 16, 400}
+        );
+        for (size_t i = 0; i < std::get<0>(expected).size(); ++i) {
+            ASSERT_EQ(*(processing_unit.segments_->at(i)), std::get<0>(expected)[i]);
+        }
+    }
+    {
+        ASSERT_EQ(structure_indices[1].size(), 2);
+        ASSERT_TRUE(std::ranges::equal(
+                structure_indices[1] |
+                        std::views::transform([&](const size_t idx) { return ranges_and_keys[idx].row_range(); }),
+                std::array{RowRange{15, 20}, RowRange{15, 20}}
+        ));
+        ASSERT_TRUE(std::ranges::equal(
+                structure_indices[1] |
+                        std::views::transform([&](const size_t idx) { return ranges_and_keys[idx].col_range(); }),
+                std::array{ColRange{1, 2}, ColRange{2, 3}}
+        ));
+        ASSERT_TRUE(std::ranges::equal(
+                structure_indices[1] |
+                        std::views::transform([&](const size_t idx) { return ranges_and_keys[idx].key_.time_range(); }),
+                std::array{TimestampRange{9, 13}, TimestampRange{9, 13}}
+        ));
+
+        const ProcessingUnit& processing_unit =
+                gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(
+                        *component_manager, clause.process(std::move(structured_entities[1]))
+                );
+        ASSERT_EQ(processing_unit.segments_->size(), 2);
+        ASSERT_EQ(processing_unit.row_ranges_->size(), 2);
+        ASSERT_EQ(processing_unit.col_ranges_->size(), 2);
+        const auto expected = slice_data_into_segments<TimeseriesIndex>(
+                desc,
+                std::numeric_limits<size_t>::max(), // Slicing is not implemented for insertion
+                cols_per_segment,
+                std::array<timestamp, 4>{10, 11, 11, 12},
+                std::array<int64_t, 4>{17, 18, 100, 19},
+                std::array{600, 18, 700, 19}
+        );
+        for (size_t i = 0; i < std::get<0>(expected).size(); ++i) {
+            ASSERT_EQ(*(processing_unit.segments_->at(i)), std::get<0>(expected)[i]);
+        }
     }
 }
 
@@ -2423,73 +2504,7 @@ TEST(MergeUpdateInsertIndexSpansMultipleSegments, TwoGroupsOfSegmentsWithMatchin
     };
     MergeUpdateClause clause = create_clause(strategy, component_manager, std::move(input_frame), {"a"});
     const std::vector<std::vector<size_t>> structure_indices = clause.structure_for_processing(ranges_and_keys);
-    ASSERT_EQ(structure_indices.size(), 3);
-    ASSERT_EQ(structure_indices[0].size(), 6);
-    ASSERT_TRUE(std::ranges::equal(structure_indices[0], std::array{0, 1, 2, 3, 4, 5}));
-    ASSERT_EQ(structure_indices[1].size(), 4);
-    ASSERT_TRUE(std::ranges::equal(structure_indices[1], std::array{4, 5, 6, 7}));
-    ASSERT_EQ(structure_indices[2].size(), 2);
-    ASSERT_TRUE(std::ranges::equal(structure_indices[2], std::array{8, 9}));
-    constexpr static std::array expected_row_ranges{
-            RowRange{5, 10},
-            RowRange{5, 10},
-            RowRange{10, 15},
-            RowRange{10, 15},
-            RowRange{15, 20},
-            RowRange{15, 20},
-            RowRange{15, 20},
-            RowRange{15, 20},
-            RowRange{20, 25},
-            RowRange{20, 25},
-            RowRange{25, 27},
-            RowRange{25, 27}
-    };
-    constexpr static std::array expected_col_ranges{
-            ColRange{1, 2},
-            ColRange{2, 3},
-            ColRange{1, 2},
-            ColRange{2, 3},
-            ColRange{1, 2},
-            ColRange{2, 3},
-            ColRange{1, 2},
-            ColRange{2, 3},
-            ColRange{1, 2},
-            ColRange{2, 3},
-            ColRange{1, 2},
-            ColRange{2, 3}
-    };
-    constexpr static std::array expected_time_ranges{
-            TimestampRange{6, 10},
-            TimestampRange{6, 10},
-            TimestampRange{9, 10},
-            TimestampRange{9, 10},
-            TimestampRange{9, 11},
-            TimestampRange{9, 11},
-            TimestampRange{9, 11},
-            TimestampRange{9, 11},
-            TimestampRange{10, 13},
-            TimestampRange{10, 13},
-            TimestampRange{13, 15},
-            TimestampRange{13, 15}
-    };
-    static_assert(expected_row_ranges.size() == expected_col_ranges.size());
-    static_assert(expected_row_ranges.size() == expected_time_ranges.size());
-
-    ASSERT_TRUE(std::ranges::equal(
-            std::views::join(structure_indices) |
-                    std::views::transform([&](auto i) { return ranges_and_keys[i].row_range(); }),
-            expected_row_ranges
-    ));
-    ASSERT_TRUE(std::ranges::equal(
-            std::views::join(structure_indices) |
-                    std::views::transform([&](auto i) { return ranges_and_keys[i].col_range(); }),
-            expected_col_ranges
-    ));
-    ASSERT_TRUE(std::ranges::equal(
-            std::views::join(structure_indices) |
-                    std::views::transform([&](auto i) { return ranges_and_keys[i].key_.time_range(); }),
-            expected_time_ranges
-    ));
+    ASSERT_EQ(structure_indices.size(), 4);
 
     std::vector<EntityId> entities = push_selected_entities(
             *component_manager,
@@ -2501,22 +2516,48 @@ TEST(MergeUpdateInsertIndexSpansMultipleSegments, TwoGroupsOfSegmentsWithMatchin
     );
     ASSERT_EQ(entities.size(), 10);
     std::vector<std::vector<EntityId>> structured_entities = structure_entities(structure_indices, entities);
-    ASSERT_EQ(structured_entities.size(), 3);
-    ASSERT_EQ(structured_entities[0].size(), 6);
-    ASSERT_TRUE(std::ranges::equal(
-            std::get<0>(component_manager->get_entities<EntityFetchCount>(structured_entities[0])),
-            std::array{1, 1, 1, 1, 2, 2}
-    ));
-    ASSERT_EQ(structured_entities[1].size(), 4);
-    ASSERT_TRUE(std::ranges::equal(
-            std::get<0>(component_manager->get_entities<EntityFetchCount>(structured_entities[1])),
-            std::array{2, 2, 1, 1}
-    ));
-    ASSERT_EQ(structured_entities[2].size(), 2);
-    ASSERT_TRUE(std::ranges::equal(
-            std::get<0>(component_manager->get_entities<EntityFetchCount>(structured_entities[2])), std::array{1, 1}
-    ));
+    ASSERT_EQ(structured_entities.size(), 4);
+
     {
+        ASSERT_EQ(structure_indices[0].size(), 6);
+        ASSERT_TRUE(std::ranges::equal(structure_indices[0], std::array{0, 1, 2, 3, 4, 5}));
+        ASSERT_EQ(structured_entities[0].size(), 6);
+        ASSERT_TRUE(std::ranges::equal(
+                std::get<0>(component_manager->get_entities<EntityFetchCount>(structured_entities[0])),
+                std::array{1, 1, 1, 1, 2, 2}
+        ));
+        ASSERT_TRUE(std::ranges::equal(
+                structure_indices[0] |
+                        std::views::transform([&](const size_t idx) { return ranges_and_keys[idx].row_range(); }),
+                std::array{
+                        RowRange{5, 10},
+                        RowRange{5, 10},
+                        RowRange{10, 15},
+                        RowRange{10, 15},
+                        RowRange{15, 20},
+                        RowRange{15, 20}
+
+                }
+        ));
+        ASSERT_TRUE(std::ranges::equal(
+                structure_indices[0] |
+                        std::views::transform([&](const size_t idx) { return ranges_and_keys[idx].col_range(); }),
+                std::array{
+                        ColRange{1, 2}, ColRange{2, 3}, ColRange{1, 2}, ColRange{2, 3}, ColRange{1, 2}, ColRange{2, 3}
+                }
+        ));
+        ASSERT_TRUE(std::ranges::equal(
+                structure_indices[0] |
+                        std::views::transform([&](const size_t idx) { return ranges_and_keys[idx].key_.time_range(); }),
+                std::array{
+                        TimestampRange{6, 10},
+                        TimestampRange{6, 10},
+                        TimestampRange{9, 10},
+                        TimestampRange{9, 10},
+                        TimestampRange{9, 11},
+                        TimestampRange{9, 11}
+                }
+        ));
         const ProcessingUnit& processing_unit = gather_entities<
                 std::shared_ptr<SegmentInMemory>,
                 std::shared_ptr<RowRange>,
@@ -2536,6 +2577,28 @@ TEST(MergeUpdateInsertIndexSpansMultipleSegments, TwoGroupsOfSegmentsWithMatchin
         ASSERT_EQ(*processing_unit.segments_->at(1), expected_segments[1]);
     }
     {
+        ASSERT_EQ(structure_indices[1].size(), 4);
+        ASSERT_TRUE(std::ranges::equal(structure_indices[1], std::array{4, 5, 6, 7}));
+        ASSERT_EQ(structured_entities[1].size(), 4);
+        ASSERT_TRUE(std::ranges::equal(
+                std::get<0>(component_manager->get_entities<EntityFetchCount>(structured_entities[1])),
+                std::array{2, 2, 2, 2}
+        ));
+        ASSERT_TRUE(std::ranges::equal(
+                structure_indices[1] |
+                        std::views::transform([&](const size_t idx) { return ranges_and_keys[idx].row_range(); }),
+                std::array{RowRange{15, 20}, RowRange{15, 20}, RowRange{20, 25}, RowRange{20, 25}}
+        ));
+        ASSERT_TRUE(std::ranges::equal(
+                structure_indices[1] |
+                        std::views::transform([&](const size_t idx) { return ranges_and_keys[idx].col_range(); }),
+                std::array{ColRange{1, 2}, ColRange{2, 3}, ColRange{1, 2}, ColRange{2, 3}}
+        ));
+        ASSERT_TRUE(std::ranges::equal(
+                structure_indices[1] |
+                        std::views::transform([&](const size_t idx) { return ranges_and_keys[idx].key_.time_range(); }),
+                std::array{TimestampRange{9, 11}, TimestampRange{9, 11}, TimestampRange{10, 13}, TimestampRange{10, 13}}
+        ));
         const ProcessingUnit& processing_unit = gather_entities<
                 std::shared_ptr<SegmentInMemory>,
                 std::shared_ptr<RowRange>,
@@ -2545,9 +2608,9 @@ TEST(MergeUpdateInsertIndexSpansMultipleSegments, TwoGroupsOfSegmentsWithMatchin
                 desc,
                 100'000,
                 cols_per_segment,
-                std::array<timestamp, 11>{10, 10, 10, 10, 10, 10, 10, 10, 11, 11, 12},
-                std::array<int64_t, 11>{17, 18, 19, 20, 21, 22, 100, 300, 23, 400, 24},
-                std::array{900, 18, 700, 1000, 21, 22, 800, 1100, 1300, 1200, 24}
+                std::array<timestamp, 8>{10, 10, 10, 10, 10, 10, 10, 10},
+                std::array<int64_t, 8>{17, 18, 19, 20, 21, 22, 100, 300},
+                std::array{900, 18, 700, 1000, 21, 22, 800, 1100}
         );
         ASSERT_EQ(processing_unit.segments_->size(), expected_segments.size());
         ASSERT_EQ(processing_unit.segments_->size(), 2);
@@ -2555,11 +2618,72 @@ TEST(MergeUpdateInsertIndexSpansMultipleSegments, TwoGroupsOfSegmentsWithMatchin
         ASSERT_EQ(*processing_unit.segments_->at(1), expected_segments[1]);
     }
     {
+        ASSERT_EQ(structure_indices[2].size(), 2);
+        ASSERT_TRUE(std::ranges::equal(structure_indices[2], std::array{6, 7}));
+        ASSERT_EQ(structured_entities[2].size(), 2);
+        ASSERT_TRUE(std::ranges::equal(
+                std::get<0>(component_manager->get_entities<EntityFetchCount>(structured_entities[2])), std::array{2, 2}
+        ));
+        ASSERT_TRUE(std::ranges::equal(
+                structure_indices[2] |
+                        std::views::transform([&](const size_t idx) { return ranges_and_keys[idx].row_range(); }),
+                std::array{RowRange{20, 25}, RowRange{20, 25}}
+        ));
+        ASSERT_TRUE(std::ranges::equal(
+                structure_indices[2] |
+                        std::views::transform([&](const size_t idx) { return ranges_and_keys[idx].col_range(); }),
+                std::array{ColRange{1, 2}, ColRange{2, 3}}
+        ));
+        ASSERT_TRUE(std::ranges::equal(
+                structure_indices[2] |
+                        std::views::transform([&](const size_t idx) { return ranges_and_keys[idx].key_.time_range(); }),
+                std::array{TimestampRange{10, 13}, TimestampRange{10, 13}}
+        ));
         const ProcessingUnit& processing_unit = gather_entities<
                 std::shared_ptr<SegmentInMemory>,
                 std::shared_ptr<RowRange>,
                 std::shared_ptr<ColRange>,
                 EntityFetchCount>(*component_manager, clause.process(std::move(structured_entities[2])));
+        auto [expected_segments, _c, _r] = slice_data_into_segments<TimeseriesIndex>(
+                desc,
+                100'000,
+                cols_per_segment,
+                std::array<timestamp, 3>{11, 11, 12},
+                std::array<int64_t, 3>{23, 400, 24},
+                std::array{1300, 1200, 24}
+        );
+        ASSERT_EQ(processing_unit.segments_->size(), expected_segments.size());
+        ASSERT_EQ(processing_unit.segments_->size(), 2);
+        ASSERT_EQ(*processing_unit.segments_->at(0), expected_segments[0]);
+        ASSERT_EQ(*processing_unit.segments_->at(1), expected_segments[1]);
+    }
+    {
+        ASSERT_EQ(structure_indices[3].size(), 2);
+        ASSERT_TRUE(std::ranges::equal(structure_indices[3], std::array{8, 9}));
+        ASSERT_EQ(structured_entities[3].size(), 2);
+        ASSERT_TRUE(std::ranges::equal(
+                std::get<0>(component_manager->get_entities<EntityFetchCount>(structured_entities[3])), std::array{1, 1}
+        ));
+        ASSERT_TRUE(std::ranges::equal(
+                structure_indices[3] |
+                        std::views::transform([&](const size_t idx) { return ranges_and_keys[idx].row_range(); }),
+                std::array{RowRange{25, 27}, RowRange{25, 27}}
+        ));
+        ASSERT_TRUE(std::ranges::equal(
+                structure_indices[3] |
+                        std::views::transform([&](const size_t idx) { return ranges_and_keys[idx].col_range(); }),
+                std::array{ColRange{1, 2}, ColRange{2, 3}}
+        ));
+        ASSERT_TRUE(std::ranges::equal(
+                structure_indices[3] |
+                        std::views::transform([&](const size_t idx) { return ranges_and_keys[idx].key_.time_range(); }),
+                std::array{TimestampRange{13, 15}, TimestampRange{13, 15}}
+        ));
+        const ProcessingUnit& processing_unit = gather_entities<
+                std::shared_ptr<SegmentInMemory>,
+                std::shared_ptr<RowRange>,
+                std::shared_ptr<ColRange>,
+                EntityFetchCount>(*component_manager, clause.process(std::move(structured_entities[3])));
         auto [expected_segments, _c, _r] = slice_data_into_segments<TimeseriesIndex>(
                 desc,
                 100'000,

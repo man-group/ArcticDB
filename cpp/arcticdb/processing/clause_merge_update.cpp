@@ -599,13 +599,13 @@ TargetRange get_target_start_end(std::span<const ProcessingUnit> row_slices) {
             .start_row_in_first_row_slice = 0,
             .end_row_in_last_row_slice = row_slices.back().segments_->back()->row_count()
     };
-    if (row_slices.size() > 1 && row_slices.front().entity_fetch_count_) {
+    if (!row_slices.empty() && row_slices.front().entity_fetch_count_) {
         if (row_slices.front().entity_fetch_count_->front() > 1) {
             const ColumnData index = row_slices.front().segments_->front()->column(0).data();
             result.start_row_in_first_row_slice = first_different_index_value_position(index);
         }
-        if (row_slices.back().entity_fetch_count_->back() > 1) {
-            ColumnData index = row_slices.back().segments_->back()->column(0).data();
+        if (row_slices.size() > 1 && row_slices.back().entity_fetch_count_->back() > 1) {
+            const ColumnData index = row_slices.back().segments_->back()->column(0).data();
             result.end_row_in_last_row_slice = first_different_index_value_position(index);
         }
     }
@@ -952,7 +952,7 @@ std::pair<size_t, size_t> MergeUpdateClause::get_source_start_end(std::span<cons
                 row_range.second
         );
         const std::pair<size_t, size_t> source_range = source_row_range_it->second;
-        if (row_slices.size() > 1 && row_slices.front().entity_fetch_count_) {
+        if (!row_slices.empty() && row_slices.front().entity_fetch_count_) {
             // An index value is spanning more than one row slices.
             std::pair<size_t, size_t> result = source_range;
             std::span<const timestamp> source_index =
@@ -971,7 +971,7 @@ std::pair<size_t, size_t> MergeUpdateClause::get_source_start_end(std::span<cons
                 );
                 result.first += next_index_value - source_index.begin();
             }
-            if (row_slices.back().entity_fetch_count_->back() > 1) {
+            if (row_slices.size() > 1 && row_slices.back().entity_fetch_count_->back() > 1) {
                 // This is the last row slice containing the index value that spans multiple row slices. It appears at
                 // the end of the row slices, which means that the other processing unit will handle all rows of
                 // the segment not containing the index value; this processing unit must handle only the rows that
@@ -1011,8 +1011,8 @@ std::pair<std::vector<ProcessingUnit>, bool> MergeUpdateClause::update_and_inser
     // reconstruction (merge_slices_and_keys) and produces a non-contiguous, unreadable index.
     // Only the first and last row slices of a group can be shared with a neighbour (a group is a
     // contiguous window of row slices), matching how get_source_start_end/get_target_start_end trim.
-    const bool co_owns_shared_slice = row_slices.size() > 1 && (row_slices.front().entity_fetch_count_->front() > 1 ||
-                                                                row_slices.back().entity_fetch_count_->back() > 1);
+    const bool co_owns_shared_slice = !row_slices.empty() && (row_slices.front().entity_fetch_count_->front() > 1 ||
+                                                              row_slices.back().entity_fetch_count_->back() > 1);
     if (strategy_.insert_only() && match_record.total_unmatched_source_rows() == 0 && !co_owns_shared_slice) {
         return {std::move(row_slices), false};
     }

@@ -83,18 +83,25 @@ std::vector<std::vector<size_t>> structure_by_time_slice(std::span<RangesAndKey>
         if (previous_time_range.second <= current_time_range.first) {
             res.emplace_back();
             const TimestampRange& first_overlap = ranges[idx - overlapping_ranges].key_.time_range();
-            if (first_overlap.second - 1 == current_time_range.first) {
-                for (size_t i = idx - overlapping_ranges; i < idx; ++i) {
-                    res.back().emplace_back(i);
-                }
-                previous_time_range = first_overlap;
-            } else {
+            for (size_t i = idx - overlapping_ranges; i < idx; ++i) {
+                res.back().emplace_back(i);
+            }
+            if (first_overlap.second <= current_time_range.first) {
+                res.emplace_back();
                 previous_time_range = current_time_range;
+            } else {
+                previous_time_range = first_overlap;
             }
             overlapping_ranges = 0;
         }
         overlapping_ranges += current_time_range.second != previous_time_range.second;
         res.back().emplace_back(idx);
+    }
+    if (overlapping_ranges > 0) {
+        res.emplace_back();
+        for (size_t i = ranges.size() - overlapping_ranges; i < ranges.size(); ++i) {
+            res.back().emplace_back(i);
+        }
     }
     return res;
 }
