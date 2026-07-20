@@ -203,19 +203,29 @@ jobs:
         if: matrix.os == 'macos'
         run: |
           set -euo pipefail
-          pinned_cmake="$(command -v cmake)"
-          echo "Pinned cmake: ${pinned_cmake} ($("${pinned_cmake}" --version | head -1))"
-          case "${pinned_cmake}" in
-            /opt/homebrew/bin/cmake|/usr/local/bin/cmake)
-              echo "::error::Expected the pinned CMake on PATH but resolved to Homebrew (${pinned_cmake})"
-              exit 1 ;;
-          esac
-          for brew_cmake in /opt/homebrew/bin/cmake /usr/local/bin/cmake; do
-            if [ -e "${brew_cmake}" ] || [ -L "${brew_cmake}" ]; then
-              ln -sf "${pinned_cmake}" "${brew_cmake}"
-              echo "Repointed ${brew_cmake} -> ${pinned_cmake} ($("${brew_cmake}" --version | head -1))"
-            fi
-          done
+
+          # vcpkg in mac runner somehow ignores PATH order.
+          # On this runner that is Homebrew's cmake, which is newer than the
+          # 3.31.6 we pinned and rejects the benchmark port's -Werror=old-style-cast flag.
+          # We overwrite Homebrew's cmake with a symlink to the pinned one so that the
+          # newest cmake vcpkg can find IS 3.31.6.
+
+          pinned_cmake="$(command -v cmake)"  # PATH resolves to the pinned 3.31.6 here
+          echo "Pinned cmake in use: ${pinned_cmake}"
+          "${pinned_cmake}" --version | head -1
+
+          # Safety check: if PATH ever stops resolving to the pinned cmake, bail out loudly
+          # instead of silently linking Homebrew's cmake to itself (a no-op that leaves 4.x).
+          if [ "${pinned_cmake}" = "/opt/homebrew/bin/cmake" ]; then
+            echo "::error::Expected the pinned CMake on PATH, but 'cmake' resolved to Homebrew (${pinned_cmake}). Aborting so we don't ship a broken pin."
+            exit 1
+          fi
+
+          # Runners are Apple Silicon, so Homebrew lives at /opt/homebrew.
+          brew_cmake="/opt/homebrew/bin/cmake"
+          echo "Overriding Homebrew cmake at ${brew_cmake} (was: $("${brew_cmake}" --version | head -1))"
+          ln -sf "${pinned_cmake}" "${brew_cmake}"
+          echo "  -> now: $("${brew_cmake}" --version | head -1)"
 
       - name: Install sanitizer runtime libraries
         if: matrix.os == 'linux' && env.ARCTICDB_USE_SANITIZER != ''
