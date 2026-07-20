@@ -187,10 +187,35 @@ jobs:
           # Pin to a known-good release. CMake 4.4.0 made -Werror=<category> validation
           # stricter, which broke the vcpkg `benchmark` port's -Werror=old-style-cast
           # option and fails CI. Bump deliberately once the port is fixed upstream.
+          # NOTE: on macOS this pin only covers the top-level configure; vcpkg picks its
+          # own (higher-versioned) cmake for port builds - see the macOS repoint step below.
           cmake-version: '3.31.6'
 
       - name: Use cmake
         run: cmake --version
+
+      - name: Force vcpkg to use the pinned CMake (macOS)
+        # vcpkg selects the highest-versioned cmake it can find for building ports, which
+        # on the macOS runner is Homebrew's (currently 4.4.0) rather than the 3.31.6 pinned
+        # above - so PATH ordering alone is not enough. 4.4.0's stricter -Werror=<category>
+        # validation breaks the vcpkg `benchmark` port. Point Homebrew's cmake at the pinned
+        # one so port builds use 3.31.6 too. Remove once the pin above is dropped.
+        if: matrix.os == 'macos'
+        run: |
+          set -euo pipefail
+          pinned_cmake="$(command -v cmake)"
+          echo "Pinned cmake: ${pinned_cmake} ($("${pinned_cmake}" --version | head -1))"
+          case "${pinned_cmake}" in
+            /opt/homebrew/bin/cmake|/usr/local/bin/cmake)
+              echo "::error::Expected the pinned CMake on PATH but resolved to Homebrew (${pinned_cmake})"
+              exit 1 ;;
+          esac
+          for brew_cmake in /opt/homebrew/bin/cmake /usr/local/bin/cmake; do
+            if [ -e "${brew_cmake}" ] || [ -L "${brew_cmake}" ]; then
+              ln -sf "${pinned_cmake}" "${brew_cmake}"
+              echo "Repointed ${brew_cmake} -> ${pinned_cmake} ($("${brew_cmake}" --version | head -1))"
+            fi
+          done
 
       - name: Install sanitizer runtime libraries
         if: matrix.os == 'linux' && env.ARCTICDB_USE_SANITIZER != ''
