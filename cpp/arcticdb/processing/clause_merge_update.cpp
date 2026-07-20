@@ -952,7 +952,7 @@ std::pair<size_t, size_t> MergeUpdateClause::get_source_start_end(std::span<cons
                 row_range.second
         );
         const std::pair<size_t, size_t> source_range = source_row_range_it->second;
-        if (row_slices.size() > 1 && row_slices.front().entity_fetch_count_) {
+        if (!row_slices.empty() && row_slices.front().entity_fetch_count_) {
             // An index value is spanning more than one row slices.
             std::pair<size_t, size_t> result = source_range;
             std::span<const timestamp> source_index =
@@ -971,7 +971,7 @@ std::pair<size_t, size_t> MergeUpdateClause::get_source_start_end(std::span<cons
                 );
                 result.first += next_index_value - source_index.begin();
             }
-            if (row_slices.back().entity_fetch_count_->back() > 1) {
+            if (row_slices.size() > 1 && row_slices.back().entity_fetch_count_->back() > 1) {
                 // This is the last row slice containing the index value that spans multiple row slices. It appears at
                 // the end of the row slices, which means that the other processing unit will handle all rows of
                 // the segment not containing the index value; this processing unit must handle only the rows that

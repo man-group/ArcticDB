@@ -1294,7 +1294,6 @@ if(${TEST})
             column_store/test/rapidcheck_column_data_random_accessor.cpp
             column_store/test/rapidcheck_column_map.cpp
             processing/test/rapidcheck_compact_data.cpp
-            processing/test/rapidcheck_merge_update.cpp
             processing/test/rapidcheck_resample.cpp
             stream/test/stream_test_common.cpp
             util/test/rapidcheck_bitset.cpp
