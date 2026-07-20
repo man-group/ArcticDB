@@ -8,20 +8,61 @@ As of the Change Date specified in that file, in accordance with the Business So
 
 import os
 import random
-import shutil
-import time
+import uuid
 
 import numpy as np
 import pandas as pd
 
-from arcticdb import Arctic, LibraryOptions
+from arcticc.pb2.s3_storage_pb2 import Config as S3Config
+from arcticdb import Arctic
 from arcticdb.version_store.library import MergeStrategy
-from arcticdb.util.logger import get_logger
 from arcticdb.util.test import random_strings_of_length
+from arcticdb_ext.storage import CONFIG_LIBRARY_NAME
 from asv_runner.benchmarks.mark import SkipNotImplemented
+
+from benchmarks.seaweed_utils import (
+    ARCTICDB_CACHE_BUCKET,
+    arctic_uri,
+    copy_bucket,
+    create_bucket,
+    delete_bucket,
+    list_buckets,
+    reset_arcticdb_cache_bucket,
+)
 
 MIN_DATE = pd.Timestamp("1960-01-01")
 MAX_DATE = pd.Timestamp("2025-01-01")
+
+# merge_experimental is destructive, so every measurement runs against a pristine copy of the
+# data: setup copies the config library and the relevant data library from the cache bucket into
+# a brand new bucket and the merge runs there; teardown hard-deletes that bucket by dropping its
+# backing SeaweedFS collection.
+
+# Short-lived per-measurement bucket; each class creates its own in setup() and deletes it in
+# teardown(). The WORK_BUCKET_PREFIX sweep in _run_setup_cache() cleans up any that a killed
+# benchmark process (e.g. an ASV timeout) failed to tear down
+WORK_BUCKET_PREFIX = "arcticdb-merge-bench-"
+
+
+def _env_repeat(default):
+    # One knob to shrink local experiment runs; leaves CI defaults untouched
+    return int(os.getenv("ARCTICDB_MERGE_BENCH_REPEAT", default))
+
+
+_LIBRARY_PREFIX_CACHE = {}
+
+
+def _cache_library_prefix(lib_name):
+    """S3 key prefix of a library in the cache bucket. Libraries created through Arctic get a
+    unique "<name><nanos>" prefix, so it must be read back from the library config."""
+    if lib_name not in _LIBRARY_PREFIX_CACHE:
+        lib = Arctic(arctic_uri(ARCTICDB_CACHE_BUCKET)).get_library(lib_name)
+        config = lib._nvs.lib_cfg()
+        storage = config.storage_by_id[config.lib_desc.storage_ids[0]]
+        s3_config = S3Config()
+        storage.config.Unpack(s3_config)
+        _LIBRARY_PREFIX_CACHE[lib_name] = s3_config.prefix
+    return _LIBRARY_PREFIX_CACHE[lib_name]
 
 
 def _random_values(rng, num_rows, value_dtype, num_unique_strings):
@@ -85,14 +126,12 @@ class MergeBase:
     }
 
     def __init__(self):
-        self.logger = get_logger()
         self.SYM = "sym"
-        # Do not interleave benchmarks as they use the same LMDB directory for the measurements
         self.rounds = 1
-        # merge_experimental is destructive, so we must copy a fresh base and run once per measurement
+        # merge_experimental is destructive, so we must restore a fresh base and run once per measurement
         self.number = 1
         self.warmup_time = 0
-        self.repeat = 10
+        self.repeat = _env_repeat(10)
         self.timeout = 600
         self.ac = None
         self.lib = None
@@ -100,42 +139,29 @@ class MergeBase:
         self.value_dtype = None
         self.source = None
         self.on = None
-
-    def finish_init(self):
-        # Base LMDB instance that will be populated by setup_cache. Relevant libraries are then
-        # copied from here to a working directory for each (destructive) merge measurement.
-        self.LMDB_BASE_DIR = f"{self.LMDB_DIR}_base"
-        self.CONNECTION_STRING_BASE = f"lmdb://{self.LMDB_BASE_DIR}"
-        self.CONNECTION_STRING = f"lmdb://{self.LMDB_DIR}"
+        self.work_bucket = None
 
     def lib_name(self, scenario, index_kind, *extra):
         num_rows, num_value_cols = scenario
         return "_".join([str(num_rows), str(num_value_cols), index_kind, *[str(e) for e in extra]])
 
+    def _cache_arctic(self):
+        return Arctic(arctic_uri(ARCTICDB_CACHE_BUCKET))
+
     def _setup_cache_base(self, ac, lib_name, target):
-        ac.delete_library(lib_name)
+        # reset_arcticdb_cache_bucket() has just emptied the bucket, so the library cannot exist
         lib = ac.create_library(lib_name)
         lib.write(self.SYM, target)
 
-    def _setup(self, lib_name):
-        if os.path.isdir(self.LMDB_DIR):
-            shutil.rmtree(self.LMDB_DIR)
-        os.mkdir(self.LMDB_DIR)
-        # Copy the config database and the relevant library database for these benchmark parameters to the actual
-        # LMDB directory where the merge will happen
-        shutil.copytree(os.path.join(self.LMDB_BASE_DIR, "_arctic_cfg"), os.path.join(self.LMDB_DIR, "_arctic_cfg"))
-        shutil.copytree(os.path.join(self.LMDB_BASE_DIR, lib_name), os.path.join(self.LMDB_DIR, lib_name))
-        # Create a new Arctic instance, otherwise we will be holding a reference to the previous iteration's .mdb files
-        # and the deletion and recreation won't be noticed by Arctic
-        del self.ac
-        self.ac = Arctic(self.CONNECTION_STRING)
-        self.lib = self.ac.get_library(lib_name)
-        # Read the symbol both to warm up the cache and to have real target rows to build the source from.
-        self.target = self.lib.read(self.SYM).data
-
-    def _teardown(self):
-        if os.path.isdir(self.LMDB_DIR):
-            shutil.rmtree(self.LMDB_DIR)
+    # ASV caches setup_cache results keyed by the function's source location, so every class must
+    # define its own setup_cache (delegating here); inheriting one shared method would make ASV
+    # reuse the first class's cache bucket for all of them.
+    def _run_setup_cache(self):
+        reset_arcticdb_cache_bucket()
+        for bucket in list_buckets():
+            if bucket.startswith(WORK_BUCKET_PREFIX):
+                delete_bucket(bucket)
+        self._setup_cache()
 
     def merge(self, strategy):
         self.lib.merge_experimental(self.SYM, self.source, strategy=self.STRATEGIES[strategy], on=self.on)
@@ -149,8 +175,6 @@ class MergeThin(MergeBase):
 
     def __init__(self):
         super().__init__()
-        self.LMDB_DIR = "merge_thin"
-        self.finish_init()
         self.value_dtype = "float"
         self.param_names = ["scenario", "strategy", "index_kind", "on_count", "source_size", "matched_pct"]
         self.params = [
@@ -163,12 +187,10 @@ class MergeThin(MergeBase):
         ]
 
     def setup_cache(self):
-        start = time.time()
-        self._setup_cache()
-        self.logger.info(f"SETUP_CACHE TIME: {time.time() - start}")
+        self._run_setup_cache()
 
     def _setup_cache(self):
-        ac = Arctic(self.CONNECTION_STRING_BASE)
+        ac = self._cache_arctic()
         for scenario in self.params[0]:
             for index_kind in self.params[2]:
                 num_rows, num_value_cols = scenario
@@ -181,7 +203,22 @@ class MergeThin(MergeBase):
             raise SkipNotImplemented  # not_matched_by_target=insert has no row-range implementation
         if index_kind == "rowrange" and on_count == 0:
             raise SkipNotImplemented  # row-range indexes cannot be a join key on their own
-        self._setup(self.lib_name(scenario, index_kind))
+        lib_name = self.lib_name(scenario, index_kind)
+        # Create a new Arctic instance every sample so nothing cached from the previous sample's
+        # (since deleted) bucket survives
+        del self.ac
+        self.work_bucket = f"{WORK_BUCKET_PREFIX}{uuid.uuid4().hex[:12]}"
+        create_bucket(self.work_bucket)
+        # The URI-based storage override redirects the copied library config to the new bucket
+        copy_bucket(
+            ARCTICDB_CACHE_BUCKET,
+            self.work_bucket,
+            prefixes=[f"{CONFIG_LIBRARY_NAME}/", f"{_cache_library_prefix(lib_name)}/"],
+        )
+        self.ac = Arctic(arctic_uri(self.work_bucket))
+        self.lib = self.ac.get_library(lib_name)
+        # Read the symbol both to warm up the cache and to have real target rows to build the source from.
+        self.target = self.lib.read(self.SYM).data
         matched_count = round(source_size * matched_pct / 100)
         self.on = None if on_count == 0 else self._select_on(on_count, num_value_cols)
         self.source = generate_merge_source(
@@ -189,7 +226,9 @@ class MergeThin(MergeBase):
         )
 
     def teardown(self, scenario, strategy, index_kind, on_count, source_size, matched_pct):
-        self._teardown()
+        if self.work_bucket is not None:
+            delete_bucket(self.work_bucket)
+            self.work_bucket = None
 
     def time_merge(self, scenario, strategy, index_kind, on_count, source_size, matched_pct):
         self.merge(strategy)
@@ -202,8 +241,6 @@ class MergeThinString(MergeBase):
 
     def __init__(self):
         super().__init__()
-        self.LMDB_DIR = "merge_thin_string"
-        self.finish_init()
         self.value_dtype = "string"
         self.param_names = [
             "scenario",
@@ -225,14 +262,12 @@ class MergeThinString(MergeBase):
         ]
 
     def setup_cache(self):
-        start = time.time()
-        self._setup_cache()
-        self.logger.info(f"SETUP_CACHE TIME: {time.time() - start}")
+        self._run_setup_cache()
 
     def _setup_cache(self):
         # Populate the base libraries only once. index_kind and num_unique_strings are shared across
         # every strategy, so each (scenario, index_kind, num_unique_strings) library is built once.
-        ac = Arctic(self.CONNECTION_STRING_BASE)
+        ac = self._cache_arctic()
         for scenario in self.params[0]:
             for index_kind in self.params[2]:
                 for num_unique_strings in self.params[6]:
@@ -248,7 +283,22 @@ class MergeThinString(MergeBase):
             raise SkipNotImplemented  # not_matched_by_target=insert has no row-range implementation
         if index_kind == "rowrange" and on_count == 0:
             raise SkipNotImplemented  # row-range indexes cannot be a join key on their own
-        self._setup(self.lib_name(scenario, index_kind, num_unique_strings))
+        lib_name = self.lib_name(scenario, index_kind, num_unique_strings)
+        # Create a new Arctic instance every sample so nothing cached from the previous sample's
+        # (since deleted) bucket survives
+        del self.ac
+        self.work_bucket = f"{WORK_BUCKET_PREFIX}{uuid.uuid4().hex[:12]}"
+        create_bucket(self.work_bucket)
+        # The URI-based storage override redirects the copied library config to the new bucket
+        copy_bucket(
+            ARCTICDB_CACHE_BUCKET,
+            self.work_bucket,
+            prefixes=[f"{CONFIG_LIBRARY_NAME}/", f"{_cache_library_prefix(lib_name)}/"],
+        )
+        self.ac = Arctic(arctic_uri(self.work_bucket))
+        self.lib = self.ac.get_library(lib_name)
+        # Read the symbol both to warm up the cache and to have real target rows to build the source from.
+        self.target = self.lib.read(self.SYM).data
         matched_count = round(source_size * matched_pct / 100)
         self.on = None if on_count == 0 else self._select_on(on_count, num_value_cols)
         self.source = generate_merge_source(
@@ -261,7 +311,9 @@ class MergeThinString(MergeBase):
         )
 
     def teardown(self, scenario, strategy, index_kind, on_count, source_size, matched_pct, num_unique_strings):
-        self._teardown()
+        if self.work_bucket is not None:
+            delete_bucket(self.work_bucket)
+            self.work_bucket = None
 
     def time_merge(self, scenario, strategy, index_kind, on_count, source_size, matched_pct, num_unique_strings):
         self.merge(strategy)
@@ -274,11 +326,9 @@ class MergeWide(MergeBase):
 
     def __init__(self):
         super().__init__()
-        self.LMDB_DIR = "merge_wide"
-        self.finish_init()
         self.value_dtype = "float"
         self.param_names = ["scenario", "strategy", "index_kind", "on_count", "source_size", "matched_pct"]
-        self.repeat = 5
+        self.repeat = _env_repeat(5)
         self.params = [
             [(5_000, 10_000)],  # scenario: (num_rows, num_value_cols)
             ["update", "insert", "update_and_insert"],  # strategy
@@ -289,14 +339,12 @@ class MergeWide(MergeBase):
         ]
 
     def setup_cache(self):
-        start = time.time()
-        self._setup_cache()
-        self.logger.info(f"SETUP_CACHE TIME: {time.time() - start}")
+        self._run_setup_cache()
 
     def _setup_cache(self):
         # Populate the base libraries only once. index_kind is shared across every strategy, so each
         # (scenario, index_kind) base library is built exactly once and reused by all strategies.
-        ac = Arctic(self.CONNECTION_STRING_BASE)
+        ac = self._cache_arctic()
         for scenario in self.params[0]:
             for index_kind in self.params[2]:
                 num_rows, num_value_cols = scenario
@@ -311,7 +359,22 @@ class MergeWide(MergeBase):
             raise SkipNotImplemented  # not_matched_by_target=insert has no row-range implementation
         if index_kind == "rowrange" and on_count == 0:
             raise SkipNotImplemented  # row-range indexes cannot be a join key on their own
-        self._setup(self.lib_name(scenario, index_kind))
+        lib_name = self.lib_name(scenario, index_kind)
+        # Create a new Arctic instance every sample so nothing cached from the previous sample's
+        # (since deleted) bucket survives
+        del self.ac
+        self.work_bucket = f"{WORK_BUCKET_PREFIX}{uuid.uuid4().hex[:12]}"
+        create_bucket(self.work_bucket)
+        # The URI-based storage override redirects the copied library config to the new bucket
+        copy_bucket(
+            ARCTICDB_CACHE_BUCKET,
+            self.work_bucket,
+            prefixes=[f"{CONFIG_LIBRARY_NAME}/", f"{_cache_library_prefix(lib_name)}/"],
+        )
+        self.ac = Arctic(arctic_uri(self.work_bucket))
+        self.lib = self.ac.get_library(lib_name)
+        # Read the symbol both to warm up the cache and to have real target rows to build the source from.
+        self.target = self.lib.read(self.SYM).data
         matched_count = round(source_size * matched_pct / 100)
         self.on = None if on_count == 0 else self._select_on(on_count, num_value_cols)
         self.source = generate_merge_source(
@@ -319,7 +382,9 @@ class MergeWide(MergeBase):
         )
 
     def teardown(self, scenario, strategy, index_kind, on_count, source_size, matched_pct):
-        self._teardown()
+        if self.work_bucket is not None:
+            delete_bucket(self.work_bucket)
+            self.work_bucket = None
 
     def time_merge(self, scenario, strategy, index_kind, on_count, source_size, matched_pct):
         self.merge(strategy)
@@ -333,9 +398,7 @@ class MergeLongWide(MergeBase):
 
     def __init__(self):
         super().__init__()
-        self.LMDB_DIR = "merge_long_wide"
-        self.finish_init()
-        self.repeat = 5
+        self.repeat = _env_repeat(5)
         self.value_dtype = "float"
         self.param_names = ["scenario", "strategy", "index_kind", "on_count", "source_size", "matched_pct"]
         self.params = [
@@ -348,12 +411,10 @@ class MergeLongWide(MergeBase):
         ]
 
     def setup_cache(self):
-        start = time.time()
-        self._setup_cache()
-        self.logger.info(f"SETUP_CACHE TIME: {time.time() - start}")
+        self._run_setup_cache()
 
     def _setup_cache(self):
-        ac = Arctic(self.CONNECTION_STRING_BASE)
+        ac = self._cache_arctic()
         for scenario in self.params[0]:
             for index_kind in self.params[2]:
                 num_rows, num_value_cols = scenario
@@ -368,7 +429,22 @@ class MergeLongWide(MergeBase):
             raise SkipNotImplemented  # row-range indexes cannot be a join key on their own
         if index_kind == "datetime" and on_count == 1:
             raise SkipNotImplemented  # grid-size cost decision: datetime measures on_count 0 and 50 only
-        self._setup(self.lib_name(scenario, index_kind))
+        lib_name = self.lib_name(scenario, index_kind)
+        # Create a new Arctic instance every sample so nothing cached from the previous sample's
+        # (since deleted) bucket survives
+        del self.ac
+        self.work_bucket = f"{WORK_BUCKET_PREFIX}{uuid.uuid4().hex[:12]}"
+        create_bucket(self.work_bucket)
+        # The URI-based storage override redirects the copied library config to the new bucket
+        copy_bucket(
+            ARCTICDB_CACHE_BUCKET,
+            self.work_bucket,
+            prefixes=[f"{CONFIG_LIBRARY_NAME}/", f"{_cache_library_prefix(lib_name)}/"],
+        )
+        self.ac = Arctic(arctic_uri(self.work_bucket))
+        self.lib = self.ac.get_library(lib_name)
+        # Read the symbol both to warm up the cache and to have real target rows to build the source from.
+        self.target = self.lib.read(self.SYM).data
         matched_count = round(source_size * matched_pct / 100)
         self.on = None if on_count == 0 else self._select_on(on_count, num_value_cols)
         self.source = generate_merge_source(
@@ -376,7 +452,9 @@ class MergeLongWide(MergeBase):
         )
 
     def teardown(self, scenario, strategy, index_kind, on_count, source_size, matched_pct):
-        self._teardown()
+        if self.work_bucket is not None:
+            delete_bucket(self.work_bucket)
+            self.work_bucket = None
 
     def time_merge(self, scenario, strategy, index_kind, on_count, source_size, matched_pct):
         self.merge(strategy)
