@@ -35,8 +35,6 @@ enum class PipelineOptimisation : uint8_t { SPEED, MEMORY };
  *
  * In addition, the expression context is a constant, representing the AST for computing expressions in filter and
  * projection clauses.
- * computed_data_ holds a map from a string representation of a [sub-]expression of the AST to a computed value
- * of this expression. This way, if an expression appears twice in the AST, we will only compute it once.
  */
 struct ProcessingUnit {
     std::optional<std::vector<std::shared_ptr<SegmentInMemory>>> segments_;
@@ -47,7 +45,15 @@ struct ProcessingUnit {
     std::optional<std::vector<uint64_t>> entity_fetch_count_;
 
     std::shared_ptr<ExpressionContext> expression_context_;
-    std::unordered_map<std::string, VariantData> computed_data_;
+
+    /*
+     * Memoization of results after applying an ExpressionNode to this processing unit. Keyed on the node's label_ with
+     * a deep comparison on hits. One slot per label, colliding writes are dropped.
+     *
+     * The raw ExpressionNode pointers are owned by expression_context_, declared above so it outlives this map, and
+     * the tree is not mutated while computing, so the pointers stay valid for the map's lifetime.
+     */
+    std::unordered_map<std::string, std::pair<const ExpressionNode*, VariantData>> computed_data_;
 
     ProcessingUnit() = default;
 
@@ -96,10 +102,8 @@ struct ProcessingUnit {
         expression_context_ = expression_context;
     }
 
-    // The name argument to this function is either a column/value name, or uniquely identifies an ExpressionNode
-    // object. If this function has been called before with the same ExpressionNode name, then we cache the result in
-    // the computed_data_ map to avoid duplicating work.
-    VariantData get(const VariantNode& name);
+    // Resolve a data column against the segments in this processing unit.
+    VariantData get(const ColumnName& column_name);
 };
 
 std::vector<ProcessingUnit> split_by_row_slice(ProcessingUnit&& proc);

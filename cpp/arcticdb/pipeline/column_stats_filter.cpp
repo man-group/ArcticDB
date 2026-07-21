@@ -29,26 +29,38 @@ bool ColumnStatsQueryMetadata::should_try_column_stats_read() const {
     return is_column_stats_enabled() && !filter_expressions.empty();
 }
 
+StatsVariantData dispatch_unary_stats(const StatsVariantData& left, OperationType operation);
+
 StatsVariantData evaluate_ast_node_against_stats(
-        const VariantNode& node, const ExpressionContext& expression_context, const StatsRowIndices& row_indices,
-        const ColumnStatsData& column_stats
+        const ExpressionNode& node, const StatsRowIndices& row_indices, const ColumnStatsData& column_stats
 ) {
     return util::variant_match(
-            node,
-            [&](const ColumnName& column_name) -> StatsVariantData {
-                return column_stats.values_for_column(column_name.value, row_indices);
+            node.kind_,
+            [&](const ExpressionNode::Leaf& leaf) -> StatsVariantData {
+                return util::variant_match(
+                        leaf,
+                        [&](const ColumnName& column_name) -> StatsVariantData {
+                            return column_stats.values_for_column(column_name.value, row_indices);
+                        },
+                        [&](const std::shared_ptr<Value>& value) -> StatsVariantData { return value; },
+                        [&](const std::shared_ptr<ValueSet>& value_set) -> StatsVariantData { return value_set; },
+                        [&](const std::shared_ptr<util::RegexGeneric>&) -> StatsVariantData {
+                            return std::vector(row_indices.size(), StatsComparison::UNKNOWN);
+                        }
+                );
             },
-            [&](const ValueName& value_name) -> StatsVariantData {
-                return expression_context.values_.get_value(value_name.value);
-            },
-            [&](const ExpressionName& expression_name) -> StatsVariantData {
-                auto expr = expression_context.expression_nodes_.get_value(expression_name.value);
-                return compute_stats(expression_context, *expr, row_indices, column_stats);
-            },
-            [&](const ValueSetName& value_set_name) -> StatsVariantData {
-                return expression_context.value_sets_.get_value(value_set_name.value);
-            },
-            [&](const auto&) -> StatsVariantData { return std::vector(row_indices.size(), StatsComparison::UNKNOWN); }
+            [&](const ExpressionNode::Operation& op) -> StatsVariantData {
+                if (is_binary_operation(op.operation_type_)) {
+                    auto left = evaluate_ast_node_against_stats(*op.left_, row_indices, column_stats);
+                    auto right = evaluate_ast_node_against_stats(*op.right_, row_indices, column_stats);
+                    return dispatch_binary_stats(left, right, op.operation_type_);
+                }
+                if (is_unary_operation(op.operation_type_)) {
+                    auto left = evaluate_ast_node_against_stats(*op.left_, row_indices, column_stats);
+                    return dispatch_unary_stats(left, op.operation_type_);
+                }
+                return std::vector(row_indices.size(), StatsComparison::UNKNOWN);
+            }
     );
 }
 
@@ -107,22 +119,6 @@ StatsVariantData dispatch_unary_stats(const StatsVariantData& left, OperationTyp
                 }
         );
     }
-}
-
-StatsVariantData compute_stats(
-        const ExpressionContext& expression_context, const ExpressionNode& node, const StatsRowIndices& row_indices,
-        const ColumnStatsData& column_stats
-) {
-    if (is_binary_operation(node.operation_type_)) {
-        auto left = evaluate_ast_node_against_stats(node.left_, expression_context, row_indices, column_stats);
-        auto right = evaluate_ast_node_against_stats(node.right_, expression_context, row_indices, column_stats);
-        return dispatch_binary_stats(left, right, node.operation_type_);
-    }
-    if (is_unary_operation(node.operation_type_)) {
-        auto left = evaluate_ast_node_against_stats(node.left_, expression_context, row_indices, column_stats);
-        return dispatch_unary_stats(left, node.operation_type_);
-    }
-    return std::vector(row_indices.size(), StatsComparison::UNKNOWN);
 }
 
 namespace {
@@ -437,9 +433,8 @@ FilterQuery<index::IndexSegmentReader> create_column_stats_filter(
         util::check(row_indices.size() == isr.size(), "Expected row_indices.size() == isr.size()");
 
         // Evaluate the AST
-        StatsVariantData result = evaluate_ast_node_against_stats(
-                expression_context.root_node_name_, expression_context, row_indices, column_stats_data
-        );
+        StatsVariantData result =
+                evaluate_ast_node_against_stats(*expression_context.root_, row_indices, column_stats_data);
         util::check(
                 std::holds_alternative<std::vector<StatsComparison>>(result),
                 "evaluate_ast_node_against_stats should evaluate to a vector<StatsComparison>"

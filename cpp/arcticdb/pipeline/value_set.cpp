@@ -103,6 +103,15 @@ ValueSet::ValueSet(NumericSetType&& value_set) : numeric_base_set_(std::move(val
 
 bool ValueSet::empty() const { return empty_; }
 
+size_t ValueSet::size() const {
+    if (typed_set_string_) {
+        return typed_set_string_->size();
+    }
+    return util::variant_match(numeric_base_set_, [](const auto& set_ptr) -> size_t {
+        return set_ptr ? set_ptr->size() : 0;
+    });
+}
+
 const entity::TypeDescriptor& ValueSet::base_type() const { return base_type_; }
 
 std::shared_ptr<std::unordered_set<std::string>> ValueSet::get_fixed_width_string_set(size_t width) {

@@ -555,6 +555,64 @@ def test_filter_isin_clashing_sets(
     generic_filter_test(lib, symbol, q, expected)
 
 
+def test_filter_isin_clashing_sets_same_column_nonreg(
+    lmdb_version_store_v1, any_output_format, column_stats_filtering_enabled_and_disabled
+):
+    # Nonreg test for a bug with filtering with isin with sets with the same str() form.
+    # Both isin operands are on the same column with the same operator, so their expression nodes
+    # used to share a name. The two value sets have identical str() (see comments in visit_expression),
+    # so they share a value-set name too. The node name collision meant one isin
+    # operand was dropped and the OR evaluated isin(vals1) | isin(vals1).
+    lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol = "test_filter_isin_clashing_sets_same_column"
+    vals1_unique_val = 100000
+    vals2_unique_val = 200000
+    df = pd.DataFrame({"a": [vals1_unique_val, vals2_unique_val, 5000]}, index=np.arange(3))
+    lib.write(symbol, df)
+    lib.create_column_stats_experimental(symbol)
+    q = QueryBuilder()
+    vals1 = np.arange(10000, dtype=np.uint64)
+    np.put(vals1, 5000, vals1_unique_val)
+    vals2 = np.arange(10000, dtype=np.uint64)
+    np.put(vals2, 5000, vals2_unique_val)
+    assert str(vals1) == str(vals2)
+    q = q[(q["a"].isin(vals1)) | (q["a"].isin(vals2))]
+    expected = df[(df["a"].isin(vals1)) | (df["a"].isin(vals2))]
+    generic_filter_test(lib, symbol, q, expected)
+
+
+def test_filter_isin_same_values_different_columns(lmdb_version_store_v1, any_output_format):
+    # Check we don't conflate them.
+    lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol = "test_filter_isin_same_values_different_columns"
+    df = pd.DataFrame({"a": [1, 2, 3, 4], "b": [3, 4, 1, 2]}, index=np.arange(4))
+    lib.write(symbol, df)
+    vals = [1, 2]
+    q = QueryBuilder()
+    q = q[q["a"].isin(vals) | q["b"].isin(vals)]
+    expected = df[df["a"].isin(vals) | df["b"].isin(vals)]
+    generic_filter_test(lib, symbol, q, expected)
+
+
+def test_filter_reused_derived_expression(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    sym = "test_filter_reused_derived_expression"
+    df = pd.DataFrame({"bid": np.arange(0, 20, 2, dtype=np.int64), "ask": np.arange(10, dtype=np.int64)})
+    lib.write(sym, df)
+
+    limit = 3
+    q = QueryBuilder()
+    spread = q["bid"] - q["ask"]
+    q = q[(spread > 0) & (spread < limit)]
+
+    pandas_spread = df["bid"] - df["ask"]
+    expected = df[(pandas_spread > 0) & (pandas_spread < limit)].reset_index(drop=True)
+    received = lib.read(sym, query_builder=q).data
+    assert_frame_equal(expected, received)
+
+
 @pytest.mark.parametrize(
     "df_col,isin_vals,expected_col",
     [
