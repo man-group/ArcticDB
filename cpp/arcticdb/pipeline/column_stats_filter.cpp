@@ -25,7 +25,7 @@ namespace arcticdb {
 bool is_column_stats_enabled() { return ConfigsMap::instance()->get_int("ColumnStats.UseForQueries", 0) == 1; }
 
 bool ColumnStatsQueryMetadata::should_try_column_stats_read() const {
-    return is_column_stats_enabled() && !filter_expressions.empty();
+    return is_column_stats_enabled() && filter_expression.has_value();
 }
 
 StatsVariantData dispatch_unary_stats(const StatsVariantData& left, OperationType operation);
@@ -469,12 +469,12 @@ ColumnStatsQueryMetadata::ColumnStatsQueryMetadata(const std::vector<std::shared
         auto& clause_type = folly::poly_type(*clause);
         if (clause_type == typeid(DateRangeClause)) {
             const auto& date_range_clause = folly::poly_cast<DateRangeClause>(*clause);
-            if (date_range.has_value()) {
-                date_range->first = std::max(date_range->first, date_range_clause.start());
-                date_range->second = std::min(date_range->second, date_range_clause.end());
-            } else {
-                date_range = std::make_pair(date_range_clause.start(), date_range_clause.end());
-            }
+            util::check(
+                    !date_range.has_value(),
+                    "Expected at most one DateRangeClause in the column stats prefix (date ranges are merged in "
+                    "plan_query)"
+            );
+            date_range = std::make_pair(date_range_clause.start(), date_range_clause.end());
             continue;
         }
         if (clause_type == typeid(RowRangeClause)) {
@@ -487,12 +487,12 @@ ColumnStatsQueryMetadata::ColumnStatsQueryMetadata(const std::vector<std::shared
             break;
         }
         const auto& filter = folly::poly_cast<FilterClause>(*clause);
-        filter_expressions.emplace_back(filter.expression_context_);
         util::check(
-                filter.clause_info().input_columns_.has_value(),
-                "FilterClause is missing input_columns_ — Python bindings should always populate this"
+                !filter_expression.has_value(),
+                "Expected at most one FilterClause in the column stats prefix (filters are merged in plan_query)"
         );
-        for (const auto& col : *filter.clause_info().input_columns_) {
+        filter_expression = filter.expression_context_;
+        for (const auto& col : filter.clause_info().input_columns_) {
             columns_of_interest.insert(col);
         }
     }
@@ -546,22 +546,6 @@ SegmentInMemory partial_decode_column_stats_segment(
     return partial;
 }
 
-namespace {
-
-FilterQuery<index::IndexSegmentReader> build_filter_from_column_stats_data(
-        ColumnStatsData&& column_stats, std::vector<std::shared_ptr<ExpressionContext>>&& filter_expressions
-) {
-    util::check(
-            filter_expressions.size() == 1,
-            "Expected exactly one filter expression for column stats (filters are merged in plan_query), got {}",
-            filter_expressions.size()
-    );
-    ExpressionContext overall_context = *filter_expressions.front();
-    return create_column_stats_filter(std::move(column_stats), std::move(overall_context));
-}
-
-} // namespace
-
 FilterQuery<index::IndexSegmentReader> create_column_stats_filter(
         std::shared_ptr<Segment> column_stats_compressed, const TimeseriesDescriptor& tsd,
         ColumnStatsQueryMetadata&& query_metadata
@@ -573,7 +557,8 @@ FilterQuery<index::IndexSegmentReader> create_column_stats_filter(
     SegmentInMemory partial_segment =
             partial_decode_column_stats_segment(*column_stats_compressed, tsd, query_metadata.columns_of_interest);
     ColumnStatsData column_stats{std::move(partial_segment), tsd, query_metadata.date_range};
-    return build_filter_from_column_stats_data(std::move(column_stats), std::move(query_metadata.filter_expressions));
+    ExpressionContext expression_context = *query_metadata.filter_expression.value();
+    return create_column_stats_filter(std::move(column_stats), std::move(expression_context));
 }
 
 } // namespace arcticdb

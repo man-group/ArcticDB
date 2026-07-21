@@ -1970,9 +1970,8 @@ def test_filter_clause_merging_not_across_row_range(
 def test_filter_merge_date_range_between(
     lmdb_version_store_tiny_segment, any_output_format, column_stats_filtering_enabled_and_disabled
 ):
-    """We move DateRangeClauses between two filters left in the query plan so we can merge the filters,
-    and in future restrict the data that the filter needs to evaluate against. This test just checks
-    that we give correct results.
+    """We move DateRangeClauses between two filters left in the query plan so we can merge the filters.
+    This test just checks that we give correct results.
     """
     lib = lmdb_version_store_tiny_segment
     lib._set_output_format_for_pipeline_tests(any_output_format)
@@ -2001,8 +2000,8 @@ def test_filter_merge_dynamic_schema_missing_column(lmdb_version_store_dynamic_s
     lib = lmdb_version_store_dynamic_schema
     lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_filter_merge_dynamic_schema_missing_column"
-    df0 = pd.DataFrame({"a": [1, 2], "b": [10, 20]}, index=pd.date_range("2000-01-01", periods=2))
-    df1 = pd.DataFrame({"a": [3, 4]}, index=pd.date_range("2000-01-03", periods=2))
+    df0 = pd.DataFrame({"a": [1, 2, 3], "b": [10, 20, 200]}, index=pd.date_range("2000-01-01", periods=3))
+    df1 = pd.DataFrame({"a": [4, 5]}, index=pd.date_range("2000-01-04", periods=2))
     lib.write(symbol, df0)
     lib.append(symbol, df1)
 

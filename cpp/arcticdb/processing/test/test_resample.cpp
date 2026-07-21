@@ -11,6 +11,7 @@
 #include <arcticdb/entity/atom_key.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/processing/clause.hpp>
+#include <arcticdb/util/error_code.hpp>
 #include <arcticdb/util/test/test_utils.hpp>
 
 using namespace arcticdb;
@@ -23,10 +24,11 @@ auto generate_bucket_boundaries(std::vector<timestamp>&& bucket_boundaries) {
 
 template<ResampleBoundary resample_boundary>
 ResampleClause<resample_boundary> generate_resample_clause(
-        ResampleBoundary label_boundary, std::vector<timestamp>&& bucket_boundaries
+        ResampleBoundary label_boundary, std::vector<timestamp>&& bucket_boundaries,
+        ResampleOrigin origin = timestamp{0}
 ) {
     ResampleClause<resample_boundary> res{
-            "dummy", label_boundary, generate_bucket_boundaries(std::move(bucket_boundaries)), 0, 0
+            "dummy", label_boundary, generate_bucket_boundaries(std::move(bucket_boundaries)), 0, std::move(origin)
     };
     ProcessingConfig processing_config{false, 0, IndexDescriptor::Type::TIMESTAMP};
     res.set_processing_config(processing_config);
@@ -172,6 +174,38 @@ TEST(Resample, StructureForProcessingExactBoundary) {
     ASSERT_EQ(ranges_and_keys[1], bottom);
     std::vector<std::vector<size_t>> expected_proc_unit_ids_right{{0, 1}, {1}};
     ASSERT_EQ(expected_proc_unit_ids_right, proc_unit_ids);
+}
+
+TEST(Resample, StructureForProcessingRaisesForUnsupportedOriginWithFoldedDateRange) {
+    // A leading DateRangeClause sets date_range_ before this function uses
+    // it to compute bucket boundaries, without having read any row data yet - so start/end/start_day/end_day
+    // origins are unsafe in that case. See ResampleClause::check_origin_supported_with_date_range.
+    StreamId sym{"sym"};
+    ColRange col_range{1, 2};
+    RowRange row_range{0, 100};
+    auto key = AtomKeyBuilder().start_index(0).end_index(1000).build<KeyType::TABLE_DATA>(sym);
+    std::vector<RangesAndKey> ranges_and_keys{RangesAndKey(row_range, col_range, key)};
+
+    auto resample_clause = generate_resample_clause<ResampleBoundary::LEFT>(
+            ResampleBoundary::LEFT, {1, 500}, ResampleOrigin{std::string{"start"}}
+    );
+    resample_clause.date_range_ = {50, 200};
+    EXPECT_THROW(resample_clause.structure_for_processing(ranges_and_keys), UserInputException);
+}
+
+TEST(Resample, StructureForProcessingAllowsUnsupportedOriginWithoutFoldedDateRange) {
+    // With no date range clause, date_range_ is derived from the real index in ranges_and_keys, so
+    // all origins are OK.
+    StreamId sym{"sym"};
+    ColRange col_range{1, 2};
+    RowRange row_range{0, 100};
+    auto key = AtomKeyBuilder().start_index(0).end_index(1000).build<KeyType::TABLE_DATA>(sym);
+    std::vector<RangesAndKey> ranges_and_keys{RangesAndKey(row_range, col_range, key)};
+
+    auto resample_clause = generate_resample_clause<ResampleBoundary::LEFT>(
+            ResampleBoundary::LEFT, {1, 500}, ResampleOrigin{std::string{"start"}}
+    );
+    EXPECT_NO_THROW(resample_clause.structure_for_processing(ranges_and_keys));
 }
 
 TEST(Resample, FindBuckets) {
