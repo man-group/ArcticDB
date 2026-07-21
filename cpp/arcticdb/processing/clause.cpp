@@ -6,6 +6,7 @@
  * will be governed by the Apache License, version 2.0.
  */
 
+#include <array>
 #include <vector>
 #include <variant>
 
@@ -802,90 +803,209 @@ std::vector<std::vector<EntityId>> MergeClause::structure_for_processing(
 // the rows are sorted by time stamp
 std::vector<EntityId> MergeClause::process(std::vector<EntityId>&& entity_ids) const { return std::move(entity_ids); }
 
-std::vector<EntityId> ColumnStatsGenerationClause::process(std::vector<EntityId>&& entity_ids) const {
-    internal::check<ErrorCode::E_INVALID_ARGUMENT>(
-            !entity_ids.empty(), "ColumnStatsGenerationClause::process does not make sense with no processing units"
-    );
-    auto proc = gather_entities<
-            std::shared_ptr<SegmentInMemory>,
-            std::shared_ptr<RowRange>,
-            std::shared_ptr<ColRange>,
-            std::shared_ptr<AtomKey>>(*component_manager_, std::move(entity_ids));
+namespace column_stats_internal {
+std::vector<ColumnStatsAggregatorData> build_per_slice_aggregators_data(
+        const std::vector<ColumnStatsAggregator>& aggregators
+) {
     std::vector<ColumnStatsAggregatorData> aggregators_data;
-    internal::check<ErrorCode::E_INVALID_ARGUMENT>(
-            static_cast<bool>(column_stats_aggregators_),
-            "ColumnStatsGenerationClause::process does not make sense with no aggregators"
-    );
-    for (const auto& agg : *column_stats_aggregators_) {
+    aggregators_data.reserve(aggregators.size());
+
+    for (const auto& agg : aggregators) {
         aggregators_data.emplace_back(agg.get_aggregator_data());
     }
+    return aggregators_data;
+}
 
+void aggregate_input_columns(
+        ProcessingUnit& processingUnit, std::vector<ColumnStatsAggregatorData>& aggregators_data,
+        const std::vector<ColumnStatsAggregator>& aggregators, bool dynamic_schema
+) {
+    for (auto agg_data : folly::enumerate(aggregators_data)) {
+        const auto& input_column_name = aggregators.at(agg_data.index).get_input_column_name();
+        auto input_column = processingUnit.get(input_column_name);
+
+        if (std::holds_alternative<ColumnWithStrings>(input_column)) {
+            agg_data->aggregate(std::get<ColumnWithStrings>(input_column));
+        } else if (!dynamic_schema) {
+            internal::raise<ErrorCode::E_ASSERTION_FAILURE>(
+                    "Unable to resolve column denoted by aggregation operator: '{}'", input_column_name
+            );
+        }
+    }
+}
+
+// Collect the start and end indexes from every atom key in the processing unit.
+// Assert if there two different indexes or return the single start/end index pair.
+std::pair<IndexValue, IndexValue> extract_start_and_end_index(const std::vector<std::shared_ptr<AtomKey>>& atom_keys) {
     ankerl::unordered_dense::set<IndexValue> start_indexes;
     ankerl::unordered_dense::set<IndexValue> end_indexes;
 
-    for (const auto& key : proc.atom_keys_.value()) {
+    for (const auto& key : atom_keys) {
         start_indexes.insert(key->start_index());
         end_indexes.insert(key->end_index());
-    }
-    for (auto agg_data : folly::enumerate(aggregators_data)) {
-        auto input_column_name = column_stats_aggregators_->at(agg_data.index).get_input_column_name();
-        auto input_column = proc.get(input_column_name);
-        if (std::holds_alternative<ColumnWithStrings>(input_column)) {
-            auto input_column_with_strings = std::get<ColumnWithStrings>(input_column);
-            agg_data->aggregate(input_column_with_strings);
-        } else {
-            if (!processing_config_.dynamic_schema_)
-                internal::raise<ErrorCode::E_ASSERTION_FAILURE>(
-                        "Unable to resolve column denoted by aggregation operator: '{}'", input_column_name
-                );
-        }
     }
 
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(
             start_indexes.size() == 1 && end_indexes.size() == 1,
             "Expected all data segments in one processing unit to have same start and end indexes"
     );
-    auto start_index = *start_indexes.begin();
-    auto end_index = *end_indexes.begin();
+
+    return {*start_indexes.begin(), *end_indexes.begin()};
+}
+
+// All segments fed into one column-stats process() call share the same
+// row-slice, which means they share the same start/end index.
+std::pair<NumericIndex, NumericIndex> extract_slice_index_bounds(const std::vector<std::shared_ptr<AtomKey>>& atom_keys
+) {
+    const auto [start_index, end_index] = extract_start_and_end_index(atom_keys);
+
     schema::check<ErrorCode::E_UNSUPPORTED_INDEX_TYPE>(
             std::holds_alternative<NumericIndex>(start_index) && std::holds_alternative<NumericIndex>(end_index),
             "Cannot build column stats over string-indexed symbol"
     );
-    auto start_index_col = std::make_shared<Column>(make_scalar_type(DataType::NANOSECONDS_UTC64), Sparsity::PERMITTED);
-    auto end_index_col = std::make_shared<Column>(make_scalar_type(DataType::NANOSECONDS_UTC64), Sparsity::PERMITTED);
-    start_index_col->template push_back<NumericIndex>(std::get<NumericIndex>(start_index));
-    end_index_col->template push_back<NumericIndex>(std::get<NumericIndex>(end_index));
-    start_index_col->set_row_data(0);
-    end_index_col->set_row_data(0);
 
-    SegmentInMemory seg;
-    seg.descriptor().set_index(IndexDescriptorImpl(IndexDescriptorImpl::Type::ROWCOUNT, 0));
-    seg.add_column(scalar_field(DataType::NANOSECONDS_UTC64, start_index_column_name), start_index_col);
-    seg.add_column(scalar_field(DataType::NANOSECONDS_UTC64, end_index_column_name), end_index_col);
-    arcticc::pb2::column_stats_pb2::ColumnStatsHeader merged_header;
+    return {std::get<NumericIndex>(start_index), std::get<NumericIndex>(end_index)};
+}
+
+std::shared_ptr<Column> make_single_row_index_column(NumericIndex value) {
+    auto col = std::make_shared<Column>(make_scalar_type(DataType::NANOSECONDS_UTC64), Sparsity::PERMITTED);
+    col->template push_back<NumericIndex>(value);
+    col->set_row_data(0);
+    return col;
+}
+
+SegmentInMemory build_per_slice_result_segment(NumericIndex start_index, NumericIndex end_index) {
+    SegmentInMemory result_segment;
+
+    result_segment.descriptor().set_index(IndexDescriptorImpl(IndexDescriptorImpl::Type::ROWCOUNT, 0));
+    result_segment.add_column(
+            scalar_field(DataType::NANOSECONDS_UTC64, start_index_column_name),
+            make_single_row_index_column(start_index)
+    );
+    result_segment.add_column(
+            scalar_field(DataType::NANOSECONDS_UTC64, end_index_column_name), make_single_row_index_column(end_index)
+    );
+    return result_segment;
+}
+
+void append_aggregated_stats_as_columns_to_result(
+        SegmentInMemory& result_segment, const ColumnStatsAggregatorOutput& aggregated_stats,
+        const std::vector<ColumnName>& output_column_names
+) {
+    internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+            output_column_names.size() == 4,
+            "Expected 4 output column names per MinMax aggregator, got {}",
+            output_column_names.size()
+    );
+    details::visit_type(aggregated_stats.min->data_type(), [&](auto col_tag) {
+        using RawType = typename ScalarTypeInfo<decltype(col_tag)>::RawType;
+
+        auto min_col =
+                std::make_shared<Column>(make_scalar_type(aggregated_stats.min->data_type()), Sparsity::PERMITTED);
+        auto max_col =
+                std::make_shared<Column>(make_scalar_type(aggregated_stats.max->data_type()), Sparsity::PERMITTED);
+        auto nan_count_col = std::make_shared<Column>(make_scalar_type(DataType::UINT64), Sparsity::PERMITTED);
+        auto null_count_col = std::make_shared<Column>(make_scalar_type(DataType::UINT64), Sparsity::PERMITTED);
+
+        min_col->template push_back<RawType>(aggregated_stats.min->template get<RawType>());
+        max_col->template push_back<RawType>(aggregated_stats.max->template get<RawType>());
+        nan_count_col->template push_back<uint64_t>(aggregated_stats.nan_count);
+        null_count_col->template push_back<uint64_t>(aggregated_stats.null_count);
+
+        result_segment.add_column(
+                scalar_field(aggregated_stats.min->data_type(), output_column_names[0].value), min_col
+        );
+        result_segment.add_column(
+                scalar_field(aggregated_stats.max->data_type(), output_column_names[1].value), max_col
+        );
+        result_segment.add_column(scalar_field(DataType::UINT64, output_column_names[2].value), nan_count_col);
+        result_segment.add_column(scalar_field(DataType::UINT64, output_column_names[3].value), null_count_col);
+    });
+}
+
+// First: finalize every aggregator_data and collect the aggregated col stats
+// Second: append the aggregated col stats to result_segment as columns
+// Note: aggregators that produced no min/max, do not append any columns to the result_segment
+// Returns: ColumnStatsHeader describing: <input_column_offset -> [{stat_segment_offset, stat_type}]>
+arcticc::pb2::column_stats_pb2::ColumnStatsHeader finalize_and_append_stats_cols_to_result(
+        SegmentInMemory& result_segment, std::vector<ColumnStatsAggregatorData>& aggregators_data,
+        const std::vector<ColumnStatsAggregator>& aggregators
+) {
+    using namespace arcticc::pb2::column_stats_pb2;
+    static constexpr std::array<ColumnStatsType, 4> stat_order{MIN_V1, MAX_V1, NAN_COUNT_V1, NULL_COUNT_V1};
+
+    ColumnStatsHeader header;
+    header.set_version(1);
+
     for (const auto& agg_data : folly::enumerate(aggregators_data)) {
-        auto finalized = agg_data->finalize(column_stats_aggregators_->at(agg_data.index).get_output_column_names());
-        auto offset_base = seg.descriptor().field_count();
-        util::check(finalized.metadata(), "Expect finalized to have metadata, ColumnStatsGenerationClause::process");
-        arcticc::pb2::column_stats_pb2::ColumnStatsHeader sub_header;
-        bool unpacked = finalized.metadata()->UnpackTo(&sub_header);
-        util::check(unpacked, "Could not unpack meta to a ColumnStatsHeader in ColumnStatsGenerationClause#process");
-        for (const auto& [data_col_offset, entry_list] : sub_header.stats_by_column()) {
-            auto& merged_entry_list = (*merged_header.mutable_stats_by_column())[data_col_offset];
-            for (const auto& entry : entry_list.entries()) {
-                auto* new_entry = merged_entry_list.add_entries();
-                new_entry->set_stats_seg_offset(entry.stats_seg_offset() + offset_base);
-                new_entry->set_type(entry.type());
-            }
+        auto aggregated_stats = agg_data->finalize();
+        if (!aggregated_stats.min.has_value()) {
+            continue; // Slice had no aggregatable values for this column - no stat column will be created
         }
-        seg.concatenate(std::move(finalized));
+
+        const auto& output_column_names = aggregators.at(agg_data.index).get_output_column_names();
+        const auto current_stat_start_offset = result_segment.descriptor().field_count();
+
+        append_aggregated_stats_as_columns_to_result(result_segment, aggregated_stats, output_column_names);
+
+        // checks if entry exists for the 'input_column_offset' (create if not)
+        auto& entry_list = (*header.mutable_stats_by_column())[aggregated_stats.input_column_offset];
+
+        // mapping: <input_column_offset -> [{stat_segment_offset, stat_type}]>
+        for (const auto& [i, stat_type] : folly::enumerate(stat_order)) {
+            // example: input_column="price" has offset 3 in the original dataframe, input_column_offset=3
+            // in the header: key=3(input_column_offset), value=[
+            // {stats_seg_offset: 2, MIN_V1} (for "price" the MIN stat is at offset 2+0 in stats_segment)
+            // {stats_seg_offset: 3, MAX_V1} (for "price" the MIN stat is at offset 2+1 in stats_segment)
+            // {stats_seg_offset: 4, NAN_COUNT_V1} (for "price" the NAN_COUNT stat is at offset 2+2 in stats_segment)
+            // {stats_seg_offset: 5, NULL_COUNT_V1} (for "price" the NULL_COUNT stat is at offset 2+2 in stats_segment)]
+
+            auto* entry = entry_list.add_entries();
+            entry->set_stats_seg_offset(current_stat_start_offset + i);
+            entry->set_type(stat_type);
+        }
     }
+    return header;
+}
+
+} // namespace column_stats_internal
+
+std::vector<EntityId> ColumnStatsGenerationClause::process(std::vector<EntityId>&& entity_ids) const {
+    using namespace column_stats_internal;
+    internal::check<ErrorCode::E_INVALID_ARGUMENT>(
+            !entity_ids.empty(), "ColumnStatsGenerationClause::process does not make sense with no processing units"
+    );
+    internal::check<ErrorCode::E_INVALID_ARGUMENT>(
+            static_cast<bool>(column_stats_aggregators_),
+            "ColumnStatsGenerationClause::process does not make sense with no aggregators"
+    );
+
+    auto proc = gather_entities<
+            std::shared_ptr<SegmentInMemory>,
+            std::shared_ptr<RowRange>,
+            std::shared_ptr<ColRange>,
+            std::shared_ptr<AtomKey>>(*component_manager_, std::move(entity_ids));
+
+    auto aggregators_data = build_per_slice_aggregators_data(*column_stats_aggregators_);
+    aggregate_input_columns(proc, aggregators_data, *column_stats_aggregators_, processing_config_.dynamic_schema_);
+
+    auto [start_index, end_index] = extract_slice_index_bounds(proc.atom_keys_.value());
+
+    // for now only with index columns: |start_index|end_index|
+    auto result_segment = build_per_slice_result_segment(start_index, end_index);
+
+    // now the result_segment becomes:
+    // |start_index|end_index|v1_min(col1)|v1_max(col1)|v1_nan_count(col1)|v1_null_count(col1)|v2_min(col2)|...
+    auto header =
+            finalize_and_append_stats_cols_to_result(result_segment, aggregators_data, *column_stats_aggregators_);
+
     google::protobuf::Any any;
-    bool packed = any.PackFrom(merged_header);
-    util::check(packed, "Failed to pack merged_header into Any in ColumnStatsGenerationClause#process");
-    seg.set_metadata(std::move(any));
-    seg.set_row_id(0);
-    return push_entities(*component_manager_, ProcessingUnit(std::move(seg)));
+    bool packed = any.PackFrom(header);
+    util::check(packed, "Failed to pack column stats header into Any in ColumnStatsGenerationClause::process");
+    result_segment.set_metadata(std::move(any));
+
+    result_segment.set_row_id(0);
+    return push_entities(*component_manager_, ProcessingUnit(std::move(result_segment)));
 }
 
 std::vector<std::vector<size_t>> RowRangeClause::structure_for_processing(std::vector<RangesAndKey>& ranges_and_keys) {

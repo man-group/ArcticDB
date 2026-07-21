@@ -8,91 +8,140 @@
 
 namespace arcticdb {
 
-SegmentInMemory merge_column_stats_segments(const std::vector<SegmentInMemory>& segments) {
+namespace merge_internal {
+
+struct MergedSchema {
+    std::vector<std::string> field_names;
+    std::vector<TypeDescriptor> type_descriptors;
+    ankerl::unordered_dense::map<std::string, size_t> name_to_index;
+    std::vector<std::optional<std::pair<uint32_t, ColumnStatTypeInternal>>> stat_info;
+};
+
+arcticc::pb2::column_stats_pb2::ColumnStatsHeader unpack_header(const SegmentInMemory& segment) {
+    arcticc::pb2::column_stats_pb2::ColumnStatsHeader header;
+
+    auto* metadata = segment.metadata();
+    util::check(metadata != nullptr, "Column stats segment has no metadata");
+    bool unpacked = metadata->UnpackTo(&header);
+    util::check(unpacked, "Could not unpack column stats segment metadata");
+    return header;
+}
+
+using SegOffsetToInputOffsetAndStatMap =
+        ankerl::unordered_dense::map<uint32_t, std::pair<uint32_t, ColumnStatTypeInternal>>;
+
+SegOffsetToInputOffsetAndStatMap invert_stats_header(const arcticc::pb2::column_stats_pb2::ColumnStatsHeader& header) {
+    SegOffsetToInputOffsetAndStatMap seg_offset_to_input_offset_and_stat;
+
+    for (const auto& [input_column_offset, entry_list] : header.stats_by_column()) {
+        for (const auto& entry : entry_list.entries()) {
+            seg_offset_to_input_offset_and_stat.emplace(
+                    entry.stats_seg_offset(), std::pair{input_column_offset, entry.type()}
+            );
+        }
+    }
+    return seg_offset_to_input_offset_and_stat;
+}
+
+void merge_existing_column_type(MergedSchema& schema, size_t existing_index, const TypeDescriptor& new_type) {
+    auto& merged_type = schema.type_descriptors.at(existing_index);
+    auto opt_common_type = has_valid_common_type(merged_type, new_type);
+    internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+            opt_common_type.has_value(),
+            "No valid common type between {} and {} in {}",
+            merged_type,
+            new_type,
+            __FUNCTION__
+    );
+    merged_type = *opt_common_type;
+}
+
+void add_new_column(
+        MergedSchema& schema, const std::string& name, const TypeDescriptor& new_type, size_t seg_offset,
+        const SegOffsetToInputOffsetAndStatMap& seg_offset_to_input_offset_and_stat
+) {
+    schema.name_to_index.emplace(name, schema.type_descriptors.size());
+    schema.type_descriptors.emplace_back(new_type);
+    schema.field_names.emplace_back(name);
+
+    if (auto stat_it = seg_offset_to_input_offset_and_stat.find(static_cast<uint32_t>(seg_offset));
+        stat_it != seg_offset_to_input_offset_and_stat.end()) {
+        schema.stat_info.emplace_back(stat_it->second);
+    } else {
+        schema.stat_info.emplace_back(std::nullopt);
+    }
+}
+
+MergedSchema compute_merged_schema(const std::vector<SegmentInMemory>& col_stats_segments) {
+    MergedSchema schema;
+
+    for (auto& segment : col_stats_segments) {
+        auto seg_offset_to_input_offset_and_stat = invert_stats_header(unpack_header(segment));
+
+        for (const auto& [idx, field] : folly::enumerate(segment.descriptor().fields())) {
+            const auto new_type = field.type();
+            const std::string name{field.name()};
+
+            if (auto it = schema.name_to_index.find(name); it != schema.name_to_index.end()) {
+                merge_existing_column_type(schema, it->second, new_type);
+            } else {
+                add_new_column(schema, name, new_type, idx, seg_offset_to_input_offset_and_stat);
+            }
+        }
+    }
+    return schema;
+}
+
+arcticc::pb2::column_stats_pb2::ColumnStatsHeader build_column_stats_header(const MergedSchema& schema) {
+    arcticc::pb2::column_stats_pb2::ColumnStatsHeader header;
+    header.set_version(1);
+
+    for (const auto& [idx, info] : folly::enumerate(schema.stat_info)) {
+        if (!info.has_value()) {
+            continue;
+        }
+
+        const auto& [data_col_offset, stat_type] = *info;
+        auto& entry_list = (*header.mutable_stats_by_column())[data_col_offset];
+        auto* new_entry = entry_list.add_entries();
+        new_entry->set_stats_seg_offset(static_cast<uint32_t>(idx));
+        new_entry->set_type(stat_type);
+    }
+    return header;
+}
+
+} // namespace merge_internal
+
+SegmentInMemory merge_column_stats_segments(const std::vector<SegmentInMemory>& col_stats_segments) {
+    using namespace merge_internal;
+
+    auto schema = compute_merged_schema(col_stats_segments);
+
     SegmentInMemory merged(Sparsity::PERMITTED);
     merged.init_column_map();
     merged.descriptor().set_index(IndexDescriptorImpl{IndexDescriptor::Type::ROWCOUNT, 0});
-
-    // Maintain the order of the columns in the input segments
-    ankerl::unordered_dense::map<std::string, size_t> field_name_to_index;
-    std::vector<TypeDescriptor> type_descriptors;
-    std::vector<std::string> field_names;
-    std::vector<arcticc::pb2::column_stats_pb2::ColumnStatsType> stat_types;
-    std::vector<size_t> data_col_offsets;
-    for (auto& segment : segments) {
-        arcticc::pb2::column_stats_pb2::ColumnStatsHeader header;
-        auto metadata = segment.metadata();
-        util::check(metadata != nullptr, "Column stats segment has no metadata");
-        bool unpacked = metadata->UnpackTo(&header);
-        util::check(unpacked, "Could not unpack column stats metadata?");
-
-        // Build reverse lookup: stats_seg_offset -> (data_col_offset, type)
-        ankerl::unordered_dense::map<uint32_t, std::pair<uint32_t, arcticc::pb2::column_stats_pb2::ColumnStatsType>>
-                offset_lookup;
-        for (const auto& [data_col_offset, entry_list] : header.stats_by_column()) {
-            for (const auto& entry : entry_list.entries()) {
-                offset_lookup[entry.stats_seg_offset()] = {data_col_offset, entry.type()};
-            }
-        }
-
-        for (const auto& [idx, field] : folly::enumerate(segment.descriptor().fields())) {
-            auto new_type = field.type();
-
-            if (auto it = field_name_to_index.find(std::string{field.name()}); it != field_name_to_index.end()) {
-                auto& merged_type = type_descriptors.at(field_name_to_index.at(std::string{field.name()}));
-                auto opt_common_type = has_valid_common_type(merged_type, new_type);
-                internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-                        opt_common_type.has_value(),
-                        "No valid common type between {} and {} in {}",
-                        merged_type,
-                        new_type,
-                        __FUNCTION__
-                );
-                merged_type = *opt_common_type;
-            } else {
-                type_descriptors.emplace_back(new_type);
-                field_name_to_index.emplace(field.name(), type_descriptors.size() - 1);
-                field_names.emplace_back(field.name());
-                auto end_index_offset = static_cast<size_t>(index::Fields::end_index);
-                if (idx > end_index_offset) {
-                    // Skip start_index and end_index which are not statistics
-                    auto& [dcol, stype] = offset_lookup.at(idx);
-                    stat_types.emplace_back(stype);
-                    data_col_offsets.emplace_back(dcol);
-                }
-            }
-        }
+    for (const auto& [idx, type_descriptor] : folly::enumerate(schema.type_descriptors)) {
+        merged.add_column(FieldRef{type_descriptor, schema.field_names.at(idx)}, 0, AllocationType::DYNAMIC);
     }
-
-    arcticc::pb2::column_stats_pb2::ColumnStatsHeader merged_header;
-    merged_header.set_version(1); // see column_stats.proto for explanation of the versioning scheme
-    auto end_index_offset = static_cast<size_t>(index::Fields::end_index);
-    size_t stat_idx = 0;
-    for (const auto& [idx, type_descriptor] : folly::enumerate(type_descriptors)) {
-        merged.add_column(FieldRef{type_descriptor, field_names.at(idx)}, 0, AllocationType::DYNAMIC);
-        if (idx > end_index_offset) {
-            auto& entry_list = (*merged_header.mutable_stats_by_column())[data_col_offsets.at(stat_idx)];
-            auto* new_entry = entry_list.add_entries();
-            new_entry->set_stats_seg_offset(idx);
-            new_entry->set_type(stat_types.at(stat_idx));
-            ++stat_idx;
-        }
-    }
-    for (auto& segment : segments) {
+    for (auto& segment : col_stats_segments) {
         merged.append(segment);
     }
     merged.set_compacted(true);
     merged.sort(start_index_column_name);
 
+    auto header = build_column_stats_header(schema);
     google::protobuf::Any any;
-    bool packed = any.PackFrom(merged_header);
-    util::check(packed, "Failed to pack merged_header in to Any?");
+    bool packed = any.PackFrom(header);
+
+    util::check(packed, "Failed to pack merged column stats header into Any");
+
     merged.set_metadata(std::move(any));
+
     return merged;
 }
 
-std::string type_to_operator_string(ColumnStatTypeInternal type) {
-    switch (type) {
+std::string stat_to_operator_string(ColumnStatTypeInternal stat) {
+    switch (stat) {
     case ColumnStatTypeInternal::MIN_V1:
         return "v1_MIN";
     case ColumnStatTypeInternal::MAX_V1:
@@ -106,8 +155,8 @@ std::string type_to_operator_string(ColumnStatTypeInternal type) {
     }
 }
 
-std::string type_to_name(ColumnStatType type) {
-    switch (type) {
+std::string stat_to_name(ColumnStatType stat) {
+    switch (stat) {
     case ColumnStatType::MINMAX:
         return "MINMAX";
     default:
@@ -115,15 +164,8 @@ std::string type_to_name(ColumnStatType type) {
     }
 }
 
-std::optional<ColumnStatType> name_to_type(const std::string& name) {
-    if (name == "MINMAX") {
-        return ColumnStatType::MINMAX;
-    }
-    return std::nullopt;
-}
-
-std::string to_segment_column_name(const std::string& column, ColumnStatTypeInternal type) {
-    return fmt::format("{}({})", type_to_operator_string(type), column);
+std::string column_and_stat_to_segment_name(const std::string& column, ColumnStatTypeInternal stat) {
+    return fmt::format("{}({})", stat_to_operator_string(stat), column);
 }
 
 void validate_column_stats_header_version(const arcticc::pb2::column_stats_pb2::ColumnStatsHeader& header) {
@@ -161,15 +203,17 @@ ColumnStats::ColumnStats(
                 );
                 continue;
             }
-            if (auto it = offset_to_stat_info_.find(data_col_offset); it != offset_to_stat_info_.end()) {
+
+            auto it = offset_to_input_column_and_stats_.find(data_col_offset);
+
+            if (it != offset_to_input_column_and_stats_.end()) {
                 it->second.column_stats.insert(external_type);
             } else {
                 std::string name{tsd.fields().at(data_col_offset).name()};
-                offset_to_stat_info_.emplace(data_col_offset, NameAndStatTypes{name, {external_type}});
+                offset_to_input_column_and_stats_.emplace(data_col_offset, NameAndStats{name, {external_type}});
             }
         }
     }
-    offset_to_stat_info_set_ = true;
 }
 
 namespace {
@@ -252,9 +296,10 @@ ColumnStats::ColumnStats(const TimeseriesDescriptor& tsd) {
             }
         }
 
-        offset_to_stat_info_.emplace(field_index, NameAndStatTypes{std::move(field_name), {ColumnStatType::MINMAX}});
+        offset_to_input_column_and_stats_.emplace(
+                field_index, NameAndStats{std::move(field_name), {ColumnStatType::MINMAX}}
+        );
     }
-    offset_to_stat_info_set_ = true;
 }
 
 namespace {
@@ -269,106 +314,137 @@ std::unordered_set<ColumnStatTypeInternal> external_to_internal(ColumnStatType t
         internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Unknown column stat type");
     }
 }
-} // namespace
 
-std::vector<std::string> ColumnStats::drop(const ColumnStats& to_drop, bool warn_if_missing) {
-    util::check(offset_to_stat_info_set_, "Expect this->offset to stat info to be set");
-    util::check(to_drop.offset_to_stat_info_set_, "Expect to_drop.offset to stat info to be set");
-    std::vector<std::string> dropped_names;
-    for (const auto& [offset, name_and_stat_types] : to_drop.offset_to_stat_info_) {
-        if (auto it = offset_to_stat_info_.find(offset); it == offset_to_stat_info_.end()) {
-            if (warn_if_missing) {
-                log::version().warn(
-                        "Requested column stats drop but column '{}' does not have any column stats",
-                        name_and_stat_types.mangled_name
-                );
-            }
-        } else {
-            for (const auto& column_stat_type : name_and_stat_types.column_stats) {
-                bool none_erased = it->second.column_stats.erase(column_stat_type) == 0;
-                if (none_erased) {
-                    if (warn_if_missing) {
-                        log::version().warn(
-                                "Requested column stats drop but column '{}' does not have the specified column stat "
-                                "'{}'",
-                                name_and_stat_types.mangled_name,
-                                type_to_name(column_stat_type)
-                        );
-                    }
-                } else {
-                    for (const auto& internal_type : external_to_internal(column_stat_type)) {
-                        dropped_names.emplace_back(
-                                to_segment_column_name(name_and_stat_types.mangled_name, internal_type)
-                        );
-                    }
-                }
-            }
-        }
+MinMaxAggregator create_minmax_aggregator(const std::string& input_column_name, size_t input_column_offset) {
+    return MinMaxAggregator(
+            ColumnName(input_column_name),
+            input_column_offset,
+            ColumnName(column_and_stat_to_segment_name(input_column_name, ColumnStatTypeInternal::MIN_V1)),
+            ColumnName(column_and_stat_to_segment_name(input_column_name, ColumnStatTypeInternal::MAX_V1)),
+            ColumnName(column_and_stat_to_segment_name(input_column_name, ColumnStatTypeInternal::NAN_COUNT_V1)),
+            ColumnName(column_and_stat_to_segment_name(input_column_name, ColumnStatTypeInternal::NULL_COUNT_V1))
+    );
+}
+
+ColumnStatsAggregator create_aggregator(
+        const std::string& input_column_name, size_t input_column_offset, ColumnStatType stat
+) {
+    switch (stat) {
+    case ColumnStatType::MINMAX:
+        return create_minmax_aggregator(input_column_name, input_column_offset);
+    default:
+        internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Unrecognised ColumnStatType");
     }
-    for (auto it = offset_to_stat_info_.begin(); it != offset_to_stat_info_.end();) {
+}
+
+void warn_if_old_offset_is_not_found(const NameAndStats& old_input_column_and_stats, bool warn_if_missing) {
+    if (warn_if_missing) {
+        log::version().warn(
+                "Old column '{}'s offset is not present in the new column stats offsets!",
+                old_input_column_and_stats.mangled_name
+        );
+    }
+}
+
+void add_erased_column_and_stat_names(
+        std::vector<std::string>& erased_column_and_stat, const std::string& mangled_name, ColumnStatType stat
+) {
+    for (const auto& internal_type : external_to_internal(stat)) {
+        erased_column_and_stat.emplace_back(column_and_stat_to_segment_name(mangled_name, internal_type));
+    }
+}
+
+void warn_if_old_stat_is_missing(const std::string& mangled_name, ColumnStatType stat, bool warn_if_missing) {
+    if (warn_if_missing) {
+        log::version().warn("New column '{}' does not have the old stat '{}'", mangled_name, stat_to_name(stat));
+    }
+}
+
+// Erase the requested stats from an existing column entry, appending the segment names that were actually removed to
+// erased_names.
+void erase_old_stats(
+        NameAndStats& new_column_stats, const std::set<ColumnStatType>& old_column_stats, bool warn_if_missing,
+        std::vector<std::string>& erased_columns_and_stats
+) {
+    for (const auto& old_column_stat : old_column_stats) {
+        bool is_erased = (new_column_stats.column_stats.erase(old_column_stat) != 0);
+
+        if (is_erased) {
+            add_erased_column_and_stat_names(erased_columns_and_stats, new_column_stats.mangled_name, old_column_stat);
+            continue;
+        }
+
+        warn_if_old_stat_is_missing(new_column_stats.mangled_name, old_column_stat, warn_if_missing);
+    }
+}
+
+void remove_columns_without_stats(std::unordered_map<size_t, NameAndStats>& columns) {
+    for (auto it = columns.begin(); it != columns.end();) {
         if (it->second.column_stats.empty()) {
-            it = offset_to_stat_info_.erase(it);
+            it = columns.erase(it);
         } else {
             ++it;
         }
     }
-    return dropped_names;
+}
+} // namespace
+
+std::vector<std::string> ColumnStats::drop_old_stats(const ColumnStats& old_stats, bool warn_if_missing) {
+    std::vector<std::string> erased_names;
+    for (const auto& [old_offset, old_input_column_and_stats] : old_stats.offset_to_input_column_and_stats_) {
+        auto it = offset_to_input_column_and_stats_.find(old_offset);
+
+        if (it == offset_to_input_column_and_stats_.end()) {
+            warn_if_old_offset_is_not_found(old_input_column_and_stats, warn_if_missing);
+            continue;
+        }
+
+        auto& new_column_stats = it->second;
+        const auto& old_column_stats = old_input_column_and_stats.column_stats;
+
+        erase_old_stats(new_column_stats, old_column_stats, warn_if_missing, erased_names);
+    }
+    remove_columns_without_stats(offset_to_input_column_and_stats_);
+    return erased_names;
 }
 
 std::unordered_map<std::string, std::unordered_set<std::string>> ColumnStats::to_map() const {
-    util::check(offset_to_stat_info_set_, "Expect offset_to_stat_info to be set in to_map");
-    std::unordered_map<std::string, std::unordered_set<std::string>> res;
-    for (const auto& [offset, name_and_stat_types] : offset_to_stat_info_) {
-        auto& entry = res[name_and_stat_types.mangled_name];
-        for (const auto& type : name_and_stat_types.column_stats) {
-            entry.emplace(type_to_name(type));
+    std::unordered_map<std::string, std::unordered_set<std::string>> input_name_to_stats_names;
+    for (const auto& [offset, input_column_and_stats] : offset_to_input_column_and_stats_) {
+        auto& stats_names = input_name_to_stats_names[input_column_and_stats.mangled_name];
+
+        for (const auto& stat : input_column_and_stats.column_stats) {
+            stats_names.emplace(stat_to_name(stat));
         }
     }
-    return res;
+    return input_name_to_stats_names;
 }
 
 std::optional<Clause> ColumnStats::clause() const {
     if (empty()) {
         return std::nullopt;
     }
-    util::check(offset_to_stat_info_set_, "Expect offset_to_stat_info to be set");
-    std::unordered_set<std::string> input_columns;
-    auto index_generation_aggregators = std::make_shared<std::vector<ColumnStatsAggregator>>();
-    for (const auto& [offset, name_and_stat_types] : offset_to_stat_info_) {
-        input_columns.emplace(name_and_stat_types.mangled_name);
 
-        for (const auto& column_stat_type : name_and_stat_types.column_stats) {
-            switch (column_stat_type) {
-            case ColumnStatType::MINMAX:
-                index_generation_aggregators->emplace_back(MinMaxAggregator(
-                        ColumnName(name_and_stat_types.mangled_name),
-                        offset,
-                        ColumnName(
-                                to_segment_column_name(name_and_stat_types.mangled_name, ColumnStatTypeInternal::MIN_V1)
-                        ),
-                        ColumnName(
-                                to_segment_column_name(name_and_stat_types.mangled_name, ColumnStatTypeInternal::MAX_V1)
-                        ),
-                        ColumnName(to_segment_column_name(
-                                name_and_stat_types.mangled_name, ColumnStatTypeInternal::NAN_COUNT_V1
-                        )),
-                        ColumnName(to_segment_column_name(
-                                name_and_stat_types.mangled_name, ColumnStatTypeInternal::NULL_COUNT_V1
-                        ))
-                ));
-                break;
-            default:
-                internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Unrecognised ColumnStatType");
-            }
+    std::unordered_set<std::string> input_columns;
+    auto aggregators = std::make_shared<std::vector<ColumnStatsAggregator>>();
+
+    for (const auto& [input_column_offset, input_column_and_stats] : offset_to_input_column_and_stats_) {
+        input_columns.emplace(input_column_and_stats.mangled_name);
+
+        for (const auto& column_stat : input_column_and_stats.column_stats) {
+            aggregators->emplace_back(
+                    create_aggregator(input_column_and_stats.mangled_name, input_column_offset, column_stat)
+            );
         }
     }
-    return ColumnStatsGenerationClause(std::move(input_columns), index_generation_aggregators);
+
+    return ColumnStatsGenerationClause(std::move(input_columns), aggregators);
 }
 
-bool ColumnStats::empty() const { return offset_to_stat_info_.empty(); }
+bool ColumnStats::empty() const { return offset_to_input_column_and_stats_.empty(); }
 
 bool ColumnStats::operator==(const ColumnStats& right) const {
-    return offset_to_stat_info_ == right.offset_to_stat_info_;
+    return offset_to_input_column_and_stats_ == right.offset_to_input_column_and_stats_;
 }
 
 } // namespace arcticdb

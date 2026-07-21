@@ -2087,7 +2087,7 @@ void create_column_stats_impl(
         );
         ColumnStats old_column_stats(old_header, tsd);
         // No need to redo work for any stats that already exist
-        column_stats.drop(old_column_stats, false);
+        column_stats.drop_old_stats(old_column_stats, false);
         // If all the column stats we are being asked to create already exist, there's no work to do
         if (column_stats.empty()) {
             return;
@@ -2105,16 +2105,16 @@ void create_column_stats_impl(
     auto read_query = std::make_shared<ReadQuery>(std::vector{std::make_shared<Clause>(std::move(*clause))});
     read_indexed_keys_to_pipeline(pipeline_context, *read_query, read_options, index_info);
 
-    auto segs = read_process_and_collect(store, pipeline_context, read_query, read_options).get();
+    auto col_stats_slices_and_keys = read_process_and_collect(store, pipeline_context, read_query, read_options).get();
     schema::check<ErrorCode::E_COLUMN_DOESNT_EXIST>(
-            !segs.empty(), "Cannot create column stats for nonexistent columns"
+            !col_stats_slices_and_keys.empty(), "Cannot create column stats for nonexistent columns"
     );
 
-    std::vector<SegmentInMemory> segments_in_memory;
-    for (auto& seg : segs) {
-        segments_in_memory.emplace_back(seg.release_segment(store));
+    std::vector<SegmentInMemory> col_stats_segments;
+    for (auto& slice_and_key : col_stats_slices_and_keys) {
+        col_stats_segments.emplace_back(slice_and_key.release_segment(store));
     }
-    SegmentInMemory new_segment = merge_column_stats_segments(segments_in_memory);
+    SegmentInMemory new_segment = merge_column_stats_segments(col_stats_segments);
     util::check(new_segment.metadata(), "new_segment should always have metadata");
     new_segment.descriptor().set_id(versioned_item.key_.id());
 
