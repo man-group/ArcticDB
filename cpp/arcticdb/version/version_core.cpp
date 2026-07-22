@@ -3129,7 +3129,7 @@ folly::Future<VersionedItem> merge_update_impl(
                     0,
                     pipeline_context->descriptor(),
                     pipeline_context->release_normalization(),
-                    pipeline_context->release_opt_user_defined_metadata(),
+                    std::make_optional(std::move(source->user_meta)),
                     std::nullopt,
                     write_options.bucketize_dynamic
             );

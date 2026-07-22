@@ -2528,36 +2528,52 @@ VersionedItem LocalVersionedEngine::merge_internal(
     py::gil_scoped_release release_gil;
     UpdateInfo update_info = get_latest_undeleted_version_and_next_version_id(store(), version_map(), stream_id);
     if (update_info.previous_index_key_.has_value()) {
-        if (source->empty()) {
-            ARCTICDB_RUNTIME_DEBUG(
-                    log::version(),
-                    "Merging into existing data with an empty source has no effect. \n No new version is being "
-                    "created "
-                    "for symbol='{}', and the last version is returned",
-                    stream_id
-            );
-            return VersionedItem{*std::move(update_info.previous_index_key_)};
-        }
+
         const ReadOptions read_options;
         const WriteOptions write_options = get_write_options();
-        VersionedItem versioned_item = merge_update_impl(
-                                               store(),
-                                               update_info,
-                                               read_options,
-                                               write_options,
-                                               IndexPartialKey{stream_id, update_info.next_version_id_},
-                                               std::move(on),
-                                               strategy,
-                                               std::move(source),
-                                               get_de_dup_map(stream_id, update_info.previous_index_key_, write_options)
-        )
-                                               .get();
+
+        VersionedItem versioned_item =
+                source->empty()
+                        ? VersionedItem{async::submit_io_task(
+                                                UpdateMetadataTask{store(), update_info, std::move(source->user_meta)}
+                          )
+                                                .get()}
+                        : merge_update_impl(
+                                  store(),
+                                  update_info,
+                                  read_options,
+                                  write_options,
+                                  IndexPartialKey{stream_id, update_info.next_version_id_},
+                                  std::move(on),
+                                  strategy,
+                                  std::move(source),
+                                  get_de_dup_map(stream_id, update_info.previous_index_key_, write_options)
+                          )
+                                  .get();
         write_version_and_prune_previous(prune_previous_versions, versioned_item.key_, update_info.previous_index_key_);
         return versioned_item;
     } else if (upsert) {
-        internal::raise<ErrorCode::E_NOT_SUPPORTED>(
-                "Error upserting symbol \"{}\". Upsert is not supported for merge yet.", stream_id
+        user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                strategy.insert(),
+                "Error upserting non-existent symbol \"{}\". {} never inserts rows that are not matched by the "
+                "target, so the new symbol would be empty. Either use a merge strategy with "
+                "not_matched_by_target=insert or create the symbol before merging.",
+                stream_id,
+                strategy
         );
+        VersionedItem versioned_item = write_dataframe_impl(
+                store(),
+                update_info.next_version_id_,
+                source,
+                get_write_options(),
+                std::make_shared<DeDupMap>(),
+                false,
+                true
+        );
+        if (cfg().symbol_list())
+            symbol_list().add_symbol(store(), stream_id, update_info.next_version_id_);
+        version_map()->write_version(store(), versioned_item.key_, std::nullopt);
+        return versioned_item;
     }
     storage::raise<ErrorCode::E_SYMBOL_NOT_FOUND>("Cannot merge into non-existent symbol \"{}\".", stream_id);
 }

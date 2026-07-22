@@ -33,13 +33,6 @@ def mock_find_keys_for_symbol(key_types):
     return lambda key_type, symbol: keys[key_type]
 
 
-def raise_wrapper(exception, message=None):
-    def _raise(*args, **kwargs):
-        raise exception(message)
-
-    return _raise
-
-
 def generic_merge_test(
     lib,
     sym: str,
@@ -132,24 +125,19 @@ class TestMergeTimeseriesCommon:
         assert len(lt.find_keys_for_symbol(KeyType.VERSION, "sym")) == 2
 
     @pytest.mark.parametrize("metadata", ({"meta": "data"}, None))
-    def test_merge_does_not_write_new_version_with_empty_source(self, lmdb_library, metadata, strategy):
+    def test_merge_writes_new_version_with_empty_source(self, lmdb_library, metadata, strategy):
         lib = lmdb_library
         target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]}, index=pd.date_range("2024-01-01", periods=3))
-        write_vit = lib.write("sym", target)
+        lib.write("sym", target, metadata="v0")
         merge_vit = lib.merge_experimental("sym", pd.DataFrame(), metadata=metadata, strategy=strategy)
-        # There's a bug in append, update, and merge when there's an empty source. All of them return the passed
-        # metadata even though it's not used.
-        merge_vit.metadata = write_vit.metadata
-        assert_vit_equals_except_data(write_vit, merge_vit)
-        assert merge_vit.data is None and write_vit.data is None
+        assert merge_vit.metadata is None if metadata is None else merge_vit.metadata == metadata
         lt = lib._dev_tools.library_tool()
         assert len(lt.find_keys_for_symbol(KeyType.TABLE_DATA, "sym")) == 1
-        assert len(lt.find_keys_for_symbol(KeyType.TABLE_INDEX, "sym")) == 1
-        assert len(lt.find_keys_for_symbol(KeyType.VERSION, "sym")) == 1
-
+        assert len(lt.find_keys_for_symbol(KeyType.TABLE_INDEX, "sym")) == 2
+        assert len(lt.find_keys_for_symbol(KeyType.VERSION, "sym")) == 2
         read_vit = lib.read("sym")
-        assert read_vit.version == 0
-        assert read_vit.metadata is None
+        assert read_vit.version == 1
+        assert merge_vit.metadata is None if metadata is None else merge_vit.metadata == metadata
         assert_frame_equal(read_vit.data, target)
 
     @pytest.mark.parametrize(
@@ -536,20 +524,22 @@ class TestMergeTimeseriesUpdate:
             lib.merge_experimental("sym", source, strategy=self.strategy)
 
     @pytest.mark.parametrize("merge_metadata", (None, "meta"))
-    @pytest.mark.xfail(reason="Monday: 12518592426")
     def test_target_is_empty(self, lmdb_library, merge_metadata):
         lib = lmdb_library
         target = pd.DataFrame({"a": np.array([], dtype=np.int64)}, index=pd.DatetimeIndex([]))
         lib.write("sym", target)
-
         source = pd.DataFrame({"a": np.array([1, 2], dtype=np.int64)}, index=pd.date_range("2024-01-01", periods=2))
         merge_vit = lib.merge_experimental(
             "sym", source, strategy=MergeStrategy(not_matched_by_target=MergeAction.DO_NOTHING), metadata=merge_metadata
         )
-        expected = target
+        assert merge_vit.metadata is None if merge_metadata is None else merge_vit.metadata == merge_metadata
+        lt = lib._dev_tools.library_tool()
+        assert len(lt.find_keys_for_symbol(KeyType.TABLE_DATA, "sym")) == 0
+        assert len(lt.find_keys_for_symbol(KeyType.TABLE_INDEX, "sym")) == 2
+        assert len(lt.find_keys_for_symbol(KeyType.VERSION, "sym")) == 2
         read_vit = lib.read("sym")
         assert read_vit.metadata is None if merge_metadata is None else read_vit.metadata == merge_metadata
-        assert_frame_equal(read_vit.data, expected)
+        assert_frame_equal(read_vit.data, target)
 
     @pytest.mark.parametrize(
         "source",
@@ -559,23 +549,31 @@ class TestMergeTimeseriesUpdate:
             pd.DataFrame({"a": [1]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-01")])),
         ),
     )
-    @pytest.mark.parametrize("upsert", (pytest.param(True, marks=pytest.mark.xfail), False))
+    @pytest.mark.parametrize("upsert", (True, False))
     def test_target_symbol_does_not_exist(self, lmdb_library, source, upsert):
+        # An update-only strategy never inserts unmatched rows, so upserting into a non-existent symbol could only
+        # ever create an empty symbol. That is most likely a user error, thus it throws instead.
         lib = lmdb_library
 
-        if not upsert:
-            with pytest.raises(StorageException):
-                lib.merge_experimental(
-                    "sym", source, strategy=MergeStrategy(MergeAction.UPDATE, MergeAction.DO_NOTHING), upsert=upsert
-                )
-        else:
-            merge_vit = lib.merge_experimental(
+        expected_exception = UserInputException if upsert else StorageException
+        with pytest.raises(expected_exception):
+            lib.merge_experimental(
                 "sym", source, strategy=MergeStrategy(MergeAction.UPDATE, MergeAction.DO_NOTHING), upsert=upsert
             )
-            expected = pd.DataFrame({"a": []}, index=pd.DatetimeIndex([]))
-            read_vit = lib.read("sym")
-            assert_vit_equals_except_data(merge_vit, read_vit)
-            assert_frame_equal(read_vit.data, expected)
+        assert not lib.has_symbol("sym")
+
+    def test_upsert_with_existing_symbol(self, lmdb_library):
+        # When the symbol exists upsert is irrelevant and a regular merge is performed.
+        lib = lmdb_library
+        target = pd.DataFrame({"a": [1, 2, 3]}, index=pd.date_range("2024-01-01", periods=3))
+        lib.write("sym", target)
+        source = pd.DataFrame(
+            {"a": [20, 40]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-02"), pd.Timestamp("2024-01-04")])
+        )
+        merge_vit = lib.merge_experimental("sym", source, strategy=self.strategy, upsert=True)
+        assert merge_vit.version == 1
+        expected = pd.DataFrame({"a": [1, 20, 3]}, index=pd.date_range("2024-01-01", periods=3))
+        assert_frame_equal(lib.read("sym").data, expected)
 
     def test_updates_the_latest_live_version(self, lmdb_version_store_v1):
         lib = lmdb_version_store_v1
@@ -1737,7 +1735,8 @@ class TestMergeTimeseriesUpdateAndInsert:
     )
     @pytest.mark.parametrize("upsert", (True, False))
     @pytest.mark.parametrize("strategy", (MergeStrategy("update", "insert"), MergeStrategy("do_nothing", "insert")))
-    def test_target_symbol_does_not_exist(self, lmdb_library, monkeypatch, source, upsert, strategy):
+    @pytest.mark.parametrize("metadata", (None, {"meta": "data"}))
+    def test_target_symbol_does_not_exist(self, lmdb_library, source, upsert, strategy, metadata):
         # Model non-existing target after Library.update
         # There is an upsert parameter to control whether to create the index. If upsert=False exception is thrown.
         # Since we're doing a merge on non-existing data, I think it's logical to assume that nothing matches. No
@@ -1745,44 +1744,55 @@ class TestMergeTimeseriesUpdateAndInsert:
         lib = lmdb_library
 
         if not upsert:
-            monkeypatch.setattr(lib.__class__, "merge_experimental", raise_wrapper(StorageException), raising=False)
             with pytest.raises(StorageException):
-                lib.merge_experimental("sym", source, strategy=strategy, upsert=upsert)
+                lib.merge_experimental("sym", source, strategy=strategy, upsert=upsert, metadata=metadata)
+            assert not lib.has_symbol("sym")
         else:
-            import datetime
-
-            monkeypatch.setattr(
-                lib.__class__,
-                "merge_experimental",
-                lambda *args, **kwargs: VersionedItem(
-                    symbol="sym",
-                    library=lmdb_library.name,
-                    data=None,
-                    version=0,
-                    metadata=None,
-                    host=lmdb_library._nvs.env,
-                    timestamp=pd.Timestamp(datetime.datetime.now()),
-                ),
-                raising=False,
-            )
-            merge_vit = lib.merge_experimental("sym", source, strategy=strategy, upsert=upsert)
-            expected = source
-            monkeypatch.setattr(
-                lib,
-                "read",
-                lambda *args, **kwargs: VersionedItem(
-                    symbol=merge_vit.symbol,
-                    library=merge_vit.library,
-                    data=expected,
-                    version=merge_vit.version,
-                    metadata=merge_vit.metadata,
-                    host=merge_vit.host,
-                    timestamp=merge_vit.timestamp,
-                ),
-            )
+            merge_vit = lib.merge_experimental("sym", source, strategy=strategy, upsert=upsert, metadata=metadata)
+            assert merge_vit.version == 0
+            assert merge_vit.metadata == metadata
+            assert lib.list_symbols() == ["sym"]
             read_vit = lib.read("sym")
             assert_vit_equals_except_data(merge_vit, read_vit)
-            assert_frame_equal(read_vit.data, expected)
+            assert_frame_equal(read_vit.data, source)
+
+    def test_upsert_with_existing_symbol(self, lmdb_library):
+        # When the symbol exists upsert is irrelevant and a regular merge is performed.
+        lib = lmdb_library
+        target = pd.DataFrame({"a": [1, 2, 3]}, index=pd.date_range("2024-01-01", periods=3))
+        lib.write("sym", target)
+        source = pd.DataFrame(
+            {"a": [20, 40]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-02"), pd.Timestamp("2024-01-04")])
+        )
+        merge_vit = lib.merge_experimental("sym", source, strategy=self.strategy, upsert=True)
+        assert merge_vit.version == 1
+        expected = pd.DataFrame(
+            {"a": [1, 20, 3, 40]},
+            index=pd.DatetimeIndex(
+                [
+                    pd.Timestamp("2024-01-01"),
+                    pd.Timestamp("2024-01-02"),
+                    pd.Timestamp("2024-01-03"),
+                    pd.Timestamp("2024-01-04"),
+                ]
+            ),
+        )
+        assert_frame_equal(lib.read("sym").data, expected)
+
+    def test_upsert_recreates_symbol_after_delete(self, lmdb_library):
+        # Recreating a deleted symbol continues the version counter and adds a symbol list key.
+        lib = lmdb_library
+        lib.write("sym", pd.DataFrame({"a": [1, 2, 3]}, index=pd.date_range("2024-01-01", periods=3)))
+        lib.delete("sym")
+        lib_tool = lib._dev_tools.library_tool()
+        assert not len(lib.list_symbols())
+        num_symbol_list_keys = len(lib_tool.find_keys(KeyType.SYMBOL_LIST))
+        source = pd.DataFrame({"a": [10]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-05")]))
+        merge_vit = lib.merge_experimental("sym", source, strategy=self.strategy, upsert=True)
+        assert merge_vit.version == 1
+        assert_frame_equal(lib.read("sym").data, source)
+        assert len(lib_tool.find_keys(KeyType.SYMBOL_LIST)) == num_symbol_list_keys + 1
+        assert lib.list_symbols() == ["sym"]
 
     def test_on_index_and_column(self, lmdb_library):
         lib = lmdb_library
@@ -2695,24 +2705,20 @@ class TestMergeRowrangeCommon:
         assert len(lt.find_keys_for_symbol(KeyType.VERSION, "sym")) == 2
 
     @pytest.mark.parametrize("metadata", ({"meta": "data"}, None))
-    def test_merge_does_not_write_new_version_with_empty_source(self, lmdb_library, metadata, strategy):
+    def test_merge_writes_new_version_with_empty_source(self, lmdb_library, metadata, strategy):
         lib = lmdb_library
         target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]})
-        write_vit = lib.write("sym", target)
+        lib.write("sym", target)
         merge_vit = lib.merge_experimental("sym", pd.DataFrame(), metadata=metadata, strategy=strategy, on=["a"])
-        # There's a bug in append, update, and merge when there's an empty source. All of them return the passed
-        # metadata even though it's not used.
-        merge_vit.metadata = write_vit.metadata
-        assert_vit_equals_except_data(write_vit, merge_vit)
-        assert merge_vit.data is None and write_vit.data is None
+        assert merge_vit.metadata is None if metadata is None else merge_vit.metadata == metadata
         lt = lib._dev_tools.library_tool()
         assert len(lt.find_keys_for_symbol(KeyType.TABLE_DATA, "sym")) == 1
-        assert len(lt.find_keys_for_symbol(KeyType.TABLE_INDEX, "sym")) == 1
-        assert len(lt.find_keys_for_symbol(KeyType.VERSION, "sym")) == 1
+        assert len(lt.find_keys_for_symbol(KeyType.TABLE_INDEX, "sym")) == 2
+        assert len(lt.find_keys_for_symbol(KeyType.VERSION, "sym")) == 2
 
         read_vit = lib.read("sym")
-        assert read_vit.version == 0
-        assert read_vit.metadata is None
+        assert read_vit.version == 1
+        assert read_vit.metadata is None if metadata is None else read_vit.metadata == metadata
         assert_frame_equal(read_vit.data, target)
 
     @pytest.mark.parametrize(
