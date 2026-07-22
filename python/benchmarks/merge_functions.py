@@ -6,6 +6,8 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 
+import random
+
 import numpy as np
 import pandas as pd
 
@@ -20,6 +22,7 @@ CACHE_BUCKET = "arcticdb-merge-update-cache"
 WORK_BUCKET = "arcticdb-merge-work"
 ROWS_PER_SEGMENT = 100_000
 START_DATE = pd.Timestamp("1960-01-01")
+random.seed(0)  # random_strings_of_length draws string pools from stdlib random
 
 
 def generate_merge_target(num_rows, num_value_cols, value_dtype, index_kind, rng, num_unique_strings=None):
