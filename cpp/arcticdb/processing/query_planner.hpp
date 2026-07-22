@@ -23,7 +23,7 @@ using ClauseVariant = std::variant<
         std::shared_ptr<ResampleClause<ResampleBoundary::RIGHT>>, std::shared_ptr<RowRangeClause>,
         std::shared_ptr<DateRangeClause>, std::shared_ptr<ConcatClause>>;
 
-std::vector<ClauseVariant> plan_query(std::vector<ClauseVariant>&& clauses);
+std::vector<std::shared_ptr<Clause>> plan_query(std::vector<std::shared_ptr<Clause>>&& clauses);
 
 ExpressionContext and_filter_expression_contexts(
         const std::vector<std::shared_ptr<ExpressionContext>>& expression_contexts
