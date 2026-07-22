@@ -1,11 +1,14 @@
 #include <arcticdb/pipeline/read_query.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
+#include <arcticdb/processing/query_planner.hpp>
 
 namespace arcticdb::pipelines {
 
-ReadQuery::ReadQuery(std::vector<std::shared_ptr<Clause>>&& clauses) : clauses_(std::move(clauses)) {}
+ReadQuery::ReadQuery(std::vector<std::shared_ptr<Clause>>&& clauses) : clauses_(plan_query(std::move(clauses))) {}
 
-void ReadQuery::add_clauses(std::vector<std::shared_ptr<Clause>>&& clauses) { clauses_ = std::move(clauses); }
+void ReadQuery::add_clauses(std::vector<std::shared_ptr<Clause>>&& clauses) {
+    clauses_ = plan_query(std::move(clauses));
+}
 
 void ReadQuery::convert_to_positive_row_filter(int64_t total_rows) {
     if (!row_range) {

@@ -11,6 +11,7 @@
 #include <arcticdb/async/async_store.hpp>
 #include <arcticdb/codec/default_codecs.hpp>
 #include <arcticdb/version/version_core.hpp>
+#include <arcticdb/processing/query_planner.hpp>
 #include <arcticdb/storage/storage.hpp>
 #include <arcticdb/storage/storage_options.hpp>
 #include <arcticdb/util/optional_defaults.hpp>
@@ -1555,6 +1556,7 @@ MultiSymbolReadOutput LocalVersionedEngine::batch_read_and_join_internal(
 ) {
     py::gil_scoped_release release_gil;
     util::check(!clauses.empty(), "Cannot join with no joining clause provided");
+    clauses = plan_query(std::move(clauses));
     auto opt_index_key_futs = batch_get_versions_async(store(), version_map(), *stream_ids, *version_queries);
     std::vector<folly::Future<SymbolProcessingResult>> symbol_processing_result_futs;
     symbol_processing_result_futs.reserve(opt_index_key_futs.size());
