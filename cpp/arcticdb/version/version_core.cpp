@@ -1375,7 +1375,7 @@ void check_can_perform_processing(
              std::holds_alternative<std::monostate>(read_query.row_filter) && read_query.clauses_.empty());
     const bool is_numpy_array = pipeline_context->has_normalization() && pipeline_context->normalization().has_np();
     // We do not support processing over numpy arrays in general, but compact_data (either directly, or via the
-    // compact_data_inline argument to append) must work with numpy arrays as well as Series/DataFrames
+    // compact_data argument to append) must work with numpy arrays as well as Series/DataFrames
     const bool is_compaction =
             !read_query.clauses_.empty() && folly::poly_type(*read_query.clauses_.front()) == typeid(CompactDataClause);
     if (!is_query_empty) {

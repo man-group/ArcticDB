@@ -187,10 +187,45 @@ jobs:
           # Pin to a known-good release. CMake 4.4.0 made -Werror=<category> validation
           # stricter, which broke the vcpkg `benchmark` port's -Werror=old-style-cast
           # option and fails CI. Bump deliberately once the port is fixed upstream.
+          # NOTE: on macOS this pin only covers the top-level configure; vcpkg picks its
+          # own (higher-versioned) cmake for port builds - see the macOS repoint step below.
           cmake-version: '3.31.6'
 
       - name: Use cmake
         run: cmake --version
+
+      - name: Force vcpkg to use the pinned CMake (macOS)
+        # vcpkg selects the highest-versioned cmake it can find for building ports, which
+        # on the macOS runner is Homebrew's (currently 4.4.0) rather than the 3.31.6 pinned
+        # above - so PATH ordering alone is not enough. 4.4.0's stricter -Werror=<category>
+        # validation breaks the vcpkg `benchmark` port. Point Homebrew's cmake at the pinned
+        # one so port builds use 3.31.6 too. Remove once the pin above is dropped.
+        if: matrix.os == 'macos'
+        run: |
+          set -euo pipefail
+
+          # vcpkg in mac runner somehow ignores PATH order.
+          # On this runner that is Homebrew's cmake, which is newer than the
+          # 3.31.6 we pinned and rejects the benchmark port's -Werror=old-style-cast flag.
+          # We overwrite Homebrew's cmake with a symlink to the pinned one so that the
+          # newest cmake vcpkg can find IS 3.31.6.
+
+          pinned_cmake="$(command -v cmake)"  # PATH resolves to the pinned 3.31.6 here
+          echo "Pinned cmake in use: ${pinned_cmake}"
+          "${pinned_cmake}" --version | head -1
+
+          # Safety check: if PATH ever stops resolving to the pinned cmake, bail out loudly
+          # instead of silently linking Homebrew's cmake to itself (a no-op that leaves 4.x).
+          if [ "${pinned_cmake}" = "/opt/homebrew/bin/cmake" ]; then
+            echo "::error::Expected the pinned CMake on PATH, but 'cmake' resolved to Homebrew (${pinned_cmake}). Aborting so we don't ship a broken pin."
+            exit 1
+          fi
+
+          # Runners are Apple Silicon, so Homebrew lives at /opt/homebrew.
+          brew_cmake="/opt/homebrew/bin/cmake"
+          echo "Overriding Homebrew cmake at ${brew_cmake} (was: $("${brew_cmake}" --version | head -1))"
+          ln -sf "${pinned_cmake}" "${brew_cmake}"
+          echo "  -> now: $("${brew_cmake}" --version | head -1)"
 
       - name: Install sanitizer runtime libraries
         if: matrix.os == 'linux' && env.ARCTICDB_USE_SANITIZER != ''

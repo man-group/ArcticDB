@@ -95,6 +95,29 @@ If only `NumCPUThreads` is set, `NumIOThreads` will still default to x1.5 `NumCP
 
 <sup>\*</sup>On Linux machines, this core count takes cgroups into account. In particular, this means that CPU limits are respected in processes running in Kubernetes.
 
+### TaskScheduler.LogTaskStats
+
+Enable per-task diagnostics for the CPU and IO threadpools. When set to `1`, ArcticDB logs one record per completed task to the `schedule` log stream, recording which pool and worker thread ran the task, how long it waited in the queue, and how long it ran:
+
+```
+task_stats pool=IO thread=IOPool7 task_id=42 enqueue_ns=... wait_ns=... run_ns=... expired=false priority=0
+```
+
+Values:
+* 0: Disable (Default)
+* 1: Enable
+
+The records are logged at the `DEBUG` level, so you must also raise the `schedule` stream to `DEBUG` (see [Logging configuration](#logging-configuration) below). For example, to capture the records to a file:
+
+```
+ARCTICDB_TaskScheduler_LogTaskStats_int=1 ARCTICDB_schedule_loglevel=DEBUG \
+    python your_app.py 2> task_stats.log
+```
+
+The `thread` field is not supported on Windows and reads `unknown` there.
+
+The [`scripts/analyze_task_scheduler_queues.py`](https://github.com/man-group/ArcticDB/blob/master/scripts/analyze_task_scheduler_queues.py) script parses the captured log and provides a visualization.
+
 ### VersionStore.WillItemBePickledWarningMsg
 
 Control whether a detailed message explaining how the item is normalized is logged when calling the `will_item_be_pickled` function.
