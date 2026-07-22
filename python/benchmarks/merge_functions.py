@@ -58,7 +58,7 @@ def get_random_unique_rows(target, count, rng, unique_on=None):
     # (pandas rejects an empty duplicated() subset).
     if not on_cols:
         return matched.copy()
-    return matched[~matched.reset_index().duplicated(subset=on_cols, keep="first").values].copy()
+    return matched[~matched.duplicated(subset=on_cols, keep="first").values].copy()
 
 
 def generate_source_for_row_range(target, source_size, matched_count, rng, on=None, value_dtype=None):
@@ -87,7 +87,7 @@ def generate_source_for_row_range(target, source_size, matched_count, rng, on=No
         }
     )
     source = pd.concat([matched, rest])
-    source = source[~source.reset_index().duplicated(subset=on, keep="first").values]
+    source = source[~source.duplicated(subset=on, keep="first").values]
     source.index = pd.RangeIndex(len(source))
     return source.sample(frac=1, random_state=42).reset_index(drop=True)
 
