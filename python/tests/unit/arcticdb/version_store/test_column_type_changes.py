@@ -15,7 +15,7 @@ from arcticdb.version_store.library import Library
 
 from arcticdb_ext.version_store import StreamDescriptorMismatch
 from arcticdb_ext.storage import KeyType
-from arcticdb.util.test import assert_frame_equal
+from arcticdb.util.test import assert_frame_equal, arrow_string_read
 from arcticdb_ext.types import DataType
 
 from tests.util.mark import ARM64
@@ -55,7 +55,9 @@ def test_changing_numeric_type(version_store_factory, dynamic_schema):
 
 @pytest.mark.parametrize("dynamic_schema", [True, False])
 @pytest.mark.parametrize("dynamic_strings_first", [True, False])
-def test_changing_string_type(version_store_factory, dynamic_schema, dynamic_strings_first):
+def test_changing_string_type(
+    version_store_factory, dynamic_schema, dynamic_strings_first, write_string_dtype, read_string_dtype
+):
     lib = version_store_factory(dynamic_strings=True, dynamic_schema=dynamic_schema)
     sym_append = "test_changing_string_type_append"
     sym_update = "test_changing_string_type_update"
@@ -69,12 +71,16 @@ def test_changing_string_type(version_store_factory, dynamic_schema, dynamic_str
     lib.append(sym_append, df_append, dynamic_strings=not dynamic_strings_first)
     lib.update(sym_update, df_update, dynamic_strings=not dynamic_strings_first)
 
-    expected_append = pd.concat([df_write, df_append])
-    received_append = lib.read(sym_append).data
+    with arrow_string_read(read_string_dtype):
+        expected_append = pd.DataFrame(
+            {"col": ["a", "bb", "ccc", "dddd"]}, index=pd.date_range("2024-01-01", periods=4)
+        )
+        received_append = lib.read(sym_append).data
     assert_frame_equal(expected_append, received_append)
 
-    expected_update = pd.DataFrame({"col": ["a", "dddd", "ccc"]}, index=pd.date_range("2024-01-01", periods=3))
-    received_update = lib.read(sym_update).data
+    with arrow_string_read(read_string_dtype):
+        expected_update = pd.DataFrame({"col": ["a", "dddd", "ccc"]}, index=pd.date_range("2024-01-01", periods=3))
+        received_update = lib.read(sym_update).data
     assert_frame_equal(expected_update, received_update)
 
 

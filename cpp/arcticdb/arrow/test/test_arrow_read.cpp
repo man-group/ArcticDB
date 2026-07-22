@@ -191,8 +191,7 @@ TEST_P(ArrowStringColumnRead, Basic) {
     auto handler = ArrowStringHandler();
     auto column_name = "col";
     auto read_options = ReadOptions();
-    read_options.set_output_format(OutputFormat::ARROW);
-    read_options.set_arrow_output_default_string_format(output_string_format());
+    read_options.set_output_config(ArrowOutputConfig{output_string_format(), {}});
     auto [type_desc, block_config] = handler.output_type_and_block_config(
             TypeDescriptor{DataType::UTF_DYNAMIC64, Dimension::Dim0}, column_name, read_options
     );
@@ -394,11 +393,9 @@ TEST(ArrowRead, ConvertSegmentMultipleStringColumns) {
         string_values[1].emplace_back(fmt::format("string_{}", str_id_offset + row));
     }
     auto read_options = ReadOptions();
-    read_options.set_output_format(OutputFormat::ARROW);
-    read_options.set_arrow_output_default_string_format(ArrowOutputStringFormat::CATEGORICAL);
     auto per_column_string_format =
             std::unordered_map<std::string, ArrowOutputStringFormat>{{"str_2", ArrowOutputStringFormat::LARGE_STRING}};
-    read_options.set_arrow_output_per_column_string_format(per_column_string_format);
+    read_options.set_output_config(ArrowOutputConfig{ArrowOutputStringFormat::CATEGORICAL, per_column_string_format});
     auto segment = get_detachable_segment(fields, num_rows, chunk_size, read_options);
     auto string_pool = std::make_shared<StringPool>();
     fill_chunked_string_column(
@@ -459,7 +456,7 @@ class ArrowTimestampConvert : public testing::TestWithParam<TimestampConvertPara
     ReadOptions read_options;
 
     ArrowTimestampConvert() {
-        read_options.set_output_format(OutputFormat::ARROW);
+        read_options.set_output_config(ArrowOutputConfig{});
         std::tie(dest_type, block_config) = handler.output_type_and_block_config(source_type, "ts", read_options);
         dest_size = data_type_size(dest_type);
     }

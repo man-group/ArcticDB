@@ -29,7 +29,7 @@ from arcticdb.exceptions import (
     UserInputException,
     ArcticException,
 )
-from arcticdb import QueryBuilder
+from arcticdb import QueryBuilder, OutputFormat
 from arcticdb.flattener import Flattener
 from arcticdb.util.test_utils import generate_random_numpy_array, generate_random_series
 from arcticdb.version_store import NativeVersionStore
@@ -50,6 +50,8 @@ from arcticdb.util.test import (
     assert_series_equal,
     config_context,
     distinct_timestamps,
+    arrow_string_read,
+    expected_for_read_string_dtype,
 )
 from tests.conftest import Marks
 from tests.util.date import DateRange
@@ -1498,12 +1500,14 @@ def test_negative_strides(basic_store_tiny_segment):
 
 
 @pytest.mark.storage
-def test_dynamic_strings(basic_store):
-    row = pd.Series(["A", "B", "C", "Aaba", "Baca", "CABA", "dog", "cat"])
-    df = pd.DataFrame({"x": row})
-    basic_store.write("strings", df, dynamic_strings=True)
-    vit = basic_store.read("strings")
-    assert_equal(vit.data, df)
+def test_dynamic_strings(basic_store, write_string_dtype, read_string_dtype):
+    values = ["A", "B", "C", "Aaba", "Baca", "CABA", "dog", "cat"]
+    basic_store.write("strings", pd.DataFrame({"x": values}), dynamic_strings=True)
+    with arrow_string_read(read_string_dtype):
+        expected = pd.DataFrame({"x": values})
+        vit = basic_store.read("strings")
+    assert_equal(vit.data, expected)
+    assert (str(vit.data["x"].dtype) == "str") == read_string_dtype
 
 
 @pytest.mark.storage
@@ -2839,7 +2843,11 @@ def test_batch_append_with_throw_exception(basic_store, three_col_df):
 
 @pytest.mark.parametrize("use_date_range_clause", [True, False])
 @marks([Marks.pipeline, Marks.storage])
-def test_batch_read_date_range(basic_store_tombstone_and_sync_passive, use_date_range_clause, any_output_format):
+def test_batch_read_date_range(
+    basic_store_tombstone_and_sync_passive, use_date_range_clause, any_output_format, read_string_dtype
+):
+    if read_string_dtype and any_output_format != OutputFormat.PANDAS:
+        pytest.skip("infer_string only affects pandas output")
     lmdb_version_store = basic_store_tombstone_and_sync_passive
     lmdb_version_store._set_output_format_for_pipeline_tests(any_output_format)
     symbols = []
@@ -2862,26 +2870,29 @@ def test_batch_read_date_range(basic_store_tombstone_and_sync_passive, use_date_
         date_range = pd.date_range(base_date + pd.DateOffset(j + 100), periods=500)
         date_ranges.append(date_range)
 
-    if use_date_range_clause:
-        qbs = []
-        for date_range in date_ranges:
-            q = QueryBuilder()
-            q = q.date_range(date_range)
-            qbs.append(q)
-        result_dict = lmdb_version_store.batch_read(symbols, query_builder=qbs)
-    else:
-        result_dict = lmdb_version_store.batch_read(symbols, date_ranges=date_ranges)
+    with arrow_string_read(read_string_dtype):
+        if use_date_range_clause:
+            qbs = []
+            for date_range in date_ranges:
+                q = QueryBuilder()
+                q = q.date_range(date_range)
+                qbs.append(q)
+            result_dict = lmdb_version_store.batch_read(symbols, query_builder=qbs)
+        else:
+            result_dict = lmdb_version_store.batch_read(symbols, date_ranges=date_ranges)
     for x, sym in enumerate(result_dict.keys()):
         vit = result_dict[sym]
         date_range = date_ranges[x]
         start = date_range[0]
         end = date_range[-1]
-        assert_equal(vit.data, dfs[x].loc[start:end])
+        assert_equal(vit.data, expected_for_read_string_dtype(dfs[x].loc[start:end], read_string_dtype))
 
 
 @pytest.mark.parametrize("use_row_range_clause", [True, False])
 @marks([Marks.pipeline])
-def test_batch_read_row_range(lmdb_version_store_v1, use_row_range_clause, any_output_format):
+def test_batch_read_row_range(lmdb_version_store_v1, use_row_range_clause, any_output_format, read_string_dtype):
+    if read_string_dtype and any_output_format != OutputFormat.PANDAS:
+        pytest.skip("infer_string only affects pandas output")
     lib = lmdb_version_store_v1
     lib._set_output_format_for_pipeline_tests(any_output_format)
     num_symbols = 5
@@ -2901,23 +2912,24 @@ def test_batch_read_row_range(lmdb_version_store_v1, use_row_range_clause, any_o
     for j in range(num_symbols):
         row_ranges.append((j * (num_rows // num_symbols), ((j + 1) * (num_rows // num_symbols))))
 
-    if use_row_range_clause:
-        qbs = []
-        for row_range in row_ranges:
-            q = QueryBuilder()
-            q = q.row_range(row_range)
-            qbs.append(q)
-        result_dict = lib.batch_read(symbols, query_builder=qbs)
-    else:
-        result_dict = lib.batch_read(symbols, row_ranges=row_ranges)
+    with arrow_string_read(read_string_dtype):
+        if use_row_range_clause:
+            qbs = []
+            for row_range in row_ranges:
+                q = QueryBuilder()
+                q = q.row_range(row_range)
+                qbs.append(q)
+            result_dict = lib.batch_read(symbols, query_builder=qbs)
+        else:
+            result_dict = lib.batch_read(symbols, row_ranges=row_ranges)
     for idx, sym in enumerate(result_dict.keys()):
         df = result_dict[sym].data
         row_range = row_ranges[idx]
-        assert_equal(df, dfs[idx].iloc[row_range[0] : row_range[1]])
+        assert_equal(df, expected_for_read_string_dtype(dfs[idx].iloc[row_range[0] : row_range[1]], read_string_dtype))
 
 
 @pytest.mark.storage
-def test_batch_read_columns(basic_store_tombstone_and_sync_passive):
+def test_batch_read_columns(basic_store_tombstone_and_sync_passive, write_string_dtype, read_string_dtype):
     lmdb_version_store = basic_store_tombstone_and_sync_passive
     columns_of_interest = ["strings", "uint8"]
     number_of_requests = 5
@@ -2935,10 +2947,11 @@ def test_batch_read_columns(basic_store_tombstone_and_sync_passive):
     for x, symbol in enumerate(symbols):
         lmdb_version_store.write(symbol, dfs[x])
 
-    result_dict = lmdb_version_store.batch_read(symbols, columns=[columns_of_interest] * number_of_requests)
+    with arrow_string_read(read_string_dtype):
+        result_dict = lmdb_version_store.batch_read(symbols, columns=[columns_of_interest] * number_of_requests)
     for x, sym in enumerate(result_dict.keys()):
         vit = result_dict[sym]
-        assert_equal_value(vit.data, dfs[x][columns_of_interest])
+        assert_equal_value(vit.data, expected_for_read_string_dtype(dfs[x][columns_of_interest], read_string_dtype))
 
 
 @pytest.mark.storage

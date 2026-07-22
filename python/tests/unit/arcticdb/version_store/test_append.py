@@ -15,7 +15,7 @@ from arcticdb.version_store import NativeVersionStore
 from arcticdb_ext.exceptions import InternalException, NormalizationException, UnsortedDataException, SchemaException
 from arcticdb_ext.storage import KeyType
 from arcticdb_ext import set_config_int
-from arcticdb.util.test import random_integers, assert_frame_equal, assert_series_equal
+from arcticdb.util.test import random_integers, assert_frame_equal, assert_series_equal, arrow_string_read
 from arcticdb.config import set_log_level
 from arcticdb.util.test_utils import generate_random_numpy_array, supported_types_list
 from arcticdb.util.logger import get_logger
@@ -281,21 +281,25 @@ class TestAppend:
         expected = pd.concat([df1, df2])
         assert_frame_equal(vit.data, expected)
 
-    def test_append_string_of_different_sizes(self, lmdb_version_store, compact_data):
+    def test_append_string_of_different_sizes(
+        self, lmdb_version_store, compact_data, write_string_dtype, read_string_dtype
+    ):
         symbol = "test_append_simple"
-        df1 = pd.DataFrame(data={"x": ["cat", "dog"]}, index=np.arange(0, 2))
-        lmdb_version_store.write(symbol, df1)
-        vit = lmdb_version_store.read(symbol)
-        assert_frame_equal(vit.data, df1)
+        lmdb_version_store.write(symbol, pd.DataFrame(data={"x": ["cat", "dog"]}, index=np.arange(0, 2)))
+        with arrow_string_read(read_string_dtype):
+            expected = pd.DataFrame(data={"x": ["cat", "dog"]}, index=np.arange(0, 2))
+            assert_frame_equal(lmdb_version_store.read(symbol).data, expected)
 
         df2 = pd.DataFrame(
             data={"x": ["catandsomethingelse", "dogandsomethingevenlonger"]},
             index=np.arange(2, 4),
         )
         lmdb_version_store.append(symbol, df2, compact_data=compact_data)
-        vit = lmdb_version_store.read(symbol)
-        expected = pd.concat([df1, df2])
-        assert_frame_equal(vit.data, expected)
+        with arrow_string_read(read_string_dtype):
+            expected = pd.DataFrame(
+                data={"x": ["cat", "dog", "catandsomethingelse", "dogandsomethingevenlonger"]}, index=np.arange(0, 4)
+            )
+            assert_frame_equal(lmdb_version_store.read(symbol).data, expected)
 
     def test_append_dynamic_schema_add_column(self, lmdb_version_store_dynamic_schema, compact_data):
         symbol = "symbol"

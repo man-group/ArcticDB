@@ -10,6 +10,7 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/numpy.h>
 #include <pybind11/operators.h>
+#include <pybind11/stl.h>
 #include <arcticdb/entity/data_error.hpp>
 #include <arcticdb/entity/protobuf_mappings.hpp>
 #include <arcticdb/python/python_to_tensor_frame.hpp>
@@ -230,6 +231,27 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
             .value("LARGE_STRING", ArrowOutputStringFormat::LARGE_STRING)
             .value("SMALL_STRING", ArrowOutputStringFormat::SMALL_STRING);
 
+    py::enum_<PandasStringFormat>(version, "InternalPandasStringFormat")
+            .value("OBJECT", PandasStringFormat::OBJECT)
+            .value("ARROW_LARGE_STRING", PandasStringFormat::ARROW_LARGE_STRING);
+
+    py::class_<PandasOutputConfig>(version, "PandasOutputConfig")
+            .def(py::init<>())
+            .def(py::init([](PandasStringFormat default_string_format) {
+                     return PandasOutputConfig{default_string_format};
+                 }),
+                 py::arg("default_string_format") = PandasStringFormat::OBJECT);
+
+    py::class_<ArrowOutputConfig>(version, "ArrowOutputConfig")
+            .def(py::init<>())
+            .def(py::init([](ArrowOutputStringFormat default_string_format,
+                             std::unordered_map<std::string, ArrowOutputStringFormat>
+                                     per_column_string_format) {
+                     return ArrowOutputConfig{default_string_format, std::move(per_column_string_format)};
+                 }),
+                 py::arg("default_string_format") = ArrowOutputStringFormat::LARGE_STRING,
+                 py::arg("per_column_string_format") = std::unordered_map<std::string, ArrowOutputStringFormat>{});
+
     py::class_<ReadOptions>(version, "PythonVersionStoreReadOptions")
             .def(py::init())
             .def("set_force_strings_to_object", &ReadOptions::set_force_strings_to_object)
@@ -238,11 +260,9 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
             .def("set_incompletes", &ReadOptions::set_incompletes)
             .def("set_set_tz", &ReadOptions::set_set_tz)
             .def("set_optimise_string_memory", &ReadOptions::set_optimise_string_memory)
-            .def("set_output_format", &ReadOptions::set_output_format)
-            .def("set_arrow_output_default_string_format", &ReadOptions::set_arrow_output_default_string_format)
-            .def("set_arrow_output_per_column_string_format", &ReadOptions::set_arrow_output_per_column_string_format)
+            .def("set_output_config", &ReadOptions::set_output_config)
             .def_property_readonly("incompletes", &ReadOptions::get_incompletes)
-            .def_property_readonly("output_format", &ReadOptions::output_format);
+            .def_property_readonly("output_format", &ReadOptions::output_format_for_frame);
 
     py::class_<BatchReadOptions>(version, "PythonVersionStoreBatchReadOptions")
             .def(py::init([](bool batch_throw_on_error) { return BatchReadOptions(batch_throw_on_error); }))
@@ -258,7 +278,7 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
             [](StreamId sid, std::string path, std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options
             ) {
                 auto handler_data = std::make_shared<std::any>(
-                        TypeHandlerRegistry::instance()->get_handler_data(read_options.output_format())
+                        TypeHandlerRegistry::instance()->get_handler_data(read_options.output_format_for_frame())
                 );
                 return adapt_read_df(
                         read_dataframe_from_file(sid, path, read_query, read_options, handler_data), handler_data.get()
@@ -870,9 +890,10 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                         const VersionQuery& version_query,
                         const std::shared_ptr<ReadQuery>& read_query,
                         const ReadOptions& read_options) {
-                        auto handler_data = std::make_shared<std::any>(
-                                TypeHandlerRegistry::instance()->get_handler_data(read_options.output_format())
-                        );
+                        auto handler_data =
+                                std::make_shared<std::any>(TypeHandlerRegistry::instance()->get_handler_data(
+                                        read_options.output_format_for_frame()
+                                ));
                         return adapt_read_df(
                                 v.read_dataframe_version(sid, version_query, read_query, read_options, handler_data),
                                 handler_data.get()
@@ -963,7 +984,7 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                         ReadResult res{
                                 vit,
                                 PandasOutputFrame{SegmentInMemory{tsd.as_stream_descriptor()}},
-                                read_options.output_format(),
+                                read_options.output_format_for_frame(),
                                 tsd_proto.normalization(),
                                 tsd_proto.user_meta(),
                                 tsd_proto.multi_key_meta(),
@@ -1067,7 +1088,7 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                                 );
                             });
                         }
-                        const OutputFormat output_format = read_options.output_format();
+                        const OutputFormat output_format = read_options.output_format_for_frame();
                         auto handler_data = std::make_shared<std::any>(
                                 TypeHandlerRegistry::instance()->get_handler_data(output_format)
                         );
@@ -1120,7 +1141,7 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                             ReadResult res{
                                     vit,
                                     PandasOutputFrame{SegmentInMemory{tsd.as_stream_descriptor()}},
-                                    read_options.output_format(),
+                                    read_options.output_format_for_frame(),
                                     tsd_proto.normalization(),
                                     tsd_proto.user_meta(),
                                     tsd_proto.multi_key_meta(),

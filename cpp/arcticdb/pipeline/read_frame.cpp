@@ -62,7 +62,9 @@ std::pair<StreamDescriptor, BlockConfigPerColumn> get_filtered_descriptor_and_bl
                 auto handlers = TypeHandlerRegistry::instance();
 
                 for (auto& field : *fields) {
-                    if (auto handler = handlers->get_handler(read_options.output_format(), field.type())) {
+                    if (auto handler = handlers->get_handler(
+                                read_options.output_format_for_column_type(field.type()), field.type()
+                        )) {
                         auto [output_type, block_config] =
                                 handler->output_type_and_block_config(field.type(), field.name(), read_options);
                         block_config_per_column.emplace_back(block_config);
@@ -110,55 +112,35 @@ void finalize_segment_setup(
     handle_modified_descriptor(context, output);
 }
 
-SegmentInMemory allocate_chunked_frame(
-        const std::shared_ptr<PipelineContext>& context, const ReadOptions& read_options
-) {
-    ARCTICDB_SAMPLE_DEFAULT(AllocContiguousFrame)
+SegmentInMemory allocate_frame(const std::shared_ptr<PipelineContext>& context, const ReadOptions& read_options) {
+    ARCTICDB_SAMPLE_DEFAULT(AllocateFrame)
     auto [offset, row_count] = offset_and_row_count(context);
     auto block_row_counts = output_block_row_counts(context);
-    ARCTICDB_DEBUG(log::version(), "Allocated chunked frame with offset {} and row count {}", offset, row_count);
     auto [desc, block_config_per_column] = get_filtered_descriptor_and_block_config(context, read_options);
     SegmentInMemory output{
             std::move(desc), 0, AllocationType::DETACHABLE, Sparsity::NOT_PERMITTED, block_config_per_column
     };
-
     for (auto& column : output.columns()) {
         const auto data_size = data_type_size(column->type());
-        for (auto block_row_count : block_row_counts) {
-            if (block_row_count > 0) {
-                // We can end up with empty segments from the processing pipeline, e.g. when:
-                // - Filtering a data key to the empty set (e.g. date_range = (3, 3) in a data key with no index=3)
-                // - Resampling with a date range with a bucket slice containing no indices
-                // 0 sized memory blocks would break the offset assumptions in chunked buffers, and it is fine to have
-                // number of memory blocks not equal number of segments because follow-up methods like
-                // `copy_frame_data_to_buffer` rely on offsets rather than block indices.
-                const auto bytes = block_row_count * data_size;
-                column->allocate_and_advance_by(bytes);
+        if (read_options.output_format_for_column_type(column->type()) == OutputFormat::ARROW) {
+            for (auto block_row_count : block_row_counts) {
+                if (block_row_count > 0) {
+                    // We can end up with empty segments from the processing pipeline, e.g. when:
+                    // - Filtering a data key to the empty set (e.g. date_range = (3, 3) in a data key with no index=3)
+                    // - Resampling with a date range with a bucket slice containing no indices
+                    // 0 sized memory blocks would break the offset assumptions in chunked buffers, and it is fine to
+                    // have number of memory blocks not equal number of segments because follow-up methods like
+                    // `copy_frame_data_to_buffer` rely on offsets rather than block indices.
+                    const auto bytes = block_row_count * data_size;
+                    column->allocate_and_advance_by(bytes);
+                }
             }
+        } else if (row_count > 0) {
+            column->allocate_and_advance_by(row_count * data_size);
         }
     }
-
     finalize_segment_setup(output, offset, row_count, context);
     return output;
-}
-
-SegmentInMemory allocate_contiguous_frame(
-        const std::shared_ptr<PipelineContext>& context, const ReadOptions& read_options
-) {
-    ARCTICDB_SAMPLE_DEFAULT(AllocChunkedFrame)
-    auto [offset, row_count] = offset_and_row_count(context);
-    auto desc = get_filtered_descriptor_and_block_config(context, read_options).first;
-    // block_config_per_column is not used for contiguous frame allocation
-    SegmentInMemory output{std::move(desc), row_count, AllocationType::DETACHABLE, Sparsity::NOT_PERMITTED};
-    finalize_segment_setup(output, offset, row_count, context);
-    return output;
-}
-
-SegmentInMemory allocate_frame(const std::shared_ptr<PipelineContext>& context, const ReadOptions& read_options) {
-    if (read_options.output_format() == OutputFormat::ARROW)
-        return allocate_chunked_frame(context, read_options);
-    else
-        return allocate_contiguous_frame(context, read_options);
 }
 
 size_t get_index_field_count(const SegmentInMemory& frame) { return frame.descriptor().index().field_count(); }
@@ -345,7 +327,8 @@ void decode_or_expand(
 ) {
     const auto source_type_desc = mapping.source_type_desc_;
     const auto dest_type_desc = mapping.dest_type_desc_;
-    if (auto handler = get_type_handler(read_options.output_format(), source_type_desc, dest_type_desc)) {
+    const auto column_format = read_options.output_format_for_column_type(dest_type_desc);
+    if (auto handler = get_type_handler(column_format, source_type_desc, dest_type_desc)) {
         handler->handle_type(
                 data,
                 dest_column,
@@ -369,7 +352,7 @@ void decode_or_expand(
         // hence `ndarray().sparse_map_bytes() > 0` is not enough. We check whether the uncompressed size matches
         // the expected number of rows.
         const bool is_sparse = dense_num_rows < mapping.num_rows_;
-        const bool is_arrow = read_options.output_format() == OutputFormat::ARROW;
+        const bool is_arrow = column_format == OutputFormat::ARROW;
 
         if (is_sparse) {
             // We explicitly allocate an intermediate dense_buffer to decode the dense data into.
@@ -415,7 +398,10 @@ void decode_or_expand(
             data += decode_field(source_type_desc, encoded_field_info, data, sink, bv, encoding_version);
             handle_type_promotion(mapping, dest_column);
         }
-        handle_truncation(dest_column, mapping.truncate_);
+
+        if (is_arrow) {
+            handle_truncation(dest_column, mapping.truncate_);
+        }
     }
 }
 
@@ -462,89 +448,81 @@ ColumnTruncation get_truncate_range_from_index(
 }
 
 ColumnTruncation get_truncate_range(
-        const SegmentInMemory& frame, const PipelineContextRow& context, const ReadOptions& read_options,
-        const ReadQuery& read_query, EncodingVersion encoding_version, const EncodedFieldImpl& index_field,
-        const uint8_t* index_field_offset
+        const SegmentInMemory& frame, const PipelineContextRow& context, const ReadQuery& read_query,
+        EncodingVersion encoding_version, const EncodedFieldImpl& index_field, const uint8_t* index_field_offset
 ) {
     ColumnTruncation truncate_rows;
     const auto& row_range = context.slice_and_key().slice().row_range;
     const auto& first_row_offset = frame.offset();
     auto adjusted_row_range = RowRange(row_range.first - first_row_offset, row_range.second - first_row_offset);
-    if (read_options.output_format() == OutputFormat::ARROW) {
-        util::variant_match(
-                read_query.row_filter,
-                [&truncate_rows,
-                 &adjusted_row_range,
-                 &frame,
-                 &context,
-                 &index_field,
-                 index_field_offset,
-                 encoding_version](const IndexRange& index_filter) {
-                    // Time filter is inclusive of both end points
-                    const auto& time_filter = static_cast<const TimestampRange&>(index_filter);
-                    // We have historically had some bugs where the start and end index values in the atom key do not
-                    // exactly reflect the first and last timestamps in the index of the corresponding data keys, so use
-                    // the index column as a definitive source of truth
-                    auto [index_column, first_ts, last_ts] = [&]() {
-                        std::shared_ptr<Column> _index_column;
-                        timestamp _first_ts;
-                        timestamp _last_ts;
-                        if (context.fetch_index()) {
-                            _index_column = frame.column_ptr(0);
-                            _first_ts = *_index_column->scalar_at<timestamp>(adjusted_row_range.first);
-                            _last_ts = *_index_column->scalar_at<timestamp>(adjusted_row_range.second - 1);
-                        } else {
-                            const auto& index_type = frame.descriptor().fields(0UL).type();
-                            _index_column = std::make_shared<Column>(index_type);
-                            std::optional<util::BitMagic> bv;
-                            (void)decode_field(
-                                    index_type, index_field, index_field_offset, *_index_column, bv, encoding_version
-                            );
-                            _index_column->set_row_data(_index_column->row_count() - 1);
-                            _first_ts = *_index_column->scalar_at<timestamp>(0);
-                            _last_ts = *_index_column->scalar_at<timestamp>(_index_column->row_count() - 1);
+    util::variant_match(
+            read_query.row_filter,
+            [&truncate_rows, &adjusted_row_range, &frame, &context, &index_field, index_field_offset, encoding_version](
+                    const IndexRange& index_filter
+            ) {
+                // Time filter is inclusive of both end points
+                const auto& time_filter = static_cast<const TimestampRange&>(index_filter);
+                // We have historically had some bugs where the start and end index values in the atom key do not
+                // exactly reflect the first and last timestamps in the index of the corresponding data keys, so use
+                // the index column as a definitive source of truth
+                auto [index_column, first_ts, last_ts] = [&]() {
+                    std::shared_ptr<Column> _index_column;
+                    timestamp _first_ts;
+                    timestamp _last_ts;
+                    if (context.fetch_index()) {
+                        _index_column = frame.column_ptr(0);
+                        _first_ts = *_index_column->scalar_at<timestamp>(adjusted_row_range.first);
+                        _last_ts = *_index_column->scalar_at<timestamp>(adjusted_row_range.second - 1);
+                    } else {
+                        const auto& index_type = frame.descriptor().fields(0UL).type();
+                        _index_column = std::make_shared<Column>(index_type);
+                        std::optional<util::BitMagic> bv;
+                        (void)decode_field(
+                                index_type, index_field, index_field_offset, *_index_column, bv, encoding_version
+                        );
+                        _index_column->set_row_data(_index_column->row_count() - 1);
+                        _first_ts = *_index_column->scalar_at<timestamp>(0);
+                        _last_ts = *_index_column->scalar_at<timestamp>(_index_column->row_count() - 1);
+                    }
+                    return std::make_tuple(_index_column, _first_ts, _last_ts);
+                }();
+                // The `get_truncate_range_from_index` is O(logn). This check serves to avoid the expensive O(logn)
+                // check for blocks in the middle of the range
+                // Note that this is slightly stricter than entity::contains, as if a time filter boundary exactly
+                // matches the segment index boundary, we would keep the whole segment and no log-complexity search
+                // is required
+                if ((time_filter.first > first_ts && time_filter.first <= last_ts) ||
+                    (time_filter.second >= first_ts && time_filter.second < last_ts)) {
+                    if (context.fetch_index()) {
+                        truncate_rows = get_truncate_range_from_index(*index_column, adjusted_row_range, time_filter);
+                    } else {
+                        truncate_rows = get_truncate_range_from_index(
+                                *index_column, {0, index_column->row_count()}, time_filter
+                        );
+                        if (truncate_rows.start_.has_value()) {
+                            truncate_rows.start_ = *truncate_rows.start_ + adjusted_row_range.first;
                         }
-                        return std::make_tuple(_index_column, _first_ts, _last_ts);
-                    }();
-                    // The `get_truncate_range_from_index` is O(logn). This check serves to avoid the expensive O(logn)
-                    // check for blocks in the middle of the range
-                    // Note that this is slightly stricter than entity::contains, as if a time filter boundary exactly
-                    // matches the segment index boundary, we would keep the whole segment and no log-complexity search
-                    // is required
-                    if ((time_filter.first > first_ts && time_filter.first <= last_ts) ||
-                        (time_filter.second >= first_ts && time_filter.second < last_ts)) {
-                        if (context.fetch_index()) {
-                            truncate_rows =
-                                    get_truncate_range_from_index(*index_column, adjusted_row_range, time_filter);
-                        } else {
-                            truncate_rows = get_truncate_range_from_index(
-                                    *index_column, {0, index_column->row_count()}, time_filter
-                            );
-                            if (truncate_rows.start_.has_value()) {
-                                truncate_rows.start_ = *truncate_rows.start_ + adjusted_row_range.first;
-                            }
-                            if (truncate_rows.end_.has_value()) {
-                                truncate_rows.end_ = *truncate_rows.end_ + adjusted_row_range.first;
-                            }
+                        if (truncate_rows.end_.has_value()) {
+                            truncate_rows.end_ = *truncate_rows.end_ + adjusted_row_range.first;
                         }
                     }
-                    // Because of an old bug where end_index values in the index key could be larger than the last_ts+1,
-                    // we need to handle the case where we need to drop the entire first block.
-                    if (time_filter.first > last_ts) {
-                        truncate_rows.start_ = adjusted_row_range.second;
-                    }
-                },
-                [&truncate_rows, &adjusted_row_range, &first_row_offset](const RowRange& row_filter) {
-                    // The row_filter is with respect to global offset. Column truncation works on column row indices.
-                    auto row_filter_start = row_filter.first - first_row_offset;
-                    auto row_filter_end = row_filter.second - first_row_offset;
-                    truncate_rows = get_truncate_range_from_rows(adjusted_row_range, row_filter_start, row_filter_end);
-                },
-                [](const auto&) {
-                    // Do nothing
                 }
-        );
-    }
+                // Because of an old bug where end_index values in the index key could be larger than the last_ts+1,
+                // we need to handle the case where we need to drop the entire first block.
+                if (time_filter.first > last_ts) {
+                    truncate_rows.start_ = adjusted_row_range.second;
+                }
+            },
+            [&truncate_rows, &adjusted_row_range, &first_row_offset](const RowRange& row_filter) {
+                // The row_filter is with respect to global offset. Column truncation works on column row indices.
+                auto row_filter_start = row_filter.first - first_row_offset;
+                auto row_filter_end = row_filter.second - first_row_offset;
+                truncate_rows = get_truncate_range_from_rows(adjusted_row_range, row_filter_start, row_filter_end);
+            },
+            [](const auto&) {
+                // Do nothing
+            }
+    );
     return truncate_rows;
 };
 
@@ -673,19 +651,22 @@ void decode_into_frame_static( // with or without filters, row range or date ran
         auto& index_field = fields.at(0u);
         const auto index_field_offset = data;
         decode_index_field(frame, index_field, data, begin, end, context, encoding_version);
-        auto truncate_range = get_truncate_range( // arrow specific, if we have filters finds the index start and end
-                frame,
-                context,
-                read_options,
-                read_query,
-                encoding_version,
-                index_field,
-                index_field_offset
-        );
-        if (context.fetch_index() && get_index_field_count(frame)) {
-            handle_truncation(
-                    frame.column(0), truncate_range
-            ); // truncates the index column if we have an index and we need to truncate based on the filte
+        // Truncation applies only to columns that decode via the arrow path. Computed lazily
+        std::optional<ColumnTruncation> truncate_range;
+        const ColumnTruncation no_truncation;
+        auto truncate_range_for = [&](const TypeDescriptor& type) -> const ColumnTruncation& {
+            if (read_options.output_format_for_column_type(type) != OutputFormat::ARROW)
+                return no_truncation;
+            if (!truncate_range) {
+                truncate_range = get_truncate_range(
+                        frame, context, read_query, encoding_version, index_field, index_field_offset
+                );
+            }
+            return *truncate_range;
+        };
+
+        if (context.fetch_index() && index_fieldcount > 0) {
+            handle_truncation(frame.column(0), truncate_range_for(frame.column(0).type()));
         }
 
         StaticColumnMappingIterator it(context, index_fieldcount);
@@ -693,7 +674,7 @@ void decode_into_frame_static( // with or without filters, row range or date ran
             return;
 
         while (it.has_next()) {
-            advance_skipped_cols(data, it, fields, hdr); // if we have colum filter
+            advance_skipped_cols(data, it, fields, hdr); // if we have column filter
             if (has_magic_nums)
                 util::check_magic_in_place<ColumnMagic>(data);
 
@@ -709,7 +690,8 @@ void decode_into_frame_static( // with or without filters, row range or date ran
             ColumnMapping mapping{
                     frame, it.dest_col(), it.source_field_pos(), context
             }; // where to write in the output frame
-            mapping.set_truncate(truncate_range);
+
+            mapping.set_truncate(truncate_range_for(mapping.dest_type_desc_));
 
             check_type_compatibility(mapping, field_name, it.source_col(), it.dest_col());
             check_data_left_for_subsequent_fields(data, end, it, context);
@@ -780,13 +762,25 @@ void decode_into_frame_dynamic(
         auto& index_field = fields.at(0u);
         auto index_field_offset = data;
         decode_index_field(frame, index_field, data, begin, end, context, encoding_version);
-        auto truncate_range = get_truncate_range(
-                frame, context, read_options, read_query, encoding_version, index_field, index_field_offset
-        );
-        if (get_index_field_count(frame)) {
-            handle_truncation(frame.column(0), truncate_range);
+        // Truncation applies only to columns that decode via the arrow path. Computed lazily
+        std::optional<ColumnTruncation> truncate_range;
+        const ColumnTruncation no_truncation;
+        auto truncate_range_for = [&](const TypeDescriptor& type) -> const ColumnTruncation& {
+            if (read_options.output_format_for_column_type(type) != OutputFormat::ARROW) {
+                return no_truncation;
+            }
+            if (!truncate_range) {
+                truncate_range = get_truncate_range(
+                        frame, context, read_query, encoding_version, index_field, index_field_offset
+                );
+            }
+            return *truncate_range;
+        };
+
+        // Index-only frames have no columns
+        if (index_fieldcount > 0) {
+            handle_truncation(frame.column(0), truncate_range_for(frame.column(0).type()));
         }
-        auto requires_truncation = truncate_range.start_.has_value() || truncate_range.end_.has_value();
         auto truncated_column_indices = std::unordered_set<size_t>{};
 
         auto field_count = context.slice_and_key().slice_.col_range.diff() + index_fieldcount;
@@ -803,8 +797,10 @@ void decode_into_frame_dynamic(
             auto& column = frame.column(static_cast<position_t>(dst_col));
             ColumnMapping mapping{frame, dst_col, field_col, context};
             check_mapping_type_compatibility(mapping);
-            mapping.set_truncate(truncate_range);
-            if (requires_truncation) {
+            const auto& column_truncation = truncate_range_for(mapping.dest_type_desc_);
+            mapping.set_truncate(column_truncation);
+
+            if (column_truncation.start_.has_value() || column_truncation.end_.has_value()) {
                 truncated_column_indices.insert(dst_col);
             }
             util::check(
@@ -832,13 +828,13 @@ void decode_into_frame_dynamic(
             );
         }
 
-        if (requires_truncation) {
-            // We decode only the columns in `seg` and they are truncated during decoding. We need to truncate the
-            // remaining columns in `frame` that were not present in `seg`.
+        // We decode only the columns in `seg` and they are truncated during decoding. We need to truncate the
+        // remaining columns in `frame` that were not present in `seg`.
+        if (!std::holds_alternative<std::monostate>(read_query.row_filter)) {
             for (auto frame_col = index_fieldcount; frame_col < frame.descriptor().field_count(); ++frame_col) {
                 if (!truncated_column_indices.contains(frame_col)) {
                     auto& column = frame.column(static_cast<position_t>(frame_col));
-                    handle_truncation(column, truncate_range);
+                    handle_truncation(column, truncate_range_for(column.type()));
                 }
             }
         }
@@ -998,6 +994,7 @@ struct ReduceColumnTask : async::BaseTask {
             return {};
         }();
 
+        auto output_format_for_column = read_options_.output_format_for_column_type(column.type());
         if (dynamic_schema && column_data == slice_map_->columns_.end()) {
             if (is_fixed_string_type(field_type)) {
                 // Special case where we have a fixed-width string column that is all null (e.g. dynamic schema
@@ -1014,26 +1011,14 @@ struct ReduceColumnTask : async::BaseTask {
                 swap(prev_buffer, new_buffer);
             } else {
                 NullValueReducer null_reducer{
-                        column,
-                        context_,
-                        frame_,
-                        shared_data_,
-                        handler_data_,
-                        read_options_.output_format(),
-                        default_value
+                        column, context_, frame_, shared_data_, handler_data_, output_format_for_column, default_value
                 };
                 null_reducer.finalize();
             }
         } else if (column_data != slice_map_->columns_.end()) {
             if (dynamic_schema) {
                 NullValueReducer null_reducer{
-                        column,
-                        context_,
-                        frame_,
-                        shared_data_,
-                        handler_data_,
-                        read_options_.output_format(),
-                        default_value
+                        column, context_, frame_, shared_data_, handler_data_, output_format_for_column, default_value
                 };
                 for (const auto& row : column_data->second) {
                     PipelineContextRow context_row{context_, row.second.context_index_};

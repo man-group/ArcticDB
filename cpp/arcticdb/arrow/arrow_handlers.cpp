@@ -18,32 +18,6 @@
 #include <arcticdb/stream/index.hpp>
 
 namespace arcticdb {
-ArrowOutputStringFormat ArrowStringHandler::output_string_format(
-        std::string_view column_name, const ReadOptions& read_options
-) const {
-    const auto& arrow_config = read_options.arrow_output_config();
-    if (auto it = arrow_config.per_column_string_format_.find(std::string{column_name});
-        it != arrow_config.per_column_string_format_.end()) {
-        return it->second;
-    } else {
-        // This could give the incorrect return type if:
-        //  - The user has explicitly named a column "__idx__blah"
-        //  - The user has NOT specified a string return type for column "__idx__blah"
-        //  - The user HAS specified a string return type for column "blah"
-        // This seems vanishingly unlikely, and to fix would require pushing knowledge of Pandas multiindex field counts
-        // and fake field positions deep into the decoding pipeline, which is architecturally undesirable if it can be
-        // avoided.
-        // See test_explicit_string_format__idx__prefix and issue 10679807500
-        auto multiindex_column_name = stream::demangled_name(column_name);
-        if (multiindex_column_name.has_value()) {
-            if (auto multiindex_it = arrow_config.per_column_string_format_.find(std::string(*multiindex_column_name));
-                multiindex_it != arrow_config.per_column_string_format_.end()) {
-                return multiindex_it->second;
-            }
-        }
-    }
-    return arrow_config.default_string_format_;
-}
 
 void ArrowStringHandler::handle_type(
         const uint8_t*& data, Column& dest_column, const EncodedFieldImpl& field, const ColumnMapping& m,
@@ -403,7 +377,7 @@ void ArrowStringHandler::convert_type(
         const Column& source_column, Column& dest_column, const ColumnMapping& mapping, const DecodePathData&,
         std::any&, const std::shared_ptr<StringPool>& string_pool, const ReadOptions& read_options
 ) const {
-    auto string_format = output_string_format(mapping.frame_field_descriptor_.name(), read_options);
+    auto string_format = read_options.arrow_string_format_for_column(mapping.frame_field_descriptor_.name());
     switch (string_format) {
     case ArrowOutputStringFormat::CATEGORICAL:
         encode_dictionary(source_column, dest_column, mapping, string_pool);
@@ -420,7 +394,7 @@ void ArrowStringHandler::convert_type(
 std::pair<TypeDescriptor, DetachableBlockConfig> ArrowStringHandler::output_type_and_block_config(
         const TypeDescriptor&, std::string_view column_name, const ReadOptions& read_options
 ) const {
-    auto string_format = output_string_format(column_name, read_options);
+    auto string_format = read_options.arrow_string_format_for_column(column_name);
     switch (string_format) {
     case ArrowOutputStringFormat::CATEGORICAL:
         return {make_scalar_type(DataType::UTF_DYNAMIC32), detachable_block_config::Regular{0}};

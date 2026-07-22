@@ -1081,7 +1081,7 @@ ReadResult PythonVersionStore::batch_read_and_join(
     );
     return create_python_read_result(
             versions_and_frame.versioned_items_,
-            read_options.output_format(),
+            read_options.output_format_for_frame(),
             std::move(versions_and_frame.frame_and_descriptor_),
             std::move(versions_and_frame.metadatas_)
     );
@@ -1134,7 +1134,7 @@ ReadResult PythonVersionStore::read_dataframe_version(
             read_dataframe_version_internal(stream_id, version_query, read_query, read_options, handler_data);
     return create_python_read_result(
             opt_version_and_frame.root_.versioned_item_,
-            read_options.output_format(),
+            read_options.output_format_for_frame(),
             std::move(opt_version_and_frame.root_.frame_and_descriptor_),
             std::nullopt,
             std::move(opt_version_and_frame.nodes_)
@@ -1554,7 +1554,7 @@ ReadResult read_dataframe_from_file(
 
     return create_python_read_result(
             opt_version_and_frame.versioned_item_,
-            read_options.output_format(),
+            read_options.output_format_for_frame(),
             std::move(opt_version_and_frame.frame_and_descriptor_)
     );
 }

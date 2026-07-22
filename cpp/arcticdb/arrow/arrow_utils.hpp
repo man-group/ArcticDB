@@ -40,6 +40,8 @@ std::vector<sparrow::array> arrow_arrays_from_column(
                 std::nullopt
 );
 
+std::vector<std::shared_ptr<RecordBatchData>> column_to_arrow_arrays(const Column& column, std::string_view name);
+
 std::optional<proto::descriptors::NormalizationMetadata::ExperimentalArrow::ColumnMeta> column_metadata(
         const proto::descriptors::NormalizationMetadata& norm_meta, std::string_view column_name
 );
