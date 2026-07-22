@@ -18,7 +18,7 @@ from asv_runner.benchmarks.mark import SkipNotImplemented
 
 from benchmarks.seaweed_utils import SeaweedClient
 
-# The cache bucket holds every scenario's precomputed target+source libraries; each measurement
+# The cache bucket holds every scenario's precomputed target libraries; each measurement
 # copies its target prefix into the throwaway work bucket.
 CACHE_BUCKET = "arcticdb-merge-update-cache"
 WORK_BUCKET = "arcticdb-merge-work"
@@ -27,10 +27,9 @@ ROWS_PER_SEGMENT = 100_000
 
 START_DATE = pd.Timestamp("1960-01-01")
 random.seed(0)
-rng = np.random.default_rng(0)
 
 
-def generate_merge_target(num_rows, num_value_cols, value_dtype, index_kind, num_unique_strings=None):
+def generate_merge_target(num_rows, num_value_cols, value_dtype, index_kind, rng, num_unique_strings=None):
     if pd.api.types.is_string_dtype(value_dtype):
         assert num_unique_strings is not None
         strings = random_strings_of_length(num_unique_strings, length=10, unique=True, kind="ascii")
@@ -47,7 +46,7 @@ def generate_merge_target(num_rows, num_value_cols, value_dtype, index_kind, num
     return df
 
 
-def get_random_unique_rows(target, count, unique_on=None):
+def get_random_unique_rows(target, count, rng, unique_on=None):
     """
     Picks `count` amount of rows from `target` deduplicates them so that they don't match on the `on` columns and
     returns them as a dataframe.
@@ -62,14 +61,14 @@ def get_random_unique_rows(target, count, unique_on=None):
     return matched[~matched.reset_index().duplicated(subset=on_cols, keep="first").values].copy()
 
 
-def generate_source_for_row_range(target, source_size, matched_count, on=None, value_dtype=None):
+def generate_source_for_row_range(target, source_size, matched_count, rng, on=None, value_dtype=None):
     """
     Create a dataframe with RowRange index where ~`matched_count` amount of rows match at least one row in `target` on
     all columns in `on`. The columns that are not in `on` get randomised values.
     """
     on = on if on else []
     assert len(on) > 0
-    matched = get_random_unique_rows(target, matched_count, on)
+    matched = get_random_unique_rows(target, matched_count, rng, on)
     is_string = pd.api.types.is_string_dtype(value_dtype)
     string_pool = pd.unique(target.select_dtypes(include="object").values.ravel()) if is_string else None
     for col in target.columns:
@@ -94,7 +93,7 @@ def generate_source_for_row_range(target, source_size, matched_count, on=None, v
 
 
 def generate_source_for_datetime(
-    target, source_size, affected_row_slice_idx=None, rows_per_segment=100_000, on=None, value_dtype="float32"
+    target, source_size, rng, affected_row_slice_idx=None, rows_per_segment=100_000, on=None, value_dtype="float32"
 ):
     """
     Spread `source_size` rows over the affected target row slices: half of each slice's share matches target rows
@@ -120,7 +119,7 @@ def generate_source_for_datetime(
         # cap matches at half the slice; overflow becomes inserts
         matched_count = min(source_rows_per_affected_segment // 2, len(row_slice) // 2)
         inserted_count = source_rows_per_affected_segment - matched_count
-        matched = get_random_unique_rows(row_slice, matched_count, on)
+        matched = get_random_unique_rows(row_slice, matched_count, rng, on)
         for col in target.columns:
             if col not in on:
                 matched[col] = (
@@ -187,9 +186,8 @@ class MergeBase:
         self.value_dtype = None
         self.source = None
         self.on = None
-        # setup copies the target prefix into the work bucket by literal name; the source prefix is never copied.
+        # setup copies the target prefix into the work bucket by literal name.
         self.target_prefix = "target"
-        self.source_prefix = "source"
         # Each class owns its client. ASV runs setup_cache, setup and teardown on separate instances
         # (only setup_cache's return value is shared between them), so the client is created here in
         # __init__ — the one place every phase can reach it — rather than in setup_cache.
@@ -197,41 +195,32 @@ class MergeBase:
 
     SYM = "sym"
 
-    def _cache_uri(self, path_prefix):
-        return self.seaweed.arctic_uri(CACHE_BUCKET, path_prefix)
-
     def _write_cache_target(self, lib_name, target):
-        Arctic(self._cache_uri(self.target_prefix)).create_library(lib_name).write(self.SYM, target)
+        uri = self.seaweed.arctic_uri(CACHE_BUCKET, self.target_prefix)
+        Arctic(uri).create_library(lib_name).write(self.SYM, target)
 
-    def _source_sym(self, source_size, matched_slices=None):
-        return f"src_{source_size}" if matched_slices is None else f"src_{source_size}_{matched_slices}"
+    def _generate_source(self, source_size, matched_slices=None):
+        # Params-seeded rng: every setup call for a given combo generates the identical source.
+        rng = np.random.default_rng([source_size, matched_slices or 0])
+        target = self.lib.read(self.SYM).data
+        # Maximal on-set: every on_count (incl. 0) merges the same source; generators need a non-empty on.
+        on = [f"val_{j}" for j in range(max(dict(zip(self.param_names, self.params))["on_count"]))]
+        if self.INDEX_KIND == "datetime":
+            slices = matched_slices or max(1, len(target) // ROWS_PER_SEGMENT)
+            return generate_source_for_datetime(
+                target,
+                source_size,
+                rng,
+                affected_row_slice_idx=affected_slices(len(target), slices),
+                rows_per_segment=ROWS_PER_SEGMENT,
+                on=on,
+                value_dtype=self.value_dtype,
+            )
+        return generate_source_for_row_range(
+            target, source_size, source_size // 2, rng, on=on, value_dtype=self.value_dtype
+        )
 
-    def _precompute_sources(self, lib_name, target):
-        # One source per size (and matched_slices), built with the maximal on-set and shared across on_counts.
-        src_lib = Arctic(self._cache_uri(self.source_prefix)).create_library(lib_name)
-        pmap = dict(zip(self.param_names, self.params))
-        on = [f"val_{j}" for j in range(max(pmap["on_count"]))]
-        num_slices = max(1, len(target) // ROWS_PER_SEGMENT)
-        for source_size in pmap["source_size"]:
-            if self.INDEX_KIND == "datetime":
-                for matched_slices in pmap.get("matched_slices", [num_slices]):
-                    source = generate_source_for_datetime(
-                        target,
-                        source_size,
-                        affected_row_slice_idx=affected_slices(len(target), matched_slices),
-                        rows_per_segment=ROWS_PER_SEGMENT,
-                        on=on,
-                        value_dtype=self.value_dtype,
-                    )
-                    key = matched_slices if "matched_slices" in pmap else None
-                    src_lib.write(self._source_sym(source_size, key), source)
-            else:
-                source = generate_source_for_row_range(
-                    target, source_size, source_size // 2, on=on, value_dtype=self.value_dtype
-                )
-                src_lib.write(self._source_sym(source_size), source)
-
-    def _prepare_merge(self, lib_name, on_count, source_sym):
+    def _prepare_merge(self, lib_name, on_count, source_size, matched_slices=None):
         # Fresh Arctic per sample so nothing cached from the previous sample's bucket survives.
         del self.ac
         self.seaweed.delete_bucket(WORK_BUCKET)  # tolerant: reclaims a bucket leaked by a crashed run
@@ -241,7 +230,7 @@ class MergeBase:
         self.ac = Arctic(self.seaweed.arctic_uri(WORK_BUCKET, self.target_prefix))
         self.lib = self.ac.get_library(lib_name)
         self.on = [f"val_{j}" for j in range(on_count)]
-        self.source = Arctic(self._cache_uri(self.source_prefix)).get_library(lib_name).read(source_sym).data
+        self.source = self._generate_source(source_size, matched_slices)
 
     def merge(self, strategy):
         self.lib.merge_experimental(self.SYM, self.source, strategy=self.STRATEGIES[strategy], on=self.on)
@@ -269,15 +258,12 @@ class MergeThinDatetime(MergeBase):
         reset_cache_bucket(self.seaweed)
         for scenario in self.params[0]:
             num_rows, num_value_cols = scenario
-            target = generate_merge_target(num_rows, num_value_cols, self.value_dtype, self.INDEX_KIND)
-            lib_name = make_lib_name(scenario, self.INDEX_KIND)
-            self._write_cache_target(lib_name, target)
-            self._precompute_sources(lib_name, target)
+            rng = np.random.default_rng([num_rows, num_value_cols])
+            target = generate_merge_target(num_rows, num_value_cols, self.value_dtype, self.INDEX_KIND, rng)
+            self._write_cache_target(make_lib_name(scenario, self.INDEX_KIND), target)
 
     def setup(self, scenario, strategy, on_count, source_size, matched_slices):
-        lib_name = make_lib_name(scenario, self.INDEX_KIND)
-        source_sym = self._source_sym(source_size, matched_slices)
-        self._prepare_merge(lib_name, on_count, source_sym)
+        self._prepare_merge(make_lib_name(scenario, self.INDEX_KIND), on_count, source_size, matched_slices)
 
     def teardown(self, scenario, strategy, on_count, source_size, matched_slices):
         self.seaweed.delete_bucket(WORK_BUCKET)
@@ -310,15 +296,12 @@ class MergeThinRowRange(MergeBase):
         reset_cache_bucket(self.seaweed)
         for scenario in self.params[0]:
             num_rows, num_value_cols = scenario
-            target = generate_merge_target(num_rows, num_value_cols, self.value_dtype, self.INDEX_KIND)
-            lib_name = make_lib_name(scenario, self.INDEX_KIND)
-            self._write_cache_target(lib_name, target)
-            self._precompute_sources(lib_name, target)
+            rng = np.random.default_rng([num_rows, num_value_cols])
+            target = generate_merge_target(num_rows, num_value_cols, self.value_dtype, self.INDEX_KIND, rng)
+            self._write_cache_target(make_lib_name(scenario, self.INDEX_KIND), target)
 
     def setup(self, scenario, strategy, on_count, source_size):
-        lib_name = make_lib_name(scenario, self.INDEX_KIND)
-        source_sym = self._source_sym(source_size)
-        self._prepare_merge(lib_name, on_count, source_sym)
+        self._prepare_merge(make_lib_name(scenario, self.INDEX_KIND), on_count, source_size)
 
     def teardown(self, scenario, strategy, on_count, source_size):
         self.seaweed.delete_bucket(WORK_BUCKET)
@@ -354,22 +337,22 @@ class MergeThinStringDatetime(MergeBase):
         for scenario in pmap["scenario"]:
             for num_unique_strings in pmap["num_unique_strings"]:
                 num_rows, num_value_cols = scenario
+                rng = np.random.default_rng([num_rows, num_value_cols, num_unique_strings])
                 target = generate_merge_target(
-                    num_rows, num_value_cols, self.value_dtype, self.INDEX_KIND, num_unique_strings=num_unique_strings
+                    num_rows,
+                    num_value_cols,
+                    self.value_dtype,
+                    self.INDEX_KIND,
+                    rng,
+                    num_unique_strings=num_unique_strings,
                 )
-                lib_name = make_lib_name(scenario, self.INDEX_KIND)
                 # One target per pool size; per-size prefixes let setup copy only the variant being merged.
                 self.target_prefix = f"target_{num_unique_strings}"
-                self.source_prefix = f"source_{num_unique_strings}"
-                self._write_cache_target(lib_name, target)
-                self._precompute_sources(lib_name, target)
+                self._write_cache_target(make_lib_name(scenario, self.INDEX_KIND), target)
 
     def setup(self, scenario, strategy, on_count, source_size, matched_slices, num_unique_strings):
         self.target_prefix = f"target_{num_unique_strings}"
-        self.source_prefix = f"source_{num_unique_strings}"
-        lib_name = make_lib_name(scenario, self.INDEX_KIND)
-        source_sym = self._source_sym(source_size, matched_slices)
-        self._prepare_merge(lib_name, on_count, source_sym)
+        self._prepare_merge(make_lib_name(scenario, self.INDEX_KIND), on_count, source_size, matched_slices)
 
     def teardown(self, scenario, strategy, on_count, source_size, matched_slices, num_unique_strings):
         self.seaweed.delete_bucket(WORK_BUCKET)
@@ -404,22 +387,22 @@ class MergeThinStringRowRange(MergeBase):
         for scenario in pmap["scenario"]:
             for num_unique_strings in pmap["num_unique_strings"]:
                 num_rows, num_value_cols = scenario
+                rng = np.random.default_rng([num_rows, num_value_cols, num_unique_strings])
                 target = generate_merge_target(
-                    num_rows, num_value_cols, self.value_dtype, self.INDEX_KIND, num_unique_strings=num_unique_strings
+                    num_rows,
+                    num_value_cols,
+                    self.value_dtype,
+                    self.INDEX_KIND,
+                    rng,
+                    num_unique_strings=num_unique_strings,
                 )
-                lib_name = make_lib_name(scenario, self.INDEX_KIND)
                 # One target per pool size; per-size prefixes let setup copy only the variant being merged.
                 self.target_prefix = f"target_{num_unique_strings}"
-                self.source_prefix = f"source_{num_unique_strings}"
-                self._write_cache_target(lib_name, target)
-                self._precompute_sources(lib_name, target)
+                self._write_cache_target(make_lib_name(scenario, self.INDEX_KIND), target)
 
     def setup(self, scenario, strategy, on_count, source_size, num_unique_strings):
         self.target_prefix = f"target_{num_unique_strings}"
-        self.source_prefix = f"source_{num_unique_strings}"
-        lib_name = make_lib_name(scenario, self.INDEX_KIND)
-        source_sym = self._source_sym(source_size)
-        self._prepare_merge(lib_name, on_count, source_sym)
+        self._prepare_merge(make_lib_name(scenario, self.INDEX_KIND), on_count, source_size)
 
     def teardown(self, scenario, strategy, on_count, source_size, num_unique_strings):
         self.seaweed.delete_bucket(WORK_BUCKET)
@@ -453,17 +436,14 @@ class MergeWideDatetime(MergeBase):
         reset_cache_bucket(self.seaweed)
         for scenario in self.params[0]:
             num_rows, num_value_cols = scenario
-            target = generate_merge_target(num_rows, num_value_cols, self.value_dtype, self.INDEX_KIND)
-            lib_name = make_lib_name(scenario, self.INDEX_KIND)
-            self._write_cache_target(lib_name, target)
-            self._precompute_sources(lib_name, target)
+            rng = np.random.default_rng([num_rows, num_value_cols])
+            target = generate_merge_target(num_rows, num_value_cols, self.value_dtype, self.INDEX_KIND, rng)
+            self._write_cache_target(make_lib_name(scenario, self.INDEX_KIND), target)
 
     def setup(self, scenario, strategy, on_count, source_size):
         if strategy != "update" and on_count == 1:
             raise SkipNotImplemented  # grid-size cost decision, not unsupported
-        lib_name = make_lib_name(scenario, self.INDEX_KIND)
-        source_sym = self._source_sym(source_size)
-        self._prepare_merge(lib_name, on_count, source_sym)
+        self._prepare_merge(make_lib_name(scenario, self.INDEX_KIND), on_count, source_size)
 
     def teardown(self, scenario, strategy, on_count, source_size):
         self.seaweed.delete_bucket(WORK_BUCKET)
@@ -496,15 +476,12 @@ class MergeWideRowRange(MergeBase):
         reset_cache_bucket(self.seaweed)
         for scenario in self.params[0]:
             num_rows, num_value_cols = scenario
-            target = generate_merge_target(num_rows, num_value_cols, self.value_dtype, self.INDEX_KIND)
-            lib_name = make_lib_name(scenario, self.INDEX_KIND)
-            self._write_cache_target(lib_name, target)
-            self._precompute_sources(lib_name, target)
+            rng = np.random.default_rng([num_rows, num_value_cols])
+            target = generate_merge_target(num_rows, num_value_cols, self.value_dtype, self.INDEX_KIND, rng)
+            self._write_cache_target(make_lib_name(scenario, self.INDEX_KIND), target)
 
     def setup(self, scenario, strategy, on_count, source_size):
-        lib_name = make_lib_name(scenario, self.INDEX_KIND)
-        source_sym = self._source_sym(source_size)
-        self._prepare_merge(lib_name, on_count, source_sym)
+        self._prepare_merge(make_lib_name(scenario, self.INDEX_KIND), on_count, source_size)
 
     def teardown(self, scenario, strategy, on_count, source_size):
         self.seaweed.delete_bucket(WORK_BUCKET)
