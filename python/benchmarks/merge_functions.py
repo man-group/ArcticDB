@@ -6,8 +6,6 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 
-import random
-
 import numpy as np
 import pandas as pd
 
@@ -18,15 +16,10 @@ from asv_runner.benchmarks.mark import SkipNotImplemented
 
 from benchmarks.seaweed_utils import SeaweedClient
 
-# The cache bucket holds every scenario's precomputed target+source libraries; each measurement
-# copies its target prefix into the throwaway work bucket.
 CACHE_BUCKET = "arcticdb-merge-update-cache"
 WORK_BUCKET = "arcticdb-merge-work"
-# Row-slice size the target is chunked into; the datetime source generator touches a number of these.
 ROWS_PER_SEGMENT = 100_000
-
 START_DATE = pd.Timestamp("1960-01-01")
-random.seed(0)
 
 
 def generate_merge_target(num_rows, num_value_cols, value_dtype, index_kind, rng, num_unique_strings=None):
@@ -116,7 +109,6 @@ def generate_source_for_datetime(
 
     source_segments = []
     for row_slice in affected_row_slices:
-        # cap matches at half the slice; overflow becomes inserts
         matched_count = min(source_rows_per_affected_segment // 2, len(row_slice) // 2)
         inserted_count = source_rows_per_affected_segment - matched_count
         matched = get_random_unique_rows(row_slice, matched_count, rng, on)
@@ -160,10 +152,9 @@ def affected_slices(num_rows_in_target, matched_slices_count):
     return np.linspace(0, num_slices - 1, count, dtype=int).tolist()
 
 
-# ASV keys setup_cache results by source location, so each class defines its own setup_cache.
-def reset_cache_bucket(seaweed):
-    seaweed.delete_bucket(CACHE_BUCKET)
-    seaweed.create_bucket(CACHE_BUCKET)
+def reset_bucket(seaweed, bucket):
+    seaweed.delete_bucket(bucket)
+    seaweed.create_bucket(bucket)
 
 
 class MergeBase:
@@ -186,12 +177,8 @@ class MergeBase:
         self.value_dtype = None
         self.source = None
         self.on = None
-        # setup copies the target prefix into the work bucket by literal name; the source prefix is never copied.
         self.target_prefix = "target"
         self.source_prefix = "source"
-        # Each class owns its client. ASV runs setup_cache, setup and teardown on separate instances
-        # (only setup_cache's return value is shared between them), so the client is created here in
-        # __init__ — the one place every phase can reach it — rather than in setup_cache.
         self.seaweed = SeaweedClient()
 
     SYM = "sym"
@@ -203,7 +190,6 @@ class MergeBase:
     def _generate_source(self, target, source_size, matched_slices=None):
         # Params-seeded rng: the same (class, params) always generate the identical source.
         rng = np.random.default_rng([source_size, matched_slices or 0])
-        # Maximal on-set: every on_count (incl. 0) merges the same source; generators need a non-empty on.
         on = [f"val_{j}" for j in range(max(dict(zip(self.param_names, self.params))["on_count"]))]
         if self.INDEX_KIND == "datetime":
             slices = matched_slices or max(1, len(target) // ROWS_PER_SEGMENT)
@@ -234,9 +220,7 @@ class MergeBase:
     def _prepare_merge(self, lib_name, on_count, source_size, matched_slices=None):
         # Fresh Arctic per sample so nothing cached from the previous sample's bucket survives.
         del self.ac
-        self.seaweed.delete_bucket(WORK_BUCKET)  # tolerant: reclaims a bucket leaked by a crashed run
-        self.seaweed.create_bucket(WORK_BUCKET)
-        # The URI-based storage override redirects the copied library config to the new bucket.
+        reset_bucket(self.seaweed, WORK_BUCKET)
         self.seaweed.copy_bucket(CACHE_BUCKET, WORK_BUCKET, prefixes=[f"{self.target_prefix}/"])
         self.ac = Arctic(self.seaweed.arctic_uri(WORK_BUCKET, self.target_prefix))
         self.lib = self.ac.get_library(lib_name)
@@ -249,7 +233,7 @@ class MergeBase:
 
 
 class MergeThinDatetime(MergeBase):
-    """All merge strategies, long-thin numeric dataframe (10M rows x 2 cols), datetime index.
+    """All merge strategies, long-thin numeric dataframe (10M rows x 5 cols), datetime index.
     matched_slices is the number of the target's row slices the source touches (100 slices here)."""
 
     INDEX_KIND = "datetime"
@@ -259,7 +243,7 @@ class MergeThinDatetime(MergeBase):
         self.value_dtype = "float32"
         self.param_names = ["scenario", "strategy", "on_count", "source_size", "matched_slices"]
         self.params = [
-            [(10_000_000, 2)],  # scenario: (num_rows, num_value_cols) — long-thin
+            [(10_000_000, 5)],  # scenario: (num_rows, num_value_cols) — long-thin
             ["update", "insert", "update_and_insert"],  # strategy
             [0, 1],  # on_count
             [1_000, 500_000],  # source_size (source row count)
@@ -267,7 +251,7 @@ class MergeThinDatetime(MergeBase):
         ]
 
     def setup_cache(self):
-        reset_cache_bucket(self.seaweed)
+        reset_bucket(self.seaweed, CACHE_BUCKET)
         for scenario in self.params[0]:
             num_rows, num_value_cols = scenario
             rng = np.random.default_rng([num_rows, num_value_cols])
@@ -290,7 +274,7 @@ class MergeThinDatetime(MergeBase):
 
 
 class MergeThinRowRange(MergeBase):
-    """update only, long-thin numeric dataframe (10M rows x 2 cols), row-range index.
+    """update only, long-thin numeric dataframe (10M rows x 5 cols), row-range index.
     matched_slices is dropped: row-range merge reads every slice and has no insert path."""
 
     INDEX_KIND = "rowrange"
@@ -300,14 +284,14 @@ class MergeThinRowRange(MergeBase):
         self.value_dtype = "float32"
         self.param_names = ["scenario", "strategy", "on_count", "source_size"]
         self.params = [
-            [(10_000_000, 2)],  # scenario: (num_rows, num_value_cols) — long-thin
+            [(10_000_000, 5)],  # scenario: (num_rows, num_value_cols) — long-thin
             ["update"],  # strategy: only update is implemented for row-range indexes
             [1],  # on_count: row-range indexes cannot be a join key on their own, so on_count >= 1
             [1_000, 500_000],  # source_size (source row count)
         ]
 
     def setup_cache(self):
-        reset_cache_bucket(self.seaweed)
+        reset_bucket(self.seaweed, CACHE_BUCKET)
         for scenario in self.params[0]:
             num_rows, num_value_cols = scenario
             rng = np.random.default_rng([num_rows, num_value_cols])
@@ -330,7 +314,7 @@ class MergeThinRowRange(MergeBase):
 
 
 class MergeThinStringDatetime(MergeBase):
-    """All merge strategies, long-thin string dataframe (1M rows x 2 cols), datetime index (10 slices)."""
+    """All merge strategies, long-thin string dataframe (1M rows x 5 cols), datetime index (10 slices)."""
 
     INDEX_KIND = "datetime"
 
@@ -339,7 +323,7 @@ class MergeThinStringDatetime(MergeBase):
         self.value_dtype = "string"
         self.param_names = ["scenario", "strategy", "on_count", "source_size", "matched_slices", "num_unique_strings"]
         self.params = [
-            [(1_000_000, 2)],  # scenario: (num_rows, num_value_cols)
+            [(1_000_000, 5)],  # scenario: (num_rows, num_value_cols)
             ["update", "insert", "update_and_insert"],  # strategy
             [0, 1],  # on_count
             [1_000, 500_000],  # source_size (source row count)
@@ -348,7 +332,7 @@ class MergeThinStringDatetime(MergeBase):
         ]
 
     def setup_cache(self):
-        reset_cache_bucket(self.seaweed)
+        reset_bucket(self.seaweed, CACHE_BUCKET)
         pmap = dict(zip(self.param_names, self.params))
         for scenario in pmap["scenario"]:
             for num_unique_strings in pmap["num_unique_strings"]:
@@ -385,7 +369,7 @@ class MergeThinStringDatetime(MergeBase):
 
 
 class MergeThinStringRowRange(MergeBase):
-    """update only, long-thin string dataframe (1M rows x 2 cols), row-range index (matched_slices dropped)."""
+    """update only, long-thin string dataframe (1M rows x 5 cols), row-range index (matched_slices dropped)."""
 
     INDEX_KIND = "rowrange"
 
@@ -394,7 +378,7 @@ class MergeThinStringRowRange(MergeBase):
         self.value_dtype = "string"
         self.param_names = ["scenario", "strategy", "on_count", "source_size", "num_unique_strings"]
         self.params = [
-            [(1_000_000, 2)],  # scenario: (num_rows, num_value_cols)
+            [(1_000_000, 5)],  # scenario: (num_rows, num_value_cols)
             ["update"],  # strategy: only update is implemented for row-range indexes
             [1],  # on_count: row-range indexes cannot be a join key on their own, so on_count >= 1
             [1_000, 500_000],  # source_size (source row count)
@@ -402,10 +386,10 @@ class MergeThinStringRowRange(MergeBase):
         ]
 
     def setup_cache(self):
-        reset_cache_bucket(self.seaweed)
-        pmap = dict(zip(self.param_names, self.params))
-        for scenario in pmap["scenario"]:
-            for num_unique_strings in pmap["num_unique_strings"]:
+        reset_bucket(self.seaweed, CACHE_BUCKET)
+        param_map = dict(zip(self.param_names, self.params))
+        for scenario in param_map["scenario"]:
+            for num_unique_strings in param_map["num_unique_strings"]:
                 num_rows, num_value_cols = scenario
                 rng = np.random.default_rng([num_rows, num_value_cols, num_unique_strings])
                 target = generate_merge_target(
@@ -457,7 +441,7 @@ class MergeWideDatetime(MergeBase):
         ]
 
     def setup_cache(self):
-        reset_cache_bucket(self.seaweed)
+        reset_bucket(self.seaweed, CACHE_BUCKET)
         for scenario in self.params[0]:
             num_rows, num_value_cols = scenario
             rng = np.random.default_rng([num_rows, num_value_cols])
@@ -499,7 +483,7 @@ class MergeWideRowRange(MergeBase):
         ]
 
     def setup_cache(self):
-        reset_cache_bucket(self.seaweed)
+        reset_bucket(self.seaweed, CACHE_BUCKET)
         for scenario in self.params[0]:
             num_rows, num_value_cols = scenario
             rng = np.random.default_rng([num_rows, num_value_cols])
