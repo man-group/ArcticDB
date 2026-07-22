@@ -27,6 +27,8 @@
 #include <arcticdb/util/constructors.hpp>
 #include <arcticdb/version/version_tasks.hpp>
 #include <string>
+#include <chrono>
+#include <arcticdb/util/configs_map.hpp>
 
 namespace arcticdb::version_store {
 
@@ -277,7 +279,17 @@ template<
             segment_size.has_value() ? SegmentationPolicy{*segment_size} : SegmentationPolicy{}
     };
 
+    auto total = std::distance(to_compact_start, to_compact_end);
+    auto start = std::chrono::steady_clock::now();
     [[maybe_unused]] size_t count = 0;
+    size_t processed = 0;
+
+    // Percentage of segments after which to log progress. Default 10% means logs at 10%, 20%, ... 100%.
+    // Override via env var: ARCTICDB_Compact_LogProgressPercentage_INT=<value>
+    // Or in Python: set_config_int("Compact.LogProgressPercentage", <value>)
+    int log_every_percent = ConfigsMap::instance()->get_int("Compact.LogProgressPercentage", 10);
+    int next_log_pct = log_every_percent;
+
     for (auto it = to_compact_start; it != to_compact_end; ++it) {
         auto sk = [&it]() {
             if constexpr (std::is_same_v<IteratorType, pipelines::PipelineContext::iterator>)
@@ -285,6 +297,18 @@ template<
             else
                 return *it;
         }();
+
+        ++processed;
+        if (log_every_percent > 0) {
+            int pct = static_cast<int>(processed * 100 / total);
+            if (pct >= next_log_pct) {
+                auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(
+                    std::chrono::steady_clock::now() - start).count();
+                log::version().info("do_compact: processed {}/{} segments for symbol {}, elapsed {}s",
+                    processed, total, pipeline_context->stream_id_, elapsed);
+                next_log_pct += log_every_percent;
+            }
+        }
         if (sk.slice().rows().diff() == 0) {
             continue;
         }
