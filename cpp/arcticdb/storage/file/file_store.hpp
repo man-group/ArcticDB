@@ -72,12 +72,8 @@ void write_dataframe_to_file_internal(
     auto key_seg_futs =
             folly::collect(folly::window(
                                    std::move(slices),
-                                   [frame,
-                                    key = std::move(partial_key),
-                                    sparsify_floats = options.sparsify_floats](auto&& slice) {
-                                       return async::submit_cpu_task(
-                                               pipelines::WriteToSegmentTask(frame, slice, key, sparsify_floats)
-                                       );
+                                   [frame, key = std::move(partial_key)](auto&& slice) {
+                                       return async::submit_cpu_task(pipelines::WriteToSegmentTask(frame, slice, key));
                                    },
                                    write_window_size()
                            ))

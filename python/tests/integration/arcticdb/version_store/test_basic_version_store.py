@@ -549,8 +549,9 @@ def test_prune_previous_versions_write(basic_store, sym):
     assert len(keys_for_sym) == 3
     latest_ver_key = max(keys_for_sym, key=lambda x: x.version_id)
     check_write_and_prune_previous_version_keys(lib_tool, sym, latest_ver_key)
-    # Then - we got 3 symbol keys: 1 for each of the writes
-    assert len(lib_tool.find_keys(KeyType.SYMBOL_LIST)) == 3
+    # Then - we got 1 symbol key from the first write, and none from the subsequent as there was a live version already
+    # on the second and third writes
+    assert len(lib_tool.find_keys(KeyType.SYMBOL_LIST)) == 1
 
 
 @pytest.mark.storage
@@ -632,8 +633,9 @@ def test_prune_previous_versions_write_batch(basic_store):
         assert len(keys_for_sym) == 3
         latest_ver_key = max(keys_for_sym, key=lambda x: x.version_id)
         check_write_and_prune_previous_version_keys(lib_tool, sym, latest_ver_key)
-    # Then - we got 6 symbol keys: 1 for each of the writes
-    assert len(lib_tool.find_keys(KeyType.SYMBOL_LIST)) == 6
+    # Then - we got 2 symbol list keys from the first batch_write, and none from the subsequent calls as both symbols
+    # had known live versions when these were called
+    assert len(lib_tool.find_keys(KeyType.SYMBOL_LIST)) == 2
 
 
 @pytest.mark.storage
@@ -677,9 +679,9 @@ def test_prune_previous_versions_batch_write_metadata(basic_store):
         latest_ver_key = max(keys_for_sym, key=lambda x: x.version_id)
         check_write_and_prune_previous_version_keys(lib_tool, sym, latest_ver_key)
 
-    # Then - we got 4 symbol keys: 1 for each of the batch_write calls
-    # batch_write_metadata should not create any new symbol keys
-    assert len(lib_tool.find_keys(KeyType.SYMBOL_LIST)) == 4
+    # Then - we got 2 symbol list keys from the first batch_write_metadata, and none from the subsequent calls as both
+    # symbols had known live versions when these were called
+    assert len(lib_tool.find_keys(KeyType.SYMBOL_LIST)) == 2
 
 
 @pytest.mark.storage

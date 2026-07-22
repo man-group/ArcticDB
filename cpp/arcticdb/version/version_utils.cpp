@@ -98,4 +98,17 @@ FrameAndDescriptor frame_and_descriptor_from_segment(SegmentInMemory&& seg) {
     return {SegmentInMemory(std::move(seg)), tsd, {}};
 }
 
+version_store::UpdateInfo populate_update_info(const VersionMapEntry& entry) {
+    // This is used in get_next_version_id_and_optionally_latest_undeleted_version and
+    // batch_get_next_version_id_and_optionally_latest_undeleted_version_async. If the get_latest_undeleted_version flag
+    // is false (which is the case in [batch_]write when dedup is disabled) the entry may not contain any live versions,
+    // and opt_latest_undeleted_version_index will be std::nullopt. We populate the returned previous_index_key_ in this
+    // case only as a small optimisation to avoid writing a symbol list key when we already know a previous live version
+    // exists.
+    auto opt_latest_version_index = entry.get_first_index(true).first;
+    auto opt_latest_undeleted_version_index = entry.get_first_index(false).first;
+    VersionId next_version_id = opt_latest_version_index.has_value() ? opt_latest_version_index->version_id() + 1 : 0;
+    return version_store::UpdateInfo{opt_latest_undeleted_version_index, next_version_id};
+}
+
 } // namespace arcticdb

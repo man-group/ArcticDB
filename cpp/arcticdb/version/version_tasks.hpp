@@ -46,42 +46,6 @@ struct IndexInformation {
 // - IndexInformation is a pre-fetched index key + optional column stats, used to avoid re-reading the index
 using VersionIdentifier = std::variant<VersionedItem, StreamId, std::shared_ptr<IndexInformation>>;
 
-struct UpdateMetadataTask : async::BaseTask {
-    const std::shared_ptr<Store> store_;
-    const version_store::UpdateInfo update_info_;
-    const AtomKey index_key_;
-    arcticdb::proto::descriptors::UserDefinedMetadata user_meta_;
-    VersionId version_id_ = 0;
-
-    UpdateMetadataTask(
-            std::shared_ptr<Store> store, version_store::UpdateInfo update_info,
-            arcticdb::proto::descriptors::UserDefinedMetadata&& user_meta
-    ) :
-        store_(std::move(store)),
-        update_info_(std::move(update_info)),
-        user_meta_(std::move(user_meta)) {}
-
-    AtomKey operator()() const {
-        ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: update metadata");
-        util::check(
-                update_info_.previous_index_key_.has_value(),
-                "Cannot update metadata as there is no previous index key to update"
-        );
-        auto index_key = *(update_info_.previous_index_key_);
-        auto segment = store_->read_sync(index_key).second;
-
-        segment.mutable_index_descriptor().mutable_proto().mutable_user_meta()->CopyFrom(user_meta_);
-        return to_atom(store_->write_sync(
-                index_key.type(),
-                update_info_.next_version_id_,
-                index_key.id(),
-                index_key.start_index(),
-                index_key.end_index(),
-                std::move(segment)
-        ));
-    }
-};
-
 struct MaybeDeletedAtomKey {
     AtomKey key;
     bool deleted;

@@ -183,25 +183,23 @@ batch_get_latest_undeleted_and_latest_versions_async(
 }
 
 inline std::vector<folly::Future<version_store::UpdateInfo>>
-batch_get_latest_undeleted_version_and_next_version_id_async(
+batch_get_next_version_id_and_optionally_latest_undeleted_version_async(
         const std::shared_ptr<Store>& store, const std::shared_ptr<VersionMap>& version_map,
-        const std::vector<StreamId>& stream_ids
+        const std::vector<StreamId>& stream_ids, bool get_latest_undeleted_version = true
 ) {
     ARCTICDB_SAMPLE(BatchGetLatestUndeletedVersionAndNextVersionId, 0)
     std::vector<folly::Future<version_store::UpdateInfo>> vector_fut;
     for (auto& stream_id : stream_ids) {
-        vector_fut.push_back(async::submit_io_task(CheckReloadTask{
-                                                           store,
-                                                           version_map,
-                                                           stream_id,
-                                                           LoadStrategy{LoadType::LATEST, LoadObjective::UNDELETED_ONLY}
-                                                   }
-        ).thenValue([](auto entry) {
-            auto latest_version = entry->get_first_index(true).first;
-            auto latest_undeleted_version = entry->get_first_index(false).first;
-            VersionId next_version_id = latest_version.has_value() ? latest_version->version_id() + 1 : 0;
-            return version_store::UpdateInfo{latest_undeleted_version, next_version_id};
-        }));
+        // Note that despite LoadObjective::UNDELETED_ONLY only loading the latest undeleted version, it will always
+        // also load the latest (possibly deleted) version due to the structure of the version chain. This is because a
+        // tombstone or tombstone all key deleting a version is always closer to the head of the chain than the index
+        // key it is deleting.
+        LoadStrategy load_strategy{
+                LoadType::LATEST,
+                get_latest_undeleted_version ? LoadObjective::UNDELETED_ONLY : LoadObjective::INCLUDE_DELETED
+        };
+        vector_fut.push_back(async::submit_io_task(CheckReloadTask{store, version_map, stream_id, load_strategy})
+                                     .thenValue([](auto entry) { return populate_update_info(*entry); }));
     }
     return vector_fut;
 }

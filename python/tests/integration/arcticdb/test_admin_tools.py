@@ -58,8 +58,8 @@ def test_get_sizes(arctic_client, lib_name, all_recursive_metastructure_versions
     assert 3000 < sizes[KeyType.TABLE_INDEX].bytes_compressed < 6000
     assert sizes[KeyType.TABLE_DATA].count == 7
     assert 20e6 < sizes[KeyType.TABLE_DATA].bytes_compressed < 30e6
-    assert sizes[KeyType.SYMBOL_LIST].count == 4
-    assert 500 < sizes[KeyType.SYMBOL_LIST].bytes_compressed < 3000
+    assert sizes[KeyType.SYMBOL_LIST].count == 2
+    assert 250 < sizes[KeyType.SYMBOL_LIST].bytes_compressed < 3000
     assert sizes[KeyType.LOG].count == 5
 
     for t in (KeyType.APPEND_DATA, KeyType.SNAPSHOT_REF, KeyType.LOG_COMPACTED, KeyType.MULTI_KEY):
@@ -72,11 +72,11 @@ def test_get_sizes(arctic_client, lib_name, all_recursive_metastructure_versions
     assert sizes[KeyType.VERSION].count == 6
     assert sizes[KeyType.TABLE_INDEX].count == 1
     assert sizes[KeyType.TABLE_DATA].count == 3
-    assert sizes[KeyType.SYMBOL_LIST].count == 5
+    assert sizes[KeyType.SYMBOL_LIST].count == 3
     assert 10e6 < sizes[KeyType.TABLE_DATA].bytes_compressed < 15e6
 
     total_size = sum_sizes(sizes.values())
-    assert total_size.count == 23
+    assert total_size.count == 21
     assert total_size.bytes_compressed == sum(s.bytes_compressed for s in sizes.values())
 
     # Check the other key types
