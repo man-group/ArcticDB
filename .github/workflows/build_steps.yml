@@ -751,4 +751,61 @@ jobs:
           path: |
             ${{runner.temp}}/*test*
         continue-on-error: true
-            
+
+  # This job installs the SAME freshly-built wheel on an different runner and verifies it
+  # imports and does a basic read/write. If the wheel requires different system libraries than
+  # the target platform provides, `import arcticdb` fails here and blocks the build — which
+  # is exactly the regression we want to catch.
+  #
+  os_compat:
+    # macOS-only: verify the wheel imports and reads/writes on a runner different from
+    # the one that built it (macos-15 vs the newer build host).
+    if: inputs.job_type == 'build-python-wheels' && inputs.python3 == 14 && fromJSON(inputs.matrix)[0].os == 'macos'
+    needs: [compile]
+    runs-on: macos-15
+    defaults:
+      run: {shell: bash}
+    env:
+      os: ${{ fromJSON(inputs.matrix)[0].os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+          ref: ${{ inputs.ref }}
+
+      - name: Runner environment
+        run: |
+          uname -a || true
+          uname -m || true
+          [[ "$os" == "macos" ]] && sw_vers || true
+
+      - name: Get the freshly-built wheel
+        uses: actions/download-artifact@v8
+        with:
+          name: wheel-${{needs.compile.outputs.cibw_build}}
+          path: ${{runner.temp}}/wheel
+
+      - name: Select Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.${{inputs.python3}}"
+
+      - name: Install the wheel
+        env:
+          WHEEL_DIR: ${{runner.temp}}/wheel
+        run: |
+          python -V
+          python -m pip install --upgrade pip
+          # Resolve the wheel via Python glob as bash mangles the backslashes.
+          wheel_path=$(python -c "import glob, os; print(glob.glob(os.path.join(os.environ['WHEEL_DIR'], '*.whl'))[0])")
+          python -m pip install --force-reinstall --retries 3 --timeout 500 "${wheel_path}[Testing]"
+          python -m pip list
+
+      - name: Run a basic read/write test suite on the older runner
+        run: |
+          build_tooling/parallel_test.sh tests/unit/arcticdb/version_store/test_write.py
+        env:
+          TEST_OUTPUT_DIR: ${{runner.temp}}
+          PYTEST_XDIST_MODE: ""   # single file, run serially
+

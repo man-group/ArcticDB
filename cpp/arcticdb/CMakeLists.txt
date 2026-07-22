@@ -49,9 +49,24 @@ if(${BUILD_WITH_REMOTERY})
     add_compile_definitions(USE_REMOTERY)
 endif()
 
-# Required for the macOS SDK to use all the latest features of libc++, for both vcpkg and conda-forge builds.
+# conda-forge builds against an old macOS SDK whose libc++ availability annotations would
+# otherwise forbid newer C++ features; conda ships its own libc++ runtime that provides the
+# symbols, so disabling the annotations is safe there.
 # See: https://conda-forge.org/docs/maintainer/knowledge_base.html#newer-c-features-with-old-sdk
-add_compile_definitions(_LIBCPP_DISABLE_AVAILABILITY)
+#
+# Do NOT define this for the vcpkg/PyPI wheel: it links the *system* libc++, and disabling
+# availability makes libc++ assume every feature is present and emit *strong* references to
+# symbols that only exist in newer system dylibs (e.g. std::__hash_memory, gated on the
+# macOS 26 / LLVM 21 SDK). The wheel then links fine on the build runner but fails to dlopen
+# on older macOS with "Symbol not found: __ZNSt3__113__hash_memoryEPKvm". Leaving the
+# annotations enabled lets libc++ back-deploy correctly for the deployment target.
+if(${ARCTICDB_USING_CONDA})
+    if(APPLE)
+        if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
+            add_compile_definitions(_LIBCPP_DISABLE_AVAILABILITY)
+        endif()
+    endif()
+endif()
 
 if(NOT ${ARCTICDB_USING_CONDA})
     find_package(Libevent CONFIG REQUIRED)
