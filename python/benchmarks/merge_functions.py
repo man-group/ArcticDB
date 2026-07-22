@@ -18,7 +18,7 @@ from asv_runner.benchmarks.mark import SkipNotImplemented
 
 from benchmarks.seaweed_utils import SeaweedClient
 
-# The cache bucket holds every scenario's precomputed target libraries; each measurement
+# The cache bucket holds every scenario's precomputed target+source libraries; each measurement
 # copies its target prefix into the throwaway work bucket.
 CACHE_BUCKET = "arcticdb-merge-update-cache"
 WORK_BUCKET = "arcticdb-merge-work"
@@ -186,8 +186,9 @@ class MergeBase:
         self.value_dtype = None
         self.source = None
         self.on = None
-        # setup copies the target prefix into the work bucket by literal name.
+        # setup copies the target prefix into the work bucket by literal name; the source prefix is never copied.
         self.target_prefix = "target"
+        self.source_prefix = "source"
         # Each class owns its client. ASV runs setup_cache, setup and teardown on separate instances
         # (only setup_cache's return value is shared between them), so the client is created here in
         # __init__ — the one place every phase can reach it — rather than in setup_cache.
@@ -199,10 +200,9 @@ class MergeBase:
         uri = self.seaweed.arctic_uri(CACHE_BUCKET, self.target_prefix)
         Arctic(uri).create_library(lib_name).write(self.SYM, target)
 
-    def _generate_source(self, source_size, matched_slices=None):
-        # Params-seeded rng: every setup call for a given combo generates the identical source.
+    def _generate_source(self, target, source_size, matched_slices=None):
+        # Params-seeded rng: the same (class, params) always generate the identical source.
         rng = np.random.default_rng([source_size, matched_slices or 0])
-        target = self.lib.read(self.SYM).data
         # Maximal on-set: every on_count (incl. 0) merges the same source; generators need a non-empty on.
         on = [f"val_{j}" for j in range(max(dict(zip(self.param_names, self.params))["on_count"]))]
         if self.INDEX_KIND == "datetime":
@@ -220,6 +220,17 @@ class MergeBase:
             target, source_size, source_size // 2, rng, on=on, value_dtype=self.value_dtype
         )
 
+    def _source_sym(self, source_size, matched_slices=None):
+        return f"src_{source_size}" if matched_slices is None else f"src_{source_size}_{matched_slices}"
+
+    def _precompute_sources(self, lib_name, target):
+        src_lib = Arctic(self.seaweed.arctic_uri(CACHE_BUCKET, self.source_prefix)).create_library(lib_name)
+        pmap = dict(zip(self.param_names, self.params))
+        for source_size in pmap["source_size"]:
+            for matched_slices in pmap.get("matched_slices", [None]):
+                source = self._generate_source(target, source_size, matched_slices)
+                src_lib.write(self._source_sym(source_size, matched_slices), source)
+
     def _prepare_merge(self, lib_name, on_count, source_size, matched_slices=None):
         # Fresh Arctic per sample so nothing cached from the previous sample's bucket survives.
         del self.ac
@@ -230,7 +241,8 @@ class MergeBase:
         self.ac = Arctic(self.seaweed.arctic_uri(WORK_BUCKET, self.target_prefix))
         self.lib = self.ac.get_library(lib_name)
         self.on = [f"val_{j}" for j in range(on_count)]
-        self.source = self._generate_source(source_size, matched_slices)
+        src_ac = Arctic(self.seaweed.arctic_uri(CACHE_BUCKET, self.source_prefix))
+        self.source = src_ac.get_library(lib_name).read(self._source_sym(source_size, matched_slices)).data
 
     def merge(self, strategy):
         self.lib.merge_experimental(self.SYM, self.source, strategy=self.STRATEGIES[strategy], on=self.on)
@@ -260,7 +272,9 @@ class MergeThinDatetime(MergeBase):
             num_rows, num_value_cols = scenario
             rng = np.random.default_rng([num_rows, num_value_cols])
             target = generate_merge_target(num_rows, num_value_cols, self.value_dtype, self.INDEX_KIND, rng)
-            self._write_cache_target(make_lib_name(scenario, self.INDEX_KIND), target)
+            lib_name = make_lib_name(scenario, self.INDEX_KIND)
+            self._write_cache_target(lib_name, target)
+            self._precompute_sources(lib_name, target)
 
     def setup(self, scenario, strategy, on_count, source_size, matched_slices):
         self._prepare_merge(make_lib_name(scenario, self.INDEX_KIND), on_count, source_size, matched_slices)
@@ -298,7 +312,9 @@ class MergeThinRowRange(MergeBase):
             num_rows, num_value_cols = scenario
             rng = np.random.default_rng([num_rows, num_value_cols])
             target = generate_merge_target(num_rows, num_value_cols, self.value_dtype, self.INDEX_KIND, rng)
-            self._write_cache_target(make_lib_name(scenario, self.INDEX_KIND), target)
+            lib_name = make_lib_name(scenario, self.INDEX_KIND)
+            self._write_cache_target(lib_name, target)
+            self._precompute_sources(lib_name, target)
 
     def setup(self, scenario, strategy, on_count, source_size):
         self._prepare_merge(make_lib_name(scenario, self.INDEX_KIND), on_count, source_size)
@@ -348,10 +364,14 @@ class MergeThinStringDatetime(MergeBase):
                 )
                 # One target per pool size; per-size prefixes let setup copy only the variant being merged.
                 self.target_prefix = f"target_{num_unique_strings}"
-                self._write_cache_target(make_lib_name(scenario, self.INDEX_KIND), target)
+                self.source_prefix = f"source_{num_unique_strings}"
+                lib_name = make_lib_name(scenario, self.INDEX_KIND)
+                self._write_cache_target(lib_name, target)
+                self._precompute_sources(lib_name, target)
 
     def setup(self, scenario, strategy, on_count, source_size, matched_slices, num_unique_strings):
         self.target_prefix = f"target_{num_unique_strings}"
+        self.source_prefix = f"source_{num_unique_strings}"
         self._prepare_merge(make_lib_name(scenario, self.INDEX_KIND), on_count, source_size, matched_slices)
 
     def teardown(self, scenario, strategy, on_count, source_size, matched_slices, num_unique_strings):
@@ -398,10 +418,14 @@ class MergeThinStringRowRange(MergeBase):
                 )
                 # One target per pool size; per-size prefixes let setup copy only the variant being merged.
                 self.target_prefix = f"target_{num_unique_strings}"
-                self._write_cache_target(make_lib_name(scenario, self.INDEX_KIND), target)
+                self.source_prefix = f"source_{num_unique_strings}"
+                lib_name = make_lib_name(scenario, self.INDEX_KIND)
+                self._write_cache_target(lib_name, target)
+                self._precompute_sources(lib_name, target)
 
     def setup(self, scenario, strategy, on_count, source_size, num_unique_strings):
         self.target_prefix = f"target_{num_unique_strings}"
+        self.source_prefix = f"source_{num_unique_strings}"
         self._prepare_merge(make_lib_name(scenario, self.INDEX_KIND), on_count, source_size)
 
     def teardown(self, scenario, strategy, on_count, source_size, num_unique_strings):
@@ -438,7 +462,9 @@ class MergeWideDatetime(MergeBase):
             num_rows, num_value_cols = scenario
             rng = np.random.default_rng([num_rows, num_value_cols])
             target = generate_merge_target(num_rows, num_value_cols, self.value_dtype, self.INDEX_KIND, rng)
-            self._write_cache_target(make_lib_name(scenario, self.INDEX_KIND), target)
+            lib_name = make_lib_name(scenario, self.INDEX_KIND)
+            self._write_cache_target(lib_name, target)
+            self._precompute_sources(lib_name, target)
 
     def setup(self, scenario, strategy, on_count, source_size):
         if strategy != "update" and on_count == 1:
@@ -478,7 +504,9 @@ class MergeWideRowRange(MergeBase):
             num_rows, num_value_cols = scenario
             rng = np.random.default_rng([num_rows, num_value_cols])
             target = generate_merge_target(num_rows, num_value_cols, self.value_dtype, self.INDEX_KIND, rng)
-            self._write_cache_target(make_lib_name(scenario, self.INDEX_KIND), target)
+            lib_name = make_lib_name(scenario, self.INDEX_KIND)
+            self._write_cache_target(lib_name, target)
+            self._precompute_sources(lib_name, target)
 
     def setup(self, scenario, strategy, on_count, source_size):
         self._prepare_merge(make_lib_name(scenario, self.INDEX_KIND), on_count, source_size)
