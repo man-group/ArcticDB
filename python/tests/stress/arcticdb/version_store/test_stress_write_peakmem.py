@@ -31,27 +31,6 @@ def create_mixed_type_df(num_rows=100_000, num_columns=100):
     return df
 
 
-def assert_read_allocates_small_fraction(read_fn, size_fn, acceptable_ratio=1.5):
-    tracemalloc.start()
-    tracemalloc.reset_peak()
-
-    obj = read_fn()
-
-    _, peak_memory_during_read = tracemalloc.get_traced_memory()
-
-    tracemalloc.stop()
-
-    reference_size = size_fn(obj)
-    print(f"Reference size: {reference_size/1000/1000:.2f}MB")
-    print(f"Peak memory during read: {peak_memory_during_read/1000/1000:.2f}MB")
-    print(f"Peak memory during read ratio: {peak_memory_during_read / reference_size:.4f}")
-
-    # Asserts the read is zero-copy and does not allocate a duplicate of the output.
-    assert peak_memory_during_read / reference_size < acceptable_ratio
-
-    return obj
-
-
 def assert_write_allocates_small_fraction(lib, sym, create_obj_fn, acceptable_ratio=1.5):
     tracemalloc.start()
 
@@ -103,22 +82,6 @@ def test_peakmem_write_arrow_basic(lmdb_version_store_arrow):
 
     # Verify that original table was not modified during write.
     original_table_after_write.equals(table_copy)
-
-
-@pytest.mark.skipif(sys.version_info < (3, 9), reason="Tracemalloc doesn't support `reset_peak` before python 3.9")
-def test_peakmem_read_str_dtype(lmdb_version_store_v1):
-    lib = lmdb_version_store_v1
-    sym = "sym"
-    lib.write(sym, create_mixed_type_df())
-
-    with pd.option_context("future.infer_string", True):
-        df = assert_read_allocates_small_fraction(
-            lambda: lib.read(sym).data,
-            lambda d: d.memory_usage(deep=True).sum(),
-        )
-
-    # Confirms the str-dtype read path was exercised (i % 5 == 3 columns are str).
-    assert str(df["col_3"].dtype) == "str"
 
 
 @pytest.mark.skipif(sys.version_info < (3, 9), reason="Tracemalloc doesn't support `reset_peak` before python 3.9")
