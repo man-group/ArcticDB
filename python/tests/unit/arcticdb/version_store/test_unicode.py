@@ -42,7 +42,7 @@ def unicode_strs_df(start_date: pd.Timestamp, num_rows: int) -> pd.DataFrame:
 
 @pytest.mark.parametrize("parallel", (True, False))
 @pytest.mark.parametrize("multi_index", (True, False))
-def test_write(lmdb_version_store_tiny_segment, parallel, multi_index):
+def test_write(lmdb_version_store_tiny_segment, parallel, multi_index, infer_string):
     lib = lmdb_version_store_tiny_segment
     start = pd.Timestamp("2018-01-02")
     num_rows = 100

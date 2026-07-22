@@ -12,8 +12,10 @@
 #include <arcticdb/python/gil_lock.hpp>
 #include <arcticdb/pipeline/input_frame.hpp>
 #include <arcticdb/entity/native_tensor.hpp>
+#include <pybind11/numpy.h>
 #include <memory>
 #include <string>
+#include <variant>
 #include <vector>
 
 namespace arcticdb::convert {
@@ -21,10 +23,12 @@ namespace arcticdb::convert {
 namespace py = pybind11;
 using namespace arcticdb::entity;
 
+using PandasColumn = std::variant<py::array, std::vector<std::shared_ptr<RecordBatchData>>>;
+
 struct ARCTICDB_VISIBILITY_HIDDEN PandasData {
     PandasData(
             std::vector<std::string>&& index_names, std::vector<std::string>&& column_names,
-            std::vector<py::object>&& index_values, std::vector<py::object>&& columns_values, SortedValue sorted
+            std::vector<PandasColumn>&& index_values, std::vector<PandasColumn>&& columns_values, SortedValue sorted
     ) :
         index_names(std::move(index_names)),
         column_names(std::move(column_names)),
@@ -36,8 +40,8 @@ struct ARCTICDB_VISIBILITY_HIDDEN PandasData {
 
     std::vector<std::string> index_names;
     std::vector<std::string> column_names;
-    std::vector<py::object> index_values;
-    std::vector<py::object> columns_values;
+    std::vector<PandasColumn> index_values;
+    std::vector<PandasColumn> columns_values;
     SortedValue sorted{SortedValue::UNKNOWN};
 };
 

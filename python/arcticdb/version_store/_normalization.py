@@ -29,7 +29,7 @@ from abc import ABCMeta, abstractmethod
 from arcticdb.dependencies import _PYARROW_AVAILABLE, _POLARS_AVAILABLE, pyarrow as pa, polars as pl
 from arcticdb.preconditions import check
 from arcticdb_ext import get_config_string
-from pandas.api.types import is_integer_dtype
+from pandas.api.types import infer_dtype, is_integer_dtype
 from arcticc.pb2.descriptors_pb2 import UserDefinedMetadata, NormalizationMetadata, MsgPackSerialization
 from arcticc.pb2.storage_pb2 import VersionStoreConfig
 from collections import Counter
@@ -217,7 +217,7 @@ def get_timezone_from_metadata(norm_meta):
     return None
 
 
-def _to_primitive(arr, arr_name, dynamic_strings, string_max_len=None, coerce_column_type=None, norm_meta=None):
+def _to_primitive(arr, arr_name, dynamic_strings, string_max_len=None, coerce_column_type=None, norm_meta=None) -> np.ndarray | List[RecordBatchData]:
     arr_dtype_as_str = str(arr.dtype)
     if "pyarrow" in arr_dtype_as_str:
         raise ArcticDbNotYetImplemented(
@@ -234,6 +234,16 @@ def _to_primitive(arr, arr_name, dynamic_strings, string_max_len=None, coerce_co
             norm_meta.common.categories[arr_name].category.extend(arr.categories)
         return arr.codes
 
+    if "str" in arr_dtype_as_str:
+        chunked = arr._pa_array              # pa.ChunkedArray
+        batches = []
+        for chunk in chunked.chunks:         # each chunk is a pa.Array (large_string)
+            record_batch = pa.RecordBatch.from_arrays([chunk], names=[str(arr_name)])
+            rbd = RecordBatchData()
+            record_batch._export_to_c(rbd.array(), rbd.schema())
+            batches.append(rbd)
+
+        return batches
     # This check has to come after the categorical check above, as Categoricals are a Pandas concept, not numpy, which
     # causes issubdtype to throw if arr.dtype == CategoricalDtype
     if np.issubdtype(arr.dtype, np.timedelta64):
@@ -1067,6 +1077,14 @@ class BlockManagerUnconsolidated(BlockManager):
         return self.blocks
 
 
+def _infer_string_enabled():
+    """Whether pandas' future.infer_string option is on, i.e. the reader wants string columns as the str dtype."""
+    try:
+        return bool(pd.get_option("future.infer_string"))
+    except pd.errors.OptionError:  # pandas < 2.1 does not have the option
+        return False
+
+
 class DataFrameNormalizer(_PandasNormalizer):
     TYPE = "df"
 
@@ -1092,9 +1110,15 @@ class DataFrameNormalizer(_PandasNormalizer):
         def df_from_arrays(arrays, cols, ind, n_ind):
             def gen_blocks():
                 _len = len(index)
+                infer_string = _infer_string_enabled()
                 column_placement_in_block = 0
                 for idx, a in enumerate(arrays):
                     if idx < n_ind:
+                        continue
+                    #TEMPORARY
+                    if infer_string and a.dtype == np.dtype("object") and infer_dtype(a, skipna=True) == "string":
+                        yield make_block(pd.array(a, dtype="str"), placement=(column_placement_in_block,)) # TODO: this creates a copy, figure out how to pass arrow data directly
+                        column_placement_in_block += 1
                         continue
                     # In Pandas 1 the dtype param of make_block is ignored for empty blocks and the dtype is always object
                     # Pre-empty type Arctic has a default dtype of float64 for empty columns. Thus a casting to float64
@@ -1308,7 +1332,7 @@ class DataFrameNormalizer(_PandasNormalizer):
         if isinstance(item.columns, MultiIndex):
             raise ArcticDbNotYetImplemented("MultiIndex column are not supported yet")
 
-        index_names, ix_vals = self._index_to_records(
+        index_names, index_values = self._index_to_records(
             item, norm_meta.df.common, dynamic_strings, string_max_len=string_max_len, empty_types=empty_types
         )
         # The first branch of this if is faster, but does not work with null/duplicated column names
@@ -1316,7 +1340,7 @@ class DataFrameNormalizer(_PandasNormalizer):
             columns_vals = [item[col].values for col in item.columns]
         else:
             columns_vals = [item.iloc[:, idx].values for idx in range(len(item.columns))]
-        columns, column_vals = _normalize_columns(
+        column_names, column_vals = _normalize_columns(
             item.columns,
             columns_vals,
             norm_meta.df,
@@ -1347,8 +1371,8 @@ class DataFrameNormalizer(_PandasNormalizer):
         return NormalizedInput(
             item=PandasData(
                 index_names=index_names,
-                index_values=ix_vals,
-                column_names=columns,
+                index_values=index_values,
+                column_names=column_names,
                 columns_values=column_vals,
                 sorted=sort_status,
             ),

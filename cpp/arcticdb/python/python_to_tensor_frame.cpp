@@ -6,6 +6,7 @@
  * will be governed by the Apache License, version 2.0.
  */
 
+#include "pipeline/input_frame.hpp"
 #include <arcticdb/python/python_to_tensor_frame.hpp>
 #include <arcticdb/entity/performance_tracing.hpp>
 #include <arcticdb/entity/native_tensor.hpp>
@@ -100,8 +101,6 @@ static std::tuple<char, int> parse_array_descriptor(PyObject* obj) {
 
 struct PyArrayDescriptor {
     PyArrayDescriptor(PyObject* ptr, bool empty_types) {
-        auto& api = pybind11::detail::npy_api::get();
-        util::check(api.PyArray_Check_(ptr), "Expected Python array");
         arr_ = pybind11::detail::array_proxy(ptr);
         std::tie(kind_, elsize_) = parse_array_descriptor(arr_->descr);
         ndim_ = arr_->nd;
@@ -243,9 +242,13 @@ NativeTensor obj_to_tensor(PyObject* ptr, bool empty_types, std::optional<std::s
 
 void pandas_data_to_frame(const PandasData& pandas_data, const bool empty_types, InputFrame& frame) {
     frame.num_rows = 0u;
-    // Fill index
     const auto& idx_names = pandas_data.index_names;
     const auto& idx_vals = pandas_data.index_values;
+    const auto& col_names = pandas_data.column_names;
+    const auto& col_vals = pandas_data.columns_values;
+    const auto sorted = pandas_data.sorted;
+
+    // Fill index
     util::check(
             idx_names.size() == idx_vals.size(),
             "Number idx names {} and values {} do not match",
@@ -254,11 +257,23 @@ void pandas_data_to_frame(const PandasData& pandas_data, const bool empty_types,
     );
 
     StreamDescriptor desc;
-    std::vector<entity::NativeTensor> field_tensors;
-    std::optional<entity::NativeTensor> opt_index_tensor;
+    std::vector<InputFrame::FieldData> columns;
+    columns.reserve(idx_names.size() + col_vals.size());
+    bool has_only_tensors{true};
+    std::vector<sparrow::record_batch> arrow_owners;
     if (!idx_names.empty()) {
         util::check(idx_names.size() == 1, "Multi-indexed dataframes not handled");
-        auto index_tensor = obj_to_tensor(idx_vals[0].ptr(), empty_types);
+        auto index_tensor = util::variant_match(
+                idx_vals[0],
+                [&](const py::array& arr) { return obj_to_tensor(arr.ptr(), empty_types); },
+                [&](const std::vector<std::shared_ptr<RecordBatchData>>&) -> entity::NativeTensor {
+                    normalization::raise<ErrorCode::E_UNIMPLEMENTED_INPUT_TYPE>(
+                            "Arrow-backed index '{}' (e.g. the pandas string dtype) is not yet supported on write",
+                            idx_names[0]
+                    );
+                    has_only_tensors = false;
+                }
+        );
         util::check(index_tensor.ndim() == 1, "Multi-dimensional indexes not handled");
         util::check(index_tensor.shape() != nullptr, "Index tensor expected to contain shapes");
         std::string index_column_name = !idx_names.empty() ? idx_names[0] : "index";
@@ -270,53 +285,81 @@ void pandas_data_to_frame(const PandasData& pandas_data, const bool empty_types,
 
             desc.add_scalar_field(index_tensor.dt_, index_column_name);
             frame.index = stream::TimeseriesIndex(index_column_name);
-            opt_index_tensor = std::move(index_tensor);
         } else {
             frame.index = stream::RowCountIndex();
             desc.set_index_type(IndexDescriptor::Type::ROWCOUNT);
             desc.add_scalar_field(index_tensor.dt_, index_column_name);
-            field_tensors.push_back(std::move(index_tensor));
         }
+        columns.emplace_back(std::move(index_tensor));
     }
 
     // Fill tensors
-    const auto& col_names = pandas_data.column_names;
-    const auto& col_vals = pandas_data.columns_values;
-    const auto sorted = pandas_data.sorted;
-
     for (auto i = 0u; i < col_vals.size(); ++i) {
-        auto tensor = [&] {
-            try {
-                return obj_to_tensor(col_vals[i].ptr(), empty_types, col_names[i]);
-            } catch (...) {
-                log::storage().debug(
-                        "ArcticDB encountered error when parsing the input data in column[{}]: \"{}\".Printing column "
-                        "info for all columns in the input:\n{}",
-                        i,
-                        col_names[i],
-                        [&] {
-                            std::string all_column_info;
-                            for (size_t col = 0; col < col_names.size(); ++col) {
-                                all_column_info += fmt::format(
-                                        "Column [{}] \"{}\": {}\n",
-                                        col,
-                                        col_names[col],
-                                        column_info(PyArrayDescriptor(col_vals[col].ptr(), empty_types))
-                                );
-                            }
-                            return all_column_info;
-                        }()
-                );
-                throw;
-            }
-        }();
-        frame.num_rows = std::max(frame.num_rows, static_cast<size_t>(tensor.shape(0)));
-        if (tensor.expanded_dim() == 1) {
-            desc.add_field(scalar_field(tensor.data_type(), col_names[i]));
-        } else if (tensor.expanded_dim() == 2) {
-            desc.add_field(FieldRef{TypeDescriptor{tensor.data_type(), Dimension::Dim1}, col_names[i]});
-        }
-        field_tensors.push_back(std::move(tensor));
+        util::variant_match(
+                col_vals[i],
+                [&](const py::array& arr) {
+                    auto tensor = [&] {
+                        try {
+                            return obj_to_tensor(arr.ptr(), empty_types, col_names[i]);
+                        } catch (...) {
+                            log::storage().debug(
+                                    "ArcticDB encountered error when parsing the input data in column[{}]: \"{}\"."
+                                    "Printing column info for all columns in the input:\n{}",
+                                    i,
+                                    col_names[i],
+                                    [&] {
+                                        std::string all_column_info;
+                                        for (size_t col = 0; col < col_names.size(); ++col) {
+                                            auto info = util::variant_match(
+                                                    col_vals[col],
+                                                    [empty_types](const py::array& a) {
+                                                        return column_info(PyArrayDescriptor(a.ptr(), empty_types));
+                                                    },
+                                                    [](const std::vector<std::shared_ptr<RecordBatchData>>&) {
+                                                        return std::string("Arrow record batches");
+                                                    }
+                                            );
+                                            all_column_info +=
+                                                    fmt::format("Column [{}] \"{}\": {}\n", col, col_names[col], info);
+                                        }
+                                        return all_column_info;
+                                    }()
+                            );
+                            throw;
+                        }
+                    }();
+                    frame.num_rows = std::max(frame.num_rows, static_cast<size_t>(tensor.shape(0)));
+                    if (tensor.expanded_dim() == 1) {
+                        desc.add_field(scalar_field(tensor.data_type(), col_names[i]));
+                    } else if (tensor.expanded_dim() == 2) {
+                        desc.add_field(FieldRef{TypeDescriptor{tensor.data_type(), Dimension::Dim1}, col_names[i]});
+                    }
+                    columns.push_back(std::move(tensor));
+                },
+                [&](const std::vector<std::shared_ptr<RecordBatchData>>& chunks) {
+                    std::vector<sparrow::record_batch> owners;
+                    owners.reserve(chunks.size());
+                    for (const auto& rbd : chunks) {
+                        owners.emplace_back(std::move(rbd->array_), std::move(rbd->schema_));
+                    }
+                    auto [cols, _] = record_batches_to_columns(owners, /*has_index=*/false);
+                    util::check(
+                            cols.size() == 1,
+                            "Expected exactly one column from Arrow column '{}', got {}",
+                            col_names[i],
+                            cols.size()
+                    );
+                    frame.num_rows = std::max(frame.num_rows, static_cast<size_t>(cols[0].row_count()));
+                    desc.add_field(FieldRef{cols[0].type(), col_names[i]});
+                    columns.emplace_back(std::move(cols[0]));
+                    arrow_owners.insert(
+                            arrow_owners.end(),
+                            std::make_move_iterator(owners.begin()),
+                            std::make_move_iterator(owners.end())
+                    );
+                    has_only_tensors = false;
+                }
+        );
     }
 
     // idx_names are passed by the python layer. They are empty in case row count index is used see:
@@ -333,7 +376,7 @@ void pandas_data_to_frame(const PandasData& pandas_data, const bool empty_types,
         desc.set_index_type(IndexDescriptor::Type::EMPTY);
     }
     desc.set_sorted(sorted);
-    frame.set_from_tensors(std::move(desc), std::move(field_tensors), std::move(opt_index_tensor));
+    frame.set_from_frame_data(std::move(desc), std::move(columns), std::move(arrow_owners), has_only_tensors);
 }
 
 void record_batches_to_frame(
@@ -413,7 +456,7 @@ std::shared_ptr<InputFrame> py_none_to_frame() {
     res->num_rows = std::max(res->num_rows, static_cast<size_t>(tensor.shape(0)));
     desc.add_field(scalar_field(tensor.data_type(), col_name));
 
-    res->set_from_tensors(std::move(desc), {tensor}, std::nullopt);
+    res->set_from_tensors(std::move(desc), {tensor});
 
     ARCTICDB_DEBUG(log::version(), "Received frame with descriptor {}", res->desc());
     res->set_index_range();

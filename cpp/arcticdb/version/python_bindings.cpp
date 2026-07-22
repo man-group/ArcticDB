@@ -278,8 +278,8 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
             .def(py::init<
                          std::vector<std::string>&&,
                          std::vector<std::string>&&,
-                         std::vector<py::object>&&,
-                         std::vector<py::object>&&,
+                         std::vector<convert::PandasColumn>&&,
+                         std::vector<convert::PandasColumn>&&,
                          SortedValue>(),
                  py::arg("index_names"),
                  py::arg("column_names"),
