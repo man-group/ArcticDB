@@ -16,6 +16,7 @@ import datetime
 import dateutil
 
 from arcticdb import OutputFormat
+from arcticdb.exceptions import SchemaException
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb.util.test import assert_frame_equal, query_stats_operation_count
 import arcticdb.toolbox.query_stats as qs
@@ -243,8 +244,9 @@ def test_querybuilder_filter_datetime_with_timezone(lmdb_version_store_tiny_segm
 
 @pytest.mark.parametrize("batch", [True, False])
 @pytest.mark.parametrize("use_date_range_clause", [True, False])
+@pytest.mark.parametrize("disjoint", [True, False])
 def test_querybuilder_date_range_then_date_range(
-    lmdb_version_store_tiny_segment, batch, use_date_range_clause, any_output_format
+    lmdb_version_store_tiny_segment, batch, use_date_range_clause, disjoint, any_output_format
 ):
     lib = lmdb_version_store_tiny_segment
     lib._set_output_format_for_pipeline_tests(any_output_format)
@@ -252,8 +254,12 @@ def test_querybuilder_date_range_then_date_range(
     df = pd.DataFrame({"col": np.arange(1, 11)}, index=pd.date_range("2000-01-01", periods=10))
     lib.write(symbol, df)
 
-    first_date_range = (pd.Timestamp("2000-01-02"), pd.Timestamp("2000-01-09"))
-    second_date_range = (pd.Timestamp("2000-01-07"), pd.Timestamp("2000-01-08"))
+    if disjoint:
+        first_date_range = (pd.Timestamp("2000-01-02"), pd.Timestamp("2000-01-04"))
+        second_date_range = (pd.Timestamp("2000-01-07"), pd.Timestamp("2000-01-09"))
+    else:
+        first_date_range = (pd.Timestamp("2000-01-02"), pd.Timestamp("2000-01-09"))
+        second_date_range = (pd.Timestamp("2000-01-07"), pd.Timestamp("2000-01-08"))
 
     q = QueryBuilder()
     if use_date_range_clause:
@@ -270,6 +276,31 @@ def test_querybuilder_date_range_then_date_range(
             received = lib.batch_read([symbol], date_ranges=[first_date_range], query_builder=q)[symbol].data
         else:
             received = lib.read(symbol, date_range=first_date_range, query_builder=q).data
+
+    if disjoint:
+        assert len(received) == 0
+        assert list(received.columns) == list(df.columns)
+    else:
+        expected = df.query("col in [7, 8]")
+        assert_frame_equal(expected, received)
+
+
+def test_querybuilder_date_range_kwarg_and_clause_intersect_with_filter(
+    lmdb_version_store_tiny_segment, column_stats_filtering_enabled_and_disabled, any_output_format
+):
+    lib = lmdb_version_store_tiny_segment
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol = "test_querybuilder_date_range_kwarg_and_clause_intersect_with_filter"
+    df = pd.DataFrame({"col": np.arange(1, 11)}, index=pd.date_range("2000-01-01", periods=10))
+    lib.write(symbol, df)
+    lib.create_column_stats_experimental(symbol)
+
+    kwarg_date_range = (pd.Timestamp("2000-01-02"), pd.Timestamp("2000-01-09"))
+    clause_date_range = (pd.Timestamp("2000-01-07"), pd.Timestamp("2000-01-08"))
+
+    q = QueryBuilder().date_range(clause_date_range)
+    q = q[q["col"] >= 7]
+    received = lib.read(symbol, date_range=kwarg_date_range, query_builder=q).data
     expected = df.query("col in [7, 8]")
     assert_frame_equal(expected, received)
 
@@ -475,6 +506,26 @@ def test_querybuilder_empty_date_range_then_groupby(lmdb_version_store_v1, any_o
     assert received.index.name == "col1"
     assert len(received.columns) == 1
     assert "col2" in received.columns
+
+
+def test_querybuilder_date_range_then_groupby_then_date_range_raises(lmdb_version_store_v1, any_output_format):
+    # Once GroupBy is followed by Agg, the index is no longer a timeseries (it becomes the grouping
+    # column), so a DateRangeClause after it must be rejected.
+    lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol = "test_querybuilder_date_range_then_groupby_then_date_range_raises"
+    df = pd.DataFrame(
+        {"col1": ["a", "b", "c", "a", "b", "c", "a", "b", "c", "d"], "col2": np.arange(1, 11)},
+        index=pd.date_range("2000-01-01", periods=10),
+    )
+    lib.write(symbol, df)
+
+    q = QueryBuilder()
+    q = q.date_range((pd.Timestamp("2000-01-02"), pd.Timestamp("2000-01-09")))
+    q = q.groupby("col1").agg({"col2": "sum"})
+    q = q.date_range((pd.Timestamp("2000-01-04"), pd.Timestamp("2000-01-06")))
+    with pytest.raises(SchemaException):
+        lib.read(symbol, query_builder=q)
 
 
 @pytest.mark.parametrize("batch", [True, False])
@@ -893,6 +944,31 @@ def test_querybuilder_project_then_date_range(lmdb_version_store_tiny_segment, a
     expected = df
     expected["new_col"] = expected["col"] * 3
     expected = expected.query("col in [3, 4, 5, 6, 7, 8]")
+    assert_frame_equal(expected, received, check_dtype=False)
+
+
+def test_querybuilder_filter_then_date_range_then_project_then_date_range(
+    lmdb_version_store_tiny_segment, any_output_format
+):
+    # The two DateRangeClauses should be moved to the front of the pipeline and merged into a single
+    # intersected range (query_planner.cpp's move_and_merge_date_ranges_left), leaving the filter and
+    # projection alone. Here we just check that we give correct results.
+    lib = lmdb_version_store_tiny_segment
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol = "test_querybuilder_filter_then_date_range_then_project_then_date_range"
+    df = pd.DataFrame({"col": np.arange(1, 11)}, index=pd.date_range("2024-01-01", periods=10))
+    lib.write(symbol, df)
+
+    q = QueryBuilder()
+    q = q[q["col"] != 5]
+    q = q.date_range((pd.Timestamp("2024-01-02"), pd.Timestamp("2024-01-06")))
+    q = q.apply("new_col", q["col"] * 10)
+    q = q.date_range((pd.Timestamp("2024-01-04"), pd.Timestamp("2024-01-09")))
+    received = lib.read(symbol, query_builder=q).data
+
+    expected = df.query("col != 5").copy()
+    expected["new_col"] = expected["col"] * 10
+    expected = expected.loc["2024-01-04":"2024-01-06"]
     assert_frame_equal(expected, received, check_dtype=False)
 
 

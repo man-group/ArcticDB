@@ -8,11 +8,8 @@ inline std::optional<util::BitSet> clause_column_bitset(
 ) {
     folly::F14FastSet<std::string_view> column_set;
     for (const auto& clause : clauses) {
-        auto opt_columns = clause->clause_info().input_columns_;
-        if (opt_columns.has_value()) {
-            for (const auto& column : *clause->clause_info().input_columns_) {
-                column_set.insert(std::string_view(column));
-            }
+        for (const auto& column : clause->clause_info().input_columns_) {
+            column_set.insert(std::string_view(column));
         }
     }
     if (!column_set.empty())
