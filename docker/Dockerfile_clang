@@ -22,6 +22,11 @@ RUN chmod 555 sccache
 
 RUN cp sccache /usr/local/bin/
 
+# The manylinux base ships a pipx-installed CMake (currently 4.4.0) which vcpkg prefers over
+# the 3.31.6 pinned in CI (build_steps.yml). 4.4's stricter -Werror=<category> validation
+# breaks the vcpkg `benchmark` port, so pin here too. Drop when the CI pin is dropped.
+RUN pipx install --force "cmake==3.31.6" && cmake --version
+
 # Test-time services baked in so the pytest CI jobs don't have to download them on every run
 RUN wget -nv https://fastdl.mongodb.org/linux/mongodb-linux-x86_64-rhel80-7.0.0.tgz && \
     tar -xzf mongodb-linux-x86_64-rhel80-7.0.0.tgz && \
