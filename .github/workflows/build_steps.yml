@@ -264,8 +264,16 @@ jobs:
       # Windows ships no IANA tz database, so the date library used by the C++ tests
       # (via date::locate_zone) can't resolve named timezones without it. pyarrow's helper
       # downloads it to %USERPROFILE%\Downloads\tzdata, where the date library looks.
-      - name: Download Windows timezone data for the C++ tests
+      - name: Windows tzdata cache
         if: inputs.job_type == 'cpp-tests' && matrix.os == 'windows'
+        id: tzdata-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/Downloads/tzdata
+          key: windows-tzdata-v1 # bump manually to pick up a new IANA tzdata release
+
+      - name: Download Windows timezone data for the C++ tests
+        if: inputs.job_type == 'cpp-tests' && matrix.os == 'windows' && steps.tzdata-cache.outputs.cache-hit != 'true'
         run: |
           python -m pip install --retries 3 --timeout 180 pyarrow
           python -c "from pyarrow.util import download_tzdata_on_windows; download_tzdata_on_windows()"
@@ -555,6 +563,7 @@ jobs:
     services: ${{matrix.test_services}}
     env:
       SCCACHE_GHA_ENABLED: "true"
+      AZURITE_VERSION: "3.36.0"
       python_impl_name: ${{needs.compile.outputs.python_impl_name}}
       distinguishing_name: ${{matrix.os}}-${{needs.compile.outputs.python_impl_name}}-${{matrix.type}}${{matrix.python_deps_id}}-${{matrix.version_cache_timeout}}
       ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
@@ -621,20 +630,55 @@ jobs:
           disk-root: "D:"  # This is also the checkout directory. Total size 12GB.
         continue-on-error: true
 
+      # Skip installs when the tool is already baked into the container image (docker/Dockerfile*)
+      - name: Detect tools bundled in the container image
+        if: matrix.os == 'linux'
+        run: |
+          command -v azurite >/dev/null && echo "HAS_AZURITE=1" | tee -a $GITHUB_ENV || true
+
       # GitHub runner image does not come with npm
       - name: Install npm (Linux and macOS)
-        if: matrix.os == 'linux' || matrix.os == 'macos'
+        if: (matrix.os == 'linux' && env.HAS_AZURITE != '1') || matrix.os == 'macos'
         uses: actions/setup-node@v3.3.0
         with:
           node-version: '24'
 
-      - name: Install Azurite
+      - name: Install Azurite (Linux)
+        if: matrix.os == 'linux' && env.HAS_AZURITE != '1'
         uses: nick-fields/retry@v3
         with:
           timeout_minutes: 10
           max_attempts: 3
-          command: npm install -g azurite 
-          
+          command: npm install -g azurite@${{env.AZURITE_VERSION}}
+
+      # No job containers on hosted Windows/macOS runners, so cache the azurite install instead
+      - name: Azurite cache (Windows and macOS)
+        if: matrix.os == 'windows' || matrix.os == 'macos'
+        id: azurite-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/azurite
+          key: azurite-${{env.AZURITE_VERSION}}-${{runner.os}}
+
+      - name: Install Azurite (Windows and macOS)
+        if: (matrix.os == 'windows' || matrix.os == 'macos') && steps.azurite-cache.outputs.cache-hit != 'true'
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 10
+          max_attempts: 3
+          shell: bash
+          command: npm install -g --prefix "$HOME/azurite" azurite@${{env.AZURITE_VERSION}}
+
+      - name: Add Azurite to PATH (Windows and macOS)
+        if: matrix.os == 'windows' || matrix.os == 'macos'
+        run: |
+          # npm puts the .cmd shims in the prefix root on Windows and in bin/ elsewhere
+          if [[ -n "$MSYSTEM" ]]; then
+            echo "$USERPROFILE\azurite" >> $GITHUB_PATH
+          else
+            echo "$HOME/azurite/bin" >> $GITHUB_PATH
+          fi
+
       - name: Install MongoDB
         if: matrix.os == 'linux'
         uses: ./.github/actions/install_mongodb
@@ -659,8 +703,16 @@ jobs:
         env:
           CMAKE_BUILD_PARALLEL_LEVEL: ${{vars.CMAKE_BUILD_PARALLEL_LEVEL}}
 
-      - name: Download Windows timezone data for PyArrow
+      - name: Windows tzdata cache
         if: matrix.os == 'windows'
+        id: tzdata-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/Downloads/tzdata
+          key: windows-tzdata-v1 # bump manually to pick up a new IANA tzdata release
+
+      - name: Download Windows timezone data for PyArrow
+        if: matrix.os == 'windows' && steps.tzdata-cache.outputs.cache-hit != 'true'
         run: python -c "from pyarrow.util import download_tzdata_on_windows; download_tzdata_on_windows()"
 
       - name: Set persistent storage variables
