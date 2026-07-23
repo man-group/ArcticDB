@@ -15,7 +15,7 @@ runs:
         if ! command -v azurite >/dev/null; then
           yum install nodejs npm -y
           npm config set strict-ssl false
-          npm install -g azurite
+          npm install -g azurite@3.36.0
         fi
         
         cd python

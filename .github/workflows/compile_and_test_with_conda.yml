@@ -275,7 +275,7 @@ jobs:
         with:
           timeout_minutes: 10
           max_attempts: 3
-          command: npm install -g azurite
+          command: npm install -g azurite@3.36.0
 
       - name: Check no arcticdb file depend on tests package
         run: build_tooling/checks.sh
