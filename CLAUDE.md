@@ -143,6 +143,11 @@ When upgrading a dependency like `sparrow` that has a custom port in vcpkg:
 
 C++ benchmark sources are in `cpp/arcticdb/*/test/benchmark_*.cpp`. ASV Python benchmarks live in `python/benchmarks/`. See [ASV Benchmarks Wiki](https://github.com/man-group/ArcticDB/wiki/Dev:-ASV-Benchmarks).
 
+ASV benchmarks that store data on SeaweedFS (e.g. `merge_functions.py`) need the single local
+server started first: `build_tooling/start_seaweed.sh start` (the CI benchmark workflow does
+this automatically). Client helpers, including `reset_arcticdb_cache_bucket()` which every
+`setup_cache` using SeaweedFS must call first, are in `python/benchmarks/seaweed_utils.py`.
+
 ## Code Review Guidelines
 
 When writing or modifying code, follow the standards in [`docs/claude/PR_REVIEW_GUIDELINES.md`](docs/claude/PR_REVIEW_GUIDELINES.md). These cover API stability, memory safety, on-disk format compatibility, concurrency, testing, and other quality gates enforced during PR review.
