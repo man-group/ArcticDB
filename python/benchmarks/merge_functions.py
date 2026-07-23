@@ -250,7 +250,7 @@ class MergeThinDatetime(MergeBase):
         self.value_dtype = "float32"
         self.param_names = ["scenario", "strategy", "on_count", "source_size", "matched_slices"]
         self.params = [
-            [(5_000_000, 5)],  # scenario: (num_rows, num_value_cols) — long-thin
+            [(5_000_000, 3)],  # scenario: (num_rows, num_value_cols) — long-thin
             ["update", "insert", "update_and_insert"],  # strategy
             [0],  # on_count
             [1_000, 500_000],  # source_size (source row count)
@@ -291,7 +291,7 @@ class MergeThinRowRange(MergeBase):
         self.value_dtype = "float32"
         self.param_names = ["scenario", "strategy", "on_count", "source_size"]
         self.params = [
-            [(5_000_000, 5)],  # scenario: (num_rows, num_value_cols) — long-thin
+            [(5_000_000, 3)],  # scenario: (num_rows, num_value_cols) — long-thin
             ["update"],  # strategy: only update is implemented for row-range indexes
             [1],  # on_count: row-range indexes cannot be a join key on their own, so on_count >= 1
             [1_000, 500_000],  # source_size (source row count)
@@ -330,7 +330,7 @@ class MergeThinStringDatetime(MergeBase):
         self.value_dtype = "string"
         self.param_names = ["scenario", "strategy", "on_count", "source_size", "matched_slices", "num_unique_strings"]
         self.params = [
-            [(1_000_000, 5)],  # scenario: (num_rows, num_value_cols)
+            [(1_000_000, 3)],  # scenario: (num_rows, num_value_cols)
             ["update", "insert", "update_and_insert"],  # strategy
             [1],  # on_count
             [1_000, 500_000],  # source_size (source row count)
@@ -385,7 +385,7 @@ class MergeThinStringRowRange(MergeBase):
         self.value_dtype = "string"
         self.param_names = ["scenario", "strategy", "on_count", "source_size", "num_unique_strings"]
         self.params = [
-            [(1_000_000, 5)],  # scenario: (num_rows, num_value_cols)
+            [(1_000_000, 3)],  # scenario: (num_rows, num_value_cols)
             ["update"],  # strategy: only update is implemented for row-range indexes
             [1],  # on_count: row-range indexes cannot be a join key on their own, so on_count >= 1
             [1_000, 500_000],  # source_size (source row count)
