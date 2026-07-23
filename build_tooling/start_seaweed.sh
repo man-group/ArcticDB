@@ -64,6 +64,7 @@ start() {
         -filer.port="$SEAWEED_FILER_PORT" \
         -s3 \
         -s3.port="$SEAWEED_S3_PORT" \
+        -s3.port.iceberg=0 \
         >"$LOG_FILE" 2>&1 &
     echo $! >"$PID_FILE"
 

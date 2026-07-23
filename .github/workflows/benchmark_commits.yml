@@ -21,10 +21,7 @@ jobs:
       always() &&
       !cancelled()
     runs-on: ${{ needs.start_ec2_runner.outputs.label }}
-    container:
-      image: ghcr.io/man-group/arcticdb-dev:${{ inputs.dev_image_tag }}
-      # SeaweedFS keeps its data on /dev/shm (see SEAWEED_DATA_DIR); the docker default is 64MB
-      options: --shm-size=16g
+    container: ghcr.io/man-group/arcticdb-dev:${{ inputs.dev_image_tag }}
     env:
       # this is potentially overflowing the cache, so should be looked into after we address issue #1057
       # 0 - uses S3 Cache, 1 - uses GHA cache
@@ -41,9 +38,8 @@ jobs:
       ARCTICDB_REAL_S3_REGION: eu-west-1
       ARCTICDB_REAL_S3_ENDPOINT: s3.eu-west-1.amazonaws.com
       ASV_RESULTS_BUCKET: arcticdb-ci-benchmark-results
-      # The merge benchmarks store data on a local SeaweedFS; RAM-backed data dir keeps their
-      # per-sample bucket copies off EBS
-      SEAWEED_DATA_DIR: /dev/shm/seaweedfs-asv
+      # The merge benchmarks store data on a local SeaweedFS
+      SEAWEED_DATA_DIR: ${{ runner.temp }}/seaweedfs-asv
       SEAWEED_BIN_DIR: ${{ github.workspace }}/.seaweed-bin
       VCPKG_NUGET_USER: ${{secrets.VCPKG_NUGET_USER || github.repository_owner}}
       VCPKG_NUGET_TOKEN: ${{secrets.VCPKG_NUGET_TOKEN || secrets.GITHUB_TOKEN}}
