@@ -76,32 +76,18 @@ std::vector<std::vector<size_t>> structure_by_time_slice(std::span<RangesAndKey>
                std::tie(right.row_range().first, right.col_range().first);
     });
     std::vector<std::vector<size_t>> res;
-    TimestampRange previous_time_range{std::numeric_limits<timestamp>::min(), std::numeric_limits<timestamp>::min()};
-    size_t overlapping_ranges{};
-    for (const auto& [idx, ranges_and_key] : folly::enumerate(ranges)) {
-        const TimestampRange& current_time_range = ranges_and_key.key_.time_range();
-        if (previous_time_range.second <= current_time_range.first) {
-            res.emplace_back();
-            const TimestampRange& first_overlap = ranges[idx - overlapping_ranges].key_.time_range();
-            for (size_t i = idx - overlapping_ranges; i < idx; ++i) {
-                res.back().emplace_back(i);
+    size_t first_group_slice = 0;
+    while (first_group_slice < ranges.size()) {
+        const timestamp group_end_time = ranges[first_group_slice].key_.end_time();
+        std::vector<size_t>& group = res.emplace_back();
+        size_t next_group_start_first_slice = first_group_slice;
+        for (size_t i = first_group_slice; i < ranges.size() && ranges[i].key_.start_time() < group_end_time; ++i) {
+            group.emplace_back(i);
+            if (next_group_start_first_slice == i && ranges[i].key_.end_time() == group_end_time) {
+                ++next_group_start_first_slice;
             }
-            if (first_overlap.second <= current_time_range.first) {
-                res.emplace_back();
-                previous_time_range = current_time_range;
-            } else {
-                previous_time_range = first_overlap;
-            }
-            overlapping_ranges = 0;
         }
-        overlapping_ranges += current_time_range.second != previous_time_range.second;
-        res.back().emplace_back(idx);
-    }
-    if (overlapping_ranges > 0) {
-        res.emplace_back();
-        for (size_t i = ranges.size() - overlapping_ranges; i < ranges.size(); ++i) {
-            res.back().emplace_back(i);
-        }
+        first_group_slice = next_group_start_first_slice;
     }
     return res;
 }

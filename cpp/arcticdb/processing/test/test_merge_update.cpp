@@ -1390,7 +1390,7 @@ TEST_F(MergeUpdateClauseUpdateStrategyRowRange, MatchNaN) {
             rows_per_segment_,
             cols_per_segment_,
             std::array<int8_t, num_rows_>{9, 2, 12, 33, 33, 33, 33, 33, 33, 33, 33, 6, -9, 100},
-            std::array<unsigned, num_rows_>{0, 1, 100, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 200},
+            std::array<unsigned, num_rows_>{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 200},
             std::array{false, true, false, true, false, true, false, true, false, true, false, true, false, false},
             std::array<float, num_rows_>{
                     0., 1., 2., 3., 4., 5., 6., 7., 8., 9., 10., 11., 12., std::numeric_limits<float>::quiet_NaN()
@@ -1445,8 +1445,8 @@ TEST_F(MergeUpdateClauseUpdateStrategyRowRange, MergeOnTwoColumns_Segment1_Segme
             non_string_fields_rowcount_index_descriptor(),
             rows_per_segment_,
             cols_per_segment_,
-            std::array<int8_t, num_rows_>{9, 2, 12, 33, 33, 33, 33, 33, 33, 33, 33, 6, -9, 100},
-            std::array<unsigned, num_rows_>{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 5},
+            std::array<int8_t, num_rows_>{9, 2, 12, 33, 33, 33, 33, 33, 33, 33, 33, 6, -9, 0},
+            std::array<unsigned, num_rows_>{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13},
             std::array{false, true, false, false, false, true, false, false, false, true, false, true, false, true},
             std::array<float, num_rows_>{
                     0., 1., 2., 1000., 4., 5., 6., 1001., 8., 9., 10., 11., 12., std::numeric_limits<float>::quiet_NaN()
@@ -1653,7 +1653,7 @@ TEST(MergeClauseDateRange, SourceMatchesAllIndexRangesButDoesNotMatchAnyRow) {
     std::vector<EntityId> entities = push_selected_entities(
             *component_manager,
             structure_indices,
-            std::move(segments),
+            clone_segments(segments),
             std::move(cols),
             std::move(rows),
             std::move(ranges_and_keys)
@@ -1776,7 +1776,7 @@ TEST_P(MergeUpdateClauseInsertAndUpdate, InsertAfterLastRow) {
     MergeUpdateClause clause = create_clause(GetParam(), component_manager, std::move(input_frame));
 
     const std::vector<std::vector<size_t>> structure_indices = clause.structure_for_processing(ranges_and_keys);
-    // Inserting in the beginning of the DataFrame picks the first row slice
+    // Inserting in the end picks the last row slice
     ASSERT_EQ(structure_indices.size(), 1);
     ASSERT_EQ(structure_indices[0].size(), col_slice_count);
 

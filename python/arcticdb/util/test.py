@@ -156,17 +156,18 @@ def dataframe_dump_to_log(label_for_df, df: pd.DataFrame):
     we could use to reproduce something or further analyze failures caused by
     a problems in test code or arctic
     """
-    if not SHORTER_LOGS:
-        print("-" * 80)
-        if isinstance(df, pd.DataFrame):
-            print("dataframe : , ", label_for_df)
-            print(df.to_csv())
-            print("column definitions : ")
-            print(df.dtypes)
-        else:
-            print(f"Not a dataframe passed : {type(df)}")
-            print(df)
-        print("-" * 80)
+    if SHORTER_LOGS:
+        return
+    print("-" * 80)
+    if isinstance(df, pd.DataFrame):
+        print("dataframe : , ", label_for_df)
+        print(df.to_csv())
+        print("column definitions : ")
+        print(df.dtypes)
+    else:
+        print(f"Not a dataframe passed : {type(df)}")
+        print(df)
+    print("-" * 80)
 
 
 def dataframe_single_column_string(length=1000, column_label="string_short", seed=0, string_len=1):

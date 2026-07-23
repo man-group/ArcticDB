@@ -31,10 +31,6 @@
 
 namespace arcticdb {
 
-struct MergeUpdateInsertedRowsEntity {
-    size_t inserted_rows;
-};
-
 using ResampleOrigin = std::variant<std::string, timestamp>;
 
 using RangesAndKey = pipelines::RangesAndKey;
@@ -900,8 +896,9 @@ struct MergeUpdateClause {
         void clone_source_match(size_t source_row_src, size_t source_row_dst, size_t row_slice);
         void validate_rows_to_update(const MergeStrategy& strategy) const;
         [[nodiscard]] size_t total_unmatched_source_rows() const;
-        [[nodiscard]] std::span<const std::vector<size_t>> matched_rows(size_t target_row_slice) const;
+        [[nodiscard]] const std::vector<std::vector<size_t>>& matched_rows(size_t target_row_slice) const;
         [[nodiscard]] bool is_source_row_matched(size_t source_row) const;
+        [[nodiscard]] bool has_matched_target_rows() const;
 
       private:
         /// For each row slice, for each source row, store all target rows that match it
@@ -912,28 +909,31 @@ struct MergeUpdateClause {
     };
 
   private:
-    std::pair<std::vector<ProcessingUnit>, bool> update_and_insert(
+    std::vector<ProcessingUnit> update_and_insert(
             const MatchRecord& match_record, const StreamDescriptor& target_descriptor,
-            std::vector<ProcessingUnit>&& row_slices
+            std::vector<ProcessingUnit>&& row_slices, std::pair<size_t, size_t> source_start_end
     ) const;
 
-    std::pair<std::vector<ProcessingUnit>, bool> update(
-            const MatchRecord& match_record, std::vector<ProcessingUnit>&& row_slices
+    std::vector<ProcessingUnit> update(
+            const MatchRecord& match_record, std::vector<ProcessingUnit>&& row_slices,
+            std::pair<size_t, size_t> source_start_end
     ) const;
 
     /// Filter segments which will be affected by the merge. The complexity is O(m * log(n)) where n is the number
     /// of rows in the source data and m is the number of row slices in the library
     std::vector<std::vector<size_t>> structure_for_processing_log(std::vector<RangesAndKey>& ranges_and_keys);
 
-    MatchRecord match(std::span<ProcessingUnit> row_slices) const;
+    MatchRecord match(std::span<ProcessingUnit> row_slices, std::pair<size_t, size_t> source_start_end) const;
 
     MatchRecord filter_on_additional_columns_match(
             const StreamDescriptor& source_descriptor, const StreamDescriptor& target_descriptor,
-            std::span<ProcessingUnit> proc, std::optional<MatchRecord>&& match_record
+            std::span<ProcessingUnit> proc, std::optional<MatchRecord>&& match_record,
+            std::pair<size_t, size_t> source_start_end
     ) const;
 
     MatchRecord initialize_rows_to_update_for_row_range_indexed_data(
-            std::span<ProcessingUnit> row_slices, const StreamDescriptor& source_descriptor
+            std::span<ProcessingUnit> row_slices, const StreamDescriptor& source_descriptor,
+            std::pair<size_t, size_t> source_start_end
     ) const;
 
     size_t field_index_for_matching_on_column(std::string_view name, const StreamDescriptor& descriptor) const;
@@ -949,7 +949,7 @@ struct MergeUpdateClause {
 
     [[nodiscard]] bool must_structure_by_time_slice() const;
 
-    std::span<const timestamp> get_source_index(std::span<const ProcessingUnit> row_slices) const;
+    std::span<const timestamp> get_source_index(std::pair<size_t, size_t> source_start_end) const;
 
     std::span<const std::byte> get_source_data_bytes(size_t field_index, std::pair<size_t, size_t> range) const;
 };

@@ -335,6 +335,49 @@ class TestMergeTimeseriesUpdate:
         assert len(lt.find_keys_for_symbol(KeyType.TABLE_INDEX, "sym")) == 2
         assert len(lt.find_keys_for_symbol(KeyType.VERSION, "sym")) == 2
 
+    def test_dedup_map_deduplicates_unchanged_column_slice(self, lmdb_library_factory):
+        lib = lmdb_library_factory(arcticdb.LibraryOptions(columns_per_segment=2, dedup=True))
+        target = pd.DataFrame(
+            {"a": [1, 2, 3], "b": [1.0, 2.0, 3.0], "c": [10, 20, 30], "d": [100.0, 200.0, 300.0]},
+            index=pd.date_range("2024-01-01", periods=3),
+        )
+        lib.write("sym", target)
+        source = pd.DataFrame(
+            {"a": [20, 30], "b": [20.0, 30.0], "c": [20, 30], "d": [200.0, 300.0]},
+            index=pd.DatetimeIndex([pd.Timestamp("2024-01-02"), pd.Timestamp("2024-01-03")]),
+        )
+        lib.merge_experimental("sym", source, strategy=self.strategy)
+        expected = pd.DataFrame(
+            {"a": [1, 20, 30], "b": [1.0, 20.0, 30.0], "c": [10, 20, 30], "d": [100.0, 200.0, 300.0]},
+            index=pd.date_range("2024-01-01", periods=3),
+        )
+        assert_frame_equal(lib.read("sym").data, expected)
+
+        lt = lib._dev_tools.library_tool()
+        assert len(lt.find_keys_for_symbol(KeyType.TABLE_DATA, "sym")) == 3
+        keys_v0 = lt.dataframe_to_keys(lt.read_index("sym", as_of=0), "sym")
+        keys_v1 = lt.dataframe_to_keys(lt.read_index("sym", as_of=1), "sym")
+        assert keys_v0[-1] == keys_v1[-1]
+
+    @pytest.mark.parametrize("de_duplication", [False, True])
+    def test_skips_writing_row_slice_left_unchanged_by_on_mismatch(self, in_memory_store_factory, de_duplication):
+        # A row slice whose index matches but whose "on" column does not match is not re-emitted,
+        # so no data segment is written regardless of whether dedup is enabled.
+        lib = in_memory_store_factory(segment_row_size=2, de_duplication=de_duplication)
+        target = pd.DataFrame(
+            {"a": [1, 2, 3, 4, 5, 6], "b": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]},
+            index=pd.date_range("2024-01-01", periods=6),
+        )
+        lib.write("sym", target)
+        source = pd.DataFrame({"a": [999], "b": [99.0]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-03")]))
+        qs.reset_stats()
+        with qs.query_stats():
+            lib.merge_experimental("sym", source, self.strategy, on=["a"])
+        stats = qs.get_query_stats()
+        assert query_stats_operation_count(stats, "Memory_PutObject", "TABLE_DATA") == 0
+        assert query_stats_operation_count(stats, "Memory_PutObject", "TABLE_INDEX") == 1
+        assert_frame_equal(lib.read("sym").data, target)
+
     @pytest.mark.parametrize(
         "slicing_policy",
         [
@@ -1146,8 +1189,10 @@ class TestMergeTimeseriesInsert:
         assert len(lt.find_keys_for_symbol(KeyType.TABLE_INDEX, "sym")) == 2
         assert len(lt.find_keys_for_symbol(KeyType.VERSION, "sym")) == 2
 
-    def test_writes_new_version_even_if_nothing_is_changed(self, lmdb_library):
-        lib = lmdb_library
+    # The row slice is not re-emitted when unchanged, so no second data key is written regardless of dedup.
+    @pytest.mark.parametrize("dedup, expected_data_keys", [(False, 1), (True, 1)])
+    def test_writes_new_version_even_if_nothing_is_changed(self, lmdb_library_factory, dedup, expected_data_keys):
+        lib = lmdb_library_factory(arcticdb.LibraryOptions(dedup=dedup))
         target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]}, index=pd.date_range("2024-01-01", periods=3))
         lib.write("sym", target)
         source = pd.DataFrame(
@@ -1163,7 +1208,7 @@ class TestMergeTimeseriesInsert:
         assert_frame_equal(read_vit.data, target)
 
         lt = lib._dev_tools.library_tool()
-        assert len(lt.find_keys_for_symbol(KeyType.TABLE_DATA, "sym")) == 1
+        assert len(lt.find_keys_for_symbol(KeyType.TABLE_DATA, "sym")) == expected_data_keys
         assert len(lt.find_keys_for_symbol(KeyType.TABLE_INDEX, "sym")) == 2
         assert len(lt.find_keys_for_symbol(KeyType.VERSION, "sym")) == 2
 
@@ -2896,8 +2941,10 @@ class TestMergeRowrangeUpdate:
         with pytest.raises(StorageException):
             lib.merge_experimental("sym", source, strategy=self.strategy, on=["a"])
 
-    def test_writes_new_version_even_if_nothing_is_changed(self, lmdb_library):
-        lib = lmdb_library
+    # The row slice is not re-emitted when unchanged, so no second data key is written regardless of dedup.
+    @pytest.mark.parametrize("dedup, expected_data_keys", [(False, 1), (True, 1)])
+    def test_writes_new_version_even_if_nothing_is_changed(self, lmdb_library_factory, dedup, expected_data_keys):
+        lib = lmdb_library_factory(arcticdb.LibraryOptions(dedup=dedup))
         target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]})
         lib.write("sym", target)
         source = pd.DataFrame({"a": [10, 20], "b": [10.0, 20.0]})
@@ -2909,7 +2956,7 @@ class TestMergeRowrangeUpdate:
         assert_frame_equal(read_vit.data, target)
 
         lt = lib._dev_tools.library_tool()
-        assert len(lt.find_keys_for_symbol(KeyType.TABLE_DATA, "sym")) == 1
+        assert len(lt.find_keys_for_symbol(KeyType.TABLE_DATA, "sym")) == expected_data_keys
         assert len(lt.find_keys_for_symbol(KeyType.TABLE_INDEX, "sym")) == 2
         assert len(lt.find_keys_for_symbol(KeyType.VERSION, "sym")) == 2
 

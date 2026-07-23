@@ -401,7 +401,7 @@ std::vector<SliceAndKey> merge_slices_and_keys(
                 ++old_slice_and_key_it;
             } else {
                 const RowRange new_row_range = new_slice_and_key_it->slice().row_range;
-                const size_t inserted_rows = inserted_rows_per_row_range[new_row_range];
+                const size_t inserted_rows = inserted_rows_per_row_range.at(new_row_range);
                 new_slice_and_key_it->slice().row_range.first += total_inserted_rows;
                 new_slice_and_key_it->slice().row_range.second += total_inserted_rows + inserted_rows;
                 total_inserted_rows += inserted_rows;
@@ -3024,7 +3024,8 @@ folly::Future<ReadVersionOutput> read_frame_for_version(
 folly::Future<std::vector<SliceAndKey>> read_modify_write_data_keys(
         const std::shared_ptr<Store>& store, std::shared_ptr<ReadQuery> read_query, const ReadOptions& read_options,
         const IndexPartialKey& target_partial_index_key, const std::shared_ptr<PipelineContext>& pipeline_context,
-        std::shared_ptr<ComponentManager> component_manager, std::shared_ptr<DeDupMap> de_dup_map
+        std::shared_ptr<ComponentManager> component_manager = std::make_shared<ComponentManager>(),
+        std::shared_ptr<DeDupMap> de_dup_map = std::make_shared<DeDupMap>()
 ) {
     auto write_clause_processing_structure = read_query->clauses_.empty()
                                                      ? ProcessingStructure::ROW_SLICE
@@ -3061,15 +3062,7 @@ folly::Future<VersionedItem> read_modify_write_impl(
         const IndexPartialKey& target_partial_index_key, const std::shared_ptr<PipelineContext>& pipeline_context,
         std::optional<proto::descriptors::UserDefinedMetadata>&& user_meta_proto
 ) {
-    return read_modify_write_data_keys(
-                   store,
-                   read_query,
-                   read_options,
-                   target_partial_index_key,
-                   pipeline_context,
-                   std::make_shared<ComponentManager>(),
-                   std::make_shared<DeDupMap>()
-    )
+    return read_modify_write_data_keys(store, read_query, read_options, target_partial_index_key, pipeline_context)
             .thenValue([&](std::vector<SliceAndKey>&& data_keys_and_slices) {
                 ARCTICDB_DEBUG_CHECK(
                         ErrorCode::E_ASSERTION_FAILURE,
@@ -3125,13 +3118,14 @@ folly::Future<VersionedItem> merge_update_impl(
     // The target is empty.
     if (pipeline_context->rows_ == 0) {
         if (strategy.insert()) {
-            return write_dataframe_impl(store, update_info.next_version_id_, source, write_options, de_dup_map);
+            return async_write_dataframe_impl(store, update_info.next_version_id_, source, write_options, de_dup_map)
+                    .get();
         } else if (strategy.update_only()) {
             const TimeseriesDescriptor tsd = make_timeseries_descriptor(
                     0,
                     pipeline_context->descriptor(),
                     pipeline_context->release_normalization(),
-                    pipeline_context->release_opt_user_defined_metadata(),
+                    std::move(source->user_meta),
                     std::nullopt,
                     write_options.bucketize_dynamic
             );
@@ -3155,7 +3149,7 @@ folly::Future<VersionedItem> merge_update_impl(
     user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
             !write_options.dynamic_schema, "Cannot merge update with dynamic schema"
     );
-    internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+    internal::check<ErrorCode::E_NOT_IMPLEMENTED>(
             strategy.not_matched_by_target != MergeAction::INSERT ||
                     pipeline_context->descriptor().index().type() == IndexDescriptor::Type::TIMESTAMP,
             "Merge update with INSERT strategy is not implemented for ROWRANGE indexes yet."
@@ -3189,7 +3183,7 @@ folly::Future<VersionedItem> merge_update_impl(
                 ankerl::unordered_dense::map<RowRange, size_t> inserted_rows_per_row_range;
                 component_manager->process_entities([&](const MergeUpdateInsertedRowsEntity& inserted_rows,
                                                         const std::shared_ptr<RowRange>& row_range) {
-                    inserted_rows_per_row_range.emplace(*row_range, inserted_rows.inserted_rows);
+                    inserted_rows_per_row_range.emplace(*row_range, inserted_rows);
                 });
                 std::vector<SliceAndKey> merged_ranges_and_keys = merge_slices_and_keys(
                         std::move(pipeline_context->slice_and_keys_),
@@ -3456,13 +3450,7 @@ folly::Future<std::optional<VersionedItem>> compact_data_impl(
                 ReadOptions read_options;
                 read_options.set_dynamic_schema(dynamic_schema);
                 return read_modify_write_data_keys(
-                               store,
-                               read_query,
-                               read_options,
-                               target_partial_index_key,
-                               pipeline_context,
-                               std::make_shared<ComponentManager>(),
-                               std::make_shared<DeDupMap>()
+                               store, read_query, read_options, target_partial_index_key, pipeline_context
                 )
                         .thenValue(
                                 [pipeline_context = std::move(pipeline_context),
