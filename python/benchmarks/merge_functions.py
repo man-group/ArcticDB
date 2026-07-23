@@ -246,11 +246,11 @@ class MergeThinDatetime(MergeBase):
         self.value_dtype = "float32"
         self.param_names = ["scenario", "strategy", "on_count", "source_size", "matched_slices"]
         self.params = [
-            [(10_000_000, 5)],  # scenario: (num_rows, num_value_cols) — long-thin
+            [(5_000_000, 5)],  # scenario: (num_rows, num_value_cols) — long-thin
             ["update", "insert", "update_and_insert"],  # strategy
-            [0, 1],  # on_count
+            [0],  # on_count
             [1_000, 500_000],  # source_size (source row count)
-            [20, 80],  # matched_slices (number of the target's 100 row slices the source touches)
+            [10, 40],  # matched_slices (number of the target's 100 row slices the source touches)
         ]
 
     def setup_cache(self):
@@ -287,7 +287,7 @@ class MergeThinRowRange(MergeBase):
         self.value_dtype = "float32"
         self.param_names = ["scenario", "strategy", "on_count", "source_size"]
         self.params = [
-            [(10_000_000, 5)],  # scenario: (num_rows, num_value_cols) — long-thin
+            [(5_000_000, 5)],  # scenario: (num_rows, num_value_cols) — long-thin
             ["update"],  # strategy: only update is implemented for row-range indexes
             [1],  # on_count: row-range indexes cannot be a join key on their own, so on_count >= 1
             [1_000, 500_000],  # source_size (source row count)
@@ -328,7 +328,7 @@ class MergeThinStringDatetime(MergeBase):
         self.params = [
             [(1_000_000, 5)],  # scenario: (num_rows, num_value_cols)
             ["update", "insert", "update_and_insert"],  # strategy
-            [0, 1],  # on_count
+            [1],  # on_count
             [1_000, 500_000],  # source_size (source row count)
             [2, 8],  # matched_slices (number of the target's 10 row slices the source touches)
             [100, 100_000],  # num_unique_strings (size of the pool each column is drawn from)
@@ -439,7 +439,7 @@ class MergeWideDatetime(MergeBase):
         self.params = [
             [(5_000, 10_000)],  # scenario: (num_rows, num_value_cols)
             ["update", "insert", "update_and_insert"],  # strategy
-            [0, 1, 1000],  # on_count
+            [0, 1000],  # on_count
             [100],  # source_size
         ]
 
