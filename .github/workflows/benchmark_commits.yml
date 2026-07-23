@@ -21,7 +21,10 @@ jobs:
       always() &&
       !cancelled()
     runs-on: ${{ needs.start_ec2_runner.outputs.label }}
-    container: ghcr.io/man-group/arcticdb-dev:${{ inputs.dev_image_tag }}
+    container:
+      image: ghcr.io/man-group/arcticdb-dev:${{ inputs.dev_image_tag }}
+      # SeaweedFS keeps its data on /dev/shm (see SEAWEED_DATA_DIR); the docker default is 64MB
+      options: --shm-size=16g
     env:
       # this is potentially overflowing the cache, so should be looked into after we address issue #1057
       # 0 - uses S3 Cache, 1 - uses GHA cache
@@ -38,6 +41,10 @@ jobs:
       ARCTICDB_REAL_S3_REGION: eu-west-1
       ARCTICDB_REAL_S3_ENDPOINT: s3.eu-west-1.amazonaws.com
       ASV_RESULTS_BUCKET: arcticdb-ci-benchmark-results
+      # The merge benchmarks store data on a local SeaweedFS; RAM-backed data dir keeps their
+      # per-sample bucket copies off EBS
+      SEAWEED_DATA_DIR: /dev/shm/seaweedfs-asv
+      SEAWEED_BIN_DIR: ${{ github.workspace }}/.seaweed-bin
       VCPKG_NUGET_USER: ${{secrets.VCPKG_NUGET_USER || github.repository_owner}}
       VCPKG_NUGET_TOKEN: ${{secrets.VCPKG_NUGET_TOKEN || secrets.GITHUB_TOKEN}}
       VCPKG_MAN_NUGET_USER: ${{secrets.VCPKG_MAN_NUGET_USER}} # For forks to download pre-compiled dependencies from the Man repo
@@ -107,6 +114,10 @@ jobs:
           # pytz and pandas<3 can go once latest ArcticDB release has these dependencies
           ./tooling_venv/bin/pip install "ArcticDB[Testing]" "pytz" "pandas<3"
 
+      - name: Start SeaweedFS
+        shell: bash -el {0}
+        run: build_tooling/start_seaweed.sh start
+
       - name: Configure what suite or tests to execute
         shell: bash -el {0}
         run: | 
@@ -164,6 +175,13 @@ jobs:
 
           ./tooling_venv/bin/python build_tooling/summarize_asv_run.py --commit-hash $(git rev-parse HEAD)
           exit $any_worse
+
+      - name: Stop SeaweedFS
+        if: always()
+        shell: bash -el {0}
+        run: |
+          tail -20 "$SEAWEED_DATA_DIR/weed.log" || true
+          build_tooling/start_seaweed.sh stop
 
       - name: Clean up the test bucket
         if: always()

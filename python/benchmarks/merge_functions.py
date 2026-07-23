@@ -14,7 +14,6 @@ import pandas as pd
 from arcticdb import Arctic
 from arcticdb.version_store.library import MergeStrategy
 from arcticdb.util.test import random_strings_of_length
-from asv_runner.benchmarks.mark import SkipNotImplemented
 
 from benchmarks.seaweed_utils import SeaweedClient
 
@@ -179,6 +178,7 @@ class MergeBase:
         self.lib = None
         self.value_dtype = None
         self.source = None
+        self._source_key = None
         self.on = None
         self.target_prefix = "target"
         self.source_prefix = "source"
@@ -228,16 +228,20 @@ class MergeBase:
         self.ac = Arctic(self.seaweed.arctic_uri(WORK_BUCKET, self.target_prefix))
         self.lib = self.ac.get_library(lib_name)
         self.on = [f"val_{j}" for j in range(on_count)]
-        src_ac = Arctic(self.seaweed.arctic_uri(CACHE_BUCKET, self.source_prefix))
-        self.source = src_ac.get_library(lib_name).read(self._source_sym(source_size, matched_slices)).data
+        # The source is immutable; reuse it across the repeat samples of one benchmark process.
+        key = (self.source_prefix, lib_name, self._source_sym(source_size, matched_slices))
+        if self._source_key != key:
+            src_ac = Arctic(self.seaweed.arctic_uri(CACHE_BUCKET, self.source_prefix))
+            self.source = src_ac.get_library(lib_name).read(key[2]).data
+            self._source_key = key
 
     def merge(self, strategy):
         self.lib.merge_experimental(self.SYM, self.source, strategy=self.STRATEGIES[strategy], on=self.on)
 
 
 class MergeThinDatetime(MergeBase):
-    """All merge strategies, long-thin numeric dataframe (10M rows x 5 cols), datetime index.
-    matched_slices is the number of the target's row slices the source touches (100 slices here)."""
+    """All merge strategies, long-thin numeric dataframe (5M rows x 5 cols), datetime index.
+    matched_slices is the number of the target's row slices the source touches (50 slices here)."""
 
     INDEX_KIND = "datetime"
 
@@ -250,7 +254,7 @@ class MergeThinDatetime(MergeBase):
             ["update", "insert", "update_and_insert"],  # strategy
             [0],  # on_count
             [1_000, 500_000],  # source_size (source row count)
-            [10, 40],  # matched_slices (number of the target's 100 row slices the source touches)
+            [10, 40],  # matched_slices (number of the target's 50 row slices the source touches)
         ]
 
     def setup_cache(self):
@@ -277,7 +281,7 @@ class MergeThinDatetime(MergeBase):
 
 
 class MergeThinRowRange(MergeBase):
-    """update only, long-thin numeric dataframe (10M rows x 5 cols), row-range index.
+    """update only, long-thin numeric dataframe (5M rows x 5 cols), row-range index.
     matched_slices is dropped: row-range merge reads every slice and has no insert path."""
 
     INDEX_KIND = "rowrange"
@@ -454,8 +458,6 @@ class MergeWideDatetime(MergeBase):
             self._precompute_sources(lib_name, target)
 
     def setup(self, scenario, strategy, on_count, source_size):
-        if strategy != "update" and on_count == 1:
-            raise SkipNotImplemented  # grid-size cost decision, not unsupported
         self._prepare_merge(make_lib_name(scenario, self.INDEX_KIND), on_count, source_size)
 
     def teardown(self, scenario, strategy, on_count, source_size):
