@@ -11,9 +11,12 @@ runs:
     - name: Run local pytests
       shell: bash
       run: |
-        yum install nodejs npm -y
-        npm config set strict-ssl false
-        npm install -g azurite
+        # Skip when azurite is already baked into the container image (docker/Dockerfile*)
+        if ! command -v azurite >/dev/null; then
+          yum install nodejs npm -y
+          npm config set strict-ssl false
+          npm install -g azurite
+        fi
         
         cd python
         ln -s ../cpp/out/linux-${{ inputs.build_type }}-build/arcticdb/arcticdb_ext.cpython-36m-x86_64-linux-gnu.so

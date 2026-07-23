@@ -22,6 +22,20 @@ RUN chmod 555 sccache
 
 RUN cp sccache /usr/local/bin/
 
+# Test-time services baked in so the pytest CI jobs don't have to download them on every run
+RUN wget -nv https://fastdl.mongodb.org/linux/mongodb-linux-x86_64-rhel80-7.0.0.tgz && \
+    tar -xzf mongodb-linux-x86_64-rhel80-7.0.0.tgz && \
+    cp mongodb-linux-x86_64-rhel80-7.0.0/bin/* /usr/local/bin/ && \
+    rm -rf mongodb-linux-x86_64-rhel80-7.0.0* && \
+    mongod --version
+
+RUN wget -nv https://nodejs.org/dist/v24.11.0/node-v24.11.0-linux-x64.tar.xz && \
+    tar -xJf node-v24.11.0-linux-x64.tar.xz -C /usr/local --strip-components=1 && \
+    rm node-v24.11.0-linux-x64.tar.xz && \
+    node --version
+
+RUN npm install -g azurite@3.36.0 && azurite --version
+
 ENV CC=/usr/bin/clang
 ENV CMAKE_C_COMPILER=/usr/bin/clang
 ENV CXX=/usr/bin/clang++
