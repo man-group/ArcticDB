@@ -214,9 +214,9 @@ class MergeBase:
 
     def _precompute_sources(self, lib_name, target):
         src_lib = Arctic(self.seaweed.arctic_uri(CACHE_BUCKET, self.source_prefix)).create_library(lib_name)
-        pmap = dict(zip(self.param_names, self.params))
-        for source_size in pmap["source_size"]:
-            for matched_slices in pmap.get("matched_slices", [None]):
+        parameter_map = dict(zip(self.param_names, self.params))
+        for source_size in parameter_map["source_size"]:
+            for matched_slices in parameter_map.get("matched_slices", [None]):
                 source = self._generate_source(target, source_size, matched_slices)
                 src_lib.write(self._source_sym(source_size, matched_slices), source)
 
@@ -340,9 +340,9 @@ class MergeThinStringDatetime(MergeBase):
 
     def setup_cache(self):
         reset_bucket(self.seaweed, CACHE_BUCKET)
-        pmap = dict(zip(self.param_names, self.params))
-        for scenario in pmap["scenario"]:
-            for num_unique_strings in pmap["num_unique_strings"]:
+        parameter_map = dict(zip(self.param_names, self.params))
+        for scenario in parameter_map["scenario"]:
+            for num_unique_strings in parameter_map["num_unique_strings"]:
                 num_rows, num_value_cols = scenario
                 rng = np.random.default_rng([num_rows, num_value_cols, num_unique_strings])
                 target = generate_merge_target(
