@@ -345,3 +345,69 @@ jobs:
           name: conda_pytest-${{inputs.platform}}-${{steps.pyver.outputs.impl}}-${{matrix.type}}
           path: ${{ runner.temp }}/pytest.xml
         continue-on-error: true
+
+  os_compat:
+    name: OS compat (${{inputs.platform}})
+    # macOS-only: exercise the build artifact on macos-15, a different OS version from
+    # the macos-26 host that built it.
+    if: inputs.platform == 'osx_arm64'
+    needs: [compile]
+    runs-on: macos-15
+    env:
+      ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
+      ACTIONS_ALLOW_UNSECURE_COMMANDS: true
+    defaults:
+      run:
+        shell: bash -l {0}
+    steps:
+      - uses: actions/checkout@v6.0.1
+
+      - name: Initialise lmdb and lmdbxx submodules
+        run: git -c core.autocrlf=false submodule update --init cpp/third_party/lmdb cpp/third_party/lmdbxx
+
+      - name: Runner environment
+        run: |
+          uname -a || true
+          uname -m || true
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v8
+        with:
+          name: build-${{inputs.platform}}
+          path: .
+
+      - name: Install Conda environment from environment-dev.yml
+        uses: mamba-org/setup-micromamba@v2.0.6
+        with:
+          environment-file: environment-dev.yml
+          environment-name: arcticdb
+          init-shell: bash
+          cache-environment: true
+          cache-environment-key: conda-env-${{inputs.platform}}
+          post-cleanup: 'none'
+          micromamba-version: '2.1.0-0'
+
+      - name: Install ArcticDB from artifacts
+        run: |
+          # Reuse the prebuilt extension from the artifact; do not recompile here.
+          export ARCTIC_CMAKE_PRESET=skip
+          python -m pip install --no-build-isolation --no-deps --retries 3 --timeout 400 -v -e .
+          python setup.py protoc --build-lib python
+        env:
+          ARCTICDB_USING_CONDA: 1
+
+      - name: Verify import and run a basic read/write test suite on the older runner
+        run: |
+          python -c "import arcticdb; print(arcticdb.__version__)"
+          cd python
+          BASETEMP_ARG=""
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            mkdir -p D:/temp
+            BASETEMP_ARG="--basetemp=D:/temp/pytest"
+          fi
+          python -m pytest --timeout=3600 -v --tb=line $BASETEMP_ARG \
+            tests/unit/arcticdb/version_store/test_write.py
+        env:
+          ARCTICDB_USING_CONDA: 1
+          ARCTICDB_WARN_ON_WRITING_EMPTY_DATAFRAME: 0
+          ARCTICDB_LMDBSTORAGE_WARNIFOPENED_STR: all
