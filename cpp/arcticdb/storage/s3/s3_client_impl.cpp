@@ -191,6 +191,15 @@ S3Result<DeleteObjectsOutput> S3ClientImpl::delete_objects(
 ) {
     Aws::S3::Model::DeleteObjectsRequest request;
     request.WithBucket(bucket_name.c_str());
+#ifndef ARCTICDB_USING_CONDA
+    // SetRequestChecksumRequired only exists in the patched vcpkg aws-sdk-cpp (see
+    // vcpkg_overlays/aws-sdk-cpp/disable-deleteobjects-checksum.patch), not the conda-forge SDK.
+    // Defaults to requiring a checksum (the SDK behaviour); set the config to 0 to disable it for
+    // backends that reject the CRC64-NVME digest with BadDigest.
+    request.SetRequestChecksumRequired(
+            ConfigsMap::instance()->get_int("S3Storage.DeleteObjectsRequestChecksumRequired", 1) == 1
+    );
+#endif
     Aws::S3::Model::Delete del_objects;
     for (auto& s3_object_name : s3_object_names) {
         ARCTICDB_RUNTIME_DEBUG(log::storage(), "Removing s3 object with key {}", s3_object_name);

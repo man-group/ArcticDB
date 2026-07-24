@@ -6,6 +6,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 
+import contextlib
 import logging
 import sys
 import time
@@ -22,7 +23,7 @@ from enum import Enum
 import multiprocessing
 
 from arcticdb_ext import get_config_int, set_config_int
-from arcticdb_ext.exceptions import InternalException, UnsortedDataException, UserInputException
+from arcticdb_ext.exceptions import InternalException, StorageException, UnsortedDataException, UserInputException
 from arcticdb_ext.storage import NoDataFoundException, KeyType, AWSAuthMethod
 from arcticdb.exceptions import ArcticDbNotYetImplemented, NoSuchVersionException
 from arcticdb.adapters.mongo_library_adapter import MongoLibraryAdapter
@@ -1488,7 +1489,7 @@ def test_s3_checksum_off_by_env_var(s3_storage, lib_name, multiprocess):
         p.join()
 
 
-def test_s3_checksum_on_by_env_var(s3_storage, lib_name, monkeypatch):
+def test_s3_checksum_on_by_env_var(s3_storage, lib_name, monkeypatch, route_env_to_extension):
     monkeypatch.setenv("AWS_RESPONSE_CHECKSUM_VALIDATION", "when_supported")
     with pytest.raises(Exception):  # moto is set to reject checksum header
         create_library(s3_storage.arctic_uri, lib_name)
@@ -1498,7 +1499,8 @@ def test_s3_checksum_on_by_env_var(s3_storage, lib_name, monkeypatch):
     ARCTICDB_USING_CONDA,
     reason="DeleteObjects crc64nvme opt-out is a vcpkg overlay patch, not applied to conda aws-sdk-cpp builds",
 )
-def test_s3_delete_survives_crc64nvme_hostile_backend(s3_storage, lib_name):
+@pytest.mark.parametrize("checksum_required", [None, 0, 1])
+def test_s3_delete_survives_crc64nvme_hostile_backend(s3_storage, lib_name, checksum_required):
     endpoint = s3_storage.factory.endpoint
     verify = s3_storage.factory.client_cert_file or False
     requests.post(endpoint + "/reject_crc64nvme", b"1", verify=verify).raise_for_status()
@@ -1507,13 +1509,47 @@ def test_s3_delete_survives_crc64nvme_hostile_backend(s3_storage, lib_name):
         lib = Arctic(s3_storage.arctic_uri)[lib_name]
         lib._nvs.write("test", 1)
         lib._nvs.write("test", 2)
-        with qs.query_stats():
-            lib.delete("test")
-            stats = qs.get_query_stats()
+        if checksum_required is None:
+            config = contextlib.nullcontext()
+        else:
+            config = config_context("S3Storage.DeleteObjectsRequestChecksumRequired", checksum_required)
+        with config:
+            # lib.delete swallows storage errors, so remove a key directly to observe the rejection.
+            lt = lib._nvs.library_tool()
+            key = lt.find_keys(KeyType.TABLE_DATA)[0]
+            with qs.query_stats():
+                if checksum_required == 0:
+                    lt.remove(key)
+                else:
+                    with pytest.raises(StorageException):
+                        lt.remove(key)
+                stats = qs.get_query_stats()
         assert "S3_DeleteObjects" in stats["storage_operations"], stats
-        assert "test" not in lib.list_symbols()
     finally:
         requests.post(endpoint + "/reject_crc64nvme", b"0", verify=verify).raise_for_status()
+
+
+@REAL_S3_TESTS_MARK
+@pytest.mark.storage
+@pytest.mark.skipif(
+    ARCTICDB_USING_CONDA,
+    reason="DeleteObjects crc64nvme opt-out is a vcpkg overlay patch, not applied to conda aws-sdk-cpp builds",
+)
+def test_s3_delete_objects_checksum_required_real_s3(real_s3_storage, lib_name):
+    # AWS requires a checksum on multi-object DeleteObjects, so disabling it makes the request fail.
+    # lib.delete swallows storage errors, so use LibraryTool.remove which routes through the batch
+    # delete_objects path and propagates the failure.
+    # It is to make sure the default setting (config unset -> checksum required) works on aws s3
+    ac = Arctic(real_s3_storage.arctic_uri)
+    try:
+        lib = ac.create_library(lib_name)
+        lib._nvs.write("sym", 1)
+        lt = lib._nvs.library_tool()
+        key = lt.find_keys(KeyType.TABLE_DATA)[0]
+        lt.remove(key)
+        assert not lt.key_exists(key)
+    finally:
+        ac.delete_library(lib_name)
 
 
 @pytest.mark.parametrize("snap", [chr(0), chr(30), chr(127), chr(128), "", "l" * 255, "*<>"])

@@ -59,6 +59,18 @@ The S3 API supports the `DeleteObjects` method, whereby a single HTTP request ca
 
 The default is 1000.
 
+### S3Storage.DeleteObjectsRequestChecksumRequired
+
+Controls whether ArcticDB includes a checksum (`x-amz-checksum-*`) on the S3 `DeleteObjects`'s header
+
+Some S3-compatible backends (e.g. `Scality`) do not support this and reject the request with checksum related error. Set this option to `0` to stop ArcticDB adding the checksum to the request's header
+
+This only takes effect for the pypi build of ArcticDB; the conda build always follows the SDK default.
+
+Values:
+* 0: Do not include a checksum on `DeleteObjects` request.
+* 1: Require a checksum (Default).
+
 ### S3Storage.VerifySSL
 
 Control whether the client should verify the SSL certificate of the storage. If set, this will override the library option set upon library creation.
