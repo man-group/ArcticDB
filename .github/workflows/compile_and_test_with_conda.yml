@@ -259,7 +259,18 @@ jobs:
       - name: Install MongoDB (ARM manual)
         if: inputs.install_mongodb && contains(inputs.platform, 'aarch64')
         run: |
-          curl --retry 5 --retry-delay 5 --retry-connrefused -LO https://fastdl.mongodb.org/linux/mongodb-linux-aarch64-ubuntu2204-7.0.0.tgz
+          # Manual retry loop: curl's --retry doesn't cover connect failures (exit 7)
+          # or SSL handshake resets (exit 35), both seen in CI.
+          downloaded=0
+          for attempt in 1 2 3 4 5; do
+            if curl -fL --connect-timeout 30 -O https://fastdl.mongodb.org/linux/mongodb-linux-aarch64-ubuntu2204-7.0.0.tgz; then
+              downloaded=1
+              break
+            fi
+            echo "MongoDB download attempt ${attempt} failed, retrying in 10s..."
+            sleep 10
+          done
+          [ "$downloaded" = 1 ]
           tar -xzf mongodb-linux-aarch64-ubuntu2204-7.0.0.tgz
           cp mongodb-linux-aarch64-ubuntu2204-7.0.0/bin/* /usr/local/bin/
           mongod --version
