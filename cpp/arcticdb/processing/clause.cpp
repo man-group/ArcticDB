@@ -119,8 +119,10 @@ std::vector<EntityId> FilterClause::process(std::vector<EntityId>&& entity_ids) 
             *component_manager_, std::move(entity_ids)
     );
     proc.set_expression_context(expression_context_);
-    ARCTICDB_RUNTIME_DEBUG(log::memory(), "Doing filter {} for entity ids {}", root_node_name_, entity_ids);
-    auto variant_data = proc.get(root_node_name_);
+    ARCTICDB_RUNTIME_DEBUG(
+            log::memory(), "Doing filter {} for entity ids {}", expression_context_->root_->label_, entity_ids
+    );
+    auto variant_data = expression_context_->root_->compute(proc);
     std::vector<EntityId> output;
     util::variant_match(
             variant_data,
@@ -140,10 +142,8 @@ std::vector<EntityId> FilterClause::process(std::vector<EntityId>&& entity_ids) 
 }
 
 OutputSchema FilterClause::modify_schema(OutputSchema&& output_schema) const {
-    check_column_presence(output_schema, *clause_info_.input_columns_, "Filter");
-    auto root_expr = expression_context_->expression_nodes_.get_value(root_node_name_.value);
-    std::variant<BitSetTag, DataType> return_type =
-            root_expr->compute(*expression_context_, output_schema.column_types());
+    check_column_presence(output_schema, clause_info_.input_columns_, "Filter");
+    std::variant<BitSetTag, DataType> return_type = expression_context_->root_->compute(output_schema.column_types());
     user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
             std::holds_alternative<BitSetTag>(return_type), "FilterClause AST would produce a column, not a bitset"
     );
@@ -151,7 +151,7 @@ OutputSchema FilterClause::modify_schema(OutputSchema&& output_schema) const {
 }
 
 std::string FilterClause::to_string() const {
-    return expression_context_ ? fmt::format("WHERE {}", root_node_name_.value) : "";
+    return expression_context_ ? fmt::format("WHERE {}", expression_context_->root_->label_) : "";
 }
 
 std::vector<EntityId> ProjectClause::process(std::vector<EntityId>&& entity_ids) const {
@@ -163,7 +163,7 @@ std::vector<EntityId> ProjectClause::process(std::vector<EntityId>&& entity_ids)
             *component_manager_, std::move(entity_ids)
     );
     proc.set_expression_context(expression_context_);
-    auto variant_data = proc.get(expression_context_->root_node_name_);
+    auto variant_data = expression_context_->root_->compute(proc);
     std::vector<EntityId> output;
     util::variant_match(
             variant_data,
@@ -215,42 +215,25 @@ std::vector<EntityId> ProjectClause::process(std::vector<EntityId>&& entity_ids)
 }
 
 OutputSchema ProjectClause::modify_schema(OutputSchema&& output_schema) const {
-    check_column_presence(output_schema, *clause_info_.input_columns_, "Project");
-    util::variant_match(
-            expression_context_->root_node_name_,
-            [&](const ExpressionName& root_node_name) {
-                auto root_expr = expression_context_->expression_nodes_.get_value(root_node_name.value);
-                std::variant<BitSetTag, DataType> return_type =
-                        root_expr->compute(*expression_context_, output_schema.column_types());
-                user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
-                        std::holds_alternative<DataType>(return_type),
-                        "ProjectClause AST would produce a bitset, not a column"
-                );
-                output_schema.add_field(output_column_, std::get<DataType>(return_type));
-            },
-            [&](const ValueName& root_node_name) {
-                output_schema.add_field(
-                        output_column_,
-                        expression_context_->values_.get_value(root_node_name.value)->descriptor().data_type()
-                );
-            },
-            [](const auto&) {
-                // Shouldn't make it here due to check in ctor
-                user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("ProjectClause AST would not produce a column");
-            }
-    );
+    check_column_presence(output_schema, clause_info_.input_columns_, "Project");
+    const auto& root = *expression_context_->root_;
+    if (root.is_value()) {
+        const auto& value = std::get<std::shared_ptr<Value>>(std::get<ExpressionNode::Leaf>(root.kind_));
+        output_schema.add_field(output_column_, value->descriptor().data_type());
+    } else {
+        std::variant<BitSetTag, DataType> return_type = root.compute(output_schema.column_types());
+        user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                std::holds_alternative<DataType>(return_type), "ProjectClause AST would produce a bitset, not a column"
+        );
+        output_schema.add_field(output_column_, std::get<DataType>(return_type));
+    }
     return output_schema;
 }
 
 [[nodiscard]] std::string ProjectClause::to_string() const {
-    return expression_context_ ? fmt::format(
-                                         "PROJECT Column[\"{}\"] = {}",
-                                         output_column_,
-                                         std::holds_alternative<ExpressionName>(expression_context_->root_node_name_)
-                                                 ? std::get<ExpressionName>(expression_context_->root_node_name_).value
-                                                 : std::get<ValueName>(expression_context_->root_node_name_).value
-                                 )
-                               : "";
+    return expression_context_
+                   ? fmt::format("PROJECT Column[\"{}\"] = {}", output_column_, expression_context_->root_->label_)
+                   : "";
 }
 
 void ProjectClause::add_column(ProcessingUnit& proc, const ColumnWithStrings& col) const {
@@ -286,7 +269,7 @@ AggregationClause::AggregationClause(
     clause_info_.input_structure_ = ProcessingStructure::HASH_BUCKETED;
     clause_info_.can_combine_with_column_selection_ = false;
     clause_info_.index_ = NewIndex(grouping_column_);
-    clause_info_.input_columns_ = std::make_optional<std::unordered_set<std::string>>({grouping_column_});
+    clause_info_.input_columns_ = {grouping_column_};
     str_ = "AGGREGATE {";
     for (const auto& named_aggregator : named_aggregators) {
         str_.append(fmt::format(
@@ -295,7 +278,7 @@ AggregationClause::AggregationClause(
                 named_aggregator.input_column_name_,
                 named_aggregator.aggregation_operator_
         ));
-        clause_info_.input_columns_->insert(named_aggregator.input_column_name_);
+        clause_info_.input_columns_.insert(named_aggregator.input_column_name_);
         auto typed_input_column_name = ColumnName(named_aggregator.input_column_name_);
         auto typed_output_column_name = ColumnName(named_aggregator.output_column_name_);
         if (named_aggregator.aggregation_operator_ == "sum") {
@@ -546,7 +529,7 @@ std::vector<EntityId> AggregationClause::process(std::vector<EntityId>&& entity_
 }
 
 OutputSchema AggregationClause::modify_schema(OutputSchema&& output_schema) const {
-    check_column_presence(output_schema, *clause_info_.input_columns_, "Aggregation");
+    check_column_presence(output_schema, clause_info_.input_columns_, "Aggregation");
     output_schema.clear_default_values();
     const auto& input_stream_desc = output_schema.stream_descriptor();
     StreamDescriptor stream_desc(input_stream_desc.id());
@@ -1048,7 +1031,7 @@ std::vector<std::vector<size_t>> DateRangeClause::structure_for_processing(std::
 }
 
 std::vector<EntityId> DateRangeClause::process(std::vector<EntityId>&& entity_ids) const {
-    if (entity_ids.empty()) {
+    if (entity_ids.empty() || start_ > end_) {
         return {};
     }
     auto proc = gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(

@@ -49,9 +49,24 @@ if(${BUILD_WITH_REMOTERY})
     add_compile_definitions(USE_REMOTERY)
 endif()
 
-# Required for the macOS SDK to use all the latest features of libc++, for both vcpkg and conda-forge builds.
+# conda-forge builds against an old macOS SDK whose libc++ availability annotations would
+# otherwise forbid newer C++ features; conda ships its own libc++ runtime that provides the
+# symbols, so disabling the annotations is safe there.
 # See: https://conda-forge.org/docs/maintainer/knowledge_base.html#newer-c-features-with-old-sdk
-add_compile_definitions(_LIBCPP_DISABLE_AVAILABILITY)
+#
+# Do NOT define this for the vcpkg/PyPI wheel: it links the *system* libc++, and disabling
+# availability makes libc++ assume every feature is present and emit *strong* references to
+# symbols that only exist in newer system dylibs (e.g. std::__hash_memory, gated on the
+# macOS 26 / LLVM 21 SDK). The wheel then links fine on the build runner but fails to dlopen
+# on older macOS with "Symbol not found: __ZNSt3__113__hash_memoryEPKvm". Leaving the
+# annotations enabled lets libc++ back-deploy correctly for the deployment target.
+if(${ARCTICDB_USING_CONDA})
+    if(APPLE)
+        if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
+            add_compile_definitions(_LIBCPP_DISABLE_AVAILABILITY)
+        endif()
+    endif()
+endif()
 
 if(NOT ${ARCTICDB_USING_CONDA})
     find_package(Libevent CONFIG REQUIRED)
@@ -1082,7 +1097,9 @@ if(${TEST})
             pipeline/test/test_column_stats_dispatch.cpp
             pipeline/test/test_column_stats_dispatch_range_vs_range.cpp
             pipeline/test/test_column_stats_isin.cpp
+            pipeline/test/test_column_stats_query_metadata.cpp
             util/test/test_regex.cpp
+            processing/test/ast_test_helpers.hpp
             processing/test/test_arithmetic_type_promotion.cpp
             processing/test/test_clause.cpp
             processing/test/test_compact_data.cpp
@@ -1094,6 +1111,7 @@ if(${TEST})
             processing/test/test_operation_dispatch.cpp
             processing/test/test_output_schema_aggregator_types.cpp
             processing/test/test_output_schema_ast_validity.cpp
+            processing/test/test_query_planner.cpp
             processing/test/test_output_schema_basic.cpp
             processing/test/test_parallel_processing.cpp
             processing/test/test_resample.cpp

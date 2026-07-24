@@ -575,28 +575,27 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
         return ColumnName(name);
     }));
 
-    py::class_<ValueName>(version, "ValueName").def(py::init([](const std::string& name) { return ValueName(name); }));
-
-    py::class_<ValueSetName>(version, "ValueSetName").def(py::init([](const std::string& name) {
-        return ValueSetName(name);
-    }));
-
-    py::class_<ExpressionName>(version, "ExpressionName").def(py::init([](const std::string& name) {
-        return ExpressionName(name);
-    }));
-
-    py::class_<RegexName>(version, "RegexName").def(py::init([](const std::string& name) { return RegexName(name); }));
-
     py::class_<ExpressionNode, std::shared_ptr<ExpressionNode>>(version, "ExpressionNode")
-            .def(py::init([](VariantNode condition, VariantNode left, VariantNode right, OperationType operation_type) {
-                return ExpressionNode(condition, left, right, operation_type);
+            .def(py::init([](std::shared_ptr<ExpressionNode> condition,
+                             std::shared_ptr<ExpressionNode>
+                                     left,
+                             std::shared_ptr<ExpressionNode>
+                                     right,
+                             OperationType operation_type) {
+                return std::make_shared<ExpressionNode>(
+                        std::move(condition), std::move(left), std::move(right), operation_type
+                );
             }))
-            .def(py::init([](VariantNode left, VariantNode right, OperationType operation_type) {
-                return ExpressionNode(left, right, operation_type);
+            .def(py::init([](std::shared_ptr<ExpressionNode> left,
+                             std::shared_ptr<ExpressionNode>
+                                     right,
+                             OperationType operation_type) {
+                return std::make_shared<ExpressionNode>(std::move(left), std::move(right), operation_type);
             }))
-            .def(py::init([](VariantNode left, OperationType operation_type) {
-                return ExpressionNode(left, operation_type);
-            }));
+            .def(py::init([](std::shared_ptr<ExpressionNode> left, OperationType operation_type) {
+                return std::make_shared<ExpressionNode>(std::move(left), operation_type);
+            }))
+            .def(py::init([](ExpressionNode::Leaf leaf) { return std::make_shared<ExpressionNode>(std::move(leaf)); }));
 
     py::enum_<PipelineOptimisation>(version, "PipelineOptimisation")
             .value("SPEED", PipelineOptimisation::SPEED)
@@ -608,11 +607,7 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
 
     py::class_<ExpressionContext, std::shared_ptr<ExpressionContext>>(version, "ExpressionContext")
             .def(py::init())
-            .def("add_expression_node", &ExpressionContext::add_expression_node)
-            .def("add_value", &ExpressionContext::add_value)
-            .def("add_value_set", &ExpressionContext::add_value_set)
-            .def("add_regex", &ExpressionContext::add_regex)
-            .def_readwrite("root_node_name", &ExpressionContext::root_node_name_);
+            .def_readwrite("root", &ExpressionContext::root_);
 
     py::class_<UpdateQuery>(version, "PythonVersionStoreUpdateQuery")
             .def(py::init())

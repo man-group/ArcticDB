@@ -16,7 +16,15 @@
 #include <arcticdb/util/test/config_common.hpp>
 #include <arcticdb/toolbox/query_stats.hpp>
 
+#include <folly/executors/ThreadPoolExecutor.h>
+#include <folly/system/ThreadName.h>
+#include <arcticdb/log/log.hpp>
+#include <spdlog/sinks/base_sink.h>
+
+#include <algorithm>
+#include <chrono>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include <arcticdb/storage/s3/s3_storage.hpp>
@@ -813,4 +821,102 @@ TEST(KeyUtilsDeleteBatching, FlushesPendingBufferAtThreshold) {
     );
 
     ASSERT_EQ(storage->recorded_call_sizes(), std::vector<size_t>({3, 3, 3, 2}));
+}
+
+namespace task_observer_test {
+
+class CapturingSink : public spdlog::sinks::base_sink<std::mutex> {
+  public:
+    std::vector<std::string> snapshot() {
+        std::lock_guard lock(cap_mutex_);
+        return messages_;
+    }
+
+  protected:
+    void sink_it_(const spdlog::details::log_msg& msg) override {
+        std::lock_guard lock(cap_mutex_);
+        messages_.emplace_back(msg.payload.data(), msg.payload.size());
+    }
+
+    void flush_() override {}
+
+  private:
+    std::mutex cap_mutex_;
+    std::vector<std::string> messages_;
+};
+
+struct SleepTask : arcticdb::async::BaseTask {
+    folly::Unit operator()() const {
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        return folly::Unit{};
+    }
+};
+
+} // namespace task_observer_test
+
+TEST(Async, TaskStatsLoggingObserverLogsBothPools) {
+    using namespace task_observer_test;
+
+    auto& logger = arcticdb::log::schedule();
+    auto sink = std::make_shared<CapturingSink>();
+    const auto saved_level = logger.level();
+    logger.sinks().push_back(sink);
+    logger.set_level(spdlog::level::debug);
+
+    auto find_line = [&](const std::string& prefix) {
+        for (const auto& m : sink->snapshot()) {
+            if (m.rfind(prefix, 0) == 0) {
+                return m;
+            }
+        }
+        return std::string{};
+    };
+
+    {
+        arcticdb::async::TaskScheduler sched{1, 1};
+        sched.cpu_exec().addTaskObserver(std::make_unique<arcticdb::async::TaskStatsLoggingObserver>("CPU"));
+        sched.io_exec().addTaskObserver(std::make_unique<arcticdb::async::TaskStatsLoggingObserver>("IO"));
+
+        sched.submit_cpu_task(SleepTask{}).get();
+        sched.submit_io_task(SleepTask{}).get();
+
+        for (auto i = 0;
+             i < 500 && (find_line("task_stats pool=CPU").empty() || find_line("task_stats pool=IO").empty());
+             ++i) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+    }
+
+    logger.set_level(saved_level);
+    auto& sinks = logger.sinks();
+    sinks.erase(std::remove(sinks.begin(), sinks.end(), sink), sinks.end());
+
+    const auto cpu_line = find_line("task_stats pool=CPU");
+    const auto io_line = find_line("task_stats pool=IO");
+
+    ASSERT_FALSE(cpu_line.empty()) << "no CPU task_stats record logged";
+    ASSERT_FALSE(io_line.empty()) << "no IO task_stats record logged";
+#ifndef _WIN32
+    // folly::getCurrentThreadName() is unimplemented on Windows, so the thread field reads "unknown" there.
+    EXPECT_NE(cpu_line.find("thread=CPUPool"), std::string::npos) << cpu_line;
+    EXPECT_NE(io_line.find("thread=IOPool"), std::string::npos) << io_line;
+#endif
+    EXPECT_NE(cpu_line.find("run_ns="), std::string::npos) << cpu_line;
+    EXPECT_NE(io_line.find("run_ns="), std::string::npos) << io_line;
+}
+
+TEST(Async, FormatTaskStatsLine) {
+    folly::ThreadPoolExecutor::ProcessedTaskInfo info;
+    info.taskId = 42;
+    info.priority = 3;
+    info.enqueueTime = std::chrono::steady_clock::time_point{std::chrono::nanoseconds{1000}};
+    info.waitTime = std::chrono::nanoseconds{250};
+    info.runTime = std::chrono::nanoseconds{9000};
+    info.expired = false;
+
+    ASSERT_EQ(
+            arcticdb::async::format_task_stats_line("IO", "IOPool7", info),
+            "task_stats pool=IO thread=IOPool7 task_id=42 enqueue_ns=1000 wait_ns=250 run_ns=9000 expired=false "
+            "priority=3"
+    );
 }

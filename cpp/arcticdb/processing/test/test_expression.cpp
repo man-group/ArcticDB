@@ -10,37 +10,113 @@
 #include <arcticdb/processing/expression_context.hpp>
 #include <arcticdb/processing/expression_node.hpp>
 #include <arcticdb/processing/processing_unit.hpp>
+#include <arcticdb/processing/test/ast_test_helpers.hpp>
+#include <arcticdb/pipeline/value_set.hpp>
 #include <arcticdb/util/test/generators.hpp>
+#include <arcticdb/util/test/segment_generation_utils.hpp>
+
+#include <unordered_set>
 
 TEST(ExpressionNode, AddBasic) {
     using namespace arcticdb;
     StreamId symbol("test_add");
-    auto wrapper =
-            SinkWrapper(symbol, {scalar_field(DataType::UINT64, "thing1"), scalar_field(DataType::UINT64, "thing2")});
+    SegmentInMemory seg = create_dense_segment(
+            stream_descriptor(
+                    symbol,
+                    stream::RowCountIndex{},
+                    {scalar_field(DataType::UINT64, "thing1"), scalar_field(DataType::UINT64, "thing2")}
+            ),
+            std::views::iota(uint64_t{0}, uint64_t{20}),
+            std::views::iota(uint64_t{1}, uint64_t{21})
+    );
+    ProcessingUnit proc(std::move(seg));
+    auto root = node(col("thing1"), col("thing2"), OperationType::ADD);
+    auto expression_context = std::make_shared<ExpressionContext>();
+    expression_context->root_ = root;
+    proc.set_expression_context(expression_context);
+    auto ret = root->compute(proc);
+    const auto& result_col = std::get<ColumnWithStrings>(ret).column_;
 
     for (auto j = 0; j < 20; ++j) {
-        wrapper.aggregator_.start_row(timestamp(j))([&](auto&& rb) {
-            rb.set_scalar(1, j);
-            rb.set_scalar(2, j + 1);
-        });
+        auto v1 = proc.segments_->at(0)->scalar_at<uint64_t>(j, 0);
+        ASSERT_EQ(v1.value(), j);
+        auto v2 = proc.segments_->at(0)->scalar_at<uint64_t>(j, 1);
+        ASSERT_EQ(v2.value(), j + 1);
+        ASSERT_EQ(result_col->scalar_at<uint64_t>(j), v1.value() + v2.value());
+    }
+}
+
+TEST(ExpressionNode, SubexpressionMemoized) {
+    using namespace arcticdb;
+    StreamId symbol("test_longhand");
+    SegmentInMemory seg = create_dense_segment(
+            stream_descriptor(
+                    symbol,
+                    stream::RowCountIndex{},
+                    {scalar_field(DataType::UINT64, "thing1"), scalar_field(DataType::UINT64, "thing2")}
+            ),
+            std::views::iota(uint64_t{0}, uint64_t{20}),
+            std::views::iota(uint64_t{1}, uint64_t{21})
+    );
+    ProcessingUnit proc(std::move(seg));
+
+    auto add1 = node(col("thing1"), col("thing2"), OperationType::ADD);
+    auto add2 = node(col("thing1"), col("thing2"), OperationType::ADD);
+    auto root = node(add1, add2, OperationType::MUL);
+
+    auto expression_context = std::make_shared<ExpressionContext>();
+    expression_context->root_ = root;
+    proc.set_expression_context(expression_context);
+
+    auto ret = root->compute(proc);
+    const auto& result_col = std::get<ColumnWithStrings>(ret).column_;
+
+    for (auto j = 0; j < 20; ++j) {
+        auto v1 = proc.segments_->at(0)->scalar_at<uint64_t>(j, 0).value();
+        auto v2 = proc.segments_->at(0)->scalar_at<uint64_t>(j, 1).value();
+        ASSERT_EQ(result_col->scalar_at<uint64_t>(j), (v1 + v2) * (v1 + v2));
     }
 
-    wrapper.aggregator_.commit();
-    auto& seg = wrapper.segment();
-    ProcessingUnit proc(std::move(seg));
-    auto node = std::make_shared<ExpressionNode>(ColumnName("thing1"), ColumnName("thing2"), OperationType::ADD);
-    auto expression_context = std::make_shared<ExpressionContext>();
-    expression_context->root_node_name_ = ExpressionName("new_thing");
-    expression_context->add_expression_node("new_thing", node);
-    proc.set_expression_context(expression_context);
-    auto ret = proc.get(ExpressionName("new_thing"));
-    const auto& col = std::get<ColumnWithStrings>(ret).column_;
+    const std::string add_label = R"((Column["thing1"] ADD Column["thing2"]))";
+    ASSERT_EQ(add1->label_, add_label);
+    ASSERT_EQ(add2->label_, add_label);
+    ASSERT_TRUE(proc.computed_data_.contains(add_label));
+    const auto* cached_node = proc.computed_data_.at(add_label).first;
+    ASSERT_TRUE(cached_node == add1.get() || cached_node == add2.get());
+    ASSERT_EQ(proc.computed_data_.size(), 2);
+}
 
-    for (auto j = 0; j < 20; ++j) {
-        auto v1 = proc.segments_->at(0)->scalar_at<uint64_t>(j, 1);
-        ASSERT_EQ(v1.value(), j);
-        auto v2 = proc.segments_->at(0)->scalar_at<uint64_t>(j, 2);
-        ASSERT_EQ(v2.value(), j + 1);
-        ASSERT_EQ(col->scalar_at<uint64_t>(j), v1.value() + v2.value());
+TEST(ExpressionNode, NoFalseReuseOnLabelClash) {
+    using namespace arcticdb;
+    StreamId symbol("test_label_clash");
+    SegmentInMemory seg = create_dense_segment(
+            stream_descriptor(symbol, stream::RowCountIndex{}, {scalar_field(DataType::INT64, "thing1")}),
+            std::views::iota(int64_t{0}, int64_t{20})
+    );
+    ProcessingUnit proc(std::move(seg));
+
+    auto set_a = std::make_shared<ValueSet>(
+            std::make_shared<std::unordered_set<int64_t>>(std::unordered_set<int64_t>{0, 1, 2})
+    );
+    auto set_b = std::make_shared<ValueSet>(
+            std::make_shared<std::unordered_set<int64_t>>(std::unordered_set<int64_t>{3, 4, 5})
+    );
+
+    auto isin_a = node(col("thing1"), vset(set_a), OperationType::ISIN);
+    auto isin_b = node(col("thing1"), vset(set_b), OperationType::ISIN);
+
+    auto expression_context = std::make_shared<ExpressionContext>();
+    expression_context->root_ = isin_a;
+    proc.set_expression_context(expression_context);
+
+    // The coarse value-set label keys only on dtype and size, so these two operations collide.
+    ASSERT_EQ(isin_a->label_, isin_b->label_);
+
+    auto bitset_a = std::get<util::BitSet>(isin_a->compute(proc));
+    auto bitset_b = std::get<util::BitSet>(isin_b->compute(proc));
+
+    for (size_t idx = 0; idx < 20; ++idx) {
+        ASSERT_EQ(set_a->get_set<int64_t>()->contains(static_cast<int64_t>(idx)), bitset_a.get_bit(idx));
+        ASSERT_EQ(set_b->get_set<int64_t>()->contains(static_cast<int64_t>(idx)), bitset_b.get_bit(idx));
     }
 }

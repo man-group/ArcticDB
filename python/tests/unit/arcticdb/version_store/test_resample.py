@@ -861,6 +861,129 @@ class TestResamplingOrigin:
             date_range=(pd.Timestamp("2025-01-02 00:00:00"), pd.Timestamp("2025-01-03 00:00:00")),
         )
 
+    @pytest.mark.parametrize(
+        "origin",
+        [
+            "start_day",
+            "start",
+            pytest.param("end", marks=pytest.mark.skipif(PANDAS_VERSION < Version("1.3.0"), reason="Not supported")),
+            pytest.param(
+                "end_day", marks=pytest.mark.skipif(PANDAS_VERSION < Version("1.3.0"), reason="Not supported")
+            ),
+        ],
+    )
+    def test_multiple_date_range_clauses_then_unsupported_origin_resample_raises(
+        self, lmdb_version_store_v1, origin, closed, any_output_format
+    ):
+        lib = lmdb_version_store_v1
+        lib._set_output_format_for_pipeline_tests(any_output_format)
+        sym = "test_multiple_date_range_clauses_then_unsupported_origin_resample_raises"
+
+        lib.write(
+            sym,
+            pd.DataFrame(
+                {"col": [1, 2, 3, 4, 5]},
+                index=pd.date_range("2024-01-01", periods=5),
+            ),
+        )
+        q = (
+            QueryBuilder()
+            .date_range((pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-04")))
+            .date_range((pd.Timestamp("2024-01-02"), pd.Timestamp("2024-01-05")))
+            .resample("1min", origin=origin, closed=closed)
+            .agg({"col_min": ("col", "min")})
+        )
+        with pytest.raises(UserInputException) as exception_info:
+            lib.read(sym, query_builder=q)
+        assert all(w in str(exception_info.value) for w in [origin, "origin"])
+
+    @pytest.mark.parametrize(
+        "origin",
+        [
+            "start_day",
+            "start",
+            pytest.param("end", marks=pytest.mark.skipif(PANDAS_VERSION < Version("1.3.0"), reason="Not supported")),
+            pytest.param(
+                "end_day", marks=pytest.mark.skipif(PANDAS_VERSION < Version("1.3.0"), reason="Not supported")
+            ),
+        ],
+    )
+    def test_date_range_then_filter_then_any_origin_resample_allowed(
+        self, lmdb_version_store_v1, origin, closed, any_output_format
+    ):
+        # Unlike leading date ranges folding straight into the resample, a filter in between stops the fold, so
+        # the resample computes its bucket boundaries from the real, already-filtered data it receives rather than
+        # the raw requested date range - so start/end/start_day/end_day origins work correctly here. Filter out the
+        # row at the start of the date range, so the filtered data's true first timestamp (which "start"/"start_day"
+        # origins anchor on) differs from the date range's own boundary.
+        lib = lmdb_version_store_v1
+        lib._set_output_format_for_pipeline_tests(any_output_format)
+        sym = "test_date_range_then_filter_then_any_origin_resample_allowed"
+
+        idx = pd.date_range("2024-01-01", periods=10, freq="D")
+        df = pd.DataFrame({"col": np.arange(10)}, index=idx)
+        lib.write(sym, df)
+
+        date_range = (pd.Timestamp("2024-01-02"), pd.Timestamp("2024-01-09"))
+        q = QueryBuilder().date_range(date_range)
+        q = q[q["col"] != 1]
+        q = q.resample("2D", origin=origin, closed=closed).agg({"col": "sum"})
+        received = lib.read(sym, query_builder=q).data
+
+        filtered = df.loc[date_range[0] : date_range[1]]
+        filtered = filtered[filtered["col"] != 1]
+        resampler = filtered.resample("2D", origin=origin, closed=closed)
+        # ArcticDB never emits empty buckets, but pandas can, eg for origin="end"/"end_day" with closed="left".
+        expected = resampler.agg({"col": "sum"})[resampler["col"].count() > 0]
+
+        assert_frame_equal(expected, received)
+
+    def test_date_range_after_any_origin_resample_allowed(self, lmdb_version_store_v1, closed, any_output_format):
+        lib = lmdb_version_store_v1
+        lib._set_output_format_for_pipeline_tests(any_output_format)
+        sym = "test_date_range_after_any_origin_resample_allowed"
+        idx = pd.date_range("2024-01-01", periods=10, freq="min")
+        df = pd.DataFrame({"col": np.arange(10)}, index=idx)
+        lib.write(sym, df)
+
+        reference = QueryBuilder().resample("2min", origin="start", closed=closed).agg({"col": "sum"})
+        reference_full = lib.read(sym, query_builder=reference).data
+        post_range = (pd.Timestamp("2024-01-01 00:02:00"), pd.Timestamp("2024-01-01 00:06:00"))
+        expected = reference_full.loc[post_range[0] : post_range[1]]
+
+        q = QueryBuilder().resample("2min", origin="start", closed=closed).agg({"col": "sum"}).date_range(post_range)
+        received = lib.read(sym, query_builder=q).data
+
+        assert_frame_equal(expected, received)
+
+    def test_epoch_origin_resample_with_multiple_leading_date_ranges_allowed(
+        self, lmdb_version_store_v1, closed, any_output_format
+    ):
+        lib = lmdb_version_store_v1
+        lib._set_output_format_for_pipeline_tests(any_output_format)
+        sym = "test_epoch_origin_resample_with_multiple_leading_date_ranges_allowed"
+        idx = pd.date_range("2024-01-01", periods=10, freq="min")
+        df = pd.DataFrame({"col": np.arange(10)}, index=idx)
+        lib.write(sym, df)
+
+        pre_range_a = (pd.Timestamp("2024-01-01 00:00:00"), pd.Timestamp("2024-01-01 00:07:00"))
+        pre_range_b = (pd.Timestamp("2024-01-01 00:02:00"), pd.Timestamp("2024-01-01 00:09:00"))
+        merged_pre = (max(pre_range_a[0], pre_range_b[0]), min(pre_range_a[1], pre_range_b[1]))
+
+        reference = QueryBuilder().resample("2min", origin="epoch", closed=closed).agg({"col": "sum"})
+        expected = lib.read(sym, date_range=merged_pre, query_builder=reference).data
+
+        q = (
+            QueryBuilder()
+            .date_range(pre_range_a)
+            .date_range(pre_range_b)
+            .resample("2min", origin="epoch", closed=closed)
+            .agg({"col": "sum"})
+        )
+        received = lib.read(sym, query_builder=q).data
+
+        assert_frame_equal(expected, received)
+
 
 @pytest.mark.skipif(PANDAS_VERSION < Version("1.1.0"), reason="Pandas < 1.1.0 do not have offset param")
 @pytest.mark.parametrize("closed", ["left", "right"])
@@ -942,6 +1065,56 @@ def test_date_range_outside_symbol_timerange(lmdb_version_store_v1, any_output_f
     received_df = lib.read(sym, query_builder=q).data
     assert not len(received_df)
     assert received_df.columns == df.columns
+
+
+def test_disjoint_date_ranges_fold_into_resample_produce_empty_result(lmdb_version_store_v1, any_output_format):
+    lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    sym = "test_disjoint_date_ranges_fold_into_resample_produce_empty_result"
+    df = pd.DataFrame({"col": np.arange(10)}, index=pd.date_range("2025-01-01", periods=10))
+    lib.write(sym, df)
+    q = (
+        QueryBuilder()
+        .date_range((pd.Timestamp("2025-01-01"), pd.Timestamp("2025-01-04")))
+        .date_range((pd.Timestamp("2025-01-07"), pd.Timestamp("2025-01-09")))
+        .resample("1min")
+        .agg({"col": "sum"})
+    )
+    received_df = lib.read(sym, query_builder=q).data
+    assert not len(received_df)
+    assert list(received_df.columns) == list(df.columns)
+
+
+def test_date_ranges_both_sides_of_resample_intersect_independently(lmdb_version_store_v1, any_output_format):
+    lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    sym = "test_date_ranges_both_sides_of_resample_intersect_independently"
+    df = pd.DataFrame({"col": np.arange(20)}, index=pd.date_range("2025-01-01", periods=20, freq="D"))
+    lib.write(sym, df)
+
+    pre_range_a = (pd.Timestamp("2025-01-01"), pd.Timestamp("2025-01-12"))
+    pre_range_b = (pd.Timestamp("2025-01-04"), pd.Timestamp("2025-01-15"))
+    merged_pre = (max(pre_range_a[0], pre_range_b[0]), min(pre_range_a[1], pre_range_b[1]))
+    post_range_c = (pd.Timestamp("2025-01-01"), pd.Timestamp("2025-01-10"))
+    post_range_d = (pd.Timestamp("2025-01-03"), pd.Timestamp("2025-01-20"))
+    merged_post = (max(post_range_c[0], post_range_d[0]), min(post_range_c[1], post_range_d[1]))
+
+    reference_q = QueryBuilder().resample("2D").agg({"col": "sum"})
+    reference_resampled = lib.read(sym, date_range=merged_pre, query_builder=reference_q).data
+    expected = reference_resampled.loc[merged_post[0] : merged_post[1]]
+
+    q = (
+        QueryBuilder()
+        .date_range(pre_range_a)
+        .date_range(pre_range_b)
+        .resample("2D")
+        .agg({"col": "sum"})
+        .date_range(post_range_c)
+        .date_range(post_range_d)
+    )
+    received = lib.read(sym, query_builder=q).data
+
+    assert_frame_equal(expected, received)
 
 
 class TestResampleDynamicSchema:

@@ -40,17 +40,11 @@ using StatsVariantData = std::variant<
 using StatsRowIndices = std::vector<std::optional<size_t>>;
 
 StatsVariantData evaluate_ast_node_against_stats(
-        const VariantNode& node, const ExpressionContext& expression_context, const StatsRowIndices& row_indices,
-        const ColumnStatsData& column_stats
+        const ExpressionNode& node, const StatsRowIndices& row_indices, const ColumnStatsData& column_stats
 );
 
 StatsVariantData dispatch_binary_stats(
         const StatsVariantData& left, const StatsVariantData& right, OperationType operation
-);
-
-StatsVariantData compute_stats(
-        const ExpressionContext& expression_context, const ExpressionNode& node, const StatsRowIndices& row_indices,
-        const ColumnStatsData& column_stats
 );
 
 namespace column_stats_detail {

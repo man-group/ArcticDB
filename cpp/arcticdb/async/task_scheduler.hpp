@@ -15,6 +15,8 @@
 #include <folly/executors/FutureExecutor.h>
 #include <folly/executors/CPUThreadPoolExecutor.h>
 #include <folly/executors/IOThreadPoolExecutor.h>
+#include <folly/executors/ThreadPoolExecutor.h>
+#include <folly/system/ThreadName.h>
 #include <fmt/format.h>
 #include <thread>
 #include <algorithm>
@@ -61,6 +63,38 @@ class InstrumentedNamedFactory : public folly::ThreadFactory {
   private:
     std::mutex mutex_;
     folly::NamedThreadFactory named_factory_;
+};
+
+inline std::string format_task_stats_line(
+        std::string_view pool, std::string_view thread, const folly::ThreadPoolExecutor::ProcessedTaskInfo& info
+) {
+    return fmt::format(
+            "task_stats pool={} thread={} task_id={} enqueue_ns={} wait_ns={} run_ns={} expired={} priority={}",
+            pool,
+            thread,
+            info.taskId,
+            std::chrono::duration_cast<std::chrono::nanoseconds>(info.enqueueTime.time_since_epoch()).count(),
+            info.waitTime.count(),
+            info.runTime.count(),
+            info.expired,
+            static_cast<int>(info.priority)
+    );
+}
+
+class TaskStatsLoggingObserver : public folly::ThreadPoolExecutor::TaskObserver {
+  public:
+    explicit TaskStatsLoggingObserver(std::string pool) : pool_(std::move(pool)) {}
+
+    void taskProcessed(const folly::ThreadPoolExecutor::ProcessedTaskInfo& info) noexcept override {
+        ARCTICDB_RUNTIME_DEBUG(
+                log::schedule(),
+                "{}",
+                format_task_stats_line(pool_, folly::getCurrentThreadName().value_or("unknown"), info)
+        );
+    }
+
+  private:
+    std::string pool_;
 };
 
 template<typename SchedulerType>
@@ -209,6 +243,11 @@ class TaskScheduler {
         ARCTICDB_RUNTIME_DEBUG(
                 log::schedule(), "Task scheduler created with {:d} {:d}", cpu_thread_count_, io_thread_count_
         );
+        if (ConfigsMap::instance()->get_int("TaskScheduler.LogTaskStats", 0) != 0) {
+            cpu_exec_.addTaskObserver(std::make_unique<TaskStatsLoggingObserver>("CPU"));
+            io_exec_.addTaskObserver(std::make_unique<TaskStatsLoggingObserver>("IO"));
+            ARCTICDB_RUNTIME_DEBUG(log::schedule(), "Task stats logging enabled");
+        }
     }
 
     template<class Task>

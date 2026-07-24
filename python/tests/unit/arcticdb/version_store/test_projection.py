@@ -441,3 +441,18 @@ def test_project_fixed_value_dynamic(lmdb_version_store_dynamic_schema_v1, index
     q = QueryBuilder().apply("new_col", value)
     received = lib.read(sym, query_builder=q).data
     assert_frame_equal(expected, received, check_dtype=False)
+
+
+def test_projection_repeated_subexpression(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    sym = "test_projection_repeated_subexpression"
+    df = pd.DataFrame({"a": np.arange(10, dtype=np.int64), "b": np.arange(10, 20, dtype=np.int64)})
+    lib.write(sym, df)
+
+    q = QueryBuilder()
+    q = q.apply("x", (q["a"] + q["b"]) * (q["a"] + q["b"]))
+
+    expected = df.copy()
+    expected["x"] = (df["a"] + df["b"]) * (df["a"] + df["b"])
+    received = lib.read(sym, query_builder=q).data
+    assert_frame_equal(expected, received)

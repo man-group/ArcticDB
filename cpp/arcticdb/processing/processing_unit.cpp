@@ -48,56 +48,29 @@ void ProcessingUnit::truncate(size_t start_row, size_t end_row) {
     }
 }
 
-VariantData ProcessingUnit::get(const VariantNode& name) {
+VariantData ProcessingUnit::get(const ColumnName& column_name) {
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(
             segments_.has_value(), "ProcessingUnit::get requires segments to be present"
     );
-    return util::variant_match(
-            name,
-            [&](const ColumnName& column_name) {
-                for (const auto& segment : *segments_) {
-                    segment->init_column_map();
-                    if (const auto opt_idx = segment->column_index_with_name_demangling(column_name.value)) {
-                        return VariantData(ColumnWithStrings(
-                                segment->column_ptr(static_cast<position_t>(*opt_idx)),
-                                segment->string_pool_ptr(),
-                                column_name.value
-                        ));
-                    }
-                }
+    for (const auto& segment : *segments_) {
+        segment->init_column_map();
+        if (const auto opt_idx = segment->column_index_with_name_demangling(column_name.value)) {
+            return VariantData(ColumnWithStrings(
+                    segment->column_ptr(static_cast<position_t>(*opt_idx)),
+                    segment->string_pool_ptr(),
+                    column_name.value
+            ));
+        }
+    }
 
-                if (expression_context_ && !expression_context_->dynamic_schema_) {
-                    internal::raise<ErrorCode::E_ASSERTION_FAILURE>(
-                            "Column {} not found in {}", column_name, segments_->at(0)->descriptor()
-                    );
-                } else {
-                    log::version().debug("Column {} not found in {}", column_name, segments_->at(0)->descriptor());
-                    return VariantData{EmptyResult{}};
-                }
-            },
-            [&](const ValueName& value_name) {
-                return VariantData(expression_context_->values_.get_value(value_name.value));
-            },
-            [&](const ValueSetName& value_set_name) {
-                return VariantData(expression_context_->value_sets_.get_value(value_set_name.value));
-            },
-            [&](const RegexName& regex_name) {
-                return VariantData(expression_context_->regex_matches_.get_value(regex_name.value));
-            },
-            [&](const ExpressionName& expression_name) {
-                if (auto computed = computed_data_.find(expression_name.value); computed != std::end(computed_data_)) {
-                    return computed->second;
-                } else {
-                    auto expr = expression_context_->expression_nodes_.get_value(expression_name.value);
-                    auto data = expr->compute(*this);
-                    computed_data_.try_emplace(expression_name.value, data);
-                    return data;
-                }
-            },
-            [&](const std::monostate&) -> VariantData {
-                util::raise_rte("ProcessingUnit::get called with monostate VariantNode");
-            }
-    );
+    if (expression_context_ && !expression_context_->dynamic_schema_) {
+        internal::raise<ErrorCode::E_ASSERTION_FAILURE>(
+                "Column {} not found in {}", column_name, segments_->at(0)->descriptor()
+        );
+    } else {
+        log::version().debug("Column {} not found in {}", column_name, segments_->at(0)->descriptor());
+        return VariantData{EmptyResult{}};
+    }
 }
 
 std::vector<ProcessingUnit> split_by_row_slice(ProcessingUnit&& proc) {

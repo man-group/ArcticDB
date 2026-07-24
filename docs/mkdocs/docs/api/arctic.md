@@ -9,7 +9,10 @@ Library API section.
 | ------------------------------------------ | ----------- |
 | [Arctic](#arcticdb.Arctic)                 | Top-level library management class. |
 | [LibraryOptions](#arcticdb.LibraryOptions) | Configuration options that can be applied when libraries are created. |
+| [EnterpriseLibraryOptions](#arcticdb.EnterpriseLibraryOptions) | Configuration options that can be applied when libraries are created when you are using ArcticDB enterprise features. |
 
 ::: arcticdb.Arctic
 
 ::: arcticdb.LibraryOptions
+
+::: arcticdb.EnterpriseLibraryOptions

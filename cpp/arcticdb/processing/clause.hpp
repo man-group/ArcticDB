@@ -143,7 +143,6 @@ struct FilterClause {
     ClauseInfo clause_info_;
     std::shared_ptr<ComponentManager> component_manager_;
     std::shared_ptr<ExpressionContext> expression_context_;
-    ExpressionName root_node_name_;
     PipelineOptimisation optimisation_;
 
     explicit FilterClause(
@@ -153,10 +152,9 @@ struct FilterClause {
         expression_context_(std::make_shared<ExpressionContext>(std::move(expression_context))),
         optimisation_(optimisation.value_or(PipelineOptimisation::SPEED)) {
         user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
-                std::holds_alternative<ExpressionName>(expression_context_->root_node_name_),
+                expression_context_->root_ && expression_context_->root_->is_operation(),
                 "FilterClause AST would produce a column, not a bitset"
         );
-        root_node_name_ = std::get<ExpressionName>(expression_context_->root_node_name_);
         clause_info_.input_columns_ = std::move(input_columns);
     }
 
@@ -213,8 +211,8 @@ struct ProjectClause {
         output_column_(std::move(output_column)),
         expression_context_(std::make_shared<ExpressionContext>(std::move(expression_context))) {
         user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
-                std::holds_alternative<ExpressionName>(expression_context_->root_node_name_) ||
-                        std::holds_alternative<ValueName>(expression_context_->root_node_name_),
+                expression_context_->root_ &&
+                        (expression_context_->root_->is_operation() || expression_context_->root_->is_value()),
                 "ProjectClause AST would not produce a column"
         );
         clause_info_.input_columns_ = std::move(input_columns);
@@ -312,7 +310,7 @@ struct PartitionClause {
     }
 
     OutputSchema modify_schema(OutputSchema&& output_schema) const {
-        check_column_presence(output_schema, *clause_info_.input_columns_, "GroupBy");
+        check_column_presence(output_schema, clause_info_.input_columns_, "GroupBy");
         return output_schema;
     }
 
@@ -434,6 +432,8 @@ struct ResampleClause {
     void set_aggregations(const std::vector<NamedAggregator>& named_aggregators);
 
     void set_date_range(timestamp date_range_start, timestamp date_range_end);
+
+    void check_origin_supported_with_date_range() const;
 
     std::vector<timestamp> generate_bucket_boundaries(
             timestamp first_ts, timestamp last_ts, bool responsible_for_first_overlapping_bucket

@@ -16,6 +16,14 @@ Signed-Off By: Random J. Developer <random@developer.example.org>. By including 
 **Corporations** - For corporations who wish to make contributions to ArcticDB, please contact info@arcticdb.io and
 we will arrange for the CLA to be sent to the signing authority within your corporation.
 
+# Code Style
+
+As part of the CI, linting checks are performed to ensure code meets our style guidelines. To automatically format code to match these guidelines, run the following commands from the project root directory:
+```python
+python build_tooling/format.py --install-tools  # Only required the first time
+python build_tooling/format.py --in-place --type all
+```
+
 Docker Quickstart
 =================
 

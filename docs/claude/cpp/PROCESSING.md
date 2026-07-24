@@ -80,9 +80,9 @@ Represents: (a > 5) AND (b < 10)
 
 ### Expression Evaluation
 
-Expressions are evaluated via `compute()` on `ExpressionContext` which holds the expression tree.
+`ExpressionContext` (`expression_context.hpp`) holds the expression tree as a graph of `ExpressionNode`s rooted at `root_`, along with a `dynamic_schema_` flag. Expressions are evaluated by calling `compute()` on `root_`, which recurses into its children. Results of subexpressions are memoized on the `ProcessingUnit` (keyed on each node's `label_`, deep-compared on a hit) so shared subtrees are evaluated only once.
 
-`ExpressionContext` (`expression_context.hpp`) also supports `merge_from()` to combine multiple contexts (used when AND-ing together filter clause expressions for column stats evaluation). `ConstantMap::contains()` checks whether a name is present.
+Multiple filter contexts are combined into one by `and_filter_expression_contexts()` (`query_planner.cpp`), which AND-s their root nodes into a single graph. This is used when AND-ing together filter clause expressions for column stats evaluation.
 
 ## Operation Dispatch
 
@@ -199,7 +199,7 @@ A processing unit holds data being processed through the clause pipeline.
 - `segments_`, `row_ranges_`, `col_ranges_`, `atom_keys_` - Associated data vectors (same length, elements at same index are related)
 - `bucket_` - For partitioned operations
 - `expression_context_` - AST for filter/projection
-- `computed_data_` - Cached expression results
+- `computed_data_` - Memoized expression results, keyed on each node's `label_` (one slot per label, deep-compared on a hit so colliding labels never return a wrong result)
 
 Key methods: `set_segments()`, `set_row_ranges()`, `set_col_ranges()`, `set_atom_keys()`, `apply_filter()`, `truncate()`.
 

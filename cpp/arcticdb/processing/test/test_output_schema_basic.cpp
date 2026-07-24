@@ -10,6 +10,7 @@
 
 #include <gtest/gtest.h>
 #include <arcticdb/processing/clause.hpp>
+#include <arcticdb/processing/test/ast_test_helpers.hpp>
 #include <arcticdb/util/test/generators.hpp>
 #include <arcticdb/processing/grouper.hpp>
 
@@ -109,28 +110,22 @@ TEST(OutputSchema, FilterClauseColumnPresence) {
     norm_meta.mutable_df()->mutable_common()->mutable_index()->set_step(1);
 
     // All required columns present in StreamDescriptor
-    auto node = std::make_shared<ExpressionNode>(ColumnName("col1"), ColumnName("col3"), OperationType::EQ);
     ExpressionContext ec;
-    ec.root_node_name_ = ExpressionName("blah");
-    ec.add_expression_node("blah", node);
+    ec.root_ = node(col("col1"), col("col3"), OperationType::EQ);
     FilterClause filter_clause{{"col1", "col3"}, ec, {}};
     auto output_schema = filter_clause.modify_schema({stream_desc.clone(), norm_meta});
     ASSERT_EQ(output_schema.stream_descriptor(), stream_desc);
     ASSERT_TRUE(MessageDifferencer::Equals(output_schema.norm_metadata_, norm_meta));
 
     // Some, but not all required columns present in StreamDescriptor
-    node = std::make_shared<ExpressionNode>(ColumnName("col1"), ColumnName("col4"), OperationType::EQ);
     ec = ExpressionContext();
-    ec.root_node_name_ = ExpressionName("blah");
-    ec.add_expression_node("blah", node);
+    ec.root_ = node(col("col1"), col("col4"), OperationType::EQ);
     filter_clause = FilterClause{{"col1", "col4"}, ec, {}};
     ASSERT_THROW(filter_clause.modify_schema({stream_desc.clone(), norm_meta}), SchemaException);
 
     // No required columns present in StreamDescriptor
-    node = std::make_shared<ExpressionNode>(ColumnName("col4"), ColumnName("col5"), OperationType::EQ);
     ec = ExpressionContext();
-    ec.root_node_name_ = ExpressionName("blah");
-    ec.add_expression_node("blah", node);
+    ec.root_ = node(col("col4"), col("col5"), OperationType::EQ);
     filter_clause = FilterClause{{"col4", "col5"}, ec, {}};
     ASSERT_THROW(filter_clause.modify_schema({stream_desc.clone(), norm_meta}), SchemaException);
 }
@@ -148,10 +143,8 @@ TEST(OutputSchema, ProjectClauseColumnPresence) {
     norm_meta.mutable_df()->mutable_common()->mutable_index()->set_step(1);
 
     // All required columns present in StreamDescriptor
-    auto node = std::make_shared<ExpressionNode>(ColumnName("col1"), ColumnName("col3"), OperationType::ADD);
     ExpressionContext ec;
-    ec.root_node_name_ = ExpressionName("root");
-    ec.add_expression_node("root", node);
+    ec.root_ = node(col("col1"), col("col3"), OperationType::ADD);
     ProjectClause project_clause{{"col1", "col3"}, "root", ec};
     auto output_schema = project_clause.modify_schema({stream_desc.clone(), norm_meta});
     stream_desc.add_scalar_field(DataType::INT64, "root");
@@ -159,18 +152,14 @@ TEST(OutputSchema, ProjectClauseColumnPresence) {
     ASSERT_TRUE(MessageDifferencer::Equals(output_schema.norm_metadata_, norm_meta));
 
     // Some, but not all required columns present in StreamDescriptor
-    node = std::make_shared<ExpressionNode>(ColumnName("col1"), ColumnName("col4"), OperationType::ADD);
     ec = ExpressionContext();
-    ec.root_node_name_ = ExpressionName("root");
-    ec.add_expression_node("root", node);
+    ec.root_ = node(col("col1"), col("col4"), OperationType::ADD);
     project_clause = ProjectClause{{"col1", "col4"}, "root", ec};
     ASSERT_THROW(project_clause.modify_schema({stream_desc.clone(), norm_meta}), SchemaException);
 
     // No required columns present in StreamDescriptor
-    node = std::make_shared<ExpressionNode>(ColumnName("col4"), ColumnName("col5"), OperationType::ADD);
     ec = ExpressionContext();
-    ec.root_node_name_ = ExpressionName("root");
-    ec.add_expression_node("root", node);
+    ec.root_ = node(col("col4"), col("col5"), OperationType::ADD);
     project_clause = ProjectClause{{"col4", "col5"}, "root", ec};
     ASSERT_THROW(project_clause.modify_schema({stream_desc.clone(), norm_meta}), SchemaException);
 }
