@@ -43,7 +43,7 @@ TEST(ColumnStatsQueryMetadata, FilterThenHeadThenFilterOnlyUsesLeadingFilter) {
 
     ColumnStatsQueryMetadata metadata(clauses);
 
-    ASSERT_TRUE(metadata.filter_expression.has_value());
+    ASSERT_TRUE(metadata.filter_expression != nullptr);
     EXPECT_EQ(metadata.columns_of_interest, (std::unordered_set<std::string>{"a"}));
 }
 

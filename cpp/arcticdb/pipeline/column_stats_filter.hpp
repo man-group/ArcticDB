@@ -125,7 +125,7 @@ class ColumnStatsData {
 
 struct ColumnStatsQueryMetadata {
     // Filter expression we can apply column stats to.
-    std::optional<std::shared_ptr<ExpressionContext>> filter_expression;
+    std::shared_ptr<ExpressionContext> filter_expression;
     // Columns referenced in the user's query.
     std::unordered_set<std::string> columns_of_interest;
     std::optional<std::pair<timestamp, timestamp>> date_range;

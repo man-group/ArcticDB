@@ -190,7 +190,7 @@ TEST(Resample, StructureForProcessingRaisesForUnsupportedOriginWithFoldedDateRan
             ResampleBoundary::LEFT, {1, 500}, ResampleOrigin{std::string{"start"}}
     );
     resample_clause.date_range_ = {50, 200};
-    EXPECT_THROW(resample_clause.structure_for_processing(ranges_and_keys), UserInputException);
+    EXPECT_THROW((void)resample_clause.structure_for_processing(ranges_and_keys), UserInputException);
 }
 
 TEST(Resample, StructureForProcessingAllowsUnsupportedOriginWithoutFoldedDateRange) {
@@ -205,7 +205,7 @@ TEST(Resample, StructureForProcessingAllowsUnsupportedOriginWithoutFoldedDateRan
     auto resample_clause = generate_resample_clause<ResampleBoundary::LEFT>(
             ResampleBoundary::LEFT, {1, 500}, ResampleOrigin{std::string{"start"}}
     );
-    EXPECT_NO_THROW(resample_clause.structure_for_processing(ranges_and_keys));
+    EXPECT_NO_THROW((void)resample_clause.structure_for_processing(ranges_and_keys));
 }
 
 TEST(Resample, FindBuckets) {

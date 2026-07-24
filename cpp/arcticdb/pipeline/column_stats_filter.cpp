@@ -25,7 +25,7 @@ namespace arcticdb {
 bool is_column_stats_enabled() { return ConfigsMap::instance()->get_int("ColumnStats.UseForQueries", 0) == 1; }
 
 bool ColumnStatsQueryMetadata::should_try_column_stats_read() const {
-    return is_column_stats_enabled() && filter_expression.has_value();
+    return is_column_stats_enabled() && filter_expression != nullptr;
 }
 
 StatsVariantData dispatch_unary_stats(const StatsVariantData& left, OperationType operation);
@@ -488,7 +488,7 @@ ColumnStatsQueryMetadata::ColumnStatsQueryMetadata(const std::vector<std::shared
         }
         const auto& filter = folly::poly_cast<FilterClause>(*clause);
         util::check(
-                !filter_expression.has_value(),
+                filter_expression == nullptr,
                 "Expected at most one FilterClause in the column stats prefix (filters are merged in plan_query)"
         );
         filter_expression = filter.expression_context_;
@@ -557,7 +557,7 @@ FilterQuery<index::IndexSegmentReader> create_column_stats_filter(
     SegmentInMemory partial_segment =
             partial_decode_column_stats_segment(*column_stats_compressed, tsd, query_metadata.columns_of_interest);
     ColumnStatsData column_stats{std::move(partial_segment), tsd, query_metadata.date_range};
-    ExpressionContext expression_context = *query_metadata.filter_expression.value();
+    ExpressionContext expression_context = *query_metadata.filter_expression;
     return create_column_stats_filter(std::move(column_stats), std::move(expression_context));
 }
 

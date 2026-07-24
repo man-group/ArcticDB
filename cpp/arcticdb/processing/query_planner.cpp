@@ -8,6 +8,8 @@
 
 #include <arcticdb/processing/query_planner.hpp>
 
+#include <arcticdb/util/collection_utils.hpp>
+
 #include <algorithm>
 #include <string>
 #include <type_traits>
@@ -32,8 +34,7 @@ bool date_range_can_move_to_left_of(const ClauseVariant& clause) { return is_fil
 // each other (and can then be merged by merge_consecutive_filter_clauses), eg
 // [F1, F2, DR1, F3, F4, DR2] -> [DR_12, F1, F2, F3, F4]
 std::vector<ClauseVariant> move_and_merge_date_ranges_left(std::vector<ClauseVariant>&& clauses) {
-    std::vector<ClauseVariant> result;
-    result.reserve(clauses.size());
+    auto result = util::reserve_vector<ClauseVariant>(clauses.size());
     // The date ranges merged so far for the run currently being built, and the filters/projects seen since the
     // last one, both still pending output until the run ends (so the merged date range can be emitted first).
     std::shared_ptr<DateRangeClause> merged_date_range;

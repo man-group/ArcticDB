@@ -528,6 +528,46 @@ def test_querybuilder_date_range_then_groupby_then_date_range_raises(lmdb_versio
         lib.read(symbol, query_builder=q)
 
 
+def test_querybuilder_date_range_then_groupby_then_date_range_raises_with_timestamp_grouping_column(
+    lmdb_version_store_v1, any_output_format
+):
+    # The grouping column becomes an ordinary data column with the real index replaced by a plain
+    # rowcount index (see AggregationClause::modify_schema), regardless of the grouping column's own
+    # dtype. So a DateRangeClause after GroupBy+Agg must still be rejected even when the grouping
+    # column itself holds timestamps.
+    lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol = "test_querybuilder_date_range_then_groupby_then_date_range_raises_with_timestamp_grouping_column"
+    df = pd.DataFrame(
+        {
+            "col1": pd.to_datetime(
+                [
+                    "2000-06-01",
+                    "2000-06-02",
+                    "2000-06-03",
+                    "2000-06-01",
+                    "2000-06-02",
+                    "2000-06-03",
+                    "2000-06-01",
+                    "2000-06-02",
+                    "2000-06-03",
+                    "2000-06-04",
+                ]
+            ),
+            "col2": np.arange(1, 11),
+        },
+        index=pd.date_range("2000-01-01", periods=10),
+    )
+    lib.write(symbol, df)
+
+    q = QueryBuilder()
+    q = q.date_range((pd.Timestamp("2000-01-02"), pd.Timestamp("2000-01-09")))
+    q = q.groupby("col1").agg({"col2": "sum"})
+    q = q.date_range((pd.Timestamp("2000-01-04"), pd.Timestamp("2000-01-06")))
+    with pytest.raises(SchemaException):
+        lib.read(symbol, query_builder=q)
+
+
 @pytest.mark.parametrize("batch", [True, False])
 @pytest.mark.parametrize("use_row_range_clause", [True, False])
 def test_querybuilder_row_range(lmdb_version_store_tiny_segment, batch, use_row_range_clause, any_output_format):
