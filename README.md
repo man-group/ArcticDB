@@ -152,13 +152,13 @@ Please see version conversion dates in the below table:
 | ------------- | ------------- | ------------- |
 | 1.0 | Business Source License 1.1 | Mar 16, 2025 |
 | 1.2 | Business Source License 1.1 | May 22, 2025 |
-| 1.3 | Business Source License 1.1 | Jun  9, 2025 |
-| 1.4 | Business Source License 1.1 | Jun  23, 2025 |
-| 1.5 | Business Source License 1.1 | Jul  11, 2025 |
-| 1.6 | Business Source License 1.1 | Jul  25, 2025 |
-| 2.0 | Business Source License 1.1 | Aug  29, 2025 |
-| 3.0 | Business Source License 1.1 | Sep  13, 2025 |
-| 4.0 | Business Source License 1.1 | Sep  27, 2025 |
+| 1.3 | Business Source License 1.1 | Jun 9, 2025 |
+| 1.4 | Business Source License 1.1 | Jun 23, 2025 |
+| 1.5 | Business Source License 1.1 | Jul 11, 2025 |
+| 1.6 | Business Source License 1.1 | Jul 25, 2025 |
+| 2.0 | Business Source License 1.1 | Aug 29, 2025 |
+| 3.0 | Business Source License 1.1 | Sep 13, 2025 |
+| 4.0 | Business Source License 1.1 | Sep 27, 2025 |
 | 4.1 | Business Source License 1.1 | Nov 1, 2025 |
 | 4.2 | Business Source License 1.1 | Nov 12, 2025 |
 | 4.3 | Business Source License 1.1 | Feb 7, 2026 |
@@ -180,6 +180,19 @@ Please see version conversion dates in the below table:
 | 6.3 | Business Source License 1.1 | Nov 3, 2027 |
 | 6.5 | Business Source License 1.1 | Dec 11, 2027 |
 | 6.6 | Business Source License 1.1 | Jan 6, 2028 |
+| 6.7 | Business Source License 1.1 | Jan 12, 2028 |
+| 6.8 | Business Source License 1.1 | Jan 28, 2028 |
+| 6.9 | Business Source License 1.1 | Feb 2, 2028 |
+| 6.10 | Business Source License 1.1 | Mar 2, 2028 |
+| 6.11 | Business Source License 1.1 | Mar 23, 2028 |
+| 6.12 | Business Source License 1.1 | Apr 15, 2028 |
+| 6.13 | Business Source License 1.1 | Apr 21, 2028 |
+| 6.14 | Business Source License 1.1 | Apr 29, 2028 |
+| 6.15 | Business Source License 1.1 | May 4, 2028 |
+| 6.16 | Business Source License 1.1 | May 11, 2028 |
+| 6.17 | Business Source License 1.1 | May 18, 2028 |
+| 6.18 | Business Source License 1.1 | Jun 1, 2028 |
+| 6.19 | Business Source License 1.1 | Jul 21, 2028 |
 
 ## Code of Conduct
 
