@@ -687,6 +687,9 @@ class HostDispatcherApplication(DomainDispatcherApplication):
     _reqs_till_rate_limit = -1
     # When set to an access key id, any S3 request not signed with that key is rejected with 403. None disables.
     _enforced_access_key = None
+    # When True, reject any request carrying an x-amz-checksum-crc64nvme header with a BadDigest, mimicking
+    # backends (e.g. Scality) that do not support the flexible-checksum digest the SDK forces on batch delete.
+    _reject_crc64nvme = False
 
     @staticmethod
     def _request_access_key(environ):
@@ -723,6 +726,19 @@ class HostDispatcherApplication(DomainDispatcherApplication):
                     "411 Length Required", [("Content-Type", "text/xml"), ("Content-Length", str(len(response_body)))]
                 )
                 return [response_body]
+
+            # Mimic a backend that does not support CRC64-NVME (e.g. Scality): reject the digest header the
+            # SDK attaches to batch delete. Only DeleteObjects always carries it as a header; writes send it as an
+            # aws-chunked trailer which never reaches the WSGI environ, so this only trips on batch delete.
+            if self._reject_crc64nvme and environ.get("HTTP_X_AMZ_CHECKSUM_CRC64NVME"):
+                response_body = (
+                    b'<?xml version="1.0" encoding="UTF-8"?><Error><Code>BadDigest</Code>'
+                    b"<Message>The Content-MD5 you specified did not match what we received.</Message></Error>"
+                )
+                start_response(
+                    "400 Bad Request", [("Content-Type", "text/xml"), ("Content-Length", str(len(response_body)))]
+                )
+                return [response_body]
             # Mock ec2 imds responses for testing
             if path_info in (
                 "/latest/dynamic/instance-identity/document",
@@ -746,6 +762,14 @@ class HostDispatcherApplication(DomainDispatcherApplication):
                 self._enforced_access_key = body or None
                 start_response("200 OK", [("Content-Type", "text/plain")])
                 return [b"Access key enforcement set"]
+
+            # Allow toggling CRC64-NVME rejection (body "1" to enable, "0" to disable)
+            if path_info in ("/reject_crc64nvme", b"/reject_crc64nvme"):
+                length = int(environ["CONTENT_LENGTH"])
+                body = environ["wsgi.input"].read(length).decode("ascii")
+                self._reject_crc64nvme = bool(int(body))
+                start_response("200 OK", [("Content-Type", "text/plain")])
+                return [b"crc64nvme rejection set"]
 
             if self._reqs_till_rate_limit == 0:
                 response_body = (

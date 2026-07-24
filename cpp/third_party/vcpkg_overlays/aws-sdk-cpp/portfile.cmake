@@ -11,6 +11,7 @@ vcpkg_from_github(
         fix_find_curl.patch
         find-dependency.patch
         configure-binary-dir.patch # https://github.com/aws/aws-sdk-cpp/pull/3459
+        disable-deleteobjects-checksum.patch # opt out of forced CRC64-NVME on batch delete; some backends (Scality) reject it
 )
 
 string(COMPARE EQUAL "${VCPKG_CRT_LINKAGE}" "dynamic" FORCE_SHARED_CRT)

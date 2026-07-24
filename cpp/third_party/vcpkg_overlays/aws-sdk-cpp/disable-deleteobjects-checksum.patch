@@ -1,0 +1,16 @@
+diff --git a/generated/src/aws-cpp-sdk-s3/include/aws/s3/model/DeleteObjectsRequest.h b/generated/src/aws-cpp-sdk-s3/include/aws/s3/model/DeleteObjectsRequest.h
+index 2c1f5b2..3fb7c2c 100644
+--- a/generated/src/aws-cpp-sdk-s3/include/aws/s3/model/DeleteObjectsRequest.h
++++ b/generated/src/aws-cpp-sdk-s3/include/aws/s3/model/DeleteObjectsRequest.h
+@@ -41,7 +41,10 @@ class DeleteObjectsRequest : public S3Request {
+ 
+   AWS_S3_API bool HasEmbeddedError(IOStream& body, const Http::HeaderValueCollection& header) const override;
+   AWS_S3_API Aws::String GetChecksumAlgorithmName() const override;
+-  inline bool RequestChecksumRequired() const override { return true; };
++  // MAN PATCH: since aws-sdk-cpp 1.11.486 this returned true, forcing a default CRC64-NVME integrity
++  // digest (x-amz-checksum-crc64nvme) on every multi-object delete. Some S3-compatible backends we use
++  // (e.g. Scality) do not support it and reject the request with BadDigest.
++  inline bool RequestChecksumRequired() const override { return false; };
+ 
+   /**
+    * Helper function to collect parameters (configurable and static hardcoded) required for endpoint computation.

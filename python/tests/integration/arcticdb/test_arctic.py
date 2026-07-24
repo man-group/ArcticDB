@@ -13,6 +13,7 @@ import psutil
 import pytz
 import math
 import pytest
+import requests
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
@@ -26,6 +27,7 @@ from arcticdb_ext.storage import NoDataFoundException, KeyType, AWSAuthMethod
 from arcticdb.exceptions import ArcticDbNotYetImplemented, NoSuchVersionException
 from arcticdb.adapters.mongo_library_adapter import MongoLibraryAdapter
 from arcticdb.arctic import Arctic
+import arcticdb.toolbox.query_stats as qs
 from arcticdb.options import LibraryOptions
 from arcticdb import QueryBuilder
 from arcticdb.storage_fixtures.api import StorageFixture, ArcticUriFields, StorageFixtureFactory
@@ -1486,17 +1488,32 @@ def test_s3_checksum_off_by_env_var(s3_storage, lib_name, multiprocess):
         p.join()
 
 
-@pytest.mark.skipif(
-    not ARCTICDB_USING_CONDA,
-    reason="aws sdk on pypi is pinned at version which doesn't turn on checksumming by default",
-)
-@pytest.mark.skip(
-    reason="aws sdk is stuck at 1.11.449 on conda CI due to libarrow pin, which doesn't run checksumming by default"
-)
 def test_s3_checksum_on_by_env_var(s3_storage, lib_name, monkeypatch):
     monkeypatch.setenv("AWS_RESPONSE_CHECKSUM_VALIDATION", "when_supported")
-    with pytest.raises(Exception):
+    with pytest.raises(Exception):  # moto is set to reject checksum header
         create_library(s3_storage.arctic_uri, lib_name)
+
+
+@pytest.mark.skipif(
+    ARCTICDB_USING_CONDA,
+    reason="DeleteObjects crc64nvme opt-out is a vcpkg overlay patch, not applied to conda aws-sdk-cpp builds",
+)
+def test_s3_delete_survives_crc64nvme_hostile_backend(s3_storage, lib_name):
+    endpoint = s3_storage.factory.endpoint
+    verify = s3_storage.factory.client_cert_file or False
+    requests.post(endpoint + "/reject_crc64nvme", b"1", verify=verify).raise_for_status()
+    try:
+        create_library(s3_storage.arctic_uri, lib_name)
+        lib = Arctic(s3_storage.arctic_uri)[lib_name]
+        lib._nvs.write("test", 1)
+        lib._nvs.write("test", 2)
+        with qs.query_stats():
+            lib.delete("test")
+            stats = qs.get_query_stats()
+        assert "S3_DeleteObjects" in stats["storage_operations"], stats
+        assert "test" not in lib.list_symbols()
+    finally:
+        requests.post(endpoint + "/reject_crc64nvme", b"0", verify=verify).raise_for_status()
 
 
 @pytest.mark.parametrize("snap", [chr(0), chr(30), chr(127), chr(128), "", "l" * 255, "*<>"])
