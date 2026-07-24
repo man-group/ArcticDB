@@ -298,12 +298,11 @@ def random_unicode_string(length: int) -> str:
 
 
 @contextmanager
-def arrow_string_read(enabled: bool):
-    """Read strings back as the pandas arrow-backed ``str`` dtype (``future.infer_string``) or as ``object``.
+def arrow_string_option(enabled: bool):
+    """Toggle the pandas arrow-backed ``str`` dtype (``future.infer_string``) for a read or write call.
 
-    Wrap only the read call, not the write: writing that dtype is not supported yet. Skips when ``enabled`` is
-    requested on pandas that lacks either ``future.infer_string`` (< 2.1) or the ``str`` dtype (StringDtype na_value,
-    added in 2.3).
+    Skips when ``enabled`` is requested on pandas that lacks either ``future.infer_string`` (< 2.1) or the
+    ``str`` dtype (StringDtype na_value, added in 2.3).
     """
     from arcticdb.version_store._normalization import _ARROW_BACKED_STR_DTYPE_SUPPORTED
 
@@ -322,33 +321,46 @@ def arrow_string_read(enabled: bool):
         yield
 
 
-def _expected_index_for_read_string_dtype(index):
+# Same mechanics for read and write calls; kept as two names so call sites read clearly.
+arrow_string_read = arrow_string_option
+arrow_string_write = arrow_string_option
+
+
+def _is_arrow_str_dtype(dtype):
+    return isinstance(dtype, pd.StringDtype) and dtype.storage == "pyarrow"
+
+
+def _expected_index_for_read_string_dtype(index, read_string_dtype: bool):
     str_dtype = pd.StringDtype(storage="pyarrow", na_value=np.nan)
     if isinstance(index, pd.MultiIndex):
         levels = [
-            pd.array(list(vals), dtype=str_dtype) if vals.dtype == object else vals
-            for vals in (index.get_level_values(i) for i in range(index.nlevels))
+            _expected_index_for_read_string_dtype(index.get_level_values(i), read_string_dtype)
+            for i in range(index.nlevels)
         ]
         return pd.MultiIndex.from_arrays(levels, names=index.names)
-    if index.dtype == object:
+    if read_string_dtype and index.dtype == object:
         return pd.Index(pd.array(list(index), dtype=str_dtype), name=index.name)
+    if not read_string_dtype and _is_arrow_str_dtype(index.dtype):
+        return pd.Index(list(index), dtype=object, name=index.name)
     return index
 
 
 def expected_for_read_string_dtype(df, read_string_dtype: bool):
-    """Return ``df`` with its object columns and object index levels converted to the arrow-backed ``str`` dtype.
+    """Return ``df`` with its string columns and string index levels matching a read under ``arrow_string_read``.
 
     Use to build an expected frame that matches a read performed under ``arrow_string_read``. Numeric columns and
-    index levels are left untouched; None and np.nan both map to the str dtype's np.nan na_value.
+    index levels are left untouched; None and np.nan both map to the str dtype's np.nan na_value. ``df`` may itself
+    have arrow-backed ``str`` columns/index (e.g. if it was constructed under ``arrow_string_write(True)``), so this
+    also downcasts those back to ``object`` when ``read_string_dtype`` is False.
     """
-    if not read_string_dtype:
-        return df
     out = df.copy()
     for col in out.columns:
-        if out[col].dtype == object:
+        if read_string_dtype and out[col].dtype == object:
             out[col] = pd.array(list(out[col]), dtype=pd.StringDtype(storage="pyarrow", na_value=np.nan))
-    out.index = _expected_index_for_read_string_dtype(out.index)
-    out.columns = _expected_index_for_read_string_dtype(out.columns)
+        elif not read_string_dtype and _is_arrow_str_dtype(out[col].dtype):
+            out[col] = out[col].astype(object)
+    out.index = _expected_index_for_read_string_dtype(out.index, read_string_dtype)
+    out.columns = _expected_index_for_read_string_dtype(out.columns, read_string_dtype)
     return out
 
 

@@ -26,7 +26,7 @@ from arcticdb_ext.types import (
     IndexKind,
 )
 from arcticdb_ext.stream import FixedTickRowBuilder, SegmentHolder, FixedTimestampAggregator, TickReader
-from arcticdb.util.test import assert_frame_equal, arrow_string_read
+from arcticdb.util.test import assert_frame_equal, arrow_string_read, arrow_string_write
 
 
 def test_vl_string_simple():
@@ -210,7 +210,8 @@ def test_string_encoding_error_message(lmdb_version_store_tiny_segment):
 
 def test_write_dynamic_simple(lmdb_version_store_v2, write_string_dtype, read_string_dtype):
     values = ["Aaba", "A", "B", "C", "Baca", "CABA", "dog", "cat", "here is a very long one"]
-    lmdb_version_store_v2.write("strings", pd.DataFrame({"x": values}), dynamic_strings=True)
+    with arrow_string_write(write_string_dtype):
+        lmdb_version_store_v2.write("strings", pd.DataFrame({"x": values}), dynamic_strings=True)
     with arrow_string_read(read_string_dtype):
         expected = pd.DataFrame({"x": values})
         vit = lmdb_version_store_v2.read("strings")
@@ -228,7 +229,8 @@ def test_read_filtered_string_column(
         lib._normalizer.df.set_skip_df_consolidation()
     index = pd.date_range("2026-01-01", periods=10)
     values = [f"str_{i}" for i in range(10)]
-    lib.write("strings", pd.DataFrame({"x": values}, index=index), dynamic_strings=True)
+    with arrow_string_write(write_string_dtype):
+        lib.write("strings", pd.DataFrame({"x": values}, index=index), dynamic_strings=True)
     if expect_empty:
         read_kwargs = (
             {"date_range": (pd.Timestamp("2027-01-01"), pd.Timestamp("2027-01-02"))}
@@ -253,7 +255,8 @@ def test_read_row_range_default_index_string_first_column(
     if skip_consolidation:
         lib._normalizer.df.set_skip_df_consolidation()
     values = [f"str_{i}" for i in range(10)]
-    lib.write("strings", pd.DataFrame({"x": values}), dynamic_strings=True)
+    with arrow_string_write(write_string_dtype):
+        lib.write("strings", pd.DataFrame({"x": values}), dynamic_strings=True)
     with arrow_string_read(read_string_dtype):
         received = lib.read("strings", row_range=(3, 8)).data
     assert len(received) == 5
@@ -264,22 +267,30 @@ def test_read_row_range_default_index_string_first_column(
 
 def test_none_and_nan_string_semantics(lmdb_version_store_v2, write_string_dtype, read_string_dtype):
     lib = lmdb_version_store_v2
-    lib.write("s", pd.DataFrame({"x": ["a", None, np.nan, "b"]}), dynamic_strings=True)
+    with arrow_string_write(write_string_dtype):
+        lib.write("s", pd.DataFrame({"x": ["a", None, np.nan, "b"]}), dynamic_strings=True)
     with arrow_string_read(read_string_dtype):
         col = lib.read("s").data["x"]
     assert list(col.isna()) == [False, True, True, False]
     assert col.iloc[0] == "a" and col.iloc[3] == "b"
-    assert np.isnan(col.iloc[2])
     if read_string_dtype:
         assert str(col.dtype) == "str"
         assert np.isnan(col.iloc[1])
+        assert np.isnan(col.iloc[2])
+    elif write_string_dtype:
+        # The arrow-backed str dtype has a single missing-value marker, so the distinction between
+        # None and NaN in the original input does not survive the write.
+        assert col.iloc[1] is None
+        assert col.iloc[2] is None
     else:
         assert col.iloc[1] is None
+        assert np.isnan(col.iloc[2])
 
 
 def test_isnull_filter_string_column_dtype_independent(lmdb_version_store_v2, write_string_dtype, read_string_dtype):
     lib = lmdb_version_store_v2
-    lib.write("s", pd.DataFrame({"x": ["a", None, np.nan, "b"]}), dynamic_strings=True)
+    with arrow_string_write(write_string_dtype):
+        lib.write("s", pd.DataFrame({"x": ["a", None, np.nan, "b"]}), dynamic_strings=True)
     q = QueryBuilder()
     q = q[q["x"].isnull()]
     with arrow_string_read(read_string_dtype):
@@ -290,6 +301,8 @@ def test_isnull_filter_string_column_dtype_independent(lmdb_version_store_v2, wr
 
 
 def test_read_string_index(lmdb_version_store_v2, write_string_dtype, read_string_dtype, skip_consolidation):
+    # write_string_dtype is unused here: the "v" column is numeric and writing an arrow-backed str
+    # dtype index is not yet supported, so the write always happens under the default object dtype.
     lib = lmdb_version_store_v2
     if skip_consolidation:
         lib._normalizer.df.set_skip_df_consolidation()

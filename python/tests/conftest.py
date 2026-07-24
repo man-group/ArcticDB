@@ -321,8 +321,6 @@ def skip_consolidation(request):
 
 @pytest.fixture(params=[False, True], ids=["write_object", "write_str"])
 def write_string_dtype(request):
-    if request.param:
-        pytest.skip("writing the pandas arrow-backed str dtype is not yet supported")
     return request.param
 
 

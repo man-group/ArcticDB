@@ -217,7 +217,9 @@ def get_timezone_from_metadata(norm_meta):
     return None
 
 
-def _to_primitive(arr, arr_name, dynamic_strings, string_max_len=None, coerce_column_type=None, norm_meta=None) -> np.ndarray | List[RecordBatchData]:
+def _to_primitive(
+    arr, arr_name, dynamic_strings, string_max_len=None, coerce_column_type=None, norm_meta=None
+) -> np.ndarray | List[RecordBatchData]:
     arr_dtype_as_str = str(arr.dtype)
     if "pyarrow" in arr_dtype_as_str:
         raise ArcticDbNotYetImplemented(
@@ -235,9 +237,9 @@ def _to_primitive(arr, arr_name, dynamic_strings, string_max_len=None, coerce_co
         return arr.codes
 
     if "str" in arr_dtype_as_str:
-        chunked = arr._pa_array              # pa.ChunkedArray
+        chunked = arr._pa_array  # pa.ChunkedArray
         batches = []
-        for chunk in chunked.chunks:         # each chunk is a pa.Array (large_string)
+        for chunk in chunked.chunks:  # each chunk is a pa.Array (large_string)
             record_batch = pa.RecordBatch.from_arrays([chunk], names=[str(arr_name)])
             rbd = RecordBatchData()
             record_batch._export_to_c(rbd.array(), rbd.schema())
@@ -1138,7 +1140,7 @@ class DataFrameNormalizer(_PandasNormalizer):
         def df_from_arrays(arrays, cols, ind, n_ind):
             def gen_blocks():
                 _len = len(index)
-                infer_string = _infer_string_enabled()
+                infer_string = _use_pyarrow_strings_in_pandas()
                 column_placement_in_block = 0
                 for idx, a in enumerate(arrays):
                     if idx < n_ind:

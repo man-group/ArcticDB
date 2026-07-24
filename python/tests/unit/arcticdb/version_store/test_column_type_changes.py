@@ -15,7 +15,7 @@ from arcticdb.version_store.library import Library
 
 from arcticdb_ext.version_store import StreamDescriptorMismatch
 from arcticdb_ext.storage import KeyType
-from arcticdb.util.test import assert_frame_equal, arrow_string_read
+from arcticdb.util.test import assert_frame_equal, arrow_string_read, arrow_string_write
 from arcticdb_ext.types import DataType
 
 from tests.util.mark import ARM64
@@ -61,15 +61,16 @@ def test_changing_string_type(
     lib = version_store_factory(dynamic_strings=True, dynamic_schema=dynamic_schema)
     sym_append = "test_changing_string_type_append"
     sym_update = "test_changing_string_type_update"
-    df_write = pd.DataFrame({"col": ["a", "bb", "ccc"]}, index=pd.date_range("2024-01-01", periods=3))
-    df_append = pd.DataFrame({"col": ["dddd"]}, index=pd.date_range("2024-01-04", periods=1))
-    df_update = pd.DataFrame({"col": ["dddd"]}, index=pd.date_range("2024-01-02", periods=1))
+    with arrow_string_write(write_string_dtype):
+        df_write = pd.DataFrame({"col": ["a", "bb", "ccc"]}, index=pd.date_range("2024-01-01", periods=3))
+        df_append = pd.DataFrame({"col": ["dddd"]}, index=pd.date_range("2024-01-04", periods=1))
+        df_update = pd.DataFrame({"col": ["dddd"]}, index=pd.date_range("2024-01-02", periods=1))
 
-    lib.write(sym_append, df_write, dynamic_strings=dynamic_strings_first)
-    lib.write(sym_update, df_write, dynamic_strings=dynamic_strings_first)
+        lib.write(sym_append, df_write, dynamic_strings=dynamic_strings_first)
+        lib.write(sym_update, df_write, dynamic_strings=dynamic_strings_first)
 
-    lib.append(sym_append, df_append, dynamic_strings=not dynamic_strings_first)
-    lib.update(sym_update, df_update, dynamic_strings=not dynamic_strings_first)
+        lib.append(sym_append, df_append, dynamic_strings=not dynamic_strings_first)
+        lib.update(sym_update, df_update, dynamic_strings=not dynamic_strings_first)
 
     with arrow_string_read(read_string_dtype):
         expected_append = pd.DataFrame(

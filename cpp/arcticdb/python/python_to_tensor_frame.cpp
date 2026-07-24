@@ -342,7 +342,8 @@ void pandas_data_to_frame(const PandasData& pandas_data, const bool empty_types,
                     for (const auto& rbd : chunks) {
                         owners.emplace_back(std::move(rbd->array_), std::move(rbd->schema_));
                     }
-                    auto [cols, _] = record_batches_to_columns(owners, /*has_index=*/false);
+                    proto::descriptors::NormalizationMetadata::ExperimentalArrow arrow_meta;
+                    auto [cols, _] = record_batches_to_columns(owners, arrow_meta);
                     util::check(
                             cols.size() == 1,
                             "Expected exactly one column from Arrow column '{}', got {}",

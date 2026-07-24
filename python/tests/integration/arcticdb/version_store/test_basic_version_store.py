@@ -51,6 +51,7 @@ from arcticdb.util.test import (
     config_context,
     distinct_timestamps,
     arrow_string_read,
+    arrow_string_write,
     expected_for_read_string_dtype,
 )
 from tests.conftest import Marks
@@ -1502,7 +1503,8 @@ def test_negative_strides(basic_store_tiny_segment):
 @pytest.mark.storage
 def test_dynamic_strings(basic_store, write_string_dtype, read_string_dtype):
     values = ["A", "B", "C", "Aaba", "Baca", "CABA", "dog", "cat"]
-    basic_store.write("strings", pd.DataFrame({"x": values}), dynamic_strings=True)
+    with arrow_string_write(write_string_dtype):
+        basic_store.write("strings", pd.DataFrame({"x": values}), dynamic_strings=True)
     with arrow_string_read(read_string_dtype):
         expected = pd.DataFrame({"x": values})
         vit = basic_store.read("strings")
@@ -2944,8 +2946,9 @@ def test_batch_read_columns(basic_store_tombstone_and_sync_passive, write_string
         df.index = pd.date_range(base_date + pd.DateOffset(j), periods=len(df))
         dfs.append(df)
 
-    for x, symbol in enumerate(symbols):
-        lmdb_version_store.write(symbol, dfs[x])
+    with arrow_string_write(write_string_dtype):
+        for x, symbol in enumerate(symbols):
+            lmdb_version_store.write(symbol, dfs[x])
 
     with arrow_string_read(read_string_dtype):
         result_dict = lmdb_version_store.batch_read(symbols, columns=[columns_of_interest] * number_of_requests)

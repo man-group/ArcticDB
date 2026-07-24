@@ -16,6 +16,7 @@ from arcticdb import DataError
 
 from arcticdb.util.test import (
     arrow_string_read,
+    arrow_string_write,
     random_strings_of_length,
     random_string,
     random_floats,
@@ -263,8 +264,9 @@ def test_update_repeatedly_with_strings(
     symbol = "update_no_daterange"
 
     idx = pd.date_range("1970-01-01", periods=100, freq="D")
-    df = pd.DataFrame({"a": [random_string(10) for _ in range(len(idx))]}, index=idx)
-    lmdb_version_store.write(symbol, df)
+    with arrow_string_write(write_string_dtype):
+        df = pd.DataFrame({"a": [random_string(10) for _ in range(len(idx))]}, index=idx)
+        lmdb_version_store.write(symbol, df)
     update_end = update_start + start_dist
 
     for x in range(iterations):
@@ -276,8 +278,9 @@ def test_update_repeatedly_with_strings(
             continue
 
         idx2 = pd.date_range(update_date, periods=periods, freq="D")
-        df2 = pd.DataFrame({"a": [random_string(10) for _ in range(len(idx2))]}, index=idx2)
-        lmdb_version_store.update(symbol, df2)
+        with arrow_string_write(write_string_dtype):
+            df2 = pd.DataFrame({"a": [random_string(10) for _ in range(len(idx2))]}, index=idx2)
+            lmdb_version_store.update(symbol, df2)
 
         df.update(df2)
         with arrow_string_read(read_string_dtype):

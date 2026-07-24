@@ -14,7 +14,13 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from arcticdb.util.test import assert_frame_equal, random_strings_of_length, arrow_string_read, expected_for_read_string_dtype
+from arcticdb.util.test import (
+    assert_frame_equal,
+    random_strings_of_length,
+    arrow_string_read,
+    arrow_string_write,
+    expected_for_read_string_dtype,
+)
 
 from arcticdb.version_store.library import Library
 from arcticdb.version_store.library import UpdatePayload
@@ -53,20 +59,21 @@ def test_write(lmdb_version_store_tiny_segment, parallel, multi_index, write_str
     else:
         index = pd.date_range(start=start, periods=num_rows)
 
-    df = pd.DataFrame(
-        index=index,
-        data={
-            "a": random_strings_of_length(num_rows, 10),
-            trademark: np.arange(num_rows),
-            copyright: [unicode_str] * num_rows,
-        },
-    )
+    with arrow_string_write(write_string_dtype):
+        df = pd.DataFrame(
+            index=index,
+            data={
+                "a": random_strings_of_length(num_rows, 10),
+                trademark: np.arange(num_rows),
+                copyright: [unicode_str] * num_rows,
+            },
+        )
 
-    if parallel:
-        lib.write(symbol, df, parallel=True)
-        lib.compact_incomplete(symbol, append=False, convert_int_to_float=False, metadata=metadata)
-    else:
-        lib.write(symbol, df, metadata=metadata)
+        if parallel:
+            lib.write(symbol, df, parallel=True)
+            lib.compact_incomplete(symbol, append=False, convert_int_to_float=False, metadata=metadata)
+        else:
+            lib.write(symbol, df, metadata=metadata)
 
     lib.create_column_stats_experimental(symbol)
     with arrow_string_read(read_string_dtype):

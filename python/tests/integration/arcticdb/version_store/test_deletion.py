@@ -14,7 +14,14 @@ import random
 
 from arcticdb_ext.exceptions import UserInputException
 from arcticdb_ext.storage import KeyType, NoDataFoundException
-from arcticdb.util.test import config_context, random_string, assert_frame_equal, distinct_timestamps, arrow_string_read
+from arcticdb.util.test import (
+    config_context,
+    random_string,
+    assert_frame_equal,
+    distinct_timestamps,
+    arrow_string_read,
+    arrow_string_write,
+)
 
 
 def eprint(*args, **kwargs):
@@ -873,7 +880,8 @@ def test_delete_date_range_with_strings(version_store_factory, index_start, writ
     periods = 100
     idx = pd.date_range("1970-01-01", periods=periods, freq="D")
     values = [random_string(10) for _ in range(len(idx))]
-    lib.write(symbol, pd.DataFrame({"a": values}, index=idx), dynamic_strings=True)
+    with arrow_string_write(write_string_dtype):
+        lib.write(symbol, pd.DataFrame({"a": values}, index=idx), dynamic_strings=True)
 
     start = random.randrange(index_start, periods - 2)
     end = random.randrange(start, periods - 1)
