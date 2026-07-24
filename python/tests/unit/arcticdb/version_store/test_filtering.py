@@ -1912,3 +1912,263 @@ def test_filter_regex_comma_separated_strings(lmdb_version_store_v1, sym, dynami
     received = lib.read(sym, query_builder=q).data
     assert_frame_equal(expected, received)
     assert not expected.empty
+
+
+def test_filter_clause_merging(
+    lmdb_version_store_tiny_segment, any_output_format, column_stats_filtering_enabled_and_disabled
+):
+    """Consecutive filters are merged into one in the query planner, the result must match both the
+    equivalent ANDed filter and Pandas."""
+    lib = lmdb_version_store_tiny_segment
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol = "test_filter_clause_merging"
+    df = pd.DataFrame(
+        {"a": np.arange(20), "b": np.arange(20)[::-1], "c": np.arange(20) % 4},
+        index=pd.date_range("2000-01-01", periods=20),
+    )
+    lib.write(symbol, df)
+    lib.create_column_stats_experimental(symbol)
+
+    expected = df[(df["a"] > 5) & (df["b"] > 5) & (df["c"] == 1)]
+    assert not expected.empty
+
+    q_chained = QueryBuilder()
+    q_chained = q_chained[q_chained["a"] > 5]
+    q_chained = q_chained[q_chained["b"] > 5]
+    q_chained = q_chained[q_chained["c"] == 1]
+    assert_frame_equal(expected, lib.read(symbol, query_builder=q_chained).data)
+
+    q_single = QueryBuilder()
+    q_single = q_single[(q_single["a"] > 5) & (q_single["b"] > 5) & (q_single["c"] == 1)]
+    assert_frame_equal(expected, lib.read(symbol, query_builder=q_single).data)
+
+
+def test_filter_clause_merging_not_across_row_range(
+    lmdb_version_store_tiny_segment, any_output_format, column_stats_filtering_enabled_and_disabled
+):
+    """A RowRangeClause between two filters must not be moved left, because it affects the data that
+    the filter to its right should act on but not what the filter on its left should act on."""
+    lib = lmdb_version_store_tiny_segment
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol = "test_filter_clause_merging_not_across_row_range"
+    df = pd.DataFrame({"a": np.arange(20), "b": 19 - np.arange(20)}, index=pd.date_range("2000-01-01", periods=20))
+    lib.write(symbol, df)
+    lib.create_column_stats_experimental(symbol)
+
+    q = QueryBuilder()
+    q = q[q["a"] >= 5]
+    q = q.head(8)
+    q = q[q["b"] < 10]
+    received = lib.read(symbol, query_builder=q).data
+
+    expected = df[df["a"] >= 5].head(8)
+    expected = expected[expected["b"] < 10]
+    assert not expected.empty
+    assert_frame_equal(expected, received)
+
+
+def test_filter_merge_date_range_between(
+    lmdb_version_store_tiny_segment, any_output_format, column_stats_filtering_enabled_and_disabled
+):
+    """We move DateRangeClauses between two filters left in the query plan so we can merge the filters.
+    This test just checks that we give correct results.
+    """
+    lib = lmdb_version_store_tiny_segment
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol = "test_filter_merge_date_range_between"
+    df = pd.DataFrame({"a": np.arange(20), "b": np.arange(20)}, index=pd.date_range("2000-01-01", periods=20))
+    lib.write(symbol, df)
+    lib.create_column_stats_experimental(symbol)
+
+    start = pd.Timestamp("2000-01-05")
+    end = pd.Timestamp("2000-01-15")
+    q = QueryBuilder()
+    q = q[q["a"] > 3]
+    q = q.date_range((start, end))
+    q = q[q["b"] < 17]
+    received = lib.read(symbol, query_builder=q).data
+
+    expected = df[df["a"] > 3]
+    expected = expected[(expected.index >= start) & (expected.index <= end)]
+    expected = expected[expected["b"] < 17]
+    assert not expected.empty
+    assert_frame_equal(expected, received)
+
+
+def test_filter_merge_dynamic_schema_missing_column(lmdb_version_store_dynamic_schema, any_output_format):
+    """Merged filter referencing a column absent from some segments must still work."""
+    lib = lmdb_version_store_dynamic_schema
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol = "test_filter_merge_dynamic_schema_missing_column"
+    df0 = pd.DataFrame({"a": [1, 2, 3], "b": [10, 20, 200]}, index=pd.date_range("2000-01-01", periods=3))
+    df1 = pd.DataFrame({"a": [4, 5]}, index=pd.date_range("2000-01-04", periods=2))
+    lib.write(symbol, df0)
+    lib.append(symbol, df1)
+
+    q = QueryBuilder()
+    q = q[q["a"] > 1]
+    q = q[q["b"] < 100]
+    received = lib.read(symbol, query_builder=q).data
+
+    full_df = pd.concat([df0, df1])
+    expected = full_df[(full_df["a"] > 1) & (full_df["b"] < 100)]
+    assert_frame_equal(expected, received, check_dtype=False)
+
+
+def test_filter_merge_optimise_for_memory(
+    lmdb_version_store_tiny_segment, any_output_format, column_stats_filtering_enabled_and_disabled
+):
+    """Merging filters under MEMORY optimisation returns correct rows."""
+    lib = lmdb_version_store_tiny_segment
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol = "test_filter_merge_optimise_for_memory"
+    df = pd.DataFrame(
+        {"a": np.arange(20), "s": [f"str_{i}" for i in range(20)]}, index=pd.date_range("2000-01-01", periods=20)
+    )
+    lib.write(symbol, df)
+    lib.create_column_stats_experimental(symbol)
+
+    q = QueryBuilder()
+    q = q[q["a"] > 3]
+    q = q[q["a"] < 15]
+    q.optimise_for_memory()
+    received = lib.read(symbol, query_builder=q).data
+
+    expected = df[(df["a"] > 3) & (df["a"] < 15)]
+    assert not expected.empty
+    assert_frame_equal(expected, received)
+
+
+def test_filter_merge_date_range_moved_left_past_projection(
+    lmdb_version_store_tiny_segment, any_output_format, column_stats_filtering_enabled_and_disabled
+):
+    """A date range moved left past a projection is safe. A projection does not change the index, and
+    a date range filters on the index, so applying the date range before the projection gives the same
+    rows."""
+    lib = lmdb_version_store_tiny_segment
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol = "test_filter_merge_date_range_moved_left_past_projection"
+    df = pd.DataFrame({"a": np.arange(20)}, index=pd.date_range("2000-01-01", periods=20))
+    lib.write(symbol, df)
+    lib.create_column_stats_experimental(symbol)
+
+    start = pd.Timestamp("2000-01-05")
+    end = pd.Timestamp("2000-01-15")
+    q = QueryBuilder()
+    q = q[q["a"] >= 2]
+    q = q.apply("doubled", q["a"] * 2)
+    q = q.date_range((start, end))
+    received = lib.read(symbol, query_builder=q).data
+
+    expected = df[df["a"] >= 2].copy()
+    expected["doubled"] = expected["a"] * 2
+    expected = expected[(expected.index >= start) & (expected.index <= end)]
+    assert not expected.empty
+    assert_frame_equal(expected, received)
+
+
+def compare_chained_filters_vs_single_and(lib, symbol, build):
+    chained = lib.read(symbol, query_builder=build(combined=False)).data
+    combined = lib.read(symbol, query_builder=build(combined=True)).data
+    assert not chained.empty
+    assert_frame_equal(chained.sort_index(), combined.sort_index())
+
+
+def test_filter_merge_then_groupby(
+    lmdb_version_store_tiny_segment, any_output_format, column_stats_filtering_enabled_and_disabled
+):
+    lib = lmdb_version_store_tiny_segment
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol = "test_filter_merge_then_groupby"
+    n = 30
+    df = pd.DataFrame(
+        {"g": np.arange(n) % 4, "a": np.arange(n), "b": n - np.arange(n)},
+        index=pd.date_range("2000-01-01", periods=n),
+    )
+    lib.write(symbol, df)
+    lib.create_column_stats_experimental(symbol)
+
+    def build(combined):
+        q = QueryBuilder()
+        if combined:
+            q = q[(q["a"] > 5) & (q["b"] > 5)]
+        else:
+            q = q[q["a"] > 5]
+            q = q[q["b"] > 5]
+        return q.groupby("g").agg({"a": "sum", "b": "mean"})
+
+    compare_chained_filters_vs_single_and(lib, symbol, build)
+
+
+def test_filter_merge_then_resample(
+    lmdb_version_store_tiny_segment, any_output_format, column_stats_filtering_enabled_and_disabled
+):
+    lib = lmdb_version_store_tiny_segment
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol = "test_filter_merge_then_resample"
+    n = 30
+    df = pd.DataFrame({"a": np.arange(n), "b": n - np.arange(n)}, index=pd.date_range("2000-01-01", periods=n))
+    lib.write(symbol, df)
+    lib.create_column_stats_experimental(symbol)
+
+    def build(combined):
+        q = QueryBuilder()
+        if combined:
+            q = q[(q["a"] > 3) & (q["b"] > 3)]
+        else:
+            q = q[q["a"] > 3]
+            q = q[q["b"] > 3]
+        return q.resample("2D").agg({"a": "sum"})
+
+    compare_chained_filters_vs_single_and(lib, symbol, build)
+
+
+def test_filter_merge_projection_between_filters(
+    lmdb_version_store_tiny_segment, any_output_format, column_stats_filtering_enabled_and_disabled
+):
+    """A projection between two filters stops them from being merged together (the second filter references the projected
+    column, so it cannot be merged with the first)."""
+    lib = lmdb_version_store_tiny_segment
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol = "test_filter_merge_projection_between_filters"
+    df = pd.DataFrame({"a": np.arange(20), "b": np.arange(20, 40)}, index=pd.date_range("2000-01-01", periods=20))
+    lib.write(symbol, df)
+    lib.create_column_stats_experimental(symbol)
+
+    q = QueryBuilder()
+    q = q[q["a"] > 2]
+    q = q.apply("c", q["a"] + q["b"])
+    q = q[q["c"] < 50]
+    received = lib.read(symbol, query_builder=q).data
+
+    expected = df[df["a"] > 2].copy()
+    expected["c"] = expected["a"] + expected["b"]
+    expected = expected[expected["c"] < 50]
+    assert not expected.empty
+    assert_frame_equal(expected, received)
+
+
+def test_filter_merge_after_concat(lmdb_version_store_tiny_segment, any_output_format):
+    """Filters chained after a concat are merged and applied to the joined
+    result. The merged form must match the equivalent single ANDed filter."""
+    lib = lmdb_version_store_tiny_segment
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    df0 = pd.DataFrame({"a": np.arange(10), "b": np.arange(10, 20)}, index=pd.date_range("2000-01-01", periods=10))
+    df1 = pd.DataFrame({"a": np.arange(20, 30), "b": np.arange(30, 40)}, index=pd.date_range("2000-01-20", periods=10))
+    lib.write("test_filter_merge_after_concat_0", df0)
+    lib.write("test_filter_merge_after_concat_1", df1)
+    symbols = ["test_filter_merge_after_concat_0", "test_filter_merge_after_concat_1"]
+
+    def build(combined):
+        q = QueryBuilder().concat("outer")
+        if combined:
+            q = q[(q["a"] > 5) & (q["b"] < 38)]
+        else:
+            q = q[q["a"] > 5]
+            q = q[q["b"] < 38]
+        return q
+
+    chained = lib.batch_read_and_join(symbols, query_builder=build(False)).data
+    combined = lib.batch_read_and_join(symbols, query_builder=build(True)).data
+    assert not chained.empty
+    assert_frame_equal(chained, combined)

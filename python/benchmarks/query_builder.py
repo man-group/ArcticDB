@@ -111,6 +111,22 @@ class QueryBuilderFunctions:
         result = self.lib.read(self.symbol, columns=["v3"], query_builder=q)
         assert not result.data.empty
 
+    def _filtering_chained(self):
+        # A long chain of separate filter clauses (q[a][b][c]...), which the query planner folds into a
+        # single FilterClause. The early filters are deliberately low-selectivity (each keeps almost
+        # all rows), so without merging each clause would materialise a large intermediate filtered
+        # segment.
+        q = QueryBuilder()
+        q = q[q["v3"] > 0.0]  # keeps ~all rows
+        q = q[q["v3"] < 99.0]  # keeps ~99%
+        q = q[q["v2"] > 1]  # keeps ~93%
+        q = q[q["v2"] < 15]  # keeps ~93%
+        q = q[q["v1"] > 1]  # keeps ~80%
+        q = q[q["v1"] < 5]  # keeps ~80%
+        q = q[q["v3"] < 50.0]  # narrows to ~50%
+        result = self.lib.read(self.symbol, columns=["v1", "v2", "v3"], query_builder=q)
+        assert not result.data.empty
+
     def _projection(self):
         q = QueryBuilder()
         q = q.apply("new_col", q["v2"] * q["v3"])
@@ -150,6 +166,12 @@ class QueryBuilderFunctions:
 
     def peakmem_filtering_numeric(self, *args):
         self._filtering_numeric()
+
+    def time_filtering_chained(self, *args):
+        self._filtering_chained()
+
+    def peakmem_filtering_chained(self, *args):
+        self._filtering_chained()
 
     def time_filtering_string_isin(self, lib_for_storage, num_rows, storage):
         # Selects about 1% of the rows

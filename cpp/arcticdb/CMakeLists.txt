@@ -1082,6 +1082,7 @@ if(${TEST})
             pipeline/test/test_column_stats_dispatch.cpp
             pipeline/test/test_column_stats_dispatch_range_vs_range.cpp
             pipeline/test/test_column_stats_isin.cpp
+            pipeline/test/test_column_stats_query_metadata.cpp
             util/test/test_regex.cpp
             processing/test/ast_test_helpers.hpp
             processing/test/test_arithmetic_type_promotion.cpp
