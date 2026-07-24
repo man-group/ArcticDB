@@ -49,7 +49,8 @@ struct ClauseInfo {
     bool can_combine_with_column_selection_{true};
     // The names of the columns that are needed for this clause to make sense
     // Could either be on disk, or columns created by earlier clauses in the processing pipeline
-    std::optional<std::unordered_set<std::string>> input_columns_{std::nullopt};
+    // Empty if this clause does not have specific input columns (e.g. it operates on all columns)
+    std::unordered_set<std::string> input_columns_;
     // KeepCurrentIndex if this clause does not modify the index in any way
     // KeepCurrentTopLevelIndex if this clause requires multi-index levels>0 to be dropped, but otherwise does not
     // modify it NewIndex if this clause has changed the index to a new (supplied) name

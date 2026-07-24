@@ -142,7 +142,7 @@ std::vector<EntityId> FilterClause::process(std::vector<EntityId>&& entity_ids) 
 }
 
 OutputSchema FilterClause::modify_schema(OutputSchema&& output_schema) const {
-    check_column_presence(output_schema, *clause_info_.input_columns_, "Filter");
+    check_column_presence(output_schema, clause_info_.input_columns_, "Filter");
     std::variant<BitSetTag, DataType> return_type = expression_context_->root_->compute(output_schema.column_types());
     user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
             std::holds_alternative<BitSetTag>(return_type), "FilterClause AST would produce a column, not a bitset"
@@ -215,7 +215,7 @@ std::vector<EntityId> ProjectClause::process(std::vector<EntityId>&& entity_ids)
 }
 
 OutputSchema ProjectClause::modify_schema(OutputSchema&& output_schema) const {
-    check_column_presence(output_schema, *clause_info_.input_columns_, "Project");
+    check_column_presence(output_schema, clause_info_.input_columns_, "Project");
     const auto& root = *expression_context_->root_;
     if (root.is_value()) {
         const auto& value = std::get<std::shared_ptr<Value>>(std::get<ExpressionNode::Leaf>(root.kind_));
@@ -269,7 +269,7 @@ AggregationClause::AggregationClause(
     clause_info_.input_structure_ = ProcessingStructure::HASH_BUCKETED;
     clause_info_.can_combine_with_column_selection_ = false;
     clause_info_.index_ = NewIndex(grouping_column_);
-    clause_info_.input_columns_ = std::make_optional<std::unordered_set<std::string>>({grouping_column_});
+    clause_info_.input_columns_ = {grouping_column_};
     str_ = "AGGREGATE {";
     for (const auto& named_aggregator : named_aggregators) {
         str_.append(fmt::format(
@@ -278,7 +278,7 @@ AggregationClause::AggregationClause(
                 named_aggregator.input_column_name_,
                 named_aggregator.aggregation_operator_
         ));
-        clause_info_.input_columns_->insert(named_aggregator.input_column_name_);
+        clause_info_.input_columns_.insert(named_aggregator.input_column_name_);
         auto typed_input_column_name = ColumnName(named_aggregator.input_column_name_);
         auto typed_output_column_name = ColumnName(named_aggregator.output_column_name_);
         if (named_aggregator.aggregation_operator_ == "sum") {
@@ -529,7 +529,7 @@ std::vector<EntityId> AggregationClause::process(std::vector<EntityId>&& entity_
 }
 
 OutputSchema AggregationClause::modify_schema(OutputSchema&& output_schema) const {
-    check_column_presence(output_schema, *clause_info_.input_columns_, "Aggregation");
+    check_column_presence(output_schema, clause_info_.input_columns_, "Aggregation");
     output_schema.clear_default_values();
     const auto& input_stream_desc = output_schema.stream_descriptor();
     StreamDescriptor stream_desc(input_stream_desc.id());
@@ -1031,7 +1031,7 @@ std::vector<std::vector<size_t>> DateRangeClause::structure_for_processing(std::
 }
 
 std::vector<EntityId> DateRangeClause::process(std::vector<EntityId>&& entity_ids) const {
-    if (entity_ids.empty()) {
+    if (entity_ids.empty() || start_ > end_) {
         return {};
     }
     auto proc = gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(

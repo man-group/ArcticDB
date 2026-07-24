@@ -44,7 +44,7 @@ template<ResampleBoundary closed_boundary>
 OutputSchema ResampleClause<closed_boundary>::modify_schema(OutputSchema&& output_schema) const {
     check_is_timeseries(output_schema.stream_descriptor(), "Resample");
     output_schema.clear_default_values();
-    check_column_presence(output_schema, *clause_info_.input_columns_, "Resample");
+    check_column_presence(output_schema, clause_info_.input_columns_, "Resample");
     const auto& input_stream_desc = output_schema.stream_descriptor();
     StreamDescriptor stream_desc(input_stream_desc.id());
     stream_desc.add_field(input_stream_desc.field(0));
@@ -91,6 +91,11 @@ std::string ResampleClause<closed_boundary>::rule() const {
 
 template<ResampleBoundary closed_boundary>
 void ResampleClause<closed_boundary>::set_date_range(timestamp date_range_start, timestamp date_range_end) {
+    date_range_.emplace(date_range_start, date_range_end);
+}
+
+template<ResampleBoundary closed_boundary>
+void ResampleClause<closed_boundary>::check_origin_supported_with_date_range() const {
     // Start and end need to read the first and last segments of the date range. At the moment buckets are set up
     // before reading and processing the data.
     constexpr static std::array unsupported_origin{"start", "end", "start_day", "end_day"};
@@ -105,12 +110,11 @@ void ResampleClause<closed_boundary>::set_date_range(timestamp date_range_start,
             "Resampling origins {} are not supported in conjunction with date range",
             unsupported_origin
     );
-    date_range_.emplace(date_range_start, date_range_end);
 }
 
 template<ResampleBoundary closed_boundary>
 void ResampleClause<closed_boundary>::set_aggregations(const std::vector<NamedAggregator>& named_aggregators) {
-    clause_info_.input_columns_ = std::make_optional<std::unordered_set<std::string>>();
+    clause_info_.input_columns_.clear();
     str_ = fmt::format("RESAMPLE({}) | AGGREGATE {{", rule());
     for (const auto& named_aggregator : named_aggregators) {
         str_.append(fmt::format(
@@ -119,7 +123,7 @@ void ResampleClause<closed_boundary>::set_aggregations(const std::vector<NamedAg
                 named_aggregator.input_column_name_,
                 named_aggregator.aggregation_operator_
         ));
-        clause_info_.input_columns_->insert(named_aggregator.input_column_name_);
+        clause_info_.input_columns_.insert(named_aggregator.input_column_name_);
         auto typed_input_column_name = ColumnName(named_aggregator.input_column_name_);
         auto typed_output_column_name = ColumnName(named_aggregator.output_column_name_);
         if (named_aggregator.aggregation_operator_ == "sum") {
@@ -189,6 +193,7 @@ std::vector<std::vector<size_t>> ResampleClause<closed_boundary>::structure_for_
     );
 
     if (date_range_.has_value()) {
+        check_origin_supported_with_date_range();
         date_range_->first = std::max(date_range_->first, index_range.first);
         date_range_->second = std::min(date_range_->second, index_range.second);
     } else {

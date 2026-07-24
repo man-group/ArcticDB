@@ -310,7 +310,7 @@ struct PartitionClause {
     }
 
     OutputSchema modify_schema(OutputSchema&& output_schema) const {
-        check_column_presence(output_schema, *clause_info_.input_columns_, "GroupBy");
+        check_column_presence(output_schema, clause_info_.input_columns_, "GroupBy");
         return output_schema;
     }
 
@@ -432,6 +432,8 @@ struct ResampleClause {
     void set_aggregations(const std::vector<NamedAggregator>& named_aggregators);
 
     void set_date_range(timestamp date_range_start, timestamp date_range_end);
+
+    void check_origin_supported_with_date_range() const;
 
     std::vector<timestamp> generate_bucket_boundaries(
             timestamp first_ts, timestamp last_ts, bool responsible_for_first_overlapping_bucket
