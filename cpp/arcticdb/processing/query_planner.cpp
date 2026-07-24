@@ -19,16 +19,8 @@ namespace arcticdb {
 
 namespace {
 
-bool is_type(const std::shared_ptr<Clause>& clause, const std::type_info& type) {
-    return folly::poly_type(*clause) == type;
-}
-
-bool is_filter(const std::shared_ptr<Clause>& clause) { return is_type(clause, typeid(FilterClause)); }
-
-bool is_date_range(const std::shared_ptr<Clause>& clause) { return is_type(clause, typeid(DateRangeClause)); }
-
 bool date_range_can_move_to_left_of(const std::shared_ptr<Clause>& clause) {
-    return is_filter(clause) || is_type(clause, typeid(ProjectClause));
+    return is<FilterClause>(clause) || is<ProjectClause>(clause);
 }
 
 // Move each DateRangeClause as far left as it can go and merge any that end up adjacent into a single
@@ -51,7 +43,7 @@ std::vector<std::shared_ptr<Clause>> move_and_merge_date_ranges_left(std::vector
         run.clear();
     };
     for (auto& clause : clauses) {
-        if (is_date_range(clause)) {
+        if (is<DateRangeClause>(clause)) {
             if (merged_date_range) {
                 const auto& existing = folly::poly_cast<DateRangeClause>(*merged_date_range);
                 const auto& incoming = folly::poly_cast<DateRangeClause>(*clause);
@@ -107,7 +99,7 @@ std::vector<std::shared_ptr<Clause>> merge_consecutive_filter_clauses(std::vecto
         run.clear();
     };
     for (auto& clause : clauses) {
-        if (is_filter(clause)) {
+        if (is<FilterClause>(clause)) {
             run.push_back(std::move(clause));
         } else {
             flush_run();
@@ -122,17 +114,17 @@ std::vector<std::shared_ptr<Clause>> merge_consecutive_filter_clauses(std::vecto
 
 std::vector<std::shared_ptr<Clause>> plan_query(std::vector<std::shared_ptr<Clause>>&& clauses) {
     clauses = move_and_merge_date_ranges_left(std::move(clauses));
-    if (clauses.size() >= 2 && is_date_range(clauses[0])) {
+    if (clauses.size() >= 2 && is<DateRangeClause>(clauses[0])) {
         const auto& date_range_clause = folly::poly_cast<DateRangeClause>(*clauses[0]);
         const auto date_range_start = date_range_clause.start_;
         const auto date_range_end = date_range_clause.end_;
         auto& following = *clauses[1];
-        if (is_type(clauses[1], typeid(ResampleClause<ResampleBoundary::LEFT>))) {
+        if (is<ResampleClause<ResampleBoundary::LEFT>>(clauses[1])) {
             folly::poly_cast<ResampleClause<ResampleBoundary::LEFT>>(following).set_date_range(
                     date_range_start, date_range_end
             );
             clauses.erase(clauses.cbegin());
-        } else if (is_type(clauses[1], typeid(ResampleClause<ResampleBoundary::RIGHT>))) {
+        } else if (is<ResampleClause<ResampleBoundary::RIGHT>>(clauses[1])) {
             folly::poly_cast<ResampleClause<ResampleBoundary::RIGHT>>(following).set_date_range(
                     date_range_start, date_range_end
             );

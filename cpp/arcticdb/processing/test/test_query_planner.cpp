@@ -19,11 +19,6 @@ using namespace arcticdb;
 namespace {
 
 template<typename ClauseType>
-bool is(const std::shared_ptr<Clause>& clause) {
-    return folly::poly_type(*clause) == typeid(ClauseType);
-}
-
-template<typename ClauseType>
 const ClauseType& as(const std::shared_ptr<Clause>& clause) {
     return folly::poly_cast<ClauseType>(*clause);
 }
