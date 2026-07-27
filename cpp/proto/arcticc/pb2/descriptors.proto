@@ -134,8 +134,8 @@ message NormalizationMetadata {
         bool is_int = 7; // The index name was an integer; cast back from its string form on read.
     }
 
-    // Metadata for a pandas MultiIndex. The first level is the primary (physically stored) index;
-    // higher levels are stored as additional columns.
+    // Metadata for a pandas MultiIndex. Index levels are physically stored columns. If the first level is a 
+    // timeseries it is used as a primary index (allowing date_range filtering etc.)
     message PandasMultiIndex {
         uint32 version = 1; // Unused
         map<uint32,string> timezone = 2; // Per-level timezone for levels >= 1 (level 0 uses `tz`).
