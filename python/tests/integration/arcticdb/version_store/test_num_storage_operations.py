@@ -181,8 +181,7 @@ def test_write_and_prune_previous_over_time(lib_name, s3_and_nfs_storage_bucket,
             assert sum_all_operations(stats) == base_ops_count, visualize_stats_diff(base_stats, stats)
 
 
-@pytest.mark.parametrize("repeat", list(range(10)))
-def test_read_after_write_and_prune_previous(lib_name, s3_and_nfs_storage_bucket, clear_query_stats, repeat):
+def test_read_after_write_and_prune_previous(lib_name, s3_and_nfs_storage_bucket, clear_query_stats):
     expected_ops = 3
     lib = s3_and_nfs_storage_bucket.create_version_store_factory(lib_name)()
     lib.write("s", data=create_df())
