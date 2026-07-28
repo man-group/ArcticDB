@@ -144,6 +144,16 @@ TEST_P(ValueDataType, ValueConstruct) {
 
 INSTANTIATE_TEST_SUITE_P(ValueConstruct, ValueDataType, testing::ValuesIn(data_types()));
 
+TEST(Value, ToStringTimeType) {
+    ASSERT_EQ(Value(timestamp{0}, DataType::NANOSECONDS_UTC64).to_string<timestamp>(), "1970-01-01 00:00:00.000000000");
+    ASSERT_EQ(
+            Value(timestamp{1735689600000000001}, DataType::NANOSECONDS_UTC64).to_string<timestamp>(),
+            "2025-01-01 00:00:00.000000001"
+    );
+    ASSERT_EQ(Value(NaT, DataType::NANOSECONDS_UTC64).to_string<timestamp>(), "NaT");
+    ASSERT_EQ(Value(timestamp{0}, DataType::INT64).to_string<timestamp>(), "0");
+}
+
 class ValueDataTypePair : public ::testing::TestWithParam<std::tuple<DataType, DataType>> {};
 
 template<typename TypeTag>
