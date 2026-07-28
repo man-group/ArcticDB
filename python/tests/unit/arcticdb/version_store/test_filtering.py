@@ -487,6 +487,21 @@ def test_df_query_wrong_type(lmdb_version_store_v1, any_output_format):
     ):
         lib.read(sym, query_builder=q)
 
+    q = QueryBuilder()
+    q = q[q["col_str"] > pd.Timestamp(2025, 1, 1)]
+    with pytest.raises(
+        UserInputException,
+        match="Invalid comparison.*col_str.*type=STRING.*>.*2025-01-01 00:00:00.000000000.*type=NANOSECONDS_UTC64",
+    ):
+        lib.read(sym, query_builder=q)
+
+    q = QueryBuilder()
+    q = q[q["col_str"] > pd.NaT]
+    with pytest.raises(
+        UserInputException, match="Invalid comparison.*col_str.*type=STRING.*>.*NaT.*type=NANOSECONDS_UTC64"
+    ):
+        lib.read(sym, query_builder=q)
+
 
 def test_filter_datetime_nanoseconds(
     lmdb_version_store_v1, any_output_format, column_stats_filtering_enabled_and_disabled

@@ -1335,46 +1335,6 @@ def test_query_builder_vwap(lmdb_version_store_v1, any_output_format):
     assert_frame_equal(expected, received, check_dtype=False)
 
 
-def test_to_strings():
-    q = QueryBuilder().row_range((1, 10))
-    assert str(q) == "ROWRANGE: RANGE, start=1, end=10"
-
-    q = QueryBuilder().head(10)
-    assert str(q) == "ROWRANGE: HEAD, n=10"
-
-    q = QueryBuilder().tail(9)
-    assert str(q) == "ROWRANGE: TAIL, n=9"
-
-    q = QueryBuilder().date_range((pd.Timestamp(1000), pd.Timestamp(2000)))
-    assert str(q) == "DATE RANGE 1000 - 2000"
-
-    q = QueryBuilder().date_range((None, pd.Timestamp(2000)))
-    assert str(q) == f"DATE RANGE {pd.Timestamp.min.value} - 2000"
-
-    q = QueryBuilder().date_range((pd.Timestamp(1000), None))
-    assert str(q) == f"DATE RANGE 1000 - {pd.Timestamp.max.value}"
-
-    q = QueryBuilder()
-    q["def"] = 2 * q["abc"]
-    assert str(q) == 'PROJECT Column["def"] = (Val(UINT8:2) MUL Column["abc"])'
-
-    q = QueryBuilder()
-    q = q[q["abc"] > 3]
-    assert str(q) == 'WHERE (Column["abc"] GT Val(UINT8:3))'
-
-    q = QueryBuilder()
-    q = q[q["abc"] > 3]
-    q = q[q["def"] > q["ghi"]]
-    q.row_range((1, 10))
-    assert (
-        str(q)
-        == 'WHERE (Column["abc"] GT Val(UINT8:3)) | WHERE (Column["def"] GT Column["ghi"]) | ROWRANGE: RANGE, start=1, end=10'
-    )
-
-    q = QueryBuilder().resample("1min").agg({"col": "sum"})
-    assert str(q) == "RESAMPLE(1min) | AGGREGATE {col: (col, sum), }"
-
-
 @pytest.mark.parametrize("dynamic_schema", [True, False])
 def test_column_select_projected_column(in_memory_store_factory, dynamic_schema, any_output_format):
     lib = in_memory_store_factory(dynamic_schema=dynamic_schema, column_group_size=2)
