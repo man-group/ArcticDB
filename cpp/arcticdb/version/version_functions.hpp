@@ -38,16 +38,21 @@ inline std::pair<std::optional<AtomKey>, bool> get_latest_version(
 
 // The next version ID returned will be 0 for brand new symbols, or one greater than the largest ever version created so
 // far
-inline version_store::UpdateInfo get_latest_undeleted_version_and_next_version_id(
-        const std::shared_ptr<Store>& store, const std::shared_ptr<VersionMap>& version_map, const StreamId& stream_id
+inline version_store::UpdateInfo get_next_version_id_and_optionally_latest_undeleted_version(
+        const std::shared_ptr<Store>& store, const std::shared_ptr<VersionMap>& version_map, const StreamId& stream_id,
+        bool get_latest_undeleted_version = true
 ) {
-    ARCTICDB_SAMPLE(GetLatestUndeletedVersionAndHighestVersionId, 0)
-    LoadStrategy load_strategy{LoadType::LATEST, LoadObjective::UNDELETED_ONLY};
+    ARCTICDB_SAMPLE(GetLatestVersionAndOptionallyLatestUndeletedVersion, 0)
+    // Note that despite LoadObjective::UNDELETED_ONLY only loading the latest undeleted version, it will always
+    // also load the latest (possibly deleted) version due to the structure of the version chain. This is because a
+    // tombstone or tombstone all key deleting a version is always closer to the head of the chain than the index
+    // key it is deleting.
+    LoadStrategy load_strategy{
+            LoadType::LATEST,
+            get_latest_undeleted_version ? LoadObjective::UNDELETED_ONLY : LoadObjective::INCLUDE_DELETED
+    };
     auto entry = version_map->check_reload(store, stream_id, load_strategy, __FUNCTION__);
-    auto latest_version = entry->get_first_index(true).first;
-    auto latest_undeleted_version = entry->get_first_index(false).first;
-    VersionId next_version_id = latest_version.has_value() ? latest_version->version_id() + 1 : 0;
-    return {latest_undeleted_version, next_version_id};
+    return populate_update_info(*entry);
 }
 
 template<AtomKeyType T = AtomKeyPacked>

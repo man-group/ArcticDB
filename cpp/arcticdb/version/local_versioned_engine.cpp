@@ -150,7 +150,7 @@ folly::Future<folly::Unit> LocalVersionedEngine::delete_unreferenced_pruned_inde
         std::vector<AtomKey>&& pruned_indexes, const AtomKey& key_to_keep
 ) {
     try {
-        if (!pruned_indexes.empty() && !cfg().write_options().delayed_deletes()) {
+        if (!pruned_indexes.empty() && !write_options_.delayed_deletes) {
             // TODO: the following function will load all snapshots, which will be horrifyingly inefficient when called
             // multiple times from batch_*
             auto [not_in_snaps, in_snaps] = get_index_keys_partitioned_by_inclusion_in_snapshots(
@@ -488,7 +488,6 @@ VersionedItem LocalVersionedEngine::read_modify_write_internal(
             source_version.has_value(), "Could not find requested version for symbol \"{}\"", source_stream
     );
 
-    const WriteOptions write_options = get_write_options();
     auto [maybe_prev, deleted] = ::arcticdb::get_latest_version(store(), version_map(), target_stream);
     const auto target_version = get_next_version_from_key(maybe_prev);
 
@@ -502,7 +501,7 @@ VersionedItem LocalVersionedEngine::read_modify_write_internal(
                                            store(),
                                            read_query,
                                            read_options,
-                                           write_options,
+                                           write_options_,
                                            target_partial_index_key,
                                            pipeline_context,
                                            std::move(user_meta_proto)
@@ -633,17 +632,17 @@ std::vector<std::variant<DescriptorItem, DataError>> LocalVersionedEngine::batch
 void LocalVersionedEngine::flush_version_map() { version_map()->flush(); }
 
 std::shared_ptr<DeDupMap> LocalVersionedEngine::get_de_dup_map(
-        const StreamId& stream_id, const std::optional<AtomKey>& maybe_prev, const WriteOptions& write_options
+        const StreamId& stream_id, const UpdateInfo& update_info, const WriteOptions& write_options
 ) {
     auto de_dup_map = std::make_shared<DeDupMap>();
-    if (write_options.de_duplication) {
-        if (auto latest_undeleted_index_key = get_latest_undeleted_version(store(), version_map(), stream_id)) {
-            const auto data_keys =
-                    get_data_keys(store(), {std::move(*latest_undeleted_index_key)}, storage::ReadKeyOpts{});
+    // Next version id == 0 => this is the first version, so there is nothing to dedup against
+    if (write_options.de_duplication && update_info.next_version_id_ > 0) {
+        if (update_info.previous_index_key_.has_value()) {
+            const auto data_keys = get_data_keys(store(), *update_info.previous_index_key_, storage::ReadKeyOpts{});
             for (const auto& data_key : data_keys) {
                 de_dup_map->insert_key(data_key);
             }
-        } else if (maybe_prev && write_options.snapshot_dedup) {
+        } else if (write_options.snapshot_dedup) {
             // This means we don't have any live versions(all tombstoned), so will try to dedup from snapshot versions
             auto snap_versions = get_index_keys_in_snapshots(store(), stream_id);
             auto latest_snapshot_it = ranges::max_element(snap_versions, [](const auto& k1, const auto& k2) {
@@ -663,7 +662,7 @@ std::shared_ptr<DeDupMap> LocalVersionedEngine::get_de_dup_map(
 VersionedItem LocalVersionedEngine::sort_index(
         const StreamId& stream_id, bool dynamic_schema, bool prune_previous_versions
 ) {
-    auto update_info = get_latest_undeleted_version_and_next_version_id(store(), version_map(), stream_id);
+    auto update_info = get_next_version_id_and_optionally_latest_undeleted_version(store(), version_map(), stream_id);
     util::check(update_info.previous_index_key_.has_value(), "Cannot sort_index a non-existent symbol {}", stream_id);
     auto [index_segment_reader, slice_and_keys] =
             index::read_index_to_vector(store(), *update_info.previous_index_key_);
@@ -708,9 +707,8 @@ VersionedItem LocalVersionedEngine::sort_index(
 VersionedItem LocalVersionedEngine::delete_range_internal(
         const StreamId& stream_id, const UpdateQuery& query, const DeleteRangeOptions& option
 ) {
-    auto update_info = get_latest_undeleted_version_and_next_version_id(store(), version_map(), stream_id);
-    auto versioned_item =
-            delete_range_impl(store(), stream_id, update_info, query, get_write_options(), option.dynamic_schema_);
+    auto update_info = get_next_version_id_and_optionally_latest_undeleted_version(store(), version_map(), stream_id);
+    auto versioned_item = delete_range_impl(store(), stream_id, update_info, query, option.dynamic_schema_);
     write_version_and_prune_previous(
             option.prune_previous_versions_, versioned_item.key_, update_info.previous_index_key_
     );
@@ -723,130 +721,59 @@ VersionedItem LocalVersionedEngine::update_internal(
 ) {
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: update");
     py::gil_scoped_release release_gil;
-    auto update_info = get_latest_undeleted_version_and_next_version_id(store(), version_map(), stream_id);
-    if (update_info.previous_index_key_.has_value()) {
-        const auto versioned_item =
-                frame->empty()
-                        ? VersionedItem{async::submit_io_task(
-                                                UpdateMetadataTask{store(), update_info, std::move(frame->user_meta)}
-                          )
-                                                .get()}
-                        : update_impl(
-                                  store(),
-                                  update_info,
-                                  query,
-                                  frame,
-                                  get_write_options(),
-                                  dynamic_schema,
-                                  cfg().write_options().empty_types()
-                          );
-        write_version_and_prune_previous(prune_previous_versions, versioned_item.key_, update_info.previous_index_key_);
-        return versioned_item;
-    } else {
-        if (upsert) {
-            auto write_options = get_write_options();
-            write_options.dynamic_schema |= dynamic_schema;
-            auto versioned_item = write_dataframe_impl(
-                    store_,
-                    update_info.next_version_id_,
-                    frame,
-                    write_options,
-                    std::make_shared<DeDupMap>(),
-                    false,
-                    true
-            );
-
-            if (cfg_.symbol_list())
-                symbol_list().add_symbol(store_, stream_id, update_info.next_version_id_);
-
-            version_map()->write_version(store(), versioned_item.key_, std::nullopt);
-            return versioned_item;
-        } else {
-            util::raise_rte("Cannot update non-existent symbol {}", stream_id);
-        }
-    }
+    auto update_info = get_next_version_id_and_optionally_latest_undeleted_version(store(), version_map(), stream_id);
+    return async_update_internal(
+                   stream_id,
+                   std::move(update_info),
+                   query,
+                   frame,
+                   upsert,
+                   dynamic_schema,
+                   prune_previous_versions,
+                   false
+    )
+            .get();
 }
 
 VersionedItem LocalVersionedEngine::write_versioned_metadata_internal(
         const StreamId& stream_id, bool prune_previous_versions,
         arcticdb::proto::descriptors::UserDefinedMetadata&& user_meta
 ) {
-    auto update_info = get_latest_undeleted_version_and_next_version_id(store(), version_map(), stream_id);
-    if (update_info.previous_index_key_.has_value()) {
-        ARCTICDB_DEBUG(log::version(), "write_versioned_metadata for stream_id: {}", stream_id);
-        auto index_key = UpdateMetadataTask{store(), update_info, std::move(user_meta)}();
-        write_version_and_prune_previous(prune_previous_versions, index_key, update_info.previous_index_key_);
-        return VersionedItem{std::move(index_key)};
-    } else {
-        auto frame = convert::py_none_to_frame();
-        frame->desc().set_id(stream_id);
-        frame->user_meta = std::move(user_meta);
-        auto versioned_item =
-                write_versioned_dataframe_internal(stream_id, frame, prune_previous_versions, false, false);
-        if (cfg_.symbol_list())
-            symbol_list().add_symbol(store_, stream_id, update_info.next_version_id_);
-
-        return versioned_item;
-    }
+    py::gil_scoped_release release_gil;
+    auto update_info = get_next_version_id_and_optionally_latest_undeleted_version(store(), version_map(), stream_id);
+    return async_write_versioned_metadata_internal(
+                   stream_id, std::move(update_info), std::move(user_meta), prune_previous_versions
+    )
+            .get();
 }
 
 std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_write_versioned_metadata_internal(
         const std::vector<StreamId>& stream_ids, bool prune_previous_versions, bool throw_on_error,
         std::vector<arcticdb::proto::descriptors::UserDefinedMetadata>&& user_meta_protos
 ) {
+    py::gil_scoped_release release_gil;
     auto stream_update_info_futures =
-            batch_get_latest_undeleted_version_and_next_version_id_async(store(), version_map(), stream_ids);
+            batch_get_next_version_id_and_optionally_latest_undeleted_version_async(store(), version_map(), stream_ids);
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(
             stream_ids.size() == stream_update_info_futures.size(),
             "stream_ids and stream_update_info_futures must be of the same size"
     );
     std::vector<folly::Future<VersionedItem>> write_metadata_versions_futs;
     for (const auto&& [idx, stream_update_info_fut] : folly::enumerate(stream_update_info_futures)) {
-        write_metadata_versions_futs.push_back(
-                std::move(stream_update_info_fut)
-                        .thenValue(
-                                [this,
-                                 user_meta_proto = std::move(user_meta_protos[idx]),
-                                 &stream_id = stream_ids[idx]](auto&& update_info
-                                ) mutable -> folly::Future<IndexKeyAndUpdateInfo> {
-                                    auto index_key_fut = folly::Future<AtomKey>::makeEmpty();
-                                    if (update_info.previous_index_key_.has_value()) {
-                                        index_key_fut = async::submit_io_task(
-                                                UpdateMetadataTask{store(), update_info, std::move(user_meta_proto)}
-                                        );
-                                    } else {
-                                        auto frame = convert::py_none_to_frame();
-                                        frame->desc().set_id(stream_id);
-                                        frame->user_meta = std::move(user_meta_proto);
-                                        auto version_id = 0;
-                                        auto write_options = get_write_options();
-                                        auto de_dup_map = std::make_shared<DeDupMap>();
-                                        index_key_fut = async_write_dataframe_impl(
-                                                store(), version_id, frame, write_options, de_dup_map, false, false
-                                        );
-                                    }
-                                    return std::move(index_key_fut)
-                                            .thenValue(
-                                                    [update_info = std::forward<decltype(update_info)>(update_info
-                                                     )](auto&& index_key) mutable -> IndexKeyAndUpdateInfo {
-                                                        return IndexKeyAndUpdateInfo{
-                                                                std::move(index_key), std::move(update_info)
-                                                        };
-                                                    }
-                                            );
-                                }
-                        )
-                        .thenValue([this, prune_previous_versions](auto&& index_key_and_update_info) {
-                            auto&& [index_key, update_info] = index_key_and_update_info;
-                            return write_index_key_to_version_map_async(
-                                    version_map(),
-                                    std::move(index_key),
-                                    std::move(update_info),
-                                    prune_previous_versions,
-                                    !update_info.previous_index_key_.has_value()
-                            );
-                        })
-        );
+        write_metadata_versions_futs.push_back(std::move(stream_update_info_fut)
+                                                       .via(&async::cpu_executor())
+                                                       .thenValue([this,
+                                                                   user_meta_proto = std::move(user_meta_protos[idx]),
+                                                                   &stream_id = stream_ids[idx],
+                                                                   prune_previous_versions](UpdateInfo&& update_info
+                                                                  ) mutable {
+                                                           return async_write_versioned_metadata_internal(
+                                                                   stream_id,
+                                                                   std::move(update_info),
+                                                                   std::move(user_meta_proto),
+                                                                   prune_previous_versions
+                                                           );
+                                                       }));
     }
 
     auto write_metadata_versions = collectAll(write_metadata_versions_futs).get();
@@ -862,22 +789,15 @@ VersionedItem LocalVersionedEngine::write_versioned_dataframe_internal(
     ARCTICDB_SAMPLE(WriteVersionedDataFrame, 0)
     py::gil_scoped_release release_gil;
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: write_versioned_dataframe");
-    auto [maybe_prev, deleted] = ::arcticdb::get_latest_version(store(), version_map(), stream_id);
-    auto version_id = get_next_version_from_key(maybe_prev);
-    ARCTICDB_DEBUG(
-            log::version(), "write_versioned_dataframe for stream_id: {} , version_id = {}", stream_id, version_id
+    // We don't need to load the latest live version unless dedup is enabled. If dedup is disabled, we only care about
+    // the next version ID, which can save some IO traversing the version chain
+    auto update_info = get_next_version_id_and_optionally_latest_undeleted_version(
+            store(), version_map(), stream_id, write_options_.de_duplication
     );
-    auto write_options = get_write_options();
-    auto de_dup_map = get_de_dup_map(stream_id, maybe_prev, write_options);
-
-    auto versioned_item =
-            write_dataframe_impl(store(), version_id, frame, write_options, de_dup_map, allow_sparse, validate_index);
-
-    if (cfg().symbol_list())
-        symbol_list().add_symbol(store(), stream_id, versioned_item.key_.version_id());
-
-    write_version_and_prune_previous(prune_previous_versions, versioned_item.key_, deleted ? std::nullopt : maybe_prev);
-    return versioned_item;
+    return async_write_versioned_dataframe_internal(
+                   stream_id, std::move(update_info), frame, prune_previous_versions, allow_sparse, validate_index
+    )
+            .get();
 }
 
 std::pair<VersionedItem, TimeseriesDescriptor> LocalVersionedEngine::restore_version(
@@ -903,22 +823,25 @@ VersionedItem LocalVersionedEngine::write_segment(
             segment.descriptor().id()
     );
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: write individual segment");
-    auto [maybe_prev, deleted] = ::arcticdb::get_latest_version(store(), version_map(), stream_id);
-    auto version_id = get_next_version_from_key(maybe_prev);
+    auto update_info = get_next_version_id_and_optionally_latest_undeleted_version(
+            store(), version_map(), stream_id, write_options_.de_duplication
+    );
     ARCTICDB_DEBUG(
-            log::version(), "write individual segment for stream_id: {} , version_id = {}", stream_id, version_id
+            log::version(),
+            "write individual segment for stream_id: {} , version_id = {}",
+            stream_id,
+            update_info.next_version_id_
     );
 
-    auto write_options = get_write_options();
-    auto de_dup_map = get_de_dup_map(stream_id, maybe_prev, write_options);
+    auto de_dup_map = get_de_dup_map(stream_id, update_info, write_options_);
 
-    if (version_id == 0) {
+    if (update_info.next_version_id_ == 0) {
         auto check_outcome = verify_symbol_key(stream_id, store());
         if (std::holds_alternative<Error>(check_outcome)) {
             std::get<Error>(check_outcome).throw_error();
         }
     }
-    auto partial_key = IndexPartialKey(stream_id, version_id);
+    auto partial_key = IndexPartialKey(stream_id, update_info.next_version_id_);
 
     // TODO: do the segment splitting in parallel
     std::vector<SegmentInMemory> slices;
@@ -927,7 +850,7 @@ VersionedItem LocalVersionedEngine::write_segment(
         slices = std::vector<SegmentInMemory>({segment});
         break;
     case Slicing::RowSlicing:
-        slices = segment.split(get_write_options().segment_row_size, true);
+        slices = segment.split(write_options_.segment_row_size, true);
         break;
     }
 
@@ -992,7 +915,7 @@ VersionedItem LocalVersionedEngine::write_segment(
     if (cfg().symbol_list())
         symbol_list().add_symbol(store(), stream_id, versioned_item.key_.version_id());
 
-    write_version_and_prune_previous(prune_previous_versions, versioned_item.key_, deleted ? std::nullopt : maybe_prev);
+    write_version_and_prune_previous(prune_previous_versions, versioned_item.key_, update_info.previous_index_key_);
     return versioned_item;
 }
 
@@ -1274,7 +1197,7 @@ StageResult LocalVersionedEngine::write_parallel_frame(
     py::gil_scoped_release release_gil;
     WriteIncompleteOptions options{
             .validate_index = validate_index,
-            .write_options = get_write_options(),
+            .write_options = write_options_,
             .sort_on_index = sort_on_index,
             .sort_columns = sort_columns
     };
@@ -1285,7 +1208,7 @@ StageResult LocalVersionedEngine::write_parallel_frame(
 void LocalVersionedEngine::add_to_symbol_list_on_compaction(
         const StreamId& stream_id, const CompactIncompleteParameters& parameters, const UpdateInfo& update_info
 ) {
-    if (cfg_.symbol_list()) {
+    if (cfg().symbol_list()) {
         if (!parameters.append_ || !update_info.previous_index_key_.has_value()) {
             symbol_list().add_symbol(store_, stream_id, update_info.next_version_id_);
         }
@@ -1298,7 +1221,7 @@ std::variant<VersionedItem, CompactionError> LocalVersionedEngine::compact_incom
 ) {
     log::version().debug("Compacting incomplete symbol {} with options {}", stream_id, parameters);
 
-    auto update_info = get_latest_undeleted_version_and_next_version_id(store(), version_map(), stream_id);
+    auto update_info = get_next_version_id_and_optionally_latest_undeleted_version(store(), version_map(), stream_id);
     if (update_info.previous_index_key_) {
         ARCTICDB_DEBUG(log::version(), "Found previous version for symbol {}", stream_id);
     } else {
@@ -1310,7 +1233,7 @@ std::variant<VersionedItem, CompactionError> LocalVersionedEngine::compact_incom
     auto delete_keys_on_failure = get_delete_keys_on_failure(pipeline_context, store(), parameters);
 
     auto versioned_item_or_error = compact_incomplete_impl(
-            store_, stream_id, user_meta, update_info, parameters, get_write_options(), pipeline_context
+            store_, stream_id, user_meta, update_info, parameters, write_options_, pipeline_context
     );
     if (std::holds_alternative<CompactionError>(versioned_item_or_error)) {
         return versioned_item_or_error;
@@ -1332,7 +1255,7 @@ std::variant<VersionedItem, CompactionError> LocalVersionedEngine::compact_incom
 }
 
 UpdateInfo LocalVersionedEngine::compact_data_preamble(const StreamId& stream_id) {
-    UpdateInfo update_info = get_latest_undeleted_version_and_next_version_id(store(), version_map(), stream_id);
+    auto update_info = get_next_version_id_and_optionally_latest_undeleted_version(store(), version_map(), stream_id);
     storage::check<ErrorCode::E_SYMBOL_NOT_FOUND>(
             update_info.previous_index_key_.has_value(), "Cannot compact data of non-existent symbol \"{}\".", stream_id
     );
@@ -1354,7 +1277,7 @@ CompactDataInfo LocalVersionedEngine::compact_data_explain_plan_internal(
     py::gil_scoped_release release_gil;
     UpdateInfo update_info = compact_data_preamble(stream_id);
     return compact_data_explain_plan_impl(
-                   store(), update_info, rows_per_segment.value_or(get_write_options().segment_row_size)
+                   store(), update_info, rows_per_segment.value_or(write_options_.segment_row_size)
     )
             .get();
 }
@@ -1364,7 +1287,7 @@ VersionedItem LocalVersionedEngine::maybe_compact_data_and_write_version(
         std::optional<CompactDataFrame> compact_data_frame
 ) {
     auto versioned_item =
-            compact_data_impl(store(), update_info, get_write_options(), rows_per_segment, compact_data_frame).get();
+            compact_data_impl(store(), update_info, write_options_, rows_per_segment, compact_data_frame).get();
     if (versioned_item.has_value()) {
         write_version_and_prune_previous(
                 prune_previous_versions, versioned_item->key_, update_info.previous_index_key_
@@ -1384,15 +1307,14 @@ VersionedItem LocalVersionedEngine::compact_data_internal(
     py::gil_scoped_release release_gil;
     UpdateInfo update_info = compact_data_preamble(stream_id);
     return maybe_compact_data_and_write_version(
-            update_info, rows_per_segment.value_or(get_write_options().segment_row_size), prune_previous_versions
+            update_info, rows_per_segment.value_or(write_options_.segment_row_size), prune_previous_versions
     );
 }
 
 bool LocalVersionedEngine::is_symbol_fragmented(const StreamId& stream_id, std::optional<size_t> segment_size) {
-    auto update_info = get_latest_undeleted_version_and_next_version_id(store(), version_map(), stream_id);
-    auto options = get_write_options();
+    auto update_info = get_next_version_id_and_optionally_latest_undeleted_version(store(), version_map(), stream_id);
     auto pre_defragmentation_info = get_pre_defragmentation_info(
-            store(), stream_id, update_info, options, segment_size.value_or(options.segment_row_size)
+            store(), stream_id, update_info, write_options_, segment_size.value_or(write_options_.segment_row_size)
     );
     return is_symbol_fragmented_impl(pre_defragmentation_info.segments_need_compaction);
 }
@@ -1403,20 +1325,19 @@ VersionedItem LocalVersionedEngine::defragment_symbol_data(
     log::version().info("Defragmenting data for symbol {}", stream_id);
 
     // Currently defragmentation only for latest version - is there a use-case to allow compaction for older data?
-    auto update_info = get_latest_undeleted_version_and_next_version_id(store(), version_map(), stream_id);
+    auto update_info = get_next_version_id_and_optionally_latest_undeleted_version(store(), version_map(), stream_id);
 
-    auto options = get_write_options();
     auto versioned_item = defragment_symbol_data_impl(
             store(),
             stream_id,
             update_info,
-            options,
-            segment_size.has_value() ? *segment_size : options.segment_row_size
+            write_options_,
+            segment_size.has_value() ? *segment_size : write_options_.segment_row_size
     );
 
     write_version_and_prune_previous(prune_previous_versions, versioned_item.key_, update_info.previous_index_key_);
 
-    if (cfg_.symbol_list())
+    if (cfg().symbol_list())
         symbol_list().add_symbol(store_, stream_id, versioned_item.key_.version_id());
 
     return versioned_item;
@@ -1706,10 +1627,9 @@ folly::Future<std::vector<AtomKey>> LocalVersionedEngine::batch_write_internal(
     for (size_t idx = 0; idx < stream_ids.size(); idx++) {
         auto& frame = frames[idx];
         auto version_id = version_ids[idx];
-        auto write_options = get_write_options();
-        frame->set_bucketize_dynamic(write_options.bucketize_dynamic);
+        frame->set_bucketize_dynamic(write_options_.bucketize_dynamic);
         auto [partial_key, slicing_policy] =
-                get_partial_key_and_slicing_policy(store(), write_options, *frame, version_id, validate_index);
+                get_partial_key_and_slicing_policy(store(), write_options_, *frame, version_id, validate_index);
         auto fut_slice_keys =
                 slice_and_write(frame, slicing_policy, std::move(partial_key), store(), de_dup_maps[idx], false);
         batch_futures.emplace_back(std::move(fut_slice_keys));
@@ -1734,20 +1654,185 @@ folly::Future<std::vector<AtomKey>> LocalVersionedEngine::batch_write_internal(
             });
 }
 
-VersionIdAndDedupMapInfo LocalVersionedEngine::create_version_id_and_dedup_map(
-        const version_store::UpdateInfo&& update_info, const StreamId& stream_id, const WriteOptions& write_options
+folly::Future<VersionedItem> LocalVersionedEngine::async_write_versioned_dataframe_internal(
+        const StreamId& stream_id, UpdateInfo&& update_info, const std::shared_ptr<InputFrame>& frame,
+        bool prune_previous_versions, bool allow_sparse, bool validate_index
 ) {
-    if (cfg().write_options().de_duplication()) {
-        return VersionIdAndDedupMapInfo{
-                update_info.next_version_id_,
-                get_de_dup_map(stream_id, update_info.previous_index_key_, write_options),
-                std::move(update_info)
-        };
+    const bool add_new_symbol_list_entry = !update_info.previous_index_key_.has_value() && cfg().symbol_list();
+    auto de_dup_map = get_de_dup_map(stream_id, update_info, write_options_);
+    ARCTICDB_DEBUG(
+            log::version(),
+            "write_versioned_dataframe for stream_id: {} , version_id = {}",
+            stream_id,
+            update_info.next_version_id_
+    );
+    return async_write_dataframe_impl(
+                   store(),
+                   update_info.next_version_id_,
+                   frame,
+                   write_options_,
+                   de_dup_map,
+                   allow_sparse,
+                   validate_index
+    )
+            .thenValue([this, update_info = std::move(update_info), prune_previous_versions, add_new_symbol_list_entry](
+                               AtomKey&& index_key
+                       ) mutable {
+                return write_index_key_to_version_map_async(
+                        version_map(),
+                        std::move(index_key),
+                        std::move(update_info),
+                        prune_previous_versions,
+                        add_new_symbol_list_entry
+                );
+            });
+}
+
+folly::Future<VersionedItem> LocalVersionedEngine::async_append_internal(
+        const StreamId& stream_id, UpdateInfo&& update_info, const std::shared_ptr<InputFrame>& frame,
+        const AppendOptions& append_options, const bool batch
+) {
+    const bool add_new_symbol_list_entry = !update_info.previous_index_key_.has_value() && cfg().symbol_list();
+    auto index_key_fut = folly::Future<AtomKey>::makeEmpty();
+    if (update_info.previous_index_key_.has_value()) {
+        index_key_fut = frame->empty() ? async_write_metadata_impl(store(), update_info, std::move(frame->user_meta))
+                                       : async_append_impl(
+                                                 store(),
+                                                 update_info,
+                                                 frame,
+                                                 write_options_,
+                                                 append_options.validate_index,
+                                                 write_options_.empty_types
+                                         );
     } else {
-        return VersionIdAndDedupMapInfo{
-                update_info.next_version_id_, std::make_shared<DeDupMap>(), std::move(update_info)
-        };
+        if (!append_options.upsert) {
+            auto error_msg = fmt::format(
+                    "Cannot append to non-existent symbol {}. Using \"write_if_missing=True\" will create the symbol"
+                    "instead of throwing this exception.",
+                    stream_id
+            );
+            if (batch) {
+                missing_data::raise<ErrorCode::E_NO_SUCH_VERSION>(error_msg);
+            } else {
+                util::raise_rte(error_msg);
+            }
+        }
+        // Replace above with this as part of Monday ticket 12551552848 for 7.0.0
+        //        missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(
+        //                append_options.upsert,
+        //                "Cannot append to non-existent symbol {}. Using \"write_if_missing=True\" will create the
+        //                symbol" "instead of throwing this exception.", stream_id
+        //        );
+        index_key_fut = async_write_dataframe_impl(
+                store(),
+                update_info.next_version_id_,
+                frame,
+                write_options_,
+                std::make_shared<DeDupMap>(),
+                false,
+                append_options.validate_index
+        );
     }
+    return std::move(index_key_fut)
+            .thenValue([this,
+                        update_info = std::move(update_info),
+                        prune_previous_versions = append_options.prune_previous_versions,
+                        add_new_symbol_list_entry](AtomKey&& index_key) mutable {
+                return write_index_key_to_version_map_async(
+                        version_map(),
+                        std::move(index_key),
+                        std::move(update_info),
+                        prune_previous_versions,
+                        add_new_symbol_list_entry
+                );
+            });
+}
+
+folly::Future<VersionedItem> LocalVersionedEngine::async_update_internal(
+        const StreamId& stream_id, UpdateInfo&& update_info, const UpdateQuery& query,
+        const std::shared_ptr<InputFrame>& frame, bool upsert, bool dynamic_schema, bool prune_previous_versions,
+        const bool batch
+) {
+    const bool add_new_symbol_list_entry = !update_info.previous_index_key_.has_value() && cfg().symbol_list();
+    auto index_key_fut = folly::Future<AtomKey>::makeEmpty();
+    if (update_info.previous_index_key_.has_value()) {
+        index_key_fut = frame->empty() ? async_write_metadata_impl(store(), update_info, std::move(frame->user_meta))
+                                       : async_update_impl(
+                                                 store(),
+                                                 update_info,
+                                                 query,
+                                                 frame,
+                                                 write_options_,
+                                                 dynamic_schema,
+                                                 write_options_.empty_types
+                                         );
+    } else {
+        if (!upsert) {
+            auto error_msg = fmt::format(
+                    "Cannot update non-existent symbol {}. Using \"upsert=True\" will create the symbol instead of "
+                    "throwing this exception.",
+                    stream_id
+            );
+            if (batch) {
+                missing_data::raise<ErrorCode::E_NO_SUCH_VERSION>(error_msg);
+            } else {
+                util::raise_rte(error_msg);
+            }
+        }
+        // Replace above with this as part of Monday ticket 12551552848 for 7.0.0
+        //        missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(
+        //                upsert,
+        //                "Cannot update non-existent symbol {}. Using \"upsert=True\" will create the symbol instead of
+        //                " "throwing this exception.", stream_id
+        //        );
+        // Make a copy as we're possibly changing a flag here. dynamic_schema as an explicit argument to modification
+        // methods are on the way out, remove when this is done
+        auto write_options = write_options_;
+        write_options.dynamic_schema |= dynamic_schema;
+        index_key_fut = async_write_dataframe_impl(
+                store(), update_info.next_version_id_, frame, write_options, std::make_shared<DeDupMap>(), false, true
+        );
+    }
+    return std::move(index_key_fut)
+            .thenValue([this, update_info = std::move(update_info), prune_previous_versions, add_new_symbol_list_entry](
+                               AtomKey&& index_key
+                       ) mutable {
+                return write_index_key_to_version_map_async(
+                        version_map(),
+                        std::move(index_key),
+                        std::move(update_info),
+                        prune_previous_versions,
+                        add_new_symbol_list_entry
+                );
+            });
+}
+
+folly::Future<VersionedItem> LocalVersionedEngine::async_write_versioned_metadata_internal(
+        const StreamId& stream_id, UpdateInfo&& update_info,
+        arcticdb::proto::descriptors::UserDefinedMetadata&& user_meta, bool prune_previous_versions
+) {
+    const bool add_new_symbol_list_entry = !update_info.previous_index_key_.has_value() && cfg().symbol_list();
+    auto index_key_fut = folly::Future<AtomKey>::makeEmpty();
+    if (update_info.previous_index_key_.has_value()) {
+        index_key_fut = async_write_metadata_impl(store(), update_info, std::move(user_meta));
+    } else {
+        auto frame = convert::py_none_to_frame();
+        frame->desc().set_id(stream_id);
+        frame->user_meta = std::move(user_meta);
+        index_key_fut = async_write_dataframe_impl(store(), update_info.next_version_id_, frame, write_options_);
+    }
+    return std::move(index_key_fut)
+            .thenValue([this, update_info = std::move(update_info), prune_previous_versions, add_new_symbol_list_entry](
+                               AtomKey&& index_key
+                       ) mutable {
+                return write_index_key_to_version_map_async(
+                        version_map(),
+                        std::move(index_key),
+                        std::move(update_info),
+                        prune_previous_versions,
+                        add_new_symbol_list_entry
+                );
+            });
 }
 
 std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_write_versioned_dataframe_internal(
@@ -1756,44 +1841,30 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
 ) {
     py::gil_scoped_release release_gil;
 
-    auto write_options = get_write_options();
-    auto update_info_futs =
-            batch_get_latest_undeleted_version_and_next_version_id_async(store(), version_map(), stream_ids);
+    auto update_info_futs = batch_get_next_version_id_and_optionally_latest_undeleted_version_async(
+            store(), version_map(), stream_ids, write_options_.de_duplication
+    );
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(
             stream_ids.size() == update_info_futs.size(), "stream_ids and update_info_futs must be of the same size"
     );
     std::vector<folly::Future<VersionedItem>> version_futures;
     for (auto&& update_info_fut : folly::enumerate(update_info_futs)) {
         auto idx = update_info_fut.index;
-        version_futures.push_back(
-                std::move(*update_info_fut)
-                        .thenValue([this, &stream_id = stream_ids[idx], &write_options](auto&& update_info) {
-                            return create_version_id_and_dedup_map(std::move(update_info), stream_id, write_options);
-                        })
-                        .via(&async::cpu_executor())
-                        .thenValue([this,
-                                    &stream_id = stream_ids[idx],
-                                    &write_options,
-                                    &validate_index,
-                                    &frame = frames[idx]](auto&& version_id_and_dedup_map) {
-                            auto& [version_id, de_dup_map, update_info] = version_id_and_dedup_map;
-                            ARCTICDB_SAMPLE(WriteDataFrame, 0)
-                            ARCTICDB_DEBUG(log::version(), "Writing dataframe for stream id {}", stream_id);
-                            auto write_fut = async_write_dataframe_impl(
-                                    store(), version_id, frame, write_options, de_dup_map, false, validate_index
-                            );
-                            return std::move(write_fut).thenValue([update_info = std::move(update_info
-                                                                   )](auto&& index_key) mutable {
-                                return IndexKeyAndUpdateInfo{std::move(index_key), std::move(update_info)};
-                            });
-                        })
-                        .thenValue([this, prune_previous_versions](auto&& index_key_and_update_info) {
-                            auto&& [index_key, update_info] = index_key_and_update_info;
-                            return write_index_key_to_version_map_async(
-                                    version_map(), std::move(index_key), std::move(update_info), prune_previous_versions
-                            );
-                        })
-        );
+        version_futures.push_back(std::move(*update_info_fut)
+                                          .thenValueInline([this,
+                                                            &stream_id = stream_ids[idx],
+                                                            frame = std::move(frames[idx]),
+                                                            prune_previous_versions,
+                                                            validate_index](UpdateInfo&& update_info) {
+                                              return async_write_versioned_dataframe_internal(
+                                                      stream_id,
+                                                      std::move(update_info),
+                                                      frame,
+                                                      prune_previous_versions,
+                                                      false,
+                                                      validate_index
+                                              );
+                                          }));
     }
     auto write_versions = folly::collectAll(version_futures).get();
     TransformBatchResultsFlags flags;
@@ -1856,66 +1927,21 @@ VersionedItem LocalVersionedEngine::append_internal(
         const StreamId& stream_id, const std::shared_ptr<InputFrame>& frame, const AppendOptions& append_options
 ) {
     py::gil_scoped_release release_gil;
-    auto update_info = get_latest_undeleted_version_and_next_version_id(store(), version_map(), stream_id);
+    auto update_info = get_next_version_id_and_optionally_latest_undeleted_version(store(), version_map(), stream_id);
 
     // It would be nice if upsert also sliced into more evenly sized segments at least when compact_data is true,
     // but also when it isn't. However, the read-modify-write pipeline is all built around the PipelineContext class
     // which assumes an existing version. Better if we just make the FixedSlicer smarter so that its logic is more like
     // ReslicingInfo
-    if (update_info.previous_index_key_.has_value()) {
-        if (append_options.compact_data) {
-            auto compact_data_frame = std::make_optional<CompactDataFrame>(
-                    frame, append_options.validate_index, cfg().write_options().empty_types()
-            );
-            return maybe_compact_data_and_write_version(
-                    update_info,
-                    get_write_options().segment_row_size,
-                    append_options.prune_previous_versions,
-                    compact_data_frame
-            );
-        } else {
-            const auto versioned_item =
-                    frame->empty() ? VersionedItem{async::submit_io_task(
-                                                           UpdateMetadataTask{
-                                                                   store(), update_info, std::move(frame->user_meta)
-                                                           }
-                                     )
-                                                           .get()}
-                                   : append_impl(
-                                             store(),
-                                             update_info,
-                                             frame,
-                                             get_write_options(),
-                                             append_options.validate_index,
-                                             cfg().write_options().empty_types()
-                                     );
-            write_version_and_prune_previous(
-                    append_options.prune_previous_versions, versioned_item.key_, update_info.previous_index_key_
-            );
-            return versioned_item;
-        }
-    } else {
-        if (append_options.upsert) {
-            auto write_options = get_write_options();
-            auto versioned_item = write_dataframe_impl(
-                    store_,
-                    update_info.next_version_id_,
-                    frame,
-                    write_options,
-                    std::make_shared<DeDupMap>(),
-                    false,
-                    append_options.validate_index
-            );
-
-            if (cfg_.symbol_list())
-                symbol_list().add_symbol(store_, stream_id, update_info.next_version_id_);
-
-            version_map()->write_version(store(), versioned_item.key_, std::nullopt);
-            return versioned_item;
-        } else {
-            util::raise_rte("Cannot append to non-existent symbol {}", stream_id);
-        }
+    if (update_info.previous_index_key_.has_value() && append_options.compact_data) {
+        auto compact_data_frame =
+                std::make_optional<CompactDataFrame>(frame, append_options.validate_index, write_options_.empty_types);
+        return maybe_compact_data_and_write_version(
+                update_info, write_options_.segment_row_size, append_options.prune_previous_versions, compact_data_frame
+        );
     }
+
+    return async_append_internal(stream_id, std::move(update_info), frame, append_options, false).get();
 }
 
 std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_append_internal(
@@ -1925,7 +1951,7 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
     py::gil_scoped_release release_gil;
 
     auto stream_update_info_futures =
-            batch_get_latest_undeleted_version_and_next_version_id_async(store(), version_map(), stream_ids);
+            batch_get_next_version_id_and_optionally_latest_undeleted_version_async(store(), version_map(), stream_ids);
     std::vector<folly::Future<VersionedItem>> append_versions_futs;
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(
             stream_ids.size() == stream_update_info_futures.size(),
@@ -1935,61 +1961,13 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
         append_versions_futs.push_back(
                 std::move(stream_update_info_fut)
                         .via(&async::cpu_executor())
-                        .thenValue(
-                                [this, frame = std::move(frames[idx]), append_options, stream_id = stream_ids[idx]](
-                                        auto&& update_info
-                                ) -> folly::Future<VersionedItem> {
-                                    auto index_key_fut = folly::Future<AtomKey>::makeEmpty();
-                                    auto write_options = get_write_options();
-                                    bool add_new_symbol_list_entry{!update_info.previous_index_key_.has_value()};
-                                    if (update_info.previous_index_key_.has_value()) {
-                                        index_key_fut =
-                                                frame->empty()
-                                                        ? async::submit_io_task(UpdateMetadataTask{
-                                                                  store(), update_info, std::move(frame->user_meta)
-                                                          })
-                                                        : async_append_impl(
-                                                                  store(),
-                                                                  update_info,
-                                                                  frame,
-                                                                  write_options,
-                                                                  append_options.validate_index,
-                                                                  cfg().write_options().empty_types()
-                                                          );
-                                    } else {
-                                        missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(
-                                                append_options.upsert,
-                                                "Cannot append to non-existent symbol {}",
-                                                stream_id
-                                        );
-                                        index_key_fut = async_write_dataframe_impl(
-                                                store(),
-                                                update_info.next_version_id_,
-                                                frame,
-                                                write_options,
-                                                std::make_shared<DeDupMap>(),
-                                                false,
-                                                append_options.validate_index
-                                        );
-                                    }
-                                    return std::move(index_key_fut)
-                                            .thenValue(
-                                                    [this,
-                                                     append_options,
-                                                     add_new_symbol_list_entry,
-                                                     update_info = std::move(update_info)](AtomKey&& index_key
-                                                    ) mutable -> folly::Future<VersionedItem> {
-                                                        return write_index_key_to_version_map_async(
-                                                                version_map(),
-                                                                std::move(index_key),
-                                                                std::move(update_info),
-                                                                append_options.prune_previous_versions,
-                                                                add_new_symbol_list_entry
-                                                        );
-                                                    }
-                                            );
-                                }
-                        )
+                        .thenValue([this, frame = std::move(frames[idx]), append_options, &stream_id = stream_ids[idx]](
+                                           UpdateInfo&& update_info
+                                   ) {
+                            return async_append_internal(
+                                    stream_id, std::move(update_info), frame, append_options, true
+                            );
+                        })
         );
     }
 
@@ -2006,77 +1984,32 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
     py::gil_scoped_release release_gil;
 
     auto stream_update_info_futures =
-            batch_get_latest_undeleted_version_and_next_version_id_async(store(), version_map(), stream_ids);
+            batch_get_next_version_id_and_optionally_latest_undeleted_version_async(store(), version_map(), stream_ids);
     std::vector<folly::Future<VersionedItem>> update_versions_futs;
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(
             stream_ids.size() == stream_update_info_futures.size(),
             "stream_ids and stream_update_info_futures must be of the same size"
     );
-    for (const auto&& [idx, stream_update_info_fut] : enumerate(stream_update_info_futures)) {
-        update_versions_futs.push_back(
-                std::move(stream_update_info_fut)
-                        .via(&async::cpu_executor())
-                        .thenValue(
-                                [this,
-                                 frame = std::move(frames[idx]),
-                                 stream_id = stream_ids[idx],
-                                 update_query = update_queries[idx],
-                                 upsert,
-                                 prune_previous_versions](UpdateInfo&& update_info) -> folly::Future<VersionedItem> {
-                                    auto index_key_fut = folly::Future<AtomKey>::makeEmpty();
-                                    auto write_options = get_write_options();
-                                    bool add_new_symbol_list_entry{!update_info.previous_index_key_.has_value()};
-                                    if (update_info.previous_index_key_.has_value()) {
-                                        const bool dynamic_schema = cfg().write_options().dynamic_schema();
-                                        const bool empty_types = cfg().write_options().empty_types();
-                                        index_key_fut =
-                                                frame->empty()
-                                                        ? async::submit_io_task(UpdateMetadataTask{
-                                                                  store(), update_info, std::move(frame->user_meta)
-                                                          })
-                                                        : async_update_impl(
-                                                                  store(),
-                                                                  update_info,
-                                                                  update_query,
-                                                                  std::move(frame),
-                                                                  std::move(write_options),
-                                                                  dynamic_schema,
-                                                                  empty_types
-                                                          );
-                                    } else {
-                                        missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(
-                                                upsert,
-                                                "Cannot update non-existent symbol {}."
-                                                "Using \"upsert=True\" will create create the symbol instead of "
-                                                "throwing this exception.",
-                                                stream_id
-                                        );
-                                        index_key_fut = async_write_dataframe_impl(
-                                                store(),
-                                                update_info.next_version_id_,
-                                                std::move(frame),
-                                                std::move(write_options),
-                                                std::make_shared<DeDupMap>(),
-                                                false,
-                                                true
-                                        );
-                                    }
-                                    return std::move(index_key_fut)
-                                            .thenValue([this,
-                                                        update_info = std::move(update_info),
-                                                        prune_previous_versions,
-                                                        add_new_symbol_list_entry](auto&& index_key) mutable {
-                                                return write_index_key_to_version_map_async(
-                                                        version_map(),
-                                                        std::move(index_key),
-                                                        std::move(update_info),
-                                                        prune_previous_versions,
-                                                        add_new_symbol_list_entry
-                                                );
-                                            });
-                                }
-                        )
-        );
+    for (const auto&& [idx, stream_update_info_fut] : folly::enumerate(stream_update_info_futures)) {
+        update_versions_futs.push_back(std::move(stream_update_info_fut)
+                                               .via(&async::cpu_executor())
+                                               .thenValue([this,
+                                                           frame = std::move(frames[idx]),
+                                                           &stream_id = stream_ids[idx],
+                                                           update_query = update_queries[idx],
+                                                           upsert,
+                                                           prune_previous_versions](UpdateInfo&& update_info) {
+                                                   return async_update_internal(
+                                                           stream_id,
+                                                           std::move(update_info),
+                                                           update_query,
+                                                           frame,
+                                                           upsert,
+                                                           write_options_.dynamic_schema,
+                                                           prune_previous_versions,
+                                                           true
+                                                   );
+                                               }));
     }
 
     auto update_versions = collectAll(update_versions_futs).get();
@@ -2335,7 +2268,7 @@ std::variant<VersionedItem, CompactionError> LocalVersionedEngine::sort_merge_in
 ) {
     log::version().debug("Sort merge for symbol {} with options {}", stream_id, parameters);
 
-    auto update_info = get_latest_undeleted_version_and_next_version_id(store(), version_map(), stream_id);
+    auto update_info = get_next_version_id_and_optionally_latest_undeleted_version(store(), version_map(), stream_id);
     if (update_info.previous_index_key_) {
         ARCTICDB_DEBUG(log::version(), "Found previous version for symbol {}", stream_id);
     } else {
@@ -2347,9 +2280,8 @@ std::variant<VersionedItem, CompactionError> LocalVersionedEngine::sort_merge_in
     pipeline_context->version_id_ = update_info.next_version_id_;
     auto delete_keys_on_failure = get_delete_keys_on_failure(pipeline_context, store(), parameters);
 
-    auto sort_merge_result = sort_merge_impl(
-            store_, stream_id, user_meta, update_info, parameters, get_write_options(), pipeline_context
-    );
+    auto sort_merge_result =
+            sort_merge_impl(store_, stream_id, user_meta, update_info, parameters, write_options_, pipeline_context);
     ARCTICDB_DEBUG(log::version(), "Finished sort_merge_impl for symbol {}", stream_id);
     if (std::holds_alternative<CompactionError>(sort_merge_result)) {
         return sort_merge_result;
@@ -2397,6 +2329,7 @@ void LocalVersionedEngine::configure(const storage::LibraryDescriptor::VariantSt
                 );
             }
     );
+    write_options_ = get_write_options();
 }
 
 timestamp LocalVersionedEngine::latest_timestamp(const std::string& symbol) {
@@ -2527,7 +2460,7 @@ VersionedItem LocalVersionedEngine::merge_internal(
             is_valid_merge_strategy(strategy), "Invalid merge strategy: {}", strategy
     );
     py::gil_scoped_release release_gil;
-    UpdateInfo update_info = get_latest_undeleted_version_and_next_version_id(store(), version_map(), stream_id);
+    auto update_info = get_next_version_id_and_optionally_latest_undeleted_version(store(), version_map(), stream_id);
     if (update_info.previous_index_key_.has_value()) {
         if (source->empty()) {
             ARCTICDB_RUNTIME_DEBUG(
@@ -2540,12 +2473,11 @@ VersionedItem LocalVersionedEngine::merge_internal(
             return VersionedItem{*std::move(update_info.previous_index_key_)};
         }
         const ReadOptions read_options;
-        const WriteOptions write_options = get_write_options();
         VersionedItem versioned_item = merge_update_impl(
                                                store(),
                                                VersionedItem{*update_info.previous_index_key_},
                                                read_options,
-                                               write_options,
+                                               write_options_,
                                                IndexPartialKey{stream_id, update_info.next_version_id_},
                                                std::move(on),
                                                strategy,

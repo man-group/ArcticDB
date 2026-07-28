@@ -33,12 +33,6 @@ namespace arcticdb::version_store {
 using namespace entity;
 using namespace pipelines;
 
-VersionedItem write_dataframe_impl(
-        const std::shared_ptr<Store>& store, VersionId version_id, const std::shared_ptr<InputFrame>& frame,
-        const WriteOptions& options, const std::shared_ptr<DeDupMap>& de_dup_map = std::make_shared<DeDupMap>(),
-        bool allow_sparse = false, bool validate_index = false
-);
-
 std::tuple<IndexPartialKey, SlicingPolicy> get_partial_key_and_slicing_policy(
         const std::shared_ptr<Store>& store, const WriteOptions& options, const InputFrame& frame, VersionId version_id,
         bool validate_index
@@ -46,7 +40,8 @@ std::tuple<IndexPartialKey, SlicingPolicy> get_partial_key_and_slicing_policy(
 
 folly::Future<entity::AtomKey> async_write_dataframe_impl(
         const std::shared_ptr<Store>& store, VersionId version_id, const std::shared_ptr<pipelines::InputFrame>& frame,
-        const WriteOptions& options, const std::shared_ptr<DeDupMap>& de_dup_map, bool allow_sparse, bool validate_index
+        const WriteOptions& options, const std::shared_ptr<DeDupMap>& de_dup_map = std::make_shared<DeDupMap>(),
+        bool allow_sparse = false, bool validate_index = false
 );
 
 folly::Future<AtomKey> async_append_impl(
@@ -54,24 +49,19 @@ folly::Future<AtomKey> async_append_impl(
         const WriteOptions& options, bool validate_index, bool empty_types
 );
 
-VersionedItem append_impl(
-        const std::shared_ptr<Store>& store, const UpdateInfo& update_info, const std::shared_ptr<InputFrame>& frame,
-        const WriteOptions& options, bool validate_index, bool empty_types
-);
-
-VersionedItem update_impl(
-        const std::shared_ptr<Store>& store, const UpdateInfo& update_info, const UpdateQuery& query,
-        const std::shared_ptr<InputFrame>& frame, WriteOptions&& options, bool dynamic_schema, bool empty_types
-);
-
 folly::Future<AtomKey> async_update_impl(
         const std::shared_ptr<Store>& store, const UpdateInfo& update_info, const UpdateQuery& query,
-        const std::shared_ptr<InputFrame>& frame, WriteOptions&& options, bool dynamic_schema, bool empty_types
+        const std::shared_ptr<InputFrame>& frame, const WriteOptions& options, bool dynamic_schema, bool empty_types
+);
+
+folly::Future<AtomKey> async_write_metadata_impl(
+        const std::shared_ptr<Store>& store, const UpdateInfo& update_info,
+        arcticdb::proto::descriptors::UserDefinedMetadata&& user_meta
 );
 
 VersionedItem delete_range_impl(
         const std::shared_ptr<Store>& store, const StreamId& stream_id, const UpdateInfo& update_info,
-        const UpdateQuery& query, const WriteOptions&& options, bool dynamic_schema
+        const UpdateQuery& query, bool dynamic_schema
 );
 
 folly::Future<IndexInformation> read_index_key_without_column_stats(

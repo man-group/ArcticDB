@@ -322,54 +322,6 @@ def test_query_stats_metadata(s3_version_store_v1, clear_query_stats):
         s3_version_store_v1.read_metadata("a")
         s3_version_store_v1.read_metadata("a")
     stats = qs.get_query_stats()
-    # {
-    #     "storage_operations": {
-    #         "S3_GetObject": {
-    #             "TABLE_INDEX": {
-    #                 "count": 3,
-    #                 "size_bytes": 3036,
-    #                 "total_time_ms": 48
-    #             },
-    #             "VERSION": {
-    #                 "count": 4,
-    #                 "size_bytes": 581,
-    #                 "total_time_ms": 69
-    #             },
-    #             "VERSION_REF": {
-    #                 "count": 7,
-    #                 "size_bytes": 2466,
-    #                 "total_time_ms": 118
-    #             }
-    #         },
-    #         "S3_PutObject": {
-    #             "SYMBOL_LIST": {
-    #                 "count": 2,
-    #                 "size_bytes": 322,
-    #                 "total_time_ms": 31
-    #             },
-    #             "TABLE_DATA": {
-    #                 "count": 1,
-    #                 "size_bytes": 79,
-    #                 "total_time_ms": 17
-    #             },
-    #             "TABLE_INDEX": {
-    #                 "count": 2,
-    #                 "size_bytes": 2024,
-    #                 "total_time_ms": 30
-    #             },
-    #             "VERSION": {
-    #                 "count": 2,
-    #                 "size_bytes": 1192,
-    #                 "total_time_ms": 30
-    #             },
-    #             "VERSION_REF": {
-    #                 "count": 2,
-    #                 "size_bytes": 1233,
-    #                 "total_time_ms": 30
-    #             }
-    #         }
-    #     }
-    # }
     assert "storage_operations" in stats
     storage_operations = stats["storage_operations"]
 
@@ -382,19 +334,23 @@ def test_query_stats_metadata(s3_version_store_v1, clear_query_stats):
     assert expected_get_keys == get_object_stats.keys()
 
     assert get_object_stats["TABLE_INDEX"]["count"] == 3
-    assert get_object_stats["VERSION"]["count"] == 4
-    assert get_object_stats["VERSION_REF"]["count"] == 7
+    assert get_object_stats["VERSION"]["count"] == 2
+    assert get_object_stats["VERSION_REF"]["count"] == 6
 
     for key in expected_get_keys:
         stats_entry = get_object_stats[key]
-        assert stats_entry["size_bytes"] > 0
+        # Version keys are attempted to be read when attempting to read the version ref key and it does not exist
+        # for legacy compatability with the implementation of the version chain. These reads always fail as the
+        # version key does not exist either, so size_bytes will be zero here as no other version key reads are
+        # required
+        assert (stats_entry["size_bytes"] == 0) if key == "VERSION" else (stats_entry["size_bytes"] > 0)
         assert stats_entry["total_time_ms"] < 8000
 
     put_object_stats = storage_operations["S3_PutObject"]
     assert expected_put_keys == put_object_stats.keys()
 
     # Check specific count values from the sample output
-    assert put_object_stats["SYMBOL_LIST"]["count"] == 2
+    assert put_object_stats["SYMBOL_LIST"]["count"] == 1
     assert put_object_stats["TABLE_DATA"]["count"] == 1
     assert put_object_stats["TABLE_INDEX"]["count"] == 2
     assert put_object_stats["VERSION"]["count"] == 2
@@ -420,59 +376,6 @@ def test_query_stats_batch(s3_version_store_v1, clear_query_stats):
         s3_version_store_v1.batch_read([sym1, sym2])
 
     stats = qs.get_query_stats()
-    # {
-    #     "storage_operations": {
-    #         "S3_GetObject": {
-    #             "TABLE_DATA": {
-    #                 "count": 4,
-    #                 "size_bytes": 986,
-    #                 "total_time_ms": 63
-    #             },
-    #             "TABLE_INDEX": {
-    #                 "count": 4,
-    #                 "size_bytes": 4287,
-    #                 "total_time_ms": 70
-    #             },
-    #             "VERSION": {
-    #                 "count": 6,
-    #                 "size_bytes": 1204,
-    #                 "total_time_ms": 99
-    #             },
-    #             "VERSION_REF": {
-    #                 "count": 12,
-    #                 "size_bytes": 5231,
-    #                 "total_time_ms": 223
-    #             }
-    #         },
-    #         "S3_PutObject": {
-    #             "SYMBOL_LIST": {
-    #                 "count": 4,
-    #                 "size_bytes": 680,
-    #                 "total_time_ms": 60
-    #             },
-    #             "TABLE_DATA": {
-    #                 "count": 4,
-    #                 "size_bytes": 986,
-    #                 "total_time_ms": 67
-    #             },
-    #             "TABLE_INDEX": {
-    #                 "count": 4,
-    #                 "size_bytes": 4287,
-    #                 "total_time_ms": 64
-    #             },
-    #             "VERSION": {
-    #                 "count": 4,
-    #                 "size_bytes": 2494,
-    #                 "total_time_ms": 61
-    #             },
-    #             "VERSION_REF": {
-    #                 "count": 4,
-    #                 "size_bytes": 2655,
-    #                 "total_time_ms": 62
-    #             }
-    #         }
-    #     }
-    # }
     assert "storage_operations" in stats
     storage_operations = stats["storage_operations"]
 
@@ -486,23 +389,30 @@ def test_query_stats_batch(s3_version_store_v1, clear_query_stats):
 
     assert get_object_stats["TABLE_DATA"]["count"] == 4
     assert get_object_stats["TABLE_INDEX"]["count"] == 4
-    assert get_object_stats["VERSION"]["count"] == 6
+    assert get_object_stats["VERSION"]["count"] == 4
     assert get_object_stats["VERSION_REF"]["count"] == 12
 
     put_object_stats = storage_operations["S3_PutObject"]
     assert expected_put_keys == put_object_stats.keys()
 
-    assert put_object_stats["SYMBOL_LIST"]["count"] == 4
+    assert put_object_stats["SYMBOL_LIST"]["count"] == 2
     assert put_object_stats["TABLE_DATA"]["count"] == 4
     assert put_object_stats["TABLE_INDEX"]["count"] == 4
     assert put_object_stats["VERSION"]["count"] == 4
     assert put_object_stats["VERSION_REF"]["count"] == 4
 
-    for op_stats in storage_operations.values():
-        for key_stat in op_stats.values():
+    for op_type, op_stats in storage_operations.items():
+        for key_type, key_stat in op_stats.items():
             assert key_stat["count"] > 0
-            assert key_stat["size_bytes"] > 0
             assert key_stat["total_time_ms"] < 8000
+            # Version keys are attempted to be read when attempting to read the version ref key and it does not exist
+            # for legacy compatability with the implementation of the version chain. These reads always fail as the
+            # version key does not exist either, so size_bytes will be zero here as no other version key reads are
+            # required
+            if op_type == "S3_GetObject" and key_type == "VERSION":
+                assert key_stat["size_bytes"] == 0
+            else:
+                assert key_stat["size_bytes"] > 0
 
 
 def test_query_stats_staged_data(s3_version_store_v1, clear_query_stats, sym):
