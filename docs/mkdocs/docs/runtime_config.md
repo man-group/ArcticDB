@@ -157,6 +157,19 @@ Values:
 
 Please note that if meta structure V2 is read by < v6.7.0, exception KeyError will be raised
 
+### Compact.LogProgressPercentage
+
+Controls how frequently progress is logged during `finalize_staged_data` operations. A log line is emitted each time this percentage of segments has been processed.
+
+For example, with the default value of `10`, logs appear at 10%, 20%, 30%, ... 100% completion:
+```
+do_compact: processed 19500/195000 segments for symbol my_symbol, elapsed 1234s
+```
+
+Setting to `0` disables progress logging entirely.
+
+The default is 10.
+
 ## Logging configuration
 
 ArcticDB has multiple log streams, and the verbosity of each can be configured independently. 
