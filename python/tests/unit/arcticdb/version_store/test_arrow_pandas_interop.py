@@ -14,6 +14,7 @@ Interop between pandas and arrow, structured in three groups:
 3. Combine pandas and arrow     -- combine the two formats via append, update, or concat.
 """
 
+import copy
 from typing import Union
 
 import numpy as np
@@ -39,7 +40,7 @@ def _indexed_arrow_table(index_name, values, tz=None, start="2025-01-01"):
 
 
 def _pandas_ts(values, start="2025-01-01", tz=None, name="ts"):
-    """pandas DataFrame with a named (optionally tz-aware) DatetimeIndex and a single int column."""
+    """pandas DataFrame with a named (or unnamed if name=None) (optionally tz-aware) DatetimeIndex and a single int column."""
     df = pd.DataFrame({"col": np.array(values, dtype=np.int64)}, index=pd.date_range(start, periods=len(values), tz=tz))
     df.index.name = name
     return df
@@ -207,117 +208,281 @@ def test_write_pandas_unnamed_multiindex_read_arrow(in_memory_version_store_arro
     assert_frame_equal_with_arrow(received, df)
 
 
+def test_write_pandas_multiindex_timezone_read_arrow(in_memory_version_store_arrow):
+    """A tz-aware MultiIndex level produces a tz-aware arrow timestamp column."""
+    lib = in_memory_version_store_arrow
+    sym = "test_write_pandas_multiindex_timezone_read_arrow"
+    df = pd.DataFrame(
+        {"col": np.arange(10, dtype=np.int64)},
+        index=[
+            [chr(ord("a") + i // 5) for i in range(10)],
+            [pd.Timestamp(year=2025, month=1, day=1 + i % 5, tz="America/Los_Angeles") for i in range(10)],
+        ],
+    )
+    df.index.names = ["index1", "index2"]
+    lib.write(sym, df)
+
+    received = lib.read(sym).data
+    assert received.column_names == ["index1", "index2", "col"]
+    assert received.schema.field("index1").type == pa.large_string()
+    assert received.schema.field("index2").type == pa.timestamp("ns", "America/Los_Angeles")
+    assert_frame_equal_with_arrow(received, df)
+
+
+def test_write_pandas_unnamed_multiindex_multiple_timezones_read_arrow(in_memory_version_store_arrow):
+    """Each unnamed MultiIndex level keeps its own timezone in its ``__index_level_N__`` column."""
+    lib = in_memory_version_store_arrow
+    sym = "test_write_pandas_unnamed_multiindex_multiple_timezones_read_arrow"
+    df = pd.DataFrame(
+        {"col": np.arange(10, dtype=np.int64)},
+        index=[
+            [pd.Timestamp(year=2025, month=1, day=1 + i // 5, tz="Asia/Hong_Kong") for i in range(10)],
+            [pd.Timestamp(year=2025, month=1, day=1 + i % 5, tz="America/Los_Angeles") for i in range(10)],
+        ],
+    )
+    lib.write(sym, df)
+
+    received = lib.read(sym).data
+    assert received.column_names == ["__index_level_0__", "__index_level_1__", "col"]
+    assert received.schema.field("__index_level_0__").type == pa.timestamp("ns", "Asia/Hong_Kong")
+    assert received.schema.field("__index_level_1__").type == pa.timestamp("ns", "America/Los_Angeles")
+    assert_frame_equal_with_arrow(received, df)
+
+
 # Tests dealing with column name duplication and invalid arrow names
 # Such pandas dataframes initially won't support combining with arrow (but still must be readable)
 
 
-def test_write_pandas_duplicate_columns_read_arrow(in_memory_version_store_arrow):
-    """Duplicate pandas column names are deduplicated with `_` when read as arrow,
-    original columnn names are restored on `arrow.to_pandas`."""
+@pytest.mark.parametrize("col_name", ["col", None, 5, ""])
+@pytest.mark.parametrize("duplicate", [True, False])
+def test_write_pandas_duplicate_and_special_col_names(in_memory_version_store_arrow, col_name, duplicate):
+    """None / integer / empty-string column labels stringify, and a duplicate is disambiguated with
+    surrounding underscores."""
     lib = in_memory_version_store_arrow
-    sym = "test_write_pandas_duplicate_columns_read_arrow"
-    df = pd.DataFrame([[1, 2]], columns=["a", "a"], index=pd.date_range("2025-01-01", periods=1))
-    df.index.name = "ts"
+    sym = "test_write_pandas_duplicate_and_special_col_names"
+    columns = [col_name, "y"]
+    expected_columns = [f"{col_name}", "y"]
+    if duplicate:
+        columns.append(col_name)
+        expected_columns.append(f"_{col_name}_")
+    df = pd.DataFrame(np.zeros((1, len(columns))), columns=columns)
     lib.write(sym, df)
 
     received = lib.read(sym).data
-    assert received.column_names == ["ts", "a", "_a_"]
+    assert received.column_names == expected_columns
     assert_frame_equal_with_arrow(received, df)
 
 
-def test_write_pandas_index_name_clashes_with_column_read_arrow(in_memory_version_store_arrow):
-    """An index whose name equals a column name is deduplcated when read as arrow"""
+@pytest.mark.parametrize("col_name", [None, 5])
+def test_write_pandas_special_col_name_clashes_with_string_col_name(in_memory_version_store_arrow, col_name):
+    """A special label whose string form already exists as another column is wrapped until unique."""
     lib = in_memory_version_store_arrow
-    sym = "test_write_pandas_index_name_clashes_with_column_read_arrow"
-    df = pd.DataFrame({"a": np.arange(2, dtype=np.int64)}, index=pd.date_range("2025-01-01", periods=2))
-    df.index.name = "a"
+    sym = "test_write_pandas_special_col_name_clashes_with_string_col_name"
+    columns = [col_name, str(col_name), col_name]
+    df = pd.DataFrame(np.zeros((1, len(columns))), columns=columns)
     lib.write(sym, df)
 
     received = lib.read(sym).data
-    assert received.column_names == ["a", "_a_"]
+    assert received.column_names == [f"{col_name}", f"_{col_name}_", f"__{col_name}__"]
     assert_frame_equal_with_arrow(received, df)
 
 
-def test_write_pandas_none_column_read_arrow(in_memory_version_store_arrow):
-    """A ``None`` column name is stored under the arrow name "None"."""
+@pytest.mark.parametrize("columns", [["col"], ["index"], ["index", "index"], ["__index__"], ["__index__", "__index__"]])
+def test_write_pandas_unnamed_index_clashes(in_memory_version_store_arrow, columns):
+    """The unnamed-index name ``__index__`` is wrapped in underscores until it no longer clashes with
+    a column, and clashing columns are themselves disambiguated."""
     lib = in_memory_version_store_arrow
-    sym = "test_write_pandas_none_column_read_arrow"
-    df = pd.DataFrame([[1, 2]], columns=[None, "b"], index=pd.date_range("2025-01-01", periods=1))
-    df.index.name = "ts"
+    sym = "test_write_pandas_unnamed_index_clashes"
+    df = pd.DataFrame(np.zeros((1, len(columns))), columns=columns, index=[pd.Timestamp(0)])
+    index_column_name = "__index__" if "__index__" not in columns else "___index___"
+    expected_columns = [index_column_name]
+    taken_column_names = set(expected_columns)
+    for column in columns:
+        while column in taken_column_names:
+            column = f"_{column}_"
+        taken_column_names.add(column)
+        expected_columns.append(column)
     lib.write(sym, df)
 
     received = lib.read(sym).data
-    assert received.column_names == ["ts", "None", "b"]
+    assert received.column_names == expected_columns
     assert_frame_equal_with_arrow(received, df)
 
 
-def test_write_pandas_empty_column_read_arrow(in_memory_version_store_arrow):
-    """An empty-string column name is stored under the empty arrow name"""
+@pytest.mark.parametrize("index_name", ["index", "__index__", "ts"])
+def test_write_pandas_named_index_clashes_with_columns(in_memory_version_store_arrow, index_name):
+    """A named index whose name matches one or more columns keeps its name; the clashing columns are
+    wrapped until unique."""
     lib = in_memory_version_store_arrow
-    sym = "test_write_pandas_empty_column_read_arrow"
-    df = pd.DataFrame([[1, 2]], columns=["", "b"], index=pd.date_range("2025-01-01", periods=1))
-    df.index.name = "ts"
+    sym = "test_write_pandas_named_index_clashes_with_columns"
+    columns = [index_name, index_name, f"_{index_name}_"]
+    df = pd.DataFrame(np.zeros((1, len(columns))), columns=columns, index=[pd.Timestamp(0)])
+    df.index.name = index_name
+    expected_columns = [index_name, f"_{columns[0]}_", f"__{columns[1]}__", f"__{columns[2]}__"]
     lib.write(sym, df)
 
     received = lib.read(sym).data
-    assert received.column_names == ["ts", "", "b"]
+    assert received.column_names == expected_columns
     assert_frame_equal_with_arrow(received, df)
 
 
-def test_write_pandas_unnamed_index_clashes_with_column_read_arrow(in_memory_version_store_arrow):
-    """When an unnamed index would collide with an existing column called ``__index__``, the index
-    is given a further-wrapped ``___index___`` name so it does not clash."""
+@pytest.mark.parametrize("col_name", ["", None, 5])
+def test_write_pandas_named_index_clashes_with_special_col_names(in_memory_version_store_arrow, col_name):
+    """A named index whose name is the string form of a special column label wins the name; the
+    special columns are wrapped."""
     lib = in_memory_version_store_arrow
-    sym = "test_write_pandas_unnamed_index_clashes_with_column_read_arrow"
-    df = pd.DataFrame({"__index__": np.arange(2, dtype=np.int64)}, index=pd.date_range("2025-01-01", periods=2))
-    assert df.index.name is None
+    sym = "test_write_pandas_named_index_clashes_with_special_col_names"
+    index_name = str(col_name)
+    columns = [col_name, col_name]
+    df = pd.DataFrame(np.zeros((1, len(columns))), columns=columns, index=[pd.Timestamp(0)])
+    df.index.name = index_name
+    expected_columns = [index_name, f"_{columns[0]}_", f"__{columns[1]}__"]
     lib.write(sym, df)
 
     received = lib.read(sym).data
-    assert received.column_names == ["___index___", "__index__"]
+    assert received.column_names == expected_columns
+    # Arrow column names are always strings, so an all-integer columns index round-trips as object dtype.
+    df.columns = df.columns.astype(object)
     assert_frame_equal_with_arrow(received, df)
 
 
-def test_write_pandas_unnamed_index_clashes_with_multiple_columns_read_arrow(in_memory_version_store_arrow):
-    """The unnamed-index name is wrapped in underscores until it no longer clashes with any column,
-    so with both ``__index__`` and ``___index___`` taken the index becomes ``____index____``."""
+@pytest.mark.parametrize(
+    "columns",
+    [
+        ["col"],
+        ["index"],
+        ["__index_level_0__"],
+        ["__index_level_0__", "__index_level_0__"],
+        ["__index_level_0__", "__index_level_1__"],
+    ],
+)
+def test_write_pandas_unnamed_multiindex_clashes(in_memory_version_store_arrow, columns):
+    """Unnamed MultiIndex level names ``__index_level_N__`` are wrapped until they no longer clash
+    with columns, and clashing columns are disambiguated."""
     lib = in_memory_version_store_arrow
-    sym = "test_write_pandas_unnamed_index_clashes_with_multiple_columns_read_arrow"
+    sym = "test_write_pandas_unnamed_multiindex_clashes"
     df = pd.DataFrame(
-        {"__index__": np.arange(2, dtype=np.int64), "___index___": np.arange(2, dtype=np.int64)},
-        index=pd.date_range("2025-01-01", periods=2),
+        np.zeros((1, len(columns))), columns=columns, index=pd.MultiIndex.from_product([[pd.Timestamp(0)], ["id"]])
     )
-    assert df.index.name is None
+    index_column_names = ["__index_level_0__", "__index_level_1__"]
+    if index_column_names[0] in columns:
+        index_column_names[0] = f"_{index_column_names[0]}_"
+    if index_column_names[1] in columns:
+        index_column_names[1] = f"_{index_column_names[1]}_"
+    if columns == ["__index_level_0__", "__index_level_0__"]:
+        columns[-1] = f"__{columns[-1]}__"
+    expected_columns = index_column_names + columns
     lib.write(sym, df)
 
     received = lib.read(sym).data
-    assert received.column_names == ["____index____", "__index__", "___index___"]
+    assert received.column_names == expected_columns
     assert_frame_equal_with_arrow(received, df)
 
 
-def test_write_pandas_multiindex_duplicates(in_memory_version_store_arrow):
-    """Unnamed MultiIndex levels are materialised under synthetic ``__index_level_N__`` names and deduplicated."""
+@pytest.mark.parametrize("index_column_names", [["my name", None], [None, "my name"]])
+@pytest.mark.parametrize(
+    "columns",
+    [
+        ["col"],
+        ["index"],
+        ["__index_level_0__"],
+        ["__index_level_0__", "__index_level_0__"],
+        ["__index_level_0__", "__index_level_1__"],
+    ],
+)
+def test_write_pandas_partially_named_multiindex_clashes(in_memory_version_store_arrow, index_column_names, columns):
+    """A MultiIndex with a mix of named and unnamed levels: unnamed levels get ``__index_level_N__``
+    names, and everything is disambiguated against the columns."""
     lib = in_memory_version_store_arrow
-    sym = "test_write_pandas_multiindex_duplicates"
-    index = pd.MultiIndex.from_arrays([pd.date_range("2025-01-01", periods=3), ["a", "b", "c"]])
-    index.names = [None, "col"]
+    sym = "test_write_pandas_partially_named_multiindex_clashes"
     df = pd.DataFrame(
-        [[1, 2, 3, 4, 5]],
-        columns=["__index_level_0__", "__index_level_0__", "___index_level_0___", "col", "col"],
-        index=index,
+        np.zeros((1, len(columns))),
+        columns=columns,
+        index=pd.MultiIndex.from_product([[pd.Timestamp(0)], ["id"]], names=index_column_names),
+    )
+    expected_columns = copy.deepcopy(index_column_names)
+    for i in range(len(index_column_names)):
+        expected_columns[i] = f"__index_level_{i}__" if index_column_names[i] is None else index_column_names[i]
+    if expected_columns[0] in columns:
+        expected_columns[0] = f"_{expected_columns[0]}_"
+    if expected_columns[1] in columns:
+        expected_columns[1] = f"_{expected_columns[1]}_"
+    expected_columns += copy.deepcopy(columns)
+    if columns == ["__index_level_0__", "__index_level_0__"]:
+        expected_columns[-1] = f"_{expected_columns[-1]}_"
+    if expected_columns[0] == "___index_level_0___" and columns == ["__index_level_0__", "__index_level_0__"]:
+        expected_columns[-1] = f"_{expected_columns[-1]}_"
+    lib.write(sym, df)
+
+    received = lib.read(sym).data
+    assert received.column_names == expected_columns
+    assert_frame_equal_with_arrow(received, df)
+
+
+def test_write_pandas_multiindex_duplicate_level_names(in_memory_version_store_arrow):
+    """Duplicate MultiIndex level names are disambiguated with surrounding underscores."""
+    lib = in_memory_version_store_arrow
+    sym = "test_write_pandas_multiindex_duplicate_level_names"
+    df = pd.DataFrame(
+        np.zeros((1, 1)),
+        columns=["col"],
+        index=pd.MultiIndex.from_product([[pd.Timestamp(0)], ["id"]], names=["level", "level"]),
     )
     lib.write(sym, df)
 
     received = lib.read(sym).data
-    assert received.column_names == [
-        "____index_level_0____",
-        "col",
-        "__index_level_0__",
-        "___index_level_0___",
-        "_____index_level_0_____",
-        "_col_",
-        "__col__",
-    ]
+    assert received.column_names == ["level", "_level_", "col"]
+    assert_frame_equal_with_arrow(received, df)
+
+
+@pytest.mark.parametrize("columns", [["level 1"], ["level 2"], ["level 1", "level 2"], ["level 1", "level 1"]])
+def test_write_pandas_multiindex_columns_clash_with_level_names(in_memory_version_store_arrow, columns):
+    """Columns that clash with MultiIndex level names are wrapped until unique."""
+    lib = in_memory_version_store_arrow
+    sym = "test_write_pandas_multiindex_columns_clash_with_level_names"
+    index_names = ["level 1", "level 2"]
+    df = pd.DataFrame(
+        np.zeros((1, len(columns))),
+        columns=columns,
+        index=pd.MultiIndex.from_product([[pd.Timestamp(0)], ["id"]], names=index_names),
+    )
+    expected_columns = index_names
+    taken_column_names = set(expected_columns)
+    for col in columns:
+        while col in taken_column_names:
+            col = f"_{col}_"
+        expected_columns.append(col)
+        taken_column_names.add(col)
+    lib.write(sym, df)
+
+    received = lib.read(sym).data
+    assert received.column_names == expected_columns
+    assert_frame_equal_with_arrow(received, df)
+
+
+@pytest.mark.parametrize("clash_level", [0, 1])
+@pytest.mark.parametrize("col_name", ["", None, 5])
+def test_write_pandas_multiindex_level_clashes_with_special_col_names(
+    in_memory_version_store_arrow, clash_level, col_name
+):
+    """A MultiIndex level whose name is the string form of a special column label wins the name; the
+    special column is wrapped."""
+    lib = in_memory_version_store_arrow
+    sym = "test_write_pandas_multiindex_level_clashes_with_special_col_names"
+    index_names = ["level 1", "level 2"]
+    index_names[clash_level] = str(col_name)
+    df = pd.DataFrame(
+        np.zeros((1, 1)),
+        columns=[col_name],
+        index=pd.MultiIndex.from_product([[pd.Timestamp(0)], ["id"]], names=index_names),
+    )
+    expected_columns = index_names + [f"_{col_name}_"]
+    lib.write(sym, df)
+
+    received = lib.read(sym).data
+    assert received.column_names == expected_columns
+    # Arrow column names are always strings, so an all-integer columns index round-trips as object dtype.
+    df.columns = df.columns.astype(object)
     assert_frame_equal_with_arrow(received, df)
 
 
