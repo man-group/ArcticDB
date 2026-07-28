@@ -9,6 +9,7 @@
 #pragma once
 
 #include <arcticdb/entity/types.hpp>
+#include <arcticdb/util/format_date.hpp>
 
 namespace arcticdb {
 
@@ -101,6 +102,9 @@ struct Value {
     [[nodiscard]] std::string to_string() const {
         if (has_sequence_type()) {
             return "\"" + std::string(*str_data(), len()) + "\"";
+        } else if (is_time_type(data_type_)) {
+            // The offset of a tz-aware input is discarded before the Value is built, so this is the UTC instant.
+            return util::format_timestamp(get<timestamp>());
         } else {
             return fmt::format("{}", get<RawType>());
         }
@@ -173,6 +177,8 @@ VALUE_CONSTRUCT(int32_t, INT32)
 VALUE_CONSTRUCT(int64_t, INT64)
 VALUE_CONSTRUCT(float, FLOAT32)
 VALUE_CONSTRUCT(double, FLOAT64)
+
+inline Value construct_timestamp_value(const timestamp ts) { return Value{ts, DataType::NANOSECONDS_UTC64}; }
 
 inline Value construct_string_value(const std::string& str) { return Value{str, DataType::UTF_DYNAMIC64}; }
 

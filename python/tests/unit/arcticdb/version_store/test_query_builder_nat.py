@@ -8,6 +8,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 import pytest
 
 from arcticdb.util.test import assert_frame_equal, query_stats_operation_count
@@ -25,13 +26,31 @@ sym = "sym"
     [
         lambda q: q["col"] == pd.NaT,
         lambda q: q["col"] != pd.NaT,
+        lambda q: q["col"] > pd.NaT,
+        lambda q: q["col"] < pd.NaT,
+        lambda q: q["col"] >= pd.NaT,
+        lambda q: q["col"] <= pd.NaT,
+        lambda q: pd.NaT < q["col"],
         lambda q: q["col"] > pd.Timestamp("2024-01-01"),
         lambda q: q["col"] < pd.Timestamp("2024-01-01"),
         lambda q: q["col"] >= pd.Timestamp("2024-01-01"),
         lambda q: q["col"] <= pd.Timestamp("2024-01-01"),
         lambda q: pd.Timestamp("2024-01-01") < q["col"],
     ],
-    ids=["eq_nat", "ne_nat", "gt_ts", "lt_ts", "ge_ts", "le_ts", "ts_lt_col"],
+    ids=[
+        "eq_nat",
+        "ne_nat",
+        "gt_nat",
+        "lt_nat",
+        "ge_nat",
+        "le_nat",
+        "nat_lt_col",
+        "gt_ts",
+        "lt_ts",
+        "ge_ts",
+        "le_ts",
+        "ts_lt_col",
+    ],
 )
 def test_filter_nat_values(in_memory_version_store, column_stats_filtering_enabled_and_disabled, query_expr):
     lib = in_memory_version_store
@@ -55,6 +74,74 @@ def test_filter_nat_values(in_memory_version_store, column_stats_filtering_enabl
 
     full_df = pd.concat([df0, df1])
     expected = full_df[query_expr(full_df)]
+    assert_frame_equal(expected, result)
+
+
+SPARSE_QUERY_EXPRS = [
+    lambda q: q["col"] == pd.NaT,
+    lambda q: q["col"] != pd.NaT,
+    lambda q: q["col"] > pd.NaT,
+    lambda q: q["col"] < pd.NaT,
+    lambda q: q["col"] >= pd.NaT,
+    lambda q: q["col"] <= pd.NaT,
+    lambda q: pd.NaT < q["col"],
+]
+SPARSE_QUERY_IDS = ["eq_nat", "ne_nat", "gt_nat", "lt_nat", "ge_nat", "le_nat", "nat_lt_col"]
+
+
+def _write_sparse_time_col(lib):
+    lib._set_allow_arrow_input()
+    table = pa.table(
+        {
+            "ts": pa.Array.from_pandas(pd.date_range("2000-01-01", periods=9), type=pa.timestamp("ns")),
+            "col": pa.array(
+                [
+                    pd.Timestamp("2024-01-01").value,
+                    None,
+                    pd.Timestamp("2024-01-03").value,
+                    None,
+                    None,
+                    None,
+                    pd.Timestamp("2024-01-07").value,
+                    None,
+                    None,
+                ],
+                pa.timestamp("ns"),
+            ),
+            "other": pa.array(range(9), pa.int64()),
+        }
+    )
+    lib.write(sym, table, index_column=True)
+    lib.create_column_stats_experimental(sym)
+
+
+@pytest.mark.parametrize("query_expr", SPARSE_QUERY_EXPRS, ids=SPARSE_QUERY_IDS)
+def test_filter_sparse_col_vs_nat(in_memory_store_factory, column_stats_filtering_enabled_and_disabled, query_expr):
+    lib = in_memory_store_factory(segment_row_size=3)
+    _write_sparse_time_col(lib)
+
+    q = QueryBuilder()
+    q = q[query_expr(q)]
+    result = lib.read(sym, query_builder=q, output_format="PANDAS").data
+
+    full_df = lib.read(sym, output_format="PANDAS").data
+    expected = full_df[query_expr(full_df)]
+    assert_frame_equal(expected, result)
+
+
+@pytest.mark.parametrize("query_expr", SPARSE_QUERY_EXPRS, ids=SPARSE_QUERY_IDS)
+def test_filter_sparse_col_vs_nat_then_filter(
+    in_memory_store_factory, column_stats_filtering_enabled_and_disabled, query_expr
+):
+    lib = in_memory_store_factory(segment_row_size=3)
+    _write_sparse_time_col(lib)
+
+    q = QueryBuilder()
+    q = q[query_expr(q) & (q["other"] > 3)]
+    result = lib.read(sym, query_builder=q, output_format="PANDAS").data
+
+    full_df = lib.read(sym, output_format="PANDAS").data
+    expected = full_df[query_expr(full_df) & (full_df["other"] > 3)]
     assert_frame_equal(expected, result)
 
 
