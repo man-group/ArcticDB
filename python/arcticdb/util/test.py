@@ -7,10 +7,11 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 
 import copy
+import gc
 import os
 import sys
 from contextlib import contextmanager
-from typing import Mapping, Any, Optional, NamedTuple, List, AnyStr, Union, Dict
+from typing import Mapping, Any, Iterator, Optional, NamedTuple, List, AnyStr, Union, Dict
 import numpy as np
 import pandas as pd
 from pandas import DateOffset, Timedelta
@@ -54,6 +55,12 @@ from arcticdb_ext import (
     get_config_string,
     set_config_string,
     unset_config_string,
+)
+from arcticdb_ext.util import (
+    reset_segment_residency_tracking,
+    segment_residency_high_water,
+    segment_residency_live,
+    set_segment_residency_tracking,
 )
 from packaging.version import Version
 from arcticdb.version_store._store import MergeStrategy, normalize_merge_strategy
@@ -402,6 +409,46 @@ def config_context_multi(config: Dict[str, int]):
                 set_config_int(name, initial[name])
             else:
                 unset_config_int(name)
+
+
+class SegmentResidency:
+    """View of the process-wide SegmentResidencyTracker counters."""
+
+    @property
+    def high_water(self) -> int:
+        return segment_residency_high_water()
+
+    @property
+    def live(self) -> int:
+        return segment_residency_live()
+
+
+@contextmanager
+def segment_residency_tracking() -> Iterator[SegmentResidency]:
+    """Count segments decoded from storage by the processing pipeline that are resident in memory at once.
+
+    Read `high_water` inside the block: the counters are reset on exit.
+
+    Test-only instrumentation, disabled outside this block. Only `DecodeSliceTask` marks segments, so a plain read
+    (which decodes straight into the output frame) counts nothing; this measures `QueryBuilder` reads and the other
+    clause-pipeline entry points.
+    """
+    live = segment_residency_live()
+    assert live == 0, f"counted segment leaked from an earlier block: live={live}"
+    reset_segment_residency_tracking()
+    set_segment_residency_tracking(True)
+    try:
+        yield SegmentResidency()
+        # On a clean exit every read has completed and every clause has run, so the count is already zero. The poll
+        # only covers a release landing on another thread as the read unwinds, hence the short deadline.
+        gc.collect()
+        deadline = time.time() + 2.0
+        while segment_residency_live() != 0 and time.time() < deadline:
+            time.sleep(0.01)
+        assert segment_residency_live() == 0, f"segments still resident after the block: {segment_residency_live()}"
+    finally:
+        set_segment_residency_tracking(False)
+        reset_segment_residency_tracking()
 
 
 @contextmanager

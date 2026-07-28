@@ -29,12 +29,7 @@
 #include <arcticdb/version/admission_handler.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <folly/futures/Future.h>
-#include <folly/futures/Promise.h>
-#include <atomic>
-#include <deque>
-#include <functional>
 #include <memory>
-#include <mutex>
 #include <string>
 #include <chrono>
 #include <arcticdb/util/configs_map.hpp>
@@ -106,8 +101,6 @@ folly::Future<std::vector<EntityId>> schedule_clause_processing(
         std::shared_ptr<ComponentManager> component_manager, std::shared_ptr<ProcessingUnitAdmissionHandler> admission,
         std::shared_ptr<std::vector<std::shared_ptr<Clause>>> clauses
 );
-
-size_t segment_read_window();
 
 FrameAndDescriptor read_index_impl(const std::shared_ptr<Store>& store, const VersionedItem& version);
 

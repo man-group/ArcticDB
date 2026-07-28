@@ -192,6 +192,9 @@ When working on a feature branch, maintain a work log in `docs/claude/plans/<bra
 
 Code style is enforced by `make lint` **Always run `make lint` after making code changes.**
 
+Put Python imports at module scope. Do not add function-local ("lazy") imports to defer a cost or to
+tolerate a stale build — including in test helpers.
+
 ### Git Commits
 
 - Do not add "Generated with AI" or "Co-Authored-By" lines to commit messages

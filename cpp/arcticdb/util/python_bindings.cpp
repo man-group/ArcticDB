@@ -8,6 +8,7 @@
 
 #include <arcticdb/util/python_bindings.hpp>
 #include <arcticdb/util/regex_filter.hpp>
+#include <arcticdb/util/segment_residency_tracker.hpp>
 
 namespace arcticdb::util {
 
@@ -17,5 +18,15 @@ void register_bindings(py::module& m) {
     py::class_<RegexGeneric, std::shared_ptr<RegexGeneric>>(tools, "RegexGeneric")
             .def(py::init<const std::string&>(), py::arg("pattern"))
             .def("text", &RegexGeneric::text);
+
+    tools.def(
+            "set_segment_residency_tracking",
+            [](bool enabled) { SegmentResidencyTracker::instance().set_enabled(enabled); },
+            py::arg("enabled"),
+            "Test-only. Enable counting of segments decoded from storage that are resident in memory."
+    );
+    tools.def("reset_segment_residency_tracking", []() { SegmentResidencyTracker::instance().reset(); });
+    tools.def("segment_residency_high_water", []() { return SegmentResidencyTracker::instance().high_water(); });
+    tools.def("segment_residency_live", []() { return SegmentResidencyTracker::instance().live(); });
 }
 } // namespace arcticdb::util

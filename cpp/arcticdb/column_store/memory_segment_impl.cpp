@@ -339,15 +339,22 @@ SegmentInMemoryImpl::SegmentInMemoryImpl(
 
 SegmentInMemoryImpl::~SegmentInMemoryImpl() {
     ARCTICDB_TRACE(log::version(), "Destroying segment in memory");
-    auto& residency_tracker = util::SegmentResidencyTracker::instance();
-    if (from_disk_.value_ && residency_tracker.enabled()) {
-        residency_tracker.on_segment_released();
+    if (from_disk_.value_) {
+        util::SegmentResidencyTracker::instance().on_segment_released();
     }
 }
 
 void SegmentInMemoryImpl::mark_from_disk() {
-    from_disk_.value_ = true;
-    util::SegmentResidencyTracker::instance().on_segment_resident();
+    // Only set the flag while tracking, so the destructor cannot release a segment that was never counted. The flag
+    // also makes this idempotent, so a second call cannot count one segment twice against a single destructor.
+    if (from_disk_.value_) {
+        return;
+    }
+    auto& residency_tracker = util::SegmentResidencyTracker::instance();
+    if (residency_tracker.enabled()) {
+        from_disk_.value_ = true;
+        residency_tracker.on_segment_resident();
+    }
 }
 
 // Append any columns that exist both in this segment and in the 'other' segment onto the
@@ -523,6 +530,9 @@ SegmentInMemoryImpl SegmentInMemoryImpl::clone() const {
     output.compacted_ = compacted_;
     if (tsd_)
         output.set_timeseries_descriptor(tsd_->clone());
+    if (from_disk_.value_) {
+        output.mark_from_disk();
+    }
 
     return output;
 }

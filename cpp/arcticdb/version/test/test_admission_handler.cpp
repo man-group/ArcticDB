@@ -9,6 +9,11 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <chrono>
+#include <deque>
+#include <memory>
+#include <stdexcept>
+#include <utility>
 
 #include <arcticdb/version/version_store_api.hpp>
 #include <arcticdb/version/version_core.hpp>
@@ -20,7 +25,9 @@
 #include <arcticdb/pipeline/slicing.hpp>
 #include <arcticdb/pipeline/query.hpp>
 #include <arcticdb/util/segment_residency_tracker.hpp>
+#include <arcticdb/column_store/memory_segment_impl.hpp>
 #include <arcticdb/util/configs_map.hpp>
+#include <arcticdb/util/error_code.hpp>
 #include <arcticdb/util/variant.hpp>
 #include <arcticdb/processing/clause_utils.hpp>
 #include <arcticdb/async/task_scheduler.hpp>
@@ -52,22 +59,94 @@ void write_sliced_symbol(
 
 struct ResidencyGuard {
     ResidencyGuard() {
+        // A non-zero count here means a previous test leaked a counted segment past its own guard. Left unchecked, the
+        // stray release drives live_ negative and every upper-bound assertion below passes vacuously.
+        EXPECT_EQ(util::SegmentResidencyTracker::instance().live(), 0) << "counted segment leaked from an earlier test";
         util::SegmentResidencyTracker::instance().reset();
         util::SegmentResidencyTracker::instance().set_enabled(true);
     }
-    ~ResidencyGuard() { util::SegmentResidencyTracker::instance().set_enabled(false); }
+    ~ResidencyGuard() {
+        util::SegmentResidencyTracker::instance().set_enabled(false);
+        util::SegmentResidencyTracker::instance().reset();
+    }
 };
 
 // Runs create_column_stats with admission ceiling k and returns the peak number of resident segments.
 int64_t high_water_for_create_column_stats(
-        version_store::PythonVersionStore& pvs, const StreamId& stream_id, ColumnStats column_stats, int64_t k
+        version_store::PythonVersionStore& pvs, const StreamId& stream_id, int64_t k
 ) {
     ScopedConfig config_guard{PROCESSING_UNITS_BOUND_KEY, k};
     ResidencyGuard residency_guard;
-    pvs.create_column_stats_version(stream_id, column_stats, VersionQuery{});
+    pvs.create_column_stats_version(stream_id, VersionQuery{});
     return util::SegmentResidencyTracker::instance().high_water();
 }
 } // namespace
+
+TEST(SegmentResidencyTracking, HighWaterIsPeakNotTotal) {
+    ResidencyGuard residency_guard;
+    auto& tracker = util::SegmentResidencyTracker::instance();
+    tracker.on_segment_resident();
+    tracker.on_segment_resident();
+    tracker.on_segment_released();
+    tracker.on_segment_resident();
+    tracker.on_segment_released();
+    tracker.on_segment_resident();
+    EXPECT_EQ(tracker.high_water(), 2);
+}
+
+TEST(SegmentResidencyTracking, SelfMoveAssignmentKeepsSegmentCounted) {
+    ResidencyGuard residency_guard;
+    {
+        SegmentInMemoryImpl segment{};
+        segment.mark_from_disk();
+        // -Wpragmas first because GCC before 13 does not know -Wself-move and -Werror is on
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wpragmas"
+#pragma GCC diagnostic ignored "-Wself-move"
+        segment = std::move(segment);
+#pragma GCC diagnostic pop
+    }
+    SegmentInMemoryImpl later{};
+    later.mark_from_disk();
+    EXPECT_EQ(util::SegmentResidencyTracker::instance().high_water(), 1);
+}
+
+TEST(SegmentResidencyTracking, MarkedWhileDisabledIsNotReleased) {
+    util::SegmentResidencyTracker::instance().set_enabled(false);
+    auto marked_while_disabled = std::make_unique<SegmentInMemoryImpl>();
+    marked_while_disabled->mark_from_disk();
+
+    ResidencyGuard residency_guard;
+    marked_while_disabled.reset();
+
+    SegmentInMemoryImpl resident{};
+    resident.mark_from_disk();
+    EXPECT_EQ(util::SegmentResidencyTracker::instance().high_water(), 1);
+}
+
+// A clone of a counted segment is a second copy of the decoded data, so it is counted too. Otherwise destroying the
+// source would take the count back to zero while the data is still resident in the clone.
+TEST(SegmentResidencyTracking, CloneOfMarkedSegmentIsCounted) {
+    ResidencyGuard residency_guard;
+    auto& tracker = util::SegmentResidencyTracker::instance();
+    {
+        auto source = std::make_unique<SegmentInMemoryImpl>();
+        source->mark_from_disk();
+        auto clone = source->clone();
+        EXPECT_EQ(tracker.high_water(), 2);
+        source.reset();
+        EXPECT_EQ(tracker.live(), 1);
+    }
+    EXPECT_EQ(tracker.live(), 0);
+    EXPECT_EQ(tracker.high_water(), 2);
+}
+
+TEST(SegmentResidencyTracking, CloneOfUnmarkedSegmentIsNotCounted) {
+    ResidencyGuard residency_guard;
+    SegmentInMemoryImpl source{};
+    auto clone = source.clone();
+    EXPECT_EQ(util::SegmentResidencyTracker::instance().high_water(), 0);
+}
 
 struct ColumnStatsStoreTest : TestStore {
   protected:
@@ -86,11 +165,7 @@ TEST_F(ColumnStatsStoreTest, ResidencyBoundedByAdmission) {
 
     write_sliced_symbol(*test_store_, stream_id, num_cols, num_rows, col_per_slice, row_per_slice);
 
-    ColumnStats column_stats{
-            {{"col_0", {"MINMAX"}}, {"col_1", {"MINMAX"}}, {"col_2", {"MINMAX"}}, {"col_3", {"MINMAX"}}}
-    };
-
-    const int64_t high_water_mark = high_water_for_create_column_stats(*test_store_, stream_id, column_stats, k);
+    const int64_t high_water_mark = high_water_for_create_column_stats(*test_store_, stream_id, k);
 
     ASSERT_GT(num_segments, static_cast<size_t>(k) * max_unit_size);
     EXPECT_GE(high_water_mark, static_cast<int64_t>(max_unit_size));
@@ -102,7 +177,7 @@ namespace {
 // Builds num_units processing units of unit_size segments each.
 std::shared_ptr<version_store::ProcessingUnitAdmissionHandler> make_admission_handler(
         size_t num_units, size_t unit_size, size_t max_processing_units_in_flight, size_t read_window,
-        std::vector<int>& fire_count, std::vector<folly::Promise<pipelines::SegmentAndSlice>>& kept
+        std::vector<int>& fire_count, std::deque<folly::Promise<pipelines::SegmentAndSlice>>& kept
 ) {
     using namespace arcticdb::pipelines;
     std::vector<RangesAndKey> ranges;
@@ -135,7 +210,7 @@ TEST(ProcessingUnitAdmissionHandlerTest, FiresAtMostKUnitsThenAdvancesOnCompleti
     // Read window larger than all work, so the residency budget is the only limiter
     const size_t read_window = num_units * unit_size;
     std::vector<int> fire_count;
-    std::vector<folly::Promise<pipelines::SegmentAndSlice>> kept;
+    std::deque<folly::Promise<pipelines::SegmentAndSlice>> kept;
     auto admission = make_admission_handler(num_units, unit_size, k, read_window, fire_count, kept);
 
     admission->admit_initial_processing_units();
@@ -171,7 +246,7 @@ TEST(ProcessingUnitAdmissionHandlerTest, SharedSegmentFiredOnce) {
     std::vector<std::vector<size_t>> units{{0, 1}, {1, 2}}; // segment 1 shared
 
     std::vector<int> fire_count(3, 0);
-    std::vector<folly::Promise<SegmentAndSlice>> kept;
+    std::deque<folly::Promise<SegmentAndSlice>> kept;
     version_store::SegmentReader reader = [&fire_count, &kept](RangesAndKey&& rk) {
         ++fire_count.at(rk.row_range().first);
         kept.emplace_back();
@@ -202,8 +277,9 @@ TEST(ProcessingUnitAdmissionHandlerTest, ReadWindowLimitsInFlightReads) {
     const size_t read_window = 3;
 
     std::vector<int> fire_count;
-    std::vector<folly::Promise<SegmentAndSlice>> kept;
-    kept.reserve(total_segments);
+    // setValue below holds a reference into this deque while its continuation dispatches the next read, which appends
+    // here. A vector would reallocate under that reference; a deque never invalidates references to existing elements.
+    std::deque<folly::Promise<SegmentAndSlice>> kept;
     auto admission = make_admission_handler(num_units, unit_size, k, read_window, fire_count, kept);
 
     auto total_fired = [&fire_count]() {
@@ -308,6 +384,141 @@ TEST(ProcessingUnitAdmissionHandlerTest, OverlappingUnitsAdvanceWithCeilingOne) 
     EXPECT_EQ(fire_count.at(2).load(), 1);
 }
 
+TEST(ProcessingUnitAdmissionHandlerTest, AdvancesWithReadWindowOfOne) {
+    using namespace arcticdb::pipelines;
+    TinyThreadPool tiny_pool;
+
+    const size_t num_units = 3;
+    const size_t unit_size = 2;
+    const size_t num_segments = num_units * unit_size;
+
+    std::vector<RangesAndKey> ranges;
+    std::vector<std::vector<size_t>> units;
+    for (size_t u = 0; u < num_units; ++u) {
+        std::vector<size_t> unit;
+        for (size_t c = 0; c < unit_size; ++c) {
+            const size_t idx = ranges.size();
+            ranges.emplace_back(RowRange{idx, idx + 1}, ColRange{0, 1}, entity::AtomKey{});
+            unit.push_back(idx);
+        }
+        units.push_back(std::move(unit));
+    }
+
+    std::vector<std::atomic<int>> fire_count(num_segments);
+    for (auto& count : fire_count) {
+        count.store(0);
+    }
+
+    version_store::SegmentReader reader = [&fire_count](RangesAndKey&& rk) {
+        const auto idx = rk.row_range().first;
+        return folly::via(&async::io_executor(), [&fire_count, idx, rk = std::move(rk)]() mutable {
+            fire_count[idx].fetch_add(1, std::memory_order_relaxed);
+            return SegmentAndSlice(std::move(rk), SegmentInMemory{});
+        });
+    };
+
+    auto admission = std::make_shared<version_store::ProcessingUnitAdmissionHandler>(
+            std::move(reader),
+            std::move(ranges),
+            std::vector<std::vector<size_t>>(units),
+            /*max_processing_units_in_flight=*/1,
+            /*read_window=*/1
+    );
+
+    auto segment_futures = admission->futures();
+    std::vector<folly::Future<folly::Unit>> unit_futures;
+    for (const auto& unit : units) {
+        std::vector<folly::Future<SegmentAndSlice>> local;
+        for (auto i : unit) {
+            local.emplace_back(std::move(segment_futures.at(i)));
+        }
+        unit_futures.emplace_back(folly::collect(local)
+                                          .via(&async::cpu_executor())
+                                          .thenValue([](auto&&) { return folly::Unit{}; })
+                                          .ensure([admission]() { admission->on_processing_unit_complete(); }));
+    }
+
+    auto all_done = folly::collect(unit_futures).via(&async::io_executor());
+    admission->admit_initial_processing_units();
+    std::move(all_done).get(std::chrono::seconds(30));
+
+    for (size_t i = 0; i < num_segments; ++i) {
+        EXPECT_EQ(fire_count.at(i).load(), 1) << "segment " << i;
+    }
+}
+
+namespace {
+// Two units of two segments each, a ceiling and window of 1, and a reader that throws synchronously for
+// throwing_segment. Mirrors schedule_first_iteration, including the .ensure that advances admission whether the unit
+// succeeded or failed.
+std::vector<folly::Try<folly::Unit>> run_synchronous_read_throw_case(size_t throwing_segment) {
+    using namespace arcticdb::pipelines;
+    const std::vector<std::vector<size_t>> units{{0, 1}, {2, 3}};
+    const size_t num_segments = 4;
+
+    std::vector<RangesAndKey> ranges;
+    for (size_t i = 0; i < num_segments; ++i) {
+        ranges.emplace_back(RowRange{i, i + 1}, ColRange{0, 1}, entity::AtomKey{});
+    }
+
+    version_store::SegmentReader reader = [throwing_segment](RangesAndKey&& rk) -> folly::Future<SegmentAndSlice> {
+        if (rk.row_range().first == throwing_segment) {
+            throw std::runtime_error("synchronous read failure");
+        }
+        return folly::via(&async::io_executor(), [rk = std::move(rk)]() mutable {
+            return SegmentAndSlice(std::move(rk), SegmentInMemory{});
+        });
+    };
+
+    auto admission = std::make_shared<version_store::ProcessingUnitAdmissionHandler>(
+            std::move(reader),
+            std::move(ranges),
+            std::vector<std::vector<size_t>>(units),
+            /*max_processing_units_in_flight=*/1,
+            /*read_window=*/1
+    );
+
+    auto segment_futures = admission->futures();
+    std::vector<folly::Future<folly::Unit>> unit_futures;
+    for (const auto& unit : units) {
+        std::vector<folly::Future<SegmentAndSlice>> local;
+        for (auto i : unit) {
+            local.emplace_back(std::move(segment_futures.at(i)));
+        }
+        unit_futures.emplace_back(folly::collect(local)
+                                          .via(&async::cpu_executor())
+                                          .thenValue([](auto&&) { return folly::Unit{}; })
+                                          .ensure([admission]() { admission->on_processing_unit_complete(); }));
+    }
+
+    auto all_done = folly::collectAll(unit_futures).via(&async::io_executor());
+    admission->admit_initial_processing_units();
+    return std::move(all_done).get(std::chrono::seconds(30));
+}
+} // namespace
+
+// A reader that throws synchronously rather than returning a failed future must still free its window slot and complete
+// its promise. Otherwise the slot is taken forever and nothing ever satisfies the collect for that segment, so with a
+// window of 1 the whole pipeline stops. Unit 1 completing shows that the window recovered, because with a
+// ceiling of 1 it is only admitted once unit 0 has finished.
+TEST(ProcessingUnitAdmissionHandlerTest, SynchronousReadThrowDoesNotHang) {
+    TinyThreadPool tiny_pool;
+    const auto results = run_synchronous_read_throw_case(/*throwing_segment=*/1); // second segment of unit 0
+    EXPECT_TRUE(results.at(0).hasException());
+    EXPECT_TRUE(results.at(1).hasValue());
+}
+
+// Throwing on the *first* segment of a unit leaves the unit's other segment sitting in the read queue with the window
+// slot already freed, which the failed dispatch itself does not re-check. Recovery comes from the .ensure: the
+// exception fails unit 0's collect fast, on_processing_unit_complete calls fill_read_window unconditionally, and the
+// queued segment is drained. Nothing else would drain it, so this pins that coupling down.
+TEST(ProcessingUnitAdmissionHandlerTest, SynchronousReadThrowOnFirstSegmentOfUnitDoesNotHang) {
+    TinyThreadPool tiny_pool;
+    const auto results = run_synchronous_read_throw_case(/*throwing_segment=*/0); // first segment of unit 0
+    EXPECT_TRUE(results.at(0).hasException());
+    EXPECT_TRUE(results.at(1).hasValue());
+}
+
 // Static schema with column_group_size changed between the initial write and a later append, so the appended row slices
 // have a different number of column slices than the original ones. The processing units therefore have different sizes,
 // and the bound must use the max across units to avoid deadlock.
@@ -339,7 +550,7 @@ TEST(ColumnStatsMixedColSlicing, ResidencyBoundedWithUnevenUnits) {
     engine.configure(std::move(wide_cfg));
 
     auto appended = get_test_frame<stream::TimeseriesIndex>(stream_id, fields, num_rows, num_rows);
-    engine.append_internal(stream_id, std::move(appended.frame_), false, false, false);
+    engine.append_internal(stream_id, std::move(appended.frame_), version_store::AppendOptions{});
 
     // Confirm the slicing: 4 original row slices x 2 column slices + 4 appended row slices x 1 column
     // slice = 12 data segments. A uniform layout would have 16
@@ -347,15 +558,11 @@ TEST(ColumnStatsMixedColSlicing, ResidencyBoundedWithUnevenUnits) {
     engine._test_get_store()->iterate_type(KeyType::TABLE_DATA, [&data_segments](VariantKey&&) { ++data_segments; });
     ASSERT_EQ(data_segments, 12u);
 
-    ColumnStats column_stats{
-            {{"col_0", {"MINMAX"}}, {"col_1", {"MINMAX"}}, {"col_2", {"MINMAX"}}, {"col_3", {"MINMAX"}}}
-    };
-
     const int64_t k = 2;
     const size_t max_unit_size = 2; // original row slices span 2 column slices; appended ones span 1
     const int64_t bound = k * static_cast<int64_t>(max_unit_size);
 
-    int64_t high_water = high_water_for_create_column_stats(engine, stream_id, column_stats, k);
+    int64_t high_water = high_water_for_create_column_stats(engine, stream_id, k);
 
     EXPECT_GT(high_water, 0);
     EXPECT_LE(high_water, bound);
@@ -397,22 +604,18 @@ TEST(ColumnStatsMixedColSlicing, ResidencyBoundedWithUnevenUnitsWiderFirst) {
     engine.configure(std::move(narrow_cfg));
 
     auto appended = get_test_frame<stream::TimeseriesIndex>(stream_id, fields, num_rows, num_rows);
-    engine.append_internal(stream_id, std::move(appended.frame_), false, false, false);
+    engine.append_internal(stream_id, std::move(appended.frame_), version_store::AppendOptions{});
 
     // 4 original row slices x 1 column slice + 4 appended row slices x 2 column slices = 12 data segments.
     size_t data_segments = 0;
     engine._test_get_store()->iterate_type(KeyType::TABLE_DATA, [&data_segments](VariantKey&&) { ++data_segments; });
     ASSERT_EQ(data_segments, 12u);
 
-    ColumnStats column_stats{
-            {{"col_0", {"MINMAX"}}, {"col_1", {"MINMAX"}}, {"col_2", {"MINMAX"}}, {"col_3", {"MINMAX"}}}
-    };
-
     const int64_t k = 2;
     const size_t max_unit_size = 2; // appended row slices span 2 column slices
     const int64_t bound = k * static_cast<int64_t>(max_unit_size);
 
-    int64_t high_water = high_water_for_create_column_stats(engine, stream_id, column_stats, k);
+    int64_t high_water = high_water_for_create_column_stats(engine, stream_id, k);
 
     EXPECT_GT(high_water, 0);
     EXPECT_LE(high_water, bound);
@@ -439,21 +642,24 @@ struct ScopedThreadCounts {
 };
 } // namespace
 
-// Many column slices in each processing unit make the IO read-ahead term go to 1. The 2*cpu_thread_count floor must
-// keep the default from starving the CPU pool.
-TEST(MaxResidentProcessingUnits, CpuFloorAppliesForWideUnits) {
+// Dividing the window by a wide unit size rounds down to almost nothing, so the per-CPU-thread term is what keeps
+// enough units admitted to occupy the CPU pool.
+TEST(MaxResidentProcessingUnits, CpuTermDominatesForWideUnits) {
     ScopedThreadCounts threads{/*cpu=*/4, /*io=*/2};
     const std::vector<std::vector<size_t>> wide_units{{0, 1, 2, 3, 4, 5, 6, 7}}; // max_unit_size = 8
-    // io_read_ahead = ceil(4*2 / 8) = 1; cpu floor = 2*4 = 8
-    EXPECT_EQ(version_store::max_resident_processing_units(wide_units), 8u);
+    // read_window = 2*2 = 4; ceil(4 / 8) = 1, plus cpu_thread_count = 4
+    EXPECT_EQ(version_store::max_resident_processing_units(wide_units), 5u);
+    EXPECT_GE(version_store::max_resident_processing_units(wide_units), 4u);
 }
 
-// Narrow units keep the IO read-ahead term large, so it wins over the cpu floor.
-TEST(MaxResidentProcessingUnits, IoReadAheadDominatesForNarrowUnits) {
+// For single-segment units the budget must exceed the read window, so segments stay queued ahead of it and read
+// completion keeps dispatching without waiting on a processing unit to finish.
+TEST(MaxResidentProcessingUnits, ExceedsReadWindowForNarrowUnits) {
     ScopedThreadCounts threads{/*cpu=*/2, /*io=*/8};
     const std::vector<std::vector<size_t>> narrow_units{{0}, {1}, {2}}; // max_unit_size = 1
-    // io_read_ahead = ceil(4*8 / 1) = 32; cpu floor = 2*2 = 4
-    EXPECT_EQ(version_store::max_resident_processing_units(narrow_units), 32u);
+    // read_window = 2*8 = 16; ceil(16 / 1) = 16, plus cpu_thread_count = 2
+    EXPECT_EQ(version_store::max_resident_processing_units(narrow_units), 18u);
+    EXPECT_GT(version_store::max_resident_processing_units(narrow_units), version_store::segment_read_window());
 }
 
 // An explicit config override takes precedence over the default.
@@ -473,22 +679,38 @@ TEST(MaxResidentProcessingUnits, ZeroAdmitsAllUnits) {
     EXPECT_EQ(version_store::max_resident_processing_units(units), units.size());
 }
 
+// A negative value is neither a valid budget nor the 0 kill switch, so it is rejected rather than silently floored.
+TEST(MaxResidentProcessingUnits, NegativeConfigThrows) {
+    ScopedThreadCounts threads{/*cpu=*/4, /*io=*/8};
+    ScopedConfig override_guard{"VersionStore.NumProcessingUnitsLive", -1};
+    const std::vector<std::vector<size_t>> units{{0, 1}, {2, 3}};
+    EXPECT_THROW(version_store::max_resident_processing_units(units), UserInputException);
+}
+
 // The read window defaults to 2*io_thread_count, matching the old folly::window(2*io) read path.
 TEST(SegmentReadWindow, DefaultsToTwiceIoThreads) {
     ScopedThreadCounts threads{/*cpu=*/4, /*io=*/8};
     EXPECT_EQ(version_store::segment_read_window(), 16u);
 }
 
-// An explicit config override takes precedence, and the window never drops below 1.
-TEST(SegmentReadWindow, ConfigOverrideAndFloor) {
+// An explicit config override takes precedence.
+TEST(SegmentReadWindow, ConfigOverrideTakesPrecedence) {
+    ScopedThreadCounts threads{/*cpu=*/4, /*io=*/8};
+    ScopedConfig override_guard{"VersionStore.SegmentReadWindow", 5};
+    EXPECT_EQ(version_store::segment_read_window(), 5u);
+}
+
+// Zero and negative values are rejected rather than silently floored to 1, since unlike NumProcessingUnitsLive there
+// is no kill-switch meaning for 0 here.
+TEST(SegmentReadWindow, NonPositiveConfigThrows) {
     ScopedThreadCounts threads{/*cpu=*/4, /*io=*/8};
     {
-        ScopedConfig override_guard{"VersionStore.SegmentReadWindow", 5};
-        EXPECT_EQ(version_store::segment_read_window(), 5u);
+        ScopedConfig override_guard{"VersionStore.SegmentReadWindow", 0};
+        EXPECT_THROW(version_store::segment_read_window(), UserInputException);
     }
     {
-        ScopedConfig override_guard{"VersionStore.SegmentReadWindow", 0};
-        EXPECT_EQ(version_store::segment_read_window(), 1u);
+        ScopedConfig override_guard{"VersionStore.SegmentReadWindow", -1};
+        EXPECT_THROW(version_store::segment_read_window(), UserInputException);
     }
 }
 

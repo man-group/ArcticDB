@@ -1317,15 +1317,6 @@ static void generate_output_schema_and_save_to_pipeline(
     pipeline_context.default_values_ = std::forward<decltype(default_values)>(default_values);
 }
 
-// Read window: the number of segment reads submitted but not completed at any given time. Always >= 1. Defaults to
-// 2*io_thread_count.
-size_t segment_read_window() {
-    const int64_t io_thread_count = static_cast<int64_t>(async::TaskScheduler::instance()->io_thread_count());
-    const int64_t default_window = 2 * io_thread_count;
-    const int64_t configured = ConfigsMap::instance()->get_int("VersionStore.SegmentReadWindow", default_window);
-    return static_cast<size_t>(std::max<int64_t>(1, configured));
-}
-
 folly::Future<std::vector<EntityId>> read_and_schedule_processing(
         const std::shared_ptr<Store>& store, const std::shared_ptr<PipelineContext>& pipeline_context,
         const std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options,

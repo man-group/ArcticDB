@@ -171,6 +171,42 @@ The warning is only present in builds for Python 3.12 and later, the version whe
 `forkserver`), which is indistinguishable from an unsafe fork at the point the warning would be logged, so it would
 fire for those safe cases too.
 
+### VersionStore.NumProcessingUnitsLive
+
+`QueryBuilder` operations (`filter`, `groupby`, `resample`, etc.) and manual column stats creation read data in units of one or
+more segments. This setting bounds how many of those units can be admitted into memory at once: an admitted unit's segments
+are decoded and held in memory until processing on that unit finishes. Without this bound, if in-memory processing falls
+behind the read rate, decoded segments for the whole symbol can accumulate in memory.
+
+Defaults to `VersionStore.SegmentReadWindow` divided by the largest number of segments in a single processing unit
+(rounded up), plus `VersionStore.NumCPUThreads`. The first term admits enough units to keep the read window full; the
+second lets every CPU thread hold a unit for processing without taking capacity away from the window, so reads are not
+gated on processing completing.
+
+Note that the first term scales with `NumIOThreads` and the second with `NumCPUThreads`, so on a machine with large
+threadpools the default is correspondingly large and will not meaningfully reduce peak memory use. It is a guard-rail
+against processing falling a long way behind reads, not a tight bound.
+
+**To bound memory in absolute terms, set this explicitly to a small value** such as 8. That can have a huge effect, but
+costs wall time: benchmarking a 100M row x 100 column symbol on S3 measured `K=8` cutting peak memory by
+80-85% for manual column stats creation and 57-73% for `resample`, for a 54-217% increase in wall time.
+
+Values:
+* A positive integer: the maximum number of processing units resident in memory at once.
+* `0`: disables the bound (residency is unbounded, so `SegmentReadWindow` alone governs how many segment reads are in
+  flight).
+
+### VersionStore.SegmentReadWindow
+
+Bounds how many segment reads can be submitted to the IO threadpool but not yet completed at any one time.
+
+Applies to the same operations as `VersionStore.NumProcessingUnitsLive`, that is `QueryBuilder` reads and manual column
+stats creation. A plain `read` with no `QueryBuilder` takes a different code path and is not affected by either setting.
+
+Defaults to `2 * VersionStore.NumIOThreads`.
+
+Must be at least 1.
+
 ### VersionStore.WillItemBePickledWarningMsg
 
 Control whether a detailed message explaining how the item is normalized is logged when calling the `will_item_be_pickled` function.

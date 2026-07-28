@@ -17,6 +17,8 @@
 #include <arcticdb/util/constructors.hpp>
 #include <boost/iterator/iterator_facade.hpp>
 
+#include <utility>
+
 namespace py = pybind11;
 
 namespace arcticdb {
@@ -524,7 +526,8 @@ class SegmentInMemoryImpl {
     SegmentInMemoryImpl clone() const;
 
     // Marks this segment as having been decoded from storage, so SegmentResidencyTracker counts it from here until
-    // this object is destroyed. clone() and processing outputs are left unmarked.
+    // this object is destroyed. A no-op unless the tracker is enabled.
+    // Processing outputs are left unmarked.
     void mark_from_disk();
 
     void set_string_pool(std::shared_ptr<StringPool> string_pool);
@@ -587,10 +590,10 @@ class SegmentInMemoryImpl {
     struct OnDiskFlag {
         bool value_ = false;
         OnDiskFlag() = default;
-        OnDiskFlag(OnDiskFlag&& other) noexcept : value_(other.value_) { other.value_ = false; }
+        OnDiskFlag(OnDiskFlag&& other) noexcept : value_(std::exchange(other.value_, false)) {}
+        // std::exchange rather than read-then-clear so that self-move-assignment leaves value_ set
         OnDiskFlag& operator=(OnDiskFlag&& other) noexcept {
-            value_ = other.value_;
-            other.value_ = false;
+            value_ = std::exchange(other.value_, false);
             return *this;
         }
         OnDiskFlag(const OnDiskFlag&) = delete;

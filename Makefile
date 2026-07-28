@@ -146,14 +146,27 @@ test-cpp-rapidcheck-debug: $(_DEBUG_BUILD_DIR)/.configure-stamp ## Build and run
 	$(_DEBUG_BUILD_DIR)/arcticdb/arcticdb_rapidcheck_tests $(if $(FILTER),--gtest_filter=$(FILTER))
 
 # ── symlink ──────────────────────────────────────────────────────────────────
-_EXT_SUFFIX := $(shell python3 -c "import sysconfig; print(sysconfig.get_config_var('EXT_SUFFIX'))")
+# EXT_SUFFIX must come from the interpreter that will import the extension, not whichever python3 is on
+# PATH. Those differ whenever the venv and the system python are different minor versions, e.g. a py311
+# venv with a py310 /usr/bin/python3.
+_EXT_SUFFIX_PYTHON := $(firstword $(wildcard $(if $(VIRTUAL_ENV),$(VIRTUAL_ENV)/bin/python) $(_VENV_PYTHON)) python3)
+_EXT_SUFFIX := $(shell $(_EXT_SUFFIX_PYTHON) -c "import sysconfig; print(sysconfig.get_config_var('EXT_SUFFIX'))")
+
+define _do_symlink
+	@test -f $(1)/arcticdb/arcticdb_ext$(_EXT_SUFFIX) || { \
+		echo "ERROR: $(1)/arcticdb/arcticdb_ext$(_EXT_SUFFIX) does not exist."; \
+		echo "       EXT_SUFFIX '$(_EXT_SUFFIX)' came from $(_EXT_SUFFIX_PYTHON); built extensions are:"; \
+		ls $(1)/arcticdb/arcticdb_ext*.so 2>/dev/null || echo "       (none — run the build first)"; \
+		exit 1; }
+	ln -sfn ../$(1)/arcticdb/arcticdb_ext$(_EXT_SUFFIX) python/arcticdb_ext$(_EXT_SUFFIX)
+endef
 
 symlink: ## Symlink release arcticdb_ext into python/
-	ln -sf ../cpp/out/$(RELEASE_PRESET)-build/arcticdb/arcticdb_ext$(_EXT_SUFFIX) python/arcticdb_ext$(_EXT_SUFFIX)
+	$(call _do_symlink,$(_RELEASE_BUILD_DIR))
 	@echo "Created python/arcticdb_ext$(_EXT_SUFFIX) -> release build"
 
 symlink-debug: ## Symlink debug arcticdb_ext into python/
-	ln -sf ../cpp/out/$(DEBUG_PRESET)-build/arcticdb/arcticdb_ext$(_EXT_SUFFIX) python/arcticdb_ext$(_EXT_SUFFIX)
+	$(call _do_symlink,$(_DEBUG_BUILD_DIR))
 	@echo "Created python/arcticdb_ext$(_EXT_SUFFIX) -> debug build"
 
 # ── test-py ──────────────────────────────────────────────────────────────────

@@ -9,9 +9,12 @@
 #pragma once
 
 #include <arcticdb/pipeline/frame_slice.hpp>
+#include <arcticdb/util/preconditions.hpp>
+#include <folly/ExceptionWrapper.h>
 #include <folly/futures/Future.h>
 #include <folly/futures/Promise.h>
 #include <atomic>
+#include <exception>
 #include <deque>
 #include <functional>
 #include <memory>
@@ -49,10 +52,19 @@ class ProcessingUnitAdmissionHandler : public std::enable_shared_from_this<Proce
         ranges_and_keys_(std::make_shared<std::vector<pipelines::RangesAndKey>>(std::move(ranges_and_keys))),
         promises_(std::make_shared<std::vector<folly::Promise<pipelines::SegmentAndSlice>>>(ranges_and_keys_->size())),
         i_th_segment_enqueued_(ranges_and_keys_->size(), false),
-        read_window_(std::max<size_t>(1, read_window)),
+        read_window_(read_window),
         processing_units_(std::move(processing_units)),
         max_processing_units_in_flight_(max_processing_units_in_flight),
-        next_unit_(max_processing_units_in_flight) {}
+        next_unit_(max_processing_units_in_flight) {
+        internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+                read_window >= 1, "ProcessingUnitAdmissionHandler read_window must be >= 1, got {}", read_window
+        );
+        internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+                max_processing_units_in_flight >= 1,
+                "ProcessingUnitAdmissionHandler max_processing_units_in_flight must be >= 1, got {}",
+                max_processing_units_in_flight
+        );
+    }
 
     // Used to chain downstream processing, possibly before any of the work is actually executing.
     // The work then gets kicked off by admit_initial_processing_units or on_processing_unit_complete.
@@ -109,7 +121,18 @@ class ProcessingUnitAdmissionHandler : public std::enable_shared_from_this<Proce
             }
         }
         for (const auto i : to_launch) {
-            dispatch_read(i);
+            // A reader that throws instead of returning a failed future would otherwise leave the window slot used
+            // and the promise unfulfilled, hanging every consumer of this segment. Catch everything, since losing a
+            // promise here cannot be recovered from.
+            try {
+                dispatch_read(i);
+            } catch (...) {
+                {
+                    std::lock_guard lock{window_mutex_};
+                    --active_reads_;
+                }
+                promises_->at(i).setException(folly::exception_wrapper{std::current_exception()});
+            }
         }
     }
 
@@ -138,6 +161,9 @@ class ProcessingUnitAdmissionHandler : public std::enable_shared_from_this<Proce
     std::shared_ptr<std::vector<folly::Promise<pipelines::SegmentAndSlice>>> promises_;
 
     // State to hand-roll a folly::window over the segment loads on the IO pool
+    // We do this so that when the processing unit budget is much higher than the window size, we still
+    // get sensible queuing behaviour on the IO pools. Benchmarking on PR #3191 showed a major performance
+    // penalty without this windowing, due to the round-robin scheduling on the IO thread pools.
     std::mutex window_mutex_; // protects the 3 fields below
     std::vector<bool> i_th_segment_enqueued_;
     std::deque<size_t> segments_queued_for_read_;
@@ -151,5 +177,9 @@ class ProcessingUnitAdmissionHandler : public std::enable_shared_from_this<Proce
 };
 
 size_t max_resident_processing_units(const std::vector<std::vector<size_t>>& processing_unit_indexes);
+
+// Read window: the number of segment reads submitted but not completed at any given time. Always >= 1. Defaults to
+// 2*io_thread_count.
+size_t segment_read_window();
 
 } // namespace arcticdb::version_store
