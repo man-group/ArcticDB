@@ -200,6 +200,12 @@ static void check_can_append(
     );
 }
 
+// A frame being appended starts at the end of the existing data, and inherits its column bucketing
+static void set_frame_offset_and_bucketize_dynamic(InputFrame& frame, const TimeseriesDescriptor& existing_tsd) {
+    frame.set_offset(static_cast<ssize_t>(existing_tsd.total_rows()));
+    frame.set_bucketize_dynamic(existing_tsd.column_groups());
+}
+
 static void check_can_update(
         const InputFrame& frame, const index::IndexSegmentReader& index_segment_reader, bool dynamic_schema,
         bool empty_types
@@ -239,10 +245,7 @@ folly::Future<AtomKey> async_append_impl(
                         validate_index,
                         empty_types
                 );
-                bool bucketize_dynamic = index_segment_reader.bucketize_dynamic();
-                auto row_offset = index_segment_reader.tsd().total_rows();
-                frame->set_offset(static_cast<ssize_t>(row_offset));
-                frame->set_bucketize_dynamic(bucketize_dynamic);
+                set_frame_offset_and_bucketize_dynamic(*frame, index_segment_reader.tsd());
                 auto slicing_arg = get_slicing_policy(options, *frame);
                 return append_frame(
                         IndexPartialKey{frame->desc().id(), update_info.next_version_id_},
@@ -3305,30 +3308,7 @@ static std::shared_ptr<TimeseriesDescriptor> compact_data_tsd(
         const WriteOptions& write_options
 ) {
     const auto& existing_tsd = pipeline_context.tsd();
-    if (compact_data_frame.has_value()) {
-        auto& frame = compact_data_frame->frame_;
-        if (frame->num_rows > 0) {
-            check_can_append(
-                    *frame,
-                    existing_tsd,
-                    pipeline_context.last_existing_index_value_,
-                    write_options,
-                    compact_data_frame->validate_index_,
-                    compact_data_frame->empty_types_
-            );
-            frame->set_offset(existing_tsd.total_rows());
-            frame->set_bucketize_dynamic(existing_tsd.column_groups());
-            return std::make_shared<TimeseriesDescriptor>(index::get_merged_tsd(
-                    frame->offset + frame->num_rows, write_options.dynamic_schema, existing_tsd, frame
-            ));
-        } else {
-            frame->set_offset(existing_tsd.total_rows());
-            frame->set_bucketize_dynamic(existing_tsd.column_groups());
-            auto merged_tsd = std::make_shared<TimeseriesDescriptor>(existing_tsd);
-            *merged_tsd->mutable_proto().mutable_user_meta() = std::move(frame->user_meta);
-            return merged_tsd;
-        }
-    } else {
+    if (!compact_data_frame.has_value()) {
         return std::make_shared<TimeseriesDescriptor>(make_timeseries_descriptor(
                 existing_tsd.total_rows(),
                 *pipeline_context.desc_,
@@ -3338,9 +3318,27 @@ static std::shared_ptr<TimeseriesDescriptor> compact_data_tsd(
                 write_options.bucketize_dynamic
         ));
     }
+    auto& frame = compact_data_frame->frame_;
+    set_frame_offset_and_bucketize_dynamic(*frame, existing_tsd);
+    if (frame->num_rows == 0) {
+        auto merged_tsd = std::make_shared<TimeseriesDescriptor>(existing_tsd);
+        *merged_tsd->mutable_proto().mutable_user_meta() = std::move(frame->user_meta);
+        return merged_tsd;
+    }
+    check_can_append(
+            *frame,
+            existing_tsd,
+            pipeline_context.last_existing_index_value_,
+            write_options,
+            compact_data_frame->validate_index_,
+            compact_data_frame->empty_types_
+    );
+    return std::make_shared<TimeseriesDescriptor>(
+            index::get_merged_tsd(frame->offset + frame->num_rows, write_options.dynamic_schema, existing_tsd, frame)
+    );
 }
 
-folly::Future<std::optional<VersionedItem>> compact_data_impl(
+folly::Future<std::optional<AtomKey>> async_compact_data_impl(
         const std::shared_ptr<Store>& store, const UpdateInfo& update_info, const WriteOptions& write_options,
         uint64_t rows_per_segment, std::optional<CompactDataFrame> compact_data_frame
 ) {
@@ -3380,9 +3378,9 @@ folly::Future<std::optional<VersionedItem>> compact_data_impl(
                                  read_query,
                                  tsd,
                                  frame](std::vector<SliceAndKey>&& slices_and_keys
-                                ) -> folly::Future<std::optional<VersionedItem>> {
+                                ) -> folly::Future<std::optional<AtomKey>> {
                                     if (slices_and_keys.empty() && !frame) {
-                                        return folly::makeFuture(std::optional<VersionedItem>());
+                                        return folly::makeFuture(std::optional<AtomKey>());
                                     }
                                     const std::vector<RowRange> new_row_ranges =
                                             find_sorted_unique_row_ranges(slices_and_keys);

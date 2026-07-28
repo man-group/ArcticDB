@@ -203,7 +203,7 @@ struct CompactDataFrame {
     bool empty_types_;
 };
 
-folly::Future<std::optional<VersionedItem>> compact_data_impl(
+folly::Future<std::optional<AtomKey>> async_compact_data_impl(
         const std::shared_ptr<Store>& store, const UpdateInfo& update_info, const WriteOptions& write_options,
         uint64_t rows_per_segment, std::optional<CompactDataFrame> compact_data_frame = std::nullopt
 );

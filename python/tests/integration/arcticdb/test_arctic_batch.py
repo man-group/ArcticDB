@@ -642,7 +642,8 @@ def test_snapshots_with_delete_batch(arctic_library):
 
 
 @pytest.mark.storage
-def test_append_batch(library_factory):
+@pytest.mark.parametrize("compact_data", [False, True])
+def test_append_batch(library_factory, compact_data):
     lib = library_factory(LibraryOptions(rows_per_segment=10))
     assert lib._nvs._lib_cfg.lib_desc.version.write_options.segment_row_size == 10
     num_days = 50
@@ -659,7 +660,7 @@ def test_append_batch(library_factory):
         list_dataframes[sym] = df
 
     # When a symbol doesn't exist, we expect it to be created. In effect, append_batch functions as write_batch
-    batch = lib.append_batch(list_append_requests)
+    batch = lib.append_batch(list_append_requests, compact_data=compact_data)
     assert all(type(w) == PythonVersionedItem for w in batch)
 
     # Then
@@ -678,7 +679,7 @@ def test_append_batch(library_factory):
         list_dataframes[sym] = pd.concat([list_dataframes[sym], df])
 
     # When the symbol already exists, we expect the current dataframe to be appended to the previous dataframe
-    batch = lib.append_batch(list_append_requests)
+    batch = lib.append_batch(list_append_requests, compact_data=compact_data)
     assert all(type(w) == PythonVersionedItem for w in batch)
 
     # Then
@@ -690,7 +691,8 @@ def test_append_batch(library_factory):
 
 
 @pytest.mark.storage
-def test_append_batch_missing_keys(arctic_library):
+@pytest.mark.parametrize("compact_data", [False, True])
+def test_append_batch_missing_keys(arctic_library, compact_data):
     lib = arctic_library
 
     num_days = 2
@@ -715,7 +717,8 @@ def test_append_batch_missing_keys(arctic_library):
         [
             WritePayload("s1", df1_append, metadata="great_metadata_s1"),
             WritePayload("s2", df2_append, metadata="great_metadata_s2"),
-        ]
+        ],
+        compact_data=compact_data,
     )
 
     # Then
@@ -732,10 +735,13 @@ def test_append_batch_missing_keys(arctic_library):
     assert_frame_equal(read_dataframe.data, pd.concat([df2_write, df2_append]))
 
 
-def test_append_batch_empty_dataframe_increases_version(lmdb_version_store_v1):
-    lib = lmdb_version_store_v1
-    lib.batch_write(["sym1", "sym2"], [pd.DataFrame({"a": [1, 2, 3]}), pd.DataFrame({"b": [1, 2, 3, 4]})])
-    lib_tool = lib.library_tool()
+@pytest.mark.parametrize("compact_data", [False, True])
+def test_append_batch_empty_dataframe_increases_version(lmdb_library, compact_data):
+    lib = lmdb_library
+    lib.write_batch(
+        [WritePayload("sym1", pd.DataFrame({"a": [1, 2, 3]})), WritePayload("sym2", pd.DataFrame({"b": [1, 2, 3, 4]}))]
+    )
+    lib_tool = lib._nvs.library_tool()
 
     for symbol in ["sym1", "sym2"]:
         assert len(lib_tool.find_keys_for_symbol(KeyType.VERSION, symbol)) == 1
@@ -744,7 +750,10 @@ def test_append_batch_empty_dataframe_increases_version(lmdb_version_store_v1):
     # One symbol list entry for sym1 and one for sym2
     assert len(lib_tool.find_keys(KeyType.SYMBOL_LIST)) == 2
 
-    append_result = lib.batch_append(["sym1", "sym2"], [pd.DataFrame({"a": [5, 6, 7]}), pd.DataFrame({"b": []})])
+    append_result = lib.append_batch(
+        [WritePayload("sym1", pd.DataFrame({"a": [5, 6, 7]})), WritePayload("sym2", pd.DataFrame({"b": []}))],
+        compact_data=compact_data,
+    )
     assert append_result[0].version == 1
     assert append_result[1].version == 1
 

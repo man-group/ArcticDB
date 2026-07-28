@@ -107,10 +107,13 @@ std::vector<std::variant<VersionedItem, DataError>> PythonVersionStore::batch_wr
 std::vector<std::variant<VersionedItem, DataError>> PythonVersionStore::batch_append(
         const std::vector<StreamId>& stream_ids, const std::vector<convert::InputItem>& items,
         const std::vector<py::object>& norms, const std::vector<py::object>& user_metas, bool prune_previous_versions,
-        bool validate_index, bool upsert, bool throw_on_error
+        bool validate_index, bool upsert, bool throw_on_error, bool compact_data
 ) {
     AppendOptions append_options{
-            .upsert = upsert, .prune_previous_versions = prune_previous_versions, .validate_index = validate_index
+            .upsert = upsert,
+            .prune_previous_versions = prune_previous_versions,
+            .validate_index = validate_index,
+            .compact_data = compact_data
     };
     auto frames = create_input_tensor_frames(
             stream_ids,

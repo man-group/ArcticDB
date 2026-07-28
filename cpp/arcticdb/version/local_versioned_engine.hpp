@@ -328,11 +328,6 @@ class LocalVersionedEngine : public VersionedEngine {
             const StreamId& stream_id, std::optional<uint64_t> rows_per_segment
     ) override;
 
-    VersionedItem maybe_compact_data_and_write_version(
-            const UpdateInfo& update_info, uint64_t rows_per_segment, bool prune_previous_versions,
-            std::optional<CompactDataFrame> compact_data_frame = std::nullopt
-    );
-
     VersionedItem compact_data_internal(
             const StreamId& stream_id, std::optional<uint64_t> rows_per_segment, bool prune_previous_versions
     ) override;
@@ -482,6 +477,10 @@ class LocalVersionedEngine : public VersionedEngine {
     folly::Future<VersionedItem> async_write_versioned_metadata_internal(
             const StreamId& stream_id, UpdateInfo&& update_info,
             arcticdb::proto::descriptors::UserDefinedMetadata&& user_meta, bool prune_previous_versions
+    );
+
+    folly::Future<VersionedItem> async_compact_data_internal(
+            UpdateInfo&& update_info, uint64_t rows_per_segment, bool prune_previous_versions
     );
 
     std::shared_ptr<Store> store_;

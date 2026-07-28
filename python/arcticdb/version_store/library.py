@@ -1467,7 +1467,11 @@ class Library:
         )
 
     def append_batch(
-        self, append_payloads: List[WritePayload], prune_previous_versions: bool = False, validate_index=True
+        self,
+        append_payloads: List[WritePayload],
+        prune_previous_versions: bool = False,
+        validate_index: bool = True,
+        compact_data: bool = False,
     ) -> List[Union[VersionedItem, DataError]]:
         """
         Append data to multiple symbols in a batch fashion. This is more efficient than making multiple `append` calls in
@@ -1486,6 +1490,13 @@ class Library:
             Verify that each entry in the batch has an index that supports date range searches and update operations.
             This tests that the data is sorted in ascending order, using Pandas DataFrame.index.is_monotonic_increasing.
             For Arrow input data, ArcticDB checks the index column directly.
+        compact_data: bool, default=False
+            If False, the data being appended will be sliced and written to disk without consideration for how
+            fragmented this may make the data.
+            If True, the data will also be compacted at the same time (see the `compact_data` method for more details).
+            Note that this will usually involve reading some data segments from disk and doing some in-memory
+            processing, and so will generally be slower than when this argument is False. However, subsequent reads of
+            the data will generally be faster.
 
         Returns
         -------
@@ -1515,6 +1526,7 @@ class Library:
             validate_index=validate_index,
             throw_on_error=throw_on_error,
             index_column_vector=[p.index_column for p in append_payloads],
+            compact_data=compact_data,
         )
 
     def update(

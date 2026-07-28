@@ -2019,6 +2019,7 @@ class NativeVersionStore:
         prune_previous_version=None,
         validate_index: bool = False,
         index_column_vector: Optional[List[bool]] = None,
+        compact_data: bool = False,
         **kwargs,
     ) -> List[VersionedItem]:
         """
@@ -2049,6 +2050,13 @@ class NativeVersionStore:
             Only applicable when data is a PyArrow Table or Polars DataFrame. If True for a given entry,
             the first column is treated as the timeseries index.
             i-th entry corresponds to i-th element of `symbols`.
+        compact_data: bool, default=False
+            If False, the data being appended will be sliced and written to disk without consideration for how
+            fragmented this may make the data.
+            If True, the data will also be compacted at the same time (see the `compact_data` method for more details).
+            Note that this will usually involve reading some data segments from disk and doing some in-memory
+            processing, and so will generally be slower than when this argument is False. However, subsequent reads of
+            the data will generally be faster.
         kwargs :
             passed through to the write handler
 
@@ -2079,6 +2087,7 @@ class NativeVersionStore:
             validate_index,
             throw_on_error,
             index_column_vector,
+            compact_data,
             **kwargs,
         )
 
@@ -2091,6 +2100,7 @@ class NativeVersionStore:
         validate_index,
         throw_on_error,
         index_column_vector,
+        compact_data,
         **kwargs,
     ):
         proto_cfg = self._lib_cfg.lib_desc.version.write_options
@@ -2118,6 +2128,7 @@ class NativeVersionStore:
             validate_index,
             write_if_missing,
             throw_on_error,
+            compact_data,
         )
         converted = self._convert_cxx_batch_results_to_python(cxx_versioned_items, metadata_vector)
         for idx, result in enumerate(converted):
