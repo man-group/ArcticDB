@@ -22,6 +22,8 @@
 #include <aws/s3/model/HeadObjectRequest.h>
 #include <aws/s3/model/Delete.h>
 #include <aws/s3/model/ObjectIdentifier.h>
+#include <aws/core/Aws.h>
+#include <aws/core/utils/HashingUtils.h>
 
 #include <boost/interprocess/streams/bufferstream.hpp>
 
@@ -186,20 +188,23 @@ S3Result<std::monostate> S3ClientImpl::put_object(
     return {std::monostate()};
 }
 
+bool delete_objects_request_use_md5_checksum() {
+    // Defaults to requiring a CRC64-NVME checksum (the SDK behaviour);
+    return ConfigsMap::instance()->get_int("S3Storage.DeleteObjectsChecksum", 0) == 1;
+}
+
+struct ChecksumConfigurableDeleteObjectsRequest : public Aws::S3::Model::DeleteObjectsRequest {
+    bool RequestChecksumRequired() const override {
+        // Disable the checksum here if MD5 checksum is needed instead (will add manually in the request header).
+        return !delete_objects_request_use_md5_checksum();
+    }
+};
+
 S3Result<DeleteObjectsOutput> S3ClientImpl::delete_objects(
         const std::vector<std::string>& s3_object_names, const std::string& bucket_name
 ) {
-    Aws::S3::Model::DeleteObjectsRequest request;
+    ChecksumConfigurableDeleteObjectsRequest request;
     request.WithBucket(bucket_name.c_str());
-#ifndef ARCTICDB_USING_CONDA
-    // SetRequestChecksumRequired only exists in the patched vcpkg aws-sdk-cpp (see
-    // vcpkg_overlays/aws-sdk-cpp/disable-deleteobjects-checksum.patch), not the conda-forge SDK.
-    // Defaults to requiring a checksum (the SDK behaviour); set the config to 0 to disable it for
-    // backends that reject the CRC64-NVME digest with BadDigest.
-    request.SetRequestChecksumRequired(
-            ConfigsMap::instance()->get_int("S3Storage.DeleteObjectsRequestChecksumRequired", 1) == 1
-    );
-#endif
     Aws::S3::Model::Delete del_objects;
     for (auto& s3_object_name : s3_object_names) {
         ARCTICDB_RUNTIME_DEBUG(log::storage(), "Removing s3 object with key {}", s3_object_name);
@@ -208,6 +213,14 @@ S3Result<DeleteObjectsOutput> S3ClientImpl::delete_objects(
 
     ARCTICDB_SUBSAMPLE(S3StorageDeleteObjects, 0)
     request.SetDelete(del_objects);
+    if (delete_objects_request_use_md5_checksum()) {
+        ARCTICDB_RUNTIME_DEBUG(log::storage(), "Setting md5 checksum in header");
+        auto payload = request.SerializePayload();
+        request.SetAdditionalCustomHeaderValue(
+                Aws::Http::CONTENT_MD5_HEADER,
+                Aws::Utils::HashingUtils::Base64Encode(Aws::Utils::HashingUtils::CalculateMD5(payload))
+        );
+    }
 
     auto outcome = s3_client.DeleteObjects(request);
     if (!outcome.IsSuccess()) {

@@ -635,8 +635,23 @@ def route_env_to_extension(monkeypatch):
     if os.name == "nt":
         from arcticdb_ext.tools import putenv_s
 
-        monkeypatch.setattr(os, "putenv", putenv_s)
-        monkeypatch.setattr(os, "unsetenv", lambda n: putenv_s(n, ""))
+        routed = set()
+
+        def putenv(name, value):
+            routed.add(name)
+            putenv_s(name, value)
+
+        monkeypatch.setattr(os, "putenv", putenv)
+        monkeypatch.setattr(os, "unsetenv", lambda n: putenv(n, ""))
+
+        undo = monkeypatch.undo
+
+        def undo_and_resync():
+            undo()  # undo() restore only the Python's copy of the environment
+            for name in routed:
+                putenv_s(name, os.environ.get(name, ""))
+
+        monkeypatch.undo = undo_and_resync
     yield
 
 

@@ -59,17 +59,20 @@ The S3 API supports the `DeleteObjects` method, whereby a single HTTP request ca
 
 The default is 1000.
 
-### S3Storage.DeleteObjectsRequestChecksumRequired
+### S3Storage.DeleteObjectsChecksum
 
-Controls whether ArcticDB includes a checksum (`x-amz-checksum-*`) on the S3 `DeleteObjects`'s header
+Controls which checksum ArcticDB sends on the S3 `DeleteObjects` request. By default the AWS SDK attaches a crc64nvme checksum (`x-amz-checksum-crc64nvme`).
 
-Some S3-compatible backends (e.g. `Scality`) do not support this and reject the request with checksum related error. Set this option to `0` to stop ArcticDB adding the checksum to the request's header
-
-This only takes effect for the pypi build of ArcticDB; the conda build always follows the SDK default.
+Some S3-compatible backends (e.g. `Scality`) do not support this and reject the request with a checksum related error, but do accept the legacy `Content-MD5` header. Set this option to `1` for those backends.
 
 Values:
-* 0: Do not include a checksum on `DeleteObjects` request.
-* 1: Require a checksum (Default).
+* 0: Send the SDK's default crc64nvme checksum (Default).
+* 1: Send md5 checksum instead.
+
+!!! warning "Has no effect in `when_supported` checksum mode"
+
+    Note if either environment variable `AWS_REQUEST_CHECKSUM_CALCULATION` or `AWS_RESPONSE_CHECKSUM_VALIDATION` is set to `when_supported`, the setting of `S3Storage.DeleteObjectsChecksum` will have no effect. crc64nvme checksum will always be sent.
+    See the [AWS documentation](https://docs.aws.amazon.com/sdkref/latest/guide/feature-dataintegrity.html) for more details.
 
 ### S3Storage.VerifySSL
 

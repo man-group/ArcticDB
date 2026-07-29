@@ -58,7 +58,6 @@ from ...util.mark import (
     SSL_TESTS_MARK,
     SSL_TEST_SUPPORTED,
     FORK_SUPPORTED,
-    ARCTICDB_USING_CONDA,
     xfail_azure_chars,
 )
 
@@ -1495,59 +1494,62 @@ def test_s3_checksum_on_by_env_var(s3_storage, lib_name, monkeypatch, route_env_
         create_library(s3_storage.arctic_uri, lib_name)
 
 
-@pytest.mark.skipif(
-    ARCTICDB_USING_CONDA,
-    reason="DeleteObjects crc64nvme opt-out is a vcpkg overlay patch, not applied to conda aws-sdk-cpp builds",
-)
-@pytest.mark.parametrize("checksum_required", [None, 0, 1])
-def test_s3_delete_survives_crc64nvme_hostile_backend(s3_storage, lib_name, checksum_required):
+@pytest.mark.parametrize("md5_checksum", [None, 0, 1])
+def test_s3_delete_survives_md5_only_backend(s3_storage, lib_name, md5_checksum):
+    # moto is set to reject the CRC64-NVME digest the SDK sends by default and to require a correct
+    # Content-MD5 instead, so only the MD5 opt-in should be able to delete.
     endpoint = s3_storage.factory.endpoint
     verify = s3_storage.factory.client_cert_file or False
-    requests.post(endpoint + "/reject_crc64nvme", b"1", verify=verify).raise_for_status()
+    requests.post(endpoint + "/require_md5_checksum", b"1", verify=verify).raise_for_status()
     try:
         create_library(s3_storage.arctic_uri, lib_name)
         lib = Arctic(s3_storage.arctic_uri)[lib_name]
-        lib._nvs.write("test", 1)
-        lib._nvs.write("test", 2)
-        if checksum_required is None:
+        for i in range(3):
+            lib._nvs.write("test", i)
+        lt = lib._nvs.library_tool()
+        assert len(lib.list_versions(symbol="test")) == 3
+        if md5_checksum is None:
             config = contextlib.nullcontext()
         else:
-            config = config_context("S3Storage.DeleteObjectsRequestChecksumRequired", checksum_required)
+            config = config_context("S3Storage.DeleteObjectsChecksum", md5_checksum)
         with config:
-            # lib.delete swallows storage errors, so remove a key directly to observe the rejection.
-            lt = lib._nvs.library_tool()
-            key = lt.find_keys(KeyType.TABLE_DATA)[0]
+            # Deleting named versions routes through delete_tree, which removes the index keys of both
+            # versions in a single DeleteObjects request and propagates storage errors. lib.delete(symbol)
+            # cannot be used here because it catches StorageException and only logs it.
             with qs.query_stats():
-                if checksum_required == 0:
-                    lt.remove(key)
+                if md5_checksum == 1:
+                    lib.delete("test", versions=[0, 1])
                 else:
                     with pytest.raises(StorageException):
-                        lt.remove(key)
+                        lib.delete("test", versions=[0, 1])
                 stats = qs.get_query_stats()
         assert "S3_DeleteObjects" in stats["storage_operations"], stats
+        assert len(lt.find_keys(KeyType.TABLE_INDEX)) == (1 if md5_checksum == 1 else 3)
     finally:
-        requests.post(endpoint + "/reject_crc64nvme", b"0", verify=verify).raise_for_status()
+        requests.post(endpoint + "/require_md5_checksum", b"0", verify=verify).raise_for_status()
 
 
 @REAL_S3_TESTS_MARK
 @pytest.mark.storage
-@pytest.mark.skipif(
-    ARCTICDB_USING_CONDA,
-    reason="DeleteObjects crc64nvme opt-out is a vcpkg overlay patch, not applied to conda aws-sdk-cpp builds",
-)
-def test_s3_delete_objects_checksum_required_real_s3(real_s3_storage, lib_name):
-    # AWS requires a checksum on multi-object DeleteObjects, so disabling it makes the request fail.
-    # lib.delete swallows storage errors, so use LibraryTool.remove which routes through the batch
-    # delete_objects path and propagates the failure.
-    # It is to make sure the default setting (config unset -> checksum required) works on aws s3
+@pytest.mark.parametrize("md5_checksum", [None, 0, 1])
+def test_s3_delete_objects_checksum_real_s3(real_s3_storage, lib_name, md5_checksum):
+    # AWS accepts both the SDK's CRC64-NVME digest and the legacy Content-MD5 on multi-object DeleteObjects,
+    # so every mode must succeed
     ac = Arctic(real_s3_storage.arctic_uri)
     try:
         lib = ac.create_library(lib_name)
-        lib._nvs.write("sym", 1)
+        for i in range(3):
+            lib._nvs.write("sym", i)
         lt = lib._nvs.library_tool()
-        key = lt.find_keys(KeyType.TABLE_DATA)[0]
-        lt.remove(key)
-        assert not lt.key_exists(key)
+        config = (
+            contextlib.nullcontext()
+            if md5_checksum is None
+            else config_context("S3Storage.DeleteObjectsChecksum", md5_checksum)
+        )
+        with config:
+            lib.delete("sym", versions=[0, 1])
+        assert len(lt.find_keys(KeyType.TABLE_INDEX)) == 1
+        assert lib.read("sym").data == 2
     finally:
         ac.delete_library(lib_name)
 
