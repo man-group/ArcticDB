@@ -122,7 +122,12 @@ std::vector<std::variant<ResultValueType, DataError>> transform_batch_items_or_t
             const bool is_missing_version_exception = exception.template is_compatible_with<NoSuchVersionException>();
             const bool throw_on_missing_symbol = (is_missing_version_exception && flags.throw_on_missing_symbol_);
             if (flags.throw_on_error_ && (!is_missing_version_exception || throw_on_missing_symbol)) {
-                version_or_exception.throwUnlessValue();
+                if (flags.convert_no_data_found_to_key_not_found_ &&
+                    exception.template is_compatible_with<storage::NoDataFoundException>()) {
+                    throw storage::KeyNotFoundException(exception.what().toStdString());
+                } else {
+                    version_or_exception.throwUnlessValue();
+                }
             } else {
                 DataError data_error =
                         version_queries.empty()

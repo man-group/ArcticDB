@@ -690,6 +690,7 @@ def test_append_batch(library_factory, compact_data):
         assert_frame_equal(read_dataframe.data, original_dataframe)
 
 
+# See test_basic_version_store.py::test_batch_append_missing_keys for equivalent V1 API test
 @pytest.mark.storage
 @pytest.mark.parametrize("compact_data", [False, True])
 def test_append_batch_missing_keys(arctic_library, compact_data):
