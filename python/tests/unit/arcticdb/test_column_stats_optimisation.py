@@ -165,7 +165,7 @@ def test_column_stats_query_optimisation_column_not_in_stats(
 
 
 def test_column_stats_query_optimisation_empty_segment(
-    in_memory_version_store_tiny_segment, column_stats_filtering_enabled
+    in_memory_version_store_tiny_segment, column_stats_filtering_enabled, clear_query_stats
 ):
     lib = in_memory_version_store_tiny_segment
 

@@ -1336,7 +1336,7 @@ def test_query_builder_vwap(lmdb_version_store_v1, any_output_format):
 
 
 @pytest.mark.parametrize("dynamic_schema", [True, False])
-def test_column_select_projected_column(in_memory_store_factory, dynamic_schema, any_output_format):
+def test_column_select_projected_column(in_memory_store_factory, dynamic_schema, any_output_format, clear_query_stats):
     lib = in_memory_store_factory(dynamic_schema=dynamic_schema, column_group_size=2)
     lib._set_output_format_for_pipeline_tests(any_output_format)
     sym = "sym_0"
@@ -1353,7 +1353,9 @@ def test_column_select_projected_column(in_memory_store_factory, dynamic_schema,
 
 
 @pytest.mark.parametrize("dynamic_schema", [True, False])
-def test_column_select_projected_column_and_filter_it(in_memory_store_factory, dynamic_schema, any_output_format):
+def test_column_select_projected_column_and_filter_it(
+    in_memory_store_factory, dynamic_schema, any_output_format, clear_query_stats
+):
     lib = in_memory_store_factory(dynamic_schema=dynamic_schema, column_group_size=2)
     lib._set_output_format_for_pipeline_tests(any_output_format)
     sym = "sym_0"
@@ -1373,7 +1375,7 @@ def test_column_select_projected_column_and_filter_it(in_memory_store_factory, d
 @pytest.mark.parametrize("dynamic_schema", [True, False])
 @pytest.mark.parametrize("column_to_read", ["b", "c"])
 def test_filter_synthetic_column_and_select_on_disk_column(
-    in_memory_store_factory, dynamic_schema, column_to_read, any_output_format
+    in_memory_store_factory, dynamic_schema, column_to_read, any_output_format, clear_query_stats
 ):
     lib = in_memory_store_factory(dynamic_schema=dynamic_schema, column_group_size=2)
     lib._set_output_format_for_pipeline_tests(any_output_format)

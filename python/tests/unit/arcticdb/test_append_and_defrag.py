@@ -276,7 +276,7 @@ def assert_data_key_ios(stats, expected_reads, expected_writes):
     assert query_stats_operation_count(stats, "S3_PutObject", "TABLE_DATA") == expected_writes
 
 
-def test_io_count_basic(s3_library_factory):
+def test_io_count_basic(s3_library_factory, clear_query_stats):
     lib = s3_library_factory(LibraryOptions(rows_per_segment=64))
     sym_0 = "test_io_count_basic_0"
     sym_1 = "test_io_count_basic_1"
@@ -339,7 +339,7 @@ def test_io_count_basic(s3_library_factory):
     assert_data_key_ios(stats, 4, 2)
 
 
-def test_io_count_many_iterations(s3_library_factory):
+def test_io_count_many_iterations(s3_library_factory, clear_query_stats):
     lib = s3_library_factory(LibraryOptions(rows_per_segment=64))
     sym = "test_io_count_many_iterations"
     rows_per_df = 4

@@ -261,7 +261,7 @@ def test_collect_schema_with_query(lmdb_library):
 
 
 @pytest.mark.parametrize("create_column_stats", [True, False])
-def test_collect_schema_and_collect_multiple_times(mem_library, create_column_stats):
+def test_collect_schema_and_collect_multiple_times(mem_library, create_column_stats, clear_query_stats):
     with (
         config_context("VersionMap.ReloadInterval", 0),
         config_context("ColumnStats.UseForQueries", int(create_column_stats)),
@@ -365,7 +365,7 @@ def test_collect_schema_and_collect_multiple_times(mem_library, create_column_st
         assert_frame_equal_with_arrow(expected, received_df)
 
 
-def test_collect_schema_and_collect_version_deleted(mem_library):
+def test_collect_schema_and_collect_version_deleted(mem_library, clear_query_stats):
     with config_context("VersionMap.ReloadInterval", 0):
         lib = mem_library
         lib._nvs.set_output_format(OutputFormat.POLARS)

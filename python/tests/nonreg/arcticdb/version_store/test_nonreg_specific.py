@@ -543,7 +543,7 @@ def test_use_norm_failure_handler_known_types(lmdb_version_store_allows_pickling
     Library("dummy", nvs)
 
 
-def test_all_snapshots_not_loaded_for_tombstoned_as_of(in_memory_store_factory, tiny_thread_pool):
+def test_all_snapshots_not_loaded_for_tombstoned_as_of(in_memory_store_factory, tiny_thread_pool, clear_query_stats):
     # Prior to https://github.com/man-group/ArcticDB/pull/2699 if a version was requested as_of a version number that
     # had been tombstoned, we would load all of the snapshots into memory, and then search for the specified index key.
     # The new implementation:
