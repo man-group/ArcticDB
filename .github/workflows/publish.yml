@@ -88,7 +88,7 @@ jobs:
         run: |
             ls
             python3 -m pip install twine
-            python3 -m twine upload --non-interactive *.whl
+            python3 -m twine upload --skip-existing --non-interactive --verbose *.whl
         env:
           TWINE_USERNAME: ${{vars.TWINE_USERNAME || secrets.TWINE_USERNAME}}
           TWINE_PASSWORD: ${{secrets.TWINE_PASSWORD}}
