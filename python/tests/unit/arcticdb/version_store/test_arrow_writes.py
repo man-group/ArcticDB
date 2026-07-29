@@ -111,6 +111,18 @@ def test_basic_write_strings(in_memory_version_store_arrow, type):
     assert table.equals(received)
 
 
+@pytest.mark.skip(
+    reason="Writing an arrow column with an empty-string name aborts in sparrow "
+    "(record_batch.cpp: 'A column can not have an empty name'); the assertion is uncatchable so this "
+    "cannot run as a live test until sparrow raises instead"
+)
+def test_write_empty_column_name_fails(in_memory_version_store_arrow):
+    """An empty-string arrow column name is rejected by sparrow. Skipped because the failure is a hard
+    assertion abort rather than a catchable exception."""
+    lib = in_memory_version_store_arrow
+    lib.write("sym", pa.table({"": pa.array([0, 1], pa.int64())}))
+
+
 @pytest.mark.skip(reason="Not implemented yet 9951777416")
 @pytest.mark.parametrize("type", [pa.timestamp("us"), pa.timestamp("ms"), pa.timestamp("s")])
 @pytest.mark.parametrize("index_column", [False, True])
