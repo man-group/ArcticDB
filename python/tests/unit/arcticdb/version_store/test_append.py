@@ -809,8 +809,7 @@ class TestAppend:
         # Using arange guarantees the dtype matches the written df
         append_data = pd.DataFrame({"col": np.arange(0)}) if data_class == "dataframe" else pd.Series(np.arange(0))
         append_vit = (
-            # TODO: 12033601732 test with batch and compact_data=True as well
-            lib.batch_append([sym], [append_data], metadata_vector=[metadata_v1])[0]
+            lib.batch_append([sym], [append_data], metadata_vector=[metadata_v1], compact_data=compact_data)[0]
             if batch
             else lib.append(sym, append_data, metadata=metadata_v1, compact_data=compact_data)
         )
@@ -832,7 +831,10 @@ class TestAppend:
         assert not len(lib.list_symbols())
         num_symbol_list_keys = len(lib_tool.find_keys(KeyType.SYMBOL_LIST))
         append_df = pd.DataFrame({"col": np.arange(0)})
-        # TODO: 12033601732 test with batch and compact_data=True as well
-        (lib.batch_append([sym], [append_df]) if batch else lib.append(sym, append_df, compact_data=compact_data))
+        (
+            lib.batch_append([sym], [append_df], compact_data=compact_data)
+            if batch
+            else lib.append(sym, append_df, compact_data=compact_data)
+        )
         assert len(lib_tool.find_keys(KeyType.SYMBOL_LIST)) == num_symbol_list_keys + 1
         assert lib.list_symbols() == [sym]

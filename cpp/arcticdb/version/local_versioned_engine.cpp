@@ -97,8 +97,7 @@ struct TransformBatchResultsFlags {
     /// For historical reasons batch reading of metadata in V1 Library API does not throw when the symbol version is
     /// missing even if throw on error is true. Every other operation must throw in this case.
     bool throw_on_missing_symbol_{true};
-    /// Applies only if TransformBatchResultsFlags::throw_on_error_ is true
-    /// Used only by batch read in order to preserve the API. For historical reasons batch_read converts
+    /// Used by batch read and batch append in order to preserve the API. For historical reasons batch_read converts
     /// ErrorCategory::MISSING_DATA to ErrorCode::E_KEY_NOT_FOUND
     bool convert_no_data_found_to_key_not_found_{false};
 };
@@ -123,7 +122,12 @@ std::vector<std::variant<ResultValueType, DataError>> transform_batch_items_or_t
             const bool is_missing_version_exception = exception.template is_compatible_with<NoSuchVersionException>();
             const bool throw_on_missing_symbol = (is_missing_version_exception && flags.throw_on_missing_symbol_);
             if (flags.throw_on_error_ && (!is_missing_version_exception || throw_on_missing_symbol)) {
-                version_or_exception.throwUnlessValue();
+                if (flags.convert_no_data_found_to_key_not_found_ &&
+                    exception.template is_compatible_with<storage::NoDataFoundException>()) {
+                    throw storage::KeyNotFoundException(exception.what().toStdString());
+                } else {
+                    version_or_exception.throwUnlessValue();
+                }
             } else {
                 DataError data_error =
                         version_queries.empty()
@@ -1282,33 +1286,18 @@ CompactDataInfo LocalVersionedEngine::compact_data_explain_plan_internal(
             .get();
 }
 
-VersionedItem LocalVersionedEngine::maybe_compact_data_and_write_version(
-        const UpdateInfo& update_info, uint64_t rows_per_segment, bool prune_previous_versions,
-        std::optional<CompactDataFrame> compact_data_frame
-) {
-    auto versioned_item =
-            compact_data_impl(store(), update_info, write_options_, rows_per_segment, compact_data_frame).get();
-    if (versioned_item.has_value()) {
-        write_version_and_prune_previous(
-                prune_previous_versions, versioned_item->key_, update_info.previous_index_key_
-        );
-        return *versioned_item;
-    } else {
-        // compact_data_impl returns nullopt if the data was already compacted, in which case the versioned item we
-        // return is for the existing version
-        return {std::move(*update_info.previous_index_key_)};
-    }
-}
-
 VersionedItem LocalVersionedEngine::compact_data_internal(
         const StreamId& stream_id, std::optional<uint64_t> rows_per_segment, bool prune_previous_versions
 ) {
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: compact_data");
     py::gil_scoped_release release_gil;
     UpdateInfo update_info = compact_data_preamble(stream_id);
-    return maybe_compact_data_and_write_version(
-            update_info, rows_per_segment.value_or(write_options_.segment_row_size), prune_previous_versions
-    );
+    return async_compact_data_internal(
+                   std::move(update_info),
+                   rows_per_segment.value_or(write_options_.segment_row_size),
+                   prune_previous_versions
+    )
+            .get();
 }
 
 bool LocalVersionedEngine::is_symbol_fragmented(const StreamId& stream_id, std::optional<size_t> segment_size) {
@@ -1694,16 +1683,38 @@ folly::Future<VersionedItem> LocalVersionedEngine::async_append_internal(
 ) {
     const bool add_new_symbol_list_entry = !update_info.previous_index_key_.has_value() && cfg().symbol_list();
     auto index_key_fut = folly::Future<AtomKey>::makeEmpty();
+    // It would be nice if upsert also sliced into more evenly sized segments at least when compact_data is true,
+    // but also when it isn't. However, the read-modify-write pipeline is all built around the PipelineContext class
+    // which assumes an existing version. Better if we just make the FixedSlicer smarter so that its logic is more like
+    // ReslicingInfo
     if (update_info.previous_index_key_.has_value()) {
-        index_key_fut = frame->empty() ? async_write_metadata_impl(store(), update_info, std::move(frame->user_meta))
-                                       : async_append_impl(
-                                                 store(),
-                                                 update_info,
-                                                 frame,
-                                                 write_options_,
-                                                 append_options.validate_index,
-                                                 write_options_.empty_types
-                                         );
+        if (append_options.compact_data) {
+            auto compact_data_frame = std::make_optional<CompactDataFrame>(
+                    frame, append_options.validate_index, write_options_.empty_types
+            );
+            index_key_fut =
+                    async_compact_data_impl(
+                            store(), update_info, write_options_, write_options_.segment_row_size, compact_data_frame
+                    )
+                            .thenValueInline([](std::optional<AtomKey>&& opt_index_key) {
+                                internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+                                        opt_index_key.has_value(),
+                                        "append with compact_data=true should always write a new version"
+                                );
+                                return *opt_index_key;
+                            });
+        } else {
+            index_key_fut = frame->empty()
+                                    ? async_write_metadata_impl(store(), update_info, std::move(frame->user_meta))
+                                    : async_append_impl(
+                                              store(),
+                                              update_info,
+                                              frame,
+                                              write_options_,
+                                              append_options.validate_index,
+                                              write_options_.empty_types
+                                      );
+        }
     } else {
         if (!append_options.upsert) {
             auto error_msg = fmt::format(
@@ -1835,6 +1846,30 @@ folly::Future<VersionedItem> LocalVersionedEngine::async_write_versioned_metadat
             });
 }
 
+folly::Future<VersionedItem> LocalVersionedEngine::async_compact_data_internal(
+        UpdateInfo&& update_info, uint64_t rows_per_segment, bool prune_previous_versions
+) {
+    return async_compact_data_impl(store(), update_info, write_options_, rows_per_segment)
+            .thenValueInline(
+                    [this, update_info = std::move(update_info), prune_previous_versions](auto&& opt_index_key
+                    ) mutable -> folly::Future<VersionedItem> {
+                        if (opt_index_key.has_value()) {
+                            return write_index_key_to_version_map_async(
+                                    version_map(),
+                                    std::move(*opt_index_key),
+                                    std::move(update_info),
+                                    prune_previous_versions,
+                                    false
+                            );
+                        } else {
+                            // compact_data_impl returns nullopt if the data was already compacted, in which case the
+                            // versioned item we return is for the existing version
+                            return {std::move(*update_info.previous_index_key_)};
+                        }
+                    }
+            );
+}
+
 std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_write_versioned_dataframe_internal(
         const std::vector<StreamId>& stream_ids, std::vector<std::shared_ptr<pipelines::InputFrame>>&& frames,
         bool prune_previous_versions, bool validate_index, bool throw_on_error
@@ -1928,19 +1963,6 @@ VersionedItem LocalVersionedEngine::append_internal(
 ) {
     py::gil_scoped_release release_gil;
     auto update_info = get_next_version_id_and_optionally_latest_undeleted_version(store(), version_map(), stream_id);
-
-    // It would be nice if upsert also sliced into more evenly sized segments at least when compact_data is true,
-    // but also when it isn't. However, the read-modify-write pipeline is all built around the PipelineContext class
-    // which assumes an existing version. Better if we just make the FixedSlicer smarter so that its logic is more like
-    // ReslicingInfo
-    if (update_info.previous_index_key_.has_value() && append_options.compact_data) {
-        auto compact_data_frame =
-                std::make_optional<CompactDataFrame>(frame, append_options.validate_index, write_options_.empty_types);
-        return maybe_compact_data_and_write_version(
-                update_info, write_options_.segment_row_size, append_options.prune_previous_versions, compact_data_frame
-        );
-    }
-
     return async_append_internal(stream_id, std::move(update_info), frame, append_options, false).get();
 }
 
@@ -1974,6 +1996,9 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
     auto append_versions = folly::collectAll(append_versions_futs).get();
     TransformBatchResultsFlags flags;
     flags.throw_on_error_ = throw_on_error;
+    // Missing index keys raise NoDataFoundException on compact_data path, but KeyNotFoundException on non-compact path
+    // Setting this flag makes the exception bubbed up to the user the same in both cases
+    flags.convert_no_data_found_to_key_not_found_ = append_options.compact_data;
     return transform_batch_items_or_throw(std::move(append_versions), stream_ids, flags);
 }
 
