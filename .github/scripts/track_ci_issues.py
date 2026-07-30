@@ -36,12 +36,17 @@ def read_lines(path: str) -> list[str]:
 def _sanitise_search_query(title: str) -> str:
     """Strip characters that GitHub Search treats as special syntax.
 
-    GitHub's issue search interprets [ ] : / . \\ as operators or escape
+    GitHub's issue search interprets [ ] : / \\ as operators or escape
     characters, which causes queries for test paths (especially Windows
     backslash paths) to return zero results. We strip these from the search
     query and rely on the exact title match below to filter accurately.
+
+    The dot is kept: GitHub indexes a filename token like ``test_foo.py`` as
+    a single term, so splitting it at the dot leaves a bare ``test_foo`` term
+    that matches nothing. Because search ANDs the terms, that dead term drops
+    the whole query to zero results and a duplicate issue is opened each run.
     """
-    return re.sub(r'[\[\]:/.\\"]', " ", title)
+    return re.sub(r'[\[\]:/\\"]', " ", title)
 
 
 def find_existing_issue(repo: str, label: str, title: str) -> int | None:
