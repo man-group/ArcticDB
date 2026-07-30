@@ -104,7 +104,7 @@ class TestStressTimeseriesMergeUpdate:
         assert_frame_equal(result, expected)
 
     @pytest.mark.parametrize("on_segments", [[], [1, 4, 5, 6, 9], [5, 6], [1, 9], [4, 5, 9]])
-    def test_merge_update_on(self, s3_version_store_v1, on_segments):
+    def test_merge_update_on(self, s3_version_store_v1, on_segments, clear_query_stats):
         segments_to_update = [1, 4, 5, 6, 9]
         on = ["col_1", "col_130"]
         qs.reset_stats()

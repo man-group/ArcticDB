@@ -1911,6 +1911,9 @@ def old_venv_and_arctic_uri(old_venv, arctic_uri):
 
 @pytest.fixture
 def clear_query_stats():
+    # Reset before the test as well as after to make sure we start and end in a clean state
+    query_stats.disable()
+    query_stats.reset_stats()
     yield
     query_stats.disable()
     query_stats.reset_stats()

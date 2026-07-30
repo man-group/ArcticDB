@@ -94,7 +94,9 @@ class TestLazyDataFrame:
         assert_frame_equal(expected, received)
 
     @pytest.mark.parametrize("create_column_stats", [True, False])
-    def test_lazy_filter_column_stats(self, mem_library, any_output_format, collect_schema_first, create_column_stats):
+    def test_lazy_filter_column_stats(
+        self, mem_library, any_output_format, collect_schema_first, create_column_stats, clear_query_stats
+    ):
         lib = mem_library
         lib._nvs._set_output_format_for_pipeline_tests(any_output_format)
         sym = "test_lazy_filter_column_stats"
