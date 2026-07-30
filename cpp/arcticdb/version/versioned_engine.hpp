@@ -149,6 +149,11 @@ class VersionedEngine {
             const StreamId& stream_id, std::optional<uint64_t> rows_per_segment, bool prune_previous_versions
     ) = 0;
 
+    virtual std::vector<std::variant<VersionedItem, DataError>> batch_compact_data_internal(
+            const std::vector<StreamId>& stream_ids, std::optional<uint64_t> rows_per_segment,
+            bool prune_previous_versions, bool throw_on_error
+    ) = 0;
+
     virtual bool is_symbol_fragmented(const StreamId& stream_id, std::optional<size_t> segment_size) = 0;
 
     virtual VersionedItem defragment_symbol_data(

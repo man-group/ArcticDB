@@ -207,6 +207,9 @@ using AtomicOperationFailedException = ArcticSpecificException<ErrorCode::E_ATOM
 using UnsupportedAtomicOperationException = ArcticSpecificException<ErrorCode::E_UNSUPPORTED_ATOMIC_OPERATION>;
 using NotImplementedException = ArcticSpecificException<ErrorCode::E_NOT_IMPLEMENTED_BY_STORAGE>;
 using QuotaExceededException = ArcticSpecificException<ErrorCode::E_QUOTA_EXCEEDED>;
+using SymbolNotFoundException = ArcticSpecificException<ErrorCode::E_SYMBOL_NOT_FOUND>;
+using RecursivelyNormalizedDataException =
+        ArcticSpecificException<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_RECURSIVE_NORMALIZED_DATA>;
 
 template<ErrorCode error_code>
 [[noreturn]] void throw_error(const std::string& msg) {
@@ -291,6 +294,18 @@ template<>
 template<>
 [[noreturn]] inline void throw_error<ErrorCode::E_QUOTA_EXCEEDED>(const std::string& msg) {
     throw ArcticSpecificException<ErrorCode::E_QUOTA_EXCEEDED>(msg);
+}
+
+template<>
+[[noreturn]] inline void throw_error<ErrorCode::E_SYMBOL_NOT_FOUND>(const std::string& msg) {
+    throw ArcticSpecificException<ErrorCode::E_SYMBOL_NOT_FOUND>(msg);
+}
+
+template<>
+[[noreturn]] inline void throw_error<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_RECURSIVE_NORMALIZED_DATA>(
+        const std::string& msg
+) {
+    throw ArcticSpecificException<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_RECURSIVE_NORMALIZED_DATA>(msg);
 }
 
 } // namespace arcticdb

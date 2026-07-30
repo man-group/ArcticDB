@@ -1217,7 +1217,7 @@ class Library:
 
     @staticmethod
     def _raise_if_duplicate_symbols_in_batch(batch):
-        symbols = {p.symbol for p in batch}
+        symbols = {(p if isinstance(p, str) else p.symbol) for p in batch}
         if len(symbols) < len(batch):
             raise ArcticDuplicateSymbolsInBatchException
 
@@ -3323,6 +3323,77 @@ class Library:
         1
         """
         return self._nvs.compact_data(symbol, rows_per_segment, prune_previous_versions)
+
+    def compact_data_batch(
+        self,
+        symbols: List[str],
+        rows_per_segment: Optional[int] = None,
+        prune_previous_versions: bool = False,
+    ) -> List[Union[VersionedItem, DataError]]:
+        """
+        Compact the data keys associated with the latest versions of a collection of symbols such that the number of
+        rows in each segment is close to rows_per_segment. After compaction, all segments will have a row count within
+        33% of rows_per_segment.
+
+        For each symbol, this operation creates a new version, unless the data for that symbol is already compacted.
+
+        The metadata from the versions being compacted are maintained with the newly created versions.
+
+        Parameters
+        ----------
+        symbols : List[str]
+            The symbols to compact the data keys of.
+        rows_per_segment : Optional[int], default=None
+            The target number of rows for each segment after the compaction. If None, uses the library configuration
+            setting. Note that subsequent calls to write, append, and update will continue to use the library
+            configuration setting.
+        prune_previous_versions : bool, default=False
+            If True, removes previous versions from the version list.
+
+        Returns
+        -------
+        List[Union[VersionedItem, DataError]]
+            The i-th element of the returned list corresponds to the i-th entry of the input symbols argument:
+            * If successful - a VersionedItem including the version number of the written symbol in the store. The data
+              and metadata attributes will not be populated. If no compaction occurs because the data is already
+              compacted, the version field will be that of the latest live version for the symbol.
+            * On failure - a DataError object containing information about the error encountered when trying to compact
+              that symbol.
+
+        Raises
+        ------
+        ArcticNativeException
+            If invalid rows_per_segment is provided
+        ArcticDuplicateSymbolsInBatchException
+            If the symbols argument contains duplicate entries
+
+        Examples
+        --------
+
+        >>> df1 = pd.DataFrame({"col": np.arange(100_000)})
+        >>> df2 = pd.DataFrame({"col": np.arange(200_000)})
+        >>> for i in range(100):
+        >>>     lib.append_batch(
+        >>>         [
+        >>>             WritePayload("sym1", df1[i * 1_000 : (i + 1) * 1_000]),
+        >>>             WritePayload("sym2", df2[i * 2_000 : (i + 1) * 2_000]),
+        >>>         ]
+        >>>     )
+        >>> lib_tool = lib._dev_tools.library_tool()
+        >>> len(lib_tool.read_index("sym1"))
+        100
+        >>> len(lib_tool.read_index("sym2"))
+        100
+        >>> lib.compact_data_batch(["sym1", "sym2"])
+        >>> len(lib_tool.read_index("sym1"))
+        1
+        >>> len(lib_tool.read_index("sym2"))
+        2
+        """
+        self._raise_if_duplicate_symbols_in_batch(symbols)
+        return self._nvs._batch_compact_data_internal(
+            symbols, rows_per_segment, prune_previous_versions, throw_on_error=False
+        )
 
     def is_symbol_fragmented(self, symbol: str, segment_size: Optional[int] = None) -> bool:
         """
