@@ -22,13 +22,9 @@ namespace arcticdb::toolbox::apy {
 
 namespace py = pybind11;
 
-enum class StorageLockKind { UNRELIABLE, RELIABLE };
-
 struct StorageLockInfo {
     std::string name;
-    StorageLockKind kind;
-    std::optional<uint64_t> lock_id; // reliable locks only
-    timestamp value;                 // nanosecond timestamp (unreliable) or expiration (reliable)
+    timestamp acquire_time; // nanosecond timestamp the lock was written
     bool active;
     std::optional<google::protobuf::Any> metadata;
 };

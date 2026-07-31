@@ -77,20 +77,11 @@ class LibraryTool(LibraryToolImpl):
 
         return StorageLock(self._nvs.version_store.get_storage_lock(name))
 
-    def get_reliable_storage_lock(self, name: str, timeout_ns: int):
-        """Return a dict-in/dict-out :class:`~arcticdb.toolbox.storage_lock.ReliableStorageLock`.
-
-        Requires a storage backend supporting atomic writes (e.g. S3).
-        """
-        from arcticdb.toolbox.storage_lock import ReliableStorageLock
-
-        return ReliableStorageLock(name, self._nvs._library, timeout_ns)
-
     def list_storage_locks(self) -> List[Dict[str, Any]]:
-        """List every storage lock in the library, of both kinds, with their metadata denormalised to a dict.
+        """List the storage locks in the library, with their metadata denormalised to a dict.
 
-        Each entry has ``name``, ``kind`` ("unreliable"/"reliable"), ``active``, ``metadata`` (dict or None), a
-        ``timestamp`` (unreliable) or ``expiration`` and ``lock_id`` (reliable).
+        Each entry has ``name``, ``timestamp`` (nanoseconds), ``active`` (within the lock TTL), and ``metadata``
+        (dict or None).
         """
         locks = super().list_storage_locks()
         for lock in locks:

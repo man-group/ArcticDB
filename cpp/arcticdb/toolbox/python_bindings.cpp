@@ -22,16 +22,13 @@
 namespace arcticdb::toolbox::apy {
 
 namespace {
-// The lock cores traffic in google::protobuf::Any; the py::object <-> Any conversion lives only here, mirroring the
-// snapshot metadata path. The py::object is a UserDefinedMetadata proto (or None).
 std::optional<google::protobuf::Any> py_metadata_to_any(const py::object& metadata) {
-    if (metadata.is_none()) {
+    auto udm = python_util::maybe_pb_from_python<arcticdb::proto::descriptors::UserDefinedMetadata>(metadata);
+    if (!udm.has_value()) {
         return std::nullopt;
     }
-    arcticdb::proto::descriptors::UserDefinedMetadata udm;
-    python_util::pb_from_python(metadata, udm);
     google::protobuf::Any any;
-    any.PackFrom(udm);
+    any.PackFrom(*udm);
     return any;
 }
 
@@ -88,14 +85,7 @@ void register_bindings(py::module& m, py::exception<arcticdb::ArcticException>& 
                      for (auto& info : self.list_storage_locks()) {
                          py::dict d;
                          d["name"] = info.name;
-                         const bool reliable = info.kind == StorageLockKind::RELIABLE;
-                         d["kind"] = reliable ? "reliable" : "unreliable";
-                         d["lock_id"] = info.lock_id.has_value() ? py::cast(*info.lock_id) : py::none();
-                         if (reliable) {
-                             d["expiration"] = info.value;
-                         } else {
-                             d["timestamp"] = info.value;
-                         }
+                         d["timestamp"] = info.acquire_time;
                          d["active"] = info.active;
                          d["metadata"] = any_metadata_to_py(info.metadata);
                          result.append(std::move(d));
@@ -117,19 +107,11 @@ void register_bindings(py::module& m, py::exception<arcticdb::ArcticException>& 
             .def(py::init<>([](std::string base_name, std::shared_ptr<Library> lib, timestamp timeout) {
                 auto store = version_store::LocalVersionedEngine(lib)._test_get_store();
                 return ReliableStorageLock<>(base_name, store, timeout);
-            }))
-            .def("read_metadata",
-                 [](const ReliableStorageLock<>& self) { return any_metadata_to_py(self.read_metadata()); });
+            }));
 
     py::class_<ReliableStorageLockManager>(tools, "ReliableStorageLockManager")
             .def(py::init<>([]() { return ReliableStorageLockManager(); }))
-            .def(
-                    "take_lock_guard",
-                    [](ReliableStorageLockManager& self, const ReliableStorageLock<>& lock, const py::object& metadata
-                    ) { self.take_lock_guard(lock, py_metadata_to_any(metadata)); },
-                    py::arg("lock"),
-                    py::arg("metadata") = py::none()
-            )
+            .def("take_lock_guard", &ReliableStorageLockManager::take_lock_guard)
             .def("free_lock_guard", &ReliableStorageLockManager::free_lock_guard);
 
     py::class_<StorageMover>(tools, "StorageMover")

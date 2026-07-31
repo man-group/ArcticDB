@@ -22,7 +22,6 @@
 #include <arcticdb/entity/protobuf_mappings.hpp>
 #include <arcticdb/python/adapt_read_dataframe.hpp>
 #include <arcticdb/util/storage_lock.hpp>
-#include <arcticdb/util/reliable_storage_lock.hpp>
 #include <cstdlib>
 
 namespace arcticdb::toolbox::apy {
@@ -170,51 +169,21 @@ std::vector<VariantKey> LibraryTool::find_keys_for_id(entity::KeyType kt, const 
 std::vector<StorageLockInfo> LibraryTool::list_storage_locks() {
     std::vector<StorageLockInfo> res;
     auto now = util::SysClock::nanos_since_epoch();
+    auto ttl = ConfigsMap::instance()->get_int("StorageLock.TTL", StorageLock<>::DEFAULT_TTL_INTERVAL);
 
-    auto read_lock_segment = [&](const VariantKey& key
-                             ) -> std::optional<std::pair<timestamp, std::optional<google::protobuf::Any>>> {
+    store()->iterate_type(KeyType::LOCK, [&](VariantKey&& key) {
+        auto name = fmt::format("{}", variant_key_id(key));
         try {
             auto kv = store()->read_sync(key, storage::ReadKeyOpts{.dont_warn_about_missing_key = true});
-            auto value = kv.second.template scalar_at<timestamp>(0, 0).value();
+            auto acquire_time = kv.second.template scalar_at<timestamp>(0, 0).value();
             std::optional<google::protobuf::Any> metadata;
             if (const auto* meta = kv.second.metadata()) {
                 metadata = *meta;
             }
-            return std::make_pair(value, std::move(metadata));
+            res.push_back(
+                    StorageLockInfo{std::move(name), acquire_time, (now - acquire_time) < ttl, std::move(metadata)}
+            );
         } catch (const storage::KeyNotFoundException&) {
-            return std::nullopt;
-        }
-    };
-
-    auto ttl = ConfigsMap::instance()->get_int("StorageLock.TTL", StorageLock<>::DEFAULT_TTL_INTERVAL);
-    store()->iterate_type(KeyType::LOCK, [&](VariantKey&& key) {
-        auto name = fmt::format("{}", variant_key_id(key));
-        if (auto read = read_lock_segment(key)) {
-            res.push_back(StorageLockInfo{
-                    std::move(name),
-                    StorageLockKind::UNRELIABLE,
-                    std::nullopt,
-                    read->first,
-                    (now - read->first) < ttl,
-                    std::move(read->second)
-            });
-        }
-    });
-
-    store()->iterate_type(KeyType::ATOMIC_LOCK, [&](VariantKey&& key) {
-        auto stream_id = variant_key_id(key);
-        auto string_id = std::get<StringId>(stream_id);
-        auto lock_id = lock::extract_lock_id_from_stream_id(stream_id);
-        auto base_name = string_id.substr(0, string_id.find(lock::SEPARATOR));
-        if (auto read = read_lock_segment(key)) {
-            res.push_back(StorageLockInfo{
-                    std::move(base_name),
-                    StorageLockKind::RELIABLE,
-                    lock_id,
-                    read->first,
-                    read->first > now,
-                    std::move(read->second)
-            });
         }
     });
 

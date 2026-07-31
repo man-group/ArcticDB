@@ -6,10 +6,6 @@ import sys
 
 from arcticdb.util.logger import get_logger
 from arcticdb_ext.tools import ReliableStorageLock, ReliableStorageLockManager
-from arcticdb.toolbox.storage_lock import (
-    ReliableStorageLock as ReliableStorageLockWrapper,
-    ReliableStorageLockManager as ReliableStorageLockManagerWrapper,
-)
 from arcticdb.util.test import config_context
 from tests.util.mark import REAL_S3_TESTS_MARK, WINDOWS
 
@@ -156,47 +152,9 @@ def test_list_storage_locks_unreliable(mem_library):
         assert len(locks) == 1
         info = locks[0]
         assert info["name"] == "mylock"
-        assert info["kind"] == "unreliable"
         assert info["active"] is True
         assert info["metadata"] == {"who": "me"}
         assert "timestamp" in info
 
         lock.unlock()
         assert lib_tool.list_storage_locks() == []
-
-
-# --- ReliableStorageLock metadata coverage (needs atomic writes, hence S3) -------------------------------------------
-
-
-def test_reliable_storage_lock_metadata(s3_clean_bucket, lib_name):
-    lib = s3_clean_bucket.create_arctic().create_library(lib_name)
-
-    # timeout small enough that a heartbeat extend (timeout / 5) fires within the sleep below
-    lock = ReliableStorageLockWrapper("meta_lock", lib._nvs._library, 2 * one_sec)
-    manager = ReliableStorageLockManagerWrapper()
-
-    assert lock.read_metadata() is None
-
-    manager.take_lock_guard(lock, metadata={"job": "reliable", "attempt": 1})
-    try:
-        assert lock.read_metadata() == {"job": "reliable", "attempt": 1}
-
-        # Metadata persists across at least one heartbeat extend
-        time.sleep(1)
-        assert lock.read_metadata() == {"job": "reliable", "attempt": 1}
-
-        # Every reliable lock id is listed (heartbeat extends create new ids; old ones are only cleared long after
-        # expiry). Each carries the metadata, and the current holder is the highest id.
-        lib_tool = lib._nvs.library_tool()
-        reliable = [info for info in lib_tool.list_storage_locks() if info["kind"] == "reliable"]
-        assert len(reliable) >= 1
-        for info in reliable:
-            assert info["name"] == "meta_lock"
-            assert info["metadata"] == {"job": "reliable", "attempt": 1}
-            assert "expiration" in info
-        latest = max(reliable, key=lambda info: info["lock_id"])
-        assert latest["active"] is True
-    finally:
-        manager.free_lock_guard()
-
-    assert lock.read_metadata() is None

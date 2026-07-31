@@ -647,7 +647,6 @@ def test_compat_storage_lock_write_old_read_new(old_venv_and_arctic_uri, lib_nam
             locks = {info["name"]: info for info in lib_tool.list_storage_locks()}
             assert "compat_lock2" in locks
             assert locks["compat_lock2"]["metadata"] is None
-            assert locks["compat_lock2"]["kind"] == "unreliable"
 
 
 def test_norm_meta_column_and_index_names_write_old_read_new(old_venv_and_arctic_uri, lib_name):
