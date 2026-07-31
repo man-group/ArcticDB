@@ -15,6 +15,7 @@
 
 // for std::accumulate
 #include <numeric>
+#include <span>
 
 #include <pybind11/numpy.h>
 

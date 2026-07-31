@@ -259,9 +259,10 @@ def random_values_for_dtype(dtype, count):
         return np.random.random(count).astype(dtype)
     if np.issubdtype(dtype, np.bool_):
         return np.random.random(count) < 0.5
-    # datetime64[ns] stored as int64
-    info = np.iinfo(np.int64)
-    return np.random.randint(info.min, info.max, size=count).astype(dtype)
+    # datetime64[ns] stored as int64. dtype must be passed explicitly, otherwise numpy uses the platform default
+    # integer, which is int32 on Windows, and the bounds below are then out of range.
+    low, high = (d.astype("datetime64[ns]").astype(np.int64) for d in (MIN_DATE, MAX_DATE))
+    return np.random.randint(low, high, size=count, dtype=np.int64).astype(dtype)
 
 
 def randomize_values(frame, positions, columns):
