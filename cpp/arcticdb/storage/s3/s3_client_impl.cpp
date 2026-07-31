@@ -190,7 +190,7 @@ S3Result<std::monostate> S3ClientImpl::put_object(
 
 bool delete_objects_request_use_md5_checksum() {
     // Defaults to requiring a CRC64-NVME checksum (the SDK behaviour);
-    return ConfigsMap::instance()->get_int("S3Storage.DeleteObjectsChecksum", 0) == 1;
+    return ConfigsMap::instance()->get_string("S3Storage.DeleteObjectsChecksum", "crc64nvme") == "md5";
 }
 
 struct ChecksumConfigurableDeleteObjectsRequest : public Aws::S3::Model::DeleteObjectsRequest {

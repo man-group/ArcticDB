@@ -4,11 +4,15 @@ ArcticDB features a variety of options that can be tuned at runtime. This page d
 
 ## Configuration methods
 
-All of the integer options detailed on this page can be configured using the following two methods. All of the options listed on this page are integer options except for log levels, which will be explained in their own section.
+Every option on this page can be configured either in code or by an environment variable. Most options are integer
+options; the exceptions are noted in each option's own section, and log levels, which are explained in their own
+section. Each option has a fixed type, and you must use the setter matching that type.
+
+The values of string options are case-sensitive (e.g. `md5`, not `MD5`); an unrecognised value falls back to the option's default. Option names are not case-sensitive.
 
 ### In code
 
-For integer options, the following code snippet demonstrates how to set values in code:
+For integer options:
 
 ```python
 from arcticdb.config import set_config_int
@@ -17,19 +21,27 @@ set_config_int(setting, value)
 
 where `setting` is a string containing the setting name (e.g. `VersionMap.ReloadInterval`), and `value` is an int to set the option to.
 
+For string options:
+
+```python
+from arcticdb.config import set_config_string
+set_config_string(setting, value)
+```
+
 ### Environment variables
 
-For integer options, environment variables can be used to set options as follows:
+Environment variables can be used to set options as follows, where the suffix selects the option's type:
 
 ```
 ARCTICDB_<setting>_int=<value>
+ARCTICDB_<setting>_str=<value>
 ```
 
-e.g. `ARCTICDB_VersionMap_ReloadInterval_int=0`. Note that `.` characters in setting names are replaced with underscores when setting them by environment variables.
+e.g. `ARCTICDB_VersionMap_ReloadInterval_int=0`, or `ARCTICDB_S3Storage_DeleteObjectsChecksum_str=md5`. Note that `.` characters in setting names are replaced with underscores when setting them by environment variables.
 
 ### Priority
 
-If both the environment variable is set, and `set_config_int` is called, then the latter takes priority.
+If both the environment variable is set, and the corresponding `set_config_*` function is called, then the latter takes priority.
 
 ### Reactivity
 
@@ -63,11 +75,13 @@ The default is 1000.
 
 Controls which checksum ArcticDB sends on the S3 `DeleteObjects` request. By default the AWS SDK attaches a crc64nvme checksum (`x-amz-checksum-crc64nvme`).
 
-Some S3-compatible backends (e.g. `Scality`) do not support this and reject the request with a checksum related error, but do accept the legacy `Content-MD5` header. Set this option to `1` for those backends.
+Some S3-compatible backends (e.g. `Scality`) do not support this and reject the request with a checksum related error, but do accept the legacy `Content-MD5` header. Set this option to `md5` for those backends.
+
+This is a string option, so it is set with `set_config_string` or `ARCTICDB_S3Storage_DeleteObjectsChecksum_str` (see [Configuration methods](#configuration-methods)).
 
 Values:
-* 0: Send the SDK's default crc64nvme checksum (Default).
-* 1: Send md5 checksum instead.
+* `crc64nvme`: Send the SDK's default crc64nvme checksum (Default).
+* `md5`: Send md5 checksum instead.
 
 !!! warning "Has no effect in `when_supported` checksum mode"
 

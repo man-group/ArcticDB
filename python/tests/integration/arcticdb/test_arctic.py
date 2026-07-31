@@ -34,7 +34,7 @@ from arcticdb import QueryBuilder
 from arcticdb.storage_fixtures.api import StorageFixture, ArcticUriFields, StorageFixtureFactory
 from arcticdb.storage_fixtures.mongo import MongoDatabase
 from arcticdb.storage_fixtures.utils import GracefulProcessUtils
-from arcticdb.util.test import assert_frame_equal, sample_dataframe, config_context
+from arcticdb.util.test import assert_frame_equal, sample_dataframe, config_context, config_context_string
 from arcticdb.storage_fixtures.s3 import S3Bucket
 from arcticdb.config import Defaults
 from arcticdb.version_store.library import (
@@ -1494,8 +1494,8 @@ def test_s3_checksum_on_by_env_var(s3_storage, lib_name, monkeypatch, route_env_
         create_library(s3_storage.arctic_uri, lib_name)
 
 
-@pytest.mark.parametrize("md5_checksum", [None, 0, 1])
-def test_s3_delete_survives_md5_only_backend(s3_storage, lib_name, md5_checksum):
+@pytest.mark.parametrize("checksum", [None, "crc64nvme", "md5"])
+def test_s3_delete_survives_md5_only_backend(s3_storage, lib_name, checksum):
     # moto is set to reject the CRC64-NVME digest the SDK sends by default and to require a correct
     # Content-MD5 instead, so only the MD5 opt-in should be able to delete.
     endpoint = s3_storage.factory.endpoint
@@ -1508,31 +1508,31 @@ def test_s3_delete_survives_md5_only_backend(s3_storage, lib_name, md5_checksum)
             lib._nvs.write("test", i)
         lt = lib._nvs.library_tool()
         assert len(lib.list_versions(symbol="test")) == 3
-        if md5_checksum is None:
+        if checksum is None:
             config = contextlib.nullcontext()
         else:
-            config = config_context("S3Storage.DeleteObjectsChecksum", md5_checksum)
+            config = config_context_string("S3Storage.DeleteObjectsChecksum", checksum)
         with config:
             # Deleting named versions routes through delete_tree, which removes the index keys of both
             # versions in a single DeleteObjects request and propagates storage errors. lib.delete(symbol)
             # cannot be used here because it catches StorageException and only logs it.
             with qs.query_stats():
-                if md5_checksum == 1:
+                if checksum == "md5":
                     lib.delete("test", versions=[0, 1])
                 else:
                     with pytest.raises(StorageException):
                         lib.delete("test", versions=[0, 1])
                 stats = qs.get_query_stats()
         assert "S3_DeleteObjects" in stats["storage_operations"], stats
-        assert len(lt.find_keys(KeyType.TABLE_INDEX)) == (1 if md5_checksum == 1 else 3)
+        assert len(lt.find_keys(KeyType.TABLE_INDEX)) == (1 if checksum == "md5" else 3)
     finally:
         requests.post(endpoint + "/require_md5_checksum", b"0", verify=verify).raise_for_status()
 
 
 @REAL_S3_TESTS_MARK
 @pytest.mark.storage
-@pytest.mark.parametrize("md5_checksum", [None, 0, 1])
-def test_s3_delete_objects_checksum_real_s3(real_s3_storage, lib_name, md5_checksum):
+@pytest.mark.parametrize("checksum", [None, "crc64nvme", "md5"])
+def test_s3_delete_objects_checksum_real_s3(real_s3_storage, lib_name, checksum):
     # AWS accepts both the SDK's CRC64-NVME digest and the legacy Content-MD5 on multi-object DeleteObjects,
     # so every mode must succeed
     ac = Arctic(real_s3_storage.arctic_uri)
@@ -1543,8 +1543,8 @@ def test_s3_delete_objects_checksum_real_s3(real_s3_storage, lib_name, md5_check
         lt = lib._nvs.library_tool()
         config = (
             contextlib.nullcontext()
-            if md5_checksum is None
-            else config_context("S3Storage.DeleteObjectsChecksum", md5_checksum)
+            if checksum is None
+            else config_context_string("S3Storage.DeleteObjectsChecksum", checksum)
         )
         with config:
             lib.delete("sym", versions=[0, 1])
