@@ -16,7 +16,10 @@
 #include <arcticdb/storage/s3/s3_client_interface.hpp>
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/util/configs_map.hpp>
+#include <arcticdb/util/fork_generation.hpp>
+#include <atomic>
 #include <cstdlib>
+#include <mutex>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -29,6 +32,8 @@ const std::string USE_AWS_CRED_PROVIDERS_TOKEN = "_RBAC_";
 class S3Storage : public Storage, AsyncStorage {
   public:
     S3Storage(const LibraryPath& lib, OpenMode mode, const S3Settings& conf);
+
+    ~S3Storage();
 
     std::string get_key_path(const VariantKey& key) const;
 
@@ -43,7 +48,7 @@ class S3Storage : public Storage, AsyncStorage {
     std::optional<size_t> max_delete_batch_size() const override;
 
     // These are only public for testing purposes
-    S3ClientInterface& client() { return *s3_client_; }
+    S3ClientInterface& client();
     bool directory_bucket() const { return directory_bucket_; }
 
   protected:
@@ -87,11 +92,17 @@ class S3Storage : public Storage, AsyncStorage {
     const std::string& bucket_name() const { return bucket_name_; }
     const std::string& root_folder() const { return root_folder_; }
 
+    void rebuild_client_if_forked();
+
     std::shared_ptr<S3ApiInstance> s3_api_;
     std::unique_ptr<S3ClientInterface> s3_client_;
     // aws sdk annoyingly requires raw pointer being passed in the sts client factory to the s3 client
     // thus sts_client_ should have same life span as s3_client_
     std::unique_ptr<Aws::STS::STSClient> sts_client_;
+    // Retained so that the client can be rebuilt after a fork
+    S3Settings conf_;
+    std::atomic<uint64_t> client_fork_generation_;
+    std::mutex client_mutex_;
     std::string root_folder_;
     std::string bucket_name_;
     std::string region_;

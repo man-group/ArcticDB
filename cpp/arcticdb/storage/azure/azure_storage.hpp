@@ -12,6 +12,9 @@
 #include <arcticdb/storage/azure/azure_client_interface.hpp>
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/util/pb_util.hpp>
+#include <arcticdb/util/fork_generation.hpp>
+#include <atomic>
+#include <mutex>
 #include <string>
 
 namespace arcticdb::storage::azure {
@@ -22,6 +25,8 @@ class AzureStorage final : public Storage {
     using Config = arcticdb::proto::azure_storage::Config;
 
     AzureStorage(const LibraryPath& lib, OpenMode mode, const Config& conf);
+
+    ~AzureStorage();
 
     std::string name() const final;
 
@@ -63,7 +68,17 @@ class AzureStorage final : public Storage {
     const std::set<char>& do_unsupported_library_chars() const final;
 
   private:
+    void create_azure_client();
+
+    void rebuild_client_if_forked();
+
+    AzureClientWrapper& client();
+
     std::unique_ptr<AzureClientWrapper> azure_client_;
+    // Retained so that the client can be rebuilt after a fork
+    Config conf_;
+    std::atomic<uint64_t> client_fork_generation_;
+    std::mutex client_mutex_;
 
     std::string root_folder_;
     std::string container_name_;

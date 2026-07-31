@@ -12,6 +12,9 @@
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/storage/s3/s3_api.hpp>
 #include <arcticdb/storage/s3/s3_client_interface.hpp>
+#include <arcticdb/util/fork_generation.hpp>
+#include <atomic>
+#include <mutex>
 
 namespace arcticdb::storage::nfs_backed {
 
@@ -20,6 +23,8 @@ class NfsBackedStorage final : public Storage {
     using Config = arcticdb::proto::nfs_backed_storage::Config;
 
     NfsBackedStorage(const LibraryPath& lib, OpenMode mode, const Config& conf);
+
+    ~NfsBackedStorage();
 
     std::string name() const final;
 
@@ -61,13 +66,21 @@ class NfsBackedStorage final : public Storage {
 
     std::string do_key_path(const VariantKey&) const final;
 
-    auto& client() { return s3_client_; }
+    std::unique_ptr<storage::s3::S3ClientInterface>& client();
     const std::string& bucket_name() const { return bucket_name_; }
     const std::string& root_folder() const { return root_folder_; }
     const std::string& region() const { return region_; }
 
+    void create_s3_client();
+
+    void rebuild_client_if_forked();
+
     std::shared_ptr<s3::S3ApiInstance> s3_api_;
     std::unique_ptr<storage::s3::S3ClientInterface> s3_client_;
+    // Retained so that the client can be rebuilt after a fork
+    Config conf_;
+    std::atomic<uint64_t> client_fork_generation_;
+    std::mutex client_mutex_;
     std::string root_folder_;
     std::string bucket_name_;
     std::string region_;

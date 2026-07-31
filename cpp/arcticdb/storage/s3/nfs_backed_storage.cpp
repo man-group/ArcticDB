@@ -122,24 +122,57 @@ VariantKey unencode_object_id(const VariantKey& key) {
     );
 }
 
-NfsBackedStorage::NfsBackedStorage(const LibraryPath& library_path, OpenMode mode, const Config& conf) :
-    Storage(library_path, mode),
-    s3_api_(s3::S3ApiInstance::instance()), // make sure we have an initialized AWS SDK
-    root_folder_(object_store_utils::get_root_folder(library_path)),
-    bucket_name_(conf.bucket_name()),
-    region_(conf.region()) {
-
-    if (conf.use_mock_storage_for_testing()) {
+void NfsBackedStorage::create_s3_client() {
+    if (conf_.use_mock_storage_for_testing()) {
         log::storage().warn("Using Mock S3 storage for NfsBackedStorage");
         s3_client_ = std::make_unique<s3::S3ClientTestWrapper>(std::make_unique<s3::MockS3Client>());
     } else {
         s3_client_ = std::make_unique<s3::S3ClientImpl>(
-                s3::get_aws_credentials(conf),
-                s3::get_s3_config_and_set_env_var(conf),
+                s3::get_aws_credentials(conf_),
+                s3::get_s3_config_and_set_env_var(conf_),
                 Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never,
                 false
         );
     }
+}
+
+/* As S3Storage::rebuild_client_if_forked. */
+void NfsBackedStorage::rebuild_client_if_forked() {
+    const auto generation = util::fork_generation();
+    if (client_fork_generation_.load(std::memory_order_acquire) == generation) {
+        return;
+    }
+    std::lock_guard lock{client_mutex_};
+    if (client_fork_generation_.load(std::memory_order_relaxed) == generation) {
+        return;
+    }
+    static_cast<void>(s3_client_.release());
+    create_s3_client();
+    client_fork_generation_.store(generation, std::memory_order_release);
+    ARCTICDB_RUNTIME_DEBUG(log::storage(), "Rebuilt NFS backed S3 client for generation {} after fork", generation);
+}
+
+std::unique_ptr<s3::S3ClientInterface>& NfsBackedStorage::client() {
+    rebuild_client_if_forked();
+    return s3_client_;
+}
+
+NfsBackedStorage::~NfsBackedStorage() {
+    if (client_fork_generation_.load(std::memory_order_relaxed) != util::fork_generation()) {
+        static_cast<void>(s3_client_.release());
+    }
+}
+
+NfsBackedStorage::NfsBackedStorage(const LibraryPath& library_path, OpenMode mode, const Config& conf) :
+    Storage(library_path, mode),
+    s3_api_(s3::S3ApiInstance::instance()), // make sure we have an initialized AWS SDK
+    conf_(conf),
+    client_fork_generation_(util::fork_generation()),
+    root_folder_(object_store_utils::get_root_folder(library_path)),
+    bucket_name_(conf.bucket_name()),
+    region_(conf.region()) {
+
+    create_s3_client();
 
     if (conf.prefix().empty()) {
         ARCTICDB_DEBUG(log::version(), "prefix not found, will use {}", root_folder_);
@@ -172,12 +205,12 @@ std::string NfsBackedStorage::do_key_path(const VariantKey& key) const {
 
 void NfsBackedStorage::do_write(KeySegmentPair& key_seg) {
     auto enc = KeySegmentPair{encode_object_id(key_seg.variant_key()), key_seg.segment_ptr()};
-    s3::detail::do_write_impl(enc, root_folder_, bucket_name_, *s3_client_, NfsBucketizer{});
+    s3::detail::do_write_impl(enc, root_folder_, bucket_name_, *client(), NfsBucketizer{});
 }
 
 void NfsBackedStorage::do_update(KeySegmentPair& key_seg, UpdateOpts) {
     auto enc = KeySegmentPair{encode_object_id(key_seg.variant_key()), key_seg.segment_ptr()};
-    s3::detail::do_update_impl(enc, root_folder_, bucket_name_, *s3_client_, NfsBucketizer{});
+    s3::detail::do_update_impl(enc, root_folder_, bucket_name_, *client(), NfsBucketizer{});
 }
 
 void NfsBackedStorage::do_read(VariantKey&& variant_key, const ReadVisitor& visitor, ReadKeyOpts opts) {
@@ -188,7 +221,7 @@ void NfsBackedStorage::do_read(VariantKey&& variant_key, const ReadVisitor& visi
             visitor,
             root_folder_,
             bucket_name_,
-            *s3_client_,
+            *client(),
             NfsBucketizer{},
             std::move(decoder),
             opts
@@ -199,14 +232,14 @@ KeySegmentPair NfsBackedStorage::do_read(VariantKey&& variant_key, ReadKeyOpts o
     auto encoded_key = encode_object_id(variant_key);
     auto decoder = [](auto&& k) { return unencode_object_id(std::move(k)); };
     return s3::detail::do_read_impl(
-            std::move(encoded_key), root_folder_, bucket_name_, *s3_client_, NfsBucketizer{}, std::move(decoder), opts
+            std::move(encoded_key), root_folder_, bucket_name_, *client(), NfsBucketizer{}, std::move(decoder), opts
     );
 }
 
 void NfsBackedStorage::do_remove(VariantKey&& variant_key, RemoveOpts) {
     auto enc = encode_object_id(variant_key);
     std::array<VariantKey, 1> arr{std::move(enc)};
-    s3::detail::do_remove_impl(std::span(arr), root_folder_, bucket_name_, *s3_client_, NfsBucketizer{});
+    s3::detail::do_remove_impl(std::span(arr), root_folder_, bucket_name_, *client(), NfsBucketizer{});
 }
 
 void NfsBackedStorage::do_remove(std::span<VariantKey> variant_keys, RemoveOpts) {
@@ -215,7 +248,7 @@ void NfsBackedStorage::do_remove(std::span<VariantKey> variant_keys, RemoveOpts)
     std::transform(std::begin(variant_keys), std::end(variant_keys), std::back_inserter(enc), [](auto&& key) {
         return encode_object_id(key);
     });
-    s3::detail::do_remove_impl(std::span(enc), root_folder_, bucket_name_, *s3_client_, NfsBucketizer{});
+    s3::detail::do_remove_impl(std::span(enc), root_folder_, bucket_name_, *client(), NfsBucketizer{});
 }
 
 std::optional<size_t> NfsBackedStorage::max_delete_batch_size() const {
@@ -241,12 +274,12 @@ bool NfsBackedStorage::do_iterate_type_until_match(
         return s3::detail::visit_if_prefix_matches(visitor, prefix, unencode_object_id(key));
     };
     s3::detail::Visitor<IterateTypePredicate> final_visitor{visitor_with_prefix_filtering};
-    return s3::detail::do_iterate_type_impl(key_type, bucket_name_, *s3_client_, path_info, final_visitor);
+    return s3::detail::do_iterate_type_impl(key_type, bucket_name_, *client(), path_info, final_visitor);
 }
 
 bool NfsBackedStorage::do_key_exists(const VariantKey& key) {
     auto encoded_key = encode_object_id(key);
-    return s3::detail::do_key_exists_impl(encoded_key, root_folder_, bucket_name_, *s3_client_, NfsBucketizer{});
+    return s3::detail::do_key_exists_impl(encoded_key, root_folder_, bucket_name_, *client(), NfsBucketizer{});
 }
 
 bool NfsBackedStorage::supports_object_size_calculation() const { return true; }
@@ -267,7 +300,7 @@ void NfsBackedStorage::do_visit_object_sizes(
     };
     s3::detail::Visitor<ObjectSizesVisitor> final_visitor{visitor_with_prefix_filtering};
 
-    s3::detail::do_visit_object_sizes_for_type_impl(key_type, bucket_name_, *s3_client_, path_info, final_visitor);
+    s3::detail::do_visit_object_sizes_for_type_impl(key_type, bucket_name_, *client(), path_info, final_visitor);
 }
 
 } // namespace arcticdb::storage::nfs_backed

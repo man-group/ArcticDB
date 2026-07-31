@@ -301,11 +301,11 @@ bool do_key_exists_impl(const VariantKey& key, const std::string& root_folder, A
 std::string AzureStorage::name() const { return fmt::format("azure_storage-{}/{}", container_name_, root_folder_); }
 
 void AzureStorage::do_write(KeySegmentPair& key_seg) {
-    detail::do_write_impl(key_seg, root_folder_, *azure_client_, FlatBucketizer{}, upload_option_, request_timeout_);
+    detail::do_write_impl(key_seg, root_folder_, client(), FlatBucketizer{}, upload_option_, request_timeout_);
 }
 
 void AzureStorage::do_update(KeySegmentPair& key_seg, UpdateOpts) {
-    detail::do_update_impl(key_seg, root_folder_, *azure_client_, FlatBucketizer{}, upload_option_, request_timeout_);
+    detail::do_update_impl(key_seg, root_folder_, client(), FlatBucketizer{}, upload_option_, request_timeout_);
 }
 
 void AzureStorage::do_read(VariantKey&& variant_key, const ReadVisitor& visitor, ReadKeyOpts opts) {
@@ -313,7 +313,7 @@ void AzureStorage::do_read(VariantKey&& variant_key, const ReadVisitor& visitor,
             std::move(variant_key),
             visitor,
             root_folder_,
-            *azure_client_,
+            client(),
             FlatBucketizer{},
             opts,
             download_option_,
@@ -323,23 +323,17 @@ void AzureStorage::do_read(VariantKey&& variant_key, const ReadVisitor& visitor,
 
 KeySegmentPair AzureStorage::do_read(VariantKey&& variant_key, ReadKeyOpts opts) {
     return detail::do_read_impl(
-            std::move(variant_key),
-            root_folder_,
-            *azure_client_,
-            FlatBucketizer{},
-            opts,
-            download_option_,
-            request_timeout_
+            std::move(variant_key), root_folder_, client(), FlatBucketizer{}, opts, download_option_, request_timeout_
     );
 }
 
 void AzureStorage::do_remove(VariantKey&& variant_key, RemoveOpts) {
     std::array<VariantKey, 1> arr{std::move(variant_key)};
-    detail::do_remove_impl(std::span(arr), root_folder_, *azure_client_, FlatBucketizer{}, request_timeout_);
+    detail::do_remove_impl(std::span(arr), root_folder_, client(), FlatBucketizer{}, request_timeout_);
 }
 
 void AzureStorage::do_remove(std::span<VariantKey> variant_keys, RemoveOpts) {
-    detail::do_remove_impl(std::move(variant_keys), root_folder_, *azure_client_, FlatBucketizer{}, request_timeout_);
+    detail::do_remove_impl(std::move(variant_keys), root_folder_, client(), FlatBucketizer{}, request_timeout_);
 }
 
 std::optional<size_t> AzureStorage::max_delete_batch_size() const {
@@ -352,11 +346,11 @@ std::optional<size_t> AzureStorage::max_delete_batch_size() const {
 bool AzureStorage::do_iterate_type_until_match(
         KeyType key_type, const IterateTypePredicate& visitor, const std::string& prefix
 ) {
-    return detail::do_iterate_type_impl(key_type, visitor, root_folder_, *azure_client_, prefix);
+    return detail::do_iterate_type_impl(key_type, visitor, root_folder_, client(), prefix);
 }
 
 bool AzureStorage::do_key_exists(const VariantKey& key) {
-    return detail::do_key_exists_impl(key, root_folder_, *azure_client_);
+    return detail::do_key_exists_impl(key, root_folder_, client());
 }
 
 std::string AzureStorage::do_key_path(const VariantKey& key) const {
@@ -391,18 +385,53 @@ namespace arcticdb::storage::azure {
 using namespace Azure::Storage;
 using namespace Azure::Storage::Blobs;
 
-AzureStorage::AzureStorage(const LibraryPath& library_path, OpenMode mode, const Config& conf) :
-    Storage(library_path, mode),
-    root_folder_(object_store_utils::get_root_folder(library_path)),
-    container_name_(conf.container_name()),
-    request_timeout_(conf.request_timeout() == 0 ? 200000 : conf.request_timeout()) {
-    if (conf.use_mock_storage_for_testing()) {
+void AzureStorage::create_azure_client() {
+    if (conf_.use_mock_storage_for_testing()) {
         ARCTICDB_RUNTIME_DEBUG(log::storage(), "Using Mock Azure storage");
         azure_client_ = std::make_unique<MockAzureClient>();
     } else {
         ARCTICDB_RUNTIME_DEBUG(log::storage(), "Using Real Azure storage");
-        azure_client_ = std::make_unique<RealAzureClient>(conf);
+        azure_client_ = std::make_unique<RealAzureClient>(conf_);
     }
+}
+
+/* See the comment in RealAzureClient::get_client_options: a client built before a fork must be rebuilt here so that
+ * it draws on a connection pool bucket of its own rather than on the sockets it inherited. Leak the old one rather
+ * than destroying it, since destroying it would run libcurl teardown against those inherited sockets. */
+void AzureStorage::rebuild_client_if_forked() {
+    const auto generation = util::fork_generation();
+    if (client_fork_generation_.load(std::memory_order_acquire) == generation) {
+        return;
+    }
+    std::lock_guard lock{client_mutex_};
+    if (client_fork_generation_.load(std::memory_order_relaxed) == generation) {
+        return;
+    }
+    static_cast<void>(azure_client_.release());
+    create_azure_client();
+    client_fork_generation_.store(generation, std::memory_order_release);
+    ARCTICDB_RUNTIME_DEBUG(log::storage(), "Rebuilt Azure client for generation {} after fork", generation);
+}
+
+AzureClientWrapper& AzureStorage::client() {
+    rebuild_client_if_forked();
+    return *azure_client_;
+}
+
+AzureStorage::~AzureStorage() {
+    if (client_fork_generation_.load(std::memory_order_relaxed) != util::fork_generation()) {
+        static_cast<void>(azure_client_.release());
+    }
+}
+
+AzureStorage::AzureStorage(const LibraryPath& library_path, OpenMode mode, const Config& conf) :
+    Storage(library_path, mode),
+    conf_(conf),
+    client_fork_generation_(util::fork_generation()),
+    root_folder_(object_store_utils::get_root_folder(library_path)),
+    container_name_(conf.container_name()),
+    request_timeout_(conf.request_timeout() == 0 ? 200000 : conf.request_timeout()) {
+    create_azure_client();
     if (conf.ca_cert_path().empty()) {
         ARCTICDB_RUNTIME_DEBUG(log::storage(), "Using default CA cert path");
     } else {

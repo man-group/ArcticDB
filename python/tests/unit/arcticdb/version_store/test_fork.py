@@ -6,6 +6,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 
+import gc
 import multiprocessing
 import sys
 import time
@@ -18,7 +19,7 @@ from arcticdb_ext import set_config_int, unset_config_int
 
 from arcticdb.util.test import assert_frame_equal
 
-from tests.util.mark import SKIP_CONDA_MARK
+from tests.util.mark import AZURE_TESTS_MARK, SKIP_CONDA_MARK
 
 FORK_SUPPORTED = pytest.mark.skipif(sys.platform == "win32", reason="fork/forkserver not available on Windows")
 
@@ -71,12 +72,9 @@ def _read_and_assert_symbol(args):
     "store_factory",
     [
         "s3_store_factory",
-        pytest.param(
-            "azure_store_factory",
-            marks=pytest.mark.skip(
-                reason="Azure SDK's CurlConnectionPool is global and is not fork-safe. Monday ref 12128961896"
-            ),
-        ),
+        # Fails: Azure SDK's CurlConnectionPool is global, so forked children transact on sockets the parent
+        # opened. Monday ref 12128961896
+        pytest.param("azure_store_factory", marks=AZURE_TESTS_MARK),
     ],
 )
 def test_parallel_reads(store_factory, request):
@@ -135,6 +133,65 @@ def test_configs_propagated_to_child_process(request, store_fixture, start_metho
             p.map(_check_config_in_child, [(store, "TestPropagation", 12345)])
     finally:
         unset_config_int("TestPropagation")
+
+
+_INHERITED_AT_FORK = {}
+
+
+def _child_read_inherited():
+    lib = _INHERITED_AT_FORK["lib"]
+    assert_frame_equal(lib.read("sym").data, df("sym"))
+
+
+def _run_in_fork(target, timeout=120):
+    ctx = multiprocessing.get_context("fork")
+    proc = ctx.Process(target=target)
+    proc.start()
+    proc.join(timeout)
+    if proc.is_alive():
+        proc.kill()
+        proc.join()
+        pytest.fail(f"Forked child running {target.__name__} did not exit within {timeout}s")
+    return proc.exitcode
+
+
+FORK_STORAGES = [
+    pytest.param("lmdb_storage", id="lmdb"),
+    pytest.param("s3_storage", marks=SKIP_CONDA_MARK, id="s3"),
+    pytest.param("gcp_storage", marks=SKIP_CONDA_MARK, id="gcp"),
+    pytest.param("azurite_storage", marks=AZURE_TESTS_MARK, id="azure"),
+]
+
+
+@pytest.fixture
+def used_library(request, lib_name):
+    """An Arctic and a Library that have served at least one read and one write, held in a module global so
+    that a forked child can reach them through the memory it inherits."""
+    storage = request.getfixturevalue(request.param)
+    ac = Arctic(storage.arctic_uri)
+    lib = ac.create_library(lib_name)
+    lib.write("sym", df("sym"))
+    assert_frame_equal(lib.read("sym").data, df("sym"))
+    _INHERITED_AT_FORK["ac"] = ac
+    _INHERITED_AT_FORK["lib"] = lib
+    del ac, lib
+    gc.collect()
+    try:
+        yield
+    finally:
+        _INHERITED_AT_FORK.clear()
+        gc.collect()
+        Arctic(storage.arctic_uri).delete_library(lib_name)
+
+
+@FORK_SUPPORTED
+@pytest.mark.parametrize("used_library", FORK_STORAGES, indirect=True)
+def test_fork_child_reads_inherited_library(used_library):
+    """A forked child reading through a Library inherited from the parent, rather than one reconstructed
+    from a pickle, drives the storage's post-fork client rebuild and must still see correct data."""
+    assert _run_in_fork(_child_read_inherited) == 0
+
+    assert_frame_equal(_INHERITED_AT_FORK["lib"].read("sym").data, df("sym"))
 
 
 def test_set_config_int_overrides_env_var_after_spawn(lmdb_version_store_v1, monkeypatch):

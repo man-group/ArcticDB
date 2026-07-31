@@ -250,6 +250,8 @@ void S3Storage::create_s3_client(const S3Settings& conf, const Aws::Auth::AWSCre
 S3Storage::S3Storage(const LibraryPath& library_path, OpenMode mode, const S3Settings& conf) :
     Storage(library_path, mode),
     s3_api_(S3ApiInstance::instance()), // make sure we have an initialized AWS SDK
+    conf_(conf),
+    client_fork_generation_(util::fork_generation()),
     root_folder_(object_store_utils::get_root_folder(library_path)),
     bucket_name_(conf.bucket_name()),
     region_(conf.region()) {
@@ -274,6 +276,37 @@ S3Storage::S3Storage(const LibraryPath& library_path, OpenMode mode, const S3Set
     std::locale locale{std::locale::classic(), new std::num_put<char>()};
     (void)std::locale::global(locale);
     ARCTICDB_DEBUG(log::storage(), "Opened S3 backed storage at {}", root_folder_);
+}
+
+/* A client built before a fork owns threads that the forked process does not have and sockets that its parent is
+ * still transacting on, so it can be neither used nor destroyed here. Abandon it and build a replacement. Leaking
+ * rather than destroying also keeps any reference handed out by an earlier client() call valid. */
+void S3Storage::rebuild_client_if_forked() {
+    const auto generation = util::fork_generation();
+    if (client_fork_generation_.load(std::memory_order_acquire) == generation) {
+        return;
+    }
+    std::lock_guard lock{client_mutex_};
+    if (client_fork_generation_.load(std::memory_order_relaxed) == generation) {
+        return;
+    }
+    static_cast<void>(s3_client_.release());
+    static_cast<void>(sts_client_.release());
+    create_s3_client(conf_, get_aws_credentials(conf_));
+    client_fork_generation_.store(generation, std::memory_order_release);
+    ARCTICDB_RUNTIME_DEBUG(log::storage(), "Rebuilt S3 client for generation {} after fork", generation);
+}
+
+S3ClientInterface& S3Storage::client() {
+    rebuild_client_if_forked();
+    return *s3_client_;
+}
+
+S3Storage::~S3Storage() {
+    if (client_fork_generation_.load(std::memory_order_relaxed) != util::fork_generation()) {
+        static_cast<void>(s3_client_.release());
+        static_cast<void>(sts_client_.release());
+    }
 }
 
 bool S3Storage::supports_object_size_calculation() const { return true; }

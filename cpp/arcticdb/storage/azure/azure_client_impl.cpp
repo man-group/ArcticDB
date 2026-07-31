@@ -52,6 +52,7 @@
 #include <arcticdb/storage/azure/azure_client_interface.hpp>
 #include <arcticdb/storage/object_store_utils.hpp>
 #include <arcticdb/util/error_code.hpp>
+#include <arcticdb/util/fork_generation.hpp>
 
 namespace arcticdb::storage {
 using namespace object_store_utils;
@@ -117,6 +118,12 @@ Azure::Storage::Blobs::BlobClientOptions RealAzureClient::get_client_options(con
     if (!conf.ca_cert_dir().empty()) {
         curl_transport_options.CAPath = conf.ca_cert_dir();
     }
+    // azure-core's connection pool is a process-global static, and a forked child inherits its sockets along with
+    // the rest of the address space. Both processes then transact on the same sockets, which crosses requests and
+    // responses and surfaces as short reads and spurious 404s. The pool is keyed partly on ConnectionTimeout, so
+    // offsetting it by the fork generation puts each process in its own bucket, leaving the inherited connections
+    // in a bucket nothing will look in again. There is no supported way to flush the pool itself.
+    curl_transport_options.ConnectionTimeout += std::chrono::milliseconds(util::fork_generation());
     client_options.Transport.Transport = std::make_shared<Azure::Core::Http::CurlTransport>(curl_transport_options);
 #endif
 

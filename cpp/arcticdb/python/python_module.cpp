@@ -29,6 +29,7 @@
 #include <arcticdb/python/python_handlers_common.hpp>
 #include <arcticdb/python/python_bindings_common.hpp>
 #include <arcticdb/util/pybind_mutex.hpp>
+#include <arcticdb/util/fork_generation.hpp>
 
 #include <pybind11/pybind11.h>
 #include <mongocxx/exception/logic_error.hpp>
@@ -226,6 +227,7 @@ PYBIND11_MODULE(arcticdb_ext, m) {
     pthread_atfork(nullptr, nullptr, &reinit_scheduler);
     pthread_atfork(nullptr, nullptr, &reinit_lmdb_warning);
     pthread_atfork(nullptr, nullptr, &register_python_handler_data_factory);
+    pthread_atfork(nullptr, nullptr, &util::increment_fork_generation);
 #endif
     // Set up the global exception handlers first, so module-specific exception handler can override it:
     auto exceptions = m.def_submodule("exceptions");
