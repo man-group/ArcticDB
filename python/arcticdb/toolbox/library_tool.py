@@ -13,7 +13,11 @@ from arcticdb_ext.storage import KeyType
 from arcticdb_ext.stream import SegmentInMemory
 from arcticdb_ext.tools import LibraryTool as LibraryToolImpl
 from arcticdb_ext.version_store import AtomKey, RefKey
-from arcticdb.version_store._normalization import denormalize_dataframe, normalize_dataframe
+from arcticdb.version_store._normalization import (
+    denormalize_dataframe,
+    normalize_dataframe,
+    denormalize_user_metadata,
+)
 from arcticdb_ext.version_store import Slicing
 
 VariantKey = Union[AtomKey, RefKey]
@@ -66,6 +70,33 @@ class LibraryTool(LibraryToolImpl):
 
     def find_keys_for_symbol(self, key_type: KeyType, id: Union[str, int]) -> Union[List[AtomKey], List[RefKey]]:
         return self.find_keys_for_id(key_type, id)
+
+    def get_storage_lock(self, name: str):
+        """Return a dict-in/dict-out :class:`~arcticdb.toolbox.storage_lock.StorageLock` for the given lock name."""
+        from arcticdb.toolbox.storage_lock import StorageLock
+
+        return StorageLock(self._nvs.version_store.get_storage_lock(name))
+
+    def get_reliable_storage_lock(self, name: str, timeout_ns: int):
+        """Return a dict-in/dict-out :class:`~arcticdb.toolbox.storage_lock.ReliableStorageLock`.
+
+        Requires a storage backend supporting atomic writes (e.g. S3).
+        """
+        from arcticdb.toolbox.storage_lock import ReliableStorageLock
+
+        return ReliableStorageLock(name, self._nvs._library, timeout_ns)
+
+    def list_storage_locks(self) -> List[Dict[str, Any]]:
+        """List every storage lock in the library, of both kinds, with their metadata denormalised to a dict.
+
+        Each entry has ``name``, ``kind`` ("unreliable"/"reliable"), ``active``, ``metadata`` (dict or None), a
+        ``timestamp`` (unreliable) or ``expiration`` and ``lock_id`` (reliable).
+        """
+        locks = super().list_storage_locks()
+        for lock in locks:
+            meta = lock.get("metadata")
+            lock["metadata"] = denormalize_user_metadata(meta) if meta is not None else None
+        return locks
 
     def read_to_segment_in_memory(self, key: VariantKey) -> SegmentInMemory:
         return decode_segment(self.read_to_segment(key))

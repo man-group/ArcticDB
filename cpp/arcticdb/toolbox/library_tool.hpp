@@ -22,6 +22,17 @@ namespace arcticdb::toolbox::apy {
 
 namespace py = pybind11;
 
+enum class StorageLockKind { UNRELIABLE, RELIABLE };
+
+struct StorageLockInfo {
+    std::string name;
+    StorageLockKind kind;
+    std::optional<uint64_t> lock_id; // reliable locks only
+    timestamp value;                 // nanosecond timestamp (unreliable) or expiration (reliable)
+    bool active;
+    std::optional<google::protobuf::Any> metadata;
+};
+
 class LibraryTool {
 
   public:
@@ -64,6 +75,8 @@ class LibraryTool {
     std::string get_key_path(const VariantKey& key);
 
     std::vector<VariantKey> find_keys_for_id(entity::KeyType kt, const StreamId& stream_id);
+
+    std::vector<StorageLockInfo> list_storage_locks();
 
     int count_keys(entity::KeyType kt);
 

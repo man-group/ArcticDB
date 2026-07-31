@@ -12,6 +12,7 @@
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/util/constants.hpp>
 #include <arcticdb/util/configs_map.hpp>
+#include <arcticdb/util/pb_util.hpp>
 
 #include <mutex>
 #include <folly/executors/FunctionScheduler.h>
@@ -32,7 +33,10 @@ using ReliableLockResult = std::variant<AcquiredLock, LockInUse>;
 struct ActiveLock {
     AcquiredLockId lock_id;
     timestamp expiration;
+    std::optional<google::protobuf::Any> metadata;
 
+    // Identity is the (id, expiration) pair; metadata is deliberately excluded so equality does not depend on
+    // comparing protobuf Any payloads.
     bool operator==(const ActiveLock& other) const {
         return lock_id == other.lock_id && expiration == other.expiration;
     }
@@ -52,28 +56,37 @@ class ReliableStorageLock {
     ReliableStorageLock(const std::string& base_name, const std::shared_ptr<Store> store, timestamp timeout);
     ReliableStorageLock(const ReliableStorageLock<ClockType>& other) = default;
 
-    AcquiredLockId retry_until_take_lock() const;
-    ReliableLockResult try_take_lock() const;
-    ReliableLockResult try_extend_lock(AcquiredLockId acquired_lock) const;
+    AcquiredLockId retry_until_take_lock(std::optional<google::protobuf::Any> metadata = std::nullopt) const;
+    ReliableLockResult try_take_lock(std::optional<google::protobuf::Any> metadata = std::nullopt) const;
+    ReliableLockResult try_extend_lock(
+            AcquiredLockId acquired_lock, std::optional<google::protobuf::Any> metadata = std::nullopt
+    ) const;
     void free_lock(AcquiredLockId acquired_lock) const;
     timestamp timeout() const;
 
     // Below APIs are for admin management of the lock
     std::optional<ActiveLock> inspect_latest_lock() const;
 
+    // Returns the current holder's user-defined metadata, or nullopt if there is no lock or it carries no metadata.
+    std::optional<google::protobuf::Any> read_metadata() const;
+
     // Forcefully takes a new lock without waiting for any timeouts. If custom_timeout is negative the resulting lock
     // will be expired at creation (hence will result in forcefully freeing the locks).
-    AcquiredLockId force_take_lock(timestamp custom_timeout) const;
+    AcquiredLockId force_take_lock(
+            timestamp custom_timeout, std::optional<google::protobuf::Any> metadata = std::nullopt
+    ) const;
 
     void force_clear_locks() const;
 
   private:
     ReliableLockResult try_take_id(
             const std::vector<AcquiredLockId>& existing_locks, AcquiredLockId lock_id,
-            std::optional<timestamp> timeout_override = std::nullopt
+            std::optional<timestamp> timeout_override = std::nullopt,
+            const std::optional<google::protobuf::Any>& metadata = std::nullopt
     ) const;
     std::pair<std::vector<AcquiredLockId>, std::optional<AcquiredLockId>> get_all_locks() const;
     timestamp get_expiration(RefKey lock_key) const;
+    std::optional<google::protobuf::Any> get_metadata(RefKey lock_key) const;
     void clear_locks(const std::vector<AcquiredLockId>& acquired_locks, bool old_only = true) const;
     StreamId get_stream_id(AcquiredLockId acquired_lock) const;
     RefKey get_ref_key(AcquiredLockId acquired_lock) const;
@@ -88,7 +101,8 @@ class ReliableStorageLock {
 class ReliableStorageLockGuard {
   public:
     ReliableStorageLockGuard(
-            const ReliableStorageLock<>& lock, AcquiredLockId acquired_lock, std::optional<folly::Func>&& on_lost_lock
+            const ReliableStorageLock<>& lock, AcquiredLockId acquired_lock, std::optional<folly::Func>&& on_lost_lock,
+            std::optional<google::protobuf::Any> metadata = std::nullopt
     );
 
     ~ReliableStorageLockGuard();
@@ -101,6 +115,8 @@ class ReliableStorageLockGuard {
     const ReliableStorageLock<> lock_;
     std::optional<AcquiredLockId> acquired_lock_;
     std::optional<folly::Func> on_lost_lock_;
+    // Fixed at acquire and re-written on every heartbeat extend so it persists for the lock's lifetime.
+    std::optional<google::protobuf::Any> metadata_;
     folly::FunctionScheduler extend_lock_heartbeat_;
 };
 
@@ -108,7 +124,9 @@ class ReliableStorageLockGuard {
 struct LostReliableLock : std::exception {};
 class ReliableStorageLockManager {
   public:
-    void take_lock_guard(const ReliableStorageLock<>& lock);
+    void take_lock_guard(
+            const ReliableStorageLock<>& lock, std::optional<google::protobuf::Any> metadata = std::nullopt
+    );
     void free_lock_guard();
 
   private:

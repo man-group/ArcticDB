@@ -16,8 +16,34 @@
 #include <arcticdb/toolbox/library_tool.hpp>
 #include <arcticdb/toolbox/query_stats.hpp>
 #include <arcticdb/toolbox/storage_mover.hpp>
+#include <arcticdb/python/python_utils.hpp>
+#include <arcticdb/entity/protobufs.hpp>
 
 namespace arcticdb::toolbox::apy {
+
+namespace {
+// The lock cores traffic in google::protobuf::Any; the py::object <-> Any conversion lives only here, mirroring the
+// snapshot metadata path. The py::object is a UserDefinedMetadata proto (or None).
+std::optional<google::protobuf::Any> py_metadata_to_any(const py::object& metadata) {
+    if (metadata.is_none()) {
+        return std::nullopt;
+    }
+    arcticdb::proto::descriptors::UserDefinedMetadata udm;
+    python_util::pb_from_python(metadata, udm);
+    google::protobuf::Any any;
+    any.PackFrom(udm);
+    return any;
+}
+
+py::object any_metadata_to_py(const std::optional<google::protobuf::Any>& metadata) {
+    if (!metadata.has_value()) {
+        return py::none();
+    }
+    arcticdb::proto::descriptors::UserDefinedMetadata udm;
+    metadata->UnpackTo(&udm);
+    return python_util::pb_to_python(udm);
+}
+} // namespace
 
 void register_bindings(py::module& m, py::exception<arcticdb::ArcticException>& base_exception) {
     auto tools = m.def_submodule("tools", "Library management tool hooks");
@@ -56,6 +82,26 @@ void register_bindings(py::module& m, py::exception<arcticdb::ArcticException>& 
             .def("count_keys", &LibraryTool::count_keys)
             .def("get_key_path", &LibraryTool::get_key_path)
             .def("find_keys_for_id", &LibraryTool::find_keys_for_id)
+            .def("list_storage_locks",
+                 [](LibraryTool& self) {
+                     py::list result;
+                     for (auto& info : self.list_storage_locks()) {
+                         py::dict d;
+                         d["name"] = info.name;
+                         const bool reliable = info.kind == StorageLockKind::RELIABLE;
+                         d["kind"] = reliable ? "reliable" : "unreliable";
+                         d["lock_id"] = info.lock_id.has_value() ? py::cast(*info.lock_id) : py::none();
+                         if (reliable) {
+                             d["expiration"] = info.value;
+                         } else {
+                             d["timestamp"] = info.value;
+                         }
+                         d["active"] = info.active;
+                         d["metadata"] = any_metadata_to_py(info.metadata);
+                         result.append(std::move(d));
+                     }
+                     return result;
+                 })
             .def("clear_ref_keys", &LibraryTool::clear_ref_keys)
             .def("batch_key_exists", &LibraryTool::batch_key_exists, py::call_guard<SingleThreadMutexHolder>())
             .def("inspect_env_variable", &LibraryTool::inspect_env_variable)
@@ -71,11 +117,19 @@ void register_bindings(py::module& m, py::exception<arcticdb::ArcticException>& 
             .def(py::init<>([](std::string base_name, std::shared_ptr<Library> lib, timestamp timeout) {
                 auto store = version_store::LocalVersionedEngine(lib)._test_get_store();
                 return ReliableStorageLock<>(base_name, store, timeout);
-            }));
+            }))
+            .def("read_metadata",
+                 [](const ReliableStorageLock<>& self) { return any_metadata_to_py(self.read_metadata()); });
 
     py::class_<ReliableStorageLockManager>(tools, "ReliableStorageLockManager")
             .def(py::init<>([]() { return ReliableStorageLockManager(); }))
-            .def("take_lock_guard", &ReliableStorageLockManager::take_lock_guard)
+            .def(
+                    "take_lock_guard",
+                    [](ReliableStorageLockManager& self, const ReliableStorageLock<>& lock, const py::object& metadata
+                    ) { self.take_lock_guard(lock, py_metadata_to_any(metadata)); },
+                    py::arg("lock"),
+                    py::arg("metadata") = py::none()
+            )
             .def("free_lock_guard", &ReliableStorageLockManager::free_lock_guard);
 
     py::class_<StorageMover>(tools, "StorageMover")
@@ -126,10 +180,30 @@ void register_bindings(py::module& m, py::exception<arcticdb::ArcticException>& 
     tools.add_object("CompactionLockName", py::str(arcticdb::CompactionLockName));
 
     py::class_<StorageLockWrapper>(tools, "StorageLock")
-            .def("lock", &StorageLockWrapper::lock)
+            .def(
+                    "lock",
+                    [](StorageLockWrapper& self, const py::object& metadata) {
+                        self.lock(py_metadata_to_any(metadata));
+                    },
+                    py::arg("metadata") = py::none()
+            )
             .def("unlock", &StorageLockWrapper::unlock)
-            .def("lock_timeout", &StorageLockWrapper::lock_timeout)
-            .def("try_lock", &StorageLockWrapper::try_lock);
+            .def(
+                    "lock_timeout",
+                    [](StorageLockWrapper& self, size_t timeout_ms, const py::object& metadata) {
+                        self.lock_timeout(timeout_ms, py_metadata_to_any(metadata));
+                    },
+                    py::arg("timeout_ms"),
+                    py::arg("metadata") = py::none()
+            )
+            .def(
+                    "try_lock",
+                    [](StorageLockWrapper& self, const py::object& metadata) {
+                        return self.try_lock(py_metadata_to_any(metadata));
+                    },
+                    py::arg("metadata") = py::none()
+            )
+            .def("read_metadata", [](StorageLockWrapper& self) { return any_metadata_to_py(self.read_metadata()); });
 
     using namespace arcticdb::query_stats;
     auto query_stats_module = tools.def_submodule("query_stats", "Query stats functionality");

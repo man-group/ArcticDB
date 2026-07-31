@@ -6,6 +6,11 @@ import sys
 
 from arcticdb.util.logger import get_logger
 from arcticdb_ext.tools import ReliableStorageLock, ReliableStorageLockManager
+from arcticdb.toolbox.storage_lock import (
+    ReliableStorageLock as ReliableStorageLockWrapper,
+    ReliableStorageLockManager as ReliableStorageLockManagerWrapper,
+)
+from arcticdb.util.test import config_context
 from tests.util.mark import REAL_S3_TESTS_MARK, WINDOWS
 
 import time
@@ -82,3 +87,116 @@ def test_many_increments(real_storage_factory, lib_name, num_processes, max_slee
     expected_df = pd.DataFrame({"col": [num_processes_succeeded]})
     assert_frame_equal(read_df, expected_df)
     assert vit.version == num_processes_succeeded
+
+
+# --- Plain (unreliable) StorageLock coverage -------------------------------------------------------------------------
+# These run on the in-memory backend; the unreliable lock works on any store. A short WaitMs keeps the acquire
+# confirmation delay small.
+
+
+def test_storage_lock_lifecycle(mem_library):
+    with config_context("StorageLock.WaitMs", 50):
+        l1 = mem_library._nvs.library_tool().get_storage_lock("lock")
+        l2 = mem_library._nvs.library_tool().get_storage_lock("lock")
+
+        assert l1.try_lock()
+        assert not l2.try_lock()
+        l1.unlock()
+
+        assert l2.try_lock()
+        l2.unlock()
+
+        l1.lock()
+        assert not l2.try_lock()
+        l1.unlock()
+
+
+def test_storage_lock_timeout_when_held(mem_library):
+    with config_context("StorageLock.WaitMs", 50):
+        l1 = mem_library._nvs.library_tool().get_storage_lock("lock")
+        l2 = mem_library._nvs.library_tool().get_storage_lock("lock")
+
+        assert l1.try_lock()
+        with pytest.raises(Exception):
+            l2.lock_timeout(100)
+        l1.unlock()
+
+
+def test_storage_lock_metadata_round_trip(mem_library):
+    with config_context("StorageLock.WaitMs", 50):
+        writer = mem_library._nvs.library_tool().get_storage_lock("lock")
+        reader = mem_library._nvs.library_tool().get_storage_lock("lock")
+
+        # No lock yet
+        assert reader.read_metadata() is None
+
+        # A separate reader observes the holder's metadata (the trace use-case)
+        writer.lock(metadata={"job_name": "blah", "n": 42})
+        assert reader.read_metadata() == {"job_name": "blah", "n": 42}
+
+        # Metadata gone after unlock
+        writer.unlock()
+        assert reader.read_metadata() is None
+
+        # Locking without metadata reports no metadata
+        writer.lock()
+        assert reader.read_metadata() is None
+        writer.unlock()
+
+
+def test_list_storage_locks_unreliable(mem_library):
+    with config_context("StorageLock.WaitMs", 50):
+        lock = mem_library._nvs.library_tool().get_storage_lock("mylock")
+        lib_tool = mem_library._nvs.library_tool()
+
+        assert lib_tool.list_storage_locks() == []
+
+        lock.lock(metadata={"who": "me"})
+        locks = lib_tool.list_storage_locks()
+        assert len(locks) == 1
+        info = locks[0]
+        assert info["name"] == "mylock"
+        assert info["kind"] == "unreliable"
+        assert info["active"] is True
+        assert info["metadata"] == {"who": "me"}
+        assert "timestamp" in info
+
+        lock.unlock()
+        assert lib_tool.list_storage_locks() == []
+
+
+# --- ReliableStorageLock metadata coverage (needs atomic writes, hence S3) -------------------------------------------
+
+
+def test_reliable_storage_lock_metadata(s3_clean_bucket, lib_name):
+    lib = s3_clean_bucket.create_arctic().create_library(lib_name)
+
+    # timeout small enough that a heartbeat extend (timeout / 5) fires within the sleep below
+    lock = ReliableStorageLockWrapper("meta_lock", lib._nvs._library, 2 * one_sec)
+    manager = ReliableStorageLockManagerWrapper()
+
+    assert lock.read_metadata() is None
+
+    manager.take_lock_guard(lock, metadata={"job": "reliable", "attempt": 1})
+    try:
+        assert lock.read_metadata() == {"job": "reliable", "attempt": 1}
+
+        # Metadata persists across at least one heartbeat extend
+        time.sleep(1)
+        assert lock.read_metadata() == {"job": "reliable", "attempt": 1}
+
+        # Every reliable lock id is listed (heartbeat extends create new ids; old ones are only cleared long after
+        # expiry). Each carries the metadata, and the current holder is the highest id.
+        lib_tool = lib._nvs.library_tool()
+        reliable = [info for info in lib_tool.list_storage_locks() if info["kind"] == "reliable"]
+        assert len(reliable) >= 1
+        for info in reliable:
+            assert info["name"] == "meta_lock"
+            assert info["metadata"] == {"job": "reliable", "attempt": 1}
+            assert "expiration" in info
+        latest = max(reliable, key=lambda info: info["lock_id"])
+        assert latest["active"] is True
+    finally:
+        manager.free_lock_guard()
+
+    assert lock.read_metadata() is None

@@ -164,6 +164,42 @@ backup_segment = tool.overwrite_append_data_with_dataframe(key, new_df)
 backup = tool.update_append_data_column_type(key, "column_name", float)
 ```
 
+## Storage Locks
+
+Two coarse-grained storage locks are exposed through `LibraryTool`, both with dict-in/dict-out
+user metadata. See `python/arcticdb/toolbox/storage_lock.py` for the wrappers and
+`cpp/arcticdb/util/storage_lock.hpp` / `cpp/arcticdb/util/reliable_storage_lock.hpp` for the cores.
+
+| Lock | Factory | Backend | Notes |
+|------|---------|---------|-------|
+| `StorageLock` (unreliable) | `tool.get_storage_lock(name)` | any | Timestamp + TTL based; two processes can race. |
+| `ReliableStorageLock` | `tool.get_reliable_storage_lock(name, timeout_ns)` | atomic-write only (S3/NFS) | Uses If-None-Match; heartbeat-extended via `ReliableStorageLockManager`. |
+
+```python
+tool = lib.library_tool()
+
+lock = tool.get_storage_lock("my_lock")
+lock.lock(metadata={"job_name": "nightly"})   # metadata is optional
+lock.read_metadata()                           # -> {"job_name": "nightly"} from any process
+lock.unlock()
+
+# List every lock in the library (both kinds), metadata denormalised to a dict
+tool.list_storage_locks()
+# [{"name": "my_lock", "kind": "unreliable", "active": True, "timestamp": ..., "metadata": {...}}]
+```
+
+### On-disk format and compatibility
+
+Metadata is attached to the lock segment's `google::protobuf::Any` field (the same
+`UserDefinedMetadata` path as snapshots), **not** a new column. The timestamp/expiration column
+old clients read via `scalar_at(0, 0)` is unchanged, so:
+
+- Old clients can read new (metadata-bearing) locks — they ignore the `Any` field.
+- New code reads old locks and reports `metadata` as `None`.
+
+`list_storage_locks` lists every reliable lock id rather than collapsing to latest-per-base-name;
+the `active` flag and `lock_id` identify the current holder.
+
 ## Helper Functions
 
 ### Key to Properties Dictionary
@@ -188,6 +224,7 @@ Get a `LibraryTool` via `lib.library_tool()`. Use `find_keys_for_symbol(KeyType,
 | File | Purpose |
 |------|---------|
 | `toolbox/library_tool.py` | LibraryTool class |
+| `toolbox/storage_lock.py` | Dict-in/dict-out StorageLock / ReliableStorageLock wrappers |
 | `toolbox/__init__.py` | Module exports |
 
 ## Cautions

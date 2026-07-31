@@ -24,12 +24,29 @@
 #include <arcticdb/storage/s3/detail-inl.hpp>
 #include <arcticdb/storage/s3/s3_client_wrapper.hpp>
 #include <arcticdb/storage/mock/storage_mock_client.hpp>
+#include <arcticdb/entity/protobufs.hpp>
 #include <aws/core/Aws.h>
 
 using namespace arcticdb;
 using namespace lock;
 namespace aa = arcticdb::async;
 namespace as = arcticdb::storage;
+
+namespace {
+google::protobuf::Any make_meta(const std::string& payload) {
+    arcticdb::proto::descriptors::UserDefinedMetadata udm;
+    udm.set_inline_payload(payload);
+    google::protobuf::Any any;
+    any.PackFrom(udm);
+    return any;
+}
+
+std::string meta_payload(const google::protobuf::Any& any) {
+    arcticdb::proto::descriptors::UserDefinedMetadata udm;
+    any.UnpackTo(&udm);
+    return udm.inline_payload();
+}
+} // namespace
 
 // These tests test the actual implementation
 
@@ -183,6 +200,52 @@ TEST(ReliableStorageLock, NotImplementedException) {
             { ReliableStorageLock<> lock(StringId("test_lock"), store, ONE_SECOND); },
             UnsupportedAtomicOperationException
     );
+}
+
+TEST(ReliableStorageLock, Metadata) {
+    auto store = std::make_shared<InMemoryStore>();
+    using Clock = util::ManualClock;
+    ReliableStorageLock<Clock> lock{StringId{"meta_lock"}, store, 10};
+
+    Clock::time_ = 0;
+    // No lock yet
+    ASSERT_FALSE(lock.read_metadata().has_value());
+
+    // Acquire with metadata, read it back
+    ASSERT_EQ(lock.try_take_lock(make_meta("acq")), ReliableLockResult{AcquiredLock{0}});
+    auto read = lock.read_metadata();
+    ASSERT_TRUE(read.has_value());
+    ASSERT_EQ(meta_payload(*read), "acq");
+
+    // inspect_latest_lock exposes the metadata
+    auto active = lock.inspect_latest_lock();
+    ASSERT_TRUE(active.has_value());
+    ASSERT_TRUE(active->metadata.has_value());
+    ASSERT_EQ(meta_payload(*active->metadata), "acq");
+
+    // Metadata re-written and preserved across an extend
+    Clock::time_ = 5;
+    ASSERT_EQ(lock.try_extend_lock(0, make_meta("acq")), ReliableLockResult{AcquiredLock{1}});
+    ASSERT_EQ(meta_payload(*lock.read_metadata()), "acq");
+
+    // Absent after free
+    lock.free_lock(1);
+    ASSERT_FALSE(lock.read_metadata().has_value());
+}
+
+TEST(ReliableStorageLock, MetadataSegmentBackwardCompatible) {
+    auto store = std::make_shared<InMemoryStore>();
+    using Clock = util::ManualClock;
+    Clock::time_ = 0;
+    ReliableStorageLock<Clock> lock{StringId{"compat_lock"}, store, 10};
+
+    // A no-metadata lock (an old-format segment) is read with metadata nullopt and lifecycle unaffected
+    ASSERT_EQ(lock.try_take_lock(), ReliableLockResult{AcquiredLock{0}});
+    ASSERT_FALSE(lock.read_metadata().has_value());
+    auto active = lock.inspect_latest_lock();
+    ASSERT_TRUE(active.has_value());
+    ASSERT_FALSE(active->metadata.has_value());
+    ASSERT_EQ(active->expiration, 10);
 }
 
 TEST(ReliableStorageLock, AdminTools) {

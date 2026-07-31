@@ -9,7 +9,7 @@ from packaging import version
 import pandas as pd
 import numpy as np
 from arcticdb import QueryBuilder, LibraryOptions
-from arcticdb.util.test import assert_frame_equal, assert_frame_equal_with_arrow, merge
+from arcticdb.util.test import assert_frame_equal, assert_frame_equal_with_arrow, merge, config_context
 from arcticdb.version_store.library import MergeStrategy, MergeAction
 from arcticdb.options import ModifiableEnterpriseLibraryOption, OutputFormat
 from arcticdb.toolbox.library_tool import LibraryTool
@@ -606,6 +606,48 @@ def test_compat_merge_rowrange_write_new_read_old(old_venv_and_arctic_uri, lib_n
             pytest.skip("Reading the new library on s3 or azure with 1.6.2 requires some work arounds")
 
         compat.old_lib.assert_read(sym, expected)
+
+
+def test_compat_storage_lock_write_new_read_old(old_venv_and_arctic_uri, lib_name):
+    # The current version gains an optional, old-client-ignored metadata field on the lock segment. An old client
+    # reads only the timestamp scalar it always read, so it still sees a metadata-bearing lock as held. This is the
+    # "old clients can read new locks" direction.
+    old_venv, arctic_uri = old_venv_and_arctic_uri
+    with CompatLibrary(old_venv, arctic_uri, lib_name) as compat:
+        with compat.current_version() as curr:
+            with config_context("StorageLock.WaitMs", 50):
+                lock = curr.lib._nvs.library_tool().get_storage_lock("compat_lock")
+                lock.lock(metadata={"job_name": "blah"})
+                # Deliberately left held so the old client observes it on disk.
+
+        compat.old_lib.execute(
+            [
+                'lock = lib._nvs.version_store.get_storage_lock("compat_lock")',
+                'assert lock.try_lock() == False, "old client should see the metadata-bearing lock as held"',
+            ]
+        )
+
+
+def test_compat_storage_lock_write_old_read_new(old_venv_and_arctic_uri, lib_name):
+    # A lock created by an old client has no metadata field. The current version reads it via read_metadata and
+    # list_storage_locks and reports metadata None without error. This is the "new code reads old locks" direction.
+    old_venv, arctic_uri = old_venv_and_arctic_uri
+    with CompatLibrary(old_venv, arctic_uri, lib_name) as compat:
+        compat.old_lib.execute(
+            [
+                'lock = lib._nvs.version_store.get_storage_lock("compat_lock2")',
+                "lock.lock()",
+            ]
+        )
+
+        with compat.current_version() as curr:
+            lib_tool = curr.lib._nvs.library_tool()
+            lock = lib_tool.get_storage_lock("compat_lock2")
+            assert lock.read_metadata() is None
+            locks = {info["name"]: info for info in lib_tool.list_storage_locks()}
+            assert "compat_lock2" in locks
+            assert locks["compat_lock2"]["metadata"] is None
+            assert locks["compat_lock2"]["kind"] == "unreliable"
 
 
 def test_norm_meta_column_and_index_names_write_old_read_new(old_venv_and_arctic_uri, lib_name):

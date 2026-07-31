@@ -15,6 +15,7 @@
 #include <arcticdb/util/exponential_backoff.hpp>
 #include <arcticdb/storage/failure_simulation.hpp>
 #include <arcticdb/util/configs_map.hpp>
+#include <arcticdb/util/pb_util.hpp>
 
 #include <fmt/std.h>
 #include <mutex>
@@ -29,10 +30,15 @@ inline StreamDescriptor lock_stream_descriptor(const StreamId& stream_id) {
     };
 }
 
-SegmentInMemory lock_segment(const StreamId& name, uint64_t timestamp) {
+SegmentInMemory lock_segment(
+        const StreamId& name, uint64_t timestamp, std::optional<google::protobuf::Any> metadata = std::nullopt
+) {
     SegmentInMemory output{lock_stream_descriptor(name)};
     output.set_scalar(0, timestamp);
     output.end_row();
+    if (metadata.has_value()) {
+        output.set_metadata(std::move(*metadata));
+    }
     return output;
 }
 
@@ -87,9 +93,16 @@ class StorageLock {
 
     ARCTICDB_NO_MOVE_OR_COPY(StorageLock)
 
-    void lock(const std::shared_ptr<Store>& store) { do_lock(store); }
+    void lock(const std::shared_ptr<Store>& store, std::optional<google::protobuf::Any> metadata = std::nullopt) {
+        do_lock(store, std::nullopt, std::move(metadata));
+    }
 
-    void lock_timeout(const std::shared_ptr<Store>& store, size_t timeout_ms) { do_lock(store, timeout_ms); }
+    void lock_timeout(
+            const std::shared_ptr<Store>& store, size_t timeout_ms,
+            std::optional<google::protobuf::Any> metadata = std::nullopt
+    ) {
+        do_lock(store, timeout_ms, std::move(metadata));
+    }
 
     void unlock(const std::shared_ptr<Store>& store) {
         if (auto read_ts = read_timestamp(store); !read_ts || *read_ts != ts_) {
@@ -101,7 +114,7 @@ class StorageLock {
         mutex_.unlock();
     }
 
-    bool try_lock(const std::shared_ptr<Store>& store) {
+    bool try_lock(const std::shared_ptr<Store>& store, std::optional<google::protobuf::Any> metadata = std::nullopt) {
         ARCTICDB_DEBUG(log::lock(), "Storage lock: try lock");
         if (!mutex_.try_lock()) {
             ARCTICDB_DEBUG(log::lock(), "Storage lock: failed local lock");
@@ -110,7 +123,7 @@ class StorageLock {
 
         OnExit x{[that = this]() { that->mutex_.unlock(); }};
 
-        const bool try_lock = try_acquire_lock(store);
+        const bool try_lock = try_acquire_lock(store, metadata);
         if (try_lock) {
             x.release();
         }
@@ -118,17 +131,36 @@ class StorageLock {
         return try_lock;
     }
 
+    // Returns the current holder's user-defined metadata, or nullopt if there is no active lock or it carries no
+    // metadata. Readable regardless of ownership, so it can be used to trace who holds the lock.
+    std::optional<google::protobuf::Any> read_metadata(const std::shared_ptr<Store>& store) const {
+        if (!exists_active_lock(store)) {
+            return std::nullopt;
+        }
+        try {
+            auto key_seg = store->read_sync(ref_key(), {.dont_warn_about_missing_key = true});
+            if (const auto* meta = key_seg.second.metadata()) {
+                return *meta;
+            }
+        } catch (const storage::KeyNotFoundException&) {
+        }
+        return std::nullopt;
+    }
+
     void _test_release_local_lock() { mutex_.unlock(); }
 
   private:
-    void do_lock(const std::shared_ptr<Store>& store, std::optional<size_t> timeout_ms = std::nullopt) {
+    void do_lock(
+            const std::shared_ptr<Store>& store, std::optional<size_t> timeout_ms,
+            const std::optional<google::protobuf::Any>& metadata
+    ) {
         mutex_.lock();
         size_t wait_ms = ConfigsMap::instance()->get_int("StorageLock.InitialWaitMs", DEFAULT_INITIAL_WAIT_MS);
         thread_local std::uniform_int_distribution<size_t> dist;
         thread_local std::minstd_rand gen(std::random_device{}());
         size_t total_wait = 0;
 
-        while (!try_acquire_lock(store)) {
+        while (!try_acquire_lock(store, metadata)) {
             if (timeout_ms && total_wait > *timeout_ms) {
                 ts_ = 0;
                 log::lock().info("Lock timed out, giving up after {}", wait_ms);
@@ -143,9 +175,9 @@ class StorageLock {
         }
     }
 
-    bool try_acquire_lock(const std::shared_ptr<Store>& store) {
+    bool try_acquire_lock(const std::shared_ptr<Store>& store, const std::optional<google::protobuf::Any>& metadata) {
         if (!exists_active_lock(store)) {
-            ts_ = create_ref_key(store);
+            ts_ = create_ref_key(store, metadata);
             const auto lock_sleep_ms = ConfigsMap::instance()->get_int("StorageLock.WaitMs", DEFAULT_WAIT_MS);
             ARCTICDB_DEBUG(log::lock(), "Waiting for {} ms..", lock_sleep_ms);
             std::this_thread::sleep_for(std::chrono::milliseconds(lock_sleep_ms));
@@ -172,10 +204,12 @@ class StorageLock {
 
     void sleep_ms(size_t ms) const { std::this_thread::sleep_for(std::chrono::milliseconds(ms)); }
 
-    timestamp create_ref_key(const std::shared_ptr<Store>& store) {
+    timestamp create_ref_key(
+            const std::shared_ptr<Store>& store, const std::optional<google::protobuf::Any>& metadata
+    ) {
         auto ts = ClockType::nanos_since_epoch();
         StorageFailureSimulator::instance()->go(FailureType::WRITE_LOCK);
-        store->write_sync(KeyType::LOCK, name_, lock_segment(name_, ts));
+        store->write_sync(KeyType::LOCK, name_, lock_segment(name_, ts, metadata));
         ARCTICDB_DEBUG(log::lock(), "Created lock with timestamp {}", ts);
         return ts;
     }
@@ -232,13 +266,21 @@ class StorageLockWrapper {
         store_(std::move(store)),
         lock_(std::make_shared<StorageLock<>>(stream_id)) {}
 
-    void lock() { lock_->lock(store_); }
+    void lock(std::optional<google::protobuf::Any> metadata = std::nullopt) {
+        lock_->lock(store_, std::move(metadata));
+    }
 
-    void lock_timeout(size_t timeout_ms) { lock_->lock_timeout(store_, timeout_ms); }
+    void lock_timeout(size_t timeout_ms, std::optional<google::protobuf::Any> metadata = std::nullopt) {
+        lock_->lock_timeout(store_, timeout_ms, std::move(metadata));
+    }
 
     void unlock() { lock_->unlock(store_); }
 
-    bool try_lock() { return lock_->try_lock(store_); }
+    bool try_lock(std::optional<google::protobuf::Any> metadata = std::nullopt) {
+        return lock_->try_lock(store_, std::move(metadata));
+    }
+
+    std::optional<google::protobuf::Any> read_metadata() const { return lock_->read_metadata(store_); }
 };
 
 } // namespace arcticdb

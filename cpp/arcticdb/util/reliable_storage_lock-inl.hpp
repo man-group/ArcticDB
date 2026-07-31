@@ -28,10 +28,15 @@ inline StreamDescriptor lock_stream_descriptor(const StreamId& stream_id) {
     return stream_descriptor(stream_id, stream::RowCountIndex(), {scalar_field(DataType::INT64, "expiration")});
 }
 
-inline SegmentInMemory lock_segment(const StreamId& name, timestamp expiration) {
+inline SegmentInMemory lock_segment(
+        const StreamId& name, timestamp expiration, std::optional<google::protobuf::Any> metadata = std::nullopt
+) {
     SegmentInMemory output{lock_stream_descriptor(name)};
     output.set_scalar(0, expiration);
     output.end_row();
+    if (metadata.has_value()) {
+        output.set_metadata(std::move(*metadata));
+    }
     return output;
 }
 
@@ -106,6 +111,15 @@ timestamp ReliableStorageLock<ClockType>::get_expiration(RefKey lock_key) const 
 }
 
 template<class ClockType>
+std::optional<google::protobuf::Any> ReliableStorageLock<ClockType>::get_metadata(RefKey lock_key) const {
+    auto kv = store_->read_sync(lock_key, storage::ReadKeyOpts{});
+    if (const auto* meta = kv.second.metadata()) {
+        return *meta;
+    }
+    return std::nullopt;
+}
+
+template<class ClockType>
 void ReliableStorageLock<ClockType>::clear_locks(const std::vector<AcquiredLockId>& lock_ids, bool old_only) const {
     auto now = ClockType::nanos_since_epoch();
     auto to_delete = std::vector<VariantKey>();
@@ -127,7 +141,7 @@ void ReliableStorageLock<ClockType>::clear_locks(const std::vector<AcquiredLockI
 }
 
 template<class ClockType>
-ReliableLockResult ReliableStorageLock<ClockType>::try_take_lock() const {
+ReliableLockResult ReliableStorageLock<ClockType>::try_take_lock(std::optional<google::protobuf::Any> metadata) const {
     auto [existing_locks, latest] = get_all_locks();
     if (latest.has_value()) {
         auto expires = get_expiration(get_ref_key(latest.value()));
@@ -137,11 +151,12 @@ ReliableLockResult ReliableStorageLock<ClockType>::try_take_lock() const {
         }
     }
     auto next_id = get_next_id(latest);
-    return try_take_id(existing_locks, next_id);
+    return try_take_id(existing_locks, next_id, std::nullopt, metadata);
 }
 
 template<class ClockType>
-AcquiredLockId ReliableStorageLock<ClockType>::retry_until_take_lock() const {
+AcquiredLockId ReliableStorageLock<ClockType>::retry_until_take_lock(std::optional<google::protobuf::Any> metadata
+) const {
     // We don't use the ExponentialBackoff because we want to be able to wait indefinitely
     auto max_wait = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::nanoseconds(timeout()));
     auto min_wait = max_wait / 16;
@@ -153,18 +168,20 @@ AcquiredLockId ReliableStorageLock<ClockType>::retry_until_take_lock() const {
         return current_wait * factor;
     };
 
-    auto acquired_lock = try_take_lock();
+    auto acquired_lock = try_take_lock(metadata);
 
     while (!std::holds_alternative<AcquiredLock>(acquired_lock)) {
         std::this_thread::sleep_for(jittered_wait());
         current_wait = std::min(current_wait * 2, max_wait);
-        acquired_lock = try_take_lock();
+        acquired_lock = try_take_lock(metadata);
     }
     return std::get<AcquiredLock>(acquired_lock);
 }
 
 template<class ClockType>
-ReliableLockResult ReliableStorageLock<ClockType>::try_extend_lock(AcquiredLockId acquired_lock) const {
+ReliableLockResult ReliableStorageLock<ClockType>::try_extend_lock(
+        AcquiredLockId acquired_lock, std::optional<google::protobuf::Any> metadata
+) const {
     auto [existing_locks, latest] = get_all_locks();
     util::check(
             latest.has_value() && latest.value() >= acquired_lock,
@@ -176,7 +193,7 @@ ReliableLockResult ReliableStorageLock<ClockType>::try_extend_lock(AcquiredLockI
         return LockInUse{};
     }
     auto next_id = get_next_id(latest);
-    return try_take_id(existing_locks, next_id);
+    return try_take_id(existing_locks, next_id, std::nullopt, metadata);
 }
 
 template<class ClockType>
@@ -202,17 +219,34 @@ template<class ClockType>
 std::optional<ActiveLock> ReliableStorageLock<ClockType>::inspect_latest_lock() const {
     auto [existing_locks, latest_lock_id] = get_all_locks();
     if (latest_lock_id.has_value()) {
-        auto expiration = get_expiration(get_ref_key(latest_lock_id.value()));
-        return {{latest_lock_id.value(), expiration}};
+        auto lock_key = get_ref_key(latest_lock_id.value());
+        auto kv = store_->read_sync(lock_key, storage::ReadKeyOpts{});
+        auto expiration = kv.second.template scalar_at<timestamp>(0, 0).value();
+        std::optional<google::protobuf::Any> metadata;
+        if (const auto* meta = kv.second.metadata()) {
+            metadata = *meta;
+        }
+        return {{latest_lock_id.value(), expiration, std::move(metadata)}};
     }
     return std::nullopt;
 }
 
 template<class ClockType>
-AcquiredLockId ReliableStorageLock<ClockType>::force_take_lock(timestamp custom_timeout) const {
+std::optional<google::protobuf::Any> ReliableStorageLock<ClockType>::read_metadata() const {
+    auto [existing_locks, latest_lock_id] = get_all_locks();
+    if (latest_lock_id.has_value()) {
+        return get_metadata(get_ref_key(latest_lock_id.value()));
+    }
+    return std::nullopt;
+}
+
+template<class ClockType>
+AcquiredLockId ReliableStorageLock<ClockType>::force_take_lock(
+        timestamp custom_timeout, std::optional<google::protobuf::Any> metadata
+) const {
     auto [existing_locks, latest] = get_all_locks();
     auto force_next_id = get_force_next_id(latest);
-    auto result = try_take_id(existing_locks, force_next_id, custom_timeout);
+    auto result = try_take_id(existing_locks, force_next_id, custom_timeout, metadata);
     return util::variant_match(
             result,
             [&](AcquiredLock& acquired_lock) {
@@ -229,12 +263,14 @@ AcquiredLockId ReliableStorageLock<ClockType>::force_take_lock(timestamp custom_
 template<class ClockType>
 ReliableLockResult ReliableStorageLock<ClockType>::try_take_id(
         const std::vector<AcquiredLockId>& existing_locks, AcquiredLockId lock_id,
-        std::optional<timestamp> timeout_override
+        std::optional<timestamp> timeout_override, const std::optional<google::protobuf::Any>& metadata
 ) const {
     auto lock_stream_id = get_stream_id(lock_id);
     auto expiration = ClockType::nanos_since_epoch() + timeout_override.value_or(timeout_);
     try {
-        store_->write_if_none_sync(KeyType::ATOMIC_LOCK, lock_stream_id, lock_segment(lock_stream_id, expiration));
+        store_->write_if_none_sync(
+                KeyType::ATOMIC_LOCK, lock_stream_id, lock_segment(lock_stream_id, expiration, metadata)
+        );
     } catch (const AtomicOperationFailedException& e) {
         log::lock().debug("Failed to acquire lock (likely someone acquired it before us): {}", e.what());
         return LockInUse{};
@@ -251,11 +287,13 @@ void ReliableStorageLock<ClockType>::force_clear_locks() const {
 }
 
 inline ReliableStorageLockGuard::ReliableStorageLockGuard(
-        const ReliableStorageLock<>& lock, AcquiredLockId acquired_lock, std::optional<folly::Func>&& on_lost_lock
+        const ReliableStorageLock<>& lock, AcquiredLockId acquired_lock, std::optional<folly::Func>&& on_lost_lock,
+        std::optional<google::protobuf::Any> metadata
 ) :
     lock_(lock),
     acquired_lock_(std::nullopt),
-    on_lost_lock_(std::move(on_lost_lock)) {
+    on_lost_lock_(std::move(on_lost_lock)),
+    metadata_(std::move(metadata)) {
     acquired_lock_ = acquired_lock;
     // We heartbeat 5 times per lock timeout to extend the lock.
     auto hearbeat_frequency = std::chrono::duration_cast<std::chrono::microseconds>(
@@ -265,7 +303,7 @@ inline ReliableStorageLockGuard::ReliableStorageLockGuard(
             [that = this]() {
                 if (that->acquired_lock_.has_value()) {
                     try {
-                        auto result = that->lock_.try_extend_lock(that->acquired_lock_.value());
+                        auto result = that->lock_.try_extend_lock(that->acquired_lock_.value(), that->metadata_);
                         util::variant_match(
                                 result,
                                 [&](AcquiredLock& acquired_lock) { that->acquired_lock_ = acquired_lock; },
@@ -322,9 +360,13 @@ inline void ReliableStorageLockGuard::set_on_lost_lock(folly::Func&& on_lost_loc
     }
 }
 
-inline void ReliableStorageLockManager::take_lock_guard(const ReliableStorageLock<>& lock) {
-    auto acquired = lock.retry_until_take_lock();
-    guard = std::make_shared<ReliableStorageLockGuard>(lock, acquired, []() { throw LostReliableLock(); });
+inline void ReliableStorageLockManager::take_lock_guard(
+        const ReliableStorageLock<>& lock, std::optional<google::protobuf::Any> metadata
+) {
+    auto acquired = lock.retry_until_take_lock(metadata);
+    guard = std::make_shared<ReliableStorageLockGuard>(
+            lock, acquired, []() { throw LostReliableLock(); }, std::move(metadata)
+    );
 }
 
 inline void ReliableStorageLockManager::free_lock_guard() { guard = std::nullopt; }
