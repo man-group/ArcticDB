@@ -100,6 +100,11 @@ struct IClause {
 
 using Clause = folly::Poly<IClause>;
 
+template<typename ClauseType>
+bool is(const std::shared_ptr<Clause>& clause) {
+    return folly::poly_type(*clause) == typeid(ClauseType);
+}
+
 void check_column_presence(
         OutputSchema& output_schema, const std::unordered_set<std::string>& required_columns,
         std::string_view clause_name

@@ -523,7 +523,6 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
             .def_readonly("needs_post_processing", &ReadQuery::needs_post_processing)
             // Unsurprisingly, pybind11 doesn't understand folly::poly, so use vector of variants here
             .def("add_clauses", [](ReadQuery& self, std::vector<ClauseVariant> clauses) {
-                clauses = plan_query(std::move(clauses));
                 std::vector<std::shared_ptr<Clause>> _clauses;
                 self.needs_post_processing = false;
                 for (auto&& clause : clauses) {
@@ -1047,7 +1046,6 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                         user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
                                 !clauses.empty(), "batch_read_and_join called with no clauses"
                         );
-                        clauses = plan_query(std::move(clauses));
                         std::vector<std::shared_ptr<Clause>> _clauses;
                         bool first_clause{true};
                         for (auto&& clause : clauses) {
