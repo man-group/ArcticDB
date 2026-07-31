@@ -1,4 +1,5 @@
 import os
+import datetime
 import pandas as pd
 import numpy as np
 import pytest
@@ -118,20 +119,48 @@ def test_storage_lock_timeout_when_held(mem_library):
         l1.unlock()
 
 
-def test_storage_lock_metadata_round_trip(mem_library):
+STORAGE_LOCK_METADATA = [
+    pytest.param("nightly-etl", id="str"),
+    pytest.param(42, id="int"),
+    pytest.param(3.14, id="float"),
+    pytest.param(True, id="bool"),
+    pytest.param(b"\x00\x01\x02", id="bytes"),
+    pytest.param([1, "a", 2.0, True], id="list"),
+    pytest.param({"job_name": "blah", "n": 42}, id="dict"),
+    pytest.param({"a": [1, {"b": 2}], "c": None}, id="nested"),
+    pytest.param(pd.Timestamp("2025-01-01 09:30:00"), id="timestamp_naive"),
+    pytest.param(pd.Timestamp("2025-01-01 09:30:00", tz="America/New_York"), id="timestamp_tz"),
+    pytest.param(datetime.datetime(2025, 1, 1, 9, 30, tzinfo=datetime.timezone.utc), id="datetime_tz"),
+    pytest.param(datetime.timedelta(days=1, hours=2, seconds=30), id="timedelta"),
+]
+
+
+@pytest.mark.parametrize("metadata", STORAGE_LOCK_METADATA)
+def test_storage_lock_metadata_round_trip(mem_library, metadata):
+    with config_context("StorageLock.WaitMs", 50):
+        lib_tool = mem_library._nvs.library_tool()
+        writer = lib_tool.get_storage_lock("lock")
+        reader = mem_library._nvs.library_tool().get_storage_lock("lock")
+
+        # A separate reader observes the holder's metadata (the trace use-case)
+        writer.lock(metadata=metadata)
+        assert reader.read_metadata() == metadata
+
+        # and it surfaces through the listing
+        (info,) = lib_tool.list_storage_locks()
+        assert info["metadata"] == metadata
+
+        # Metadata gone after unlock
+        writer.unlock()
+        assert reader.read_metadata() is None
+
+
+def test_storage_lock_metadata_absent(mem_library):
     with config_context("StorageLock.WaitMs", 50):
         writer = mem_library._nvs.library_tool().get_storage_lock("lock")
         reader = mem_library._nvs.library_tool().get_storage_lock("lock")
 
         # No lock yet
-        assert reader.read_metadata() is None
-
-        # A separate reader observes the holder's metadata (the trace use-case)
-        writer.lock(metadata={"job_name": "blah", "n": 42})
-        assert reader.read_metadata() == {"job_name": "blah", "n": 42}
-
-        # Metadata gone after unlock
-        writer.unlock()
         assert reader.read_metadata() is None
 
         # Locking without metadata reports no metadata
