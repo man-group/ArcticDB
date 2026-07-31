@@ -1829,12 +1829,12 @@ TEST_P(MergeUpdateClauseInsertAndUpdate, SourceDataEndsBeforeLastSegment) {
             rows_per_segment,
             cols_per_segment,
             iota_view{timestamp{0}, timestamp{num_rows}} | views::transform([](const timestamp x) { return x * 2; }),
-            iota_view{size_t{0}, num_rows}
+            iota_view{uint64_t{0}, uint64_t{num_rows}}
     );
     // Will insert in segments 0, 2, 3
     // Segments 1, 4, 5 are not processed
     auto [input_frame, input_frame_owner] = input_frame_from_tensors<TimeseriesIndex>(
-            desc, std::array<timestamp, 3>{1, 21, 33}, std::array<size_t, 3>{100, 200, 300}
+            desc, std::array<timestamp, 3>{1, 21, 33}, std::array<uint64_t, 3>{100, 200, 300}
     );
     std::vector<RangesAndKey> ranges_and_keys = generate_ranges_and_keys(desc, segments, col_ranges, row_ranges);
     auto component_manager = std::make_shared<ComponentManager>();
@@ -1858,17 +1858,17 @@ TEST_P(MergeUpdateClauseInsertAndUpdate, SourceDataEndsBeforeLastSegment) {
     constexpr static std::array expected_col_ranges = {ColRange{1, 2}, ColRange{1, 2}, ColRange{1, 2}};
     const std::array expected_segments = {
             create_dense_segment(
-                    desc, std::array<timestamp, 6>{0, 1, 2, 4, 6, 8}, std::array<size_t, 6>{0, 100, 1, 2, 3, 4}
+                    desc, std::array<timestamp, 6>{0, 1, 2, 4, 6, 8}, std::array<uint64_t, 6>{0, 100, 1, 2, 3, 4}
             ),
             create_dense_segment(
                     desc,
                     std::array<timestamp, 6>{20, 21, 22, 24, 26, 28},
-                    std::array<size_t, 6>{10, 200, 11, 12, 13, 14}
+                    std::array<uint64_t, 6>{10, 200, 11, 12, 13, 14}
             ),
             create_dense_segment(
                     desc,
                     std::array<timestamp, 6>{30, 32, 33, 34, 36, 38},
-                    std::array<size_t, 6>{15, 16, 300, 17, 18, 19}
+                    std::array<uint64_t, 6>{15, 16, 300, 17, 18, 19}
             ),
     };
     std::array<ProcessingUnit, 3> processing_units;
@@ -1899,13 +1899,13 @@ TEST_P(MergeUpdateClauseInsertAndUpdate, SourceDataStartsAfterTheFirstSegment) {
             rows_per_segment,
             cols_per_segment,
             iota_view{timestamp{0}, timestamp{num_rows}} | views::transform([](const timestamp x) { return x * 2; }),
-            iota_view{size_t{0}, num_rows}
+            iota_view{uint64_t{0}, uint64_t{num_rows}}
     );
     // Will insert in segments 2, 3
     // Segments 0, 1, 4, 5 are not processed
     constexpr static size_t input_frame_rows = 2;
     auto [input_frame, input_frame_owner] = input_frame_from_tensors<TimeseriesIndex>(
-            desc, std::array<timestamp, input_frame_rows>{21, 33}, std::array<size_t, input_frame_rows>{100, 200}
+            desc, std::array<timestamp, input_frame_rows>{21, 33}, std::array<uint64_t, input_frame_rows>{100, 200}
     );
     std::vector<RangesAndKey> ranges_and_keys = generate_ranges_and_keys(desc, segments, col_ranges, row_ranges);
     auto component_manager = std::make_shared<ComponentManager>();
@@ -1932,12 +1932,12 @@ TEST_P(MergeUpdateClauseInsertAndUpdate, SourceDataStartsAfterTheFirstSegment) {
             create_dense_segment(
                     desc,
                     std::array<timestamp, 6>{20, 21, 22, 24, 26, 28},
-                    std::array<size_t, 6>{10, 100, 11, 12, 13, 14}
+                    std::array<uint64_t, 6>{10, 100, 11, 12, 13, 14}
             ),
             create_dense_segment(
                     desc,
                     std::array<timestamp, 6>{30, 32, 33, 34, 36, 38},
-                    std::array<size_t, 6>{15, 16, 200, 17, 18, 19}
+                    std::array<uint64_t, 6>{15, 16, 200, 17, 18, 19}
             ),
     };
     std::array<ProcessingUnit, expected_segments_to_process> processing_units;
@@ -1969,11 +1969,11 @@ TEST_P(MergeUpdateClauseInsertAndUpdate, SkipExpandedSegmentsInsertAtEnd) {
             cols_per_segment,
             std::array<timestamp, num_rows>{0,  1,  2,  3,  4,  10, 11, 12, 13, 14, 20, 21, 22, 23,
                                             24, 30, 31, 32, 33, 34, 40, 41, 42, 43, 44, 50, 51},
-            iota_view{size_t{0}, num_rows}
+            iota_view{uint64_t{0}, uint64_t{num_rows}}
     );
-    constexpr static size_t input_frame_rows = 3;
+    constexpr static size_t input_frame_rows = 2;
     auto [input_frame, input_frame_owner] = input_frame_from_tensors<TimeseriesIndex>(
-            desc, std::array<timestamp, input_frame_rows>{35, 47}, std::array<size_t, input_frame_rows>{100, 200}
+            desc, std::array<timestamp, input_frame_rows>{35, 47}, std::array<uint64_t, input_frame_rows>{100, 200}
     );
     std::vector<RangesAndKey> ranges_and_keys = generate_ranges_and_keys(desc, segments, col_ranges, row_ranges);
     auto component_manager = std::make_shared<ComponentManager>();
@@ -1999,12 +1999,12 @@ TEST_P(MergeUpdateClauseInsertAndUpdate, SkipExpandedSegmentsInsertAtEnd) {
             create_dense_segment(
                     desc,
                     std::array<timestamp, 6>{30, 31, 32, 33, 34, 35},
-                    std::array<size_t, 6>{15, 16, 17, 18, 19, 100}
+                    std::array<uint64_t, 6>{15, 16, 17, 18, 19, 100}
             ),
             create_dense_segment(
                     desc,
-                    std::array<timestamp, 7>{40, 41, 42, 43, 44, 47},
-                    std::array<size_t, 7>{20, 21, 22, 23, 24, 200}
+                    std::array<timestamp, 6>{40, 41, 42, 43, 44, 47},
+                    std::array<uint64_t, 6>{20, 21, 22, 23, 24, 200}
             ),
     };
     for (size_t i = 0; i < structured_entities.size(); ++i) {
@@ -2034,11 +2034,11 @@ TEST_P(MergeUpdateClauseInsertAndUpdate, SkipExpandedSegmentsInsertInMiddle) {
             rows_per_segment,
             cols_per_segment,
             iota_view{timestamp{0}, timestamp{num_rows}} | views::transform([](const timestamp x) { return x * 5; }),
-            iota_view{size_t{0}, num_rows}
+            iota_view{uint64_t{0}, uint64_t{num_rows}}
     );
     constexpr static size_t input_frame_rows = 1;
     auto [input_frame, input_frame_owner] = input_frame_from_tensors<TimeseriesIndex>(
-            desc, std::array<timestamp, input_frame_rows>{87}, std::array<size_t, input_frame_rows>{100}
+            desc, std::array<timestamp, input_frame_rows>{87}, std::array<uint64_t, input_frame_rows>{100}
     );
     std::vector<RangesAndKey> ranges_and_keys = generate_ranges_and_keys(desc, segments, col_ranges, row_ranges);
     ASSERT_EQ(ranges_and_keys.size(), num_row_slices);
@@ -2062,7 +2062,7 @@ TEST_P(MergeUpdateClauseInsertAndUpdate, SkipExpandedSegmentsInsertInMiddle) {
     constexpr static RowRange expected_row_range{15, 20};
     constexpr static ColRange expected_col_range{1, 2};
     const SegmentInMemory expected_segment = create_dense_segment(
-            desc, std::array<timestamp, 6>{75, 80, 85, 87, 90, 95}, std::array<size_t, 6>{15, 16, 17, 100, 18, 19}
+            desc, std::array<timestamp, 6>{75, 80, 85, 87, 90, 95}, std::array<uint64_t, 6>{15, 16, 17, 100, 18, 19}
     );
     const ProcessingUnit& processing_unit =
             gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(
