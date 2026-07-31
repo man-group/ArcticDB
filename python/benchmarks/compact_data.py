@@ -19,6 +19,8 @@ from arcticdb.options import ModifiableLibraryOption
 from arcticdb.util.logger import get_logger
 from arcticdb.util.test import random_strings_of_length
 
+from benchmarks.common import lib_name
+
 random.seed(42)
 rng = np.random.default_rng(42)
 
@@ -49,9 +51,6 @@ class CompactDataBase:
         self.LMDB_BASE_DIR = f"{self.LMDB_DIR}_base"
         self.CONNECTION_STRING_BASE = f"lmdb://{self.LMDB_BASE_DIR}"
         self.CONNECTION_STRING = f"lmdb://{self.LMDB_DIR}"
-
-    def lib_name(self, *args):
-        return "_".join(f"{arg}" for arg in args)
 
     def _setup_cache_base(self, ac, lib_name, rows_per_segment, columns_per_segment, dfs):
         ac.delete_library(lib_name)
@@ -125,14 +124,14 @@ class CompactDataNumericStaticSchema(CompactDataBase):
                     )
                     self._setup_cache_base(
                         ac,
-                        self.lib_name(row_params, num_columns, column_slicing),
+                        lib_name(row_params, num_columns, column_slicing),
                         initial_rows_per_segment,
                         num_columns // 2 if column_slicing else num_columns * 2,
                         [df],
                     )
 
     def setup(self, row_params, num_columns, column_slicing):
-        self._setup(self.lib_name(row_params, num_columns, column_slicing), row_params[2])
+        self._setup(lib_name(row_params, num_columns, column_slicing), row_params[2])
 
     def teardown(self, row_params, num_columns, column_slicing):
         self._teardown()
@@ -182,14 +181,14 @@ class CompactDataStringsStaticSchema(CompactDataBase):
                         df = pd.DataFrame({f"col_{i}": rng.choice(strings, num_rows) for i in range(num_columns)})
                         self._setup_cache_base(
                             ac,
-                            self.lib_name(row_params, num_columns, column_slicing, num_unique_strings),
+                            lib_name(row_params, num_columns, column_slicing, num_unique_strings),
                             initial_rows_per_segment,
                             num_columns // 2 if column_slicing else num_columns * 2,
                             [df],
                         )
 
     def setup(self, row_params, num_columns, column_slicing, num_unique_strings):
-        self._setup(self.lib_name(row_params, num_columns, column_slicing, num_unique_strings), row_params[2])
+        self._setup(lib_name(row_params, num_columns, column_slicing, num_unique_strings), row_params[2])
 
     def teardown(self, row_params, num_columns, column_slicing, num_unique_strings):
         self._teardown()
@@ -237,14 +236,14 @@ class CompactDataNumericDynamicSchema(CompactDataBase):
                     dfs.append(pd.DataFrame({column: np.arange(initial_rows_per_segment) for column in columns}))
                 self._setup_cache_base(
                     ac,
-                    self.lib_name(row_params, num_columns),
+                    lib_name(row_params, num_columns),
                     initial_rows_per_segment,
                     0,  # Column slicing doesn't apply to dynamic schema
                     dfs,
                 )
 
     def setup(self, row_params, num_columns):
-        self._setup(self.lib_name(row_params, num_columns), row_params[2])
+        self._setup(lib_name(row_params, num_columns), row_params[2])
 
     def teardown(self, row_params, num_columns):
         self._teardown()
