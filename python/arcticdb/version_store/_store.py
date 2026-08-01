@@ -1640,11 +1640,9 @@ class NativeVersionStore:
         version_queries = self._get_version_queries(len(symbols), as_ofs, **kwargs)
         # Take a copy as _get_read_queries can modify the input argument, which makes reusing the input counter-intuitive
         per_symbol_query_builders = copy.deepcopy(per_symbol_query_builders)
-        # Needed to force date_range and row_range arguments to go through the read_and_process path rather than the
-        # direct read path if no explicit query is provided for a symbol
-        force_ranges_to_queries = True
+        # Ranges default to the processing-pipeline path (see _get_read_query / #2348).
         read_queries = self._get_read_queries(
-            len(symbols), date_ranges, row_ranges, columns, per_symbol_query_builders, force_ranges_to_queries
+            len(symbols), date_ranges, row_ranges, columns, per_symbol_query_builders, force_ranges_to_queries=True
         )
         read_options, output_format = self._get_read_options_and_output_format(**kwargs)
         return self._adapt_read_res(
@@ -2228,9 +2226,27 @@ class NativeVersionStore:
         row_range: Tuple[int, int],
         columns: Optional[List[str]],
         query_builder: Optional[QueryBuilder],
+        force_ranges_to_queries: bool = True,
     ):
+        """
+        Build a ReadQuery for a single symbol.
+
+        When ``force_ranges_to_queries`` is True (the default) and a ``date_range`` /
+        ``row_range`` is supplied without an existing QueryBuilder, the range is
+        converted into a processing clause. That path truncates segment buffers in
+        C++ so returned frames do not retain unused rows from intersecting segments
+        (see issue #2348). Set ``force_ranges_to_queries=False`` only for callers that
+        intentionally want the legacy zero-copy Python post-filter view.
+        """
         check(date_range is None or row_range is None, "Date range and row range both specified")
         read_query = _PythonVersionStoreReadQuery()
+
+        if (
+            force_ranges_to_queries
+            and query_builder is None
+            and (date_range is not None or row_range is not None)
+        ):
+            query_builder = QueryBuilder()
 
         if date_range is not None and query_builder is not None:
             query_builder.prepend(QueryBuilder().date_range(date_range))
@@ -2258,7 +2274,7 @@ class NativeVersionStore:
         row_ranges: Optional[List[Optional[Tuple[int, int]]]],
         columns: Optional[List[List[str]]],
         query_builder: Optional[Union[QueryBuilder, List[QueryBuilder]]],
-        force_ranges_to_queries: bool = False,
+        force_ranges_to_queries: bool = True,
     ):
         read_queries = []
 
@@ -2305,7 +2321,7 @@ class NativeVersionStore:
             if query_builder is not None:
                 query = copy.deepcopy(query_builder) if isinstance(query_builder, QueryBuilder) else query_builder[idx]
 
-            if query is None and force_ranges_to_queries:
+            if query is None and force_ranges_to_queries and (date_range is not None or row_range is not None):
                 query = QueryBuilder()
 
             read_query = self._get_read_query(
@@ -2313,6 +2329,7 @@ class NativeVersionStore:
                 row_range=row_range,
                 columns=these_columns,
                 query_builder=query,
+                force_ranges_to_queries=force_ranges_to_queries,
             )
 
             read_queries.append(read_query)
@@ -2478,9 +2495,8 @@ class NativeVersionStore:
         date_range: `Optional[DateRangeInput]`, default=None
             DateRange to read data for. Inclusive both for lower and upper bounds. Applicable only for dataframes with
             a DateTime index. Returns only the part of the data that falls within the given range.
-            The same effect can  be achieved by using the date_range clause of the QueryBuilder class, which will be
-            slower, but return data with a smaller memory footprint. See the QueryBuilder.date_range docstring for more
-            details.
+            Ranges are applied via the processing pipeline (same path as ``QueryBuilder.date_range``) so returned
+            frames do not retain unused rows from intersecting data segments.
             Only one of date_range or row_range can be provided.
         row_range : `Optional[Tuple[Optional[int], Optional[int]]]`, default=None
             Row range to read data for. Inclusive of the lower bound, exclusive of the upper bound.
@@ -2488,6 +2504,7 @@ class NativeVersionStore:
             the handling of negative start/end values.
             Leaving either element as None leaves that side of the range open-ended. For example (5, None) would
             include everything from the 5th row onwards.
+            Like ``date_range``, this is applied via the processing pipeline so unused segment rows are truncated.
             Only one of date_range or row_range can be provided.
         columns: `Optional[List[str]]`, default=None
             Applicable only for dataframes. Determines which columns to return data for.
@@ -2658,11 +2675,14 @@ class NativeVersionStore:
                 return self._postprocess_df_with_only_rowcount_idx(read_result, row_range)
 
             if read_query.row_filter is not None and read_query.needs_post_processing:
-                # post filter
+                # post filter — numpy slicing would retain a view onto the full
+                # intersecting segment buffers (#2348). Always copy so unused rows
+                # can be freed once the parent FrameData is dropped.
                 start_idx, end_idx = self._compute_filter_start_end_row(read_result, read_query)
                 data = []
                 for c in read_result.frame_data.data:
-                    data.append(c[start_idx:end_idx])
+                    sliced = c[start_idx:end_idx]
+                    data.append(sliced.copy() if hasattr(sliced, "copy") else sliced)
                 row_count = len(data[0]) if len(data) else 0
                 read_result.frame_data = FrameData(
                     data,

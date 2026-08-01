@@ -1033,9 +1033,8 @@ class QueryBuilder:
     def date_range(self, date_range: DateRangeInput):
         """
         DateRange to read data for.  Applicable only for Pandas data with a DateTime index. Returns only the part
-        of the data that falls within the given range. If this is the only processing clause being applied, then the
-        returned data object will use less memory than passing date_range directly as an argument to the read method, at
-         the cost of possibly being slightly slower.
+        of the data that falls within the given range. Segment buffers are truncated in C++ so unused rows from
+        intersecting segments are not retained (same memory behaviour as ``lib.read(..., date_range=...)``).
 
         Parameters
         ----------
