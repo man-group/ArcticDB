@@ -15,6 +15,7 @@
 
 // for std::accumulate
 #include <numeric>
+#include <span>
 
 #include <pybind11/numpy.h>
 
@@ -141,6 +142,29 @@ struct NativeTensor {
         return (&(reinterpret_cast<const T*>(ptr)[signed_pos]));
     }
 
+    /// @brief Returns a std::span over the tensor data.
+    /// @param offset Number of elements to skip from the start of the tensor.
+    /// @param count Number of elements after offset to include in the span. If std::dynamic_extent, the span will
+    /// include all elements from the offset to the end of the tensor.
+    template<typename T>
+    std::span<const T> span(const size_t offset = 0, const size_t count = std::dynamic_extent) const {
+        validate_can_take_span<T>(offset, count);
+        return std::span<const T>(
+                static_cast<const T*>(ptr) + offset,
+                count == std::dynamic_extent ? nbytes() / sizeof(T) - offset : count
+        );
+    }
+
+    /// @brief Returns a std::span over the tensor data.
+    /// @param offset Number of elements to skip from the start of the tensor.
+    /// @param count Number of elements after offset to include in the span. If std::dynamic_extent, the span will
+    /// include all elements from the offset to the end of the tensor.
+    template<typename T>
+    std::span<T> span(const size_t offset = 0, const size_t count = std::dynamic_extent) {
+        const std::span<const T> as_const = std::as_const(*this).span<T>(offset, count);
+        return {const_cast<T*>(as_const.data()), as_const.size()};
+    }
+
     // returns number of elements, not bytesize
     [[nodiscard]] ssize_t size() const { return calc_elements(shape(), ndim()); }
 
@@ -158,6 +182,43 @@ struct NativeTensor {
     /// API providing the strides and shapes arrays, expanded_dim is what ArcticDB thinks of the tensor and using it
     /// can lead to out of bounds reads from strides and shapes.
     int expanded_dim_;
+
+  private:
+    template<typename T>
+    void validate_can_take_span([[maybe_unused]] const size_t offset, [[maybe_unused]] const size_t count) const {
+        ARCTICDB_DEBUG_CHECK(
+                ErrorCode::E_ASSERTION_FAILURE, ndim() == 1, "Cannot create a span from a multi-dimensional tensor"
+        );
+        ARCTICDB_DEBUG_CHECK(
+                ErrorCode::E_ASSERTION_FAILURE,
+                elsize() == sizeof(T),
+                "Mismatched tensor byte size {} and span element type size {}",
+                elsize(),
+                sizeof(T)
+        );
+        ARCTICDB_DEBUG_CHECK(
+                ErrorCode::E_ASSERTION_FAILURE,
+                size() == 0 || strides(ndim() - 1) == elsize(),
+                "Converting a fortran style NativeTensor to span is not possible"
+        );
+        // offset == size is allowed: it yields an empty span at one-past-the-end, and keeps nbytes() / sizeof(T) -
+        // offset from underflowing below.
+        ARCTICDB_DEBUG_CHECK(
+                ErrorCode::E_ASSERTION_FAILURE,
+                offset <= nbytes() / sizeof(T),
+                "Span offset {} is out of bounds for tensor of size {}",
+                offset,
+                nbytes() / sizeof(T)
+        );
+        ARCTICDB_DEBUG_CHECK(
+                ErrorCode::E_ASSERTION_FAILURE,
+                count == std::dynamic_extent || count <= nbytes() / sizeof(T) - offset,
+                "Span count {} is out of bounds for tensor of size {} with offset {}",
+                count,
+                nbytes() / sizeof(T),
+                offset
+        );
+    }
 };
 
 template<ssize_t>

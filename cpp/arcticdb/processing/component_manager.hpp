@@ -26,6 +26,17 @@ using bucket_id = uint8_t;
 
 using namespace entt::literals;
 
+/// Used only by the MergeUpdateClause. Do not use in other clauses. The merge update clause expects it's the only
+/// clause adding this entity and then after read_modify_write it reads it in order to compute the correct row ranges
+/// accounting for insertion. If any other piece of code adds this entity to the component manager the merge updates
+/// will iterate over them as well, producing wrong results. See merge_update_impl and Monday 12618296803
+struct MergeUpdateInsertedRowsEntity {
+    MergeUpdateInsertedRowsEntity() = default;
+    MergeUpdateInsertedRowsEntity(const size_t inserted_rows) : inserted_rows(inserted_rows) {}
+    operator size_t() const { return inserted_rows; }
+    size_t inserted_rows = 0;
+};
+
 class ComponentManager {
   public:
     ComponentManager() = default;
@@ -126,6 +137,20 @@ class ComponentManager {
     template<class... Args>
     std::tuple<std::vector<Args>...> get_entities(const std::vector<EntityId>& ids) {
         return get_entities_impl<Args...>(ids, false);
+    }
+
+    template<typename ProcessComponents>
+    void process_entities(ProcessComponents&& process_fn) {
+        using ArgTypes = util::function_arg_types<std::decay_t<ProcessComponents>>::args_t;
+        // Derive the component tuple type (references stripped) without default-constructing it, as
+        // the component types need not be default-constructible.
+        using NoRefArgs = std::remove_pointer_t<decltype([]<typename... Ts>(std::tuple<Ts...>*) {
+            return static_cast<std::tuple<std::remove_reference_t<Ts>...>*>(nullptr);
+        }(static_cast<ArgTypes*>(nullptr)))>;
+        return [&]<typename... Args>(std::tuple<Args...>*) {
+            auto view = registry_.view<Args...>();
+            return view.each(std::forward<ProcessComponents>(process_fn));
+        }(static_cast<NoRefArgs*>(nullptr));
     }
 
   private:

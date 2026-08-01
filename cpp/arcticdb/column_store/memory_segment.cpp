@@ -118,6 +118,10 @@ position_t SegmentInMemory::add_column(FieldRef field_ref, size_t num_rows, Allo
     return impl_->add_column(field_ref, num_rows, presize);
 }
 
+position_t SegmentInMemory::add_column(const Field& field, Column&& column) {
+    return impl_->add_column(field, std::make_shared<Column>(std::move(column)));
+}
+
 size_t SegmentInMemory::num_blocks() const { return impl_->num_blocks(); }
 
 void SegmentInMemory::append(const SegmentInMemory& other) { impl_->append(*other.impl_); }

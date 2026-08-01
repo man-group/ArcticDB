@@ -2500,17 +2500,19 @@ VersionedItem LocalVersionedEngine::merge_internal(
             return VersionedItem{*std::move(update_info.previous_index_key_)};
         }
         const ReadOptions read_options;
-        VersionedItem versioned_item = merge_update_impl(
-                                               store(),
-                                               VersionedItem{*update_info.previous_index_key_},
-                                               read_options,
-                                               write_options_,
-                                               IndexPartialKey{stream_id, update_info.next_version_id_},
-                                               std::move(on),
-                                               strategy,
-                                               std::move(source)
-        )
-                                               .get();
+        VersionedItem versioned_item =
+                merge_update_impl(
+                        store(),
+                        update_info,
+                        read_options,
+                        write_options_,
+                        IndexPartialKey{.id = stream_id, .version_id = update_info.next_version_id_},
+                        std::move(on),
+                        strategy,
+                        std::move(source),
+                        get_de_dup_map(stream_id, update_info, write_options_)
+                )
+                        .get();
         write_version_and_prune_previous(prune_previous_versions, versioned_item.key_, update_info.previous_index_key_);
         return versioned_item;
     } else if (upsert) {
