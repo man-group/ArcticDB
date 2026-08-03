@@ -40,9 +40,10 @@ class ModificationFunctions:
 
     rows_and_cols = [(1_000_000, 2), (10_000_000, 2), (5_000, 30_000)]
     storages = [Storage.LMDB, Storage.AMAZON]
-    param_names = ["rows_and_cols", "storage"]
+    compact_data = [False, True]
+    param_names = ["rows_and_cols", "storage", "compact_data"]
 
-    params = [rows_and_cols, storages]
+    params = [rows_and_cols, storages, compact_data]
 
     def __init__(self):
         self.logger = get_logger()
@@ -72,7 +73,7 @@ class ModificationFunctions:
 
         return lib_for_storage
 
-    def setup(self, libs_for_storage, rows_and_cols, storage):
+    def setup(self, libs_for_storage, rows_and_cols, storage, compact_data):
         self.lib = libs_for_storage[storage]
         if self.lib is None:
             raise SkipNotImplemented
@@ -84,15 +85,17 @@ class ModificationFunctions:
         self.lib._nvs.restore_version(self.sym, 0)
         assert self.lib.get_description(self.sym).row_count == rows
 
-        self.df_update_single = generate_random_floats_dataframe_with_index(
-            1, cols, end_timestamp=get_time_at_fraction_of_df(0.5, rows)
-        )
-        self.df_update_half = generate_random_floats_dataframe_with_index(
-            rows // 2, cols, end_timestamp=get_time_at_fraction_of_df(0.75, rows)
-        )
-        self.df_update_outside_date_range = generate_random_floats_dataframe_with_index(
-            rows, cols, end_timestamp=get_time_at_fraction_of_df(1.5, rows)
-        )
+        # These dfs will never be used when compact_data is True
+        if not compact_data:
+            self.df_update_single = generate_random_floats_dataframe_with_index(
+                1, cols, end_timestamp=get_time_at_fraction_of_df(0.5, rows)
+            )
+            self.df_update_half = generate_random_floats_dataframe_with_index(
+                rows // 2, cols, end_timestamp=get_time_at_fraction_of_df(0.75, rows)
+            )
+            self.df_update_outside_date_range = generate_random_floats_dataframe_with_index(
+                rows, cols, end_timestamp=get_time_at_fraction_of_df(1.5, rows)
+            )
         self.df_append_single = generate_random_floats_dataframe_with_index(
             1, cols, end_timestamp=get_time_at_fraction_of_df(1.1, rows)
         )
@@ -100,20 +103,26 @@ class ModificationFunctions:
         append_index = pd.date_range(start="1/2/2023", periods=rows, freq="ms")
         self.df_append_large.index = append_index
 
-    def time_update_single(self, *args):
+    def time_update_single(self, libs_for_storage, rows_and_cols, storage, compact_data):
+        if compact_data:
+            raise SkipNotImplemented
         self.lib.update(self.sym, self.df_update_single)
 
-    def time_update_half(self, *args):
+    def time_update_half(self, libs_for_storage, rows_and_cols, storage, compact_data):
+        if compact_data:
+            raise SkipNotImplemented
         self.lib.update(self.sym, self.df_update_half)
 
-    def time_update_outside_date_range(self, *args):
+    def time_update_outside_date_range(self, libs_for_storage, rows_and_cols, storage, compact_data):
+        if compact_data:
+            raise SkipNotImplemented
         self.lib.update(self.sym, self.df_update_outside_date_range, upsert=True)
 
-    def time_append_single(self, *args):
-        self.lib.append(self.sym, self.df_append_single)
+    def time_append_single(self, libs_for_storage, rows_and_cols, storage, compact_data):
+        self.lib.append(self.sym, self.df_append_single, compact_data=compact_data)
 
-    def time_append_large(self, *args):
-        self.lib.append(self.sym, self.df_append_large)
+    def time_append_large(self, libs_for_storage, rows_and_cols, storage, compact_data):
+        self.lib.append(self.sym, self.df_append_large, compact_data=compact_data)
 
 
 class Deletion:

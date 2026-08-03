@@ -2119,6 +2119,190 @@
         "version": "1fde33969c01e04ac7e55218a93c6fb9be317f7580f13fcf2dde7b49e0473436",
         "warmup_time": 0.5
     },
+    "compact_data.AppendCompactDataNumericDynamicSchema.peakmem_append_compact_data": {
+        "code": "class AppendCompactDataNumericDynamicSchema:\n    def peakmem_append_compact_data(self, num_symbols, existing_data_fragmented, append_rows):\n        self.append(num_symbols)\n\n    def setup(self, num_symbols, existing_data_fragmented, append_rows):\n        columns = rng.choice(self.COLUMN_NAMES, self.NUM_COLUMNS // 2, replace=False)\n        self.append_df = pd.DataFrame({column: np.arange(append_rows) for column in columns})\n        self._setup(self.lib_name(existing_data_fragmented))\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "name": "compact_data.AppendCompactDataNumericDynamicSchema.peakmem_append_compact_data",
+        "param_names": [
+            "num_symbols",
+            "existing_data_fragmented",
+            "append_rows"
+        ],
+        "params": [
+            [
+                "1",
+                "10"
+            ],
+            [
+                "False",
+                "True"
+            ],
+            [
+                "1",
+                "1000"
+            ]
+        ],
+        "setup_cache_key": "compact_data:431",
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "ef9a24a988741ffb5729c46d7e75bc83ebb7cd3757890eea3160303f1f1053a8"
+    },
+    "compact_data.AppendCompactDataNumericDynamicSchema.time_append_compact_data": {
+        "code": "class AppendCompactDataNumericDynamicSchema:\n    def time_append_compact_data(self, num_symbols, existing_data_fragmented, append_rows):\n        self.append(num_symbols)\n\n    def setup(self, num_symbols, existing_data_fragmented, append_rows):\n        columns = rng.choice(self.COLUMN_NAMES, self.NUM_COLUMNS // 2, replace=False)\n        self.append_df = pd.DataFrame({column: np.arange(append_rows) for column in columns})\n        self._setup(self.lib_name(existing_data_fragmented))\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "min_run_count": 2,
+        "name": "compact_data.AppendCompactDataNumericDynamicSchema.time_append_compact_data",
+        "number": 1,
+        "param_names": [
+            "num_symbols",
+            "existing_data_fragmented",
+            "append_rows"
+        ],
+        "params": [
+            [
+                "1",
+                "10"
+            ],
+            [
+                "False",
+                "True"
+            ],
+            [
+                "1",
+                "1000"
+            ]
+        ],
+        "repeat": 7,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "compact_data:431",
+        "type": "time",
+        "unit": "seconds",
+        "version": "e8851c6ceb9da5f5c4ae5526de0225ead5f6f2d221165ea2772afeb4112a7220",
+        "warmup_time": 0
+    },
+    "compact_data.AppendCompactDataNumericStaticSchema.peakmem_append_compact_data": {
+        "code": "class AppendCompactDataNumericStaticSchema:\n    def peakmem_append_compact_data(self, num_symbols, existing_data_fragmented, append_rows):\n        self.append(num_symbols)\n\n    def setup(self, num_symbols, existing_data_fragmented, append_rows):\n        self.append_df = pd.DataFrame(\n            {f\"col_{i}\": np.arange(i * append_rows, (i + 1) * append_rows) for i in range(self.NUM_COLUMNS)}\n        )\n        self._setup(self.lib_name(existing_data_fragmented))\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "name": "compact_data.AppendCompactDataNumericStaticSchema.peakmem_append_compact_data",
+        "param_names": [
+            "num_symbols",
+            "existing_data_fragmented",
+            "append_rows"
+        ],
+        "params": [
+            [
+                "1",
+                "10"
+            ],
+            [
+                "False",
+                "True"
+            ],
+            [
+                "1",
+                "50000",
+                "1000000"
+            ]
+        ],
+        "setup_cache_key": "compact_data:333",
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "85ec2af75fa362379363f90d807083ca4f66a1043a89122b6152e5c109e8535c"
+    },
+    "compact_data.AppendCompactDataNumericStaticSchema.time_append_compact_data": {
+        "code": "class AppendCompactDataNumericStaticSchema:\n    def time_append_compact_data(self, num_symbols, existing_data_fragmented, append_rows):\n        self.append(num_symbols)\n\n    def setup(self, num_symbols, existing_data_fragmented, append_rows):\n        self.append_df = pd.DataFrame(\n            {f\"col_{i}\": np.arange(i * append_rows, (i + 1) * append_rows) for i in range(self.NUM_COLUMNS)}\n        )\n        self._setup(self.lib_name(existing_data_fragmented))\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "min_run_count": 2,
+        "name": "compact_data.AppendCompactDataNumericStaticSchema.time_append_compact_data",
+        "number": 1,
+        "param_names": [
+            "num_symbols",
+            "existing_data_fragmented",
+            "append_rows"
+        ],
+        "params": [
+            [
+                "1",
+                "10"
+            ],
+            [
+                "False",
+                "True"
+            ],
+            [
+                "1",
+                "50000",
+                "1000000"
+            ]
+        ],
+        "repeat": 7,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "compact_data:333",
+        "type": "time",
+        "unit": "seconds",
+        "version": "98b2898dbb3b3750ffc35b30d035311796631e6d863708fb5c505b4dc59a6a1b",
+        "warmup_time": 0
+    },
+    "compact_data.AppendCompactDataStringsStaticSchema.peakmem_append_compact_data": {
+        "code": "class AppendCompactDataStringsStaticSchema:\n    def peakmem_append_compact_data(self, num_symbols, existing_data_fragmented, append_rows):\n        self.append(num_symbols)\n\n    def setup(self, num_symbols, existing_data_fragmented, append_rows):\n        self.append_df = pd.DataFrame(\n            {f\"col_{i}\": rng.choice(self.unique_strings, append_rows) for i in range(self.NUM_COLUMNS)}\n        )\n        self._setup(self.lib_name(existing_data_fragmented))\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "name": "compact_data.AppendCompactDataStringsStaticSchema.peakmem_append_compact_data",
+        "param_names": [
+            "num_symbols",
+            "existing_data_fragmented",
+            "append_rows"
+        ],
+        "params": [
+            [
+                "1",
+                "10"
+            ],
+            [
+                "False",
+                "True"
+            ],
+            [
+                "1",
+                "50000",
+                "1000000"
+            ]
+        ],
+        "setup_cache_key": "compact_data:382",
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "01966458fac955b928515db294e7f868a08bff9312199ee1b5b3a32cf5128259"
+    },
+    "compact_data.AppendCompactDataStringsStaticSchema.time_append_compact_data": {
+        "code": "class AppendCompactDataStringsStaticSchema:\n    def time_append_compact_data(self, num_symbols, existing_data_fragmented, append_rows):\n        self.append(num_symbols)\n\n    def setup(self, num_symbols, existing_data_fragmented, append_rows):\n        self.append_df = pd.DataFrame(\n            {f\"col_{i}\": rng.choice(self.unique_strings, append_rows) for i in range(self.NUM_COLUMNS)}\n        )\n        self._setup(self.lib_name(existing_data_fragmented))\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "min_run_count": 2,
+        "name": "compact_data.AppendCompactDataStringsStaticSchema.time_append_compact_data",
+        "number": 1,
+        "param_names": [
+            "num_symbols",
+            "existing_data_fragmented",
+            "append_rows"
+        ],
+        "params": [
+            [
+                "1",
+                "10"
+            ],
+            [
+                "False",
+                "True"
+            ],
+            [
+                "1",
+                "50000",
+                "1000000"
+            ]
+        ],
+        "repeat": 7,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "compact_data:382",
+        "type": "time",
+        "unit": "seconds",
+        "version": "a049f0099f95d04ec69d08ebabcd44d596eff4fe34034ad6d9da0b3fbd1e2f94",
+        "warmup_time": 0
+    },
     "compact_data.CompactDataNumericDynamicSchema.peakmem_compact_data": {
         "code": "class CompactDataNumericDynamicSchema:\n    def peakmem_compact_data(self, row_params, num_columns):\n        self.compact_data(row_params[2])\n\n    def setup(self, row_params, num_columns):\n        self._setup(self.lib_name(row_params, num_columns), row_params[2])\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
         "name": "compact_data.CompactDataNumericDynamicSchema.peakmem_compact_data",
@@ -2728,7 +2912,7 @@
                 "<Storage.AMAZON: 1>"
             ]
         ],
-        "setup_cache_key": "modification_functions:307",
+        "setup_cache_key": "modification_functions:316",
         "timeout": 600,
         "type": "peakmemory",
         "unit": "bytes",
@@ -2751,7 +2935,7 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "modification_functions:307",
+        "setup_cache_key": "modification_functions:316",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
@@ -2781,7 +2965,7 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "modification_functions:129",
+        "setup_cache_key": "modification_functions:138",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
@@ -2789,13 +2973,14 @@
         "warmup_time": 0
     },
     "modification_functions.ModificationFunctions.time_append_large": {
-        "code": "class ModificationFunctions:\n    def time_append_large(self, *args):\n        self.lib.append(self.sym, self.df_append_large)\n\n    def setup(self, libs_for_storage, rows_and_cols, storage):\n        self.lib = libs_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n    \n        rows, cols = rows_and_cols\n    \n        self.sym = _sym_name(rows, cols)\n        assert self.lib.has_symbol(self.sym)\n        self.lib._nvs.restore_version(self.sym, 0)\n        assert self.lib.get_description(self.sym).row_count == rows\n    \n        self.df_update_single = generate_random_floats_dataframe_with_index(\n            1, cols, end_timestamp=get_time_at_fraction_of_df(0.5, rows)\n        )\n        self.df_update_half = generate_random_floats_dataframe_with_index(\n            rows // 2, cols, end_timestamp=get_time_at_fraction_of_df(0.75, rows)\n        )\n        self.df_update_outside_date_range = generate_random_floats_dataframe_with_index(\n            rows, cols, end_timestamp=get_time_at_fraction_of_df(1.5, rows)\n        )\n        self.df_append_single = generate_random_floats_dataframe_with_index(\n            1, cols, end_timestamp=get_time_at_fraction_of_df(1.1, rows)\n        )\n        self.df_append_large = generate_random_floats_dataframe_with_index(rows, cols)\n        append_index = pd.date_range(start=\"1/2/2023\", periods=rows, freq=\"ms\")\n        self.df_append_large.index = append_index\n\n    def setup_cache(self):\n        start = time.time()\n        libs_for_storage = self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")\n        return libs_for_storage",
+        "code": "class ModificationFunctions:\n    def time_append_large(self, libs_for_storage, rows_and_cols, storage, compact_data):\n        self.lib.append(self.sym, self.df_append_large, compact_data=compact_data)\n\n    def setup(self, libs_for_storage, rows_and_cols, storage, compact_data):\n        self.lib = libs_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n    \n        rows, cols = rows_and_cols\n    \n        self.sym = _sym_name(rows, cols)\n        assert self.lib.has_symbol(self.sym)\n        self.lib._nvs.restore_version(self.sym, 0)\n        assert self.lib.get_description(self.sym).row_count == rows\n    \n        # These dfs will never be used when compact_data is True\n        if not compact_data:\n            self.df_update_single = generate_random_floats_dataframe_with_index(\n                1, cols, end_timestamp=get_time_at_fraction_of_df(0.5, rows)\n            )\n            self.df_update_half = generate_random_floats_dataframe_with_index(\n                rows // 2, cols, end_timestamp=get_time_at_fraction_of_df(0.75, rows)\n            )\n            self.df_update_outside_date_range = generate_random_floats_dataframe_with_index(\n                rows, cols, end_timestamp=get_time_at_fraction_of_df(1.5, rows)\n            )\n        self.df_append_single = generate_random_floats_dataframe_with_index(\n            1, cols, end_timestamp=get_time_at_fraction_of_df(1.1, rows)\n        )\n        self.df_append_large = generate_random_floats_dataframe_with_index(rows, cols)\n        append_index = pd.date_range(start=\"1/2/2023\", periods=rows, freq=\"ms\")\n        self.df_append_large.index = append_index\n\n    def setup_cache(self):\n        start = time.time()\n        libs_for_storage = self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")\n        return libs_for_storage",
         "min_run_count": 2,
         "name": "modification_functions.ModificationFunctions.time_append_large",
         "number": 1,
         "param_names": [
             "rows_and_cols",
-            "storage"
+            "storage",
+            "compact_data"
         ],
         "params": [
             [
@@ -2806,26 +2991,31 @@
             [
                 "<Storage.LMDB: 2>",
                 "<Storage.AMAZON: 1>"
+            ],
+            [
+                "False",
+                "True"
             ]
         ],
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "modification_functions:52",
+        "setup_cache_key": "modification_functions:53",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
-        "version": "32a9cc94de517e097bf5bff157750bcff696b67ce78c3853c59f8863ac23ff4e",
+        "version": "af9e0a3a5e4c0953ef7b868c275270be2ae244b5a54d707b0d1353bcc8e27f25",
         "warmup_time": 0
     },
     "modification_functions.ModificationFunctions.time_append_single": {
-        "code": "class ModificationFunctions:\n    def time_append_single(self, *args):\n        self.lib.append(self.sym, self.df_append_single)\n\n    def setup(self, libs_for_storage, rows_and_cols, storage):\n        self.lib = libs_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n    \n        rows, cols = rows_and_cols\n    \n        self.sym = _sym_name(rows, cols)\n        assert self.lib.has_symbol(self.sym)\n        self.lib._nvs.restore_version(self.sym, 0)\n        assert self.lib.get_description(self.sym).row_count == rows\n    \n        self.df_update_single = generate_random_floats_dataframe_with_index(\n            1, cols, end_timestamp=get_time_at_fraction_of_df(0.5, rows)\n        )\n        self.df_update_half = generate_random_floats_dataframe_with_index(\n            rows // 2, cols, end_timestamp=get_time_at_fraction_of_df(0.75, rows)\n        )\n        self.df_update_outside_date_range = generate_random_floats_dataframe_with_index(\n            rows, cols, end_timestamp=get_time_at_fraction_of_df(1.5, rows)\n        )\n        self.df_append_single = generate_random_floats_dataframe_with_index(\n            1, cols, end_timestamp=get_time_at_fraction_of_df(1.1, rows)\n        )\n        self.df_append_large = generate_random_floats_dataframe_with_index(rows, cols)\n        append_index = pd.date_range(start=\"1/2/2023\", periods=rows, freq=\"ms\")\n        self.df_append_large.index = append_index\n\n    def setup_cache(self):\n        start = time.time()\n        libs_for_storage = self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")\n        return libs_for_storage",
+        "code": "class ModificationFunctions:\n    def time_append_single(self, libs_for_storage, rows_and_cols, storage, compact_data):\n        self.lib.append(self.sym, self.df_append_single, compact_data=compact_data)\n\n    def setup(self, libs_for_storage, rows_and_cols, storage, compact_data):\n        self.lib = libs_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n    \n        rows, cols = rows_and_cols\n    \n        self.sym = _sym_name(rows, cols)\n        assert self.lib.has_symbol(self.sym)\n        self.lib._nvs.restore_version(self.sym, 0)\n        assert self.lib.get_description(self.sym).row_count == rows\n    \n        # These dfs will never be used when compact_data is True\n        if not compact_data:\n            self.df_update_single = generate_random_floats_dataframe_with_index(\n                1, cols, end_timestamp=get_time_at_fraction_of_df(0.5, rows)\n            )\n            self.df_update_half = generate_random_floats_dataframe_with_index(\n                rows // 2, cols, end_timestamp=get_time_at_fraction_of_df(0.75, rows)\n            )\n            self.df_update_outside_date_range = generate_random_floats_dataframe_with_index(\n                rows, cols, end_timestamp=get_time_at_fraction_of_df(1.5, rows)\n            )\n        self.df_append_single = generate_random_floats_dataframe_with_index(\n            1, cols, end_timestamp=get_time_at_fraction_of_df(1.1, rows)\n        )\n        self.df_append_large = generate_random_floats_dataframe_with_index(rows, cols)\n        append_index = pd.date_range(start=\"1/2/2023\", periods=rows, freq=\"ms\")\n        self.df_append_large.index = append_index\n\n    def setup_cache(self):\n        start = time.time()\n        libs_for_storage = self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")\n        return libs_for_storage",
         "min_run_count": 2,
         "name": "modification_functions.ModificationFunctions.time_append_single",
         "number": 1,
         "param_names": [
             "rows_and_cols",
-            "storage"
+            "storage",
+            "compact_data"
         ],
         "params": [
             [
@@ -2836,26 +3026,31 @@
             [
                 "<Storage.LMDB: 2>",
                 "<Storage.AMAZON: 1>"
+            ],
+            [
+                "False",
+                "True"
             ]
         ],
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "modification_functions:52",
+        "setup_cache_key": "modification_functions:53",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
-        "version": "49c73b3f13c02528fd4d86c53972a65f71734c613fe70930029d8cc8db1ffb1c",
+        "version": "b594b506b631dade5db107580fb629b5baf2da65704e018a7632e0bcfd9516b1",
         "warmup_time": 0
     },
     "modification_functions.ModificationFunctions.time_update_half": {
-        "code": "class ModificationFunctions:\n    def time_update_half(self, *args):\n        self.lib.update(self.sym, self.df_update_half)\n\n    def setup(self, libs_for_storage, rows_and_cols, storage):\n        self.lib = libs_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n    \n        rows, cols = rows_and_cols\n    \n        self.sym = _sym_name(rows, cols)\n        assert self.lib.has_symbol(self.sym)\n        self.lib._nvs.restore_version(self.sym, 0)\n        assert self.lib.get_description(self.sym).row_count == rows\n    \n        self.df_update_single = generate_random_floats_dataframe_with_index(\n            1, cols, end_timestamp=get_time_at_fraction_of_df(0.5, rows)\n        )\n        self.df_update_half = generate_random_floats_dataframe_with_index(\n            rows // 2, cols, end_timestamp=get_time_at_fraction_of_df(0.75, rows)\n        )\n        self.df_update_outside_date_range = generate_random_floats_dataframe_with_index(\n            rows, cols, end_timestamp=get_time_at_fraction_of_df(1.5, rows)\n        )\n        self.df_append_single = generate_random_floats_dataframe_with_index(\n            1, cols, end_timestamp=get_time_at_fraction_of_df(1.1, rows)\n        )\n        self.df_append_large = generate_random_floats_dataframe_with_index(rows, cols)\n        append_index = pd.date_range(start=\"1/2/2023\", periods=rows, freq=\"ms\")\n        self.df_append_large.index = append_index\n\n    def setup_cache(self):\n        start = time.time()\n        libs_for_storage = self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")\n        return libs_for_storage",
+        "code": "class ModificationFunctions:\n    def time_update_half(self, libs_for_storage, rows_and_cols, storage, compact_data):\n        if compact_data:\n            raise SkipNotImplemented\n        self.lib.update(self.sym, self.df_update_half)\n\n    def setup(self, libs_for_storage, rows_and_cols, storage, compact_data):\n        self.lib = libs_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n    \n        rows, cols = rows_and_cols\n    \n        self.sym = _sym_name(rows, cols)\n        assert self.lib.has_symbol(self.sym)\n        self.lib._nvs.restore_version(self.sym, 0)\n        assert self.lib.get_description(self.sym).row_count == rows\n    \n        # These dfs will never be used when compact_data is True\n        if not compact_data:\n            self.df_update_single = generate_random_floats_dataframe_with_index(\n                1, cols, end_timestamp=get_time_at_fraction_of_df(0.5, rows)\n            )\n            self.df_update_half = generate_random_floats_dataframe_with_index(\n                rows // 2, cols, end_timestamp=get_time_at_fraction_of_df(0.75, rows)\n            )\n            self.df_update_outside_date_range = generate_random_floats_dataframe_with_index(\n                rows, cols, end_timestamp=get_time_at_fraction_of_df(1.5, rows)\n            )\n        self.df_append_single = generate_random_floats_dataframe_with_index(\n            1, cols, end_timestamp=get_time_at_fraction_of_df(1.1, rows)\n        )\n        self.df_append_large = generate_random_floats_dataframe_with_index(rows, cols)\n        append_index = pd.date_range(start=\"1/2/2023\", periods=rows, freq=\"ms\")\n        self.df_append_large.index = append_index\n\n    def setup_cache(self):\n        start = time.time()\n        libs_for_storage = self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")\n        return libs_for_storage",
         "min_run_count": 2,
         "name": "modification_functions.ModificationFunctions.time_update_half",
         "number": 1,
         "param_names": [
             "rows_and_cols",
-            "storage"
+            "storage",
+            "compact_data"
         ],
         "params": [
             [
@@ -2866,26 +3061,31 @@
             [
                 "<Storage.LMDB: 2>",
                 "<Storage.AMAZON: 1>"
+            ],
+            [
+                "False",
+                "True"
             ]
         ],
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "modification_functions:52",
+        "setup_cache_key": "modification_functions:53",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
-        "version": "177355a8cc7d43d09fd9958c0da1c443b58461dd703f9aa77cb2ba7d4cea5d15",
+        "version": "96edbaf2b6be52cbbb332995906857cb85a1b5dd7b1c4210bd617fe62ee1d891",
         "warmup_time": 0
     },
     "modification_functions.ModificationFunctions.time_update_outside_date_range": {
-        "code": "class ModificationFunctions:\n    def time_update_outside_date_range(self, *args):\n        self.lib.update(self.sym, self.df_update_outside_date_range, upsert=True)\n\n    def setup(self, libs_for_storage, rows_and_cols, storage):\n        self.lib = libs_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n    \n        rows, cols = rows_and_cols\n    \n        self.sym = _sym_name(rows, cols)\n        assert self.lib.has_symbol(self.sym)\n        self.lib._nvs.restore_version(self.sym, 0)\n        assert self.lib.get_description(self.sym).row_count == rows\n    \n        self.df_update_single = generate_random_floats_dataframe_with_index(\n            1, cols, end_timestamp=get_time_at_fraction_of_df(0.5, rows)\n        )\n        self.df_update_half = generate_random_floats_dataframe_with_index(\n            rows // 2, cols, end_timestamp=get_time_at_fraction_of_df(0.75, rows)\n        )\n        self.df_update_outside_date_range = generate_random_floats_dataframe_with_index(\n            rows, cols, end_timestamp=get_time_at_fraction_of_df(1.5, rows)\n        )\n        self.df_append_single = generate_random_floats_dataframe_with_index(\n            1, cols, end_timestamp=get_time_at_fraction_of_df(1.1, rows)\n        )\n        self.df_append_large = generate_random_floats_dataframe_with_index(rows, cols)\n        append_index = pd.date_range(start=\"1/2/2023\", periods=rows, freq=\"ms\")\n        self.df_append_large.index = append_index\n\n    def setup_cache(self):\n        start = time.time()\n        libs_for_storage = self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")\n        return libs_for_storage",
+        "code": "class ModificationFunctions:\n    def time_update_outside_date_range(self, libs_for_storage, rows_and_cols, storage, compact_data):\n        if compact_data:\n            raise SkipNotImplemented\n        self.lib.update(self.sym, self.df_update_outside_date_range, upsert=True)\n\n    def setup(self, libs_for_storage, rows_and_cols, storage, compact_data):\n        self.lib = libs_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n    \n        rows, cols = rows_and_cols\n    \n        self.sym = _sym_name(rows, cols)\n        assert self.lib.has_symbol(self.sym)\n        self.lib._nvs.restore_version(self.sym, 0)\n        assert self.lib.get_description(self.sym).row_count == rows\n    \n        # These dfs will never be used when compact_data is True\n        if not compact_data:\n            self.df_update_single = generate_random_floats_dataframe_with_index(\n                1, cols, end_timestamp=get_time_at_fraction_of_df(0.5, rows)\n            )\n            self.df_update_half = generate_random_floats_dataframe_with_index(\n                rows // 2, cols, end_timestamp=get_time_at_fraction_of_df(0.75, rows)\n            )\n            self.df_update_outside_date_range = generate_random_floats_dataframe_with_index(\n                rows, cols, end_timestamp=get_time_at_fraction_of_df(1.5, rows)\n            )\n        self.df_append_single = generate_random_floats_dataframe_with_index(\n            1, cols, end_timestamp=get_time_at_fraction_of_df(1.1, rows)\n        )\n        self.df_append_large = generate_random_floats_dataframe_with_index(rows, cols)\n        append_index = pd.date_range(start=\"1/2/2023\", periods=rows, freq=\"ms\")\n        self.df_append_large.index = append_index\n\n    def setup_cache(self):\n        start = time.time()\n        libs_for_storage = self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")\n        return libs_for_storage",
         "min_run_count": 2,
         "name": "modification_functions.ModificationFunctions.time_update_outside_date_range",
         "number": 1,
         "param_names": [
             "rows_and_cols",
-            "storage"
+            "storage",
+            "compact_data"
         ],
         "params": [
             [
@@ -2896,26 +3096,31 @@
             [
                 "<Storage.LMDB: 2>",
                 "<Storage.AMAZON: 1>"
+            ],
+            [
+                "False",
+                "True"
             ]
         ],
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "modification_functions:52",
+        "setup_cache_key": "modification_functions:53",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
-        "version": "a69bff9c3b8f61ef96e6df1de568c35c58ff5f2bb3b4efee021b7072b6f4eff2",
+        "version": "3b8b338379b44be36fb06127c18d48567e3b5c24819a376631430deb59d7b1bb",
         "warmup_time": 0
     },
     "modification_functions.ModificationFunctions.time_update_single": {
-        "code": "class ModificationFunctions:\n    def time_update_single(self, *args):\n        self.lib.update(self.sym, self.df_update_single)\n\n    def setup(self, libs_for_storage, rows_and_cols, storage):\n        self.lib = libs_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n    \n        rows, cols = rows_and_cols\n    \n        self.sym = _sym_name(rows, cols)\n        assert self.lib.has_symbol(self.sym)\n        self.lib._nvs.restore_version(self.sym, 0)\n        assert self.lib.get_description(self.sym).row_count == rows\n    \n        self.df_update_single = generate_random_floats_dataframe_with_index(\n            1, cols, end_timestamp=get_time_at_fraction_of_df(0.5, rows)\n        )\n        self.df_update_half = generate_random_floats_dataframe_with_index(\n            rows // 2, cols, end_timestamp=get_time_at_fraction_of_df(0.75, rows)\n        )\n        self.df_update_outside_date_range = generate_random_floats_dataframe_with_index(\n            rows, cols, end_timestamp=get_time_at_fraction_of_df(1.5, rows)\n        )\n        self.df_append_single = generate_random_floats_dataframe_with_index(\n            1, cols, end_timestamp=get_time_at_fraction_of_df(1.1, rows)\n        )\n        self.df_append_large = generate_random_floats_dataframe_with_index(rows, cols)\n        append_index = pd.date_range(start=\"1/2/2023\", periods=rows, freq=\"ms\")\n        self.df_append_large.index = append_index\n\n    def setup_cache(self):\n        start = time.time()\n        libs_for_storage = self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")\n        return libs_for_storage",
+        "code": "class ModificationFunctions:\n    def time_update_single(self, libs_for_storage, rows_and_cols, storage, compact_data):\n        if compact_data:\n            raise SkipNotImplemented\n        self.lib.update(self.sym, self.df_update_single)\n\n    def setup(self, libs_for_storage, rows_and_cols, storage, compact_data):\n        self.lib = libs_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n    \n        rows, cols = rows_and_cols\n    \n        self.sym = _sym_name(rows, cols)\n        assert self.lib.has_symbol(self.sym)\n        self.lib._nvs.restore_version(self.sym, 0)\n        assert self.lib.get_description(self.sym).row_count == rows\n    \n        # These dfs will never be used when compact_data is True\n        if not compact_data:\n            self.df_update_single = generate_random_floats_dataframe_with_index(\n                1, cols, end_timestamp=get_time_at_fraction_of_df(0.5, rows)\n            )\n            self.df_update_half = generate_random_floats_dataframe_with_index(\n                rows // 2, cols, end_timestamp=get_time_at_fraction_of_df(0.75, rows)\n            )\n            self.df_update_outside_date_range = generate_random_floats_dataframe_with_index(\n                rows, cols, end_timestamp=get_time_at_fraction_of_df(1.5, rows)\n            )\n        self.df_append_single = generate_random_floats_dataframe_with_index(\n            1, cols, end_timestamp=get_time_at_fraction_of_df(1.1, rows)\n        )\n        self.df_append_large = generate_random_floats_dataframe_with_index(rows, cols)\n        append_index = pd.date_range(start=\"1/2/2023\", periods=rows, freq=\"ms\")\n        self.df_append_large.index = append_index\n\n    def setup_cache(self):\n        start = time.time()\n        libs_for_storage = self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")\n        return libs_for_storage",
         "min_run_count": 2,
         "name": "modification_functions.ModificationFunctions.time_update_single",
         "number": 1,
         "param_names": [
             "rows_and_cols",
-            "storage"
+            "storage",
+            "compact_data"
         ],
         "params": [
             [
@@ -2926,16 +3131,20 @@
             [
                 "<Storage.LMDB: 2>",
                 "<Storage.AMAZON: 1>"
+            ],
+            [
+                "False",
+                "True"
             ]
         ],
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "modification_functions:52",
+        "setup_cache_key": "modification_functions:53",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
-        "version": "eee3f8539d658de25ad38be90b670970a13fc5030a402331fbe2e1a191fe18ff",
+        "version": "dccbc566c84961f5fa35f61372f736b55c73043f416596bd929cf13ef5f6ab27",
         "warmup_time": 0
     },
     "nonreg_random_read.NonRegRandomRead.peakmem_read": {
