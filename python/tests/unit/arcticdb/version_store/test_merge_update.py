@@ -137,7 +137,7 @@ class TestMergeTimeseriesCommon:
         assert len(lt.find_keys_for_symbol(KeyType.VERSION, "sym")) == 2
         read_vit = lib.read("sym")
         assert read_vit.version == 1
-        assert merge_vit.metadata is None if metadata is None else merge_vit.metadata == metadata
+        assert read_vit.metadata is None if metadata is None else read_vit.metadata == metadata
         assert_frame_equal(read_vit.data, target)
 
     @pytest.mark.parametrize(
