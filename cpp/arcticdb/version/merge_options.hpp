@@ -15,10 +15,11 @@ struct MergeStrategy {
     MergeAction matched = MergeAction::DO_NOTHING;
     MergeAction not_matched_by_target = MergeAction::DO_NOTHING;
     bool operator==(const MergeStrategy&) const = default;
-    bool update_only() const;
-    bool insert_only() const;
-    bool insert() const;
-    bool update() const;
+    [[nodiscard]] bool update_only() const;
+    [[nodiscard]] bool insert_only() const;
+    [[nodiscard]] bool insert() const;
+    [[nodiscard]] bool update() const;
+    [[nodiscard]] bool update_and_insert() const;
 };
 
 } // namespace arcticdb

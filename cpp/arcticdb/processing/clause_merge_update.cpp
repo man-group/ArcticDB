@@ -72,21 +72,6 @@ void filter_selected_ranges_and_keys_and_reindex_entities(
 }
 
 template<util::type_descriptor_tag TDT>
-position_t write_py_string_to_pool_or_throw(
-        PyObject* const py_string_object, const size_t row_in_segment, const RowRange& row_range,
-        std::optional<ScopedGILLock>& gil_lock, StringPool& new_string_pool, const std::string_view column_name
-) {
-    return util::variant_match(
-            add_py_string_to_pool<TDT::data_type()>(py_string_object, gil_lock, new_string_pool),
-            [](position_t offset) { return offset; },
-            [&](convert::StringEncodingError&& err) -> position_t {
-                err.row_index_in_slice_ = row_in_segment;
-                err.raise(column_name, row_range.first);
-            }
-    );
-}
-
-template<util::type_descriptor_tag TDT>
 void rebuild_sequence_column_in_new_pool(
         Column& target_column, const StringPool& old_string_pool, StringPool& new_string_pool,
         const util::BitSet* target_rows_to_add_in_new_pool = nullptr
@@ -808,7 +793,7 @@ std::vector<EntityId> MergeUpdateClause::process(std::vector<EntityId>&& entity_
     std::vector<ProcessingUnit> row_slices =
             must_structure_by_time_slice() ? split_by_row_slice(std::move(proc)) : std::vector{std::move(proc)};
     const std::pair<size_t, size_t> source_start_end = get_source_start_end(row_slices);
-    const MatchRecord matched = match(row_slices, source_start_end);
+    MatchRecord matched = match(row_slices, source_start_end);
     matched.validate_rows_to_update(strategy_);
     if (strategy_.update_only()) {
         if (!matched.has_matched_target_rows()) {
@@ -825,15 +810,48 @@ std::vector<EntityId> MergeUpdateClause::process(std::vector<EntityId>&& entity_
                     std::move(*row_slice.row_ranges_),
                     std::move(*row_slice.col_ranges_),
                     std::vector<EntityFetchCount>(entity_count, 1),
-                    // Updating never inserts rows, but merge_slices_and_keys requires every emitted row range to
-                    // declare its inserted row count.
-                    std::vector(entity_count, MergeUpdateInsertedRowsEntity{0})
+                    std::vector(entity_count, MergeUpdateInsertedRowsComponent{0})
             );
             res.insert(res.end(), std::make_move_iterator(entts.begin()), std::make_move_iterator(entts.end()));
         }
         return res;
     }
     const StreamDescriptor& target_descriptor = source_->desc(); // TODO: Not true for dynamic schema
+
+    if (target_descriptor.index().type() == IndexDescriptor::Type::ROWCOUNT) {
+        MergeUpdateNotMatchedSourceRowsComponent unmatched_source_rows_component(
+                std::make_shared<util::BitSet>(matched.unmatched_source_rows())
+        );
+        if (strategy_.update() && matched.has_matched_target_rows()) {
+            // Update is requested and there are matched rows.
+            std::vector<ProcessingUnit> new_row_slices = update(matched, std::move(row_slices), source_start_end);
+            util::check(
+                    new_row_slices.size() == 1,
+                    "Row range indexed data must produce exactly one row slice as a result of Merge Update"
+            );
+            std::vector<EntityId> res;
+            for (ProcessingUnit& row_slice : new_row_slices) {
+                const size_t entity_count = row_slice.segments_->size();
+                std::vector<EntityId> entts = component_manager_->add_entities(
+                        std::move(*row_slice.segments_),
+                        std::move(*row_slice.row_ranges_),
+                        std::move(*row_slice.col_ranges_),
+                        std::vector<EntityFetchCount>(entity_count, 1),
+                        std::vector(entity_count, MergeUpdateInsertedRowsComponent{0}),
+                        std::vector(entity_count, unmatched_source_rows_component)
+                );
+                res.insert(res.end(), std::make_move_iterator(entts.begin()), std::make_move_iterator(entts.end()));
+            }
+            return res;
+        }
+        // Either there are no matched rows or this is insert only scenario. Either way we must not produce any
+        // output for the next clause (Write Clause) because this did nothing. However we must store the matched
+        // rows set so that after the pipeline ends insertion can be performed. Create a dummy entity holding
+        // only the set
+        component_manager_->add_entities(std::vector{std::move(unmatched_source_rows_component)});
+        return {};
+    }
+
     auto new_row_slices = update_and_insert(matched, target_descriptor, std::move(row_slices), source_start_end);
 
     std::vector<EntityId> res;
@@ -844,7 +862,7 @@ std::vector<EntityId> MergeUpdateClause::process(std::vector<EntityId>&& entity_
                 std::move(*row_slice.row_ranges_),
                 std::move(*row_slice.col_ranges_),
                 std::vector<EntityFetchCount>(entity_count, 1),
-                std::vector(entity_count, MergeUpdateInsertedRowsEntity{matched.total_unmatched_source_rows()})
+                std::vector(entity_count, MergeUpdateInsertedRowsComponent{matched.total_unmatched_source_rows()})
         );
         res.insert(res.end(), std::make_move_iterator(entts.begin()), std::make_move_iterator(entts.end()));
     }
@@ -994,10 +1012,6 @@ std::vector<ProcessingUnit> MergeUpdateClause::update_and_insert(
         // merge_slices_and_keys keeps the existing data keys for row slices that are not re-emitted.
         return {};
     }
-    internal::check<ErrorCode::E_NOT_IMPLEMENTED>(
-            source_->desc().index().type() == IndexDescriptor::Type::TIMESTAMP,
-            "Merge update with insertion is implemented only for timeseries"
-    );
     const std::span<const timestamp> source_index = get_source_index(source_start_end);
     const StreamDescriptor source_descriptor = source_->desc();
     const size_t num_col_slices = row_slices.begin()->col_ranges_->size();
@@ -1099,11 +1113,6 @@ std::vector<ProcessingUnit> MergeUpdateClause::update(
         const MatchRecord& match_record, std::vector<ProcessingUnit>&& row_slices,
         std::pair<size_t, size_t> source_start_end
 ) const {
-    ARCTICDB_DEBUG_CHECK(
-            ErrorCode::E_ASSERTION_FAILURE,
-            strategy_.update_only(),
-            "MergeUpdateClause::update should only be called for prue updates without insertion"
-    );
     std::vector<ProcessingUnit> result;
     const StreamDescriptor& source_descriptor = source_->desc();
     const auto [source_start, source_end] = source_start_end;
@@ -1436,6 +1445,7 @@ void MergeUpdateClause::MatchRecord::clone_source_match(
 size_t MergeUpdateClause::MatchRecord::total_unmatched_source_rows() const {
     return std::ranges::count_if(source_row_matched_count_, [](const size_t count) { return count == 0; });
 }
+
 void MergeUpdateClause::MatchRecord::validate_rows_to_update(const MergeStrategy& strategy) const {
     // TODO: This can be inlined in the loop iterating over all columns to avoid iterating the source one more
     // time. The loop structure makes it not intuitive. The performance cost must be evaluated. Monday:
@@ -1472,5 +1482,15 @@ bool MergeUpdateClause::MatchRecord::is_source_row_matched(size_t source_row) co
 }
 
 bool MergeUpdateClause::MatchRecord::has_matched_target_rows() const { return total_matched_target_rows_count_ > 0; }
+
+[[nodiscard]] util::BitSet MergeUpdateClause::MatchRecord::unmatched_source_rows() const {
+    util::BitSet result(source_row_matched_count_.size());
+    for (size_t i = 0; i < source_row_matched_count_.size(); ++i) {
+        if (source_row_matched_count_[i] == 0) {
+            result.set(i);
+        }
+    }
+    return result;
+}
 
 } // namespace arcticdb

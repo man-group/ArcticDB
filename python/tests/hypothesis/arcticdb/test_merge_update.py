@@ -223,11 +223,16 @@ def test_rowrange_merge_update(s3_version_store_v1, merge_args):
 _MISSING = object()
 
 
-def match_keys(frame, on):
+def match_keys(frame, on, include_index=True):
+    # Datetime index matches on (index, *on). Row range index has no meaningful index to match on, so it matches on
+    # the "on" columns only.
     columns = [frame[col] for col in on]
     return pd.Series(
         [
-            (index, *(_MISSING if pd.isna(col.iat[pos]) else col.iat[pos] for col in columns))
+            (
+                *((index,) if include_index else ()),
+                *(_MISSING if pd.isna(col.iat[pos]) else col.iat[pos] for col in columns),
+            )
             for pos, index in enumerate(frame.index)
         ]
     )
@@ -276,9 +281,12 @@ def randomize_values(frame, positions, columns):
 
 
 @st.composite
-def merge_insert_dataframes(draw, column_names, column_dtypes, min_date, max_date, on, strategy):
-    merged = draw(dataframe(column_names, column_dtypes, min_date, max_date)).sort_index()
-    keys = match_keys(merged, on)
+def merge_insert_dataframes(
+    draw, column_names, column_dtypes, min_date, max_date, on, strategy, index_type=DataframeStrategyIndexType.DATETIME
+):
+    rowrange = index_type == DataframeStrategyIndexType.ROWRANGE
+    merged = draw(dataframe(column_names, column_dtypes, min_date, max_date, index_type=index_type)).sort_index()
+    keys = match_keys(merged, on, include_index=not rowrange)
     is_inserted = generate_rows_to_insert(draw, keys)
     is_matched = generate_matched_rows(draw, keys, is_inserted)
     is_source = is_inserted | is_matched
@@ -292,47 +300,59 @@ def merge_insert_dataframes(draw, column_names, column_dtypes, min_date, max_dat
         # matched=do_nothing: merge ignores source, so randomize source to prove the merge doesn't use it.
         randomize_values(source, np.flatnonzero(is_matched[is_source]), non_on_columns)
 
-    # Reorder so inserted rows follow the target rows sharing their timestamp
-    order = sorted(range(len(merged)), key=lambda i: (merged.index[i], bool(is_inserted[i])))
-    expected = merged.iloc[order]
+    if rowrange:
+        # Row range index has no ordering key: unmatched rows are appended after all target rows in source order and
+        # the result is re-indexed with a fresh RangeIndex. A stable sort by the inserted flag keeps target rows in
+        # their original order followed by the inserted rows in theirs. target/source are slices of a RangeIndex, so
+        # they need a fresh contiguous RangeIndex before being written/merged.
+        order = sorted(range(len(merged)), key=lambda i: bool(is_inserted[i]))
+        expected = merged.iloc[order]
+        for frame in (target, source, expected):
+            frame.index = pd.RangeIndex(len(frame))
+            frame.index.name = "index"
+    else:
+        # Reorder so inserted rows follow the target rows sharing their timestamp
+        order = sorted(range(len(merged)), key=lambda i: (merged.index[i], bool(is_inserted[i])))
+        expected = merged.iloc[order]
 
     return target, source, expected
 
 
 @st.composite
-def merge_insert_arguments(draw, strategy):
-    on = draw(st.lists(st.sampled_from(COL_NAMES), unique=True))
-    target, source, expected = draw(merge_insert_dataframes(COL_NAMES, DTYPES, MIN_DATE, MAX_DATE, on, strategy))
+def merge_insert_arguments(draw, strategy, index_type=DataframeStrategyIndexType.DATETIME):
+    # Row range index cannot match on the index, so at least one "on" column is required.
+    on_min_size = 1 if index_type == DataframeStrategyIndexType.ROWRANGE else 0
+    on = draw(st.lists(st.sampled_from(COL_NAMES), unique=True, min_size=on_min_size))
+    target, source, expected = draw(
+        merge_insert_dataframes(COL_NAMES, DTYPES, MIN_DATE, MAX_DATE, on, strategy, index_type=index_type)
+    )
     rows_per_segment = draw(st.integers(1, len(expected)))
     cols_per_segment = draw(st.integers(1, len(COL_NAMES)))
     return target, source, expected, strategy, on, cols_per_segment, rows_per_segment
 
 
+@pytest.mark.parametrize(
+    "index_type",
+    [DataframeStrategyIndexType.DATETIME, DataframeStrategyIndexType.ROWRANGE],
+    ids=["datetime", "rowrange"],
+)
+@pytest.mark.parametrize(
+    "strategy",
+    [
+        MergeStrategy(matched="do_nothing", not_matched_by_target="insert"),
+        MergeStrategy(matched="update", not_matched_by_target="insert"),
+    ],
+    ids=["do_nothing", "update"],
+)
 @use_of_function_scoped_fixtures_in_hypothesis_checked
-@given(merge_args=merge_insert_arguments(MergeStrategy(matched="do_nothing", not_matched_by_target="insert")))
+@given(data=st.data())
 @settings(deadline=None, suppress_health_check=[HealthCheck.data_too_large])
-def test_datetime_insert(s3_storage, merge_args):
-    target, source, expected, strategy, on, cols_per_segment, rows_per_segment = merge_args
-    ac = s3_storage.create_arctic()
-    name = "test_datetime_insert"
-    if name in ac.list_libraries():
-        ac.delete_library(name)
-    lib = ac.create_library(
-        name, library_options=LibraryOptions(rows_per_segment=rows_per_segment, columns_per_segment=cols_per_segment)
+def test_insert(s3_storage, strategy, index_type, data):
+    target, source, expected, _, on, cols_per_segment, rows_per_segment = data.draw(
+        merge_insert_arguments(strategy, index_type=index_type)
     )
-    lib.write("symbol", target)
-    lib.merge_experimental("symbol", source, strategy=strategy, on=on)
-    result = lib.read("symbol").data
-    assert_frame_equal(result, expected)
-
-
-@use_of_function_scoped_fixtures_in_hypothesis_checked
-@given(merge_args=merge_insert_arguments(MergeStrategy(matched="update", not_matched_by_target="insert")))
-@settings(deadline=None, suppress_health_check=[HealthCheck.data_too_large])
-def test_datetime_update_insert(s3_storage, merge_args):
-    target, source, expected, strategy, on, cols_per_segment, rows_per_segment = merge_args
     ac = s3_storage.create_arctic()
-    name = "test_datetime_update_insert"
+    name = f"test_insert_{index_type.value}_{strategy.matched}"
     if name in ac.list_libraries():
         ac.delete_library(name)
     lib = ac.create_library(
