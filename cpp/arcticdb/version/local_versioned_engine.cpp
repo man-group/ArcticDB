@@ -2492,18 +2492,17 @@ VersionedItem LocalVersionedEngine::merge_internal(
     const bool add_new_symbol_list_entry = !update_info.previous_index_key_.has_value() && cfg().symbol_list();
     if (update_info.previous_index_key_.has_value()) {
         const ReadOptions read_options;
-        const WriteOptions write_options = get_write_options();
         index_key_fut = source->empty() ? async_write_metadata_impl(store(), update_info, std::move(source->user_meta))
                                         : merge_update_impl(
                                                   store(),
                                                   update_info,
                                                   read_options,
-                                                  write_options,
+                                                  write_options_,
                                                   IndexPartialKey{stream_id, update_info.next_version_id_},
                                                   std::move(on),
                                                   strategy,
                                                   std::move(source),
-                                                  get_de_dup_map(stream_id, update_info, write_options)
+                                                  get_de_dup_map(stream_id, update_info, write_options_)
                                           );
     } else if (upsert) {
         user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
@@ -2515,13 +2514,7 @@ VersionedItem LocalVersionedEngine::merge_internal(
                 strategy
         );
         index_key_fut = async_write_dataframe_impl(
-                store(),
-                update_info.next_version_id_,
-                source,
-                get_write_options(),
-                std::make_shared<DeDupMap>(),
-                false,
-                true
+                store(), update_info.next_version_id_, source, write_options_, std::make_shared<DeDupMap>(), false, true
         );
     } else {
         storage::raise<ErrorCode::E_SYMBOL_NOT_FOUND>("Cannot merge into non-existent symbol \"{}\".", stream_id);
