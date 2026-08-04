@@ -25,7 +25,12 @@ on:
       run_custom_pytest_command: {required: false, type: string,  default: '',    description: Run custom pytest command or additional arguments}
 
 jobs:
+  detect_changes:
+    uses: ./.github/workflows/detect_docs_only.yml
+
   linux_64:
+    needs: [detect_changes]
+    if: needs.detect_changes.outputs.docs_only != 'true'
     uses: ./.github/workflows/compile_and_test_with_conda.yml
     secrets: inherit
     with:
@@ -40,6 +45,8 @@ jobs:
       run_custom_pytest_command: ${{format('{0}', inputs.run_custom_pytest_command)}}
 
   linux_aarch64:
+    needs: [detect_changes]
+    if: needs.detect_changes.outputs.docs_only != 'true'
     uses: ./.github/workflows/compile_and_test_with_conda.yml
     secrets: inherit
     with:
@@ -53,6 +60,8 @@ jobs:
       run_custom_pytest_command: ${{format('{0}', inputs.run_custom_pytest_command)}}
 
   osx_arm64:
+    needs: [detect_changes]
+    if: needs.detect_changes.outputs.docs_only != 'true'
     uses: ./.github/workflows/compile_and_test_with_conda.yml
     secrets: inherit
     with:
@@ -69,6 +78,8 @@ jobs:
       run_custom_pytest_command: ${{format('{0}', inputs.run_custom_pytest_command)}}
 
   win_64:
+    needs: [detect_changes]
+    if: needs.detect_changes.outputs.docs_only != 'true'
     uses: ./.github/workflows/compile_and_test_with_conda.yml
     secrets: inherit
     with:
@@ -84,10 +95,11 @@ jobs:
       run_custom_pytest_command: ${{format('{0}', inputs.run_custom_pytest_command)}}
 
   publish_pytest_data:
-    needs: [linux_64, linux_aarch64, osx_arm64, win_64]
+    needs: [detect_changes, linux_64, linux_aarch64, osx_arm64, win_64]
     if: |
       always() &&
-      !cancelled()
+      !cancelled() &&
+      needs.detect_changes.outputs.docs_only != 'true'
     uses: ./.github/workflows/publish_pytest_data.yml
     secrets: inherit
     permissions:

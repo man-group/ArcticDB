@@ -59,6 +59,9 @@ concurrency:
 
 jobs:
 
+  detect_changes:
+    uses: ./.github/workflows/detect_docs_only.yml
+
   storage_type:
     runs-on: ubuntu-latest
     env:
@@ -117,6 +120,8 @@ jobs:
           done
 
   cibw_docker_image:
+    needs: [detect_changes]
+    if: needs.detect_changes.outputs.docs_only != 'true'
     uses: ./.github/workflows/cibw_docker_image.yml
     permissions: {packages: write}
     with:
@@ -502,10 +507,11 @@ jobs:
       persistent_storage: ${{ needs.storage_type.outputs.storage }}
 
   publish_pytest_data:
-    needs: [build-python-wheels-linux, build-python-wheels-windows, build-python-wheels-macos]
+    needs: [detect_changes, build-python-wheels-linux, build-python-wheels-windows, build-python-wheels-macos]
     if: |
       always() &&
-      !cancelled()
+      !cancelled() &&
+      needs.detect_changes.outputs.docs_only != 'true'
     uses: ./.github/workflows/publish_pytest_data.yml
     secrets: inherit
     permissions: {contents: write}
