@@ -26,6 +26,9 @@ on:
 
 jobs:
   detect_changes:
+    permissions:
+      contents: read
+      pull-requests: read
     uses: ./.github/workflows/detect_docs_only.yml
 
   linux_64:

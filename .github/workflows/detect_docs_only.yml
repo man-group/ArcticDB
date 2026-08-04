@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read
 
 jobs:
   detect:
@@ -15,29 +16,51 @@ jobs:
     outputs:
       docs_only: ${{ steps.check.outputs.docs_only }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout (push only)
+        if: github.event_name == 'push' && !startsWith(github.ref, 'refs/tags/')
+        uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 1
 
-      - id: check
+      - name: Fetch previous commit (push only)
+        if: github.event_name == 'push' && !startsWith(github.ref, 'refs/tags/')
         shell: bash
         run: |
           set -euo pipefail
+          before_sha="${{ github.event.before }}"
+          if [[ -n "$before_sha" ]] && [[ ! "$before_sha" =~ ^0+$ ]]; then
+            git fetch --depth=1 origin "$before_sha" || true
+          fi
+
+      - id: check
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            base_sha="${{ github.event.pull_request.base.sha }}"
+            changed_files=$(gh api --paginate "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" --jq '.[].filename')
+
           elif [[ "${{ github.event_name }}" == "push" ]]; then
-            base_sha="${{ github.event.before }}"
+            if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+              echo "docs_only=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+
+            before_sha="${{ github.event.before }}"
+            if [[ -z "$before_sha" ]] || [[ "$before_sha" =~ ^0+$ ]] || ! git cat-file -e "$before_sha" 2>/dev/null; then
+              echo "docs_only=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+
+            changed_files=$(git diff --name-only "$before_sha" "${{ github.sha }}")
+
           else
             echo "docs_only=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          if [[ -z "$base_sha" ]] || ! git cat-file -e "$base_sha" 2>/dev/null; then
-            echo "docs_only=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          changed_files=$(git diff --name-only "$base_sha" "${{ github.sha }}")
           echo "Changed files:"
           echo "$changed_files"
 
