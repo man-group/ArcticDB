@@ -7,7 +7,10 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 
 import multiprocessing
+import os
+import subprocess
 import sys
+import textwrap
 import time
 from multiprocessing import Pool
 import numpy as np
@@ -21,6 +24,12 @@ from arcticdb.util.test import assert_frame_equal
 from tests.util.mark import SKIP_CONDA_MARK
 
 FORK_SUPPORTED = pytest.mark.skipif(sys.platform == "win32", reason="fork/forkserver not available on Windows")
+
+FORK_WARNING_SUPPORTED = pytest.mark.skipif(
+    sys.version_info < (3, 12), reason="The fork warning is only compiled in for Python 3.12+"
+)
+
+FORK_WARNING = "fork() called in a process using ArcticDB"
 
 
 def df(symbol):
@@ -135,6 +144,80 @@ def test_configs_propagated_to_child_process(request, store_fixture, start_metho
             p.map(_check_config_in_child, [(store, "TestPropagation", 12345)])
     finally:
         unset_config_int("TestPropagation")
+
+
+def _count_fork_warnings(body, env=None):
+    """Run body in a fresh interpreter and count the fork warnings it logs to stderr."""
+    child_env = dict(os.environ)
+    child_env.update(env or {})
+    proc = subprocess.run([sys.executable, "-c", textwrap.dedent(body)], capture_output=True, text=True, env=child_env)
+    assert proc.returncode == 0, proc.stderr
+    return proc.stderr.count(FORK_WARNING)
+
+
+_FORK_ONCE = """
+    import os
+    import arcticdb
+
+    pid = os.fork()
+    if pid == 0:
+        os._exit(0)
+    os.waitpid(pid, 0)
+"""
+
+
+@FORK_SUPPORTED
+@FORK_WARNING_SUPPORTED
+def test_fork_warning_logged():
+    assert _count_fork_warnings(_FORK_ONCE) == 1
+
+
+@FORK_SUPPORTED
+@FORK_WARNING_SUPPORTED
+def test_fork_warning_logged_for_pool():
+    assert _count_fork_warnings("""
+            import multiprocessing
+            import arcticdb
+
+            with multiprocessing.get_context("fork").Pool(3) as pool:
+                assert pool.map(abs, [-1, -2, -3]) == [1, 2, 3]
+            """) == 1
+
+
+@FORK_SUPPORTED
+@FORK_WARNING_SUPPORTED
+def test_fork_warning_logged_once_per_process():
+    assert _count_fork_warnings("""
+            import os
+            import arcticdb
+
+            for _ in range(3):
+                pid = os.fork()
+                if pid == 0:
+                    os._exit(0)
+                os.waitpid(pid, 0)
+            """) == 1
+
+
+@FORK_SUPPORTED
+@FORK_WARNING_SUPPORTED
+def test_fork_warning_disabled_by_env_var():
+    assert _count_fork_warnings(_FORK_ONCE, env={"ARCTICDB_Fork_WarnOnFork_int": "0"}) == 0
+
+
+@FORK_SUPPORTED
+@FORK_WARNING_SUPPORTED
+def test_fork_warning_disabled_by_config():
+    assert _count_fork_warnings("""
+            import os
+            from arcticdb_ext import set_config_int
+
+            set_config_int("Fork.WarnOnFork", 0)
+            pid = os.fork()
+            if pid == 0:
+                os._exit(0)
+            os.waitpid(pid, 0)
+            """) == 0
 
 
 def test_set_config_int_overrides_env_var_after_spawn(lmdb_version_store_v1, monkeypatch):

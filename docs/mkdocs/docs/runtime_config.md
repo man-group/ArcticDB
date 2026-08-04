@@ -118,6 +118,20 @@ The `thread` field is not supported on Windows and reads `unknown` there.
 
 The [`scripts/analyze_task_scheduler_queues.py`](https://github.com/man-group/ArcticDB/blob/master/scripts/analyze_task_scheduler_queues.py) script parses the captured log and provides a visualization.
 
+### Fork.WarnOnFork
+
+Control whether ArcticDB logs a warning when the process calls `fork()`, for example through
+`multiprocessing` with the `fork` start method.
+
+The warning is logged at most once per process, no matter how many times the process forks.
+
+Values:
+* 0: Disable
+* 1: Enable (Default)
+
+The warning is only present in builds for Python 3.12 and later, the version where CPython itself began raising a
+`DeprecationWarning` for the same problem.
+
 ### VersionStore.WillItemBePickledWarningMsg
 
 Control whether a detailed message explaining how the item is normalized is logged when calling the `will_item_be_pickled` function.
