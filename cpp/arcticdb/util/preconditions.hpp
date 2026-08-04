@@ -219,3 +219,5 @@ struct formatter<A, std::enable_if_t<std::is_invocable_v<A>, char>> {
     }
 };
 } // namespace fmt
+
+// throwaway: verifying CI runs the full matrix for .cpp changes (test commit, not for merge)
