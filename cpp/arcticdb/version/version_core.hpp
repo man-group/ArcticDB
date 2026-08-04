@@ -187,7 +187,7 @@ folly::Future<VersionedItem> read_modify_write_impl(
         std::optional<proto::descriptors::UserDefinedMetadata>&& user_meta_proto
 );
 
-folly::Future<VersionedItem> merge_update_impl(
+folly::Future<AtomKey> merge_update_impl(
         const std::shared_ptr<Store>& store, const UpdateInfo& update_info, const ReadOptions& read_options,
         const WriteOptions& write_options, const IndexPartialKey& target_partial_index_key,
         std::vector<std::string>&& on, const MergeStrategy& strategy, std::shared_ptr<InputFrame> source,
