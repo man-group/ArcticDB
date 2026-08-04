@@ -3553,3 +3553,5 @@ class Library:
             raise ArcticInvalidApiUsageException(
                 "mode must be one of StagedDataFinalizeMethod.WRITE, StagedDataFinalizeMethod.APPEND, 'write', 'append'"
             )
+
+# throwaway: verifying CI runs the full matrix for .py changes (test commit, not for merge)
