@@ -216,6 +216,12 @@ Our release process is [documented here](https://github.com/man-group/ArcticDB/w
 
 ## Community
 
+### Community projects
+
+The following independently maintained community projects extend the ArcticDB ecosystem:
+
+- [arcticdb-mcp](https://github.com/YMuskrat/arcticdb_mcp): A community-maintained Model Context Protocol server that enables compatible AI assistants and agents to interact with ArcticDB libraries, symbols, versions, snapshots, batch operations and queries.
+
 We would love to hear how your ArcticDB journey evolves, email us at [info@arcticdb.io](mailto:info@arcticdb.io) or come chat to us on [Twitter](https://www.twitter.com/arcticdb)!
 
 Interested in learning more about ArcticDB? Head over to our [blog](https://medium.com/arcticdb)!
