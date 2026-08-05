@@ -67,7 +67,7 @@ dependencies:
   - pytz
   - attrs
   - boto3
-  - aioboto3 >=13
+  - aioboto3 >=9
   - werkzeug
   - moto
   - mock
