@@ -77,7 +77,10 @@ start() {
     fi
     download
     mkdir -p "$SEAWEED_DATA_DIR"
-    nohup "$SEAWEED_BIN_DIR/weed" server \
+    # AWS_* creds must not leak into weed: with them set the S3 gateway creates an admin
+    # identity from them and enables auth, rejecting the benchmarks' placeholder credentials
+    env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY \
+        nohup "$SEAWEED_BIN_DIR/weed" server \
         -dir="$SEAWEED_DATA_DIR" \
         -ip="$SEAWEED_IP" \
         -ip.bind="$SEAWEED_IP" \
@@ -103,10 +106,11 @@ start() {
             diagnostics
             exit 1
         fi
-        # Only check that both ports serve 
+        # S3 must answer 2xx: with auth disabled anonymous ListBuckets succeeds, so anything
+        # else (e.g. 403) means auth got enabled and the benchmarks' credentials would be rejected
         master_code=$(curl -s -o /dev/null -m 10 -w '%{http_code}' "http://$SEAWEED_IP:$SEAWEED_MASTER_PORT/dir/status" 2>/dev/null || true)
         s3_code=$(curl -s -o /dev/null -m 10 -w '%{http_code}' "http://$SEAWEED_IP:$SEAWEED_S3_PORT" 2>/dev/null || true)
-        if [[ "$master_code" == 2* && "$s3_code" != "000" ]]; then
+        if [[ "$master_code" == 2* && "$s3_code" == 2* ]]; then
                     echo "SeaweedFS $SEAWEED_VERSION is up (master HTTP $master_code, s3 HTTP $s3_code). IP: $SEAWEED_IP, PID: $(cat $PID_FILE) master port :$SEAWEED_MASTER_PORT, filer port :$SEAWEED_FILER_PORT," \
                 "s3 port :$SEAWEED_S3_PORT, data in $SEAWEED_DATA_DIR"
             return
