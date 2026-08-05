@@ -278,9 +278,6 @@ class AppendCompactDataBase:
         self.CONNECTION_STRING_BASE = f"lmdb://{self.LMDB_BASE_DIR}"
         self.CONNECTION_STRING = f"lmdb://{self.LMDB_DIR}"
 
-    def lib_name(self, *args):
-        return "_".join(f"{arg}" for arg in args)
-
     def _setup_cache_base(self, ac, lib_name, dfs):
         ac.delete_library(lib_name)
         lib = ac.create_library(lib_name, LibraryOptions(dynamic_schema=self.DYNAMIC_SCHEMA))
@@ -344,13 +341,13 @@ class AppendCompactDataNumericStaticSchema(AppendCompactDataBase):
                 dfs = [df[i * 10_000 : (i + 1) * 10_000] for i in range(num_rows // 10_000)]
             else:
                 dfs = [df]
-            self._setup_cache_base(ac, self.lib_name(existing_data_fragmented), dfs)
+            self._setup_cache_base(ac, lib_name(existing_data_fragmented), dfs)
 
     def setup(self, num_symbols, existing_data_fragmented, append_rows):
         self.append_df = pd.DataFrame(
             {f"col_{i}": np.arange(i * append_rows, (i + 1) * append_rows) for i in range(self.NUM_COLUMNS)}
         )
-        self._setup(self.lib_name(existing_data_fragmented))
+        self._setup(lib_name(existing_data_fragmented))
 
     def teardown(self, num_symbols, existing_data_fragmented, append_rows):
         self._teardown()
@@ -393,13 +390,13 @@ class AppendCompactDataStringsStaticSchema(AppendCompactDataBase):
                 dfs = [df[i * 10_000 : (i + 1) * 10_000] for i in range(num_rows // 10_000)]
             else:
                 dfs = [df]
-            self._setup_cache_base(ac, self.lib_name(existing_data_fragmented), dfs)
+            self._setup_cache_base(ac, lib_name(existing_data_fragmented), dfs)
 
     def setup(self, num_symbols, existing_data_fragmented, append_rows):
         self.append_df = pd.DataFrame(
             {f"col_{i}": rng.choice(self.unique_strings, append_rows) for i in range(self.NUM_COLUMNS)}
         )
-        self._setup(self.lib_name(existing_data_fragmented))
+        self._setup(lib_name(existing_data_fragmented))
 
     def teardown(self, num_symbols, existing_data_fragmented, append_rows):
         self._teardown()
@@ -443,12 +440,12 @@ class AppendCompactDataNumericDynamicSchema(AppendCompactDataBase):
             for _ in range(num_row_slices):
                 columns = rng.choice(self.COLUMN_NAMES, self.NUM_COLUMNS // 2, replace=False)
                 dfs.append(pd.DataFrame({column: np.arange(num_rows // num_row_slices) for column in columns}))
-            self._setup_cache_base(ac, self.lib_name(existing_data_fragmented), dfs)
+            self._setup_cache_base(ac, lib_name(existing_data_fragmented), dfs)
 
     def setup(self, num_symbols, existing_data_fragmented, append_rows):
         columns = rng.choice(self.COLUMN_NAMES, self.NUM_COLUMNS // 2, replace=False)
         self.append_df = pd.DataFrame({column: np.arange(append_rows) for column in columns})
-        self._setup(self.lib_name(existing_data_fragmented))
+        self._setup(lib_name(existing_data_fragmented))
 
     def teardown(self, num_symbols, existing_data_fragmented, append_rows):
         self._teardown()

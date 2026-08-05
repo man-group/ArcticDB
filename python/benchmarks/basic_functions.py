@@ -274,9 +274,6 @@ class BatchWrite:
         self.logger.info(f"SETUP_CACHE TIME: {time.time() - start}")
         return lib_for_storage
 
-    def _lib_name(self, rows):
-        return f"lib_{rows}"
-
     def _setup_cache(self):
         lib_for_storage = create_libraries_across_storages(STORAGES)
         return lib_for_storage

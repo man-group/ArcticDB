@@ -267,9 +267,9 @@ class MergeThinDatetime(MergeBase):
             num_rows, num_value_cols = scenario
             rng = np.random.default_rng([num_rows, num_value_cols])
             target = generate_merge_target(num_rows, num_value_cols, self.value_dtype, self.INDEX_KIND, rng)
-            lib_name = lib_name(*scenario, self.INDEX_KIND)
-            self._write_cache_target(lib_name, target)
-            self._precompute_sources(lib_name, target)
+            library_name = lib_name(*scenario, self.INDEX_KIND)
+            self._write_cache_target(library_name, target)
+            self._precompute_sources(library_name, target)
 
     def setup(self, scenario, strategy, on_count, source_size, matched_slices):
         self._prepare_merge(lib_name(*scenario, self.INDEX_KIND), on_count, source_size, matched_slices)
@@ -307,9 +307,9 @@ class MergeThinRowRange(MergeBase):
             num_rows, num_value_cols = scenario
             rng = np.random.default_rng([num_rows, num_value_cols])
             target = generate_merge_target(num_rows, num_value_cols, self.value_dtype, self.INDEX_KIND, rng)
-            lib_name = lib_name(*scenario, self.INDEX_KIND)
-            self._write_cache_target(lib_name, target)
-            self._precompute_sources(lib_name, target)
+            library_name = lib_name(*scenario, self.INDEX_KIND)
+            self._write_cache_target(library_name, target)
+            self._precompute_sources(library_name, target)
 
     def setup(self, scenario, strategy, on_count, source_size):
         self._prepare_merge(lib_name(*scenario, self.INDEX_KIND), on_count, source_size)
@@ -360,9 +360,9 @@ class MergeThinStringDatetime(MergeBase):
                 # One target per pool size; per-size prefixes let setup copy only the variant being merged.
                 self.target_prefix = f"target_{num_unique_strings}"
                 self.source_prefix = f"source_{num_unique_strings}"
-                lib_name = lib_name(*scenario, self.INDEX_KIND)
-                self._write_cache_target(lib_name, target)
-                self._precompute_sources(lib_name, target)
+                library_name = lib_name(*scenario, self.INDEX_KIND)
+                self._write_cache_target(library_name, target)
+                self._precompute_sources(library_name, target)
 
     def setup(self, scenario, strategy, on_count, source_size, matched_slices, num_unique_strings):
         self.target_prefix = f"target_{num_unique_strings}"
@@ -416,9 +416,9 @@ class MergeThinStringRowRange(MergeBase):
                 # One target per pool size; per-size prefixes let setup copy only the variant being merged.
                 self.target_prefix = f"target_{num_unique_strings}"
                 self.source_prefix = f"source_{num_unique_strings}"
-                lib_name = lib_name(*scenario, self.INDEX_KIND)
-                self._write_cache_target(lib_name, target)
-                self._precompute_sources(lib_name, target)
+                library_name = lib_name(*scenario, self.INDEX_KIND)
+                self._write_cache_target(library_name, target)
+                self._precompute_sources(library_name, target)
 
     def setup(self, scenario, strategy, on_count, source_size, num_unique_strings):
         self.target_prefix = f"target_{num_unique_strings}"
@@ -459,9 +459,9 @@ class MergeWideDatetime(MergeBase):
             num_rows, num_value_cols = scenario
             rng = np.random.default_rng([num_rows, num_value_cols])
             target = generate_merge_target(num_rows, num_value_cols, self.value_dtype, self.INDEX_KIND, rng)
-            lib_name = lib_name(*scenario, self.INDEX_KIND)
-            self._write_cache_target(lib_name, target)
-            self._precompute_sources(lib_name, target)
+            library_name = lib_name(*scenario, self.INDEX_KIND)
+            self._write_cache_target(library_name, target)
+            self._precompute_sources(library_name, target)
 
     def setup(self, scenario, strategy, on_count, source_size):
         self._prepare_merge(lib_name(*scenario, self.INDEX_KIND), on_count, source_size)
@@ -499,9 +499,9 @@ class MergeWideRowRange(MergeBase):
             num_rows, num_value_cols = scenario
             rng = np.random.default_rng([num_rows, num_value_cols])
             target = generate_merge_target(num_rows, num_value_cols, self.value_dtype, self.INDEX_KIND, rng)
-            lib_name = lib_name(*scenario, self.INDEX_KIND)
-            self._write_cache_target(lib_name, target)
-            self._precompute_sources(lib_name, target)
+            library_name = lib_name(*scenario, self.INDEX_KIND)
+            self._write_cache_target(library_name, target)
+            self._precompute_sources(library_name, target)
 
     def setup(self, scenario, strategy, on_count, source_size):
         self._prepare_merge(lib_name(*scenario, self.INDEX_KIND), on_count, source_size)
