@@ -492,13 +492,14 @@ folly::SemiFuture<std::vector<SliceAndKey>> write_inserted_row_range_data(
             const Field& field = slice_descriptor.field(column_in_segment);
             const size_t source_field_pos = col_range.start() + column_in_segment;
             details::visit_scalar(field.type(), [&]<util::type_descriptor_tag TDT>(TDT) {
-                constexpr bool is_sequence = is_sequence_type(TDT::data_type());
-                using SourceRawType =
-                        std::conditional_t<is_sequence, PyObject* const, typename TDT::DataTypeTag::raw_type>;
+                using SourceRawType = std::conditional_t<
+                        is_sequence_type(TDT::data_type()),
+                        PyObject* const,
+                        typename TDT::DataTypeTag::raw_type>;
                 auto data_it = col_data.begin<TDT>();
                 std::span<const SourceRawType> source_data = source.get_tensor(source_field_pos).span<SourceRawType>();
                 iterate_over_set_positions(*source_rows_to_insert, [&](size_t source_row) {
-                    if constexpr (is_sequence) {
+                    if constexpr (is_sequence_type(TDT::data_type())) {
                         *data_it = write_py_string_to_pool_or_throw<TDT>(
                                 source_data[source_row],
                                 source_row,
