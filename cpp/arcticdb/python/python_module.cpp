@@ -206,7 +206,6 @@ void reinit_lmdb_warning() {
 
 // Windows has no fork(), so there is nothing to warn about there.
 #if !defined(WIN32) && PY_VERSION_HEX >= ARCTICDB_PY_FORK_DEPRECATED_HEX
-#include <unistd.h>
 
 static std::atomic_flag warned_about_fork;
 
@@ -214,6 +213,12 @@ static std::atomic_flag warned_about_fork;
 // hang: the sink's mutex may be inherited locked, and an async logger has no flusher thread there.
 void warn_about_fork() {
     using namespace arcticdb;
+    // Importing arcticdb, and even creating libraries, starts no pool threads, so there would be
+    // nothing to warn about. This also keeps a multiprocessing forkserver quiet: it forks every
+    // worker, but does no ArcticDB work itself.
+    if (!async::io_pool_thread_started.load(std::memory_order_relaxed)) {
+        return;
+    }
     if (ConfigsMap::instance()->get_int("Fork.WarnOnFork", 1) == 0) {
         return;
     }
@@ -221,12 +226,11 @@ void warn_about_fork() {
         return;
     }
     log::version().warn(
-            "fork() called in a process using ArcticDB (pid={}). ArcticDB and the storage SDKs run background "
-            "threads which are not duplicated into the child, so Arctic, Library and NativeVersionStore objects "
-            "created before the fork must not be used in the child; doing so may deadlock or crash. Create a new "
-            "Arctic instance in the child, or use the 'spawn' or 'forkserver' multiprocessing start method. Later "
-            "forks are not logged. Set Fork.WarnOnFork to 0 to silence this warning.",
-            getpid()
+            "fork() called in a process using ArcticDB. ArcticDB and the storage SDKs run background threads "
+            "which are not duplicated into the child, so Arctic, Library and NativeVersionStore objects created "
+            "before the fork must not be used in the child; doing so may deadlock or crash. Create a new Arctic "
+            "instance in the child, or use the 'spawn' multiprocessing start method. Later forks are not logged. "
+            "Set Fork.WarnOnFork to 0 to silence this warning."
     );
 }
 

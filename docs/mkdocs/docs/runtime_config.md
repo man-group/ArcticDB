@@ -125,6 +125,10 @@ Control whether ArcticDB logs a warning when the process calls `fork()`, for exa
 
 The warning is logged at most once per process, no matter how many times the process forks.
 
+It is only logged once ArcticDB has started its background threads, which happens on the first read or write.
+A process that imports `arcticdb`, or that creates libraries without reading or writing, and then forks has
+nothing to warn about and stays silent.
+
 Values:
 * 0: Disable
 * 1: Enable (Default)

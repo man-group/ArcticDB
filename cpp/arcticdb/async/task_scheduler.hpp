@@ -18,6 +18,7 @@
 #include <folly/executors/ThreadPoolExecutor.h>
 #include <folly/system/ThreadName.h>
 #include <fmt/format.h>
+#include <atomic>
 #include <thread>
 #include <algorithm>
 #include <filesystem>
@@ -46,12 +47,21 @@ struct TaskSchedulerPtrWrapper {
     TaskScheduler& operator*() const { return *ptr_; }
 };
 
+// The IO pool never retires an idle thread, so once this is set the
+// process has ArcticDB threads for the rest of its life. Therefore this never moves from true to false.
+inline std::atomic<bool> io_pool_thread_started{false};
+
 class InstrumentedNamedFactory : public folly::ThreadFactory {
   public:
-    explicit InstrumentedNamedFactory(folly::StringPiece prefix) : named_factory_(prefix) {}
+    explicit InstrumentedNamedFactory(folly::StringPiece prefix, std::atomic<bool>* started_flag = nullptr) :
+        named_factory_(prefix),
+        started_flag_(started_flag) {}
 
     std::thread newThread(folly::Func&& func) override {
         std::lock_guard lock{mutex_};
+        if (started_flag_) {
+            started_flag_->store(true, std::memory_order_relaxed);
+        }
         return named_factory_.newThread([func = std::move(func)]() mutable {
             ARCTICDB_SAMPLE_THREAD();
             func();
@@ -63,6 +73,7 @@ class InstrumentedNamedFactory : public folly::ThreadFactory {
   private:
     std::mutex mutex_;
     folly::NamedThreadFactory named_factory_;
+    std::atomic<bool>* started_flag_;
 };
 
 inline std::string format_task_stats_line(
@@ -233,7 +244,7 @@ class TaskScheduler {
                         : ConfigsMap::instance()->get_int("VersionStore.NumIOThreads", (int)(cpu_thread_count_ * 1.5))
         ),
         cpu_exec_(cpu_thread_count_, std::make_shared<InstrumentedNamedFactory>("CPUPool")),
-        io_exec_(io_thread_count_, std::make_shared<InstrumentedNamedFactory>("IOPool")) {
+        io_exec_(io_thread_count_, std::make_shared<InstrumentedNamedFactory>("IOPool", &io_pool_thread_started)) {
         util::check(
                 cpu_thread_count_ > 0 && io_thread_count_ > 0,
                 "Zero IO or CPU threads: {} {}",
@@ -336,7 +347,7 @@ class TaskScheduler {
         ARCTICDB_RUNTIME_DEBUG(log::schedule(), "CPU exec num threads: {}", cpu_exec_.numActiveThreads());
         set_active_threads(0);
         set_max_threads(0);
-        io_exec_.set_thread_factory(std::make_shared<InstrumentedNamedFactory>("IOPool"));
+        io_exec_.set_thread_factory(std::make_shared<InstrumentedNamedFactory>("IOPool", &io_pool_thread_started));
         cpu_exec_.set_thread_factory(std::make_shared<InstrumentedNamedFactory>("CPUPool"));
         io_exec_.setNumThreads(io_thread_count_);
         cpu_exec_.setNumThreads(cpu_thread_count_);

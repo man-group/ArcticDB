@@ -146,22 +146,46 @@ def test_configs_propagated_to_child_process(request, store_fixture, start_metho
         unset_config_int("TestPropagation")
 
 
-def _count_fork_warnings(body, env=None):
-    """Run body in a fresh interpreter and count the fork warnings it logs to stderr."""
+def _run_and_count(argv, env=None):
     child_env = dict(os.environ)
     child_env.update(env or {})
-    proc = subprocess.run([sys.executable, "-c", textwrap.dedent(body)], capture_output=True, text=True, env=child_env)
+    proc = subprocess.run(argv, capture_output=True, text=True, env=child_env)
     assert proc.returncode == 0, proc.stderr
     return proc.stderr.count(FORK_WARNING)
 
 
-_FORK_ONCE = """
+def _count_fork_warnings(body, env=None):
+    """Run body in a fresh interpreter and count the fork warnings it logs to stderr."""
+    return _run_and_count([sys.executable, "-c", textwrap.dedent(body)], env)
+
+
+def _count_fork_warnings_in_script(tmp_path, body, env=None):
+    """As _count_fork_warnings, but from a real script file.
+
+    The forkserver start method preloads __main__, which it cannot do for `python -c`. Only a
+    script on disk makes the forkserver process import arcticdb.
+    """
+    script = tmp_path / "fork_body.py"
+    script.write_text(textwrap.dedent(body))
+    return _run_and_count([sys.executable, str(script)], env)
+
+
+# The warning is only logged once ArcticDB has started IO threads
+_IMPORT_AND_WRITE = """
     import os
+    import sys
+    import tempfile
+    import pandas as pd
     import arcticdb
 
+    _lib = arcticdb.Arctic("lmdb://" + tempfile.mkdtemp()).get_library("arm", create_if_missing=True)
+    _lib.write("s", pd.DataFrame({"a": [1, 2, 3]}))
+"""
+
+_FORK_ONCE = _IMPORT_AND_WRITE + """
     pid = os.fork()
     if pid == 0:
-        os._exit(0)
+        sys.exit(0)
     os.waitpid(pid, 0)
 """
 
@@ -175,28 +199,24 @@ def test_fork_warning_logged():
 @FORK_SUPPORTED
 @FORK_WARNING_SUPPORTED
 def test_fork_warning_logged_for_pool():
-    assert _count_fork_warnings("""
-            import multiprocessing
-            import arcticdb
+    assert _count_fork_warnings(_IMPORT_AND_WRITE + """
+    import multiprocessing
 
-            with multiprocessing.get_context("fork").Pool(3) as pool:
-                assert pool.map(abs, [-1, -2, -3]) == [1, 2, 3]
-            """) == 1
+    with multiprocessing.get_context("fork").Pool(3) as pool:
+        assert pool.map(abs, [-1, -2, -3]) == [1, 2, 3]
+    """) == 1
 
 
 @FORK_SUPPORTED
 @FORK_WARNING_SUPPORTED
 def test_fork_warning_logged_once_per_process():
-    assert _count_fork_warnings("""
-            import os
-            import arcticdb
-
-            for _ in range(3):
-                pid = os.fork()
-                if pid == 0:
-                    os._exit(0)
-                os.waitpid(pid, 0)
-            """) == 1
+    assert _count_fork_warnings(_IMPORT_AND_WRITE + """
+    for _ in range(3):
+        pid = os.fork()
+        if pid == 0:
+            sys.exit(0)
+        os.waitpid(pid, 0)
+    """) == 1
 
 
 @FORK_SUPPORTED
@@ -208,16 +228,111 @@ def test_fork_warning_disabled_by_env_var():
 @FORK_SUPPORTED
 @FORK_WARNING_SUPPORTED
 def test_fork_warning_disabled_by_config():
-    assert _count_fork_warnings("""
-            import os
-            from arcticdb_ext import set_config_int
+    assert _count_fork_warnings(_IMPORT_AND_WRITE + """
+    from arcticdb_ext import set_config_int
 
-            set_config_int("Fork.WarnOnFork", 0)
-            pid = os.fork()
-            if pid == 0:
-                os._exit(0)
-            os.waitpid(pid, 0)
-            """) == 0
+    set_config_int("Fork.WarnOnFork", 0)
+    pid = os.fork()
+    if pid == 0:
+        sys.exit(0)
+    os.waitpid(pid, 0)
+    """) == 0
+
+
+@FORK_SUPPORTED
+@FORK_WARNING_SUPPORTED
+def test_no_fork_warning_without_arcticdb_io():
+    """Creating a library and listing symbols starts no pool threads, so forking is safe."""
+    assert _count_fork_warnings("""
+    import os
+    import sys
+    import tempfile
+    import arcticdb
+
+    lib = arcticdb.Arctic("lmdb://" + tempfile.mkdtemp()).get_library("x", create_if_missing=True)
+    assert lib.list_symbols() == []
+
+    pid = os.fork()
+    if pid == 0:
+        sys.exit(0)
+    os.waitpid(pid, 0)
+    """) == 0
+
+
+@FORK_SUPPORTED
+@FORK_WARNING_SUPPORTED
+def test_no_fork_warning_for_spawn_pool():
+    assert _count_fork_warnings(_IMPORT_AND_WRITE + """
+    import multiprocessing
+
+    with multiprocessing.get_context("spawn").Pool(2) as pool:
+        assert pool.map(abs, [-1, -2]) == [1, 2]
+    """) == 0
+
+
+@FORK_SUPPORTED
+@FORK_WARNING_SUPPORTED
+def test_no_fork_warning_for_subprocess():
+    assert _count_fork_warnings(_IMPORT_AND_WRITE + """
+    import subprocess
+
+    subprocess.run([sys.executable, "-c", ""], check=True)
+    """) == 0
+
+
+# A forkserver preloads __main__, so the work has to sit under the guard for the forkserver process
+# not to run it. That is also how multiprocessing asks you to write a script.
+_POOL_IN_SCRIPT = """
+    import tempfile
+    import multiprocessing
+    import pandas as pd
+    import arcticdb
+
+    if __name__ == "__main__":
+        lib = arcticdb.Arctic("lmdb://" + tempfile.mkdtemp()).get_library("x", create_if_missing=True)
+        lib.write("s", pd.DataFrame({"a": [1, 2, 3]}))
+        with multiprocessing.get_context("__START_METHOD__").Pool(2) as pool:
+            assert pool.map(abs, [-1, -2]) == [1, 2]
+"""
+
+
+@FORK_SUPPORTED
+@FORK_WARNING_SUPPORTED
+def test_no_fork_warning_for_forkserver_pool(tmp_path):
+    """The forkserver process forks every worker, but holds no ArcticDB threads of its own.
+
+    It imports __main__ to preload it, so it registers the atfork handler, but the __main__ guard
+    keeps the ArcticDB work out of it. The parent holds the threads and never forks.
+    """
+    body = _POOL_IN_SCRIPT.replace("__START_METHOD__", "forkserver")
+    assert _count_fork_warnings_in_script(tmp_path, body) == 0
+
+
+@FORK_SUPPORTED
+@FORK_WARNING_SUPPORTED
+def test_fork_warning_logged_for_fork_pool_in_script(tmp_path):
+    """Positive control for test_no_fork_warning_for_forkserver_pool."""
+    body = _POOL_IN_SCRIPT.replace("__START_METHOD__", "fork")
+    assert _count_fork_warnings_in_script(tmp_path, body) == 1
+
+
+@FORK_SUPPORTED
+@FORK_WARNING_SUPPORTED
+def test_fork_warning_logged_by_forkserver_doing_module_level_io(tmp_path):
+    """Known limitation, pinned deliberately.
+
+    Writing at module level rather than under the __main__ guard means the forkserver process runs
+    it too, so it holds live ArcticDB threads and warns as it forks each worker. The warning is
+    accurate about that process, but the user is already using forkserver.
+    """
+    body = _IMPORT_AND_WRITE + """
+    import multiprocessing
+
+    if __name__ == "__main__":
+        with multiprocessing.get_context("forkserver").Pool(2) as pool:
+            assert pool.map(abs, [-1, -2]) == [1, 2]
+    """
+    assert _count_fork_warnings_in_script(tmp_path, body) == 1
 
 
 def test_set_config_int_overrides_env_var_after_spawn(lmdb_version_store_v1, monkeypatch):
