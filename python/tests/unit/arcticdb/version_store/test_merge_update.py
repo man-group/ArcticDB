@@ -25,6 +25,8 @@ from arcticdb.version_store._store import normalize_merge_action
 from typing import Union, List, Optional
 import arcticdb.toolbox.query_stats as qs
 
+from arcticdb_ext.version_store import MergeAction
+
 pytestmark = pytest.mark.merge_update
 
 
@@ -82,14 +84,8 @@ def test_normalize_merge_action(action):
     "strategy",
     (
         MergeStrategy(MergeAction.UPDATE, MergeAction.DO_NOTHING),
-        pytest.param(
-            MergeStrategy(MergeAction.DO_NOTHING, MergeAction.INSERT),
-            marks=pytest.mark.xfail(reason="Insert is not implemented"),
-        ),
-        pytest.param(
-            MergeStrategy(MergeAction.UPDATE, MergeAction.INSERT),
-            marks=pytest.mark.xfail(reason="Insert is not implemented"),
-        ),
+        MergeStrategy(MergeAction.DO_NOTHING, MergeAction.INSERT),
+        MergeStrategy(MergeAction.UPDATE, MergeAction.INSERT),
     ),
 )
 class TestMergeTimeseriesCommon:
@@ -2618,14 +2614,8 @@ class TestMergeUpdateInsertIndexSpansMultipleSegmentsChain:
     "strategy",
     (
         MergeStrategy(MergeAction.UPDATE, MergeAction.DO_NOTHING),
-        pytest.param(
-            MergeStrategy(MergeAction.DO_NOTHING, MergeAction.INSERT),
-            marks=pytest.mark.xfail(reason="Insert is not implemented"),
-        ),
-        pytest.param(
-            MergeStrategy(MergeAction.UPDATE, MergeAction.INSERT),
-            marks=pytest.mark.xfail(reason="Insert is not implemented"),
-        ),
+        MergeStrategy(MergeAction.DO_NOTHING, MergeAction.INSERT),
+        MergeStrategy(MergeAction.UPDATE, MergeAction.INSERT),
     ),
 )
 class TestMergeRowrangeCommon:
@@ -2652,8 +2642,10 @@ class TestMergeRowrangeCommon:
         assert_vit_equals_except_data(merge_vit, read_vit)
 
         lt = lib._dev_tools.library_tool()
-
-        assert len(lt.find_keys_for_symbol(KeyType.TABLE_DATA, "sym")) == 2
+        expected_data_keys = (
+            3 if strategy.not_matched_by_target == MergeAction.INSERT and strategy.matched == MergeAction.UPDATE else 2
+        )
+        assert len(lt.find_keys_for_symbol(KeyType.TABLE_DATA, "sym")) == expected_data_keys
         assert len(lt.find_keys_for_symbol(KeyType.TABLE_INDEX, "sym")) == 2
         assert len(lt.find_keys_for_symbol(KeyType.VERSION, "sym")) == 2
 
