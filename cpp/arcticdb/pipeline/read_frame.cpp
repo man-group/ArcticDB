@@ -83,13 +83,13 @@ std::pair<StreamDescriptor, BlockConfigPerColumn> get_filtered_descriptor_and_bl
         const std::shared_ptr<PipelineContext>& context, const ReadOptions& read_options
 ) {
     return get_filtered_descriptor_and_block_config(
-            context->descriptor().clone(), read_options, context->filter_columns_
+            context->output_descriptor().clone(), read_options, context->filter_columns_
     );
 }
 
 void handle_modified_descriptor(const std::shared_ptr<PipelineContext>& context, SegmentInMemory& output) {
-    if (context->orig_desc_) {
-        for (const auto& field : context->orig_desc_.value().fields()) {
+    if (context->are_string_fields_coerced()) {
+        for (const auto& field : context->on_disk_descriptor().fields()) {
             auto col_index = output.column_index(field.name());
             if (!col_index)
                 continue;
@@ -992,7 +992,8 @@ struct ReduceColumnTask : async::BaseTask {
         const auto column_data = slice_map_->columns_.find(frame_field.name());
         const auto& name = frame_field.name();
         const std::optional<Value> default_value = [&]() -> std::optional<Value> {
-            if (auto it = context_->default_values_.find(std::string(name)); it != context_->default_values_.end()) {
+            const auto& default_values = context_->output_default_values();
+            if (auto it = default_values.find(std::string(name)); it != default_values.end()) {
                 return it->second;
             }
             return {};

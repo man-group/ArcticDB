@@ -238,6 +238,8 @@ struct OutputSchema {
         default_values_.emplace(name, value);
     }
 
+    const ankerl::unordered_dense::map<std::string, Value>& default_values() const { return default_values_; }
+
   private:
     StreamDescriptor stream_descriptor_;
     std::optional<ankerl::unordered_dense::map<std::string, DataType>> column_types_;

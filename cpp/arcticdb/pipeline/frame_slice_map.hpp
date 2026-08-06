@@ -23,7 +23,7 @@ struct FrameSliceMap {
     std::shared_ptr<PipelineContext> context_;
 
     FrameSliceMap(std::shared_ptr<PipelineContext> context, bool dynamic_schema) : context_(std::move(context)) {
-        const entity::StreamDescriptor& descriptor = context_->descriptor();
+        const StreamDescriptor& descriptor = context_->on_disk_descriptor();
         const auto true_index_field_count = descriptor.index().field_count();
         const auto required_fields_count = context_->has_normalization()
                                                    ? index::required_fields_count(descriptor, context_->normalization())

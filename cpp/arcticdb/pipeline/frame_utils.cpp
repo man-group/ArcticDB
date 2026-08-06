@@ -48,8 +48,8 @@ TimeseriesDescriptor timeseries_descriptor_from_pipeline_context(
 ) {
     return make_timeseries_descriptor(
             pipeline_context->total_rows_,
-            pipeline_context->descriptor(),
-            pipeline_context->normalization(),
+            pipeline_context->output_descriptor(),
+            pipeline_context->output_normalization(),
             pipeline_context->release_opt_user_defined_metadata(),
             std::move(next_key),
             bucketize_dynamic
