@@ -81,7 +81,12 @@ from arcticdb.options import (
 )
 from arcticdb_ext.log import LogLevel as _LogLevel
 from arcticdb.authorization.permissions import OpenMode
-from arcticdb.exceptions import ArcticDbNotYetImplemented, ArcticNativeException, MissingKeysInStageResultsError
+from arcticdb.exceptions import (
+    ArcticDbNotYetImplemented,
+    ArcticNativeException,
+    MissingKeysInStageResultsError,
+    ArcticDuplicateSymbolsInBatchException,
+)
 from arcticdb.flattener import Flattener
 from arcticdb.log import version as log
 from arcticdb.version_store._custom_normalizers import get_custom_normalizer, CompositeCustomNormalizer
@@ -563,6 +568,12 @@ class NativeVersionStore:
         except Exception as e:
             log.error("Could not get primary backing store for lib due to: {}".format(e))
         return backing_store
+
+    @staticmethod
+    def _raise_if_duplicate_symbols_in_batch(batch):
+        symbols = {(p if isinstance(p, str) else p.symbol) for p in batch}
+        if len(symbols) < len(batch):
+            raise ArcticDuplicateSymbolsInBatchException
 
     def _try_normalize(
         self,
@@ -4217,6 +4228,7 @@ class NativeVersionStore:
         prune_previous_version: Optional[bool],
         throw_on_error: bool,
     ) -> List[Union[VersionedItem, DataError]]:
+        self._raise_if_duplicate_symbols_in_batch(symbols)
         check(
             rows_per_segment is None or rows_per_segment > 0,
             f"rows_per_segment must be >0, received {rows_per_segment}",

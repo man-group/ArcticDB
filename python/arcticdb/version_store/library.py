@@ -15,7 +15,14 @@ from enum import Enum, auto
 from typing import Optional, Any, Tuple, Dict, Union, List, Iterable, NamedTuple
 
 from arcticdb.dependencies import _PYARROW_AVAILABLE, _POLARS_AVAILABLE, pyarrow as pa, polars as pl
-from arcticdb.exceptions import ArcticNativeException, ArcticDbNotYetImplemented, MissingKeysInStageResultsError
+from arcticdb.exceptions import (
+    ArcticNativeException,
+    ArcticDbNotYetImplemented,
+    MissingKeysInStageResultsError,
+    ArcticInvalidApiUsageException,
+    ArcticDuplicateSymbolsInBatchException,
+    ArcticUnsupportedDataTypeException,
+)
 from numpy import datetime64
 
 from arcticdb.options import LibraryOptions, EnterpriseLibraryOptions, OutputFormat, ArrowOutputStringFormat
@@ -66,18 +73,6 @@ See Also
 
 Library.write: for more documentation on normalisation.
 """
-
-
-class ArcticInvalidApiUsageException(ArcticException):
-    """Exception indicating an invalid call made to the Arctic API."""
-
-
-class ArcticDuplicateSymbolsInBatchException(ArcticInvalidApiUsageException):
-    """Exception indicating that duplicate symbols were passed to a batch method of this module."""
-
-
-class ArcticUnsupportedDataTypeException(ArcticInvalidApiUsageException):
-    """Exception indicating that a method does not support the type of data provided."""
 
 
 class SymbolVersion(NamedTuple):
@@ -1215,12 +1210,6 @@ class Library:
             recursive_normalize_msgpack_no_pickle_fallback=False,
         )
 
-    @staticmethod
-    def _raise_if_duplicate_symbols_in_batch(batch):
-        symbols = {(p if isinstance(p, str) else p.symbol) for p in batch}
-        if len(symbols) < len(batch):
-            raise ArcticDuplicateSymbolsInBatchException
-
     def _raise_if_unsupported_type_in_write_batch(self, payloads):
         bad_symbols = []
         for p in payloads:
@@ -1298,7 +1287,7 @@ class Library:
         >>> items[0].symbol, items[1].symbol
         ('symbol_1', 'symbol_2')
         """
-        self._raise_if_duplicate_symbols_in_batch(payloads)
+        self._nvs._raise_if_duplicate_symbols_in_batch(payloads)
         self._raise_if_unsupported_type_in_write_batch(payloads)
 
         throw_on_error = False
@@ -1346,7 +1335,7 @@ class Library:
         write: For more detailed documentation.
         write_pickle: For information on the implications of providing data that needs to be pickled.
         """
-        self._raise_if_duplicate_symbols_in_batch(payloads)
+        self._nvs._raise_if_duplicate_symbols_in_batch(payloads)
 
         return self._nvs._batch_write_internal(
             [p.symbol for p in payloads],
@@ -1514,7 +1503,7 @@ class Library:
             If data that is not of NormalizableType appears in any of the payloads.
         """
 
-        self._raise_if_duplicate_symbols_in_batch(append_payloads)
+        self._nvs._raise_if_duplicate_symbols_in_batch(append_payloads)
         self._raise_if_unsupported_type_in_write_batch(append_payloads)
         throw_on_error = False
 
@@ -1718,7 +1707,7 @@ class Library:
         2024-01-02        11
         """
 
-        self._raise_if_duplicate_symbols_in_batch(update_payloads)
+        self._nvs._raise_if_duplicate_symbols_in_batch(update_payloads)
         self._raise_if_unsupported_type_in_write_batch(update_payloads)
 
         batch_update_result = self._nvs._batch_update_internal(
@@ -2626,7 +2615,7 @@ class Library:
         {'the': 'metadata_2'}
         """
 
-        self._raise_if_duplicate_symbols_in_batch(write_metadata_payloads)
+        self._nvs._raise_if_duplicate_symbols_in_batch(write_metadata_payloads)
         throw_on_error = False
         return self._nvs._batch_write_metadata_to_versioned_items(
             [p.symbol for p in write_metadata_payloads],
@@ -3390,7 +3379,6 @@ class Library:
         >>> len(lib_tool.read_index("sym2"))
         2
         """
-        self._raise_if_duplicate_symbols_in_batch(symbols)
         return self._nvs._batch_compact_data_internal(
             symbols, rows_per_segment, prune_previous_versions, throw_on_error=False
         )

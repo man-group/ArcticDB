@@ -18,7 +18,7 @@ from arcticdb_ext.exceptions import SchemaException, StorageException
 from arcticdb_ext.storage import KeyType
 from arcticdb_ext.version_store import CompactDataInfo
 from arcticdb import WritePayload
-from arcticdb.exceptions import ArcticNativeException, UserInputException
+from arcticdb.exceptions import ArcticNativeException, UserInputException, ArcticDuplicateSymbolsInBatchException
 import arcticdb.toolbox.query_stats as qs
 from arcticdb.util.hypothesis import (
     use_of_function_scoped_fixtures_in_hypothesis_checked,
@@ -906,9 +906,8 @@ def test_batch_compact_data_duplicated_symbols(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
     syms = ["duplicated_sym", "unique_sym", "duplicated_sym"]
     lib.batch_write(syms[:2], 2 * [pd.DataFrame({"col": [0]}, index=[pd.Timestamp(0)])])
-    with pytest.raises(UserInputException) as e:
+    with pytest.raises(ArcticDuplicateSymbolsInBatchException):
         lib.batch_compact_data(syms)
-    assert "duplicated_sym" in str(e.value)
 
 
 @use_of_function_scoped_fixtures_in_hypothesis_checked
