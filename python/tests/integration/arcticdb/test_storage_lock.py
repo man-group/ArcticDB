@@ -6,8 +6,9 @@ import pytest
 import sys
 
 from arcticdb.util.logger import get_logger
+from arcticdb.exceptions import ArcticDbNotYetImplemented
 from arcticdb_ext.tools import ReliableStorageLock, ReliableStorageLockManager
-from arcticdb.util.test import config_context
+from arcticdb.util.test import config_context, config_context_multi
 from tests.util.mark import REAL_S3_TESTS_MARK, WINDOWS
 
 import time
@@ -119,6 +120,50 @@ def test_storage_lock_timeout_when_held(mem_library):
         l1.unlock()
 
 
+def test_storage_lock_timeout_with_metadata(mem_library):
+    with config_context("StorageLock.WaitMs", 50):
+        lib_tool = mem_library._nvs.library_tool()
+        writer = lib_tool.get_storage_lock("lock")
+        reader = lib_tool.get_storage_lock("lock")
+
+        writer.lock_timeout(1000, metadata={"job_name": "timed"})
+        assert reader.read_metadata() == {"job_name": "timed"}
+        writer.unlock()
+        assert reader.read_metadata() is None
+
+
+def test_storage_lock_becomes_inactive_after_ttl(mem_library):
+    with config_context_multi({"StorageLock.WaitMs": 50, "StorageLock.TTL": 1}):
+        lib_tool = mem_library._nvs.library_tool()
+        lock = lib_tool.get_storage_lock("lock")
+
+        lock.lock(metadata={"job_name": "stale"})
+        # Release the in-process re-entrancy guard, leaving the (about to expire) lock on disk, so we can observe
+        # it going inactive via a fresh listing rather than via this same lock object.
+        lock._test_release_local_lock()
+
+        time.sleep(0.01)
+
+        (info,) = lib_tool.list_storage_locks()
+        assert info["active"] is False
+        assert info["metadata"] == {"job_name": "stale"}
+
+
+def test_storage_lock_read_metadata_after_ttl_expiry(mem_library):
+    with config_context_multi({"StorageLock.WaitMs": 50, "StorageLock.TTL": 1}):
+        lib_tool = mem_library._nvs.library_tool()
+        lock = lib_tool.get_storage_lock("lock")
+        reader = lib_tool.get_storage_lock("lock")
+
+        lock.lock(metadata={"job_name": "stale"})
+        lock._test_release_local_lock()
+
+        time.sleep(0.01)
+
+        # read_metadata surfaces metadata for expired locks too
+        assert reader.read_metadata() == {"job_name": "stale"}
+
+
 STORAGE_LOCK_METADATA = [
     pytest.param("nightly-etl", id="str"),
     pytest.param(42, id="int"),
@@ -155,6 +200,13 @@ def test_storage_lock_metadata_round_trip(mem_library, metadata):
         assert reader.read_metadata() is None
 
 
+def test_storage_lock_metadata_too_large(mem_library):
+    with config_context("StorageLock.WaitMs", 50):
+        lock = mem_library._nvs.library_tool().get_storage_lock("lock")
+        with pytest.raises(ArcticDbNotYetImplemented):
+            lock.lock(metadata={"blob": "x" * (1 << 20)})
+
+
 def test_storage_lock_metadata_absent(mem_library):
     with config_context("StorageLock.WaitMs", 50):
         writer = mem_library._nvs.library_tool().get_storage_lock("lock")
@@ -186,4 +238,28 @@ def test_list_storage_locks_unreliable(mem_library):
         assert "timestamp" in info
 
         lock.unlock()
+        assert lib_tool.list_storage_locks() == []
+
+
+def test_list_storage_locks_multiple(mem_library):
+    with config_context("StorageLock.WaitMs", 50):
+        lib_tool = mem_library._nvs.library_tool()
+        lock_a = lib_tool.get_storage_lock("lock_a")
+        lock_b = lib_tool.get_storage_lock("lock_b")
+
+        lock_a.lock(metadata={"who": "a"})
+        lock_b.lock()
+
+        locks = {info["name"]: info for info in lib_tool.list_storage_locks()}
+        assert locks.keys() == {"lock_a", "lock_b"}
+        assert locks["lock_a"]["active"] is True
+        assert locks["lock_a"]["metadata"] == {"who": "a"}
+        assert locks["lock_b"]["active"] is True
+        assert locks["lock_b"]["metadata"] is None
+
+        lock_a.unlock()
+        (info,) = lib_tool.list_storage_locks()
+        assert info["name"] == "lock_b"
+
+        lock_b.unlock()
         assert lib_tool.list_storage_locks() == []

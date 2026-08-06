@@ -88,6 +88,20 @@ TEST(StorageLock, MetadataSegmentBackwardCompatible) {
     ASSERT_TRUE(kv2.second.metadata() == nullptr);
 }
 
+TEST(StorageLock, ReadMetadataAfterTTLExpiry) {
+    auto store = std::make_shared<InMemoryStore>();
+    StreamId name{"stale_lock"};
+
+    // acquire_time=1 is long past the default 1-day TTL relative to the current wall clock, so this lock is
+    // inactive.
+    store->write_sync(KeyType::LOCK, name, lock_segment(name, 1u, make_meta("stale-job")));
+
+    StorageLock<> reader{name};
+    auto read = reader.read_metadata(store);
+    ASSERT_TRUE(read.has_value());
+    ASSERT_EQ(meta_payload(*read), "stale-job");
+}
+
 TEST(StorageLock, SingleThreaded) {
     SKIP_MAC("Flaky: StorageLock unreliable on Mac due to lower precision clock");
     auto store = std::make_shared<InMemoryStore>();

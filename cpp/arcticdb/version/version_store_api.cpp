@@ -420,19 +420,12 @@ VersionResultVector PythonVersionStore::list_versions(
 namespace {
 
 py::object get_metadata_from_segment(const SegmentInMemory& segment) {
-    py::object pyobj;
     if (segment.has_user_metadata()) {
         // Between v4.5.0 and v5.2.1 we saved this metadata here (commit 516d16968f0)
-        arcticdb::proto::descriptors::UserDefinedMetadata user_meta_proto;
         return python_util::pb_to_python(segment.user_metadata());
-    } else if (segment.metadata()) {
-        // Before v4.5.0 and after v5.2.1 we saved this metadata here
-        arcticdb::proto::descriptors::UserDefinedMetadata user_meta_proto;
-        if (segment.metadata()->UnpackTo(&user_meta_proto)) {
-            return python_util::pb_to_python(user_meta_proto);
-        }
     }
-    return pybind11::none();
+    // Before v4.5.0 and after v5.2.1 we saved this metadata here
+    return python_util::any_metadata_to_py(segment.metadata());
 }
 
 py::object get_metadata_for_snapshot(const std::shared_ptr<Store>& store, const VariantKey& snap_key) {

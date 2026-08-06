@@ -19,6 +19,7 @@ from arcticdb.version_store._normalization import (
     denormalize_user_metadata,
 )
 from arcticdb_ext.version_store import Slicing
+from arcticdb.toolbox.storage_lock import StorageLock
 
 VariantKey = Union[AtomKey, RefKey]
 VersionQueryInput = Union[int, str, ExplicitlySupportedDates, None]
@@ -72,16 +73,16 @@ class LibraryTool(LibraryToolImpl):
         return self.find_keys_for_id(key_type, id)
 
     def get_storage_lock(self, name: str):
-        """Return a dict-in/dict-out :class:`~arcticdb.toolbox.storage_lock.StorageLock` for the given lock name."""
-        from arcticdb.toolbox.storage_lock import StorageLock
-
+        """Return a :class:`~arcticdb.toolbox.storage_lock.StorageLock` for the given lock name."""
         return StorageLock(self._nvs.version_store.get_storage_lock(name))
 
     def list_storage_locks(self) -> List[Dict[str, Any]]:
-        """List the storage locks in the library, with their metadata denormalised to a dict.
+        """List the (unreliable) ``StorageLock`` locks in the library, with their metadata denormalised.
+
+        Does not cover ``ReliableStorageLock``, which is stored separately and is not returned here.
 
         Each entry has ``name``, ``timestamp`` (nanoseconds), ``active`` (within the lock TTL), and ``metadata``
-        (dict or None).
+        (any msgpack-able object, or None).
         """
         locks = super().list_storage_locks()
         for lock in locks:

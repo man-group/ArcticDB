@@ -618,7 +618,11 @@ def test_compat_storage_lock_write_new_read_old(old_venv_and_arctic_uri, lib_nam
             with config_context("StorageLock.WaitMs", 50):
                 lock = curr.lib._nvs.library_tool().get_storage_lock("compat_lock")
                 lock.lock(metadata={"job_name": "blah"})
-                # Deliberately left held so the old client observes it on disk.
+                # Deliberately left held on disk so the old client observes it. Release the in-memory mutex
+                # (without touching the on-disk lock) and drop our reference before leaving the block, so no
+                # current-version connection to the library remains open while the old venv runs.
+                lock._test_release_local_lock()
+                del lock
 
         compat.old_lib.execute(
             [
@@ -647,6 +651,8 @@ def test_compat_storage_lock_write_old_read_new(old_venv_and_arctic_uri, lib_nam
             locks = {info["name"]: info for info in lib_tool.list_storage_locks()}
             assert "compat_lock2" in locks
             assert locks["compat_lock2"]["metadata"] is None
+            del lock
+            del lib_tool
 
 
 def test_norm_meta_column_and_index_names_write_old_read_new(old_venv_and_arctic_uri, lib_name):

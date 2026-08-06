@@ -21,27 +21,6 @@
 
 namespace arcticdb::toolbox::apy {
 
-namespace {
-std::optional<google::protobuf::Any> py_metadata_to_any(const py::object& metadata) {
-    auto udm = python_util::maybe_pb_from_python<arcticdb::proto::descriptors::UserDefinedMetadata>(metadata);
-    if (!udm.has_value()) {
-        return std::nullopt;
-    }
-    google::protobuf::Any any;
-    any.PackFrom(*udm);
-    return any;
-}
-
-py::object any_metadata_to_py(const std::optional<google::protobuf::Any>& metadata) {
-    if (!metadata.has_value()) {
-        return py::none();
-    }
-    arcticdb::proto::descriptors::UserDefinedMetadata udm;
-    metadata->UnpackTo(&udm);
-    return python_util::pb_to_python(udm);
-}
-} // namespace
-
 void register_bindings(py::module& m, py::exception<arcticdb::ArcticException>& base_exception) {
     auto tools = m.def_submodule("tools", "Library management tool hooks");
     using namespace arcticdb::toolbox::apy;
@@ -87,7 +66,7 @@ void register_bindings(py::module& m, py::exception<arcticdb::ArcticException>& 
                          d["name"] = info.name;
                          d["timestamp"] = info.acquire_time;
                          d["active"] = info.active;
-                         d["metadata"] = any_metadata_to_py(info.metadata);
+                         d["metadata"] = python_util::any_metadata_to_py(info.metadata);
                          result.append(std::move(d));
                      }
                      return result;
@@ -165,7 +144,7 @@ void register_bindings(py::module& m, py::exception<arcticdb::ArcticException>& 
             .def(
                     "lock",
                     [](StorageLockWrapper& self, const py::object& metadata) {
-                        self.lock(py_metadata_to_any(metadata));
+                        self.lock(python_util::py_metadata_to_any(metadata));
                     },
                     py::arg("metadata") = py::none()
             )
@@ -173,7 +152,7 @@ void register_bindings(py::module& m, py::exception<arcticdb::ArcticException>& 
             .def(
                     "lock_timeout",
                     [](StorageLockWrapper& self, size_t timeout_ms, const py::object& metadata) {
-                        self.lock_timeout(timeout_ms, py_metadata_to_any(metadata));
+                        self.lock_timeout(timeout_ms, python_util::py_metadata_to_any(metadata));
                     },
                     py::arg("timeout_ms"),
                     py::arg("metadata") = py::none()
@@ -181,11 +160,13 @@ void register_bindings(py::module& m, py::exception<arcticdb::ArcticException>& 
             .def(
                     "try_lock",
                     [](StorageLockWrapper& self, const py::object& metadata) {
-                        return self.try_lock(py_metadata_to_any(metadata));
+                        return self.try_lock(python_util::py_metadata_to_any(metadata));
                     },
                     py::arg("metadata") = py::none()
             )
-            .def("read_metadata", [](StorageLockWrapper& self) { return any_metadata_to_py(self.read_metadata()); });
+            .def("read_metadata",
+                 [](StorageLockWrapper& self) { return python_util::any_metadata_to_py(self.read_metadata()); })
+            .def("_test_release_local_lock", &StorageLockWrapper::_test_release_local_lock);
 
     using namespace arcticdb::query_stats;
     auto query_stats_module = tools.def_submodule("query_stats", "Query stats functionality");

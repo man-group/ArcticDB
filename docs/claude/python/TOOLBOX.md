@@ -166,20 +166,25 @@ backup = tool.update_append_data_column_type(key, "column_name", float)
 
 ## Storage Locks
 
-The (unreliable) `StorageLock` is exposed through `LibraryTool` with dict-in/dict-out user
-metadata. See `python/arcticdb/toolbox/storage_lock.py` for the wrapper and
-`cpp/arcticdb/util/storage_lock.hpp` for the core. It is timestamp + TTL based and works on any
-backend; two processes can race (use `ReliableStorageLock` when atomic writes are available).
+The (unreliable) `StorageLock` is exposed through `LibraryTool` with user metadata normalized the
+same way as symbol metadata (any msgpack-able object, not just dicts). See
+`python/arcticdb/toolbox/storage_lock.py` for the wrapper and `cpp/arcticdb/util/storage_lock.hpp`
+for the core. It is timestamp + TTL based and works on any backend; two processes can race (use
+`ReliableStorageLock` when atomic writes are available). `list_storage_locks` only covers this
+`StorageLock` (`KeyType::LOCK`) — it does not see `ReliableStorageLock` locks (`KeyType::ATOMIC_LOCK`).
+
+`read_metadata` and `list_storage_locks` both return metadata even once the lock's TTL has expired
+(`active` is `False` in that case) — a stale lock is exactly the one worth attributing when tracing.
 
 ```python
 tool = lib.library_tool()
 
 lock = tool.get_storage_lock("my_lock")
-lock.lock(metadata={"job_name": "nightly"})   # metadata is optional
+lock.lock(metadata={"job_name": "nightly"})   # metadata is optional, any msgpack-able object
 lock.read_metadata()                           # -> {"job_name": "nightly"} from any process
 lock.unlock()
 
-# List the locks in the library, metadata denormalised to a dict
+# List the locks in the library, metadata denormalised
 tool.list_storage_locks()
 # [{"name": "my_lock", "active": True, "timestamp": ..., "metadata": {...}}]
 ```
@@ -217,7 +222,7 @@ Get a `LibraryTool` via `lib.library_tool()`. Use `find_keys_for_symbol(KeyType,
 | File | Purpose |
 |------|---------|
 | `toolbox/library_tool.py` | LibraryTool class |
-| `toolbox/storage_lock.py` | Dict-in/dict-out StorageLock wrapper |
+| `toolbox/storage_lock.py` | StorageLock wrapper with normalized metadata |
 | `toolbox/__init__.py` | Module exports |
 
 ## Cautions

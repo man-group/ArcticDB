@@ -175,14 +175,9 @@ std::vector<StorageLockInfo> LibraryTool::list_storage_locks() {
         auto name = fmt::format("{}", variant_key_id(key));
         try {
             auto kv = store()->read_sync(key, storage::ReadKeyOpts{.dont_warn_about_missing_key = true});
-            auto acquire_time = kv.second.template scalar_at<timestamp>(0, 0).value();
-            std::optional<google::protobuf::Any> metadata;
-            if (const auto* meta = kv.second.metadata()) {
-                metadata = *meta;
-            }
-            res.push_back(
-                    StorageLockInfo{std::move(name), acquire_time, (now - acquire_time) < ttl, std::move(metadata)}
-            );
+            auto data = extract_lock_segment_data(kv.second);
+            auto active = lock_is_active(data.acquire_time, now, ttl);
+            res.push_back(StorageLockInfo{std::move(name), data.acquire_time, active, std::move(data.metadata)});
         } catch (const storage::KeyNotFoundException&) {
         }
     });

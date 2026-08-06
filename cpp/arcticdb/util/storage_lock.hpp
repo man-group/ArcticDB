@@ -42,6 +42,22 @@ SegmentInMemory lock_segment(
     return output;
 }
 
+struct LockSegmentData {
+    timestamp acquire_time;
+    std::optional<google::protobuf::Any> metadata;
+};
+
+LockSegmentData extract_lock_segment_data(const SegmentInMemory& segment) {
+    auto acquire_time = segment.template scalar_at<timestamp>(0, 0).value();
+    std::optional<google::protobuf::Any> metadata;
+    if (const auto* meta = segment.metadata()) {
+        metadata = *meta;
+    }
+    return LockSegmentData{acquire_time, std::move(metadata)};
+}
+
+bool lock_is_active(timestamp acquire_time, timestamp now, int64_t ttl) { return now - acquire_time < ttl; }
+
 } // namespace
 
 struct OnExit {
@@ -131,20 +147,17 @@ class StorageLock {
         return try_lock;
     }
 
-    // Returns the current holder's user-defined metadata, or nullopt if there is no active lock or it carries no
-    // metadata. Readable regardless of ownership, so it can be used to trace who holds the lock.
+    // Returns the current lock's user-defined metadata, or nullopt if there is no lock or it carries no metadata.
     std::optional<google::protobuf::Any> read_metadata(const std::shared_ptr<Store>& store) const {
-        if (!exists_active_lock(store)) {
-            return std::nullopt;
-        }
         try {
             auto key_seg = store->read_sync(ref_key(), {.dont_warn_about_missing_key = true});
-            if (const auto* meta = key_seg.second.metadata()) {
-                return *meta;
-            }
+            auto data = extract_lock_segment_data(key_seg.second);
+            return std::move(data.metadata);
+        } catch (const std::invalid_argument&) {
+            return std::nullopt;
         } catch (const storage::KeyNotFoundException&) {
+            return std::nullopt;
         }
-        return std::nullopt;
     }
 
     void _test_release_local_lock() { mutex_.unlock(); }
@@ -152,7 +165,7 @@ class StorageLock {
   private:
     void do_lock(
             const std::shared_ptr<Store>& store, std::optional<size_t> timeout_ms,
-            const std::optional<google::protobuf::Any>& metadata
+            std::optional<google::protobuf::Any> metadata
     ) {
         mutex_.lock();
         size_t wait_ms = ConfigsMap::instance()->get_int("StorageLock.InitialWaitMs", DEFAULT_INITIAL_WAIT_MS);
@@ -244,7 +257,7 @@ class StorageLock {
         if (auto read_ts = read_timestamp(store)) {
             // check TTL
             auto ttl = ConfigsMap::instance()->get_int("StorageLock.TTL", DEFAULT_TTL_INTERVAL);
-            if (ClockType::nanos_since_epoch() - *read_ts < ttl) {
+            if (lock_is_active(*read_ts, ClockType::nanos_since_epoch(), ttl)) {
                 return true;
             }
             log::lock().warn(
@@ -281,6 +294,10 @@ class StorageLockWrapper {
     }
 
     std::optional<google::protobuf::Any> read_metadata() const { return lock_->read_metadata(store_); }
+
+    // Releases the in-process mutex without touching the on-disk lock.
+    // See StorageLock::_test_release_local_lock.
+    void _test_release_local_lock() { lock_->_test_release_local_lock(); }
 };
 
 } // namespace arcticdb

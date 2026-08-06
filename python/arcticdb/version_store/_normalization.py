@@ -1699,7 +1699,6 @@ normalize = _NORMALIZER.normalize
 denormalize = _NORMALIZER.denormalize
 
 _MAX_USER_DEFINED_META = 16 << 20  # 16MB
-_WARN_USER_DEFINED_META = 8 << 20  # 8MB
 
 _MAX_RECURSIVE_METASTRUCT = 16 << 20  # 16MB
 _WARN_RECURSIVE_METASTRUCT = 8 << 20  # 8MB
@@ -1714,7 +1713,7 @@ def _init_msgpack_metadata():
 _msgpack_metadata = _init_msgpack_metadata()
 
 
-def normalize_metadata(metadata: Any) -> UserDefinedMetadata:
+def normalize_metadata(metadata: Any, max_size: int = _MAX_USER_DEFINED_META) -> UserDefinedMetadata:
     if metadata is None:
         return None
     # Prevent arbitrary large object serialization
@@ -1727,11 +1726,12 @@ def normalize_metadata(metadata: Any) -> UserDefinedMetadata:
     # removing this protection.
     packed = _msgpack_metadata._msgpack_packb(metadata)
     size = len(packed)
-    if size > _MAX_USER_DEFINED_META:
-        raise ArcticDbNotYetImplemented(f"User defined metadata cannot exceed {_MAX_USER_DEFINED_META}B")
-    if size > _WARN_USER_DEFINED_META:
+    if size > max_size:
+        raise ArcticDbNotYetImplemented(f"User defined metadata cannot exceed {max_size}B")
+    warn_size = max_size // 2
+    if size > warn_size:
         log.warn(
-            f"User defined metadata is above warning size ({_WARN_USER_DEFINED_META}B), metadata cannot exceed {_MAX_USER_DEFINED_META}B.  Current size: {size}B."
+            f"User defined metadata is above warning size ({warn_size}B), metadata cannot exceed {max_size}B.  Current size: {size}B."
         )
 
     udm = UserDefinedMetadata()
