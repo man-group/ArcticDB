@@ -38,9 +38,6 @@ jobs:
       ARCTICDB_REAL_S3_REGION: eu-west-1
       ARCTICDB_REAL_S3_ENDPOINT: s3.eu-west-1.amazonaws.com
       ASV_RESULTS_BUCKET: arcticdb-ci-benchmark-results
-      # Some benchmarks use SeaweedFS because it supports parallel writes.
-      SEAWEED_DATA_DIR: ${{ runner.temp }}/seaweedfs-asv # Set the directory where local seaweed data resides
-      SEAWEED_BIN_DIR: ${{ github.workspace }}/.seaweed-bin # Set the directory where the seaweed binary is installed
       VCPKG_NUGET_USER: ${{secrets.VCPKG_NUGET_USER || github.repository_owner}}
       VCPKG_NUGET_TOKEN: ${{secrets.VCPKG_NUGET_TOKEN || secrets.GITHUB_TOKEN}}
       VCPKG_MAN_NUGET_USER: ${{secrets.VCPKG_MAN_NUGET_USER}} # For forks to download pre-compiled dependencies from the Man repo
@@ -111,6 +108,7 @@ jobs:
           ./tooling_venv/bin/pip install "ArcticDB[Testing]" "pytz" "pandas<3"
 
       # Use a global seaweed to avoid to cost of starting and stopping the server for each benchmark.
+      # Some benchmarks use SeaweedFS because it supports parallel writes.
       - name: Start SeaweedFS
         shell: bash -el {0}
         run: build_tooling/start_seaweed.sh start
@@ -176,9 +174,7 @@ jobs:
       - name: Stop SeaweedFS
         if: always()
         shell: bash -el {0}
-        run: |
-          tail -20 "$SEAWEED_DATA_DIR/weed.log" || true
-          build_tooling/start_seaweed.sh stop
+        run: build_tooling/start_seaweed.sh stop
 
       - name: Clean up the test bucket
         if: always()

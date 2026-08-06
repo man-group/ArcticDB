@@ -143,6 +143,8 @@ When upgrading a dependency like `sparrow` that has a custom port in vcpkg:
 
 C++ benchmark sources are in `cpp/arcticdb/*/test/benchmark_*.cpp`. ASV Python benchmarks live in `python/benchmarks/`. See [ASV Benchmarks Wiki](https://github.com/man-group/ArcticDB/wiki/Dev:-ASV-Benchmarks).
 
+Each time you change an ASV benchmark you must run this script `python/utils/asv_checks.py`
+
 ## Code Review Guidelines
 
 When writing or modifying code, follow the standards in [`docs/claude/PR_REVIEW_GUIDELINES.md`](docs/claude/PR_REVIEW_GUIDELINES.md). These cover API stability, memory safety, on-disk format compatibility, concurrency, testing, and other quality gates enforced during PR review.
