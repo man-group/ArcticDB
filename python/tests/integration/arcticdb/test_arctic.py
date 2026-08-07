@@ -1488,9 +1488,12 @@ def test_s3_checksum_off_by_env_var(s3_storage, lib_name, multiprocess):
         p.join()
 
 
-def test_s3_checksum_on_by_env_var(s3_storage, lib_name, monkeypatch, route_env_to_extension):
-    monkeypatch.setenv("AWS_RESPONSE_CHECKSUM_VALIDATION", "when_supported")
-    with pytest.raises(Exception):  # moto is set to reject checksum header
+# Setting either variable makes configure_s3_checksum_validation leave both alone, and the SDK defaults
+# the unset one to when_supported too, so either one on its own turns response validation on.
+@pytest.mark.parametrize("env_var", ["AWS_RESPONSE_CHECKSUM_VALIDATION", "AWS_REQUEST_CHECKSUM_CALCULATION"])
+def test_s3_checksum_on_by_env_var(s3_storage, lib_name, monkeypatch, route_env_to_extension, env_var):
+    monkeypatch.setenv(env_var, "when_supported")
+    with pytest.raises(StorageException): # moto is set to reject checksum header
         create_library(s3_storage.arctic_uri, lib_name)
 
 
@@ -1500,7 +1503,7 @@ def test_s3_delete_survives_md5_only_backend(s3_storage, lib_name, checksum):
     # Content-MD5 instead, so only the MD5 opt-in should be able to delete.
     endpoint = s3_storage.factory.endpoint
     verify = s3_storage.factory.client_cert_file or False
-    requests.post(endpoint + "/require_md5_checksum", b"1", verify=verify).raise_for_status()
+    requests.post(endpoint + "/require_md5_checksum_on_delete_objs_request", b"1", verify=verify).raise_for_status()
     try:
         create_library(s3_storage.arctic_uri, lib_name)
         lib = Arctic(s3_storage.arctic_uri)[lib_name]
@@ -1526,7 +1529,45 @@ def test_s3_delete_survives_md5_only_backend(s3_storage, lib_name, checksum):
         assert "S3_DeleteObjects" in stats["storage_operations"], stats
         assert len(lt.find_keys(KeyType.TABLE_INDEX)) == (1 if checksum == "md5" else 3)
     finally:
-        requests.post(endpoint + "/require_md5_checksum", b"0", verify=verify).raise_for_status()
+        requests.post(endpoint + "/require_md5_checksum_on_delete_objs_request", b"0", verify=verify).raise_for_status()
+
+
+
+@pytest.mark.parametrize("checksum_setting", [("when_supported", None), (None, "when_supported")])
+def test_s3_delete_objects_checksum_no_effect_in_when_supported_mode(
+    s3_storage, lib_name, monkeypatch, route_env_to_extension, checksum_setting
+):
+    # In when_supported mode the SDK attaches its crc64nvme digest to DeleteObjects whatever
+    # ChecksumConfigurableDeleteObjectsRequest::RequestChecksumRequired() returns, so the md5 opt-in cannot
+    # rescue an md5-only backend. Setting either variable is enough: configure_s3_checksum_validation leaves
+    # both alone once one is when_supported, and the SDK defaults the other to when_supported too. The vars
+    # must be set before the client is built because the SDK reads them into ClientConfiguration once at
+    # construction, unlike S3Storage.DeleteObjectsChecksum which is read from ConfigsMap per request.
+    request_checksum, response_checksum = checksum_setting
+    if request_checksum:
+        monkeypatch.setenv("AWS_REQUEST_CHECKSUM_CALCULATION", request_checksum)
+    if response_checksum:
+        monkeypatch.setenv("AWS_RESPONSE_CHECKSUM_VALIDATION", response_checksum)
+    endpoint = s3_storage.factory.endpoint
+    verify = s3_storage.factory.client_cert_file or False
+    try:
+        # Response checksums are on in both cases here, so the mock has to answer them rather than 411
+        requests.post(endpoint + "/reject_checksum_mode", b"0", verify=verify).raise_for_status()
+        requests.post(endpoint + "/require_md5_checksum_on_delete_objs_request", b"1", verify=verify).raise_for_status()
+        create_library(s3_storage.arctic_uri, lib_name)
+        lib = Arctic(s3_storage.arctic_uri)[lib_name]
+        lt = lib._nvs.library_tool()
+        for i in range(3):
+            lib._nvs.write("test", i)
+        with config_context_string("S3Storage.DeleteObjectsChecksum", "md5"), qs.query_stats():
+            with pytest.raises(StorageException, match="CRC64NVME"):
+                lib.delete("test", versions=[0, 1])
+            stats = qs.get_query_stats()
+        assert "S3_DeleteObjects" in stats["storage_operations"], stats
+        assert len(lt.find_keys(KeyType.TABLE_INDEX)) == 3
+    finally:
+        requests.post(endpoint + "/require_md5_checksum_on_delete_objs_request", b"0", verify=verify).raise_for_status()
+        requests.post(endpoint + "/reject_checksum_mode", b"1", verify=verify).raise_for_status()
 
 
 @REAL_S3_TESTS_MARK

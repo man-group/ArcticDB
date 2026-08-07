@@ -692,7 +692,10 @@ class HostDispatcherApplication(DomainDispatcherApplication):
     _enforced_access_key = None
     # When True, mimic a backend (e.g. Scality) that only accepts the legacy Content-MD5 digest on batch delete:
     # reject the flexible-checksum header the SDK forces by default, and require a correct Content-MD5 instead.
-    _require_md5_checksum = False
+    _require_md5_checksum_on_delete_objs_request = False
+    # When True, mimic a backend that does not implement response checksums at all, by rejecting any request
+    # asking for them. Turn off to let requests through to moto, which does support them.
+    _reject_checksum_mode = True
 
     @staticmethod
     def _is_delete_objects(environ):
@@ -740,7 +743,7 @@ class HostDispatcherApplication(DomainDispatcherApplication):
 
         with self.lock:
             # Check for x-amz-checksum-mode header
-            if environ.get("HTTP_X_AMZ_CHECKSUM_MODE") == "enabled":
+            if self._reject_checksum_mode and environ.get("HTTP_X_AMZ_CHECKSUM_MODE") == "enabled":
                 response_body = (
                     b'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
                     b"<Error><Code>MissingContentLength</Code>"
@@ -754,7 +757,7 @@ class HostDispatcherApplication(DomainDispatcherApplication):
             # Mimic a backend that only accepts the legacy Content-MD5 digest on batch delete. The check is scoped
             # to DeleteObjects (POST ?delete) because that is the only request the SDK requires a checksum header to
             # by default
-            if self._require_md5_checksum and self._is_delete_objects(environ):
+            if self._require_md5_checksum_on_delete_objs_request and self._is_delete_objects(environ):
                 error = self._md5_checksum_error(environ)
                 if error:
                     code, message = error
@@ -794,12 +797,20 @@ class HostDispatcherApplication(DomainDispatcherApplication):
                 return [b"Access key enforcement set"]
 
             # Allow toggling the Content-MD5-only batch delete behaviour (body "1" to enable, "0" to disable)
-            if path_info in ("/require_md5_checksum", b"/require_md5_checksum"):
+            if path_info in ("/require_md5_checksum_on_delete_objs_request", b"/require_md5_checksum_on_delete_objs_request"):
                 length = int(environ["CONTENT_LENGTH"])
                 body = environ["wsgi.input"].read(length).decode("ascii")
-                self._require_md5_checksum = bool(int(body))
+                self._require_md5_checksum_on_delete_objs_request = bool(int(body))
                 start_response("200 OK", [("Content-Type", "text/plain")])
                 return [b"md5 checksum requirement set"]
+
+            # Allow toggling the rejection of response checksum requests (body "1" to reject, "0" to allow)
+            if path_info in ("/reject_checksum_mode", b"/reject_checksum_mode"):
+                length = int(environ["CONTENT_LENGTH"])
+                body = environ["wsgi.input"].read(length).decode("ascii")
+                self._reject_checksum_mode = bool(int(body))
+                start_response("200 OK", [("Content-Type", "text/plain")])
+                return [b"checksum mode rejection set"]
 
             if self._reqs_till_rate_limit == 0:
                 response_body = (

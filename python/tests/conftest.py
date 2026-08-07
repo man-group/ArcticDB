@@ -646,6 +646,11 @@ def route_env_to_extension(monkeypatch):
 
         undo = monkeypatch.undo
 
+        # The undo wrapper is there because monkeypatch cleans up in two stages, in an unhelpful 
+        # order for us: it restores patched functions first (unsetenv and putenv), then the 
+        # environment variables. So by the time it's restoring env vars, the hooks are already gone
+        # and the restore has only been done on the Python's copy. The arcticdb binaries would keep
+        # the test's value for the rest of the session and leak it into later tests, causing flaky tests
         def undo_and_resync():
             undo()  # undo() restore only the Python's copy of the environment
             for name in routed:
