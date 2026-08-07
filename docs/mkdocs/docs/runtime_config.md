@@ -134,7 +134,10 @@ Values:
 * 1: Enable (Default)
 
 The warning is only present in builds for Python 3.12 and later, the version where CPython itself began raising a
-`DeprecationWarning` for the same problem.
+`DeprecationWarning` for the same problem. It is also not present on macOS: unlike Linux, macOS's `subprocess` and
+`multiprocessing` routinely use a real `fork()` followed by `exec()` to launch child processes (e.g. `spawn` and
+`forkserver`), which is indistinguishable from an unsafe fork at the point the warning would be logged, so it would
+fire for those safe cases too.
 
 ### VersionStore.WillItemBePickledWarningMsg
 

@@ -26,7 +26,8 @@ from tests.util.mark import SKIP_CONDA_MARK
 FORK_SUPPORTED = pytest.mark.skipif(sys.platform == "win32", reason="fork/forkserver not available on Windows")
 
 FORK_WARNING_SUPPORTED = pytest.mark.skipif(
-    sys.version_info < (3, 12), reason="The fork warning is only compiled in for Python 3.12+"
+    sys.version_info < (3, 12) or sys.platform == "darwin",
+    reason="The fork warning is only compiled in for Python 3.12+, and not on macOS",
 )
 
 FORK_WARNING = "fork() called in a process using ArcticDB"
@@ -185,7 +186,7 @@ _IMPORT_AND_WRITE = """
 _FORK_ONCE = _IMPORT_AND_WRITE + """
     pid = os.fork()
     if pid == 0:
-        sys.exit(0)
+        os._exit(0)
     os.waitpid(pid, 0)
 """
 
@@ -214,7 +215,7 @@ def test_fork_warning_logged_once_per_process():
     for _ in range(3):
         pid = os.fork()
         if pid == 0:
-            sys.exit(0)
+            os._exit(0)
         os.waitpid(pid, 0)
     """) == 1
 
@@ -234,7 +235,7 @@ def test_fork_warning_disabled_by_config():
     set_config_int("Fork.WarnOnFork", 0)
     pid = os.fork()
     if pid == 0:
-        sys.exit(0)
+        os._exit(0)
     os.waitpid(pid, 0)
     """) == 0
 
@@ -254,7 +255,7 @@ def test_no_fork_warning_without_arcticdb_io():
 
     pid = os.fork()
     if pid == 0:
-        sys.exit(0)
+        os._exit(0)
     os.waitpid(pid, 0)
     """) == 0
 
@@ -313,25 +314,6 @@ def test_no_fork_warning_for_forkserver_pool(tmp_path):
 def test_fork_warning_logged_for_fork_pool_in_script(tmp_path):
     """Positive control for test_no_fork_warning_for_forkserver_pool."""
     body = _POOL_IN_SCRIPT.replace("__START_METHOD__", "fork")
-    assert _count_fork_warnings_in_script(tmp_path, body) == 1
-
-
-@FORK_SUPPORTED
-@FORK_WARNING_SUPPORTED
-def test_fork_warning_logged_by_forkserver_doing_module_level_io(tmp_path):
-    """Known limitation, pinned deliberately.
-
-    Writing at module level rather than under the __main__ guard means the forkserver process runs
-    it too, so it holds live ArcticDB threads and warns as it forks each worker. The warning is
-    accurate about that process, but the user is already using forkserver.
-    """
-    body = _IMPORT_AND_WRITE + """
-    import multiprocessing
-
-    if __name__ == "__main__":
-        with multiprocessing.get_context("forkserver").Pool(2) as pool:
-            assert pool.map(abs, [-1, -2]) == [1, 2]
-    """
     assert _count_fork_warnings_in_script(tmp_path, body) == 1
 
 

@@ -137,6 +137,45 @@ For large numeric arrays, `py::array_t<>` can wrap C++ buffers without copying u
 
 Configuration functions `set_config_int()` and `set_config_string()` are exposed to Python via `arcticdb_ext`. These call into `ConfigsMap::instance()` on the C++ side.
 
+## Fork Handling
+
+`PYBIND11_MODULE` registers `pthread_atfork` handlers on non-Windows platforms. `fork()` duplicates only the calling thread, so the folly pools and the storage SDKs' background threads do not exist in the child, and any mutex they held stays locked forever.
+
+| Handler | Phase | Purpose |
+|---------|-------|---------|
+| `warn_about_fork` | prepare (parent) | Warn that inherited ArcticDB objects must not be used in the child, if pool threads exist |
+| `SingleThreadMutexHolder::reset_mutex` | child | Leak and replace the pybind entry mutex, which may have been locked by a thread that did not survive |
+| `reinit_scheduler` | child | `TaskScheduler::reattach_instance()` — leak the inherited scheduler and construct a new one with live threads |
+| `reinit_lmdb_warning` | child | Reset `LmdbStorage::times_path_opened` so the child does not inherit the parent's open counts |
+| `register_python_handler_data_factory` | child | Replace the `PythonHandlerData` factory, which holds a `py::handle` and atomic refcounts from the parent |
+
+The child handlers all leak rather than destroy inherited state, because running those destructors would join threads that do not exist.
+
+`warn_about_fork` is the only prepare handler, and the only one compiled conditionally, on `PY_VERSION_HEX >= ARCTICDB_PY_FORK_DEPRECATED_HEX` (3.12) — the CPython version that began raising its own `DeprecationWarning` for forking a multi-threaded process. That warning is invisible in practice: it is attributed to `multiprocessing/popen_fork.py` rather than `__main__`, where the default filters would show it.
+
+It runs in the parent deliberately. Logging from a child handler can hang, because the sink mutex may be inherited locked and an `async_logger` configured with `async_overflow_policy::block` has no flusher thread in the child. It is suppressible with the `Fork.WarnOnFork` config and fires at most once per process via a `std::atomic_flag`. The flag is not cleared in the child, so a child that forks again is silent.
+
+### Gating the warning on live threads
+
+Importing `arcticdb`, constructing an `Arctic`, calling `get_library()` and calling `list_symbols()` all start zero pool threads; the first real read or write starts them. So the warning is gated on `async::io_pool_thread_started`, a latch in `task_scheduler.hpp` set from `InstrumentedNamedFactory::newThread`. That factory is the only choke point that catches every IO path — a great many call sites reach the executor directly via `.via(&async::io_executor())` rather than through `submit_io_task`.
+
+A latch is exact rather than approximate here, because of how the pools retire threads:
+
+| Pool | Idle reclamation |
+|------|------------------|
+| IO | None. `IOThreadPoolExecutor` is constructed with `minThreads == maxThreads`, and each thread owns an `EventBase`. Threads observed flat at 161 across 150 s idle. |
+| CPU | Yes. `FLAGS_dynamic_cputhreadpoolexecutor` is true, so `minThreads` is 0 and idle workers exit after `FLAGS_threadtimeout_ms` (60 s). Observed dropping 20 → 1, then holding at a floor of 1 indefinitely. |
+
+Neither pool is ever shut down mid-life. The only stop is at interpreter exit, `Py_AtExit(shutdown_globals)` → `TaskScheduler::stop_active_threads()`, followed by static destruction of `instance_` running `~TaskSchedulerPtrWrapper`. So once an IO thread exists the process has ArcticDB threads until it exits, and the latch cannot be stale-true in the process that set it.
+
+It *is* stale-true in a child, where `reinit_scheduler` has installed a fresh scheduler with no threads. That is harmless only because `warned_about_fork` is also inherited set. Anything that later clears `warned_about_fork` in the child must clear the latch too.
+
+Two cases still warn where the user can do little about it. A script doing ArcticDB IO at module level, outside the `if __name__ == "__main__"` guard, starts threads in the forkserver process, which then warns as it forks each worker. And `subprocess.run(..., preexec_fn=...)` warns because disabling CPython's `vfork` optimisation makes it a real `fork()` with live threads; a prepare handler cannot tell fork-for-exec from fork-for-work. Plain `subprocess.run` and the `spawn` start method are silent because they use `vfork`, which does not run `pthread_atfork` handlers.
+
+Registering the handler through `os.register_at_fork(before=...)` instead would not change any of this: its coverage is identical across `os.fork`, all three start methods, and both `subprocess` forms.
+
+Note that `TaskScheduler::forked_`, `is_forked()` and `set_forked()` are dead: nothing calls `set_forked(true)`, so the `reattach_instance()` branch in `LocalVersionedEngine`'s constructor never runs. Setting that flag from a fork handler would reattach the scheduler a second time and leak another `TaskScheduler`. `re_init()` is dead for the same reason, and with it `set_active_threads()` and `set_max_threads()`, which nothing else calls.
+
 ## Key Files
 
 | File | Purpose |

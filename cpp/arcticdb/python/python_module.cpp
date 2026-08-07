@@ -205,7 +205,12 @@ void reinit_lmdb_warning() {
 }
 
 // Windows has no fork(), so there is nothing to warn about there.
-#if !defined(WIN32) && PY_VERSION_HEX >= ARCTICDB_PY_FORK_DEPRECATED_HEX
+//
+// macOS is excluded too: pthread_atfork handlers cannot tell a plain fork() from a fork() that is
+// immediately followed by exec() in the child, and on macOS CPython's subprocess/multiprocessing
+// routinely fork() for that fork+exec case (e.g. subprocess.run with a non-default env, or the
+// spawn/forkserver start methods)
+#if !defined(WIN32) && !defined(__APPLE__) && PY_VERSION_HEX >= ARCTICDB_PY_FORK_DEPRECATED_HEX
 
 static std::atomic_flag warned_about_fork;
 
