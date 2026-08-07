@@ -39,7 +39,7 @@ TEST(OutputFrame, AllocateChunked) {
             }
     );
 
-    context->set_descriptor(desc);
+    context->set_on_disk_descriptor(std::move(desc));
     auto read_options = ReadOptions{};
     read_options.set_output_format(OutputFormat::ARROW);
     auto frame = allocate_frame(context, read_options);
