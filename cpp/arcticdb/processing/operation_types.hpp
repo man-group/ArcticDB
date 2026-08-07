@@ -151,6 +151,36 @@ constexpr bool is_binary_operation(OperationType o) {
 
 constexpr bool is_ternary_operation(OperationType o) { return uint8_t(o) >= uint8_t(OperationType::TERNARY); }
 
+enum class MixedTimeNumericOp { COMPARE, ARITHMETIC, TERNARY };
+
+[[noreturn]] inline void raise_time_numeric_mismatch(
+        std::string_view query, std::string_view left, entity::DataType left_type, std::string_view right,
+        entity::DataType right_type, MixedTimeNumericOp kind
+) {
+    std::string_view verb;
+    switch (kind) {
+    case MixedTimeNumericOp::COMPARE:
+        verb = "compared to";
+        break;
+    case MixedTimeNumericOp::ARITHMETIC:
+        verb = "combined with";
+        break;
+    case MixedTimeNumericOp::TERNARY:
+        verb = "returned alongside";
+        break;
+    }
+    user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
+            "In query '{}': {} is of type {} and cannot be {} {}, which is of type {}. Timestamp and numeric types "
+            "cannot be mixed.",
+            query,
+            left,
+            left_type,
+            verb,
+            right,
+            right_type
+    );
+}
+
 struct AbsOperator;
 struct NegOperator;
 struct PlusOperator;

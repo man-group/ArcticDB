@@ -419,7 +419,7 @@ class SortedAggregator {
     ) const {
         if constexpr (is_time_type(input_data_type) && aggregation_operator == AggregationOperator::COUNT) {
             bucket_aggregator.template push<timestamp, true>(value);
-        } else if constexpr (is_numeric_type(input_data_type) || is_bool_type(input_data_type)) {
+        } else if constexpr (is_numeric_or_time_type(input_data_type) || is_bool_type(input_data_type)) {
             bucket_aggregator.push(value);
         } else if constexpr (is_sequence_type(input_data_type)) {
             bucket_aggregator.push(column_with_strings.string_at_offset(value));
@@ -431,7 +431,7 @@ class SortedAggregator {
     template<DataType output_data_type, typename Aggregator>
     [[nodiscard]] auto finalize_aggregator(Aggregator& bucket_aggregator, ARCTICDB_UNUSED StringPool& string_pool)
             const {
-        if constexpr (is_numeric_type(output_data_type) || is_bool_type(output_data_type) ||
+        if constexpr (is_numeric_or_time_type(output_data_type) || is_bool_type(output_data_type) ||
                       aggregation_operator == AggregationOperator::COUNT) {
             return bucket_aggregator.finalize();
         } else if constexpr (is_sequence_type(output_data_type)) {
@@ -474,7 +474,7 @@ class SortedAggregator {
         } else if constexpr (aggregation_operator == AggregationOperator::FIRST) {
             if constexpr (is_time_type(scalar_type_info::data_type)) {
                 return FirstAggregatorSorted<typename scalar_type_info::RawType, true>();
-            } else if constexpr (is_numeric_type(scalar_type_info::data_type) ||
+            } else if constexpr (is_numeric_or_time_type(scalar_type_info::data_type) ||
                                  is_bool_type(scalar_type_info::data_type)) {
                 return FirstAggregatorSorted<typename scalar_type_info::RawType>();
             } else if constexpr (is_sequence_type(scalar_type_info::data_type)) {
@@ -483,7 +483,7 @@ class SortedAggregator {
         } else if constexpr (aggregation_operator == AggregationOperator::LAST) {
             if constexpr (is_time_type(scalar_type_info::data_type)) {
                 return LastAggregatorSorted<typename scalar_type_info::RawType, true>();
-            } else if constexpr (is_numeric_type(scalar_type_info::data_type) ||
+            } else if constexpr (is_numeric_or_time_type(scalar_type_info::data_type) ||
                                  is_bool_type(scalar_type_info::data_type)) {
                 return LastAggregatorSorted<typename scalar_type_info::RawType>();
             } else if constexpr (is_sequence_type(scalar_type_info::data_type)) {

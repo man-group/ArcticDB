@@ -64,6 +64,19 @@ ValueSet::ValueSet(py::array value_list) {
     util::variant_match(numeric_base_set_, [&](const auto& numeric_base_set) { empty_ = numeric_base_set->empty(); });
 }
 
+namespace {
+
+void retag_as_time_type(entity::TypeDescriptor& base_type) {
+    util::check(
+            base_type == make_scalar_type(combine_data_type(entity::ValueType::INT, entity::SizeBits::S64)),
+            "Time-typed ValueSet expects int64 nanoseconds, got {}",
+            base_type
+    );
+    base_type = make_scalar_type(entity::DataType::NANOSECONDS_UTC64);
+}
+
+} // namespace
+
 ValueSet::ValueSet(NumericSetType&& value_set) : numeric_base_set_(std::move(value_set)) {
     util::variant_match(
             numeric_base_set_,
@@ -99,6 +112,18 @@ ValueSet::ValueSet(NumericSetType&& value_set) : numeric_base_set_(std::move(val
             }
     );
     util::variant_match(numeric_base_set_, [&](const auto& numeric_base_set) { empty_ = numeric_base_set->empty(); });
+}
+
+std::shared_ptr<ValueSet> ValueSet::from_nanoseconds(py::array value_list) {
+    auto value_set = std::make_shared<ValueSet>(value_list);
+    retag_as_time_type(value_set->base_type_);
+    return value_set;
+}
+
+std::shared_ptr<ValueSet> ValueSet::from_nanoseconds(NumericSetType&& value_set) {
+    auto result = std::make_shared<ValueSet>(std::move(value_set));
+    retag_as_time_type(result->base_type_);
+    return result;
 }
 
 bool ValueSet::empty() const { return empty_; }
@@ -150,13 +175,14 @@ void ValueSet::compute_min_max() const {
                     max_val = elem;
             }
             if (min_val) {
-                cached_min_ = construct_value<ElemType>(*min_val);
-                cached_max_ = construct_value<ElemType>(*max_val);
+                // base_type_ rather than ElemType, so that a time-typed set does not present its bounds as numeric
+                cached_min_ = Value{*min_val, base_type_.data_type()};
+                cached_max_ = Value{*max_val, base_type_.data_type()};
             }
         } else {
             auto [min_it, max_it] = std::minmax_element(set_ptr->begin(), set_ptr->end());
-            cached_min_ = construct_value<ElemType>(*min_it);
-            cached_max_ = construct_value<ElemType>(*max_it);
+            cached_min_ = Value{*min_it, base_type_.data_type()};
+            cached_max_ = Value{*max_it, base_type_.data_type()};
         }
     });
 }

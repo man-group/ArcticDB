@@ -16,8 +16,8 @@ import datetime
 import dateutil
 
 from arcticdb import OutputFormat
-from arcticdb.exceptions import SchemaException
-from arcticdb.version_store.processing import QueryBuilder
+from arcticdb.exceptions import SchemaException, UserInputException
+from arcticdb.version_store.processing import QueryBuilder, value_list_from_args
 from arcticdb.util.test import assert_frame_equal, query_stats_operation_count
 import arcticdb.toolbox.query_stats as qs
 
@@ -1398,3 +1398,25 @@ def test_filter_synthetic_column_and_select_on_disk_column(
         # filter and then read the second column slice to return the requested column
         data_keys_count = 2
     assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_DATA") == data_keys_count
+
+
+def test_value_list_from_args_tags_small_timestamps_as_time_type(monkeypatch):
+    # numpy's default integer dtype for a bare Python int follows the C `long` type, which is 32-bit on
+    # Windows but 64-bit on Linux/macOS. Simulate the Windows behaviour here so the test is meaningful on
+    # any platform: value_list_from_args must force int64 explicitly for timestamp values rather than
+    # relying on this platform-dependent default, otherwise the view to datetime64[ns] is silently skipped.
+    real_array = np.array
+
+    def windows_like_array(seq, *args, **kwargs):
+        if not args and "dtype" not in kwargs:
+            kwargs["dtype"] = np.int32
+        return real_array(seq, *args, **kwargs)
+
+    monkeypatch.setattr(np, "array", windows_like_array)
+    value_list = value_list_from_args([pd.Timestamp(0), pd.Timestamp(1)])
+    assert value_list.dtype == np.dtype("datetime64[ns]")
+
+
+def test_value_list_from_args_rejects_mixed_time_and_numeric():
+    with pytest.raises(UserInputException, match="Timestamp and numeric types cannot be mixed"):
+        value_list_from_args([pd.Timestamp(0), 5])

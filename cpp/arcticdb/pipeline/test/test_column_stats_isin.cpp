@@ -213,7 +213,9 @@ TEST_P(StatsMembershipNaTTest, IsinAndIsnotin) {
     ColumnStatsValues csv{
             std::optional<Value>{make_timestamp_value(block_min)}, std::optional<Value>{make_timestamp_value(block_max)}
     };
-    auto vs = std::make_shared<ValueSet>(
+    // A set of timestamps must be tagged as such. An untagged int64 set is a numeric set, and mixing that with a
+    // timestamp column is rejected.
+    auto vs = ValueSet::from_nanoseconds(
             NumericSetType{std::make_shared<std::unordered_set<int64_t>>(set_values.begin(), set_values.end())}
     );
     ASSERT_EQ(stats_membership_comparator(csv, *vs, OperationType::ISIN), expected_isin);

@@ -291,7 +291,8 @@ std::optional<convert::StringEncodingError> set_array_type(
         //  case for it and it will throw exception which is not meaningful. Adding BYTES_DYNAMIC64 in
         //  TypeDescriptor::visit_tag leads to a bunch of compilation errors spread all over the code.
         normalization::check<ErrorCode::E_UNIMPLEMENTED_COLUMN_SECONDARY_TYPE>(
-                is_numeric_type(row_type_descriptor.data_type()) || is_empty_type(row_type_descriptor.data_type()),
+                is_numeric_or_time_type(row_type_descriptor.data_type()) ||
+                        is_empty_type(row_type_descriptor.data_type()),
                 "Numpy array type {} is not implemented. Only dense int and float arrays are supported.",
                 datatype_to_str(row_type_descriptor.data_type())
         );
@@ -300,7 +301,7 @@ std::optional<convert::StringEncodingError> set_array_type(
             using ArrayType = typename ArrayDataTypeTag::raw_type;
             if constexpr (is_empty_type(ArrayDataTypeTag::data_type)) {
                 arr_col.set_empty_array(last_logical_row, row_tensor.ndim());
-            } else if constexpr (is_numeric_type(ArrayDataTypeTag::data_type)) {
+            } else if constexpr (is_numeric_or_time_type(ArrayDataTypeTag::data_type)) {
                 if (row_tensor.nbytes()) {
                     TypedTensor<ArrayType> typed_tensor{row_tensor};
                     arr_col.set_array(last_logical_row, typed_tensor);
@@ -344,7 +345,7 @@ inline std::optional<convert::StringEncodingError> segment_set_data(
             auto maybe_error = set_sequence_type<TagType, RawType>(seg, tensor, col, rows_to_write, row);
             if (maybe_error)
                 return maybe_error;
-        } else if constexpr ((is_numeric_type(dt) || is_bool_type(dt)) && tag.dimension() == Dimension::Dim0) {
+        } else if constexpr ((is_numeric_or_time_type(dt) || is_bool_type(dt)) && tag.dimension() == Dimension::Dim0) {
             set_integral_scalar_type<TagType, RawType>(
                     seg, tensor, col, rows_to_write, row, sparsify_floats, copy_mode
             );

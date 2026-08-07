@@ -1491,3 +1491,96 @@ INSTANTIATE_TEST_SUITE_P(
                 )
         )
 );
+
+// Mixing a timestamp with a plain numeric type is rejected upstream in the processing pipeline. Column stats must not
+// prune anything based on such a comparison, since it cannot be given a meaningful answer here either.
+// We let the error handling happen in one place downstream, since column stats may or may not be enabled.
+class StatsComparatorTimeNumericMismatchTest : public ::testing::TestWithParam<std::tuple<OperationType>> {};
+
+TEST_P(StatsComparatorTimeNumericMismatchTest, ReturnsUnknown) {
+    auto [op] = GetParam();
+    std::vector<ColumnStatsValues> time_stats{
+            {Value(timestamp{1}, DataType::NANOSECONDS_UTC64), Value(timestamp{5}, DataType::NANOSECONDS_UTC64)}
+    };
+    std::vector<ColumnStatsValues> int_stats{{construct_value(int64_t{1}), construct_value(int64_t{5})}};
+
+    // Time-typed stats against a numeric query value
+    auto numeric_query = std::get<std::vector<StatsComparison>>(
+            dispatch_binary_stats(time_stats, std::make_shared<Value>(construct_value(int64_t{3})), op)
+    );
+    ASSERT_EQ(numeric_query.size(), 1);
+    ASSERT_EQ(numeric_query.at(0), StatsComparison::UNKNOWN);
+
+    // Numeric stats against a time-typed query value
+    auto time_query = std::get<std::vector<StatsComparison>>(
+            dispatch_binary_stats(int_stats, std::make_shared<Value>(construct_timestamp_value(3)), op)
+    );
+    ASSERT_EQ(time_query.size(), 1);
+    ASSERT_EQ(time_query.at(0), StatsComparison::UNKNOWN);
+}
+
+INSTANTIATE_TEST_SUITE_P(
+        AllComparisonOps, StatsComparatorTimeNumericMismatchTest,
+        ::testing::Values(
+                OperationType::LT, OperationType::LE, OperationType::GT, OperationType::GE, OperationType::EQ,
+                OperationType::NE
+        )
+);
+
+// Timestamp against timestamp must still give a real answer rather than falling back to UNKNOWN
+TEST(StatsComparatorTimeTime, GivesRealAnswer) {
+    std::vector<ColumnStatsValues> time_stats{
+            {Value(timestamp{1}, DataType::NANOSECONDS_UTC64), Value(timestamp{5}, DataType::NANOSECONDS_UTC64)}
+    };
+    auto all_match = std::get<std::vector<StatsComparison>>(
+            dispatch_binary_stats(time_stats, std::make_shared<Value>(construct_timestamp_value(10)), OperationType::LT)
+    );
+    ASSERT_EQ(all_match.at(0), StatsComparison::ALL_MATCH);
+    auto none_match = std::get<std::vector<StatsComparison>>(
+            dispatch_binary_stats(time_stats, std::make_shared<Value>(construct_timestamp_value(0)), OperationType::LT)
+    );
+    ASSERT_EQ(none_match.at(0), StatsComparison::NONE_MATCH);
+}
+
+class StatsComparatorColumnColumnTimeNumericMismatchTest : public ::testing::TestWithParam<std::tuple<OperationType>> {
+};
+
+TEST_P(StatsComparatorColumnColumnTimeNumericMismatchTest, ReturnsUnknown) {
+    auto [op] = GetParam();
+    std::vector<ColumnStatsValues> time_stats{
+            {Value(timestamp{1}, DataType::NANOSECONDS_UTC64), Value(timestamp{5}, DataType::NANOSECONDS_UTC64)}
+    };
+    std::vector<ColumnStatsValues> int_stats{{construct_value(int64_t{1}), construct_value(int64_t{5})}};
+
+    auto time_vs_int = std::get<std::vector<StatsComparison>>(dispatch_binary_stats(time_stats, int_stats, op));
+    ASSERT_EQ(time_vs_int.size(), 1);
+    ASSERT_EQ(time_vs_int.at(0), StatsComparison::UNKNOWN);
+
+    auto int_vs_time = std::get<std::vector<StatsComparison>>(dispatch_binary_stats(int_stats, time_stats, op));
+    ASSERT_EQ(int_vs_time.size(), 1);
+    ASSERT_EQ(int_vs_time.at(0), StatsComparison::UNKNOWN);
+}
+
+INSTANTIATE_TEST_SUITE_P(
+        AllComparisonOps, StatsComparatorColumnColumnTimeNumericMismatchTest,
+        ::testing::Values(
+                OperationType::LT, OperationType::LE, OperationType::GT, OperationType::GE, OperationType::EQ,
+                OperationType::NE
+        )
+);
+
+// Two timestamp columns' stats against each other must still give a real answer rather than falling back to UNKNOWN
+TEST(StatsComparatorColumnColumnTimeTime, GivesRealAnswer) {
+    std::vector<ColumnStatsValues> low_stats{
+            {Value(timestamp{1}, DataType::NANOSECONDS_UTC64), Value(timestamp{5}, DataType::NANOSECONDS_UTC64)}
+    };
+    std::vector<ColumnStatsValues> high_stats{
+            {Value(timestamp{10}, DataType::NANOSECONDS_UTC64), Value(timestamp{20}, DataType::NANOSECONDS_UTC64)}
+    };
+    auto all_match =
+            std::get<std::vector<StatsComparison>>(dispatch_binary_stats(low_stats, high_stats, OperationType::LT));
+    ASSERT_EQ(all_match.at(0), StatsComparison::ALL_MATCH);
+    auto none_match =
+            std::get<std::vector<StatsComparison>>(dispatch_binary_stats(high_stats, low_stats, OperationType::LT));
+    ASSERT_EQ(none_match.at(0), StatsComparison::NONE_MATCH);
+}

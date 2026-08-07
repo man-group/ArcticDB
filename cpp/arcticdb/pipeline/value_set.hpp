@@ -41,6 +41,11 @@ class ValueSet {
     explicit ValueSet(py::array value_list);
     explicit ValueSet(NumericSetType&& value_set);
 
+    // Builds a set of timestamps from int64 nanoseconds since epoch. The resulting base type is NANOSECONDS_UTC64
+    // rather than INT64, so that mixing the set with a plain numeric column is rejected.
+    static std::shared_ptr<ValueSet> from_nanoseconds(py::array value_list);
+    static std::shared_ptr<ValueSet> from_nanoseconds(NumericSetType&& value_set);
+
     bool empty() const;
 
     size_t size() const;

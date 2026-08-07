@@ -627,7 +627,7 @@ std::shared_ptr<SegmentInMemoryImpl> SegmentInMemoryImpl::filter(
                             } else {
                                 *output_ptr = value;
                             }
-                        } else if constexpr (is_numeric_type(DataTypeTag::data_type) ||
+                        } else if constexpr (is_numeric_or_time_type(DataTypeTag::data_type) ||
                                              is_bool_type(DataTypeTag::data_type)) {
                             *output_ptr = value;
                         } else if constexpr (is_empty_type(DataTypeTag::data_type)) {
@@ -668,7 +668,7 @@ std::shared_ptr<SegmentInMemoryImpl> SegmentInMemoryImpl::filter(
                             } else {
                                 *output_ptr = value;
                             }
-                        } else if constexpr (is_numeric_type(DataTypeTag::data_type) ||
+                        } else if constexpr (is_numeric_or_time_type(DataTypeTag::data_type) ||
                                              is_bool_type(DataTypeTag::data_type)) {
                             *output_ptr = value;
                         } else if constexpr (is_empty_type(DataTypeTag::data_type)) {
@@ -825,7 +825,7 @@ bool operator==(const SegmentInMemoryImpl& left, const SegmentInMemoryImpl& righ
             for (auto row = 0u; row < left_col.row_count(); ++row)
                 if (left.string_at(row, col) != right.string_at(row, col))
                     return false;
-        } else if (is_numeric_type(left_data_type) || is_bool_type(left_data_type)) {
+        } else if (is_numeric_or_time_type(left_data_type) || is_bool_type(left_data_type)) {
             if (left.column(col) != right.column(col))
                 return false;
         } else if (is_empty_type(left_data_type)) {
@@ -1087,7 +1087,7 @@ void SegmentInMemoryImpl::calculate_statistics() {
     for (auto& column : columns_) {
         if (column->type().dimension() == Dimension::Dim0) {
             const auto type = column->type();
-            if (is_numeric_type(type.data_type()) || is_sequence_type(type.data_type())) {
+            if (is_numeric_or_time_type(type.data_type()) || is_sequence_type(type.data_type())) {
                 details::visit_scalar(type, [&column](auto tdt) {
                     using TagType = std::decay_t<decltype(tdt)>;
                     column->set_statistics(generate_column_statistics<TagType>(column->data()));

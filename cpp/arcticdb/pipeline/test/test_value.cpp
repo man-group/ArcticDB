@@ -44,7 +44,7 @@ consteval auto generate_numeric_testing_values() {
 
 TEST_P(ValueDataType, ValueConstruct) {
     details::visit_type(GetParam(), []<typename TypeTag>(TypeTag) {
-        if constexpr (is_numeric_type(TypeTag::data_type) || is_bool_type(TypeTag::data_type)) {
+        if constexpr (is_numeric_or_time_type(TypeTag::data_type) || is_bool_type(TypeTag::data_type)) {
             using raw_type = typename TypeTag::raw_type;
             constexpr static std::array values = generate_numeric_testing_values<TypeTag>();
             for (const auto& v : values) {

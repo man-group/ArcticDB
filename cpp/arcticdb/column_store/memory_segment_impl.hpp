@@ -54,7 +54,8 @@ class SegmentInMemoryImpl {
                             std::string_view{field.name()},
                             type_desc_tag
                     );
-                else if constexpr (is_numeric_type(DataTypeTag::data_type) || is_bool_type(DataTypeTag::data_type))
+                else if constexpr (is_numeric_or_time_type(DataTypeTag::data_type) ||
+                                   is_bool_type(DataTypeTag::data_type))
                     return c(
                             parent_->scalar_at<RawType>(row_id_, column_id_),
                             std::string_view{field.name()},
@@ -192,7 +193,7 @@ class SegmentInMemoryImpl {
                     if constexpr (is_sequence_type(T::DataTypeTag::data_type)) {
                         // test only for now
                         internal::raise<ErrorCode::E_ASSERTION_FAILURE>("string type not implemented");
-                    } else if constexpr (is_numeric_type(T::DataTypeTag::data_type) ||
+                    } else if constexpr (is_numeric_or_time_type(T::DataTypeTag::data_type) ||
                                          is_bool_type(T::DataTypeTag::data_type)) {
                         if constexpr (std::is_same_v<RawType, S>) {
                             val = parent_->scalar_at<RawType>(row_id_, col);

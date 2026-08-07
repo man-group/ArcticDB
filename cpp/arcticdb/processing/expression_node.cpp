@@ -269,7 +269,7 @@ std::variant<BitSetTag, DataType> ExpressionNode::compute(
             user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
                     std::holds_alternative<DataType>(left_type), "Unexpected bitset input to {}", operation_type_
             );
-            details::visit_type(std::get<DataType>(left_type), [operation_type_, &res](auto tag) {
+            details::visit_type(std::get<DataType>(left_type), [operation_type_, &res, this, &operation](auto tag) {
                 using type_info = ScalarTypeInfo<decltype(tag)>;
                 if constexpr (is_numeric_type(type_info::data_type)) {
                     if (operation_type_ == OperationType::ABS) {
@@ -286,7 +286,11 @@ std::variant<BitSetTag, DataType> ExpressionNode::compute(
                     }
                 } else {
                     user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
-                            "Unexpected data type {} input to {}", type_info::data_type, operation_type_
+                            "Cannot perform unary operation {}({}) ({}) in query '{}'",
+                            operation_type_,
+                            operation.left_->label_,
+                            type_info::data_type,
+                            label_
                     );
                 }
             });
@@ -335,12 +339,13 @@ std::variant<BitSetTag, DataType> ExpressionNode::compute(
                     "Unexpected value set input to {}",
                     operation_type_
             );
-            details::visit_type(std::get<DataType>(left_type), [operation_type_, &res, right_type](auto left_tag) {
+            details::visit_type(std::get<DataType>(left_type), [&](auto left_tag) {
                 using left_type_info = ScalarTypeInfo<decltype(left_tag)>;
-                details::visit_type(std::get<DataType>(right_type), [operation_type_, &res](auto right_tag) {
+                details::visit_type(std::get<DataType>(right_type), [&](auto right_tag) {
                     using right_type_info = ScalarTypeInfo<decltype(right_tag)>;
-                    if constexpr (is_numeric_type(left_type_info::data_type) &&
-                                  is_numeric_type(right_type_info::data_type)) {
+                    if constexpr (numeric_or_time_types_compatible(
+                                          left_type_info::data_type, right_type_info::data_type
+                                  )) {
                         switch (operation_type_) {
                         case OperationType::ADD: {
                             using TargetType = typename binary_operation_promoted_type<
@@ -393,6 +398,27 @@ std::variant<BitSetTag, DataType> ExpressionNode::compute(
                         default:
                             internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Unexpected binary operator");
                         }
+                    } else if constexpr (is_time_numeric_mismatch(
+                                                 left_type_info::data_type, right_type_info::data_type
+                                         )) {
+                        // Addition is commutative so the integer may be on either side, but subtraction needs the
+                        // timestamp on the left, as subtracting a timestamp from an integer is not a timestamp
+                        const bool offset_arithmetic =
+                                is_time_offset_pair(left_type_info::data_type, right_type_info::data_type) &&
+                                (operation_type_ == OperationType::ADD ||
+                                 (operation_type_ == OperationType::SUB && is_time_type(left_type_info::data_type)));
+                        if (offset_arithmetic) {
+                            res = DataType::NANOSECONDS_UTC64;
+                        } else {
+                            raise_time_numeric_mismatch(
+                                    label_,
+                                    operation.left_->label_,
+                                    left_type_info::data_type,
+                                    operation.right_->label_,
+                                    right_type_info::data_type,
+                                    MixedTimeNumericOp::ARITHMETIC
+                            );
+                        }
                     } else {
                         user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
                                 "Unexpected data types {} {} input to {}",
@@ -425,9 +451,18 @@ std::variant<BitSetTag, DataType> ExpressionNode::compute(
                     "Unexpected value set input to {}",
                     operation_type_
             );
+            if (is_time_numeric_mismatch(std::get<DataType>(left_type), std::get<DataType>(right_type))) {
+                raise_time_numeric_mismatch(
+                        label_,
+                        operation.left_->label_,
+                        std::get<DataType>(left_type),
+                        operation.right_->label_,
+                        std::get<DataType>(right_type),
+                        MixedTimeNumericOp::COMPARE
+                );
+            }
             user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
-                    (is_numeric_type(std::get<DataType>(left_type)) && is_numeric_type(std::get<DataType>(right_type))
-                    ) ||
+                    numeric_or_time_types_compatible(std::get<DataType>(left_type), std::get<DataType>(right_type)) ||
                             (is_bool_type(std::get<DataType>(left_type)) && is_bool_type(std::get<DataType>(right_type))
                             ) ||
                             (is_sequence_type(std::get<DataType>(left_type)) &&
@@ -481,11 +516,22 @@ std::variant<BitSetTag, DataType> ExpressionNode::compute(
                     operation_type_
             );
             if (right_value_set_state == ValueSetState::NON_EMPTY_SET) {
+                if (is_time_numeric_mismatch(std::get<DataType>(left_type), std::get<DataType>(right_type))) {
+                    raise_time_numeric_mismatch(
+                            label_,
+                            operation.left_->label_,
+                            std::get<DataType>(left_type),
+                            operation.right_->label_,
+                            std::get<DataType>(right_type),
+                            MixedTimeNumericOp::COMPARE
+                    );
+                }
                 user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
                         (is_sequence_type(std::get<DataType>(left_type)) &&
                          is_sequence_type(std::get<DataType>(right_type))) ||
-                                (is_numeric_type(std::get<DataType>(left_type)) &&
-                                 is_numeric_type(std::get<DataType>(right_type))),
+                                numeric_or_time_types_compatible(
+                                        std::get<DataType>(left_type), std::get<DataType>(right_type)
+                                ),
                         "Unexpected data types {} {} input to {}",
                         std::get<DataType>(left_type),
                         std::get<DataType>(right_type),
@@ -537,9 +583,9 @@ std::variant<BitSetTag, DataType> ExpressionNode::compute(
             );
         }
         if (std::holds_alternative<DataType>(left_type) && std::holds_alternative<DataType>(right_type)) {
-            details::visit_type(std::get<DataType>(left_type), [operation_type_, &res, right_type](auto left_tag) {
+            details::visit_type(std::get<DataType>(left_type), [&](auto left_tag) {
                 using left_type_info = ScalarTypeInfo<decltype(left_tag)>;
-                details::visit_type(std::get<DataType>(right_type), [operation_type_, &res](auto right_tag) {
+                details::visit_type(std::get<DataType>(right_type), [&](auto right_tag) {
                     using right_type_info = ScalarTypeInfo<decltype(right_tag)>;
                     if constexpr (is_sequence_type(left_type_info::data_type) &&
                                   is_sequence_type(right_type_info::data_type)) {
@@ -555,8 +601,13 @@ std::variant<BitSetTag, DataType> ExpressionNode::compute(
                                     operation_type_
                             );
                         }
-                    } else if constexpr (is_numeric_type(left_type_info::data_type) &&
-                                         is_numeric_type(right_type_info::data_type)) {
+                    } else if constexpr (is_time_type(left_type_info::data_type) &&
+                                         is_time_type(right_type_info::data_type)) {
+                        // ternary_operation_promoted_type would give INT64, as timestamp is int64_t
+                        res = left_type_info::data_type;
+                    } else if constexpr (numeric_or_time_types_compatible(
+                                                 left_type_info::data_type, right_type_info::data_type
+                                         )) {
                         using TargetType = typename ternary_operation_promoted_type<
                                 typename left_type_info::RawType,
                                 typename right_type_info::RawType>::type;
@@ -564,6 +615,17 @@ std::variant<BitSetTag, DataType> ExpressionNode::compute(
                     } else if constexpr (is_bool_type(left_type_info::data_type) &&
                                          is_bool_type(right_type_info::data_type)) {
                         res = DataType::BOOL8;
+                    } else if constexpr (is_time_numeric_mismatch(
+                                                 left_type_info::data_type, right_type_info::data_type
+                                         )) {
+                        raise_time_numeric_mismatch(
+                                label_,
+                                operation.left_->label_,
+                                left_type_info::data_type,
+                                operation.right_->label_,
+                                right_type_info::data_type,
+                                MixedTimeNumericOp::TERNARY
+                        );
                     } else {
                         user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
                                 "Unexpected data types {} {} input to {}",

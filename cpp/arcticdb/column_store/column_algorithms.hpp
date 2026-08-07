@@ -335,10 +335,10 @@ static void transform(
 // std::upper_bound.
 
 // Constraints shared by the four sorted-search functions: scalar type, dense iterator, and a
-// numeric raw type (integers, floats, or timestamps — matches `is_numeric_type` in entity/types.hpp).
+// numeric raw type (integers, floats, or timestamps — matches `is_numeric_or_time_type` in entity/types.hpp).
 template<typename TDT, IteratorDensity ID>
 concept SortedSearchInputs = util::instantiation_of<TDT, TypeDescriptorTag> && (TDT::dimension() == Dimension::Dim0) &&
-                             (ID == IteratorDensity::DENSE) && is_numeric_type(TDT::DataTypeTag::data_type);
+                             (ID == IteratorDensity::DENSE) && is_numeric_or_time_type(TDT::DataTypeTag::data_type);
 
 namespace search_detail {
 

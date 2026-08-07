@@ -205,7 +205,10 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
             .def(py::init([](std::vector<std::string>&& value_list) {
                 return std::make_shared<ValueSet>(std::move(value_list));
             }))
-            .def(py::init([](py::array value_list) { return std::make_shared<ValueSet>(value_list); }));
+            .def(py::init([](py::array value_list) { return std::make_shared<ValueSet>(value_list); }))
+            .def_static("from_nanoseconds", [](py::array value_list) {
+                return ValueSet::from_nanoseconds(value_list);
+            });
 
     py::class_<storage::KeySegmentPair>(version, "KeySegmentPair").def(py::init<>());
 

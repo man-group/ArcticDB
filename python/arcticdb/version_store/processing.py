@@ -386,15 +386,28 @@ def value_list_from_args(*args):
     array_list = []
     value_set = set()
     contains_integer = False
+    contains_time_type = False
+    all_time_types = True
     if len(collection) > 0:
         for value in collection:
             if value not in value_set:
                 value_set.add(value)
                 if isinstance(value, supported_time_types):
+                    contains_time_type = True
                     value = nanoseconds_from_utc(value)
-                elem = np.array([value]) if isinstance(value, (int, np.integer)) else np.full(1, value, dtype=None)
+                    # dtype must be forced to int64 rather than relying on the platform-dependent default integer
+                    # type (32-bit on Windows), otherwise the view to datetime64[ns] below can fail to apply
+                    elem = np.array([value], dtype=np.int64)
+                else:
+                    all_time_types = False
+                    elem = np.array([value]) if isinstance(value, (int, np.integer)) else np.full(1, value, dtype=None)
                 array_list.append(elem)
                 contains_integer = contains_integer or isinstance(value, (int, np.integer))
+        if contains_time_type and not all_time_types:
+            # Without this, a Timestamp mixed with a plain number would silently degrade to an all-numeric value
+            # list containing the Timestamp's raw nanosecond integer, rather than being rejected like a value list
+            # of only Timestamps compared against a numeric column already is
+            raise UserInputException("Timestamp and numeric types cannot be mixed in the same value set")
         value_list = np.concatenate(array_list)
         if contains_integer and value_list.dtype == np.float64:
             raise UserInputException("Invalid datatype conversion to double")
@@ -402,6 +415,9 @@ def value_list_from_args(*args):
             value_list = value_list.astype(np.float32)
         elif value_list.dtype.kind == "U":
             value_list = value_list.tolist()
+        elif all_time_types and value_list.dtype == np.int64:
+            # Carry the time type through to the ValueSet, so that mixing it with a numeric column is rejected
+            value_list = value_list.view("datetime64[ns]")
     else:
         # Return an empty list. This will call the string ctor for ValueSet, but also set a bool flag so that numeric
         # types also behave as expected
@@ -1282,6 +1298,9 @@ def visit_expression(expr):
                 return _ExpressionNode(_ColumnName(node.left))
             return _visit(node)
         elif isinstance(node, (np.ndarray, list)):
+            # "M" is numpy's dtype kind code for datetime64
+            if isinstance(node, np.ndarray) and node.dtype.kind == "M":
+                return _ExpressionNode(_ValueSet.from_nanoseconds(node.view("int64")))
             return _ExpressionNode(_ValueSet(node))
         elif isinstance(node, _RegexGeneric):
             return _ExpressionNode(node)

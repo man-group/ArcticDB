@@ -18,17 +18,17 @@ namespace arcticdb {
 template<typename InputTypeInfo, typename OutputTypeInfo>
 requires util::instantiation_of<InputTypeInfo, ScalarTypeInfo> && util::instantiation_of<OutputTypeInfo, ScalarTypeInfo>
 consteval bool is_aggregation_allowed(const AggregationOperator aggregation_operator) {
-    return (is_numeric_type(InputTypeInfo::data_type) && is_numeric_type(OutputTypeInfo::data_type)) ||
+    return (is_numeric_or_time_type(InputTypeInfo::data_type) && is_numeric_or_time_type(OutputTypeInfo::data_type)) ||
            (is_sequence_type(InputTypeInfo::data_type) &&
             (is_sequence_type(OutputTypeInfo::data_type) || aggregation_operator == AggregationOperator::COUNT)) ||
            (is_bool_type(InputTypeInfo::data_type) &&
-            (is_bool_type(OutputTypeInfo::data_type) || is_numeric_type(OutputTypeInfo::data_type)));
+            (is_bool_type(OutputTypeInfo::data_type) || is_numeric_or_time_type(OutputTypeInfo::data_type)));
 }
 
 template<typename OutputTypeInfo>
 requires util::instantiation_of<OutputTypeInfo, ScalarTypeInfo>
 consteval bool is_aggregation_allowed(const AggregationOperator aggregation_operator) {
-    return is_numeric_type(OutputTypeInfo::data_type) || is_bool_type(OutputTypeInfo::data_type) ||
+    return is_numeric_or_time_type(OutputTypeInfo::data_type) || is_bool_type(OutputTypeInfo::data_type) ||
            (is_sequence_type(OutputTypeInfo::data_type) &&
             (aggregation_operator == AggregationOperator::FIRST || aggregation_operator == AggregationOperator::LAST));
 }
@@ -397,7 +397,7 @@ void SortedAggregator<aggregation_operator, closed_boundary>::check_aggregator_s
 ) const {
     schema::check<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
             (is_time_type(data_type) && aggregation_operator != AggregationOperator::SUM) ||
-                    (is_numeric_type(data_type) && !is_time_type(data_type)) || is_bool_type(data_type) ||
+                    is_numeric_type(data_type) || is_bool_type(data_type) ||
                     (is_sequence_type(data_type) && (aggregation_operator == AggregationOperator::FIRST ||
                                                      aggregation_operator == AggregationOperator::LAST ||
                                                      aggregation_operator == AggregationOperator::COUNT)),

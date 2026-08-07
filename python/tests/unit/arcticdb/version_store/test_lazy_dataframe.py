@@ -13,6 +13,7 @@ import pickle
 import pytest
 
 from arcticdb import col, LazyDataFrame, LazyDataFrameCollection, QueryBuilder, ReadRequest, where
+from arcticdb.exceptions import UserInputException
 import arcticdb.toolbox.query_stats as qs
 from arcticdb.util.test import assert_frame_equal, config_context, query_stats_operation_count
 
@@ -675,3 +676,68 @@ def test_lazy_batch_pickling(lmdb_library, any_output_format):
     received_roundtripped = roundtripped.collect()
     for vit in received_roundtripped:
         assert_frame_equal(expected, vit.data)
+
+
+@pytest.mark.parametrize(
+    "expression",
+    [
+        lambda lazy_df: lazy_df["dt"] < lazy_df["num"],
+        lambda lazy_df: lazy_df["num"] < lazy_df["dt"],
+        lambda lazy_df: lazy_df["dt"].isin([0, 1]),
+    ],
+)
+def test_lazy_collect_schema_rejects_mixed_time_numeric_filter(lmdb_library, expression):
+    lib = lmdb_library
+    sym = "test_lazy_collect_schema_rejects_mixed_time_numeric_filter"
+    lib.write(
+        sym,
+        pd.DataFrame({"dt": [pd.Timestamp("2000-01-01")], "num": np.array([0], dtype=np.int64)}),
+    )
+    lazy_df = lib.read(sym, lazy=True)
+    lazy_df = lazy_df[expression(lazy_df)]
+    with pytest.raises(UserInputException, match="Timestamp and numeric types cannot be mixed"):
+        lazy_df._collect_schema()
+
+
+@pytest.mark.parametrize(
+    "expression",
+    [
+        lambda lazy_df: lazy_df["dt"] * lazy_df["num"],
+        lambda lazy_df: lazy_df["num"] - lazy_df["dt"],
+        lambda lazy_df: where(lazy_df["cond"], lazy_df["dt"], lazy_df["num"]),
+    ],
+)
+def test_lazy_collect_schema_rejects_mixed_time_numeric_projection(lmdb_library, expression):
+    lib = lmdb_library
+    sym = "test_lazy_collect_schema_rejects_mixed_time_numeric_projection"
+    lib.write(
+        sym,
+        pd.DataFrame(
+            {"cond": [True], "dt": [pd.Timestamp("2000-01-01")], "num": np.array([0], dtype=np.int64)},
+        ),
+    )
+    lazy_df = lib.read(sym, lazy=True)
+    lazy_df = lazy_df.apply("projected", expression(lazy_df))
+    with pytest.raises(UserInputException, match="Timestamp and numeric types cannot be mixed"):
+        lazy_df._collect_schema()
+
+
+# The static layer must agree with the runtime layer on the output type, not just on what is rejected
+def test_lazy_collect_schema_datetime_offset_and_ternary(lmdb_library):
+    lib = lmdb_library
+    sym = "test_lazy_collect_schema_datetime_offset_and_ternary"
+    lib.write(
+        sym,
+        pd.DataFrame(
+            {"cond": [True], "dt1": [pd.Timestamp("2000-01-01")], "dt2": [pd.Timestamp("2001-01-01")]},
+        ),
+    )
+    lazy_df = lib.read(sym, lazy=True)
+    lazy_df = lazy_df.apply("offset", lazy_df["dt1"] + np.int64(1))
+    lazy_df = lazy_df.apply("chosen", where(lazy_df["cond"], lazy_df["dt1"], lazy_df["dt2"]))
+    schema = lazy_df._collect_schema()
+    assert schema["offset"] == pl.Datetime("ns")
+    assert schema["chosen"] == pl.Datetime("ns")
+    received = lazy_df.collect().data
+    assert received["offset"].dtype == np.dtype("datetime64[ns]")
+    assert received["chosen"].dtype == np.dtype("datetime64[ns]")

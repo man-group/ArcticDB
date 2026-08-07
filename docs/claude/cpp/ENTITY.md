@@ -76,7 +76,7 @@ Helper functions in `cpp/arcticdb/entity/types.hpp`:
 - `get_type_size(DataType)` - Returns byte size of type
 - `is_floating_point_type(DataType)` - Check if float type
 - `is_integer_type(DataType)` - Check if integer type
-- `is_numeric_type(DataType)` - Check if numeric (int or float)
+- `is_numeric_or_time_type(DataType)` - Check if int, float or nanosecond timestamp
 - `is_sequence_type(DataType)` - Check if string/array type
 
 ## Type Descriptors

@@ -75,6 +75,30 @@ inline std::string binary_operation_with_types_to_string(
 }
 
 template<typename Func>
+constexpr bool is_plus_operator = std::is_same_v<std::remove_reference_t<Func>, PlusOperator>;
+
+template<typename Func>
+constexpr bool is_minus_operator = std::is_same_v<std::remove_reference_t<Func>, MinusOperator>;
+
+// Adding or subtracting an integer from a timestamp is a nanosecond offset, and yields a timestamp. left and right are
+// in expression order: addition is commutative so the integer may be on either side, but subtraction needs the
+// timestamp on the left, as subtracting a timestamp from an integer is not a timestamp.
+template<typename Func, DataType left, DataType right, typename TargetType>
+constexpr bool is_offset_arithmetic =
+        (is_plus_operator<Func> || is_minus_operator<Func>) && is_time_offset_pair(left, right) &&
+        std::is_integral_v<TargetType> && (is_plus_operator<Func> || is_time_type(left));
+
+// data_type_from_raw_type would give INT64 for an offset result, as timestamp is int64_t
+template<typename Func, DataType left, DataType right, typename TargetType>
+constexpr DataType binary_arithmetic_output_type() {
+    if constexpr (is_offset_arithmetic<Func, left, right, TargetType>) {
+        return DataType::NANOSECONDS_UTC64;
+    } else {
+        return data_type_from_raw_type<TargetType>();
+    }
+}
+
+template<typename Func>
 VariantData binary_membership(const ColumnWithStrings& column_with_strings, ValueSet& value_set, Func&& func) {
     if (is_empty_type(column_with_strings.column_->type().data_type())) {
         if constexpr (std::is_same_v<std::remove_reference_t<Func>, IsInOperator>) {
@@ -128,8 +152,9 @@ VariantData binary_membership(const ColumnWithStrings& column_with_strings, Valu
                         user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
                                 "Binary membership '{}' not implemented for bools", func
                         );
-                    } else if constexpr (is_numeric_type(col_type_info::data_type) &&
-                                         is_numeric_type(val_set_type_info::data_type)) {
+                    } else if constexpr (numeric_or_time_types_compatible(
+                                                 col_type_info::data_type, val_set_type_info::data_type
+                                         )) {
                         using WideType = typename binary_operation_promoted_type<
                                 typename col_type_info::RawType,
                                 typename val_set_type_info::RawType,
@@ -156,6 +181,17 @@ VariantData binary_membership(const ColumnWithStrings& column_with_strings, Valu
                                         return func(static_cast<WideType>(input_value), *typed_value_set);
                                     }
                                 }
+                        );
+                    } else if constexpr (is_time_numeric_mismatch(
+                                                 col_type_info::data_type, val_set_type_info::data_type
+                                         )) {
+                        raise_time_numeric_mismatch(
+                                fmt::format("{}({}, set)", func, column_with_strings.column_name_),
+                                column_with_strings.column_name_,
+                                col_type_info::data_type,
+                                "the value set",
+                                val_set_type_info::data_type,
+                                MixedTimeNumericOp::COMPARE
                         );
                     } else {
                         user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
@@ -234,8 +270,9 @@ VariantData binary_comparator(const ColumnWithStrings& left, const ColumnWithStr
                             );
                         }
                 );
-            } else if constexpr ((is_numeric_type(left_type_info::data_type) &&
-                                  is_numeric_type(right_type_info::data_type)) ||
+            } else if constexpr (numeric_or_time_types_compatible(
+                                         left_type_info::data_type, right_type_info::data_type
+                                 ) ||
                                  (is_bool_type(left_type_info::data_type) && is_bool_type(right_type_info::data_type)
                                  )) {
                 using comp = typename arcticdb::
@@ -259,6 +296,15 @@ VariantData binary_comparator(const ColumnWithStrings& left, const ColumnWithStr
                                     static_cast<typename comp::right_type>(right_value)
                             );
                         }
+                );
+            } else if constexpr (is_time_numeric_mismatch(left_type_info::data_type, right_type_info::data_type)) {
+                raise_time_numeric_mismatch(
+                        binary_operation_column_name(left.column_name_, func, right.column_name_),
+                        left.column_name_,
+                        left_type_info::data_type,
+                        right.column_name_,
+                        right_type_info::data_type,
+                        MixedTimeNumericOp::COMPARE
                 );
             } else {
                 user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
@@ -326,8 +372,9 @@ VariantData binary_comparator(const ColumnWithStrings& column_with_strings, cons
                                     }
                                 }
                         );
-                    } else if constexpr ((is_numeric_type(col_type_info::data_type) &&
-                                          is_numeric_type(val_type_info::data_type)) ||
+                    } else if constexpr (numeric_or_time_types_compatible(
+                                                 col_type_info::data_type, val_type_info::data_type
+                                         ) ||
                                          (is_bool_type(col_type_info::data_type) &&
                                           is_bool_type(val_type_info::data_type))) {
                         using ColType = typename col_type_info::RawType;
@@ -367,6 +414,19 @@ VariantData binary_comparator(const ColumnWithStrings& column_with_strings, cons
                                 }
                         );
 
+                    } else if constexpr (is_time_numeric_mismatch(col_type_info::data_type, val_type_info::data_type)) {
+                        raise_time_numeric_mismatch(
+                                binary_operation_column_name(
+                                        column_with_strings.column_name_,
+                                        func,
+                                        val.to_string<typename val_type_info::RawType>()
+                                ),
+                                column_with_strings.column_name_,
+                                col_type_info::data_type,
+                                val.to_string<typename val_type_info::RawType>(),
+                                val_type_info::data_type,
+                                MixedTimeNumericOp::COMPARE
+                        );
                     } else {
                         user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
                                 "Invalid comparison {}",
@@ -490,7 +550,30 @@ VariantData binary_operator(const Value& left, const Value& right, Func&& func) 
         using left_type_info = ScalarTypeInfo<decltype(left_tag)>;
         details::visit_type(right.data_type(), [&](auto right_tag) {
             using right_type_info = ScalarTypeInfo<decltype(right_tag)>;
-            if constexpr (!is_numeric_type(left_type_info::data_type) || !is_numeric_type(right_type_info::data_type)) {
+            using TargetType = typename binary_operation_promoted_type<
+                    typename left_type_info::RawType,
+                    typename right_type_info::RawType,
+                    std::remove_reference_t<Func>>::type;
+            constexpr bool offset_arithmetic =
+                    is_offset_arithmetic<Func, left_type_info::data_type, right_type_info::data_type, TargetType>;
+            if constexpr (is_time_numeric_mismatch(left_type_info::data_type, right_type_info::data_type) &&
+                          !offset_arithmetic) {
+                raise_time_numeric_mismatch(
+                        binary_operation_column_name(
+                                left.to_string<typename left_type_info::RawType>(),
+                                func,
+                                right.to_string<typename right_type_info::RawType>()
+                        ),
+                        left.to_string<typename left_type_info::RawType>(),
+                        left_type_info::data_type,
+                        right.to_string<typename right_type_info::RawType>(),
+                        right_type_info::data_type,
+                        MixedTimeNumericOp::ARITHMETIC
+                );
+            } else if constexpr (!numeric_or_time_types_compatible(
+                                         left_type_info::data_type, right_type_info::data_type
+                                 ) &&
+                                 !offset_arithmetic) {
                 user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
                         "Non-numeric type provided to binary operation: {}",
                         binary_operation_with_types_to_string(
@@ -504,12 +587,13 @@ VariantData binary_operator(const Value& left, const Value& right, Func&& func) 
             }
             auto right_value = right.get<typename right_type_info::RawType>();
             auto left_value = left.get<typename left_type_info::RawType>();
-            using TargetType = typename binary_operation_promoted_type<
-                    typename left_type_info::RawType,
-                    typename right_type_info::RawType,
-                    std::remove_reference_t<Func>>::type;
             *output_value =
-                    Value{TargetType{func.apply(left_value, right_value)}, data_type_from_raw_type<TargetType>()};
+                    Value{TargetType{func.apply(left_value, right_value)},
+                          binary_arithmetic_output_type<
+                                  Func,
+                                  left_type_info::data_type,
+                                  right_type_info::data_type,
+                                  TargetType>()};
         });
     });
     return VariantData(std::move(output_value));
@@ -527,7 +611,26 @@ VariantData binary_operator(const ColumnWithStrings& left, const ColumnWithStrin
         using left_type_info = ScalarTypeInfo<decltype(left_tag)>;
         details::visit_type(right.column_->type().data_type(), [&](auto right_tag) {
             using right_type_info = ScalarTypeInfo<decltype(right_tag)>;
-            if constexpr (!is_numeric_type(left_type_info::data_type) || !is_numeric_type(right_type_info::data_type)) {
+            using TargetType = typename binary_operation_promoted_type<
+                    typename left_type_info::RawType,
+                    typename right_type_info::RawType,
+                    std::remove_reference_t<decltype(func)>>::type;
+            constexpr bool offset_arithmetic =
+                    is_offset_arithmetic<Func, left_type_info::data_type, right_type_info::data_type, TargetType>;
+            if constexpr (is_time_numeric_mismatch(left_type_info::data_type, right_type_info::data_type) &&
+                          !offset_arithmetic) {
+                raise_time_numeric_mismatch(
+                        binary_operation_column_name(left.column_name_, func, right.column_name_),
+                        left.column_name_,
+                        left_type_info::data_type,
+                        right.column_name_,
+                        right_type_info::data_type,
+                        MixedTimeNumericOp::ARITHMETIC
+                );
+            } else if constexpr (!numeric_or_time_types_compatible(
+                                         left_type_info::data_type, right_type_info::data_type
+                                 ) &&
+                                 !offset_arithmetic) {
                 user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
                         "Non-numeric column provided to binary operation: {}",
                         binary_operation_with_types_to_string(
@@ -535,11 +638,11 @@ VariantData binary_operator(const ColumnWithStrings& left, const ColumnWithStrin
                         )
                 );
             }
-            using TargetType = typename binary_operation_promoted_type<
-                    typename left_type_info::RawType,
-                    typename right_type_info::RawType,
-                    std::remove_reference_t<decltype(func)>>::type;
-            constexpr auto output_data_type = data_type_from_raw_type<TargetType>();
+            constexpr auto output_data_type = binary_arithmetic_output_type<
+                    Func,
+                    left_type_info::data_type,
+                    right_type_info::data_type,
+                    TargetType>();
             output_column = std::make_unique<Column>(make_scalar_type(output_data_type), Sparsity::PERMITTED);
             arcticdb::transform<
                     typename left_type_info::TDT,
@@ -571,7 +674,30 @@ VariantData binary_operator(const ColumnWithStrings& col, const Value& val, Func
         using col_type_info = ScalarTypeInfo<decltype(col_tag)>;
         details::visit_type(val.data_type(), [&](auto val_tag) {
             using val_type_info = ScalarTypeInfo<decltype(val_tag)>;
-            if constexpr (!is_numeric_type(col_type_info::data_type) || !is_numeric_type(val_type_info::data_type)) {
+            using TargetType = typename binary_operation_promoted_type<
+                    typename col_type_info::RawType,
+                    typename val_type_info::RawType,
+                    std::remove_reference_t<decltype(func)>>::type;
+            // arguments_reversed means the value is the left operand in the expression
+            constexpr auto expr_left = arguments_reversed ? val_type_info::data_type : col_type_info::data_type;
+            constexpr auto expr_right = arguments_reversed ? col_type_info::data_type : val_type_info::data_type;
+            constexpr bool offset_arithmetic = is_offset_arithmetic<Func, expr_left, expr_right, TargetType>;
+            if constexpr (is_time_numeric_mismatch(col_type_info::data_type, val_type_info::data_type) &&
+                          !offset_arithmetic) {
+                raise_time_numeric_mismatch(
+                        binary_operation_column_name(
+                                col.column_name_, func, val.to_string<typename val_type_info::RawType>()
+                        ),
+                        col.column_name_,
+                        col_type_info::data_type,
+                        val.to_string<typename val_type_info::RawType>(),
+                        val_type_info::data_type,
+                        MixedTimeNumericOp::ARITHMETIC
+                );
+            } else if constexpr (!numeric_or_time_types_compatible(
+                                         col_type_info::data_type, val_type_info::data_type
+                                 ) &&
+                                 !offset_arithmetic) {
                 std::string error_message;
                 user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
                         "Non-numeric type provided to binary operation: {}",
@@ -586,13 +712,10 @@ VariantData binary_operator(const ColumnWithStrings& col, const Value& val, Func
                 );
             }
             const auto& raw_value = val.get<typename val_type_info::RawType>();
-            using TargetType = typename binary_operation_promoted_type<
-                    typename col_type_info::RawType,
-                    typename val_type_info::RawType,
-                    std::remove_reference_t<decltype(func)>>::type;
             if constexpr (arguments_reversed) {
                 column_name = binary_operation_column_name(fmt::format("{}", raw_value), func, col.column_name_);
-                constexpr auto output_data_type = data_type_from_raw_type<TargetType>();
+                constexpr auto output_data_type =
+                        binary_arithmetic_output_type<Func, expr_left, expr_right, TargetType>();
                 output_column = std::make_unique<Column>(make_scalar_type(output_data_type), Sparsity::PERMITTED);
                 arcticdb::transform<typename col_type_info::TDT, ScalarTagType<DataTypeTag<output_data_type>>>(
                         *(col.column_),
@@ -603,7 +726,8 @@ VariantData binary_operator(const ColumnWithStrings& col, const Value& val, Func
                 );
             } else {
                 column_name = binary_operation_column_name(col.column_name_, func, fmt::format("{}", raw_value));
-                constexpr auto output_data_type = data_type_from_raw_type<TargetType>();
+                constexpr auto output_data_type =
+                        binary_arithmetic_output_type<Func, expr_left, expr_right, TargetType>();
                 output_column = std::make_unique<Column>(make_scalar_type(output_data_type), Sparsity::PERMITTED);
                 arcticdb::transform<typename col_type_info::TDT, ScalarTagType<DataTypeTag<output_data_type>>>(
                         *(col.column_),

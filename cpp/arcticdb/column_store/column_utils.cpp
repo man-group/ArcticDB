@@ -27,7 +27,7 @@ py::array array_at(const SegmentInMemory& frame, std::size_t col_pos) {
                 } else {
                     dtype = "O";
                 }
-            } else if constexpr ((is_numeric_type(data_type) || is_bool_type(data_type)) &&
+            } else if constexpr ((is_numeric_or_time_type(data_type) || is_bool_type(data_type)) &&
                                  tag.dimension() == Dimension::Dim0) {
                 constexpr auto dim = TypeTag::DimensionTag::value;
                 util::check(dim == Dimension::Dim0, "Only scalars supported, {}", data_type);
@@ -79,7 +79,7 @@ py::array array_at(const SegmentInMemory& frame, std::size_t col_pos) {
             } else {
                 dtype = "O";
             }
-        } else if constexpr ((is_numeric_type(data_type) || is_bool_type(data_type)) &&
+        } else if constexpr ((is_numeric_or_time_type(data_type) || is_bool_type(data_type)) &&
                              tag.dimension() == Dimension::Dim0) {
             constexpr auto dim = TypeTag::DimensionTag::value;
             util::check(dim == Dimension::Dim0, "Only scalars supported, {}", frame.field(col_pos));

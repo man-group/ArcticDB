@@ -71,10 +71,7 @@ StatsComparison stats_membership_comparator(const ColumnStatsValues& stats, Valu
             using SetTag = std::remove_reference_t<decltype(set_tag)>;
 
             // TODO add bool support once the bool PR is merged
-            // Monday: 8065794446 we should disallow comparing time types to non-time numeric types
-            // This is also wrong downstream in the rest of the processing pipeline
-            if constexpr ((is_numeric_type(StatsTag::data_type) || is_time_type(StatsTag::data_type)) &&
-                          (is_numeric_type(SetTag::data_type) || is_time_type(SetTag::data_type))) {
+            if constexpr (numeric_or_time_types_compatible(StatsTag::data_type, SetTag::data_type)) {
                 using StatsRawType = StatsTag::raw_type;
                 using SetRawType = SetTag::raw_type;
                 using comp = Comparable<StatsRawType, SetRawType>;

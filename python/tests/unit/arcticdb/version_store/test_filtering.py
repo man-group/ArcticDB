@@ -8,6 +8,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 
 from datetime import datetime
 from itertools import cycle
+import operator
 import math
 import numpy as np
 from packaging.version import Version
@@ -252,8 +253,7 @@ def test_filter_datetime_naive(lmdb_version_store_v1, any_output_format, column_
 
 @pytest.mark.parametrize("dtype", (np.int64, np.uint64, np.float64, np.float32))
 @pytest.mark.parametrize("flipped", (True, False))
-@pytest.mark.parametrize("function", ("__lt__", "__le__", "__eq__", "__ne__", "__gt__", "__ge__"))
-@pytest.mark.xfail(reason="Bug - see 8065794446")
+@pytest.mark.parametrize("function", (operator.lt, operator.le, operator.eq, operator.ne, operator.gt, operator.ge))
 def test_filter_datetime_col_against_numeric_value(
     dtype, flipped, function, lmdb_version_store_v1, any_output_format, column_stats_filtering_enabled_and_disabled
 ):
@@ -266,17 +266,16 @@ def test_filter_datetime_col_against_numeric_value(
     value = dtype(pd.Timestamp(1).value)
     q = QueryBuilder()
     if flipped:
-        q = q[getattr(value, function)(q["a"])]
+        q = q[function(value, q["a"])]
     else:
-        q = q[getattr(q["a"], function)(value)]
-    with pytest.raises(UserInputException):
+        q = q[function(q["a"], value)]
+    with pytest.raises(UserInputException, match="Timestamp and numeric types cannot be mixed"):
         lib.read(symbol, query_builder=q)
 
 
 @pytest.mark.parametrize("dtype", (np.int64, np.uint64, np.float64, np.float32))
 @pytest.mark.parametrize("flipped", (True, False))
-@pytest.mark.parametrize("function", ("__lt__", "__le__", "__eq__", "__ne__", "__gt__", "__ge__"))
-@pytest.mark.xfail(reason="Bug - see 8065794446")
+@pytest.mark.parametrize("function", (operator.lt, operator.le, operator.eq, operator.ne, operator.gt, operator.ge))
 def test_filter_numeric_col_against_datetime_value(
     dtype, flipped, function, lmdb_version_store_v1, any_output_format, column_stats_filtering_enabled_and_disabled
 ):
@@ -289,16 +288,15 @@ def test_filter_numeric_col_against_datetime_value(
     value = pd.Timestamp(1)
     q = QueryBuilder()
     if flipped:
-        q = q[getattr(value, function)(q["a"])]
+        q = q[function(value, q["a"])]
     else:
-        q = q[getattr(q["a"], function)(value)]
-    with pytest.raises(UserInputException):
+        q = q[function(q["a"], value)]
+    with pytest.raises(UserInputException, match="Timestamp and numeric types cannot be mixed"):
         lib.read(symbol, query_builder=q)
 
 
 @pytest.mark.parametrize("dtype", (np.int64, np.uint64, np.float64, np.float32))
 @pytest.mark.parametrize("function", ("isin", "isnotin"))
-@pytest.mark.xfail(reason="Bug - see 8065794446")
 def test_filter_datetime_against_numeric_isin(
     function, dtype, lmdb_version_store_v1, any_output_format, column_stats_filtering_enabled_and_disabled
 ):
@@ -310,13 +308,12 @@ def test_filter_datetime_against_numeric_isin(
     lib.create_column_stats_experimental(symbol)
     q = QueryBuilder()
     q = q[getattr(q["a"], function)([dtype(pd.Timestamp(1).value)])]
-    with pytest.raises(UserInputException):
+    with pytest.raises(UserInputException, match="Timestamp and numeric types cannot be mixed"):
         lib.read(symbol, query_builder=q)
 
 
 @pytest.mark.parametrize("dtype", (np.int64, np.uint64, np.float64, np.float32))
 @pytest.mark.parametrize("function", ("isin", "isnotin"))
-@pytest.mark.xfail(reason="Bug - see 8065794446")
 def test_filter_numeric_against_datetime_isin(
     function, dtype, lmdb_version_store_v1, any_output_format, column_stats_filtering_enabled_and_disabled
 ):
@@ -328,13 +325,31 @@ def test_filter_numeric_against_datetime_isin(
     lib.create_column_stats_experimental(symbol)
     q = QueryBuilder()
     q = q[getattr(q["a"], function)([pd.Timestamp(1)])]
-    with pytest.raises(UserInputException):
+    with pytest.raises(UserInputException, match="Timestamp and numeric types cannot be mixed"):
+        lib.read(symbol, query_builder=q)
+
+
+@pytest.mark.parametrize("dtype", (np.int64, np.uint64, np.float64, np.float32))
+@pytest.mark.parametrize("function", ("isin", "isnotin"))
+def test_filter_numeric_against_mixed_time_numeric_isin(
+    function, dtype, lmdb_version_store_v1, any_output_format, column_stats_filtering_enabled_and_disabled
+):
+    # A value set mixing a Timestamp with a plain number must be rejected rather than silently falling back to
+    # comparing the column against the Timestamp's raw nanosecond integer
+    lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol = "sym"
+    df = pd.DataFrame({"a": [0, 1]}, dtype=dtype)
+    lib.write(symbol, df)
+    lib.create_column_stats_experimental(symbol)
+    q = QueryBuilder()
+    with pytest.raises(UserInputException, match="Timestamp and numeric types cannot be mixed"):
+        q = q[getattr(q["a"], function)([pd.Timestamp(1), dtype(0)])]
         lib.read(symbol, query_builder=q)
 
 
 @pytest.mark.parametrize("dtype", (np.int64, np.uint64, np.float64, np.float32))
 @pytest.mark.parametrize("function", ("__lt__", "__le__", "__eq__", "__ne__", "__gt__", "__ge__"))
-@pytest.mark.xfail(reason="Bug - see 8065794446")
 def test_filter_datetime_col_against_numeric_col(
     dtype, function, lmdb_version_store_v1, any_output_format, column_stats_filtering_enabled_and_disabled
 ):
@@ -346,13 +361,12 @@ def test_filter_datetime_col_against_numeric_col(
     lib.create_column_stats_experimental(symbol)
     q = QueryBuilder()
     q = q[getattr(q["a"], function)(q["b"])]
-    with pytest.raises(UserInputException):
+    with pytest.raises(UserInputException, match="Timestamp and numeric types cannot be mixed"):
         lib.read(symbol, query_builder=q)
 
 
 @pytest.mark.parametrize("dtype", (np.int64, np.uint64, np.float64, np.float32))
 @pytest.mark.parametrize("function", ("__lt__", "__le__", "__eq__", "__ne__", "__gt__", "__ge__"))
-@pytest.mark.xfail(reason="Bug - see 8065794446")
 def test_filter_numeric_col_against_datetime_col(
     dtype, function, lmdb_version_store_v1, any_output_format, column_stats_filtering_enabled_and_disabled
 ):
@@ -364,7 +378,7 @@ def test_filter_numeric_col_against_datetime_col(
     lib.create_column_stats_experimental(symbol)
     q = QueryBuilder()
     q = q[getattr(q["a"], function)(q["b"])]
-    with pytest.raises(UserInputException):
+    with pytest.raises(UserInputException, match="Timestamp and numeric types cannot be mixed"):
         lib.read(symbol, query_builder=q)
 
 

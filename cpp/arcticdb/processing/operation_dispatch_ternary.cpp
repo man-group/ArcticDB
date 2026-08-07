@@ -166,14 +166,19 @@ VariantData ternary_operator(
                             right.column_name_
                     );
                 }
-            } else if constexpr ((is_numeric_type(left_type_info::data_type) &&
-                                  is_numeric_type(right_type_info::data_type)) ||
+            } else if constexpr (numeric_or_time_types_compatible(
+                                         left_type_info::data_type, right_type_info::data_type
+                                 ) ||
                                  (is_bool_type(left_type_info::data_type) && is_bool_type(right_type_info::data_type)
                                  )) {
                 using TargetType = typename ternary_operation_promoted_type<
                         typename left_type_info::RawType,
                         typename right_type_info::RawType>::type;
-                constexpr auto output_data_type = data_type_from_raw_type<TargetType>();
+                // timestamp is int64_t, so data_type_from_raw_type would give INT64 for two time columns
+                constexpr auto output_data_type =
+                        is_time_type(left_type_info::data_type) && is_time_type(right_type_info::data_type)
+                                ? DataType::NANOSECONDS_UTC64
+                                : data_type_from_raw_type<TargetType>();
                 output_column = std::make_unique<Column>(make_scalar_type(output_data_type), Sparsity::PERMITTED);
                 ternary_transform<
                         typename left_type_info::TDT,
@@ -186,6 +191,15 @@ VariantData ternary_operator(
                         [](bool condition, TargetType left_val, TargetType right_val) {
                             return condition ? left_val : right_val;
                         }
+                );
+            } else if constexpr (is_time_numeric_mismatch(left_type_info::data_type, right_type_info::data_type)) {
+                raise_time_numeric_mismatch(
+                        ternary_operation_column_name(left.column_name_, right.column_name_),
+                        left.column_name_,
+                        left_type_info::data_type,
+                        right.column_name_,
+                        right_type_info::data_type,
+                        MixedTimeNumericOp::TERNARY
                 );
             } else {
                 user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
@@ -261,13 +275,16 @@ VariantData ternary_operator(const util::BitSet& condition, const ColumnWithStri
                             "Ternary operator does not support fixed width string columns '{}'", col.column_name_
                     );
                 }
-            } else if constexpr ((is_numeric_type(col_type_info::data_type) && is_numeric_type(val_type_info::data_type)
-                                 ) ||
+            } else if constexpr (numeric_or_time_types_compatible(col_type_info::data_type, val_type_info::data_type) ||
                                  (is_bool_type(col_type_info::data_type) && is_bool_type(val_type_info::data_type))) {
                 using TargetType = typename ternary_operation_promoted_type<
                         typename col_type_info::RawType,
                         typename val_type_info::RawType>::type;
-                constexpr auto output_data_type = data_type_from_raw_type<TargetType>();
+                // timestamp is int64_t, so data_type_from_raw_type would give INT64 for a time column and time value
+                constexpr auto output_data_type =
+                        is_time_type(col_type_info::data_type) && is_time_type(val_type_info::data_type)
+                                ? DataType::NANOSECONDS_UTC64
+                                : data_type_from_raw_type<TargetType>();
                 output_column = std::make_unique<Column>(make_scalar_type(output_data_type), Sparsity::PERMITTED);
                 auto value = static_cast<TargetType>(val.get<typename val_type_info::RawType>());
                 value_string = fmt::format("{}", value);
@@ -282,6 +299,17 @@ VariantData ternary_operator(const util::BitSet& condition, const ColumnWithStri
                         [](bool condition, TargetType left_val, TargetType right_val) {
                             return condition ? left_val : right_val;
                         }
+                );
+            } else if constexpr (is_time_numeric_mismatch(col_type_info::data_type, val_type_info::data_type)) {
+                raise_time_numeric_mismatch(
+                        ternary_operation_column_name<arguments_reversed>(
+                                col.column_name_, val.to_string<typename val_type_info::RawType>()
+                        ),
+                        col.column_name_,
+                        col_type_info::data_type,
+                        val.to_string<typename val_type_info::RawType>(),
+                        val_type_info::data_type,
+                        MixedTimeNumericOp::TERNARY
                 );
             } else {
                 user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
@@ -319,8 +347,8 @@ VariantData ternary_operator(const util::BitSet& condition, const ColumnWithStri
 
     details::visit_type(col.column_->type().data_type(), [&](auto col_tag) {
         using col_type_info = ScalarTypeInfo<decltype(col_tag)>;
-        if constexpr (is_dynamic_string_type(col_type_info::data_type) || is_numeric_type(col_type_info::data_type) ||
-                      is_bool_type(col_type_info::data_type)) {
+        if constexpr (is_dynamic_string_type(col_type_info::data_type) ||
+                      is_numeric_or_time_type(col_type_info::data_type) || is_bool_type(col_type_info::data_type)) {
             if constexpr (is_dynamic_string_type(col_type_info::data_type)) {
                 // We do not need to construct a new string pool, as all the strings in the output column come from the
                 // input column
@@ -389,14 +417,19 @@ VariantData ternary_operator(const util::BitSet& condition, const Value& left, c
                             "Unexpected fixed-width string value in ternary operator"
                     );
                 }
-            } else if constexpr ((is_numeric_type(left_type_info::data_type) &&
-                                  is_numeric_type(right_type_info::data_type)) ||
+            } else if constexpr (numeric_or_time_types_compatible(
+                                         left_type_info::data_type, right_type_info::data_type
+                                 ) ||
                                  (is_bool_type(left_type_info::data_type) && is_bool_type(right_type_info::data_type)
                                  )) {
                 using TargetType = typename ternary_operation_promoted_type<
                         typename left_type_info::RawType,
                         typename right_type_info::RawType>::type;
-                constexpr auto output_data_type = data_type_from_raw_type<TargetType>();
+                // timestamp is int64_t, so data_type_from_raw_type would give INT64 for two time values
+                constexpr auto output_data_type =
+                        is_time_type(left_type_info::data_type) && is_time_type(right_type_info::data_type)
+                                ? DataType::NANOSECONDS_UTC64
+                                : data_type_from_raw_type<TargetType>();
                 output_column = std::make_unique<Column>(make_scalar_type(output_data_type), Sparsity::PERMITTED);
                 auto left_value = static_cast<TargetType>(left.get<typename left_type_info::RawType>());
                 auto right_value = static_cast<TargetType>(right.get<typename right_type_info::RawType>());
@@ -404,6 +437,18 @@ VariantData ternary_operator(const util::BitSet& condition, const Value& left, c
                 right_string = fmt::format("{}", right_value);
                 ternary_transform<ScalarTagType<DataTypeTag<output_data_type>>>(
                         condition, left_value, right_value, *output_column
+                );
+            } else if constexpr (is_time_numeric_mismatch(left_type_info::data_type, right_type_info::data_type)) {
+                raise_time_numeric_mismatch(
+                        ternary_operation_column_name(
+                                left.to_string<typename left_type_info::RawType>(),
+                                right.to_string<typename right_type_info::RawType>()
+                        ),
+                        left.to_string<typename left_type_info::RawType>(),
+                        left_type_info::data_type,
+                        right.to_string<typename right_type_info::RawType>(),
+                        right_type_info::data_type,
+                        MixedTimeNumericOp::TERNARY
                 );
             } else {
                 user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
@@ -443,7 +488,8 @@ VariantData ternary_operator(const util::BitSet& condition, const Value& val, Em
             ternary_transform<typename val_type_info::TDT, arguments_reversed>(
                     condition, offset_string.offset(), EmptyResult{}, *output_column
             );
-        } else if constexpr (is_numeric_type(val_type_info::data_type) || is_bool_type(val_type_info::data_type)) {
+        } else if constexpr (is_numeric_or_time_type(val_type_info::data_type) ||
+                             is_bool_type(val_type_info::data_type)) {
             using TargetType = val_type_info::RawType;
             output_column = std::make_unique<Column>(val.descriptor(), Sparsity::PERMITTED);
             auto value = static_cast<TargetType>(val.get<typename val_type_info::RawType>());

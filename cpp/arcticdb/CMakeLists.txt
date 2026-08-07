@@ -1109,6 +1109,7 @@ if(${TEST})
             processing/test/test_join_schemas.cpp
             processing/test/test_type_promotion.cpp
             processing/test/test_operation_dispatch.cpp
+            processing/test/test_operation_dispatch_ternary.cpp
             processing/test/test_output_schema_aggregator_types.cpp
             processing/test/test_output_schema_ast_validity.cpp
             processing/test/test_query_planner.cpp

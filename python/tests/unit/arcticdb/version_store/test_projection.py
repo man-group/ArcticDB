@@ -270,8 +270,7 @@ def test_project_pow_dynamic(lmdb_version_store_dynamic_schema_v1, any_output_fo
 
 
 @pytest.mark.parametrize("dtype", (np.int64, np.uint64, np.float64, np.float32))
-@pytest.mark.parametrize("op", ("__add__", "__sub__", "__mul__", "__truediv__"))
-@pytest.mark.xfail(reason="Bug - see 8065794446")
+@pytest.mark.parametrize("op", ("__mul__", "__truediv__", "__pow__"))
 def test_project_datetime_col_with_numeric_scalar(dtype, op, lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
     lib._set_output_format_for_pipeline_tests(any_output_format)
@@ -281,13 +280,12 @@ def test_project_datetime_col_with_numeric_scalar(dtype, op, lmdb_version_store_
     value = dtype(1)
     q = QueryBuilder()
     q = q.apply("result", getattr(q["a"], op)(value))
-    with pytest.raises(UserInputException):
+    with pytest.raises(UserInputException, match="Timestamp and numeric types cannot be mixed"):
         lib.read(symbol, query_builder=q)
 
 
 @pytest.mark.parametrize("dtype", (np.int64, np.uint64, np.float64, np.float32))
-@pytest.mark.parametrize("op", ("__add__", "__sub__", "__mul__", "__truediv__"))
-@pytest.mark.xfail(reason="Bug - see 8065794446")
+@pytest.mark.parametrize("op", ("__mul__", "__truediv__", "__pow__"))
 def test_project_numeric_col_with_datetime_scalar(dtype, op, lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
     lib._set_output_format_for_pipeline_tests(any_output_format)
@@ -297,13 +295,12 @@ def test_project_numeric_col_with_datetime_scalar(dtype, op, lmdb_version_store_
     value = pd.Timestamp(1)
     q = QueryBuilder()
     q = q.apply("result", getattr(q["a"], op)(value))
-    with pytest.raises(UserInputException):
+    with pytest.raises(UserInputException, match="Timestamp and numeric types cannot be mixed"):
         lib.read(symbol, query_builder=q)
 
 
 @pytest.mark.parametrize("dtype", (np.int64, np.uint64, np.float64, np.float32))
-@pytest.mark.parametrize("op", ("__add__", "__sub__", "__mul__", "__truediv__"))
-@pytest.mark.xfail(reason="Bug - see 8065794446")
+@pytest.mark.parametrize("op", ("__mul__", "__truediv__", "__pow__"))
 def test_project_datetime_col_with_numeric_col(dtype, op, lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
     lib._set_output_format_for_pipeline_tests(any_output_format)
@@ -312,13 +309,12 @@ def test_project_datetime_col_with_numeric_col(dtype, op, lmdb_version_store_v1,
     lib.write(symbol, df)
     q = QueryBuilder()
     q = q.apply("result", getattr(q["a"], op)(q["b"]))
-    with pytest.raises(UserInputException):
+    with pytest.raises(UserInputException, match="Timestamp and numeric types cannot be mixed"):
         lib.read(symbol, query_builder=q)
 
 
 @pytest.mark.parametrize("dtype", (np.int64, np.uint64, np.float64, np.float32))
-@pytest.mark.parametrize("op", ("__add__", "__sub__", "__mul__", "__truediv__"))
-@pytest.mark.xfail(reason="Bug - see 8065794446")
+@pytest.mark.parametrize("op", ("__mul__", "__truediv__", "__pow__"))
 def test_project_numeric_col_with_datetime_col(dtype, op, lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
     lib._set_output_format_for_pipeline_tests(any_output_format)
@@ -327,11 +323,114 @@ def test_project_numeric_col_with_datetime_col(dtype, op, lmdb_version_store_v1,
     lib.write(symbol, df)
     q = QueryBuilder()
     q = q.apply("result", getattr(q["a"], op)(q["b"]))
-    with pytest.raises(UserInputException):
+    with pytest.raises(UserInputException, match="Timestamp and numeric types cannot be mixed"):
         lib.read(symbol, query_builder=q)
 
 
-@pytest.mark.xfail(reason="Bug - see 8065794446")
+@pytest.mark.parametrize("dtype", (np.float64, np.float32))
+@pytest.mark.parametrize("op", ("__add__", "__sub__"))
+def test_project_datetime_col_with_float_offset(dtype, op, lmdb_version_store_v1, any_output_format):
+    lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol = "sym"
+    df = pd.DataFrame({"a": [pd.Timestamp(0), pd.Timestamp(1)]})
+    lib.write(symbol, df)
+    q = QueryBuilder()
+    q = q.apply("result", getattr(q["a"], op)(dtype(1)))
+    with pytest.raises(UserInputException, match="Timestamp and numeric types cannot be mixed"):
+        lib.read(symbol, query_builder=q)
+
+
+# A timedelta reaches the processing pipeline as a plain integer, so integer addition and subtraction must remain
+# permitted, and must produce a timestamp rather than the int64 the promoted raw type would imply
+@pytest.mark.parametrize("dtype", (np.int8, np.uint8, np.int64, np.uint64))
+@pytest.mark.parametrize("op", ("__add__", "__sub__"))
+def test_project_datetime_col_with_integer_offset_scalar(dtype, op, lmdb_version_store_v1, any_output_format):
+    lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol = "sym"
+    df = pd.DataFrame({"a": [pd.Timestamp("2000-01-01"), pd.Timestamp("2000-01-02")]})
+    lib.write(symbol, df)
+    q = QueryBuilder()
+    q = q.apply("result", getattr(q["a"], op)(dtype(1)))
+    received = lib.read(symbol, query_builder=q).data
+    expected = df.copy()
+    expected["result"] = getattr(df["a"], op)(pd.Timedelta(1, "ns"))
+    assert received["result"].dtype == np.dtype("datetime64[ns]")
+    assert_frame_equal(expected, received)
+
+
+@pytest.mark.parametrize("op", ("__add__", "__sub__"))
+def test_project_datetime_col_with_integer_offset_col(op, lmdb_version_store_v1, any_output_format):
+    lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol = "sym"
+    df = pd.DataFrame(
+        {"a": [pd.Timestamp("2000-01-01"), pd.Timestamp("2000-01-02")], "b": np.array([1, 2], dtype=np.int64)}
+    )
+    lib.write(symbol, df)
+    q = QueryBuilder()
+    q = q.apply("result", getattr(q["a"], op)(q["b"]))
+    received = lib.read(symbol, query_builder=q).data
+    expected = df.copy()
+    expected["result"] = getattr(df["a"], op)(df["b"].astype("timedelta64[ns]"))
+    assert received["result"].dtype == np.dtype("datetime64[ns]")
+    assert_frame_equal(expected, received)
+
+
+# Addition is commutative so the integer may be on either side, but an integer minus a timestamp is not a timestamp.
+# Pandas raises TypeError for this.
+@pytest.mark.parametrize("scalar", (True, False))
+def test_project_integer_minus_datetime_col(scalar, lmdb_version_store_v1, any_output_format):
+    lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol = "sym"
+    df = pd.DataFrame(
+        {"a": [pd.Timestamp("2000-01-01"), pd.Timestamp("2000-01-02")], "b": np.array([1, 2], dtype=np.int64)}
+    )
+    lib.write(symbol, df)
+    q = QueryBuilder()
+    q = q.apply("result", np.int64(5) - q["a"] if scalar else q["b"] - q["a"])
+    with pytest.raises(UserInputException, match="Timestamp and numeric types cannot be mixed"):
+        lib.read(symbol, query_builder=q)
+
+
+@pytest.mark.parametrize("scalar", (True, False))
+def test_project_integer_plus_datetime_col(scalar, lmdb_version_store_v1, any_output_format):
+    lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol = "sym"
+    df = pd.DataFrame(
+        {"a": [pd.Timestamp("2000-01-01"), pd.Timestamp("2000-01-02")], "b": np.array([1, 2], dtype=np.int64)}
+    )
+    lib.write(symbol, df)
+    q = QueryBuilder()
+    q = q.apply("result", np.int64(1) + q["a"] if scalar else q["b"] + q["a"])
+    received = lib.read(symbol, query_builder=q).data
+    expected = df.copy()
+    offset = pd.Timedelta(1, "ns") if scalar else df["b"].astype("timedelta64[ns]")
+    expected["result"] = df["a"] + offset
+    assert received["result"].dtype == np.dtype("datetime64[ns]")
+    assert_frame_equal(expected, received)
+
+
+def test_project_datetime_col_minus_datetime_col(lmdb_version_store_v1, any_output_format):
+    lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol = "sym"
+    df = pd.DataFrame(
+        {"a": [pd.Timestamp("2000-01-02"), pd.Timestamp("2000-01-04")], "b": [pd.Timestamp(0), pd.Timestamp(1)]}
+    )
+    lib.write(symbol, df)
+    q = QueryBuilder()
+    q = q.apply("result", q["a"] - q["b"])
+    received = lib.read(symbol, query_builder=q).data
+    # There is no duration type, so the nanosecond difference comes back as an integer
+    expected = df.copy()
+    expected["result"] = (df["a"] - df["b"]).astype("int64")
+    assert_frame_equal(expected, received)
+
+
 def test_project_abs_datetime_col(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
     lib._set_output_format_for_pipeline_tests(any_output_format)
@@ -340,11 +439,10 @@ def test_project_abs_datetime_col(lmdb_version_store_v1, any_output_format):
     lib.write(symbol, df)
     q = QueryBuilder()
     q = q.apply("result", abs(q["a"]))
-    with pytest.raises(UserInputException):
+    with pytest.raises(UserInputException, match="Cannot perform unary operation"):
         lib.read(symbol, query_builder=q)
 
 
-@pytest.mark.xfail(reason="Bug - see 8065794446")
 def test_project_neg_datetime_col(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
     lib._set_output_format_for_pipeline_tests(any_output_format)
@@ -353,7 +451,7 @@ def test_project_neg_datetime_col(lmdb_version_store_v1, any_output_format):
     lib.write(symbol, df)
     q = QueryBuilder()
     q = q.apply("result", -q["a"])
-    with pytest.raises(UserInputException):
+    with pytest.raises(UserInputException, match="Cannot perform unary operation"):
         lib.read(symbol, query_builder=q)
 
 

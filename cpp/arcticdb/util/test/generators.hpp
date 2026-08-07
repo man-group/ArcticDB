@@ -80,6 +80,16 @@ inline Column generate_int_column(size_t num_rows) {
     return column;
 }
 
+// Generates a nanosecond timestamp Column where the value in each row is equal to the row index
+inline Column generate_datetime_column(size_t num_rows) {
+    using TDT = TypeDescriptorTag<DataTypeTag<DataType::NANOSECONDS_UTC64>, DimensionTag<Dimension ::Dim0>>;
+    Column column(static_cast<TypeDescriptor>(TDT{}), 0, AllocationType::DYNAMIC, Sparsity::NOT_PERMITTED);
+    for (size_t idx = 0; idx < num_rows; ++idx) {
+        column.set_scalar<timestamp>(static_cast<ssize_t>(idx), static_cast<timestamp>(idx));
+    }
+    return column;
+}
+
 // Generates an int64_t Column where the value in one row out of two is equal to the row index
 inline Column generate_int_sparse_column(size_t num_rows) {
     using TDT = TypeDescriptorTag<DataTypeTag<DataType::INT64>, DimensionTag<Dimension ::Dim0>>;

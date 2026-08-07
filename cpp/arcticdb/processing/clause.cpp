@@ -189,7 +189,7 @@ std::vector<EntityId> ProjectClause::process(std::vector<EntityId>&& entity_ids)
                         const auto offset = string_pool->get(*val->str_data(), val->len()).offset();
                         auto data = output_column->ptr_cast<TargetType>(0, output_bytes);
                         std::fill_n(data, rows, offset);
-                    } else if constexpr (is_numeric_type(val_type_info::data_type) ||
+                    } else if constexpr (is_numeric_or_time_type(val_type_info::data_type) ||
                                          is_bool_type(val_type_info::data_type)) {
                         using TargetType = val_type_info::RawType;
                         auto value = static_cast<TargetType>(val->get<typename val_type_info::RawType>());

@@ -123,8 +123,10 @@ constexpr bool is_sequence_type(ValueType v) {
 constexpr bool is_time_type(ValueType v) { return uint8_t(v) == uint8_t(ValueType::NANOSECONDS_UTC); }
 
 constexpr bool is_numeric_type(ValueType v) {
-    return is_time_type(v) || (uint8_t(v) >= uint8_t(ValueType::UINT) && uint8_t(v) <= uint8_t(ValueType::FLOAT));
+    return uint8_t(v) >= uint8_t(ValueType::UINT) && uint8_t(v) <= uint8_t(ValueType::FLOAT);
 }
+
+constexpr bool is_numeric_or_time_type(ValueType v) { return is_numeric_type(v) || is_time_type(v); }
 
 constexpr bool is_floating_point_type(ValueType v) { return uint8_t(v) == uint8_t(ValueType::FLOAT); }
 
@@ -249,6 +251,10 @@ constexpr bool is_sequence_type(DataType v) { return is_sequence_type(slice_valu
 
 constexpr bool is_numeric_type(DataType v) { return is_numeric_type(slice_value_type(v)); }
 
+constexpr bool is_time_type(DataType v) { return is_time_type(slice_value_type(v)); }
+
+constexpr bool is_numeric_or_time_type(DataType v) { return is_numeric_type(v) || is_time_type(v); }
+
 constexpr bool is_bool_type(DataType dt) { return slice_value_type(dt) == ValueType::BOOL; }
 
 constexpr bool is_bool_object_type(DataType dt) { return slice_value_type(dt) == ValueType::BOOL_OBJECT; }
@@ -258,8 +264,6 @@ constexpr bool is_unsigned_type(DataType dt) { return slice_value_type(dt) == Va
 constexpr bool is_signed_type(DataType dt) { return slice_value_type(dt) == ValueType::INT; }
 
 constexpr bool is_floating_point_type(DataType v) { return is_floating_point_type(slice_value_type(v)); }
-
-constexpr bool is_time_type(DataType v) { return is_time_type(slice_value_type(v)); }
 
 constexpr bool is_integer_type(DataType v) { return is_integer_type(slice_value_type(v)); }
 
@@ -273,9 +277,42 @@ constexpr bool is_utf_type(DataType v) { return is_utf_type(slice_value_type(v))
 
 constexpr bool is_empty_type(DataType v) { return is_empty_type(slice_value_type(v)); }
 
+// Timestamps are stored as int64 nanosecond counts, so mixing them with plain numeric types compiles and silently
+// produces meaningless results. These two predicates gate the QueryBuilder expression pipeline against that.
+constexpr bool is_time_numeric_mismatch(DataType a, DataType b) {
+    return is_numeric_or_time_type(a) && is_numeric_or_time_type(b) && is_time_type(a) != is_time_type(b);
+}
+
+constexpr bool numeric_or_time_types_compatible(DataType a, DataType b) {
+    return is_numeric_or_time_type(a) && is_numeric_or_time_type(b) && !is_time_numeric_mismatch(a, b);
+}
+
+// There is no duration type, so a timedelta reaches the processing pipeline as a plain integer and cannot be told
+// apart from one. Adding or subtracting an integer from a timestamp is therefore permitted and treated as a
+// nanosecond offset. Restricted to integers so that the result is always representable as a timestamp.
+constexpr bool is_time_offset_pair(DataType a, DataType b) {
+    return (is_time_type(a) && is_integer_type(b)) || (is_integer_type(a) && is_time_type(b));
+}
+
 static_assert(slice_value_type(DataType::UINT16) == ValueType(1));
 static_assert(get_type_size(DataType::UINT32) == 4);
 static_assert(get_type_size(DataType::UINT64) == 8);
+
+static_assert(is_numeric_or_time_type(DataType::NANOSECONDS_UTC64));
+static_assert(!is_numeric_type(DataType::NANOSECONDS_UTC64));
+static_assert(is_numeric_type(DataType::INT64));
+static_assert(is_time_numeric_mismatch(DataType::NANOSECONDS_UTC64, DataType::INT64));
+static_assert(!is_time_numeric_mismatch(DataType::NANOSECONDS_UTC64, DataType::NANOSECONDS_UTC64));
+static_assert(!is_time_numeric_mismatch(DataType::NANOSECONDS_UTC64, DataType::UTF_DYNAMIC64));
+static_assert(numeric_or_time_types_compatible(DataType::NANOSECONDS_UTC64, DataType::NANOSECONDS_UTC64));
+static_assert(numeric_or_time_types_compatible(DataType::INT64, DataType::FLOAT32));
+static_assert(!numeric_or_time_types_compatible(DataType::NANOSECONDS_UTC64, DataType::INT64));
+static_assert(!numeric_or_time_types_compatible(DataType::EMPTYVAL, DataType::INT64));
+static_assert(is_time_offset_pair(DataType::NANOSECONDS_UTC64, DataType::INT64));
+static_assert(is_time_offset_pair(DataType::UINT8, DataType::NANOSECONDS_UTC64));
+static_assert(!is_time_offset_pair(DataType::NANOSECONDS_UTC64, DataType::FLOAT64));
+static_assert(!is_time_offset_pair(DataType::NANOSECONDS_UTC64, DataType::NANOSECONDS_UTC64));
+static_assert(!is_time_offset_pair(DataType::INT64, DataType::INT64));
 
 constexpr ValueType get_value_type(char specifier) noexcept {
     switch (specifier) {
@@ -461,7 +498,7 @@ constexpr bool must_contain_data(TypeDescriptor td) {
 /// @important Be sure to match this with the type handler registry in:
 /// cpp/arcticdb/python/python_module.cpp#register_type_handlers
 constexpr bool is_array_type(TypeDescriptor td) {
-    return (is_numeric_type(td.data_type()) || is_bool_type(td.data_type()) || is_empty_type(td.data_type())) &&
+    return (is_numeric_or_time_type(td.data_type()) || is_bool_type(td.data_type()) || is_empty_type(td.data_type())) &&
            (td.dimension() == Dimension::Dim1);
 }
 

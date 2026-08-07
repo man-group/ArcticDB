@@ -51,7 +51,7 @@ consteval auto all_data_types() {
 }
 
 consteval bool is_allowed_mean_input(const DataType dt) {
-    return is_numeric_type(dt) || is_bool_type(dt) || is_empty_type(dt);
+    return is_numeric_or_time_type(dt) || is_bool_type(dt) || is_empty_type(dt);
 }
 
 consteval auto allowed_mean_input_types() {

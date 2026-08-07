@@ -450,7 +450,7 @@ void MaxAggregatorData::add_data_type(DataType data_type) { add_data_type_impl(d
 
 DataType MaxAggregatorData::get_output_data_type() {
     schema::check<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
-            is_numeric_type(*data_type_) || is_bool_type(*data_type_) || is_empty_type(*data_type_),
+            is_numeric_or_time_type(*data_type_) || is_bool_type(*data_type_) || is_empty_type(*data_type_),
             "Max aggregation not supported with type {}",
             *data_type_
     );
@@ -479,7 +479,7 @@ void MinAggregatorData::add_data_type(DataType data_type) { add_data_type_impl(d
 
 DataType MinAggregatorData::get_output_data_type() {
     schema::check<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
-            is_numeric_type(*data_type_) || is_bool_type(*data_type_) || is_empty_type(*data_type_),
+            is_numeric_or_time_type(*data_type_) || is_bool_type(*data_type_) || is_empty_type(*data_type_),
             "Min aggregation not supported with type {}",
             *data_type_
     );
@@ -506,7 +506,7 @@ std::optional<Value> MinAggregatorData::get_default_value() { return {}; }
 
 void MeanAggregatorData::add_data_type(DataType data_type) {
     schema::check<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
-            is_numeric_type(data_type) || is_bool_type(data_type) || is_empty_type(data_type),
+            is_numeric_or_time_type(data_type) || is_bool_type(data_type) || is_empty_type(data_type),
             "Mean aggregation not supported with type {}",
             data_type
     );

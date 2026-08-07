@@ -1038,6 +1038,160 @@ def test_filter_ternary_invalid_arguments(lmdb_version_store_v1, any_output_form
         lib.read(symbol, query_builder=q)
 
 
+@pytest.fixture
+def ternary_datetime_sym(lmdb_version_store_v1):
+    df = pd.DataFrame(
+        {
+            "conditional": [True, False, True],
+            "dt1": [pd.Timestamp("2000-01-01"), pd.Timestamp("2000-01-02"), pd.Timestamp("2000-01-03")],
+            "dt2": [pd.Timestamp("2001-01-01"), pd.Timestamp("2001-01-02"), pd.Timestamp("2001-01-03")],
+            "numeric": np.array([0, 1, 2], dtype=np.int64),
+        }
+    )
+    symbol = "ternary_datetime_sym"
+    lmdb_version_store_v1.write(symbol, df)
+    return symbol, df
+
+
+@pytest.mark.parametrize("flipped", (True, False))
+def test_project_ternary_datetime_col_numeric_col(
+    ternary_datetime_sym, flipped, lmdb_version_store_v1, any_output_format
+):
+    lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol, _ = ternary_datetime_sym
+    q = QueryBuilder()
+    args = ("numeric", "dt1") if flipped else ("dt1", "numeric")
+    q = q.apply("projected", where(q["conditional"], q[args[0]], q[args[1]]))
+    with pytest.raises(UserInputException, match="Timestamp and numeric types cannot be mixed"):
+        lib.read(symbol, query_builder=q)
+
+
+@pytest.mark.parametrize("flipped", (True, False))
+def test_project_ternary_datetime_col_numeric_value(
+    ternary_datetime_sym, flipped, lmdb_version_store_v1, any_output_format
+):
+    lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol, _ = ternary_datetime_sym
+    q = QueryBuilder()
+    q = q.apply("projected", where(q["conditional"], 0, q["dt1"]) if flipped else where(q["conditional"], q["dt1"], 0))
+    with pytest.raises(UserInputException, match="Timestamp and numeric types cannot be mixed"):
+        lib.read(symbol, query_builder=q)
+
+
+@pytest.mark.parametrize("value", (1.5, np.float32(1.5)))
+def test_project_ternary_datetime_col_float_value(
+    ternary_datetime_sym, value, lmdb_version_store_v1, any_output_format
+):
+    lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol, _ = ternary_datetime_sym
+    q = QueryBuilder()
+    q = q.apply("projected", where(q["conditional"], q["dt1"], value))
+    with pytest.raises(UserInputException, match="Timestamp and numeric types cannot be mixed"):
+        lib.read(symbol, query_builder=q)
+
+
+def test_project_ternary_datetime_value_numeric_value(lmdb_version_store_v1, any_output_format):
+    lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol = "test_project_ternary_datetime_value_numeric_value"
+    lib.write(symbol, pd.DataFrame({"conditional": [True, False]}))
+    q = QueryBuilder()
+    q = q.apply("projected", where(q["conditional"], pd.Timestamp("2000-01-01"), 0))
+    with pytest.raises(UserInputException, match="Timestamp and numeric types cannot be mixed"):
+        lib.read(symbol, query_builder=q)
+
+
+@pytest.mark.parametrize("flipped", (True, False))
+def test_project_ternary_datetime_value_numeric_col(
+    ternary_datetime_sym, flipped, lmdb_version_store_v1, any_output_format
+):
+    lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol, _ = ternary_datetime_sym
+    value = pd.Timestamp("2000-01-01")
+    q = QueryBuilder()
+    q = q.apply(
+        "projected",
+        where(q["conditional"], q["numeric"], value) if flipped else where(q["conditional"], value, q["numeric"]),
+    )
+    with pytest.raises(UserInputException, match="Timestamp and numeric types cannot be mixed"):
+        lib.read(symbol, query_builder=q)
+
+
+# Both branches being timestamps must keep working, and must produce a datetime64 column rather than the int64 that
+# the promoted raw type would imply
+def test_project_ternary_datetime_col_col(ternary_datetime_sym, lmdb_version_store_v1, any_output_format):
+    lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol, df = ternary_datetime_sym
+    q = QueryBuilder()
+    q = q.apply("projected", where(q["conditional"], q["dt1"], q["dt2"]))
+    received = lib.read(symbol, query_builder=q).data
+    expected = df.copy(deep=True)
+    expected["projected"] = np.where(df["conditional"].to_numpy(), df["dt1"], df["dt2"])
+    assert received["projected"].dtype == np.dtype("datetime64[ns]")
+    assert_frame_equal(expected, received)
+
+
+@pytest.mark.parametrize("flipped", (True, False))
+def test_project_ternary_datetime_col_value(ternary_datetime_sym, flipped, lmdb_version_store_v1, any_output_format):
+    lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol, df = ternary_datetime_sym
+    value = pd.Timestamp("2002-06-05")
+    q = QueryBuilder()
+    q = q.apply(
+        "projected",
+        where(q["conditional"], value, q["dt1"]) if flipped else where(q["conditional"], q["dt1"], value),
+    )
+    received = lib.read(symbol, query_builder=q).data
+    expected = df.copy(deep=True)
+    # np.where with a Series and a scalar Timestamp loses the datetime64 dtype
+    if flipped:
+        expected["projected"] = df["dt1"].where(~df["conditional"], value)
+    else:
+        expected["projected"] = df["dt1"].where(df["conditional"], value)
+    assert received["projected"].dtype == np.dtype("datetime64[ns]")
+    assert_frame_equal(expected, received)
+
+
+def test_project_ternary_datetime_value_value(lmdb_version_store_v1, any_output_format):
+    lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol = "test_project_ternary_datetime_value_value"
+    df = pd.DataFrame({"conditional": [True, False]})
+    lib.write(symbol, df)
+    left = pd.Timestamp("2000-01-01")
+    right = pd.Timestamp("2001-01-01")
+    q = QueryBuilder()
+    q = q.apply("projected", where(q["conditional"], left, right))
+    received = lib.read(symbol, query_builder=q).data
+    expected = df.copy(deep=True)
+    expected["projected"] = np.where(df["conditional"].to_numpy(), left, right)
+    assert received["projected"].dtype == np.dtype("datetime64[ns]")
+    assert_frame_equal(expected, received)
+
+
+# Only one branch is a real operand under dynamic schema, so there is nothing to mismatch against
+def test_project_ternary_datetime_dynamic_missing_column(lmdb_version_store_dynamic_schema_v1, any_output_format):
+    lib = lmdb_version_store_dynamic_schema_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol = "test_project_ternary_datetime_dynamic_missing_column"
+    df_0 = pd.DataFrame(
+        {"conditional": [True, False], "dt1": [pd.Timestamp("2000-01-01"), pd.Timestamp("2000-01-02")]}, index=[0, 1]
+    )
+    df_1 = pd.DataFrame({"conditional": [True, False]}, index=[2, 3])
+    lib.write(symbol, df_0)
+    lib.append(symbol, df_1)
+    q = QueryBuilder()
+    q = q.apply("projected", where(q["conditional"], q["dt1"], q["dt1"]))
+    received = lib.read(symbol, query_builder=q).data
+    assert received["projected"].dtype == np.dtype("datetime64[ns]")
+
+
 def test_filter_ternary_pythonic_syntax():
     q = QueryBuilder()
     with pytest.raises(UserInputException):

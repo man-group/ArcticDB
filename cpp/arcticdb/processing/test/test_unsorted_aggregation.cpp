@@ -35,7 +35,7 @@ TEST_P(UnsortedAggregationDataTypeParametrizationFixture, Sum) {
 TEST_P(UnsortedAggregationDataTypeParametrizationFixture, Mean) {
     MeanAggregatorData aggregator_data;
     const DataType dt = GetParam();
-    if (!(is_numeric_type(dt) || is_bool_type(dt) || is_empty_type(dt))) {
+    if (!(is_numeric_or_time_type(dt) || is_bool_type(dt) || is_empty_type(dt))) {
         ASSERT_THROW(aggregator_data.add_data_type(dt), SchemaException);
     } else {
         aggregator_data.add_data_type(dt);
