@@ -11,6 +11,7 @@
 #include <arcticdb/util/magic_num.hpp>
 
 #include <bitmagic/bm.h>
+#include <bitmagic/bmalgo.h>
 
 namespace arcticdb {
 
@@ -22,6 +23,23 @@ using BitMagicStart = SmallMagicNum<'M', 's'>;
 using BitMagicEnd = SmallMagicNum<'M', 'e'>;
 using BitSetSizeType = bm::bvector<>::size_type;
 using BitIndex = bm::bvector<>::rs_index_type;
+
+template<typename functor>
+struct BitSetVisitor {
+    functor& f;
+    int add_bits(BitSet::size_type off, const unsigned char* bits, unsigned n) {
+        for (unsigned i = 0; i < n; ++i) {
+            f(off + bits[i]);
+        }
+        return 0;
+    }
+    int add_range(BitSet::size_type off, BitSet::size_type n) {
+        for (BitSet::size_type i = 0; i < n; ++i) {
+            f(off + i);
+        }
+        return 0;
+    }
+};
 
 /// @brief Get the combined size of the magic words used as delimiters for the sparse bitmaps
 /// When sparse bitmaps are encoded we use two different magic words to mark the start and the end of the bitmap
@@ -50,10 +68,20 @@ void copy_packed_bits(const uint8_t* src, size_t src_bit_offset, size_t num_bits
 template<typename functor>
 requires std::is_invocable_r_v<void, functor, size_t>
 void iterate_over_set_positions(const bm::bvector<>& bv, size_t from, size_t to, functor&& f) {
-    // TODO: Investigate performance of `get_enumerator`. Maybe having an rs_index can speed it up.
-    for (auto en = bv.get_enumerator(from); *en < to; ++en) {
-        f(*en);
+    util::check(to >= from, "Invalid bit set iteration range: from {} to {}", from, to);
+    if (from == to) {
+        return;
     }
+    util::BitSetVisitor visitor{f};
+    // the range that bitmagic requires is inclusive
+    bm::for_each_bit_range(bv, from, to - 1, visitor);
+}
+
+template<typename functor>
+requires std::is_invocable_r_v<void, functor, size_t>
+void iterate_over_set_positions(const bm::bvector<>& bv, functor&& f) {
+    util::BitSetVisitor visitor{f};
+    bm::for_each_bit(bv, visitor);
 }
 
 } // namespace arcticdb
