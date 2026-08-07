@@ -8,7 +8,7 @@ Every option on this page can be configured either in code or by an environment 
 options; the exceptions are noted in each option's own section, and log levels, which are explained in their own
 section. Each option has a fixed type, and you must use the setter matching that type.
 
-The values of string options are case-sensitive (e.g. `md5`, not `MD5`); an unrecognised value falls back to the option's default. Option names are not case-sensitive.
+The values of string options are case-sensitive (e.g. `md5`, not `MD5`). Each option's own section lists the values it accepts; setting anything else raises `UserInputException` when the option is used. Option names are not case-sensitive.
 
 ### In code
 
@@ -82,6 +82,9 @@ This is a string option, so it is set with `set_config_string` or `ARCTICDB_S3St
 Values:
 * `crc64nvme`: Send the SDK's default crc64nvme checksum (Default).
 * `md5`: Send md5 checksum instead.
+
+Any other value, including a differently cased `MD5` or `CRC64NVME`, raises `UserInputException` on the first
+`DeleteObjects` request rather than silently falling back to the default.
 
 !!! warning "Has no effect in `when_supported` checksum mode"
 

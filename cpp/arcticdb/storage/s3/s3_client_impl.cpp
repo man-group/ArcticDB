@@ -198,7 +198,8 @@ bool delete_objects_request_use_md5_checksum() {
         return true;
     }
     throw ArcticSpecificException<ErrorCode::E_INVALID_USER_ARGUMENT>(fmt::format(
-            "Invalid S3Storage.DeleteObjectsChecksum '{}'. Valid values are 'crc64nvme' and 'md5'.", setting));
+            "Invalid S3Storage.DeleteObjectsChecksum '{}'. Valid values are 'crc64nvme' and 'md5'.", setting
+    ));
 }
 
 struct ChecksumConfigurableDeleteObjectsRequest : public Aws::S3::Model::DeleteObjectsRequest {

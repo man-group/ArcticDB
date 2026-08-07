@@ -797,7 +797,10 @@ class HostDispatcherApplication(DomainDispatcherApplication):
                 return [b"Access key enforcement set"]
 
             # Allow toggling the Content-MD5-only batch delete behaviour (body "1" to enable, "0" to disable)
-            if path_info in ("/require_md5_checksum_on_delete_objs_request", b"/require_md5_checksum_on_delete_objs_request"):
+            if path_info in (
+                "/require_md5_checksum_on_delete_objs_request",
+                b"/require_md5_checksum_on_delete_objs_request",
+            ):
                 length = int(environ["CONTENT_LENGTH"])
                 body = environ["wsgi.input"].read(length).decode("ascii")
                 self._require_md5_checksum_on_delete_objs_request = bool(int(body))

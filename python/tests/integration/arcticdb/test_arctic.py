@@ -1493,7 +1493,7 @@ def test_s3_checksum_off_by_env_var(s3_storage, lib_name, multiprocess):
 @pytest.mark.parametrize("env_var", ["AWS_RESPONSE_CHECKSUM_VALIDATION", "AWS_REQUEST_CHECKSUM_CALCULATION"])
 def test_s3_checksum_on_by_env_var(s3_storage, lib_name, monkeypatch, route_env_to_extension, env_var):
     monkeypatch.setenv(env_var, "when_supported")
-    with pytest.raises(StorageException): # moto is set to reject checksum header
+    with pytest.raises(StorageException):  # moto is set to reject checksum header
         create_library(s3_storage.arctic_uri, lib_name)
 
 
@@ -1532,7 +1532,6 @@ def test_s3_delete_survives_md5_only_backend(s3_storage, lib_name, checksum):
         requests.post(endpoint + "/require_md5_checksum_on_delete_objs_request", b"0", verify=verify).raise_for_status()
 
 
-
 @pytest.mark.parametrize("checksum_setting", [("when_supported", None), (None, "when_supported")])
 def test_s3_delete_objects_checksum_no_effect_in_when_supported_mode(
     s3_storage, lib_name, monkeypatch, route_env_to_extension, checksum_setting
@@ -1568,6 +1567,19 @@ def test_s3_delete_objects_checksum_no_effect_in_when_supported_mode(
     finally:
         requests.post(endpoint + "/require_md5_checksum_on_delete_objs_request", b"0", verify=verify).raise_for_status()
         requests.post(endpoint + "/reject_checksum_mode", b"1", verify=verify).raise_for_status()
+
+
+@pytest.mark.parametrize("checksum", ["MD5", "CRC64NVME", "crc32", "sha256"])
+def test_s3_delete_objects_checksum_invalid_value(s3_storage, lib_name, checksum):
+    create_library(s3_storage.arctic_uri, lib_name)
+    lib = Arctic(s3_storage.arctic_uri)[lib_name]
+    for i in range(3):
+        lib._nvs.write("test", i)
+    lt = lib._nvs.library_tool()
+    with config_context_string("S3Storage.DeleteObjectsChecksum", checksum):
+        with pytest.raises(UserInputException, match="DeleteObjectsChecksum"):
+            lib.delete("test", versions=[0, 1])
+    assert len(lt.find_keys(KeyType.TABLE_INDEX)) == 3
 
 
 @REAL_S3_TESTS_MARK
