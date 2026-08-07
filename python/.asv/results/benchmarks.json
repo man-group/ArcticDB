@@ -2908,7 +2908,9 @@
                 "(5000000, 3)"
             ],
             [
-                "'update'"
+                "'update'",
+                "'insert'",
+                "'update_and_insert'"
             ],
             [
                 "1"
@@ -2940,7 +2942,9 @@
                 "(5000000, 3)"
             ],
             [
-                "'update'"
+                "'update'",
+                "'insert'",
+                "'update_and_insert'"
             ],
             [
                 "1"
@@ -3065,7 +3069,9 @@
                 "(1000000, 3)"
             ],
             [
-                "'update'"
+                "'update'",
+                "'insert'",
+                "'update_and_insert'"
             ],
             [
                 "2"
@@ -3102,7 +3108,9 @@
                 "(1000000, 3)"
             ],
             [
-                "'update'"
+                "'update'",
+                "'insert'",
+                "'update_and_insert'"
             ],
             [
                 "2"
@@ -3210,7 +3218,9 @@
                 "(5000, 10000)"
             ],
             [
-                "'update'"
+                "'update'",
+                "'insert'",
+                "'update_and_insert'"
             ],
             [
                 "1",
@@ -3242,7 +3252,9 @@
                 "(5000, 10000)"
             ],
             [
-                "'update'"
+                "'update'",
+                "'insert'",
+                "'update_and_insert'"
             ],
             [
                 "1",
