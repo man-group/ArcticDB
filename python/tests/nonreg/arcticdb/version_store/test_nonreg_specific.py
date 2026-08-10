@@ -329,6 +329,7 @@ def test_date_range_multi_index(lmdb_version_store):
         "batch_write",
         "batch_append",
         "batch_write_metadata",
+        "batch_compact_data",
     ),
 )
 @pytest.mark.parametrize("lib_config", (True, False))
@@ -350,12 +351,12 @@ def test_prune_previous_general(version_store_factory, monkeypatch, method, lib_
 
     df_1 = pd.DataFrame({"col": np.arange(10)}, index=pd.date_range("2024-01-11", periods=10))
     arg_0 = [sym] if method.startswith("batch") else sym
-    if method.startswith("batch"):
-        arg_1 = [df_1]
-    elif method == "compact_data":
+    if method.endswith("compact_data"):
         # Prune previous on this call so that we start with 1 index key for the method under test
         lib.append(sym, df_1, prune_previous_version=True)
         arg_1 = 100_000  # rows_per_segment
+    elif method.startswith("batch"):
+        arg_1 = [df_1]
     else:
         arg_1 = df_1
     getattr(lib, method)(arg_0, arg_1, prune_previous_version=arg)

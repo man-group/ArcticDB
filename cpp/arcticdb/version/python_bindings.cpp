@@ -769,6 +769,10 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                  &PythonVersionStore::compact_data,
                  py::call_guard<SingleThreadMutexHolder>(),
                  "Compact data segments")
+            .def("_batch_compact_data",
+                 &PythonVersionStore::batch_compact_data,
+                 py::call_guard<SingleThreadMutexHolder>(),
+                 "Compact data segments for multiple symbols")
             .def("is_symbol_fragmented",
                  &PythonVersionStore::is_symbol_fragmented,
                  py::call_guard<SingleThreadMutexHolder>(),

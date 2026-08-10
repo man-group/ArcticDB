@@ -332,6 +332,11 @@ class LocalVersionedEngine : public VersionedEngine {
             const StreamId& stream_id, std::optional<uint64_t> rows_per_segment, bool prune_previous_versions
     ) override;
 
+    std::vector<std::variant<VersionedItem, DataError>> batch_compact_data_internal(
+            const std::vector<StreamId>& stream_ids, std::optional<uint64_t> rows_per_segment,
+            bool prune_previous_versions, bool throw_on_error
+    ) override;
+
     bool is_symbol_fragmented(const StreamId& stream_id, std::optional<size_t> segment_size) override;
 
     VersionedItem defragment_symbol_data(
@@ -453,7 +458,6 @@ class LocalVersionedEngine : public VersionedEngine {
     void add_to_symbol_list_on_compaction(
             const StreamId& stream_id, const CompactIncompleteParameters& parameters, const UpdateInfo& update_info
     );
-    UpdateInfo compact_data_preamble(const StreamId& stream_id);
 
     // Per-symbol modification pipelines shared by the single-symbol and batch entry points. Each takes the resolved
     // update_info, produces the new index key, and writes it to the version map. The single-symbol methods obtain
