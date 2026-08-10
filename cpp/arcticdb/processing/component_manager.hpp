@@ -37,11 +37,16 @@ struct MergeUpdateInsertedRowsComponent {
     size_t inserted_rows = 0;
 };
 
+/// Used only by the MergeUpdateClause, and only for row-count indexed targets. After the pipeline finishes,
+/// write_inserted_row_range_data (via source_rows_to_insert_for_row_range_merge_update) intersects this component
+/// across *all* entities that carry it to decide which source rows to append. If any other piece of code adds this
+/// component the intersection will silently drop bits and rows will not be inserted. All instances added within a
+/// single merge must have the same size.
 struct MergeUpdateNotMatchedSourceRowsComponent {
     MergeUpdateNotMatchedSourceRowsComponent() = default;
     MergeUpdateNotMatchedSourceRowsComponent(std::shared_ptr<util::BitSet> unmatched_source_rows) :
         unmatched_source_rows(std::move(unmatched_source_rows)) {}
-    operator util::BitSet&() const { return *unmatched_source_rows; }
+    operator util::BitSet&() { return *unmatched_source_rows; }
     std::shared_ptr<util::BitSet> unmatched_source_rows;
 };
 

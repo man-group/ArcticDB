@@ -2642,6 +2642,7 @@ class TestMergeRowrangeCommon:
         assert_vit_equals_except_data(merge_vit, read_vit)
 
         lt = lib._dev_tools.library_tool()
+        # +1 for the never-pruned v0 key, +1 per write path exercised (UPDATE rewrites in place, INSERT appends).
         expected_data_keys = (
             3 if strategy.not_matched_by_target == MergeAction.INSERT and strategy.matched == MergeAction.UPDATE else 2
         )
@@ -3025,13 +3026,18 @@ class TestMergeRowrangeInsert:
     def setup_method(self):
         self.strategy = MergeStrategy(MergeAction.DO_NOTHING, MergeAction.INSERT)
 
-    def test_basic_append_unmatched(self, lmdb_library):
-        lib = lmdb_library
+    def test_basic_append_unmatched(self, in_memory_store_factory):
+        lib = in_memory_store_factory()
         target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]})
         # a=1 matches (do_nothing leaves it untouched), a=99 and a=100 are unmatched and appended in source order.
         source = pd.DataFrame({"a": [1, 99, 100], "b": [10.0, 99.0, 100.0]})
         lib.write("sym", target)
-        lib.merge_experimental("sym", source, strategy=self.strategy, on=["a"])
+        qs.reset_stats()
+        with qs.query_stats():
+            lib.merge_experimental("sym", source, strategy=self.strategy, on=["a"])
+        stats = qs.get_query_stats()
+        # a single-column-slice target's unmatched rows are appended as exactly one new data segment.
+        assert query_stats_operation_count(stats, "Memory_PutObject", "TABLE_DATA") == 1
         expected = pd.DataFrame({"a": [1, 2, 3, 99, 100], "b": [1.0, 2.0, 3.0, 99.0, 100.0]})
         assert_frame_equal(lib.read("sym").data, expected)
 
@@ -3108,13 +3114,18 @@ class TestMergeRowrangeUpdateAndInsert:
     def setup_method(self):
         self.strategy = MergeStrategy(MergeAction.UPDATE, MergeAction.INSERT)
 
-    def test_update_matched_and_append_unmatched(self, lmdb_library):
-        lib = lmdb_library
+    def test_update_matched_and_append_unmatched(self, in_memory_store_factory):
+        lib = in_memory_store_factory(dynamic_strings=True)
         target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0], "c": ["x", "y", "z"]})
         source = pd.DataFrame({"a": [1, 99, 3, 100], "b": [10.0, 99.0, 30.0, 100.0], "c": ["X", "N", "Z", "M"]})
         # a=1 updates row 0, a=3 updates row 2; a=99 and a=100 are unmatched and appended in source order.
         lib.write("sym", target)
-        lib.merge_experimental("sym", source, strategy=self.strategy, on=["a"])
+        qs.reset_stats()
+        with qs.query_stats():
+            lib.merge_experimental("sym", source, strategy=self.strategy, on=["a"])
+        stats = qs.get_query_stats()
+        # update one segment in place and append one segment for insertion
+        assert query_stats_operation_count(stats, "Memory_PutObject", "TABLE_DATA") == 2
         expected = pd.DataFrame(
             {
                 "a": [1, 2, 3, 99, 100],

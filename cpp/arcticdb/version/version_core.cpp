@@ -451,7 +451,9 @@ std::optional<util::BitSet> source_rows_to_insert_for_row_range_merge_update(con
 std::vector<StreamDescriptor> split_rowrange_descriptor(
         const StreamDescriptor& descriptor, const size_t column_slice_size
 ) {
-    auto descriptors = util::reserve_vector<StreamDescriptor>(descriptor.field_count() / column_slice_size + 1);
+    auto descriptors = util::reserve_vector<StreamDescriptor>(
+            (descriptor.field_count() + column_slice_size - 1) / column_slice_size
+    );
     for (size_t field_index = 0; field_index < descriptor.field_count(); ++field_index) {
         if (field_index % column_slice_size == 0) {
             descriptors.emplace_back();

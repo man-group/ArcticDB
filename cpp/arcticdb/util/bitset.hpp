@@ -25,6 +25,7 @@ using BitSetSizeType = bm::bvector<>::size_type;
 using BitIndex = bm::bvector<>::rs_index_type;
 
 template<typename functor>
+requires std::is_invocable_r_v<void, functor, size_t>
 struct BitSetVisitor {
     functor& f;
     int add_bits(BitSet::size_type off, const unsigned char* bits, unsigned n) {
