@@ -98,10 +98,12 @@ from arcticdb.exceptions import (
 from arcticdb.flattener import Flattener
 from arcticdb.log import version as log
 from arcticdb.version_store._custom_normalizers import get_custom_normalizer, CompositeCustomNormalizer
-from arcticdb.version_store._normalization import (
-    PandasData,
+from arcticdb.version_store._string_dtype import (
     _is_arrow_string_column,
     _use_pyarrow_strings_in_pandas,
+)
+from arcticdb.version_store._normalization import (
+    PandasData,
     normalize_metadata,
     normalize_recursive_metastruct,
     denormalize_user_metadata,
@@ -2734,6 +2736,7 @@ class NativeVersionStore:
                 end_idx = index.searchsorted(datetime64(read_query.row_filter.end_ts, "ns"), side="right")
         else:
             raise ArcticNativeException("Unrecognised row_filter type: {}".format(type(read_query.row_filter)))
+        # Resolve start_idx/end_idx (may be negative or beyond row_count) into valid bounds within [0, row_count].
         start, stop, _ = slice(start_idx, end_idx).indices(read_result.frame_data.row_count)
         return (start, stop)
 

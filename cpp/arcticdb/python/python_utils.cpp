@@ -30,7 +30,7 @@ PyObject** fill_with_none(PyObject** ptr_dest, size_t count, PythonHandlerData& 
     return ptr_dest + count;
 }
 
-py::tuple extract_numpy_arrays(PandasOutputFrame& pandas_output_frame) {
+py::tuple extract_pandas_columns(PandasOutputFrame& pandas_output_frame) {
     auto frame = pandas_output_frame.release_frame();
     const size_t field_count = frame.fields().size();
     const size_t index_field_count = frame.descriptor().index().field_count();

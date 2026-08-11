@@ -57,7 +57,8 @@ from arcticdb_ext.storage import NativeVariantStorage, AWSAuthMethod, S3Settings
 from arcticdb_ext import set_config_int, unset_config_int
 import arcticdb_ext.cpp_async as adb_async
 from arcticdb_ext.cpp_async import reinit_task_scheduler
-from arcticdb.version_store._normalization import MsgPackNormalizer, _ARROW_BACKED_STR_DTYPE_SUPPORTED
+from arcticdb.version_store._normalization import MsgPackNormalizer
+from arcticdb.version_store._string_dtype import _ARROW_BACKED_STR_DTYPE_SUPPORTED
 from arcticdb.util.test import create_df, CustomThing, TestCustomNormalizer
 from arcticdb.arctic import Arctic
 from tests.util.marking import Mark
@@ -330,6 +331,11 @@ def write_string_dtype(request):
 def read_string_dtype(request):
     if request.param and not _ARROW_BACKED_STR_DTYPE_SUPPORTED:
         pytest.skip("pandas too old for the arrow-backed str dtype (StringDtype na_value, added in 2.3)")
+    return request.param
+
+
+@pytest.fixture(params=[False, True], ids=["consolidate", "skip_consolidation"])
+def skip_consolidation(request):
     return request.param
 
 

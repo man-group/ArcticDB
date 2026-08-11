@@ -12,6 +12,7 @@
 #include <arcticdb/column_store/column.hpp>
 #include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/util/allocator.hpp>
+#include <arcticdb/util/collection_utils.hpp>
 #include <sparrow/layout/array_access.hpp>
 #include <sparrow/layout/primitive_data_access.hpp>
 #include <sparrow/utils/temporal.hpp>
@@ -381,10 +382,11 @@ std::optional<ArrowMeta::ColumnMeta> column_metadata(
 
 std::vector<std::shared_ptr<RecordBatchData>> column_to_arrow_arrays(const Column& column, std::string_view name) {
     auto column_arrays = arrow_arrays_from_column(column, name);
-    std::vector<std::shared_ptr<RecordBatchData>> output;
-    output.reserve(column_arrays.size());
+    auto output = util::reserve_vector<std::shared_ptr<RecordBatchData>>(column_arrays.size());
     for (auto& column_array : column_arrays) {
-        auto [arr, schema] = sparrow::extract_arrow_structures(std::move(column_array));
+        sparrow::record_batch batch{};
+        batch.add_column(std::string{name}, std::move(column_array));
+        auto [arr, schema] = sparrow::extract_arrow_structures(std::move(batch));
         output.emplace_back(std::make_shared<RecordBatchData>(arr, schema));
     }
     return output;

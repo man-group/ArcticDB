@@ -220,7 +220,7 @@ def test_write_dynamic_simple(lmdb_version_store_v2, write_string_dtype, read_st
 @pytest.mark.parametrize("filter_kind", ["date_range", "row_range"])
 @pytest.mark.parametrize("expect_empty", [False, True])
 def test_read_filtered_string_column(
-    lmdb_version_store_v2, write_string_dtype, read_string_dtype, filter_kind, expect_empty, skip_consolidation
+    lmdb_version_store_v2, read_string_dtype, filter_kind, expect_empty, skip_consolidation
 ):
     lib = lmdb_version_store_v2
     if skip_consolidation:
@@ -245,9 +245,7 @@ def test_read_filtered_string_column(
     assert (str(received["x"].dtype) == "str") == read_string_dtype
 
 
-def test_read_row_range_default_index_string_first_column(
-    lmdb_version_store_v2, write_string_dtype, read_string_dtype, skip_consolidation
-):
+def test_read_row_range_default_index_string_first_column(lmdb_version_store_v2, read_string_dtype, skip_consolidation):
     lib = lmdb_version_store_v2
     if skip_consolidation:
         lib._normalizer.df.set_skip_df_consolidation()

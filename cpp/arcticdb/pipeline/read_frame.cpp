@@ -800,7 +800,7 @@ void decode_into_frame_dynamic(
             const auto& column_truncation = truncate_range_for(mapping.dest_type_desc_);
             mapping.set_truncate(column_truncation);
 
-            if (column_truncation.start_.has_value() || column_truncation.end_.has_value()) {
+            if (column_truncation.requires_truncation()) {
                 truncated_column_indices.insert(dst_col);
             }
             util::check(

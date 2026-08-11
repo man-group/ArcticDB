@@ -27,9 +27,15 @@ import pickle
 from abc import ABCMeta, abstractmethod
 
 from arcticdb.dependencies import _PYARROW_AVAILABLE, _POLARS_AVAILABLE, pyarrow as pa, polars as pl
+from arcticdb.version_store._string_dtype import (
+    _use_pyarrow_strings_in_pandas,
+    _is_arrow_string_column,
+    _arrow_string_arrays_to_pd_array,
+    _adopt_arrow_strings,
+)
 from arcticdb.preconditions import check
 from arcticdb_ext import get_config_string
-from pandas.api.types import is_integer_dtype
+from pandas.api.types import infer_dtype, is_integer_dtype
 from arcticc.pb2.descriptors_pb2 import UserDefinedMetadata, NormalizationMetadata, MsgPackSerialization
 from arcticc.pb2.storage_pb2 import VersionStoreConfig
 from collections import Counter
@@ -521,7 +527,8 @@ def _normalize_columns_names(columns_names, index_names, norm_meta, dynamic_sche
     counter = Counter(columns_names)
     for idx in range(len(columns_names)):
         col = columns_names[idx]
-        if col is None:
+        # None, or NaN (an unnamed column in a future.infer_string str-dtype columns Index), is unnamed.
+        if pd.isna(col):
             if dynamic_schema and counter[col] > 1:
                 raise ArcticNativeException("Multiple None columns not allowed in dynamic_schema")
             new_name = "__none__{}".format(0 if dynamic_schema else idx)
@@ -1068,41 +1075,6 @@ class BlockManagerUnconsolidated(BlockManager):
         return self.blocks
 
 
-def _arrow_backed_str_dtype_supported():
-    # The pandas arrow-backed "str" dtype (StringDtype with na_value) was added in pandas 2.3. future.infer_string
-    # exists from pandas 2.1, so the option can be set on 2.1/2.2 but there this dtype cannot be constructed.
-    try:
-        pd.StringDtype(storage="pyarrow", na_value=np.nan)
-        return True
-    except (TypeError, ImportError):
-        return False
-
-
-_ARROW_BACKED_STR_DTYPE_SUPPORTED = _arrow_backed_str_dtype_supported()
-
-
-def _use_pyarrow_strings_in_pandas():
-    if not _PYARROW_AVAILABLE or not _ARROW_BACKED_STR_DTYPE_SUPPORTED:
-        return False
-    return bool(pd.get_option("future.infer_string"))
-
-
-def _is_arrow_string_column(value):
-    return isinstance(value, list) and (len(value) == 0 or isinstance(value[0], RecordBatchData))
-
-
-def _arrow_string_arrays_to_pd_array(arrays):
-    dtype = pd.StringDtype(storage="pyarrow", na_value=np.nan)
-    if not arrays:
-        return pd.array([], dtype=dtype)
-    imported = [pa.Array._import_from_c(a.array(), a.schema()) for a in arrays]
-    return pd.array(pa.chunked_array(imported), dtype=dtype)
-
-
-def _adopt_arrow_strings(column):
-    return _arrow_string_arrays_to_pd_array(column) if _is_arrow_string_column(column) else column
-
-
 class DataFrameNormalizer(_PandasNormalizer):
     TYPE = "df"
 
@@ -1128,6 +1100,7 @@ class DataFrameNormalizer(_PandasNormalizer):
         def df_from_arrays(arrays, cols, ind, n_ind):
             def gen_blocks():
                 _len = len(index)
+                infer_string = _use_pyarrow_strings_in_pandas()
                 column_placement_in_block = 0
                 for idx, a in enumerate(arrays):
                     if idx < n_ind:
@@ -1234,10 +1207,17 @@ class DataFrameNormalizer(_PandasNormalizer):
                 df = self.df_without_consolidation(columns, item.data[0], item, n_indexes, data)
 
         if denormed_columns is not None:
-            # Set the dtype to object otherwise columns with names int(1) and None will become 1.0 and np.nan, because
-            # Pandas assumes this is a float64 array
             if denormed_columns_contain_none:
-                df.columns = pd.Index(denormed_columns, dtype=object)
+                if _use_pyarrow_strings_in_pandas() and all(
+                    col is None or isinstance(col, str) for col in denormed_columns
+                ):
+                    # Under future.infer_string an all-string columns axis is the str dtype, where None
+                    # reads back as nan — matching how pandas builds such a columns Index.
+                    df.columns = pd.Index(denormed_columns)
+                else:
+                    # Force object otherwise: names like int(1) with None would become 1.0 and nan, because
+                    # pandas infers a float64 array. Object preserves the exact int/None labels.
+                    df.columns = pd.Index(denormed_columns, dtype=object)
             else:
                 df.columns = denormed_columns
         if norm_meta.common.columns.fake_name is False and len(norm_meta.common.columns.name) > 0:
@@ -1350,7 +1330,7 @@ class DataFrameNormalizer(_PandasNormalizer):
         if isinstance(item.columns, MultiIndex):
             raise ArcticDbNotYetImplemented("MultiIndex column are not supported yet")
 
-        index_names, ix_vals = self._index_to_records(
+        index_names, index_values = self._index_to_records(
             item, norm_meta.df.common, dynamic_strings, string_max_len=string_max_len, empty_types=empty_types
         )
         # The first branch of this if is faster, but does not work with null/duplicated column names
@@ -1358,7 +1338,7 @@ class DataFrameNormalizer(_PandasNormalizer):
             columns_vals = [item[col].values for col in item.columns]
         else:
             columns_vals = [item.iloc[:, idx].values for idx in range(len(item.columns))]
-        columns, column_vals = _normalize_columns(
+        column_names, column_vals = _normalize_columns(
             item.columns,
             columns_vals,
             norm_meta.df,
@@ -1389,8 +1369,8 @@ class DataFrameNormalizer(_PandasNormalizer):
         return NormalizedInput(
             item=PandasData(
                 index_names=index_names,
-                index_values=ix_vals,
-                column_names=columns,
+                index_values=index_values,
+                column_names=column_names,
                 columns_values=column_vals,
                 sorted=sort_status,
             ),
@@ -1824,7 +1804,7 @@ def denormalize_user_metadata(udm, ext_obj=None):
 def denormalize_dataframe(ret):
     pandas_output_frame = ret[1]
     norm = ret[2]
-    frame_data = FrameData(*pandas_output_frame.extract_numpy_arrays())
+    frame_data = FrameData(*pandas_output_frame.extract_pandas_columns())
     if len(frame_data.names) == 0:
         return None
 

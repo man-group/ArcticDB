@@ -311,7 +311,7 @@ def arrow_string_read(enabled: bool):
     requested on pandas that lacks either ``future.infer_string`` (< 2.1) or the ``str`` dtype (StringDtype na_value,
     added in 2.3).
     """
-    from arcticdb.version_store._normalization import _ARROW_BACKED_STR_DTYPE_SUPPORTED
+    from arcticdb.version_store._string_dtype import _ARROW_BACKED_STR_DTYPE_SUPPORTED
 
     if enabled and not _ARROW_BACKED_STR_DTYPE_SUPPORTED:
         import pytest

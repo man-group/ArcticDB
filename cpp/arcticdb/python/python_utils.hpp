@@ -351,6 +351,6 @@ inline auto pd_to_offset(std::string_view rule) {
     return imported_obj(rule).attr("nanos").cast<timestamp>();
 }
 
-py::tuple extract_numpy_arrays(PandasOutputFrame& pandas_output_frame);
+py::tuple extract_pandas_columns(PandasOutputFrame& pandas_output_frame);
 
 } // namespace arcticdb::python_util
