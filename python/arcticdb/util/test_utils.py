@@ -155,7 +155,9 @@ def verify_dynamically_added_columns(
         elif pd.api.types.is_bool_dtype(dtype):
             assert False == value, f"column {col}:{dtype} -> False == {value}"
         elif pd.api.types.is_string_dtype(dtype):
-            assert value is None, f"column {col}:{dtype} -> None == {value}"
+            # Missing strings are None for object/fixed-width columns and NaN for the
+            # pandas str extension dtype under future.infer_string.
+            assert pd.isna(value), f"column {col}:{dtype} -> NA == {value}"
         elif pd.api.types.is_datetime64_any_dtype(dtype):
             assert pd.isna(value), f"column {col}:{dtype} -> None == {value}"
         else:

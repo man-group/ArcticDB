@@ -31,7 +31,6 @@ from arcticdb.util.test import (
     generic_filter_test,
     generic_filter_test_strings,
     generic_filter_test_nans,
-    arrow_string_read,
     unicode_symbols,
     equals,
 )
@@ -778,10 +777,8 @@ def test_filter_numeric_membership_mixing_int64_and_uint64(
 
 
 def test_filter_nones_and_nans_retained_in_string_column(
-    lmdb_version_store_v1, any_output_format, read_string_dtype, column_stats_filtering_enabled_and_disabled
+    lmdb_version_store_v1, any_output_format, column_stats_filtering_enabled_and_disabled
 ):
-    if read_string_dtype and any_output_format != OutputFormat.PANDAS:
-        pytest.skip("infer_string only affects pandas output")
     lib = lmdb_version_store_v1
     lib._set_output_format_for_pipeline_tests(any_output_format)
     sym = "test_filter_nones_and_nans_retained_in_string_column"
@@ -793,21 +790,19 @@ def test_filter_nones_and_nans_retained_in_string_column(
     q = q[q["filter_column"] == 1]
     q.optimise_for_memory()
     expected = df.query("filter_column == 1")
-    with arrow_string_read(read_string_dtype):
-        received = lib.read(sym, query_builder=q).data
+    received = lib.read(sym, query_builder=q).data
     assert np.array_equal(expected["filter_column"], received["filter_column"])
-    assert received["string_column"].iloc[0] == "1"
-    if any_output_format == OutputFormat.PANDAS and read_string_dtype:
-        # The arrow-backed str dtype maps both np.nan and None to its np.nan na_value.
-        assert np.isnan(received["string_column"].iloc[1])
-        assert np.isnan(received["string_column"].iloc[2])
-    elif any_output_format == OutputFormat.PANDAS:
-        assert np.isnan(received["string_column"].iloc[1])
-        assert received["string_column"].iloc[2] is None
+    string_column = received["string_column"]
+    assert string_column.iloc[0] == "1"
+    # Under future.infer_string the column is the arrow-backed `str` dtype, whose only null sentinel is np.nan.
+    received_is_str_dtype = str(string_column.dtype) == "str"
+    if any_output_format == OutputFormat.PANDAS or received_is_str_dtype:
+        assert np.isnan(string_column.iloc[1])
     else:
-        # Reading as arrow loses None vs NaN: both are stored as arrow nulls and come back as pandas None.
-        assert received["string_column"].iloc[1] is None
-        assert received["string_column"].iloc[2] is None
+        # When reading as arrow `None` vs `NaN` information is lost. It's all stored as arrow `null`s which then is
+        # converted to pandas `None`s
+        assert string_column.iloc[1] is None
+    assert np.isnan(string_column.iloc[2]) if received_is_str_dtype else string_column.iloc[2] is None
 
 
 # Tests that false matches aren't generated when list members truncate to column values

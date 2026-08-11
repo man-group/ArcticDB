@@ -6,6 +6,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 
+import os
 import pytest
 import pandas as pd
 from arcticdb.util.test import assert_frame_equal, assert_vit_equals_except_data, merge, query_stats_operation_count
@@ -26,8 +27,13 @@ from typing import Union, List, Optional
 import arcticdb.toolbox.query_stats as qs
 
 from arcticdb_ext.version_store import MergeAction
-
-pytestmark = pytest.mark.merge_update
+pytestmark = [
+    pytest.mark.merge_update,
+    pytest.mark.skipif(
+        os.environ.get("ARCTICDB_PYTEST_INFER_STRING") == "1",
+        reason="merge update does not support arrow/str input",
+    ),
+]
 
 
 def mock_find_keys_for_symbol(key_types):

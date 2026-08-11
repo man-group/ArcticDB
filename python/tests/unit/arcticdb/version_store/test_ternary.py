@@ -17,6 +17,7 @@ import pytest
 from arcticdb import QueryBuilder, where, OutputFormat
 from arcticdb_ext.exceptions import InternalException, SchemaException, UserInputException
 from arcticdb.util.hypothesis import use_of_function_scoped_fixtures_in_hypothesis_checked
+from arcticdb.version_store._string_dtype import _use_pyarrow_strings_in_pandas
 from arcticdb.util.test import assert_frame_equal
 from tests.util.mark import WINDOWS
 
@@ -132,6 +133,9 @@ def test_project_ternary_column_column_dynamic_strings(lmdb_version_store_v1, an
 
 
 @pytest.mark.skipif(WINDOWS, reason="We do not support fixed-width strings on Windows")
+@pytest.mark.skipif(
+    _use_pyarrow_strings_in_pandas(), reason="fixed-width strings not applicable under future.infer_string"
+)
 def test_project_ternary_fixed_width_strings(version_store_factory):
     # Explicitly not tested with arrow because arrow doesn't support fixed width strings
     lib = version_store_factory(dynamic_strings=False)

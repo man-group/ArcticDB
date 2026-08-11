@@ -33,7 +33,7 @@ from arcticdb.exceptions import (
     NormalizationException,
     ArcticNativeException,
 )
-from arcticdb.version_store._normalization import _arrow_backed_str_dtype_supported
+from arcticdb.version_store._string_dtype import _arrow_backed_str_dtype_supported, _use_pyarrow_strings_in_pandas
 from arcticdb.version_store._custom_normalizers import (
     register_normalizer,
     get_custom_normalizer,
@@ -57,6 +57,7 @@ from arcticdb.version_store._common import TimeFrame
 from arcticdb.util.test import (
     CustomThing,
     TestCustomNormalizer,
+    arrow_string_read,
     assert_frame_equal,
     assert_series_equal,
 )
@@ -599,6 +600,38 @@ def test_ndarray_arbitrary_shape():
     fd = FrameData.from_pandas_data(df)
     d = norm.denormalize(fd, norm_meta.np)
     assert np.array_equal(d, arr)
+
+
+def test_numpy_string_array_with_arrow_backed_pandas_strings(lmdb_version_store):
+    lib = lmdb_version_store
+    sym = "test_numpy_string_array_with_arrow_backed_pandas_strings"
+    arr = np.array(["ab", "cd", "efg"])
+    lib.write(sym, arr)
+    with arrow_string_read(True):
+        result = lib.read(sym).data
+    assert isinstance(result, np.ndarray)
+    np.testing.assert_array_equal(result, arr)
+
+
+def test_batch_read_numpy_string_array_with_arrow_backed_pandas_strings(lmdb_version_store):
+    lib = lmdb_version_store
+    np_sym = "test_batch_read_numpy_string_array_with_arrow_backed_pandas_strings_np"
+    df_sym = "test_batch_read_numpy_string_array_with_arrow_backed_pandas_strings_df"
+    arr = np.array(["ab", "cd", "efg"])
+    df = pd.DataFrame({"x": ["a", "b", "c"]})
+    lib.write(np_sym, arr)
+    lib.write(df_sym, df)
+    with arrow_string_read(True):
+        expected_df = pd.DataFrame({"x": ["a", "b", "c"]})
+        results = lib.batch_read([np_sym, df_sym])
+    np_result = results[np_sym].data
+    assert isinstance(np_result, np.ndarray)
+    np.testing.assert_array_equal(np_result, arr)
+    df_result = results[df_sym].data
+    # The np-normalized symbol forces its own decode to object strings; the df symbol in the same
+    # batch must still get the arrow-backed str dtype it asked for.
+    assert str(df_result["x"].dtype) == "str"
+    assert_frame_equal(expected_df, df_result)
 
 
 def test_dict_with_tuples():
@@ -1509,7 +1542,18 @@ class TestNonStringColumnNameNormalization:
             expected.columns = expected_names if len(expected_names) else pd.RangeIndex(start=0, stop=0, step=1)
         return expected
 
+    @staticmethod
+    def _skip_if_none_column_under_infer_string(to_write, to_add):
+        # Under future.infer_string a None column label becomes NaN, and pandas' own concat/Index
+        # inference mishandles NaN column labels (nan != nan, so it drops the column's data and can't
+        # dedup), making this test's pd.concat-based expected unreliable. ArcticDB's read of such columns
+        # is verified correct elsewhere (see test_string.py::test_none_column_name_read_dtype), so skip
+        # these adversarial combos under the flag rather than assert against a degenerate expected.
+        if _use_pyarrow_strings_in_pandas() and any(pd.isna(c) for c in set(to_write.columns) | set(to_add.columns)):
+            pytest.skip("pandas concat mishandles NaN column labels under future.infer_string")
+
     def test_append_with_different_col_name_normalization(self, in_memory_store_factory, to_write, to_add):
+        self._skip_if_none_column_under_infer_string(to_write, to_add)
         lib = in_memory_store_factory(dynamic_schema=True)
         lib.write("sym", to_write)
         lib.append("sym", to_add)
@@ -1518,6 +1562,7 @@ class TestNonStringColumnNameNormalization:
         assert_frame_equal(result, expected)
 
     def test_update_with_different_col_name_normalization(self, in_memory_store_factory, to_write, to_add):
+        self._skip_if_none_column_under_infer_string(to_write, to_add)
         lib = in_memory_store_factory(dynamic_schema=True)
         lib.write("sym", to_write)
         lib.update("sym", to_add)
@@ -1526,6 +1571,7 @@ class TestNonStringColumnNameNormalization:
         assert_frame_equal(result, expected)
 
     def test_concat_with_different_col_name_normalization(self, lmdb_library_dynamic_schema, to_write, to_add):
+        self._skip_if_none_column_under_infer_string(to_write, to_add)
         lib = lmdb_library_dynamic_schema
         lib.write("sym0", to_write)
         lib.write("sym1", to_add)

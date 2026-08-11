@@ -29,7 +29,7 @@ from arcticdb.exceptions import (
     UserInputException,
     ArcticException,
 )
-from arcticdb import QueryBuilder, OutputFormat
+from arcticdb import QueryBuilder
 from arcticdb.flattener import Flattener
 from arcticdb.util.test_utils import generate_random_numpy_array, generate_random_series
 from arcticdb.version_store import NativeVersionStore
@@ -46,17 +46,17 @@ from arcticdb.util.test import (
     sample_dataframe,
     sample_dataframe_only_strings,
     get_sample_dataframe,
+    arrow_string_read,
     assert_frame_equal,
     assert_series_equal,
     config_context,
     distinct_timestamps,
-    arrow_string_read,
-    expected_for_read_string_dtype,
 )
 from tests.conftest import Marks
 from tests.util.date import DateRange
 from arcticdb.util.test import equals
 from arcticdb.version_store._store import resolve_defaults
+from arcticdb.version_store._string_dtype import _use_pyarrow_strings_in_pandas
 from tests.util.mark import xfail_azure_chars
 from tests.util.marking import marks
 
@@ -1544,10 +1544,13 @@ def test_negative_strides(basic_store_tiny_segment):
 
 
 @pytest.mark.storage
-def test_dynamic_strings(basic_store, write_string_dtype, read_string_dtype):
+def test_dynamic_strings(basic_store, read_string_dtype):
+    # The write dtype follows the ambient pandas option (object normally, str under the infer_string CI
+    # variant) while the read dtype is parametrised, so this covers both write/read representations.
     values = ["A", "B", "C", "Aaba", "Baca", "CABA", "dog", "cat"]
     basic_store.write("strings", pd.DataFrame({"x": values}), dynamic_strings=True)
     with arrow_string_read(read_string_dtype):
+        # expected must be built under the same option as the read
         expected = pd.DataFrame({"x": values})
         vit = basic_store.read("strings")
     assert_equal(vit.data, expected)
@@ -1618,8 +1621,12 @@ def test_dynamic_strings_with_all_nones(basic_store):
     df = pd.DataFrame({"x": [None, None]})
     basic_store.write("strings", df, dynamic_strings=True)
     data = basic_store.read("strings")
-    assert data.data["x"][0] is None
-    assert data.data["x"][1] is None
+    if _use_pyarrow_strings_in_pandas():
+        assert pd.isna(data.data["x"][0])
+        assert pd.isna(data.data["x"][1])
+    else:
+        assert data.data["x"][0] is None
+        assert data.data["x"][1] is None
 
 
 @pytest.mark.storage
@@ -1993,6 +2000,9 @@ def test_dataframe_with_nan_and_nat_only(basic_store):
 
 
 @pytest.mark.storage
+@pytest.mark.skipif(
+    _use_pyarrow_strings_in_pandas(), reason="object-dtype coercion path not reachable under future.infer_string"
+)
 def test_coercion_to_float(basic_store):
     lib = basic_store
     df = pd.DataFrame({"col": [np.nan, "1", np.nan]})
@@ -2013,6 +2023,9 @@ def test_coercion_to_float(basic_store):
 
 
 @pytest.mark.storage
+@pytest.mark.skipif(
+    _use_pyarrow_strings_in_pandas(), reason="object-dtype coercion path not reachable under future.infer_string"
+)
 def test_coercion_to_str_with_dynamic_strings(basic_store):
     # assert that the getting sample function is not called
     lib = basic_store
@@ -2910,11 +2923,7 @@ def test_batch_append_missing_keys(in_memory_version_store, compact_data):
 
 @pytest.mark.parametrize("use_date_range_clause", [True, False])
 @marks([Marks.pipeline, Marks.storage])
-def test_batch_read_date_range(
-    basic_store_tombstone_and_sync_passive, use_date_range_clause, any_output_format, read_string_dtype
-):
-    if read_string_dtype and any_output_format != OutputFormat.PANDAS:
-        pytest.skip("infer_string only affects pandas output")
+def test_batch_read_date_range(basic_store_tombstone_and_sync_passive, use_date_range_clause, any_output_format):
     lmdb_version_store = basic_store_tombstone_and_sync_passive
     lmdb_version_store._set_output_format_for_pipeline_tests(any_output_format)
     symbols = []
@@ -2937,29 +2946,26 @@ def test_batch_read_date_range(
         date_range = pd.date_range(base_date + pd.DateOffset(j + 100), periods=500)
         date_ranges.append(date_range)
 
-    with arrow_string_read(read_string_dtype):
-        if use_date_range_clause:
-            qbs = []
-            for date_range in date_ranges:
-                q = QueryBuilder()
-                q = q.date_range(date_range)
-                qbs.append(q)
-            result_dict = lmdb_version_store.batch_read(symbols, query_builder=qbs)
-        else:
-            result_dict = lmdb_version_store.batch_read(symbols, date_ranges=date_ranges)
+    if use_date_range_clause:
+        qbs = []
+        for date_range in date_ranges:
+            q = QueryBuilder()
+            q = q.date_range(date_range)
+            qbs.append(q)
+        result_dict = lmdb_version_store.batch_read(symbols, query_builder=qbs)
+    else:
+        result_dict = lmdb_version_store.batch_read(symbols, date_ranges=date_ranges)
     for x, sym in enumerate(result_dict.keys()):
         vit = result_dict[sym]
         date_range = date_ranges[x]
         start = date_range[0]
         end = date_range[-1]
-        assert_equal(vit.data, expected_for_read_string_dtype(dfs[x].loc[start:end], read_string_dtype))
+        assert_equal(vit.data, dfs[x].loc[start:end])
 
 
 @pytest.mark.parametrize("use_row_range_clause", [True, False])
 @marks([Marks.pipeline])
-def test_batch_read_row_range(lmdb_version_store_v1, use_row_range_clause, any_output_format, read_string_dtype):
-    if read_string_dtype and any_output_format != OutputFormat.PANDAS:
-        pytest.skip("infer_string only affects pandas output")
+def test_batch_read_row_range(lmdb_version_store_v1, use_row_range_clause, any_output_format):
     lib = lmdb_version_store_v1
     lib._set_output_format_for_pipeline_tests(any_output_format)
     num_symbols = 5
@@ -2979,24 +2985,23 @@ def test_batch_read_row_range(lmdb_version_store_v1, use_row_range_clause, any_o
     for j in range(num_symbols):
         row_ranges.append((j * (num_rows // num_symbols), ((j + 1) * (num_rows // num_symbols))))
 
-    with arrow_string_read(read_string_dtype):
-        if use_row_range_clause:
-            qbs = []
-            for row_range in row_ranges:
-                q = QueryBuilder()
-                q = q.row_range(row_range)
-                qbs.append(q)
-            result_dict = lib.batch_read(symbols, query_builder=qbs)
-        else:
-            result_dict = lib.batch_read(symbols, row_ranges=row_ranges)
+    if use_row_range_clause:
+        qbs = []
+        for row_range in row_ranges:
+            q = QueryBuilder()
+            q = q.row_range(row_range)
+            qbs.append(q)
+        result_dict = lib.batch_read(symbols, query_builder=qbs)
+    else:
+        result_dict = lib.batch_read(symbols, row_ranges=row_ranges)
     for idx, sym in enumerate(result_dict.keys()):
         df = result_dict[sym].data
         row_range = row_ranges[idx]
-        assert_equal(df, expected_for_read_string_dtype(dfs[idx].iloc[row_range[0] : row_range[1]], read_string_dtype))
+        assert_equal(df, dfs[idx].iloc[row_range[0] : row_range[1]])
 
 
 @pytest.mark.storage
-def test_batch_read_columns(basic_store_tombstone_and_sync_passive, write_string_dtype, read_string_dtype):
+def test_batch_read_columns(basic_store_tombstone_and_sync_passive):
     lmdb_version_store = basic_store_tombstone_and_sync_passive
     columns_of_interest = ["strings", "uint8"]
     number_of_requests = 5
@@ -3014,11 +3019,10 @@ def test_batch_read_columns(basic_store_tombstone_and_sync_passive, write_string
     for x, symbol in enumerate(symbols):
         lmdb_version_store.write(symbol, dfs[x])
 
-    with arrow_string_read(read_string_dtype):
-        result_dict = lmdb_version_store.batch_read(symbols, columns=[columns_of_interest] * number_of_requests)
+    result_dict = lmdb_version_store.batch_read(symbols, columns=[columns_of_interest] * number_of_requests)
     for x, sym in enumerate(result_dict.keys()):
         vit = result_dict[sym]
-        assert_equal_value(vit.data, expected_for_read_string_dtype(dfs[x][columns_of_interest], read_string_dtype))
+        assert_equal_value(vit.data, dfs[x][columns_of_interest])
 
 
 @pytest.mark.storage

@@ -143,6 +143,14 @@ _faulthandler_file = None  # kept open so faulthandler can write to the fd
 
 # silence warnings about custom markers
 def pytest_configure(config):
+    if os.environ.get("ARCTICDB_PYTEST_INFER_STRING") == "1":
+        if not _ARROW_BACKED_STR_DTYPE_SUPPORTED:
+            raise pytest.UsageError(
+                f"ARCTICDB_PYTEST_INFER_STRING=1 requires pandas>=2.3 for the arrow-backed str dtype, "
+                f"but found pandas {pd.__version__}"
+            )
+        pd.set_option("future.infer_string", True)
+
     config.addinivalue_line("markers", "storage: Mark tests related to storage functionality")
     config.addinivalue_line("markers", "authentication: Mark tests related to authentication functionality")
     config.addinivalue_line("markers", "pipeline: Mark tests related to pipeline functionality")
@@ -301,29 +309,6 @@ def only_test_encoding_version_v1(request):
     ],
 )
 def encoding_version(request):
-    return request.param
-
-
-@pytest.fixture(params=[False, True], ids=["numpy_strings", "infer_strings"])
-def infer_string(request):
-    try:
-        with pd.option_context("future.infer_string", request.param):
-            yield request.param
-    except pd.errors.OptionError:
-        if request.param:
-            pytest.skip("pandas too old for future.infer_string")
-        yield request.param
-
-
-@pytest.fixture(params=[False, True], ids=["consolidate", "skip_consolidation"])
-def skip_consolidation(request):
-    return request.param
-
-
-@pytest.fixture(params=[False, True], ids=["write_object", "write_str"])
-def write_string_dtype(request):
-    if request.param:
-        pytest.skip("writing the pandas arrow-backed str dtype is not yet supported")
     return request.param
 
 

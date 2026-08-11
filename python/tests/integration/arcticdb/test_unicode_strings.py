@@ -59,7 +59,7 @@ def test_write_blns(lmdb_version_store, any_arrow_string_format):
     table = pandas_to_arrow_with_index_first(df)
     lib.write(symbol, table, index_column=True)
     received = cast_string_columns(lib.read(symbol, output_format=OutputFormat.PYARROW).data, pa.string())
-    assert table.equals(received)
+    assert cast_string_columns(table, pa.string()).equals(received)
 
 
 def test_append_blns(lmdb_version_store, any_arrow_string_format):
@@ -84,7 +84,7 @@ def test_append_blns(lmdb_version_store, any_arrow_string_format):
     lib.append(symbol, table_second_half, index_column=True)
     received = cast_string_columns(lib.read(symbol, output_format=OutputFormat.PYARROW).data, pa.string())
     expected = pandas_to_arrow_with_index_first(df)
-    assert expected.equals(received)
+    assert cast_string_columns(expected, pa.string()).equals(received)
 
 
 def test_update_blns(lmdb_version_store, any_arrow_string_format):
@@ -112,7 +112,7 @@ def test_update_blns(lmdb_version_store, any_arrow_string_format):
     lib.update(symbol, table_middle_half, index_column=True)
     received = cast_string_columns(lib.read(symbol, output_format=OutputFormat.PYARROW).data, pa.string())
     expected = pandas_to_arrow_with_index_first(df)
-    assert expected.equals(received)
+    assert cast_string_columns(expected, pa.string()).equals(received)
 
 
 def test_batch_read_blns(lmdb_version_store, any_arrow_string_format):
@@ -143,7 +143,7 @@ def test_batch_read_blns(lmdb_version_store, any_arrow_string_format):
         expected = tables[idx]
         if idx % 2 == 1:
             expected = expected.filter(expr)
-        assert expected.equals(cast_string_columns(res[sym].data, pa.string()))
+        assert cast_string_columns(expected, pa.string()).equals(cast_string_columns(res[sym].data, pa.string()))
 
 
 def assert_dicts_of_dfs_equal(dict1, dict2):
@@ -175,7 +175,7 @@ def test_recursive_normalizers_blns(
     received = lib.read(symbol, output_format=OutputFormat.PYARROW).data
     for key in keys:
         assert key in received.keys()
-        assert table.equals(cast_string_columns(received[key], pa.string()))
+        assert cast_string_columns(table, pa.string()).equals(cast_string_columns(received[key], pa.string()))
 
 
 @pytest.mark.skip(reason="These do not roundtrip properly. Monday: 9256783357")

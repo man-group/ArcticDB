@@ -8,6 +8,7 @@ on:
       cibw_image_tag:    {required: false, type: string, description: Linux only. As built by cibw_docker_image.yml workflow}
       cibw_version:      {required: false, type: string, description: build-python-wheels only. Must match the cibw_image_tag}
       python_deps_ids:   {default: '[""]', type: string, description: build-python-wheels test matrix parameter. JSON string.}
+      infer_string_ids:  {default: '[""]', type: string, description: 'test matrix parameter. JSON string, e.g. ["", -inferstr]'}
       python3:           {default: -1, type: number, description: Python 3 minor version}
       persistent_storage:      {default: "no", type: string, description: Specifies whether the python tests should tests against real storages e.g. AWS S3  }
       pytest_xdist_mode: {default: "", type: string, description: additional argument to pass for pytest-xdist}
@@ -544,6 +545,7 @@ jobs:
       matrix:
         type: ${{fromJSON(vars.TEST_DIRS_OVERRIDE || needs.compile.outputs.test_dirs)}}
         python_deps_id: ${{fromJson(inputs.python_deps_ids)}}
+        infer_string_id: ${{fromJson(inputs.infer_string_ids)}}
         # Always run with both for cp311
         version_cache_timeout: ${{ fromJSON((inputs.version_cache_full_test || needs.compile.outputs.python_impl_name == 'cp311') && '["NoCache", "DefaultCache"]' || '["DefaultCache"]') }}
         admission_limit: ${{ fromJSON((inputs.serial_admission_test && needs.compile.outputs.python_impl_name == 'cp311') && '["Serial", "Default"]' || '["Default"]') }}
@@ -554,9 +556,14 @@ jobs:
             admission_limit: Serial
           - python_deps_id: -compat311
             admission_limit: Serial
+          # infer_string variant only runs with the default deps and default cache, and is likewise unrelated
+          # to the admission limit
+          - {python_deps_id: -compat311, infer_string_id: -inferstr}
+          - {version_cache_timeout: NoCache, infer_string_id: -inferstr}
+          - {infer_string_id: -inferstr, admission_limit: Serial}
         include:
           ${{fromJSON(inputs.matrix)}}
-    name: ${{matrix.type}}${{matrix.python_deps_id}}-${{matrix.version_cache_timeout}}${{matrix.admission_limit == 'Serial' && '-Serial' || ''}}
+    name: ${{matrix.type}}${{matrix.python_deps_id}}${{matrix.infer_string_id}}-${{matrix.version_cache_timeout}}${{matrix.admission_limit == 'Serial' && '-Serial' || ''}}
     runs-on: ${{matrix.distro}}
     container: ${{matrix.os == 'linux' &&  matrix.container || null}}
     defaults:
@@ -565,7 +572,7 @@ jobs:
     env:
       SCCACHE_GHA_ENABLED: "true"
       python_impl_name: ${{needs.compile.outputs.python_impl_name}}
-      distinguishing_name: ${{matrix.os}}-${{needs.compile.outputs.python_impl_name}}-${{matrix.type}}${{matrix.python_deps_id}}-${{matrix.version_cache_timeout}}${{matrix.admission_limit == 'Serial' && '-Serial' || ''}}
+      distinguishing_name: ${{matrix.os}}-${{needs.compile.outputs.python_impl_name}}-${{matrix.type}}${{matrix.python_deps_id}}${{matrix.infer_string_id}}-${{matrix.version_cache_timeout}}${{matrix.admission_limit == 'Serial' && '-Serial' || ''}}
       ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
       real_tests_storage_type: ${{matrix.admission_limit != 'Serial' && (inputs.run_full_matrix_of_persistent_tests || needs.compile.outputs.python_impl_name == 'cp311') && inputs.persistent_storage || 'no'}}
     steps:
@@ -730,6 +737,7 @@ jobs:
           NUM_PROCESSING_UNITS_LIVE: ${{matrix.admission_limit == 'Serial' && 1 || -1}}
           ARCTICDB_WARN_ON_WRITING_EMPTY_DATAFRAME: 0
           ARCTICDB_LMDBSTORAGE_WARNIFOPENED_STR: all
+          ARCTICDB_PYTEST_INFER_STRING: ${{ matrix.infer_string_id == '-inferstr' && '1' || '0' }}
 
       - name: Collect crash dumps (Windows)
         if: matrix.os == 'windows' && failure()
