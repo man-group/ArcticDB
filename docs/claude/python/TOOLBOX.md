@@ -164,6 +164,43 @@ backup_segment = tool.overwrite_append_data_with_dataframe(key, new_df)
 backup = tool.update_append_data_column_type(key, "column_name", float)
 ```
 
+## Storage Locks
+
+The (unreliable) `StorageLock` is exposed through `LibraryTool` with user metadata normalized the
+same way as symbol metadata (any msgpack-able object, not just dicts), but capped at 1MB rather
+than the general 16MB user-metadata limit — the locking mechanism relies on reads and writes
+happening much faster than the pre-emption window (`StorageLock.WaitMs`), so lock metadata must
+stay small. See `python/arcticdb/toolbox/storage_lock.py` for the wrapper and
+`cpp/arcticdb/util/storage_lock.hpp` for the core. It is timestamp + TTL based and works on any
+backend; two processes can race (use `ReliableStorageLock` when atomic writes are available).
+`list_storage_locks` only covers this `StorageLock` (`KeyType::LOCK`) — it does not see
+`ReliableStorageLock` locks (`KeyType::ATOMIC_LOCK`).
+
+`read_metadata` and `list_storage_locks` both return metadata even once the lock's TTL has expired
+(`active` is `False` in that case) — a stale lock is exactly the one worth attributing when tracing.
+
+```python
+tool = lib.library_tool()
+
+lock = tool.get_storage_lock("my_lock")
+lock.lock(metadata={"job_name": "nightly"})   # metadata is optional, any msgpack-able object
+lock.read_metadata()                           # -> {"job_name": "nightly"} from any process
+lock.unlock()
+
+# List the locks in the library, metadata denormalised
+tool.list_storage_locks()
+# [{"name": "my_lock", "active": True, "timestamp": ..., "metadata": {...}}]
+```
+
+### On-disk format and compatibility
+
+Metadata is attached to the lock segment's `google::protobuf::Any` field (the same
+`UserDefinedMetadata` path as snapshots), **not** a new column. The timestamp column old clients
+read via `scalar_at(0, 0)` is unchanged, so:
+
+- Old clients can read new (metadata-bearing) locks — they ignore the `Any` field.
+- New code reads old locks and reports `metadata` as `None`.
+
 ## Helper Functions
 
 ### Key to Properties Dictionary
@@ -188,6 +225,7 @@ Get a `LibraryTool` via `lib.library_tool()`. Use `find_keys_for_symbol(KeyType,
 | File | Purpose |
 |------|---------|
 | `toolbox/library_tool.py` | LibraryTool class |
+| `toolbox/storage_lock.py` | StorageLock wrapper with normalized metadata |
 | `toolbox/__init__.py` | Module exports |
 
 ## Cautions

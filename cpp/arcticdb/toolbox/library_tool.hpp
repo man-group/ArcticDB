@@ -22,6 +22,13 @@ namespace arcticdb::toolbox::apy {
 
 namespace py = pybind11;
 
+struct StorageLockInfo {
+    std::string name;
+    timestamp acquire_time; // nanosecond timestamp the lock was written
+    bool active;
+    std::optional<google::protobuf::Any> metadata;
+};
+
 class LibraryTool {
 
   public:
@@ -64,6 +71,10 @@ class LibraryTool {
     std::string get_key_path(const VariantKey& key);
 
     std::vector<VariantKey> find_keys_for_id(entity::KeyType kt, const StreamId& stream_id);
+
+    // Lists locks created via the (unreliable) `StorageLock`, i.e. `KeyType::LOCK`. Does not cover
+    // `ReliableStorageLock`, which uses `KeyType::ATOMIC_LOCK` and is not iterated here.
+    std::vector<StorageLockInfo> list_storage_locks();
 
     int count_keys(entity::KeyType kt);
 

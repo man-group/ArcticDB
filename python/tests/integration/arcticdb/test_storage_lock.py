@@ -1,11 +1,14 @@
 import os
+import datetime
 import pandas as pd
 import numpy as np
 import pytest
 import sys
 
 from arcticdb.util.logger import get_logger
+from arcticdb.exceptions import ArcticDbNotYetImplemented
 from arcticdb_ext.tools import ReliableStorageLock, ReliableStorageLockManager
+from arcticdb.util.test import config_context, config_context_multi
 from tests.util.mark import REAL_S3_TESTS_MARK, WINDOWS
 
 import time
@@ -82,3 +85,181 @@ def test_many_increments(real_storage_factory, lib_name, num_processes, max_slee
     expected_df = pd.DataFrame({"col": [num_processes_succeeded]})
     assert_frame_equal(read_df, expected_df)
     assert vit.version == num_processes_succeeded
+
+
+# --- Plain (unreliable) StorageLock coverage -------------------------------------------------------------------------
+# These run on the in-memory backend; the unreliable lock works on any store. A short WaitMs keeps the acquire
+# confirmation delay small.
+
+
+def test_storage_lock_lifecycle(mem_library):
+    with config_context("StorageLock.WaitMs", 50):
+        l1 = mem_library._nvs.library_tool().get_storage_lock("lock")
+        l2 = mem_library._nvs.library_tool().get_storage_lock("lock")
+
+        assert l1.try_lock()
+        assert not l2.try_lock()
+        l1.unlock()
+
+        assert l2.try_lock()
+        l2.unlock()
+
+        l1.lock()
+        assert not l2.try_lock()
+        l1.unlock()
+
+
+def test_storage_lock_timeout_when_held(mem_library):
+    with config_context("StorageLock.WaitMs", 50):
+        l1 = mem_library._nvs.library_tool().get_storage_lock("lock")
+        l2 = mem_library._nvs.library_tool().get_storage_lock("lock")
+
+        assert l1.try_lock()
+        with pytest.raises(Exception):
+            l2.lock_timeout(100)
+        l1.unlock()
+
+
+def test_storage_lock_timeout_with_metadata(mem_library):
+    with config_context("StorageLock.WaitMs", 50):
+        lib_tool = mem_library._nvs.library_tool()
+        writer = lib_tool.get_storage_lock("lock")
+        reader = lib_tool.get_storage_lock("lock")
+
+        writer.lock_timeout(1000, metadata={"job_name": "timed"})
+        assert reader.read_metadata() == {"job_name": "timed"}
+        writer.unlock()
+        assert reader.read_metadata() is None
+
+
+def test_storage_lock_becomes_inactive_after_ttl(mem_library):
+    with config_context_multi({"StorageLock.WaitMs": 50, "StorageLock.TTL": 1}):
+        lib_tool = mem_library._nvs.library_tool()
+        lock = lib_tool.get_storage_lock("lock")
+
+        lock.lock(metadata={"job_name": "stale"})
+        # Release the in-process re-entrancy guard, leaving the (about to expire) lock on disk, so we can observe
+        # it going inactive via a fresh listing rather than via this same lock object.
+        lock._test_release_local_lock()
+
+        time.sleep(0.01)
+
+        (info,) = lib_tool.list_storage_locks()
+        assert info["active"] is False
+        assert info["metadata"] == {"job_name": "stale"}
+
+
+def test_storage_lock_read_metadata_after_ttl_expiry(mem_library):
+    with config_context_multi({"StorageLock.WaitMs": 50, "StorageLock.TTL": 1}):
+        lib_tool = mem_library._nvs.library_tool()
+        lock = lib_tool.get_storage_lock("lock")
+        reader = lib_tool.get_storage_lock("lock")
+
+        lock.lock(metadata={"job_name": "stale"})
+        lock._test_release_local_lock()
+
+        time.sleep(0.01)
+
+        # read_metadata surfaces metadata for expired locks too
+        assert reader.read_metadata() == {"job_name": "stale"}
+
+
+STORAGE_LOCK_METADATA = [
+    pytest.param("nightly-etl", id="str"),
+    pytest.param(42, id="int"),
+    pytest.param(3.14, id="float"),
+    pytest.param(True, id="bool"),
+    pytest.param(b"\x00\x01\x02", id="bytes"),
+    pytest.param([1, "a", 2.0, True], id="list"),
+    pytest.param({"job_name": "blah", "n": 42}, id="dict"),
+    pytest.param({"a": [1, {"b": 2}], "c": None}, id="nested"),
+    pytest.param(pd.Timestamp("2025-01-01 09:30:00"), id="timestamp_naive"),
+    pytest.param(pd.Timestamp("2025-01-01 09:30:00", tz="America/New_York"), id="timestamp_tz"),
+    pytest.param(datetime.datetime(2025, 1, 1, 9, 30, tzinfo=datetime.timezone.utc), id="datetime_tz"),
+    pytest.param(datetime.timedelta(days=1, hours=2, seconds=30), id="timedelta"),
+]
+
+
+@pytest.mark.parametrize("metadata", STORAGE_LOCK_METADATA)
+def test_storage_lock_metadata_round_trip(mem_library, metadata):
+    with config_context("StorageLock.WaitMs", 50):
+        lib_tool = mem_library._nvs.library_tool()
+        writer = lib_tool.get_storage_lock("lock")
+        reader = mem_library._nvs.library_tool().get_storage_lock("lock")
+
+        # A separate reader observes the holder's metadata (the trace use-case)
+        writer.lock(metadata=metadata)
+        assert reader.read_metadata() == metadata
+
+        # and it surfaces through the listing
+        (info,) = lib_tool.list_storage_locks()
+        assert info["metadata"] == metadata
+
+        # Metadata gone after unlock
+        writer.unlock()
+        assert reader.read_metadata() is None
+
+
+def test_storage_lock_metadata_too_large(mem_library):
+    with config_context("StorageLock.WaitMs", 50):
+        lock = mem_library._nvs.library_tool().get_storage_lock("lock")
+        with pytest.raises(ArcticDbNotYetImplemented):
+            lock.lock(metadata={"blob": "x" * (1 << 20)})
+
+
+def test_storage_lock_metadata_absent(mem_library):
+    with config_context("StorageLock.WaitMs", 50):
+        writer = mem_library._nvs.library_tool().get_storage_lock("lock")
+        reader = mem_library._nvs.library_tool().get_storage_lock("lock")
+
+        # No lock yet
+        assert reader.read_metadata() is None
+
+        # Locking without metadata reports no metadata
+        writer.lock()
+        assert reader.read_metadata() is None
+        writer.unlock()
+
+
+def test_list_storage_locks_unreliable(mem_library):
+    with config_context("StorageLock.WaitMs", 50):
+        lock = mem_library._nvs.library_tool().get_storage_lock("mylock")
+        lib_tool = mem_library._nvs.library_tool()
+
+        assert lib_tool.list_storage_locks() == []
+
+        lock.lock(metadata={"who": "me"})
+        locks = lib_tool.list_storage_locks()
+        assert len(locks) == 1
+        info = locks[0]
+        assert info["name"] == "mylock"
+        assert info["active"] is True
+        assert info["metadata"] == {"who": "me"}
+        assert "timestamp" in info
+
+        lock.unlock()
+        assert lib_tool.list_storage_locks() == []
+
+
+def test_list_storage_locks_multiple(mem_library):
+    with config_context("StorageLock.WaitMs", 50):
+        lib_tool = mem_library._nvs.library_tool()
+        lock_a = lib_tool.get_storage_lock("lock_a")
+        lock_b = lib_tool.get_storage_lock("lock_b")
+
+        lock_a.lock(metadata={"who": "a"})
+        lock_b.lock()
+
+        locks = {info["name"]: info for info in lib_tool.list_storage_locks()}
+        assert locks.keys() == {"lock_a", "lock_b"}
+        assert locks["lock_a"]["active"] is True
+        assert locks["lock_a"]["metadata"] == {"who": "a"}
+        assert locks["lock_b"]["active"] is True
+        assert locks["lock_b"]["metadata"] is None
+
+        lock_a.unlock()
+        (info,) = lib_tool.list_storage_locks()
+        assert info["name"] == "lock_b"
+
+        lock_b.unlock()
+        assert lib_tool.list_storage_locks() == []

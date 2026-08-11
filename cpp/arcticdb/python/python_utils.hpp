@@ -135,6 +135,28 @@ std::optional<Msg> maybe_pb_from_python(const py::object& py_msg) {
     return res;
 }
 
+inline std::optional<google::protobuf::Any> py_metadata_to_any(const py::object& metadata) {
+    auto udm = maybe_pb_from_python<arcticdb::proto::descriptors::UserDefinedMetadata>(metadata);
+    if (!udm.has_value()) {
+        return std::nullopt;
+    }
+    google::protobuf::Any any;
+    any.PackFrom(*udm);
+    return any;
+}
+
+inline py::object any_metadata_to_py(const google::protobuf::Any* metadata) {
+    arcticdb::proto::descriptors::UserDefinedMetadata udm;
+    if (!metadata || !metadata->UnpackTo(&udm)) {
+        return py::none();
+    }
+    return pb_to_python(udm);
+}
+
+inline py::object any_metadata_to_py(const std::optional<google::protobuf::Any>& metadata) {
+    return any_metadata_to_py(metadata.has_value() ? &*metadata : nullptr);
+}
+
 /**
  * Register __repr__ string representation by piggy backing on fmt::format
  * @tparam PyClass type of class binding
