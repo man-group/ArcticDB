@@ -146,10 +146,7 @@ void declare_resample_clause(py::module& version) {
             .def("__str__", &ResampleClause<closed_boundary>::to_string);
 }
 
-void register_bindings(py::module& version, py::exception<arcticdb::ArcticException>& base_exception) {
-
-    py::register_local_exception<StreamDescriptorMismatch>(version, "StreamDescriptorMismatch", base_exception.ptr());
-
+void register_bindings(py::module& version, py::exception<arcticdb::ArcticException>&) {
     // Useful for enterprise
     auto constants = version.def_submodule("constants", "Reserved stream id constants used by ArcticDB");
     constants.attr("WRITE_VERSION_ID") = py::str(WriteVersionId);
@@ -1253,7 +1250,8 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                         // lazy_df._collect_schema() == lazy_df.collect().data.schema
                         // is maintained. In polarctic we can drop index columns if they are not in with_columns.
                         auto num_index_levels =
-                                pipelines::index::required_fields_count(stream_desc, schema.norm_metadata_);
+                                pipelines::index::required_fields_info(stream_desc, schema.norm_metadata_)
+                                        .num_physical_required_columns();
                         for (size_t idx = 0; idx < num_index_levels; ++idx) {
                             cols.insert(stream_desc.field(idx).name());
                         }

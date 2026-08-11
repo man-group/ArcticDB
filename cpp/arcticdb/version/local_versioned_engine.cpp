@@ -1506,6 +1506,37 @@ auto unpack_symbol_processing_results(std::vector<SymbolProcessingResult>&& symb
     );
 }
 
+// Drop the symbols that have no rows to contribute, matching append, where appending a zero-row frame is a no-op.
+// If all symbols are empty doesn't remove any, so we are not left with an empty list.
+void drop_rowless_symbols(
+        std::vector<OutputSchema>& input_schemas, std::vector<std::vector<EntityId>>& entity_ids,
+        ComponentManager& component_manager
+) {
+    const auto has_rows = [&component_manager](const std::vector<EntityId>& ids) {
+        auto [row_ranges] = component_manager.get_entities<std::shared_ptr<RowRange>>(ids);
+        return std::ranges::any_of(row_ranges, [](const auto& row_range) { return row_range->diff() > 0; });
+    };
+    std::vector<size_t> to_keep;
+    for (size_t idx = 0; idx < entity_ids.size(); ++idx) {
+        if (has_rows(entity_ids[idx])) {
+            to_keep.emplace_back(idx);
+        }
+    }
+    if (to_keep.empty() || to_keep.size() == entity_ids.size()) {
+        return;
+    }
+    std::vector<OutputSchema> kept_schemas;
+    std::vector<std::vector<EntityId>> kept_entity_ids;
+    kept_schemas.reserve(to_keep.size());
+    kept_entity_ids.reserve(to_keep.size());
+    for (const auto idx : to_keep) {
+        kept_schemas.emplace_back(std::move(input_schemas[idx]));
+        kept_entity_ids.emplace_back(std::move(entity_ids[idx]));
+    }
+    input_schemas = std::move(kept_schemas);
+    entity_ids = std::move(kept_entity_ids);
+}
+
 std::shared_ptr<PipelineContext> setup_join_pipeline_context(
         std::vector<OutputSchema>&& input_schemas, const std::vector<std::shared_ptr<Clause>>& clauses
 ) {
@@ -1564,6 +1595,7 @@ MultiSymbolReadOutput LocalVersionedEngine::batch_read_and_join_internal(
                              ) mutable {
                 auto [input_schemas, entity_ids, res_versioned_items, res_metadatas] =
                         unpack_symbol_processing_results(std::move(symbol_processing_results));
+                drop_rowless_symbols(input_schemas, entity_ids, *component_manager);
                 auto pipeline_context = setup_join_pipeline_context(std::move(input_schemas), *clauses_ptr);
                 return schedule_remaining_iterations(std::move(entity_ids), clauses_ptr)
                         .thenValueInline([component_manager](std::vector<EntityId>&& processed_entity_ids) {
@@ -1748,9 +1780,7 @@ folly::Future<VersionedItem> LocalVersionedEngine::async_append_internal(
     // ReslicingInfo
     if (update_info.previous_index_key_.has_value()) {
         if (append_options.compact_data) {
-            auto compact_data_frame = std::make_optional<CompactDataFrame>(
-                    frame, append_options.validate_index, write_options_.empty_types
-            );
+            auto compact_data_frame = std::make_optional<CompactDataFrame>(frame, append_options.validate_index);
             index_key_fut =
                     async_compact_data_impl(
                             store(), update_info, write_options_, write_options_.segment_row_size, compact_data_frame
@@ -1766,12 +1796,7 @@ folly::Future<VersionedItem> LocalVersionedEngine::async_append_internal(
             index_key_fut = frame->empty()
                                     ? async_write_metadata_impl(store(), update_info, std::move(frame->user_meta))
                                     : async_append_impl(
-                                              store(),
-                                              update_info,
-                                              frame,
-                                              write_options_,
-                                              append_options.validate_index,
-                                              write_options_.empty_types
+                                              store(), update_info, frame, write_options_, append_options.validate_index
                                       );
         }
     } else {
@@ -1826,16 +1851,9 @@ folly::Future<VersionedItem> LocalVersionedEngine::async_update_internal(
     const bool add_new_symbol_list_entry = !update_info.previous_index_key_.has_value() && cfg().symbol_list();
     auto index_key_fut = folly::Future<AtomKey>::makeEmpty();
     if (update_info.previous_index_key_.has_value()) {
-        index_key_fut = frame->empty() ? async_write_metadata_impl(store(), update_info, std::move(frame->user_meta))
-                                       : async_update_impl(
-                                                 store(),
-                                                 update_info,
-                                                 query,
-                                                 frame,
-                                                 write_options_,
-                                                 dynamic_schema,
-                                                 write_options_.empty_types
-                                         );
+        index_key_fut = frame->empty()
+                                ? async_write_metadata_impl(store(), update_info, std::move(frame->user_meta))
+                                : async_update_impl(store(), update_info, query, frame, write_options_, dynamic_schema);
     } else {
         if (!upsert) {
             auto error_msg = fmt::format(

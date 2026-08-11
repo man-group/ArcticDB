@@ -12,7 +12,7 @@ import pyarrow as pa
 import pytest
 
 from arcticdb import col, concat, LazyDataFrame, LazyDataFrameCollection, QueryBuilder, ReadRequest
-from arcticdb.exceptions import NoSuchVersionException, SchemaException
+from arcticdb.exceptions import NormalizationException, NoSuchVersionException, SchemaException
 from arcticdb.options import LibraryOptions
 from arcticdb.util.test import assert_frame_equal, assert_series_equal
 from tests.util.mark import WINDOWS
@@ -392,11 +392,6 @@ def test_symbol_concat_empty_column_intersection(
 
 @pytest.mark.parametrize("empty_first", [True, False])
 @pytest.mark.parametrize("join", ["inner", "outer"])
-@pytest.mark.xfail(
-    strict=True,
-    reason="A zero-row write records its index as not physically stored while still writing the index column, "
-    "and concat rejects the disagreement. Append is unaffected. Monday: TODO",
-)
 def test_symbol_concat_with_empty_dataframe(in_memory_library, empty_first, join):
     # A zero-row symbol contributes no rows, so the result is the non-empty symbol, as in pandas.
     lib = in_memory_library
@@ -411,10 +406,6 @@ def test_symbol_concat_with_empty_dataframe(in_memory_library, empty_first, join
 
 
 @pytest.mark.parametrize("join", ["inner", "outer"])
-@pytest.mark.xfail(
-    strict=True,
-    reason="Same cause as test_symbol_concat_with_empty_dataframe. Monday: TODO",
-)
 def test_symbol_concat_empty_dataframe_does_not_contribute_its_columns(in_memory_library_dynamic, join):
     # A zero-row symbol is skipped entirely, so a column only it has is dropped even by an outer join. Pandas
     # would keep it backfilled; matching append matters more here. See
@@ -948,22 +939,22 @@ def test_symbol_concat_symbols_with_different_indexes(lmdb_library, join, any_ou
     lib.write("timestamp_index_sym", df_1)
     lib.write("multiindex_sym", df_2)
 
-    with pytest.raises(SchemaException):
+    with pytest.raises(NormalizationException):
         concat(lib.read_batch(["range_index_sym", "timestamp_index_sym"], lazy=True), join).collect()
 
-    with pytest.raises(SchemaException):
+    with pytest.raises(NormalizationException):
         concat(lib.read_batch(["timestamp_index_sym", "range_index_sym"], lazy=True), join).collect()
 
-    with pytest.raises(SchemaException):
+    with pytest.raises(NormalizationException):
         concat(lib.read_batch(["range_index_sym", "multiindex_sym"], lazy=True), join).collect()
 
-    with pytest.raises(SchemaException):
+    with pytest.raises(NormalizationException):
         concat(lib.read_batch(["multiindex_sym", "range_index_sym"], lazy=True), join).collect()
 
-    with pytest.raises(SchemaException):
+    with pytest.raises(NormalizationException):
         concat(lib.read_batch(["timestamp_index_sym", "multiindex_sym"], lazy=True), join).collect()
 
-    with pytest.raises(SchemaException):
+    with pytest.raises(NormalizationException):
         concat(lib.read_batch(["timestamp_index_sym", "multiindex_sym"], lazy=True), join).collect()
 
 
@@ -1100,9 +1091,9 @@ class TestMixedArrowPandasConcat:
         pandas_df = pd.DataFrame({"val": [4, 5, 6]})
         self.lib.write("arrow_sym", arrow_table, index_column=True)
         self.lib.write("pandas_sym", pandas_df)
-        with pytest.raises(SchemaException):
+        with pytest.raises(NormalizationException):
             concat(self.lib.read_batch(["arrow_sym", "pandas_sym"], lazy=True)).collect()
-        with pytest.raises(SchemaException):
+        with pytest.raises(NormalizationException):
             concat(self.lib.read_batch(["pandas_sym", "arrow_sym"], lazy=True)).collect()
 
     def test_arrow_unindexed_with_pandas_timestamp_index_raises(self):
@@ -1111,9 +1102,9 @@ class TestMixedArrowPandasConcat:
         pandas_df = pd.DataFrame({"val": [4, 5, 6]}, index=pd.DatetimeIndex(dates, name="ts"))
         self.lib.write("arrow_sym", arrow_table)
         self.lib.write("pandas_sym", pandas_df)
-        with pytest.raises(SchemaException):
+        with pytest.raises(NormalizationException):
             concat(self.lib.read_batch(["arrow_sym", "pandas_sym"], lazy=True)).collect()
-        with pytest.raises(SchemaException):
+        with pytest.raises(NormalizationException):
             concat(self.lib.read_batch(["pandas_sym", "arrow_sym"], lazy=True)).collect()
 
     def test_arrow_with_pandas_multiindex_raises(self):
@@ -1122,9 +1113,9 @@ class TestMixedArrowPandasConcat:
         pandas_df = pd.DataFrame({"val": [4, 5, 6]}, index=index)
         self.lib.write("arrow_sym", arrow_table)
         self.lib.write("pandas_sym", pandas_df)
-        with pytest.raises(SchemaException):
+        with pytest.raises(NormalizationException):
             concat(self.lib.read_batch(["arrow_sym", "pandas_sym"], lazy=True)).collect()
-        with pytest.raises(SchemaException):
+        with pytest.raises(NormalizationException):
             concat(self.lib.read_batch(["pandas_sym", "arrow_sym"], lazy=True)).collect()
 
     def test_arrow_arrow_concat_no_index(self):

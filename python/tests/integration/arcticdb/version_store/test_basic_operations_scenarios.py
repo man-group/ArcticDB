@@ -22,7 +22,8 @@ from datetime import timedelta, timezone
 
 from arcticdb.exceptions import ArcticNativeException, UnsortedDataException
 from arcticdb.version_store.processing import QueryBuilder
-from arcticdb_ext.version_store import StreamDescriptorMismatch, NoSuchVersionException
+from arcticdb_ext.exceptions import StreamDescriptorMismatch
+from arcticdb_ext.version_store import NoSuchVersionException
 
 from arcticdb_ext.exceptions import (
     InternalException,

@@ -13,7 +13,7 @@ from arcticdb import QueryBuilder
 from arcticdb.supported_types import float_types
 from arcticdb.version_store.library import Library
 
-from arcticdb_ext.version_store import StreamDescriptorMismatch
+from arcticdb_ext.exceptions import StreamDescriptorMismatch
 from arcticdb_ext.storage import KeyType
 from arcticdb.util.test import assert_frame_equal
 from arcticdb_ext.types import DataType

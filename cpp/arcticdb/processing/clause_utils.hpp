@@ -19,6 +19,7 @@
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/processing/component_manager.hpp>
 #include <arcticdb/processing/processing_unit.hpp>
+#include <arcticdb/processing/schema_combine.hpp>
 #include <arcticdb/processing/sorted_aggregation.hpp>
 
 namespace arcticdb {
@@ -207,21 +208,6 @@ std::vector<EntityId> push_entities(
 std::shared_ptr<std::vector<EntityFetchCount>> generate_segment_fetch_counts(
         std::span<const std::vector<size_t>> processing_unit_indexes, size_t num_segments
 );
-
-// Multi-symbol join utilities
-enum class JoinType : uint8_t { OUTER, INNER };
-
-std::pair<StreamDescriptor, proto::descriptors::NormalizationMetadata> join_indexes(
-        std::vector<OutputSchema>& input_schemas
-);
-
-IndexDescriptorImpl generate_index_descriptor(const std::vector<OutputSchema>& input_schemas);
-
-std::unordered_set<size_t> add_index_fields(StreamDescriptor& stream_desc, std::vector<OutputSchema>& input_schemas);
-
-void inner_join(StreamDescriptor& stream_desc, std::vector<OutputSchema>& input_schemas);
-
-void outer_join(StreamDescriptor& stream_desc, std::vector<OutputSchema>& input_schemas);
 
 void check_column_presence(
         OutputSchema& output_schema, const std::unordered_set<std::string>& required_columns,

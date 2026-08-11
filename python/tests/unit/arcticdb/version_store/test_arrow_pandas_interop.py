@@ -666,16 +666,10 @@ def _index_tz(received: ArrowOrPandas):
 
 
 FORMATS_ORDER = [("arrow", "pandas"), ("pandas", "arrow")]
-_APPEND = pytest.param(
-    "append", marks=pytest.mark.xfail(reason="append between arrow and pandas not yet supported", strict=True)
-)
-_UPDATE = pytest.param(
-    "update", marks=pytest.mark.xfail(reason="update between arrow and pandas not yet supported", strict=True)
-)
 # append/update/concat all produce a row-wise union for disjoint, contiguous timeseries chunks.
-INDEXED_OPS = [_APPEND, _UPDATE, "concat"]
+INDEXED_OPS = ["append", "update", "concat"]
 # operations that apply without a timeseries index.
-UNINDEXED_OPS = [_APPEND, "concat"]
+UNINDEXED_OPS = ["append", "concat"]
 
 
 # --- matching schema (row-wise union), both directions --------------------
@@ -729,11 +723,6 @@ def test_combine_pandas_unnamed_index_concat(arrow_library_any_schema, first_fmt
 
 @pytest.mark.parametrize("first_fmt, second_fmt", FORMATS_ORDER)
 @pytest.mark.parametrize("op", ["append", "update"])
-@pytest.mark.xfail(
-    reason="append/update with a column-name mismatch (unnamed pandas index stored as __index__ vs a "
-    "named arrow index column) should raise SchemaException; users must align names via the rename API",
-    strict=True,
-)
 def test_combine_pandas_unnamed_index_append_update_raises(arrow_library_any_schema, op, first_fmt, second_fmt):
     """Unlike concat, append/update require matching column names, so an unnamed pandas index must
     not silently combine with a named arrow index column."""
@@ -988,10 +977,6 @@ def test_combine_pandas_duplicate_columns_raises(arrow_library):
         lib.append("sym", df)
 
 
-@pytest.mark.xfail(
-    reason="pandas empty-string column has no matching arrow column; should raise SchemaException once arrow<->pandas append lands",
-    strict=True,
-)
 def test_combine_pandas_empty_column_name_mismatch_raises(arrow_library):
     """Arrow with column name "empty" combined with pandas empty "" column name should raise a SchemaException"""
     lib = arrow_library

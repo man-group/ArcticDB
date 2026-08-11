@@ -126,24 +126,34 @@ std::pair<index::IndexSegmentReader, std::vector<SliceAndKey>> read_index_to_vec
         const std::shared_ptr<Store>& store, const AtomKey& index_key
 );
 
-// Combines the stream descriptors of an existing index key and a new frame.
-// Can be used to get the metadata for [write_index] when updating or appending.
-TimeseriesDescriptor get_merged_tsd(
-        size_t row_count, bool dynamic_schema, const TimeseriesDescriptor& existing_tsd,
-        const std::shared_ptr<pipelines::InputFrame>& new_frame
-);
-
 [[nodiscard]] bool is_timeseries_index(const IndexDescriptorImpl& index_desc);
 
-// If NormalizationMetadata is not provided, or specifies the return type is not a Series or DataFrame, returns the
-// index field count from the stream descriptor.
-// Otherwise, the behaviour depends on whether the data has a multiindex, and whether or not the data is a Series.
-// - DataFrame + non multiindex = index field count from the stream descriptor
-// - DataFrame + multiindex = number of levels in the multiindex
-// - Series + non multiindex = index field count from the stream descriptor PLUS ONE. This is to handle joins of Series
-//   with different names, which are stored as dataframes with different column names internally.
-// - Series + multiindex = number of levels in the multiindex PLUS ONE for the same reason as above
-uint32_t required_fields_count(
+// The shape of a frame's required fields - its index columns, plus its value column if it is a Series. Those are
+// always the leading fields of the descriptor, so a count of them says where the data columns begin.
+struct RequiredFieldInfo {
+    bool has_multi_index{false};
+    bool has_series_value_column{false};
+    // Index levels occupying a leading descriptor field. Zero for a range index, whose name is held only in the
+    // normalization metadata. Cannot be derived from the count alone, as a one-level multi-index is legal.
+    size_t num_physical_indices{0};
+
+    [[nodiscard]] size_t num_physical_required_columns() const {
+        return num_physical_indices + (has_series_value_column ? 1 : 0);
+    }
+
+    // How many of a single frame's leading fields are required ones. An empty index occupies no descriptor field, so
+    // a frame carrying one contributes none of the index levels and every one of its fields is a data column.
+    [[nodiscard]] size_t num_required_columns_for(IndexDescriptorImpl::Type index_type) const {
+        const size_t indices = index_type == IndexDescriptorImpl::Type::EMPTY ? 0 : num_physical_indices;
+        return indices + (has_series_value_column ? 1 : 0);
+    }
+};
+
+RequiredFieldInfo required_fields_info(const proto::descriptors::NormalizationMetadata& norm_meta);
+
+// For metadata that says nothing about the index - absent, or an input type with no index of its own such as an
+// ndarray or a pickled object - the descriptor's own index field count is the answer.
+RequiredFieldInfo required_fields_info(
         const StreamDescriptor& stream_desc,
         const std::optional<proto::descriptors::NormalizationMetadata>& norm_meta = std::nullopt
 );

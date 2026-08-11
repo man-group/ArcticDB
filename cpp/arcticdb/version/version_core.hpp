@@ -48,12 +48,12 @@ folly::Future<entity::AtomKey> async_write_dataframe_impl(
 
 folly::Future<AtomKey> async_append_impl(
         const std::shared_ptr<Store>& store, const UpdateInfo& update_info, const std::shared_ptr<InputFrame>& frame,
-        const WriteOptions& options, bool validate_index, bool empty_types
+        const WriteOptions& options, bool validate_index
 );
 
 folly::Future<AtomKey> async_update_impl(
         const std::shared_ptr<Store>& store, const UpdateInfo& update_info, const UpdateQuery& query,
-        const std::shared_ptr<InputFrame>& frame, const WriteOptions& options, bool dynamic_schema, bool empty_types
+        const std::shared_ptr<InputFrame>& frame, const WriteOptions& options, bool dynamic_schema
 );
 
 folly::Future<AtomKey> async_write_metadata_impl(
@@ -201,7 +201,6 @@ folly::Future<CompactDataInfo> compact_data_explain_plan_impl(
 struct CompactDataFrame {
     std::shared_ptr<InputFrame> frame_;
     bool validate_index_;
-    bool empty_types_;
 };
 
 folly::Future<std::optional<AtomKey>> async_compact_data_impl(

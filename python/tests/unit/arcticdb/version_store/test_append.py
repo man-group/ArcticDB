@@ -409,10 +409,7 @@ class TestAppend:
         to_append = df if existing == "pickled" else pickled
         lib.write(symbol, to_write)
         assert lib.is_symbol_pickled(symbol) == (existing == "pickled")
-        # Appending to a pickled symbol is rejected by a runtime check before any schema combining, so only
-        # appending pickled data to a normalized symbol is reported as the object kind mismatch it is.
-        expected = InternalException if existing == "pickled" else NormalizationException
-        with pytest.raises(expected):
+        with pytest.raises(NormalizationException):
             lib.append(symbol, to_append, compact_data=compact_data)
 
     # A default RangeIndex - start 0, step 1 - is what pandas hands you for any frame you did not index
@@ -788,7 +785,7 @@ class TestAppend:
         lib.write("sym", to_write)
         with pytest.raises(NormalizationException) as e:
             lib.append("sym", to_append, compact_data=compact_data)
-        assert "Append" in str(e.value)
+        assert "append" in str(e.value)
 
     @pytest.mark.parametrize(
         "to_write, to_append",
@@ -819,31 +816,10 @@ class TestAppend:
             lib.append("sym", to_append, compact_data=compact_data)
         assert "name_1" in str(e.value) and "name_2" in str(e.value)
 
-    def test_append_series_with_different_row_range_index_name(
-        self, lmdb_version_store_dynamic_schema_v1, compact_data
-    ):
-        lib = lmdb_version_store_dynamic_schema_v1
-        to_write = pd.Series([1, 2, 3])
-        to_write.index.name = "index_name_1"
-        to_append = pd.Series([4, 5, 6])
-        to_append.index.name = "index_name_2"
-        lib.write("sym", to_write)
-        lib.append("sym", to_append, compact_data=compact_data)
-        # The current behavior is the last modification operation is setting the index name.
-        # See Monday 9797097831, it would be best to require that index names are always matching. This is the case for
-        # datetime index because it's a physical column. It's a potentially breaking change.
-        assert lib.read("sym").data.index.name == "index_name_2"
-
     @pytest.mark.parametrize("frame_type", ["series", "dataframe"])
     @pytest.mark.parametrize(
         "written_name, appended_name",
         [("index_name_1", "index_name_2"), ("index_name_1", None), (None, "index_name_2")],
-    )
-    @pytest.mark.xfail(
-        strict=True,
-        reason="Monday 9797097831: a RangeIndex name is held only in the metadata, so a mismatch goes unnoticed "
-        "and the last write wins, unlike every other index name. Remove this and the last-write-wins assertion in "
-        "test_append_series_with_different_row_range_index_name together.",
     )
     def test_append_with_different_row_range_index_name_raises(
         self, in_memory_version_store_dynamic_schema, compact_data, frame_type, written_name, appended_name
@@ -949,3 +925,16 @@ class TestAppend:
         )
         assert len(lib_tool.find_keys(KeyType.SYMBOL_LIST)) == num_symbol_list_keys + 1
         assert lib.list_symbols() == [sym]
+
+
+def test_append_mismatched_column_count_message_is_truncated(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    sym = "test_append_mismatched_column_count_message_is_truncated"
+    index = pd.date_range("2024-01-01", periods=1)
+    lib.write(sym, pd.DataFrame({f"col{i}": [i] for i in range(10)}, index=index))
+    with pytest.raises(SchemaException) as e:
+        lib.append(sym, pd.DataFrame({"col0": [0], "col1": [1]}, index=pd.date_range("2024-01-02", periods=1)))
+    msg = str(e.value)
+    assert f"Cannot append (symbol '{sym}')" in msg
+    # Eight columns are missing, so only the first five are named.
+    assert "missing [col2, col3, col4, col5, col6, etc.], unexpected []" in msg

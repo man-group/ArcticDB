@@ -19,17 +19,14 @@ import pandas as pd
 import numpy as np
 import pytz
 import re
-import itertools
 import attr
 import warnings
-import difflib
 from datetime import datetime
 
 from arcticdb_ext.exceptions import UserInputException
 from numpy import datetime64
 from pandas import Timestamp, to_datetime, Timedelta
 from typing import Any, Optional, Union, List, Sequence, Tuple, Dict, Set, NamedTuple
-from contextlib import contextmanager
 import time
 
 from arcticdb.dependencies import pyarrow as pa
@@ -68,7 +65,6 @@ from arcticdb_ext.version_store import PythonVersionStoreUpdateQuery as _PythonV
 from arcticdb_ext.version_store import PythonVersionStoreReadOptions as _PythonVersionStoreReadOptions
 from arcticdb_ext.version_store import PythonVersionStoreBatchReadOptions as _PythonVersionStoreBatchReadOptions
 from arcticdb_ext.version_store import PythonVersionStoreVersionQuery as _PythonVersionStoreVersionQuery
-from arcticdb_ext.version_store import StreamDescriptorMismatch
 from arcticdb_ext.version_store import DataError, KeyNotFoundInStageResultInfo
 from arcticdb_ext.version_store import sorted_value_name, PreloadedIndexQuery as _PreloadedIndexQuery
 from arcticdb_ext.version_store import ArrowOutputFrame, InternalOutputFormat, MergeAction, _modify_schema
@@ -306,7 +302,6 @@ def _handle_categorical_columns(symbol, data, throw=True, operation_supports_cat
 
 
 _BATCH_BAD_ARGS: Dict[Any, Sequence[str]] = {}
-_STREAM_DESCRIPTOR_SPLIT = re.compile(r", (?=FD<)")
 
 
 def _check_batch_kwargs(batch_fun, non_batch_fun, kwargs: Dict):
@@ -318,28 +313,6 @@ def _check_batch_kwargs(batch_fun, non_batch_fun, kwargs: Dict):
     union = cached & kwargs.keys()
     if union:
         log.warning("Using non-batch arguments {} with {}", union, batch_fun.__name__)
-
-
-@contextmanager
-def _diff_long_stream_descriptor_mismatch(nvs):  # Diffing strings is easier done in Python than C++
-    try:
-        yield
-    except StreamDescriptorMismatch as sdm:
-        nvs.last_mismatch_msg = sdm.args[0]
-        # TODO: This is too hacky. Consider providing a useful exception in C++ instead of string munging in Python.
-        preamble, stream_id, existing, new_val = sdm.args[0].split("; ")
-        existing = _STREAM_DESCRIPTOR_SPLIT.split(existing[existing.find("=") + 1 :])
-        new_val = _STREAM_DESCRIPTOR_SPLIT.split(new_val[new_val.find("=") + 1 :])
-        diff = difflib.unified_diff(existing, new_val, n=0)
-        new_msg_lines = (
-            preamble,
-            stream_id,
-            "(Showing only the mismatch. Full col list saved in the `last_mismatch_msg` attribute of the lib instance.",
-            "'-' marks columns missing from the argument, '+' for unexpected.)",
-            *(x for x in itertools.islice(diff, 3, None) if not x.startswith("@@")),
-        )
-        sdm.args = ("\n".join(new_msg_lines),)
-        raise
 
 
 def _assume_true(name, kwargs):
@@ -955,8 +928,6 @@ class NativeVersionStore:
             dynamic_strings = True
         return dynamic_strings
 
-    last_mismatch_msg: Optional[str] = None
-
     def append(
         self,
         symbol: str,
@@ -1079,37 +1050,36 @@ class NativeVersionStore:
         write_if_missing = kwargs.get("write_if_missing", True)
 
         if self._valid_item_type(item):
-            with _diff_long_stream_descriptor_mismatch(self):
-                if incomplete:
-                    # Note that the V2 API has never called append with the incomplete kwarg, so we don't need the
-                    # stacklevel switching behaviour
-                    warn(
-                        "Staging data with append() is deprecated. Use stage() instead.",
-                        DeprecationWarning,
-                        stacklevel=2,
-                    )
-                    self.version_store.write_parallel(symbol, item, norm_meta, validate_index, False, None)
-                else:
-                    call_time = time.time_ns()
-                    vit = self.version_store.append(
-                        symbol,
-                        item,
-                        norm_meta,
-                        udm,
-                        write_if_missing,
-                        prune_previous_version,
-                        validate_index,
-                        compact_data,
-                    )
-                    # This is a heuristic to check for the case of using append call to write an empty dataframe in that
-                    # case we want to warn users that the processing pipeline might not work as expected. There are two
-                    # cases when the version is 0 either a new symbol was created by this call or there was an existing
-                    # symbol with version 0 and the input dataframe was empty, which makes the append a noop. That is
-                    # why the call_time is used to check if the symbol creation time was after the call to append in the
-                    # C++ layer.
-                    if vit.version == 0 and write_if_missing and vit.timestamp >= call_time:
-                        _log_warning_on_writing_empty_dataframe(dataframe, symbol)
-                    return self._convert_thin_cxx_item_to_python(vit, metadata)
+            if incomplete:
+                # Note that the V2 API has never called append with the incomplete kwarg, so we don't need the
+                # stacklevel switching behaviour
+                warn(
+                    "Staging data with append() is deprecated. Use stage() instead.",
+                    DeprecationWarning,
+                    stacklevel=2,
+                )
+                self.version_store.write_parallel(symbol, item, norm_meta, validate_index, False, None)
+            else:
+                call_time = time.time_ns()
+                vit = self.version_store.append(
+                    symbol,
+                    item,
+                    norm_meta,
+                    udm,
+                    write_if_missing,
+                    prune_previous_version,
+                    validate_index,
+                    compact_data,
+                )
+                # This is a heuristic to check for the case of using append call to write an empty dataframe in that
+                # case we want to warn users that the processing pipeline might not work as expected. There are two
+                # cases when the version is 0 either a new symbol was created by this call or there was an existing
+                # symbol with version 0 and the input dataframe was empty, which makes the append a noop. That is
+                # why the call_time is used to check if the symbol creation time was after the call to append in the
+                # C++ layer.
+                if vit.version == 0 and write_if_missing and vit.timestamp >= call_time:
+                    _log_warning_on_writing_empty_dataframe(dataframe, symbol)
+                return self._convert_thin_cxx_item_to_python(vit, metadata)
 
     def update(
         self,
@@ -1218,18 +1188,17 @@ class NativeVersionStore:
         )
 
         if self._valid_item_type(item):
-            with _diff_long_stream_descriptor_mismatch(self):
-                call_time = time.time_ns()
-                vit = self.version_store.update(
-                    symbol, update_query, item, norm_meta, udm, upsert, dynamic_schema, prune_previous_version
-                )
-                # This is a heuristic to check for using update to write an empty dataframe in that case we want to warn
-                # users that the processing pipeline might not work as expected. There are two cases when the version is
-                # 0 either a new symbol was created by this call or there was an existing symbol with version 0 and the
-                # input dataframe was empty, which makes the update a noop. That is why the call_time is used to check
-                # if the symbol creation time was after the call to append in the C++ layer.
-                if vit.version == 0 and upsert and vit.timestamp >= call_time:
-                    _log_warning_on_writing_empty_dataframe(data, symbol)
+            call_time = time.time_ns()
+            vit = self.version_store.update(
+                symbol, update_query, item, norm_meta, udm, upsert, dynamic_schema, prune_previous_version
+            )
+            # This is a heuristic to check for using update to write an empty dataframe in that case we want to warn
+            # users that the processing pipeline might not work as expected. There are two cases when the version is
+            # 0 either a new symbol was created by this call or there was an existing symbol with version 0 and the
+            # input dataframe was empty, which makes the update a noop. That is why the call_time is used to check
+            # if the symbol creation time was after the call to append in the C++ layer.
+            if vit.version == 0 and upsert and vit.timestamp >= call_time:
+                _log_warning_on_writing_empty_dataframe(data, symbol)
             return self._convert_thin_cxx_item_to_python(vit, metadata)
 
     def _apply_date_range_to_update_query(
