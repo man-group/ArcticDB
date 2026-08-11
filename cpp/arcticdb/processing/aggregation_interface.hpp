@@ -10,6 +10,7 @@
 
 #include <folly/Poly.h>
 #include <arcticdb/entity/types.hpp>
+#include <arcticdb/pipeline/column_stats_types.hpp>
 
 namespace arcticdb {
 
@@ -60,7 +61,7 @@ struct IColumnStatsAggregatorData {
     template<class Base>
     struct Interface : Base {
         void aggregate(const ColumnWithStrings& input_column) { folly::poly_call<0>(*this, input_column); }
-        SegmentInMemory finalize(const std::vector<ColumnName>& output_column_names) const {
+        std::vector<ColumnStatValue> finalize(const std::vector<ColumnName>& output_column_names) const {
             return folly::poly_call<1>(*this, output_column_names);
         }
     };

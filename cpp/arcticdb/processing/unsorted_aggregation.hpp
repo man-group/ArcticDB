@@ -9,6 +9,7 @@
 #pragma once
 
 #include <arcticdb/entity/types.hpp>
+#include <arcticdb/pipeline/column_stats_types.hpp>
 #include <arcticdb/processing/expression_node.hpp>
 
 namespace arcticdb {
@@ -19,7 +20,7 @@ class MinMaxAggregatorData {
     ARCTICDB_MOVE_COPY_DEFAULT(MinMaxAggregatorData)
 
     void aggregate(const ColumnWithStrings& input_column);
-    SegmentInMemory finalize(const std::vector<ColumnName>& output_column_names) const;
+    std::vector<ColumnStatValue> finalize(const std::vector<ColumnName>& output_column_names) const;
 
   private:
     std::optional<Value> min_;

@@ -2,6 +2,7 @@
 
 #include <arcticdb/pipeline/column_name_resolution.hpp>
 #include <arcticdb/processing/clause.hpp>
+#include <arcticdb/pipeline/column_stats_types.hpp>
 #include <arcticdb/pipeline/index_fields.hpp>
 #include <column_stats.pb.h>
 #include <ankerl/unordered_dense.h>
@@ -13,12 +14,10 @@
 
 namespace arcticdb {
 
-SegmentInMemory merge_column_stats_segments(const std::vector<SegmentInMemory>& segments);
+SegmentInMemory build_column_stats_segment(std::vector<ColumnStatsComponent>&& components);
 
 // User facing types - eg users are only allowed to create min and max together, not one or the other
 enum class ColumnStatType { MINMAX };
-// Total universe of column stats we support - min and max are treated separately here
-using ColumnStatTypeInternal = arcticc::pb2::column_stats_pb2::ColumnStatsType;
 
 static const char* const start_index_column_name = "start_index";
 static constexpr size_t start_index_column_offset = 0;

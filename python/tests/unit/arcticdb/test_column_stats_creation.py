@@ -940,6 +940,31 @@ def header_all_entries(header):
             yield data_col_offset, entry
 
 
+def header_offset_by_stat(header):
+    """{(data_col_offset, stat type): stats_seg_offset}. Order-independent, unlike comparing the
+    serialized header, since protobuf map ordering is unspecified."""
+    return {
+        (data_col_offset, entry.type): entry.stats_seg_offset for data_col_offset, entry in header_all_entries(header)
+    }
+
+
+def assert_header_offsets_match_field_names(lib, sym, header, col_name_by_offset):
+    """Every entry's stats_seg_offset must point at the stats column named after the data column
+    at its data_col_offset."""
+    field_name_by_type = {
+        ColumnStatsType.MIN_V1: "v1_MIN",
+        ColumnStatsType.MAX_V1: "v1_MAX",
+        ColumnStatsType.NAN_COUNT_V1: "v1_NAN_COUNT",
+        ColumnStatsType.NULL_COUNT_V1: "v1_NULL_COUNT",
+    }
+    lib_tool = lib.library_tool()
+    keys = lib_tool.find_keys_for_symbol(KeyType.COLUMN_STATS, sym)
+    fields = lib_tool.read_descriptor(keys[0]).fields()
+    for data_col_offset, entry in header_all_entries(header):
+        expected = f"{field_name_by_type[entry.type]}({col_name_by_offset[data_col_offset]})"
+        assert fields[entry.stats_seg_offset].name == expected
+
+
 def test_column_stats_header_metadata(version_store_factory, lib_name, encoding_version, any_output_format):
     lib = version_store_factory(
         column_group_size=2,
@@ -972,19 +997,38 @@ def test_column_stats_header_metadata(version_store_factory, lib_name, encoding_
     assert len(set(offsets)) == 8
 
     # Verify descriptor field names match the offsets
-    field_name_by_type = {
-        ColumnStatsType.MIN_V1: "v1_MIN",
-        ColumnStatsType.MAX_V1: "v1_MAX",
-        ColumnStatsType.NAN_COUNT_V1: "v1_NAN_COUNT",
-        ColumnStatsType.NULL_COUNT_V1: "v1_NULL_COUNT",
-    }
-    col_name_by_offset = {2: "col_1", 3: "col_2"}
-    lib_tool = lib.library_tool()
-    keys = lib_tool.find_keys_for_symbol(KeyType.COLUMN_STATS, sym)
-    fields = lib_tool.read_descriptor(keys[0]).fields()
-    for data_col_offset, entry in header_all_entries(header):
-        expected = f"{field_name_by_type[entry.type]}({col_name_by_offset[data_col_offset]})"
-        assert fields[entry.stats_seg_offset].name == expected
+    assert_header_offsets_match_field_names(lib, sym, header, {2: "col_1", 3: "col_2"})
+
+
+def test_column_stats_create_twice_is_noop(version_store_factory, lib_name, encoding_version, any_output_format):
+    """Creating stats twice on one version must not duplicate or re-offset anything. The eligible
+    column set comes from the version's own descriptor, so the second call finds every requested
+    stat already present and does nothing."""
+    lib = version_store_factory(
+        column_group_size=2,
+        segment_row_size=2,
+        encoding_version=int(encoding_version),
+        lmdb_config={"map_size": 2**30},
+        name=lib_name + f"_{encoding_version.name}",
+    )
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    sym = "test_column_stats_create_twice_is_noop"
+    expected_column_stats = generate_symbol(lib, sym)
+
+    lib.create_column_stats_experimental(sym)
+    first_header = read_column_stats_header(lib, sym)
+    assert_stats_equal(lib.read_column_stats_experimental(sym), expected_column_stats)
+
+    lib.create_column_stats_experimental(sym)
+    second_header = read_column_stats_header(lib, sym)
+
+    assert header_offset_by_stat(second_header) == header_offset_by_stat(first_header)
+    assert second_header.version == first_header.version
+    assert header_stat_count(second_header) == 8
+    assert len({entry.stats_seg_offset for _, entry in header_all_entries(second_header)}) == 8
+    assert_header_offsets_match_field_names(lib, sym, second_header, {2: "col_1", 3: "col_2"})
+    assert lib.get_column_stats_info_experimental(sym) == {"col_1": {"MINMAX"}, "col_2": {"MINMAX"}}
+    assert_stats_equal(lib.read_column_stats_experimental(sym), expected_column_stats)
 
 
 def test_column_stats_duplicated_column_names(version_store_factory, lib_name, encoding_version, any_output_format):

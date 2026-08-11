@@ -1,45 +1,35 @@
 #include <arcticdb/pipeline/column_stats.hpp>
-#include <arcticdb/pipeline/index_fields.hpp>
 #include <arcticdb/processing/aggregation_interface.hpp>
 #include <arcticdb/processing/unsorted_aggregation.hpp>
 #include <arcticdb/entity/timeseries_descriptor.hpp>
 #include <arcticdb/entity/type_utils.hpp>
 #include <arcticdb/util/preconditions.hpp>
 
+#include <algorithm>
+#include <tuple>
+
 namespace arcticdb {
 
-SegmentInMemory merge_column_stats_segments(const std::vector<SegmentInMemory>& segments) {
-    SegmentInMemory merged(Sparsity::PERMITTED);
-    merged.init_column_map();
-    merged.descriptor().set_index(IndexDescriptorImpl{IndexDescriptor::Type::ROWCOUNT, 0});
+namespace {
+struct StatColumn {
+    std::string name;
+    ColumnStatTypeInternal type;
+    size_t data_col_offset;
+    TypeDescriptor type_descriptor;
+};
 
-    // Maintain the order of the columns in the input segments
-    ankerl::unordered_dense::map<std::string, size_t> field_name_to_index;
-    std::vector<TypeDescriptor> type_descriptors;
-    std::vector<std::string> field_names;
-    std::vector<arcticc::pb2::column_stats_pb2::ColumnStatsType> stat_types;
-    std::vector<size_t> data_col_offsets;
-    for (auto& segment : segments) {
-        arcticc::pb2::column_stats_pb2::ColumnStatsHeader header;
-        auto metadata = segment.metadata();
-        util::check(metadata != nullptr, "Column stats segment has no metadata");
-        bool unpacked = metadata->UnpackTo(&header);
-        util::check(unpacked, "Could not unpack column stats metadata?");
-
-        // Build reverse lookup: stats_seg_offset -> (data_col_offset, type)
-        ankerl::unordered_dense::map<uint32_t, std::pair<uint32_t, arcticc::pb2::column_stats_pb2::ColumnStatsType>>
-                offset_lookup;
-        for (const auto& [data_col_offset, entry_list] : header.stats_by_column()) {
-            for (const auto& entry : entry_list.entries()) {
-                offset_lookup[entry.stats_seg_offset()] = {data_col_offset, entry.type()};
-            }
-        }
-
-        for (const auto& [idx, field] : folly::enumerate(segment.descriptor().fields())) {
-            auto new_type = field.type();
-
-            if (auto it = field_name_to_index.find(std::string{field.name()}); it != field_name_to_index.end()) {
-                auto& merged_type = type_descriptors.at(field_name_to_index.at(std::string{field.name()}));
+// Distinct stat columns in first-appearance order, each widened to a type that can hold every
+// component's value for it. Dynamic schema can give a different type per row slice.
+std::vector<StatColumn> collect_stat_columns(
+        const std::vector<ColumnStatsComponent>& components,
+        ankerl::unordered_dense::map<std::string, size_t>& name_to_index
+) {
+    std::vector<StatColumn> stat_columns;
+    for (const auto& component : components) {
+        for (const auto& stat : component.stats) {
+            auto new_type = make_scalar_type(stat.value.data_type());
+            if (auto it = name_to_index.find(stat.segment_column_name); it != name_to_index.end()) {
+                auto& merged_type = stat_columns.at(it->second).type_descriptor;
                 auto opt_common_type = has_valid_common_type(merged_type, new_type);
                 internal::check<ErrorCode::E_ASSERTION_FAILURE>(
                         opt_common_type.has_value(),
@@ -50,45 +40,87 @@ SegmentInMemory merge_column_stats_segments(const std::vector<SegmentInMemory>& 
                 );
                 merged_type = *opt_common_type;
             } else {
-                type_descriptors.emplace_back(new_type);
-                field_name_to_index.emplace(field.name(), type_descriptors.size() - 1);
-                field_names.emplace_back(field.name());
-                auto end_index_offset = static_cast<size_t>(index::Fields::end_index);
-                if (idx > end_index_offset) {
-                    // Skip start_index and end_index which are not statistics
-                    auto& [dcol, stype] = offset_lookup.at(idx);
-                    stat_types.emplace_back(stype);
-                    data_col_offsets.emplace_back(dcol);
-                }
+                name_to_index.emplace(stat.segment_column_name, stat_columns.size());
+                stat_columns.emplace_back(
+                        StatColumn{stat.segment_column_name, stat.type, stat.data_col_offset, new_type}
+                );
             }
         }
     }
+    return stat_columns;
+}
 
-    arcticc::pb2::column_stats_pb2::ColumnStatsHeader merged_header;
-    merged_header.set_version(1); // see column_stats.proto for explanation of the versioning scheme
-    auto end_index_offset = static_cast<size_t>(index::Fields::end_index);
-    size_t stat_idx = 0;
-    for (const auto& [idx, type_descriptor] : folly::enumerate(type_descriptors)) {
-        merged.add_column(FieldRef{type_descriptor, field_names.at(idx)}, 0, AllocationType::DYNAMIC);
-        if (idx > end_index_offset) {
-            auto& entry_list = (*merged_header.mutable_stats_by_column())[data_col_offsets.at(stat_idx)];
-            auto* new_entry = entry_list.add_entries();
-            new_entry->set_stats_seg_offset(idx);
-            new_entry->set_type(stat_types.at(stat_idx));
-            ++stat_idx;
+// has_valid_common_type guarantees the target represents the source exactly, so a static_cast is
+// faithful. The source type is needed to interpret Value's raw bytes, hence the nested visit.
+void set_stat_value(Column& column, size_t row, const Value& value) {
+    details::visit_type(column.type().data_type(), [&column, row, &value](auto target_tag) {
+        using TargetRaw = typename ScalarTypeInfo<decltype(target_tag)>::RawType;
+        details::visit_type(value.data_type(), [&column, row, &value](auto source_tag) {
+            using SourceRaw = typename ScalarTypeInfo<decltype(source_tag)>::RawType;
+            column.set_scalar<TargetRaw>(static_cast<ssize_t>(row), static_cast<TargetRaw>(value.get<SourceRaw>()));
+        });
+    });
+}
+} // namespace
+
+SegmentInMemory build_column_stats_segment(std::vector<ColumnStatsComponent>&& components) {
+    internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+            !components.empty(), "build_column_stats_segment requires at least one component"
+    );
+    std::sort(components.begin(), components.end(), [](const auto& left, const auto& right) {
+        return std::tie(left.start_index, left.end_index) < std::tie(right.start_index, right.end_index);
+    });
+
+    ankerl::unordered_dense::map<std::string, size_t> name_to_index;
+    const auto stat_columns = collect_stat_columns(components, name_to_index);
+
+    const auto last_row = static_cast<ssize_t>(components.size()) - 1;
+    SegmentInMemory seg(Sparsity::PERMITTED);
+    seg.init_column_map();
+    seg.descriptor().set_index(IndexDescriptorImpl{IndexDescriptor::Type::ROWCOUNT, 0});
+
+    auto start_index_col = std::make_shared<Column>(make_scalar_type(DataType::NANOSECONDS_UTC64), Sparsity::PERMITTED);
+    auto end_index_col = std::make_shared<Column>(make_scalar_type(DataType::NANOSECONDS_UTC64), Sparsity::PERMITTED);
+    for (const auto& component : components) {
+        start_index_col->push_back<NumericIndex>(component.start_index);
+        end_index_col->push_back<NumericIndex>(component.end_index);
+    }
+    start_index_col->set_row_data(last_row);
+    end_index_col->set_row_data(last_row);
+    seg.add_column(scalar_field(DataType::NANOSECONDS_UTC64, start_index_column_name), start_index_col);
+    seg.add_column(scalar_field(DataType::NANOSECONDS_UTC64, end_index_column_name), end_index_col);
+
+    std::vector<std::shared_ptr<Column>> columns;
+    columns.reserve(stat_columns.size());
+    for (const auto& stat_column : stat_columns) {
+        columns.emplace_back(std::make_shared<Column>(stat_column.type_descriptor, Sparsity::PERMITTED));
+    }
+    // set_scalar creates and backfills the sparse map where a stat is missing from a row slice
+    for (const auto& [row, component] : folly::enumerate(components)) {
+        for (const auto& stat : component.stats) {
+            set_stat_value(*columns.at(name_to_index.at(stat.segment_column_name)), row, stat.value);
         }
     }
-    for (auto& segment : segments) {
-        merged.append(segment);
+
+    const auto stats_offset_base = seg.descriptor().field_count();
+    arcticc::pb2::column_stats_pb2::ColumnStatsHeader header;
+    header.set_version(1); // see column_stats.proto for explanation of the versioning scheme
+    for (const auto& [idx, stat_column] : folly::enumerate(stat_columns)) {
+        columns.at(idx)->set_row_data(last_row);
+        seg.add_column(FieldRef{stat_column.type_descriptor, stat_column.name}, columns.at(idx));
+        auto* new_entry = (*header.mutable_stats_by_column())[stat_column.data_col_offset].add_entries();
+        new_entry->set_stats_seg_offset(stats_offset_base + idx);
+        new_entry->set_type(stat_column.type);
     }
-    merged.set_compacted(true);
-    merged.sort(start_index_column_name);
+
+    seg.set_row_id(last_row);
+    seg.set_compacted(true);
 
     google::protobuf::Any any;
-    bool packed = any.PackFrom(merged_header);
-    util::check(packed, "Failed to pack merged_header in to Any?");
-    merged.set_metadata(std::move(any));
-    return merged;
+    bool packed = any.PackFrom(header);
+    util::check(packed, "Failed to pack header in to Any?");
+    seg.set_metadata(std::move(any));
+    return seg;
 }
 
 std::string type_to_operator_string(ColumnStatTypeInternal type) {
