@@ -3774,3 +3774,235 @@ def test_merge_insert_only_into_chain_with_shared_boundaries(lmdb_library):
         index=pd.DatetimeIndex([10, 20, 20, 25, 30, 30, 40, 40, 50]),
     )
     assert_frame_equal(lib.read("sym").data, expected)
+
+
+class TestMergeMultiindexInsert:
+    """MultiIndex insert tests for datetime and row-range merge strategies."""
+
+    @pytest.mark.parametrize(
+        "strategy",
+        [
+            MergeStrategy(MergeAction.DO_NOTHING, MergeAction.INSERT),
+            MergeStrategy(MergeAction.UPDATE, MergeAction.INSERT),
+        ],
+        ids=["do_nothing_insert", "update_insert"],
+    )
+    def test_datetime_basic(self, lmdb_library, strategy):
+        lib = lmdb_library
+        index_names = [None, "sec"]
+        primary_target_vals = pd.DatetimeIndex(["2024-01-01", "2024-01-02", "2024-01-03"])
+        target_idx = pd.MultiIndex.from_arrays([primary_target_vals, ["A", "B", "C"]], names=index_names)
+        target = pd.DataFrame({"c": [1, 2, 3], "d": [-1.0, -2.0, -3.0]}, index=target_idx)
+
+        primary_source_vals = pd.DatetimeIndex(["2023-12-31", "2024-01-02", "2024-01-02 10:00:00", "2024-01-05"])
+        source_idx = pd.MultiIndex.from_arrays([primary_source_vals, ["p", "q", "r", "s"]], names=index_names)
+        source = pd.DataFrame({"c": [10, 20, 30, 40], "d": [10.0, 20.0, 30.0, 40.0]}, index=source_idx)
+
+        if strategy.matched == MergeAction.DO_NOTHING:
+            expected_primary = pd.DatetimeIndex(
+                [
+                    "2023-12-31",
+                    "2024-01-01",
+                    "2024-01-02",
+                    "2024-01-02 10:00:00",
+                    "2024-01-03",
+                    "2024-01-05",
+                ]
+            )
+            expected_secondary = ["p", "A", "B", "r", "C", "s"]
+            expected_c = [10, 1, 2, 30, 3, 40]
+            expected_d = [10.0, -1.0, -2.0, 30.0, -3.0, 40.0]
+        else:  # UPDATE
+            expected_primary = pd.DatetimeIndex(
+                [
+                    "2023-12-31",
+                    "2024-01-01",
+                    "2024-01-02",
+                    "2024-01-02 10:00:00",
+                    "2024-01-03",
+                    "2024-01-05",
+                ]
+            )
+            expected_secondary = ["p", "A", "q", "r", "C", "s"]
+            expected_c = [10, 1, 20, 30, 3, 40]
+            expected_d = [10.0, -1.0, 20.0, 30.0, -3.0, 40.0]
+
+        expected_idx = pd.MultiIndex.from_arrays([expected_primary, expected_secondary], names=index_names)
+        expected = pd.DataFrame({"c": expected_c, "d": expected_d}, index=expected_idx)
+
+        lib.write("sym", target)
+        lib.merge_experimental("sym", source, strategy=strategy, on=None)
+        assert_frame_equal(lib.read("sym").data, expected)
+
+    @pytest.mark.parametrize(
+        "strategy",
+        [
+            MergeStrategy(MergeAction.DO_NOTHING, MergeAction.INSERT),
+            MergeStrategy(MergeAction.UPDATE, MergeAction.INSERT),
+        ],
+        ids=["do_nothing_insert", "update_insert"],
+    )
+    def test_rowrange_basic(self, lmdb_library, strategy):
+        lib = lmdb_library
+        index_names = ["p", "s"]
+        target_idx = pd.MultiIndex.from_arrays([["P", "Q", "R"], [1, 2, 3]], names=index_names)
+        target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]}, index=target_idx)
+
+        source_idx = pd.MultiIndex.from_arrays([["X", "Y"], [20, 90]], names=index_names)
+        source = pd.DataFrame({"a": [2, 9], "b": [20.0, 90.0]}, index=source_idx)
+
+        if strategy.matched == MergeAction.DO_NOTHING:
+            expected_idx = pd.MultiIndex.from_arrays([["P", "Q", "R", "Y"], [1, 2, 3, 90]], names=index_names)
+            expected = pd.DataFrame({"a": [1, 2, 3, 9], "b": [1.0, 2.0, 3.0, 90.0]}, index=expected_idx)
+        else:  # UPDATE
+            expected_idx = pd.MultiIndex.from_arrays([["P", "X", "R", "Y"], [1, 20, 3, 90]], names=index_names)
+            expected = pd.DataFrame({"a": [1, 2, 3, 9], "b": [1.0, 20.0, 3.0, 90.0]}, index=expected_idx)
+
+        lib.write("sym", target)
+        lib.merge_experimental("sym", source, strategy=strategy, on=["a"])
+        assert_frame_equal(lib.read("sym").data, expected)
+
+    @pytest.mark.parametrize(
+        "strategy",
+        [
+            MergeStrategy(MergeAction.DO_NOTHING, MergeAction.INSERT),
+            MergeStrategy(MergeAction.UPDATE, MergeAction.INSERT),
+        ],
+        ids=["do_nothing_insert", "update_insert"],
+    )
+    def test_rowrange_requires_on(self, lmdb_library, strategy):
+        lib = lmdb_library
+        index_names = ["p", "s"]
+        target_idx = pd.MultiIndex.from_arrays([["P", "Q", "R"], [1, 2, 3]], names=index_names)
+        target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]}, index=target_idx)
+
+        source_idx = pd.MultiIndex.from_arrays([["X", "Y"], [20, 90]], names=index_names)
+        source = pd.DataFrame({"a": [2, 9], "b": [20.0, 90.0]}, index=source_idx)
+
+        lib.write("sym", target)
+        with pytest.raises(UserInputException):
+            lib.merge_experimental("sym", source, strategy=strategy, on=None)
+
+    @pytest.mark.parametrize(
+        "is_datetime",
+        [True, False],
+        ids=["datetime", "rowrange"],
+    )
+    def test_on_secondary_index_level(self, lmdb_library, is_datetime):
+        lib = lmdb_library
+        strategy = MergeStrategy(MergeAction.UPDATE, MergeAction.INSERT)
+
+        if is_datetime:
+            index_names = [None, "a"]
+            primary_target_vals = pd.DatetimeIndex(["2024-01-01", "2024-01-02", "2024-01-03"])
+            target_idx = pd.MultiIndex.from_arrays([primary_target_vals, ["A", "B", "C"]], names=index_names)
+            target = pd.DataFrame({"c": [1, 2, 3]}, index=target_idx)
+
+            primary_source_vals = pd.DatetimeIndex(["2024-01-02", "2024-01-02", "2024-01-05"])
+            source_idx = pd.MultiIndex.from_arrays([primary_source_vals, ["B", "Z", "E"]], names=index_names)
+            source = pd.DataFrame({"c": [20, 99, 50]}, index=source_idx)
+
+            expected_primary = pd.DatetimeIndex(["2024-01-01", "2024-01-02", "2024-01-02", "2024-01-03", "2024-01-05"])
+            expected_secondary = ["A", "B", "Z", "C", "E"]
+            expected_c = [1, 20, 99, 3, 50]
+        else:  # rowrange
+            index_names = ["p", "a"]
+            target_idx = pd.MultiIndex.from_arrays([["P", "Q", "R"], ["A", "B", "C"]], names=index_names)
+            target = pd.DataFrame({"c": [1, 2, 3]}, index=target_idx)
+
+            source_idx = pd.MultiIndex.from_arrays([["X", "Y"], ["B", "Z"]], names=index_names)
+            source = pd.DataFrame({"c": [20, 90]}, index=source_idx)
+
+            expected_primary = ["P", "X", "R", "Y"]
+            expected_secondary = ["A", "B", "C", "Z"]
+            expected_c = [1, 20, 3, 90]
+
+        expected_idx = pd.MultiIndex.from_arrays([expected_primary, expected_secondary], names=index_names)
+        expected = pd.DataFrame({"c": expected_c}, index=expected_idx)
+
+        lib.write("sym", target)
+        lib.merge_experimental("sym", source, strategy=strategy, on=["a"])
+        assert_frame_equal(lib.read("sym").data, expected)
+
+    def test_string_secondary_level_insert(self, lmdb_library):
+        lib = lmdb_library
+        strategy = MergeStrategy(MergeAction.DO_NOTHING, MergeAction.INSERT)
+        index_names = [None, "s"]
+
+        primary_target_vals = pd.DatetimeIndex(["2024-01-01", "2024-01-02"])
+        target_idx = pd.MultiIndex.from_arrays([primary_target_vals, ["x", "y"]], names=index_names)
+        target = pd.DataFrame({"a": [1, 2]}, index=target_idx)
+
+        primary_source_vals = pd.DatetimeIndex(["2024-01-02", "2024-01-03", "2024-01-04"])
+        source_idx = pd.MultiIndex.from_arrays([primary_source_vals, ["y", "café", None]], names=index_names)
+        source = pd.DataFrame({"a": [2, 3, 4]}, index=source_idx)
+
+        expected_primary = pd.DatetimeIndex(["2024-01-01", "2024-01-02", "2024-01-03", "2024-01-04"])
+        expected_secondary = ["x", "y", "café", None]
+        expected_idx = pd.MultiIndex.from_arrays([expected_primary, expected_secondary], names=index_names)
+        expected = pd.DataFrame({"a": [1, 2, 3, 4]}, index=expected_idx)
+
+        lib.write("sym", target)
+        lib.merge_experimental("sym", source, strategy=strategy, on=None)
+        assert_frame_equal(lib.read("sym").data, expected)
+
+    def test_datetime_insert_across_row_slices(self, lmdb_library_factory):
+        lib = lmdb_library_factory(arcticdb.LibraryOptions(rows_per_segment=2))
+        strategy = MergeStrategy(MergeAction.DO_NOTHING, MergeAction.INSERT)
+        index_names = [None, "s"]
+
+        target_idx = pd.MultiIndex.from_arrays(
+            [
+                pd.to_datetime([10, 20, 30], unit="ns"),
+                [1, 2, 3],
+            ],
+            names=index_names,
+        )
+        target = pd.DataFrame({"a": [0, 1, 2]}, index=target_idx)
+
+        source_idx = pd.MultiIndex.from_arrays(
+            [
+                pd.to_datetime([15, 25], unit="ns"),
+                [15, 25],
+            ],
+            names=index_names,
+        )
+        source = pd.DataFrame({"a": [100, 101]}, index=source_idx)
+
+        expected_idx = pd.MultiIndex.from_arrays(
+            [
+                pd.to_datetime([10, 15, 20, 25, 30], unit="ns"),
+                [1, 15, 2, 25, 3],
+            ],
+            names=index_names,
+        )
+        expected = pd.DataFrame({"a": [0, 100, 1, 101, 2]}, index=expected_idx)
+
+        lib.write("sym", target)
+        lib.merge_experimental("sym", source, strategy=strategy, on=None)
+        assert_frame_equal(lib.read("sym").data, expected)
+
+    @pytest.mark.parametrize(
+        "is_datetime",
+        [True, False],
+        ids=["datetime", "rowrange"],
+    )
+    def test_upsert_nonexistent_symbol(self, lmdb_library, is_datetime):
+        lib = lmdb_library
+        strategy = MergeStrategy(MergeAction.UPDATE, MergeAction.INSERT)
+
+        if is_datetime:
+            index_names = [None, "s"]
+            primary_vals = pd.DatetimeIndex(["2024-01-01", "2024-01-02"])
+            source_idx = pd.MultiIndex.from_arrays([primary_vals, ["A", "B"]], names=index_names)
+            source = pd.DataFrame({"a": [1, 2]}, index=source_idx)
+            on = None
+        else:  # rowrange
+            index_names = ["p", "s"]
+            source_idx = pd.MultiIndex.from_arrays([["P", "Q"], [1, 2]], names=index_names)
+            source = pd.DataFrame({"a": [1, 2]}, index=source_idx)
+            on = ["s"]
+
+        sym = f"nonexistent_{is_datetime}"
+        lib.merge_experimental(sym, source, strategy=strategy, upsert=True, on=on)
+        assert_frame_equal(lib.read(sym).data, source)

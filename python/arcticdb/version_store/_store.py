@@ -4398,6 +4398,8 @@ class NativeVersionStore:
             This API is under development and is subject to change. The API is not subject to semver and can change in
             minor or patch releases.
 
+            Dynamic schema is not supported.
+
         Parameters
         ----------
         symbol : str
