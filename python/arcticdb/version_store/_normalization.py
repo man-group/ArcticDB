@@ -32,6 +32,7 @@ from arcticdb.version_store._string_dtype import (
     _is_arrow_string_column,
     _arrow_string_arrays_to_pd_array,
     _adopt_arrow_strings,
+    _pandas_str_column_to_record_batches,
 )
 from arcticdb.preconditions import check
 from arcticdb_ext import get_config_string
@@ -223,7 +224,9 @@ def get_timezone_from_metadata(norm_meta):
     return None
 
 
-def _to_primitive(arr, arr_name, dynamic_strings, string_max_len=None, coerce_column_type=None, norm_meta=None):
+def _to_primitive(
+    arr, arr_name, dynamic_strings, string_max_len=None, coerce_column_type=None, norm_meta=None
+) -> Union[np.ndarray, List[RecordBatchData]]:
     arr_dtype_as_str = str(arr.dtype)
     if "pyarrow" in arr_dtype_as_str:
         raise ArcticDbNotYetImplemented(
@@ -240,6 +243,8 @@ def _to_primitive(arr, arr_name, dynamic_strings, string_max_len=None, coerce_co
             norm_meta.common.categories[arr_name].category.extend(arr.categories)
         return arr.codes
 
+    if "str" in arr_dtype_as_str:
+        return _pandas_str_column_to_record_batches(arr._pa_array, arr_name)
     # This check has to come after the categorical check above, as Categoricals are a Pandas concept, not numpy, which
     # causes issubdtype to throw if arr.dtype == CategoricalDtype
     if np.issubdtype(arr.dtype, np.timedelta64):

@@ -27,6 +27,7 @@ from typing import Union, List, Optional
 import arcticdb.toolbox.query_stats as qs
 
 from arcticdb_ext.version_store import MergeAction
+
 pytestmark = [
     pytest.mark.merge_update,
     pytest.mark.skipif(

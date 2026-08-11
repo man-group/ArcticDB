@@ -14,7 +14,7 @@ class NodeReadResult:
     def __init__(self, sym, frame_data, norm, sort_order):
         self.sym = sym
         self.frame_data = (
-            FrameData(*frame_data.extract_numpy_arrays()) if isinstance(frame_data, PandasOutputFrame) else frame_data
+            FrameData(*frame_data.extract_pandas_columns()) if isinstance(frame_data, PandasOutputFrame) else frame_data
         )
         self.norm = norm
         self.sort_order = sort_order
@@ -24,7 +24,7 @@ class ReadResult:
     def __init__(self, version, frame_data, norm, udm, mmeta, node_read_results, sort_order):
         self.version = version
         self.frame_data = (
-            FrameData(*frame_data.extract_numpy_arrays()) if isinstance(frame_data, PandasOutputFrame) else frame_data
+            FrameData(*frame_data.extract_pandas_columns()) if isinstance(frame_data, PandasOutputFrame) else frame_data
         )
         self.norm = norm
         self.udm = udm

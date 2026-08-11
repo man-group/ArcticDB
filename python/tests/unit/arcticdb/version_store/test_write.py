@@ -12,6 +12,7 @@ import pytest
 from arcticdb_ext.exceptions import UnsortedDataException, ArcticException as ArcticNativeException
 from arcticdb.util._versions import IS_PANDAS_TWO
 from arcticdb.util.test import assert_frame_equal
+from arcticdb.version_store._string_dtype import _use_pyarrow_strings_in_pandas
 from pandas import MultiIndex
 
 
@@ -142,7 +143,12 @@ class TestMissingStringPlaceholders:
         sym = "nan"
         lib.write(sym, pd.DataFrame({"a": [None, np.nan]}, dtype=dtype))
         data = lib.read(sym).data
-        assert_frame_equal(data, pd.DataFrame({"a": [None, np.nan]}, dtype=dtype))
+        expected_dtype = (
+            pd.StringDtype(storage="pyarrow", na_value=np.nan)
+            if dtype is object and _use_pyarrow_strings_in_pandas()
+            else dtype
+        )
+        assert_frame_equal(data, pd.DataFrame({"a": [None, np.nan]}, dtype=expected_dtype))
 
     @pytest.mark.parametrize("dtype", [None, object])
     def test_write_with_nan_none_and_a_string(self, lmdb_version_store, dtype):
@@ -150,7 +156,7 @@ class TestMissingStringPlaceholders:
         sym = "nan"
         lib.write(sym, pd.DataFrame({"a": [None, np.nan, "string"]}, dtype=dtype))
         data = lib.read(sym).data
-        assert_frame_equal(data, pd.DataFrame({"a": [None, np.nan, "string"]}, dtype=dtype))
+        assert_frame_equal(data, pd.DataFrame({"a": [None, np.nan, "string"]}))
 
     @pytest.mark.parametrize("dtype", [None, object, np.double, np.float32])
     def test_write_only_nan_column(self, lmdb_version_store, dtype):
@@ -158,7 +164,12 @@ class TestMissingStringPlaceholders:
         sym = "nan"
         lib.write(sym, pd.DataFrame({"a": [np.nan]}, dtype=dtype))
         data = lib.read(sym).data
-        assert_frame_equal(data, pd.DataFrame({"a": [np.nan]}, dtype=dtype))
+        expected_dtype = (
+            pd.StringDtype(storage="pyarrow", na_value=np.nan)
+            if dtype is object and _use_pyarrow_strings_in_pandas()
+            else dtype
+        )
+        assert_frame_equal(data, pd.DataFrame({"a": [np.nan]}, dtype=expected_dtype))
 
 
 def test_write_bool_named_columns(lmdb_version_store):

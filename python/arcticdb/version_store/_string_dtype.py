@@ -50,6 +50,17 @@ def _adopt_arrow_strings(column):
     return _arrow_string_arrays_to_pd_array(column) if _is_arrow_string_column(column) else column
 
 
+def _pandas_str_column_to_record_batches(chunked, arr_name) -> List[RecordBatchData]:
+    # chunked: pa.ChunkedArray backing a pyarrow-backed pandas string column (arr._pa_array)
+    batches = []
+    for chunk in chunked.chunks:  # each chunk is a pa.Array (large_string)
+        record_batch = pa.RecordBatch.from_arrays([chunk], names=[str(arr_name)])
+        rbd = RecordBatchData()
+        record_batch._export_to_c(rbd.array(), rbd.schema())
+        batches.append(rbd)
+    return batches
+
+
 __all__ = [
     "_arrow_backed_str_dtype_supported",
     "_ARROW_BACKED_STR_DTYPE_SUPPORTED",
@@ -57,4 +68,5 @@ __all__ = [
     "_is_arrow_string_column",
     "_arrow_string_arrays_to_pd_array",
     "_adopt_arrow_strings",
+    "_pandas_str_column_to_record_batches",
 ]

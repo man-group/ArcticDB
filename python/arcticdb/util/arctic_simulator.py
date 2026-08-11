@@ -42,7 +42,9 @@ def apply_dynamic_schema_changes(to_df: pd.DataFrame, from_df: pd.DataFrame):
         elif pd.api.types.is_bool_dtype(dtype):
             default_value = ARCTICDB_NA_VALUE_BOOL
         elif pd.api.types.is_string_dtype(dtype) or pd.api.types.is_object_dtype(dtype):
-            default_value = ARCTICDB_NA_VALUE_STRING
+            # np.full cannot interpret the pandas str extension dtype, so build an
+            # object array first and cast via pandas.
+            return pd.array(np.full(num_rows, ARCTICDB_NA_VALUE_STRING, dtype=object), dtype=dtype)
         elif pd.api.types.is_datetime64_any_dtype(dtype):
             default_value = ARCTICDB_NA_VALUE_TIMESTAMP
         else:
