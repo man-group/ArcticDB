@@ -19,7 +19,7 @@ class StorageLock:
     Metadata passed at acquire time is stored on the lock and can be read back by any process via
     ``read_metadata`` to trace which job holds the lock. Metadata is capped at 1MB, well below the general
     16MB user-metadata limit, because the locking mechanism relies on reads and writes happening much
-    faster than the pre-emption window Storage.WaitMs (default 1000).
+    faster than the pre-emption window StorageLock.WaitMs (default 1000).
     """
 
     def __init__(self, ext_lock: _StorageLockImpl):

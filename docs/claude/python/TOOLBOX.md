@@ -167,11 +167,14 @@ backup = tool.update_append_data_column_type(key, "column_name", float)
 ## Storage Locks
 
 The (unreliable) `StorageLock` is exposed through `LibraryTool` with user metadata normalized the
-same way as symbol metadata (any msgpack-able object, not just dicts). See
-`python/arcticdb/toolbox/storage_lock.py` for the wrapper and `cpp/arcticdb/util/storage_lock.hpp`
-for the core. It is timestamp + TTL based and works on any backend; two processes can race (use
-`ReliableStorageLock` when atomic writes are available). `list_storage_locks` only covers this
-`StorageLock` (`KeyType::LOCK`) — it does not see `ReliableStorageLock` locks (`KeyType::ATOMIC_LOCK`).
+same way as symbol metadata (any msgpack-able object, not just dicts), but capped at 1MB rather
+than the general 16MB user-metadata limit — the locking mechanism relies on reads and writes
+happening much faster than the pre-emption window (`StorageLock.WaitMs`), so lock metadata must
+stay small. See `python/arcticdb/toolbox/storage_lock.py` for the wrapper and
+`cpp/arcticdb/util/storage_lock.hpp` for the core. It is timestamp + TTL based and works on any
+backend; two processes can race (use `ReliableStorageLock` when atomic writes are available).
+`list_storage_locks` only covers this `StorageLock` (`KeyType::LOCK`) — it does not see
+`ReliableStorageLock` locks (`KeyType::ATOMIC_LOCK`).
 
 `read_metadata` and `list_storage_locks` both return metadata even once the lock's TTL has expired
 (`active` is `False` in that case) — a stale lock is exactly the one worth attributing when tracing.
