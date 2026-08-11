@@ -161,6 +161,17 @@ def test_sum_aggregation_bool(lmdb_version_store_v1, any_output_format):
     generic_aggregation_test(lib, symbol, df, "grouping_column", {"to_sum": "sum"})
 
 
+def test_sum_aggregation_timestamp_raises(lmdb_version_store_v1, any_output_format):
+    lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol = "test_sum_aggregation_timestamp_raises"
+    df = DataFrame({"grouping_column": ["0", "1"], "to_sum": [pd.Timestamp(0), pd.Timestamp(1)]})
+    lib.write(symbol, df)
+    q = QueryBuilder().groupby("grouping_column").agg({"to_sum": "sum"})
+    with pytest.raises(SchemaException):
+        lib.read(symbol, query_builder=q)
+
+
 def test_mean_aggregation(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
     lib._set_output_format_for_pipeline_tests(any_output_format)
@@ -216,6 +227,11 @@ def test_mean_aggregation_timestamp(lmdb_version_store_v1, any_output_format):
     )
     lib.write(symbol, df)
     generic_aggregation_test(lib, symbol, df, "grouping_column", {"to_mean": "mean"})
+
+    q = QueryBuilder().groupby("grouping_column").agg({"mean": ("to_mean", "mean"), "count": ("to_mean", "count")})
+    received = lib.read(symbol, query_builder=q).data
+    assert received["mean"].dtype == np.dtype("datetime64[ns]")
+    assert received["count"].dtype == np.dtype(np.uint64)
 
 
 def test_named_agg(lmdb_version_store_tiny_segment, any_output_format):
@@ -716,8 +732,13 @@ def test_timestamp_aggregations_with_missing_aggregation_column(
     received = lib.read(sym, query_builder=q).data
     received = received.reindex(columns=sorted(received.columns)).sort_index()
 
+    for col in ["agg_mean", "agg_min", "agg_max"]:
+        assert received[col].dtype == np.dtype("datetime64[ns]")
+    assert received["agg_count"].dtype == np.dtype(np.uint64)
+
     full_df = lib.read(sym).data
     expected = full_df.groupby("grouping").agg(**{k: pd.NamedAgg(*v) for k, v in agg_dict.items()})
     expected = expected.reindex(columns=sorted(expected.columns)).sort_index()
 
+    # Pandas groupby count gives int64 where ArcticDB gives uint64
     assert_frame_equal(received, expected, check_dtype=False)

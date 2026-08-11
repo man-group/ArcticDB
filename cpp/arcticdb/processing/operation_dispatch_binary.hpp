@@ -74,24 +74,11 @@ inline std::string binary_operation_with_types_to_string(
     );
 }
 
-template<typename Func>
-constexpr bool is_plus_operator = std::is_same_v<std::remove_reference_t<Func>, PlusOperator>;
-
-template<typename Func>
-constexpr bool is_minus_operator = std::is_same_v<std::remove_reference_t<Func>, MinusOperator>;
-
-// Adding or subtracting an integer from a timestamp is a nanosecond offset, and yields a timestamp. left and right are
-// in expression order: addition is commutative so the integer may be on either side, but subtraction needs the
-// timestamp on the left, as subtracting a timestamp from an integer is not a timestamp.
-template<typename Func, DataType left, DataType right, typename TargetType>
-constexpr bool is_offset_arithmetic =
-        (is_plus_operator<Func> || is_minus_operator<Func>) && is_time_offset_pair(left, right) &&
-        std::is_integral_v<TargetType> && (is_plus_operator<Func> || is_time_type(left));
-
 // data_type_from_raw_type would give INT64 for an offset result, as timestamp is int64_t
 template<typename Func, DataType left, DataType right, typename TargetType>
 constexpr DataType binary_arithmetic_output_type() {
-    if constexpr (is_offset_arithmetic<Func, left, right, TargetType>) {
+    if constexpr (time_arithmetic<Func, left, right> == TimeArithmeticKind::OFFSET) {
+        static_assert(std::is_integral_v<TargetType>);
         return DataType::NANOSECONDS_UTC64;
     } else {
         return data_type_from_raw_type<TargetType>();
@@ -554,11 +541,9 @@ VariantData binary_operator(const Value& left, const Value& right, Func&& func) 
                     typename left_type_info::RawType,
                     typename right_type_info::RawType,
                     std::remove_reference_t<Func>>::type;
-            constexpr bool offset_arithmetic =
-                    is_offset_arithmetic<Func, left_type_info::data_type, right_type_info::data_type, TargetType>;
-            if constexpr (is_time_numeric_mismatch(left_type_info::data_type, right_type_info::data_type) &&
-                          !offset_arithmetic) {
-                raise_time_numeric_mismatch(
+            constexpr auto kind = time_arithmetic<Func, left_type_info::data_type, right_type_info::data_type>;
+            if constexpr (kind == TimeArithmeticKind::INVALID) {
+                raise_invalid_time_arithmetic(
                         binary_operation_column_name(
                                 left.to_string<typename left_type_info::RawType>(),
                                 func,
@@ -568,12 +553,12 @@ VariantData binary_operator(const Value& left, const Value& right, Func&& func) 
                         left_type_info::data_type,
                         right.to_string<typename right_type_info::RawType>(),
                         right_type_info::data_type,
-                        MixedTimeNumericOp::ARITHMETIC
+                        std::remove_reference_t<Func>::operation_type
                 );
             } else if constexpr (!numeric_or_time_types_compatible(
                                          left_type_info::data_type, right_type_info::data_type
                                  ) &&
-                                 !offset_arithmetic) {
+                                 kind == TimeArithmeticKind::NONE) {
                 user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
                         "Non-numeric type provided to binary operation: {}",
                         binary_operation_with_types_to_string(
@@ -615,22 +600,20 @@ VariantData binary_operator(const ColumnWithStrings& left, const ColumnWithStrin
                     typename left_type_info::RawType,
                     typename right_type_info::RawType,
                     std::remove_reference_t<decltype(func)>>::type;
-            constexpr bool offset_arithmetic =
-                    is_offset_arithmetic<Func, left_type_info::data_type, right_type_info::data_type, TargetType>;
-            if constexpr (is_time_numeric_mismatch(left_type_info::data_type, right_type_info::data_type) &&
-                          !offset_arithmetic) {
-                raise_time_numeric_mismatch(
+            constexpr auto kind = time_arithmetic<Func, left_type_info::data_type, right_type_info::data_type>;
+            if constexpr (kind == TimeArithmeticKind::INVALID) {
+                raise_invalid_time_arithmetic(
                         binary_operation_column_name(left.column_name_, func, right.column_name_),
                         left.column_name_,
                         left_type_info::data_type,
                         right.column_name_,
                         right_type_info::data_type,
-                        MixedTimeNumericOp::ARITHMETIC
+                        std::remove_reference_t<Func>::operation_type
                 );
             } else if constexpr (!numeric_or_time_types_compatible(
                                          left_type_info::data_type, right_type_info::data_type
                                  ) &&
-                                 !offset_arithmetic) {
+                                 kind == TimeArithmeticKind::NONE) {
                 user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
                         "Non-numeric column provided to binary operation: {}",
                         binary_operation_with_types_to_string(
@@ -681,10 +664,9 @@ VariantData binary_operator(const ColumnWithStrings& col, const Value& val, Func
             // arguments_reversed means the value is the left operand in the expression
             constexpr auto expr_left = arguments_reversed ? val_type_info::data_type : col_type_info::data_type;
             constexpr auto expr_right = arguments_reversed ? col_type_info::data_type : val_type_info::data_type;
-            constexpr bool offset_arithmetic = is_offset_arithmetic<Func, expr_left, expr_right, TargetType>;
-            if constexpr (is_time_numeric_mismatch(col_type_info::data_type, val_type_info::data_type) &&
-                          !offset_arithmetic) {
-                raise_time_numeric_mismatch(
+            constexpr auto kind = time_arithmetic<Func, expr_left, expr_right>;
+            if constexpr (kind == TimeArithmeticKind::INVALID) {
+                raise_invalid_time_arithmetic(
                         binary_operation_column_name(
                                 col.column_name_, func, val.to_string<typename val_type_info::RawType>()
                         ),
@@ -692,12 +674,12 @@ VariantData binary_operator(const ColumnWithStrings& col, const Value& val, Func
                         col_type_info::data_type,
                         val.to_string<typename val_type_info::RawType>(),
                         val_type_info::data_type,
-                        MixedTimeNumericOp::ARITHMETIC
+                        std::remove_reference_t<Func>::operation_type
                 );
             } else if constexpr (!numeric_or_time_types_compatible(
                                          col_type_info::data_type, val_type_info::data_type
                                  ) &&
-                                 !offset_arithmetic) {
+                                 kind == TimeArithmeticKind::NONE) {
                 std::string error_message;
                 user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
                         "Non-numeric type provided to binary operation: {}",

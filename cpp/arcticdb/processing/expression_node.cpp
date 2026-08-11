@@ -343,9 +343,21 @@ std::variant<BitSetTag, DataType> ExpressionNode::compute(
                 using left_type_info = ScalarTypeInfo<decltype(left_tag)>;
                 details::visit_type(std::get<DataType>(right_type), [&](auto right_tag) {
                     using right_type_info = ScalarTypeInfo<decltype(right_tag)>;
-                    if constexpr (numeric_or_time_types_compatible(
-                                          left_type_info::data_type, right_type_info::data_type
-                                  )) {
+                    const auto arithmetic_kind = classify_time_arithmetic(
+                            operation_type_, left_type_info::data_type, right_type_info::data_type
+                    );
+                    if (arithmetic_kind == TimeArithmeticKind::INVALID) {
+                        raise_invalid_time_arithmetic(
+                                label_,
+                                operation.left_->label_,
+                                left_type_info::data_type,
+                                operation.right_->label_,
+                                right_type_info::data_type,
+                                operation_type_
+                        );
+                    } else if constexpr (numeric_or_time_types_compatible(
+                                                 left_type_info::data_type, right_type_info::data_type
+                                         )) {
                         switch (operation_type_) {
                         case OperationType::ADD: {
                             using TargetType = typename binary_operation_promoted_type<
@@ -401,24 +413,8 @@ std::variant<BitSetTag, DataType> ExpressionNode::compute(
                     } else if constexpr (is_time_numeric_mismatch(
                                                  left_type_info::data_type, right_type_info::data_type
                                          )) {
-                        // Addition is commutative so the integer may be on either side, but subtraction needs the
-                        // timestamp on the left, as subtracting a timestamp from an integer is not a timestamp
-                        const bool offset_arithmetic =
-                                is_time_offset_pair(left_type_info::data_type, right_type_info::data_type) &&
-                                (operation_type_ == OperationType::ADD ||
-                                 (operation_type_ == OperationType::SUB && is_time_type(left_type_info::data_type)));
-                        if (offset_arithmetic) {
-                            res = DataType::NANOSECONDS_UTC64;
-                        } else {
-                            raise_time_numeric_mismatch(
-                                    label_,
-                                    operation.left_->label_,
-                                    left_type_info::data_type,
-                                    operation.right_->label_,
-                                    right_type_info::data_type,
-                                    MixedTimeNumericOp::ARITHMETIC
-                            );
-                        }
+                        // arithmetic_kind can only be OFFSET here: INVALID already raised above
+                        res = DataType::NANOSECONDS_UTC64;
                     } else {
                         user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
                                 "Unexpected data types {} {} input to {}",

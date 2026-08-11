@@ -289,7 +289,8 @@ class ExpressionNode:
 def where(condition: Any, left: Any, right: Any) -> ExpressionNode:
     """
     Ternary operator choosing from the left expression where condition is true, and from the right expression where
-    it is false. Similar to numpy.where, or the Python statement `left if condition else right`.
+    it is false. Similar to numpy.where, or the Python statement `left if condition else right`. left and right
+    must both be timestamps or both numeric; two timestamps give a datetime64[ns] result column.
 
     Parameters
     ----------
@@ -378,6 +379,11 @@ def nanoseconds_timedelta(timedelta):
     return int(pd.Timedelta(timedelta).value)
 
 
+# supported_time_types is shared with normalization and DateRange handling (arcticdb/supported_types.py), so
+# np.datetime64 - only meaningful inside a query - is added to it locally rather than there.
+_query_time_types = supported_time_types + (np.datetime64,)
+
+
 def value_list_from_args(*args):
     if len(args) == 1 and is_supported_sequence(args[0]):
         collection = args[0]
@@ -392,7 +398,7 @@ def value_list_from_args(*args):
         for value in collection:
             if value not in value_set:
                 value_set.add(value)
-                if isinstance(value, supported_time_types):
+                if isinstance(value, _query_time_types):
                     contains_time_type = True
                     value = nanoseconds_from_utc(value)
                     # dtype must be forced to int64 rather than relying on the platform-dependent default integer
@@ -474,6 +480,9 @@ class QueryBuilder:
     * Unary arithmetic: -, abs
     * Power: ** (base may be integer or float; exponent must be an integer type, not float)
 
+      A timestamp operand is only accepted by + and -, as described under #Timestamp filtering below; * and /
+      never accept one, and the ** result types below assume neither operand is a timestamp.
+
       Result type of ** depends on operand types:
 
       - unsigned integer ^ unsigned integer -> uint64
@@ -506,6 +515,9 @@ class QueryBuilder:
 
         q.isin(1, 2, 3)
 
+    datetime64 arrays of any resolution are also accepted and are normalised to nanoseconds; a value set may not
+    mix timestamps with plain numbers.
+
     regex_match, similar to pandas' contains, accepts string as pattern and can only filter string columns
 
     Boolean columns can be filtered on directly:
@@ -525,10 +537,19 @@ class QueryBuilder:
     See tests/unit/arcticdb/version_store/test_filtering.py for more example uses.
 
     #Timestamp filtering
-    pandas.Timestamp, datetime.datetime, pandas.Timedelta, and datetime.timedelta objects are supported.
-    Note that internally all of these types are converted to nanoseconds (since epoch in the Timestamp/datetime
-    cases). This means that nonsensical operations such as multiplying two times together are permitted (but not
-    encouraged).
+    pandas.Timestamp and datetime.datetime objects are supported, converted internally to nanoseconds since
+    epoch. pandas.Timedelta and datetime.timedelta objects are only valid as offsets added to or subtracted from a
+    timestamp; timedelta columns cannot be written at all.
+
+    A timestamp may only be compared with, tested for membership against, or returned from a `where` clause
+    alongside another timestamp; mixing with an integer, unsigned integer, or float raises. timestamp + integer
+    and timestamp - integer are nanosecond offsets and yield a timestamp; integer - timestamp is rejected, as in
+    pandas. timestamp - timestamp yields int64 nanoseconds, since there is no duration type, and is the only
+    arithmetic permitted between two timestamps: +, *, /, and ** are all rejected.
+
+    Both mixed integer behaviours above are expected to change when a duration type is added: offsetting a
+    timestamp will require an explicit cast from an integer, and timestamp - timestamp will yield a duration
+    rather than int64.
     #Restrictions
     String equality/inequality (and isin/isnotin) is supported for printable ASCII characters only.
     Although not prohibited, it is not recommended to use ==, !=, isin, or isnotin with floating point values.
@@ -541,6 +562,10 @@ class QueryBuilder:
     Query involves comparing a string to one or more numeric values, or vice versa
     Query involves arithmetic with a column containing strings
     Exponent in ** is a floating point value
+    Query involves comparing, testing membership of, or performing arithmetic or a where() selection between a
+    timestamp and a numeric value, or vice versa
+    Query involves *, /, or ** where either operand is a timestamp
+    Query involves integer - timestamp
     """
 
     def __init__(self):

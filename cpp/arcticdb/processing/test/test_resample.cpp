@@ -792,3 +792,35 @@ TYPED_TEST(SortedAggregatorSparseStructure, ThreeSegmentsInABuckeOnlyMiddleIsPre
     assert_column_is_dense(*output);
     ASSERT_EQ(output->row_count(), 1);
 }
+
+// test_resample.cpp and rapidcheck_resample.cpp otherwise only ever aggregate INT64 value columns; MeanAggregatorSorted
+// has a separate branch for NANOSECONDS_UTC64 that divides in double and rounds back to an integer nanosecond count,
+// rather than returning a plain double as it would for a numeric column.
+// compute_output_column only presizes the output column (it is used elsewhere to test sparse/dense structure), so
+// this test calls SortedAggregator::aggregate directly to exercise the actual push/finalize value computation.
+TEST(Resample, MeanAggregationOfTimestampValueColumn) {
+    using IndexTDT = ScalarTagType<DataTypeTag<DataType::NANOSECONDS_UTC64>>;
+    using ValueTDT = ScalarTagType<DataTypeTag<DataType::NANOSECONDS_UTC64>>;
+    constexpr ResampleBoundary closed = ResampleBoundary::LEFT;
+    constexpr ResampleBoundary label = ResampleBoundary::LEFT;
+    const SortedAggregator<AggregationOperator::MEAN, closed> aggregator{
+            ColumnName{"input_column_name"}, ColumnName{"output_column_name"}
+    };
+    const std::vector<timestamp> bucket_boundaries{0, 10, 20};
+    const std::vector<std::shared_ptr<Column>> input_index_columns{
+            std::make_shared<Column>(create_dense_column<IndexTDT>(std::array<timestamp, 4>{1, 2, 11, 12}))
+    };
+    const std::vector<std::optional<ColumnWithStrings>> input_agg_columns{std::make_optional(ColumnWithStrings{
+            create_dense_column<ValueTDT>(std::array<timestamp, 4>{100, 200, 1000, 3000}), nullptr, "col1"
+    })};
+    const TimestampRange full_range{std::numeric_limits<timestamp>::min() + 1, std::numeric_limits<timestamp>::max()};
+    auto [output_index_column, mapping] =
+            generate_output_index_column<closed>(input_index_columns, bucket_boundaries, full_range, label);
+    StringPool string_pool;
+    const std::optional<Column> output = aggregator.aggregate(input_agg_columns, mapping, string_pool);
+    ASSERT_TRUE(output.has_value());
+    ASSERT_EQ(DataType::NANOSECONDS_UTC64, output->type().data_type());
+    ASSERT_EQ(output->row_count(), 2);
+    ASSERT_EQ(150, output->scalar_at<int64_t>(0));
+    ASSERT_EQ(2000, output->scalar_at<int64_t>(1));
+}

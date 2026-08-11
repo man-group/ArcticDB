@@ -285,6 +285,37 @@ def test_resampling_nan_correctness(version_store_factory, any_output_format):
     generic_resample_test(lib, sym, "us", agg_dict, df)
 
 
+@pytest.mark.skipif(
+    not IS_PANDAS_TWO, reason="Pandas 1.X does not support mean/min/max/first/last/count on datetime columns"
+)
+def test_resampling_datetime_value_column_output_dtypes(lmdb_version_store_v1, any_output_format):
+    lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    sym = "test_resampling_datetime_value_column_output_dtypes"
+    idx = pd.date_range("2024-01-01", periods=9, freq="min")
+    datetime_col = pd.date_range("2000-01-01", periods=9, freq="D")
+    df = pd.DataFrame({"datetime_col": datetime_col}, index=idx)
+    lib.write(sym, df)
+
+    agg_dict = {
+        "datetime_min": ("datetime_col", "min"),
+        "datetime_max": ("datetime_col", "max"),
+        "datetime_mean": ("datetime_col", "mean"),
+        "datetime_first": ("datetime_col", "first"),
+        "datetime_last": ("datetime_col", "last"),
+        "datetime_count": ("datetime_col", "count"),
+    }
+    expected_types = {
+        "datetime_min": "datetime64[ns]",
+        "datetime_max": "datetime64[ns]",
+        "datetime_mean": "datetime64[ns]",
+        "datetime_first": "datetime64[ns]",
+        "datetime_last": "datetime64[ns]",
+        "datetime_count": np.uint64,
+    }
+    generic_resample_test(lib, sym, "3min", agg_dict, df, expected_types=expected_types)
+
+
 def test_resampling_bool_columns(lmdb_version_store_tiny_segment, any_output_format):
     lib = lmdb_version_store_tiny_segment
     lib._set_output_format_for_pipeline_tests(any_output_format)

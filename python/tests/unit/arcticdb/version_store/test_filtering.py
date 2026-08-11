@@ -397,6 +397,70 @@ def test_filter_datetime_isin(lmdb_version_store_v1, any_output_format, column_s
         generic_filter_test(lib, symbol, q, expected)
 
 
+@pytest.mark.parametrize("unit", ("s", "ms", "us", "D"))
+@pytest.mark.parametrize("function", ("isin", "isnotin"))
+def test_filter_datetime_isin_non_nanosecond_resolution(
+    function, unit, lmdb_version_store_v1, any_output_format, column_stats_filtering_enabled_and_disabled
+):
+    lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol = "test_filter_datetime_isin_non_nanosecond_resolution"
+    df = pd.DataFrame({"a": pd.date_range("2000-01-01", periods=10)})
+    lib.write(symbol, df)
+    lib.create_column_stats_experimental(symbol)
+    value_set = np.array(["2000-01-05"], dtype=f"datetime64[{unit}]")
+    q = QueryBuilder()
+    q = q[getattr(q["a"], function)(value_set)]
+    is_in = df["a"].isin(value_set)
+    expected = df[is_in] if function == "isin" else df[~is_in]
+    generic_filter_test(lib, symbol, q, expected)
+
+
+@pytest.mark.parametrize("dtype", (np.int64, np.uint64, np.float64, np.float32))
+@pytest.mark.parametrize("function", ("isin", "isnotin"))
+def test_filter_numeric_against_mixed_time_numeric_isin_datetime64(
+    function, dtype, lmdb_version_store_v1, any_output_format, column_stats_filtering_enabled_and_disabled
+):
+    # A value set mixing an np.datetime64 with a plain number must be rejected the same way as one mixing a
+    # pd.Timestamp with a plain number (test_filter_numeric_against_mixed_time_numeric_isin above)
+    lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol = "sym"
+    df = pd.DataFrame({"a": [0, 1]}, dtype=dtype)
+    lib.write(symbol, df)
+    lib.create_column_stats_experimental(symbol)
+    q = QueryBuilder()
+    with pytest.raises(UserInputException, match="Timestamp and numeric types cannot be mixed"):
+        q = q[getattr(q["a"], function)([np.datetime64("2000-01-01"), dtype(0)])]
+        lib.read(symbol, query_builder=q)
+
+
+@pytest.mark.parametrize("function", ("isin", "isnotin"))
+def test_filter_datetime64_nat_isin(
+    function, lmdb_version_store_v1, any_output_format, column_stats_filtering_enabled_and_disabled
+):
+    # np.datetime64("NaT") round-trips to the same INT64_MIN sentinel as pd.NaT (pd.Timestamp(...).value), so it
+    # should be silently ignored in the value set the same way pd.NaT is (test_filter_nat_isin in
+    # test_query_builder_nat.py)
+    lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol = "test_filter_datetime64_nat_isin"
+    df = pd.DataFrame(
+        {"a": [pd.Timestamp("2000-01-01"), pd.NaT, pd.Timestamp("2000-01-03")]},
+        index=pd.date_range("2000-01-01", periods=3),
+    )
+    lib.write(symbol, df)
+    lib.create_column_stats_experimental(symbol)
+    q = QueryBuilder()
+    values = [np.datetime64("NaT"), pd.Timestamp("2000-01-03")]
+    q = q[getattr(q["a"], function)(values)]
+    result = lib.read(symbol, query_builder=q).data
+    non_nat_values = [v for v in values if not pd.isna(v)]
+    mask = df["a"].isin(non_nat_values)
+    expected = df[mask] if function == "isin" else df[~mask]
+    assert_frame_equal(expected, result)
+
+
 def test_filter_datetime_timedelta(
     lmdb_version_store_v1, any_output_format, column_stats_filtering_enabled_and_disabled
 ):

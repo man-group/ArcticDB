@@ -174,11 +174,8 @@ VariantData ternary_operator(
                 using TargetType = typename ternary_operation_promoted_type<
                         typename left_type_info::RawType,
                         typename right_type_info::RawType>::type;
-                // timestamp is int64_t, so data_type_from_raw_type would give INT64 for two time columns
                 constexpr auto output_data_type =
-                        is_time_type(left_type_info::data_type) && is_time_type(right_type_info::data_type)
-                                ? DataType::NANOSECONDS_UTC64
-                                : data_type_from_raw_type<TargetType>();
+                        ternary_output_type<left_type_info::data_type, right_type_info::data_type, TargetType>();
                 output_column = std::make_unique<Column>(make_scalar_type(output_data_type), Sparsity::PERMITTED);
                 ternary_transform<
                         typename left_type_info::TDT,
@@ -280,11 +277,8 @@ VariantData ternary_operator(const util::BitSet& condition, const ColumnWithStri
                 using TargetType = typename ternary_operation_promoted_type<
                         typename col_type_info::RawType,
                         typename val_type_info::RawType>::type;
-                // timestamp is int64_t, so data_type_from_raw_type would give INT64 for a time column and time value
                 constexpr auto output_data_type =
-                        is_time_type(col_type_info::data_type) && is_time_type(val_type_info::data_type)
-                                ? DataType::NANOSECONDS_UTC64
-                                : data_type_from_raw_type<TargetType>();
+                        ternary_output_type<col_type_info::data_type, val_type_info::data_type, TargetType>();
                 output_column = std::make_unique<Column>(make_scalar_type(output_data_type), Sparsity::PERMITTED);
                 auto value = static_cast<TargetType>(val.get<typename val_type_info::RawType>());
                 value_string = fmt::format("{}", value);
@@ -425,11 +419,8 @@ VariantData ternary_operator(const util::BitSet& condition, const Value& left, c
                 using TargetType = typename ternary_operation_promoted_type<
                         typename left_type_info::RawType,
                         typename right_type_info::RawType>::type;
-                // timestamp is int64_t, so data_type_from_raw_type would give INT64 for two time values
                 constexpr auto output_data_type =
-                        is_time_type(left_type_info::data_type) && is_time_type(right_type_info::data_type)
-                                ? DataType::NANOSECONDS_UTC64
-                                : data_type_from_raw_type<TargetType>();
+                        ternary_output_type<left_type_info::data_type, right_type_info::data_type, TargetType>();
                 output_column = std::make_unique<Column>(make_scalar_type(output_data_type), Sparsity::PERMITTED);
                 auto left_value = static_cast<TargetType>(left.get<typename left_type_info::RawType>());
                 auto right_value = static_cast<TargetType>(right.get<typename right_type_info::RawType>());

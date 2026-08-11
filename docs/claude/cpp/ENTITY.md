@@ -76,8 +76,26 @@ Helper functions in `cpp/arcticdb/entity/types.hpp`:
 - `get_type_size(DataType)` - Returns byte size of type
 - `is_floating_point_type(DataType)` - Check if float type
 - `is_integer_type(DataType)` - Check if integer type
-- `is_numeric_or_time_type(DataType)` - Check if int, float or nanosecond timestamp
+- `is_numeric_type(DataType)` - Check if int or float type; excludes `NANOSECONDS_UTC64`
+- `is_numeric_or_time_type(DataType)` - Check if int, float, or nanosecond timestamp
 - `is_sequence_type(DataType)` - Check if string/array type
+
+`is_numeric_type` and `is_numeric_or_time_type` are deliberately distinct so that a timestamp column is not
+treated as plain numeric by default; call sites (column stats, aggregation, the processing operators below) opt
+in to timestamps via `is_numeric_or_time_type`. Three related predicates gate the QueryBuilder expression
+pipeline against mixing timestamps with plain numbers (`types.hpp:280-315`):
+- `is_time_numeric_mismatch(a, b)` - true when exactly one of two numeric-or-time types is a timestamp
+- `numeric_or_time_types_compatible(a, b)` - true when both are numeric-or-time and not a mismatch
+- `is_time_offset_pair(a, b)` - true when one side is a timestamp and the other an integer (the
+  `timestamp ± integer` nanosecond-offset case)
+
+Comparison, membership, and ternary call sites in the processing module call `is_time_numeric_mismatch()`
+directly. Arithmetic call sites instead go through `classify_time_arithmetic()` (`processing/operation_types.hpp`),
+which calls `is_time_offset_pair()` internally to decide the offset case and additionally rejects `+`, `*`, `/`,
+and `**` between two timestamps, which these two entity-level predicates alone do not distinguish from the legal
+`timestamp - timestamp` case.
+
+See [PROCESSING.md - Timestamp Legality](PROCESSING.md#timestamp-legality) for how these are used.
 
 ## Type Descriptors
 

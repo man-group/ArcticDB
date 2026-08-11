@@ -431,6 +431,23 @@ def test_project_datetime_col_minus_datetime_col(lmdb_version_store_v1, any_outp
     assert_frame_equal(expected, received)
 
 
+@pytest.mark.parametrize("other", ("column", "value"))
+@pytest.mark.parametrize("op", ("__add__", "__mul__", "__truediv__", "__pow__"))
+def test_project_datetime_col_invalid_arithmetic_with_datetime(op, other, lmdb_version_store_v1, any_output_format):
+    lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol = "sym"
+    df = pd.DataFrame(
+        {"a": [pd.Timestamp("2000-01-02"), pd.Timestamp("2000-01-04")], "b": [pd.Timestamp(0), pd.Timestamp(1)]}
+    )
+    lib.write(symbol, df)
+    q = QueryBuilder()
+    other_operand = q["b"] if other == "column" else pd.Timestamp("2000-01-01")
+    q = q.apply("result", getattr(q["a"], op)(other_operand))
+    with pytest.raises(UserInputException, match="Only subtraction is supported between two timestamps"):
+        lib.read(symbol, query_builder=q)
+
+
 def test_project_abs_datetime_col(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
     lib._set_output_format_for_pipeline_tests(any_output_format)

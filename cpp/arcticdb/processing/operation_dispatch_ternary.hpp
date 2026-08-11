@@ -16,6 +16,15 @@
 
 namespace arcticdb {
 
+template<DataType left, DataType right, typename TargetType>
+constexpr DataType ternary_output_type() {
+    if constexpr (is_time_type(left) && is_time_type(right)) {
+        return DataType::NANOSECONDS_UTC64;
+    } else {
+        return data_type_from_raw_type<TargetType>();
+    }
+}
+
 VariantData ternary_operator(const util::BitSet& condition, const util::BitSet& left, const util::BitSet& right);
 
 template<bool arguments_reversed = false>

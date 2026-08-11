@@ -74,9 +74,35 @@ Represents: (a > 5) AND (b < 10)
 `OperationType` enum in `cpp/arcticdb/processing/operation_types.hpp` defines:
 - **Unary**: `ABS`, `NEG`, `ISNULL`, `NOTNULL`, `IDENTITY`, `NOT`
 - **Comparison**: `EQ`, `NE`, `LT`, `LE`, `GT`, `GE`
-- **Arithmetic**: `ADD`, `SUB`, `MUL`, `DIV`
+- **Arithmetic**: `ADD`, `SUB`, `MUL`, `DIV`, `POW`
 - **Logical**: `AND`, `OR`, `XOR`
 - **String**: `ISIN`, `ISNOTIN`
+
+#### Timestamp Legality
+
+A timestamp (`NANOSECONDS_UTC64`) operand may not be mixed with a plain numeric operand in comparison,
+membership, or ternary expressions — `is_time_numeric_mismatch()` (`entity/types.hpp`) gates this directly and
+raises `UserInputException` via `raise_time_numeric_mismatch()` ("Timestamp and numeric types cannot be mixed").
+
+Arithmetic (`ADD`, `SUB`, `MUL`, `DIV`, `POW`) is instead gated by `classify_time_arithmetic(op, left, right)`
+(`operation_types.hpp`), which returns one of: `NONE` (neither operand a time type — ordinary numeric rules
+apply), `OFFSET` (`timestamp ± integer`, via `is_time_offset_pair()` from `entity/types.hpp`, yielding
+`NANOSECONDS_UTC64`), `DURATION` (`timestamp - timestamp`, yielding `INT64` nanoseconds, since there is no
+duration type), or `INVALID` (everything else, including `+`, `*`, `/`, and `**` between two timestamps, and any
+mismatch that isn't an offset pair). On `INVALID`, `raise_invalid_time_arithmetic()` reuses
+`raise_time_numeric_mismatch()`'s wording when exactly one operand is a timestamp, or otherwise raises a message
+naming the operator and ending "Only subtraction is supported between two timestamps."
+
+The check happens twice: at schema time in the `ExpressionNode::compute()` overload returning
+`std::variant<BitSetTag, DataType>` (`expression_node.cpp`), and at read time in the `binary_operator()` overloads
+(`operation_dispatch_binary.hpp`). Both call the same `classify_time_arithmetic()`/`raise_invalid_time_arithmetic()`
+pair, passing a plain `OperationType`, so the two paths agree both on which expressions are legal and on the wording
+of the message. `raise_invalid_time_arithmetic()` renders the operator token via `arithmetic_operation_symbol(OperationType)`
+(`operation_types.hpp`), which maps `ADD`/`SUB`/`MUL`/`DIV`/`POW` to `+`/`-`/`*`/`/`/`**` — the Python symbol the user
+wrote, as opposed to `operation_type_to_str()`, which is reserved for AST query labels. One difference remains,
+deliberately: the `query` argument to `raise_invalid_time_arithmetic()` is still the AST label, e.g.
+`Column["dt1"] ADD Column["dt2"]`, so the same message names the operator as both `ADD` (in the quoted query) and
+`+` (in the prose) — this is pre-existing AST label rendering shared with other messages, not specific to this check.
 
 ### Expression Evaluation
 
@@ -99,7 +125,7 @@ Dispatches operations based on data types at runtime.
 | Category | Operations |
 |----------|------------|
 | Comparison | `<`, `<=`, `>`, `>=`, `==`, `!=` |
-| Arithmetic | `+`, `-`, `*`, `/` |
+| Arithmetic | `+`, `-`, `*`, `/`, `**` |
 | Logical | `AND`, `OR`, `NOT` |
 | Aggregation | `SUM`, `MEAN`, `MIN`, `MAX`, `COUNT`, `FIRST`, `LAST` |
 | String | `ISIN`, `ISNOTIN`, `STARTSWITH`, `ENDSWITH` |
@@ -131,6 +157,10 @@ NaT handling follows Pandas semantics: any comparison involving NaT is False, ex
 `stats_membership_comparator()` in `column_stats_dispatch.cpp` evaluates a segment's min/max stats against a `ValueSet`. It uses the `ValueSet`'s cached `min_value()` / `max_value()` (computed lazily via `std::call_once`, filtering out NaN values) for a fast range disjointness check. If the ranges overlap and the result is ambiguous, it falls back to iterating individual set elements against the segment's `ValueRange`. The `isnotin` result is the logical inverse of `isin`. `visit_binary_membership_stats()` applies this per row-slice across the stats vector.
 
 `Value::is_nan()` supports the NaN handling: segments where both min and max are NaN are treated as all-NaN and produce `NONE_MATCH` for `isin`.
+
+`ValueSet` (`pipeline/value_set.hpp`) tags a set built from timestamps with `base_type()` `NANOSECONDS_UTC64`
+rather than `INT64`, via `ValueSet::from_nanoseconds()`, so the same `is_time_numeric_mismatch()` check that
+covers comparisons also rejects a value set that mixes timestamps with plain numbers.
 
 See [PIPELINE.md - Column Stats Filtering](PIPELINE.md#column-stats-filtering) for the full read-path integration.
 
@@ -288,7 +318,9 @@ Translates to C++ expression tree internally.
 
 ## Error Handling
 
-Type mismatches throw `SchemaException`. Invalid operations throw `UserInputException`.
+Type mismatches throw `SchemaException`. Invalid operations throw `UserInputException`, including mixing a
+timestamp with a plain numeric operand (see [Timestamp Legality](#timestamp-legality) above) and `+`/`*`/`/`/`**`
+between two timestamps (only `-` is legal between two timestamps).
 
 ## Related Documentation
 

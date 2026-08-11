@@ -74,6 +74,9 @@ pandas.DataFrame / pa.Table / pl.DataFrame (based on OutputFormat)
 | `object` (strings) | `UTF_DYNAMIC64` |
 | `category` | Underlying type |
 
+Other `datetime64` resolutions (`[s]`, `[ms]`, `[us]`, from Pandas >= 2.0) are coerced to `datetime64[ns]` before
+normalization (`_normalization.py:242-248`), so on-disk data is always nanosecond resolution.
+
 ### Index Handling
 
 ```python

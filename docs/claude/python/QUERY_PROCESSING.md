@@ -151,6 +151,23 @@ q = q[q["category"] == ["tech", "finance"]]  # Same as isin
 q = q[q["status"] != ["deleted"]]  # Same as isnotin
 ```
 
+### Timestamp Type Rules
+
+A timestamp (`pd.Timestamp`, `datetime.datetime`, `datetime.date`, or a `datetime64` column) may only be
+compared with, tested for membership against (`isin`/`isnotin`), or returned from a ternary alongside, another
+timestamp. Mixing with `int`/`uint`/`float` raises `UserInputException` matching "Timestamp and numeric types
+cannot be mixed" (the C++ pipeline raises this for comparison/arithmetic/ternary; `isin`/`isnotin` value sets are
+checked in `processing.py` first and raise "Timestamp and numeric types cannot be mixed in the same value set").
+
+- `timestamp ± integer` is legal and is treated as a nanosecond offset, yielding a timestamp. `integer - timestamp`
+  is rejected, matching pandas.
+- `timestamp - timestamp` is legal and yields `int64` nanoseconds — there is no duration type. It is the only
+  arithmetic operation permitted between two timestamps: `timestamp + timestamp` raises.
+- `*`, `/`, and `**` are rejected whenever either operand is a timestamp — there is no offset or nanoseconds-delta
+  interpretation for them, unlike `+`/`-`.
+- `isin`/`isnotin` accept `datetime64` arrays of any resolution (`[s]`, `[ms]`, `[us]`, `[D]`), normalised to
+  nanoseconds; a value set may not mix timestamps with plain numbers.
+
 ### Regex Matching
 
 ```python

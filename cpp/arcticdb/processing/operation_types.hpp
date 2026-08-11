@@ -181,6 +181,74 @@ enum class MixedTimeNumericOp { COMPARE, ARITHMETIC, TERNARY };
     );
 }
 
+// Whether `op` applied to `left` and `right` is a nanosecond offset (timestamp +/- integer, yielding a timestamp), a
+// duration (timestamp - timestamp, yielding a plain integer nanosecond count), plain numeric arithmetic unaffected by
+// timestamps, or invalid. Shared between the schema-time check in expression_node.cpp and the read-time dispatch in
+// operation_dispatch_binary.hpp so the two cannot diverge.
+enum class TimeArithmeticKind { NONE, OFFSET, DURATION, INVALID };
+
+constexpr TimeArithmeticKind classify_time_arithmetic(OperationType op, entity::DataType left, entity::DataType right) {
+    const bool left_time = is_time_type(left);
+    const bool right_time = is_time_type(right);
+    if (!left_time && !right_time) {
+        return TimeArithmeticKind::NONE;
+    }
+    if (left_time && right_time) {
+        return op == OperationType::SUB ? TimeArithmeticKind::DURATION : TimeArithmeticKind::INVALID;
+    }
+    if (!is_time_offset_pair(left, right)) {
+        return TimeArithmeticKind::INVALID;
+    }
+    if (op == OperationType::ADD) {
+        return TimeArithmeticKind::OFFSET;
+    }
+    if (op == OperationType::SUB && left_time) {
+        return TimeArithmeticKind::OFFSET;
+    }
+    return TimeArithmeticKind::INVALID;
+}
+
+// The symbol the user wrote in Python, rather than operation_type_to_str's enumerator name, which is reserved for
+// query labels. Only used in user-facing arithmetic error messages.
+inline std::string_view arithmetic_operation_symbol(const OperationType ot) {
+    switch (ot) {
+    case OperationType::ADD:
+        return "+";
+    case OperationType::SUB:
+        return "-";
+    case OperationType::MUL:
+        return "*";
+    case OperationType::DIV:
+        return "/";
+    case OperationType::POW:
+        return "**";
+    default:
+        return operation_type_to_str(ot);
+    }
+}
+
+// Called when classify_time_arithmetic returns INVALID. Reuses raise_time_numeric_mismatch's wording when exactly
+// one operand is a time type, since existing tests match on that phrase; two timestamps get a message naming the
+// operator, as that case is otherwise indistinguishable from the many timestamp/duration combinations that are legal.
+[[noreturn]] inline void raise_invalid_time_arithmetic(
+        std::string_view query, std::string_view left, entity::DataType left_type, std::string_view right,
+        entity::DataType right_type, OperationType op
+) {
+    if (is_time_type(left_type) != is_time_type(right_type)) {
+        raise_time_numeric_mismatch(query, left, left_type, right, right_type, MixedTimeNumericOp::ARITHMETIC);
+    }
+    user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
+            "In query '{}': {} is of type {} and cannot be combined with {}, which is of type {} using the {} "
+            "operator. Only subtraction is supported between two timestamps.",
+            query,
+            left,
+            left_type,
+            right,
+            right_type,
+            arithmetic_operation_symbol(op)
+    );
+}
+
 struct AbsOperator;
 struct NegOperator;
 struct PlusOperator;
@@ -436,6 +504,8 @@ struct NotNullOperator {
 };
 
 struct PlusOperator {
+    static constexpr OperationType operation_type = OperationType::ADD;
+
     template<typename T, typename U, typename V = typename binary_operation_promoted_type<T, U, PlusOperator>::type>
     V apply(T t, U u) {
         return static_cast<V>(t) + static_cast<V>(u);
@@ -443,6 +513,8 @@ struct PlusOperator {
 };
 
 struct MinusOperator {
+    static constexpr OperationType operation_type = OperationType::SUB;
+
     template<typename T, typename U, typename V = typename binary_operation_promoted_type<T, U, MinusOperator>::type>
     V apply(T t, U u) {
         return static_cast<V>(t) - static_cast<V>(u);
@@ -450,6 +522,8 @@ struct MinusOperator {
 };
 
 struct TimesOperator {
+    static constexpr OperationType operation_type = OperationType::MUL;
+
     template<typename T, typename U, typename V = typename binary_operation_promoted_type<T, U, TimesOperator>::type>
     V apply(T t, U u) {
         return static_cast<V>(t) * static_cast<V>(u);
@@ -457,6 +531,8 @@ struct TimesOperator {
 };
 
 struct DivideOperator {
+    static constexpr OperationType operation_type = OperationType::DIV;
+
     template<typename T, typename U, typename V = typename binary_operation_promoted_type<T, U, DivideOperator>::type>
     V apply(T t, U u) {
         return static_cast<V>(t) / static_cast<V>(u);
@@ -618,6 +694,8 @@ struct GreaterThanEqualsOperator {
 };
 
 struct PowOperator {
+    static constexpr OperationType operation_type = OperationType::POW;
+
     template<typename T, typename U, typename V = typename binary_operation_promoted_type<T, U, PowOperator>::type>
     V apply(T t, U u) {
         if constexpr (std::is_unsigned_v<T> && std::is_unsigned_v<U>) {
@@ -655,6 +733,10 @@ struct PowOperator {
         return static_cast<V>(std::pow(static_cast<V>(t), static_cast<V>(u)));
     }
 };
+
+template<typename Func, entity::DataType left, entity::DataType right>
+constexpr TimeArithmeticKind time_arithmetic =
+        classify_time_arithmetic(std::remove_reference_t<Func>::operation_type, left, right);
 
 struct EqualsOperator {
     template<typename T, typename U>
