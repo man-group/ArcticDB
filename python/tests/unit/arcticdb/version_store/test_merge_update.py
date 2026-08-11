@@ -25,6 +25,8 @@ from arcticdb.version_store._store import normalize_merge_action
 from typing import Union, List, Optional
 import arcticdb.toolbox.query_stats as qs
 
+from arcticdb_ext.version_store import MergeAction
+
 pytestmark = pytest.mark.merge_update
 
 
@@ -82,14 +84,8 @@ def test_normalize_merge_action(action):
     "strategy",
     (
         MergeStrategy(MergeAction.UPDATE, MergeAction.DO_NOTHING),
-        pytest.param(
-            MergeStrategy(MergeAction.DO_NOTHING, MergeAction.INSERT),
-            marks=pytest.mark.xfail(reason="Insert is not implemented"),
-        ),
-        pytest.param(
-            MergeStrategy(MergeAction.UPDATE, MergeAction.INSERT),
-            marks=pytest.mark.xfail(reason="Insert is not implemented"),
-        ),
+        MergeStrategy(MergeAction.DO_NOTHING, MergeAction.INSERT),
+        MergeStrategy(MergeAction.UPDATE, MergeAction.INSERT),
     ),
 )
 class TestMergeTimeseriesCommon:
@@ -2618,14 +2614,8 @@ class TestMergeUpdateInsertIndexSpansMultipleSegmentsChain:
     "strategy",
     (
         MergeStrategy(MergeAction.UPDATE, MergeAction.DO_NOTHING),
-        pytest.param(
-            MergeStrategy(MergeAction.DO_NOTHING, MergeAction.INSERT),
-            marks=pytest.mark.xfail(reason="Insert is not implemented"),
-        ),
-        pytest.param(
-            MergeStrategy(MergeAction.UPDATE, MergeAction.INSERT),
-            marks=pytest.mark.xfail(reason="Insert is not implemented"),
-        ),
+        MergeStrategy(MergeAction.DO_NOTHING, MergeAction.INSERT),
+        MergeStrategy(MergeAction.UPDATE, MergeAction.INSERT),
     ),
 )
 class TestMergeRowrangeCommon:
@@ -2652,8 +2642,11 @@ class TestMergeRowrangeCommon:
         assert_vit_equals_except_data(merge_vit, read_vit)
 
         lt = lib._dev_tools.library_tool()
-
-        assert len(lt.find_keys_for_symbol(KeyType.TABLE_DATA, "sym")) == 2
+        # +1 for the never-pruned v0 key, +1 per write path exercised (UPDATE rewrites in place, INSERT appends).
+        expected_data_keys = (
+            3 if strategy.not_matched_by_target == MergeAction.INSERT and strategy.matched == MergeAction.UPDATE else 2
+        )
+        assert len(lt.find_keys_for_symbol(KeyType.TABLE_DATA, "sym")) == expected_data_keys
         assert len(lt.find_keys_for_symbol(KeyType.TABLE_INDEX, "sym")) == 2
         assert len(lt.find_keys_for_symbol(KeyType.VERSION, "sym")) == 2
 
@@ -3024,6 +3017,154 @@ class TestMergeRowrangeUpdate:
         expected = pd.DataFrame({"my_index": [1, 2, 3], "b": [10.0, 2.0, 3.0]}, index=pd.RangeIndex(start=0, stop=3))
         expected.index.name = "my_index"
         generic_merge_test(lib, "sym", target, source, self.strategy, expected, on=["my_index"])
+
+
+class TestMergeRowrangeInsert:
+    """Row count indexed merge with strategy do_nothing/insert: unmatched source rows are appended to the target in
+    source order; matched source rows are left untouched (no in-place rewrite)."""
+
+    def setup_method(self):
+        self.strategy = MergeStrategy(MergeAction.DO_NOTHING, MergeAction.INSERT)
+
+    def test_basic_append_unmatched(self, in_memory_store_factory):
+        lib = in_memory_store_factory()
+        target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]})
+        # a=1 matches (do_nothing leaves it untouched), a=99 and a=100 are unmatched and appended in source order.
+        source = pd.DataFrame({"a": [1, 99, 100], "b": [10.0, 99.0, 100.0]})
+        lib.write("sym", target)
+        qs.reset_stats()
+        with qs.query_stats():
+            lib.merge_experimental("sym", source, strategy=self.strategy, on=["a"])
+        stats = qs.get_query_stats()
+        # a single-column-slice target's unmatched rows are appended as exactly one new data segment.
+        assert query_stats_operation_count(stats, "Memory_PutObject", "TABLE_DATA") == 1
+        expected = pd.DataFrame({"a": [1, 2, 3, 99, 100], "b": [1.0, 2.0, 3.0, 99.0, 100.0]})
+        assert_frame_equal(lib.read("sym").data, expected)
+
+    def test_none_matched_appends_all(self, lmdb_library):
+        lib = lmdb_library
+        target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]})
+        source = pd.DataFrame({"a": [10, 20], "b": [10.0, 20.0]})
+        lib.write("sym", target)
+        lib.merge_experimental("sym", source, strategy=self.strategy, on=["a"])
+        expected = pd.DataFrame({"a": [1, 2, 3, 10, 20], "b": [1.0, 2.0, 3.0, 10.0, 20.0]})
+        assert_frame_equal(lib.read("sym").data, expected)
+
+    def test_all_matched_writes_no_new_data_keys(self, lmdb_library):
+        lib = lmdb_library
+        target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]})
+        source = pd.DataFrame({"a": [3, 1, 2], "b": [30.0, 10.0, 20.0]})
+        lib.write("sym", target)
+        lt = lib._dev_tools.library_tool()
+        assert len(lt.find_keys_for_symbol(KeyType.TABLE_DATA, "sym")) == 1
+        lib.merge_experimental("sym", source, strategy=self.strategy, on=["a"])
+        # do_nothing on matched means no row slice is rewritten, and every source row matched means nothing is
+        # inserted, so no new data key is created.
+        assert len(lt.find_keys_for_symbol(KeyType.TABLE_DATA, "sym")) == 1
+        assert_frame_equal(lib.read("sym").data, target)
+
+    def test_match_in_one_row_slice_only_suppresses_insert(self, lmdb_library_factory):
+        lib = lmdb_library_factory(arcticdb.LibraryOptions(rows_per_segment=2))
+        target = pd.DataFrame({"a": [1, 2, 3, 4], "b": [1.0, 2.0, 3.0, 4.0]})  # row slices [0,2) and [2,4)
+        # a=3 lives in the second row slice, so only that slice's processing unit matches it. The matched bitsets are
+        # ORed across all units, so a=3 must NOT be inserted even though the first slice's unit did not match it.
+        source = pd.DataFrame({"a": [3, 5], "b": [30.0, 50.0]})
+        lib.write("sym", target)
+        lib.merge_experimental("sym", source, strategy=self.strategy, on=["a"])
+        expected = pd.DataFrame({"a": [1, 2, 3, 4, 5], "b": [1.0, 2.0, 3.0, 4.0, 50.0]})
+        assert_frame_equal(lib.read("sym").data, expected)
+
+    def test_duplicate_unmatched_source_rows_both_inserted(self, lmdb_library):
+        lib = lmdb_library
+        target = pd.DataFrame({"a": [1], "b": [1.0]})
+        source = pd.DataFrame({"a": [7, 7], "b": [70.0, 71.0]})
+        lib.write("sym", target)
+        lib.merge_experimental("sym", source, strategy=self.strategy, on=["a"])
+        expected = pd.DataFrame({"a": [1, 7, 7], "b": [1.0, 70.0, 71.0]})
+        assert_frame_equal(lib.read("sym").data, expected)
+
+    def test_string_columns_inserted(self, lmdb_library):
+        lib = lmdb_library
+        target = pd.DataFrame({"a": [1, 2], "s": ["x", "y"]})
+        # Non-ASCII string exercises the GIL/string-pool path in build_row_range_insert_segments.
+        source = pd.DataFrame({"a": [1, 3, 4], "s": ["x", "café", None]})
+        lib.write("sym", target)
+        lib.merge_experimental("sym", source, strategy=self.strategy, on=["a"])
+        expected = pd.DataFrame({"a": [1, 2, 3, 4], "s": ["x", "y", "café", None]})
+        assert_frame_equal(lib.read("sym").data, expected)
+
+    def test_column_sliced_insert(self, lmdb_library_factory):
+        lib = lmdb_library_factory(arcticdb.LibraryOptions(columns_per_segment=2))
+        target = pd.DataFrame({"a": [1, 2], "b": [1.0, 2.0], "c": [10, 20]})  # column slices [a, b] and [c]
+        source = pd.DataFrame({"a": [1, 3], "b": [1.0, 30.0], "c": [10, 300]})
+        lib.write("sym", target)
+        lt = lib._dev_tools.library_tool()
+        assert len(lt.find_keys_for_symbol(KeyType.TABLE_DATA, "sym")) == 2  # 1 row slice x 2 column slices
+        lib.merge_experimental("sym", source, strategy=self.strategy, on=["a"])
+        expected = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 30.0], "c": [10, 20, 300]})
+        assert_frame_equal(lib.read("sym").data, expected)
+        # One insert segment is appended per column slice; do_nothing leaves the matched rows untouched.
+        assert len(lt.find_keys_for_symbol(KeyType.TABLE_DATA, "sym")) == 4
+
+
+class TestMergeRowrangeUpdateAndInsert:
+    """Row count indexed merge with strategy update/insert: matched source rows update the target in place and
+    unmatched source rows are appended in source order."""
+
+    def setup_method(self):
+        self.strategy = MergeStrategy(MergeAction.UPDATE, MergeAction.INSERT)
+
+    def test_update_matched_and_append_unmatched(self, in_memory_store_factory):
+        lib = in_memory_store_factory(dynamic_strings=True)
+        target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0], "c": ["x", "y", "z"]})
+        source = pd.DataFrame({"a": [1, 99, 3, 100], "b": [10.0, 99.0, 30.0, 100.0], "c": ["X", "N", "Z", "M"]})
+        # a=1 updates row 0, a=3 updates row 2; a=99 and a=100 are unmatched and appended in source order.
+        lib.write("sym", target)
+        qs.reset_stats()
+        with qs.query_stats():
+            lib.merge_experimental("sym", source, strategy=self.strategy, on=["a"])
+        stats = qs.get_query_stats()
+        # update one segment in place and append one segment for insertion
+        assert query_stats_operation_count(stats, "Memory_PutObject", "TABLE_DATA") == 2
+        expected = pd.DataFrame(
+            {
+                "a": [1, 2, 3, 99, 100],
+                "b": [10.0, 2.0, 30.0, 99.0, 100.0],
+                "c": ["X", "y", "Z", "N", "M"],
+            }
+        )
+        assert_frame_equal(lib.read("sym").data, expected)
+
+    def test_only_matches_no_insert_segment(self, lmdb_library):
+        lib = lmdb_library
+        target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]})
+        source = pd.DataFrame({"a": [1, 2], "b": [10.0, 20.0]})
+        lib.write("sym", target)
+        lt = lib._dev_tools.library_tool()
+        lib.merge_experimental("sym", source, strategy=self.strategy, on=["a"])
+        expected = pd.DataFrame({"a": [1, 2, 3], "b": [10.0, 20.0, 3.0]})
+        assert_frame_equal(lib.read("sym").data, expected)
+        # The update rewrites the single row slice (one new data key); nothing is inserted.
+        assert len(lt.find_keys_for_symbol(KeyType.TABLE_DATA, "sym")) == 2
+
+    def test_multiple_on_columns(self, lmdb_library):
+        lib = lmdb_library
+        target = pd.DataFrame({"a": [1, 2], "b": ["x", "y"], "c": [1.0, 2.0]})
+        source = pd.DataFrame({"a": [1, 3], "b": ["x", "q"], "c": [10.0, 30.0]})
+        # (a=1, b="x") matches row 0 and updates c; (a=3, b="q") is unmatched and appended.
+        lib.write("sym", target)
+        lib.merge_experimental("sym", source, strategy=self.strategy, on=["a", "b"])
+        expected = pd.DataFrame({"a": [1, 2, 3], "b": ["x", "y", "q"], "c": [10.0, 2.0, 30.0]})
+        assert_frame_equal(lib.read("sym").data, expected)
+
+    def test_ambiguous_multi_match_raises(self, lmdb_library):
+        lib = lmdb_library
+        # Two source rows match the same target row on "a"; an update strategy cannot resolve which value wins.
+        target = pd.DataFrame({"a": [1, 2], "b": [1.0, 2.0]})
+        source = pd.DataFrame({"a": [1, 1], "b": [10.0, 11.0]})
+        lib.write("sym", target)
+        with pytest.raises(UserInputException):
+            lib.merge_experimental("sym", source, strategy=self.strategy, on=["a"])
 
 
 class TestMergeMultiindexUpdate:

@@ -30,11 +30,24 @@ using namespace entt::literals;
 /// clause adding this entity and then after read_modify_write it reads it in order to compute the correct row ranges
 /// accounting for insertion. If any other piece of code adds this entity to the component manager the merge updates
 /// will iterate over them as well, producing wrong results. See merge_update_impl and Monday 12618296803
-struct MergeUpdateInsertedRowsEntity {
-    MergeUpdateInsertedRowsEntity() = default;
-    MergeUpdateInsertedRowsEntity(const size_t inserted_rows) : inserted_rows(inserted_rows) {}
+struct MergeUpdateInsertedRowsComponent {
+    MergeUpdateInsertedRowsComponent() = default;
+    MergeUpdateInsertedRowsComponent(const size_t inserted_rows) : inserted_rows(inserted_rows) {}
     operator size_t() const { return inserted_rows; }
     size_t inserted_rows = 0;
+};
+
+/// Used only by the MergeUpdateClause, and only for row-count indexed targets. After the pipeline finishes,
+/// write_inserted_row_range_data (via source_rows_to_insert_for_row_range_merge_update) intersects this component
+/// across *all* entities that carry it to decide which source rows to append. If any other piece of code adds this
+/// component the intersection will silently drop bits and rows will not be inserted. All instances added within a
+/// single merge must have the same size.
+struct MergeUpdateNotMatchedSourceRowsComponent {
+    MergeUpdateNotMatchedSourceRowsComponent() = default;
+    MergeUpdateNotMatchedSourceRowsComponent(std::shared_ptr<util::BitSet> unmatched_source_rows) :
+        unmatched_source_rows(std::move(unmatched_source_rows)) {}
+    operator util::BitSet&() { return *unmatched_source_rows; }
+    std::shared_ptr<util::BitSet> unmatched_source_rows;
 };
 
 class ComponentManager {
@@ -140,7 +153,7 @@ class ComponentManager {
     }
 
     template<typename ProcessComponents>
-    void process_entities(ProcessComponents&& process_fn) {
+    auto process_entities(ProcessComponents&& process_fn) const {
         using ArgTypes = util::function_arg_types<std::decay_t<ProcessComponents>>::args_t;
         // Derive the component tuple type (references stripped) without default-constructing it, as
         // the component types need not be default-constructible.

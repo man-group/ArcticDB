@@ -133,6 +133,21 @@ std::variant<position_t, convert::StringEncodingError> add_py_string_to_pool(
     }
 }
 
+template<util::type_descriptor_tag TDT>
+position_t write_py_string_to_pool_or_throw(
+        PyObject* const py_string_object, const size_t row_in_segment, const pipelines::RowRange& row_range,
+        std::optional<ScopedGILLock>& gil_lock, StringPool& new_string_pool, const std::string_view column_name
+) {
+    return util::variant_match(
+            add_py_string_to_pool<TDT::data_type()>(py_string_object, gil_lock, new_string_pool),
+            [](position_t offset) { return offset; },
+            [&](convert::StringEncodingError&& err) -> position_t {
+                err.row_index_in_slice_ = row_in_segment;
+                err.raise(column_name, row_range.first);
+            }
+    );
+}
+
 template<typename TagType, typename RawType>
 std::optional<convert::StringEncodingError> set_sequence_type(
         SegmentInMemory& seg, const entity::NativeTensor& tensor, size_t col, size_t rows_to_write, size_t row
