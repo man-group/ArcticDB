@@ -43,10 +43,15 @@ on:
 
 jobs:
 
+  detect_changes:
+    uses: ./.github/workflows/detect_docs_only.yml
+
   get_commits_to_benchmark:
-    name: Get tag commits  
+    name: Get tag commits
+    needs: [detect_changes]
+    if: ${{ !cancelled() && needs.detect_changes.outputs.docs_only != 'true' }}
     runs-on: ubuntu-22.04
-    steps:  
+    steps:
       - name: Checkout code 
         uses: actions/checkout@v3.3.0
         with:
@@ -130,6 +135,8 @@ jobs:
           
   run-asv-check-script:
     name: Executes asv tests checks
+    needs: [detect_changes]
+    if: ${{ !cancelled() && needs.detect_changes.outputs.docs_only != 'true' }}
     timeout-minutes: 120
     runs-on: ubuntu-latest
     container:
@@ -244,6 +251,8 @@ jobs:
   # ========================= Sanitizers ========================
   sanitizer-address-leak-undefined:
     name: Tests with ASan+LSan+UBSan
+    needs: [detect_changes]
+    if: ${{ !cancelled() && needs.detect_changes.outputs.docs_only != 'true' }}
     uses: ./.github/workflows/build_steps.yml
     secrets: inherit
     permissions: {packages: write}

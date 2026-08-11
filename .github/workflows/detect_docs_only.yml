@@ -1,0 +1,82 @@
+name: Detect docs-only changes
+on:
+  workflow_call:
+    outputs:
+      docs_only:
+        description: "true if every changed file is docs/metadata and the build/test matrix can be skipped"
+        value: ${{ jobs.detect.outputs.docs_only }}
+
+permissions:
+  contents: read
+
+jobs:
+  detect:
+    runs-on: ubuntu-latest
+    outputs:
+      docs_only: ${{ steps.check.outputs.docs_only }}
+    steps:
+      - name: Checkout (shallow)
+        if: |
+          github.event_name == 'pull_request' ||
+          (github.event_name == 'push' && !startsWith(github.ref, 'refs/tags/'))
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Fetch comparison commit (shallow)
+        if: |
+          github.event_name == 'pull_request' ||
+          (github.event_name == 'push' && !startsWith(github.ref, 'refs/tags/'))
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            base_sha="${{ github.event.pull_request.base.sha }}"
+          else
+            base_sha="${{ github.event.before }}"
+          fi
+          if [[ -n "$base_sha" ]] && [[ ! "$base_sha" =~ ^0+$ ]]; then
+            git fetch --depth=1 origin "$base_sha" || true
+          fi
+
+      - id: check
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            base_sha="${{ github.event.pull_request.base.sha }}"
+
+          elif [[ "${{ github.event_name }}" == "push" ]]; then
+            if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+              echo "docs_only=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            base_sha="${{ github.event.before }}"
+
+          else
+            echo "docs_only=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [[ -z "$base_sha" ]] || [[ "$base_sha" =~ ^0+$ ]] || ! git cat-file -e "$base_sha" 2>/dev/null; then
+            echo "docs_only=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          changed_files=$(git diff --no-renames --name-only "$base_sha" "${{ github.sha }}")
+          echo "Changed files:"
+          echo "$changed_files"
+
+          if [[ -z "$changed_files" ]]; then
+            echo "docs_only=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          non_docs_files=$(echo "$changed_files" | grep -Ev '(\.md$|\.ipynb$|^docs/|^LICENSE(\.[A-Za-z]+)?$|^\.gitignore$)' || true)
+
+          if [[ -z "$non_docs_files" ]]; then
+            echo "docs_only=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "docs_only=false" >> "$GITHUB_OUTPUT"
+          fi
