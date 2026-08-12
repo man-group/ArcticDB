@@ -82,7 +82,7 @@ void default_initialize(uint8_t* data, const size_t bytes) {
         std::fill_n(type_ptr, num_rows, not_a_string());
     } else if constexpr (is_floating_point_type(data_type)) {
         std::fill_n(type_ptr, num_rows, std::numeric_limits<RawType>::quiet_NaN());
-    } else if constexpr (is_time_type(data_type)) {
+    } else if constexpr (has_nat_sentinel(data_type)) {
         std::fill_n(type_ptr, num_rows, NaT);
     } else if constexpr (is_integer_type(data_type) || is_bool_type(data_type)) {
         std::memset(data, 0, bytes);

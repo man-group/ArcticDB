@@ -205,7 +205,15 @@ VariantData ExpressionNode::compute(ProcessingUnit& seg) const {
             [&seg](const Leaf& leaf) -> VariantData {
                 return util::variant_match(
                         leaf,
-                        [&seg](const ColumnName& column_name) -> VariantData { return seg.get(column_name); },
+                        [&seg](const ColumnName& column_name) -> VariantData {
+                            auto data = seg.get(column_name);
+                            if (const auto* col = std::get_if<ColumnWithStrings>(&data)) {
+                                check_column_type_supported_in_queries(
+                                        column_name.value, col->column_->type().data_type()
+                                );
+                            }
+                            return data;
+                        },
                         [](const std::shared_ptr<Value>& value) -> VariantData { return value; },
                         [](const std::shared_ptr<ValueSet>& value_set) -> VariantData { return value_set; },
                         [](const std::shared_ptr<util::RegexGeneric>& regex) -> VariantData { return regex; }
@@ -614,6 +622,7 @@ std::variant<BitSetTag, DataType> ExpressionNode::leaf_return_type(
                         "Clause requires column '{}' to exist in input data",
                         column_name.value
                 );
+                check_column_type_supported_in_queries(column_name.value, it->second);
                 return it->second;
             },
             [](const std::shared_ptr<Value>& value) -> std::variant<BitSetTag, DataType> { return value->data_type(); },

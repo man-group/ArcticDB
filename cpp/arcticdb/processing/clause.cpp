@@ -16,6 +16,7 @@
 #include <arcticdb/stream/merge.hpp>
 
 #include <arcticdb/processing/clause.hpp>
+#include <arcticdb/processing/operation_types.hpp>
 
 #include <arcticdb/pipeline/column_name_resolution.hpp>
 #include <arcticdb/pipeline/column_stats.hpp>
@@ -376,7 +377,9 @@ std::vector<EntityId> AggregationClause::process(std::vector<EntityId>&& entity_
             auto input_column_name = aggregators_.at(agg_data.index).get_input_column_name();
             auto input_column = row_slice.get(input_column_name);
             if (std::holds_alternative<ColumnWithStrings>(input_column)) {
-                agg_data->add_data_type(std::get<ColumnWithStrings>(input_column).column_->type().data_type());
+                const auto input_data_type = std::get<ColumnWithStrings>(input_column).column_->type().data_type();
+                check_column_type_supported_in_queries(input_column_name.value, input_data_type);
+                agg_data->add_data_type(input_data_type);
             }
         }
     }
@@ -394,6 +397,7 @@ std::vector<EntityId> AggregationClause::process(std::vector<EntityId>&& entity_
         auto partitioning_column = row_slice.get(ColumnName(grouping_column_));
         if (std::holds_alternative<ColumnWithStrings>(partitioning_column)) {
             ColumnWithStrings col = std::get<ColumnWithStrings>(partitioning_column);
+            check_column_type_supported_in_queries(grouping_column_, col.column_->type().data_type());
             details::visit_type(col.column_->type().data_type(), [&, this](auto data_type_tag) {
                 using col_type_info = ScalarTypeInfo<decltype(data_type_tag)>;
                 grouping_data_type = col_type_info::data_type;
@@ -533,13 +537,16 @@ OutputSchema AggregationClause::modify_schema(OutputSchema&& output_schema) cons
     output_schema.clear_default_values();
     const auto& input_stream_desc = output_schema.stream_descriptor();
     StreamDescriptor stream_desc(input_stream_desc.id());
-    stream_desc.add_field(input_stream_desc.field(*input_stream_desc.find_field(grouping_column_)));
+    const auto& grouping_field = input_stream_desc.field(*input_stream_desc.find_field(grouping_column_));
+    check_column_type_supported_in_queries(grouping_column_, grouping_field.type().data_type());
+    stream_desc.add_field(grouping_field);
     stream_desc.set_index({IndexDescriptorImpl::Type::ROWCOUNT, 0});
 
     for (const auto& agg : aggregators_) {
         const auto& input_column_name = agg.get_input_column_name().value;
         const auto& output_column_name = agg.get_output_column_name().value;
         const auto& input_column_type = output_schema.column_types()[input_column_name];
+        check_column_type_supported_in_queries(input_column_name, input_column_type);
         auto agg_data = agg.get_aggregator_data();
         agg_data.add_data_type(input_column_type);
         const DataType output_column_type = agg_data.get_output_data_type();

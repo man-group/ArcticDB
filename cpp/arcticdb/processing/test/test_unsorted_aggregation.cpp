@@ -1,5 +1,7 @@
 #include <gtest/gtest.h>
+#include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/processing/unsorted_aggregation.hpp>
+#include <arcticdb/util/constants.hpp>
 #include <arcticdb/util/test/test_utils.hpp>
 
 using namespace arcticdb;
@@ -22,7 +24,7 @@ TEST_P(UnsortedAggregationDataTypeParametrizationFixture, Sum) {
         constexpr DataType expected_data_type = combine_data_type(ValueType::FLOAT, SizeBits::S64);
         ASSERT_EQ(aggregator_data.get_output_data_type(), expected_data_type);
         ASSERT_EQ(aggregator_data.get_default_value(), std::optional{Value(double{0}, expected_data_type)});
-    } else if (is_sequence_type(dt) || is_time_type(dt) || is_bool_object_type(dt)) {
+    } else if (is_sequence_type(dt) || has_nat_sentinel(dt) || is_bool_object_type(dt)) {
         ASSERT_THROW(aggregator_data.get_output_data_type(), SchemaException);
     } else {
         ASSERT_TRUE(is_empty_type(dt));
@@ -162,3 +164,37 @@ TEST_P(AggregationResult, Mean) {
 }
 
 INSTANTIATE_TEST_SUITE_P(Mean, AggregationResult, ::testing::ValuesIn(allowed_mean_input_types()));
+
+TEST(MinMaxAggregatorDataTimedelta, NaTExcludedFromMinMax) {
+    using Tag = ScalarTagType<DataTypeTag<DataType::TIMEDELTA_NS64>>;
+    const std::array<timestamp, 4> data{5, NaT, 1, NaT};
+    const ColumnWithStrings input(create_dense_column<Tag>(data), nullptr, "dur");
+
+    MinMaxAggregatorData aggregator_data(1);
+    aggregator_data.aggregate(input);
+    const SegmentInMemory result = aggregator_data.finalize(
+            {ColumnName{"min"}, ColumnName{"max"}, ColumnName{"nan_count"}, ColumnName{"null_count"}}
+    );
+
+    ASSERT_EQ(result.field(0).type(), make_scalar_type(DataType::TIMEDELTA_NS64));
+    ASSERT_EQ(result.field(1).type(), make_scalar_type(DataType::TIMEDELTA_NS64));
+    ASSERT_EQ(result.column(0).scalar_at<timestamp>(0), 1);
+    ASSERT_EQ(result.column(1).scalar_at<timestamp>(0), 5);
+    ASSERT_EQ(result.column(2).scalar_at<uint64_t>(0), 2);
+}
+
+TEST(MinMaxAggregatorDataTimedelta, AllNaTReportedAsNaT) {
+    using Tag = ScalarTagType<DataTypeTag<DataType::TIMEDELTA_NS64>>;
+    const std::array<timestamp, 3> data{NaT, NaT, NaT};
+    const ColumnWithStrings input(create_dense_column<Tag>(data), nullptr, "dur");
+
+    MinMaxAggregatorData aggregator_data(1);
+    aggregator_data.aggregate(input);
+    const SegmentInMemory result = aggregator_data.finalize(
+            {ColumnName{"min"}, ColumnName{"max"}, ColumnName{"nan_count"}, ColumnName{"null_count"}}
+    );
+
+    ASSERT_EQ(result.column(0).scalar_at<timestamp>(0), NaT);
+    ASSERT_EQ(result.column(1).scalar_at<timestamp>(0), NaT);
+    ASSERT_EQ(result.column(2).scalar_at<uint64_t>(0), 3);
+}

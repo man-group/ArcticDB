@@ -149,8 +149,9 @@ StatsComparison stats_comparator(const ColumnStatsValues& stats_lhs, const Value
             // Monday: 8065794446 we should disallow comparing time types to non-time numeric types
             // This is also wrong downstream in the rest of the processing pipeline
             constexpr bool stats_supported = is_numeric_type(StatsTag::data_type) ||
-                                             is_time_type(StatsTag::data_type) || is_bool_type(StatsTag::data_type);
-            constexpr bool val_supported = is_numeric_type(ValTag::data_type) || is_time_type(ValTag::data_type) ||
+                                             is_timedelta_type(StatsTag::data_type) ||
+                                             is_bool_type(StatsTag::data_type);
+            constexpr bool val_supported = is_numeric_type(ValTag::data_type) || is_timedelta_type(ValTag::data_type) ||
                                            is_bool_type(ValTag::data_type);
             // Mixed bool/non-bool comparisons are rejected at runtime by check_no_mixed_bool_comparison.
             // MSVC C4804 treats `numeric > bool` as an error.
@@ -163,7 +164,7 @@ StatsComparison stats_comparator(const ColumnStatsValues& stats_lhs, const Value
                 auto min_val = static_cast<comp::left_type>(stats_lhs.min->get<StatsRawType>());
                 auto max_val = static_cast<comp::left_type>(stats_lhs.max->get<StatsRawType>());
                 auto query_value = static_cast<comp::right_type>(val_rhs.get<ValRawType>());
-                if constexpr (is_time_type(StatsTag::data_type)) {
+                if constexpr (has_nat_sentinel(StatsTag::data_type)) {
                     using F = std::remove_reference_t<Func>;
                     constexpr auto nat_result = std::is_same_v<F, NotEqualsOperator> ? StatsComparison::ALL_MATCH
                                                                                      : StatsComparison::NONE_MATCH;
@@ -197,8 +198,8 @@ StatsComparison stats_comparator(const ColumnStatsValues& stats_lhs, const Colum
         return details::visit_type(stats_rhs.min->data_type(), [&](auto rhs_tag) -> StatsComparison {
             using RhsTag = std::remove_reference_t<decltype(rhs_tag)>;
 
-            if constexpr ((is_numeric_type(LhsTag::data_type) || is_time_type(LhsTag::data_type)) &&
-                          (is_numeric_type(RhsTag::data_type) || is_time_type(RhsTag::data_type))) {
+            if constexpr ((is_numeric_type(LhsTag::data_type) || is_timedelta_type(LhsTag::data_type)) &&
+                          (is_numeric_type(RhsTag::data_type) || is_timedelta_type(RhsTag::data_type))) {
                 using LhsRawType = LhsTag::raw_type;
                 using RhsRawType = RhsTag::raw_type;
                 using comp = Comparable<LhsRawType, RhsRawType>;
@@ -206,16 +207,16 @@ StatsComparison stats_comparator(const ColumnStatsValues& stats_lhs, const Colum
                 auto lhs_max = static_cast<typename comp::left_type>(stats_lhs.max->get<LhsRawType>());
                 auto rhs_min = static_cast<typename comp::right_type>(stats_rhs.min->get<RhsRawType>());
                 auto rhs_max = static_cast<typename comp::right_type>(stats_rhs.max->get<RhsRawType>());
-                if constexpr (is_time_type(LhsTag::data_type) || is_time_type(RhsTag::data_type)) {
+                if constexpr (has_nat_sentinel(LhsTag::data_type) || has_nat_sentinel(RhsTag::data_type)) {
                     using F = std::remove_reference_t<Func>;
                     constexpr auto nat_result = std::is_same_v<F, NotEqualsOperator> ? StatsComparison::ALL_MATCH
                                                                                      : StatsComparison::NONE_MATCH;
-                    if constexpr (is_time_type(LhsTag::data_type)) {
+                    if constexpr (has_nat_sentinel(LhsTag::data_type)) {
                         if (static_cast<timestamp>(lhs_min) == NaT) {
                             return nat_result;
                         }
                     }
-                    if constexpr (is_time_type(RhsTag::data_type)) {
+                    if constexpr (has_nat_sentinel(RhsTag::data_type)) {
                         if (static_cast<timestamp>(rhs_min) == NaT) {
                             return nat_result;
                         }

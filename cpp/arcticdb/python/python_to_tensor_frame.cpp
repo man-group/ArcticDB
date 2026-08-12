@@ -12,6 +12,7 @@
 #include <arcticdb/python/python_utils.hpp>
 #include <arcticdb/python/python_types.hpp>
 #include <arcticdb/stream/index.hpp>
+#include <arcticdb/util/configs_map.hpp>
 #include <pybind11/numpy.h>
 #include <sparrow/record_batch.hpp>
 
@@ -358,6 +359,22 @@ void record_batches_to_frame(
     );
 }
 
+// Every write, append, update and stage entry point reaches py_input_item_to_frame, whatever the input format, so this
+// is the one place that can gate a type for all of them.
+static void check_input_types_are_writeable(const StreamDescriptor& desc) {
+    if (ConfigsMap::instance()->get_int("Timedelta.EnableWrite", 0) == 1) {
+        return;
+    }
+    for (const auto& field : desc.fields()) {
+        normalization::check<ErrorCode::E_UNIMPLEMENTED_INPUT_TYPE>(
+                !is_timedelta_type(field.type().data_type()),
+                "Writing duration columns is not yet supported, column '{}' is of type {}",
+                field.name(),
+                field.type()
+        );
+    }
+}
+
 std::shared_ptr<InputFrame> py_input_item_to_frame(
         const StreamId& stream_name, const InputItem& item, const py::object& norm_meta, const py::object& user_meta,
         bool empty_types, pipelines::SortednessScan sortedness_scan
@@ -381,6 +398,7 @@ std::shared_ptr<InputFrame> py_input_item_to_frame(
                 record_batches_to_frame(record_batches, *res, sortedness_scan);
             }
     );
+    check_input_types_are_writeable(res->desc());
     res->set_index_range();
     res->desc().set_id(stream_name);
     ARCTICDB_DEBUG(log::version(), "Received frame with descriptor {}", res->desc());

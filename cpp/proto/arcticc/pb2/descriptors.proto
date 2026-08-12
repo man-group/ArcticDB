@@ -32,6 +32,7 @@ message TypeDescriptor {
         DYNAMIC_UTF8 = 12;
         EMPTY = 13;
         BOOL_OBJECT = 14; // Nullable boolean
+        TIMEDELTA = 15; // Signed nanosecond duration, pandas timedelta64[ns]
     }
 
     enum SizeBits {

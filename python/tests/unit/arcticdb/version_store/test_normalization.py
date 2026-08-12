@@ -58,6 +58,7 @@ from arcticdb.util.test import (
     TestCustomNormalizer,
     assert_frame_equal,
     assert_series_equal,
+    config_context,
 )
 from arcticdb.util._versions import IS_PANDAS_ZERO, IS_PANDAS_TWO
 import arcticc.pb2.descriptors_pb2 as descriptors_pb2
@@ -921,8 +922,22 @@ def test_writing_timedelta(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
     sym = "test_writing_timedelta"
     df = pd.DataFrame({"col": [pd.Timedelta(1, unit="day")]})
-    with pytest.raises(ArcticDbNotYetImplemented):
+    with pytest.raises(NormalizationException):
         lib.write(sym, df)
+    with config_context("Timedelta.EnableWrite", 1):
+        lib.write(sym, df)
+    assert_frame_equal(df, lib.read(sym).data)
+
+
+@pytest.mark.parametrize("dtype", ["datetime64[s]", "datetime64[ms]", "datetime64[us]", "datetime64[ns]"])
+def test_writing_ndarray_coerces_resolution(lmdb_version_store_v1, dtype):
+    lib = lmdb_version_store_v1
+    sym = "test_writing_ndarray_coerces_resolution"
+    arr = np.array([1, 2, 3], dtype=dtype)
+    lib.write(sym, arr)
+    received = lib.read(sym).data
+    assert received.dtype == np.dtype("datetime64[ns]")
+    np.testing.assert_array_equal(arr.astype("datetime64[ns]"), received)
 
 
 def test_bools_are_pickled(lmdb_version_store_allows_pickling):

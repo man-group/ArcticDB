@@ -1083,6 +1083,7 @@ if(${TEST})
             entity/test/test_key_serialization.cpp
             entity/test/test_metrics.cpp
             entity/test/test_ref_key.cpp
+            entity/test/test_timedelta_type.cpp
             entity/test/test_variant_key.cpp
             entity/test/test_tensor.cpp
             log/test/test_log.cpp

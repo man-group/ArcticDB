@@ -27,7 +27,7 @@ void MinMaxAggregatorData::aggregate(const ColumnWithStrings& input_column) {
         if constexpr (!is_sequence_type(type_info::data_type)) {
             // null_count_ tracks rows that are genuinely absent (sparse-map gaps from Arrow
             // validity bitmaps). nan_count_ tracks in-band sentinel values found while iterating
-            // the dense values (NaN for floats, NaT for time types) - see the for_each below.
+            // the dense values (NaN for floats, NaT for timestamps and durations) - see the for_each below.
             if (input_column.column_->is_sparse()) {
                 const auto sparse_gap_count = input_column.column_->last_row() + 1 - input_column.column_->row_count();
                 null_count_ += static_cast<uint64_t>(sparse_gap_count);
@@ -35,7 +35,7 @@ void MinMaxAggregatorData::aggregate(const ColumnWithStrings& input_column) {
             auto is_nat_or_nan = []([[maybe_unused]] RawType v) {
                 if constexpr (is_floating_point_type(type_info::data_type)) {
                     return std::isnan(v);
-                } else if constexpr (is_time_type(type_info::data_type)) {
+                } else if constexpr (has_nat_sentinel(type_info::data_type)) {
                     return v == NaT;
                 } else {
                     return false;
@@ -44,7 +44,7 @@ void MinMaxAggregatorData::aggregate(const ColumnWithStrings& input_column) {
             auto missing_value = []() -> RawType {
                 if constexpr (is_floating_point_type(type_info::data_type)) {
                     return std::numeric_limits<RawType>::quiet_NaN();
-                } else if constexpr (is_time_type(type_info::data_type)) {
+                } else if constexpr (has_nat_sentinel(type_info::data_type)) {
                     return static_cast<RawType>(NaT);
                 } else {
                     return RawType{};
@@ -52,9 +52,9 @@ void MinMaxAggregatorData::aggregate(const ColumnWithStrings& input_column) {
             };
             [[maybe_unused]] bool any_nan{false};
             arcticdb::for_each<typename type_info::TDT>(*input_column.column_, [&](auto value) {
-                // In-band sentinel (NaN for floats, NaT for time types) - count it and skip the
+                // In-band sentinel (NaN for floats, NaT for timestamps and durations) - count it and skip the
                 // min/max update so those reflect only real values.
-                if constexpr (is_floating_point_type(type_info::data_type) || is_time_type(type_info::data_type)) {
+                if constexpr (is_floating_point_type(type_info::data_type) || has_nat_sentinel(type_info::data_type)) {
                     if (is_nat_or_nan(value)) {
                         ++nan_count_;
                         any_nan = true;
@@ -69,7 +69,7 @@ void MinMaxAggregatorData::aggregate(const ColumnWithStrings& input_column) {
                     max_->set(std::max(max_->get<RawType>(), value));
                 }
             });
-            if constexpr (is_floating_point_type(type_info::data_type) || is_time_type(type_info::data_type)) {
+            if constexpr (is_floating_point_type(type_info::data_type) || has_nat_sentinel(type_info::data_type)) {
                 if (any_nan && !min_) {
                     // Everything in the block is NaN/NaT, reflect this in the stats
                     min_ = Value{missing_value(), type_info::data_type};
@@ -185,6 +185,11 @@ struct OutputType<DataTypeTag<DataType::BOOL8>, void> {
 template<>
 struct OutputType<DataTypeTag<DataType::NANOSECONDS_UTC64>, void> {
     using type = ScalarTagType<DataTypeTag<DataType::NANOSECONDS_UTC64>>;
+};
+
+template<>
+struct OutputType<DataTypeTag<DataType::TIMEDELTA_NS64>, void> {
+    using type = ScalarTagType<DataTypeTag<DataType::TIMEDELTA_NS64>>;
 };
 
 template<>

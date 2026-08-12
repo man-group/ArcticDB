@@ -73,8 +73,8 @@ StatsComparison stats_membership_comparator(const ColumnStatsValues& stats, Valu
             // TODO add bool support once the bool PR is merged
             // Monday: 8065794446 we should disallow comparing time types to non-time numeric types
             // This is also wrong downstream in the rest of the processing pipeline
-            if constexpr ((is_numeric_type(StatsTag::data_type) || is_time_type(StatsTag::data_type)) &&
-                          (is_numeric_type(SetTag::data_type) || is_time_type(SetTag::data_type))) {
+            if constexpr ((is_numeric_type(StatsTag::data_type) || is_timedelta_type(StatsTag::data_type)) &&
+                          (is_numeric_type(SetTag::data_type) || is_timedelta_type(SetTag::data_type))) {
                 using StatsRawType = StatsTag::raw_type;
                 using SetRawType = SetTag::raw_type;
                 using comp = Comparable<StatsRawType, SetRawType>;
@@ -85,7 +85,7 @@ StatsComparison stats_membership_comparator(const ColumnStatsValues& stats, Valu
                 auto set_min_raw = static_cast<RightType>(set_min->get<SetRawType>());
                 auto set_max_raw = static_cast<RightType>(set_max->get<SetRawType>());
 
-                if constexpr (is_time_type(StatsTag::data_type)) {
+                if constexpr (has_nat_sentinel(StatsTag::data_type)) {
                     // We do not return NaT rows with .isin([NaT]), which is the same as our behaviour
                     // for NaN. Therefore the values in the set do not matter if the block is all NaT.
                     // It's sufficient to just check the set's minimum to calculate nat_in_set since NaT =
@@ -120,7 +120,7 @@ StatsComparison stats_membership_comparator(const ColumnStatsValues& stats, Valu
                     auto typed_set = value_set.get_set<SetRawType>();
                     isin_result = StatsComparison::NONE_MATCH;
                     for (const auto& elem : *typed_set) {
-                        if constexpr (is_time_type(StatsTag::data_type)) {
+                        if constexpr (has_nat_sentinel(StatsTag::data_type)) {
                             // The case where the set is just {NaT} is handled above. When the set is {NaT, Other}
                             // we can just exclude NaT from consideration.
                             if (static_cast<timestamp>(elem) == NaT) {

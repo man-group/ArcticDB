@@ -628,7 +628,8 @@ std::shared_ptr<SegmentInMemoryImpl> SegmentInMemoryImpl::filter(
                                 *output_ptr = value;
                             }
                         } else if constexpr (is_numeric_type(DataTypeTag::data_type) ||
-                                             is_bool_type(DataTypeTag::data_type)) {
+                                             is_bool_type(DataTypeTag::data_type) ||
+                                             is_timedelta_type(DataTypeTag::data_type)) {
                             *output_ptr = value;
                         } else if constexpr (is_empty_type(DataTypeTag::data_type)) {
                             internal::raise<ErrorCode::E_ASSERTION_FAILURE>(
@@ -669,7 +670,8 @@ std::shared_ptr<SegmentInMemoryImpl> SegmentInMemoryImpl::filter(
                                 *output_ptr = value;
                             }
                         } else if constexpr (is_numeric_type(DataTypeTag::data_type) ||
-                                             is_bool_type(DataTypeTag::data_type)) {
+                                             is_bool_type(DataTypeTag::data_type) ||
+                                             is_timedelta_type(DataTypeTag::data_type)) {
                             *output_ptr = value;
                         } else if constexpr (is_empty_type(DataTypeTag::data_type)) {
                             internal::raise<ErrorCode::E_ASSERTION_FAILURE>(
@@ -825,7 +827,8 @@ bool operator==(const SegmentInMemoryImpl& left, const SegmentInMemoryImpl& righ
             for (auto row = 0u; row < left_col.row_count(); ++row)
                 if (left.string_at(row, col) != right.string_at(row, col))
                     return false;
-        } else if (is_numeric_type(left_data_type) || is_bool_type(left_data_type)) {
+        } else if (is_numeric_type(left_data_type) || is_bool_type(left_data_type) ||
+                   is_timedelta_type(left_data_type)) {
             if (left.column(col) != right.column(col))
                 return false;
         } else if (is_empty_type(left_data_type)) {

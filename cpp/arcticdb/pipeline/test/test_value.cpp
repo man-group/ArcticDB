@@ -161,7 +161,7 @@ requires std::derived_from<TypeTag, DataTypeTagBase>
 consteval auto generate_pair_of_different_values_for_data_type() {
     using raw_type = typename TypeTag::raw_type;
     constexpr DataType data_type = TypeTag::data_type;
-    if constexpr (is_signed_type(data_type) || is_time_type(data_type)) {
+    if constexpr (is_signed_type(data_type) || has_nat_sentinel(data_type)) {
         return std::pair<raw_type, raw_type>{-4, 6};
     } else if constexpr (is_unsigned_type(data_type)) {
         return std::pair<raw_type, raw_type>{4, 6};

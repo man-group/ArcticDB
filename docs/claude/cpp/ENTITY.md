@@ -67,6 +67,7 @@ The `DataType` enum in `cpp/arcticdb/entity/types.hpp` defines supported data ty
 | Floats | `FLOAT32`, `FLOAT64` |
 | Boolean | `BOOL8`, `BOOL_OBJECT8` (nullable) |
 | Timestamp | `NANOSECONDS_UTC64` (nanoseconds since epoch) |
+| Duration | `TIMEDELTA_NS64` (signed nanosecond duration, pandas `timedelta64[ns]`) |
 | Strings | `ASCII_FIXED64`, `ASCII_DYNAMIC64`, `UTF_FIXED64`, `UTF_DYNAMIC64`, `UTF_DYNAMIC32` |
 | Special | `EMPTYVAL` (null), `UNKNOWN` |
 
@@ -76,8 +77,43 @@ Helper functions in `cpp/arcticdb/entity/types.hpp`:
 - `get_type_size(DataType)` - Returns byte size of type
 - `is_floating_point_type(DataType)` - Check if float type
 - `is_integer_type(DataType)` - Check if integer type
-- `is_numeric_type(DataType)` - Check if numeric (int or float)
+- `is_numeric_type(DataType)` - Check if numeric (int, float, or timestamp)
 - `is_sequence_type(DataType)` - Check if string/array type
+- `is_time_type(DataType)` - Check if timestamp. Deliberately false for `TIMEDELTA_NS64`
+- `is_timedelta_type(DataType)` - Check if duration
+- `has_nat_sentinel(DataType)` - Check whether `INT64_MIN` is this type's missing-value sentinel, i.e. timestamp or
+  duration. Use this rather than `is_time_type` wherever NaT semantics matter
+
+### The duration type
+
+`TIMEDELTA_NS64` is `int64` nanoseconds, physically identical to `NANOSECONDS_UTC64`, and shares its NaT
+(`INT64_MIN`) missing-value sentinel. It is deliberately excluded from both `is_time_type` and `is_numeric_type`:
+
+- Including it in `is_time_type` would make it mutually promotable with `NANOSECONDS_UTC64` in
+  `is_valid_type_promotion_to_target` (`cpp/arcticdb/entity/type_utils.cpp`), so appending a duration column onto a
+  timestamp column would silently succeed, and it would be admitted as an index.
+- Including it in `is_numeric_type` would let the clauses treat it as `int64`, so `q["dur"] > 5` would compare a
+  duration against a bare integer. Excluding it makes them fail closed.
+
+The cost of the second exclusion is that the handful of sites which mean "a fixed-width scalar copied as its `raw_type`"
+have to spell the set out as `is_numeric_type(x) || is_bool_type(x) || is_timedelta_type(x)`. They are
+`column_utils.cpp` `array_at` (both branches), `frame_utils.hpp` `segment_set_data`, and the `Row` visitor, `scalar_at`
+and equality check in `memory_segment_impl.{hpp,cpp}`. This is preferred over inverting the split, because the
+alternative — making `is_numeric_type` include durations and introducing a narrower predicate for arithmetic — would
+have to be applied to every `is_numeric_type` site in `processing/`, which is a much larger surface, and a site missed
+there returns a wrong answer whereas a site missed here fails loudly.
+
+Adding another scalar-only type means revisiting those sites plus the ones listed under `has_nat_sentinel`.
+
+The type can therefore be read and written but not queried. `check_column_type_supported_in_queries`
+(`cpp/arcticdb/processing/operation_types.hpp`) raises `E_UNSUPPORTED_COLUMN_TYPE` from both `ExpressionNode::compute`
+overloads and from `AggregationClause`; resample is refused by its own existing type gate.
+
+Writing is gated on the `Timedelta.EnableWrite` `ConfigsMap` flag, off by default, in `check_input_types_are_writeable`
+(`cpp/arcticdb/python/python_to_tensor_frame.cpp`). That is the only gate: every write, append, update and stage entry
+point reaches `py_input_item_to_frame`, whichever input format was used, so the descriptor scan there covers pandas,
+numpy, PyArrow and polars input alike. Data written with the flag on cannot be read by clients that predate the type,
+which raise `Invalid dtype 15:4` from `visit_type`.
 
 ## Type Descriptors
 

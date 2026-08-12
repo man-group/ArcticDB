@@ -149,7 +149,7 @@ VariantData unary_comparator(const ColumnWithStrings& col, Func&& func) {
                         return func.apply(input_value);
                     } else if constexpr (is_sequence_type(type_info::data_type)) {
                         return func.template apply<StringTypeTag>(input_value);
-                    } else if constexpr (is_time_type(type_info::data_type)) {
+                    } else if constexpr (has_nat_sentinel(type_info::data_type)) {
                         return func.template apply<TimeTypeTag>(input_value);
                     } else {
                         // For sparse integer/bool columns, physically stored values are never null.

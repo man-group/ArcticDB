@@ -174,7 +174,7 @@ ColumnStats::ColumnStats(
 
 namespace {
 bool is_col_eligible_for_stats(DataType col_data_type) {
-    return is_numeric_type(col_data_type) || is_bool_type(col_data_type);
+    return is_numeric_type(col_data_type) || is_bool_type(col_data_type) || is_timedelta_type(col_data_type);
 }
 
 // Type-disambiguated key for duplicate detection, so that e.g. an integer column labelled 2

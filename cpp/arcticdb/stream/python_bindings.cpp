@@ -37,7 +37,7 @@ void register_types(py::module& m) {
 #define VALUE_TYPE(__VT__) .value(#__VT__, ValueType::__VT__)
             VALUE_TYPE(UINT) VALUE_TYPE(INT) VALUE_TYPE(FLOAT) VALUE_TYPE(BOOL) VALUE_TYPE(NANOSECONDS_UTC)
                     VALUE_TYPE(ASCII_FIXED) VALUE_TYPE(UTF8_FIXED) VALUE_TYPE(BYTES) VALUE_TYPE(UTF_DYNAMIC)
-                            VALUE_TYPE(EMPTY) VALUE_TYPE(BOOL_OBJECT)
+                            VALUE_TYPE(EMPTY) VALUE_TYPE(BOOL_OBJECT) VALUE_TYPE(TIMEDELTA)
 #undef VALUE_TYPE
                                     ;
 
@@ -46,7 +46,7 @@ void register_types(py::module& m) {
             DATA_TYPE(UINT8) DATA_TYPE(UINT16) DATA_TYPE(UINT32) DATA_TYPE(UINT64) DATA_TYPE(INT8) DATA_TYPE(INT16)
                     DATA_TYPE(INT32) DATA_TYPE(INT64) DATA_TYPE(FLOAT32) DATA_TYPE(FLOAT64) DATA_TYPE(BOOL8)
                             DATA_TYPE(NANOSECONDS_UTC64) DATA_TYPE(ASCII_FIXED64) DATA_TYPE(ASCII_DYNAMIC64)
-                                    DATA_TYPE(UTF_FIXED64) DATA_TYPE(UTF_DYNAMIC64)
+                                    DATA_TYPE(UTF_FIXED64) DATA_TYPE(UTF_DYNAMIC64) DATA_TYPE(TIMEDELTA_NS64)
 #undef DATA_TYPE
                                             ;
 

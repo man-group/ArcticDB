@@ -93,6 +93,9 @@ enum class ValueType : uint8_t {
     EMPTY = 13,
     /// Nullable booleans
     BOOL_OBJECT = 14,
+    /// Signed nanosecond duration, i.e. Pandas `timedelta64[ns]`. Physically int64, with NaT as the missing value
+    /// sentinel, but deliberately not a NANOSECONDS_UTC: a duration is not a point in time.
+    TIMEDELTA = 15,
 
     COUNT // Not a real value type, should not be added to proto descriptor. Used to count the number of items in the
           // enum
@@ -121,6 +124,12 @@ constexpr bool is_sequence_type(ValueType v) {
 }
 
 constexpr bool is_time_type(ValueType v) { return uint8_t(v) == uint8_t(ValueType::NANOSECONDS_UTC); }
+
+constexpr bool is_timedelta_type(ValueType v) { return uint8_t(v) == uint8_t(ValueType::TIMEDELTA); }
+
+// Whether the minimum int64 doubles as the missing value sentinel for this type, as Pandas NaT does for both
+// datetime64 and timedelta64. Every site that relies on that convention should use this rather than is_time_type.
+constexpr bool has_nat_sentinel(ValueType v) { return is_time_type(v) || is_timedelta_type(v); }
 
 constexpr bool is_numeric_type(ValueType v) {
     return is_time_type(v) || (uint8_t(v) >= uint8_t(ValueType::UINT) && uint8_t(v) <= uint8_t(ValueType::FLOAT));
@@ -199,6 +208,7 @@ enum class DataType : uint8_t {
     EMPTYVAL = detail::combine_val_bits(ValueType::EMPTY, SizeBits::S64),
     BOOL_OBJECT8 = detail::combine_val_bits(ValueType::BOOL_OBJECT, SizeBits::S8),
     UTF_DYNAMIC32 = detail::combine_val_bits(ValueType::UTF_DYNAMIC, SizeBits::S32),
+    TIMEDELTA_NS64 = detail::combine_val_bits(ValueType::TIMEDELTA, SizeBits::S64),
 #undef DT_COMBINE
     UNKNOWN = 0,
 };
@@ -261,6 +271,10 @@ constexpr bool is_floating_point_type(DataType v) { return is_floating_point_typ
 
 constexpr bool is_time_type(DataType v) { return is_time_type(slice_value_type(v)); }
 
+constexpr bool is_timedelta_type(DataType v) { return is_timedelta_type(slice_value_type(v)); }
+
+constexpr bool has_nat_sentinel(DataType v) { return has_nat_sentinel(slice_value_type(v)); }
+
 constexpr bool is_integer_type(DataType v) { return is_integer_type(slice_value_type(v)); }
 
 constexpr bool is_fixed_string_type(DataType v) { return is_fixed_string_type(slice_value_type(v)); }
@@ -297,6 +311,8 @@ constexpr ValueType get_value_type(char specifier) noexcept {
         // rely uniquely on the resolution-less 'M' specifier if it this doable.
     case 'M':
         return ValueType::NANOSECONDS_UTC; //  datetime // numpy doesn't support the buffer protocol for datetime64
+    case 'm':
+        return ValueType::TIMEDELTA; //  timedelta, normalised to nanosecond resolution before reaching here
     case 'U':
         return ValueType::UTF8_FIXED; //  Unicode fixed-width
     case 'S':
@@ -328,6 +344,8 @@ constexpr char get_dtype_specifier(ValueType vt) {
         // rely uniquely on the resolution-less 'M' specifier if it this doable.
     case ValueType::NANOSECONDS_UTC:
         return 'M';
+    case ValueType::TIMEDELTA:
+        return 'm';
     case ValueType::UTF8_FIXED:
         return 'U';
     case ValueType::ASCII_FIXED:
@@ -371,6 +389,7 @@ DATA_TYPE_TAG(FLOAT32, float)
 DATA_TYPE_TAG(FLOAT64, double)
 DATA_TYPE_TAG(BOOL8, bool)
 DATA_TYPE_TAG(NANOSECONDS_UTC64, timestamp)
+DATA_TYPE_TAG(TIMEDELTA_NS64, timestamp)
 DATA_TYPE_TAG(ASCII_FIXED64, std::uint64_t)
 DATA_TYPE_TAG(ASCII_DYNAMIC64, std::uint64_t)
 DATA_TYPE_TAG(UTF_FIXED64, std::uint64_t)

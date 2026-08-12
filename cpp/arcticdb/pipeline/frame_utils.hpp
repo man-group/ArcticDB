@@ -359,7 +359,8 @@ inline std::optional<convert::StringEncodingError> segment_set_data(
             auto maybe_error = set_sequence_type<TagType, RawType>(seg, tensor, col, rows_to_write, row);
             if (maybe_error)
                 return maybe_error;
-        } else if constexpr ((is_numeric_type(dt) || is_bool_type(dt)) && tag.dimension() == Dimension::Dim0) {
+        } else if constexpr ((is_numeric_type(dt) || is_bool_type(dt) || is_timedelta_type(dt)) &&
+                             tag.dimension() == Dimension::Dim0) {
             set_integral_scalar_type<TagType, RawType>(
                     seg, tensor, col, rows_to_write, row, sparsify_floats, copy_mode
             );
@@ -376,6 +377,10 @@ inline std::optional<convert::StringEncodingError> segment_set_data(
             normalization::raise<ErrorCode::E_UNIMPLEMENTED_INPUT_TYPE>(
                     "Trying to add matrix of base type {}. Matrix types are not supported.",
                     datatype_to_str(tag.data_type())
+            );
+        } else if constexpr (is_timedelta_type(dt)) {
+            normalization::raise<ErrorCode::E_UNIMPLEMENTED_INPUT_TYPE>(
+                    "Multidimensional duration types are not supported."
             );
         } else if constexpr (!is_empty_type(dt)) {
             static_assert(!sizeof(dt), "Unknown data type");

@@ -451,7 +451,7 @@ struct TimestampConvertParam {
 class ArrowTimestampConvert : public testing::TestWithParam<TimestampConvertParam> {
   public:
     static constexpr size_t num_rows = 100;
-    ArrowTimestampHandler handler;
+    ArrowNatSentinelHandler handler;
     TypeDescriptor source_type = make_scalar_type(DataType::NANOSECONDS_UTC64);
     TypeDescriptor dest_type;
     DetachableBlockConfig block_config;

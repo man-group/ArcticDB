@@ -151,6 +151,15 @@ constexpr bool is_binary_operation(OperationType o) {
 
 constexpr bool is_ternary_operation(OperationType o) { return uint8_t(o) >= uint8_t(OperationType::TERNARY); }
 
+inline void check_column_type_supported_in_queries(std::string_view column_name, entity::DataType data_type) {
+    schema::check<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
+            !is_timedelta_type(data_type),
+            "Column '{}' is of type {}, which is not yet supported in queries",
+            column_name,
+            data_type
+    );
+}
+
 struct AbsOperator;
 struct NegOperator;
 struct PlusOperator;

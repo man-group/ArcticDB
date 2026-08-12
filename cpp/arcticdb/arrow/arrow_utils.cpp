@@ -119,6 +119,22 @@ sparrow::array create_timestamp_array(
     }
 }
 
+sparrow::array create_duration_array(
+        timestamp* data_ptr, size_t data_size, std::optional<sparrow::validity_bitmap>&& validity_bitmap
+) {
+    static_assert(sizeof(timestamp) == sizeof(std::chrono::nanoseconds));
+    sparrow::u8_buffer<std::chrono::nanoseconds> buffer(
+            reinterpret_cast<std::chrono::nanoseconds*>(data_ptr), data_size, get_detachable_allocator()
+    );
+    if (validity_bitmap) {
+        return sparrow::array{
+                sparrow::duration_nanoseconds_array{std::move(buffer), data_size, std::move(*validity_bitmap)}
+        };
+    } else {
+        return sparrow::array{sparrow::duration_nanoseconds_array{std::move(buffer), data_size}};
+    }
+}
+
 template<typename T>
 sparrow::array create_dict_array(
         sparrow::array&& dict_values_array, sparrow::u8_buffer<T>&& dict_keys_buffer,
@@ -270,7 +286,7 @@ const date::time_zone* timezone(const std::optional<ArrowMeta::ColumnMeta>& colu
 }
 
 template<typename TagType>
-requires(!is_time_type(TagType::DataTypeTag::data_type))
+requires(!is_time_type(TagType::DataTypeTag::data_type) && !is_timedelta_type(TagType::DataTypeTag::data_type))
 sparrow::array arrow_array_from_block(
         TypedBlockData<TagType>& block, std::string_view name, std::optional<sparrow::validity_bitmap>&& maybe_bitmap
 ) {
@@ -306,6 +322,8 @@ sparrow::array empty_arrow_array_for_column(
             }
         } else if constexpr (is_time_type(TagType::DataTypeTag::data_type)) {
             return create_timestamp_array(nullptr, 0, std::move(validity_bitmap), timezone(opt_column_meta));
+        } else if constexpr (is_timedelta_type(TagType::DataTypeTag::data_type)) {
+            return create_duration_array(nullptr, 0, std::move(validity_bitmap));
         } else {
             return create_primitive_array<RawType>(nullptr, 0, std::move(validity_bitmap));
         }
@@ -357,6 +375,9 @@ std::vector<sparrow::array> arrow_arrays_from_column(
                 } else if constexpr (is_time_type(TagType::DataTypeTag::data_type)) {
                     vec.emplace_back(create_timestamp_array(block->release(), block->row_count(), std::move(bitmap), tz)
                     );
+                    vec.back().set_name(name);
+                } else if constexpr (is_timedelta_type(TagType::DataTypeTag::data_type)) {
+                    vec.emplace_back(create_duration_array(block->release(), block->row_count(), std::move(bitmap)));
                     vec.back().set_name(name);
                 } else {
                     vec.emplace_back(arrow_array_from_block<TagType>(*block, name, std::move(bitmap)));
@@ -462,6 +483,8 @@ DataType arcticdb_type_from_arrow_array(const sparrow::array& array) {
         return DataType::FLOAT64;
     case sparrow::data_type::TIMESTAMP_NANOSECONDS:
         return DataType::NANOSECONDS_UTC64;
+    case sparrow::data_type::DURATION_NANOSECONDS:
+        return DataType::TIMEDELTA_NS64;
     case sparrow::data_type::STRING:
         return DataType::UTF_DYNAMIC32;
     case sparrow::data_type::LARGE_STRING:
@@ -646,6 +669,8 @@ RecordBatchData empty_record_batch_from_descriptor(
                 } else if constexpr (is_time_type(TagType::DataTypeTag::data_type)) {
                     auto opt_column_meta = column_metadata(norm_meta, field.name());
                     return create_timestamp_array(nullptr, 0, std::move(validity_bitmap), timezone(opt_column_meta));
+                } else if constexpr (is_timedelta_type(TagType::DataTypeTag::data_type)) {
+                    return create_duration_array(nullptr, 0, std::move(validity_bitmap));
                 } else {
                     return create_primitive_array<RawType>(nullptr, 0, std::move(validity_bitmap));
                 }

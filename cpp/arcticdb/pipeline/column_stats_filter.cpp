@@ -201,7 +201,7 @@ std::unordered_map<std::string, StatsForColumn> load_stats_by_column(
 
         details::visit_type(stats_metadata_for_column.data_type, [&]<typename T>(T) {
             using type_info = ScalarTypeInfo<T>;
-            if constexpr (is_numeric_type(type_info::data_type) || is_time_type(type_info::data_type) ||
+            if constexpr (is_numeric_type(type_info::data_type) || is_timedelta_type(type_info::data_type) ||
                           is_bool_type(type_info::data_type)) {
                 for (const auto& entry : stats_metadata_for_column.entries) {
                     if (entry.stat_type != MIN_V1 && entry.stat_type != MAX_V1) {

@@ -62,7 +62,7 @@ struct ArrowBoolHandler {
     ) const;
 };
 
-struct ArrowTimestampHandler {
+struct ArrowNatSentinelHandler {
     void handle_type(
             const uint8_t*& data, Column& dest_column, const EncodedFieldImpl& field, const ColumnMapping& m,
             const DecodePathData& shared_data, std::any& handler_data, EncodingVersion encoding_version,
@@ -99,12 +99,12 @@ inline void register_arrow_bool_type() {
     );
 }
 
-inline void register_arrow_timestamp_type() {
-    TypeHandlerRegistry::instance()->register_handler(
-            OutputFormat::ARROW,
-            make_scalar_type(entity::DataType::NANOSECONDS_UTC64),
-            arcticdb::ArrowTimestampHandler{}
-    );
+inline void register_arrow_nat_sentinel_types() {
+    for (const auto data_type : {entity::DataType::NANOSECONDS_UTC64, entity::DataType::TIMEDELTA_NS64}) {
+        TypeHandlerRegistry::instance()->register_handler(
+                OutputFormat::ARROW, make_scalar_type(data_type), arcticdb::ArrowNatSentinelHandler{}
+        );
+    }
 }
 
 inline void register_arrow_string_types() {

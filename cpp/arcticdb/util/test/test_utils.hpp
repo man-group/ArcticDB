@@ -27,27 +27,13 @@
 using namespace arcticdb;
 
 consteval auto all_data_types() {
-    return std::array{
-            DataType::UINT8,
-            DataType::UINT16,
-            DataType::UINT32,
-            DataType::UINT64,
-            DataType::INT8,
-            DataType::INT16,
-            DataType::INT32,
-            DataType::INT64,
-            DataType::FLOAT32,
-            DataType::FLOAT64,
-            DataType::BOOL8,
-            DataType::NANOSECONDS_UTC64,
-            DataType::ASCII_FIXED64,
-            DataType::ASCII_DYNAMIC64,
-            DataType::UTF_FIXED64,
-            DataType::UTF_DYNAMIC64,
-            DataType::EMPTYVAL,
-            DataType::BOOL_OBJECT8,
-            DataType::UTF_DYNAMIC32
-    };
+    return std::array{DataType::UINT8,          DataType::UINT16,        DataType::UINT32,
+                      DataType::UINT64,         DataType::INT8,          DataType::INT16,
+                      DataType::INT32,          DataType::INT64,         DataType::FLOAT32,
+                      DataType::FLOAT64,        DataType::BOOL8,         DataType::NANOSECONDS_UTC64,
+                      DataType::TIMEDELTA_NS64, DataType::ASCII_FIXED64, DataType::ASCII_DYNAMIC64,
+                      DataType::UTF_FIXED64,    DataType::UTF_DYNAMIC64, DataType::EMPTYVAL,
+                      DataType::BOOL_OBJECT8,   DataType::UTF_DYNAMIC32};
 }
 
 consteval bool is_allowed_mean_input(const DataType dt) {

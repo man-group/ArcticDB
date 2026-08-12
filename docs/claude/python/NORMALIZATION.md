@@ -71,8 +71,31 @@ pandas.DataFrame / pa.Table / pl.DataFrame (based on OutputFormat)
 | `float32` | `FLOAT32` |
 | `bool` | `BOOL8` |
 | `datetime64[ns]` | `NANOSECONDS_UTC64` |
+| `timedelta64[ns]` | `TIMEDELTA_NS64` (only when `Timedelta.EnableWrite` is set) |
 | `object` (strings) | `UTF_DYNAMIC64` |
 | `category` | Underlying type |
+
+Both `datetime64` and `timedelta64` are coerced to nanosecond resolution on write, since ArcticDB stores only
+nanoseconds while pandas 2 admits other resolutions.
+
+`timedelta64` columns are refused with `NormalizationException` unless the `Timedelta.EnableWrite` `ConfigsMap` flag is
+set to 1. Reading requires no flag. The gate itself is in C++, in `check_input_types_are_writeable`
+(`cpp/arcticdb/python/python_to_tensor_frame.cpp`), which scans the assembled descriptor in `py_input_item_to_frame`.
+Every write, append, update and stage entry point reaches that function whatever the input format, so pandas, Series,
+numpy, PyArrow and polars input are all covered by the one check.
+
+What Python must still do is coerce the resolution, because `obj_to_tensor` sees only the numpy dtype kind (`'M'` or
+`'m'`) and cannot tell nanoseconds from anything else. `_coerce_temporal_resolution_to_nanoseconds` handles both
+`datetime64` and `timedelta64`, and must be called from every path that turns a numpy array into a column:
+`_to_primitive`, and `NdArrayNormalizer.normalize`, which does not go through `_to_primitive`.
+
+A `pd.TimedeltaIndex` is refused whatever the flag says, as is a duration level of a `MultiIndex`
+(`_check_index_is_not_timedelta`, called from both `_normalize_single_index` and the `MultiIndex` branch of
+`_index_to_records`). Without the single-index check a `TimedeltaIndex` would silently become a rowcount index with a
+duration column named `index`; without the `MultiIndex` check a duration level would be accepted, since levels above 0
+are reset into ordinary columns before `_normalize_single_index` sees them.
+
+See `docs/claude/cpp/ENTITY.md` for why the type is readable and writable but not queryable.
 
 ### Index Handling
 
@@ -129,12 +152,18 @@ ArcticDB uses a type-based dispatch system. Normalizers inherit from `Normalizer
 
 Both `pa.Table` and `pl.DataFrame` are handled by `ArrowTableNormalizer`. Polars DataFrames are converted to `pa.Table` via `.to_arrow()` before normalization. The normalizer converts the table into a vector of record batches for the C++ layer. The `index_column` parameter (boolean) tells the normalizer to treat the first column as a sorted timestamp index.
 
+Arrow input bypasses `_to_primitive` entirely. It is still covered by the `Timedelta.EnableWrite` gate, which lives in
+`py_input_item_to_frame` and so sees the record batches' descriptor too.
+
 ### Read Path
 
 The `output_format` parameter on read methods controls the return type:
 - `OutputFormat.PANDAS` (default) — returns `pd.DataFrame`
 - `OutputFormat.PYARROW` — returns `pa.Table`
 - `OutputFormat.POLARS` — returns `pl.DataFrame` (converted from `pa.Table` via `pl.from_arrow()`)
+
+`NANOSECONDS_UTC64` becomes `pa.timestamp("ns")` and `TIMEDELTA_NS64` becomes `pa.duration("ns")`. Both are produced by
+`ArrowNatSentinelHandler`, which converts the in-band NaT sentinel into an Arrow validity bitmap.
 
 ### Date-Range Filtering (`restrict_data_to_date_range_only`)
 

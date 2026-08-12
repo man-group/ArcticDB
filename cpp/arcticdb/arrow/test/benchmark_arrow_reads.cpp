@@ -169,7 +169,7 @@ static void BM_arrow_timestamp_handler(benchmark::State& state) {
     auto read_options = ReadOptions{};
     read_options.set_output_format(OutputFormat::ARROW);
 
-    auto handler = ArrowTimestampHandler{};
+    auto handler = ArrowNatSentinelHandler{};
     auto source_type_desc = make_scalar_type(DataType::NANOSECONDS_UTC64);
     auto [dest_type_desc, block_config] = handler.output_type_and_block_config(source_type_desc, "ts", read_options);
     auto dest_size = data_type_size(dest_type_desc);

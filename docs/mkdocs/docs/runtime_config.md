@@ -202,6 +202,28 @@ Setting to `0` disables progress logging entirely.
 
 The default is 10.
 
+### Timedelta.EnableWrite
+
+Allows `timedelta64[ns]` columns to be written. The default is `0`, which rejects them with a
+`NormalizationException`, as earlier versions of ArcticDB did.
+
+Reading a `timedelta64[ns]` column never requires this option, so a symbol written with it enabled can be read by any
+client of this version or later. It cannot be read by an earlier client, which fails with `Invalid dtype 15:4`. That is
+why the option exists and why it is off by default; enable it only if every reader of the library is new enough.
+
+Unlike the other options on this page, this one is consulted on each write rather than when the `Library` is created.
+
+Limitations while it is enabled:
+
+- A duration column cannot be used in a `QueryBuilder` operation. Filtering, projecting, grouping by, or aggregating
+  over one raises `SchemaException`. Reading the column, including alongside a query on other columns, works normally.
+- A `pd.TimedeltaIndex`, or a `MultiIndex` with a duration level, is rejected. Durations are supported as data columns
+  only.
+- Resolutions other than nanoseconds are converted to nanoseconds on write, as `datetime64` already is.
+- `append` and `update` treat a duration column as compatible only with another duration column. Appending `int64` or
+  `datetime64[ns]` values to one raises `StreamDescriptorMismatch` under a static schema, or `SchemaException` under a
+  dynamic schema.
+
 ## Logging configuration
 
 ArcticDB has multiple log streams, and the verbosity of each can be configured independently. 

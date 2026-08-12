@@ -525,12 +525,12 @@ void ArrowBoolHandler::default_initialize(ChunkedBuffer&, size_t, size_t, const 
     // The packed data buffer does not need initialization since missing values are masked by the bitmap.
 }
 
-void ArrowTimestampHandler::handle_type(
+void ArrowNatSentinelHandler::handle_type(
         const uint8_t*& data, Column& dest_column, const EncodedFieldImpl& field, const ColumnMapping& m,
         const DecodePathData& shared_data, std::any& handler_data, EncodingVersion encoding_version,
         const std::shared_ptr<StringPool>& string_pool, const ReadOptions& read_options
 ) {
-    util::check(field.has_ndarray(), "Timestamp handler expected array");
+    util::check(field.has_ndarray(), "NaT sentinel handler expected array");
     const auto& ndarray = field.ndarray();
     const auto bytes = encoding_sizes::data_uncompressed_size(ndarray);
 
@@ -556,7 +556,7 @@ void ArrowTimestampHandler::handle_type(
     convert_type(decoded_data, dest_column, m, shared_data, handler_data, string_pool, read_options);
 }
 
-void ArrowTimestampHandler::
+void ArrowNatSentinelHandler::
         convert_type(const Column& source_column, Column& dest_column, const ColumnMapping& m, const DecodePathData&, std::any&, const std::shared_ptr<StringPool>&, const ReadOptions&)
                 const {
     auto* dest = reinterpret_cast<timestamp*>(dest_column.bytes_at(m.offset_bytes_, m.dest_bytes_));
@@ -565,13 +565,14 @@ void ArrowTimestampHandler::
     const bool is_sparse = source_column.opt_sparse_map().has_value();
     const auto first_idx = positions.first_idx_after_truncation.value_or(0);
     const auto end_idx = positions.end_idx_after_truncation.value_or(m.num_rows_);
-    using TimestampTag = ScalarTagType<DataTypeTag<DataType::NANOSECONDS_UTC64>>;
+    // Both NANOSECONDS_UTC64 and TIMEDELTA_NS64 are int64 underneath, so one tag iterates either.
+    using RawTag = ScalarTagType<DataTypeTag<DataType::NANOSECONDS_UTC64>>;
     util::BitSet validity;
     validity.resize(end_idx - first_idx);
     util::BitSet::bulk_insert_iterator inserter(validity);
 
     if (is_sparse) {
-        for_each_enumerated_flattened<TimestampTag>(
+        for_each_enumerated_flattened<RawTag>(
                 source_column,
                 [&] ARCTICDB_LAMBDA_INLINE(const auto& en) {
                     if (en.value() != NaT) {
@@ -591,7 +592,7 @@ void ArrowTimestampHandler::
         // If going through the `handle_type` codepath we can skip the memcpy as we have decoded directly onto the
         // destination buffer.
         if (auto* dest_ptr = dest; dest_ptr != src_ptr) {
-            while (auto block = column_data.next<TimestampTag>()) {
+            while (auto block = column_data.next<RawTag>()) {
                 const auto row_count = block->row_count();
                 memcpy(dest_ptr, block->data(), row_count * sizeof(timestamp));
                 dest_ptr += row_count;
@@ -615,12 +616,13 @@ void ArrowTimestampHandler::
     handle_truncation(dest_column, m.truncate_);
 }
 
-std::pair<TypeDescriptor, DetachableBlockConfig> ArrowTimestampHandler::
+std::pair<TypeDescriptor, DetachableBlockConfig> ArrowNatSentinelHandler::
         output_type_and_block_config(const TypeDescriptor& input_type, std::string_view, const ReadOptions&) const {
     return {input_type, detachable_block_config::Regular{0}};
 }
 
-void ArrowTimestampHandler::default_initialize(ChunkedBuffer&, size_t, size_t, const DecodePathData&, std::any&) const {
+void ArrowNatSentinelHandler::default_initialize(ChunkedBuffer&, size_t, size_t, const DecodePathData&, std::any&)
+        const {
     // No-op: The validity bitmap extra buffer is populated with zeros upstream.
     // The data buffer does not need initialization since missing values are masked by the bitmap.
 }

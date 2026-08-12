@@ -1257,6 +1257,9 @@ def valid_common_type(left, right):
         elif is_numeric_type(right) or pd.api.types.is_bool_dtype(right):
             return None
         raise Exception(f"Unexpected right dtype: {right}")
+    elif pd.api.types.is_timedelta64_dtype(left):
+        # A duration has a common type only with itself, which the left == right check above has already handled
+        return None
     raise Exception(f"Unexpected left dtype: {left}")
 
 

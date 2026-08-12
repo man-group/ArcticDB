@@ -27,11 +27,14 @@ py::array array_at(const SegmentInMemory& frame, std::size_t col_pos) {
                 } else {
                     dtype = "O";
                 }
-            } else if constexpr ((is_numeric_type(data_type) || is_bool_type(data_type)) &&
+            } else if constexpr ((is_numeric_type(data_type) || is_bool_type(data_type) || is_timedelta_type(data_type)
+                                 ) &&
                                  tag.dimension() == Dimension::Dim0) {
                 constexpr auto dim = TypeTag::DimensionTag::value;
                 util::check(dim == Dimension::Dim0, "Only scalars supported, {}", data_type);
-                if constexpr (data_type == DataType::NANOSECONDS_UTC64) {
+                if constexpr (is_timedelta_type(data_type)) {
+                    dtype = "timedelta64[ns]";
+                } else if constexpr (data_type == DataType::NANOSECONDS_UTC64) {
                     // NOTE: this is safe as of Pandas < 2.0 because `datetime64` _always_ has been using nanosecond
                     // resolution, i.e. Pandas < 2.0 _always_ provides `datetime64[ns]` and ignores any other
                     // resolution. Yet, this has changed in Pandas 2.0 and other resolution can be used, i.e. Pandas
@@ -49,6 +52,8 @@ py::array array_at(const SegmentInMemory& frame, std::size_t col_pos) {
                 esize = data_type_size(TypeDescriptor{tag});
             } else if constexpr (tag.dimension() == Dimension::Dim2) {
                 util::raise_rte("Read resulted in two dimensional type. This is not supported.");
+            } else if constexpr (is_timedelta_type(data_type)) {
+                util::raise_rte("Read resulted in a multidimensional duration type. This is not supported.");
             } else {
                 static_assert(!sizeof(data_type), "Unhandled data type");
             }
@@ -79,11 +84,13 @@ py::array array_at(const SegmentInMemory& frame, std::size_t col_pos) {
             } else {
                 dtype = "O";
             }
-        } else if constexpr ((is_numeric_type(data_type) || is_bool_type(data_type)) &&
+        } else if constexpr ((is_numeric_type(data_type) || is_bool_type(data_type) || is_timedelta_type(data_type)) &&
                              tag.dimension() == Dimension::Dim0) {
             constexpr auto dim = TypeTag::DimensionTag::value;
             util::check(dim == Dimension::Dim0, "Only scalars supported, {}", frame.field(col_pos));
-            if constexpr (data_type == DataType::NANOSECONDS_UTC64) {
+            if constexpr (is_timedelta_type(data_type)) {
+                dtype = "timedelta64[ns]";
+            } else if constexpr (data_type == DataType::NANOSECONDS_UTC64) {
                 // NOTE: this is safe as of Pandas < 2.0 because `datetime64` _always_ has been using nanosecond
                 // resolution, i.e. Pandas < 2.0 _always_ provides `datetime64[ns]` and ignores any other resolution.
                 // Yet, this has changed in Pandas 2.0 and other resolution can be used,
@@ -119,6 +126,8 @@ py::array array_at(const SegmentInMemory& frame, std::size_t col_pos) {
             }
         } else if constexpr (tag.dimension() == Dimension::Dim2) {
             util::raise_rte("Read resulted in two dimensional type. This is not supported.");
+        } else if constexpr (is_timedelta_type(data_type)) {
+            util::raise_rte("Read resulted in a multidimensional duration type. This is not supported.");
         } else {
             static_assert(!sizeof(data_type), "Unhandled data type");
         }

@@ -154,6 +154,10 @@ class FrameData(
 # rely uniquely on the resolution-less 'M' specifier if it this doable.
 DTN64_DTYPE = "datetime64[ns]"
 
+# ArcticDB only stores durations at nanosecond resolution, so any other resolution is coerced on write, as for
+# DTN64_DTYPE above.
+TDN64_DTYPE = "timedelta64[ns]"
+
 # All possible value of the "object" dtype for pandas.Series.
 OBJECT_TOKENS = (object, "object", "O")
 
@@ -217,6 +221,16 @@ def get_timezone_from_metadata(norm_meta):
     return None
 
 
+# Must be called from every path that turns a numpy array into a column, not just _to_primitive: obj_to_tensor sees only
+# the dtype kind ('M' or 'm'), so any other resolution would be stored verbatim as nanoseconds.
+def _coerce_temporal_resolution_to_nanoseconds(arr):
+    if np.issubdtype(arr.dtype, np.datetime64):
+        return arr.astype(DTN64_DTYPE, copy=False)
+    if np.issubdtype(arr.dtype, np.timedelta64):
+        return arr.astype(TDN64_DTYPE, copy=False)
+    return arr
+
+
 def _to_primitive(arr, arr_name, dynamic_strings, string_max_len=None, coerce_column_type=None, norm_meta=None):
     arr_dtype_as_str = str(arr.dtype)
     if "pyarrow" in arr_dtype_as_str:
@@ -234,18 +248,14 @@ def _to_primitive(arr, arr_name, dynamic_strings, string_max_len=None, coerce_co
             norm_meta.common.categories[arr_name].category.extend(arr.categories)
         return arr.codes
 
-    # This check has to come after the categorical check above, as Categoricals are a Pandas concept, not numpy, which
+    # ArcticDB only operates at nanosecond resolution (i.e. `datetime64[ns]`) type because so did Pandas < 2.
+    # In Pandas >= 2.0, other resolution are supported (namely `ms`, `s`, and `us`).
+    # See: https://pandas.pydata.org/docs/dev/whatsnew/v2.0.0.html#construction-with-datetime64-or-timedelta64-dtype-with-unsupported-resolution  # noqa: E501
+    # We want to maintain consistent behaviour, so we convert any other resolution
+    # to `datetime64[ns]`.
+    # This has to come after the categorical check above, as Categoricals are a Pandas concept, not numpy, which
     # causes issubdtype to throw if arr.dtype == CategoricalDtype
-    if np.issubdtype(arr.dtype, np.timedelta64):
-        raise ArcticDbNotYetImplemented(f"Failed to normalize column '{arr_name}' with unsupported dtype '{arr.dtype}'")
-
-    if np.issubdtype(arr.dtype, np.datetime64):
-        # ArcticDB only operates at nanosecond resolution (i.e. `datetime64[ns]`) type because so did Pandas < 2.
-        # In Pandas >= 2.0, other resolution are supported (namely `ms`, `s`, and `us`).
-        # See: https://pandas.pydata.org/docs/dev/whatsnew/v2.0.0.html#construction-with-datetime64-or-timedelta64-dtype-with-unsupported-resolution  # noqa: E501
-        # We want to maintain consistent behaviour, so we convert any other resolution
-        # to `datetime64[ns]`.
-        arr = arr.astype(DTN64_DTYPE, copy=False)
+    arr = _coerce_temporal_resolution_to_nanoseconds(arr)
 
     # TODO(jjerphan): Remove once pandas < 2 is not supported anymore.
     if not IS_PANDAS_TWO and len(arr) == 0 and arr.dtype == "float":
@@ -362,6 +372,12 @@ def _from_tz_timestamp(ts, tz):
 _range_index_props_are_public = hasattr(RangeIndex, "start")
 
 
+def _check_index_is_not_timedelta(index):
+    values = index if isinstance(index, np.ndarray) else index.values
+    if isinstance(values, np.ndarray) and np.issubdtype(values.dtype, np.timedelta64):
+        raise ArcticDbNotYetImplemented("Timedelta indexes are not supported")
+
+
 def _normalize_single_index(
     index, index_names, index_norm, dynamic_strings=None, string_max_len=None, empty_types=False
 ):
@@ -384,6 +400,7 @@ def _normalize_single_index(
         index_vals = index
         if not isinstance(index, np.ndarray):
             index_vals = index.values
+        _check_index_is_not_timedelta(index_vals)
         ix_vals = [
             _to_primitive(
                 index_vals, index_names, dynamic_strings, coerce_column_type=coerce_type, string_max_len=string_max_len
@@ -673,6 +690,9 @@ class ArrowTableNormalizer(Normalizer):
                 else:
                     pandas_type = "datetimetz"
                     metadata = {"timezone": str(field.type.tz)}
+            elif pa.types.is_duration(field.type):
+                pandas_type = "timedelta64"
+                numpy_type = TDN64_DTYPE
 
             pandas_columns.append(
                 {
@@ -929,6 +949,10 @@ class _PandasNormalizer(Normalizer):
             index_norm.is_physically_stored = False
             index = DatetimeIndex([])
         elif isinstance(index, MultiIndex):
+            # Levels above 0 become ordinary columns below, so without this check a duration level would be accepted
+            # while a single TimedeltaIndex is refused.
+            for level in index.levels:
+                _check_index_is_not_timedelta(level)
             # This is suboptimal and only a first implementation since it reduplicates the data
             index_norm = pd_norm.multi_index
             index_norm.field_count = len(index.levels) - 1
@@ -1028,6 +1052,7 @@ class NdArrayNormalizer(Normalizer):
     def normalize(self, item, **kwargs):
         if IS_WINDOWS and item.dtype.char == "U":
             raise ArcticDbNotYetImplemented("Numpy strings are not yet implemented on Windows")  # SKIP_WIN
+        item = _coerce_temporal_resolution_to_nanoseconds(item)
         norm_meta = NormalizationMetadata()
         norm_meta.np.shape.extend(item.shape)
 

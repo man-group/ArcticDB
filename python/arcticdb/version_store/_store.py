@@ -1316,9 +1316,9 @@ class NativeVersionStore:
         of storage.
 
         MINMAX stats are built for every data column and every inner multiindex index level whose dtype is numeric
-        (uint/int/float/bool) or a UTC nanosecond timestamp. The outer/primary index is excluded, as it is already
-        pruned by the index mechanism. Any pre-existing stats are merged with the newly computed ones
-        (read-modify-write).
+        (uint/int/float/bool), a UTC nanosecond timestamp, or a nanosecond duration. The outer/primary index is
+        excluded, as it is already pruned by the index mechanism. Any pre-existing stats are merged with the newly
+        computed ones (read-modify-write).
 
         Parameters
         ----------
