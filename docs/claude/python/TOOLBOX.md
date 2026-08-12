@@ -220,6 +220,50 @@ key = props_dict_to_atom_key(props)
 
 Get a `LibraryTool` via `lib.library_tool()`. Use `find_keys_for_symbol(KeyType, symbol)` to find keys, `read_to_dataframe(key)` to examine key contents, and `read_index(symbol)` to see data segments. See the [GitHub Wiki](https://github.com/man-group/ArcticDB/wiki/Using-the-LibraryTool-to-look-at-a-library's-internal-state) for detailed examples.
 
+## AdminTools: Size Scanning
+
+`version_store/admin_tools.py` exposes size accounting, separately from `LibraryTool`. Obtained via
+`Library.admin_tools()`.
+
+| Method | Scans |
+|--------|-------|
+| `get_sizes(key_types=None)` | Whole library, grouped by key type |
+| `get_sizes_by_symbol()` | Whole library, grouped by symbol then key type |
+| `get_sizes_for_symbol(symbol)` | One symbol, grouped by key type |
+
+### Call path
+
+```
+AdminTools.get_sizes
+  -> PythonVersionStore::scan_object_sizes            (version/local_versioned_engine.cpp)
+       one folly future per key type, run concurrently
+  -> AsyncStore::get_object_sizes                     (async/async_store.hpp)
+       aggregates count/bytes into storage::ObjectSizes, times the scan
+  -> Storage::visit_object_sizes                      (storage/storage.hpp)
+       primary storage only by default (storages.hpp)
+  -> do_visit_object_sizes_for_type_impl              (storage/s3/detail-inl.hpp)
+       paged ListObjectsV2, sizes taken from the listing - no HEAD per object
+```
+
+### Key type sets
+
+`TYPES_FOR_SIZE_CALCULATION` in `local_versioned_engine.cpp` is the ten types scanned when `key_types` is not given.
+There is no C++ list of the full set: the public `arcticdb.KeyType` enum is it, so `list(KeyType)` is how a caller
+asks for everything. Absent from it are `TOMBSTONE` and `TOMBSTONE_ALL`, which are only ever written inside VERSION
+key segments, and `STREAM_GROUP`, which is key type 0 and not a real key type (scanning it throws — see the branch
+work log for `gpetrov/widen-object-size-scan`).
+
+`_TO_NATIVE`/`_FROM_NATIVE` in `admin_tools.py` map between `KeyType` and `arcticdb_ext.storage.KeyType`, derived by
+member name so a new type needs adding in one place. `ATOMIC_LOCK` is the sole exception — the extension binds it
+under the name `SLOW_LOCK`, which `_NATIVE_NAMES` records. `test_get_sizes_key_types_everything` asserts that a
+`list(KeyType)` scan returns exactly `set(KeyType)`, which is what catches an entry that cannot in fact be scanned.
+
+Cost scales with object count *and* with the number of key types requested — each type is one listing pass over its
+prefix. `ObjectSizes.scan_duration_ns` reports the wall-clock time of an individual key type's scan.
+
+Only S3 and NFS-backed storages implement `do_visit_object_sizes`; others raise via
+`Storage::supports_object_size_calculation`.
+
 ## Key Files
 
 | File | Purpose |
@@ -227,6 +271,7 @@ Get a `LibraryTool` via `lib.library_tool()`. Use `find_keys_for_symbol(KeyType,
 | `toolbox/library_tool.py` | LibraryTool class |
 | `toolbox/storage_lock.py` | StorageLock wrapper with normalized metadata |
 | `toolbox/__init__.py` | Module exports |
+| `version_store/admin_tools.py` | AdminTools, KeyType, Size |
 
 ## Cautions
 

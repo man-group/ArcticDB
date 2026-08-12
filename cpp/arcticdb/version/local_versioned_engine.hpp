@@ -387,7 +387,10 @@ class LocalVersionedEngine : public VersionedEngine {
             const std::vector<std::pair<StreamId, VersionId>>& symbols_to_delete
     );
 
-    std::vector<storage::ObjectSizes> scan_object_sizes();
+    /** Scan sizes for the given key types, or for a default set of the most important ones when not specified. */
+    std::vector<storage::ObjectSizes> scan_object_sizes(
+            const std::optional<std::vector<KeyType>>& key_types = std::nullopt
+    );
 
     std::vector<storage::ObjectSizes> scan_object_sizes_for_stream(const StreamId& stream_id);
 

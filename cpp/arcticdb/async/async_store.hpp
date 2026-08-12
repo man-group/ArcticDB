@@ -296,9 +296,11 @@ class AsyncStore : public Store {
             bytes->fetch_add(size, std::memory_order_relaxed);
         };
 
+        const auto start = std::chrono::steady_clock::now();
         return visit_object_sizes(type, stream_id_opt, std::move(visitor))
-                .thenValueInline([counter, bytes, type](folly::Unit&&) {
-                    return std::make_shared<storage::ObjectSizes>(type, *counter, *bytes);
+                .thenValueInline([counter, bytes, type, start](folly::Unit&&) {
+                    const std::chrono::nanoseconds elapsed = std::chrono::steady_clock::now() - start;
+                    return std::make_shared<storage::ObjectSizes>(type, *counter, *bytes, elapsed.count());
                 });
     }
 

@@ -29,23 +29,26 @@ using ObjectSizesVisitor = std::function<void(const VariantKey&, CompressedSize)
 inline const std::set<char> GLOBALLY_UNSUPPORTED_CHARS{'*', '<', '>'};
 
 struct ObjectSizes {
-    ObjectSizes(KeyType key_type, uint64_t count, CompressedSize compressed_size) :
+    ObjectSizes(KeyType key_type, uint64_t count, CompressedSize compressed_size, uint64_t scan_duration_ns = 0) :
         key_type_(key_type),
         count_(count),
-        compressed_size_(compressed_size) {}
+        compressed_size_(compressed_size),
+        scan_duration_ns_(scan_duration_ns) {}
 
     explicit ObjectSizes(KeyType key_type) noexcept : ObjectSizes(key_type, 0, 0) {}
 
     ObjectSizes(const ObjectSizes& other) noexcept :
         key_type_(other.key_type_),
         count_(other.count_.load()),
-        compressed_size_(other.compressed_size_.load()) {}
+        compressed_size_(other.compressed_size_.load()),
+        scan_duration_ns_(other.scan_duration_ns_.load()) {}
 
     ObjectSizes& operator=(const ObjectSizes& that) noexcept {
         if (this != &that) {
             key_type_ = that.key_type_;
             count_ = that.count_.load();
             compressed_size_ = that.compressed_size_.load();
+            scan_duration_ns_ = that.scan_duration_ns_.load();
         }
 
         return *this;
@@ -54,6 +57,8 @@ struct ObjectSizes {
     KeyType key_type_;
     std::atomic_uint64_t count_;
     std::atomic_uint64_t compressed_size_;
+    // Wall-clock time taken to scan this key type. Zero when the sizes did not come from a scan.
+    std::atomic_uint64_t scan_duration_ns_;
 };
 
 enum class SupportsAtomicWrites {
@@ -301,10 +306,11 @@ struct formatter<ObjectSizes> {
     auto format(const ObjectSizes& sizes, FormatContext& ctx) const {
         return fmt::format_to(
                 ctx.out(),
-                "ObjectSizes key_type[{}] count[{}] compressed_size[{}]",
+                "ObjectSizes key_type[{}] count[{}] compressed_size[{}] scan_duration_ns[{}]",
                 sizes.key_type_,
                 sizes.count_,
-                sizes.compressed_size_
+                sizes.compressed_size_,
+                sizes.scan_duration_ns_
         );
     }
 };

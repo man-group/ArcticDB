@@ -2428,18 +2428,25 @@ static constexpr std::array<KeyType, 10> TYPES_FOR_SIZE_CALCULATION = {
         KeyType::SYMBOL_LIST,
 };
 
-std::vector<storage::ObjectSizes> LocalVersionedEngine::scan_object_sizes() {
+std::vector<storage::ObjectSizes> LocalVersionedEngine::scan_object_sizes(
+        const std::optional<std::vector<KeyType>>& key_types
+) {
     using ObjectSizes = storage::ObjectSizes;
-    std::vector<folly::Future<std::shared_ptr<ObjectSizes>>> sizes_futs;
+    const std::span<const KeyType> types_to_scan = key_types.has_value()
+                                                           ? std::span<const KeyType>{*key_types}
+                                                           : std::span<const KeyType>{TYPES_FOR_SIZE_CALCULATION};
 
-    for (const auto& key_type : TYPES_FOR_SIZE_CALCULATION) {
+    std::vector<folly::Future<std::shared_ptr<ObjectSizes>>> sizes_futs;
+    sizes_futs.reserve(types_to_scan.size());
+    for (const auto& key_type : types_to_scan) {
         sizes_futs.push_back(store()->get_object_sizes(key_type, std::nullopt));
     }
 
     auto ptrs = folly::collect(sizes_futs).via(&async::cpu_executor()).get();
     std::vector<storage::ObjectSizes> res;
+    res.reserve(ptrs.size());
     for (const auto& p : ptrs) {
-        res.emplace_back(p->key_type_, p->count_, p->compressed_size_);
+        res.emplace_back(p->key_type_, p->count_, p->compressed_size_, p->scan_duration_ns_);
     }
     return res;
 }

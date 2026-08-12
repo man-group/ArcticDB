@@ -625,6 +625,9 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
             .def_property_readonly(
                     "compressed_size", [](storage::ObjectSizes& self) { return self.compressed_size_.load(); }
             )
+            .def_property_readonly(
+                    "scan_duration_ns", [](storage::ObjectSizes& self) { return self.scan_duration_ns_.load(); }
+            )
             .def("__repr__", [](storage::ObjectSizes object_sizes) { return fmt::format("{}", object_sizes); })
             .doc() = "Count of keys and their uncompressed sizes in bytes for a given key type";
 
@@ -911,8 +914,10 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                  "Get the most recent update time for a list of stream ids")
             .def("scan_object_sizes",
                  &PythonVersionStore::scan_object_sizes,
+                 py::arg("key_types") = std::nullopt,
                  py::call_guard<SingleThreadMutexHolder>(),
-                 "Scan the compressed sizes of all objects in the library.")
+                 "Scan the compressed sizes of all objects in the library. Scans a default set of the most "
+                 "important key types unless key_types is given.")
             .def("scan_object_sizes_by_stream",
                  &PythonVersionStore::scan_object_sizes_by_stream,
                  py::call_guard<SingleThreadMutexHolder>(),

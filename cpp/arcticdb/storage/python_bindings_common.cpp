@@ -262,6 +262,9 @@ void register_common_storage_bindings(py::module& storage, BindingScope scope) {
             .value("TOMBSTONE_ALL", KeyType::TOMBSTONE_ALL)
             .value("SNAPSHOT_TOMBSTONE", KeyType::SNAPSHOT_TOMBSTONE)
             .value("LOG_COMPACTED", KeyType::LOG_COMPACTED)
-            .value("COLUMN_STATS", KeyType::COLUMN_STATS);
+            .value("COLUMN_STATS", KeyType::COLUMN_STATS)
+            .value("LIBRARY_CONFIG", KeyType::LIBRARY_CONFIG)
+            .value("REPLICATION_FAIL_INFO", KeyType::REPLICATION_FAIL_INFO)
+            .value("BLOCK_VERSION_REF", KeyType::BLOCK_VERSION_REF);
 }
 } // namespace arcticdb::storage::apy
