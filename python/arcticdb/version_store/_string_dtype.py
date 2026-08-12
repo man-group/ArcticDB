@@ -12,26 +12,15 @@ import numpy as np
 import pandas as pd
 
 from arcticdb.dependencies import _PYARROW_AVAILABLE, pyarrow as pa
+from arcticdb.util._versions import IS_PANDAS_TWO_THREE
 from arcticdb_ext.version_store import RecordBatchData
 
-
-def _arrow_backed_str_dtype_supported():
-    # The pandas arrow-backed "str" dtype (StringDtype with na_value) was added in pandas 2.3. future.infer_string
-    # exists from pandas 2.1, so the option can be set on 2.1/2.2 but there this dtype cannot be constructed.
-    try:
-        pd.StringDtype(storage="pyarrow", na_value=np.nan)
-        return True
-    except (TypeError, ImportError):
-        return False
-
-
-_ARROW_BACKED_STR_DTYPE_SUPPORTED = _arrow_backed_str_dtype_supported()
+_ARROW_BACKED_STR_DTYPE_SUPPORTED = _PYARROW_AVAILABLE and IS_PANDAS_TWO_THREE
 
 
 def _use_pyarrow_strings_in_pandas():
-    if not _PYARROW_AVAILABLE or not _ARROW_BACKED_STR_DTYPE_SUPPORTED:
-        return False
-    return bool(pd.get_option("future.infer_string"))
+    # get_option raises on pandas < 2.1 where future.infer_string does not exist, which the gate above excludes.
+    return _ARROW_BACKED_STR_DTYPE_SUPPORTED and bool(pd.get_option("future.infer_string"))
 
 
 def _is_arrow_string_column(value):
@@ -62,7 +51,6 @@ def _pandas_str_column_to_record_batches(chunked, arr_name) -> List[RecordBatchD
 
 
 __all__ = [
-    "_arrow_backed_str_dtype_supported",
     "_ARROW_BACKED_STR_DTYPE_SUPPORTED",
     "_use_pyarrow_strings_in_pandas",
     "_is_arrow_string_column",

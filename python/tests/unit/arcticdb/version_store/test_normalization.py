@@ -33,7 +33,7 @@ from arcticdb.exceptions import (
     NormalizationException,
     ArcticNativeException,
 )
-from arcticdb.version_store._string_dtype import _arrow_backed_str_dtype_supported, _use_pyarrow_strings_in_pandas
+from arcticdb.version_store._string_dtype import _use_pyarrow_strings_in_pandas
 from arcticdb.version_store._custom_normalizers import (
     register_normalizer,
     get_custom_normalizer,
@@ -1668,9 +1668,3 @@ def test_different_multiindex_fails_with_dynamic_schema(
                 assert_series_equal(result, expected)
             else:
                 assert_frame_equal(result, expected)
-
-
-@pytest.mark.parametrize("side_effect", [TypeError, ImportError])
-def test_arrow_backed_str_dtype_supported_handles_unavailable_pyarrow(side_effect):
-    with patch.object(pd, "StringDtype", side_effect=side_effect):
-        assert _arrow_backed_str_dtype_supported() is False
