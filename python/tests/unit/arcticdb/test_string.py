@@ -258,7 +258,9 @@ def test_read_row_range_default_index_string_first_column(lmdb_version_store_v2,
     assert (str(received["x"].dtype) == "str") == read_string_dtype
 
 
-def test_read_string_column_dtype(lmdb_version_store_v2, read_string_dtype):
+def test_read_string_column_dtype(lmdb_version_store_v2, read_string_dtype, skip_consolidation):
+    if skip_consolidation:
+        lmdb_version_store_v2._normalizer.df.set_skip_df_consolidation()
     values = ["Aaba", "A", "B", "C", "Baca", "CABA", "dog", "cat", "here is a very long one"]
     lmdb_version_store_v2.write("strings", pd.DataFrame({"x": values}), dynamic_strings=True)
     with arrow_string_read(read_string_dtype):
