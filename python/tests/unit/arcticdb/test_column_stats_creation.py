@@ -53,15 +53,15 @@ df2 = pd.DataFrame(
 )
 
 
-def index_columns_to_pl(lib, sym):
+def row_range_columns_to_pl(lib, sym):
     pdf = lib.read_index(sym).reset_index()
-    return pl.from_pandas(pdf[["start_index", "end_index"]]).unique(maintain_order=True)
+    return pl.from_pandas(pdf[["start_row", "end_row"]]).unique(maintain_order=True)
 
 
 def generate_symbol(lib, sym):
     lib.write(sym, df0)
     lib.append(sym, df1)
-    return index_columns_to_pl(lib, sym).with_columns(
+    return row_range_columns_to_pl(lib, sym).with_columns(
         pl.Series("v1_MIN(col_1)", [df0["col_1"].min(), df1["col_1"].min()]),
         pl.Series("v1_MAX(col_1)", [df0["col_1"].max(), df1["col_1"].max()]),
         pl.Series("v1_MIN(col_2)", [df0["col_2"].min(), df1["col_2"].min()]),
@@ -126,7 +126,7 @@ def test_column_stats_infinity(version_store_factory, lib_name, encoding_version
     lib.write(sym, df0)
     lib.append(sym, df1)
     lib.append(sym, df2)
-    expected_column_stats = index_columns_to_pl(lib, sym).with_columns(
+    expected_column_stats = row_range_columns_to_pl(lib, sym).with_columns(
         pl.Series("v1_MIN(col_1)", [df0["col_1"].min(), df1["col_1"].min(), df2["col_1"].min()]),
         pl.Series("v1_MAX(col_1)", [df0["col_1"].max(), df1["col_1"].max(), df2["col_1"].max()]),
     )
@@ -155,7 +155,7 @@ def test_column_stats_nan_values(lmdb_version_store, any_output_format):
     lib.append(sym, df5)
 
     # We store nan stats iff the whole block is nan
-    expected_column_stats = index_columns_to_pl(lib, sym).with_columns(
+    expected_column_stats = row_range_columns_to_pl(lib, sym).with_columns(
         pl.Series("v1_MIN(col_1)", [1.0, 5.0, 5.0, np.nan, 1.0, 1.0]),
         pl.Series("v1_MAX(col_1)", [3.0, 5.0, 5.0, np.nan, 2.0, 2.0]),
     )
@@ -173,7 +173,7 @@ def test_column_stats_only_nan_values(lmdb_version_store, any_output_format):
     df = pd.DataFrame({"col_1": [np.nan, np.nan]}, index=pd.date_range("2000-01-07", periods=2))
     lib.write(sym, df)
 
-    expected_column_stats = index_columns_to_pl(lib, sym).with_columns(
+    expected_column_stats = row_range_columns_to_pl(lib, sym).with_columns(
         pl.Series("v1_MIN(col_1)", [np.nan]),
         pl.Series("v1_MAX(col_1)", [np.nan]),
     )
@@ -221,7 +221,7 @@ def test_column_stats_nat_values(lmdb_version_store, any_output_format):
 
     # We store NaT stats iff the whole block is NaT. The Arrow output path converts NaT to null,
     # so the public read_column_stats API surfaces None for the all-NaT block.
-    expected_column_stats = index_columns_to_pl(lib, sym).with_columns(
+    expected_column_stats = row_range_columns_to_pl(lib, sym).with_columns(
         pl.Series(
             "v1_MIN(col_1)",
             [
@@ -269,7 +269,7 @@ def test_column_stats_only_nat_values(lmdb_version_store, any_output_format):
     df = pd.DataFrame({"col_1": [pd.NaT, pd.NaT]}, index=pd.date_range("2000-01-07", periods=2))
     lib.write(sym, df)
 
-    expected_column_stats = index_columns_to_pl(lib, sym).with_columns(
+    expected_column_stats = row_range_columns_to_pl(lib, sym).with_columns(
         pl.Series("v1_MIN(col_1)", [None], dtype=pl.Int64).cast(pl.Datetime("ns")),
         pl.Series("v1_MAX(col_1)", [None], dtype=pl.Int64).cast(pl.Datetime("ns")),
     )
@@ -318,7 +318,7 @@ def test_column_stats_nan_and_null_counts(lmdb_version_store, any_output_format)
 
     lib.create_column_stats_experimental(sym)
 
-    expected_column_stats = index_columns_to_pl(lib, sym).with_columns(
+    expected_column_stats = row_range_columns_to_pl(lib, sym).with_columns(
         pl.Series("v1_MIN(float_col)", [1.0, 5.0, np.nan, 1.0]),
         pl.Series("v1_MAX(float_col)", [2.0, 5.0, np.nan, 2.0]),
         pl.Series("v1_NAN_COUNT(float_col)", [0, 1, 2, 1], dtype=pl.UInt64),
@@ -401,7 +401,7 @@ def test_column_stats_null_count_sparse_floats(version_store_factory, lib_name, 
     lib.write(sym, df, sparsify_floats=True)
     lib.create_column_stats_experimental(sym)
 
-    cs = pl.from_arrow(lib.read_column_stats_experimental(sym)).sort("start_index")
+    cs = pl.from_arrow(lib.read_column_stats_experimental(sym)).sort("start_row")
     assert cs["v1_NULL_COUNT(col_1)"].to_list() == [1, 2]
     assert cs["v1_NAN_COUNT(col_1)"].to_list() == [0, 0]
     assert cs["v1_MIN(col_1)"].to_list() == [1.0, 4.0]
@@ -422,7 +422,7 @@ def test_column_stats_arrow_nan_and_null_same_column(lmdb_version_store_arrow):
     lib.append(sym, table([3.0, None, np.nan, 4.0, None]))  # nan=1, null=2, min=3, max=4
 
     lib.create_column_stats_experimental(sym)
-    cs = pl.from_arrow(lib.read_column_stats_experimental(sym)).sort("start_index")
+    cs = pl.from_arrow(lib.read_column_stats_experimental(sym)).sort("start_row")
 
     assert cs["v1_NAN_COUNT(f)"].to_list() == [1, 2, 0, 1]
     assert cs["v1_NULL_COUNT(f)"].to_list() == [1, 1, 2, 2]
@@ -458,7 +458,7 @@ def test_column_stats_arrow_nan_null_counts_hypothesis(lmdb_version_store_arrow,
         lib.append(sym, pa.table({"f": pa.array(seg, pa.float64())}))
 
     lib.create_column_stats_experimental(sym)
-    cs = pl.from_arrow(lib.read_column_stats_experimental(sym)).sort("start_index")
+    cs = pl.from_arrow(lib.read_column_stats_experimental(sym)).sort("start_row")
 
     # Each write/append is its own row-slice, so column stats rows line up with segments in index order.
     expected_nan = [sum(1 for v in seg if v is not None and np.isnan(v)) for seg in segments]
@@ -570,7 +570,7 @@ def test_column_stats_duplicated_primary_index(version_store_factory, lib_name, 
 
     total_df = pd.concat((df0, df1))
     lib.write(sym, total_df)
-    expected_column_stats = index_columns_to_pl(lib, sym).with_columns(
+    expected_column_stats = row_range_columns_to_pl(lib, sym).with_columns(
         pl.Series("v1_MIN(col_1)", [df0["col_1"].min(), df1["col_1"].min()]),
         pl.Series("v1_MAX(col_1)", [df0["col_1"].max(), df1["col_1"].max()]),
         pl.Series("v1_MIN(col_2)", [df0["col_2"].min(), df1["col_2"].min()]),
@@ -616,7 +616,7 @@ def test_column_stats_dynamic_schema_missing_data(version_store_factory, lib_nam
     # The count columns follow the same rule: a fully-missing column has no aggregator run for that
     # slice, so its NAN_COUNT/NULL_COUNT are null (not 0). Present columns count their NaNs in
     # NAN_COUNT and leave NULL_COUNT at 0 (NaN floats are stored densely here, not as sparse gaps).
-    expected_column_stats = index_columns_to_pl(lib, sym).with_columns(
+    expected_column_stats = row_range_columns_to_pl(lib, sym).with_columns(
         pl.Series(
             "v1_MIN(col_1)",
             [df0["col_1"].min(), None, df2["col_1"].min(), None, df4["col_1"].min(), None],
@@ -707,7 +707,7 @@ def test_column_stats_dynamic_schema_types_changing(
             pl.Series(f"v1_MAX({name})", [float(df0[name].max()), float(df1[name].max())]),
         ]
 
-    expected_column_stats = index_columns_to_pl(lib, sym).with_columns(
+    expected_column_stats = row_range_columns_to_pl(lib, sym).with_columns(
         *int_minmax("int_widening"),
         *int_minmax("int_narrowing"),
         *int_minmax("unsigned_to_wider_signed_int"),
@@ -1089,12 +1089,8 @@ def test_column_stats_col_called_index(
     res = lib.read_column_stats_experimental(sym)
     expected = pl.DataFrame(
         {
-            "start_index": pl.Series([pd.Timestamp("2000-01-01").value], dtype=pl.Int64).cast(pl.Datetime("ns")),
-            "end_index": (
-                pl.Series([(pd.Timestamp("2000-01-02") + pd.Timedelta(1)).value], dtype=pl.Int64).cast(
-                    pl.Datetime("ns")
-                )
-            ),
+            "start_row": pl.Series([0], dtype=pl.UInt64),
+            "end_row": pl.Series([2], dtype=pl.UInt64),
             f"v1_MIN({expected_title})": [0],
             f"v1_MAX({expected_title})": [1],
         }
@@ -1168,7 +1164,7 @@ def test_column_stats_multiindex(
 
     # Read and verify the stats
     stats = lib.read_column_stats_experimental(sym)
-    expected = index_columns_to_pl(lib, sym).with_columns(
+    expected = row_range_columns_to_pl(lib, sym).with_columns(
         pl.Series("v1_MIN(val)", [100, 300]),
         pl.Series("v1_MAX(val)", [200, 400]),
         pl.Series(f"v1_MIN({stored_col_name})", [10, 30]),
@@ -1232,7 +1228,7 @@ def test_column_stats_series(
     assert lib.get_column_stats_info_experimental(sym) == {stored_col_name: {"MINMAX"}}
 
     stats = lib.read_column_stats_experimental(sym)
-    expected = index_columns_to_pl(lib, sym).with_columns(
+    expected = row_range_columns_to_pl(lib, sym).with_columns(
         pl.Series(f"v1_MIN({stored_col_name})", [1, 3]),
         pl.Series(f"v1_MAX({stored_col_name})", [2, 4]),
     )
@@ -1303,7 +1299,7 @@ def test_column_stats_series_multiindex(
     assert lib.get_column_stats_info_experimental(sym) == {"val": {"MINMAX"}, stored_col_name: {"MINMAX"}}
 
     stats = lib.read_column_stats_experimental(sym)
-    expected = index_columns_to_pl(lib, sym).with_columns(
+    expected = row_range_columns_to_pl(lib, sym).with_columns(
         pl.Series("v1_MIN(val)", [100, 300]),
         pl.Series("v1_MAX(val)", [200, 400]),
         pl.Series(f"v1_MIN({stored_col_name})", [10, 30]),
@@ -1421,7 +1417,7 @@ def test_column_stats_create_single_unit(
     sym = "test_column_stats_single_unit"
     df = pd.DataFrame({"col_1": [1.0, 3.0]}, index=pd.date_range("2000-01-01", periods=2))
     lib.write(sym, df)
-    expected_column_stats = index_columns_to_pl(lib, sym).with_columns(
+    expected_column_stats = row_range_columns_to_pl(lib, sym).with_columns(
         pl.Series("v1_MIN(col_1)", [df["col_1"].min()]),
         pl.Series("v1_MAX(col_1)", [df["col_1"].max()]),
     )
@@ -1430,3 +1426,41 @@ def test_column_stats_create_single_unit(
         lib.create_column_stats_experimental(sym)
 
     assert_stats_equal(lib.read_column_stats_experimental(sym), expected_column_stats)
+
+
+def test_column_stats_duplicate_index_values_across_slice_boundary(
+    lmdb_version_store_tiny_segment, column_stats_filtering_enabled
+):
+    lib = lmdb_version_store_tiny_segment
+    sym = "test_column_stats_duplicate_index_values_across_slice_boundary"
+    ts = pd.Timestamp("2000-01-01")
+    lib.write(sym, pd.DataFrame({"col_1": [1, 2, 3, 4]}, index=[ts] * 4))
+
+    # The premise: row slices are cut by row count, so both share one (start_index, end_index).
+    index_df = lib.read_index(sym).reset_index()
+    assert len(index_df) == 2
+    assert index_df["start_index"].nunique() == 1
+    assert index_df["end_index"].nunique() == 1
+
+    lib.create_column_stats_experimental(sym)
+
+    # One row per row slice, each keyed by its own row range and carrying its own stats. Keyed on the
+    # index values the two collided and both were discarded.
+    column_stats = lib.read_column_stats_experimental(sym)
+    assert column_stats.num_rows == 2
+    expected_column_stats = pl.DataFrame(
+        {
+            "start_row": [0, 2],
+            "end_row": [2, 4],
+            "v1_MIN(col_1)": [1, 3],
+            "v1_MAX(col_1)": [2, 4],
+        }
+    )
+    assert_stats_equal(column_stats, expected_column_stats)
+
+    # Both rows are usable for pruning, which is what the collision cost. The filter matches only the
+    # second row slice.
+    q = QueryBuilder()
+    q = q[q["col_1"] > 2]
+    result = lib.read(sym, query_builder=q).data
+    pd.testing.assert_frame_equal(result, pd.DataFrame({"col_1": [3, 4]}, index=[ts] * 2))

@@ -19,10 +19,10 @@ SegmentInMemory build_column_stats_segment(std::vector<ColumnStatsComponent>&& c
 // User facing types - eg users are only allowed to create min and max together, not one or the other
 enum class ColumnStatType { MINMAX };
 
-static const char* const start_index_column_name = "start_index";
-static constexpr size_t start_index_column_offset = 0;
-static const char* const end_index_column_name = "end_index";
-static constexpr size_t end_index_column_offset = 1;
+static const char* const start_row_column_name = "start_row";
+static constexpr size_t start_row_column_offset = 0;
+static const char* const end_row_column_name = "end_row";
+static constexpr size_t end_row_column_offset = 1;
 
 struct NameAndStatTypes {
     std::string mangled_name;

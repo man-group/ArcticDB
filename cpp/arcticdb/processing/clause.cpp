@@ -803,13 +803,6 @@ std::vector<EntityId> ColumnStatsGenerationClause::process(std::vector<EntityId>
         aggregators_data.emplace_back(agg.get_aggregator_data());
     }
 
-    ankerl::unordered_dense::set<IndexValue> start_indexes;
-    ankerl::unordered_dense::set<IndexValue> end_indexes;
-
-    for (const auto& key : proc.atom_keys_.value()) {
-        start_indexes.insert(key->start_index());
-        end_indexes.insert(key->end_index());
-    }
     for (auto agg_data : folly::enumerate(aggregators_data)) {
         auto input_column_name = column_stats_aggregators_->at(agg_data.index).get_input_column_name();
         auto input_column = proc.get(input_column_name);
@@ -824,21 +817,20 @@ std::vector<EntityId> ColumnStatsGenerationClause::process(std::vector<EntityId>
         }
     }
 
-    internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-            start_indexes.size() == 1 && end_indexes.size() == 1,
-            "Expected all data segments in one processing unit to have same start and end indexes"
-    );
-    auto start_index = *start_indexes.begin();
-    auto end_index = *end_indexes.begin();
+    const auto& row_ranges = proc.row_ranges_.value();
+    const auto& row_range = *row_ranges.at(0);
+    for (const auto& other : row_ranges) {
+        internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+                other->first == row_range.first && other->second == row_range.second,
+                "Expected all data segments in one processing unit to have the same row range"
+        );
+    }
     schema::check<ErrorCode::E_UNSUPPORTED_INDEX_TYPE>(
-            std::holds_alternative<NumericIndex>(start_index) && std::holds_alternative<NumericIndex>(end_index),
+            std::holds_alternative<NumericIndex>(proc.atom_keys_->at(0)->start_index()) &&
+                    std::holds_alternative<NumericIndex>(proc.atom_keys_->at(0)->end_index()),
             "Cannot build column stats over string-indexed symbol"
     );
-    ColumnStatsComponent component{
-            .start_index = std::get<NumericIndex>(start_index),
-            .end_index = std::get<NumericIndex>(end_index),
-            .stats = {}
-    };
+    ColumnStatsComponent component{.start_row = row_range.first, .end_row = row_range.second, .stats = {}};
     for (const auto& agg_data : folly::enumerate(aggregators_data)) {
         auto finalized = agg_data->finalize(column_stats_aggregators_->at(agg_data.index).get_output_column_names());
         component.stats.insert(

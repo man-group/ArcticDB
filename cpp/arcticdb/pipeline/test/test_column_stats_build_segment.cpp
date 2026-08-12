@@ -22,8 +22,8 @@ ColumnStatValue min_stat(T value, DataType data_type, const char* name = "v1_MIN
     return ColumnStatValue{name, ColumnStatTypeInternal::MIN_V1, price_data_col_offset, Value{value, data_type}};
 }
 
-ColumnStatsComponent component(timestamp start, timestamp end, std::vector<ColumnStatValue> stats) {
-    return ColumnStatsComponent{start, end, std::move(stats)};
+ColumnStatsComponent component(uint64_t start_row, uint64_t end_row, std::vector<ColumnStatValue> stats) {
+    return ColumnStatsComponent{start_row, end_row, std::move(stats)};
 }
 
 position_t column_index(const SegmentInMemory& seg, std::string_view name) {
@@ -42,13 +42,13 @@ TEST(ColumnStatsBuildSegmentTest, IndexColumnsAndRowOrder) {
     );
 
     ASSERT_EQ(seg.row_count(), 3);
-    EXPECT_EQ(column_index(seg, start_index_column_name), 0);
-    EXPECT_EQ(column_index(seg, end_index_column_name), 1);
+    EXPECT_EQ(column_index(seg, start_row_column_name), 0);
+    EXPECT_EQ(column_index(seg, end_row_column_name), 1);
 
     const auto min_col = column_index(seg, "v1_MIN(price)");
-    for (auto&& [row, expected_start] : folly::enumerate(std::vector<timestamp>{100, 200, 300})) {
-        EXPECT_EQ(seg.scalar_at<timestamp>(static_cast<position_t>(row), 0), expected_start);
-        EXPECT_EQ(seg.scalar_at<timestamp>(static_cast<position_t>(row), 1), expected_start + 99);
+    for (auto&& [row, expected_start] : folly::enumerate(std::vector<uint64_t>{100, 200, 300})) {
+        EXPECT_EQ(seg.scalar_at<uint64_t>(static_cast<position_t>(row), 0), expected_start);
+        EXPECT_EQ(seg.scalar_at<uint64_t>(static_cast<position_t>(row), 1), expected_start + 99);
         EXPECT_EQ(seg.scalar_at<int64_t>(static_cast<position_t>(row), min_col), static_cast<int64_t>(row) + 1);
     }
 }
@@ -157,9 +157,9 @@ TEST(ColumnStatsBuildSegmentTest, StatAbsentFromSomeComponentsIsSparse) {
     EXPECT_FALSE(seg.scalar_at<int64_t>(1, col).has_value());
     EXPECT_EQ(seg.scalar_at<int64_t>(2, col), 33);
     EXPECT_FALSE(seg.scalar_at<int64_t>(3, col).has_value());
-    // The index columns stay dense across all rows
-    EXPECT_EQ(seg.scalar_at<timestamp>(3, 0), 400);
-    EXPECT_EQ(seg.scalar_at<timestamp>(3, 1), 499);
+    // The row-range columns stay dense across all rows
+    EXPECT_EQ(seg.scalar_at<uint64_t>(3, 0), 400);
+    EXPECT_EQ(seg.scalar_at<uint64_t>(3, 1), 499);
 }
 
 TEST(ColumnStatsBuildSegmentTest, NoCommonTypeRaises) {

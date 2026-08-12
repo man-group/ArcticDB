@@ -68,7 +68,7 @@ SegmentInMemory build_column_stats_segment(std::vector<ColumnStatsComponent>&& c
             !components.empty(), "build_column_stats_segment requires at least one component"
     );
     std::sort(components.begin(), components.end(), [](const auto& left, const auto& right) {
-        return std::tie(left.start_index, left.end_index) < std::tie(right.start_index, right.end_index);
+        return std::tie(left.start_row, left.end_row) < std::tie(right.start_row, right.end_row);
     });
 
     ankerl::unordered_dense::map<std::string, size_t> name_to_index;
@@ -79,16 +79,16 @@ SegmentInMemory build_column_stats_segment(std::vector<ColumnStatsComponent>&& c
     seg.init_column_map();
     seg.descriptor().set_index(IndexDescriptorImpl{IndexDescriptor::Type::ROWCOUNT, 0});
 
-    auto start_index_col = std::make_shared<Column>(make_scalar_type(DataType::NANOSECONDS_UTC64), Sparsity::PERMITTED);
-    auto end_index_col = std::make_shared<Column>(make_scalar_type(DataType::NANOSECONDS_UTC64), Sparsity::PERMITTED);
+    auto start_row_col = std::make_shared<Column>(make_scalar_type(DataType::UINT64), Sparsity::NOT_PERMITTED);
+    auto end_row_col = std::make_shared<Column>(make_scalar_type(DataType::UINT64), Sparsity::NOT_PERMITTED);
     for (const auto& component : components) {
-        start_index_col->push_back<NumericIndex>(component.start_index);
-        end_index_col->push_back<NumericIndex>(component.end_index);
+        start_row_col->push_back<uint64_t>(component.start_row);
+        end_row_col->push_back<uint64_t>(component.end_row);
     }
-    start_index_col->set_row_data(last_row);
-    end_index_col->set_row_data(last_row);
-    seg.add_column(scalar_field(DataType::NANOSECONDS_UTC64, start_index_column_name), start_index_col);
-    seg.add_column(scalar_field(DataType::NANOSECONDS_UTC64, end_index_column_name), end_index_col);
+    start_row_col->set_row_data(last_row);
+    end_row_col->set_row_data(last_row);
+    seg.add_column(scalar_field(DataType::UINT64, start_row_column_name), start_row_col);
+    seg.add_column(scalar_field(DataType::UINT64, end_row_column_name), end_row_col);
 
     std::vector<std::shared_ptr<Column>> columns;
     columns.reserve(stat_columns.size());
