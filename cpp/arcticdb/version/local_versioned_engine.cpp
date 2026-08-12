@@ -2429,7 +2429,7 @@ static constexpr std::array<KeyType, 10> TYPES_FOR_SIZE_CALCULATION = {
 };
 
 std::vector<storage::ObjectSizes> LocalVersionedEngine::scan_object_sizes(
-        const std::optional<std::vector<KeyType>>& key_types
+        const std::optional<std::vector<KeyType>>& key_types, bool raise_on_failure
 ) {
     using ObjectSizes = storage::ObjectSizes;
     const std::span<const KeyType> types_to_scan = key_types.has_value()
@@ -2442,10 +2442,24 @@ std::vector<storage::ObjectSizes> LocalVersionedEngine::scan_object_sizes(
         sizes_futs.push_back(store()->get_object_sizes(key_type, std::nullopt));
     }
 
-    auto ptrs = folly::collect(sizes_futs).via(&async::cpu_executor()).get();
+    // collectAll rather than collect: a key type that cannot be listed then costs us only its own numbers, which
+    // is what callers scanning the whole library want. They ask for that with raise_on_failure=false.
+    auto results = folly::collectAll(sizes_futs).via(&async::cpu_executor()).get();
     std::vector<storage::ObjectSizes> res;
-    res.reserve(ptrs.size());
-    for (const auto& p : ptrs) {
+    res.reserve(results.size());
+    for (size_t i = 0; i < results.size(); ++i) {
+        if (results[i].hasException()) {
+            if (raise_on_failure) {
+                results[i].throwUnlessValue();
+            }
+            log::version().warn(
+                    "Failed to scan sizes for key type {}, omitting it from the result: {}",
+                    key_type_long_name(types_to_scan[i]),
+                    results[i].exception().what()
+            );
+            continue;
+        }
+        const auto& p = results[i].value();
         res.emplace_back(p->key_type_, p->count_, p->compressed_size_, p->scan_duration_ns_);
     }
     return res;

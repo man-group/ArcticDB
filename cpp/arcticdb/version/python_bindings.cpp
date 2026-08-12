@@ -915,9 +915,11 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
             .def("scan_object_sizes",
                  &PythonVersionStore::scan_object_sizes,
                  py::arg("key_types") = std::nullopt,
+                 py::arg("raise_on_failure") = true,
                  py::call_guard<SingleThreadMutexHolder>(),
                  "Scan the compressed sizes of all objects in the library. Scans a default set of the most "
-                 "important key types unless key_types is given.")
+                 "important key types unless key_types is given. With raise_on_failure=False, a key type that "
+                 "cannot be listed is left out of the result rather than failing the whole scan.")
             .def("scan_object_sizes_by_stream",
                  &PythonVersionStore::scan_object_sizes_by_stream,
                  py::call_guard<SingleThreadMutexHolder>(),

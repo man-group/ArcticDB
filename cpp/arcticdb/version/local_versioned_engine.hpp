@@ -388,8 +388,14 @@ class LocalVersionedEngine : public VersionedEngine {
     );
 
     /** Scan sizes for the given key types, or for a default set of the most important ones when not specified. */
+    /**
+     * Sizes and counts, one entry per key type. Defaults to the ten most important key types.
+     *
+     * With raise_on_failure=false a key type that cannot be listed is logged and left out of the result instead of
+     * failing the whole scan, so one bad key type costs only its own numbers.
+     */
     std::vector<storage::ObjectSizes> scan_object_sizes(
-            const std::optional<std::vector<KeyType>>& key_types = std::nullopt
+            const std::optional<std::vector<KeyType>>& key_types = std::nullopt, bool raise_on_failure = true
     );
 
     std::vector<storage::ObjectSizes> scan_object_sizes_for_stream(const StreamId& stream_id);
