@@ -261,8 +261,22 @@ under the name `SLOW_LOCK`, which `_NATIVE_NAMES` records. `test_get_sizes_key_t
 Cost scales with object count *and* with the number of key types requested — each type is one listing pass over its
 prefix. `ObjectSizes.scan_duration_ns` reports the wall-clock time of an individual key type's scan.
 
-Only S3 and NFS-backed storages implement `do_visit_object_sizes`; others raise via
-`Storage::supports_object_size_calculation`.
+### Partial failures
+
+`scan_object_sizes` collects the per-key-type futures with `folly::collectAll`, so one key type's failure does not
+cancel the rest. What happens to it is the caller's choice:
+
+- `raise_on_failure=true` (default, and what `AdminTools.get_sizes` uses) — rethrow, so a caller totalling a library
+  never silently under-reports.
+- `raise_on_failure=false` — log a warning naming the key type and omit it from the result. For callers scanning
+  every key type, where one unlistable prefix should not cost the whole library's numbers. The enterprise
+  `populate_library_size` job uses this; an omitted key type is indistinguishable from an empty one.
+
+Covered by `cpp/arcticdb/version/test/test_object_sizes.cpp`, which substitutes a store that fails one chosen key
+type — not reachable from python, since every storage can list every key type in `KeyType`.
+
+Only S3 and NFS-backed storages implement `do_visit_object_sizes`; the rest fall back to reading each key and summing
+segment sizes (`AsyncStore::visit_object_sizes`), which is why LMDB and in-memory libraries also report sizes.
 
 ## Key Files
 

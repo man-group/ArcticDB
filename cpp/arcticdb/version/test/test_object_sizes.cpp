@@ -22,9 +22,8 @@ class OneKeyTypeFailsStore : public InMemoryStore {
   public:
     explicit OneKeyTypeFailsStore(KeyType failing) : failing_(failing) {}
 
-    folly::Future<std::shared_ptr<storage::ObjectSizes>> get_object_sizes(
-            KeyType key_type, const std::optional<StreamId>&
-    ) override {
+    folly::Future<std::shared_ptr<storage::ObjectSizes>>
+    get_object_sizes(KeyType key_type, const std::optional<StreamId>&) override {
         if (key_type == failing_) {
             return folly::makeFuture<std::shared_ptr<storage::ObjectSizes>>(
                     std::runtime_error(fmt::format("cannot list {}", key_type))
