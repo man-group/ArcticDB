@@ -250,16 +250,22 @@ AdminTools.get_sizes
 `TYPES_FOR_SIZE_CALCULATION` in `local_versioned_engine.cpp` is the ten types scanned when `key_types` is not given.
 There is no C++ list of the full set: the public `arcticdb.KeyType` enum is it, so `list(KeyType)` is how a caller
 asks for everything. Absent from it are `TOMBSTONE` and `TOMBSTONE_ALL`, which are only ever written inside VERSION
-key segments, and `STREAM_GROUP`, which is key type 0 and not a real key type (scanning it throws — see the branch
-work log for `gpetrov/widen-object-size-scan`).
+key segments, and `STREAM_GROUP`, which cannot be scanned at all: it is key type 0, `foreach_key_type` iterates from
+1, and `key_type_from_int` asserts `type_num > 0`, so ArcticDB treats 0 as "not a key type" throughout. LMDB never
+opens a database for it, and asking for it raises `InternalException: std::out_of_range(_Map_base::at)` out of
+`LmdbStorage::get_dbi`. Nothing can be stored under it, so it is left out of both enums rather than special-cased.
 
 `_TO_NATIVE`/`_FROM_NATIVE` in `admin_tools.py` map between `KeyType` and `arcticdb_ext.storage.KeyType`, derived by
 member name so a new type needs adding in one place. `ATOMIC_LOCK` is the sole exception — the extension binds it
 under the name `SLOW_LOCK`, which `_NATIVE_NAMES` records. `test_get_sizes_key_types_everything` asserts that a
 `list(KeyType)` scan returns exactly `set(KeyType)`, which is what catches an entry that cannot in fact be scanned.
 
-Cost scales with object count *and* with the number of key types requested — each type is one listing pass over its
-prefix. `ObjectSizes.scan_duration_ns` reports the wall-clock time of an individual key type's scan.
+Cost scales with object count *and* with the number of key types requested, and the per-key-type cost depends on
+whether the storage overrides `supports_object_size_calculation()` — S3 and NFS-backed do (`s3_storage.cpp:279`,
+`nfs_backed_storage.cpp:252`) and answer from a prefix listing. Everything else falls through to `iterate_type` plus
+`read_ignoring_key_not_found` in `AsyncStore::visit_object_sizes`, reading and decoding every object of the key type,
+so a `list(KeyType)` scan on LMDB or Azure reads the whole library. `ObjectSizes.scan_duration_ns` reports the
+wall-clock time of an individual key type's scan.
 
 ### Partial failures
 

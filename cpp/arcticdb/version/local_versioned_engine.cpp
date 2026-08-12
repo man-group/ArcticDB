@@ -2485,7 +2485,7 @@ std::vector<storage::ObjectSizes> LocalVersionedEngine::scan_object_sizes_for_st
     auto ptrs = folly::collect(sizes_futs).via(&async::cpu_executor()).get();
     std::vector<storage::ObjectSizes> res;
     for (const auto& p : ptrs) {
-        res.emplace_back(p->key_type_, p->count_, p->compressed_size_);
+        res.emplace_back(p->key_type_, p->count_, p->compressed_size_, p->scan_duration_ns_);
     }
     return res;
 }

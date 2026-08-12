@@ -174,6 +174,19 @@ def test_scan_object_sizes_records_duration(arctic_client, lib_name):
     assert data.scan_duration_ns > 0
 
 
+def test_scan_object_sizes_for_stream_records_duration(arctic_client, lib_name):
+    """The per-symbol scan reports a duration too - a scan happened, so zero would be a lie."""
+    arctic_library = arctic_client.create_library(lib_name)
+    arctic_library.write("sym", sample_dataframe(size=100))
+
+    sizes = arctic_library._nvs.version_store.scan_object_sizes_for_stream("sym")
+
+    by_key_type = {s.key_type: s for s in sizes}
+    data = by_key_type[arcticdb_ext.storage.KeyType.TABLE_DATA]
+    assert data.count > 0
+    assert data.scan_duration_ns > 0
+
+
 def test_get_sizes_by_symbol(arctic_client, lib_name, all_recursive_metastructure_versions):
     lib_opts = EnterpriseLibraryOptions(replication=True)
     arctic_library = arctic_client.create_library(lib_name, enterprise_library_options=lib_opts)

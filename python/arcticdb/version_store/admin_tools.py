@@ -193,8 +193,12 @@ class AdminTools:
             SYMBOL_LIST
             ```
 
-            Pass `list(KeyType)` for a complete breakdown. Each key type costs one listing operation over its
-            prefix in storage, so scanning types that are empty in your library is cheap but not free.
+            Pass `list(KeyType)` for a complete breakdown.
+
+            How much each extra key type costs depends on the storage. S3 and NFS-backed libraries take the sizes
+            from a listing of the key type's prefix, so a key type your library has none of costs one round trip.
+            Every other backend, including LMDB and Azure, has to read and decode every object of each key type it
+            is asked about - on those, a `list(KeyType)` scan reads the whole library.
 
         Returns
         -------

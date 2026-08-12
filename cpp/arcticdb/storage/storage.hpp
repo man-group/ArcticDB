@@ -29,13 +29,15 @@ using ObjectSizesVisitor = std::function<void(const VariantKey&, CompressedSize)
 inline const std::set<char> GLOBALLY_UNSUPPORTED_CHARS{'*', '<', '>'};
 
 struct ObjectSizes {
-    ObjectSizes(KeyType key_type, uint64_t count, CompressedSize compressed_size, uint64_t scan_duration_ns = 0) :
+    // scan_duration_ns has no default: every caller that copies an ObjectSizes has to say what it does with the
+    // duration, so a new copy site cannot silently drop it and report a scan that apparently took no time.
+    ObjectSizes(KeyType key_type, uint64_t count, CompressedSize compressed_size, uint64_t scan_duration_ns) :
         key_type_(key_type),
         count_(count),
         compressed_size_(compressed_size),
         scan_duration_ns_(scan_duration_ns) {}
 
-    explicit ObjectSizes(KeyType key_type) noexcept : ObjectSizes(key_type, 0, 0) {}
+    explicit ObjectSizes(KeyType key_type) noexcept : ObjectSizes(key_type, 0, 0, 0) {}
 
     ObjectSizes(const ObjectSizes& other) noexcept :
         key_type_(other.key_type_),
@@ -57,7 +59,8 @@ struct ObjectSizes {
     KeyType key_type_;
     std::atomic_uint64_t count_;
     std::atomic_uint64_t compressed_size_;
-    // Wall-clock time taken to scan this key type. Zero when the sizes did not come from a scan.
+    // Wall-clock time AsyncStore::get_object_sizes took to scan this key type, from submission to completion.
+    // Zero on an ObjectSizes that was not produced by a scan, e.g. one default constructed to accumulate into.
     std::atomic_uint64_t scan_duration_ns_;
 };
 
