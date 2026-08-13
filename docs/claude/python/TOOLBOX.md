@@ -227,7 +227,7 @@ Get a `LibraryTool` via `lib.library_tool()`. Use `find_keys_for_symbol(KeyType,
 
 | Method | Scans |
 |--------|-------|
-| `get_sizes(key_types=None)` | Whole library, grouped by key type |
+| `get_sizes()` | Whole library, grouped by key type |
 | `get_sizes_by_symbol()` | Whole library, grouped by symbol then key type |
 | `get_sizes_for_symbol(symbol)` | One symbol, grouped by key type |
 
@@ -247,39 +247,31 @@ AdminTools.get_sizes
 
 ### Key type sets
 
-`TYPES_FOR_SIZE_CALCULATION` in `local_versioned_engine.cpp` is the ten types scanned when `key_types` is not given.
-There is no C++ list of the full set: the public `arcticdb.KeyType` enum is it, so `list(KeyType)` is how a caller
-asks for everything. Absent from it are `TOMBSTONE` and `TOMBSTONE_ALL`, which are only ever written inside VERSION
-key segments, and `STREAM_GROUP`, which cannot be scanned at all: it is key type 0, `foreach_key_type` iterates from
-1, and `key_type_from_int` asserts `type_num > 0`, so ArcticDB treats 0 as "not a key type" throughout. LMDB never
-opens a database for it, and asking for it raises `InternalException: std::out_of_range(_Map_base::at)` out of
-`LmdbStorage::get_dbi`. Nothing can be stored under it, so it is left out of both enums rather than special-cased.
+`TYPES_FOR_SIZE_CALCULATION` in `local_versioned_engine.cpp` is the ten key types scanned. Historical, specialized
+and transient key types are left out to avoid the extra listing operations, so the result is not a complete account
+of every object in the library. `KeyType._from_native()` in `admin_tools.py` maps `arcticdb_ext.storage.KeyType` to
+the public `arcticdb.KeyType`, which covers those ten and raises for anything else.
 
-`_TO_NATIVE`/`_FROM_NATIVE` in `admin_tools.py` map between `KeyType` and `arcticdb_ext.storage.KeyType`, derived by
-member name so a new type needs adding in one place. `ATOMIC_LOCK` is the sole exception — the extension binds it
-under the name `SLOW_LOCK`, which `_NATIVE_NAMES` records. `test_get_sizes_key_types_everything` asserts that a
-`list(KeyType)` scan returns exactly `set(KeyType)`, which is what catches an entry that cannot in fact be scanned.
-
-Cost scales with object count *and* with the number of key types requested, and the per-key-type cost depends on
+Cost scales with object count *and* with the number of key types scanned, and the per-key-type cost depends on
 whether the storage overrides `supports_object_size_calculation()` — S3 and NFS-backed do (`s3_storage.cpp:279`,
 `nfs_backed_storage.cpp:252`) and answer from a prefix listing. Everything else falls through to `iterate_type` plus
-`read_ignoring_key_not_found` in `AsyncStore::visit_object_sizes`, reading and decoding every object of the key type,
-so a `list(KeyType)` scan on LMDB or Azure reads the whole library. `ObjectSizes.scan_duration_ns` reports the
-wall-clock time of an individual key type's scan.
+`read_ignoring_key_not_found` in `AsyncStore::visit_object_sizes`, reading and decoding every object of the key type.
+`ObjectSizes.scan_duration_ns` reports the wall-clock time of an individual key type's scan, so a caller recording
+metrics can attribute the cost per key type rather than to the scan as a whole.
 
 ### Partial failures
 
 `scan_object_sizes` collects the per-key-type futures with `folly::collectAll`, so one key type's failure does not
 cancel the rest. What happens to it is the caller's choice:
 
-- `raise_on_failure=true` (default, and what `AdminTools.get_sizes` uses) — rethrow, so a caller totalling a library
+- `OnScanFailure::Raise` (default, and what `AdminTools.get_sizes` uses) — rethrow, so a caller totalling a library
   never silently under-reports.
-- `raise_on_failure=false` — log a warning naming the key type and omit it from the result. For callers scanning
-  every key type, where one unlistable prefix should not cost the whole library's numbers. The enterprise
-  `populate_library_size` job uses this; an omitted key type is indistinguishable from an empty one.
+- `OnScanFailure::Skip` — log a warning naming the key type and omit it from the result. For background jobs
+  totalling many libraries, where one key type whose prefix a bucket policy denies should not cost the whole
+  library's numbers. An omitted key type is indistinguishable from an empty one.
 
-Covered by `cpp/arcticdb/version/test/test_object_sizes.cpp`, which substitutes a store that fails one chosen key
-type — not reachable from python, since every storage can list every key type in `KeyType`.
+Covered by `cpp/arcticdb/version/test/test_object_sizes.cpp`, which substitutes a store that fails the key types it
+is told to — not reachable from python, since every storage can list every key type scanned.
 
 Only S3 and NFS-backed storages implement `do_visit_object_sizes`; the rest fall back to reading each key and summing
 segment sizes (`AsyncStore::visit_object_sizes`), which is why LMDB and in-memory libraries also report sizes.

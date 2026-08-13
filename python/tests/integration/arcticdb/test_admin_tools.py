@@ -21,10 +21,10 @@ from arcticdb.version_store.admin_tools import AdminTools, sum_sizes
 logger = get_logger()
 
 
-def retry_get_sizes(admin_tools: AdminTools, retries=3, base_delay=1, key_types=None):
+def retry_get_sizes(admin_tools: AdminTools, retries=3, base_delay=1):
     for attempt in range(retries + 1):
         try:
-            result = admin_tools.get_sizes(key_types=key_types)
+            result = admin_tools.get_sizes()
             return result
         except arcticdb_ext.exceptions.StorageException as e:
             if ("E_UNEXPECTED_AZURE_ERROR" in str(e)) and (attempt < retries):
@@ -92,74 +92,6 @@ def test_get_sizes(arctic_client, lib_name, all_recursive_metastructure_versions
     sizes = retry_get_sizes(arctic_library.admin_tools())
     assert sizes[KeyType.MULTI_KEY].count == 1
     assert sizes[KeyType.MULTI_KEY].bytes_compressed > 0
-
-
-DEFAULT_SCANNED_KEY_TYPES = {
-    KeyType.TABLE_DATA,
-    KeyType.TABLE_INDEX,
-    KeyType.VERSION,
-    KeyType.VERSION_REF,
-    KeyType.APPEND_DATA,
-    KeyType.MULTI_KEY,
-    KeyType.SNAPSHOT_REF,
-    KeyType.LOG,
-    KeyType.LOG_COMPACTED,
-    KeyType.SYMBOL_LIST,
-}
-
-
-def test_key_type_native_mapping_is_one_to_one():
-    """The mapping is derived by name, so the only way to break it is a wrong _NATIVE_NAMES alias.
-
-    That fails silently rather than loudly: two members mapping to the same native type means one of them
-    reports the other's numbers, and _from_native has no way back to the one it displaced. Whether every
-    member can actually be scanned is covered by test_get_sizes_key_types_everything."""
-    natives = [k.to_native() for k in KeyType]
-
-    assert len(set(natives)) == len(natives)
-
-
-def test_get_sizes_key_types_default_unchanged(arctic_client, lib_name):
-    arctic_library = arctic_client.create_library(lib_name)
-    arctic_library.write("sym", sample_dataframe(size=100))
-
-    sizes = retry_get_sizes(arctic_library.admin_tools())
-
-    assert set(sizes) == DEFAULT_SCANNED_KEY_TYPES
-
-
-def test_get_sizes_key_types_subset(arctic_client, lib_name):
-    arctic_library = arctic_client.create_library(lib_name)
-    arctic_library.write("sym", sample_dataframe(size=100))
-
-    requested = [KeyType.TABLE_DATA, KeyType.VERSION_REF]
-    sizes = retry_get_sizes(arctic_library.admin_tools(), key_types=requested)
-
-    assert set(sizes) == set(requested)
-    assert sizes[KeyType.TABLE_DATA].count > 0
-    assert sizes[KeyType.VERSION_REF].count == 1
-
-
-def test_get_sizes_key_types_everything(arctic_client, lib_name):
-    lib_opts = EnterpriseLibraryOptions(replication=True)
-    arctic_library = arctic_client.create_library(lib_name, enterprise_library_options=lib_opts)
-    arctic_library.write("sym", sample_dataframe(size=100))
-    arctic_library._nvs.create_column_stats_experimental("sym")
-
-    sizes = retry_get_sizes(arctic_library.admin_tools(), key_types=list(KeyType))
-
-    # Every key type that can exist as an object in storage is scannable, and all of them are reported
-    assert set(sizes) == set(KeyType)
-    assert DEFAULT_SCANNED_KEY_TYPES < set(sizes)
-
-    # A key type outside the default set that this library does have
-    assert sizes[KeyType.COLUMN_STATS].count == 1
-    assert sizes[KeyType.COLUMN_STATS].bytes_compressed > 0
-
-    # ...and ones it does not. These are reported as empty rather than omitted.
-    for key_type in (KeyType.SNAPSHOT, KeyType.GENERATION, KeyType.PARTITION, KeyType.METRICS):
-        assert sizes[key_type].count == 0
-        assert sizes[key_type].bytes_compressed == 0
 
 
 def test_scan_object_sizes_records_duration(arctic_client, lib_name):

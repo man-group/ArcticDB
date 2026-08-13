@@ -619,6 +619,10 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
             .def_readonly("compressed_size", &KeySizesInfo::compressed_size)
             .doc() = "Count of keys and their compressed and uncompressed sizes in bytes.";
 
+    py::enum_<OnScanFailure>(version, "OnScanFailure")
+            .value("RAISE", OnScanFailure::Raise)
+            .value("SKIP", OnScanFailure::Skip);
+
     py::class_<storage::ObjectSizes>(version, "ObjectSizes")
             .def_readonly("key_type", &storage::ObjectSizes::key_type_)
             .def_property_readonly("count", [](storage::ObjectSizes& self) { return self.count_.load(); })
@@ -914,12 +918,10 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                  "Get the most recent update time for a list of stream ids")
             .def("scan_object_sizes",
                  &PythonVersionStore::scan_object_sizes,
-                 py::arg("key_types") = std::nullopt,
-                 py::arg("raise_on_failure") = true,
+                 py::arg("on_failure") = OnScanFailure::Raise,
                  py::call_guard<SingleThreadMutexHolder>(),
-                 "Scan the compressed sizes of all objects in the library. Scans a default set of the most "
-                 "important key types unless key_types is given. With raise_on_failure=False, a key type that "
-                 "cannot be listed is left out of the result rather than failing the whole scan.")
+                 "Scan the compressed sizes of all objects in the library. With on_failure=OnScanFailure.SKIP, a "
+                 "key type that cannot be listed is left out of the result rather than failing the whole scan.")
             .def("scan_object_sizes_by_stream",
                  &PythonVersionStore::scan_object_sizes_by_stream,
                  py::call_guard<SingleThreadMutexHolder>(),

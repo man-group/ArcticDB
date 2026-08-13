@@ -2428,13 +2428,9 @@ static constexpr std::array<KeyType, 10> TYPES_FOR_SIZE_CALCULATION = {
         KeyType::SYMBOL_LIST,
 };
 
-std::vector<storage::ObjectSizes> LocalVersionedEngine::scan_object_sizes(
-        const std::optional<std::vector<KeyType>>& key_types, bool raise_on_failure
-) {
+std::vector<storage::ObjectSizes> LocalVersionedEngine::scan_object_sizes(OnScanFailure on_failure) {
     using ObjectSizes = storage::ObjectSizes;
-    const std::span<const KeyType> types_to_scan = key_types.has_value()
-                                                           ? std::span<const KeyType>{*key_types}
-                                                           : std::span<const KeyType>{TYPES_FOR_SIZE_CALCULATION};
+    const std::span<const KeyType> types_to_scan{TYPES_FOR_SIZE_CALCULATION};
 
     std::vector<folly::Future<std::shared_ptr<ObjectSizes>>> sizes_futs;
     sizes_futs.reserve(types_to_scan.size());
@@ -2442,14 +2438,14 @@ std::vector<storage::ObjectSizes> LocalVersionedEngine::scan_object_sizes(
         sizes_futs.push_back(store()->get_object_sizes(key_type, std::nullopt));
     }
 
-    // collectAll rather than collect: a key type that cannot be listed then costs us only its own numbers, which
-    // is what callers scanning the whole library want. They ask for that with raise_on_failure=false.
+    // collectAll rather than collect, so that a key type that cannot be listed costs us only its own numbers
+    // rather than the whole scan. Callers ask for that with OnScanFailure::Skip.
     auto results = folly::collectAll(sizes_futs).via(&async::cpu_executor()).get();
     std::vector<storage::ObjectSizes> res;
     res.reserve(results.size());
     for (size_t i = 0; i < results.size(); ++i) {
         if (results[i].hasException()) {
-            if (raise_on_failure) {
+            if (on_failure == OnScanFailure::Raise) {
                 results[i].throwUnlessValue();
             }
             log::version().warn(

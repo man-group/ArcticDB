@@ -36,30 +36,3 @@ for_symbol[KeyType.VERSION].count  # how many version keys are in the library?
 Most of the space used by a library should be in its `TABLE_DATA` keys since this is where your data is actually kept.
 The other key types are metadata tracked by ArcticDB, primarily to index and version your data. More information about
 our data layout is available [here](../technical/on_disk_storage.md).
-
-## Choosing which key types to scan
-
-`get_sizes` scans ten key types by default — the ones that hold your data and the metadata used to index and version
-it. `arcticdb.KeyType` has more members than that: historical types no longer written, transient ones such as locks,
-and types used only by enterprise replication and backups. Pass `key_types` to scan a different set:
-
-```py
-from arcticdb import KeyType
-
-admin_tools.get_sizes(key_types=[KeyType.TABLE_DATA])  # just the data segments
-admin_tools.get_sizes(key_types=list(KeyType))  # a complete breakdown
-```
-
-Every key type you ask for appears in the result, with a zero size and count when the library has none of them.
-
-The cost grows with the number of key types you ask for, not just with the amount of data you have, and how steeply
-depends on your storage:
-
-- **S3 and NFS-backed libraries** take the sizes straight from a listing of each key type's prefix, without reading
-  the objects. A key type your library has none of costs one round trip, so a complete breakdown is cheap but not
-  free — on a storage where listing is slow it can still take noticeably longer than the default.
-- **Every other backend**, LMDB and Azure included, has no such shortcut: it reads and decodes every object of each
-  key type you ask about. `key_types=list(KeyType)` there means reading the entire library, `TABLE_DATA` and all.
-
-Because the default set is where essentially all of your bytes live, prefer it unless you specifically need to account
-for the remainder.
