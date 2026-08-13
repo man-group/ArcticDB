@@ -8,6 +8,7 @@
 
 #include <arcticdb/pipeline/pipeline_context.hpp>
 #include <arcticdb/pipeline/read_pipeline.hpp>
+#include <arcticdb/pipeline/index_utils.hpp>
 #include <arcticdb/column_store/column_map.hpp>
 
 namespace arcticdb::pipelines {
@@ -173,6 +174,13 @@ const StreamDescriptor& PipelineContext::output_descriptor() const {
 
 const proto::descriptors::NormalizationMetadata& PipelineContext::output_normalization() const {
     return output_schema_ ? output_schema_->norm_metadata_ : normalization();
+}
+
+uint32_t PipelineContext::output_required_fields_count() const {
+    if (output_schema_ || tsd_) {
+        return index::required_fields_count(output_descriptor(), output_normalization());
+    }
+    return index::required_fields_count(output_descriptor());
 }
 
 const ankerl::unordered_dense::map<std::string, Value>& PipelineContext::output_default_values() const {

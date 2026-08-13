@@ -50,7 +50,7 @@ inline std::string binary_operation_column_name(
 }
 
 template<typename Func>
-inline std::string binary_operation_with_types_to_string(
+std::string binary_operation_with_types_to_string(
         std::string_view left, const TypeDescriptor& type_left, Func&& func, std::string_view right,
         const TypeDescriptor& type_right, bool arguments_reversed = false
 ) {
@@ -73,6 +73,11 @@ inline std::string binary_operation_with_types_to_string(
             get_user_friendly_type_string(type_right)
     );
 }
+
+std::string binary_operation_with_types_to_string(
+        std::string_view left, const TypeDescriptor& type_left, OperationType func, std::string_view right,
+        const TypeDescriptor& type_right, bool arguments_reversed = false
+);
 
 template<typename Func>
 VariantData binary_membership(const ColumnWithStrings& column_with_strings, ValueSet& value_set, Func&& func) {

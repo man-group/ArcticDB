@@ -269,7 +269,7 @@ std::variant<BitSetTag, DataType> ExpressionNode::compute(
             user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
                     std::holds_alternative<DataType>(left_type), "Unexpected bitset input to {}", operation_type_
             );
-            details::visit_type(std::get<DataType>(left_type), [operation_type_, &res](auto tag) {
+            details::visit_type(std::get<DataType>(left_type), [operation_type_, &res, &operation](auto tag) {
                 using type_info = ScalarTypeInfo<decltype(tag)>;
                 if constexpr (is_numeric_type(type_info::data_type)) {
                     if (operation_type_ == OperationType::ABS) {
@@ -286,7 +286,9 @@ std::variant<BitSetTag, DataType> ExpressionNode::compute(
                     }
                 } else {
                     user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
-                            "Unexpected data type {} input to {}", type_info::data_type, operation_type_
+                            "Cannot perform unary operation {} ({})",
+                            unary_operation_to_string(operation_type_, operation.left_->label_),
+                            get_user_friendly_type_string(type_info::TDT::type_descriptor())
                     );
                 }
             });
@@ -335,74 +337,86 @@ std::variant<BitSetTag, DataType> ExpressionNode::compute(
                     "Unexpected value set input to {}",
                     operation_type_
             );
-            details::visit_type(std::get<DataType>(left_type), [operation_type_, &res, right_type](auto left_tag) {
-                using left_type_info = ScalarTypeInfo<decltype(left_tag)>;
-                details::visit_type(std::get<DataType>(right_type), [operation_type_, &res](auto right_tag) {
-                    using right_type_info = ScalarTypeInfo<decltype(right_tag)>;
-                    if constexpr (is_numeric_type(left_type_info::data_type) &&
-                                  is_numeric_type(right_type_info::data_type)) {
-                        switch (operation_type_) {
-                        case OperationType::ADD: {
-                            using TargetType = typename binary_operation_promoted_type<
-                                    typename left_type_info::RawType,
-                                    typename right_type_info::RawType,
-                                    std::remove_reference_t<PlusOperator>>::type;
-                            res = data_type_from_raw_type<TargetType>();
-                            break;
-                        }
-                        case OperationType::SUB: {
-                            using TargetType = typename binary_operation_promoted_type<
-                                    typename left_type_info::RawType,
-                                    typename right_type_info::RawType,
-                                    std::remove_reference_t<MinusOperator>>::type;
-                            res = data_type_from_raw_type<TargetType>();
-                            break;
-                        }
-                        case OperationType::MUL: {
-                            using TargetType = typename binary_operation_promoted_type<
-                                    typename left_type_info::RawType,
-                                    typename right_type_info::RawType,
-                                    std::remove_reference_t<TimesOperator>>::type;
-                            res = data_type_from_raw_type<TargetType>();
-                            break;
-                        }
-                        case OperationType::DIV: {
-                            using TargetType = typename binary_operation_promoted_type<
-                                    typename left_type_info::RawType,
-                                    typename right_type_info::RawType,
-                                    std::remove_reference_t<DivideOperator>>::type;
-                            res = data_type_from_raw_type<TargetType>();
-                            break;
-                        }
-                        case OperationType::POW: {
-                            if constexpr (!is_integer_type(right_type_info::data_type)) {
-                                user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
-                                        "POW operator does not support floating point exponents, got {}",
-                                        right_type_info::data_type
-                                );
-                            }
+            details::visit_type(
+                    std::get<DataType>(left_type),
+                    [operation_type_, &res, right_type, &operation](auto left_tag) {
+                        using left_type_info = ScalarTypeInfo<decltype(left_tag)>;
+                        details::visit_type(
+                                std::get<DataType>(right_type),
+                                [operation_type_, &res, &operation](auto right_tag) {
+                                    using right_type_info = ScalarTypeInfo<decltype(right_tag)>;
+                                    if constexpr (is_numeric_type(left_type_info::data_type) &&
+                                                  is_numeric_type(right_type_info::data_type)) {
+                                        switch (operation_type_) {
+                                        case OperationType::ADD: {
+                                            using TargetType = typename binary_operation_promoted_type<
+                                                    typename left_type_info::RawType,
+                                                    typename right_type_info::RawType,
+                                                    std::remove_reference_t<PlusOperator>>::type;
+                                            res = data_type_from_raw_type<TargetType>();
+                                            break;
+                                        }
+                                        case OperationType::SUB: {
+                                            using TargetType = typename binary_operation_promoted_type<
+                                                    typename left_type_info::RawType,
+                                                    typename right_type_info::RawType,
+                                                    std::remove_reference_t<MinusOperator>>::type;
+                                            res = data_type_from_raw_type<TargetType>();
+                                            break;
+                                        }
+                                        case OperationType::MUL: {
+                                            using TargetType = typename binary_operation_promoted_type<
+                                                    typename left_type_info::RawType,
+                                                    typename right_type_info::RawType,
+                                                    std::remove_reference_t<TimesOperator>>::type;
+                                            res = data_type_from_raw_type<TargetType>();
+                                            break;
+                                        }
+                                        case OperationType::DIV: {
+                                            using TargetType = typename binary_operation_promoted_type<
+                                                    typename left_type_info::RawType,
+                                                    typename right_type_info::RawType,
+                                                    std::remove_reference_t<DivideOperator>>::type;
+                                            res = data_type_from_raw_type<TargetType>();
+                                            break;
+                                        }
+                                        case OperationType::POW: {
+                                            if constexpr (!is_integer_type(right_type_info::data_type)) {
+                                                user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                                                        "POW operator does not support floating point exponents, got "
+                                                        "{}",
+                                                        right_type_info::data_type
+                                                );
+                                            }
 
-                            using TargetType = typename binary_operation_promoted_type<
-                                    typename left_type_info::RawType,
-                                    typename right_type_info::RawType,
-                                    std::remove_reference_t<PowOperator>>::type;
-                            res = data_type_from_raw_type<TargetType>();
-                            break;
-                        }
+                                            using TargetType = typename binary_operation_promoted_type<
+                                                    typename left_type_info::RawType,
+                                                    typename right_type_info::RawType,
+                                                    std::remove_reference_t<PowOperator>>::type;
+                                            res = data_type_from_raw_type<TargetType>();
+                                            break;
+                                        }
 
-                        default:
-                            internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Unexpected binary operator");
-                        }
-                    } else {
-                        user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
-                                "Unexpected data types {} {} input to {}",
-                                left_type_info::data_type,
-                                right_type_info::data_type,
-                                operation_type_
+                                        default:
+                                            internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Unexpected binary operator"
+                                            );
+                                        }
+                                    } else {
+                                        user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                                                "Non-numeric operand provided to binary operation: {}",
+                                                binary_operation_with_types_to_string(
+                                                        operation.left_->label_,
+                                                        left_type_info::TDT::type_descriptor(),
+                                                        operation_type_,
+                                                        operation.right_->label_,
+                                                        right_type_info::TDT::type_descriptor()
+                                                )
+                                        );
+                                    }
+                                }
                         );
                     }
-                });
-            });
+            );
             break;
         case OperationType::EQ:
         case OperationType::NE:
@@ -433,10 +447,14 @@ std::variant<BitSetTag, DataType> ExpressionNode::compute(
                             (is_sequence_type(std::get<DataType>(left_type)) &&
                              is_sequence_type(std::get<DataType>(right_type)) &&
                              (operation_type_ == OperationType::EQ || operation_type_ == OperationType::NE)),
-                    "Unexpected data types {} {} input to {}",
-                    std::get<DataType>(left_type),
-                    std::get<DataType>(right_type),
-                    operation_type_
+                    "Invalid comparison {}",
+                    binary_operation_with_types_to_string(
+                            operation.left_->label_,
+                            TypeDescriptor{std::get<DataType>(left_type), Dimension::Dim0},
+                            operation_type_,
+                            operation.right_->label_,
+                            TypeDescriptor{std::get<DataType>(right_type), Dimension::Dim0}
+                    )
             );
             break;
         case OperationType::REGEX_MATCH:
@@ -486,10 +504,11 @@ std::variant<BitSetTag, DataType> ExpressionNode::compute(
                          is_sequence_type(std::get<DataType>(right_type))) ||
                                 (is_numeric_type(std::get<DataType>(left_type)) &&
                                  is_numeric_type(std::get<DataType>(right_type))),
-                        "Unexpected data types {} {} input to {}",
-                        std::get<DataType>(left_type),
-                        std::get<DataType>(right_type),
-                        operation_type_
+                        "Cannot check membership '{}' of {} {} in set of {}",
+                        operation_type_,
+                        operation.left_->label_,
+                        get_user_friendly_type_string(std::get<DataType>(left_type)),
+                        get_user_friendly_type_string(std::get<DataType>(right_type))
                 );
             } // else - Empty value set compatible with all data types
             break;

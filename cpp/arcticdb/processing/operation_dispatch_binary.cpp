@@ -172,4 +172,28 @@ VariantData dispatch_binary(const VariantData& left, const VariantData& right, O
     }
 }
 
+std::string binary_operation_with_types_to_string(
+        std::string_view left, const TypeDescriptor& type_left, OperationType func, std::string_view right,
+        const TypeDescriptor& type_right, bool arguments_reversed
+) {
+    if (arguments_reversed) {
+        return fmt::format(
+                "{} ({}) {} {} ({})",
+                right,
+                get_user_friendly_type_string(type_right),
+                func,
+                left,
+                get_user_friendly_type_string(type_left)
+        );
+    }
+    return fmt::format(
+            "{} ({}) {} {} ({})",
+            left,
+            get_user_friendly_type_string(type_left),
+            func,
+            right,
+            get_user_friendly_type_string(type_right)
+    );
+}
+
 } // namespace arcticdb

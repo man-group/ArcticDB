@@ -159,6 +159,10 @@ struct PipelineContext : public std::enable_shared_from_this<PipelineContext> {
 
     const proto::descriptors::NormalizationMetadata& output_normalization() const;
 
+    /// Number of leading required (index) fields in the output, accounting for multi-index/series normalization.
+    /// Returns the count with no normalization applied when the context carries neither an output schema nor a TSD.
+    uint32_t output_required_fields_count() const;
+
     const ankerl::unordered_dense::map<std::string, Value>& output_default_values() const;
 
     void set_selected_columns(const std::optional<std::vector<std::string>>& columns);
