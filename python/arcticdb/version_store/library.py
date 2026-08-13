@@ -185,8 +185,7 @@ class SymbolDescription(NamedTuple):
 
 class WritePayload:
     """
-    WritePayload is designed to enable batching of multiple operations with an API that mirrors the singular
-    ``write`` API.
+    WritePayload is designed to enable batching of multiple operations with an API that mirrors the singular ``write`` API.
 
     Construction of ``WritePayload`` objects is only required for batch write operations.
 
@@ -239,8 +238,7 @@ class WritePayload:
 
 class WriteMetadataPayload:
     """
-    WriteMetadataPayload is designed to enable batching of multiple operations with an API that mirrors the singular
-    ``write_metadata`` API.
+    WriteMetadataPayload is designed to enable batching of multiple operations with an API that mirrors the singular ``write_metadata`` API.
 
     Construction of ``WriteMetadataPayload`` objects is only required for batch write metadata operations.
 
@@ -272,6 +270,7 @@ class WriteMetadataPayload:
 
 class ReadRequest(NamedTuple):
     """ReadRequest is designed to enable batching of read operations with an API that mirrors the singular ``read`` API.
+
     Therefore, construction of this object is only required for batch read operations.
 
     Attributes
@@ -331,9 +330,9 @@ class ReadRequest(NamedTuple):
 
 
 class ReadInfoRequest(NamedTuple):
-    """ReadInfoRequest is useful for batch methods like read_metadata_batch and get_description_batch, where we
-    only need to specify the symbol and the version information. Therefore, construction of this object is
-    only required for these batch operations.
+    """ReadInfoRequest is useful for batch methods like read_metadata_batch and get_description_batch, where we only need to specify the symbol and the version information.
+
+    Therefore, construction of this object is only required for these batch operations.
 
     Attributes
     ----------
@@ -359,6 +358,7 @@ class ReadInfoRequest(NamedTuple):
 
 class DeleteRequest(NamedTuple):
     """DeleteRequest is designed to enable batching of delete operations with an API that mirrors the singular ``delete`` API.
+
     Therefore, construction of this object is only required for batch delete operations.
 
     Attributes
@@ -383,8 +383,7 @@ class DeleteRequest(NamedTuple):
 
 class UpdatePayload:
     """
-    UpdatePayload is designed to enable batching of multiple operations with an API that mirrors the singular
-    ``update`` API.
+    UpdatePayload is designed to enable batching of multiple operations with an API that mirrors the singular ``update`` API.
 
     Construction of ``UpdatePayload`` objects is only required for batch update operations.
 
@@ -437,6 +436,7 @@ class UpdatePayload:
 class LazyDataFrame(QueryBuilder):
     """
     Lazy dataframe implementation, allowing chains of queries to be added before the read is actually executed.
+
     Returned by `Library.read`, `Library.head`, and `Library.tail` calls when `lazy=True`.
 
     See Also
@@ -544,10 +544,12 @@ class LazyDataFrame(QueryBuilder):
 
 class LazyDataFrameCollection(QueryBuilder):
     """
-    Lazy dataframe implementation for batch operations. Allows the application of chains of queries to be added before
-    the actual reads are performed. Queries applied to this object will be applied to all  the symbols being read.
-    If per-symbol queries are required, split can be used to break this class into a list of `LazyDataFrame` objects.
-    Returned by `Library.read_batch` calls when `lazy=True`.
+    Lazy dataframe implementation for batch operations.
+
+    Allows the application of chains of queries to be added before the actual reads are performed. Queries applied
+    to this object will be applied to all the symbols being read. If per-symbol queries are required, split can be
+    used to break this class into a list of `LazyDataFrame` objects. Returned by `Library.read_batch` calls when
+    `lazy=True`.
 
     See Also
     --------
@@ -954,10 +956,11 @@ class Library:
         index_column: bool = False,
     ) -> StageResult:
         """
-        Similar to ``write`` but the written segments are left in an "incomplete" state, unable to be read until they
-        are finalized. This enables multiple writers to a single symbol - all writing staged data at the same time -
-        with one process able to later finalize all staged data rendering the data readable by clients.
-        To finalize staged data see ``finalize_staged_data`` or ``sort_and_finalize_staged_data``.
+        Similar to ``write`` but the written segments are left in an "incomplete" state, unable to be read until they are finalized.
+
+        This enables multiple writers to a single symbol - all writing staged data at the same time - with one
+        process able to later finalize all staged data rendering the data readable by clients. To finalize staged
+        data see ``finalize_staged_data`` or ``sort_and_finalize_staged_data``.
 
         Check out the [demo notebook](https://docs.arcticdb.io/latest/notebooks/ArcticDB_staged_data_with_tokens/) for more info and examples.
 
@@ -1017,9 +1020,10 @@ class Library:
         recursive_normalizers: bool = None,
     ) -> VersionedItem:
         """
-        Write ``data`` to the specified ``symbol``. If ``symbol`` already exists then a new version will be created to
-        reference the newly written data. For more information on versions see the documentation for the `read`
-        primitive.
+        Write ``data`` to the specified ``symbol``.
+
+        If ``symbol`` already exists then a new version will be created to reference the newly written data. For more
+        information on versions see the documentation for the `read` primitive.
 
         ``data`` must be of a format that can be normalised into Arctic's internal storage structure. Pandas
         DataFrames, Pandas Series and Numpy NDArrays can all be normalised. Normalised data will be split along both the
@@ -1150,8 +1154,9 @@ class Library:
         recursive_normalizers: bool = None,
     ) -> VersionedItem:
         """
-        See `write`. This method differs from `write` only in that ``data`` can be of any type that is serialisable via
-        the Pickle library. There are significant downsides to storing data in this way:
+        This method differs from `write` only in that ``data`` can be of any type that is serialisable via the Pickle library.
+
+        There are significant downsides to storing data in this way:
 
         - Retrieval can only be done in bulk. Calls to `read` will not support `date_range`, `query_builder` or `columns`.
         - The data cannot be updated or appended to via the update and append methods.
@@ -1358,9 +1363,11 @@ class Library:
         compact_data: bool = False,
     ) -> VersionedItem:
         """
-        Appends the given data to the existing, stored data. Append always appends along the index. A new version will
-        be created to reference the newly-appended data. Append only accepts data for which the index of the first
-        row is equal to or greater than the index of the last row in the existing data.
+        Appends the given data to the existing, stored data.
+
+        Append always appends along the index. A new version will be created to reference the newly-appended data.
+        Append only accepts data for which the index of the first row is equal to or greater than the index of the
+        last row in the existing data.
 
         Appends containing differing column sets to the existing data are only possible if the library has been
         configured to support dynamic schemas.
@@ -1463,11 +1470,11 @@ class Library:
         compact_data: bool = False,
     ) -> List[Union[VersionedItem, DataError]]:
         """
-        Append data to multiple symbols in a batch fashion. This is more efficient than making multiple `append` calls in
-        succession as some constant-time operations can be executed only once rather than once for each element of
-        `append_payloads`.
-        Note that this isn't an atomic operation - it's possible for one symbol to be fully written and readable before
-        another symbol.
+        Append data to multiple symbols in a batch fashion.
+
+        This is more efficient than making multiple `append` calls in succession as some constant-time operations can
+        be executed only once rather than once for each element of `append_payloads`. Note that this isn't an atomic
+        operation - it's possible for one symbol to be fully written and readable before another symbol.
 
         Parameters
         ----------
@@ -1529,10 +1536,11 @@ class Library:
         index_column: bool = False,
     ) -> VersionedItem:
         """
-        Overwrites existing symbol data with the contents of ``data``. The entire range between the first and last index
-        entry in ``data`` is replaced in its entirety with the contents of ``data``, adding additional index entries if
-        required. `update` only operates over the outermost index level - this means secondary index rows will be
-        removed if not contained in ``data``.
+        Overwrites existing symbol data with the contents of ``data``.
+
+        The entire range between the first and last index entry in ``data`` is replaced in its entirety with the
+        contents of ``data``, adding additional index entries if required. `update` only operates over the outermost
+        index level - this means secondary index rows will be removed if not contained in ``data``.
 
         Both the existing symbol version and ``data`` must be timeseries-indexed.
 
@@ -1648,8 +1656,9 @@ class Library:
         prune_previous_versions: bool = False,
     ) -> List[Union[VersionedItem, DataError]]:
         """
-        Perform an update operation on a list of symbols in parallel. All constrains on
-        [update](#arcticdb.version_store.library.Library.update) apply to this call as well.
+        Perform an update operation on a list of symbols in parallel.
+
+        All constrains on [update](#arcticdb.version_store.library.Library.update) apply to this call as well.
 
         Parameters
         ----------
@@ -1748,8 +1757,10 @@ class Library:
         stage_results: Optional[List[StageResult]] = None,
     ) -> VersionedItem:
         """
-        Finalizes staged data, making it available for reads. All staged segments must be ordered and non-overlapping.
-        ``finalize_staged_data`` is less time-consuming than ``sort_and_finalize_staged_data``.
+        Finalizes staged data, making it available for reads.
+
+        All staged segments must be ordered and non-overlapping. ``finalize_staged_data`` is less time-consuming than
+        ``sort_and_finalize_staged_data``.
 
         If ``mode`` is ``StagedDataFinalizeMethod.APPEND`` or ``append`` the index of the first row of the new segment must be equal to or greater
         than the index of the last row in the existing data.
@@ -1881,9 +1892,11 @@ class Library:
         stage_results: Optional[List[StageResult]] = None,
     ) -> VersionedItem:
         """
-        Sorts and merges all staged data, making it available for reads. This differs from `finalize_staged_data` in that it
-        can support staged segments with interleaved time periods and staged segments which are not internally sorted. The
-        end result will be sorted. This requires performing a full sort in memory so can be time-consuming.
+        Sorts and merges all staged data, making it available for reads.
+
+        This differs from `finalize_staged_data` in that it can support staged segments with interleaved time periods
+        and staged segments which are not internally sorted. The end result will be sorted. This requires performing
+        a full sort in memory so can be time-consuming.
 
         If ``mode`` is ``StagedDataFinalizeMethod.APPEND`` the index of the first row of the sorted block must be equal to or greater
         than the index of the last row in the existing data.
@@ -2034,8 +2047,9 @@ class Library:
         arrow_string_format_per_column: Optional[Dict[str, Union[ArrowOutputStringFormat, "pa.DataType"]]] = None,
     ) -> Union[VersionedItem, LazyDataFrame]:
         """
-        Read data for the named symbol.  Returns a VersionedItem object with a data and metadata element (as passed into
-        write).
+        Read data for the named symbol.
+
+        Returns a VersionedItem object with a data and metadata element (as passed into write).
 
         Parameters
         ----------
@@ -2355,9 +2369,9 @@ class Library:
         arrow_string_format_per_column: Optional[Dict[str, Union[ArrowOutputStringFormat, "pa.DataType"]]] = None,
     ) -> VersionedItemWithJoin:
         """
-        Reads multiple symbols in a batch, and then joins them together using the first clause in the `query_builder`
-        argument. If there are subsequent clauses in the `query_builder` argument, then these are applied to the joined
-        data.
+        Reads multiple symbols in a batch, and then joins them together using the first clause in the `query_builder` argument.
+
+        If there are subsequent clauses in the `query_builder` argument, then these are applied to the joined data.
 
         Parameters
         ----------
@@ -2485,8 +2499,9 @@ class Library:
 
     def read_metadata(self, symbol: str, as_of: Optional[AsOf] = None) -> VersionedItem:
         """
-        Return the metadata saved for a symbol.  This method is faster than read as it only loads the metadata, not the
-        data itself.
+        Return the metadata saved for a symbol.
+
+        This method is faster than read as it only loads the metadata, not the data itself.
 
         Parameters
         ----------
@@ -2539,8 +2554,9 @@ class Library:
         prune_previous_versions: bool = False,
     ) -> VersionedItem:
         """
-        Write metadata under the specified symbol name to this library. The data will remain unchanged.
-        A new version will be created.
+        Write metadata under the specified symbol name to this library.
+
+        The data will remain unchanged. A new version will be created.
 
         If the symbol is missing, it causes a write with empty data (None, pickled, can't append) and the supplied
         metadata.
@@ -2572,10 +2588,11 @@ class Library:
         prune_previous_versions: bool = False,
     ) -> List[Union[VersionedItem, DataError]]:
         """
-        Write metadata to multiple symbols in a batch fashion. This is more efficient than making multiple `write_metadata` calls
-        in succession as some constant-time operations can be executed only once rather than once for each element of
-        `write_metadata_payloads`.
-        Note that this isn't an atomic operation - it's possible for the metadata for one symbol to be fully written and
+        Write metadata to multiple symbols in a batch fashion.
+
+        This is more efficient than making multiple `write_metadata` calls in succession as some constant-time
+        operations can be executed only once rather than once for each element of `write_metadata_payloads`. Note
+        that this isn't an atomic operation - it's possible for the metadata for one symbol to be fully written and
         readable before another symbol.
 
         See the Metadata section of our online documentation for details about how metadata is persisted and caveats.
@@ -2672,8 +2689,7 @@ class Library:
 
     def delete(self, symbol: str, versions: Optional[Union[int, Iterable[int]]] = None) -> None:
         """
-        Delete all versions of the symbol from the library, unless ``version`` is specified, in which case only those
-        versions are deleted.
+        Delete all versions of the symbol from the library, unless ``version`` is specified, in which case only those versions are deleted.
 
         This may not actually delete the underlying data if a snapshot still references the version. See ``snapshot`` for
         more detail.
@@ -2786,8 +2802,10 @@ class Library:
 
     def delete_snapshot(self, snapshot_name: str) -> None:
         """
-        Delete a named snapshot. This may take time if the given snapshot is the last reference to the underlying
-        symbol(s) as the underlying data will be removed as well.
+        Delete a named snapshot.
+
+        This may take time if the given snapshot is the last reference to the underlying symbol(s) as the underlying
+        data will be removed as well.
 
         Parameters
         ----------
@@ -3184,7 +3202,7 @@ class Library:
 
     def compact_symbol_list(self) -> None:
         """
-        Compact the symbol list cache into a single key in the storage
+        Compact the symbol list cache into a single key in the storage.
 
         Returns
         -------
@@ -3206,8 +3224,7 @@ class Library:
         rows_per_segment: Optional[int] = None,
     ) -> CompactDataInfo:
         """
-        Do a dry run of compact_data, demonstrating what the impact would be of calling compact_data without actually
-        modifying any data on disk.
+        Do a dry run of compact_data, demonstrating what the impact would be of calling compact_data without actually modifying any data on disk.
 
         Parameters
         ----------
@@ -3263,9 +3280,9 @@ class Library:
         prune_previous_versions: bool = False,
     ) -> VersionedItem:
         """
-        Compact the data keys associated with the latest version of a symbol such that the number of rows in each
-        segment is close to rows_per_segment. After compaction, all segments will have a row count within 33% of
-        rows_per_segment.
+        Compact the data keys associated with the latest version of a symbol such that the number of rows in each segment is close to rows_per_segment.
+
+        After compaction, all segments will have a row count within 33% of rows_per_segment.
 
         This operation creates a new version, unless the data is already compacted.
 
@@ -3320,9 +3337,9 @@ class Library:
         prune_previous_versions: bool = False,
     ) -> List[Union[VersionedItem, DataError]]:
         """
-        Compact the data keys associated with the latest versions of a collection of symbols such that the number of
-        rows in each segment is close to rows_per_segment. After compaction, all segments will have a row count within
-        33% of rows_per_segment.
+        Compact the data keys associated with the latest versions of a collection of symbols such that the number of rows in each segment is close to rows_per_segment.
+
+        After compaction, all segments will have a row count within 33% of rows_per_segment.
 
         For each symbol, this operation creates a new version, unless the data for that symbol is already compacted.
 
@@ -3385,8 +3402,9 @@ class Library:
 
     def is_symbol_fragmented(self, symbol: str, segment_size: Optional[int] = None) -> bool:
         """
-        This method has been deprecated and will be removed in a future release. Please use compact_data_explain_plan
-        instead.
+        This method has been deprecated and will be removed in a future release.
+
+        Please use compact_data_explain_plan instead.
 
         Check whether the number of segments that would be reduced by compaction is more than or equal to the
         value specified by the configuration option "SymbolDataCompact.SegmentCount" (defaults to 100).

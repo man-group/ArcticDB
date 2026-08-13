@@ -288,8 +288,9 @@ class ExpressionNode:
 
 def where(condition: Any, left: Any, right: Any) -> ExpressionNode:
     """
-    Ternary operator choosing from the left expression where condition is true, and from the right expression where
-    it is false. Similar to numpy.where, or the Python statement `left if condition else right`.
+    Ternary operator choosing from the left expression where condition is true, and from the right expression where it is false.
+
+    Similar to numpy.where, or the Python statement `left if condition else right`.
 
     Parameters
     ----------
@@ -541,9 +542,10 @@ class QueryBuilder:
 
     def apply(self, name, expr):
         """
-        Apply enables new columns to be created using supported QueryBuilder numeric operations. See the documentation for the
-        QueryBuilder class for more information on supported expressions - any expression valid in a filter is valid when using
-        `apply`.
+        Apply enables new columns to be created using supported QueryBuilder numeric operations.
+
+        See the documentation for the QueryBuilder class for more information on supported expressions - any
+        expression valid in a filter is valid when using `apply`.
 
         Parameters
         ----------
@@ -591,7 +593,9 @@ class QueryBuilder:
 
     def groupby(self, name: str):
         """
-        Group symbol by column name. GroupBy operations must be followed by an aggregation operator. Currently the following five aggregation
+        Group symbol by column name.
+
+        GroupBy operations must be followed by an aggregation operator. Currently the following five aggregation
         operators are supported:
 
         * "mean" - compute the mean of the group
@@ -729,8 +733,10 @@ class QueryBuilder:
         origin: Union[str, pd.Timestamp] = "epoch",
     ):
         """
-        Resample a symbol on the index. The symbol must be datetime indexed. Resample operations must be followed by
-        an aggregation operator. Currently, the following 7 aggregation operators are supported:
+        Resample a symbol on the index.
+
+        The symbol must be datetime indexed. Resample operations must be followed by an aggregation operator.
+        Currently, the following 7 aggregation operators are supported:
 
         * "mean" - compute the mean of the group
         * "sum" - compute the sum of the group
@@ -1032,10 +1038,12 @@ class QueryBuilder:
 
     def date_range(self, date_range: DateRangeInput):
         """
-        DateRange to read data for.  Applicable only for Pandas data with a DateTime index. Returns only the part
-        of the data that falls within the given range. If this is the only processing clause being applied, then the
-        returned data object will use less memory than passing date_range directly as an argument to the read method, at
-         the cost of possibly being slightly slower.
+        DateRange to read data for.
+
+        Applicable only for Pandas data with a DateTime index. Returns only the part of the data that falls
+        within the given range. If this is the only processing clause being applied, then the returned data
+        object will use less memory than passing date_range directly as an argument to the read method, at the
+        cost of possibly being slightly slower.
 
         Parameters
         ----------
@@ -1059,8 +1067,10 @@ class QueryBuilder:
 
     def concat(self, join: str = "outer"):
         """
-        Concatenate a list of symbols together. Should be the first clause in a QueryBuilder provided to either
-        NativeVersionStore.batch_read_and_join or Library.read_batch_and_join.
+        Concatenate a list of symbols together.
+
+        Should be the first clause in a QueryBuilder provided to either NativeVersionStore.batch_read_and_join
+        or Library.read_batch_and_join.
 
         Parameters
         ----------
