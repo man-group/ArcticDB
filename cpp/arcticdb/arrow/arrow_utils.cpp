@@ -498,6 +498,23 @@ std::optional<ArrowMeta::ColumnMeta> generate_column_metadata(const sparrow::arr
         }
         break;
     }
+    case DataType::UTF_DYNAMIC32:
+    case DataType::UTF_DYNAMIC64: {
+        opt_column_meta.emplace();
+        if (array.dictionary().has_value()) {
+            opt_column_meta->set_string_format(proto::descriptors::ArrowStringFormat::CATEGORICAL);
+        } else if (array.data_type() == sparrow::data_type::LARGE_STRING) {
+            opt_column_meta->set_string_format(proto::descriptors::ArrowStringFormat::LARGE_STRING);
+        } else if (array.data_type() == sparrow::data_type::STRING) {
+            opt_column_meta->set_string_format(proto::descriptors::ArrowStringFormat::SMALL_STRING);
+        } else {
+            internal::raise<ErrorCode::E_ASSERTION_FAILURE>(
+                    "Unexpected Arrow data type in generate_column_metadata {}",
+                    sparrow::data_type_to_format(array.data_type())
+            );
+        }
+        break;
+    }
     default:
         break;
     }
@@ -611,12 +628,13 @@ std::pair<std::vector<Column>, entity::StreamDescriptor> record_batches_to_colum
 }
 
 RecordBatchData empty_record_batch_from_descriptor(
-        const entity::StreamDescriptor& stream_desc, const ArrowOutputConfig& arrow_output_config,
+        const entity::StreamDescriptor& stream_desc, ArrowOutputConfig&& arrow_output_config,
         const std::optional<ankerl::unordered_dense::set<std::string_view>>& columns,
         const proto::descriptors::NormalizationMetadata& norm_meta
 ) {
     // The logic here is similar to empty_arrow_array_for_column, but there the string format is dictated by the
     // column's buffers, whereas here we rely on the ArrowOutputConfig
+    modify_arrow_output_config_from_norm_meta(norm_meta, arrow_output_config);
     const auto& default_string_format = arrow_output_config.default_string_format_;
     const auto& per_column_string_format = arrow_output_config.per_column_string_format_;
     sparrow::record_batch record_batch;
@@ -673,6 +691,92 @@ RecordBatchData empty_record_batch_from_descriptor(
     auto struct_array = sparrow::array{record_batch.extract_struct_array()};
     auto [arr, schema] = sparrow::extract_arrow_structures(std::move(struct_array));
     return {arr, schema};
+}
+
+ArrowOutputStringFormat convert_arrow_string_format_enum(
+        const proto::descriptors::ArrowStringFormat& proto_enum, ArrowOutputFormat output_format
+) {
+    switch (proto_enum) {
+    case proto::descriptors::ArrowStringFormat::CATEGORICAL:
+        return ArrowOutputStringFormat::CATEGORICAL;
+    case proto::descriptors::ArrowStringFormat::LARGE_STRING:
+        return ArrowOutputStringFormat::LARGE_STRING;
+    case proto::descriptors::ArrowStringFormat::SMALL_STRING:
+        // Polars doesn't support small string, so map this to large string
+        return output_format == ArrowOutputFormat::POLARS ? ArrowOutputStringFormat::LARGE_STRING
+                                                          : ArrowOutputStringFormat::SMALL_STRING;
+    default:
+        log::version().warn("Unrecognised string format proto, defaulting to large string");
+        return ArrowOutputStringFormat::LARGE_STRING;
+    }
+}
+
+bool check_arrow_config_all_specified(const ArrowOutputConfig& arrow_config) {
+    if (arrow_config.default_string_format_ == ArrowOutputStringFormat::UNSPECIFIED) {
+        return false;
+    } else {
+        return std::ranges::none_of(
+                arrow_config.per_column_string_format_ | std::ranges::views::values,
+                [](ArrowOutputStringFormat per_column_string_format) {
+                    return per_column_string_format == ArrowOutputStringFormat::UNSPECIFIED;
+                }
+        );
+    }
+}
+
+void modify_arrow_output_config_from_norm_meta(
+        const proto::descriptors::NormalizationMetadata& norm_meta, ArrowOutputConfig& arrow_config
+) {
+    if (norm_meta.has_experimental_arrow()) {
+        // Data was written as Arrow. Any ArrowOutputStringFormat::UNSPECIFIED should be taken from the norm meta if
+        // present, and become LARGE_STRING otherwise
+        const auto& columns_norm_meta = norm_meta.experimental_arrow().columns();
+        const auto default_string_format = arrow_config.default_string_format_ == ArrowOutputStringFormat::UNSPECIFIED
+                                                   ? ArrowOutputStringFormat::LARGE_STRING
+                                                   : arrow_config.default_string_format_;
+        for (auto& [col_name, final_string_format] : arrow_config.per_column_string_format_) {
+            if (final_string_format == ArrowOutputStringFormat::UNSPECIFIED) {
+                if (auto it = columns_norm_meta.find(col_name); it != columns_norm_meta.end()) {
+                    const auto& col_meta = it->second;
+                    if (col_meta.has_string_format()) {
+                        final_string_format =
+                                convert_arrow_string_format_enum(col_meta.string_format(), arrow_config.output_format);
+                    } else {
+                        final_string_format = default_string_format;
+                    }
+                } else {
+                    final_string_format = default_string_format;
+                }
+            }
+        }
+        if (arrow_config.default_string_format_ == ArrowOutputStringFormat::UNSPECIFIED) {
+            // The above loop guarantees that no values in the per_column_string_format_ map are now UNSPECIFIED
+            // Add any columns from the norm meta NOT already present in per_column_string_format_
+            for (const auto& [col_name, col_meta] : columns_norm_meta) {
+                if (!arrow_config.per_column_string_format_.contains(col_name) && col_meta.has_string_format()) {
+                    arrow_config.per_column_string_format_[col_name] =
+                            convert_arrow_string_format_enum(col_meta.string_format(), arrow_config.output_format);
+                }
+            }
+            arrow_config.default_string_format_ = ArrowOutputStringFormat::LARGE_STRING;
+        }
+    } else {
+        // Data was not written as Arrow. If the default type is unspecified it should become large string. If a
+        // per-column override is unspecified, it should use the default type
+        if (arrow_config.default_string_format_ == ArrowOutputStringFormat::UNSPECIFIED) {
+            arrow_config.default_string_format_ = ArrowOutputStringFormat::LARGE_STRING;
+        }
+        for (auto& string_format : arrow_config.per_column_string_format_ | std::ranges::views::values) {
+            if (string_format == ArrowOutputStringFormat::UNSPECIFIED) {
+                string_format = arrow_config.default_string_format_;
+            }
+        }
+    }
+    ARCTICDB_DEBUG_CHECK(
+            ErrorCode::E_ASSERTION_FAILURE,
+            check_arrow_config_all_specified(arrow_config),
+            "modify_arrow_output_config_from_norm_meta should never result in UNSPECIFIED output types"
+    );
 }
 
 } // namespace arcticdb

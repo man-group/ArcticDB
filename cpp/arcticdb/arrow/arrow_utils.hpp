@@ -63,9 +63,13 @@ std::pair<std::vector<Column>, entity::StreamDescriptor> record_batches_to_colum
 // - it makes it easy to reuse our normalization metadata handling in the Python layer for things like multiindex
 // - sparrow lacks support for easy construction of ArrowSchema directly without going through record batches anyway
 RecordBatchData empty_record_batch_from_descriptor(
-        const entity::StreamDescriptor& stream_desc, const ArrowOutputConfig& arrow_output_config,
+        const entity::StreamDescriptor& stream_desc, ArrowOutputConfig&& arrow_output_config,
         const std::optional<ankerl::unordered_dense::set<std::string_view>>& columns,
         const proto::descriptors::NormalizationMetadata& norm_meta
+);
+
+void modify_arrow_output_config_from_norm_meta(
+        const proto::descriptors::NormalizationMetadata& norm_meta, ArrowOutputConfig& arrow_config
 );
 
 } // namespace arcticdb

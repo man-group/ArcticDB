@@ -109,6 +109,12 @@ message MsgPackSerialization {
     }
 }
 
+enum ArrowStringFormat {
+    CATEGORICAL = 0;
+    LARGE_STRING = 1;
+    SMALL_STRING = 2;
+}
+
 message NormalizationMetadata {
     /**
     This type represents all the additional info required to reconstruct
@@ -226,7 +232,10 @@ message NormalizationMetadata {
 
     message ExperimentalArrow {
         message ColumnMeta {
+            // Could make these a oneof, as they are mutually exclusive. But there may be other column-specific
+            // metadata in future that is not mutually exclusive, so this is more extensible.
             optional string timezone = 1;
+            optional ArrowStringFormat string_format = 2;
         }
 
         bool has_index = 1;

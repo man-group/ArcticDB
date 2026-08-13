@@ -39,6 +39,7 @@ from arcticdb_ext.version_store import (
     ArrowOutputConfig,
     CompactDataInfo,
     InternalPandasStringFormat,
+    InternalArrowOutputFormat,
     PandasOutputConfig,
     RecordBatchData,
     SortedValue,
@@ -2362,7 +2363,7 @@ class NativeVersionStore:
                     self.resolve_runtime_defaults(
                         "arrow_string_format_default",
                         proto_cfg,
-                        global_default=ArrowOutputStringFormat.LARGE_STRING,
+                        global_default=ArrowOutputStringFormat.UNSPECIFIED,
                         **kwargs,
                     ),
                     output_format,
@@ -2373,6 +2374,11 @@ class NativeVersionStore:
                         "arrow_string_format_per_column", proto_cfg, global_default={}, **kwargs
                     ).items()
                 },
+                (
+                    InternalArrowOutputFormat.POLARS
+                    if output_format.lower() == OutputFormat.POLARS.lower()
+                    else InternalArrowOutputFormat.PYARROW
+                ),
             )
         else:  # Pandas
             string_format = (
@@ -2433,7 +2439,7 @@ class NativeVersionStore:
             read_options_per_symbol.append(read_options)
 
         batch_read_options = _PythonVersionStoreBatchReadOptions(batch_throw_on_error)
-        batch_read_options.set_read_options_per_symbol(read_options_per_symbol)
+        batch_read_options.set_read_options(read_options_per_symbol)
         # output_format is also a batch level setting, because we currently don't support mixed output formats
         output_format = self.resolve_runtime_defaults("output_format", {}, global_default=OutputFormat.PANDAS, **kwargs)
         batch_read_options.set_output_format(output_format_to_internal(output_format))

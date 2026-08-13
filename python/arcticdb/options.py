@@ -240,7 +240,12 @@ class ArrowOutputStringFormat(str, Enum):
     Controls the string column format when using `PYARROW` or `POLARS` output formats.
     Accepts either the enum value or the corresponding `pyarrow.DataType`.
 
-    LARGE_STRING (default):
+    UNSPECIFIED (default):
+        If data was written using an Arrow format, then for each column, use the format that was
+        written. If it was not written using an Arrow format, then it will default to
+        LARGE_STRING.
+
+    LARGE_STRING:
         Uses 64-bit variable-size encoding.
         PyArrow: `pa.large_string()`, Polars: `pl.String`
         Supports up to 2⁶³-1 bytes total string length per Arrow array.
@@ -264,6 +269,7 @@ class ArrowOutputStringFormat(str, Enum):
     https://arrow.apache.org/docs/format/Columnar.html
     """
 
+    UNSPECIFIED = "UNSPECIFIED"
     CATEGORICAL = "CATEGORICAL"
     DICTIONARY_ENCODED = "DICTIONARY_ENCODED"
     LARGE_STRING = "LARGE_STRING"
@@ -296,8 +302,10 @@ def arrow_output_string_format_to_internal(
                 "SMALL_STRING is not supported with POLARS output format. Please use LARGE_STRING instead."
             )
         return InternalArrowOutputStringFormat.SMALL_STRING
+    elif arrow_string_format == ArrowOutputStringFormat.UNSPECIFIED:
+        return InternalArrowOutputStringFormat.UNSPECIFIED
     else:
-        raise ValueError(f"Unkown ArrowOutputStringFormat: {arrow_string_format}")
+        raise ValueError(f"Unknown ArrowOutputStringFormat: {arrow_string_format}")
 
 
 class RuntimeOptions:
@@ -305,7 +313,7 @@ class RuntimeOptions:
         self,
         *,
         output_format: Union[OutputFormat, str] = OutputFormat.PANDAS,
-        arrow_string_format_default: ArrowOutputStringFormat = ArrowOutputStringFormat.LARGE_STRING,
+        arrow_string_format_default: ArrowOutputStringFormat = ArrowOutputStringFormat.UNSPECIFIED,
     ):
         self.output_format = output_format
         self.arrow_string_format_default = arrow_string_format_default

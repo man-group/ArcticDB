@@ -230,11 +230,16 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
     py::enum_<ArrowOutputStringFormat>(version, "InternalArrowOutputStringFormat")
             .value("CATEGORICAL", ArrowOutputStringFormat::CATEGORICAL)
             .value("LARGE_STRING", ArrowOutputStringFormat::LARGE_STRING)
-            .value("SMALL_STRING", ArrowOutputStringFormat::SMALL_STRING);
+            .value("SMALL_STRING", ArrowOutputStringFormat::SMALL_STRING)
+            .value("UNSPECIFIED", ArrowOutputStringFormat::UNSPECIFIED);
 
     py::enum_<PandasStringFormat>(version, "InternalPandasStringFormat")
             .value("OBJECT", PandasStringFormat::OBJECT)
             .value("ARROW_LARGE_STRING", PandasStringFormat::ARROW_LARGE_STRING);
+
+    py::enum_<ArrowOutputFormat>(version, "InternalArrowOutputFormat")
+            .value("PYARROW", ArrowOutputFormat::PYARROW)
+            .value("POLARS", ArrowOutputFormat::POLARS);
 
     py::class_<PandasOutputConfig>(version, "PandasOutputConfig")
             .def(py::init<>())
@@ -247,11 +252,15 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
             .def(py::init<>())
             .def(py::init([](ArrowOutputStringFormat default_string_format,
                              std::unordered_map<std::string, ArrowOutputStringFormat>
-                                     per_column_string_format) {
-                     return ArrowOutputConfig{default_string_format, std::move(per_column_string_format)};
+                                     per_column_string_format,
+                             ArrowOutputFormat output_format) {
+                     return ArrowOutputConfig{
+                             default_string_format, std::move(per_column_string_format), output_format
+                     };
                  }),
-                 py::arg("default_string_format") = ArrowOutputStringFormat::LARGE_STRING,
-                 py::arg("per_column_string_format") = std::unordered_map<std::string, ArrowOutputStringFormat>{});
+                 py::arg("default_string_format") = ArrowOutputStringFormat::UNSPECIFIED,
+                 py::arg("per_column_string_format") = std::unordered_map<std::string, ArrowOutputStringFormat>{},
+                 py::arg("output_format") = ArrowOutputFormat::PYARROW);
 
     py::class_<ReadOptions>(version, "PythonVersionStoreReadOptions")
             .def(py::init())
@@ -268,7 +277,6 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
     py::class_<BatchReadOptions>(version, "PythonVersionStoreBatchReadOptions")
             .def(py::init([](bool batch_throw_on_error) { return BatchReadOptions(batch_throw_on_error); }))
             .def("set_read_options", &BatchReadOptions::set_read_options)
-            .def("set_read_options_per_symbol", &BatchReadOptions::set_read_options_per_symbol)
             .def("set_output_format", &BatchReadOptions::set_output_format)
             .def("set_batch_throw_on_error", &BatchReadOptions::set_batch_throw_on_error)
             .def("at", &BatchReadOptions::at);
@@ -281,8 +289,10 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                 auto handler_data = std::make_shared<std::any>(
                         TypeHandlerRegistry::instance()->get_handler_data(read_options.output_format_for_frame())
                 );
+                // See comment in bindings for read_dataframe_version regarding clone
                 return adapt_read_df(
-                        read_dataframe_from_file(sid, path, read_query, read_options, handler_data), handler_data.get()
+                        read_dataframe_from_file(sid, path, read_query, read_options.clone(), handler_data),
+                        handler_data.get()
                 );
             }
     );
@@ -912,8 +922,14 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                                 std::make_shared<std::any>(TypeHandlerRegistry::instance()->get_handler_data(
                                         read_options.output_format_for_frame()
                                 ));
+                        // ReadOptions copy-ctor is shallow, so passing by copy does not achieve the same thing as the
+                        // clone here. Although ReadOptions are not currently reused in the Python layer, if this
+                        // changed in the future then modifying them in a read call for Arrow string format
+                        // round-tripping would produce counterintuitive behaviour
                         return adapt_read_df(
-                                v.read_dataframe_version(sid, version_query, read_query, read_options, handler_data),
+                                v.read_dataframe_version(
+                                        sid, version_query, read_query, read_options.clone(), handler_data
+                                ),
                                 handler_data.get()
                         );
                     },
@@ -1063,9 +1079,14 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                         auto handler_data = std::make_shared<std::any>(
                                 TypeHandlerRegistry::instance()->get_handler_data(batch_read_options.output_format())
                         );
+                        // See comment in bindings for read_dataframe_version regarding clone
                         return python_util::adapt_read_dfs(
                                 v.batch_read(
-                                        stream_ids, version_queries, read_queries, batch_read_options, handler_data
+                                        stream_ids,
+                                        version_queries,
+                                        read_queries,
+                                        batch_read_options.clone(),
+                                        handler_data
                                 ),
                                 handler_data.get()
                         );
@@ -1111,12 +1132,13 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                         auto handler_data = std::make_shared<std::any>(
                                 TypeHandlerRegistry::instance()->get_handler_data(output_format)
                         );
+                        // See comment in bindings for read_dataframe_version regarding clone
                         return adapt_read_df(
                                 v.batch_read_and_join(
                                         std::make_shared<std::vector<StreamId>>(std::move(stream_ids)),
                                         std::make_shared<std::vector<VersionQuery>>(std::move(version_queries)),
                                         read_queries,
-                                        read_options,
+                                        read_options.clone(),
                                         std::move(_clauses),
                                         handler_data
                                 ),
@@ -1245,10 +1267,6 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
         }
     });
 
-    version.def("write_dataframe_to_file", &write_dataframe_to_file);
-
-    version.def("read_dataframe_from_file", &read_dataframe_from_file);
-
     version.def(
             "_modify_schema",
             [](const std::shared_ptr<PreloadedIndexQuery>& preloaded_index_query,
@@ -1283,8 +1301,9 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                         return std::nullopt;
                     }
                 }();
+                // See comment in bindings for read_dataframe_version regarding clone
                 auto record_batch = empty_record_batch_from_descriptor(
-                        stream_desc, read_options.arrow_output_config(), columns, norm
+                        stream_desc, std::move(read_options.clone().arrow_output_config()), columns, norm
                 );
                 return std::make_pair(std::move(record_batch), python_util::pb_to_python(schema.norm_metadata_));
             }

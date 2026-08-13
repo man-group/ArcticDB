@@ -15,17 +15,22 @@
 
 namespace arcticdb {
 
-enum class ArrowOutputStringFormat : uint8_t { CATEGORICAL, LARGE_STRING, SMALL_STRING };
+enum class ArrowOutputStringFormat : uint8_t { CATEGORICAL, LARGE_STRING, SMALL_STRING, UNSPECIFIED };
 
 enum class PandasStringFormat : uint8_t { OBJECT, ARROW_LARGE_STRING };
+
+enum class ArrowOutputFormat : uint8_t { PYARROW, POLARS };
 
 struct PandasOutputConfig {
     PandasStringFormat default_string_format_ = PandasStringFormat::OBJECT;
 };
 
 struct ArrowOutputConfig {
-    ArrowOutputStringFormat default_string_format_ = ArrowOutputStringFormat::LARGE_STRING;
-    std::unordered_map<std::string, ArrowOutputStringFormat> per_column_string_format_;
+    ArrowOutputStringFormat default_string_format_ = ArrowOutputStringFormat::UNSPECIFIED;
+    std::unordered_map<std::string, ArrowOutputStringFormat> per_column_string_format_ = {};
+    // Needed only for ArrowOutputStringFormat::UNSPECIFIED, as Polars doesn't support SMALL_STRING. When unspecified,
+    // data written as small string will get read back into large string if Polars is the output format
+    ArrowOutputFormat output_format = ArrowOutputFormat::PYARROW;
 };
 
 using OutputConfig = std::variant<PandasOutputConfig, ArrowOutputConfig>;

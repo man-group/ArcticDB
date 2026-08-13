@@ -59,14 +59,14 @@ sparrow::array create_timestamp_array(
     }
 }
 
-TEST(ArrowGenerateColumnMetadata, NonTimestamp) {
+TEST(ArrowGenerateColumnMetadata, NonMetadataType) {
     std::vector<uint8_t> data(10);
     std::iota(data.begin(), data.end(), 0U);
     auto array = create_array(data);
     ASSERT_FALSE(generate_column_metadata(array, DataType::UINT8).has_value());
 }
 
-TEST(ArrowGenerateColumnMetadata, TimezoneNaive) {
+TEST(ArrowGenerateColumnMetadataTimestamp, TimezoneNaive) {
     size_t num_rows = 10;
     auto* data_ptr = reinterpret_cast<timestamp*>(allocate_detachable_memory(num_rows * sizeof(timestamp)));
     std::iota(data_ptr, data_ptr + num_rows, 0UL);
@@ -74,9 +74,10 @@ TEST(ArrowGenerateColumnMetadata, TimezoneNaive) {
     auto opt_column_metadata = generate_column_metadata(array, DataType::NANOSECONDS_UTC64);
     ASSERT_TRUE(opt_column_metadata.has_value());
     ASSERT_FALSE(opt_column_metadata->has_timezone());
+    ASSERT_FALSE(opt_column_metadata->has_string_format());
 }
 
-TEST(ArrowGenerateColumnMetadata, TimezoneAware) {
+TEST(ArrowGenerateColumnMetadataTimestamp, TimezoneAware) {
     size_t num_rows = 10;
     auto* data_ptr = reinterpret_cast<timestamp*>(allocate_detachable_memory(num_rows * sizeof(timestamp)));
     std::iota(data_ptr, data_ptr + num_rows, 0UL);
@@ -87,6 +88,42 @@ TEST(ArrowGenerateColumnMetadata, TimezoneAware) {
     ASSERT_TRUE(opt_column_metadata.has_value());
     ASSERT_TRUE(opt_column_metadata->has_timezone());
     ASSERT_EQ(opt_column_metadata->timezone(), tz_str);
+    ASSERT_FALSE(opt_column_metadata->has_string_format());
+}
+
+TEST(ArrowGenerateColumnMetadataStrings, SmallString) {
+    sparrow::array array{sparrow::string_array{std::vector<std::string>{}}};
+    ASSERT_EQ(array.data_type(), sparrow::data_type::STRING);
+    auto opt_column_metadata = generate_column_metadata(array, DataType::UTF_DYNAMIC32);
+    ASSERT_TRUE(opt_column_metadata.has_value());
+    ASSERT_TRUE(opt_column_metadata->has_string_format());
+    ASSERT_EQ(opt_column_metadata->string_format(), proto::descriptors::ArrowStringFormat::SMALL_STRING);
+    ASSERT_FALSE(opt_column_metadata->has_timezone());
+}
+
+TEST(ArrowGenerateColumnMetadataStrings, LargeString) {
+    sparrow::array array{sparrow::big_string_array{std::vector<std::string>{}}};
+    ASSERT_EQ(array.data_type(), sparrow::data_type::LARGE_STRING);
+    auto opt_column_metadata = generate_column_metadata(array, DataType::UTF_DYNAMIC64);
+    ASSERT_TRUE(opt_column_metadata.has_value());
+    ASSERT_TRUE(opt_column_metadata->has_string_format());
+    ASSERT_EQ(opt_column_metadata->string_format(), proto::descriptors::ArrowStringFormat::LARGE_STRING);
+    ASSERT_FALSE(opt_column_metadata->has_timezone());
+}
+
+TEST(ArrowGenerateColumnMetadataStrings, Categorical) {
+    sparrow::array array{sparrow::dictionary_encoded_array<int32_t>{
+            typename sparrow::dictionary_encoded_array<int32_t>::keys_buffer_type(
+                    sparrow::u8_buffer<int32_t>{nullptr, 0, get_detachable_allocator()}
+            ),
+            sparrow::array{sparrow::big_string_array(std::vector<std::string>{"a"})},
+    }};
+    ASSERT_TRUE(array.is_dictionary());
+    auto opt_column_metadata = generate_column_metadata(array, DataType::UTF_DYNAMIC64);
+    ASSERT_TRUE(opt_column_metadata.has_value());
+    ASSERT_TRUE(opt_column_metadata->has_string_format());
+    ASSERT_EQ(opt_column_metadata->string_format(), proto::descriptors::ArrowStringFormat::CATEGORICAL);
+    ASSERT_FALSE(opt_column_metadata->has_timezone());
 }
 
 template<typename types>
@@ -477,8 +514,9 @@ TEST(ArrowWriteMemoryLifetime, InputFrameKeepsBufferAlive) {
     register_native_handler_data_factory();
     auto handler_data =
             std::make_shared<std::any>(TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE));
+    ReadOptions read_options;
     auto read_result =
-            engine.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, ReadOptions{}, handler_data);
+            engine.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, read_options, handler_data);
     const auto& seg = read_result.root_.frame_and_descriptor_.frame_;
     constexpr auto num_rows = num_record_batches * num_rows_per_record_batch;
     ASSERT_EQ(seg.row_count(), num_rows);

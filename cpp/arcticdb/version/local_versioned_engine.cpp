@@ -471,7 +471,7 @@ VersionIdentifier get_version_identifier(
 
 ReadVersionWithNodesOutput LocalVersionedEngine::read_dataframe_version_internal(
         const StreamId& stream_id, const VersionQuery& version_query, const std::shared_ptr<ReadQuery>& read_query,
-        const ReadOptions& read_options, std::shared_ptr<std::any> handler_data
+        ReadOptions& read_options, std::shared_ptr<std::any> handler_data
 ) {
     py::gil_scoped_release release_gil;
     const auto identifier = util::variant_match(
@@ -1392,7 +1392,7 @@ VersionedItem LocalVersionedEngine::defragment_symbol_data(
 
 std::vector<std::variant<ReadVersionWithNodesOutput, DataError>> LocalVersionedEngine::batch_read_internal(
         const std::vector<StreamId>& stream_ids, const std::vector<VersionQuery>& version_queries,
-        std::vector<std::shared_ptr<ReadQuery>>& read_queries, const BatchReadOptions& batch_read_options,
+        std::vector<std::shared_ptr<ReadQuery>>& read_queries, BatchReadOptions& batch_read_options,
         std::shared_ptr<std::any> handler_data
 ) {
     py::gil_scoped_release release_gil;
@@ -1417,7 +1417,7 @@ std::vector<std::variant<ReadVersionWithNodesOutput, DataError>> LocalVersionedE
                                     read_query =
                                             read_queries.empty() ? std::make_shared<ReadQuery>() : read_queries[idx],
                                     read_options = batch_read_options.at(idx),
-                                    handler_data](auto&& opt_index_key) {
+                                    handler_data](auto&& opt_index_key) mutable {
                             auto version_info = get_version_identifier(
                                     stream_ids[idx],
                                     version_queries[idx],
@@ -1432,7 +1432,7 @@ std::vector<std::variant<ReadVersionWithNodesOutput, DataError>> LocalVersionedE
                                     read_query =
                                             read_queries.empty() ? std::make_shared<ReadQuery>() : read_queries[idx],
                                     read_options = batch_read_options.at(idx),
-                                    handler_data](ReadVersionOutput&& result) {
+                                    handler_data](ReadVersionOutput&& result) mutable {
                             auto& keys = result.frame_and_descriptor_.keys_;
                             if (keys.empty()) {
                                 return folly::makeFuture(ReadVersionWithNodesOutput{std::move(result), {}});
@@ -1517,7 +1517,7 @@ std::shared_ptr<PipelineContext> setup_join_pipeline_context(
 
 MultiSymbolReadOutput LocalVersionedEngine::batch_read_and_join_internal(
         std::shared_ptr<std::vector<StreamId>> stream_ids, std::shared_ptr<std::vector<VersionQuery>> version_queries,
-        std::vector<std::shared_ptr<ReadQuery>>& read_queries, const ReadOptions& read_options,
+        std::vector<std::shared_ptr<ReadQuery>>& read_queries, ReadOptions& read_options,
         std::vector<std::shared_ptr<Clause>>&& clauses, std::shared_ptr<std::any> handler_data
 ) {
     py::gil_scoped_release release_gil;

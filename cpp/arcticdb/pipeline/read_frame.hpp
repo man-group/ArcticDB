@@ -19,7 +19,7 @@ namespace arcticdb::pipelines {
 
 struct ReadQuery;
 
-SegmentInMemory allocate_frame(const std::shared_ptr<PipelineContext>& context, const ReadOptions& read_options);
+SegmentInMemory allocate_frame(const std::shared_ptr<PipelineContext>& context, ReadOptions& read_options);
 
 template<typename KeySliceContainer>
 std::optional<util::BitSet> check_and_mark_slices(

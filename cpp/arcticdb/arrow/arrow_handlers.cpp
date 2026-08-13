@@ -388,6 +388,8 @@ void ArrowStringHandler::convert_type(
     case ArrowOutputStringFormat::SMALL_STRING:
         encode_variable_length<int32_t>(source_column, dest_column, mapping, string_pool);
         break;
+    case ArrowOutputStringFormat::UNSPECIFIED:
+        util::raise_rte("ArrowStringHandler::convert_type should never be called with unspecified string format");
     }
 }
 
@@ -402,9 +404,13 @@ std::pair<TypeDescriptor, DetachableBlockConfig> ArrowStringHandler::output_type
         return {make_scalar_type(DataType::UTF_DYNAMIC64), detachable_block_config::Regular{sizeof(int64_t)}};
     case ArrowOutputStringFormat::SMALL_STRING:
         return {make_scalar_type(DataType::UTF_DYNAMIC32), detachable_block_config::Regular{sizeof(int32_t)}};
-    default:
-        util::raise_rte("Unknown arrow string output format {}", static_cast<int32_t>(string_format));
+    case ArrowOutputStringFormat::UNSPECIFIED:
+        util::raise_rte(
+                "ArrowStringHandler::output_type_and_block_config should never be called with unspecified string format"
+        );
     }
+    // Avoid control reaches end of non-void function style compilation errors
+    return {};
 }
 
 void ArrowStringHandler::default_initialize(

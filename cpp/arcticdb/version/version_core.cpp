@@ -811,7 +811,7 @@ folly::Future<AtomKey> async_write_metadata_impl(
 }
 
 folly::Future<ReadVersionOutput> read_multi_key(
-        const std::shared_ptr<Store>& store, const ReadOptions& read_options, const SegmentInMemory& index_key_seg,
+        const std::shared_ptr<Store>& store, ReadOptions& read_options, const SegmentInMemory& index_key_seg,
         std::shared_ptr<std::any> handler_data, AtomKey&& key
 ) {
     std::vector<AtomKey> keys;
@@ -1961,7 +1961,7 @@ folly::Future<folly::Unit> copy_segments_to_frame(
 
 folly::Future<SegmentInMemory> prepare_output_frame(
         std::vector<SliceAndKey>&& items, const std::shared_ptr<PipelineContext>& pipeline_context,
-        const std::shared_ptr<Store>& store, const ReadOptions& read_options, std::shared_ptr<std::any> handler_data
+        const std::shared_ptr<Store>& store, ReadOptions& read_options, std::shared_ptr<std::any> handler_data
 ) {
     pipeline_context->clear_vectors();
     pipeline_context->slice_and_keys_ = std::move(items);
@@ -2218,16 +2218,17 @@ ColumnStats get_column_stats_info_impl(const std::shared_ptr<Store>& store, cons
 }
 
 folly::Future<SegmentInMemory> do_direct_read_or_process(
-        const std::shared_ptr<Store>& store, const std::shared_ptr<ReadQuery>& read_query,
-        const ReadOptions& read_options, const std::shared_ptr<PipelineContext>& pipeline_context,
-        const DecodePathData& shared_data, std::shared_ptr<std::any> handler_data
+        const std::shared_ptr<Store>& store, const std::shared_ptr<ReadQuery>& read_query, ReadOptions& read_options,
+        const std::shared_ptr<PipelineContext>& pipeline_context, const DecodePathData& shared_data,
+        std::shared_ptr<std::any> handler_data
 ) {
     const bool direct_read = read_query->clauses_.empty();
     if (!direct_read) {
         ARCTICDB_SAMPLE(RunPipelineAndOutput, 0)
         util::check_rte(!pipeline_context->is_pickled(), "Cannot filter pickled data");
         return read_process_and_collect(store, pipeline_context, read_query, read_options)
-                .thenValue([store, pipeline_context, read_options, handler_data](std::vector<SliceAndKey>&& segs) {
+                .thenValue([store, pipeline_context, read_options, handler_data](std::vector<SliceAndKey>&& segs
+                           ) mutable {
                     return prepare_output_frame(std::move(segs), pipeline_context, store, read_options, handler_data);
                 });
     } else {
@@ -2931,8 +2932,7 @@ VersionedItem generate_result_versioned_item(const VersionIdentifier& version_in
 
 folly::Future<ReadVersionOutput> read_frame_for_version(
         const std::shared_ptr<Store>& store, const VersionIdentifier& version_info,
-        const std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options,
-        std::shared_ptr<std::any> handler_data
+        const std::shared_ptr<ReadQuery>& read_query, ReadOptions& read_options, std::shared_ptr<std::any> handler_data
 ) {
     auto start_pipeline = [store, read_query, read_options, handler_data](VersionIdentifier&& resolved_version) {
         auto res_versioned_item = generate_result_versioned_item(resolved_version);
@@ -2942,13 +2942,12 @@ folly::Future<ReadVersionOutput> read_frame_for_version(
                 .via(&async::cpu_executor())
                 .thenValue([store,
                             read_query,
-                            read_options = read_options,
+                            read_options,
                             res_versioned_item = std::move(res_versioned_item),
                             handler_data](auto&& pipeline_context) mutable {
                     // TODO: Handle ndarray data when requesting ARROW output
                     if (pipeline_context->has_normalization() && pipeline_context->normalization().has_np() &&
                         read_options.output_format_for_frame() == OutputFormat::PANDAS) {
-                        read_options = read_options.clone();
                         // We can't have arrow strings for ndarray data (that is not a dataframe), so we force it as
                         // object
                         read_options.set_output_config(PandasOutputConfig{PandasStringFormat::OBJECT});
