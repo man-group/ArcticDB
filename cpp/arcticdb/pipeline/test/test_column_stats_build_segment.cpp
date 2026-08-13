@@ -7,9 +7,15 @@
  */
 
 #include <gtest/gtest.h>
+#include <gmock/gmock.h>
 #include <arcticdb/entity/type_utils.hpp>
+#include <arcticdb/entity/stream_descriptor.hpp>
 #include <arcticdb/pipeline/column_stats.hpp>
+#include <arcticdb/pipeline/frame_slice.hpp>
 #include <google/protobuf/any.pb.h>
+
+#include <algorithm>
+#include <unordered_set>
 
 namespace arcticdb {
 
@@ -22,8 +28,8 @@ ColumnStatValue min_stat(T value, DataType data_type, const char* name = "v1_MIN
     return ColumnStatValue{name, ColumnStatTypeInternal::MIN_V1, price_data_col_offset, Value{value, data_type}};
 }
 
-ColumnStatsComponent component(uint64_t start_row, uint64_t end_row, std::vector<ColumnStatValue> stats) {
-    return ColumnStatsComponent{start_row, end_row, std::move(stats)};
+ColumnStatsRow component(uint64_t start_row, uint64_t end_row, std::vector<ColumnStatValue> stats) {
+    return ColumnStatsRow{start_row, end_row, std::move(stats)};
 }
 
 position_t column_index(const SegmentInMemory& seg, std::string_view name) {
@@ -31,14 +37,53 @@ position_t column_index(const SegmentInMemory& seg, std::string_view name) {
     EXPECT_TRUE(idx.has_value()) << "column " << name << " missing";
     return static_cast<position_t>(*idx);
 }
+
+StreamDescriptor make_descriptor(DataType price_type = DataType::INT64, DataType volume_type = DataType::UINT64) {
+    StreamDescriptor desc{"sym"};
+    desc.add_scalar_field(DataType::UINT64, "index");
+    desc.add_scalar_field(price_type, "price");
+    desc.add_scalar_field(volume_type, "volume");
+    return desc;
+}
+
+bool stat_values_equal(const ColumnStatValue& left, const ColumnStatValue& right) {
+    return left.segment_column_name == right.segment_column_name && left.type == right.type &&
+           left.data_col_offset == right.data_col_offset && left.value == right.value;
+}
+
+// Stat order within a component reflects protobuf map iteration order over stats_by_column, which
+// is unspecified, so comparisons sort by segment_column_name first.
+void expect_components_equal(std::vector<ColumnStatsRow> actual, std::vector<ColumnStatsRow> expected) {
+    auto by_name = [](const ColumnStatValue& l, const ColumnStatValue& r) {
+        return l.segment_column_name < r.segment_column_name;
+    };
+    for (auto& c : actual) {
+        std::sort(c.stats.begin(), c.stats.end(), by_name);
+    }
+    for (auto& c : expected) {
+        std::sort(c.stats.begin(), c.stats.end(), by_name);
+    }
+    ASSERT_EQ(actual.size(), expected.size());
+    for (size_t i = 0; i < actual.size(); ++i) {
+        EXPECT_EQ(actual.at(i).start_row, expected.at(i).start_row) << "component " << i;
+        EXPECT_EQ(actual.at(i).end_row, expected.at(i).end_row) << "component " << i;
+        ASSERT_EQ(actual.at(i).stats.size(), expected.at(i).stats.size()) << "component " << i;
+        for (size_t j = 0; j < actual.at(i).stats.size(); ++j) {
+            EXPECT_TRUE(stat_values_equal(actual.at(i).stats.at(j), expected.at(i).stats.at(j)))
+                    << "component " << i << " stat " << j;
+        }
+    }
+}
 } // namespace
 
 TEST(ColumnStatsBuildSegmentTest, IndexColumnsAndRowOrder) {
+    auto desc = make_descriptor();
     // Deliberately out of index order
     auto seg = build_column_stats_segment(
             {component(300, 399, {min_stat<int64_t>(3, DataType::INT64)}),
              component(100, 199, {min_stat<int64_t>(1, DataType::INT64)}),
-             component(200, 299, {min_stat<int64_t>(2, DataType::INT64)})}
+             component(200, 299, {min_stat<int64_t>(2, DataType::INT64)})},
+            desc
     );
 
     ASSERT_EQ(seg.row_count(), 3);
@@ -54,23 +99,27 @@ TEST(ColumnStatsBuildSegmentTest, IndexColumnsAndRowOrder) {
 }
 
 TEST(ColumnStatsBuildSegmentTest, HeaderOffsetsMatchColumnPositions) {
-    auto seg = build_column_stats_segment({component(
-            100,
-            199,
-            {min_stat<int64_t>(1, DataType::INT64),
-             ColumnStatValue{
-                     "v1_MAX(price)",
-                     ColumnStatTypeInternal::MAX_V1,
-                     price_data_col_offset,
-                     Value{int64_t{9}, DataType::INT64}
-             },
-             ColumnStatValue{
-                     "v1_MIN(volume)",
-                     ColumnStatTypeInternal::MIN_V1,
-                     volume_data_col_offset,
-                     Value{uint64_t{5}, DataType::UINT64}
-             }}
-    )});
+    auto desc = make_descriptor();
+    auto seg = build_column_stats_segment(
+            {component(
+                    100,
+                    199,
+                    {min_stat<int64_t>(1, DataType::INT64),
+                     ColumnStatValue{
+                             "v1_MAX(price)",
+                             ColumnStatTypeInternal::MAX_V1,
+                             price_data_col_offset,
+                             Value{int64_t{9}, DataType::INT64}
+                     },
+                     ColumnStatValue{
+                             "v1_MIN(volume)",
+                             ColumnStatTypeInternal::MIN_V1,
+                             volume_data_col_offset,
+                             Value{uint64_t{5}, DataType::UINT64}
+                     }}
+            )},
+            desc
+    );
 
     ASSERT_TRUE(seg.metadata());
     arcticc::pb2::column_stats_pb2::ColumnStatsHeader header;
@@ -96,58 +145,46 @@ TEST(ColumnStatsBuildSegmentTest, HeaderOffsetsMatchColumnPositions) {
     EXPECT_EQ(entries, 3);
 }
 
-// Dynamic schema can give a different type per row slice for the same stat. The column must widen
-// to the common type and every value must survive the cast.
-TEST(ColumnStatsBuildSegmentTest, WidensToCommonTypeUnsignedIntegers) {
-    auto seg = build_column_stats_segment(
-            {component(100, 199, {min_stat<uint8_t>(7, DataType::UINT8)}),
-             component(200, 299, {min_stat<uint16_t>(1000, DataType::UINT16)})}
-    );
-
-    const auto col = column_index(seg, "v1_MIN(price)");
-    const auto expected_type =
-            has_valid_common_type(make_scalar_type(DataType::UINT8), make_scalar_type(DataType::UINT16));
-    ASSERT_TRUE(expected_type.has_value());
-    EXPECT_EQ(seg.column(col).type(), *expected_type);
-    EXPECT_EQ(seg.scalar_at<uint16_t>(0, col), 7);
-    EXPECT_EQ(seg.scalar_at<uint16_t>(1, col), 1000);
-}
-
-TEST(ColumnStatsBuildSegmentTest, WidensToCommonTypeMixedSignIntegers) {
-    auto seg = build_column_stats_segment(
-            {component(100, 199, {min_stat<uint16_t>(1000, DataType::UINT16)}),
-             component(200, 299, {min_stat<int32_t>(-1002, DataType::INT32)})}
-    );
-
-    const auto col = column_index(seg, "v1_MIN(price)");
-    const auto expected_type =
-            has_valid_common_type(make_scalar_type(DataType::UINT16), make_scalar_type(DataType::INT32));
-    ASSERT_TRUE(expected_type.has_value());
-    EXPECT_EQ(seg.column(col).type(), *expected_type);
-    EXPECT_EQ(seg.scalar_at<int32_t>(0, col), 1000);
-    EXPECT_EQ(seg.scalar_at<int32_t>(1, col), -1002);
-}
-
-TEST(ColumnStatsBuildSegmentTest, WidensToCommonTypeFloats) {
-    auto seg = build_column_stats_segment(
-            {component(100, 199, {min_stat<float>(1.5F, DataType::FLOAT32)}),
-             component(200, 299, {min_stat<double>(2.25, DataType::FLOAT64)})}
-    );
-
-    const auto col = column_index(seg, "v1_MIN(price)");
-    EXPECT_EQ(seg.column(col).type(), make_scalar_type(DataType::FLOAT64));
-    EXPECT_EQ(seg.scalar_at<double>(0, col), 1.5);
-    EXPECT_EQ(seg.scalar_at<double>(1, col), 2.25);
+// The descriptor decides the stat column's on-disk type, not the row slices contributing to this
+// particular create — otherwise a partial create over a subset of slices could write a narrower
+// type than a whole-symbol create, making the on-disk type depend on creation order.
+TEST(ColumnStatsBuildSegmentTest, StatColumnTypeComesFromDescriptor) {
+    {
+        auto desc = make_descriptor(DataType::UINT16);
+        auto seg = build_column_stats_segment(
+                {component(100, 199, {min_stat<uint8_t>(7, DataType::UINT8)}),
+                 component(200, 299, {min_stat<uint16_t>(1000, DataType::UINT16)})},
+                desc
+        );
+        const auto col = column_index(seg, "v1_MIN(price)");
+        EXPECT_EQ(seg.column(col).type(), make_scalar_type(DataType::UINT16));
+        EXPECT_EQ(seg.scalar_at<uint16_t>(0, col), 7);
+        EXPECT_EQ(seg.scalar_at<uint16_t>(1, col), 1000);
+    }
+    {
+        auto desc = make_descriptor(DataType::INT32);
+        auto seg = build_column_stats_segment(
+                {component(100, 199, {min_stat<uint16_t>(1000, DataType::UINT16)}),
+                 component(200, 299, {min_stat<int16_t>(-1002, DataType::INT16)})},
+                desc
+        );
+        const auto col = column_index(seg, "v1_MIN(price)");
+        EXPECT_EQ(seg.column(col).type(), make_scalar_type(DataType::INT32));
+        EXPECT_EQ(seg.scalar_at<int32_t>(0, col), 1000);
+        EXPECT_EQ(seg.scalar_at<int32_t>(1, col), -1002);
+    }
 }
 
 // A stat missing from some row slices stays sparse, with the absent rows marked absent rather than
 // shifting the values of the rows that do have it.
 TEST(ColumnStatsBuildSegmentTest, StatAbsentFromSomeComponentsIsSparse) {
+    auto desc = make_descriptor();
     auto seg = build_column_stats_segment(
             {component(100, 199, {min_stat<int64_t>(11, DataType::INT64)}),
              component(200, 299, {}),
              component(300, 399, {min_stat<int64_t>(33, DataType::INT64)}),
-             component(400, 499, {})}
+             component(400, 499, {})},
+            desc
     );
 
     ASSERT_EQ(seg.row_count(), 4);
@@ -162,18 +199,100 @@ TEST(ColumnStatsBuildSegmentTest, StatAbsentFromSomeComponentsIsSparse) {
     EXPECT_EQ(seg.scalar_at<uint64_t>(3, 1), 499);
 }
 
-TEST(ColumnStatsBuildSegmentTest, NoCommonTypeRaises) {
+TEST(ColumnStatsBuildSegmentTest, DuplicateRowRangeRaises) {
+    auto desc = make_descriptor();
     EXPECT_THROW(
             build_column_stats_segment(
-                    {component(100, 199, {min_stat<uint64_t>(1, DataType::UINT64)}),
-                     component(200, 299, {min_stat<int64_t>(-1, DataType::INT64)})}
+                    {component(100, 199, {min_stat<int64_t>(1, DataType::INT64)}),
+                     component(100, 199, {min_stat<int64_t>(2, DataType::INT64)})},
+                    desc
             ),
             InternalException
     );
 }
 
+TEST(ColumnStatsBuildSegmentTest, NonMonotonicRowRangeRaises) {
+    auto desc = make_descriptor();
+    EXPECT_THROW(
+            build_column_stats_segment(
+                    {component(0, 5, {min_stat<int64_t>(1, DataType::INT64)}),
+                     component(0, 3, {min_stat<int64_t>(2, DataType::INT64)})},
+                    desc
+            ),
+            InternalException
+    );
+}
+
+TEST(ColumnStatsBuildSegmentTest, DataColOffsetOutOfRangeRaises) {
+    auto desc = make_descriptor();
+    EXPECT_THROW(build_column_stats_segment(
+            {component(
+                    100,
+                    199,
+                    {ColumnStatValue{
+                            "v1_MIN(bogus)", ColumnStatTypeInternal::MIN_V1, 999, Value{int64_t{1}, DataType::INT64}
+                    }}
+            )},
+            desc
+    ), InternalException);
+}
+
 TEST(ColumnStatsBuildSegmentTest, EmptyComponentsRaises) {
-    EXPECT_THROW(build_column_stats_segment({}), InternalException);
+    auto desc = make_descriptor();
+    EXPECT_THROW(build_column_stats_segment({}, desc), InternalException);
+}
+
+TEST(ColumnStatsBuildSegmentTest, RoundTripsSingleTypeComponents) {
+    auto desc = make_descriptor();
+    std::vector components{
+            component(100, 199, {min_stat<int64_t>(11, DataType::INT64)}),
+            component(200, 299, {}),
+            component(300, 399, {min_stat<int64_t>(33, DataType::INT64)}),
+            component(400, 499, {})
+    };
+    auto expected = components;
+    auto seg = build_column_stats_segment(std::move(components), desc);
+    auto decoded = decode_column_stats_segment(seg);
+    expect_components_equal(std::move(decoded), std::move(expected));
+}
+
+TEST(ColumnStatsBuildSegmentTest, EmptySegmentDecodesToNoComponents) {
+    SegmentInMemory empty_seg;
+    EXPECT_TRUE(decode_column_stats_segment(empty_seg).empty());
+}
+
+TEST(ColumnStatsBuildSegmentTest, FutureHeaderVersionRaises) {
+    auto desc = make_descriptor();
+    auto seg = build_column_stats_segment({component(100, 199, {min_stat<int64_t>(1, DataType::INT64)})}, desc);
+
+    arcticc::pb2::column_stats_pb2::ColumnStatsHeader header;
+    ASSERT_TRUE(seg.metadata()->UnpackTo(&header));
+    header.set_version(99);
+    google::protobuf::Any any;
+    ASSERT_TRUE(any.PackFrom(header));
+    seg.reset_metadata();
+    seg.set_metadata(std::move(any));
+
+    EXPECT_THROW(decode_column_stats_segment(seg), InternalException);
+}
+
+TEST(ColumnStatsBuildSegmentTest, HeaderOffsetOutOfRangeRaises) {
+    auto desc = make_descriptor();
+    auto seg = build_column_stats_segment({component(100, 199, {min_stat<int64_t>(1, DataType::INT64)})}, desc);
+
+    arcticc::pb2::column_stats_pb2::ColumnStatsHeader header;
+    ASSERT_TRUE(seg.metadata()->UnpackTo(&header));
+    for (auto& [data_col_offset, entry_list] : *header.mutable_stats_by_column()) {
+        for (auto& entry : *entry_list.mutable_entries()) {
+            entry.set_stats_seg_offset(999);
+        }
+    }
+    google::protobuf::Any any;
+    ASSERT_TRUE(any.PackFrom(header));
+    seg.reset_metadata();
+    seg.set_metadata(std::move(any));
+
+    EXPECT_THROW(decode_column_stats_segment(seg), InternalException);
 }
 
 } // namespace arcticdb

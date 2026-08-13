@@ -830,7 +830,7 @@ std::vector<EntityId> ColumnStatsGenerationClause::process(std::vector<EntityId>
                     std::holds_alternative<NumericIndex>(proc.atom_keys_->at(0)->end_index()),
             "Cannot build column stats over string-indexed symbol"
     );
-    ColumnStatsComponent component{.start_row = row_range.first, .end_row = row_range.second, .stats = {}};
+    ColumnStatsRow component{.start_row = row_range.first, .end_row = row_range.second, .stats = {}};
     for (const auto& agg_data : folly::enumerate(aggregators_data)) {
         auto finalized = agg_data->finalize(column_stats_aggregators_->at(agg_data.index).get_output_column_names());
         component.stats.insert(

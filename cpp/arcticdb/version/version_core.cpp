@@ -2026,17 +2026,29 @@ AtomKey index_key_to_column_stats_key(const IndexTypeKey& index_key) {
 }
 
 void create_column_stats_impl(
-        const std::shared_ptr<Store>& store, const VersionedItem& versioned_item, const ReadOptions& read_options
+        const std::shared_ptr<Store>& store, const VersionedItem& versioned_item, const ReadOptions& read_options,
+        const std::optional<IndexRange>& date_range, const std::optional<SignedRowRange>& row_range
 ) {
     using namespace arcticdb::pipelines;
     auto column_stats_key = index_key_to_column_stats_key(versioned_item.key_);
+    const bool range_given = date_range.has_value() || row_range.has_value();
+
     auto index_future = store->read(versioned_item.key_);
+    std::optional<folly::Future<std::pair<VariantKey, SegmentInMemory>>> column_stats_future;
+    if (range_given) {
+        storage::ReadKeyOpts stats_read_opts{.dont_warn_about_missing_key = true};
+        column_stats_future = store->read(column_stats_key, stats_read_opts);
+    }
 
-    storage::ReadKeyOpts stats_read_opts{.dont_warn_about_missing_key = true};
-    auto column_stats_future = store->read_metadata(column_stats_key, stats_read_opts);
-
-    auto [index_try, column_stats_try] =
-            folly::collectAll(std::move(index_future), std::move(column_stats_future)).get();
+    folly::Try<std::pair<VariantKey, SegmentInMemory>> index_try;
+    std::optional<folly::Try<std::pair<VariantKey, SegmentInMemory>>> column_stats_try;
+    if (column_stats_future) {
+        auto [idx_try, stats_try] = folly::collectAll(std::move(index_future), std::move(*column_stats_future)).get();
+        index_try = std::move(idx_try);
+        column_stats_try = std::move(stats_try);
+    } else {
+        index_try = std::move(index_future).getTry();
+    }
 
     if (index_try.hasException()) {
         throw storage::NoDataFoundException(fmt::format(
@@ -2060,32 +2072,17 @@ void create_column_stats_impl(
                     arcticdb::proto::descriptors::NormalizationMetadata::InputTypeCase::kMsgPackFrame,
             "Cannot create column stats on pickled data"
     );
+    user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+            !(date_range.has_value() && row_range.has_value()), "Date range and row range both specified"
+    );
+    user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+            !date_range.has_value() || tsd.index().type() == IndexDescriptor::Type::TIMESTAMP,
+            "date_range is only supported for timestamp-indexed symbols when creating column stats"
+    );
 
     ColumnStats column_stats{tsd};
     if (column_stats.empty()) {
         return;
-    }
-
-    std::optional<google::protobuf::Any> old_metadata;
-    if (!column_stats_try.hasException()) {
-        old_metadata = std::move(column_stats_try.value().second);
-    }
-
-    if (old_metadata) {
-        arcticc::pb2::column_stats_pb2::ColumnStatsHeader old_header;
-        bool unpacked = old_metadata->UnpackTo(&old_header);
-        util::check(
-                unpacked,
-                "Could not unpack metadata of old_header in create_column_stats_impl? key={}",
-                column_stats_key
-        );
-        // The stats we would have to compute that do not already exist. The whole segment is
-        // rewritten below, so this only decides whether there is any work to do at all.
-        ColumnStats outstanding = column_stats;
-        outstanding.drop(ColumnStats{old_header, tsd}, false);
-        if (outstanding.empty()) {
-            return;
-        }
     }
 
     auto clause = column_stats.clause();
@@ -2094,23 +2091,53 @@ void create_column_stats_impl(
         return;
     }
 
+    std::vector<ColumnStatsRow> old_components;
+    if (column_stats_try) {
+        if (column_stats_try->hasException<storage::KeyNotFoundException>()) {
+            // no stats yet, nothing to preserve
+        } else {
+            column_stats_try->throwUnlessValue();
+            old_components = decode_column_stats_segment(column_stats_try->value().second);
+        }
+    }
+
     auto pipeline_context = std::make_shared<PipelineContext>();
     pipeline_context->stream_id_ = versioned_item.key_.id();
     auto read_query = std::make_shared<ReadQuery>(std::vector{std::make_shared<Clause>(std::move(*clause))});
+    read_query->row_range = row_range;
+    if (date_range) {
+        read_query->row_filter = *date_range;
+    }
     read_indexed_keys_to_pipeline(pipeline_context, *read_query, read_options, index_info);
+
+    // Now pipeline_context->slice_and_keys_ contains all the slices that have any intersection with the requested range and we're
+    // about to recalculate them. So drop them from old_components.
+    // Our end result will be the union of old_components and the recalculated stats so this exercise is to avoid duplicate rows.
+    std::unordered_set<RowRange, RowRange::Hasher> in_range;
+    for (const auto& sk : pipeline_context->slice_and_keys_) {
+        in_range.insert(sk.slice().rows());
+    }
+    std::erase_if(old_components, [&in_range](const ColumnStatsRow& c) {
+        return in_range.contains(RowRange{c.start_row, c.end_row});
+    });
 
     auto component_manager = std::make_shared<ComponentManager>();
     read_and_schedule_processing(store, pipeline_context, read_query, read_options, component_manager).get();
 
-    std::vector<ColumnStatsComponent> components;
-    component_manager->process_entities([&components](const ColumnStatsComponent& component) {
+    std::vector<ColumnStatsRow> components;
+    component_manager->process_entities([&components](const ColumnStatsRow& component) {
         components.emplace_back(component);
     });
     if (components.empty()) {
         return;
     }
 
-    SegmentInMemory new_segment = build_column_stats_segment(std::move(components));
+    components.insert(
+            components.end(),
+            std::make_move_iterator(old_components.begin()),
+            std::make_move_iterator(old_components.end())
+    );
+    SegmentInMemory new_segment = build_column_stats_segment(std::move(components), pipeline_context->descriptor());
     util::check(new_segment.metadata(), "new_segment should always have metadata");
     new_segment.descriptor().set_id(versioned_item.key_.id());
 

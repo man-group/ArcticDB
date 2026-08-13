@@ -19,7 +19,7 @@ from polars.testing import assert_frame_equal as pl_assert_frame_equal
 from arcticc.pb2.column_stats_pb2 import ColumnStatsHeader, ColumnStatsType
 from google.protobuf.any_pb2 import Any as ProtobufAny
 
-from arcticdb_ext.exceptions import SchemaException, StorageException, UserInputException
+from arcticdb_ext.exceptions import SchemaException, SortingException, StorageException, UserInputException
 from arcticdb_ext.storage import KeyType
 from arcticdb_ext.version_store import NoSuchVersionException
 from arcticdb import QueryBuilder
@@ -69,7 +69,7 @@ def generate_symbol(lib, sym):
     )
 
 
-def assert_stats_equal(received, expected):
+def assert_stats_equal(received, expected, check_dtypes=False):
     assert isinstance(received, pa.Table)
     assert isinstance(expected, pl.DataFrame)
     received_pl = pl.from_arrow(received)
@@ -79,7 +79,7 @@ def assert_stats_equal(received, expected):
     missing = set(expected.columns) - set(received_pl.columns)
     assert not missing, f"Expected columns missing from received: {missing}"
     received_pl = received_pl.select(expected.columns)
-    pl_assert_frame_equal(received_pl, expected, check_column_order=False, check_dtypes=False)
+    pl_assert_frame_equal(received_pl, expected, check_column_order=False, check_dtypes=check_dtypes)
 
 
 def test_column_stats_basic_flow(version_store_factory, lib_name, encoding_version, any_output_format):
@@ -166,24 +166,6 @@ def test_column_stats_nan_values(lmdb_version_store, any_output_format):
     assert_stats_equal(column_stats, expected_column_stats)
 
 
-def test_column_stats_only_nan_values(lmdb_version_store, any_output_format):
-    lib = lmdb_version_store
-    lib._set_output_format_for_pipeline_tests(any_output_format)
-    sym = "test_column_stats_nan_values"
-    df = pd.DataFrame({"col_1": [np.nan, np.nan]}, index=pd.date_range("2000-01-07", periods=2))
-    lib.write(sym, df)
-
-    expected_column_stats = row_range_columns_to_pl(lib, sym).with_columns(
-        pl.Series("v1_MIN(col_1)", [np.nan]),
-        pl.Series("v1_MAX(col_1)", [np.nan]),
-    )
-
-    lib.create_column_stats_experimental(sym)
-
-    column_stats = lib.read_column_stats_experimental(sym)
-    assert_stats_equal(column_stats, expected_column_stats)
-
-
 def test_column_stats_nat_values(lmdb_version_store, any_output_format):
     lib = lmdb_version_store
     lib._set_output_format_for_pipeline_tests(any_output_format)
@@ -260,32 +242,6 @@ def test_column_stats_nat_values(lmdb_version_store, any_output_format):
     raw_stats = lib_tool.read_to_dataframe(keys[0])
     assert raw_stats["v1_MIN(col_1)"].values.view("int64")[3] == nat_sentinel
     assert raw_stats["v1_MAX(col_1)"].values.view("int64")[3] == nat_sentinel
-
-
-def test_column_stats_only_nat_values(lmdb_version_store, any_output_format):
-    lib = lmdb_version_store
-    lib._set_output_format_for_pipeline_tests(any_output_format)
-    sym = "test_column_stats_only_nat_values"
-    df = pd.DataFrame({"col_1": [pd.NaT, pd.NaT]}, index=pd.date_range("2000-01-07", periods=2))
-    lib.write(sym, df)
-
-    expected_column_stats = row_range_columns_to_pl(lib, sym).with_columns(
-        pl.Series("v1_MIN(col_1)", [None], dtype=pl.Int64).cast(pl.Datetime("ns")),
-        pl.Series("v1_MAX(col_1)", [None], dtype=pl.Int64).cast(pl.Datetime("ns")),
-    )
-
-    lib.create_column_stats_experimental(sym)
-
-    column_stats = lib.read_column_stats_experimental(sym)
-    assert_stats_equal(column_stats, expected_column_stats)
-
-    nat_sentinel = np.iinfo(np.int64).min
-    lib_tool = lib.library_tool()
-    keys = lib_tool.find_keys_for_symbol(KeyType.COLUMN_STATS, sym)
-    assert len(keys) == 1
-    raw_stats = lib_tool.read_to_dataframe(keys[0])
-    assert raw_stats["v1_MIN(col_1)"].values.view("int64")[0] == nat_sentinel
-    assert raw_stats["v1_MAX(col_1)"].values.view("int64")[0] == nat_sentinel
 
 
 def test_column_stats_nan_and_null_counts(lmdb_version_store, any_output_format):
@@ -653,19 +609,7 @@ def test_column_stats_dynamic_schema_missing_data(version_store_factory, lib_nam
     assert_stats_equal(column_stats, expected_column_stats)
 
 
-def test_column_stats_dynamic_schema_types_changing(
-    version_store_factory, lib_name, encoding_version, any_output_format
-):
-    lib = version_store_factory(
-        column_group_size=2,
-        segment_row_size=2,
-        dynamic_schema=True,
-        encoding_version=int(encoding_version),
-        name=lib_name + f"_{encoding_version.name}",
-    )
-    lib._set_output_format_for_pipeline_tests(any_output_format)
-    sym = "test_column_stats_dynamic_schema_types_changing"
-
+def dynamic_schema_types_changing_dfs():
     df0 = pd.DataFrame(
         {
             "int_widening": np.arange(0, 2, dtype=np.uint8),
@@ -691,7 +635,46 @@ def test_column_stats_dynamic_schema_types_changing(
         },
         index=pd.date_range("2000-01-03", periods=2),
     )
+    return df0, df1
 
+
+def assert_dynamic_schema_types_changing_schema(schema):
+    assert schema["v1_MIN(int_widening)"] == pl.UInt16
+    assert schema["v1_MAX(int_widening)"] == pl.UInt16
+
+    assert schema["v1_MIN(int_narrowing)"] == pl.Int16
+    assert schema["v1_MAX(int_narrowing)"] == pl.Int16
+
+    assert schema["v1_MIN(unsigned_to_wider_signed_int)"] == pl.Int32
+    assert schema["v1_MAX(unsigned_to_wider_signed_int)"] == pl.Int32
+
+    assert schema["v1_MIN(wider_signed_to_unsigned_int)"] == pl.Int32
+    assert schema["v1_MAX(wider_signed_to_unsigned_int)"] == pl.Int32
+
+    assert schema["v1_MIN(unsigned_to_signed_int_same_width)"] == pl.Int32
+    assert schema["v1_MAX(unsigned_to_signed_int_same_width)"] == pl.Int32
+
+    assert schema["v1_MIN(int_to_float)"] == pl.Float64
+    assert schema["v1_MAX(int_to_float)"] == pl.Float64
+
+    assert schema["v1_MIN(float_to_int)"] == pl.Float64
+    assert schema["v1_MAX(float_to_int)"] == pl.Float64
+
+
+def test_column_stats_dynamic_schema_types_changing(
+    version_store_factory, lib_name, encoding_version, any_output_format
+):
+    lib = version_store_factory(
+        column_group_size=2,
+        segment_row_size=2,
+        dynamic_schema=True,
+        encoding_version=int(encoding_version),
+        name=lib_name + f"_{encoding_version.name}",
+    )
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    sym = "test_column_stats_dynamic_schema_types_changing"
+
+    df0, df1 = dynamic_schema_types_changing_dfs()
     lib.write(sym, df0)
     lib.append(sym, df1)
 
@@ -731,28 +714,7 @@ def test_column_stats_dynamic_schema_types_changing(
     column_stats = lib.read_column_stats_experimental(sym)
     assert_stats_equal(column_stats, expected_column_stats)
 
-    schema = pl.from_arrow(column_stats).schema
-
-    assert schema["v1_MIN(int_widening)"] == pl.UInt16
-    assert schema["v1_MAX(int_widening)"] == pl.UInt16
-
-    assert schema["v1_MIN(int_narrowing)"] == pl.Int16
-    assert schema["v1_MAX(int_narrowing)"] == pl.Int16
-
-    assert schema["v1_MIN(unsigned_to_wider_signed_int)"] == pl.Int32
-    assert schema["v1_MAX(unsigned_to_wider_signed_int)"] == pl.Int32
-
-    assert schema["v1_MIN(wider_signed_to_unsigned_int)"] == pl.Int32
-    assert schema["v1_MAX(wider_signed_to_unsigned_int)"] == pl.Int32
-
-    assert schema["v1_MIN(unsigned_to_signed_int_same_width)"] == pl.Int32
-    assert schema["v1_MAX(unsigned_to_signed_int_same_width)"] == pl.Int32
-
-    assert schema["v1_MIN(int_to_float)"] == pl.Float64
-    assert schema["v1_MAX(int_to_float)"] == pl.Float64
-
-    assert schema["v1_MIN(float_to_int)"] == pl.Float64
-    assert schema["v1_MAX(float_to_int)"] == pl.Float64
+    assert_dynamic_schema_types_changing_schema(pl.from_arrow(column_stats).schema)
 
 
 def test_column_stats_object_deleted_with_index_key(lmdb_version_store, any_output_format):
@@ -1000,10 +962,11 @@ def test_column_stats_header_metadata(version_store_factory, lib_name, encoding_
     assert_header_offsets_match_field_names(lib, sym, header, {2: "col_1", 3: "col_2"})
 
 
-def test_column_stats_create_twice_is_noop(version_store_factory, lib_name, encoding_version, any_output_format):
-    """Creating stats twice on one version must not duplicate or re-offset anything. The eligible
-    column set comes from the version's own descriptor, so the second call finds every requested
-    stat already present and does nothing."""
+def test_column_stats_create_twice_is_idempotent(version_store_factory, lib_name, encoding_version, any_output_format):
+    """Creating stats twice on one version with no range recomputes every row slice both times, but
+    the recomputed values are identical, so header and content come out the same. This does not
+    mean the second call is a no-op - a range-limited create can and does change the segment - only
+    that recomputing unchanged data is idempotent."""
     lib = version_store_factory(
         column_group_size=2,
         segment_row_size=2,
@@ -1012,7 +975,7 @@ def test_column_stats_create_twice_is_noop(version_store_factory, lib_name, enco
         name=lib_name + f"_{encoding_version.name}",
     )
     lib._set_output_format_for_pipeline_tests(any_output_format)
-    sym = "test_column_stats_create_twice_is_noop"
+    sym = "test_column_stats_create_twice_is_idempotent"
     expected_column_stats = generate_symbol(lib, sym)
 
     lib.create_column_stats_experimental(sym)
@@ -1464,3 +1427,283 @@ def test_column_stats_duplicate_index_values_across_slice_boundary(
     q = q[q["col_1"] > 2]
     result = lib.read(sym, query_builder=q).data
     pd.testing.assert_frame_equal(result, pd.DataFrame({"col_1": [3, 4]}, index=[ts] * 2))
+
+
+def nine_row_symbol_df():
+    # col_2's NaNs are distributed one/two/three per row slice (0,3)/(3,6)/(6,9)
+    return pd.DataFrame(
+        {
+            "col_1": list(range(9)),
+            "col_2": [10.0, 11.0, np.nan, np.nan, np.nan, 14.0, np.nan, np.nan, np.nan],
+        },
+        index=pd.date_range("2000-01-01", periods=9),
+    )
+
+
+def write_nine_row_symbol(lib, sym):
+    df = nine_row_symbol_df()
+    lib.write(sym, df)
+    return df
+
+
+def eleven_row_symbol_df():
+    # At segment_row_size=3 the slices are (0,3)/(3,6)/(6,9)/(9,11), the last one ragged. col_2's
+    # NaNs are one/two/three/none per slice, and (6,9) is entirely NaN so its min and max are NaN.
+    return pd.DataFrame(
+        {
+            "col_1": list(range(11)),
+            "col_2": [10.0, 11.0, np.nan, np.nan, np.nan, 14.0, np.nan, np.nan, np.nan, 19.0, 20.0],
+        },
+        index=pd.date_range("2000-01-01", periods=11),
+    )
+
+
+def write_eleven_row_symbol(lib, sym):
+    df = eleven_row_symbol_df()
+    lib.write(sym, df)
+    return df
+
+
+def jan(day):
+    return pd.Timestamp(f"2000-01-{day:02d}")
+
+
+def expected_row_range_stats(df, expected_slices):
+    def slice_stats(col):
+        values_by_slice = [df[col].iloc[s:e] for s, e in expected_slices]
+        return (
+            [values.min() for values in values_by_slice],
+            [values.max() for values in values_by_slice],
+            [int(values.isna().sum()) for values in values_by_slice],
+        )
+
+    col_1_min, col_1_max, col_1_nan = slice_stats("col_1")
+    col_2_min, col_2_max, col_2_nan = slice_stats("col_2")
+    null_counts = [0] * len(expected_slices)
+
+    return pl.DataFrame(
+        {
+            "start_row": pl.Series([s for s, _ in expected_slices], dtype=pl.UInt64),
+            "end_row": pl.Series([e for _, e in expected_slices], dtype=pl.UInt64),
+            "v1_MIN(col_1)": pl.Series([int(v) for v in col_1_min], dtype=pl.Int64),
+            "v1_MAX(col_1)": pl.Series([int(v) for v in col_1_max], dtype=pl.Int64),
+            "v1_NAN_COUNT(col_1)": pl.Series(col_1_nan, dtype=pl.UInt64),
+            "v1_NULL_COUNT(col_1)": pl.Series(null_counts, dtype=pl.UInt64),
+            "v1_MIN(col_2)": pl.Series(col_2_min, dtype=pl.Float64),
+            "v1_MAX(col_2)": pl.Series(col_2_max, dtype=pl.Float64),
+            "v1_NAN_COUNT(col_2)": pl.Series(col_2_nan, dtype=pl.UInt64),
+            "v1_NULL_COUNT(col_2)": pl.Series(null_counts, dtype=pl.UInt64),
+        }
+    )
+
+
+@pytest.mark.parametrize(
+    "row_range, expected_slices",
+    [
+        ((0, 3), [(0, 3)]),
+        ((0, 4), [(0, 3), (3, 6)]),
+        ((4, 5), [(3, 6)]),
+        ((6, 9), [(6, 9)]),
+        ((-9, -6), [(0, 3)]),
+        ((None, 3), [(0, 3)]),
+        ((6, None), [(6, 9)]),
+        ((None, None), [(0, 3), (3, 6), (6, 9)]),
+        ((None, -6), [(0, 3)]),
+    ],
+)
+def test_column_stats_create_row_range(version_store_factory, lib_name, row_range, expected_slices):
+    lib = version_store_factory(segment_row_size=3, name=lib_name)
+    sym = "test_column_stats_create_row_range"
+    df = write_nine_row_symbol(lib, sym)
+
+    lib.create_column_stats_experimental(sym, row_range=row_range)
+
+    assert_stats_equal(
+        lib.read_column_stats_experimental(sym), expected_row_range_stats(df, expected_slices), check_dtypes=True
+    )
+
+
+@pytest.mark.parametrize(
+    "date_range, expected_slices",
+    [
+        ((pd.Timestamp("2000-01-01"), pd.Timestamp("2000-01-03")), [(0, 3)]),
+        ((pd.Timestamp("2000-01-01"), pd.Timestamp("2000-01-04")), [(0, 3), (3, 6)]),
+        ((pd.Timestamp("2000-01-05"), pd.Timestamp("2000-01-05")), [(3, 6)]),
+        ((pd.Timestamp("2000-01-07"), pd.Timestamp("2000-01-09")), [(6, 9)]),
+    ],
+)
+def test_column_stats_create_date_range(version_store_factory, lib_name, date_range, expected_slices):
+    lib = version_store_factory(segment_row_size=3, name=lib_name)
+    sym = "test_column_stats_create_date_range"
+    df = write_nine_row_symbol(lib, sym)
+
+    lib.create_column_stats_experimental(sym, date_range=date_range)
+
+    assert_stats_equal(
+        lib.read_column_stats_experimental(sym), expected_row_range_stats(df, expected_slices), check_dtypes=True
+    )
+
+
+# We create an 11 row symbol with slices:
+# [0, 3) , [3, 6), [6, 9), [9, 11)
+# We check that after creating stats with a series of row ranges of the form [A, B)
+# we get stats over the set of segments covering the union of those row ranges
+# In particular you can end up calculating stats for up to N rows outside a row_range boundary,
+# where N is the row slice size minus one.
+@pytest.mark.parametrize(
+    "row_ranges, expected_slices",
+    [
+        ([(0, 4), (3, 5)], [(0, 3), (3, 6)]),
+        # Leave a hole over [6, 9)
+        ([(0, 4), (9, 10)], [(0, 3), (3, 6), (9, 11)]),
+        # Same, in the other order, checks sorting in the stats segment
+        ([(9, 10), (0, 4)], [(0, 3), (3, 6), (9, 11)]),
+        # Fill the hole
+        ([(0, 4), (9, 10), (6, 7)], [(0, 3), (3, 6), (6, 9), (9, 11)]),
+        # Repeating a range replaces its rows rather than duplicating them
+        ([(0, 4), (0, 4)], [(0, 3), (3, 6)]),
+        # You need all segments to cover (2,10)
+        ([(0, 4), (2, 10)], [(0, 3), (3, 6), (6, 9), (9, 11)]),
+        # [3, 6) is recalculated, [0, 3) is kept, [6, 9) is new
+        ([(0, 4), (5, 9)], [(0, 3), (3, 6), (6, 9)]),
+    ],
+)
+def test_column_stats_create_incrementally_by_row_range(version_store_factory, lib_name, row_ranges, expected_slices):
+    lib = version_store_factory(segment_row_size=3, name=lib_name)
+    sym = "sym"
+    df = write_eleven_row_symbol(lib, sym)
+
+    for row_range in row_ranges:
+        lib.create_column_stats_experimental(sym, row_range=row_range)
+
+    assert_stats_equal(
+        lib.read_column_stats_experimental(sym), expected_row_range_stats(df, expected_slices), check_dtypes=True
+    )
+
+
+# As above, but by date range. The 11 row symbol is indexed 2000-01-01 to 2000-01-11, so the slices
+# span [Jan 1, Jan 3], [Jan 4, Jan 6], [Jan 7, Jan 9], [Jan 10, Jan 11]. Unlike row ranges, date
+# ranges are inclusive at both ends.
+@pytest.mark.parametrize(
+    "date_ranges, expected_slices",
+    [
+        ([(jan(1), jan(4)), (jan(4), jan(5))], [(0, 3), (3, 6)]),
+        # Leave a hole over [6, 9)
+        ([(jan(1), jan(4)), (jan(10), jan(11))], [(0, 3), (3, 6), (9, 11)]),
+        # Same, in the other order, checks sorting in the stats segment
+        ([(jan(10), jan(11)), (jan(1), jan(4))], [(0, 3), (3, 6), (9, 11)]),
+        # Fill the hole
+        ([(jan(1), jan(4)), (jan(10), jan(11)), (jan(7), jan(8))], [(0, 3), (3, 6), (6, 9), (9, 11)]),
+        # Repeating a range replaces its rows rather than duplicating them
+        ([(jan(1), jan(4)), (jan(1), jan(4))], [(0, 3), (3, 6)]),
+        # You need all segments to cover [Jan 3, Jan 10]
+        ([(jan(1), jan(4)), (jan(3), jan(10))], [(0, 3), (3, 6), (6, 9), (9, 11)]),
+        # [3, 6) is recalculated, [0, 3) is kept, [6, 9) is new
+        ([(jan(1), jan(4)), (jan(6), jan(9))], [(0, 3), (3, 6), (6, 9)]),
+    ],
+)
+def test_column_stats_create_incrementally_by_date_range(version_store_factory, lib_name, date_ranges, expected_slices):
+    lib = version_store_factory(segment_row_size=3, name=lib_name)
+    sym = "sym"
+    df = write_eleven_row_symbol(lib, sym)
+
+    for date_range in date_ranges:
+        lib.create_column_stats_experimental(sym, date_range=date_range)
+
+    assert_stats_equal(
+        lib.read_column_stats_experimental(sym), expected_row_range_stats(df, expected_slices), check_dtypes=True
+    )
+
+
+def test_column_stats_create_dynamic_schema_partial_create_uses_descriptor_type(version_store_factory, lib_name):
+    """A range covering only the first row slice must still type MIN/MAX from the version's descriptor,
+    not from that slice's own dtype"""
+    lib = version_store_factory(column_group_size=2, segment_row_size=2, dynamic_schema=True, name=lib_name)
+    sym = "test_column_stats_create_dynamic_schema_partial_create_uses_descriptor_type"
+
+    df0, df1 = dynamic_schema_types_changing_dfs()
+    lib.write(sym, df0)
+    lib.append(sym, df1)
+
+    lib.create_column_stats_experimental(sym, row_range=(0, 2))
+
+    assert_dynamic_schema_types_changing_schema(pl.from_arrow(lib.read_column_stats_experimental(sym)).schema)
+
+
+def test_column_stats_create_partial_coverage_with_column_slicing(version_store_factory, lib_name):
+    lib = version_store_factory(column_group_size=2, segment_row_size=3, name=lib_name)
+    sym = "test_column_stats_create_partial_coverage_with_column_slicing"
+    df = pd.DataFrame(
+        {f"col_{i}": np.arange(i * 100, i * 100 + 9) for i in range(1, 5)},
+        index=pd.date_range("2000-01-01", periods=9),
+    )
+    lib.write(sym, df)
+
+    lib.create_column_stats_experimental(sym, row_range=(0, 4))
+
+    expected_slices = [(0, 3), (3, 6)]
+    expected = pl.DataFrame(
+        {
+            "start_row": [s for s, _ in expected_slices],
+            "end_row": [e for _, e in expected_slices],
+            **{
+                f"v1_MIN(col_{i})": [int(df[f"col_{i}"].iloc[s:e].min()) for s, e in expected_slices]
+                for i in range(1, 5)
+            },
+            **{
+                f"v1_MAX(col_{i})": [int(df[f"col_{i}"].iloc[s:e].max()) for s, e in expected_slices]
+                for i in range(1, 5)
+            },
+        }
+    )
+    assert_stats_equal(lib.read_column_stats_experimental(sym), expected)
+
+
+def test_column_stats_create_empty_range_is_noop(version_store_factory, lib_name):
+    lib = version_store_factory(segment_row_size=3, name=lib_name)
+    sym = "test_column_stats_create_empty_range_is_noop"
+    df = write_nine_row_symbol(lib, sym)
+
+    lib.create_column_stats_experimental(sym, row_range=(2, 2))
+    assert not lib.library_tool().find_keys_for_symbol(KeyType.COLUMN_STATS, sym)
+
+    lib.create_column_stats_experimental(sym, row_range=(100, 105))
+    assert not lib.library_tool().find_keys_for_symbol(KeyType.COLUMN_STATS, sym)
+
+    lib.create_column_stats_experimental(sym, row_range=(0, 3))
+    expected = expected_row_range_stats(df, [(0, 3)])
+    assert_stats_equal(lib.read_column_stats_experimental(sym), expected, check_dtypes=True)
+
+    lib.create_column_stats_experimental(sym, row_range=(2, 2))
+    assert_stats_equal(lib.read_column_stats_experimental(sym), expected, check_dtypes=True)
+
+    lib.create_column_stats_experimental(sym, row_range=(100, 105))
+    assert_stats_equal(lib.read_column_stats_experimental(sym), expected, check_dtypes=True)
+
+
+def test_column_stats_create_date_range_and_row_range_both_specified_raises(lmdb_version_store_tiny_segment):
+    lib = lmdb_version_store_tiny_segment
+    sym = "test_column_stats_create_date_range_and_row_range_both_specified_raises"
+    lib.write(sym, df0)
+
+    with pytest.raises(UserInputException):
+        lib.create_column_stats_experimental(sym, date_range=(df0.index[0], df0.index[-1]), row_range=(0, 2))
+
+
+def test_column_stats_create_date_range_non_timestamp_index_raises(version_store_factory, lib_name):
+    lib = version_store_factory(segment_row_size=2, name=lib_name)
+    sym = "test_column_stats_create_date_range_non_timestamp_index_raises"
+    lib.write(sym, pd.Series([1, 2, 3, 4], name="myval"))
+
+    with pytest.raises(UserInputException):
+        lib.create_column_stats_experimental(sym, date_range=(pd.Timestamp("2000-01-01"), pd.Timestamp("2000-01-02")))
+
+
+def test_column_stats_create_date_range_unsorted_raises(version_store_factory, lib_name):
+    lib = version_store_factory(segment_row_size=2, name=lib_name)
+    sym = "test_column_stats_create_date_range_unsorted_raises"
+    unsorted_index = [pd.Timestamp("2000-01-03"), pd.Timestamp("2000-01-01")]
+    lib.write(sym, pd.DataFrame({"col_1": [1, 2]}, index=unsorted_index))
+
+    with pytest.raises(SortingException):
+        lib.create_column_stats_experimental(sym, date_range=(pd.Timestamp("2000-01-01"), pd.Timestamp("2000-01-03")))

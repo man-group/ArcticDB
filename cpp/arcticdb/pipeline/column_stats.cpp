@@ -3,10 +3,12 @@
 #include <arcticdb/processing/unsorted_aggregation.hpp>
 #include <arcticdb/entity/timeseries_descriptor.hpp>
 #include <arcticdb/entity/type_utils.hpp>
+#include <arcticdb/column_store/column_algorithms.hpp>
 #include <arcticdb/util/preconditions.hpp>
 
 #include <algorithm>
 #include <tuple>
+#include <unordered_set>
 
 namespace arcticdb {
 
@@ -18,40 +20,44 @@ struct StatColumn {
     TypeDescriptor type_descriptor;
 };
 
-// Distinct stat columns in first-appearance order, each widened to a type that can hold every
-// component's value for it. Dynamic schema can give a different type per row slice.
+bool is_count_stat(ColumnStatTypeInternal type) {
+    return type == ColumnStatTypeInternal::NAN_COUNT_V1 || type == ColumnStatTypeInternal::NULL_COUNT_V1;
+}
+
+// Distinct stat columns in first-appearance order. MIN/MAX take their type from the descriptor
+// (deterministic regardless of which row slices this create covers); nan/null counts are always
+// UINT64.
 std::vector<StatColumn> collect_stat_columns(
-        const std::vector<ColumnStatsComponent>& components,
+        const std::vector<ColumnStatsRow>& components, const StreamDescriptor& descriptor,
         ankerl::unordered_dense::map<std::string, size_t>& name_to_index
 ) {
     std::vector<StatColumn> stat_columns;
     for (const auto& component : components) {
         for (const auto& stat : component.stats) {
-            auto new_type = make_scalar_type(stat.value.data_type());
-            if (auto it = name_to_index.find(stat.segment_column_name); it != name_to_index.end()) {
-                auto& merged_type = stat_columns.at(it->second).type_descriptor;
-                auto opt_common_type = has_valid_common_type(merged_type, new_type);
-                internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-                        opt_common_type.has_value(),
-                        "No valid common type between {} and {} in {}",
-                        merged_type,
-                        new_type,
-                        __FUNCTION__
-                );
-                merged_type = *opt_common_type;
-            } else {
-                name_to_index.emplace(stat.segment_column_name, stat_columns.size());
-                stat_columns.emplace_back(
-                        StatColumn{stat.segment_column_name, stat.type, stat.data_col_offset, new_type}
-                );
+            if (name_to_index.contains(stat.segment_column_name)) {
+                continue;
             }
+            internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+                    stat.data_col_offset < descriptor.field_count(),
+                    "Column stats data_col_offset {} is out of range for a descriptor with {} fields. Use "
+                    "drop_column_stats_experimental and recreate the column stats.",
+                    stat.data_col_offset,
+                    descriptor.field_count()
+            );
+            const auto resolved_type = is_count_stat(stat.type) ? make_scalar_type(DataType::UINT64)
+                                                                : descriptor.field(stat.data_col_offset).type();
+            name_to_index.emplace(stat.segment_column_name, stat_columns.size());
+            stat_columns.emplace_back(
+                    StatColumn{stat.segment_column_name, stat.type, stat.data_col_offset, resolved_type}
+            );
         }
     }
     return stat_columns;
 }
 
-// has_valid_common_type guarantees the target represents the source exactly, so a static_cast is
-// faithful. The source type is needed to interpret Value's raw bytes, hence the nested visit.
+// The target is the descriptor's field type, which merge_descriptors resolved as a common type over
+// every slice's type for that column, so the static_cast is OK. The source type is needed to
+// interpret Value's raw bytes, hence the nested visit.
 void set_stat_value(Column& column, size_t row, const Value& value) {
     details::visit_type(column.type().data_type(), [&column, row, &value](auto target_tag) {
         using TargetRaw = typename ScalarTypeInfo<decltype(target_tag)>::RawType;
@@ -63,16 +69,36 @@ void set_stat_value(Column& column, size_t row, const Value& value) {
 }
 } // namespace
 
-SegmentInMemory build_column_stats_segment(std::vector<ColumnStatsComponent>&& components) {
+SegmentInMemory build_column_stats_segment(
+        std::vector<ColumnStatsRow>&& components, const StreamDescriptor& descriptor
+) {
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(
             !components.empty(), "build_column_stats_segment requires at least one component"
     );
     std::sort(components.begin(), components.end(), [](const auto& left, const auto& right) {
         return std::tie(left.start_row, left.end_row) < std::tie(right.start_row, right.end_row);
     });
+    for (size_t i = 0; i < components.size(); ++i) {
+        internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+                components.at(i).end_row > components.at(i).start_row,
+                "Column stats component has empty row range [{}, {})",
+                components.at(i).start_row,
+                components.at(i).end_row
+        );
+        if (i > 0) {
+            internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+                    components.at(i).start_row > components.at(i - 1).start_row,
+                    "Column stats components must have strictly increasing start_row, got [{}, {}) after [{}, {})",
+                    components.at(i).start_row,
+                    components.at(i).end_row,
+                    components.at(i - 1).start_row,
+                    components.at(i - 1).end_row
+            );
+        }
+    }
 
     ankerl::unordered_dense::map<std::string, size_t> name_to_index;
-    const auto stat_columns = collect_stat_columns(components, name_to_index);
+    const auto stat_columns = collect_stat_columns(components, descriptor, name_to_index);
 
     const auto last_row = static_cast<ssize_t>(components.size()) - 1;
     SegmentInMemory seg(Sparsity::PERMITTED);
@@ -136,6 +162,84 @@ std::string type_to_operator_string(ColumnStatTypeInternal type) {
     default:
         internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Unknown column stat type requested");
     }
+}
+
+std::vector<ColumnStatsRow> decode_column_stats_segment(const SegmentInMemory& segment) {
+    if (segment.row_count() == 0) {
+        return {};
+    }
+
+    internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+            segment.metadata(), "Column stats segment is missing its header metadata"
+    );
+    arcticc::pb2::column_stats_pb2::ColumnStatsHeader header;
+    internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+            segment.metadata()->UnpackTo(&header), "Failed to unpack column stats header from segment metadata"
+    );
+    internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+            header.version() == 1,
+            "Column stats header version {} is not understood by this client. Use "
+            "drop_column_stats_experimental and recreate the column stats before downgrading.",
+            header.version()
+    );
+
+    const auto& fields = segment.fields();
+    internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+            fields.size() >= 2 && fields.at(start_row_column_offset).name() == start_row_column_name &&
+                    fields.at(end_row_column_offset).name() == end_row_column_name,
+            "Column stats segment does not have start_row/end_row columns at the expected offsets"
+    );
+
+    const auto& start_row_col = segment.column(start_row_column_offset);
+    const auto& end_row_col = segment.column(end_row_column_offset);
+    internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+            !start_row_col.is_sparse() && !end_row_col.is_sparse() &&
+                    static_cast<size_t>(start_row_col.row_count()) == segment.row_count() &&
+                    static_cast<size_t>(end_row_col.row_count()) == segment.row_count(),
+            "Column stats start_row/end_row columns must be dense and cover every row of the segment"
+    );
+
+    std::vector<ColumnStatsRow> components(segment.row_count());
+    for (size_t row = 0; row < segment.row_count(); ++row) {
+        components.at(row).start_row =
+                *segment.scalar_at<uint64_t>(static_cast<position_t>(row), start_row_column_offset);
+        components.at(row).end_row = *segment.scalar_at<uint64_t>(static_cast<position_t>(row), end_row_column_offset);
+    }
+
+    for (const auto& [data_col_offset, entry_list] : header.stats_by_column()) {
+        for (const auto& entry : entry_list.entries()) {
+            internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+                    entry.type() != ColumnStatTypeInternal::UNKNOWN,
+                    "Column stats header entry for data column {} has an unrecognised stat type - you need to upgrade your ArcticDB client",
+                    data_col_offset
+            );
+            const auto stats_seg_offset = entry.stats_seg_offset();
+            internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+                    stats_seg_offset > end_row_column_offset && stats_seg_offset < fields.size(),
+                    "Column stats header entry stats_seg_offset {} is out of range for a segment with {} fields",
+                    stats_seg_offset,
+                    fields.size()
+            );
+
+            const auto field_name = fields.at(stats_seg_offset).name();
+
+            const auto& column = segment.column(stats_seg_offset);
+            const std::string segment_column_name{field_name};
+            details::visit_type(column.type().data_type(), [&]([[maybe_unused]] auto tag) {
+                using type_info = ScalarTypeInfo<decltype(tag)>;
+                for_each_enumerated<typename type_info::TDT>(column, [&](const auto& it) {
+                    components.at(static_cast<size_t>(it.idx()))
+                            .stats.emplace_back(ColumnStatValue{
+                                    segment_column_name,
+                                    entry.type(),
+                                    data_col_offset,
+                                    Value{it.value(), type_info::data_type}
+                            });
+                });
+            });
+        }
+    }
+    return components;
 }
 
 std::string type_to_name(ColumnStatType type) {
@@ -287,64 +391,6 @@ ColumnStats::ColumnStats(const TimeseriesDescriptor& tsd) {
         offset_to_stat_info_.emplace(field_index, NameAndStatTypes{std::move(field_name), {ColumnStatType::MINMAX}});
     }
     offset_to_stat_info_set_ = true;
-}
-
-namespace {
-std::unordered_set<ColumnStatTypeInternal> external_to_internal(ColumnStatType type) {
-    switch (type) {
-    case ColumnStatType::MINMAX:
-        return {ColumnStatTypeInternal::MIN_V1,
-                ColumnStatTypeInternal::MAX_V1,
-                ColumnStatTypeInternal::NAN_COUNT_V1,
-                ColumnStatTypeInternal::NULL_COUNT_V1};
-    default:
-        internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Unknown column stat type");
-    }
-}
-} // namespace
-
-std::vector<std::string> ColumnStats::drop(const ColumnStats& to_drop, bool warn_if_missing) {
-    util::check(offset_to_stat_info_set_, "Expect this->offset to stat info to be set");
-    util::check(to_drop.offset_to_stat_info_set_, "Expect to_drop.offset to stat info to be set");
-    std::vector<std::string> dropped_names;
-    for (const auto& [offset, name_and_stat_types] : to_drop.offset_to_stat_info_) {
-        if (auto it = offset_to_stat_info_.find(offset); it == offset_to_stat_info_.end()) {
-            if (warn_if_missing) {
-                log::version().warn(
-                        "Requested column stats drop but column '{}' does not have any column stats",
-                        name_and_stat_types.mangled_name
-                );
-            }
-        } else {
-            for (const auto& column_stat_type : name_and_stat_types.column_stats) {
-                bool none_erased = it->second.column_stats.erase(column_stat_type) == 0;
-                if (none_erased) {
-                    if (warn_if_missing) {
-                        log::version().warn(
-                                "Requested column stats drop but column '{}' does not have the specified column stat "
-                                "'{}'",
-                                name_and_stat_types.mangled_name,
-                                type_to_name(column_stat_type)
-                        );
-                    }
-                } else {
-                    for (const auto& internal_type : external_to_internal(column_stat_type)) {
-                        dropped_names.emplace_back(
-                                to_segment_column_name(name_and_stat_types.mangled_name, internal_type)
-                        );
-                    }
-                }
-            }
-        }
-    }
-    for (auto it = offset_to_stat_info_.begin(); it != offset_to_stat_info_.end();) {
-        if (it->second.column_stats.empty()) {
-            it = offset_to_stat_info_.erase(it);
-        } else {
-            ++it;
-        }
-    }
-    return dropped_names;
 }
 
 std::unordered_map<std::string, std::unordered_set<std::string>> ColumnStats::to_map() const {

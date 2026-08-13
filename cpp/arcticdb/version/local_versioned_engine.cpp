@@ -213,15 +213,17 @@ folly::Future<folly::Unit> LocalVersionedEngine::delete_unreferenced_pruned_inde
 }
 
 void LocalVersionedEngine::create_column_stats_internal(
-        const VersionedItem& versioned_item, const ReadOptions& read_options
+        const VersionedItem& versioned_item, const ReadOptions& read_options,
+        const std::optional<IndexRange>& date_range, const std::optional<SignedRowRange>& row_range
 ) {
     ARCTICDB_RUNTIME_SAMPLE(CreateColumnStatsInternal, 0)
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: create_column_stats");
-    create_column_stats_impl(store(), versioned_item, read_options);
+    create_column_stats_impl(store(), versioned_item, read_options, date_range, row_range);
 }
 
 void LocalVersionedEngine::create_column_stats_version_internal(
-        const StreamId& stream_id, const VersionQuery& version_query, const ReadOptions& read_options
+        const StreamId& stream_id, const VersionQuery& version_query, const ReadOptions& read_options,
+        const std::optional<IndexRange>& date_range, const std::optional<SignedRowRange>& row_range
 ) {
     auto versioned_item = get_version_to_read(stream_id, version_query);
     missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(
@@ -229,7 +231,7 @@ void LocalVersionedEngine::create_column_stats_version_internal(
             "create_column_stats_version_internal: version not found for stream '{}'",
             stream_id
     );
-    create_column_stats_internal(versioned_item.value(), read_options);
+    create_column_stats_internal(versioned_item.value(), read_options, date_range, row_range);
 }
 
 void LocalVersionedEngine::drop_column_stats_internal(const VersionedItem& versioned_item) {

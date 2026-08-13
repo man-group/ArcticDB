@@ -34,7 +34,7 @@ struct ColumnStatValue {
 /// One per row slice. Added to the ComponentManager as a standalone entity by
 /// ColumnStatsGenerationClause::process and read back by create_column_stats_impl via
 /// process_entities, which scans the whole registry — no other code may add this component.
-struct ColumnStatsComponent {
+struct ColumnStatsRow {
     uint64_t start_row;
     uint64_t end_row;
     std::vector<ColumnStatValue> stats;

@@ -50,7 +50,56 @@ def test_create_column_stats_reads_index_key_once_and_writes_single_key(in_memor
     lib.create_column_stats_experimental(sym)
 
     assert get_table_index_read_count() == 1, qs.get_query_stats()
+    assert get_column_stats_read_count() == 0, qs.get_query_stats()
     assert get_column_stats_write_count() == 1, qs.get_query_stats()
+
+
+def test_create_column_stats_with_row_range_reads_and_writes_stats_key_once(in_memory_version_store, clear_query_stats):
+    lib = in_memory_version_store
+    df0 = pd.DataFrame({"col_1": [1, 2], "col_2": ["a", "b"]}, index=pd.date_range("2000-01-01", periods=2))
+    df1 = pd.DataFrame({"col_1": [3, 4], "col_2": ["c", "d"]}, index=pd.date_range("2000-01-03", periods=2))
+    lib.write(sym, df0)
+    lib.append(sym, df1)
+    lib.create_column_stats_experimental(sym)
+
+    qs.enable()
+    qs.reset_stats()
+    lib.create_column_stats_experimental(sym, row_range=(0, 2))
+
+    assert get_table_index_read_count() == 1, qs.get_query_stats()
+    assert get_column_stats_read_count() == 1, qs.get_query_stats()
+    assert get_column_stats_write_count() == 1, qs.get_query_stats()
+
+
+# Stats cover only the first of three row slices, so the other two must be read whatever the query:
+# a slice the stats say nothing about cannot be pruned.
+@pytest.mark.parametrize(
+    "threshold, expected_reads",
+    [
+        (-1, 3),  # the covered slice matches in full
+        (1, 3),  # the covered slice matches in part
+        (4, 2),  # the covered slice is pruned, max=2 < 4
+        (9, 2),  # nothing matches anywhere, but only the covered slice can be pruned
+    ],
+    ids=["gte_-1", "gte_1", "gte_4", "gte_9"],
+)
+def test_column_stats_partial_coverage_does_not_change_query_results(
+    in_memory_store_factory, clear_query_stats, column_stats_filtering_enabled, threshold, expected_reads
+):
+    lib = in_memory_store_factory(segment_row_size=3)
+    df = pd.DataFrame({"col_1": np.arange(9)}, index=pd.date_range("2000-01-01", periods=9))
+    lib.write(sym, df)
+    lib.create_column_stats_experimental(sym, row_range=(0, 3))
+
+    qs.enable()
+    q = QueryBuilder()
+    q = q[q["col_1"] >= threshold]
+    qs.reset_stats()
+    result = lib.read(sym, query_builder=q).data
+    table_data_reads = get_table_data_read_count()
+
+    assert_frame_equal(df[df["col_1"] >= threshold], result, check_freq=False)
+    assert table_data_reads == expected_reads, f"Expected {expected_reads} TABLE_DATA read(s), got {table_data_reads}"
 
 
 @pytest.mark.parametrize(

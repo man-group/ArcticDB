@@ -1,5 +1,6 @@
 #pragma once
 
+#include <arcticdb/entity/stream_descriptor.hpp>
 #include <arcticdb/pipeline/column_name_resolution.hpp>
 #include <arcticdb/processing/clause.hpp>
 #include <arcticdb/pipeline/column_stats_types.hpp>
@@ -14,7 +15,11 @@
 
 namespace arcticdb {
 
-SegmentInMemory build_column_stats_segment(std::vector<ColumnStatsComponent>&& components);
+SegmentInMemory build_column_stats_segment(
+        std::vector<ColumnStatsRow>&& components, const StreamDescriptor& descriptor
+);
+
+std::vector<ColumnStatsRow> decode_column_stats_segment(const SegmentInMemory& segment);
 
 // User facing types - eg users are only allowed to create min and max together, not one or the other
 enum class ColumnStatType { MINMAX };
@@ -43,9 +48,6 @@ class ColumnStats {
     explicit ColumnStats(
             const arcticc::pb2::column_stats_pb2::ColumnStatsHeader& header, const TimeseriesDescriptor& tsd
     );
-
-    // Returns the segment column names of the dropped stats (e.g. "v1_MIN(col)", "v1_MAX(col)")
-    std::vector<std::string> drop(const ColumnStats& to_drop, bool warn_if_missing = true);
 
     std::unordered_map<std::string, std::unordered_set<std::string>> to_map() const;
     std::optional<Clause> clause() const;
