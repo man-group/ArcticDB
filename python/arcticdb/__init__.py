@@ -16,7 +16,7 @@ from arcticdb.version_store.processing import QueryBuilder, where
 from arcticdb.version_store._store import VersionedItem
 import arcticdb.version_store.library as library
 from arcticdb.tools import set_config_from_env_vars
-from arcticdb_ext.version_store import DataError, VersionRequestType, OnScanFailure
+from arcticdb_ext.version_store import DataError, OnScanFailure, VersionRequestType
 from arcticdb_ext.exceptions import ErrorCode, ErrorCategory
 from arcticdb.version_store.library import (
     WritePayload,

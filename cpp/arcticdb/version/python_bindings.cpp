@@ -619,9 +619,16 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
             .def_readonly("compressed_size", &KeySizesInfo::compressed_size)
             .doc() = "Count of keys and their compressed and uncompressed sizes in bytes.";
 
-    py::enum_<OnScanFailure>(version, "OnScanFailure")
-            .value("RAISE", OnScanFailure::Raise)
-            .value("SKIP", OnScanFailure::Skip);
+    py::enum_<OnScanFailure>(version, "OnScanFailure", R"pbdoc(
+        What a size scan does with a key type it cannot list.
+    )pbdoc")
+            .value("RAISE", OnScanFailure::Raise, R"pbdoc(
+            Raise, so that a caller totalling a library never silently under-reports.
+    )pbdoc")
+            .value("SKIP", OnScanFailure::Skip, R"pbdoc(
+            Log a warning naming the key type and leave it out of the result, so that one key type that cannot be
+            listed does not cost the whole scan. An omitted key type is indistinguishable from an empty one.
+    )pbdoc");
 
     py::class_<storage::ObjectSizes>(version, "ObjectSizes")
             .def_readonly("key_type", &storage::ObjectSizes::key_type_)

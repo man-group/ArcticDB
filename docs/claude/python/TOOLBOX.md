@@ -270,6 +270,9 @@ cancel the rest. What happens to it is the caller's choice:
   totalling many libraries, where one key type whose prefix a bucket policy denies should not cost the whole
   library's numbers. An omitted key type is indistinguishable from an empty one.
 
+`OnScanFailure` is re-exported from `arcticdb`, as `DataError` and `VersionRequestType` are, but `scan_object_sizes`
+itself is reached through `lib._nvs.version_store` — `AdminTools.get_sizes` does not take the option.
+
 Covered by `cpp/arcticdb/version/test/test_object_sizes.cpp`, which substitutes a store that fails the key types it
 is told to — not reachable from python, since every storage can list every key type scanned.
 
