@@ -47,6 +47,11 @@ bool scanned(const std::vector<storage::ObjectSizes>& sizes, KeyType key_type) {
     return std::ranges::any_of(sizes, [key_type](const auto& s) { return s.key_type_ == key_type; });
 }
 
+// Only call for a key type that was scanned
+const storage::ObjectSizes& find_sizes(const std::vector<storage::ObjectSizes>& sizes, KeyType key_type) {
+    return *std::ranges::find(sizes, key_type, &storage::ObjectSizes::key_type_);
+}
+
 } // namespace
 
 TEST(ScanObjectSizes, RaisesOnFailureByDefault) {
@@ -63,9 +68,10 @@ TEST(ScanObjectSizes, OmitsFailedKeyTypesWhenSkipping) {
     // The readable key types are still reported, in full, and with the duration of their own scan
     EXPECT_FALSE(scanned(sizes, KeyType::TABLE_INDEX));
     ASSERT_TRUE(scanned(sizes, KeyType::TABLE_DATA));
-    EXPECT_EQ(sizes[0].count_, 3);
-    EXPECT_EQ(sizes[0].compressed_size_, 30);
-    EXPECT_EQ(sizes[0].scan_duration_ns_, 100);
+    const auto& table_data = find_sizes(sizes, KeyType::TABLE_DATA);
+    EXPECT_EQ(table_data.count_, 3);
+    EXPECT_EQ(table_data.compressed_size_, 30);
+    EXPECT_EQ(table_data.scan_duration_ns_, 100);
 }
 
 TEST(ScanObjectSizes, EveryKeyTypeFailingIsAnEmptyResultNotAnError) {

@@ -247,10 +247,13 @@ AdminTools.get_sizes
 
 ### Key type sets
 
-`TYPES_FOR_SIZE_CALCULATION` in `local_versioned_engine.cpp` is the ten key types scanned. Historical, specialized
+`TYPES_FOR_SIZE_CALCULATION` in `local_versioned_engine.cpp` lists the key types scanned. Historical, specialized
 and transient key types are left out to avoid the extra listing operations, so the result is not a complete account
-of every object in the library. `KeyType._from_native()` in `admin_tools.py` maps `arcticdb_ext.storage.KeyType` to
-the public `arcticdb.KeyType`, which covers those ten and raises for anything else.
+of every object in the library. `COLUMN_STATS` is in the list but is only ever populated by the experimental column
+stats APIs, so it reads as zero for almost every library. `KeyType._from_native()` in `admin_tools.py` maps
+`arcticdb_ext.storage.KeyType` to the public `arcticdb.KeyType`, which covers the same set and raises for anything
+else. `test_scanned_key_types_are_pinned` (`test_admin_tools.py`) fails if the two drift apart, or if a new key type
+is added without a decision about scanning it.
 
 Cost scales with object count *and* with the number of key types scanned, and the per-key-type cost depends on
 whether the storage overrides `supports_object_size_calculation()` — S3 and NFS-backed do (`s3_storage.cpp:279`,
@@ -270,8 +273,9 @@ cancel the rest. What happens to it is the caller's choice:
   totalling many libraries, where one key type whose prefix a bucket policy denies should not cost the whole
   library's numbers. An omitted key type is indistinguishable from an empty one.
 
-`OnScanFailure` is re-exported from `arcticdb`, as `DataError` and `VersionRequestType` are, but `scan_object_sizes`
-itself is reached through `lib._nvs.version_store` — `AdminTools.get_sizes` does not take the option.
+`OnScanFailure` is not re-exported from `arcticdb`. `scan_object_sizes` is reached through `lib._nvs.version_store`
+and `AdminTools.get_sizes` does not take the option, so the enum lives with the rest of that surface on
+`arcticdb_ext.version_store`.
 
 Covered by `cpp/arcticdb/version/test/test_object_sizes.cpp`, which substitutes a store that fails the key types it
 is told to — not reachable from python, since every storage can list every key type scanned.

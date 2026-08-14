@@ -14,6 +14,8 @@ import arcticdb_ext
 import arcticdb_ext.storage
 from arcticdb.util.test import sample_dataframe
 from arcticdb import KeyType, Size, Arctic
+from arcticdb.toolbox.library_tool import LibraryTool
+from arcticdb_ext.storage import KeyType as NativeKeyType
 
 from arcticdb.options import EnterpriseLibraryOptions
 from arcticdb.version_store.admin_tools import AdminTools, sum_sizes
@@ -112,6 +114,34 @@ def test_get_sizes_includes_column_stats(arctic_client, lib_name):
     sizes = retry_get_sizes(arctic_library.admin_tools())
     assert sizes[KeyType.COLUMN_STATS].count == 1
     assert sizes[KeyType.COLUMN_STATS].bytes_compressed > 0
+
+
+def test_scanned_key_types_are_pinned():
+    """A new key type must be added to TYPES_FOR_SIZE_CALCULATION and arcticdb.KeyType, or excluded on purpose."""
+    lib = Arctic("mem://").create_library("tst")
+    lib.write("sym", sample_dataframe(size=100))
+
+    scanned = {s.key_type for s in lib._nvs.version_store.scan_object_sizes()}
+    not_scanned = set(LibraryTool.key_types()) - scanned
+
+    assert not_scanned == {
+        NativeKeyType.VERSION_JOURNAL,
+        NativeKeyType.GENERATION,
+        NativeKeyType.METRICS,
+        NativeKeyType.SNAPSHOT,
+        NativeKeyType.STORAGE_INFO,
+        NativeKeyType.APPEND_REF,
+        NativeKeyType.LOCK,
+        NativeKeyType.SLOW_LOCK,
+        NativeKeyType.TOMBSTONE,
+        NativeKeyType.PARTITION,
+        NativeKeyType.OFFSET,
+        NativeKeyType.BACKUP_SNAPSHOT_REF,
+        NativeKeyType.TOMBSTONE_ALL,
+        NativeKeyType.SNAPSHOT_TOMBSTONE,
+    }
+    # Every scanned key type maps to a public one, and the public enum has nothing the scan never returns
+    assert {KeyType._from_native(t) for t in scanned} == set(KeyType)
 
 
 def test_scan_object_sizes_records_duration(arctic_client, lib_name):
