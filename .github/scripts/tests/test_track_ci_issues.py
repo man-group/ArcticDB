@@ -316,3 +316,14 @@ class TestSanitiseSearchQuery:
         result = _sanitise_search_query(title)
         for word in ["tests", "stress", "arcticdb", "test_foo", "test_bar"]:
             assert word in result
+
+    def test_keeps_filename_dot_intact(self):
+        """The '.' in a filename must not be stripped. GitHub indexes
+        ``test_foo.py`` as one term; splitting it into a bare ``test_foo``
+        term makes the ANDed search match nothing, so a duplicate issue is
+        opened every run."""
+        result = _sanitise_search_query(
+            "Flaky test: tests/integration/foo/test_num_storage_operations.py::test_read_as_of_version"
+        )
+        assert "test_num_storage_operations.py" in result
+        assert "test_read_as_of_version" in result

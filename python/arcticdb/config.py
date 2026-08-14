@@ -26,7 +26,7 @@ from typing import AnyStr, Optional, Dict
 
 from arcticdb.exceptions import ArcticNativeException
 from arcticdb.log import logger_by_name, configure
-from arcticdb_ext import set_config_int, get_config_int
+from arcticdb_ext import set_config_int, get_config_int, set_config_string, get_config_string
 
 _HOME = osp.expanduser("~/.arctic/native")
 

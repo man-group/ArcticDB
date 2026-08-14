@@ -34,7 +34,7 @@ from arcticdb.flattener import Flattener
 from arcticdb.util.test_utils import generate_random_numpy_array, generate_random_series
 from arcticdb.version_store import NativeVersionStore
 from arcticdb.version_store._store import VersionedItem
-from arcticdb_ext.exceptions import _ArcticLegacyCompatibilityException, StorageException
+from arcticdb_ext.exceptions import _ArcticLegacyCompatibilityException, KeyNotFoundException, StorageException
 from arcticdb_ext.storage import KeyType, NoDataFoundException
 from arcticdb_ext.version_store import (
     NoSuchVersionException,
@@ -549,8 +549,9 @@ def test_prune_previous_versions_write(basic_store, sym):
     assert len(keys_for_sym) == 3
     latest_ver_key = max(keys_for_sym, key=lambda x: x.version_id)
     check_write_and_prune_previous_version_keys(lib_tool, sym, latest_ver_key)
-    # Then - we got 3 symbol keys: 1 for each of the writes
-    assert len(lib_tool.find_keys(KeyType.SYMBOL_LIST)) == 3
+    # Then - we got 1 symbol key from the first write, and none from the subsequent as there was a live version already
+    # on the second and third writes
+    assert len(lib_tool.find_keys(KeyType.SYMBOL_LIST)) == 1
 
 
 @pytest.mark.storage
@@ -632,8 +633,51 @@ def test_prune_previous_versions_write_batch(basic_store):
         assert len(keys_for_sym) == 3
         latest_ver_key = max(keys_for_sym, key=lambda x: x.version_id)
         check_write_and_prune_previous_version_keys(lib_tool, sym, latest_ver_key)
-    # Then - we got 6 symbol keys: 1 for each of the writes
-    assert len(lib_tool.find_keys(KeyType.SYMBOL_LIST)) == 6
+    # Then - we got 2 symbol list keys from the first batch_write, and none from the subsequent calls as both symbols
+    # had known live versions when these were called
+    assert len(lib_tool.find_keys(KeyType.SYMBOL_LIST)) == 2
+
+
+@pytest.mark.storage
+def test_prune_previous_versions_write_metadata(basic_store):
+    """Verify that the write metadata method correctly prunes previous versions when the corresponding option is specified."""
+    # Given
+    lib = basic_store
+    lib_tool = lib.library_tool()
+    sym = "test_prune_previous_versions_write_metadata"
+    meta0 = {"a": 0}
+    meta1 = {"a": 1}
+    meta2 = {"a": 2}
+
+    # When
+    lib.write(sym, None, metadata=meta0)
+    lib.write(sym, None, metadata=meta1)
+    ref_key = lib_tool.find_keys_for_id(KeyType.VERSION_REF, sym)[0]
+    keys_in_ref = lib_tool.read_to_keys(ref_key)
+    assert len(lib.list_versions(sym)) == 2
+    check_append_ref_key_structure(keys_in_ref)
+
+    lib.write_metadata(sym, meta2, prune_previous_version=True)
+
+    ref_key = lib_tool.find_keys_for_id(KeyType.VERSION_REF, sym)[0]
+    keys_in_ref = lib_tool.read_to_keys(ref_key)
+    assert len(lib.list_versions(sym)) == 1
+    check_regular_write_ref_key_structure(keys_in_ref, latest_version_id=2)
+
+    # Then - only latest version and keys should survive
+    assert len(lib_tool.find_keys_for_id(KeyType.TABLE_INDEX, sym)) == 1
+    assert len(lib_tool.find_keys_for_id(KeyType.TABLE_DATA, sym)) == 1
+
+    # Then - we got 2 version keys per symbol: version 0, version 1 that contains the tombstone_all
+    keys_for_sym = lib_tool.find_keys_for_id(KeyType.VERSION, sym)
+
+    assert len(keys_for_sym) == 3
+    latest_ver_key = max(keys_for_sym, key=lambda x: x.version_id)
+    check_write_and_prune_previous_version_keys(lib_tool, sym, latest_ver_key)
+
+    # Then - we got 1 symbol list key from the first write, and none from the subsequent calls as the symbol had known
+    # live versions when these were called
+    assert len(lib_tool.find_keys(KeyType.SYMBOL_LIST)) == 1
 
 
 @pytest.mark.storage
@@ -677,9 +721,9 @@ def test_prune_previous_versions_batch_write_metadata(basic_store):
         latest_ver_key = max(keys_for_sym, key=lambda x: x.version_id)
         check_write_and_prune_previous_version_keys(lib_tool, sym, latest_ver_key)
 
-    # Then - we got 4 symbol keys: 1 for each of the batch_write calls
-    # batch_write_metadata should not create any new symbol keys
-    assert len(lib_tool.find_keys(KeyType.SYMBOL_LIST)) == 4
+    # Then - we got 2 symbol list keys from the first batch_write_metadata, and none from the subsequent calls as both
+    # symbols had known live versions when these were called
+    assert len(lib_tool.find_keys(KeyType.SYMBOL_LIST)) == 2
 
 
 @pytest.mark.storage
@@ -2827,14 +2871,37 @@ def test_batch_append(basic_store_tombstone, three_col_df):
 
 
 @pytest.mark.storage
-def test_batch_append_with_throw_exception(basic_store, three_col_df):
+@pytest.mark.parametrize("compact_data", [False, True])
+def test_batch_append_no_versions_no_upsert_exception(basic_store, three_col_df, compact_data):
     multi_data = {"sym1": three_col_df(), "sym2": three_col_df(1)}
     with pytest.raises(NoSuchVersionException):
         basic_store.batch_append(
             list(multi_data.keys()),
             list(multi_data.values()),
+            compact_data=compact_data,
             write_if_missing=False,
         )
+
+
+# See test_arctic_batch.py::test_append_batch_missing_keys for equivalent V2 API test
+@pytest.mark.storage
+@pytest.mark.parametrize("compact_data", [False, True])
+def test_batch_append_missing_keys(in_memory_version_store, compact_data):
+    lib = in_memory_version_store
+
+    df1_write = pd.DataFrame({"col1": [1]})
+    df2_write = pd.DataFrame({"col2": [2]})
+    lib.write("s1", df1_write)
+    lib.write("s2", df2_write)
+
+    lib_tool = lib.library_tool()
+    s1_index_key = lib_tool.find_keys_for_id(KeyType.TABLE_INDEX, "s1")[0]
+    lib_tool.remove(s1_index_key)
+
+    df1_append = pd.DataFrame({"col1": [11]})
+    df2_append = pd.DataFrame({"col1": [12]})
+    with pytest.raises(KeyNotFoundException) as e:
+        lib.batch_append(["s1", "s2"], [df1_append, df2_append], compact_data=compact_data)
 
 
 @pytest.mark.parametrize("use_date_range_clause", [True, False])

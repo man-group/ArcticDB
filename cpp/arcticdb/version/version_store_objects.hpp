@@ -82,13 +82,13 @@ struct TombstoneVersionResult : PreDeleteChecks {
 };
 
 /**
- * Output from [batch_]get_latest_undeleted_version_and_next_version_id. Contains info needed for writing operations
- * that depend on a previous live version existing:
- *  - update (with upsert false)
- *  - append (with upsert false)
- *  - batch_append (doesn't currently support upsert)
- *  - write_metadata
- *  - batch_write_metadata
+ * Output from [batch_]get_next_version_id_and_optionally_latest_undeleted_version[_async]. Contains info needed for
+ * modification operations. Both functions have a get_latest_undeleted_version bool argument. If this is true,
+ * previous_index_key_ will contain the index key of the latest live version if any exist. If it is false (which is
+ * only the case in [batch_]write calls with dedup disabled), this field may be std::nullopt even if a live version
+ * exists, as all we require is the next_version_id_. While identifying the next version id, it is possible we will
+ * also learn that a previous live version exists, in which case previous_index_key_ is populated, and used to know
+ * that we do not need to write a symbol list key.
  */
 struct UpdateInfo {
     /**

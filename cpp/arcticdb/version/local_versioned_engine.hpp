@@ -35,16 +35,6 @@ using VersionedItemOrError = std::variant<VersionedItem, DataError>;
  */
 using SpecificAndLatestVersionKeys = std::pair<
         std::shared_ptr<std::unordered_map<StreamId, AtomKey>>, std::shared_ptr<std::unordered_map<StreamId, AtomKey>>>;
-struct VersionIdAndDedupMapInfo {
-    VersionId version_id;
-    std::shared_ptr<DeDupMap> de_dup_map;
-    version_store::UpdateInfo update_info;
-};
-
-struct IndexKeyAndUpdateInfo {
-    entity::AtomKey index_key;
-    version_store::UpdateInfo update_info;
-};
 
 struct KeySizesInfo {
     size_t count;
@@ -338,13 +328,13 @@ class LocalVersionedEngine : public VersionedEngine {
             const StreamId& stream_id, std::optional<uint64_t> rows_per_segment
     ) override;
 
-    VersionedItem maybe_compact_data_and_write_version(
-            const UpdateInfo& update_info, uint64_t rows_per_segment, bool prune_previous_versions,
-            std::optional<CompactDataFrame> compact_data_frame = std::nullopt
-    );
-
     VersionedItem compact_data_internal(
             const StreamId& stream_id, std::optional<uint64_t> rows_per_segment, bool prune_previous_versions
+    ) override;
+
+    std::vector<std::variant<VersionedItem, DataError>> batch_compact_data_internal(
+            const std::vector<StreamId>& stream_ids, std::optional<uint64_t> rows_per_segment,
+            bool prune_previous_versions, bool throw_on_error
     ) override;
 
     bool is_symbol_fragmented(const StreamId& stream_id, std::optional<size_t> segment_size) override;
@@ -372,7 +362,7 @@ class LocalVersionedEngine : public VersionedEngine {
     void force_release_lock(const StreamId& name);
 
     std::shared_ptr<DeDupMap> get_de_dup_map(
-            const StreamId& stream_id, const std::optional<AtomKey>& maybe_prev, const WriteOptions& write_options
+            const StreamId& stream_id, const UpdateInfo& update_info, const WriteOptions& write_options
     );
 
     folly::Future<VersionedItem> write_index_key_to_version_map_async(
@@ -395,10 +385,6 @@ class LocalVersionedEngine : public VersionedEngine {
 
     std::vector<std::variant<folly::Unit, DataError>> batch_delete_symbols_internal(
             const std::vector<std::pair<StreamId, VersionId>>& symbols_to_delete
-    );
-
-    VersionIdAndDedupMapInfo create_version_id_and_dedup_map(
-            const version_store::UpdateInfo&& update_info, const StreamId& stream_id, const WriteOptions& write_options
     );
 
     std::vector<storage::ObjectSizes> scan_object_sizes();
@@ -472,10 +458,38 @@ class LocalVersionedEngine : public VersionedEngine {
     void add_to_symbol_list_on_compaction(
             const StreamId& stream_id, const CompactIncompleteParameters& parameters, const UpdateInfo& update_info
     );
-    UpdateInfo compact_data_preamble(const StreamId& stream_id);
+
+    // Per-symbol modification pipelines shared by the single-symbol and batch entry points. Each takes the resolved
+    // update_info, produces the new index key, and writes it to the version map. The single-symbol methods obtain
+    // update_info synchronously and block on the returned future; the batch methods chain it per symbol.
+    folly::Future<VersionedItem> async_write_versioned_dataframe_internal(
+            const StreamId& stream_id, UpdateInfo&& update_info, const std::shared_ptr<pipelines::InputFrame>& frame,
+            bool prune_previous_versions, bool allow_sparse, bool validate_index
+    );
+
+    folly::Future<VersionedItem> async_append_internal(
+            const StreamId& stream_id, UpdateInfo&& update_info, const std::shared_ptr<pipelines::InputFrame>& frame,
+            const AppendOptions& append_options, const bool batch
+    );
+
+    folly::Future<VersionedItem> async_update_internal(
+            const StreamId& stream_id, UpdateInfo&& update_info, const UpdateQuery& query,
+            const std::shared_ptr<pipelines::InputFrame>& frame, bool upsert, bool dynamic_schema,
+            bool prune_previous_versions, const bool batch
+    );
+
+    folly::Future<VersionedItem> async_write_versioned_metadata_internal(
+            const StreamId& stream_id, UpdateInfo&& update_info,
+            arcticdb::proto::descriptors::UserDefinedMetadata&& user_meta, bool prune_previous_versions
+    );
+
+    folly::Future<VersionedItem> async_compact_data_internal(
+            UpdateInfo&& update_info, uint64_t rows_per_segment, bool prune_previous_versions
+    );
 
     std::shared_ptr<Store> store_;
     arcticdb::proto::storage::VersionStoreConfig cfg_;
+    WriteOptions write_options_;
     std::shared_ptr<VersionMap> version_map_ = std::make_shared<VersionMap>();
     std::shared_ptr<SymbolList> symbol_list_;
     std::optional<std::string> license_key_;

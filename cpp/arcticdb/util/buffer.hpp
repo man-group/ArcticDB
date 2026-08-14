@@ -220,6 +220,8 @@ struct Buffer : public BaseBuffer<Buffer, true> {
 
     [[nodiscard]] size_t available() const { return capacity_ >= preamble_bytes_ ? capacity_ - preamble_bytes_ : 0; }
 
+    void clear() { deallocate(); }
+
   private:
     inline void resize(size_t alloc_bytes) {
         const size_t bytes = alloc_bytes - preamble_bytes_;

@@ -82,6 +82,11 @@ struct PipelineContext : public std::enable_shared_from_this<PipelineContext> {
 
         void advance(ptrdiff_t n) { index_ += n; }
 
+        template<class OtherValue>
+        ptrdiff_t distance_to(const PipelineContextIterator<OtherValue>& other) const {
+            return static_cast<ptrdiff_t>(other.index_) - static_cast<ptrdiff_t>(index_);
+        }
+
         ValueType& dereference() const {
             row_ = PipelineContextRow{parent_, index_};
             return row_;

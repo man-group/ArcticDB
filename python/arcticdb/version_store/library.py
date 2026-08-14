@@ -15,7 +15,14 @@ from enum import Enum, auto
 from typing import Optional, Any, Tuple, Dict, Union, List, Iterable, NamedTuple
 
 from arcticdb.dependencies import _PYARROW_AVAILABLE, _POLARS_AVAILABLE, pyarrow as pa, polars as pl
-from arcticdb.exceptions import ArcticNativeException, ArcticDbNotYetImplemented, MissingKeysInStageResultsError
+from arcticdb.exceptions import (
+    ArcticNativeException,
+    ArcticDbNotYetImplemented,
+    MissingKeysInStageResultsError,
+    ArcticInvalidApiUsageException,
+    ArcticDuplicateSymbolsInBatchException,
+    ArcticUnsupportedDataTypeException,
+)
 from numpy import datetime64
 
 from arcticdb.options import LibraryOptions, EnterpriseLibraryOptions, OutputFormat, ArrowOutputStringFormat
@@ -66,18 +73,6 @@ See Also
 
 Library.write: for more documentation on normalisation.
 """
-
-
-class ArcticInvalidApiUsageException(ArcticException):
-    """Exception indicating an invalid call made to the Arctic API."""
-
-
-class ArcticDuplicateSymbolsInBatchException(ArcticInvalidApiUsageException):
-    """Exception indicating that duplicate symbols were passed to a batch method of this module."""
-
-
-class ArcticUnsupportedDataTypeException(ArcticInvalidApiUsageException):
-    """Exception indicating that a method does not support the type of data provided."""
 
 
 class SymbolVersion(NamedTuple):
@@ -1215,12 +1210,6 @@ class Library:
             recursive_normalize_msgpack_no_pickle_fallback=False,
         )
 
-    @staticmethod
-    def _raise_if_duplicate_symbols_in_batch(batch):
-        symbols = {p.symbol for p in batch}
-        if len(symbols) < len(batch):
-            raise ArcticDuplicateSymbolsInBatchException
-
     def _raise_if_unsupported_type_in_write_batch(self, payloads):
         bad_symbols = []
         for p in payloads:
@@ -1298,7 +1287,7 @@ class Library:
         >>> items[0].symbol, items[1].symbol
         ('symbol_1', 'symbol_2')
         """
-        self._raise_if_duplicate_symbols_in_batch(payloads)
+        self._nvs._raise_if_duplicate_symbols_in_batch(payloads)
         self._raise_if_unsupported_type_in_write_batch(payloads)
 
         throw_on_error = False
@@ -1346,7 +1335,7 @@ class Library:
         write: For more detailed documentation.
         write_pickle: For information on the implications of providing data that needs to be pickled.
         """
-        self._raise_if_duplicate_symbols_in_batch(payloads)
+        self._nvs._raise_if_duplicate_symbols_in_batch(payloads)
 
         return self._nvs._batch_write_internal(
             [p.symbol for p in payloads],
@@ -1467,7 +1456,11 @@ class Library:
         )
 
     def append_batch(
-        self, append_payloads: List[WritePayload], prune_previous_versions: bool = False, validate_index=True
+        self,
+        append_payloads: List[WritePayload],
+        prune_previous_versions: bool = False,
+        validate_index: bool = True,
+        compact_data: bool = False,
     ) -> List[Union[VersionedItem, DataError]]:
         """
         Append data to multiple symbols in a batch fashion. This is more efficient than making multiple `append` calls in
@@ -1486,6 +1479,13 @@ class Library:
             Verify that each entry in the batch has an index that supports date range searches and update operations.
             This tests that the data is sorted in ascending order, using Pandas DataFrame.index.is_monotonic_increasing.
             For Arrow input data, ArcticDB checks the index column directly.
+        compact_data: bool, default=False
+            If False, the data being appended will be sliced and written to disk without consideration for how
+            fragmented this may make the data.
+            If True, the data will also be compacted at the same time (see the `compact_data` method for more details).
+            Note that this will usually involve reading some data segments from disk and doing some in-memory
+            processing, and so will generally be slower than when this argument is False. However, subsequent reads of
+            the data will generally be faster.
 
         Returns
         -------
@@ -1503,7 +1503,7 @@ class Library:
             If data that is not of NormalizableType appears in any of the payloads.
         """
 
-        self._raise_if_duplicate_symbols_in_batch(append_payloads)
+        self._nvs._raise_if_duplicate_symbols_in_batch(append_payloads)
         self._raise_if_unsupported_type_in_write_batch(append_payloads)
         throw_on_error = False
 
@@ -1515,6 +1515,7 @@ class Library:
             validate_index=validate_index,
             throw_on_error=throw_on_error,
             index_column_vector=[p.index_column for p in append_payloads],
+            compact_data=compact_data,
         )
 
     def update(
@@ -1706,7 +1707,7 @@ class Library:
         2024-01-02        11
         """
 
-        self._raise_if_duplicate_symbols_in_batch(update_payloads)
+        self._nvs._raise_if_duplicate_symbols_in_batch(update_payloads)
         self._raise_if_unsupported_type_in_write_batch(update_payloads)
 
         batch_update_result = self._nvs._batch_update_internal(
@@ -2614,7 +2615,7 @@ class Library:
         {'the': 'metadata_2'}
         """
 
-        self._raise_if_duplicate_symbols_in_batch(write_metadata_payloads)
+        self._nvs._raise_if_duplicate_symbols_in_batch(write_metadata_payloads)
         throw_on_error = False
         return self._nvs._batch_write_metadata_to_versioned_items(
             [p.symbol for p in write_metadata_payloads],
@@ -3312,6 +3313,76 @@ class Library:
         """
         return self._nvs.compact_data(symbol, rows_per_segment, prune_previous_versions)
 
+    def compact_data_batch(
+        self,
+        symbols: List[str],
+        rows_per_segment: Optional[int] = None,
+        prune_previous_versions: bool = False,
+    ) -> List[Union[VersionedItem, DataError]]:
+        """
+        Compact the data keys associated with the latest versions of a collection of symbols such that the number of
+        rows in each segment is close to rows_per_segment. After compaction, all segments will have a row count within
+        33% of rows_per_segment.
+
+        For each symbol, this operation creates a new version, unless the data for that symbol is already compacted.
+
+        The metadata from the versions being compacted are maintained with the newly created versions.
+
+        Parameters
+        ----------
+        symbols : List[str]
+            The symbols to compact the data keys of.
+        rows_per_segment : Optional[int], default=None
+            The target number of rows for each segment after the compaction. If None, uses the library configuration
+            setting. Note that subsequent calls to write, append, and update will continue to use the library
+            configuration setting.
+        prune_previous_versions : bool, default=False
+            If True, removes previous versions from the version list.
+
+        Returns
+        -------
+        List[Union[VersionedItem, DataError]]
+            The i-th element of the returned list corresponds to the i-th entry of the input symbols argument:
+            * If successful - a VersionedItem including the version number of the written symbol in the store. The data
+              and metadata attributes will not be populated. If no compaction occurs because the data is already
+              compacted, the version field will be that of the latest live version for the symbol.
+            * On failure - a DataError object containing information about the error encountered when trying to compact
+              that symbol.
+
+        Raises
+        ------
+        ArcticNativeException
+            If invalid rows_per_segment is provided
+        ArcticDuplicateSymbolsInBatchException
+            If the symbols argument contains duplicate entries
+
+        Examples
+        --------
+
+        >>> df1 = pd.DataFrame({"col": np.arange(100_000)})
+        >>> df2 = pd.DataFrame({"col": np.arange(200_000)})
+        >>> for i in range(100):
+        >>>     lib.append_batch(
+        >>>         [
+        >>>             WritePayload("sym1", df1[i * 1_000 : (i + 1) * 1_000]),
+        >>>             WritePayload("sym2", df2[i * 2_000 : (i + 1) * 2_000]),
+        >>>         ]
+        >>>     )
+        >>> lib_tool = lib._dev_tools.library_tool()
+        >>> len(lib_tool.read_index("sym1"))
+        100
+        >>> len(lib_tool.read_index("sym2"))
+        100
+        >>> lib.compact_data_batch(["sym1", "sym2"])
+        >>> len(lib_tool.read_index("sym1"))
+        1
+        >>> len(lib_tool.read_index("sym2"))
+        2
+        """
+        return self._nvs._batch_compact_data_internal(
+            symbols, rows_per_segment, prune_previous_versions, throw_on_error=False
+        )
+
     def is_symbol_fragmented(self, symbol: str, segment_size: Optional[int] = None) -> bool:
         """
         This method has been deprecated and will be removed in a future release. Please use compact_data_explain_plan
@@ -3427,8 +3498,6 @@ class Library:
             This API is under development and is subject to change. The API is not subject to semver and can change in
             minor or patch releases.
 
-            Only date time indexed symbols and sources are supported at the moment.
-
             Dynamic schema is not supported.
 
         Parameters
@@ -3438,9 +3507,6 @@ class Library:
         source : pandas.DataFrame or pandas.Series
             The new data to merge. In the case of timeseries, the index must be sorted.
         strategy : Optional[MergeStrategy], default=MergeStrategy(matched="update", not_matched_by_target="insert")
-            !!! warning
-                Only `MergeStrategy(matched="update", not_matched_by_target="do_nothing")` is implemented
-
             Determines how to handle matched and unmatched rows. Accepted strategies are:
                 - MergeStrategy(matched="update", not_matched_by_target="do_nothing"): Update matched rows, leave others unchanged.
                 - MergeStrategy(matched="do_nothing", not_matched_by_target="insert"): Insert unmatched rows from source.
@@ -3470,10 +3536,9 @@ class Library:
         prune_previous_versions : bool, default False
             If True, removes previous versions from the version list.
         upsert : bool, default False
-            !!! warning
-                Not yet implemented
-
-            If True and `not_matched_by_target="insert"`, creates the symbol if it does not exist.
+            If True and the symbol does not exist, create it by writing `source` to the store. Requires a strategy
+            with `not_matched_by_target="insert"`; combining it with an update-only strategy raises
+            `UserInputException` as the newly created symbol would be empty.
 
         Returns
         -------
@@ -3486,7 +3551,8 @@ class Library:
         StorageException
             If symbol doesn't exist and `upsert=False`
         UserInputException
-            If strategy is not one of the supported strategies listed above
+            If strategy is not one of the supported strategies listed above or if `upsert=True` is used with an
+            update-only strategy and the symbol doesn't exist
         UnsortedDataException
             If date-time index is used and source or target are not sorted
         SchemaException

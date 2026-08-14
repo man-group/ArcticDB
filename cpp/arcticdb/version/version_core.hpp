@@ -27,17 +27,13 @@
 #include <arcticdb/util/constructors.hpp>
 #include <arcticdb/version/version_tasks.hpp>
 #include <string>
+#include <chrono>
+#include <arcticdb/util/configs_map.hpp>
 
 namespace arcticdb::version_store {
 
 using namespace entity;
 using namespace pipelines;
-
-VersionedItem write_dataframe_impl(
-        const std::shared_ptr<Store>& store, VersionId version_id, const std::shared_ptr<InputFrame>& frame,
-        const WriteOptions& options, const std::shared_ptr<DeDupMap>& de_dup_map = std::make_shared<DeDupMap>(),
-        bool allow_sparse = false, bool validate_index = false
-);
 
 std::tuple<IndexPartialKey, SlicingPolicy> get_partial_key_and_slicing_policy(
         const std::shared_ptr<Store>& store, const WriteOptions& options, const InputFrame& frame, VersionId version_id,
@@ -46,7 +42,8 @@ std::tuple<IndexPartialKey, SlicingPolicy> get_partial_key_and_slicing_policy(
 
 folly::Future<entity::AtomKey> async_write_dataframe_impl(
         const std::shared_ptr<Store>& store, VersionId version_id, const std::shared_ptr<pipelines::InputFrame>& frame,
-        const WriteOptions& options, const std::shared_ptr<DeDupMap>& de_dup_map, bool allow_sparse, bool validate_index
+        const WriteOptions& options, const std::shared_ptr<DeDupMap>& de_dup_map = std::make_shared<DeDupMap>(),
+        bool allow_sparse = false, bool validate_index = false
 );
 
 folly::Future<AtomKey> async_append_impl(
@@ -54,24 +51,19 @@ folly::Future<AtomKey> async_append_impl(
         const WriteOptions& options, bool validate_index, bool empty_types
 );
 
-VersionedItem append_impl(
-        const std::shared_ptr<Store>& store, const UpdateInfo& update_info, const std::shared_ptr<InputFrame>& frame,
-        const WriteOptions& options, bool validate_index, bool empty_types
-);
-
-VersionedItem update_impl(
-        const std::shared_ptr<Store>& store, const UpdateInfo& update_info, const UpdateQuery& query,
-        const std::shared_ptr<InputFrame>& frame, WriteOptions&& options, bool dynamic_schema, bool empty_types
-);
-
 folly::Future<AtomKey> async_update_impl(
         const std::shared_ptr<Store>& store, const UpdateInfo& update_info, const UpdateQuery& query,
-        const std::shared_ptr<InputFrame>& frame, WriteOptions&& options, bool dynamic_schema, bool empty_types
+        const std::shared_ptr<InputFrame>& frame, const WriteOptions& options, bool dynamic_schema, bool empty_types
+);
+
+folly::Future<AtomKey> async_write_metadata_impl(
+        const std::shared_ptr<Store>& store, const UpdateInfo& update_info,
+        arcticdb::proto::descriptors::UserDefinedMetadata&& user_meta
 );
 
 VersionedItem delete_range_impl(
         const std::shared_ptr<Store>& store, const StreamId& stream_id, const UpdateInfo& update_info,
-        const UpdateQuery& query, const WriteOptions&& options, bool dynamic_schema
+        const UpdateQuery& query, bool dynamic_schema
 );
 
 folly::Future<IndexInformation> read_index_key_without_column_stats(
@@ -195,10 +187,11 @@ folly::Future<VersionedItem> read_modify_write_impl(
         std::optional<proto::descriptors::UserDefinedMetadata>&& user_meta_proto
 );
 
-folly::Future<VersionedItem> merge_update_impl(
-        const std::shared_ptr<Store>& store, const VersionIdentifier& version_info, const ReadOptions& read_options,
+folly::Future<AtomKey> merge_update_impl(
+        const std::shared_ptr<Store>& store, const UpdateInfo& update_info, const ReadOptions& read_options,
         const WriteOptions& write_options, const IndexPartialKey& target_partial_index_key,
-        std::vector<std::string>&& on, const MergeStrategy& strategy, std::shared_ptr<InputFrame> source
+        std::vector<std::string>&& on, const MergeStrategy& strategy, std::shared_ptr<InputFrame> source,
+        std::shared_ptr<DeDupMap> de_dup_map
 );
 
 folly::Future<CompactDataInfo> compact_data_explain_plan_impl(
@@ -211,7 +204,7 @@ struct CompactDataFrame {
     bool empty_types_;
 };
 
-folly::Future<std::optional<VersionedItem>> compact_data_impl(
+folly::Future<std::optional<AtomKey>> async_compact_data_impl(
         const std::shared_ptr<Store>& store, const UpdateInfo& update_info, const WriteOptions& write_options,
         uint64_t rows_per_segment, std::optional<CompactDataFrame> compact_data_frame = std::nullopt
 );
@@ -277,7 +270,17 @@ template<
             segment_size.has_value() ? SegmentationPolicy{*segment_size} : SegmentationPolicy{}
     };
 
+    auto total = std::distance(to_compact_start, to_compact_end);
+    auto start = std::chrono::steady_clock::now();
     [[maybe_unused]] size_t count = 0;
+    size_t processed = 0;
+
+    // Percentage of segments after which to log progress. Default 10% means logs at 10%, 20%, ... 100%.
+    // Override via env var: ARCTICDB_Compact_LogProgressPercentage_INT=<value>
+    // Or in Python: set_config_int("Compact.LogProgressPercentage", <value>)
+    int log_every_percent = ConfigsMap::instance()->get_int("Compact.LogProgressPercentage", 10);
+    int next_log_pct = log_every_percent;
+
     for (auto it = to_compact_start; it != to_compact_end; ++it) {
         auto sk = [&it]() {
             if constexpr (std::is_same_v<IteratorType, pipelines::PipelineContext::iterator>)
@@ -285,6 +288,24 @@ template<
             else
                 return *it;
         }();
+
+        ++processed;
+        if (log_every_percent > 0) {
+            int pct = static_cast<int>(processed * 100 / total);
+            if (pct >= next_log_pct) {
+                auto elapsed =
+                        std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - start)
+                                .count();
+                log::version().info(
+                        "do_compact: processed {}/{} segments for symbol {}, elapsed {}s",
+                        processed,
+                        total,
+                        pipeline_context->stream_id_,
+                        elapsed
+                );
+                next_log_pct += log_every_percent;
+            }
+        }
         if (sk.slice().rows().diff() == 0) {
             continue;
         }

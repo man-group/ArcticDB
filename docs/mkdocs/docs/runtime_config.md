@@ -4,11 +4,15 @@ ArcticDB features a variety of options that can be tuned at runtime. This page d
 
 ## Configuration methods
 
-All of the integer options detailed on this page can be configured using the following two methods. All of the options listed on this page are integer options except for log levels, which will be explained in their own section.
+Every option on this page can be configured either in code or by an environment variable. Most options are integer
+options; the exceptions are noted in each option's own section, and log levels, which are explained in their own
+section. Each option has a fixed type, and you must use the setter matching that type.
+
+The values of string options are case-sensitive (e.g. `md5`, not `MD5`). Each option's own section lists the values it accepts; setting anything else raises `UserInputException` when the option is used. Option names are not case-sensitive.
 
 ### In code
 
-For integer options, the following code snippet demonstrates how to set values in code:
+For integer options:
 
 ```python
 from arcticdb.config import set_config_int
@@ -17,19 +21,27 @@ set_config_int(setting, value)
 
 where `setting` is a string containing the setting name (e.g. `VersionMap.ReloadInterval`), and `value` is an int to set the option to.
 
+For string options:
+
+```python
+from arcticdb.config import set_config_string
+set_config_string(setting, value)
+```
+
 ### Environment variables
 
-For integer options, environment variables can be used to set options as follows:
+Environment variables can be used to set options as follows, where the suffix selects the option's type:
 
 ```
 ARCTICDB_<setting>_int=<value>
+ARCTICDB_<setting>_str=<value>
 ```
 
-e.g. `ARCTICDB_VersionMap_ReloadInterval_int=0`. Note that `.` characters in setting names are replaced with underscores when setting them by environment variables.
+e.g. `ARCTICDB_VersionMap_ReloadInterval_int=0`, or `ARCTICDB_S3Storage_DeleteObjectsChecksum_str=md5`. Note that `.` characters in setting names are replaced with underscores when setting them by environment variables.
 
 ### Priority
 
-If both the environment variable is set, and `set_config_int` is called, then the latter takes priority.
+If both the environment variable is set, and the corresponding `set_config_*` function is called, then the latter takes priority.
 
 ### Reactivity
 
@@ -58,6 +70,26 @@ The default is 500.
 The S3 API supports the `DeleteObjects` method, whereby a single HTTP request can be used to delete multiple objects. This parameter can be used to control how many objects are requested to be deleted at a time.
 
 The default is 1000.
+
+### S3Storage.DeleteObjectsChecksum
+
+Controls which checksum ArcticDB sends on the S3 `DeleteObjects` request. By default the AWS SDK attaches a crc64nvme checksum (`x-amz-checksum-crc64nvme`).
+
+Some S3-compatible backends (e.g. `Scality`) do not support this and reject the request with a checksum related error, but do accept the legacy `Content-MD5` header. Set this option to `md5` for those backends.
+
+This is a string option, so it is set with `set_config_string` or `ARCTICDB_S3Storage_DeleteObjectsChecksum_str` (see [Configuration methods](#configuration-methods)).
+
+Values:
+* `crc64nvme`: Send the SDK's default crc64nvme checksum (Default).
+* `md5`: Send md5 checksum instead.
+
+Any other value, including a differently cased `MD5` or `CRC64NVME`, raises `UserInputException` on the first
+`DeleteObjects` request rather than silently falling back to the default.
+
+!!! warning "Has no effect in `when_supported` checksum mode"
+
+    Note if either environment variable `AWS_REQUEST_CHECKSUM_CALCULATION` or `AWS_RESPONSE_CHECKSUM_VALIDATION` is set to `when_supported`, the setting of `S3Storage.DeleteObjectsChecksum` will have no effect. crc64nvme checksum will always be sent.
+    See the [AWS documentation](https://docs.aws.amazon.com/sdkref/latest/guide/feature-dataintegrity.html) for more details.
 
 ### S3Storage.VerifySSL
 
@@ -118,6 +150,27 @@ The `thread` field is not supported on Windows and reads `unknown` there.
 
 The [`scripts/analyze_task_scheduler_queues.py`](https://github.com/man-group/ArcticDB/blob/master/scripts/analyze_task_scheduler_queues.py) script parses the captured log and provides a visualization.
 
+### Fork.WarnOnFork
+
+Control whether ArcticDB logs a warning when the process calls `fork()`, for example through
+`multiprocessing` with the `fork` start method.
+
+The warning is logged at most once per process, no matter how many times the process forks.
+
+It is only logged once ArcticDB has started its background threads, which happens on the first read or write.
+A process that imports `arcticdb`, or that creates libraries without reading or writing, and then forks has
+nothing to warn about and stays silent.
+
+Values:
+* 0: Disable
+* 1: Enable (Default)
+
+The warning is only present in builds for Python 3.12 and later, the version where CPython itself began raising a
+`DeprecationWarning` for the same problem. It is also not present on macOS: unlike Linux, macOS's `subprocess` and
+`multiprocessing` routinely use a real `fork()` followed by `exec()` to launch child processes (e.g. `spawn` and
+`forkserver`), which is indistinguishable from an unsafe fork at the point the warning would be logged, so it would
+fire for those safe cases too.
+
 ### VersionStore.WillItemBePickledWarningMsg
 
 Control whether a detailed message explaining how the item is normalized is logged when calling the `will_item_be_pickled` function.
@@ -156,6 +209,19 @@ Values:
 * 1: Enable (Default)
 
 Please note that if meta structure V2 is read by < v6.7.0, exception KeyError will be raised
+
+### Compact.LogProgressPercentage
+
+Controls how frequently progress is logged during `finalize_staged_data` operations. A log line is emitted each time this percentage of segments has been processed.
+
+For example, with the default value of `10`, logs appear at 10%, 20%, 30%, ... 100% completion:
+```
+do_compact: processed 19500/195000 segments for symbol my_symbol, elapsed 1234s
+```
+
+Setting to `0` disables progress logging entirely.
+
+The default is 10.
 
 ## Logging configuration
 

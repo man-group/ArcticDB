@@ -62,3 +62,15 @@ class MissingKeysInStageResultsError(ArcticException):
 
     def __eq__(self, other: "MissingKeysInStageResultsError"):
         return self.msg == other.msg and self.stage_results_with_missing_keys == other.stage_results_with_missing_keys
+
+
+class ArcticInvalidApiUsageException(ArcticException):
+    """Exception indicating an invalid call made to the Arctic API."""
+
+
+class ArcticDuplicateSymbolsInBatchException(ArcticInvalidApiUsageException):
+    """Exception indicating that duplicate symbols were passed to a batch method of this module."""
+
+
+class ArcticUnsupportedDataTypeException(ArcticInvalidApiUsageException):
+    """Exception indicating that a method does not support the type of data provided."""

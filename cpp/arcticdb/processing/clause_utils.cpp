@@ -46,6 +46,52 @@ std::vector<std::vector<EntityId>> structure_by_row_slice(
     return res;
 }
 
+template<typename T>
+requires util::any_of<T, RangesAndKey, RangesAndEntity>
+std::vector<std::vector<size_t>> structure_by_row_slice(std::vector<T>& ranges) {
+    std::ranges::sort(ranges, [](const T& left, const T& right) {
+        return std::tie(left.row_range().first, left.col_range().first) <
+               std::tie(right.row_range().first, right.col_range().first);
+    });
+
+    std::vector<std::vector<size_t>> res;
+    RowRange previous_row_range{std::numeric_limits<size_t>::max(), std::numeric_limits<size_t>::max()};
+    for (const auto& [idx, ranges_and_key] : folly::enumerate(ranges)) {
+        RowRange current_row_range{ranges_and_key.row_range()};
+        if (current_row_range != previous_row_range) {
+            res.emplace_back();
+        }
+        res.back().emplace_back(idx);
+        previous_row_range = current_row_range;
+    }
+    return res;
+}
+
+template std::vector<std::vector<size_t>> structure_by_row_slice(std::vector<RangesAndKey>& ranges);
+template std::vector<std::vector<size_t>> structure_by_row_slice(std::vector<RangesAndEntity>& ranges);
+
+std::vector<std::vector<size_t>> structure_by_time_slice(std::span<RangesAndKey> ranges) {
+    std::ranges::sort(ranges, [](const RangesAndKey& left, const RangesAndKey& right) {
+        return std::tie(left.row_range().first, left.col_range().first) <
+               std::tie(right.row_range().first, right.col_range().first);
+    });
+    std::vector<std::vector<size_t>> res;
+    size_t first_group_slice = 0;
+    while (first_group_slice < ranges.size()) {
+        const timestamp group_end_time = ranges[first_group_slice].key_.end_time();
+        std::vector<size_t>& group = res.emplace_back();
+        size_t next_group_start_first_slice = first_group_slice;
+        for (size_t i = first_group_slice; i < ranges.size() && ranges[i].key_.start_time() < group_end_time; ++i) {
+            group.emplace_back(i);
+            if (next_group_start_first_slice == i && ranges[i].key_.end_time() == group_end_time) {
+                ++next_group_start_first_slice;
+            }
+        }
+        first_group_slice = next_group_start_first_slice;
+    }
+    return res;
+}
+
 std::vector<std::vector<EntityId>> offsets_to_entity_ids(
         const std::vector<std::vector<size_t>>& offsets, const std::vector<RangesAndEntity>& ranges_and_entities
 ) {

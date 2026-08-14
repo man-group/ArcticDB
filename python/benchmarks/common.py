@@ -81,3 +81,7 @@ def generate_benchmark_df(n, freq="min", end_timestamp="1/1/2023"):
 
 def get_prewritten_lib_name(rows):
     return f"prewritten_{rows}"
+
+
+def lib_name(*args):
+    return "_".join(f"{arg}" for arg in args)

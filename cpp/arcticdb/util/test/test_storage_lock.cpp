@@ -12,9 +12,95 @@
 #include <folly/executors/FutureExecutor.h>
 #include <folly/executors/CPUThreadPoolExecutor.h>
 #include <arcticdb/util/test/gtest_utils.hpp>
+#include <arcticdb/entity/protobufs.hpp>
 
 using namespace arcticdb;
 using namespace folly;
+
+namespace {
+google::protobuf::Any make_meta(const std::string& payload) {
+    arcticdb::proto::descriptors::UserDefinedMetadata udm;
+    udm.set_inline_payload(payload);
+    google::protobuf::Any any;
+    any.PackFrom(udm);
+    return any;
+}
+
+std::string meta_payload(const google::protobuf::Any& any) {
+    arcticdb::proto::descriptors::UserDefinedMetadata udm;
+    any.UnpackTo(&udm);
+    return udm.inline_payload();
+}
+} // namespace
+
+TEST(StorageLock, MetadataRoundTrip) {
+    SKIP_MAC("Flaky: StorageLock unreliable on Mac due to lower precision clock");
+    auto store = std::make_shared<InMemoryStore>();
+    StorageLock<> writer{StringId{"meta_lock"}};
+    StorageLock<> reader{StringId{"meta_lock"}};
+
+    // No lock yet
+    ASSERT_FALSE(reader.read_metadata(store).has_value());
+
+    // A separate reader observes the holder's metadata (the trace use-case)
+    ASSERT_TRUE(writer.try_lock(store, make_meta("job-42")));
+    auto read = reader.read_metadata(store);
+    ASSERT_TRUE(read.has_value());
+    ASSERT_EQ(meta_payload(*read), "job-42");
+
+    // Metadata gone after unlock
+    writer.unlock(store);
+    ASSERT_FALSE(reader.read_metadata(store).has_value());
+
+    // Locking without metadata reports no metadata
+    ASSERT_TRUE(writer.try_lock(store));
+    ASSERT_FALSE(reader.read_metadata(store).has_value());
+    writer.unlock(store);
+}
+
+TEST(StorageLock, ForceReleaseRemovesMetadata) {
+    SKIP_MAC("Flaky: StorageLock unreliable on Mac due to lower precision clock");
+    auto store = std::make_shared<InMemoryStore>();
+    StorageLock<> lock{StringId{"fr_lock"}};
+    ASSERT_TRUE(lock.try_lock(store, make_meta("x")));
+    StorageLock<>::force_release_lock(StringId{"fr_lock"}, store);
+    StorageLock<> reader{StringId{"fr_lock"}};
+    ASSERT_FALSE(reader.read_metadata(store).has_value());
+    lock._test_release_local_lock();
+}
+
+TEST(StorageLock, MetadataSegmentBackwardCompatible) {
+    auto store = std::make_shared<InMemoryStore>();
+    StreamId name{"compat_lock"};
+
+    // New client writes a metadata-bearing lock segment. The timestamp old clients read via scalar_at(0, 0) is
+    // unchanged, so old clients can still read new locks.
+    store->write_sync(KeyType::LOCK, name, lock_segment(name, 12345u, make_meta("payload")));
+    auto kv = store->read_sync(RefKey{name, KeyType::LOCK}, storage::ReadKeyOpts{});
+    ASSERT_EQ(kv.second.template scalar_at<timestamp>(0, 0).value(), 12345);
+    ASSERT_TRUE(kv.second.metadata() != nullptr);
+
+    // An old-format segment (today's lock_segment output) carries no metadata, so new code reads old locks and
+    // reports no metadata.
+    store->write_sync(KeyType::LOCK, name, lock_segment(name, 999u));
+    auto kv2 = store->read_sync(RefKey{name, KeyType::LOCK}, storage::ReadKeyOpts{});
+    ASSERT_EQ(kv2.second.template scalar_at<timestamp>(0, 0).value(), 999);
+    ASSERT_TRUE(kv2.second.metadata() == nullptr);
+}
+
+TEST(StorageLock, ReadMetadataAfterTTLExpiry) {
+    auto store = std::make_shared<InMemoryStore>();
+    StreamId name{"stale_lock"};
+
+    // acquire_time=1 is long past the default 1-day TTL relative to the current wall clock, so this lock is
+    // inactive.
+    store->write_sync(KeyType::LOCK, name, lock_segment(name, 1u, make_meta("stale-job")));
+
+    StorageLock<> reader{name};
+    auto read = reader.read_metadata(store);
+    ASSERT_TRUE(read.has_value());
+    ASSERT_EQ(meta_payload(*read), "stale-job");
+}
 
 TEST(StorageLock, SingleThreaded) {
     SKIP_MAC("Flaky: StorageLock unreliable on Mac due to lower precision clock");

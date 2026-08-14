@@ -1033,7 +1033,7 @@
                 "<Storage.AMAZON: 1>"
             ]
         ],
-        "setup_cache_key": "basic_functions:313",
+        "setup_cache_key": "basic_functions:310",
         "type": "peakmemory",
         "unit": "bytes",
         "version": "f4a967266cd6ea1d0d981ad126d561f2f00dbb8eeab69cc3e865dffa411e06f7"
@@ -1060,7 +1060,7 @@
                 "<Storage.AMAZON: 1>"
             ]
         ],
-        "setup_cache_key": "basic_functions:313",
+        "setup_cache_key": "basic_functions:310",
         "type": "peakmemory",
         "unit": "bytes",
         "version": "c0ae8f163bf19c07653b6f60ab6e995158aa563e662c2d8ccd347a5ba505688c"
@@ -1087,7 +1087,7 @@
                 "<Storage.AMAZON: 1>"
             ]
         ],
-        "setup_cache_key": "basic_functions:313",
+        "setup_cache_key": "basic_functions:310",
         "type": "peakmemory",
         "unit": "bytes",
         "version": "d362cfb67572e9f68968dfe29777803a15c4691f01653af49ea32bdb7c158b01"
@@ -1119,7 +1119,7 @@
         "repeat": 0,
         "rounds": 1,
         "sample_time": 0.1,
-        "setup_cache_key": "basic_functions:313",
+        "setup_cache_key": "basic_functions:310",
         "type": "time",
         "unit": "seconds",
         "version": "9c67c6ac2385d57d12dc1d8d49b7a0d0711d60e36d0e7d6a99a23e5fcc7cfbb5",
@@ -1152,7 +1152,7 @@
         "repeat": 0,
         "rounds": 1,
         "sample_time": 0.1,
-        "setup_cache_key": "basic_functions:313",
+        "setup_cache_key": "basic_functions:310",
         "type": "time",
         "unit": "seconds",
         "version": "a93ba8dc7f258d45759f62c1d3d2a48bcf6ea4d091a58f36008ed020b4eeefb9",
@@ -1185,7 +1185,7 @@
         "repeat": 0,
         "rounds": 1,
         "sample_time": 0.1,
-        "setup_cache_key": "basic_functions:313",
+        "setup_cache_key": "basic_functions:310",
         "type": "time",
         "unit": "seconds",
         "version": "64aec41d93970093050e6a4b50565a81f071487c2b3a63f9e6fabe9afe0b0f7f",
@@ -1218,7 +1218,7 @@
         "repeat": 0,
         "rounds": 1,
         "sample_time": 0.1,
-        "setup_cache_key": "basic_functions:313",
+        "setup_cache_key": "basic_functions:310",
         "type": "time",
         "unit": "seconds",
         "version": "f2cdd6b45cd2d49f2358097a18969b2ad5f2efc6cf26a854ab889d6b23fc4c4f",
@@ -2119,8 +2119,192 @@
         "version": "1fde33969c01e04ac7e55218a93c6fb9be317f7580f13fcf2dde7b49e0473436",
         "warmup_time": 0.5
     },
+    "compact_data.AppendCompactDataNumericDynamicSchema.peakmem_append_compact_data": {
+        "code": "class AppendCompactDataNumericDynamicSchema:\n    def peakmem_append_compact_data(self, num_symbols, existing_data_fragmented, append_rows):\n        self.append(num_symbols)\n\n    def setup(self, num_symbols, existing_data_fragmented, append_rows):\n        columns = rng.choice(self.COLUMN_NAMES, self.NUM_COLUMNS // 2, replace=False)\n        self.append_df = pd.DataFrame({column: np.arange(append_rows) for column in columns})\n        self._setup(lib_name(existing_data_fragmented))\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "name": "compact_data.AppendCompactDataNumericDynamicSchema.peakmem_append_compact_data",
+        "param_names": [
+            "num_symbols",
+            "existing_data_fragmented",
+            "append_rows"
+        ],
+        "params": [
+            [
+                "1",
+                "10"
+            ],
+            [
+                "False",
+                "True"
+            ],
+            [
+                "1",
+                "1000"
+            ]
+        ],
+        "setup_cache_key": "compact_data:427",
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "ba4165befb708b8f7f58643cda9872d9cb793aad070c02999d2cc7114fa42ec9"
+    },
+    "compact_data.AppendCompactDataNumericDynamicSchema.time_append_compact_data": {
+        "code": "class AppendCompactDataNumericDynamicSchema:\n    def time_append_compact_data(self, num_symbols, existing_data_fragmented, append_rows):\n        self.append(num_symbols)\n\n    def setup(self, num_symbols, existing_data_fragmented, append_rows):\n        columns = rng.choice(self.COLUMN_NAMES, self.NUM_COLUMNS // 2, replace=False)\n        self.append_df = pd.DataFrame({column: np.arange(append_rows) for column in columns})\n        self._setup(lib_name(existing_data_fragmented))\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "min_run_count": 2,
+        "name": "compact_data.AppendCompactDataNumericDynamicSchema.time_append_compact_data",
+        "number": 1,
+        "param_names": [
+            "num_symbols",
+            "existing_data_fragmented",
+            "append_rows"
+        ],
+        "params": [
+            [
+                "1",
+                "10"
+            ],
+            [
+                "False",
+                "True"
+            ],
+            [
+                "1",
+                "1000"
+            ]
+        ],
+        "repeat": 7,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "compact_data:427",
+        "type": "time",
+        "unit": "seconds",
+        "version": "213d83968732a37caeb4a6199db291b7ff4720e1ba81da9b8f9d335bf863e675",
+        "warmup_time": 0
+    },
+    "compact_data.AppendCompactDataNumericStaticSchema.peakmem_append_compact_data": {
+        "code": "class AppendCompactDataNumericStaticSchema:\n    def peakmem_append_compact_data(self, num_symbols, existing_data_fragmented, append_rows):\n        self.append(num_symbols)\n\n    def setup(self, num_symbols, existing_data_fragmented, append_rows):\n        self.append_df = pd.DataFrame(\n            {f\"col_{i}\": np.arange(i * append_rows, (i + 1) * append_rows) for i in range(self.NUM_COLUMNS)}\n        )\n        self._setup(lib_name(existing_data_fragmented))\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "name": "compact_data.AppendCompactDataNumericStaticSchema.peakmem_append_compact_data",
+        "param_names": [
+            "num_symbols",
+            "existing_data_fragmented",
+            "append_rows"
+        ],
+        "params": [
+            [
+                "1",
+                "10"
+            ],
+            [
+                "False",
+                "True"
+            ],
+            [
+                "1",
+                "50000",
+                "1000000"
+            ]
+        ],
+        "setup_cache_key": "compact_data:329",
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "1581bf5cf4f523b1dba5029cd77944e091eb35ea35bb67e679bda577d5e5ace3"
+    },
+    "compact_data.AppendCompactDataNumericStaticSchema.time_append_compact_data": {
+        "code": "class AppendCompactDataNumericStaticSchema:\n    def time_append_compact_data(self, num_symbols, existing_data_fragmented, append_rows):\n        self.append(num_symbols)\n\n    def setup(self, num_symbols, existing_data_fragmented, append_rows):\n        self.append_df = pd.DataFrame(\n            {f\"col_{i}\": np.arange(i * append_rows, (i + 1) * append_rows) for i in range(self.NUM_COLUMNS)}\n        )\n        self._setup(lib_name(existing_data_fragmented))\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "min_run_count": 2,
+        "name": "compact_data.AppendCompactDataNumericStaticSchema.time_append_compact_data",
+        "number": 1,
+        "param_names": [
+            "num_symbols",
+            "existing_data_fragmented",
+            "append_rows"
+        ],
+        "params": [
+            [
+                "1",
+                "10"
+            ],
+            [
+                "False",
+                "True"
+            ],
+            [
+                "1",
+                "50000",
+                "1000000"
+            ]
+        ],
+        "repeat": 7,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "compact_data:329",
+        "type": "time",
+        "unit": "seconds",
+        "version": "fec1a6b2e52e6380a99b1666c49b3461b4fb24f28221b495f60e1be274bb9023",
+        "warmup_time": 0
+    },
+    "compact_data.AppendCompactDataStringsStaticSchema.peakmem_append_compact_data": {
+        "code": "class AppendCompactDataStringsStaticSchema:\n    def peakmem_append_compact_data(self, num_symbols, existing_data_fragmented, append_rows):\n        self.append(num_symbols)\n\n    def setup(self, num_symbols, existing_data_fragmented, append_rows):\n        self.append_df = pd.DataFrame(\n            {f\"col_{i}\": rng.choice(self.unique_strings, append_rows) for i in range(self.NUM_COLUMNS)}\n        )\n        self._setup(lib_name(existing_data_fragmented))\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "name": "compact_data.AppendCompactDataStringsStaticSchema.peakmem_append_compact_data",
+        "param_names": [
+            "num_symbols",
+            "existing_data_fragmented",
+            "append_rows"
+        ],
+        "params": [
+            [
+                "1",
+                "10"
+            ],
+            [
+                "False",
+                "True"
+            ],
+            [
+                "1",
+                "50000",
+                "1000000"
+            ]
+        ],
+        "setup_cache_key": "compact_data:378",
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "7a58c10ef4b2a352df474a8f1904d021f721652d3837e10680d47d47c3d275b6"
+    },
+    "compact_data.AppendCompactDataStringsStaticSchema.time_append_compact_data": {
+        "code": "class AppendCompactDataStringsStaticSchema:\n    def time_append_compact_data(self, num_symbols, existing_data_fragmented, append_rows):\n        self.append(num_symbols)\n\n    def setup(self, num_symbols, existing_data_fragmented, append_rows):\n        self.append_df = pd.DataFrame(\n            {f\"col_{i}\": rng.choice(self.unique_strings, append_rows) for i in range(self.NUM_COLUMNS)}\n        )\n        self._setup(lib_name(existing_data_fragmented))\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "min_run_count": 2,
+        "name": "compact_data.AppendCompactDataStringsStaticSchema.time_append_compact_data",
+        "number": 1,
+        "param_names": [
+            "num_symbols",
+            "existing_data_fragmented",
+            "append_rows"
+        ],
+        "params": [
+            [
+                "1",
+                "10"
+            ],
+            [
+                "False",
+                "True"
+            ],
+            [
+                "1",
+                "50000",
+                "1000000"
+            ]
+        ],
+        "repeat": 7,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "compact_data:378",
+        "type": "time",
+        "unit": "seconds",
+        "version": "8665815997d55eb8deeb5b37f5eafc228bc6aed867aee9a5f0e5171296cbbd26",
+        "warmup_time": 0
+    },
     "compact_data.CompactDataNumericDynamicSchema.peakmem_compact_data": {
-        "code": "class CompactDataNumericDynamicSchema:\n    def peakmem_compact_data(self, row_params, num_columns):\n        self.compact_data(row_params[2])\n\n    def setup(self, row_params, num_columns):\n        self._setup(self.lib_name(row_params, num_columns), row_params[2])\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "code": "class CompactDataNumericDynamicSchema:\n    def peakmem_compact_data(self, row_params, num_columns):\n        self.compact_data(row_params[2])\n\n    def setup(self, row_params, num_columns):\n        self._setup(lib_name(row_params, num_columns), row_params[2])\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
         "name": "compact_data.CompactDataNumericDynamicSchema.peakmem_compact_data",
         "param_names": [
             "(num_rows, initial_rows_per_segment, target_rows_per_segment)",
@@ -2136,13 +2320,13 @@
                 "10000"
             ]
         ],
-        "setup_cache_key": "compact_data:220",
+        "setup_cache_key": "compact_data:219",
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "310049835bc1f2bbaa094caa69c3d1a21e1858b58ef43a2e878480bf72785195"
+        "version": "c15da0bab109a8a3ef408294394b0b4492de87510ce03ef817a72ddba0572700"
     },
     "compact_data.CompactDataNumericDynamicSchema.time_compact_data": {
-        "code": "class CompactDataNumericDynamicSchema:\n    def time_compact_data(self, row_params, num_columns):\n        self.compact_data(row_params[2])\n\n    def setup(self, row_params, num_columns):\n        self._setup(self.lib_name(row_params, num_columns), row_params[2])\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "code": "class CompactDataNumericDynamicSchema:\n    def time_compact_data(self, row_params, num_columns):\n        self.compact_data(row_params[2])\n\n    def setup(self, row_params, num_columns):\n        self._setup(lib_name(row_params, num_columns), row_params[2])\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
         "min_run_count": 2,
         "name": "compact_data.CompactDataNumericDynamicSchema.time_compact_data",
         "number": 1,
@@ -2163,14 +2347,14 @@
         "repeat": 15,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "compact_data:220",
+        "setup_cache_key": "compact_data:219",
         "type": "time",
         "unit": "seconds",
-        "version": "2d0282bafa3f8ae8121eb1529f89761519c7b9509a7a8a5b341a807aedc2197d",
+        "version": "1a7929bda8b3b10dd3e652f070e4ccc125a28aae4caf0e7ebe539f86bc24f897",
         "warmup_time": 0
     },
     "compact_data.CompactDataNumericStaticSchema.peakmem_compact_data": {
-        "code": "class CompactDataNumericStaticSchema:\n    def peakmem_compact_data(self, row_params, num_columns, column_slicing):\n        self.compact_data(row_params[2])\n\n    def setup(self, row_params, num_columns, column_slicing):\n        self._setup(self.lib_name(row_params, num_columns, column_slicing), row_params[2])\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "code": "class CompactDataNumericStaticSchema:\n    def peakmem_compact_data(self, row_params, num_columns, column_slicing):\n        self.compact_data(row_params[2])\n\n    def setup(self, row_params, num_columns, column_slicing):\n        self._setup(lib_name(row_params, num_columns, column_slicing), row_params[2])\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
         "name": "compact_data.CompactDataNumericStaticSchema.peakmem_compact_data",
         "param_names": [
             "(num_rows, initial_rows_per_segment, target_rows_per_segment)",
@@ -2192,13 +2376,13 @@
                 "True"
             ]
         ],
-        "setup_cache_key": "compact_data:110",
+        "setup_cache_key": "compact_data:109",
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "7ddde650100a4d862d7f8695176b37976f15d863d33961be34678a636d14286f"
+        "version": "37d8aadd1f1639c8702ca70ab8299d2d64e6b9e634862531b424ebde718e1275"
     },
     "compact_data.CompactDataNumericStaticSchema.time_compact_data": {
-        "code": "class CompactDataNumericStaticSchema:\n    def time_compact_data(self, row_params, num_columns, column_slicing):\n        self.compact_data(row_params[2])\n\n    def setup(self, row_params, num_columns, column_slicing):\n        self._setup(self.lib_name(row_params, num_columns, column_slicing), row_params[2])\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "code": "class CompactDataNumericStaticSchema:\n    def time_compact_data(self, row_params, num_columns, column_slicing):\n        self.compact_data(row_params[2])\n\n    def setup(self, row_params, num_columns, column_slicing):\n        self._setup(lib_name(row_params, num_columns, column_slicing), row_params[2])\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
         "min_run_count": 2,
         "name": "compact_data.CompactDataNumericStaticSchema.time_compact_data",
         "number": 1,
@@ -2225,14 +2409,14 @@
         "repeat": 15,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "compact_data:110",
+        "setup_cache_key": "compact_data:109",
         "type": "time",
         "unit": "seconds",
-        "version": "22560f846d485befae82958fd482315fb72e650d867e9ffc509eace6a2b93f03",
+        "version": "1adb81796aa15ebb66f2b9cfa6d803ffb9687ea074115073d9e0ff49fd342d73",
         "warmup_time": 0
     },
     "compact_data.CompactDataStringsStaticSchema.peakmem_compact_data": {
-        "code": "class CompactDataStringsStaticSchema:\n    def peakmem_compact_data(self, row_params, num_columns, column_slicing, num_unique_strings):\n        target_rows_per_segment = row_params[2]\n        self.compact_data(row_params[2])\n\n    def setup(self, row_params, num_columns, column_slicing, num_unique_strings):\n        self._setup(self.lib_name(row_params, num_columns, column_slicing, num_unique_strings), row_params[2])\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "code": "class CompactDataStringsStaticSchema:\n    def peakmem_compact_data(self, row_params, num_columns, column_slicing, num_unique_strings):\n        target_rows_per_segment = row_params[2]\n        self.compact_data(row_params[2])\n\n    def setup(self, row_params, num_columns, column_slicing, num_unique_strings):\n        self._setup(lib_name(row_params, num_columns, column_slicing, num_unique_strings), row_params[2])\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
         "name": "compact_data.CompactDataStringsStaticSchema.peakmem_compact_data",
         "param_names": [
             "(num_rows, initial_rows_per_segment, target_rows_per_segment)",
@@ -2259,13 +2443,13 @@
                 "100000"
             ]
         ],
-        "setup_cache_key": "compact_data:166",
+        "setup_cache_key": "compact_data:165",
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "a99039af2df70f85781dd519ac84c641eef72187661d78c10a7db379f500b5c7"
+        "version": "c0318b30706b143ac685ec9a5c549702a5d82b8f0bbe7e4587e0ceb96620e91d"
     },
     "compact_data.CompactDataStringsStaticSchema.time_compact_data": {
-        "code": "class CompactDataStringsStaticSchema:\n    def time_compact_data(self, row_params, num_columns, column_slicing, num_unique_strings):\n        self.compact_data(row_params[2])\n\n    def setup(self, row_params, num_columns, column_slicing, num_unique_strings):\n        self._setup(self.lib_name(row_params, num_columns, column_slicing, num_unique_strings), row_params[2])\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "code": "class CompactDataStringsStaticSchema:\n    def time_compact_data(self, row_params, num_columns, column_slicing, num_unique_strings):\n        self.compact_data(row_params[2])\n\n    def setup(self, row_params, num_columns, column_slicing, num_unique_strings):\n        self._setup(lib_name(row_params, num_columns, column_slicing, num_unique_strings), row_params[2])\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
         "min_run_count": 2,
         "name": "compact_data.CompactDataStringsStaticSchema.time_compact_data",
         "number": 1,
@@ -2297,10 +2481,10 @@
         "repeat": 15,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "compact_data:166",
+        "setup_cache_key": "compact_data:165",
         "type": "time",
         "unit": "seconds",
-        "version": "dd92a93207202dec280ad9849eeb15da6c3ebc0bea0dc490759473feb42ee3a5",
+        "version": "dd1b297e52b126a9abb2023c06bfd999045e847f37e7ab00a34e7e842b39a305",
         "warmup_time": 0
     },
     "finalize_staged_data.FinalizeStagedData.peakmem_finalize_staged_data": {
@@ -2630,6 +2814,466 @@
         "version": "2238d0faf29b5206ab9dd61d1acea68ae7883b8ac95bc8c0fafaefb85ff1527b",
         "warmup_time": 0.1
     },
+    "merge_functions.MergeThinDatetime.peakmem_merge": {
+        "code": "class MergeThinDatetime:\n    def peakmem_merge(self, scenario, strategy, on_count, source_size, matched_slices):\n        self.merge(strategy)\n\n    def setup(self, scenario, strategy, on_count, source_size, matched_slices):\n        self._prepare_merge(lib_name(*scenario, self.INDEX_KIND), on_count, source_size, matched_slices)\n\n    def setup_cache(self):\n        reset_bucket(self.seaweed, CACHE_BUCKET)\n        for scenario in self.params[0]:\n            num_rows, num_value_cols = scenario\n            rng = np.random.default_rng([num_rows, num_value_cols])\n            target = generate_merge_target(num_rows, num_value_cols, self.value_dtype, self.INDEX_KIND, rng)\n            library_name = lib_name(*scenario, self.INDEX_KIND)\n            self._write_cache_target(library_name, target)\n            self._precompute_sources(library_name, target)",
+        "name": "merge_functions.MergeThinDatetime.peakmem_merge",
+        "param_names": [
+            "scenario",
+            "strategy",
+            "on_count",
+            "source_size",
+            "matched_slices"
+        ],
+        "params": [
+            [
+                "(5000000, 3)"
+            ],
+            [
+                "'update'",
+                "'insert'",
+                "'update_and_insert'"
+            ],
+            [
+                "0"
+            ],
+            [
+                "1000",
+                "500000"
+            ],
+            [
+                "10",
+                "40"
+            ]
+        ],
+        "setup_cache_key": "merge_functions:264",
+        "timeout": 600,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "bda038e7ac799f351dadb49a529e87aa2762d0993fa7b3f2fb5534f80d20c5d6"
+    },
+    "merge_functions.MergeThinDatetime.time_merge": {
+        "code": "class MergeThinDatetime:\n    def time_merge(self, scenario, strategy, on_count, source_size, matched_slices):\n        self.merge(strategy)\n\n    def setup(self, scenario, strategy, on_count, source_size, matched_slices):\n        self._prepare_merge(lib_name(*scenario, self.INDEX_KIND), on_count, source_size, matched_slices)\n\n    def setup_cache(self):\n        reset_bucket(self.seaweed, CACHE_BUCKET)\n        for scenario in self.params[0]:\n            num_rows, num_value_cols = scenario\n            rng = np.random.default_rng([num_rows, num_value_cols])\n            target = generate_merge_target(num_rows, num_value_cols, self.value_dtype, self.INDEX_KIND, rng)\n            library_name = lib_name(*scenario, self.INDEX_KIND)\n            self._write_cache_target(library_name, target)\n            self._precompute_sources(library_name, target)",
+        "min_run_count": 2,
+        "name": "merge_functions.MergeThinDatetime.time_merge",
+        "number": 1,
+        "param_names": [
+            "scenario",
+            "strategy",
+            "on_count",
+            "source_size",
+            "matched_slices"
+        ],
+        "params": [
+            [
+                "(5000000, 3)"
+            ],
+            [
+                "'update'",
+                "'insert'",
+                "'update_and_insert'"
+            ],
+            [
+                "0"
+            ],
+            [
+                "1000",
+                "500000"
+            ],
+            [
+                "10",
+                "40"
+            ]
+        ],
+        "repeat": 10,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "merge_functions:264",
+        "timeout": 600,
+        "type": "time",
+        "unit": "seconds",
+        "version": "5fa0f07cbaf18da0b38b5fa5a212bd62af352193686538be081fad7bfd09497f",
+        "warmup_time": 0
+    },
+    "merge_functions.MergeThinRowRange.peakmem_merge": {
+        "code": "class MergeThinRowRange:\n    def peakmem_merge(self, scenario, strategy, on_count, source_size):\n        self.merge(strategy)\n\n    def setup(self, scenario, strategy, on_count, source_size):\n        self._prepare_merge(lib_name(*scenario, self.INDEX_KIND), on_count, source_size)\n\n    def setup_cache(self):\n        reset_bucket(self.seaweed, CACHE_BUCKET)\n        for scenario in self.params[0]:\n            num_rows, num_value_cols = scenario\n            rng = np.random.default_rng([num_rows, num_value_cols])\n            target = generate_merge_target(num_rows, num_value_cols, self.value_dtype, self.INDEX_KIND, rng)\n            library_name = lib_name(*scenario, self.INDEX_KIND)\n            self._write_cache_target(library_name, target)\n            self._precompute_sources(library_name, target)",
+        "name": "merge_functions.MergeThinRowRange.peakmem_merge",
+        "param_names": [
+            "scenario",
+            "strategy",
+            "on_count",
+            "source_size"
+        ],
+        "params": [
+            [
+                "(5000000, 3)"
+            ],
+            [
+                "'update'",
+                "'insert'",
+                "'update_and_insert'"
+            ],
+            [
+                "1"
+            ],
+            [
+                "1000",
+                "500000"
+            ]
+        ],
+        "setup_cache_key": "merge_functions:304",
+        "timeout": 600,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "aa4096cc5f46058c309c21eb33ebaabc2e84d6e07560aac829027da71086ea6b"
+    },
+    "merge_functions.MergeThinRowRange.time_merge": {
+        "code": "class MergeThinRowRange:\n    def time_merge(self, scenario, strategy, on_count, source_size):\n        self.merge(strategy)\n\n    def setup(self, scenario, strategy, on_count, source_size):\n        self._prepare_merge(lib_name(*scenario, self.INDEX_KIND), on_count, source_size)\n\n    def setup_cache(self):\n        reset_bucket(self.seaweed, CACHE_BUCKET)\n        for scenario in self.params[0]:\n            num_rows, num_value_cols = scenario\n            rng = np.random.default_rng([num_rows, num_value_cols])\n            target = generate_merge_target(num_rows, num_value_cols, self.value_dtype, self.INDEX_KIND, rng)\n            library_name = lib_name(*scenario, self.INDEX_KIND)\n            self._write_cache_target(library_name, target)\n            self._precompute_sources(library_name, target)",
+        "min_run_count": 2,
+        "name": "merge_functions.MergeThinRowRange.time_merge",
+        "number": 1,
+        "param_names": [
+            "scenario",
+            "strategy",
+            "on_count",
+            "source_size"
+        ],
+        "params": [
+            [
+                "(5000000, 3)"
+            ],
+            [
+                "'update'",
+                "'insert'",
+                "'update_and_insert'"
+            ],
+            [
+                "1"
+            ],
+            [
+                "1000",
+                "500000"
+            ]
+        ],
+        "repeat": 10,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "merge_functions:304",
+        "timeout": 600,
+        "type": "time",
+        "unit": "seconds",
+        "version": "256a83ebc7be8dd867cee611d7e3e1fafe2e35dc4ccc40358530caf35984706f",
+        "warmup_time": 0
+    },
+    "merge_functions.MergeThinStringDatetime.peakmem_merge": {
+        "code": "class MergeThinStringDatetime:\n    def peakmem_merge(self, scenario, strategy, on_count, source_size, matched_slices, num_unique_strings):\n        self.merge(strategy)\n\n    def setup(self, scenario, strategy, on_count, source_size, matched_slices, num_unique_strings):\n        self.target_prefix = f\"target_{num_unique_strings}\"\n        self.source_prefix = f\"source_{num_unique_strings}\"\n        self._prepare_merge(lib_name(*scenario, self.INDEX_KIND), on_count, source_size, matched_slices)\n\n    def setup_cache(self):\n        reset_bucket(self.seaweed, CACHE_BUCKET)\n        parameter_map = dict(zip(self.param_names, self.params))\n        for scenario in parameter_map[\"scenario\"]:\n            for num_unique_strings in parameter_map[\"num_unique_strings\"]:\n                num_rows, num_value_cols = scenario\n                rng = np.random.default_rng([num_rows, num_value_cols, num_unique_strings])\n                target = generate_merge_target(\n                    num_rows,\n                    num_value_cols,\n                    self.value_dtype,\n                    self.INDEX_KIND,\n                    rng,\n                    num_unique_strings=num_unique_strings,\n                )\n                # One target per pool size; per-size prefixes let setup copy only the variant being merged.\n                self.target_prefix = f\"target_{num_unique_strings}\"\n                self.source_prefix = f\"source_{num_unique_strings}\"\n                library_name = lib_name(*scenario, self.INDEX_KIND)\n                self._write_cache_target(library_name, target)\n                self._precompute_sources(library_name, target)",
+        "name": "merge_functions.MergeThinStringDatetime.peakmem_merge",
+        "param_names": [
+            "scenario",
+            "strategy",
+            "on_count",
+            "source_size",
+            "matched_slices",
+            "num_unique_strings"
+        ],
+        "params": [
+            [
+                "(1000000, 3)"
+            ],
+            [
+                "'update'",
+                "'insert'",
+                "'update_and_insert'"
+            ],
+            [
+                "1"
+            ],
+            [
+                "1000",
+                "500000"
+            ],
+            [
+                "2",
+                "8"
+            ],
+            [
+                "100",
+                "100000"
+            ]
+        ],
+        "setup_cache_key": "merge_functions:345",
+        "timeout": 600,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "4deaada28c22d2cd8a4edfb8d8d9c558ab7b4c68bd9c3bc81cf099cdd90d2585"
+    },
+    "merge_functions.MergeThinStringDatetime.time_merge": {
+        "code": "class MergeThinStringDatetime:\n    def time_merge(self, scenario, strategy, on_count, source_size, matched_slices, num_unique_strings):\n        self.merge(strategy)\n\n    def setup(self, scenario, strategy, on_count, source_size, matched_slices, num_unique_strings):\n        self.target_prefix = f\"target_{num_unique_strings}\"\n        self.source_prefix = f\"source_{num_unique_strings}\"\n        self._prepare_merge(lib_name(*scenario, self.INDEX_KIND), on_count, source_size, matched_slices)\n\n    def setup_cache(self):\n        reset_bucket(self.seaweed, CACHE_BUCKET)\n        parameter_map = dict(zip(self.param_names, self.params))\n        for scenario in parameter_map[\"scenario\"]:\n            for num_unique_strings in parameter_map[\"num_unique_strings\"]:\n                num_rows, num_value_cols = scenario\n                rng = np.random.default_rng([num_rows, num_value_cols, num_unique_strings])\n                target = generate_merge_target(\n                    num_rows,\n                    num_value_cols,\n                    self.value_dtype,\n                    self.INDEX_KIND,\n                    rng,\n                    num_unique_strings=num_unique_strings,\n                )\n                # One target per pool size; per-size prefixes let setup copy only the variant being merged.\n                self.target_prefix = f\"target_{num_unique_strings}\"\n                self.source_prefix = f\"source_{num_unique_strings}\"\n                library_name = lib_name(*scenario, self.INDEX_KIND)\n                self._write_cache_target(library_name, target)\n                self._precompute_sources(library_name, target)",
+        "min_run_count": 2,
+        "name": "merge_functions.MergeThinStringDatetime.time_merge",
+        "number": 1,
+        "param_names": [
+            "scenario",
+            "strategy",
+            "on_count",
+            "source_size",
+            "matched_slices",
+            "num_unique_strings"
+        ],
+        "params": [
+            [
+                "(1000000, 3)"
+            ],
+            [
+                "'update'",
+                "'insert'",
+                "'update_and_insert'"
+            ],
+            [
+                "1"
+            ],
+            [
+                "1000",
+                "500000"
+            ],
+            [
+                "2",
+                "8"
+            ],
+            [
+                "100",
+                "100000"
+            ]
+        ],
+        "repeat": 10,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "merge_functions:345",
+        "timeout": 600,
+        "type": "time",
+        "unit": "seconds",
+        "version": "cfc2523da2cb2b2cc7892532ef9027eeeaf039dd512c09875e6cc054fd3e977b",
+        "warmup_time": 0
+    },
+    "merge_functions.MergeThinStringRowRange.peakmem_merge": {
+        "code": "class MergeThinStringRowRange:\n    def peakmem_merge(self, scenario, strategy, on_count, source_size, num_unique_strings):\n        self.merge(strategy)\n\n    def setup(self, scenario, strategy, on_count, source_size, num_unique_strings):\n        self.target_prefix = f\"target_{num_unique_strings}\"\n        self.source_prefix = f\"source_{num_unique_strings}\"\n        self._prepare_merge(lib_name(*scenario, self.INDEX_KIND), on_count, source_size)\n\n    def setup_cache(self):\n        reset_bucket(self.seaweed, CACHE_BUCKET)\n        param_map = dict(zip(self.param_names, self.params))\n        for scenario in param_map[\"scenario\"]:\n            for num_unique_strings in param_map[\"num_unique_strings\"]:\n                num_rows, num_value_cols = scenario\n                rng = np.random.default_rng([num_rows, num_value_cols, num_unique_strings])\n                target = generate_merge_target(\n                    num_rows,\n                    num_value_cols,\n                    self.value_dtype,\n                    self.INDEX_KIND,\n                    rng,\n                    num_unique_strings=num_unique_strings,\n                )\n                # One target per pool size; per-size prefixes let setup copy only the variant being merged.\n                self.target_prefix = f\"target_{num_unique_strings}\"\n                self.source_prefix = f\"source_{num_unique_strings}\"\n                library_name = lib_name(*scenario, self.INDEX_KIND)\n                self._write_cache_target(library_name, target)\n                self._precompute_sources(library_name, target)",
+        "name": "merge_functions.MergeThinStringRowRange.peakmem_merge",
+        "param_names": [
+            "scenario",
+            "strategy",
+            "on_count",
+            "source_size",
+            "num_unique_strings"
+        ],
+        "params": [
+            [
+                "(1000000, 3)"
+            ],
+            [
+                "'update'",
+                "'insert'",
+                "'update_and_insert'"
+            ],
+            [
+                "2"
+            ],
+            [
+                "1000",
+                "500000"
+            ],
+            [
+                "5000",
+                "100000"
+            ]
+        ],
+        "setup_cache_key": "merge_functions:401",
+        "timeout": 600,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "16b046fab8ab2ff6a54e7b6c1b6bca4b1f3518b5a093be95fc3b02422b00a2ec"
+    },
+    "merge_functions.MergeThinStringRowRange.time_merge": {
+        "code": "class MergeThinStringRowRange:\n    def time_merge(self, scenario, strategy, on_count, source_size, num_unique_strings):\n        self.merge(strategy)\n\n    def setup(self, scenario, strategy, on_count, source_size, num_unique_strings):\n        self.target_prefix = f\"target_{num_unique_strings}\"\n        self.source_prefix = f\"source_{num_unique_strings}\"\n        self._prepare_merge(lib_name(*scenario, self.INDEX_KIND), on_count, source_size)\n\n    def setup_cache(self):\n        reset_bucket(self.seaweed, CACHE_BUCKET)\n        param_map = dict(zip(self.param_names, self.params))\n        for scenario in param_map[\"scenario\"]:\n            for num_unique_strings in param_map[\"num_unique_strings\"]:\n                num_rows, num_value_cols = scenario\n                rng = np.random.default_rng([num_rows, num_value_cols, num_unique_strings])\n                target = generate_merge_target(\n                    num_rows,\n                    num_value_cols,\n                    self.value_dtype,\n                    self.INDEX_KIND,\n                    rng,\n                    num_unique_strings=num_unique_strings,\n                )\n                # One target per pool size; per-size prefixes let setup copy only the variant being merged.\n                self.target_prefix = f\"target_{num_unique_strings}\"\n                self.source_prefix = f\"source_{num_unique_strings}\"\n                library_name = lib_name(*scenario, self.INDEX_KIND)\n                self._write_cache_target(library_name, target)\n                self._precompute_sources(library_name, target)",
+        "min_run_count": 2,
+        "name": "merge_functions.MergeThinStringRowRange.time_merge",
+        "number": 1,
+        "param_names": [
+            "scenario",
+            "strategy",
+            "on_count",
+            "source_size",
+            "num_unique_strings"
+        ],
+        "params": [
+            [
+                "(1000000, 3)"
+            ],
+            [
+                "'update'",
+                "'insert'",
+                "'update_and_insert'"
+            ],
+            [
+                "2"
+            ],
+            [
+                "1000",
+                "500000"
+            ],
+            [
+                "5000",
+                "100000"
+            ]
+        ],
+        "repeat": 10,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "merge_functions:401",
+        "timeout": 600,
+        "type": "time",
+        "unit": "seconds",
+        "version": "5b1ad5a07078537f4b40748fd746b8053078bd52e4f3ff7d2c141470c7ccb6a7",
+        "warmup_time": 0
+    },
+    "merge_functions.MergeWideDatetime.peakmem_merge": {
+        "code": "class MergeWideDatetime:\n    def peakmem_merge(self, scenario, strategy, on_count, source_size):\n        self.merge(strategy)\n\n    def setup(self, scenario, strategy, on_count, source_size):\n        self._prepare_merge(lib_name(*scenario, self.INDEX_KIND), on_count, source_size)\n\n    def setup_cache(self):\n        reset_bucket(self.seaweed, CACHE_BUCKET)\n        for scenario in self.params[0]:\n            num_rows, num_value_cols = scenario\n            rng = np.random.default_rng([num_rows, num_value_cols])\n            target = generate_merge_target(num_rows, num_value_cols, self.value_dtype, self.INDEX_KIND, rng)\n            library_name = lib_name(*scenario, self.INDEX_KIND)\n            self._write_cache_target(library_name, target)\n            self._precompute_sources(library_name, target)",
+        "name": "merge_functions.MergeWideDatetime.peakmem_merge",
+        "param_names": [
+            "scenario",
+            "strategy",
+            "on_count",
+            "source_size"
+        ],
+        "params": [
+            [
+                "(5000, 10000)"
+            ],
+            [
+                "'update'",
+                "'insert'",
+                "'update_and_insert'"
+            ],
+            [
+                "0",
+                "1000"
+            ],
+            [
+                "100"
+            ]
+        ],
+        "setup_cache_key": "merge_functions:456",
+        "timeout": 600,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "5f3a5dffc5a5810c9c7edad0c697800df32682f9c4ec49442c6e85cca031184b"
+    },
+    "merge_functions.MergeWideDatetime.time_merge": {
+        "code": "class MergeWideDatetime:\n    def time_merge(self, scenario, strategy, on_count, source_size):\n        self.merge(strategy)\n\n    def setup(self, scenario, strategy, on_count, source_size):\n        self._prepare_merge(lib_name(*scenario, self.INDEX_KIND), on_count, source_size)\n\n    def setup_cache(self):\n        reset_bucket(self.seaweed, CACHE_BUCKET)\n        for scenario in self.params[0]:\n            num_rows, num_value_cols = scenario\n            rng = np.random.default_rng([num_rows, num_value_cols])\n            target = generate_merge_target(num_rows, num_value_cols, self.value_dtype, self.INDEX_KIND, rng)\n            library_name = lib_name(*scenario, self.INDEX_KIND)\n            self._write_cache_target(library_name, target)\n            self._precompute_sources(library_name, target)",
+        "min_run_count": 2,
+        "name": "merge_functions.MergeWideDatetime.time_merge",
+        "number": 1,
+        "param_names": [
+            "scenario",
+            "strategy",
+            "on_count",
+            "source_size"
+        ],
+        "params": [
+            [
+                "(5000, 10000)"
+            ],
+            [
+                "'update'",
+                "'insert'",
+                "'update_and_insert'"
+            ],
+            [
+                "0",
+                "1000"
+            ],
+            [
+                "100"
+            ]
+        ],
+        "repeat": 5,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "merge_functions:456",
+        "timeout": 600,
+        "type": "time",
+        "unit": "seconds",
+        "version": "4d658e12e079c00f5d468ed7a82c1b2facd8de1b98e5388b569c1737a3d82607",
+        "warmup_time": 0
+    },
+    "merge_functions.MergeWideRowRange.peakmem_merge": {
+        "code": "class MergeWideRowRange:\n    def peakmem_merge(self, scenario, strategy, on_count, source_size):\n        self.merge(strategy)\n\n    def setup(self, scenario, strategy, on_count, source_size):\n        self._prepare_merge(lib_name(*scenario, self.INDEX_KIND), on_count, source_size)\n\n    def setup_cache(self):\n        reset_bucket(self.seaweed, CACHE_BUCKET)\n        for scenario in self.params[0]:\n            num_rows, num_value_cols = scenario\n            rng = np.random.default_rng([num_rows, num_value_cols])\n            target = generate_merge_target(num_rows, num_value_cols, self.value_dtype, self.INDEX_KIND, rng)\n            library_name = lib_name(*scenario, self.INDEX_KIND)\n            self._write_cache_target(library_name, target)\n            self._precompute_sources(library_name, target)",
+        "name": "merge_functions.MergeWideRowRange.peakmem_merge",
+        "param_names": [
+            "scenario",
+            "strategy",
+            "on_count",
+            "source_size"
+        ],
+        "params": [
+            [
+                "(5000, 10000)"
+            ],
+            [
+                "'update'",
+                "'insert'",
+                "'update_and_insert'"
+            ],
+            [
+                "1",
+                "1000"
+            ],
+            [
+                "100"
+            ]
+        ],
+        "setup_cache_key": "merge_functions:496",
+        "timeout": 600,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "f33e277e4413aa7b086be54628ec33080037cbdf369f347c5dd190ffca5a6fff"
+    },
+    "merge_functions.MergeWideRowRange.time_merge": {
+        "code": "class MergeWideRowRange:\n    def time_merge(self, scenario, strategy, on_count, source_size):\n        self.merge(strategy)\n\n    def setup(self, scenario, strategy, on_count, source_size):\n        self._prepare_merge(lib_name(*scenario, self.INDEX_KIND), on_count, source_size)\n\n    def setup_cache(self):\n        reset_bucket(self.seaweed, CACHE_BUCKET)\n        for scenario in self.params[0]:\n            num_rows, num_value_cols = scenario\n            rng = np.random.default_rng([num_rows, num_value_cols])\n            target = generate_merge_target(num_rows, num_value_cols, self.value_dtype, self.INDEX_KIND, rng)\n            library_name = lib_name(*scenario, self.INDEX_KIND)\n            self._write_cache_target(library_name, target)\n            self._precompute_sources(library_name, target)",
+        "min_run_count": 2,
+        "name": "merge_functions.MergeWideRowRange.time_merge",
+        "number": 1,
+        "param_names": [
+            "scenario",
+            "strategy",
+            "on_count",
+            "source_size"
+        ],
+        "params": [
+            [
+                "(5000, 10000)"
+            ],
+            [
+                "'update'",
+                "'insert'",
+                "'update_and_insert'"
+            ],
+            [
+                "1",
+                "1000"
+            ],
+            [
+                "100"
+            ]
+        ],
+        "repeat": 5,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "merge_functions:496",
+        "timeout": 600,
+        "type": "time",
+        "unit": "seconds",
+        "version": "8be4bc6bfde5a0e7db280ac5e667e58f53c945de9de79a16e0965936c6b6f547",
+        "warmup_time": 0
+    },
     "modification_functions.DeleteBatchSymbols.time_delete_batch_symbols": {
         "code": "class DeleteBatchSymbols:\n    def time_delete_batch_symbols(self, *args):\n        self.lib.delete_batch(self.syms)\n\n    def setup(self, num_symbols, storage):\n        if not is_storage_enabled(storage):\n            raise SkipNotImplemented\n    \n        if storage == Storage.LMDB:\n            self.ac = Arctic(f\"lmdb://{self.ARCTIC_DIR}\")\n        elif storage == Storage.AMAZON:\n            from arcticdb.storage_fixtures.s3 import real_s3_from_environment_variables\n    \n            factory = real_s3_from_environment_variables(shared_path=True, validate=True, log=True)\n            self.ac = factory.create_fixture().create_arctic()\n    \n        self.ac.delete_library(\"test_lib\")\n        self.lib = self.ac.create_library(\"test_lib\")\n    \n        df = pd.DataFrame({\"col\": range(1000)})\n        self.syms = [f\"sym_{i}\" for i in range(num_symbols)]\n        for sym in self.syms:\n            self.lib.write(sym, df)",
         "min_run_count": 2,
@@ -2728,7 +3372,7 @@
                 "<Storage.AMAZON: 1>"
             ]
         ],
-        "setup_cache_key": "modification_functions:307",
+        "setup_cache_key": "modification_functions:316",
         "timeout": 600,
         "type": "peakmemory",
         "unit": "bytes",
@@ -2751,7 +3395,7 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "modification_functions:307",
+        "setup_cache_key": "modification_functions:316",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
@@ -2781,7 +3425,7 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "modification_functions:129",
+        "setup_cache_key": "modification_functions:138",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
@@ -2789,13 +3433,14 @@
         "warmup_time": 0
     },
     "modification_functions.ModificationFunctions.time_append_large": {
-        "code": "class ModificationFunctions:\n    def time_append_large(self, *args):\n        self.lib.append(self.sym, self.df_append_large)\n\n    def setup(self, libs_for_storage, rows_and_cols, storage):\n        self.lib = libs_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n    \n        rows, cols = rows_and_cols\n    \n        self.sym = _sym_name(rows, cols)\n        assert self.lib.has_symbol(self.sym)\n        self.lib._nvs.restore_version(self.sym, 0)\n        assert self.lib.get_description(self.sym).row_count == rows\n    \n        self.df_update_single = generate_random_floats_dataframe_with_index(\n            1, cols, end_timestamp=get_time_at_fraction_of_df(0.5, rows)\n        )\n        self.df_update_half = generate_random_floats_dataframe_with_index(\n            rows // 2, cols, end_timestamp=get_time_at_fraction_of_df(0.75, rows)\n        )\n        self.df_update_outside_date_range = generate_random_floats_dataframe_with_index(\n            rows, cols, end_timestamp=get_time_at_fraction_of_df(1.5, rows)\n        )\n        self.df_append_single = generate_random_floats_dataframe_with_index(\n            1, cols, end_timestamp=get_time_at_fraction_of_df(1.1, rows)\n        )\n        self.df_append_large = generate_random_floats_dataframe_with_index(rows, cols)\n        append_index = pd.date_range(start=\"1/2/2023\", periods=rows, freq=\"ms\")\n        self.df_append_large.index = append_index\n\n    def setup_cache(self):\n        start = time.time()\n        libs_for_storage = self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")\n        return libs_for_storage",
+        "code": "class ModificationFunctions:\n    def time_append_large(self, libs_for_storage, rows_and_cols, storage, compact_data):\n        self.lib.append(self.sym, self.df_append_large, compact_data=compact_data)\n\n    def setup(self, libs_for_storage, rows_and_cols, storage, compact_data):\n        self.lib = libs_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n    \n        rows, cols = rows_and_cols\n    \n        self.sym = _sym_name(rows, cols)\n        assert self.lib.has_symbol(self.sym)\n        self.lib._nvs.restore_version(self.sym, 0)\n        assert self.lib.get_description(self.sym).row_count == rows\n    \n        # These dfs will never be used when compact_data is True\n        if not compact_data:\n            self.df_update_single = generate_random_floats_dataframe_with_index(\n                1, cols, end_timestamp=get_time_at_fraction_of_df(0.5, rows)\n            )\n            self.df_update_half = generate_random_floats_dataframe_with_index(\n                rows // 2, cols, end_timestamp=get_time_at_fraction_of_df(0.75, rows)\n            )\n            self.df_update_outside_date_range = generate_random_floats_dataframe_with_index(\n                rows, cols, end_timestamp=get_time_at_fraction_of_df(1.5, rows)\n            )\n        self.df_append_single = generate_random_floats_dataframe_with_index(\n            1, cols, end_timestamp=get_time_at_fraction_of_df(1.1, rows)\n        )\n        self.df_append_large = generate_random_floats_dataframe_with_index(rows, cols)\n        append_index = pd.date_range(start=\"1/2/2023\", periods=rows, freq=\"ms\")\n        self.df_append_large.index = append_index\n\n    def setup_cache(self):\n        start = time.time()\n        libs_for_storage = self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")\n        return libs_for_storage",
         "min_run_count": 2,
         "name": "modification_functions.ModificationFunctions.time_append_large",
         "number": 1,
         "param_names": [
             "rows_and_cols",
-            "storage"
+            "storage",
+            "compact_data"
         ],
         "params": [
             [
@@ -2806,26 +3451,31 @@
             [
                 "<Storage.LMDB: 2>",
                 "<Storage.AMAZON: 1>"
+            ],
+            [
+                "False",
+                "True"
             ]
         ],
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "modification_functions:52",
+        "setup_cache_key": "modification_functions:53",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
-        "version": "32a9cc94de517e097bf5bff157750bcff696b67ce78c3853c59f8863ac23ff4e",
+        "version": "af9e0a3a5e4c0953ef7b868c275270be2ae244b5a54d707b0d1353bcc8e27f25",
         "warmup_time": 0
     },
     "modification_functions.ModificationFunctions.time_append_single": {
-        "code": "class ModificationFunctions:\n    def time_append_single(self, *args):\n        self.lib.append(self.sym, self.df_append_single)\n\n    def setup(self, libs_for_storage, rows_and_cols, storage):\n        self.lib = libs_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n    \n        rows, cols = rows_and_cols\n    \n        self.sym = _sym_name(rows, cols)\n        assert self.lib.has_symbol(self.sym)\n        self.lib._nvs.restore_version(self.sym, 0)\n        assert self.lib.get_description(self.sym).row_count == rows\n    \n        self.df_update_single = generate_random_floats_dataframe_with_index(\n            1, cols, end_timestamp=get_time_at_fraction_of_df(0.5, rows)\n        )\n        self.df_update_half = generate_random_floats_dataframe_with_index(\n            rows // 2, cols, end_timestamp=get_time_at_fraction_of_df(0.75, rows)\n        )\n        self.df_update_outside_date_range = generate_random_floats_dataframe_with_index(\n            rows, cols, end_timestamp=get_time_at_fraction_of_df(1.5, rows)\n        )\n        self.df_append_single = generate_random_floats_dataframe_with_index(\n            1, cols, end_timestamp=get_time_at_fraction_of_df(1.1, rows)\n        )\n        self.df_append_large = generate_random_floats_dataframe_with_index(rows, cols)\n        append_index = pd.date_range(start=\"1/2/2023\", periods=rows, freq=\"ms\")\n        self.df_append_large.index = append_index\n\n    def setup_cache(self):\n        start = time.time()\n        libs_for_storage = self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")\n        return libs_for_storage",
+        "code": "class ModificationFunctions:\n    def time_append_single(self, libs_for_storage, rows_and_cols, storage, compact_data):\n        self.lib.append(self.sym, self.df_append_single, compact_data=compact_data)\n\n    def setup(self, libs_for_storage, rows_and_cols, storage, compact_data):\n        self.lib = libs_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n    \n        rows, cols = rows_and_cols\n    \n        self.sym = _sym_name(rows, cols)\n        assert self.lib.has_symbol(self.sym)\n        self.lib._nvs.restore_version(self.sym, 0)\n        assert self.lib.get_description(self.sym).row_count == rows\n    \n        # These dfs will never be used when compact_data is True\n        if not compact_data:\n            self.df_update_single = generate_random_floats_dataframe_with_index(\n                1, cols, end_timestamp=get_time_at_fraction_of_df(0.5, rows)\n            )\n            self.df_update_half = generate_random_floats_dataframe_with_index(\n                rows // 2, cols, end_timestamp=get_time_at_fraction_of_df(0.75, rows)\n            )\n            self.df_update_outside_date_range = generate_random_floats_dataframe_with_index(\n                rows, cols, end_timestamp=get_time_at_fraction_of_df(1.5, rows)\n            )\n        self.df_append_single = generate_random_floats_dataframe_with_index(\n            1, cols, end_timestamp=get_time_at_fraction_of_df(1.1, rows)\n        )\n        self.df_append_large = generate_random_floats_dataframe_with_index(rows, cols)\n        append_index = pd.date_range(start=\"1/2/2023\", periods=rows, freq=\"ms\")\n        self.df_append_large.index = append_index\n\n    def setup_cache(self):\n        start = time.time()\n        libs_for_storage = self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")\n        return libs_for_storage",
         "min_run_count": 2,
         "name": "modification_functions.ModificationFunctions.time_append_single",
         "number": 1,
         "param_names": [
             "rows_and_cols",
-            "storage"
+            "storage",
+            "compact_data"
         ],
         "params": [
             [
@@ -2836,26 +3486,31 @@
             [
                 "<Storage.LMDB: 2>",
                 "<Storage.AMAZON: 1>"
+            ],
+            [
+                "False",
+                "True"
             ]
         ],
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "modification_functions:52",
+        "setup_cache_key": "modification_functions:53",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
-        "version": "49c73b3f13c02528fd4d86c53972a65f71734c613fe70930029d8cc8db1ffb1c",
+        "version": "b594b506b631dade5db107580fb629b5baf2da65704e018a7632e0bcfd9516b1",
         "warmup_time": 0
     },
     "modification_functions.ModificationFunctions.time_update_half": {
-        "code": "class ModificationFunctions:\n    def time_update_half(self, *args):\n        self.lib.update(self.sym, self.df_update_half)\n\n    def setup(self, libs_for_storage, rows_and_cols, storage):\n        self.lib = libs_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n    \n        rows, cols = rows_and_cols\n    \n        self.sym = _sym_name(rows, cols)\n        assert self.lib.has_symbol(self.sym)\n        self.lib._nvs.restore_version(self.sym, 0)\n        assert self.lib.get_description(self.sym).row_count == rows\n    \n        self.df_update_single = generate_random_floats_dataframe_with_index(\n            1, cols, end_timestamp=get_time_at_fraction_of_df(0.5, rows)\n        )\n        self.df_update_half = generate_random_floats_dataframe_with_index(\n            rows // 2, cols, end_timestamp=get_time_at_fraction_of_df(0.75, rows)\n        )\n        self.df_update_outside_date_range = generate_random_floats_dataframe_with_index(\n            rows, cols, end_timestamp=get_time_at_fraction_of_df(1.5, rows)\n        )\n        self.df_append_single = generate_random_floats_dataframe_with_index(\n            1, cols, end_timestamp=get_time_at_fraction_of_df(1.1, rows)\n        )\n        self.df_append_large = generate_random_floats_dataframe_with_index(rows, cols)\n        append_index = pd.date_range(start=\"1/2/2023\", periods=rows, freq=\"ms\")\n        self.df_append_large.index = append_index\n\n    def setup_cache(self):\n        start = time.time()\n        libs_for_storage = self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")\n        return libs_for_storage",
+        "code": "class ModificationFunctions:\n    def time_update_half(self, libs_for_storage, rows_and_cols, storage, compact_data):\n        if compact_data:\n            raise SkipNotImplemented\n        self.lib.update(self.sym, self.df_update_half)\n\n    def setup(self, libs_for_storage, rows_and_cols, storage, compact_data):\n        self.lib = libs_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n    \n        rows, cols = rows_and_cols\n    \n        self.sym = _sym_name(rows, cols)\n        assert self.lib.has_symbol(self.sym)\n        self.lib._nvs.restore_version(self.sym, 0)\n        assert self.lib.get_description(self.sym).row_count == rows\n    \n        # These dfs will never be used when compact_data is True\n        if not compact_data:\n            self.df_update_single = generate_random_floats_dataframe_with_index(\n                1, cols, end_timestamp=get_time_at_fraction_of_df(0.5, rows)\n            )\n            self.df_update_half = generate_random_floats_dataframe_with_index(\n                rows // 2, cols, end_timestamp=get_time_at_fraction_of_df(0.75, rows)\n            )\n            self.df_update_outside_date_range = generate_random_floats_dataframe_with_index(\n                rows, cols, end_timestamp=get_time_at_fraction_of_df(1.5, rows)\n            )\n        self.df_append_single = generate_random_floats_dataframe_with_index(\n            1, cols, end_timestamp=get_time_at_fraction_of_df(1.1, rows)\n        )\n        self.df_append_large = generate_random_floats_dataframe_with_index(rows, cols)\n        append_index = pd.date_range(start=\"1/2/2023\", periods=rows, freq=\"ms\")\n        self.df_append_large.index = append_index\n\n    def setup_cache(self):\n        start = time.time()\n        libs_for_storage = self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")\n        return libs_for_storage",
         "min_run_count": 2,
         "name": "modification_functions.ModificationFunctions.time_update_half",
         "number": 1,
         "param_names": [
             "rows_and_cols",
-            "storage"
+            "storage",
+            "compact_data"
         ],
         "params": [
             [
@@ -2866,26 +3521,31 @@
             [
                 "<Storage.LMDB: 2>",
                 "<Storage.AMAZON: 1>"
+            ],
+            [
+                "False",
+                "True"
             ]
         ],
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "modification_functions:52",
+        "setup_cache_key": "modification_functions:53",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
-        "version": "177355a8cc7d43d09fd9958c0da1c443b58461dd703f9aa77cb2ba7d4cea5d15",
+        "version": "96edbaf2b6be52cbbb332995906857cb85a1b5dd7b1c4210bd617fe62ee1d891",
         "warmup_time": 0
     },
     "modification_functions.ModificationFunctions.time_update_outside_date_range": {
-        "code": "class ModificationFunctions:\n    def time_update_outside_date_range(self, *args):\n        self.lib.update(self.sym, self.df_update_outside_date_range, upsert=True)\n\n    def setup(self, libs_for_storage, rows_and_cols, storage):\n        self.lib = libs_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n    \n        rows, cols = rows_and_cols\n    \n        self.sym = _sym_name(rows, cols)\n        assert self.lib.has_symbol(self.sym)\n        self.lib._nvs.restore_version(self.sym, 0)\n        assert self.lib.get_description(self.sym).row_count == rows\n    \n        self.df_update_single = generate_random_floats_dataframe_with_index(\n            1, cols, end_timestamp=get_time_at_fraction_of_df(0.5, rows)\n        )\n        self.df_update_half = generate_random_floats_dataframe_with_index(\n            rows // 2, cols, end_timestamp=get_time_at_fraction_of_df(0.75, rows)\n        )\n        self.df_update_outside_date_range = generate_random_floats_dataframe_with_index(\n            rows, cols, end_timestamp=get_time_at_fraction_of_df(1.5, rows)\n        )\n        self.df_append_single = generate_random_floats_dataframe_with_index(\n            1, cols, end_timestamp=get_time_at_fraction_of_df(1.1, rows)\n        )\n        self.df_append_large = generate_random_floats_dataframe_with_index(rows, cols)\n        append_index = pd.date_range(start=\"1/2/2023\", periods=rows, freq=\"ms\")\n        self.df_append_large.index = append_index\n\n    def setup_cache(self):\n        start = time.time()\n        libs_for_storage = self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")\n        return libs_for_storage",
+        "code": "class ModificationFunctions:\n    def time_update_outside_date_range(self, libs_for_storage, rows_and_cols, storage, compact_data):\n        if compact_data:\n            raise SkipNotImplemented\n        self.lib.update(self.sym, self.df_update_outside_date_range, upsert=True)\n\n    def setup(self, libs_for_storage, rows_and_cols, storage, compact_data):\n        self.lib = libs_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n    \n        rows, cols = rows_and_cols\n    \n        self.sym = _sym_name(rows, cols)\n        assert self.lib.has_symbol(self.sym)\n        self.lib._nvs.restore_version(self.sym, 0)\n        assert self.lib.get_description(self.sym).row_count == rows\n    \n        # These dfs will never be used when compact_data is True\n        if not compact_data:\n            self.df_update_single = generate_random_floats_dataframe_with_index(\n                1, cols, end_timestamp=get_time_at_fraction_of_df(0.5, rows)\n            )\n            self.df_update_half = generate_random_floats_dataframe_with_index(\n                rows // 2, cols, end_timestamp=get_time_at_fraction_of_df(0.75, rows)\n            )\n            self.df_update_outside_date_range = generate_random_floats_dataframe_with_index(\n                rows, cols, end_timestamp=get_time_at_fraction_of_df(1.5, rows)\n            )\n        self.df_append_single = generate_random_floats_dataframe_with_index(\n            1, cols, end_timestamp=get_time_at_fraction_of_df(1.1, rows)\n        )\n        self.df_append_large = generate_random_floats_dataframe_with_index(rows, cols)\n        append_index = pd.date_range(start=\"1/2/2023\", periods=rows, freq=\"ms\")\n        self.df_append_large.index = append_index\n\n    def setup_cache(self):\n        start = time.time()\n        libs_for_storage = self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")\n        return libs_for_storage",
         "min_run_count": 2,
         "name": "modification_functions.ModificationFunctions.time_update_outside_date_range",
         "number": 1,
         "param_names": [
             "rows_and_cols",
-            "storage"
+            "storage",
+            "compact_data"
         ],
         "params": [
             [
@@ -2896,26 +3556,31 @@
             [
                 "<Storage.LMDB: 2>",
                 "<Storage.AMAZON: 1>"
+            ],
+            [
+                "False",
+                "True"
             ]
         ],
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "modification_functions:52",
+        "setup_cache_key": "modification_functions:53",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
-        "version": "a69bff9c3b8f61ef96e6df1de568c35c58ff5f2bb3b4efee021b7072b6f4eff2",
+        "version": "3b8b338379b44be36fb06127c18d48567e3b5c24819a376631430deb59d7b1bb",
         "warmup_time": 0
     },
     "modification_functions.ModificationFunctions.time_update_single": {
-        "code": "class ModificationFunctions:\n    def time_update_single(self, *args):\n        self.lib.update(self.sym, self.df_update_single)\n\n    def setup(self, libs_for_storage, rows_and_cols, storage):\n        self.lib = libs_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n    \n        rows, cols = rows_and_cols\n    \n        self.sym = _sym_name(rows, cols)\n        assert self.lib.has_symbol(self.sym)\n        self.lib._nvs.restore_version(self.sym, 0)\n        assert self.lib.get_description(self.sym).row_count == rows\n    \n        self.df_update_single = generate_random_floats_dataframe_with_index(\n            1, cols, end_timestamp=get_time_at_fraction_of_df(0.5, rows)\n        )\n        self.df_update_half = generate_random_floats_dataframe_with_index(\n            rows // 2, cols, end_timestamp=get_time_at_fraction_of_df(0.75, rows)\n        )\n        self.df_update_outside_date_range = generate_random_floats_dataframe_with_index(\n            rows, cols, end_timestamp=get_time_at_fraction_of_df(1.5, rows)\n        )\n        self.df_append_single = generate_random_floats_dataframe_with_index(\n            1, cols, end_timestamp=get_time_at_fraction_of_df(1.1, rows)\n        )\n        self.df_append_large = generate_random_floats_dataframe_with_index(rows, cols)\n        append_index = pd.date_range(start=\"1/2/2023\", periods=rows, freq=\"ms\")\n        self.df_append_large.index = append_index\n\n    def setup_cache(self):\n        start = time.time()\n        libs_for_storage = self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")\n        return libs_for_storage",
+        "code": "class ModificationFunctions:\n    def time_update_single(self, libs_for_storage, rows_and_cols, storage, compact_data):\n        if compact_data:\n            raise SkipNotImplemented\n        self.lib.update(self.sym, self.df_update_single)\n\n    def setup(self, libs_for_storage, rows_and_cols, storage, compact_data):\n        self.lib = libs_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n    \n        rows, cols = rows_and_cols\n    \n        self.sym = _sym_name(rows, cols)\n        assert self.lib.has_symbol(self.sym)\n        self.lib._nvs.restore_version(self.sym, 0)\n        assert self.lib.get_description(self.sym).row_count == rows\n    \n        # These dfs will never be used when compact_data is True\n        if not compact_data:\n            self.df_update_single = generate_random_floats_dataframe_with_index(\n                1, cols, end_timestamp=get_time_at_fraction_of_df(0.5, rows)\n            )\n            self.df_update_half = generate_random_floats_dataframe_with_index(\n                rows // 2, cols, end_timestamp=get_time_at_fraction_of_df(0.75, rows)\n            )\n            self.df_update_outside_date_range = generate_random_floats_dataframe_with_index(\n                rows, cols, end_timestamp=get_time_at_fraction_of_df(1.5, rows)\n            )\n        self.df_append_single = generate_random_floats_dataframe_with_index(\n            1, cols, end_timestamp=get_time_at_fraction_of_df(1.1, rows)\n        )\n        self.df_append_large = generate_random_floats_dataframe_with_index(rows, cols)\n        append_index = pd.date_range(start=\"1/2/2023\", periods=rows, freq=\"ms\")\n        self.df_append_large.index = append_index\n\n    def setup_cache(self):\n        start = time.time()\n        libs_for_storage = self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")\n        return libs_for_storage",
         "min_run_count": 2,
         "name": "modification_functions.ModificationFunctions.time_update_single",
         "number": 1,
         "param_names": [
             "rows_and_cols",
-            "storage"
+            "storage",
+            "compact_data"
         ],
         "params": [
             [
@@ -2926,16 +3591,20 @@
             [
                 "<Storage.LMDB: 2>",
                 "<Storage.AMAZON: 1>"
+            ],
+            [
+                "False",
+                "True"
             ]
         ],
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "modification_functions:52",
+        "setup_cache_key": "modification_functions:53",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
-        "version": "eee3f8539d658de25ad38be90b670970a13fc5030a402331fbe2e1a191fe18ff",
+        "version": "dccbc566c84961f5fa35f61372f736b55c73043f416596bd929cf13ef5f6ab27",
         "warmup_time": 0
     },
     "nonreg_random_read.NonRegRandomRead.peakmem_read": {

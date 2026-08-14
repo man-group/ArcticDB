@@ -42,6 +42,7 @@
 #include <arcticdb/util/format_date.hpp>
 #include <iterator>
 #include <aws/core/utils/stream/ResponseStream.h>
+#include <arcticdb/util/bitset.hpp>
 
 namespace arcticdb::version_store {
 
@@ -80,24 +81,6 @@ static void modify_descriptor(
                 set_data_type(DataType::UTF_FIXED64, field_desc.mutable_type());
         }
     }
-}
-
-VersionedItem write_dataframe_impl(
-        const std::shared_ptr<Store>& store, VersionId version_id, const std::shared_ptr<InputFrame>& frame,
-        const WriteOptions& options, const std::shared_ptr<DeDupMap>& de_dup_map, bool sparsify_floats,
-        bool validate_index
-) {
-    ARCTICDB_SUBSAMPLE_DEFAULT(WaitForWriteCompletion)
-    ARCTICDB_DEBUG(
-            log::version(),
-            "write_dataframe_impl stream_id: {} , version_id: {}, {} rows",
-            frame->desc().id(),
-            version_id,
-            frame->num_rows
-    );
-    auto atom_key_fut =
-            async_write_dataframe_impl(store, version_id, frame, options, de_dup_map, sparsify_floats, validate_index);
-    return {std::move(atom_key_fut).get()};
 }
 
 std::tuple<IndexPartialKey, SlicingPolicy> get_partial_key_and_slicing_policy(
@@ -218,6 +201,12 @@ static void check_can_append(
     );
 }
 
+// A frame being appended starts at the end of the existing data, and inherits its column bucketing
+static void set_frame_offset_and_bucketize_dynamic(InputFrame& frame, const TimeseriesDescriptor& existing_tsd) {
+    frame.set_offset(static_cast<ssize_t>(existing_tsd.total_rows()));
+    frame.set_bucketize_dynamic(existing_tsd.column_groups());
+}
+
 static void check_can_update(
         const InputFrame& frame, const index::IndexSegmentReader& index_segment_reader, bool dynamic_schema,
         bool empty_types
@@ -257,10 +246,7 @@ folly::Future<AtomKey> async_append_impl(
                         validate_index,
                         empty_types
                 );
-                bool bucketize_dynamic = index_segment_reader.bucketize_dynamic();
-                auto row_offset = index_segment_reader.tsd().total_rows();
-                frame->set_offset(static_cast<ssize_t>(row_offset));
-                frame->set_bucketize_dynamic(bucketize_dynamic);
+                set_frame_offset_and_bucketize_dynamic(*frame, index_segment_reader.tsd());
                 auto slicing_arg = get_slicing_policy(options, *frame);
                 return append_frame(
                         IndexPartialKey{frame->desc().id(), update_info.next_version_id_},
@@ -271,23 +257,6 @@ folly::Future<AtomKey> async_append_impl(
                         options.dynamic_schema
                 );
             });
-}
-
-VersionedItem append_impl(
-        const std::shared_ptr<Store>& store, const UpdateInfo& update_info, const std::shared_ptr<InputFrame>& frame,
-        const WriteOptions& options, bool validate_index, bool empty_types
-) {
-
-    ARCTICDB_SUBSAMPLE_DEFAULT(WaitForWriteCompletion)
-    auto version_key_fut = async_append_impl(store, update_info, frame, options, validate_index, empty_types);
-    auto versioned_item = VersionedItem(std::move(version_key_fut).get());
-    ARCTICDB_DEBUG(
-            log::version(),
-            "write_dataframe_impl stream_id: {} , version_id: {}",
-            versioned_item.symbol(),
-            update_info.next_version_id_
-    );
-    return versioned_item;
 }
 
 namespace {
@@ -415,11 +384,162 @@ bool is_fake_index_name(const arcticc::pb2::descriptors_pb2::NormalizationMetada
     return is_fake_datetime_index_name || is_fake_mutliindex_name;
 }
 
+std::vector<SliceAndKey> merge_slices_and_keys(
+        std::vector<SliceAndKey>&& old_slices, std::vector<SliceAndKey>&& new_slices,
+        ankerl::unordered_dense::map<RowRange, size_t>&& inserted_rows_per_row_range
+) {
+    ranges::sort(new_slices);
+    std::vector<SliceAndKey> merged_ranges_and_keys;
+    auto new_slice_and_key_it = new_slices.begin();
+    auto old_slice_and_key_it = old_slices.begin();
+    while (old_slice_and_key_it != old_slices.end()) {
+        size_t total_inserted_rows{};
+        ColRange current_col_range = old_slice_and_key_it->slice().col_range;
+        while (old_slice_and_key_it != old_slices.end() && current_col_range == old_slice_and_key_it->slice().col_range
+        ) {
+            if (new_slice_and_key_it == new_slices.end() ||
+                old_slice_and_key_it->slice() < new_slice_and_key_it->slice()) {
+                old_slice_and_key_it->slice().row_range.first += total_inserted_rows;
+                old_slice_and_key_it->slice().row_range.second += total_inserted_rows;
+                merged_ranges_and_keys.emplace_back(std::move(*old_slice_and_key_it));
+                ++old_slice_and_key_it;
+            } else {
+                const RowRange new_row_range = new_slice_and_key_it->slice().row_range;
+                const size_t inserted_rows = inserted_rows_per_row_range.at(new_row_range);
+                new_slice_and_key_it->slice().row_range.first += total_inserted_rows;
+                new_slice_and_key_it->slice().row_range.second += total_inserted_rows + inserted_rows;
+                total_inserted_rows += inserted_rows;
+                merged_ranges_and_keys.emplace_back(std::move(*new_slice_and_key_it));
+                ++new_slice_and_key_it;
+                while (old_slice_and_key_it != old_slices.end() &&
+                       old_slice_and_key_it->slice().col_range == current_col_range &&
+                       old_slice_and_key_it->slice().row_range.first < new_row_range.second) {
+                    ++old_slice_and_key_it;
+                }
+            }
+        }
+        while (new_slice_and_key_it != new_slices.end() && new_slice_and_key_it->slice().col_range == current_col_range
+        ) {
+            new_slice_and_key_it->slice().row_range.first += total_inserted_rows;
+            new_slice_and_key_it->slice().row_range.second += total_inserted_rows;
+            merged_ranges_and_keys.emplace_back(std::move(*new_slice_and_key_it));
+            ++new_slice_and_key_it;
+        }
+    }
+    internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+            new_slice_and_key_it == new_slices.end(), "Not all new slices were merged"
+    );
+    internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+            old_slice_and_key_it == old_slices.end(), "Not all old slices were merged"
+    );
+    return merged_ranges_and_keys;
+}
+
+std::optional<util::BitSet> source_rows_to_insert_for_row_range_merge_update(const ComponentManager& component_manager
+) {
+    std::optional<util::BitSet> rows_to_insert;
+    component_manager.process_entities([&](const MergeUpdateNotMatchedSourceRowsComponent& unmatched_source_rows) {
+        if (rows_to_insert) {
+            rows_to_insert->bit_and(*unmatched_source_rows.unmatched_source_rows);
+        } else {
+            rows_to_insert = *unmatched_source_rows.unmatched_source_rows;
+        }
+    });
+    return rows_to_insert;
+}
+
+std::vector<StreamDescriptor> split_rowrange_descriptor(
+        const StreamDescriptor& descriptor, const size_t column_slice_size
+) {
+    auto descriptors = util::reserve_vector<StreamDescriptor>(
+            (descriptor.field_count() + column_slice_size - 1) / column_slice_size
+    );
+    for (size_t field_index = 0; field_index < descriptor.field_count(); ++field_index) {
+        if (field_index % column_slice_size == 0) {
+            descriptors.emplace_back();
+            descriptors.back().set_index(descriptor.index());
+            descriptors.back().set_id(descriptor.id());
+        }
+        descriptors.back().add_field(descriptor.field(field_index));
+    }
+    return descriptors;
+}
+
+folly::SemiFuture<std::vector<SliceAndKey>> write_inserted_row_range_data(
+        const InputFrame& source, const ComponentManager& component_manager, const StreamDescriptor& target_descriptor,
+        const size_t columns_per_slice, const IndexPartialKey& target_index_partial_key,
+        const size_t last_row_in_target, Store& store
+) {
+    const std::optional<util::BitSet> source_rows_to_insert =
+            source_rows_to_insert_for_row_range_merge_update(component_manager);
+    const size_t num_rows_to_insert = source_rows_to_insert ? source_rows_to_insert->count() : 0;
+    if (num_rows_to_insert == 0) {
+        return folly::makeFuture<std::vector<SliceAndKey>>(std::vector<SliceAndKey>{});
+    }
+    std::vector<StreamDescriptor> descriptors = split_rowrange_descriptor(target_descriptor, columns_per_slice);
+    const RowRange new_row_range{last_row_in_target, last_row_in_target + num_rows_to_insert};
+    auto write_data_keys_future = util::reserve_vector<folly::Future<SliceAndKey>>(descriptors.size());
+    for (size_t col_slice = 0; col_slice < descriptors.size(); ++col_slice) {
+        SegmentInMemory new_segment(
+                std::move(descriptors[col_slice]), num_rows_to_insert, AllocationType::PRESIZED, Sparsity::NOT_PERMITTED
+        );
+        const StreamDescriptor& slice_descriptor = new_segment.descriptor();
+        const ColRange col_range{
+                col_slice * columns_per_slice,
+                std::min((col_slice + 1) * columns_per_slice, target_descriptor.field_count())
+        };
+        for (size_t column_in_segment = 0; column_in_segment < slice_descriptor.field_count(); ++column_in_segment) {
+            std::optional<ScopedGILLock> gil_lock;
+            ColumnData col_data = new_segment.column_data(column_in_segment);
+            const Field& field = slice_descriptor.field(column_in_segment);
+            const size_t source_field_pos = col_range.start() + column_in_segment;
+            details::visit_scalar(field.type(), [&]<util::type_descriptor_tag TDT>(TDT) {
+                using SourceRawType = std::conditional_t<
+                        is_sequence_type(TDT::data_type()),
+                        PyObject* const,
+                        typename TDT::DataTypeTag::raw_type>;
+                auto data_it = col_data.begin<TDT>();
+                std::span<const SourceRawType> source_data = source.get_tensor(source_field_pos).span<SourceRawType>();
+                iterate_over_set_positions(*source_rows_to_insert, [&](size_t source_row) {
+                    if constexpr (is_sequence_type(TDT::data_type())) {
+                        *data_it = write_py_string_to_pool_or_throw<TDT>(
+                                source_data[source_row],
+                                source_row,
+                                RowRange{0, source.num_rows},
+                                gil_lock,
+                                new_segment.string_pool(),
+                                field.name()
+                        );
+                    } else {
+                        *data_it = source_data[source_row];
+                    }
+                    ++data_it;
+                });
+            });
+        }
+        new_segment.set_row_data(num_rows_to_insert - 1);
+        write_data_keys_future.push_back(store.compress_and_schedule_async_write(
+                std::make_tuple(
+                        PartialKey{
+                                .key_type = KeyType::TABLE_DATA,
+                                .version_id = target_index_partial_key.version_id,
+                                .stream_id = target_index_partial_key.id,
+                                .start_index = static_cast<timestamp>(new_row_range.first),
+                                .end_index = static_cast<timestamp>(new_row_range.second)
+                        },
+                        std::move(new_segment),
+                        FrameSlice(col_range, new_row_range)
+                ),
+                std::make_shared<DeDupMap>()
+        ));
+    }
+    return folly::collect(std::move(write_data_keys_future));
+}
 } // namespace
 
 VersionedItem delete_range_impl(
         const std::shared_ptr<Store>& store, const StreamId& stream_id, const UpdateInfo& update_info,
-        const UpdateQuery& query, const WriteOptions&&, bool dynamic_schema
+        const UpdateQuery& query, bool dynamic_schema
 ) {
 
     util::check(update_info.previous_index_key_.has_value(), "Cannot delete from non-existent symbol {}", stream_id);
@@ -586,17 +706,13 @@ static std::pair<std::vector<SliceAndKey>, size_t> get_slice_and_keys_for_update
 
 folly::Future<AtomKey> async_update_impl(
         const std::shared_ptr<Store>& store, const UpdateInfo& update_info, const UpdateQuery& query,
-        const std::shared_ptr<InputFrame>& frame, WriteOptions&& options, bool dynamic_schema, bool empty_types
+        const std::shared_ptr<InputFrame>& frame, const WriteOptions& options, bool dynamic_schema, bool empty_types
 ) {
     return index::async_get_index_reader(*(update_info.previous_index_key_), store)
             // This future will complete on the IO executor
-            .thenValueInline([store,
-                              update_info,
-                              query,
-                              frame,
-                              options = std::move(options),
-                              dynamic_schema,
-                              empty_types](index::IndexSegmentReader&& index_segment_reader) {
+            .thenValueInline([store, update_info, query, frame, options, dynamic_schema, empty_types](
+                                     index::IndexSegmentReader&& index_segment_reader
+                             ) {
                 check_can_update(*frame, index_segment_reader, dynamic_schema, empty_types);
                 ARCTICDB_DEBUG(
                         log::version(),
@@ -687,17 +803,37 @@ folly::Future<AtomKey> async_update_impl(
             });
 }
 
-VersionedItem update_impl(
-        const std::shared_ptr<Store>& store, const UpdateInfo& update_info, const UpdateQuery& query,
-        const std::shared_ptr<InputFrame>& frame, WriteOptions&& options, bool dynamic_schema, bool empty_types
+folly::Future<AtomKey> async_write_metadata_impl(
+        const std::shared_ptr<Store>& store, const UpdateInfo& update_info,
+        arcticdb::proto::descriptors::UserDefinedMetadata&& user_meta
 ) {
-    auto versioned_item = VersionedItem(
-            async_update_impl(store, update_info, query, frame, std::move(options), dynamic_schema, empty_types).get()
+    util::check(
+            update_info.previous_index_key_.has_value(),
+            "Cannot write metadata as there is no previous index key to update"
     );
     ARCTICDB_DEBUG(
-            log::version(), "updated stream_id: {} , version_id: {}", frame->desc().id(), update_info.next_version_id_
+            log::version(),
+            "write metadata for stream_id: {} , version_id: {}",
+            update_info.previous_index_key_->id(),
+            update_info.next_version_id_
     );
-    return versioned_item;
+    return store->read(*update_info.previous_index_key_)
+            .thenValue([store, update_info, user_meta = std::move(user_meta)](
+                               std::pair<VariantKey, SegmentInMemory>&& key_segment
+                       ) mutable {
+                auto& segment = key_segment.second;
+                *segment.mutable_index_descriptor().mutable_proto().mutable_user_meta() = std::move(user_meta);
+                const auto& index_key = *update_info.previous_index_key_;
+                return store->write(
+                        index_key.type(),
+                        update_info.next_version_id_,
+                        index_key.id(),
+                        index_key.start_index(),
+                        index_key.end_index(),
+                        std::move(segment)
+                );
+            })
+            .thenValueInline([](VariantKey&& key) { return to_atom(std::move(key)); });
 }
 
 folly::Future<ReadVersionOutput> read_multi_key(
@@ -2999,18 +3135,19 @@ folly::Future<ReadVersionOutput> read_frame_for_version(
 
 folly::Future<std::vector<SliceAndKey>> read_modify_write_data_keys(
         const std::shared_ptr<Store>& store, std::shared_ptr<ReadQuery> read_query, const ReadOptions& read_options,
-        const IndexPartialKey& target_partial_index_key, const std::shared_ptr<PipelineContext>& pipeline_context
+        const IndexPartialKey& target_partial_index_key, const std::shared_ptr<PipelineContext>& pipeline_context,
+        std::shared_ptr<ComponentManager> component_manager = std::make_shared<ComponentManager>(),
+        std::shared_ptr<DeDupMap> de_dup_map = std::make_shared<DeDupMap>()
 ) {
     auto write_clause_processing_structure = read_query->clauses_.empty()
                                                      ? ProcessingStructure::ROW_SLICE
                                                      : read_query->clauses_.back()->clause_info().output_structure_;
-    read_query->clauses_.push_back(std::make_shared<Clause>(WriteClause(
-            target_partial_index_key, std::make_shared<DeDupMap>(), store, write_clause_processing_structure
-    )));
+    read_query->clauses_.push_back(std::make_shared<Clause>(
+            WriteClause(target_partial_index_key, std::move(de_dup_map), store, write_clause_processing_structure)
+    ));
 
-    auto component_manager = std::make_shared<ComponentManager>();
     return read_and_schedule_processing(store, pipeline_context, read_query, read_options, component_manager)
-            .thenValue([component_manager,
+            .thenValue([component_manager = std::move(component_manager),
                         pipeline_context,
                         read_query = std::move(read_query)](std::vector<EntityId>&& processed_entity_ids) {
                 generate_output_schema_and_save_to_pipeline(*pipeline_context, *read_query);
@@ -3073,22 +3210,46 @@ folly::Future<VersionedItem> read_modify_write_impl(
             });
 }
 
-folly::Future<VersionedItem> merge_update_impl(
-        const std::shared_ptr<Store>& store, const VersionIdentifier& version_info, const ReadOptions& read_options,
+folly::Future<AtomKey> merge_update_impl(
+        const std::shared_ptr<Store>& store, const UpdateInfo& update_info, const ReadOptions& read_options,
         const WriteOptions& write_options, const IndexPartialKey& target_partial_index_key,
-        std::vector<std::string>&& on, const MergeStrategy& strategy, std::shared_ptr<InputFrame> source
+        std::vector<std::string>&& on, const MergeStrategy& strategy, std::shared_ptr<InputFrame> source,
+        std::shared_ptr<DeDupMap> de_dup_map
 ) {
     auto read_query = std::make_shared<ReadQuery>();
     const StreamDescriptor& source_descriptor = source->desc();
     auto merge_update_clause = std::make_shared<Clause>(MergeUpdateClause(std::move(on), strategy, source));
     read_query->clauses_.push_back(merge_update_clause);
-    VersionIdentifier resolved = version_info;
+    VersionIdentifier resolved = VersionedItem{*update_info.previous_index_key_};
     if (auto* vi = std::get_if<VersionedItem>(&resolved)) {
         // TODO: Swap this out for the async version and chain futures from it
         resolved = std::make_shared<IndexInformation>(read_index_key_without_column_stats_sync(store, vi->key_));
     }
     std::shared_ptr<PipelineContext> pipeline_context =
             setup_pipeline_context(store, std::move(resolved), *read_query, read_options);
+    // The target is empty.
+    if (pipeline_context->rows_ == 0) {
+        if (strategy.insert()) {
+            return async_write_dataframe_impl(store, update_info.next_version_id_, source, write_options, de_dup_map)
+                    .get();
+        } else if (strategy.update_only()) {
+            const TimeseriesDescriptor tsd = make_timeseries_descriptor(
+                    0,
+                    pipeline_context->descriptor(),
+                    pipeline_context->release_normalization(),
+                    std::move(source->user_meta),
+                    std::nullopt,
+                    write_options.bucketize_dynamic
+            );
+            return index::write_index(
+                    index_type_from_descriptor(pipeline_context->descriptor()),
+                    tsd,
+                    std::vector<SliceAndKey>{},
+                    target_partial_index_key,
+                    store
+            );
+        }
+    }
     // TODO: Rely on modify_schema for this https://man312219.monday.com/boards/7852509418/pulses/10997979275
     schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
             columns_match(pipeline_context->descriptor(), source_descriptor),
@@ -3110,45 +3271,85 @@ folly::Future<VersionedItem> merge_update_impl(
     );
     folly::poly_cast<MergeUpdateClause>(*merge_update_clause).fake_index_name_ =
             index_type == IndexDescriptor::Type::TIMESTAMP && is_fake_index_name(pipeline_context->normalization());
-    return read_modify_write_data_keys(store, read_query, read_options, target_partial_index_key, pipeline_context)
+    auto component_manager = std::make_shared<ComponentManager>();
+    return read_modify_write_data_keys(
+                   store,
+                   read_query,
+                   read_options,
+                   target_partial_index_key,
+                   pipeline_context,
+                   component_manager,
+                   std::move(de_dup_map)
+    )
             .thenValue([pipeline_context = std::move(pipeline_context),
+                        component_manager = std::move(component_manager),
                         store,
                         write_options,
                         source = std::move(source),
-                        target_partial_index_key](std::vector<SliceAndKey>&& data_keys_and_slices) {
-                // TODO: This needs to be changed to account for the INSERT option of merge update. Insert can
-                // create new segments and shift row slices.
-                ranges::sort(data_keys_and_slices);
-                std::vector<SliceAndKey> merged_ranges_and_keys;
-                auto new_slice = data_keys_and_slices.begin();
-                for (SliceAndKey& slice : pipeline_context->slice_and_keys_) {
-                    if (new_slice != data_keys_and_slices.end() && new_slice->slice_ == slice.slice_) {
-                        merged_ranges_and_keys.push_back(std::move(*new_slice));
-                        ++new_slice;
-                    } else {
-                        merged_ranges_and_keys.push_back(std::move(slice));
-                    }
-                }
-                pipeline_context->slice_and_keys_.clear();
-                const size_t row_count = merged_ranges_and_keys.empty()
-                                                 ? 0
-                                                 : merged_ranges_and_keys.back().slice().row_range.second -
-                                                           merged_ranges_and_keys.front().slice().row_range.first;
-                const TimeseriesDescriptor tsd = make_timeseries_descriptor(
-                        row_count,
-                        pipeline_context->descriptor(),
-                        pipeline_context->normalization(),
-                        std::make_optional(std::move(source->user_meta)),
-                        std::nullopt,
-                        write_options.bucketize_dynamic
-                );
-                return index::write_index(
-                        index_type_from_descriptor(pipeline_context->descriptor()),
-                        tsd,
-                        std::move(merged_ranges_and_keys),
                         target_partial_index_key,
-                        store
-                );
+                        strategy](std::vector<SliceAndKey>&& data_keys_and_slices) {
+                const StreamDescriptor& target_descriptor = pipeline_context->descriptor();
+                folly::SemiFuture<std::vector<SliceAndKey>> inserted_row_slices_fut =
+                        (target_descriptor.index().type() == IndexDescriptor::Type::ROWCOUNT && strategy.insert())
+                                ? write_inserted_row_range_data(
+                                          *source,
+                                          *component_manager,
+                                          target_descriptor,
+                                          write_options.column_group_size,
+                                          target_partial_index_key,
+                                          pipeline_context->last_row(),
+                                          *store
+                                  )
+                                : folly::makeSemiFuture(std::vector<SliceAndKey>{});
+                return std::move(inserted_row_slices_fut)
+                        .via(&async::cpu_executor())
+                        .thenValue([pipeline_context,
+                                    component_manager,
+                                    store,
+                                    write_options,
+                                    source,
+                                    target_partial_index_key,
+                                    data_keys_and_slices = std::move(data_keys_and_slices
+                                    )](std::vector<SliceAndKey>&& inserted_row_slices) mutable {
+                            ankerl::unordered_dense::map<RowRange, size_t> inserted_rows_per_row_range;
+                            component_manager->process_entities(
+                                    [&](const MergeUpdateInsertedRowsComponent& inserted_rows,
+                                        const std::shared_ptr<RowRange>& row_range) {
+                                        inserted_rows_per_row_range.emplace(*row_range, inserted_rows);
+                                    }
+                            );
+                            data_keys_and_slices.insert(
+                                    data_keys_and_slices.end(),
+                                    std::make_move_iterator(inserted_row_slices.begin()),
+                                    std::make_move_iterator(inserted_row_slices.end())
+                            );
+                            std::vector<SliceAndKey> merged_ranges_and_keys = merge_slices_and_keys(
+                                    std::move(pipeline_context->slice_and_keys_),
+                                    std::move(data_keys_and_slices),
+                                    std::move(inserted_rows_per_row_range)
+                            );
+                            pipeline_context->slice_and_keys_.clear();
+                            const size_t row_count =
+                                    merged_ranges_and_keys.empty()
+                                            ? 0
+                                            : merged_ranges_and_keys.back().slice().row_range.second -
+                                                      merged_ranges_and_keys.front().slice().row_range.first;
+                            const TimeseriesDescriptor tsd = make_timeseries_descriptor(
+                                    row_count,
+                                    pipeline_context->descriptor(),
+                                    pipeline_context->normalization(),
+                                    std::make_optional(std::move(source->user_meta)),
+                                    std::nullopt,
+                                    write_options.bucketize_dynamic
+                            );
+                            return index::write_index(
+                                    index_type_from_descriptor(pipeline_context->descriptor()),
+                                    tsd,
+                                    std::move(merged_ranges_and_keys),
+                                    target_partial_index_key,
+                                    store
+                            );
+                        });
             });
 }
 
@@ -3324,30 +3525,7 @@ static std::shared_ptr<TimeseriesDescriptor> compact_data_tsd(
         const WriteOptions& write_options
 ) {
     const auto& existing_tsd = pipeline_context.tsd();
-    if (compact_data_frame.has_value()) {
-        auto& frame = compact_data_frame->frame_;
-        if (frame->num_rows > 0) {
-            check_can_append(
-                    *frame,
-                    existing_tsd,
-                    pipeline_context.last_existing_index_value_,
-                    write_options,
-                    compact_data_frame->validate_index_,
-                    compact_data_frame->empty_types_
-            );
-            frame->set_offset(existing_tsd.total_rows());
-            frame->set_bucketize_dynamic(existing_tsd.column_groups());
-            return std::make_shared<TimeseriesDescriptor>(index::get_merged_tsd(
-                    frame->offset + frame->num_rows, write_options.dynamic_schema, existing_tsd, frame
-            ));
-        } else {
-            frame->set_offset(existing_tsd.total_rows());
-            frame->set_bucketize_dynamic(existing_tsd.column_groups());
-            auto merged_tsd = std::make_shared<TimeseriesDescriptor>(existing_tsd);
-            *merged_tsd->mutable_proto().mutable_user_meta() = std::move(frame->user_meta);
-            return merged_tsd;
-        }
-    } else {
+    if (!compact_data_frame.has_value()) {
         return std::make_shared<TimeseriesDescriptor>(make_timeseries_descriptor(
                 existing_tsd.total_rows(),
                 *pipeline_context.desc_,
@@ -3357,9 +3535,27 @@ static std::shared_ptr<TimeseriesDescriptor> compact_data_tsd(
                 write_options.bucketize_dynamic
         ));
     }
+    auto& frame = compact_data_frame->frame_;
+    set_frame_offset_and_bucketize_dynamic(*frame, existing_tsd);
+    if (frame->num_rows == 0) {
+        auto merged_tsd = std::make_shared<TimeseriesDescriptor>(existing_tsd);
+        *merged_tsd->mutable_proto().mutable_user_meta() = std::move(frame->user_meta);
+        return merged_tsd;
+    }
+    check_can_append(
+            *frame,
+            existing_tsd,
+            pipeline_context.last_existing_index_value_,
+            write_options,
+            compact_data_frame->validate_index_,
+            compact_data_frame->empty_types_
+    );
+    return std::make_shared<TimeseriesDescriptor>(
+            index::get_merged_tsd(frame->offset + frame->num_rows, write_options.dynamic_schema, existing_tsd, frame)
+    );
 }
 
-folly::Future<std::optional<VersionedItem>> compact_data_impl(
+folly::Future<std::optional<AtomKey>> async_compact_data_impl(
         const std::shared_ptr<Store>& store, const UpdateInfo& update_info, const WriteOptions& write_options,
         uint64_t rows_per_segment, std::optional<CompactDataFrame> compact_data_frame
 ) {
@@ -3399,9 +3595,9 @@ folly::Future<std::optional<VersionedItem>> compact_data_impl(
                                  read_query,
                                  tsd,
                                  frame](std::vector<SliceAndKey>&& slices_and_keys
-                                ) -> folly::Future<std::optional<VersionedItem>> {
+                                ) -> folly::Future<std::optional<AtomKey>> {
                                     if (slices_and_keys.empty() && !frame) {
-                                        return folly::makeFuture(std::optional<VersionedItem>());
+                                        return folly::makeFuture(std::optional<AtomKey>());
                                     }
                                     const std::vector<RowRange> new_row_ranges =
                                             find_sorted_unique_row_ranges(slices_and_keys);

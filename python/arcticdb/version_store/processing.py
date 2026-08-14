@@ -53,6 +53,7 @@ from arcticdb_ext.version_store import (
     ValueInt64,
     ValueFloat32,
     ValueFloat64,
+    ValueTimestamp,
 )
 from arcticdb_ext.version_store import ExpressionNode as _ExpressionNode
 from arcticdb_ext.version_store import OperationType as _OperationType
@@ -1262,7 +1263,7 @@ def create_value(value):
         f = CONSTRUCTOR_MAP.get(min_scalar_type.kind).get(min_scalar_type.itemsize)
     elif isinstance(value, supported_time_types):
         value = nanoseconds_from_utc(value)
-        f = ValueInt64
+        f = ValueTimestamp
     elif isinstance(value, (datetime.timedelta, pd.Timedelta)):
         value = nanoseconds_timedelta(value)
         f = ValueInt64

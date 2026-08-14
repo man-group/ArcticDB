@@ -81,7 +81,12 @@ from arcticdb.options import (
 )
 from arcticdb_ext.log import LogLevel as _LogLevel
 from arcticdb.authorization.permissions import OpenMode
-from arcticdb.exceptions import ArcticDbNotYetImplemented, ArcticNativeException, MissingKeysInStageResultsError
+from arcticdb.exceptions import (
+    ArcticDbNotYetImplemented,
+    ArcticNativeException,
+    MissingKeysInStageResultsError,
+    ArcticDuplicateSymbolsInBatchException,
+)
 from arcticdb.flattener import Flattener
 from arcticdb.log import version as log
 from arcticdb.version_store._custom_normalizers import get_custom_normalizer, CompositeCustomNormalizer
@@ -563,6 +568,12 @@ class NativeVersionStore:
         except Exception as e:
             log.error("Could not get primary backing store for lib due to: {}".format(e))
         return backing_store
+
+    @staticmethod
+    def _raise_if_duplicate_symbols_in_batch(batch):
+        symbols = {(p if isinstance(p, str) else p.symbol) for p in batch}
+        if len(symbols) < len(batch):
+            raise ArcticDuplicateSymbolsInBatchException
 
     def _try_normalize(
         self,
@@ -2019,6 +2030,7 @@ class NativeVersionStore:
         prune_previous_version=None,
         validate_index: bool = False,
         index_column_vector: Optional[List[bool]] = None,
+        compact_data: bool = False,
         **kwargs,
     ) -> List[VersionedItem]:
         """
@@ -2049,6 +2061,13 @@ class NativeVersionStore:
             Only applicable when data is a PyArrow Table or Polars DataFrame. If True for a given entry,
             the first column is treated as the timeseries index.
             i-th entry corresponds to i-th element of `symbols`.
+        compact_data: bool, default=False
+            If False, the data being appended will be sliced and written to disk without consideration for how
+            fragmented this may make the data.
+            If True, the data will also be compacted at the same time (see the `compact_data` method for more details).
+            Note that this will usually involve reading some data segments from disk and doing some in-memory
+            processing, and so will generally be slower than when this argument is False. However, subsequent reads of
+            the data will generally be faster.
         kwargs :
             passed through to the write handler
 
@@ -2079,6 +2098,7 @@ class NativeVersionStore:
             validate_index,
             throw_on_error,
             index_column_vector,
+            compact_data,
             **kwargs,
         )
 
@@ -2091,6 +2111,7 @@ class NativeVersionStore:
         validate_index,
         throw_on_error,
         index_column_vector,
+        compact_data,
         **kwargs,
     ):
         proto_cfg = self._lib_cfg.lib_desc.version.write_options
@@ -2118,6 +2139,7 @@ class NativeVersionStore:
             validate_index,
             write_if_missing,
             throw_on_error,
+            compact_data,
         )
         converted = self._convert_cxx_batch_results_to_python(cxx_versioned_items, metadata_vector)
         for idx, result in enumerate(converted):
@@ -4135,6 +4157,93 @@ class NativeVersionStore:
         cxx_versioned_item = self.version_store._compact_data(symbol, rows_per_segment, prune_previous_version)
         return self._convert_thin_cxx_item_to_python(cxx_versioned_item, None)
 
+    def batch_compact_data(
+        self,
+        symbols: List[str],
+        rows_per_segment: Optional[int] = None,
+        prune_previous_version: Optional[bool] = None,
+    ) -> List[VersionedItem]:
+        """
+        Compact the data keys associated with the latest versions of a collection of symbols such that the number of
+        rows in each segment is close to rows_per_segment. After compaction, all segments will have a row count within
+        33% of rows_per_segment.
+
+        For each symbol, this operation creates a new version, unless the data for that symbol is already compacted.
+
+        The metadata from the versions being compacted are maintained with the newly created versions.
+
+        Note that any fixed-width string columns that are compacted by this method will be coerced to dynamic UTF-8.
+
+        Parameters
+        ----------
+        symbols : List[str]
+            The symbols to compact the data keys of.
+        rows_per_segment : Optional[int], default=None
+            The target number of rows for each segment after the compaction. If None, uses the library configuration
+            setting. Note that subsequent calls to write, append, and update will continue to use the library
+            configuration setting.
+        prune_previous_version : bool, default=None
+            Remove previous versions from version list. Uses library default if left as None.
+
+        Returns
+        -------
+        List[VersionedItem]
+            The i-th element of the returned list corresponds to the i-th entry of the input symbols argument. List of
+            structures containing information including the version number of the written symbol in the store. The data
+            and metadata attributes will not be populated.  If no compaction occurs because the data is already
+            compacted, the version field will be that of the latest live version for the symbol.
+
+        Raises
+        ------
+        StorageException
+            If any of the symbols don't exist
+        ArcticNativeException
+            If invalid rows_per_segment is provided
+        SchemaException
+            If the existing data for any of the symbols is recursively normalized
+
+        Examples
+        --------
+
+        >>> df1 = pd.DataFrame({"col": np.arange(100_000)})
+        >>> df2 = pd.DataFrame({"col": np.arange(200_000)})
+        >>> for i in range(100):
+        >>>     lib.batch_append(["sym1", "sym2"], [df1[i * 1_000: (i + 1) * 1_000], df2[i * 2_000: (i + 1) * 2_000]])
+        >>> len(lib.read_index("sym1"))
+        100
+        >>> len(lib.read_index("sym2"))
+        100
+        >>> lib.batch_compact_data(["sym1", "sym2"])
+        >>> len(lib.read_index("sym1"))
+        1
+        >>> len(lib.read_index("sym2"))
+        2
+        """
+        return self._batch_compact_data_internal(symbols, rows_per_segment, prune_previous_version, throw_on_error=True)
+
+    def _batch_compact_data_internal(
+        self,
+        symbols: List[str],
+        rows_per_segment: Optional[int],
+        prune_previous_version: Optional[bool],
+        throw_on_error: bool,
+    ) -> List[Union[VersionedItem, DataError]]:
+        self._raise_if_duplicate_symbols_in_batch(symbols)
+        check(
+            rows_per_segment is None or rows_per_segment > 0,
+            f"rows_per_segment must be >0, received {rows_per_segment}",
+        )
+        prune_previous_version = resolve_defaults(
+            "prune_previous_version",
+            self._lib_cfg.lib_desc.version.write_options,
+            global_default=False,
+            existing_value=prune_previous_version,
+        )
+        cxx_versioned_items = self.version_store._batch_compact_data(
+            symbols, rows_per_segment, prune_previous_version, throw_on_error
+        )
+        return self._convert_cxx_batch_results_to_python(cxx_versioned_items, len(cxx_versioned_items) * [None])
+
     def is_symbol_fragmented(self, symbol: str, segment_size: Optional[int] = None) -> bool:
         """
         This method has been deprecated and will be removed in a future release. Please use compact_data_explain_plan
@@ -4289,7 +4398,7 @@ class NativeVersionStore:
             This API is under development and is subject to change. The API is not subject to semver and can change in
             minor or patch releases.
 
-            Only date time indexed symbols and sources are supported at the moment.
+            Dynamic schema is not supported.
 
         Parameters
         ----------
@@ -4298,9 +4407,6 @@ class NativeVersionStore:
         source : pandas.DataFrame or pandas.Series
             The new data to merge. In the case of timeseries, the index must be sorted.
         strategy : Optional[MergeStrategy], default=MergeStrategy(matched="update", not_matched_by_target="insert")
-            !!! warning
-                Only `MergeStrategy(matched="update", not_matched_by_target="do_nothing")` is implemented
-
             Determines how to handle matched and unmatched rows. Accepted strategies are:
                 - MergeStrategy(matched="update", not_matched_by_target="do_nothing"): Update matched rows, leave others unchanged.
                 - MergeStrategy(matched="do_nothing", not_matched_by_target="insert"): Insert unmatched rows from source.
@@ -4330,10 +4436,9 @@ class NativeVersionStore:
         prune_previous_versions : bool, default False
             If True, removes previous versions from the version list.
         upsert : bool, default False
-            !!! warning
-                Not yet implemented
-
-            If True and `not_matched_by_target="insert"`, creates the symbol if it does not exist.
+            If True and the symbol does not exist, create it by writing `source` to the store. Requires a strategy
+            with `not_matched_by_target="insert"`; combining it with an update-only strategy raises
+            `UserInputException` as the newly created symbol would be empty.
 
         Returns
         -------
@@ -4346,7 +4451,8 @@ class NativeVersionStore:
         StorageException
             If symbol doesn't exist and `upsert=False`
         UserInputException
-            If strategy is not one of the supported strategies listed above
+            If strategy is not one of the supported strategies listed above or if `upsert=True` is used with an
+            update-only strategy and the symbol doesn't exist
         UnsortedDataException
             If date-time index is used and source or target are not sorted
         SchemaException

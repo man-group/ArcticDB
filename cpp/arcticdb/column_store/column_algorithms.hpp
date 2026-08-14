@@ -579,6 +579,18 @@ ColumnData::ColumnDataIterator<TDT, IT, ID, true> exponential_lower_bound(
     return lower_bound<TDT, IT, ID>(bracket_start, bracket_end, value);
 }
 
+template<
+        util::type_descriptor_tag TDT, IteratorType IT = IteratorType::REGULAR,
+        IteratorDensity ID = IteratorDensity::DENSE>
+requires SortedSearchInputs<TDT, ID>
+ColumnData::ColumnDataIterator<TDT, IT, ID, true> exponential_lower_bound(
+        const ColumnData& data, typename TDT::DataTypeTag::raw_type value
+) {
+    auto start = data.cbegin<TDT, IT, ID>();
+    auto end = data.cend<TDT, IT, ID>();
+    return exponential_lower_bound(start, end, value);
+}
+
 // Exponential (galloping) upper_bound.
 template<typename TDT, IteratorType IT, IteratorDensity ID>
 requires SortedSearchInputs<TDT, ID>
@@ -599,6 +611,18 @@ ColumnData::ColumnDataIterator<TDT, IT, ID, true> exponential_upper_bound(
                 return probe <= v;
             });
     return upper_bound<TDT, IT, ID>(bracket_start, bracket_end, value);
+}
+
+template<
+        util::type_descriptor_tag TDT, IteratorType IT = IteratorType::REGULAR,
+        IteratorDensity ID = IteratorDensity::DENSE>
+requires SortedSearchInputs<TDT, ID>
+ColumnData::ColumnDataIterator<TDT, IT, ID, true> exponential_upper_bound(
+        const ColumnData& data, typename TDT::DataTypeTag::raw_type value
+) {
+    auto start = data.cbegin<TDT, IT, ID>();
+    auto end = data.cend<TDT, IT, ID>();
+    return exponential_upper_bound(start, end, value);
 }
 
 namespace search_detail {

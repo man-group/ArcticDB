@@ -217,7 +217,7 @@ class PythonVersionStore : public LocalVersionedEngine {
     std::vector<VersionedItemOrError> batch_append(
             const std::vector<StreamId>& stream_ids, const std::vector<convert::InputItem>& items,
             const std::vector<py::object>& norms, const std::vector<py::object>& user_metas,
-            bool prune_previous_versions, bool validate_index, bool upsert, bool throw_on_error
+            bool prune_previous_versions, bool validate_index, bool upsert, bool throw_on_error, bool compact_data
     );
 
     std::vector<std::pair<VersionedItem, TimeseriesDescriptor>> batch_restore_version(
@@ -297,6 +297,11 @@ class PythonVersionStore : public LocalVersionedEngine {
 
     VersionedItem compact_data(
             const StreamId& stream_id, std::optional<uint64_t> rows_per_segment, bool prune_previous_versions
+    );
+
+    std::vector<VersionedItemOrError> batch_compact_data(
+            const std::vector<StreamId>& stream_ids, std::optional<uint64_t> rows_per_segment,
+            bool prune_previous_versions, bool throw_on_error
     );
 
   private:

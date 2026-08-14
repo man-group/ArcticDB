@@ -165,7 +165,7 @@ def test_column_stats_query_optimisation_column_not_in_stats(
 
 
 def test_column_stats_query_optimisation_empty_segment(
-    in_memory_version_store_tiny_segment, column_stats_filtering_enabled
+    in_memory_version_store_tiny_segment, column_stats_filtering_enabled, clear_query_stats
 ):
     lib = in_memory_version_store_tiny_segment
 
@@ -958,7 +958,7 @@ def test_column_stats_three_chained_filter_clauses(
 
 
 def test_column_stats_repeated_expressions(in_memory_version_store, clear_query_stats, column_stats_filtering_enabled):
-    """Nonreg test: ConstMap.set_value is called repeatedly with name=Num(2) here. We shouldn't validate against the repetition."""
+    """Nonreg test: the leaf labelled Val(UINT8:2) recurs throughout this query. We shouldn't validate against the repetition."""
     lib = in_memory_version_store
 
     df0 = pd.DataFrame({"col_1": [1, 2]}, index=pd.date_range("2000-01-01", periods=2))

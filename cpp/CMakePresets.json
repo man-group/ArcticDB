@@ -149,7 +149,9 @@
       "inherits": ["common_vcpkg", "macos"],
       "cacheVariables": {
         "CMAKE_OSX_DEPLOYMENT_TARGET": "15.0",
-        "ARCTICDB_COMPILER_CACHE": "sccache"
+        "ARCTICDB_COMPILER_CACHE": "sccache",
+        "VCPKG_OVERLAY_TRIPLETS": "custom-triplets",
+        "VCPKG_TARGET_TRIPLET": "arm64-osx-15"
       }
     },
     { "name": "windows-cl-release",       "inherits": "windows-cl-debug",       "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }},

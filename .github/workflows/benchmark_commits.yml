@@ -107,6 +107,12 @@ jobs:
           # pytz and pandas<3 can go once latest ArcticDB release has these dependencies
           ./tooling_venv/bin/pip install "ArcticDB[Testing]" "pytz" "pandas<3"
 
+      # Use a global seaweed to avoid to cost of starting and stopping the server for each benchmark.
+      # Some benchmarks use SeaweedFS because it supports parallel writes.
+      - name: Start SeaweedFS
+        shell: bash -el {0}
+        run: build_tooling/start_seaweed.sh start
+
       - name: Configure what suite or tests to execute
         shell: bash -el {0}
         run: | 
@@ -164,6 +170,11 @@ jobs:
 
           ./tooling_venv/bin/python build_tooling/summarize_asv_run.py --commit-hash $(git rev-parse HEAD)
           exit $any_worse
+
+      - name: Stop SeaweedFS
+        if: always()
+        shell: bash -el {0}
+        run: build_tooling/start_seaweed.sh stop
 
       - name: Clean up the test bucket
         if: always()

@@ -60,6 +60,7 @@ inline std::unordered_map<ErrorCategory, const char*> get_error_category_names()
     ERROR_CODE(1003, E_RUNTIME_ERROR)                                                                                  \
     ERROR_CODE(1004, E_STORED_CONFIG_ERROR)                                                                            \
     ERROR_CODE(1005, E_NOT_SUPPORTED)                                                                                  \
+    ERROR_CODE(1006, E_NOT_IMPLEMENTED)                                                                                \
     ERROR_CODE(2000, E_INCOMPATIBLE_OBJECTS)                                                                           \
     ERROR_CODE(2001, E_UNIMPLEMENTED_INPUT_TYPE)                                                                       \
     ERROR_CODE(2002, E_UPDATE_NOT_SUPPORTED)                                                                           \
@@ -206,6 +207,9 @@ using AtomicOperationFailedException = ArcticSpecificException<ErrorCode::E_ATOM
 using UnsupportedAtomicOperationException = ArcticSpecificException<ErrorCode::E_UNSUPPORTED_ATOMIC_OPERATION>;
 using NotImplementedException = ArcticSpecificException<ErrorCode::E_NOT_IMPLEMENTED_BY_STORAGE>;
 using QuotaExceededException = ArcticSpecificException<ErrorCode::E_QUOTA_EXCEEDED>;
+using SymbolNotFoundException = ArcticSpecificException<ErrorCode::E_SYMBOL_NOT_FOUND>;
+using RecursivelyNormalizedDataException =
+        ArcticSpecificException<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_RECURSIVE_NORMALIZED_DATA>;
 
 template<ErrorCode error_code>
 [[noreturn]] void throw_error(const std::string& msg) {
@@ -290,6 +294,18 @@ template<>
 template<>
 [[noreturn]] inline void throw_error<ErrorCode::E_QUOTA_EXCEEDED>(const std::string& msg) {
     throw ArcticSpecificException<ErrorCode::E_QUOTA_EXCEEDED>(msg);
+}
+
+template<>
+[[noreturn]] inline void throw_error<ErrorCode::E_SYMBOL_NOT_FOUND>(const std::string& msg) {
+    throw ArcticSpecificException<ErrorCode::E_SYMBOL_NOT_FOUND>(msg);
+}
+
+template<>
+[[noreturn]] inline void throw_error<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_RECURSIVE_NORMALIZED_DATA>(
+        const std::string& msg
+) {
+    throw ArcticSpecificException<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_RECURSIVE_NORMALIZED_DATA>(msg);
 }
 
 } // namespace arcticdb

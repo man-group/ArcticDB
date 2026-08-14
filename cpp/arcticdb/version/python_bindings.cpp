@@ -181,6 +181,7 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
     version.def("ValueInt64", &construct_value<int64_t>);
     version.def("ValueFloat32", &construct_value<float>);
     version.def("ValueFloat64", &construct_value<double>);
+    version.def("ValueTimestamp", &construct_timestamp_value);
 
     version.def("Value", &construct_value<uint8_t>);
     version.def("Value", &construct_value<uint16_t>);
@@ -522,7 +523,6 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
             .def_readonly("needs_post_processing", &ReadQuery::needs_post_processing)
             // Unsurprisingly, pybind11 doesn't understand folly::poly, so use vector of variants here
             .def("add_clauses", [](ReadQuery& self, std::vector<ClauseVariant> clauses) {
-                clauses = plan_query(std::move(clauses));
                 std::vector<std::shared_ptr<Clause>> _clauses;
                 self.needs_post_processing = false;
                 for (auto&& clause : clauses) {
@@ -769,6 +769,10 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                  &PythonVersionStore::compact_data,
                  py::call_guard<SingleThreadMutexHolder>(),
                  "Compact data segments")
+            .def("_batch_compact_data",
+                 &PythonVersionStore::batch_compact_data,
+                 py::call_guard<SingleThreadMutexHolder>(),
+                 "Compact data segments for multiple symbols")
             .def("is_symbol_fragmented",
                  &PythonVersionStore::is_symbol_fragmented,
                  py::call_guard<SingleThreadMutexHolder>(),
@@ -1046,7 +1050,6 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                         user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
                                 !clauses.empty(), "batch_read_and_join called with no clauses"
                         );
-                        clauses = plan_query(std::move(clauses));
                         std::vector<std::shared_ptr<Clause>> _clauses;
                         bool first_clause{true};
                         for (auto&& clause : clauses) {

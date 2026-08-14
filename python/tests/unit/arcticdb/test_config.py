@@ -8,11 +8,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 
 from pickle import loads, dumps
 from arcticdb_ext import (
-    get_config_int,
-    set_config_int,
     unset_config_int,
-    get_config_string,
-    set_config_string,
     unset_config_string,
     get_config_double,
     set_config_double,
@@ -23,6 +19,12 @@ from arcticdb_ext import (
     set_all_config_string,
     get_all_config_double,
     set_all_config_double,
+)
+from arcticdb.config import (
+    get_config_int,
+    set_config_int,
+    get_config_string,
+    set_config_string,
 )
 
 

@@ -635,8 +635,28 @@ def route_env_to_extension(monkeypatch):
     if os.name == "nt":
         from arcticdb_ext.tools import putenv_s
 
-        monkeypatch.setattr(os, "putenv", putenv_s)
-        monkeypatch.setattr(os, "unsetenv", lambda n: putenv_s(n, ""))
+        routed = set()
+
+        def putenv(name, value):
+            routed.add(name)
+            putenv_s(name, value)
+
+        monkeypatch.setattr(os, "putenv", putenv)
+        monkeypatch.setattr(os, "unsetenv", lambda n: putenv(n, ""))
+
+        undo = monkeypatch.undo
+
+        # The undo wrapper is there because monkeypatch cleans up in two stages, in an unhelpful
+        # order for us: it restores patched functions first (unsetenv and putenv), then the
+        # environment variables. So by the time it's restoring env vars, the hooks are already gone
+        # and the restore has only been done on the Python's copy. The arcticdb binaries would keep
+        # the test's value for the rest of the session and leak it into later tests, causing flaky tests
+        def undo_and_resync():
+            undo()  # undo() restore only the Python's copy of the environment
+            for name in routed:
+                putenv_s(name, os.environ.get(name, ""))
+
+        monkeypatch.undo = undo_and_resync
     yield
 
 
@@ -1766,6 +1786,28 @@ def in_memory_library_dynamic() -> Library:
 
 
 @pytest.fixture
+def arrow_library(in_memory_library) -> Library:
+    """Static-schema in-memory V2 library configured for arrow input and arrow output."""
+    in_memory_library._nvs.set_output_format(OutputFormat.PYARROW)
+    in_memory_library._nvs._set_allow_arrow_input()
+    return in_memory_library
+
+
+@pytest.fixture
+def arrow_library_dynamic(in_memory_library_dynamic) -> Library:
+    """Dynamic-schema in-memory V2 library configured for arrow input and arrow output."""
+    in_memory_library_dynamic._nvs.set_output_format(OutputFormat.PYARROW)
+    in_memory_library_dynamic._nvs._set_allow_arrow_input()
+    return in_memory_library_dynamic
+
+
+@pytest.fixture(params=["arrow_library", "arrow_library_dynamic"])
+def arrow_library_any_schema(request) -> Library:
+    """Parametrizes a test over both static and dynamic schema arrow libraries."""
+    return request.getfixturevalue(request.param)
+
+
+@pytest.fixture
 def in_memory_library_tiny_segment() -> Library:
     library_options = LibraryOptions(rows_per_segment=2, columns_per_segment=2)
     ac = Arctic("mem://")
@@ -1889,6 +1931,9 @@ def old_venv_and_arctic_uri(old_venv, arctic_uri):
 
 @pytest.fixture
 def clear_query_stats():
+    # Reset before the test as well as after to make sure we start and end in a clean state
+    query_stats.disable()
+    query_stats.reset_stats()
     yield
     query_stats.disable()
     query_stats.reset_stats()
