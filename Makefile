@@ -26,7 +26,8 @@ _TMPDIR_ENV := $(if $(TMPDIR_OVERRIDE),TMPDIR=$(TMPDIR_OVERRIDE))
 _PROTOC_ENV := $(if $(PROTOC_VERS),ARCTICDB_PROTOC_VERS=$(PROTOC_VERS))
 # Combined environment prefix for commands that need both
 _ENV        := $(strip $(_TMPDIR_ENV) $(_PROTOC_ENV))
-_VENV_PYTHON := $(firstword $(wildcard $(if $(VIRTUAL_ENV),$(VIRTUAL_ENV)/bin/python)) $(VENV_DIR)/$(VENV_NAME)/bin/python)
+_VENV_ROOT := $(firstword $(wildcard $(if $(VIRTUAL_ENV),$(VIRTUAL_ENV))) $(VENV_DIR)/$(VENV_NAME))
+_VENV_PYTHON := $(_VENV_ROOT)/bin/python
 _VENV_PIP := $(VENV_DIR)/$(VENV_NAME)/bin/pip
 
 # ── Phony targets ────────────────────────────────────────────────────────────
