@@ -38,7 +38,15 @@ struct NameAndStatTypes {
     }
 };
 
-void validate_column_stats_header_version(const arcticc::pb2::column_stats_pb2::ColumnStatsHeader& header);
+// The version of the ColumnStatsHeader written by this build. See column_stats.proto for an
+// explanation of the header versioning scheme.
+static constexpr uint32_t CURRENT_COLUMN_STATS_HEADER_VERSION = 1;
+
+enum class ColumnStatsHeaderVersionMismatchAction { Warn, Raise };
+
+void validate_column_stats_header_version(
+        const arcticc::pb2::column_stats_pb2::ColumnStatsHeader& header, ColumnStatsHeaderVersionMismatchAction action
+);
 
 std::string to_segment_column_name(const std::string& column, ColumnStatTypeInternal type);
 

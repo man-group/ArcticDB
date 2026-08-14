@@ -24,9 +24,6 @@ bool is_count_stat(ColumnStatTypeInternal type) {
     return type == ColumnStatTypeInternal::NAN_COUNT_V1 || type == ColumnStatTypeInternal::NULL_COUNT_V1;
 }
 
-// Distinct stat columns in first-appearance order. MIN/MAX take their type from the descriptor
-// (deterministic regardless of which row slices this create covers); nan/null counts are always
-// UINT64.
 std::vector<StatColumn> collect_stat_columns(
         const std::vector<ColumnStatsRow>& components, const StreamDescriptor& descriptor,
         ankerl::unordered_dense::map<std::string, size_t>& name_to_index
@@ -76,7 +73,7 @@ SegmentInMemory build_column_stats_segment(
             !components.empty(), "build_column_stats_segment requires at least one component"
     );
     std::sort(components.begin(), components.end(), [](const auto& left, const auto& right) {
-        return std::tie(left.start_row, left.end_row) < std::tie(right.start_row, right.end_row);
+        return left.start_row < right.start_row;
     });
     for (size_t i = 0; i < components.size(); ++i) {
         internal::check<ErrorCode::E_ASSERTION_FAILURE>(
@@ -130,7 +127,7 @@ SegmentInMemory build_column_stats_segment(
 
     const auto stats_offset_base = seg.descriptor().field_count();
     arcticc::pb2::column_stats_pb2::ColumnStatsHeader header;
-    header.set_version(1); // see column_stats.proto for explanation of the versioning scheme
+    header.set_version(CURRENT_COLUMN_STATS_HEADER_VERSION);
     for (const auto& [idx, stat_column] : folly::enumerate(stat_columns)) {
         columns.at(idx)->set_row_data(last_row);
         seg.add_column(FieldRef{stat_column.type_descriptor, stat_column.name}, columns.at(idx));
@@ -176,12 +173,9 @@ std::vector<ColumnStatsRow> decode_column_stats_segment(const SegmentInMemory& s
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(
             segment.metadata()->UnpackTo(&header), "Failed to unpack column stats header from segment metadata"
     );
-    internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-            header.version() == 1,
-            "Column stats header version {} is not understood by this client. Use "
-            "drop_column_stats_experimental and recreate the column stats before downgrading.",
-            header.version()
-    );
+    // decode_column_stats_segment is only used for creating/extending column stats, so it is OK to fatally
+    // error on an unrecognised header version here
+    validate_column_stats_header_version(header, ColumnStatsHeaderVersionMismatchAction::Raise);
 
     const auto& fields = segment.fields();
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(
@@ -210,7 +204,8 @@ std::vector<ColumnStatsRow> decode_column_stats_segment(const SegmentInMemory& s
         for (const auto& entry : entry_list.entries()) {
             internal::check<ErrorCode::E_ASSERTION_FAILURE>(
                     entry.type() != ColumnStatTypeInternal::UNKNOWN,
-                    "Column stats header entry for data column {} has an unrecognised stat type - you need to upgrade your ArcticDB client",
+                    "Column stats header entry for data column {} has an unrecognised stat type - you need to upgrade "
+                    "your ArcticDB client",
                     data_col_offset
             );
             const auto stats_seg_offset = entry.stats_seg_offset();
@@ -262,15 +257,22 @@ std::string to_segment_column_name(const std::string& column, ColumnStatTypeInte
     return fmt::format("{}({})", type_to_operator_string(type), column);
 }
 
-void validate_column_stats_header_version(const arcticc::pb2::column_stats_pb2::ColumnStatsHeader& header) {
-    auto version = header.version();
-    if (version > 1) {
-        log::version().warn(
-                "This client only understands column stats version 1 but has encountered version={}. Upgrade your "
-                "ArcticDB "
-                "installation.",
+void validate_column_stats_header_version(
+        const arcticc::pb2::column_stats_pb2::ColumnStatsHeader& header, ColumnStatsHeaderVersionMismatchAction action
+) {
+    const auto version = header.version();
+    if (version > CURRENT_COLUMN_STATS_HEADER_VERSION) {
+        const auto message = fmt::format(
+                "This client only understands column stats version {} but has encountered version={}. Upgrade your "
+                "ArcticDB installation.",
+                CURRENT_COLUMN_STATS_HEADER_VERSION,
                 version
         );
+        if (action == ColumnStatsHeaderVersionMismatchAction::Raise) {
+            internal::raise<ErrorCode::E_ASSERTION_FAILURE>(message);
+        } else {
+            log::version().warn(message);
+        }
     }
 }
 
@@ -278,7 +280,7 @@ ColumnStats::ColumnStats(
         const arcticc::pb2::column_stats_pb2::ColumnStatsHeader& header, const TimeseriesDescriptor& tsd
 ) {
     using namespace arcticc::pb2::column_stats_pb2;
-    validate_column_stats_header_version(header);
+    validate_column_stats_header_version(header, ColumnStatsHeaderVersionMismatchAction::Warn);
 
     for (const auto& [data_col_offset, entry_list] : header.stats_by_column()) {
         for (const auto& entry : entry_list.entries()) {

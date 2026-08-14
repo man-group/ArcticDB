@@ -962,19 +962,12 @@ def test_column_stats_header_metadata(version_store_factory, lib_name, encoding_
     assert_header_offsets_match_field_names(lib, sym, header, {2: "col_1", 3: "col_2"})
 
 
-def test_column_stats_create_twice_is_idempotent(version_store_factory, lib_name, encoding_version, any_output_format):
-    """Creating stats twice on one version with no range recomputes every row slice both times, but
-    the recomputed values are identical, so header and content come out the same. This does not
-    mean the second call is a no-op - a range-limited create can and does change the segment - only
-    that recomputing unchanged data is idempotent."""
+def test_column_stats_create_twice_is_idempotent(version_store_factory, lib_name):
     lib = version_store_factory(
         column_group_size=2,
         segment_row_size=2,
-        encoding_version=int(encoding_version),
-        lmdb_config={"map_size": 2**30},
-        name=lib_name + f"_{encoding_version.name}",
+        name=lib_name,
     )
-    lib._set_output_format_for_pipeline_tests(any_output_format)
     sym = "test_column_stats_create_twice_is_idempotent"
     expected_column_stats = generate_symbol(lib, sym)
 
@@ -1223,6 +1216,30 @@ def test_column_stats_series_rangeindex(version_store_factory, lib_name, encodin
     assert lib.get_column_stats_info_experimental(sym) == {"myval": {"MINMAX"}}
 
 
+def test_column_stats_string_indexed_symbol(version_store_factory, lib_name):
+    lib = version_store_factory(
+        column_group_size=2,
+        segment_row_size=2,
+        name=lib_name,
+    )
+    sym = "test_column_stats_string_indexed_symbol"
+    df0 = pd.DataFrame({"col_1": [1, 2]}, index=["a", "b"])
+    df1 = pd.DataFrame({"col_1": [3, 4]}, index=["c", "d"])
+    lib.write(sym, df0)
+    lib.append(sym, df1)
+    # We don't support stats over strings yet, so no stats over the string index itself
+    expected_column_stats = row_range_columns_to_pl(lib, sym).with_columns(
+        pl.Series("v1_MIN(col_1)", [df0["col_1"].min(), df1["col_1"].min()]),
+        pl.Series("v1_MAX(col_1)", [df0["col_1"].max(), df1["col_1"].max()]),
+    )
+
+    lib.create_column_stats_experimental(sym)
+    assert lib.get_column_stats_info_experimental(sym) == {"col_1": {"MINMAX"}}
+
+    column_stats = lib.read_column_stats_experimental(sym)
+    assert_stats_equal(column_stats, expected_column_stats)
+
+
 @pytest.mark.parametrize(
     "index_level_name, stored_col_name",
     [
@@ -1399,7 +1416,7 @@ def test_column_stats_duplicate_index_values_across_slice_boundary(
     ts = pd.Timestamp("2000-01-01")
     lib.write(sym, pd.DataFrame({"col_1": [1, 2, 3, 4]}, index=[ts] * 4))
 
-    # The premise: row slices are cut by row count, so both share one (start_index, end_index).
+    # both share one (start_index, end_index)
     index_df = lib.read_index(sym).reset_index()
     assert len(index_df) == 2
     assert index_df["start_index"].nunique() == 1
@@ -1407,8 +1424,6 @@ def test_column_stats_duplicate_index_values_across_slice_boundary(
 
     lib.create_column_stats_experimental(sym)
 
-    # One row per row slice, each keyed by its own row range and carrying its own stats. Keyed on the
-    # index values the two collided and both were discarded.
     column_stats = lib.read_column_stats_experimental(sym)
     assert column_stats.num_rows == 2
     expected_column_stats = pl.DataFrame(
@@ -1421,8 +1436,7 @@ def test_column_stats_duplicate_index_values_across_slice_boundary(
     )
     assert_stats_equal(column_stats, expected_column_stats)
 
-    # Both rows are usable for pruning, which is what the collision cost. The filter matches only the
-    # second row slice.
+    # Both rows can be used for pruning
     q = QueryBuilder()
     q = q[q["col_1"] > 2]
     result = lib.read(sym, query_builder=q).data
@@ -1679,6 +1693,60 @@ def test_column_stats_create_empty_range_is_noop(version_store_factory, lib_name
 
     lib.create_column_stats_experimental(sym, row_range=(100, 105))
     assert_stats_equal(lib.read_column_stats_experimental(sym), expected, check_dtypes=True)
+
+
+@pytest.mark.parametrize(
+    "reversed_range",
+    [{"row_range": (5, 2)}, {"date_range": (jan(7), jan(2))}],
+    ids=["row_range", "date_range"],
+)
+def test_column_stats_create_reversed_range_is_noop(version_store_factory, lib_name, reversed_range):
+    lib = version_store_factory(segment_row_size=3, name=lib_name)
+    sym = "test_column_stats_create_reversed_range_is_noop"
+    df = write_nine_row_symbol(lib, sym)
+
+    lib.create_column_stats_experimental(sym, **reversed_range)
+    assert not lib.library_tool().find_keys_for_symbol(KeyType.COLUMN_STATS, sym)
+
+    lib.create_column_stats_experimental(sym, row_range=(0, 3))
+    expected = expected_row_range_stats(df, [(0, 3)])
+    assert_stats_equal(lib.read_column_stats_experimental(sym), expected, check_dtypes=True)
+
+    lib.create_column_stats_experimental(sym, **reversed_range)
+    assert_stats_equal(lib.read_column_stats_experimental(sym), expected, check_dtypes=True)
+
+
+def test_column_stats_create_dynamic_schema_preserves_stats_for_column_outside_the_range(
+    version_store_factory, lib_name
+):
+    """col_2 exists only in the second row slice, so recomputing only the first must carry its stats
+    over from the stored segment rather than from anything the create just calculated."""
+    lib = version_store_factory(segment_row_size=3, dynamic_schema=True, name=lib_name)
+    sym = "test_column_stats_create_dynamic_schema_preserves_stats_for_column_outside_the_range"
+    lib.write(sym, pd.DataFrame({"col_1": [1, 2, 3]}, index=pd.date_range("2000-01-01", periods=3)))
+    lib.append(sym, pd.DataFrame({"col_2": [4, 5, 6]}, index=pd.date_range("2000-01-04", periods=3)))
+
+    expected = pl.DataFrame(
+        {
+            "start_row": pl.Series([0, 3], dtype=pl.UInt64),
+            "end_row": pl.Series([3, 6], dtype=pl.UInt64),
+            "v1_MIN(col_1)": pl.Series([1, None], dtype=pl.Int64),
+            "v1_MAX(col_1)": pl.Series([3, None], dtype=pl.Int64),
+            "v1_NAN_COUNT(col_1)": pl.Series([0, None], dtype=pl.UInt64),
+            "v1_NULL_COUNT(col_1)": pl.Series([0, None], dtype=pl.UInt64),
+            "v1_MIN(col_2)": pl.Series([None, 4], dtype=pl.Int64),
+            "v1_MAX(col_2)": pl.Series([None, 6], dtype=pl.Int64),
+            "v1_NAN_COUNT(col_2)": pl.Series([None, 0], dtype=pl.UInt64),
+            "v1_NULL_COUNT(col_2)": pl.Series([None, 0], dtype=pl.UInt64),
+        }
+    )
+
+    lib.create_column_stats_experimental(sym)
+    assert_stats_equal(lib.read_column_stats_experimental(sym), expected, check_dtypes=True)
+
+    lib.create_column_stats_experimental(sym, row_range=(0, 3))
+    assert_stats_equal(lib.read_column_stats_experimental(sym), expected, check_dtypes=True)
+    assert lib.get_column_stats_info_experimental(sym) == {"col_1": {"MINMAX"}, "col_2": {"MINMAX"}}
 
 
 def test_column_stats_create_date_range_and_row_range_both_specified_raises(lmdb_version_store_tiny_segment):

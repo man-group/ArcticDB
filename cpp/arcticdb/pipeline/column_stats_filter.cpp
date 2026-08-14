@@ -310,7 +310,7 @@ ColumnStatsData::ColumnStatsData(
     util::check(metadata != nullptr, "Column stats segment has no metadata");
     bool unpacked = metadata->UnpackTo(&header);
     util::check(unpacked, "Could not unpack ColumnStatsHeader from column stats segment metadata");
-    validate_column_stats_header_version(header);
+    validate_column_stats_header_version(header, ColumnStatsHeaderVersionMismatchAction::Warn);
 
     segment.init_column_map();
     const auto& fields = segment.descriptor().fields();
@@ -488,7 +488,7 @@ SegmentInMemory partial_decode_column_stats_segment(
     ColumnStatsHeader header;
     bool unpacked = maybe_metadata->UnpackTo(&header);
     util::check(unpacked, "Could not unpack ColumnStatsHeader from column stats segment metadata");
-    validate_column_stats_header_version(header);
+    validate_column_stats_header_version(header, ColumnStatsHeaderVersionMismatchAction::Warn);
 
     std::unordered_set<std::string> retain_field_names;
     retain_field_names.insert(start_row_column_name);

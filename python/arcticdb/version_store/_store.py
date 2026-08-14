@@ -1343,9 +1343,8 @@ class NativeVersionStore:
         as_of : `Optional[VersionQueryInput]`, default=None
             See documentation of `read` method for more details.
         date_range: `Optional[DateRangeInput]`, default=None
-            Only recompute stats for row slices intersecting this range. Requires a sorted timestamp index; raises
-            for a non-timestamp index or an unsorted/descending one. Only one of `date_range` or `row_range` can be
-            provided.
+            Only recompute stats for row slices intersecting this range. Requires a sorted timestamp index.
+            Only one of `date_range` or `row_range` can be provided.
         row_range : `Optional[Tuple[Optional[int], Optional[int]]]`, default=None
             Only recompute stats for row slices intersecting this range. Accepts negative indices, with the same
             semantics as the `row_range` argument to `read`. Either end may be `None`, meaning the start or the end

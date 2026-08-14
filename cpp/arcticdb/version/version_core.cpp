@@ -2110,9 +2110,9 @@ void create_column_stats_impl(
     }
     read_indexed_keys_to_pipeline(pipeline_context, *read_query, read_options, index_info);
 
-    // Now pipeline_context->slice_and_keys_ contains all the slices that have any intersection with the requested range and we're
-    // about to recalculate them. So drop them from old_components.
-    // Our end result will be the union of old_components and the recalculated stats so this exercise is to avoid duplicate rows.
+    // Now pipeline_context->slice_and_keys_ contains all the slices that have any intersection with the requested range
+    // and we're about to recalculate them. So drop them from old_components. Our end result will be the union of
+    // old_components and the recalculated stats so this exercise is to avoid duplicate rows.
     std::unordered_set<RowRange, RowRange::Hasher> in_range;
     for (const auto& sk : pipeline_context->slice_and_keys_) {
         in_range.insert(sk.slice().rows());
@@ -2122,12 +2122,10 @@ void create_column_stats_impl(
     });
 
     auto component_manager = std::make_shared<ComponentManager>();
-    read_and_schedule_processing(store, pipeline_context, read_query, read_options, component_manager).get();
+    auto processed_entity_ids =
+            read_and_schedule_processing(store, pipeline_context, read_query, read_options, component_manager).get();
 
-    std::vector<ColumnStatsRow> components;
-    component_manager->process_entities([&components](const ColumnStatsRow& component) {
-        components.emplace_back(component);
-    });
+    auto [components] = component_manager->get_entities<ColumnStatsRow>(processed_entity_ids);
     if (components.empty()) {
         return;
     }

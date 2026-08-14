@@ -15,12 +15,8 @@
 #include <string>
 #include <vector>
 
-// Kept free of processing/ and column_stats.hpp so that aggregation_interface.hpp can name the
-// aggregator return type: column_stats.hpp includes processing/clause.hpp, which includes
-// aggregation_interface.hpp.
 namespace arcticdb {
 
-// Total universe of column stats we support - min and max are treated separately here
 using ColumnStatTypeInternal = arcticc::pb2::column_stats_pb2::ColumnStatsType;
 
 struct ColumnStatValue {
@@ -33,7 +29,7 @@ struct ColumnStatValue {
 
 /// One per row slice. Added to the ComponentManager as a standalone entity by
 /// ColumnStatsGenerationClause::process and read back by create_column_stats_impl via
-/// process_entities, which scans the whole registry — no other code may add this component.
+/// process_entities
 struct ColumnStatsRow {
     uint64_t start_row;
     uint64_t end_row;

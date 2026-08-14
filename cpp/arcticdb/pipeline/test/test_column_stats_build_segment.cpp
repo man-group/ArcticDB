@@ -225,16 +225,22 @@ TEST(ColumnStatsBuildSegmentTest, NonMonotonicRowRangeRaises) {
 
 TEST(ColumnStatsBuildSegmentTest, DataColOffsetOutOfRangeRaises) {
     auto desc = make_descriptor();
-    EXPECT_THROW(build_column_stats_segment(
-            {component(
-                    100,
-                    199,
-                    {ColumnStatValue{
-                            "v1_MIN(bogus)", ColumnStatTypeInternal::MIN_V1, 999, Value{int64_t{1}, DataType::INT64}
-                    }}
-            )},
-            desc
-    ), InternalException);
+    EXPECT_THROW(
+            build_column_stats_segment(
+                    {component(
+                            100,
+                            199,
+                            {ColumnStatValue{
+                                    "v1_MIN(bogus)",
+                                    ColumnStatTypeInternal::MIN_V1,
+                                    999,
+                                    Value{int64_t{1}, DataType::INT64}
+                            }}
+                    )},
+                    desc
+            ),
+            InternalException
+    );
 }
 
 TEST(ColumnStatsBuildSegmentTest, EmptyComponentsRaises) {

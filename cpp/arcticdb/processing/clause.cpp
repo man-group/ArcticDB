@@ -789,11 +789,9 @@ std::vector<EntityId> ColumnStatsGenerationClause::process(std::vector<EntityId>
     internal::check<ErrorCode::E_INVALID_ARGUMENT>(
             !entity_ids.empty(), "ColumnStatsGenerationClause::process does not make sense with no processing units"
     );
-    auto proc = gather_entities<
-            std::shared_ptr<SegmentInMemory>,
-            std::shared_ptr<RowRange>,
-            std::shared_ptr<ColRange>,
-            std::shared_ptr<AtomKey>>(*component_manager_, std::move(entity_ids));
+    auto proc = gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(
+            *component_manager_, std::move(entity_ids)
+    );
     std::vector<ColumnStatsAggregatorData> aggregators_data;
     internal::check<ErrorCode::E_INVALID_ARGUMENT>(
             static_cast<bool>(column_stats_aggregators_),
@@ -825,11 +823,6 @@ std::vector<EntityId> ColumnStatsGenerationClause::process(std::vector<EntityId>
                 "Expected all data segments in one processing unit to have the same row range"
         );
     }
-    schema::check<ErrorCode::E_UNSUPPORTED_INDEX_TYPE>(
-            std::holds_alternative<NumericIndex>(proc.atom_keys_->at(0)->start_index()) &&
-                    std::holds_alternative<NumericIndex>(proc.atom_keys_->at(0)->end_index()),
-            "Cannot build column stats over string-indexed symbol"
-    );
     ColumnStatsRow component{.start_row = row_range.first, .end_row = row_range.second, .stats = {}};
     for (const auto& agg_data : folly::enumerate(aggregators_data)) {
         auto finalized = agg_data->finalize(column_stats_aggregators_->at(agg_data.index).get_output_column_names());
@@ -839,8 +832,7 @@ std::vector<EntityId> ColumnStatsGenerationClause::process(std::vector<EntityId>
                 std::make_move_iterator(finalized.end())
         );
     }
-    component_manager_->add_entities(std::vector{std::move(component)});
-    return {};
+    return component_manager_->add_entities(std::vector{std::move(component)});
 }
 
 std::vector<std::vector<size_t>> RowRangeClause::structure_for_processing(std::vector<RangesAndKey>& ranges_and_keys) {
