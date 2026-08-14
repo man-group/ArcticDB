@@ -76,6 +76,10 @@ class KeyType(Enum):
     SYMBOL_LIST = 10
     """A collection of keys that together store the total set of symbols stored in a library. Used for `list_symbols`."""
 
+    COLUMN_STATS = 11
+    """Column statistics about the TABLE_INDEX key with the same symbol and version number. 
+       Only written by the column stats APIs."""
+
     @staticmethod
     def _from_native(native_key_type: NativeKeyType):
         if native_key_type == NativeKeyType.TABLE_DATA:
@@ -98,6 +102,8 @@ class KeyType(Enum):
             return KeyType.LOG_COMPACTED
         elif native_key_type == NativeKeyType.SYMBOL_LIST:
             return KeyType.SYMBOL_LIST
+        elif native_key_type == NativeKeyType.COLUMN_STATS:
+            return KeyType.COLUMN_STATS
         else:
             raise ArcticException(f"Unexpected KeyType {native_key_type} - this indicates a bug in ArcticDB")
 

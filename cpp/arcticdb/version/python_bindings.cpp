@@ -619,11 +619,25 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
             .def_readonly("compressed_size", &KeySizesInfo::compressed_size)
             .doc() = "Count of keys and their compressed and uncompressed sizes in bytes.";
 
+    py::enum_<OnScanFailure>(version, "OnScanFailure", R"pbdoc(
+        What a size scan does with a key type it cannot list.
+    )pbdoc")
+            .value("RAISE", OnScanFailure::Raise, R"pbdoc(
+            Raise, so that a caller totalling a library never silently under-reports.
+    )pbdoc")
+            .value("SKIP", OnScanFailure::Skip, R"pbdoc(
+            Log a warning naming the key type and leave it out of the result, so that one key type that cannot be
+            listed does not cost the whole scan. An omitted key type is indistinguishable from an empty one.
+    )pbdoc");
+
     py::class_<storage::ObjectSizes>(version, "ObjectSizes")
             .def_readonly("key_type", &storage::ObjectSizes::key_type_)
             .def_property_readonly("count", [](storage::ObjectSizes& self) { return self.count_.load(); })
             .def_property_readonly(
                     "compressed_size", [](storage::ObjectSizes& self) { return self.compressed_size_.load(); }
+            )
+            .def_property_readonly(
+                    "scan_duration_ns", [](storage::ObjectSizes& self) { return self.scan_duration_ns_.load(); }
             )
             .def("__repr__", [](storage::ObjectSizes object_sizes) { return fmt::format("{}", object_sizes); })
             .doc() = "Count of keys and their uncompressed sizes in bytes for a given key type";
@@ -911,8 +925,10 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                  "Get the most recent update time for a list of stream ids")
             .def("scan_object_sizes",
                  &PythonVersionStore::scan_object_sizes,
+                 py::arg("on_failure") = OnScanFailure::Raise,
                  py::call_guard<SingleThreadMutexHolder>(),
-                 "Scan the compressed sizes of all objects in the library.")
+                 "Scan the compressed sizes of all objects in the library. With on_failure=OnScanFailure.SKIP, a "
+                 "key type that cannot be listed is left out of the result rather than failing the whole scan.")
             .def("scan_object_sizes_by_stream",
                  &PythonVersionStore::scan_object_sizes_by_stream,
                  py::call_guard<SingleThreadMutexHolder>(),

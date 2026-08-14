@@ -41,6 +41,9 @@ struct KeySizesInfo {
     size_t compressed_size; // bytes
 };
 
+/// What a size scan does with a key type it cannot list.
+enum class OnScanFailure { Raise, Skip };
+
 /**
  * These statistics record the number of deletions *attempted*. In particular note that we attempt
  * to delete column stats keys without checking whether they exist first.
@@ -387,7 +390,13 @@ class LocalVersionedEngine : public VersionedEngine {
             const std::vector<std::pair<StreamId, VersionId>>& symbols_to_delete
     );
 
-    std::vector<storage::ObjectSizes> scan_object_sizes();
+    /**
+     * Sizes and counts, one entry per key type scanned.
+     *
+     * With OnScanFailure::Skip a key type that cannot be listed is logged and left out of the result instead of
+     * failing the whole scan, so one bad key type costs only its own numbers.
+     */
+    std::vector<storage::ObjectSizes> scan_object_sizes(OnScanFailure on_failure = OnScanFailure::Raise);
 
     std::vector<storage::ObjectSizes> scan_object_sizes_for_stream(const StreamId& stream_id);
 

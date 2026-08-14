@@ -11,8 +11,11 @@ import numpy as np
 import pandas as pd
 from arcticdb.util.logger import get_logger
 import arcticdb_ext
+import arcticdb_ext.storage
 from arcticdb.util.test import sample_dataframe
 from arcticdb import KeyType, Size, Arctic
+from arcticdb.toolbox.library_tool import LibraryTool
+from arcticdb_ext.storage import KeyType as NativeKeyType
 
 from arcticdb.options import EnterpriseLibraryOptions
 from arcticdb.version_store.admin_tools import AdminTools, sum_sizes
@@ -49,7 +52,7 @@ def test_get_sizes(arctic_client, lib_name, all_recursive_metastructure_versions
     sizes = retry_get_sizes(arctic_library.admin_tools())
 
     # Then
-    assert len(sizes) == 10
+    assert len(sizes) == 11
     assert sizes[KeyType.VERSION_REF].count == 2
     assert 500 < sizes[KeyType.VERSION_REF].bytes_compressed < 2000
     assert sizes[KeyType.VERSION].count == 5
@@ -62,7 +65,13 @@ def test_get_sizes(arctic_client, lib_name, all_recursive_metastructure_versions
     assert 250 < sizes[KeyType.SYMBOL_LIST].bytes_compressed < 3000
     assert sizes[KeyType.LOG].count == 5
 
-    for t in (KeyType.APPEND_DATA, KeyType.SNAPSHOT_REF, KeyType.LOG_COMPACTED, KeyType.MULTI_KEY):
+    for t in (
+        KeyType.APPEND_DATA,
+        KeyType.SNAPSHOT_REF,
+        KeyType.LOG_COMPACTED,
+        KeyType.MULTI_KEY,
+        KeyType.COLUMN_STATS,
+    ):
         assert sizes[t].count == 0
         assert sizes[t].bytes_compressed == 0
 
@@ -91,6 +100,73 @@ def test_get_sizes(arctic_client, lib_name, all_recursive_metastructure_versions
     sizes = retry_get_sizes(arctic_library.admin_tools())
     assert sizes[KeyType.MULTI_KEY].count == 1
     assert sizes[KeyType.MULTI_KEY].bytes_compressed > 0
+
+
+def test_get_sizes_includes_column_stats(arctic_client, lib_name):
+    arctic_library = arctic_client.create_library(lib_name)
+    arctic_library.write("sym", sample_dataframe(size=100))
+
+    sizes = retry_get_sizes(arctic_library.admin_tools())
+    assert sizes[KeyType.COLUMN_STATS] == Size(0, 0)
+
+    arctic_library._nvs.create_column_stats_experimental("sym")
+
+    sizes = retry_get_sizes(arctic_library.admin_tools())
+    assert sizes[KeyType.COLUMN_STATS].count == 1
+    assert sizes[KeyType.COLUMN_STATS].bytes_compressed > 0
+
+
+def test_scanned_key_types_are_pinned():
+    """A new key type must be added to TYPES_FOR_SIZE_CALCULATION and arcticdb.KeyType, or excluded on purpose."""
+    lib = Arctic("mem://").create_library("tst")
+    lib.write("sym", sample_dataframe(size=100))
+
+    scanned = {s.key_type for s in lib._nvs.version_store.scan_object_sizes()}
+    not_scanned = set(LibraryTool.key_types()) - scanned
+
+    assert not_scanned == {
+        NativeKeyType.VERSION_JOURNAL,
+        NativeKeyType.GENERATION,
+        NativeKeyType.METRICS,
+        NativeKeyType.SNAPSHOT,
+        NativeKeyType.STORAGE_INFO,
+        NativeKeyType.APPEND_REF,
+        NativeKeyType.LOCK,
+        NativeKeyType.SLOW_LOCK,
+        NativeKeyType.TOMBSTONE,
+        NativeKeyType.PARTITION,
+        NativeKeyType.OFFSET,
+        NativeKeyType.BACKUP_SNAPSHOT_REF,
+        NativeKeyType.TOMBSTONE_ALL,
+        NativeKeyType.SNAPSHOT_TOMBSTONE,
+    }
+    # Every scanned key type maps to a public one, and the public enum has nothing the scan never returns
+    assert {KeyType._from_native(t) for t in scanned} == set(KeyType)
+
+
+def test_scan_object_sizes_records_duration(arctic_client, lib_name):
+    arctic_library = arctic_client.create_library(lib_name)
+    arctic_library.write("sym", sample_dataframe(size=100))
+
+    sizes = arctic_library._nvs.version_store.scan_object_sizes()
+
+    by_key_type = {s.key_type: s for s in sizes}
+    data = by_key_type[arcticdb_ext.storage.KeyType.TABLE_DATA]
+    assert data.count > 0
+    assert data.scan_duration_ns > 0
+
+
+def test_scan_object_sizes_for_stream_records_duration(arctic_client, lib_name):
+    """The per-symbol scan reports a duration too - a scan happened, so zero would be a lie."""
+    arctic_library = arctic_client.create_library(lib_name)
+    arctic_library.write("sym", sample_dataframe(size=100))
+
+    sizes = arctic_library._nvs.version_store.scan_object_sizes_for_stream("sym")
+
+    by_key_type = {s.key_type: s for s in sizes}
+    data = by_key_type[arcticdb_ext.storage.KeyType.TABLE_DATA]
+    assert data.count > 0
+    assert data.scan_duration_ns > 0
 
 
 def test_get_sizes_by_symbol(arctic_client, lib_name, all_recursive_metastructure_versions):
