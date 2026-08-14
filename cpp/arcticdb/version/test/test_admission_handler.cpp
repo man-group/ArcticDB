@@ -31,6 +31,7 @@
 #include <arcticdb/util/variant.hpp>
 #include <arcticdb/processing/clause_utils.hpp>
 #include <arcticdb/async/task_scheduler.hpp>
+#include <folly/executors/QueuedImmediateExecutor.h>
 
 namespace arcticdb {
 
@@ -515,6 +516,63 @@ TEST(ProcessingUnitAdmissionHandlerTest, SynchronousReadThrowDoesNotHang) {
 TEST(ProcessingUnitAdmissionHandlerTest, SynchronousReadThrowOnFirstSegmentOfUnitDoesNotHang) {
     TinyThreadPool tiny_pool;
     const auto results = run_synchronous_read_throw_case(/*throwing_segment=*/0); // first segment of unit 0
+    EXPECT_TRUE(results.at(0).hasException());
+    EXPECT_TRUE(results.at(1).hasValue());
+}
+
+TEST(ProcessingUnitAdmissionHandlerTest, SynchronousReadThrowStillDrainsRestOfUnit) {
+    using namespace arcticdb::pipelines;
+    const std::vector<std::vector<size_t>> units{{0, 1}, {2, 3}};
+    std::vector<RangesAndKey> ranges;
+    for (size_t i = 0; i < 4; ++i) {
+        ranges.emplace_back(RowRange{i, i + 1}, ColRange{0, 1}, entity::AtomKey{});
+    }
+
+    std::vector<int> fire_count(4, 0);
+    version_store::SegmentReader reader = [&fire_count](RangesAndKey&& rk) -> folly::Future<SegmentAndSlice> {
+        const auto i = rk.row_range().first;
+        ++fire_count.at(i);
+        if (i == 0) {
+            throw std::runtime_error("synchronous read failure");
+        }
+        return folly::makeFuture(SegmentAndSlice(std::move(rk), SegmentInMemory{}));
+    };
+
+    auto admission = std::make_shared<version_store::ProcessingUnitAdmissionHandler>(
+            std::move(reader),
+            std::move(ranges),
+            std::vector<std::vector<size_t>>(units),
+            /*max_processing_units_in_flight=*/1,
+            /*read_window=*/1
+    );
+
+    auto& executor = folly::QueuedImmediateExecutor::instance();
+    auto segment_futures = admission->futures();
+    std::vector<folly::Future<folly::Unit>> unit_futures;
+    for (const auto& unit : units) {
+        std::vector<folly::Future<SegmentAndSlice>> local;
+        for (auto i : unit) {
+            local.emplace_back(std::move(segment_futures.at(i)));
+        }
+        unit_futures.emplace_back(folly::collectAll(local)
+                                          .via(&executor)
+                                          .thenValue([](std::vector<folly::Try<SegmentAndSlice>>&& tries) {
+                                              for (const auto& t : tries) {
+                                                  t.throwUnlessValue();
+                                              }
+                                              return folly::Unit{};
+                                          })
+                                          .ensure([admission]() { admission->on_processing_unit_complete(); }));
+    }
+    auto all_done = folly::collectAll(unit_futures).via(&executor);
+
+    admission->admit_initial_processing_units();
+
+    const std::vector<int> expected_fire_counts(4, 1);
+    EXPECT_EQ(expected_fire_counts, fire_count);
+    // Before the get, which has no timeout and so would hang rather than fail if a unit never completed.
+    ASSERT_TRUE(all_done.isReady()) << "stalled: unit 0 never completed, so unit 1 was never admitted";
+    const auto results = std::move(all_done).get();
     EXPECT_TRUE(results.at(0).hasException());
     EXPECT_TRUE(results.at(1).hasValue());
 }

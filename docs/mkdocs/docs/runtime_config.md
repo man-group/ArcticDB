@@ -173,7 +173,7 @@ fire for those safe cases too.
 
 ### VersionStore.NumProcessingUnitsLive
 
-`QueryBuilder` operations (`filter`, `groupby`, `resample`, etc.) and manual column stats creation read data in units of one or
+`QueryBuilder` operations (`filter`, `groupby`, `resample`, etc.) read data in units of one or
 more segments. This setting bounds how many of those units can be admitted into memory at once: an admitted unit's segments
 are decoded and held in memory until processing on that unit finishes. Without this bound, if in-memory processing falls
 behind the read rate, decoded segments for the whole symbol can accumulate in memory.
@@ -188,8 +188,7 @@ threadpools the default is correspondingly large and will not meaningfully reduc
 against processing falling a long way behind reads, not a tight bound.
 
 **To bound memory in absolute terms, set this explicitly to a small value** such as 8. That can have a huge effect, but
-costs wall time: benchmarking a 100M row x 100 column symbol on S3 measured `K=8` cutting peak memory by
-80-85% for manual column stats creation and 57-73% for `resample`, for a 54-217% increase in wall time.
+costs wall time.
 
 Values:
 * A positive integer: the maximum number of processing units resident in memory at once.

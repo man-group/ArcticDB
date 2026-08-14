@@ -111,27 +111,38 @@ class ProcessingUnitAdmissionHandler : public std::enable_shared_from_this<Proce
     // Launch eligible reads until the read window is full. Called whenever a read completes or a new processing unit
     // is admitted.
     void fill_read_window() {
-        std::vector<size_t> to_launch;
-        {
-            std::lock_guard lock{window_mutex_};
-            while (active_reads_ < read_window_ && !segments_queued_for_read_.empty()) {
-                to_launch.push_back(segments_queued_for_read_.front());
-                segments_queued_for_read_.pop_front();
-                ++active_reads_;
-            }
-        }
-        for (const auto i : to_launch) {
-            // A reader that throws instead of returning a failed future would otherwise leave the window slot used
-            // and the promise unfulfilled, hanging every consumer of this segment. Catch everything, since losing a
-            // promise here cannot be recovered from.
-            try {
-                dispatch_read(i);
-            } catch (...) {
-                {
-                    std::lock_guard lock{window_mutex_};
-                    --active_reads_;
+        while (true) {
+            std::vector<size_t> to_launch;
+            {
+                std::lock_guard lock{window_mutex_};
+                while (active_reads_ < read_window_ && !segments_queued_for_read_.empty()) {
+                    to_launch.push_back(segments_queued_for_read_.front());
+                    segments_queued_for_read_.pop_front();
+                    ++active_reads_;
                 }
-                promises_->at(i).setException(folly::exception_wrapper{std::current_exception()});
+            }
+            if (to_launch.empty()) {
+                return;
+            }
+            bool any_read_dispatch_failed = false;
+            for (const auto i : to_launch) {
+                // A reader that throws instead of returning a failed future would otherwise leave the window slot used
+                // and the promise unfulfilled, hanging every consumer of this segment. Catch everything, since losing a
+                // promise here cannot be recovered from.
+                try {
+                    dispatch_read(i);
+                } catch (...) {
+                    {
+                        std::lock_guard lock{window_mutex_};
+                        --active_reads_;
+                    }
+                    promises_->at(i).setException(folly::exception_wrapper{std::current_exception()});
+                    any_read_dispatch_failed = true;
+                }
+            }
+            // If any reads failed go round again for the slots the catch freed, otherwise break the while loop
+            if (!any_read_dispatch_failed) {
+                return;
             }
         }
     }
