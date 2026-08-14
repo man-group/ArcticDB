@@ -2415,7 +2415,7 @@ timestamp LocalVersionedEngine::latest_timestamp(const std::string& symbol) {
 
 // Some key types are historical or very specialized, so restrict to these in size calculations to avoid extra
 // listing operations
-static constexpr std::array<KeyType, 10> TYPES_FOR_SIZE_CALCULATION = {
+static constexpr std::array<KeyType, 11> TYPES_FOR_SIZE_CALCULATION = {
         KeyType::VERSION_REF,
         KeyType::VERSION,
         KeyType::TABLE_INDEX,
@@ -2426,6 +2426,7 @@ static constexpr std::array<KeyType, 10> TYPES_FOR_SIZE_CALCULATION = {
         KeyType::LOG,
         KeyType::LOG_COMPACTED,
         KeyType::SYMBOL_LIST,
+        KeyType::COLUMN_STATS,
 };
 
 std::vector<storage::ObjectSizes> LocalVersionedEngine::scan_object_sizes(OnScanFailure on_failure) {

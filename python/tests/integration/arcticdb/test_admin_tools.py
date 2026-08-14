@@ -50,7 +50,7 @@ def test_get_sizes(arctic_client, lib_name, all_recursive_metastructure_versions
     sizes = retry_get_sizes(arctic_library.admin_tools())
 
     # Then
-    assert len(sizes) == 10
+    assert len(sizes) == 11
     assert sizes[KeyType.VERSION_REF].count == 2
     assert 500 < sizes[KeyType.VERSION_REF].bytes_compressed < 2000
     assert sizes[KeyType.VERSION].count == 5
@@ -63,7 +63,13 @@ def test_get_sizes(arctic_client, lib_name, all_recursive_metastructure_versions
     assert 250 < sizes[KeyType.SYMBOL_LIST].bytes_compressed < 3000
     assert sizes[KeyType.LOG].count == 5
 
-    for t in (KeyType.APPEND_DATA, KeyType.SNAPSHOT_REF, KeyType.LOG_COMPACTED, KeyType.MULTI_KEY):
+    for t in (
+        KeyType.APPEND_DATA,
+        KeyType.SNAPSHOT_REF,
+        KeyType.LOG_COMPACTED,
+        KeyType.MULTI_KEY,
+        KeyType.COLUMN_STATS,
+    ):
         assert sizes[t].count == 0
         assert sizes[t].bytes_compressed == 0
 
@@ -92,6 +98,20 @@ def test_get_sizes(arctic_client, lib_name, all_recursive_metastructure_versions
     sizes = retry_get_sizes(arctic_library.admin_tools())
     assert sizes[KeyType.MULTI_KEY].count == 1
     assert sizes[KeyType.MULTI_KEY].bytes_compressed > 0
+
+
+def test_get_sizes_includes_column_stats(arctic_client, lib_name):
+    arctic_library = arctic_client.create_library(lib_name)
+    arctic_library.write("sym", sample_dataframe(size=100))
+
+    sizes = retry_get_sizes(arctic_library.admin_tools())
+    assert sizes[KeyType.COLUMN_STATS] == Size(0, 0)
+
+    arctic_library._nvs.create_column_stats_experimental("sym")
+
+    sizes = retry_get_sizes(arctic_library.admin_tools())
+    assert sizes[KeyType.COLUMN_STATS].count == 1
+    assert sizes[KeyType.COLUMN_STATS].bytes_compressed > 0
 
 
 def test_scan_object_sizes_records_duration(arctic_client, lib_name):
