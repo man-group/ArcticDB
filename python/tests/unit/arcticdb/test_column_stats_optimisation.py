@@ -1,6 +1,8 @@
 from datetime import datetime
 
 import numpy as np
+import polars as pl
+import pyarrow as pa
 import pytest
 from arcticdb_ext.storage import KeyType
 
@@ -680,6 +682,42 @@ def test_column_stats_all_null_slice_pruning(
     expected = df[pandas_expr(df)]
     assert_frame_equal(expected, result)
     assert table_data_reads == expected_reads, f"Expected {expected_reads} TABLE_DATA reads but got {table_data_reads}"
+
+
+@pytest.mark.parametrize("arrow_type", [pa.int64(), pa.float64()], ids=["int64", "float64"])
+def test_column_stats_column_null_in_every_slice_prunes(
+    in_memory_store_factory, clear_query_stats, column_stats_filtering_enabled_and_disabled, arrow_type
+):
+    lib = in_memory_store_factory(segment_row_size=2)
+    lib._set_allow_arrow_input()
+    table = pa.table({"f": pa.array([None] * 8, arrow_type), "g": pa.array([float(i) for i in range(8)], pa.float64())})
+    lib.write(sym, table)
+    lib.create_column_stats_experimental(sym)
+
+    stats = lib.read_column_stats_experimental(sym)
+    assert "v1_MIN(f)" not in stats.column_names
+    assert stats.column("v1_NULL_COUNT(f)").to_pylist() == [2, 2, 2, 2]
+
+    qs.enable()
+    q = QueryBuilder()
+    q = q[q["f"] > 0]
+    qs.reset_stats()
+    result = lib.read(sym, query_builder=q).data
+
+    assert len(result) == 0
+    if column_stats_filtering_enabled_and_disabled:
+        assert get_table_data_read_count() == 0, "Every slice is null, so nothing can satisfy `> 0`"
+    else:
+        assert get_table_data_read_count() == 4, "Filtering is disabled, so all 4 slices should be read"
+
+    # A null does not satisfy `> 0` in pandas or polars either - the zero-row result above is the
+    # correct answer to the query, not an artifact of over-pruning.
+    pandas_result = table.to_pandas()
+    pandas_result = pandas_result[pandas_result["f"] > 0]
+    assert len(pandas_result) == 0
+
+    polars_result = pl.from_arrow(table).filter(pl.col("f") > 0)
+    assert len(polars_result) == 0
 
 
 @pytest.mark.xfail(reason="Creating column stats on multi-indexed symbols is not supported yet")
