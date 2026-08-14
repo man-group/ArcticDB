@@ -340,61 +340,15 @@ namespace {
 bool is_col_eligible_for_stats(DataType col_data_type) {
     return is_numeric_type(col_data_type) || is_bool_type(col_data_type);
 }
-
-// Type-disambiguated key for duplicate detection, so that e.g. an integer column labelled 2
-// and a string column labelled "2" are not treated as duplicates.
-std::string to_user_facing_name_key(
-        std::string_view field_name, const arcticdb::proto::descriptors::NormalizationMetadata::Pandas& common
-) {
-    auto it = common.col_names().find(std::string{field_name});
-    if (it == common.col_names().end())
-        return "str:" + std::string{field_name};
-
-    const auto& info = it->second;
-    if (info.is_none())
-        return "none:";
-    if (info.is_empty())
-        return "empty:";
-    if (info.is_int())
-        return "int:" + info.original_name();
-    if (!info.original_name().empty())
-        return "str:" + info.original_name();
-
-    return "str:" + std::string{field_name};
-}
-
-// The denormalized column name as the user sees it, for error messages.
-std::string to_user_facing_display_name(
-        std::string_view field_name, const arcticdb::proto::descriptors::NormalizationMetadata::Pandas& common
-) {
-    auto it = common.col_names().find(std::string{field_name});
-    if (it == common.col_names().end())
-        return std::string{field_name};
-
-    const auto& info = it->second;
-    if (info.is_none())
-        return "None";
-    if (info.is_empty())
-        return "";
-    if (info.is_int() || !info.original_name().empty())
-        return info.original_name();
-
-    return std::string{field_name};
-}
-
 } // namespace
 
 // Build MINMAX stats for every eligible column, computed directly from the TSD.
 // The timeseries index is skipped.
-// Rejects symbols with duplicated data-column names.
 ColumnStats::ColumnStats(const TimeseriesDescriptor& tsd) {
     const auto& fields = tsd.fields();
-    const auto& norm = tsd.normalization();
 
     const bool has_timeseries_index = tsd.index().field_count() > 0;
     const size_t start_field_index = has_timeseries_index ? 1 : 0;
-
-    std::unordered_set<std::string> seen_user_names;
 
     for (const auto& [field_index, field] : folly::enumerate(fields)) {
         if (field_index < start_field_index) {
@@ -405,17 +359,6 @@ ColumnStats::ColumnStats(const TimeseriesDescriptor& tsd) {
         }
 
         std::string field_name{field.name()};
-
-        if (norm.has_df()) {
-            const auto& common = norm.df().common();
-            if (!seen_user_names.insert(to_user_facing_name_key(field.name(), common)).second) {
-                user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
-                        "Cannot create column stats: symbol has duplicated data column name [{}]",
-                        to_user_facing_display_name(field.name(), common)
-                );
-            }
-        }
-
         offset_to_stat_info_.emplace(field_index, NameAndStatTypes{std::move(field_name), {ColumnStatType::MINMAX}});
     }
     offset_to_stat_info_set_ = true;

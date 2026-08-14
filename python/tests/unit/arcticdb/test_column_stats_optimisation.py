@@ -11,7 +11,7 @@ from arcticdb.version_store.processing import QueryBuilder
 import arcticdb.toolbox.query_stats as qs
 import pandas as pd
 
-from arcticdb_ext.exceptions import UserInputException
+from arcticdb_ext.exceptions import InternalException, UserInputException
 
 
 def get_table_data_read_count():
@@ -213,6 +213,51 @@ def test_column_stats_query_optimisation_column_not_in_stats(
     q = q[q["col_1"] > 2]
     result = lib.read(sym, query_builder=q).data
     assert_frame_equal(df1, result)
+
+
+def test_column_stats_query_optimisation_duplicate_column_names(
+    in_memory_store_factory, encoding_version, clear_query_stats, column_stats_filtering_enabled
+):
+    lib = in_memory_store_factory(encoding_version=int(encoding_version))
+
+    df0 = pd.DataFrame([[1, 2], [3, 4]], columns=["col_1", "col_1"], index=pd.date_range("2000-01-01", periods=2))
+    df1 = pd.DataFrame([[5, 6], [7, 8]], columns=["col_1", "col_1"], index=pd.date_range("2000-01-03", periods=2))
+
+    lib.write(sym, df0)
+    lib.append(sym, df1)
+    lib.create_column_stats_experimental(sym)
+    assert lib.get_column_stats_info_experimental(sym) == {
+        "__col_col_1__0": {"MINMAX"},
+        "__col_col_1__1": {"MINMAX"},
+    }
+
+    qs.enable()
+    q = QueryBuilder()
+    q = q[q["__col_col_1__1"] > 5]
+    qs.reset_stats()
+    result = lib.read(sym, query_builder=q).data
+    table_data_reads = get_table_data_read_count()
+
+    assert_frame_equal(df1, result)
+    assert table_data_reads == 1, f"Expected 1 TABLE_DATA read, got {table_data_reads}"
+
+
+def test_column_stats_query_optimisation_ambiguous_duplicate_column_name_raises(
+    in_memory_version_store, column_stats_filtering_enabled_and_disabled
+):
+    lib = in_memory_version_store
+
+    df0 = pd.DataFrame([[1, 2], [3, 4]], columns=["col_1", "col_1"], index=pd.date_range("2000-01-01", periods=2))
+    df1 = pd.DataFrame([[5, 6], [7, 8]], columns=["col_1", "col_1"], index=pd.date_range("2000-01-03", periods=2))
+    lib.write(sym, df0)
+    lib.append(sym, df1)
+
+    lib.create_column_stats_experimental(sym)
+
+    q = QueryBuilder()
+    q = q[q["col_1"] > 5]
+    with pytest.raises(InternalException, match="E_ASSERTION_FAILURE"):
+        lib.read(sym, query_builder=q)
 
 
 def test_column_stats_query_optimisation_empty_segment(

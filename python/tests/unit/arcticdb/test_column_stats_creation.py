@@ -994,22 +994,42 @@ def test_column_stats_duplicated_column_names(in_memory_store_factory, lib_name,
     )
     lib._set_output_format_for_pipeline_tests(any_output_format)
     sym = "test_column_stats_basic_flow_duplicated_column_names"
-    df = pd.DataFrame([[7, 1, 6], [8, 2, 5]], index=pd.date_range("2000-01-01", periods=2))
-    df.columns = ["col_0", "col_1", "col_1"]
+    df = pd.DataFrame([[7, 1, 6, 3], [8, 2, 5, 4]], index=pd.date_range("2000-01-01", periods=2))
+    df.columns = ["col_0", "col_1", "col_1", "col_2"]
 
     lib.write(sym, df)
     # Check we're testing the right thing
     saved_col_names = lib.get_info(sym)["normalization_metadata"].df.common.col_names
-    assert len(saved_col_names) == 3
+    assert len(saved_col_names) == 4
     assert "col_0" in saved_col_names
     assert "__col_col_1__1" in saved_col_names
     assert "__col_col_1__2" in saved_col_names
+    assert "col_2" in saved_col_names
 
-    # Duplicated source column names make column stats ambiguous - the C++ layer rejects the request.
-    with pytest.raises(UserInputException):
-        lib.create_column_stats_experimental(sym)
-    stats_keys = lib.library_tool().find_keys_for_symbol(KeyType.COLUMN_STATS, sym)
-    assert not stats_keys
+    lib.create_column_stats_experimental(sym)
+    assert lib.get_column_stats_info_experimental(sym) == {
+        "col_0": {"MINMAX"},
+        "__col_col_1__1": {"MINMAX"},
+        "__col_col_1__2": {"MINMAX"},
+        "col_2": {"MINMAX"},
+    }
+
+    column_stats = lib.read_column_stats_experimental(sym)
+    expected_column_stats = pl.DataFrame(
+        {
+            "start_row": [0],
+            "end_row": [2],
+            "v1_MIN(col_0)": [7],
+            "v1_MAX(col_0)": [8],
+            "v1_MIN(__col_col_1__1)": [1],
+            "v1_MAX(__col_col_1__1)": [2],
+            "v1_MIN(__col_col_1__2)": [5],
+            "v1_MAX(__col_col_1__2)": [6],
+            "v1_MIN(col_2)": [3],
+            "v1_MAX(col_2)": [4],
+        }
+    )
+    assert_stats_equal(column_stats, expected_column_stats)
 
 
 @pytest.mark.parametrize("index_name", ("index", "some-other-name"))
