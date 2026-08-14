@@ -986,8 +986,19 @@ std::shared_ptr<std::vector<folly::Future<std::vector<EntityId>>>> schedule_firs
         // Switch to the CPU executor for reasons detailed in the PR description
         // https://github.com/man-group/ArcticDB/pull/3086
         auto processing_fut =
-                folly::collect(local_futs)
+                // collectAll rather than collect so that a unit is never reported complete, admitting the next one,
+                // while its own reads are still in flight
+                folly::collectAll(local_futs)
                         .via(&async::cpu_executor())
+                        .thenValueInline([](std::vector<folly::Try<pipelines::SegmentAndSlice>>&& segment_and_slice_trys
+                                         ) {
+                            std::vector<pipelines::SegmentAndSlice> segment_and_slices;
+                            segment_and_slices.reserve(segment_and_slice_trys.size());
+                            for (auto& segment_and_slice_try : segment_and_slice_trys) {
+                                segment_and_slices.emplace_back(std::move(segment_and_slice_try).value());
+                            }
+                            return segment_and_slices;
+                        })
                         .thenValueInline([component_manager,
                                           segment_fetch_counts,
                                           id_to_pos,
