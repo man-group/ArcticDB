@@ -509,10 +509,6 @@ TEST(ProcessingUnitAdmissionHandlerTest, SynchronousReadThrowDoesNotHang) {
     EXPECT_TRUE(results.at(1).hasValue());
 }
 
-// Throwing on the *first* segment of a unit leaves the unit's other segment sitting in the read queue with the window
-// slot already freed, which the failed dispatch itself does not re-check. Recovery comes from the .ensure: the
-// exception fails unit 0's collect fast, on_processing_unit_complete calls fill_read_window unconditionally, and the
-// queued segment is drained. Nothing else would drain it, so this pins that coupling down.
 TEST(ProcessingUnitAdmissionHandlerTest, SynchronousReadThrowOnFirstSegmentOfUnitDoesNotHang) {
     TinyThreadPool tiny_pool;
     const auto results = run_synchronous_read_throw_case(/*throwing_segment=*/0); // first segment of unit 0

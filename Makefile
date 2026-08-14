@@ -26,7 +26,7 @@ _TMPDIR_ENV := $(if $(TMPDIR_OVERRIDE),TMPDIR=$(TMPDIR_OVERRIDE))
 _PROTOC_ENV := $(if $(PROTOC_VERS),ARCTICDB_PROTOC_VERS=$(PROTOC_VERS))
 # Combined environment prefix for commands that need both
 _ENV        := $(strip $(_TMPDIR_ENV) $(_PROTOC_ENV))
-_VENV_PYTHON := $(VENV_DIR)/$(VENV_NAME)/bin/python
+_VENV_PYTHON := $(firstword $(wildcard $(if $(VIRTUAL_ENV),$(VIRTUAL_ENV)/bin/python)) $(VENV_DIR)/$(VENV_NAME)/bin/python)
 _VENV_PIP := $(VENV_DIR)/$(VENV_NAME)/bin/pip
 
 # ── Phony targets ────────────────────────────────────────────────────────────
@@ -146,10 +146,10 @@ test-cpp-rapidcheck-debug: $(_DEBUG_BUILD_DIR)/.configure-stamp ## Build and run
 	$(_DEBUG_BUILD_DIR)/arcticdb/arcticdb_rapidcheck_tests $(if $(FILTER),--gtest_filter=$(FILTER))
 
 # ── symlink ──────────────────────────────────────────────────────────────────
-# EXT_SUFFIX must come from the interpreter that will import the extension, not whichever python3 is on
-# PATH. Those differ whenever the venv and the system python are different minor versions, e.g. a py311
-# venv with a py310 /usr/bin/python3.
-_EXT_SUFFIX_PYTHON := $(firstword $(wildcard $(if $(VIRTUAL_ENV),$(VIRTUAL_ENV)/bin/python) $(_VENV_PYTHON)) python3)
+# EXT_SUFFIX must come from the same interpreter that test-py imports the extension with (_VENV_PYTHON),
+# not whichever python3 is on PATH. Those differ whenever the venv and the system python are different
+# minor versions, e.g. a py311 venv with a py310 /usr/bin/python3.
+_EXT_SUFFIX_PYTHON := $(firstword $(wildcard $(_VENV_PYTHON)) python3)
 _EXT_SUFFIX := $(shell $(_EXT_SUFFIX_PYTHON) -c "import sysconfig; print(sysconfig.get_config_var('EXT_SUFFIX'))")
 
 define _do_symlink

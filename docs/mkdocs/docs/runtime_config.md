@@ -199,8 +199,8 @@ Values:
 
 Bounds how many segment reads can be submitted to the IO threadpool but not yet completed at any one time.
 
-Applies to the same operations as `VersionStore.NumProcessingUnitsLive`, that is `QueryBuilder` reads and manual column
-stats creation. A plain `read` with no `QueryBuilder` takes a different code path and is not affected by either setting.
+Applies to the same operations as `VersionStore.NumProcessingUnitsLive`, that is `QueryBuilder` reads.
+A plain `read` with no `QueryBuilder` takes a different code path and is not affected by either setting.
 
 Defaults to `2 * VersionStore.NumIOThreads`.
 
