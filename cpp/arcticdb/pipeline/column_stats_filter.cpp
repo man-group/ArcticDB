@@ -193,35 +193,34 @@ std::unordered_map<std::string, StatsForColumn> load_stats_by_column(
         stats_for_column.nan_counts.resize(num_rows, 0);
         stats_for_column.null_counts.resize(num_rows, 0);
 
-        internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-                stats_metadata_for_column.data_type != DataType::UNKNOWN,
-                "Column stats for {} have no MIN/MAX and therefore an unknown data type",
-                stats_metadata_for_column.col_name
-        );
-
-        details::visit_type(stats_metadata_for_column.data_type, [&]<typename T>(T) {
-            using type_info = ScalarTypeInfo<T>;
-            if constexpr (is_numeric_type(type_info::data_type) || is_time_type(type_info::data_type) ||
-                          is_bool_type(type_info::data_type)) {
-                for (const auto& entry : stats_metadata_for_column.entries) {
-                    if (entry.stat_type != MIN_V1 && entry.stat_type != MAX_V1) {
-                        continue;
-                    }
-                    const auto& column = segment.column(static_cast<position_t>(entry.segment_col_idx));
-                    const bool is_min = entry.stat_type == MIN_V1;
-                    auto& dest = is_min ? stats_for_column.mins : stats_for_column.maxes;
-                    for_each_enumerated<typename type_info::TDT>(
-                            column,
-                            [&](const ColumnData::Enumeration<typename type_info::RawType>& enumerating_it) {
-                                auto idx = static_cast<size_t>(enumerating_it.idx());
-                                if (idx >= first_kept && idx < last_kept_excl) {
-                                    dest.at(idx - first_kept) = Value{enumerating_it.value(), type_info::data_type};
+        // data_type stays UNKNOWN when every row-slice this column's stats were computed over was
+        // entirely null, leaving only NAN_COUNT/NULL_COUNT
+        // entries below - nothing to decode here, mins/maxes stay all-absent.
+        if (stats_metadata_for_column.data_type != DataType::UNKNOWN) {
+            details::visit_type(stats_metadata_for_column.data_type, [&]<typename T>(T) {
+                using type_info = ScalarTypeInfo<T>;
+                if constexpr (is_numeric_type(type_info::data_type) || is_time_type(type_info::data_type) ||
+                              is_bool_type(type_info::data_type)) {
+                    for (const auto& entry : stats_metadata_for_column.entries) {
+                        if (entry.stat_type != MIN_V1 && entry.stat_type != MAX_V1) {
+                            continue;
+                        }
+                        const auto& column = segment.column(static_cast<position_t>(entry.segment_col_idx));
+                        const bool is_min = entry.stat_type == MIN_V1;
+                        auto& dest = is_min ? stats_for_column.mins : stats_for_column.maxes;
+                        for_each_enumerated<typename type_info::TDT>(
+                                column,
+                                [&](const ColumnData::Enumeration<typename type_info::RawType>& enumerating_it) {
+                                    auto idx = static_cast<size_t>(enumerating_it.idx());
+                                    if (idx >= first_kept && idx < last_kept_excl) {
+                                        dest.at(idx - first_kept) = Value{enumerating_it.value(), type_info::data_type};
+                                    }
                                 }
-                            }
-                    );
+                        );
+                    }
                 }
-            }
-        });
+            });
+        }
 
         // NaN/NaT and null (sparse-gap) counts are stored inline with min/max as dense UINT64 columns.
         using CountTDT = ScalarTagType<DataTypeTag<DataType::UINT64>>;
