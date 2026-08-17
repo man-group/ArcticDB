@@ -15,6 +15,7 @@
 
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/util/constructors.hpp>
+#include <boost/locale/boundary/index.hpp>
 #include <folly/container/Enumerate.h>
 
 namespace arcticdb {
@@ -30,11 +31,15 @@ using namespace entt::literals;
 /// clause adding this entity and then after read_modify_write it reads it in order to compute the correct row ranges
 /// accounting for insertion. If any other piece of code adds this entity to the component manager the merge updates
 /// will iterate over them as well, producing wrong results. See merge_update_impl and Monday 12618296803
-struct MergeUpdateInsertedRowsComponent {
-    MergeUpdateInsertedRowsComponent() = default;
-    MergeUpdateInsertedRowsComponent(const size_t inserted_rows) : inserted_rows(inserted_rows) {}
-    operator size_t() const { return inserted_rows; }
-    size_t inserted_rows = 0;
+struct MergeUpdateRowSlicingInfoComponent {
+    MergeUpdateRowSlicingInfoComponent() = default;
+    MergeUpdateRowSlicingInfoComponent(int num_segments, int segment_index, size_t num_rows) :
+        num_segments_(num_segments),
+        segment_index_(segment_index),
+        num_rows_(num_rows) {}
+    int num_segments_ = 1;
+    int segment_index_ = 0;
+    size_t num_rows_ = 0;
 };
 
 /// Used only by the MergeUpdateClause, and only for row-count indexed targets. After the pipeline finishes,
@@ -59,7 +64,7 @@ class ComponentManager {
 
     // Add a single entity with the components defined by args
     template<class... Args>
-    void add_entity(EntityId id, Args... args) {
+    void add_components(EntityId id, Args... args) {
         std::unique_lock lock(mtx_);
         (
                 [&] {
@@ -166,6 +171,13 @@ class ComponentManager {
         }(static_cast<NoRefArgs*>(nullptr));
     }
 
+    template<typename T>
+    requires(!std::same_as<T, EntityFetchCount>)
+    void remove_component(const EntityId entt) {
+        std::unique_lock lock(mtx_);
+        registry_.remove<T>(entt);
+    }
+
   private:
     void decrement_entity_fetch_count(EntityId id);
     void update_entity_fetch_count(EntityId id, EntityFetchCount count);
@@ -180,12 +192,10 @@ class ComponentManager {
             // Using view.get theoretically and empirically faster than registry_.get
             auto view = registry_.view<const Args...>();
 
-            for (auto id : ids) {
-                tuple_res.emplace_back(std::move(view.get(id)));
-            }
+            std::ranges::transform(ids, std::back_inserter(tuple_res), [&](auto id) { return view.get(id); });
 
             if (decrement_ref_count) {
-                for (auto id : ids) {
+                for (const auto id : ids) {
                     decrement_entity_fetch_count(id);
                 }
             }

@@ -6,26 +6,25 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 
-import os
-import pytest
-import pandas as pd
-from arcticdb.util.test import assert_frame_equal, assert_vit_equals_except_data, merge, query_stats_operation_count
 import arcticdb
+from typing import List, Optional, Union
+import arcticdb.toolbox.query_stats as qs
+import numpy as np
+import pandas as pd
+import pytest
+from arcticdb.exceptions import ArcticException, StorageException, UnsortedDataException, UserInputException
+from arcticdb.util.test import (
+    assert_frame_equal,
+    assert_index_key_structure_static_schema,
+    assert_vit_equals_except_data,
+    merge,
+    query_stats_operation_count,
+)
 from arcticdb.version_store import VersionedItem
+from arcticdb.version_store._store import normalize_merge_action
+from arcticdb.version_store.library import MergeAction, MergeStrategy
 from arcticdb_ext.exceptions import SchemaException
 from arcticdb_ext.storage import KeyType
-import numpy as np
-from arcticdb.exceptions import (
-    UserInputException,
-    UnsortedDataException,
-    StorageException,
-    ArcticException,
-)
-from arcticdb.version_store.library import MergeAction, MergeStrategy
-from arcticdb.version_store._store import normalize_merge_action
-from typing import Union, List, Optional
-import arcticdb.toolbox.query_stats as qs
-
 from arcticdb_ext.version_store import MergeAction
 
 pytestmark = [
@@ -3172,6 +3171,780 @@ class TestMergeRowrangeUpdateAndInsert:
         lib.write("sym", target)
         with pytest.raises(UserInputException):
             lib.merge_experimental("sym", source, strategy=self.strategy, on=["a"])
+
+
+@pytest.mark.parametrize(
+    "strategy",
+    [MergeStrategy(MergeAction.DO_NOTHING, MergeAction.INSERT), MergeStrategy(MergeAction.UPDATE, MergeAction.INSERT)],
+    ids=["do_nothing_insert", "update_insert"],
+)
+class TestMergeInsertRowSlicingRowRange:
+
+    def test_insert_splits_into_multiple_row_slices(self, mem_library_factory, strategy):
+        lib = mem_library_factory(arcticdb.LibraryOptions(rows_per_segment=3))
+        target = pd.DataFrame({"a": [1, 2, 3, 4, 5, 6], "b": ["a", "b", "c", "d", "e", "f"]})
+        source = pd.DataFrame(
+            {
+                "a": [1, 101, 102, 103, 104, 105, 106, 107, 108, 109],
+                "b": ["Z", "A", "B", "C", "D", "E", "F", "G", "H", "I"],
+            }
+        )
+        lib.write("sym", target)
+        # With update the first segment is rewritten
+        # Inserts slices unmatched rows and appends them at the back
+        expected_data_key_writes = 4 if strategy.matched == MergeAction.UPDATE else 3
+        qs.reset_stats()
+        with qs.query_stats():
+            lib.merge_experimental("sym", source, strategy=strategy, on=["a"])
+        stats = qs.get_query_stats()
+        assert query_stats_operation_count(stats, "Memory_PutObject", "TABLE_DATA") == expected_data_key_writes
+        if strategy.matched == MergeAction.UPDATE:
+            expected = pd.DataFrame(
+                {
+                    "a": [1, 2, 3, 4, 5, 6, 101, 102, 103, 104, 105, 106, 107, 108, 109],
+                    "b": [
+                        "Z",
+                        "b",
+                        "c",
+                        "d",
+                        "e",
+                        "f",
+                        "A",
+                        "B",
+                        "C",
+                        "D",
+                        "E",
+                        "F",
+                        "G",
+                        "H",
+                        "I",
+                    ],
+                }
+            )
+        else:
+            expected = pd.DataFrame(
+                {
+                    "a": [1, 2, 3, 4, 5, 6, 101, 102, 103, 104, 105, 106, 107, 108, 109],
+                    "b": [
+                        "a",
+                        "b",
+                        "c",
+                        "d",
+                        "e",
+                        "f",
+                        "A",
+                        "B",
+                        "C",
+                        "D",
+                        "E",
+                        "F",
+                        "G",
+                        "H",
+                        "I",
+                    ],
+                }
+            )
+        assert_frame_equal(lib.read("sym").data, expected)
+        index_df = lib._dev_tools.library_tool().read_index("sym")
+        assert_index_key_structure_static_schema(index_df, rows_per_segment=3)
+
+    @pytest.mark.parametrize(
+        "num_unmatched, source_a, source_b, expected_a, expected_b, expected_num_segments, expected_data_key_writes",
+        [
+            (
+                3,
+                [100, 101, 102],
+                ["A", "B", "C"],
+                [1, 2, 100, 101, 102],
+                ["a", "b", "A", "B", "C"],
+                2,
+                1,
+            ),
+            (
+                4,
+                [100, 101, 102, 103],
+                ["A", "B", "C", "D"],
+                [1, 2, 100, 101, 102, 103],
+                ["a", "b", "A", "B", "C", "D"],
+                2,
+                1,
+            ),
+            (
+                5,
+                [100, 101, 102, 103, 104],
+                ["A", "B", "C", "D", "E"],
+                [1, 2, 100, 101, 102, 103, 104],
+                ["a", "b", "A", "B", "C", "D", "E"],
+                3,
+                2,
+            ),
+        ],
+        ids=["max_minus_one", "max", "max_plus_one"],
+    )
+    def test_insert_at_max_boundary(
+        self,
+        mem_library_factory,
+        strategy,
+        num_unmatched,
+        source_a,
+        source_b,
+        expected_a,
+        expected_b,
+        expected_num_segments,
+        expected_data_key_writes,
+    ):
+        """
+        Rows per segment is 3. Using the formula for max allowed rows for reslicing
+        max((4 * rows_per_segment) / 3, rows_per_segment + 1) the maximum allowed rows are 4. Test with row slice size
+        around that value (one less, exactly the same and one more) to catch off-by-one errors
+        """
+        lib = mem_library_factory(arcticdb.LibraryOptions(rows_per_segment=3))
+        target = pd.DataFrame({"a": [1, 2], "b": ["a", "b"]})
+        source = pd.DataFrame({"a": source_a, "b": source_b})
+        lib.write("sym", target)
+        qs.reset_stats()
+        with qs.query_stats():
+            lib.merge_experimental("sym", source, strategy=strategy, on=["a"])
+        stats = qs.get_query_stats()
+        assert query_stats_operation_count(stats, "Memory_PutObject", "TABLE_DATA") == expected_data_key_writes
+        expected = pd.DataFrame({"a": expected_a, "b": expected_b})
+        assert_frame_equal(lib.read("sym").data, expected)
+        index_df = lib._dev_tools.library_tool().read_index("sym")
+        assert_index_key_structure_static_schema(index_df, rows_per_segment=3)
+
+    def test_alternating_matched_unmatched(self, mem_library_factory, strategy):
+        lib = mem_library_factory(arcticdb.LibraryOptions(rows_per_segment=3))
+        target = pd.DataFrame(
+            {"a": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9], "b": ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"]}
+        )
+        source = pd.DataFrame(
+            {
+                "a": [1, 101, 3, 103, 5, 105, 7, 107, 9, 109],
+                "b": ["Z", "A", "Y", "B", "X", "C", "W", "D", "V", "E"],
+            }
+        )
+        lib.write("sym", target)
+        # All four segments on disk are matched
+        # Inserted data is sliced into two segments and apended
+        expected_data_key_writes = 6 if strategy.matched == MergeAction.UPDATE else 2
+        qs.reset_stats()
+        with qs.query_stats():
+            lib.merge_experimental("sym", source, strategy=strategy, on=["a"])
+        stats = qs.get_query_stats()
+        assert query_stats_operation_count(stats, "Memory_PutObject", "TABLE_DATA") == expected_data_key_writes
+        if strategy.matched == MergeAction.UPDATE:
+            expected = pd.DataFrame(
+                {
+                    "a": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 101, 103, 105, 107, 109],
+                    "b": [
+                        "a",
+                        "Z",
+                        "c",
+                        "Y",
+                        "e",
+                        "X",
+                        "g",
+                        "W",
+                        "i",
+                        "V",
+                        "A",
+                        "B",
+                        "C",
+                        "D",
+                        "E",
+                    ],
+                }
+            )
+        else:
+            expected = pd.DataFrame(
+                {
+                    "a": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 101, 103, 105, 107, 109],
+                    "b": [
+                        "a",
+                        "b",
+                        "c",
+                        "d",
+                        "e",
+                        "f",
+                        "g",
+                        "h",
+                        "i",
+                        "j",
+                        "A",
+                        "B",
+                        "C",
+                        "D",
+                        "E",
+                    ],
+                }
+            )
+        assert_frame_equal(lib.read("sym").data, expected)
+        index_df = lib._dev_tools.library_tool().read_index("sym")
+        assert_index_key_structure_static_schema(index_df, rows_per_segment=3)
+
+    def test_all_source_rows_unmatched(self, mem_library_factory, strategy):
+        lib = mem_library_factory(arcticdb.LibraryOptions(rows_per_segment=3))
+        target = pd.DataFrame({"a": [1, 2, 3, 4, 5, 6], "b": ["a", "b", "c", "d", "e", "f"]})
+        source = pd.DataFrame({"a": [101, 102, 103, 104, 105, 106, 107], "b": ["A", "B", "C", "D", "E", "F", "G"]})
+        lib.write("sym", target)
+        qs.reset_stats()
+        with qs.query_stats():
+            lib.merge_experimental("sym", source, strategy=strategy, on=["a"])
+        stats = qs.get_query_stats()
+        assert query_stats_operation_count(stats, "Memory_PutObject", "TABLE_DATA") == 2
+        expected = pd.DataFrame(
+            {
+                "a": [1, 2, 3, 4, 5, 6, 101, 102, 103, 104, 105, 106, 107],
+                "b": ["a", "b", "c", "d", "e", "f", "A", "B", "C", "D", "E", "F", "G"],
+            }
+        )
+        assert_frame_equal(lib.read("sym").data, expected)
+        index_df = lib._dev_tools.library_tool().read_index("sym")
+        assert_index_key_structure_static_schema(index_df, rows_per_segment=3)
+
+    def test_target_empty(self, mem_library_factory, strategy):
+        lib = mem_library_factory(arcticdb.LibraryOptions(rows_per_segment=3))
+        target = pd.DataFrame({"a": np.array([], dtype=np.int64), "b": np.array([], dtype=np.float64)})
+        source = pd.DataFrame({"a": [10, 20, 30, 40, 50], "b": [10.0, 20.0, 30.0, 40.0, 50.0]})
+        lib.write("sym", target)
+        qs.reset_stats()
+        with qs.query_stats():
+            lib.merge_experimental("sym", source, strategy=strategy, on=["a"])
+        stats = qs.get_query_stats()
+        assert query_stats_operation_count(stats, "Memory_PutObject", "TABLE_DATA") == 2
+        expected = pd.DataFrame({"a": [10, 20, 30, 40, 50], "b": [10.0, 20.0, 30.0, 40.0, 50.0]})
+        assert_frame_equal(lib.read("sym").data, expected)
+        index_df = lib._dev_tools.library_tool().read_index("sym")
+        assert_index_key_structure_static_schema(index_df, rows_per_segment=3)
+
+    def test_with_column_slicing(self, mem_library_factory, strategy):
+        lib = mem_library_factory(arcticdb.LibraryOptions(rows_per_segment=3, columns_per_segment=2))
+        target = pd.DataFrame(
+            {
+                "a": [1, 2, 3, 4, 5, 6],
+                "b": ["a", "b", "c", "d", "e", "f"],
+                "c": [10, 20, 30, 40, 50, 60],
+                "d": ["aa", "bb", "cc", "dd", "ee", "ff"],
+                "e": [100, 200, 300, 400, 500, 600],
+                "f": ["aaa", "bbb", "ccc", "ddd", "eee", "fff"],
+            }
+        )
+        source = pd.DataFrame(
+            {
+                "a": [3, 101, 102, 103, 104, 105],
+                "b": ["Z", "A", "B", "C", "D", "E"],
+                "c": [3000, 110, 120, 130, 140, 150],
+                "d": ["ZZ", "AA", "BB", "CC", "DD", "EE"],
+                "e": [30000, 1100, 1200, 1300, 1400, 1500],
+                "f": ["ZZZ", "AAA", "BBB", "CCC", "DDD", "EEE"],
+            }
+        )
+        lib.write("sym", target)
+        expected_data_key_writes = 9 if strategy.matched == MergeAction.UPDATE else 6
+        qs.reset_stats()
+        with qs.query_stats():
+            lib.merge_experimental("sym", source, strategy=strategy, on=["a"])
+        stats = qs.get_query_stats()
+        assert query_stats_operation_count(stats, "Memory_PutObject", "TABLE_DATA") == expected_data_key_writes
+        if strategy.matched == MergeAction.UPDATE:
+            expected = pd.DataFrame(
+                {
+                    "a": [1, 2, 3, 4, 5, 6, 101, 102, 103, 104, 105],
+                    "b": ["a", "b", "Z", "d", "e", "f", "A", "B", "C", "D", "E"],
+                    "c": [10, 20, 3000, 40, 50, 60, 110, 120, 130, 140, 150],
+                    "d": ["aa", "bb", "ZZ", "dd", "ee", "ff", "AA", "BB", "CC", "DD", "EE"],
+                    "e": [100, 200, 30000, 400, 500, 600, 1100, 1200, 1300, 1400, 1500],
+                    "f": [
+                        "aaa",
+                        "bbb",
+                        "ZZZ",
+                        "ddd",
+                        "eee",
+                        "fff",
+                        "AAA",
+                        "BBB",
+                        "CCC",
+                        "DDD",
+                        "EEE",
+                    ],
+                }
+            )
+        else:
+            expected = pd.DataFrame(
+                {
+                    "a": [1, 2, 3, 4, 5, 6, 101, 102, 103, 104, 105],
+                    "b": ["a", "b", "c", "d", "e", "f", "A", "B", "C", "D", "E"],
+                    "c": [10, 20, 30, 40, 50, 60, 110, 120, 130, 140, 150],
+                    "d": ["aa", "bb", "cc", "dd", "ee", "ff", "AA", "BB", "CC", "DD", "EE"],
+                    "e": [100, 200, 300, 400, 500, 600, 1100, 1200, 1300, 1400, 1500],
+                    "f": ["aaa", "bbb", "ccc", "ddd", "eee", "fff", "AAA", "BBB", "CCC", "DDD", "EEE"],
+                }
+            )
+        assert_frame_equal(lib.read("sym").data, expected)
+        index_df = lib._dev_tools.library_tool().read_index("sym")
+        assert_index_key_structure_static_schema(index_df, rows_per_segment=3)
+
+    def test_duplicate_unmatched_on_values_across_slice_boundary(self, mem_library_factory, strategy):
+        """Unmatched rows are inserted in order even when there are duplicates"""
+        lib = mem_library_factory(arcticdb.LibraryOptions(rows_per_segment=3))
+        target = pd.DataFrame({"a": [1], "b": ["a"]})
+        source = pd.DataFrame({"a": [7, 7, 7, 7, 7, 8], "b": ["A", "B", "C", "D", "E", "F"]})
+        lib.write("sym", target)
+        qs.reset_stats()
+        with qs.query_stats():
+            lib.merge_experimental("sym", source, strategy=strategy, on=["a"])
+        stats = qs.get_query_stats()
+        assert query_stats_operation_count(stats, "Memory_PutObject", "TABLE_DATA") == 2
+        expected = pd.DataFrame({"a": [1, 7, 7, 7, 7, 7, 8], "b": ["a", "A", "B", "C", "D", "E", "F"]})
+        assert_frame_equal(lib.read("sym").data, expected)
+        index_df = lib._dev_tools.library_tool().read_index("sym")
+        assert_index_key_structure_static_schema(index_df, rows_per_segment=3)
+
+
+@pytest.mark.parametrize(
+    "strategy",
+    [MergeStrategy(MergeAction.DO_NOTHING, MergeAction.INSERT), MergeStrategy(MergeAction.UPDATE, MergeAction.INSERT)],
+    ids=["do_nothing_insert", "update_insert"],
+)
+class TestMergeDatetimeInsertRowSlicing:
+
+    def test_interleaved_insert_slices_touched_groups(self, mem_library_factory, strategy):
+        """
+        When inserting values in a middle of the segment, the segment must be split.
+        """
+        lib = mem_library_factory(arcticdb.LibraryOptions(rows_per_segment=3))
+        target = pd.DataFrame(
+            {"b": [1.0, 3.0, 5.0, 7.0, 9.0, 11.0], "s": ["a", "b", "c", "d", "e", "f"]},
+            index=pd.DatetimeIndex(
+                ["2024-01-01", "2024-01-03", "2024-01-05", "2024-01-07", "2024-01-09", "2024-01-11"]
+            ),
+        )
+        source = pd.DataFrame(
+            {"b": [2.0, 6.0, 8.0, 10.0], "s": ["A", "B", "C", "D"]},
+            index=pd.DatetimeIndex(["2024-01-02", "2024-01-06", "2024-01-08", "2024-01-10"]),
+        )
+        lib.write("sym", target)
+        qs.reset_stats()
+        with qs.query_stats():
+            lib.merge_experimental("sym", source, strategy=strategy)
+        stats = qs.get_query_stats()
+        assert query_stats_operation_count(stats, "Memory_PutObject", "TABLE_DATA") == 4
+        expected = pd.DataFrame(
+            {
+                "b": [1.0, 2.0, 3.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0],
+                "s": ["a", "A", "b", "c", "B", "d", "C", "e", "D", "f"],
+            },
+            index=pd.DatetimeIndex(
+                [
+                    "2024-01-01",
+                    "2024-01-02",
+                    "2024-01-03",
+                    "2024-01-05",
+                    "2024-01-06",
+                    "2024-01-07",
+                    "2024-01-08",
+                    "2024-01-09",
+                    "2024-01-10",
+                    "2024-01-11",
+                ]
+            ),
+        )
+        assert_frame_equal(lib.read("sym").data, expected)
+        index_df = lib._dev_tools.library_tool().read_index("sym")
+        assert_index_key_structure_static_schema(index_df, rows_per_segment=3)
+
+    @pytest.mark.parametrize(
+        "target_index, target_b, target_s, expected_index, expected_b, expected_s, expected_num_segments",
+        [
+            (
+                pd.date_range("2024-01-01", periods=6),
+                [1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
+                ["a", "b", "c", "d", "e", "f"],
+                pd.DatetimeIndex(
+                    [
+                        "2024-01-01",
+                        "2024-01-02",
+                        "2024-01-03",
+                        "2024-01-04",
+                        "2024-01-05",
+                        "2024-01-06",
+                        "2024-01-10",
+                        "2024-01-11",
+                        "2024-01-12",
+                        "2024-01-13",
+                        "2024-01-14",
+                        "2024-01-15",
+                        "2024-01-16",
+                    ]
+                ),
+                [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0],
+                ["a", "b", "c", "d", "e", "f", "A", "B", "C", "D", "E", "F", "G"],
+                4,
+            ),
+            (
+                pd.date_range("2024-01-01", periods=5),
+                [1.0, 2.0, 3.0, 4.0, 5.0],
+                ["a", "b", "c", "d", "e"],
+                pd.DatetimeIndex(
+                    [
+                        "2024-01-01",
+                        "2024-01-02",
+                        "2024-01-03",
+                        "2024-01-04",
+                        "2024-01-05",
+                        "2024-01-10",
+                        "2024-01-11",
+                        "2024-01-12",
+                        "2024-01-13",
+                        "2024-01-14",
+                        "2024-01-15",
+                        "2024-01-16",
+                    ]
+                ),
+                [1.0, 2.0, 3.0, 4.0, 5.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0],
+                ["a", "b", "c", "d", "e", "A", "B", "C", "D", "E", "F", "G"],
+                4,
+            ),
+        ],
+        ids=["full_last_segment", "partial_last_segment"],
+    )
+    def test_insert_after_last_timestamp_slices_tail(
+        self,
+        mem_library_factory,
+        strategy,
+        target_index,
+        target_b,
+        target_s,
+        expected_index,
+        expected_b,
+        expected_s,
+        expected_num_segments,
+    ):
+        lib = mem_library_factory(arcticdb.LibraryOptions(rows_per_segment=3))
+        target = pd.DataFrame({"b": target_b, "s": target_s}, index=target_index)
+        source = pd.DataFrame(
+            {"b": [10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0], "s": ["A", "B", "C", "D", "E", "F", "G"]},
+            index=pd.date_range("2024-01-10", periods=7),
+        )
+        lib.write("sym", target)
+        qs.reset_stats()
+        with qs.query_stats():
+            lib.merge_experimental("sym", source, strategy=strategy)
+        stats = qs.get_query_stats()
+        assert query_stats_operation_count(stats, "Memory_PutObject", "TABLE_DATA") == 3
+        expected = pd.DataFrame({"b": expected_b, "s": expected_s}, index=expected_index)
+        assert_frame_equal(lib.read("sym").data, expected)
+        index_df = lib._dev_tools.library_tool().read_index("sym")
+        assert_index_key_structure_static_schema(index_df, rows_per_segment=3)
+
+    @pytest.mark.parametrize(
+        "target_index, target_b, target_s, expected_index, expected_b, expected_s, expected_num_segments",
+        [
+            (
+                pd.date_range("2024-01-10", periods=6),
+                [10.0, 11.0, 12.0, 13.0, 14.0, 15.0],
+                ["a", "b", "c", "d", "e", "f"],
+                pd.DatetimeIndex(
+                    [
+                        "2024-01-01",
+                        "2024-01-02",
+                        "2024-01-03",
+                        "2024-01-04",
+                        "2024-01-05",
+                        "2024-01-10",
+                        "2024-01-11",
+                        "2024-01-12",
+                        "2024-01-13",
+                        "2024-01-14",
+                        "2024-01-15",
+                    ]
+                ),
+                [1.0, 2.0, 3.0, 4.0, 5.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0],
+                ["A", "B", "C", "D", "E", "a", "b", "c", "d", "e", "f"],
+                3,
+            ),
+            (
+                pd.DatetimeIndex(["2024-01-10", "2024-01-11"]),
+                [10.0, 11.0],
+                ["a", "b"],
+                pd.DatetimeIndex(
+                    ["2024-01-01", "2024-01-02", "2024-01-03", "2024-01-04", "2024-01-05", "2024-01-10", "2024-01-11"]
+                ),
+                [1.0, 2.0, 3.0, 4.0, 5.0, 10.0, 11.0],
+                ["A", "B", "C", "D", "E", "a", "b"],
+                2,
+            ),
+        ],
+        ids=["full_first_segment", "partial_first_segment"],
+    )
+    def test_insert_before_first_timestamp(
+        self,
+        mem_library_factory,
+        strategy,
+        target_index,
+        target_b,
+        target_s,
+        expected_index,
+        expected_b,
+        expected_s,
+        expected_num_segments,
+    ):
+        lib = mem_library_factory(arcticdb.LibraryOptions(rows_per_segment=3))
+        target = pd.DataFrame({"b": target_b, "s": target_s}, index=target_index)
+        source = pd.DataFrame(
+            {"b": [1.0, 2.0, 3.0, 4.0, 5.0], "s": ["A", "B", "C", "D", "E"]},
+            index=pd.date_range("2024-01-01", periods=5),
+        )
+        lib.write("sym", target)
+        qs.reset_stats()
+        with qs.query_stats():
+            lib.merge_experimental("sym", source, strategy=strategy)
+        stats = qs.get_query_stats()
+        assert query_stats_operation_count(stats, "Memory_PutObject", "TABLE_DATA") == 2
+        expected = pd.DataFrame({"b": expected_b, "s": expected_s}, index=expected_index)
+        assert_frame_equal(lib.read("sym").data, expected)
+        index_df = lib._dev_tools.library_tool().read_index("sym")
+        assert_index_key_structure_static_schema(index_df, rows_per_segment=3)
+
+    def test_index_value_spanning_two_slices(self, mem_library_factory, strategy):
+        lib = mem_library_factory(arcticdb.LibraryOptions(rows_per_segment=3))
+        target = pd.DataFrame(
+            {"a": [1, 2, 3, 4, 5, 6], "b": ["a", "b", "c", "d", "e", "f"]},
+            index=pd.DatetimeIndex(
+                ["2024-01-01", "2024-01-02", "2024-01-02", "2024-01-02", "2024-01-03", "2024-01-04"]
+            ),
+        )
+        # on=["a"] means the Jan2 source rows are unmatched despite the equal timestamps.
+        source = pd.DataFrame(
+            {"a": [20, 21, 22, 50], "b": ["A", "B", "C", "D"]},
+            index=pd.DatetimeIndex(["2024-01-02", "2024-01-02", "2024-01-02", "2024-01-05"]),
+        )
+        lib.write("sym", target)
+        qs.reset_stats()
+        with qs.query_stats():
+            lib.merge_experimental("sym", source, strategy=strategy, on=["a"])
+        stats = qs.get_query_stats()
+        assert query_stats_operation_count(stats, "Memory_PutObject", "TABLE_DATA") == 3
+        expected = pd.DataFrame(
+            {
+                "a": [1, 2, 3, 4, 20, 21, 22, 5, 6, 50],
+                "b": ["a", "b", "c", "d", "A", "B", "C", "e", "f", "D"],
+            },
+            index=pd.DatetimeIndex(
+                [
+                    "2024-01-01",
+                    "2024-01-02",
+                    "2024-01-02",
+                    "2024-01-02",
+                    "2024-01-02",
+                    "2024-01-02",
+                    "2024-01-02",
+                    "2024-01-03",
+                    "2024-01-04",
+                    "2024-01-05",
+                ]
+            ),
+        )
+        assert_frame_equal(lib.read("sym").data, expected)
+        index_df = lib._dev_tools.library_tool().read_index("sym")
+        assert_index_key_structure_static_schema(index_df, rows_per_segment=3)
+
+    def test_index_value_spanning_three_slices(self, mem_library_factory, strategy):
+        lib = mem_library_factory(arcticdb.LibraryOptions(rows_per_segment=3))
+        target = pd.DataFrame(
+            {"a": [1, 2, 3, 4, 5, 6, 7, 8, 9], "b": ["a", "b", "c", "d", "e", "f", "g", "h", "i"]},
+            index=pd.DatetimeIndex(
+                [
+                    "2024-01-01",
+                    "2024-01-02",
+                    "2024-01-03",
+                    "2024-01-03",
+                    "2024-01-03",
+                    "2024-01-03",
+                    "2024-01-03",
+                    "2024-01-03",
+                    "2024-01-04",
+                ]
+            ),
+        )
+        source = pd.DataFrame({"a": [999], "b": ["A"]}, index=pd.DatetimeIndex(["2024-01-03"]))
+        lib.write("sym", target)
+        qs.reset_stats()
+        with qs.query_stats():
+            lib.merge_experimental("sym", source, strategy=strategy, on=["a"])
+        stats = qs.get_query_stats()
+        assert query_stats_operation_count(stats, "Memory_PutObject", "TABLE_DATA") == 4
+        expected = pd.DataFrame(
+            {
+                "a": [1, 2, 3, 4, 5, 6, 7, 8, 999, 9],
+                "b": ["a", "b", "c", "d", "e", "f", "g", "h", "A", "i"],
+            },
+            index=pd.DatetimeIndex(
+                [
+                    "2024-01-01",
+                    "2024-01-02",
+                    "2024-01-03",
+                    "2024-01-03",
+                    "2024-01-03",
+                    "2024-01-03",
+                    "2024-01-03",
+                    "2024-01-03",
+                    "2024-01-03",
+                    "2024-01-04",
+                ]
+            ),
+        )
+        assert_frame_equal(lib.read("sym").data, expected)
+        index_df = lib._dev_tools.library_tool().read_index("sym")
+        assert_index_key_structure_static_schema(index_df, rows_per_segment=3)
+
+    def test_matched_update_inside_resliced_group(self, mem_library_factory, strategy):
+        """Update happens in a row slice that is being resliced"""
+        lib = mem_library_factory(arcticdb.LibraryOptions(rows_per_segment=3))
+        target = pd.DataFrame(
+            {"b": [1.0, 2.0, 5.0, 6.0, 7.0, 8.0], "s": ["a", "b", "c", "d", "e", "f"]},
+            index=pd.DatetimeIndex(
+                ["2024-01-01", "2024-01-02", "2024-01-05", "2024-01-06", "2024-01-07", "2024-01-08"]
+            ),
+        )
+        source = pd.DataFrame(
+            {"b": [10.0, 1.25, 1.5], "s": ["Z", "A", "B"]},
+            index=pd.DatetimeIndex(["2024-01-01", "2024-01-01 06:00:00", "2024-01-01 12:00:00"]),
+        )
+        lib.write("sym", target)
+        qs.reset_stats()
+        with qs.query_stats():
+            lib.merge_experimental("sym", source, strategy=strategy)
+        stats = qs.get_query_stats()
+        assert query_stats_operation_count(stats, "Memory_PutObject", "TABLE_DATA") == 2
+        expected_index = pd.DatetimeIndex(
+            [
+                "2024-01-01",
+                "2024-01-01 06:00:00",
+                "2024-01-01 12:00:00",
+                "2024-01-02",
+                "2024-01-05",
+                "2024-01-06",
+                "2024-01-07",
+                "2024-01-08",
+            ]
+        )
+        if strategy.matched == MergeAction.UPDATE:
+            expected_b = [10.0, 1.25, 1.5, 2.0, 5.0, 6.0, 7.0, 8.0]
+            expected_s = ["Z", "A", "B", "b", "c", "d", "e", "f"]
+        else:
+            expected_b = [1.0, 1.25, 1.5, 2.0, 5.0, 6.0, 7.0, 8.0]
+            expected_s = ["a", "A", "B", "b", "c", "d", "e", "f"]
+        expected = pd.DataFrame({"b": expected_b, "s": expected_s}, index=expected_index)
+        assert_frame_equal(lib.read("sym").data, expected)
+        index_df = lib._dev_tools.library_tool().read_index("sym")
+        assert_index_key_structure_static_schema(index_df, rows_per_segment=3)
+
+    def test_with_column_slicing(self, mem_library_factory, strategy):
+        lib = mem_library_factory(arcticdb.LibraryOptions(rows_per_segment=3, columns_per_segment=2))
+        target = pd.DataFrame(
+            {
+                "a": [1, 4, 8],
+                "b": ["a", "b", "c"],
+                "c": [10, 40, 80],
+                "d": ["aa", "bb", "cc"],
+                "e": [100, 400, 800],
+                "f": ["aaa", "bbb", "ccc"],
+            },
+            index=pd.DatetimeIndex(["2024-01-01", "2024-01-04", "2024-01-08"]),
+        )
+        source = pd.DataFrame(
+            {
+                "a": [2, 3, 400, 5, 6, 7],
+                "b": ["A", "B", "Z", "C", "D", "E"],
+                "c": [20, 30, 440, 50, 60, 70],
+                "d": ["AA", "BB", "ZZ", "CC", "DD", "EE"],
+                "e": [200, 300, 4400, 500, 600, 700],
+                "f": ["AAA", "BBB", "ZZZ", "CCC", "DDD", "EEE"],
+            },
+            index=pd.DatetimeIndex(
+                ["2024-01-02", "2024-01-03", "2024-01-04", "2024-01-05", "2024-01-06", "2024-01-07"]
+            ),
+        )
+        lib.write("sym", target)
+        qs.reset_stats()
+        with qs.query_stats():
+            lib.merge_experimental("sym", source, strategy=strategy)
+        stats = qs.get_query_stats()
+        assert query_stats_operation_count(stats, "Memory_PutObject", "TABLE_DATA") == 6
+        if strategy.matched == MergeAction.UPDATE:
+            expected = pd.DataFrame(
+                {
+                    "a": [1, 2, 3, 400, 5, 6, 7, 8],
+                    "b": ["a", "A", "B", "Z", "C", "D", "E", "c"],
+                    "c": [10, 20, 30, 440, 50, 60, 70, 80],
+                    "d": ["aa", "AA", "BB", "ZZ", "CC", "DD", "EE", "cc"],
+                    "e": [100, 200, 300, 4400, 500, 600, 700, 800],
+                    "f": ["aaa", "AAA", "BBB", "ZZZ", "CCC", "DDD", "EEE", "ccc"],
+                },
+                index=pd.date_range("2024-01-01", periods=8),
+            )
+        else:
+            expected = pd.DataFrame(
+                {
+                    "a": [1, 2, 3, 4, 5, 6, 7, 8],
+                    "b": ["a", "A", "B", "b", "C", "D", "E", "c"],
+                    "c": [10, 20, 30, 40, 50, 60, 70, 80],
+                    "d": ["aa", "AA", "BB", "bb", "CC", "DD", "EE", "cc"],
+                    "e": [100, 200, 300, 400, 500, 600, 700, 800],
+                    "f": ["aaa", "AAA", "BBB", "bbb", "CCC", "DDD", "EEE", "ccc"],
+                },
+                index=pd.date_range("2024-01-01", periods=8),
+            )
+        assert_frame_equal(lib.read("sym").data, expected)
+        index_df = lib._dev_tools.library_tool().read_index("sym")
+        assert_index_key_structure_static_schema(index_df, rows_per_segment=3)
+
+    def test_merging_touches_only_first_row_slice(self, mem_library_factory, strategy):
+        lib = mem_library_factory(arcticdb.LibraryOptions(rows_per_segment=3))
+        # Row slices [0,3) = [Jan1, Jan8, Jan9], [3,6) = [Jan20, Jan21, Jan22].
+        target = pd.DataFrame(
+            {"b": [1.0, 8.0, 9.0, 20.0, 21.0, 22.0], "s": ["a", "b", "c", "d", "e", "f"]},
+            index=pd.DatetimeIndex(
+                ["2024-01-01", "2024-01-08", "2024-01-09", "2024-01-20", "2024-01-21", "2024-01-22"]
+            ),
+        )
+        # 5 unmatched rows, all inside the first group's index range. Second slice is untouched. The result from
+        # inserting in the first slice is resliced
+        source = pd.DataFrame(
+            {"b": [2.0, 3.0, 4.0, 5.0, 6.0], "s": ["A", "B", "C", "D", "E"]},
+            index=pd.DatetimeIndex(["2024-01-02", "2024-01-03", "2024-01-04", "2024-01-05", "2024-01-06"]),
+        )
+        lib.write("sym", target)
+        qs.reset_stats()
+        with qs.query_stats():
+            lib.merge_experimental("sym", source, strategy=strategy)
+        stats = qs.get_query_stats()
+        assert query_stats_operation_count(stats, "Memory_PutObject", "TABLE_DATA") == 2
+        expected = pd.DataFrame(
+            {
+                "b": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 8.0, 9.0, 20.0, 21.0, 22.0],
+                "s": ["a", "A", "B", "C", "D", "E", "b", "c", "d", "e", "f"],
+            },
+            index=pd.DatetimeIndex(
+                [
+                    "2024-01-01",
+                    "2024-01-02",
+                    "2024-01-03",
+                    "2024-01-04",
+                    "2024-01-05",
+                    "2024-01-06",
+                    "2024-01-08",
+                    "2024-01-09",
+                    "2024-01-20",
+                    "2024-01-21",
+                    "2024-01-22",
+                ]
+            ),
+        )
+        assert_frame_equal(lib.read("sym").data, expected)
+        index_df = lib._dev_tools.library_tool().read_index("sym")
+        assert_index_key_structure_static_schema(index_df, rows_per_segment=3)
 
 
 class TestMergeMultiindexUpdate:
