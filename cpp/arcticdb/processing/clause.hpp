@@ -861,7 +861,10 @@ struct MergeUpdateClause {
     MergeStrategy strategy_;
     std::shared_ptr<InputFrame> source_;
     bool fake_index_name_ = false;
-    MergeUpdateClause(std::vector<std::string>&& on, MergeStrategy strategy, std::shared_ptr<InputFrame> source);
+    MergeUpdateClause(
+            std::vector<std::string>&& on, MergeStrategy strategy, std::shared_ptr<InputFrame> source,
+            size_t rows_per_segment
+    );
     ARCTICDB_MOVE_COPY_DEFAULT(MergeUpdateClause)
 
     /// Row range indexes require full table scan
@@ -958,6 +961,8 @@ struct MergeUpdateClause {
     std::span<const timestamp> get_source_index(std::pair<size_t, size_t> source_start_end) const;
 
     std::span<const std::byte> get_source_data_bytes(size_t field_index, std::pair<size_t, size_t> range) const;
+
+    size_t rows_per_segment_;
 };
 
 struct CompactDataClause {

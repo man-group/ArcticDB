@@ -1626,3 +1626,38 @@ def merge(
 
 def query_stats_operation_count(stats, operation, key_type):
     return stats.get("storage_operations", {}).get(operation, {}).get(key_type, {}).get("count", 0)
+
+
+def max_rows_per_segment(rows_per_segment: int) -> int:
+    """Upper bound on the number of rows the C++ ColumnReslicer can put in a single row slice when resegmenting,
+    given a target of `rows_per_segment`. Mirrors cpp/arcticdb/column_store/column_reslicer.cpp."""
+    return max((4 * rows_per_segment) // 3, rows_per_segment + 1)
+
+
+def assert_index_key_structure_static_schema(index_df: pd.DataFrame, rows_per_segment: int) -> None:
+    max_slice = max_rows_per_segment(rows_per_segment)
+    row_ranges = {}
+    prev_col_range = None
+
+    is_continuous_range = lambda lst: all(lst[i][0] == lst[i - 1][1] for i in range(1, len(lst)))
+    is_row_range_size_within_bounds = lambda rr: 1 <= rr[1] - rr[0] <= max_slice
+
+    for start_col, end_col, start_row, end_row in zip(
+        index_df["start_col"], index_df["end_col"], index_df["start_row"], index_df["end_row"]
+    ):
+        col_range, row_range = (start_col, end_col), (start_row, end_row)
+        row_ranges.setdefault(row_range, []).append(col_range)
+        if col_range != prev_col_range:
+            if prev_col_range is not None:
+                # Non decreasing column major order
+                assert col_range[0] == prev_col_range[1]
+            prev_col_range = col_range
+
+    if not row_ranges:
+        return
+
+    reference_col_slices = next(iter(row_ranges.values()))
+    assert is_continuous_range(reference_col_slices)
+    assert is_continuous_range(list(row_ranges.keys()))
+    assert all(is_row_range_size_within_bounds(row_range) for row_range in row_ranges.keys())
+    assert all(col_slices == reference_col_slices for col_slices in row_ranges.values())

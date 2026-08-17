@@ -12,7 +12,12 @@ from arcticdb.version_store._store import MergeStrategy, MergeAction, normalize_
 from hypothesis import assume, strategies as st, given, settings, HealthCheck
 from typing import List, Tuple, Optional
 
-from arcticdb.util.test import assert_frame_equal, merge, random_strings_of_length_with_nan
+from arcticdb.util.test import (
+    assert_frame_equal,
+    assert_index_key_structure_static_schema,
+    merge,
+    random_strings_of_length_with_nan,
+)
 from tests.util.mark import MACOS, WINDOWS
 
 from arcticdb.options import LibraryOptions
@@ -270,37 +275,6 @@ def random_values_for_dtype(dtype, count):
     return np.random.randint(low, high, size=count, dtype=np.int64).astype(dtype)
 
 
-def assert_valid_index(index_df):
-    # Every column slice must be split into the exact same set of contiguous row ranges.
-    first_slice_row_ranges = None
-    current_col_range = None
-    current_row_ranges = []
-    prev_row_range = None
-
-    for start_col, end_col, start_row, end_row in zip(
-        index_df["start_col"], index_df["end_col"], index_df["start_row"], index_df["end_row"]
-    ):
-        col_range, row_range = (start_col, end_col), (start_row, end_row)
-        if current_col_range is None:
-            current_col_range = col_range
-        elif col_range != current_col_range:
-            assert col_range[0] == current_col_range[1]
-            if first_slice_row_ranges is None:
-                first_slice_row_ranges = current_row_ranges[:]
-            else:
-                assert current_row_ranges == first_slice_row_ranges
-            current_row_ranges, prev_row_range, current_col_range = [], None, col_range
-        if prev_row_range is not None:
-            assert row_range[0] == prev_row_range[1]
-        current_row_ranges.append(row_range)
-        prev_row_range = row_range
-
-    if first_slice_row_ranges is None:
-        first_slice_row_ranges = current_row_ranges
-    else:
-        assert current_row_ranges == first_slice_row_ranges
-
-
 def randomize_values(frame, positions, columns):
     if not len(positions) or not columns:
         return
@@ -391,6 +365,7 @@ def test_insert(s3_storage, strategy, index_type, data):
     )
     lib.write("symbol", target)
     lib.merge_experimental("symbol", source, strategy=strategy, on=on)
-    assert_valid_index(lib._dev_tools.library_tool().read_index("symbol"))
+    index_df = lib._dev_tools.library_tool().read_index("symbol")
+    assert_index_key_structure_static_schema(index_df, rows_per_segment=rows_per_segment)
     result = lib.read("symbol").data
     assert_frame_equal(result, expected)
