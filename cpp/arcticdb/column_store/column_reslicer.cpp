@@ -12,8 +12,14 @@
 
 #include <arcticdb/column_store/string_pool.hpp>
 #include <arcticdb/column_store/column_reslicer.hpp>
+#include <arcticdb/entity/type_utils.hpp>
 
 namespace arcticdb {
+
+size_t max_rows_per_segment(size_t rows_per_segment) {
+    // If rows_per_segment_ == 2 max_rows_per_segment_ would be 2 without the std::max
+    return std::max((4 * rows_per_segment) / 3, rows_per_segment + 1);
+}
 
 ColumnReslicer::ColumnReslicer(const size_t num_input_slices, const ReslicingInfo& reslicing_info) :
     reslicing_info_(reslicing_info) {
@@ -259,12 +265,12 @@ std::vector<Column> ColumnReslicer::reslice_by_iteration(std::vector<StringPool>
 
 std::vector<Column> ColumnReslicer::initialise_output_columns() const {
     std::vector<Column> output_columns;
-    output_columns.reserve(reslicing_info_.num_segments);
+    output_columns.reserve(reslicing_info_.num_segments());
     const auto& type = *type_;
     if (sparse_) {
         uint64_t input_values{0};
         // Represents a global bitset for all of the input columns, with 0s where an entire row slice is missing
-        util::BitSet bitset(reslicing_info_.total_rows);
+        util::BitSet bitset(reslicing_info_.total_rows());
         util::BitSet::bulk_insert_iterator inserter(bitset);
         size_t idx{0};
         for (const auto& col_or_rows : cols_or_row_counts_) {
@@ -298,7 +304,7 @@ std::vector<Column> ColumnReslicer::initialise_output_columns() const {
         );
         uint64_t output_values{0};
         uint64_t output_rows{0};
-        for (idx = 0; idx < reslicing_info_.num_segments; ++idx) {
+        for (idx = 0; idx < reslicing_info_.num_segments(); ++idx) {
             auto num_rows = reslicing_info_.rows_in_slice(idx);
             auto set_bits = bitset.count_range(output_rows, output_rows + num_rows - 1, bit_index);
             output_values += set_bits;
@@ -319,7 +325,7 @@ std::vector<Column> ColumnReslicer::initialise_output_columns() const {
                 output_values
         );
     } else {
-        for (size_t idx = 0; idx < reslicing_info_.num_segments; ++idx) {
+        for (size_t idx = 0; idx < reslicing_info_.num_segments(); ++idx) {
             output_columns.emplace_back(
                     type, reslicing_info_.rows_in_slice(idx), AllocationType::PRESIZED, Sparsity::NOT_PERMITTED
             );
