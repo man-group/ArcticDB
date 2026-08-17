@@ -852,17 +852,32 @@ std::vector<EntityId> MergeUpdateClause::process(std::vector<EntityId>&& entity_
         return {};
     }
 
+    // Before new_row_slices was always of size 1
+    // Now it can be > 1, these are the new row slices
     auto new_row_slices = update_and_insert(matched, target_descriptor, std::move(row_slices), source_start_end);
 
     std::vector<EntityId> res;
-    for (auto& row_slice : new_row_slices) {
+    for (auto&& [index, row_slice] : folly::enumerate(new_row_slices)) {
+        // Create new component to disambiguate row slices after the pipeline
+        // struct MergeUpdateRowSliceInfo {
+        //    size_t num_row_slices;
+        //    size_t row_slice_position;
+        // };
         const size_t entity_count = row_slice.segments_->size();
         std::vector<EntityId> entts = component_manager_->add_entities(
                 std::move(*row_slice.segments_),
                 std::move(*row_slice.row_ranges_),
                 std::move(*row_slice.col_ranges_),
                 std::vector<EntityFetchCount>(entity_count, 1),
-                std::vector(entity_count, MergeUpdateInsertedRowsComponent{matched.total_unmatched_source_rows()})
+                std::vector(entity_count, MergeUpdateInsertedRowsComponent{matched.total_unmatched_source_rows()}),
+                std::vector(
+                        entity_count,
+                        MergeUpdateRowSliceInfo{
+                                .num_new_row_slices = new_row_slices.size(),
+                                .row_slice_position = index,
+                                .num_rows = *row_slice.segments_->row_count()
+                        }
+                )
         );
         res.insert(res.end(), std::make_move_iterator(entts.begin()), std::make_move_iterator(entts.end()));
     }

@@ -1158,7 +1158,7 @@ std::vector<EntityId> WriteClause::process(std::vector<EntityId>&& entity_ids) c
     }
     const auto proc =
             gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(
-                    *component_manager_, std::move(entity_ids)
+                    *component_manager_, entity_ids
             );
 
     std::vector<std::shared_ptr<folly::Future<SliceAndKey>>> data_segments_to_write;
@@ -1175,7 +1175,9 @@ std::vector<EntityId> WriteClause::process(std::vector<EntityId>&& entity_ids) c
                 ))
         );
     }
-    return component_manager_->add_entities(std::move(data_segments_to_write));
+    // Forward the input entities and add the write future so that we can wait on it
+    component_manager_->add_component_to_entities(entity_ids, std::move(data_segments_to_write));
+    return entity_ids;
 }
 
 stream::PartialKey WriteClause::create_partial_key(const SegmentInMemory& segment, const RowRange& row_range) const {

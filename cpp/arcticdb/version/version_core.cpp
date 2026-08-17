@@ -3133,7 +3133,7 @@ folly::Future<ReadVersionOutput> read_frame_for_version(
     return start_pipeline(VersionIdentifier{version_info});
 }
 
-folly::Future<std::vector<SliceAndKey>> read_modify_write_data_keys(
+folly::Future<std::vector<std::pair<SliceAndKey, EntityId>>> read_modify_write_data_keys(
         const std::shared_ptr<Store>& store, std::shared_ptr<ReadQuery> read_query, const ReadOptions& read_options,
         const IndexPartialKey& target_partial_index_key, const std::shared_ptr<PipelineContext>& pipeline_context,
         std::shared_ptr<ComponentManager> component_manager = std::make_shared<ComponentManager>(),
@@ -3160,7 +3160,8 @@ folly::Future<std::vector<SliceAndKey>> read_modify_write_data_keys(
                         [](const std::shared_ptr<folly::Future<SliceAndKey>>& fut) {
                             return std::move(*fut).thenValueInline([](SliceAndKey&& slice_and_key) {
                                 slice_and_key.unset_segment();
-                                return slice_and_key;
+                                // Return the slice and key and the entity this slice and key was emited for
+                                return {slice_and_key, entity_id};
                             });
                         }
                 );
@@ -3287,7 +3288,7 @@ folly::Future<AtomKey> merge_update_impl(
                         write_options,
                         source = std::move(source),
                         target_partial_index_key,
-                        strategy](std::vector<SliceAndKey>&& data_keys_and_slices) {
+                        strategy](std::vector<SliceAndKey, EntityId>&& data_keys_and_slices) {
                 const StreamDescriptor& target_descriptor = pipeline_context->descriptor();
                 folly::SemiFuture<std::vector<SliceAndKey>> inserted_row_slices_fut =
                         (target_descriptor.index().type() == IndexDescriptor::Type::ROWCOUNT && strategy.insert())
@@ -3309,15 +3310,19 @@ folly::Future<AtomKey> merge_update_impl(
                                     write_options,
                                     source,
                                     target_partial_index_key,
-                                    data_keys_and_slices = std::move(data_keys_and_slices
+                                    data_keys_and_slices_and_entities = std::move(data_keys_and_slices
                                     )](std::vector<SliceAndKey>&& inserted_row_slices) mutable {
-                            ankerl::unordered_dense::map<RowRange, size_t> inserted_rows_per_row_range;
-                            component_manager->process_entities(
-                                    [&](const MergeUpdateInsertedRowsComponent& inserted_rows,
-                                        const std::shared_ptr<RowRange>& row_range) {
-                                        inserted_rows_per_row_range.emplace(*row_range, inserted_rows);
-                                    }
-                            );
+                            ankerl::unordered_dense::map<RowRange, std::vector<MergeUpdateRowSliceInfo>>
+                                    inserted_rows_per_row_range;
+                            for (auto [slice_and_key, entity_id] : data_keys_and_slices_and_entities) {
+                                MergeUpdateRowSliceInfo info =
+                                        component_manager->get<MergeUpdateRowSliceInfo>(entity_id);
+                                if (!inserted_rows_per_row_range.contains(slice_and_key.row_range)) {
+                                    inserted_rows_per_row_range[slice_and_key.row_range].resize(info.num_new_row_slices
+                                    );
+                                }
+                                inserted_rows_per_row_range[slice_and_key.row_range][info.row_slice_position] = info;
+                            }
                             data_keys_and_slices.insert(
                                     data_keys_and_slices.end(),
                                     std::make_move_iterator(inserted_row_slices.begin()),
