@@ -343,17 +343,10 @@ bool is_col_eligible_for_stats(DataType col_data_type) {
 } // namespace
 
 // Build MINMAX stats for every eligible column, computed directly from the TSD.
-// The timeseries index is skipped.
 ColumnStats::ColumnStats(const TimeseriesDescriptor& tsd) {
     const auto& fields = tsd.fields();
 
-    const bool has_timeseries_index = tsd.index().field_count() > 0;
-    const size_t start_field_index = has_timeseries_index ? 1 : 0;
-
     for (const auto& [field_index, field] : folly::enumerate(fields)) {
-        if (field_index < start_field_index) {
-            continue;
-        }
         if (!is_col_eligible_for_stats(field.type().data_type())) {
             continue;
         }

@@ -19,12 +19,15 @@ import string
 
 from arcticdb import OutputFormat
 from arcticdb.exceptions import ArcticNativeException, InternalException, UserInputException, SchemaException
+from arcticdb_ext.storage import KeyType
 from arcticdb.version_store.processing import QueryBuilder
+import arcticdb.toolbox.query_stats as qs
 from arcticdb.util.test import (
     assert_frame_equal,
     config_context,
     get_wide_dataframe,
     make_dynamic,
+    query_stats_operation_count,
     regularize_dataframe,
     DYNAMIC_STRINGS_SUFFIX,
     FIXED_STRINGS_SUFFIX,
@@ -1004,6 +1007,176 @@ def test_filter_with_multi_index(lmdb_version_store_v1, any_output_format, colum
     q = q[(q["a"] == 11) | (q["a"] == 13)]
     expected = df[(df["a"] == 11) | (df["a"] == 13)]
     generic_filter_test(lib, symbol, q, expected)
+
+
+def reorder_index(index, sortedness):
+    if sortedness == "ascending":
+        return index
+    elif sortedness == "descending":
+        return index[::-1]
+    elif sortedness == "shuffled":
+        # Places the largest values in the first row slice
+        return index[[4, 5, 0, 1, 2, 3]]
+    raise ValueError(sortedness)
+
+
+SORTEDNESS = ["ascending", "descending", "shuffled"]
+
+
+@pytest.mark.parametrize("index_name", [None, "my_ts"], ids=["unnamed_index", "named_index"])
+@pytest.mark.parametrize("sortedness", SORTEDNESS)
+def test_filter_on_index_column(
+    in_memory_store_factory,
+    any_output_format,
+    column_stats_filtering_enabled_and_disabled,
+    index_name,
+    sortedness,
+):
+    """The primary index is referred to by its plain name, "index" when it has none. Results must
+    match pandas whatever the sortedness, and whether or not column stats are used for pruning."""
+    lib = in_memory_store_factory(column_group_size=2, segment_row_size=2)
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol = "test_filter_on_index_column"
+    index = reorder_index(pd.date_range("2000-01-01", periods=6), sortedness)
+    index.name = index_name
+    df = pd.DataFrame({"a": np.arange(6, dtype=np.int64)}, index=index)
+    lib.write(symbol, df, validate_index=False)
+    lib.create_column_stats_experimental(symbol)
+
+    queried_name = "index" if index_name is None else index_name
+    mid = pd.Timestamp("2000-01-04")
+    for description, build_query, expected_mask in [
+        ("greater than", lambda c: c > mid, df.index > mid),
+        ("less than or equal", lambda c: c <= mid, df.index <= mid),
+        ("equals", lambda c: c == mid, df.index == mid),
+        ("not equals", lambda c: c != mid, df.index != mid),
+        (
+            "between",
+            lambda c: (c > pd.Timestamp("2000-01-02")) & (c <= pd.Timestamp("2000-01-05")),
+            (df.index > pd.Timestamp("2000-01-02")) & (df.index <= pd.Timestamp("2000-01-05")),
+        ),
+    ]:
+        q = QueryBuilder()
+        q = q[build_query(q[queried_name])]
+        received = lib.read(symbol, query_builder=q).data
+        assert_frame_equal(df[expected_mask], received), description
+
+
+@pytest.mark.parametrize("sortedness", SORTEDNESS)
+def test_filter_on_index_column_nat(
+    in_memory_store_factory, any_output_format, column_stats_filtering_enabled_and_disabled, sortedness
+):
+    """Row slice 1 is entirely NaT
+    Slice 2 is partially NaT"""
+    lib = in_memory_store_factory(column_group_size=2, segment_row_size=2)
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol = "test_filter_on_index_column_nat"
+    nat = pd.NaT
+    index = pd.DatetimeIndex(
+        [
+            pd.Timestamp("2000-01-01"),
+            pd.Timestamp("2000-01-02"),
+            nat,
+            nat,
+            nat,
+            pd.Timestamp("2000-01-06"),
+        ]
+    )
+    df = pd.DataFrame({"a": np.arange(6, dtype=np.int64)}, index=reorder_index(index, sortedness))
+    lib.write(symbol, df, validate_index=False)
+    lib.create_column_stats_experimental(symbol)
+
+    mid = pd.Timestamp("2000-01-03")
+    for build_query, expected_mask in [
+        (lambda c: c > mid, df.index > mid),
+        (lambda c: c <= mid, df.index <= mid),
+        (lambda c: c != mid, df.index != mid),
+    ]:
+        q = QueryBuilder()
+        q = q[build_query(q["index"])]
+        received = lib.read(symbol, query_builder=q).data
+        assert_frame_equal(df[expected_mask], received)
+
+
+def test_filter_on_index_column_with_date_range(
+    in_memory_store_factory, any_output_format, column_stats_filtering_enabled_and_disabled, clear_query_stats
+):
+    """date_range= is pruned by the index key rather than by column stats. The two mechanisms compose:
+    the date range excludes the outer row slices, then the filter's index stats exclude one of those
+    remaining."""
+    lib = in_memory_store_factory(column_group_size=2, segment_row_size=2)
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol = "test_filter_on_index_column_with_date_range"
+    df = pd.DataFrame({"a": np.arange(8, dtype=np.int64)}, index=pd.date_range("2000-01-01", periods=8))
+    lib.write(symbol, df)
+    lib.create_column_stats_experimental(symbol)
+    assert len(lib.library_tool().find_keys_for_symbol(KeyType.TABLE_DATA, symbol)) == 4
+
+    # Row slices are [01-01, 01-02], [01-03, 01-04], [01-05, 01-06] and [01-07, 01-08]. The date range
+    # excludes the first and last outright.
+    date_range = (pd.Timestamp("2000-01-03"), pd.Timestamp("2000-01-06"))
+    threshold = pd.Timestamp("2000-01-04")
+
+    def read_and_count(**kwargs):
+        qs.reset_stats()
+        data = lib.read(symbol, **kwargs).data
+        return data, query_stats_operation_count(qs.get_query_stats(), "Memory_GetObject", "TABLE_DATA")
+
+    qs.enable()
+    received, reads = read_and_count(date_range=date_range)
+    assert_frame_equal(df.loc[date_range[0] : date_range[1]], received)
+    assert reads == 2, "The date range prunes the two row slices it does not intersect"
+
+    q = QueryBuilder()
+    q = q[q["index"] > threshold]
+    received, reads = read_and_count(date_range=date_range, query_builder=q)
+    in_range = df.loc[date_range[0] : date_range[1]]
+    assert_frame_equal(in_range[in_range.index > threshold], received)
+    if column_stats_filtering_enabled_and_disabled:
+        # Of the two slices the date range keeps, [01-03, 01-04] ends on the threshold, so its index
+        # stats rule it out. Only [01-05, 01-06] is read.
+        assert reads == 1
+    else:
+        assert reads == 2, "Filtering is disabled, so both slices in the date range should be read"
+
+
+def test_filter_on_multi_index_primary_level(
+    in_memory_store_factory, any_output_format, column_stats_filtering_enabled_and_disabled
+):
+    """The primary level of a MultiIndex is referred to by its own name and carries stats,
+    alongside the __idx__-mangled inner level covered by test_filter_on_multi_index."""
+    lib = in_memory_store_factory(column_group_size=2, segment_row_size=2)
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol = "test_filter_on_multi_index_primary_level"
+    dates = [pd.Timestamp("2000-01-01"), pd.Timestamp("2000-01-02"), pd.Timestamp("2000-01-03")]
+    df = pd.DataFrame(
+        data={"a": np.arange(6, dtype=np.int64)},
+        index=pd.MultiIndex.from_arrays(
+            [[d for d in dates for _ in range(2)], [0, 1] * 3], names=["datetime", "level"]
+        ),
+    )
+    lib.write(symbol, df)
+    lib.create_column_stats_experimental(symbol)
+
+    # The primary level is stored under its own name, the inner level under a mangled one, even though
+    # a query refers to the inner level as q["level"].
+    assert lib.get_column_stats_info_experimental(symbol) == {
+        "datetime": {"MINMAX"},
+        "__idx__level": {"MINMAX"},
+        "a": {"MINMAX"},
+    }
+    stats_columns = set(lib.read_column_stats_experimental(symbol).column_names)
+    assert stats_columns == {"start_row", "end_row"} | {
+        f"v1_{stat}({col})"
+        for col in ("datetime", "__idx__level", "a")
+        for stat in ("MIN", "MAX", "NAN_COUNT", "NULL_COUNT")
+    }
+
+    threshold = pd.Timestamp("2000-01-01")
+    q = QueryBuilder()
+    q = q[q["datetime"] > threshold]
+    received = lib.read(symbol, query_builder=q).data
+    assert_frame_equal(df[df.index.get_level_values("datetime") > threshold], received)
 
 
 def test_filter_on_multi_index(lmdb_version_store_v1, any_output_format):
