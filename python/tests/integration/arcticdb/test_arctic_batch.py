@@ -1079,7 +1079,9 @@ def test_read_batch_missing_keys(arctic_library):
     lib_tool.remove(s2_data_key)
     lib_tool.remove(s3_key_to_delete)
     # When
-    batch = lib.read_batch(["s1", "s2", ReadRequest("s3", as_of=0)])
+    # Disable version map cache so the read hits storage and sees the missing keys
+    with config_context("VersionMap.ReloadInterval", 0):
+        batch = lib.read_batch(["s1", "s2", ReadRequest("s3", as_of=0)])
     # Then
     assert isinstance(batch[0], DataError)
     assert batch[0].symbol == "s1"

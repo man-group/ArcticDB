@@ -1818,10 +1818,12 @@ def test_batch_read_metadata_missing_keys(basic_store):
     metadata = vits["s2"].metadata
     assert metadata["s2"] == "more_metadata"
 
-    with pytest.raises(StorageException):
-        _ = lib.batch_read_metadata(["s1"], [None])
-    with pytest.raises(StorageException):
-        _ = lib.batch_read_metadata(["s2"], [0])
+    # Disable version map cache so the read hits storage and sees the missing keys
+    with config_context("VersionMap.ReloadInterval", 0):
+        with pytest.raises(StorageException):
+            _ = lib.batch_read_metadata(["s1"], [None])
+        with pytest.raises(StorageException):
+            _ = lib.batch_read_metadata(["s2"], [0])
 
 
 @pytest.mark.storage
@@ -1888,10 +1890,12 @@ def test_batch_get_info_missing_keys(basic_store):
 
     info = lib.batch_get_info(["s2"], [1])
 
-    with pytest.raises(StorageException):
-        _ = lib.batch_get_info(["s1"], [None])
-    with pytest.raises(StorageException):
-        _ = lib.batch_get_info(["s2"], [0])
+    # Disable version map cache so the read hits storage and sees the missing keys
+    with config_context("VersionMap.ReloadInterval", 0):
+        with pytest.raises(StorageException):
+            _ = lib.batch_get_info(["s1"], [None])
+        with pytest.raises(StorageException):
+            _ = lib.batch_get_info(["s2"], [0])
 
 
 @pytest.mark.storage
