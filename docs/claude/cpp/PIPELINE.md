@@ -135,20 +135,24 @@ have separate read-concurrency controls — `VersionStore.SegmentReadWindow` and
 
 Column stats store per-segment min/max values for selected columns. At read time, if a `FilterClause` is present, the column stats are evaluated against the filter expression to prune segments that cannot contain matching rows. This avoids fetching data segments from storage unnecessarily.
 
+Stats are built for every column whose type is numeric or bool (`is_col_eligible_for_stats()` in `column_stats.cpp`), which includes the primary index column at field offset 0. Index stats are what allow row slices of an out-of-order symbol to be pruned: the index key records each row slice's *first and last* index value rather than its minimum and maximum, so it cannot prune unsorted data. They also prune `QueryBuilder` filters on the index column, which `read(date_range=...)` does not cover — `plan_query()` never rewrites an index-column `FilterClause` into a `DateRangeClause`.
+
 ### Gating
 
 Controlled by the `ColumnStats.UseForQueries` config flag (checked in `is_column_stats_enabled()`). The function `should_try_column_stats_read()` returns true only when the flag is on and the query's first non-range clause is a `FilterClause`.
 
 ### Data Model
 
-Column stats are stored as a separate `COLUMN_STATS` key derived from the index key (see `index_key_to_column_stats_key()` in `version_core.cpp`). The stats segment has `start_index` and `end_index` columns identifying each row-slice, plus columns like `v1.0_MIN(col)` and `v1.0_MAX(col)` for each tracked column.
+Column stats are stored as a separate `COLUMN_STATS` key derived from the index key's version id, creation timestamp and content hash (see `index_key_to_column_stats_key()` in `version_core.cpp`). A new index key therefore has no stats, so writing or appending to a symbol leaves the new version unstatted until stats are recreated.
+
+The stats segment has `start_row` and `end_row` columns identifying each row-slice, plus columns like `v1_MIN(col)` and `v1_MAX(col)` for each tracked column. The `ColumnStatsHeader` protobuf in the segment metadata maps each `data_col_offset` (an offset into the index key's `TimeseriesDescriptor` fields, so offset 0 is the primary index) to its stat entries.
 
 Key types:
 
 | Type | Location | Purpose |
 |------|----------|---------|
-| `ColumnStatsData` | `column_stats_filter.hpp` | Parsed stats segment, indexed by `(start_index, end_index)` |
-| `ColumnStatsRow` | `column_stats_filter.hpp` | Stats for a single row-slice: start/end index + per-column min/max |
+| `ColumnStatsData` | `column_stats_filter.hpp` | Parsed stats segment, indexed by `RowRange` |
+| `ColumnStatsRow` | `column_stats_filter.hpp` | Stats for a single row-slice: start/end row + per-column min/max |
 | `ColumnStatsValues` | `column_stats_filter.hpp` | Min/max `Value` pair for one column in one row-slice, plus `column_absent` flag marking segments where the column was not present |
 | `ColumnStatElement` | `column_stats.hpp` | `MIN` or `MAX` — the individual stat within a `MINMAX` stat type |
 

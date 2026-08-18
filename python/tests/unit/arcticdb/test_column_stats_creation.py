@@ -63,6 +63,8 @@ def generate_symbol(lib, sym):
     lib.write(sym, df0)
     lib.append(sym, df1)
     return row_range_columns_to_pl(lib, sym).with_columns(
+        pl.Series("v1_MIN(index)", [df0.index.min(), df1.index.min()]),
+        pl.Series("v1_MAX(index)", [df0.index.max(), df1.index.max()]),
         pl.Series("v1_MIN(col_1)", [df0["col_1"].min(), df1["col_1"].min()]),
         pl.Series("v1_MAX(col_1)", [df0["col_1"].max(), df1["col_1"].max()]),
         pl.Series("v1_MIN(col_2)", [df0["col_2"].min(), df1["col_2"].min()]),
@@ -98,7 +100,11 @@ def test_column_stats_basic_flow(in_memory_store_factory, lib_name, encoding_ver
     lib.drop_column_stats_experimental(sym)
 
     lib.create_column_stats_experimental(sym)
-    assert lib.get_column_stats_info_experimental(sym) == {"col_1": {"MINMAX"}, "col_2": {"MINMAX"}}
+    assert lib.get_column_stats_info_experimental(sym) == {
+        "index": {"MINMAX"},
+        "col_1": {"MINMAX"},
+        "col_2": {"MINMAX"},
+    }
 
     column_stats = lib.read_column_stats_experimental(sym)
     assert_stats_equal(column_stats, expected_column_stats)
@@ -432,7 +438,7 @@ def test_column_stats_as_of(in_memory_store_factory, lib_name, encoding_version,
     lib._set_output_format_for_pipeline_tests(any_output_format)
     sym = "test_column_stats_as_of"
     expected_column_stats = generate_symbol(lib, sym)[[0]]
-    expected_stats_info = {"col_1": {"MINMAX"}, "col_2": {"MINMAX"}}
+    expected_stats_info = {"index": {"MINMAX"}, "col_1": {"MINMAX"}, "col_2": {"MINMAX"}}
     lib.create_column_stats_experimental(sym, as_of=0)
     assert lib.get_column_stats_info_experimental(sym, as_of=0) == expected_stats_info
     with pytest.raises(StorageException):
@@ -487,7 +493,11 @@ def test_column_stats_multiple_indexes_different_columns(
     expected_column_stats = generate_symbol(lib, sym)
 
     lib.create_column_stats_experimental(sym)
-    assert lib.get_column_stats_info_experimental(sym) == {"col_1": {"MINMAX"}, "col_2": {"MINMAX"}}
+    assert lib.get_column_stats_info_experimental(sym) == {
+        "index": {"MINMAX"},
+        "col_1": {"MINMAX"},
+        "col_2": {"MINMAX"},
+    }
 
     column_stats = lib.read_column_stats_experimental(sym)
     assert_stats_equal(column_stats, expected_column_stats)
@@ -529,7 +539,11 @@ def test_column_stats_duplicated_primary_index(in_memory_store_factory, lib_name
     )
 
     lib.create_column_stats_experimental(sym)
-    assert lib.get_column_stats_info_experimental(sym) == {"col_1": {"MINMAX"}, "col_2": {"MINMAX"}}
+    assert lib.get_column_stats_info_experimental(sym) == {
+        "index": {"MINMAX"},
+        "col_1": {"MINMAX"},
+        "col_2": {"MINMAX"},
+    }
 
     column_stats = lib.read_column_stats_experimental(sym)
     assert_stats_equal(column_stats, expected_column_stats)
@@ -597,6 +611,7 @@ def test_column_stats_dynamic_schema_missing_data(
     )
     lib.create_column_stats_experimental(sym)
     assert lib.get_column_stats_info_experimental(sym) == {
+        "index": {"MINMAX"},
         "col_1": {"MINMAX"},
         "col_2": {"MINMAX"},
         "col_5": {"MINMAX"},
@@ -697,6 +712,7 @@ def test_column_stats_dynamic_schema_types_changing(
         *float_minmax("float_to_int"),
     )
     expected_stats_info = {
+        "index": {"MINMAX"},
         "int_widening": {"MINMAX"},
         "int_narrowing": {"MINMAX"},
         "unsigned_to_wider_signed_int": {"MINMAX"},
@@ -909,9 +925,10 @@ def header_offset_by_stat(header):
     }
 
 
-def assert_header_offsets_match_field_names(lib, sym, header, col_name_by_offset):
+def assert_header_offsets_match_field_names(lib, sym, header):
     """Every entry's stats_seg_offset must point at the stats column named after the data column
-    at its data_col_offset."""
+    at its data_col_offset. data_col_offset indexes the index key's TimeseriesDescriptor fields,
+    so offset 0 is the primary index."""
     field_name_by_type = {
         ColumnStatsType.MIN_V1: "v1_MIN",
         ColumnStatsType.MAX_V1: "v1_MAX",
@@ -919,8 +936,10 @@ def assert_header_offsets_match_field_names(lib, sym, header, col_name_by_offset
         ColumnStatsType.NULL_COUNT_V1: "v1_NULL_COUNT",
     }
     lib_tool = lib.library_tool()
-    keys = lib_tool.find_keys_for_symbol(KeyType.COLUMN_STATS, sym)
-    fields = lib_tool.read_descriptor(keys[0]).fields()
+    index_key = lib_tool.find_keys_for_symbol(KeyType.TABLE_INDEX, sym)[0]
+    col_name_by_offset = [field.name for field in lib_tool.read_timeseries_descriptor(index_key).fields]
+    stats_key = lib_tool.find_keys_for_symbol(KeyType.COLUMN_STATS, sym)[0]
+    fields = lib_tool.read_descriptor(stats_key).fields()
     for data_col_offset, entry in header_all_entries(header):
         expected = f"{field_name_by_type[entry.type]}({col_name_by_offset[data_col_offset]})"
         assert fields[entry.stats_seg_offset].name == expected
@@ -937,7 +956,8 @@ def test_column_stats_header_metadata(in_memory_store_factory, lib_name, encodin
     sym = "test_column_stats_header_metadata"
     generate_symbol(lib, sym)
 
-    # Auto-discovery creates stats for all eligible columns (col_1 at offset 2, col_2 at offset 3).
+    # Auto-discovery creates stats for all eligible columns: the index at offset 0, col_1 at offset 2
+    # and col_2 at offset 3. col_0 at offset 1 is a string, so it is ineligible.
     # MINMAX emits 4 stat entries per column: MIN, MAX, NAN_COUNT, NULL_COUNT.
     minmax_types = {
         ColumnStatsType.MIN_V1,
@@ -951,13 +971,13 @@ def test_column_stats_header_metadata(in_memory_store_factory, lib_name, encodin
     assert header.version == 1
     # if you change the structure, consider whether you need to change header.version too
     assert len(header.ListFields()) == 2
-    assert header_stat_count(header) == 8
-    assert header_stat_pairs(header) == {(2, t) for t in minmax_types} | {(3, t) for t in minmax_types}
+    assert header_stat_count(header) == 12
+    assert header_stat_pairs(header) == {(offset, t) for offset in (0, 2, 3) for t in minmax_types}
     offsets = [entry.stats_seg_offset for _, entry in header_all_entries(header)]
-    assert len(set(offsets)) == 8
+    assert len(set(offsets)) == 12
 
     # Verify descriptor field names match the offsets
-    assert_header_offsets_match_field_names(lib, sym, header, {2: "col_1", 3: "col_2"})
+    assert_header_offsets_match_field_names(lib, sym, header)
 
 
 def test_column_stats_create_twice_is_idempotent(in_memory_store_factory, lib_name):
@@ -978,10 +998,14 @@ def test_column_stats_create_twice_is_idempotent(in_memory_store_factory, lib_na
 
     assert header_offset_by_stat(second_header) == header_offset_by_stat(first_header)
     assert second_header.version == first_header.version
-    assert header_stat_count(second_header) == 8
-    assert len({entry.stats_seg_offset for _, entry in header_all_entries(second_header)}) == 8
-    assert_header_offsets_match_field_names(lib, sym, second_header, {2: "col_1", 3: "col_2"})
-    assert lib.get_column_stats_info_experimental(sym) == {"col_1": {"MINMAX"}, "col_2": {"MINMAX"}}
+    assert header_stat_count(second_header) == 12
+    assert len({entry.stats_seg_offset for _, entry in header_all_entries(second_header)}) == 12
+    assert_header_offsets_match_field_names(lib, sym, second_header)
+    assert lib.get_column_stats_info_experimental(sym) == {
+        "index": {"MINMAX"},
+        "col_1": {"MINMAX"},
+        "col_2": {"MINMAX"},
+    }
     assert_stats_equal(lib.read_column_stats_experimental(sym), expected_column_stats)
 
 
@@ -1008,6 +1032,7 @@ def test_column_stats_duplicated_column_names(in_memory_store_factory, lib_name,
 
     lib.create_column_stats_experimental(sym)
     assert lib.get_column_stats_info_experimental(sym) == {
+        "index": {"MINMAX"},
         "col_0": {"MINMAX"},
         "__col_col_1__1": {"MINMAX"},
         "__col_col_1__2": {"MINMAX"},
@@ -1034,7 +1059,7 @@ def test_column_stats_duplicated_column_names(in_memory_store_factory, lib_name,
 
 @pytest.mark.parametrize("index_name", ("index", "some-other-name"))
 def test_column_stats_col_called_index(
-    in_memory_store_factory, lib_name, encoding_version, any_output_format, index_name
+    in_memory_store_factory, lib_name, encoding_version, any_output_format, index_name, column_stats_filtering_enabled
 ):
     """Check some edge cases where the data column's name matches the index column. 'index' is used as an internal
     name for un-named indexes, so using it can expose some bugs."""
@@ -1058,11 +1083,16 @@ def test_column_stats_col_called_index(
         expected_title = "__col_index__0"
     else:
         expected_title = index_name
+    # The index keeps the name "index" and the data column is mangled out of the way, so the two get
+    # separate stats columns rather than being merged.
+    assert lib.get_column_stats_info_experimental(sym) == {"index": {"MINMAX"}, expected_title: {"MINMAX"}}
     res = lib.read_column_stats_experimental(sym)
     expected = pl.DataFrame(
         {
             "start_row": pl.Series([0], dtype=pl.UInt64),
             "end_row": pl.Series([2], dtype=pl.UInt64),
+            "v1_MIN(index)": [pd.Timestamp("2000-01-01")],
+            "v1_MAX(index)": [pd.Timestamp("2000-01-02")],
             f"v1_MIN({expected_title})": [0],
             f"v1_MAX({expected_title})": [1],
         }
@@ -1070,13 +1100,19 @@ def test_column_stats_col_called_index(
     assert_stats_equal(res, expected)
 
     # Now do some filtering. We apply query builder filters to the index column first!
-    # We should make sure we haven't messed them up.
-    if index_name == "index":
-        q = QueryBuilder()
-        q = q[q[index_name] == pd.Timestamp("2000-01-01")]
-        res = lib.read(sym, query_builder=q).data
-        assert res.shape == (1, 1)
-        assert res.values == [[0]]
+    # We should make sure we haven't messed them up. Column stats pruning is enabled here, so a
+    # filter on the index must not be answered using the similarly named data column's stats.
+    q = QueryBuilder()
+    q = q[q["index"] == pd.Timestamp("2000-01-01")]
+    res = lib.read(sym, query_builder=q).data
+    assert res.shape == (1, 1)
+    assert res.values == [[0]]
+
+    q = QueryBuilder()
+    q = q[q[expected_title] == 1]
+    res = lib.read(sym, query_builder=q).data
+    assert res.shape == (1, 1)
+    assert res.values == [[1]]
 
 
 @pytest.mark.parametrize(
@@ -1089,8 +1125,8 @@ def test_column_stats_col_called_index(
 def test_column_stats_multiindex(
     in_memory_store_factory, lib_name, encoding_version, any_output_format, index_level_name, stored_col_name
 ):
-    """Column stats on a multiindex DataFrame: auto-discovery picks up data columns and the inner
-    index level; the outer/primary index is excluded (already pruned by the index)."""
+    """Column stats on a multiindex DataFrame: auto-discovery picks up data columns, the primary
+    index level and the inner index level."""
     lib = in_memory_store_factory(
         column_group_size=2,
         segment_row_size=2,
@@ -1128,14 +1164,20 @@ def test_column_stats_multiindex(
 
     full_df = pd.concat([df0, df1])
 
-    # Auto-discovery picks up the data column and the inner index level (stored name), but not
-    # the outer/primary index.
+    # Auto-discovery picks up the data column, the primary index level and the inner index level
+    # (stored name).
     lib.create_column_stats_experimental(sym)
-    assert lib.get_column_stats_info_experimental(sym) == {"val": {"MINMAX"}, stored_col_name: {"MINMAX"}}
+    assert lib.get_column_stats_info_experimental(sym) == {
+        "datetime": {"MINMAX"},
+        "val": {"MINMAX"},
+        stored_col_name: {"MINMAX"},
+    }
 
     # Read and verify the stats
     stats = lib.read_column_stats_experimental(sym)
     expected = row_range_columns_to_pl(lib, sym).with_columns(
+        pl.Series("v1_MIN(datetime)", [dt1, dt3]),
+        pl.Series("v1_MAX(datetime)", [dt2, dt4]),
         pl.Series("v1_MIN(val)", [100, 300]),
         pl.Series("v1_MAX(val)", [200, 400]),
         pl.Series(f"v1_MIN({stored_col_name})", [10, 30]),
@@ -1178,8 +1220,7 @@ def test_column_stats_series(
     in_memory_store_factory, lib_name, encoding_version, any_output_format, series_name, stored_col_name
 ):
     """Column stats on a datetime-indexed pd.Series. A Series is normalized with input_type == "series"
-    (not "df"); the outer/primary index must still be excluded (it is already pruned by the index
-    mechanism) and only the single value column gets MINMAX stats."""
+    (not "df"); both the primary index and the single value column get MINMAX stats."""
     lib = in_memory_store_factory(
         column_group_size=2,
         segment_row_size=2,
@@ -1194,11 +1235,12 @@ def test_column_stats_series(
     lib.append(sym, s1)
 
     lib.create_column_stats_experimental(sym)
-    # The outer datetime index is NOT included; only the value column.
-    assert lib.get_column_stats_info_experimental(sym) == {stored_col_name: {"MINMAX"}}
+    assert lib.get_column_stats_info_experimental(sym) == {"index": {"MINMAX"}, stored_col_name: {"MINMAX"}}
 
     stats = lib.read_column_stats_experimental(sym)
     expected = row_range_columns_to_pl(lib, sym).with_columns(
+        pl.Series("v1_MIN(index)", [s0.index.min(), s1.index.min()]),
+        pl.Series("v1_MAX(index)", [s0.index.max(), s1.index.max()]),
         pl.Series(f"v1_MIN({stored_col_name})", [1, 3]),
         pl.Series(f"v1_MAX({stored_col_name})", [2, 4]),
     )
@@ -1263,8 +1305,8 @@ def test_column_stats_string_indexed_symbol(in_memory_store_factory, lib_name):
 def test_column_stats_series_multiindex(
     in_memory_store_factory, lib_name, encoding_version, any_output_format, index_level_name, stored_col_name
 ):
-    """Column stats on a MultiIndex pd.Series: the outer/primary index is excluded, while the inner
-    index level and the value column both get MINMAX stats (mirrors the multiindex DataFrame case)."""
+    """Column stats on a MultiIndex pd.Series: the primary index level, the inner index level and
+    the value column all get MINMAX stats (mirrors the multiindex DataFrame case)."""
     lib = in_memory_store_factory(
         column_group_size=2,
         segment_row_size=2,
@@ -1286,12 +1328,17 @@ def test_column_stats_series_multiindex(
     lib.write(sym, s0)
     lib.append(sym, s1)
 
-    # The inner index level and the value column get stats, but not the outer/primary index.
     lib.create_column_stats_experimental(sym)
-    assert lib.get_column_stats_info_experimental(sym) == {"val": {"MINMAX"}, stored_col_name: {"MINMAX"}}
+    assert lib.get_column_stats_info_experimental(sym) == {
+        "datetime": {"MINMAX"},
+        "val": {"MINMAX"},
+        stored_col_name: {"MINMAX"},
+    }
 
     stats = lib.read_column_stats_experimental(sym)
     expected = row_range_columns_to_pl(lib, sym).with_columns(
+        pl.Series("v1_MIN(datetime)", [dt1, dt3]),
+        pl.Series("v1_MAX(datetime)", [dt2, dt4]),
         pl.Series("v1_MIN(val)", [100, 300]),
         pl.Series("v1_MAX(val)", [200, 400]),
         pl.Series(f"v1_MIN({stored_col_name})", [10, 30]),
@@ -1316,7 +1363,11 @@ def test_column_stats_create_tiny_thread_pool(
     expected_column_stats = generate_symbol(lib, sym)
 
     lib.create_column_stats_experimental(sym)
-    assert lib.get_column_stats_info_experimental(sym) == {"col_1": {"MINMAX"}, "col_2": {"MINMAX"}}
+    assert lib.get_column_stats_info_experimental(sym) == {
+        "index": {"MINMAX"},
+        "col_1": {"MINMAX"},
+        "col_2": {"MINMAX"},
+    }
 
     column_stats = lib.read_column_stats_experimental(sym)
     assert_stats_equal(column_stats, expected_column_stats)
@@ -1338,7 +1389,11 @@ def test_column_stats_drop_tiny_thread_pool(
     generate_symbol(lib, sym)
 
     lib.create_column_stats_experimental(sym)
-    assert lib.get_column_stats_info_experimental(sym) == {"col_1": {"MINMAX"}, "col_2": {"MINMAX"}}
+    assert lib.get_column_stats_info_experimental(sym) == {
+        "index": {"MINMAX"},
+        "col_1": {"MINMAX"},
+        "col_2": {"MINMAX"},
+    }
 
     lib.drop_column_stats_experimental(sym)
     with pytest.raises(StorageException):
@@ -1364,7 +1419,11 @@ def test_column_stats_create_independent_of_admission_ceiling(
     with config_context(ADMISSION_KEY, k):
         lib.create_column_stats_experimental(sym)
 
-    assert lib.get_column_stats_info_experimental(sym) == {"col_1": {"MINMAX"}, "col_2": {"MINMAX"}}
+    assert lib.get_column_stats_info_experimental(sym) == {
+        "index": {"MINMAX"},
+        "col_1": {"MINMAX"},
+        "col_2": {"MINMAX"},
+    }
     assert_stats_equal(lib.read_column_stats_experimental(sym), expected_column_stats)
 
 
@@ -1388,7 +1447,11 @@ def test_column_stats_create_admission_tiny_thread_pool(
     with config_context(ADMISSION_KEY, k):
         lib.create_column_stats_experimental(sym)
 
-    assert lib.get_column_stats_info_experimental(sym) == {"col_1": {"MINMAX"}, "col_2": {"MINMAX"}}
+    assert lib.get_column_stats_info_experimental(sym) == {
+        "index": {"MINMAX"},
+        "col_1": {"MINMAX"},
+        "col_2": {"MINMAX"},
+    }
     # One stats row per row slice.
     assert lib.read_column_stats_experimental(sym).num_rows == n_appends
 
@@ -1504,11 +1567,17 @@ def expected_row_range_stats(df, expected_slices):
     col_1_min, col_1_max, col_1_nan = slice_stats("col_1")
     col_2_min, col_2_max, col_2_nan = slice_stats("col_2")
     null_counts = [0] * len(expected_slices)
+    index_by_slice = [df.index[s:e] for s, e in expected_slices]
+    zero_counts = pl.Series([0] * len(expected_slices), dtype=pl.UInt64)
 
     return pl.DataFrame(
         {
             "start_row": pl.Series([s for s, _ in expected_slices], dtype=pl.UInt64),
             "end_row": pl.Series([e for _, e in expected_slices], dtype=pl.UInt64),
+            "v1_MIN(index)": pl.Series([idx.min() for idx in index_by_slice], dtype=pl.Datetime("ns")),
+            "v1_MAX(index)": pl.Series([idx.max() for idx in index_by_slice], dtype=pl.Datetime("ns")),
+            "v1_NAN_COUNT(index)": zero_counts,
+            "v1_NULL_COUNT(index)": zero_counts,
             "v1_MIN(col_1)": pl.Series([int(v) for v in col_1_min], dtype=pl.Int64),
             "v1_MAX(col_1)": pl.Series([int(v) for v in col_1_max], dtype=pl.Int64),
             "v1_NAN_COUNT(col_1)": pl.Series(col_1_nan, dtype=pl.UInt64),
@@ -1762,7 +1831,11 @@ def test_column_stats_create_dynamic_schema_preserves_stats_for_column_outside_t
 
     lib.create_column_stats_experimental(sym, row_range=(0, 3))
     assert_stats_equal(lib.read_column_stats_experimental(sym), expected, check_dtypes=True)
-    assert lib.get_column_stats_info_experimental(sym) == {"col_1": {"MINMAX"}, "col_2": {"MINMAX"}}
+    assert lib.get_column_stats_info_experimental(sym) == {
+        "index": {"MINMAX"},
+        "col_1": {"MINMAX"},
+        "col_2": {"MINMAX"},
+    }
 
 
 def test_column_stats_create_date_range_and_row_range_both_specified_raises(in_memory_version_store_tiny_segment):
