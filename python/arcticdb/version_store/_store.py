@@ -1328,9 +1328,8 @@ class NativeVersionStore:
         statistics will be used by `QueryBuilder` filtering operations to reduce the number of data segments read out
         of storage.
 
-        MINMAX stats are built for every data column and every inner multiindex index level whose dtype is numeric
-        (uint/int/float/bool) or a UTC nanosecond timestamp. The outer/primary index is excluded, as it is already
-        pruned by the index mechanism.
+        MINMAX stats are built for every column whose dtype is numeric (uint/int/float/bool) or a UTC nanosecond
+        timestamp. This covers data columns, the primary index and every inner multiindex index level.
 
         Stats for row slices that fall entirely outside `date_range`/`row_range` are preserved. Every row slice the
         range intersects is recomputed. Omitting both `date_range` and `row_range` recomputes stats for the whole symbol.
