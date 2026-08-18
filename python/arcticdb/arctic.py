@@ -38,8 +38,7 @@ logger = logging.getLogger(__name__)
 
 class Arctic:
     """
-    Top-level library management class. Arctic instances can be configured against an S3 environment and enable the
-    creation, deletion and retrieval of Arctic libraries.
+    Top-level library management class. Arctic instances can be configured against an S3 environment and enable the creation, deletion and retrieval of Arctic libraries.
     """
 
     _LIBRARY_ADAPTERS = [
@@ -307,8 +306,10 @@ class Arctic:
 
     def delete_library(self, name: str) -> None:
         """
-        Removes the library called ``name``. This will remove the underlying data contained within the library and as
-        such will take as much time as the underlying delete operations take.
+        Removes the library called ``name``.
+
+        This will remove the underlying data contained within the library and as such will take as much time as the
+        underlying delete operations take.
 
         If no library with ``name`` exists then this is a no-op. In particular this method does not raise in this case.
 
@@ -328,7 +329,7 @@ class Arctic:
 
     def has_library(self, name: str) -> bool:
         """
-        Query if the given library exists
+        Query if the given library exists.
 
         Parameters
         ----------

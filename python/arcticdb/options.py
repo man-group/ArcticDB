@@ -48,6 +48,8 @@ class LibraryOptions:
         recursive_normalizers: bool = False,
     ):
         """
+        Construct a `LibraryOptions` instance.
+
         Parameters
         ----------
 
@@ -299,8 +301,7 @@ class RuntimeOptions:
 
 class EnterpriseLibraryOptions:
     """
-    Configuration options for ArcticDB libraries, that should only be used when you are using the ArcticDB enterprise
-    features.
+    Configuration options for ArcticDB libraries, that should only be used when you are using the ArcticDB enterprise features.
 
     Contact `info@arcticdb.io` for more information about the Enterprise features.
 
@@ -321,6 +322,8 @@ class EnterpriseLibraryOptions:
         background_deletion: bool = False,
     ):
         """
+        Construct an `EnterpriseLibraryOptions` instance.
+
         Parameters
         ----------
 
