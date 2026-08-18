@@ -1222,7 +1222,7 @@ folly::Future<std::vector<EntityId>> read_and_schedule_processing(
 
     auto base_reader = store->make_uncompressed_reader(columns_to_decode(pipeline_context));
     SegmentReader reader = [base_reader = std::move(base_reader),
-                            pipeline_desc = pipeline_context->descriptor(),
+                            pipeline_desc = pipeline_context->on_disk_descriptor(),
                             processing_config](pipelines::RangesAndKey&& rk) {
         const bool is_incomplete = rk.is_incomplete();
         return base_reader(std::move(rk))

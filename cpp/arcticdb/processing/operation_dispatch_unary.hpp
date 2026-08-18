@@ -35,8 +35,6 @@ std::string unary_operation_to_string(Func&& func, std::string_view operand_str)
     return fmt::format("{}({})", func, operand_str);
 }
 
-std::string unary_operation_to_string(OperationType func, std::string_view operand_str);
-
 template<typename Func>
 VariantData unary_operator(const Value& val, Func&& func) {
     auto output = std::make_unique<Value>();

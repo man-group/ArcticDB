@@ -82,8 +82,4 @@ VariantData dispatch_unary(const VariantData& left, OperationType operation) {
     }
 }
 
-std::string unary_operation_to_string(OperationType func, std::string_view operand_str) {
-    return fmt::format("{}({})", func, operand_str);
-}
-
 } // namespace arcticdb

@@ -75,8 +75,8 @@ void PipelineContext::generate_filtered_field_descriptors(const std::optional<st
         const ankerl::unordered_dense::set<std::string_view> column_set{std::begin(*columns), std::end(*columns)};
 
         filter_columns_ = std::make_shared<FieldCollection>();
-        ARCTICDB_DEBUG(log::version(), "Context descriptor: {}", *on_disk_descriptor_);
-        for (const auto& field : on_disk_descriptor_->fields()) {
+        ARCTICDB_DEBUG(log::version(), "Context descriptor: {}", output_descriptor());
+        for (const auto& field : output_descriptor().fields()) {
             if (column_set.find(field.name()) != column_set.end())
                 filter_columns_->add_field(field.type(), field.name());
         }

@@ -74,11 +74,6 @@ std::string binary_operation_with_types_to_string(
     );
 }
 
-std::string binary_operation_with_types_to_string(
-        std::string_view left, const TypeDescriptor& type_left, OperationType func, std::string_view right,
-        const TypeDescriptor& type_right, bool arguments_reversed = false
-);
-
 template<typename Func>
 VariantData binary_membership(const ColumnWithStrings& column_with_strings, ValueSet& value_set, Func&& func) {
     if (is_empty_type(column_with_strings.column_->type().data_type())) {

@@ -504,7 +504,7 @@ std::variant<BitSetTag, DataType> ExpressionNode::compute(
                          is_sequence_type(std::get<DataType>(right_type))) ||
                                 (is_numeric_type(std::get<DataType>(left_type)) &&
                                  is_numeric_type(std::get<DataType>(right_type))),
-                        "Cannot check membership '{}' of {} {} in set of {}",
+                        "Cannot check membership '{}' of {} ({}) in set of {}",
                         operation_type_,
                         operation.left_->label_,
                         get_user_friendly_type_string(std::get<DataType>(left_type)),
