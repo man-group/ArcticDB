@@ -9,6 +9,7 @@
 #include <arcticdb/column_store/column_algorithms.hpp>
 #include <arcticdb/column_store/memory_segment_impl.hpp>
 #include <arcticdb/column_store/string_pool.hpp>
+#include <arcticdb/util/segment_residency_tracker.hpp>
 #include <arcticdb/entity/type_utils.hpp>
 #include <arcticdb/pipeline/string_pool_utils.hpp>
 #include <arcticdb/util/preconditions.hpp>
@@ -336,7 +337,25 @@ SegmentInMemoryImpl::SegmentInMemoryImpl(
     on_descriptor_change(desc, expected_column_size, allocation_type, allow_sparse, block_config_per_column);
 }
 
-SegmentInMemoryImpl::~SegmentInMemoryImpl() { ARCTICDB_TRACE(log::version(), "Destroying segment in memory"); }
+SegmentInMemoryImpl::~SegmentInMemoryImpl() {
+    ARCTICDB_TRACE(log::version(), "Destroying segment in memory");
+    if (from_disk_.value_) {
+        util::SegmentResidencyTracker::instance().on_segment_released();
+    }
+}
+
+void SegmentInMemoryImpl::mark_from_disk() {
+    // Only set the flag while tracking, so the destructor cannot release a segment that was never counted. The flag
+    // also makes this idempotent, so a second call cannot count one segment twice against a single destructor.
+    if (from_disk_.value_) {
+        return;
+    }
+    auto& residency_tracker = util::SegmentResidencyTracker::instance();
+    if (residency_tracker.enabled()) {
+        from_disk_.value_ = true;
+        residency_tracker.on_segment_resident();
+    }
+}
 
 // Append any columns that exist both in this segment and in the 'other' segment onto the
 // end of the column in this segment. Any columns that exist in this segment but not in the
@@ -511,6 +530,9 @@ SegmentInMemoryImpl SegmentInMemoryImpl::clone() const {
     output.compacted_ = compacted_;
     if (tsd_)
         output.set_timeseries_descriptor(tsd_->clone());
+    if (from_disk_.value_) {
+        output.mark_from_disk();
+    }
 
     return output;
 }

@@ -419,6 +419,7 @@ set(arcticdb_srcs
         util/preprocess.hpp
         util/ranges_from_future.hpp
         util/regex_filter.hpp
+        util/segment_residency_tracker.hpp
         util/simple_string_hash.hpp
         util/slab_allocator.hpp
         util/sparse_utils.hpp
@@ -433,6 +434,7 @@ set(arcticdb_srcs
         util/lazy.hpp
         util/type_traits.hpp
         util/variant.hpp
+        version/admission_handler.hpp
         version/de_dup_map.hpp
         version/op_log.hpp
         version/merge_options.hpp
@@ -598,6 +600,7 @@ set(arcticdb_srcs
         util/trace.cpp
         util/type_handler.cpp
         util/format_date.cpp
+        version/admission_handler.cpp
         version/key_block.hpp
         version/key_block.cpp
         version/local_versioned_engine.cpp
@@ -1167,6 +1170,7 @@ if(${TEST})
             util/test/input_frame_utils.hpp
             util/test/segment_generation_utils.hpp
             util/test/segment_generation_utils.cpp
+            version/test/test_admission_handler.cpp
             version/test/test_append.cpp
             version/test/test_key_block.cpp
             version/test/test_object_sizes.cpp

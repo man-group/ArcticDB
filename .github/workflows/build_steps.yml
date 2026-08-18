@@ -13,6 +13,7 @@ on:
       pytest_xdist_mode: {default: "", type: string, description: additional argument to pass for pytest-xdist}
       pytest_args:       {default: "", type: string, description: a way to rewrite the pytest args to change what tests are being run}
       version_cache_full_test: {default: false, type: boolean, description: if true - tests will run with both version cache 0 and 2000000000 otherwise only 2000000000}
+      serial_admission_test: {default: false, type: boolean, description: if true - cp311 tests additionally run with VersionStore.NumProcessingUnitsLive=1}
       run_full_matrix_of_persistent_tests: {default: false, type: boolean, description: if true - persistent tests will run for all python versions else only for 12 }
       DEBUG_LOGGING_ENABLED: {default: "0", type: string, required: false, description: 'Enable debug logging "1" (disabled "0")'}
       cmake_extra_args:  {default: "", type: string, required: false, description: 'Additional CMake arguments to pass during configuration'}
@@ -544,10 +545,18 @@ jobs:
         type: ${{fromJSON(vars.TEST_DIRS_OVERRIDE || needs.compile.outputs.test_dirs)}}
         python_deps_id: ${{fromJson(inputs.python_deps_ids)}}
         # Always run with both for cp311
-        version_cache_timeout: ${{ fromJSON((inputs.version_cache_full_test || needs.compile.outputs.python_impl_name == 'cp311') && '["NoCache", "DefaultCache"]' || '["DefaultCache"]') }} 
+        version_cache_timeout: ${{ fromJSON((inputs.version_cache_full_test || needs.compile.outputs.python_impl_name == 'cp311') && '["NoCache", "DefaultCache"]' || '["DefaultCache"]') }}
+        admission_limit: ${{ fromJSON((inputs.serial_admission_test && needs.compile.outputs.python_impl_name == 'cp311') && '["Serial", "Default"]' || '["Default"]') }}
+        # The admission limit is unrelated to the version cache and to the dependency pins, so Serial only runs
+        # against the default cache and the default dependencies
+        exclude:
+          - version_cache_timeout: NoCache
+            admission_limit: Serial
+          - python_deps_id: -compat311
+            admission_limit: Serial
         include:
           ${{fromJSON(inputs.matrix)}}
-    name: ${{matrix.type}}${{matrix.python_deps_id}}-${{matrix.version_cache_timeout}}
+    name: ${{matrix.type}}${{matrix.python_deps_id}}-${{matrix.version_cache_timeout}}${{matrix.admission_limit == 'Serial' && '-Serial' || ''}}
     runs-on: ${{matrix.distro}}
     container: ${{matrix.os == 'linux' &&  matrix.container || null}}
     defaults:
@@ -556,9 +565,9 @@ jobs:
     env:
       SCCACHE_GHA_ENABLED: "true"
       python_impl_name: ${{needs.compile.outputs.python_impl_name}}
-      distinguishing_name: ${{matrix.os}}-${{needs.compile.outputs.python_impl_name}}-${{matrix.type}}${{matrix.python_deps_id}}-${{matrix.version_cache_timeout}}
+      distinguishing_name: ${{matrix.os}}-${{needs.compile.outputs.python_impl_name}}-${{matrix.type}}${{matrix.python_deps_id}}-${{matrix.version_cache_timeout}}${{matrix.admission_limit == 'Serial' && '-Serial' || ''}}
       ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
-      real_tests_storage_type: ${{(inputs.run_full_matrix_of_persistent_tests || needs.compile.outputs.python_impl_name == 'cp311') && inputs.persistent_storage || 'no'}}
+      real_tests_storage_type: ${{matrix.admission_limit != 'Serial' && (inputs.run_full_matrix_of_persistent_tests || needs.compile.outputs.python_impl_name == 'cp311') && inputs.persistent_storage || 'no'}}
     steps:
       - name: Disk Space Before Clean Up
         if: matrix.os == 'linux'
@@ -717,6 +726,8 @@ jobs:
           STORAGE_TYPE: ${{ env.real_tests_storage_type }}
           # Testing with 0(no version cache) and -1(will use default timeout)
           VERSION_MAP_RELOAD_INTERVAL: ${{matrix.version_cache_timeout == 'NoCache' && 0 || -1}}
+          # 1 admits one processing unit at a time, -1 leaves the residency limit at its default
+          NUM_PROCESSING_UNITS_LIVE: ${{matrix.admission_limit == 'Serial' && 1 || -1}}
           ARCTICDB_WARN_ON_WRITING_EMPTY_DATAFRAME: 0
           ARCTICDB_LMDBSTORAGE_WARNIFOPENED_STR: all
 

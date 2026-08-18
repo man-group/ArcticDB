@@ -219,6 +219,72 @@ Key methods:
 - `get_entities_and_decrement_refcount(ids)` - Get entities (removed when fetch count reaches 0)
 - `get<T>(id)` - Get a single component for an entity
 
+## Read Admission Control
+
+### Location
+
+`cpp/arcticdb/version/admission_handler.hpp`, `cpp/arcticdb/version/admission_handler.cpp`
+
+### Purpose
+
+`ProcessingUnitAdmissionHandler` decides when each row-slice read is submitted to the IO pool. Reads used
+to be submitted eagerly for every slice at once, so if clause processing could not keep up, decoded
+`SegmentInMemory` objects accumulated ahead of it — for a whole-symbol operation such as manual column
+stats creation, up to the entire symbol.
+
+The handler is created in `read_and_schedule_processing()` and drives the futures that
+`schedule_clause_processing()` chains clause execution onto. It applies two independent limits:
+
+| Limit | Unit | Freed when | Config |
+|-------|------|-----------|--------|
+| Residency budget | processing units admitted but not yet processed | a unit finishes processing (`on_processing_unit_complete`) | `VersionStore.NumProcessingUnitsLive` |
+| Read window | segment reads submitted but not yet decoded | a read completes (`on_read_complete`) | `VersionStore.SegmentReadWindow` |
+
+The residency budget is what bounds memory: a unit's segments are decoded and held until its
+`MemSegmentProcessingTask` completes. The read window reproduces the `folly::window(2*io_threads)`
+behaviour the eager path had, and matters when the budget is much larger than the window — submitting all
+the IO up front gives poor queue fairness, because the Folly IO pool schedules round-robin across threads.
+
+### Mechanism
+
+Reads are backed by promises created up front, so the whole downstream future chain can be built before
+any work starts:
+
+```
+futures()                    ← one Future per row slice, from an unfulfilled Promise
+   │                            (schedule_first_iteration builds the clause chain on these)
+   ▼
+admit_initial_processing_units()   ← makes the first K units' segments eligible
+   │
+   ▼
+fill_read_window()           ← drains the eligible queue into the IO pool, up to read_window
+   │
+   ▼  read completes → promise fulfilled → slot freed → fill_read_window()
+   │
+   ▼  unit processed → .ensure → on_processing_unit_complete() → admit next unit
+```
+
+Two ordering constraints are load-bearing:
+
+- `admit_initial_processing_units()` must be called *after* `schedule_first_iteration()`, so the
+  `.ensure` release path exists before any unit can complete.
+- `on_processing_unit_complete()` must not block. It runs inline on a CPU pool thread at the end of a
+  processing task, and only submits IO work.
+
+A segment shared by two units (resample bucket boundaries, for example) is enqueued once, tracked by
+`i_th_segment_enqueued_`, and consumed by both units via `folly::splitFuture`. Because window slots are
+freed on read completion rather than unit completion, a unit never waits on a segment it has itself
+blocked, so any budget >= 1 and window >= 1 makes progress regardless of unit shape.
+
+### Test instrumentation
+
+`util::SegmentResidencyTracker` (`cpp/arcticdb/util/segment_residency_tracker.hpp`) counts segments
+decoded from storage that are live in memory, and records a high-water mark. `DecodeSliceTask` calls
+`SegmentInMemory::mark_from_disk()`; the `SegmentInMemoryImpl` destructor releases the count. Clause
+outputs and `clone()` results are deliberately unmarked, so the tracker measures exactly what admission
+controls. It is compiled into release builds but disabled by default, costing one relaxed atomic load per
+segment destruction.
+
 ## Query Building (C++)
 
 Build filters using `ExpressionNode` with `ExpressionNodeType::BINARY_OP` and column/constant nodes. Create clauses like `FilterClause(expr)` or `AggregationClause` with grouping and aggregation settings. See `cpp/arcticdb/processing/expression_node.hpp` and `cpp/arcticdb/processing/clause.hpp` for details.
@@ -239,6 +305,8 @@ Build filters using `ExpressionNode` with `ExpressionNodeType::BINARY_OP` and co
 | `aggregation_utils.cpp` | Aggregation helpers |
 | `operation_types.hpp` | Operator structs, `StatsComparison`, `ValueRange` |
 | `query_planner.cpp` | `plan_query()`, `and_filter_expression_contexts()` |
+| `../version/admission_handler.hpp` | `ProcessingUnitAdmissionHandler`, residency budget and read window defaults |
+| `../util/segment_residency_tracker.hpp` | Test-only decoded-segment residency high-water mark |
 
 ## Python Integration
 

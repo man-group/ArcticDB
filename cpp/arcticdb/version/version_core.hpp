@@ -26,9 +26,14 @@
 #include <arcticdb/entity/read_result.hpp>
 #include <arcticdb/util/constructors.hpp>
 #include <arcticdb/version/version_tasks.hpp>
+#include <arcticdb/version/admission_handler.hpp>
+#include <arcticdb/pipeline/frame_slice.hpp>
+#include <folly/futures/Future.h>
+#include <memory>
 #include <string>
 #include <chrono>
 #include <arcticdb/util/configs_map.hpp>
+#include <vector>
 
 namespace arcticdb::version_store {
 
@@ -93,9 +98,7 @@ folly::Future<std::vector<EntityId>> schedule_remaining_iterations(
 );
 
 folly::Future<std::vector<EntityId>> schedule_clause_processing(
-        std::shared_ptr<ComponentManager> component_manager,
-        std::vector<folly::Future<pipelines::SegmentAndSlice>>&& segment_and_slice_futures,
-        std::vector<std::vector<size_t>>&& processing_unit_indexes,
+        std::shared_ptr<ComponentManager> component_manager, std::shared_ptr<ProcessingUnitAdmissionHandler> admission,
         std::shared_ptr<std::vector<std::shared_ptr<Clause>>> clauses
 );
 
