@@ -11,11 +11,15 @@ from arcticdb.util.test import (
     assert_frame_equal,
     config_context,
     config_context_string,
+    query_stats_operation_count,
 )
 from arcticdb.version_store.processing import QueryBuilder
 import arcticdb.toolbox.query_stats as qs
 
-from tests.util.mark import MACOS_WHEEL_BUILD
+from tests.util.mark import MACOS_WHEEL_BUILD, MEM_TESTS_MARK
+
+# Large enough that the version map cache never expires during a test
+MAX_RELOAD_INTERVAL = 2_000_000_000_000
 
 
 def sum_operations(stats):
@@ -246,6 +250,49 @@ def test_read_as_of_version(lib_name, s3_and_nfs_storage_bucket, clear_query_sta
         assert get_obj_ops["TABLE_DATA"]["count"] == 1, pformat(stats)
         if expected_version_ops:
             assert get_obj_ops["VERSION"]["count"] == expected_version_ops, pformat(stats)
+
+
+@MEM_TESTS_MARK
+def test_read_as_of_after_write_with_cache(in_memory_version_store, clear_query_stats):
+    lib = in_memory_version_store
+
+    with config_context("VersionMap.ReloadInterval", MAX_RELOAD_INTERVAL):
+        lib.write("s", data=create_df())
+        lib.write("s", data=create_df(), prune_previous_version=False)
+        lib.write("s", data=create_df(), prune_previous_version=False)
+
+        qs.enable()
+        lib.read("s", as_of=0)
+        stats = qs.get_query_stats()
+        qs.reset_stats()
+
+        # TODO (monday ref 12842636013) reading immediately after write with cache enabled should not
+        # reload from storage.
+        # The writes appended every version's keys to the cached entry, but they never advanced its
+        # load_progress_, so loaded_as_far_as_version_id rejects the cache for as_of=0 and the whole
+        # chain is re-read.
+        assert query_stats_operation_count(stats, "Memory_GetObject", "VERSION_REF") == 1, pformat(stats)
+        assert query_stats_operation_count(stats, "Memory_GetObject", "VERSION") == 3, pformat(stats)
+
+
+@MEM_TESTS_MARK
+def test_write_reads_version_ref_only_once(in_memory_version_store, clear_query_stats):
+    lib = in_memory_version_store
+
+    with config_context("VersionMap.ReloadInterval", 0):
+        qs.enable()
+        lib.write("s", data=create_df())
+        stats = qs.get_query_stats()
+        qs.reset_stats()
+
+        # TODO (monday ref 12842618577) VERSION_REF should be read just once. Currently it is read 2 times
+        assert query_stats_operation_count(stats, "Memory_GetObject", "VERSION_REF") == 2, pformat(stats)
+
+        lib.write("s", data=create_df(), prune_previous_version=False)
+        stats = qs.get_query_stats()
+        qs.reset_stats()
+
+        assert query_stats_operation_count(stats, "Memory_GetObject", "VERSION_REF") == 2, pformat(stats)
 
 
 def get_dataframe_for_range_edge_cases():
