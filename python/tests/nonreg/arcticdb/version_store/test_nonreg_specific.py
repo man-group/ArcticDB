@@ -504,7 +504,7 @@ def test_resampling_non_timeseries(lmdb_version_store_v1):
     df = pd.DataFrame({"col": np.arange(10)})
     lib.write(sym, df)
     q = QueryBuilder().resample("1min").agg({"col": "sum"})
-    with pytest.raises(UserInputException):
+    with pytest.raises(SchemaException):
         lib.read(sym, query_builder=q)
     q = (
         QueryBuilder()
@@ -512,7 +512,7 @@ def test_resampling_non_timeseries(lmdb_version_store_v1):
         .resample("1min")
         .agg({"col": "sum"})
     )
-    with pytest.raises(UserInputException) as e:
+    with pytest.raises(SchemaException) as e:
         lib.read(sym, query_builder=q)
     assert "std::length_error(vector::reserve)" not in str(e.value)
 

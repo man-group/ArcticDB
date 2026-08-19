@@ -47,7 +47,7 @@ def test_filter_column_not_present(lmdb_version_store_v1, any_output_format):
     q = q[q["b"] < 5]
     symbol = "test_filter_column_not_present"
     lib.write(symbol, df)
-    with pytest.raises(InternalException):
+    with pytest.raises(SchemaException):
         _ = lib.read(symbol, query_builder=q)
 
 
@@ -448,8 +448,9 @@ def test_df_query_wrong_type(lmdb_version_store_v1, any_output_format):
     str_vals = np.array(["2", "3", "4", "5"])
     q = QueryBuilder()
     q = q[q["col1"].isin(str_vals)]
+
     with pytest.raises(
-        UserInputException, match="Cannot check membership 'IS IN' of col1.*type=INT.*in set of.*type=STRING"
+        UserInputException, match="Cannot check membership 'ISIN' of .*col1.*type=INT.*in set of.*type=STRING"
     ):
         lib.read(sym, query_builder=q)
 
@@ -457,25 +458,26 @@ def test_df_query_wrong_type(lmdb_version_store_v1, any_output_format):
     q = q[q["col1"] / q["col_str"] == 3]
     with pytest.raises(
         UserInputException,
-        match="Non-numeric column provided to binary operation: col1.*type=INT.*/.*col_str.*type=STRING",
+        match="Non-numeric operand provided to binary operation: .*col1.*type=INT.*DIV.*col_str.*type=STRING",
     ):
         lib.read(sym, query_builder=q)
 
     q = QueryBuilder()
     q = q[q["col1"] + "1" == 3]
     with pytest.raises(
-        UserInputException, match='Non-numeric type provided to binary operation: col1.*type=INT.*\+ "1".*type=STRING'
+        UserInputException,
+        match='Non-numeric operand provided to binary operation: .*col1.*type=INT.*ADD.*"1".*type=STRING',
     ):
         lib.read(sym, query_builder=q)
 
     q = QueryBuilder()
     q = q[-q["col_str"] == 3]
-    with pytest.raises(UserInputException, match="Cannot perform unary operation -\(col_str\).*type=STRING"):
+    with pytest.raises(UserInputException, match="Cannot perform unary operation NEG\(.*col_str.*\).*type=STRING"):
         lib.read(sym, query_builder=q)
 
     q = QueryBuilder()
     q = q[q["col1"] - 1 >= "1"]
-    with pytest.raises(UserInputException, match='Invalid comparison.*col1 - 1.*type=INT.*>=.*"1".*type=STRING'):
+    with pytest.raises(UserInputException, match='Invalid comparison.*col1.* SUB .*1.*type=INT.*GE.*"1".*type=STRING'):
         lib.read(sym, query_builder=q)
 
     q = QueryBuilder()
@@ -483,7 +485,7 @@ def test_df_query_wrong_type(lmdb_version_store_v1, any_output_format):
     # check that ((1 + (col1 * col2)) + col3) is generated as a column name and shown in the error message
     with pytest.raises(
         UserInputException,
-        match="Invalid comparison.*\(1 \+ \(col1 \* col2\)\) - col3.*type=INT.*==.*col_str .*type=STRING",
+        match="Invalid comparison.*\(.*1.* ADD \(.*col1.* MUL .*col2.*\)\) SUB .*col3.*type=INT.*EQ.*col_str.* .*type=STRING",
     ):
         lib.read(sym, query_builder=q)
 
@@ -1074,9 +1076,9 @@ def test_filter_string_less_than(lmdb_version_store_v1, any_output_format):
     lib.write(f"{base_symbol}_{FIXED_STRINGS_SUFFIX}", df, dynamic_strings=False)
     q = QueryBuilder()
     q = q[q["a"] < "row2"]
-    with pytest.raises(InternalException):
+    with pytest.raises(UserInputException):
         lib.read(f"{base_symbol}_{DYNAMIC_STRINGS_SUFFIX}", query_builder=q).data
-    with pytest.raises(InternalException):
+    with pytest.raises(UserInputException):
         lib.read(f"{base_symbol}_{FIXED_STRINGS_SUFFIX}", query_builder=q).data
 
 
@@ -1089,9 +1091,9 @@ def test_filter_string_less_than_equal(lmdb_version_store_v1, any_output_format)
     lib.write(f"{base_symbol}_{FIXED_STRINGS_SUFFIX}", df, dynamic_strings=False)
     q = QueryBuilder()
     q = q[q["a"] <= "row2"]
-    with pytest.raises(InternalException):
+    with pytest.raises(UserInputException):
         lib.read(f"{base_symbol}_{DYNAMIC_STRINGS_SUFFIX}", query_builder=q).data
-    with pytest.raises(InternalException):
+    with pytest.raises(UserInputException):
         lib.read(f"{base_symbol}_{FIXED_STRINGS_SUFFIX}", query_builder=q).data
 
 
@@ -1104,9 +1106,9 @@ def test_filter_string_greater_than(lmdb_version_store_v1, any_output_format):
     lib.write(f"{base_symbol}_{FIXED_STRINGS_SUFFIX}", df, dynamic_strings=False)
     q = QueryBuilder()
     q = q[q["a"] > "row2"]
-    with pytest.raises(InternalException):
+    with pytest.raises(UserInputException):
         lib.read(f"{base_symbol}_{DYNAMIC_STRINGS_SUFFIX}", query_builder=q).data
-    with pytest.raises(InternalException):
+    with pytest.raises(UserInputException):
         lib.read(f"{base_symbol}_{FIXED_STRINGS_SUFFIX}", query_builder=q).data
 
 
@@ -1119,9 +1121,9 @@ def test_filter_string_greater_than_equal(lmdb_version_store_v1, any_output_form
     lib.write(f"{base_symbol}_{FIXED_STRINGS_SUFFIX}", df, dynamic_strings=False)
     q = QueryBuilder()
     q = q[q["a"] >= "row2"]
-    with pytest.raises(InternalException):
+    with pytest.raises(UserInputException):
         lib.read(f"{base_symbol}_{DYNAMIC_STRINGS_SUFFIX}", query_builder=q).data
-    with pytest.raises(InternalException):
+    with pytest.raises(UserInputException):
         lib.read(f"{base_symbol}_{FIXED_STRINGS_SUFFIX}", query_builder=q).data
 
 

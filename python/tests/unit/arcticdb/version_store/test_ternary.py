@@ -149,13 +149,13 @@ def test_project_ternary_fixed_width_strings(version_store_factory):
     # Column/value
     q = QueryBuilder()
     q = q.apply("new_col", where(q["conditional"], q["width_1"], "hello"))
-    with pytest.raises(SchemaException):
+    with pytest.raises(UserInputException):
         lib.read(symbol, query_builder=q)
 
     # Column/column
     q = QueryBuilder()
     q = q.apply("new_col", where(q["conditional"], q["width_1"], q["width_2"]))
-    with pytest.raises(SchemaException):
+    with pytest.raises(UserInputException):
         lib.read(symbol, query_builder=q)
 
 
@@ -978,7 +978,7 @@ def test_filter_ternary_invalid_conditions(lmdb_version_store_v1, any_output_for
     # Non-bool column
     q = QueryBuilder()
     q = q[where(q["conditional"], q["conditional"] < 0, q["conditional"] >= 0)]
-    with pytest.raises(InternalException):
+    with pytest.raises(UserInputException):
         lib.read(symbol, query_builder=q)
 
     # Value

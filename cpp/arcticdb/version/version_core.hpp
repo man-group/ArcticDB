@@ -249,14 +249,14 @@ template<
         const std::shared_ptr<Store>& store, std::optional<size_t> segment_size, const CompactionOptions& options
 ) {
     CompactionResult result;
-    auto index = stream::index_type_from_descriptor(pipeline_context->descriptor());
+    auto index = stream::index_type_from_descriptor(pipeline_context->on_disk_descriptor());
 
     std::vector<folly::Future<VariantKey>> write_futures;
 
     auto semaphore = std::make_shared<folly::NativeSemaphore>(n_segments_live_during_compaction());
     stream::SegmentAggregator<IndexType, SchemaType, SegmentationPolicy, DensityPolicy> aggregator{
             [&slices](pipelines::FrameSlice&& slice) { slices.emplace_back(std::move(slice)); },
-            SchemaType{pipeline_context->descriptor(), index},
+            SchemaType{pipeline_context->on_disk_descriptor(), index},
             [&write_futures, &store, &pipeline_context, &semaphore](SegmentInMemory&& segment) {
                 auto local_index_start = IndexType::start_value_for_segment(segment);
                 auto local_index_end = pipelines::end_index_generator(IndexType::end_value_for_segment(segment));
@@ -324,7 +324,7 @@ template<
                 segment.descriptor().uncompressed_bytes()
         );
 
-        if (!index_names_match(segment.descriptor(), pipeline_context->descriptor())) {
+        if (!index_names_match(segment.descriptor(), pipeline_context->on_disk_descriptor())) {
             auto written_keys = folly::collect(write_futures).get();
             remove_written_keys(store.get(), std::move(written_keys));
             return Error{
@@ -332,7 +332,7 @@ template<
                     fmt::format(
                             "Index names in segment {} and pipeline context {} do not match",
                             segment.descriptor(),
-                            pipeline_context->descriptor()
+                            pipeline_context->on_disk_descriptor()
                     )
             };
         }
@@ -346,7 +346,7 @@ template<
         if constexpr (std::is_same_v<SchemaType, FixedSchema>) {
             if (options.perform_schema_checks) {
                 CheckOutcome outcome = check_schema_matches_incomplete(
-                        segment.descriptor(), pipeline_context->descriptor(), options.convert_int_to_float
+                        segment.descriptor(), pipeline_context->on_disk_descriptor(), options.convert_int_to_float
                 );
                 if (std::holds_alternative<Error>(outcome)) {
                     auto written_keys = folly::collect(write_futures).get();

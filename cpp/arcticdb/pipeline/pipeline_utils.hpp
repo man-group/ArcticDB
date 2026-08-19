@@ -133,7 +133,7 @@ inline std::pair<std::shared_ptr<PipelineContext>, std::shared_ptr<std::any>> pr
     pipeline_context->fetch_index_ = std::move(bitset);
     pipeline_context->ensure_vectors();
 
-    generate_filtered_field_descriptors(pipeline_context, {});
+    pipeline_context->generate_filtered_field_descriptors({});
     pipeline_context->begin()->set_string_pool(frame_and_desc.frame_.string_pool_ptr());
     auto descriptor = std::make_shared<StreamDescriptor>(frame_and_desc.frame_.descriptor());
     pipeline_context->begin()->set_descriptor(std::move(descriptor));
