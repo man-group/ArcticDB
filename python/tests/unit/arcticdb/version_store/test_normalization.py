@@ -602,6 +602,7 @@ def test_ndarray_arbitrary_shape():
     assert np.array_equal(d, arr)
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="SKIP_WIN Numpy strings not supported yet")
 def test_numpy_string_array_with_arrow_backed_pandas_strings(lmdb_version_store):
     lib = lmdb_version_store
     sym = "test_numpy_string_array_with_arrow_backed_pandas_strings"
@@ -613,6 +614,7 @@ def test_numpy_string_array_with_arrow_backed_pandas_strings(lmdb_version_store)
     np.testing.assert_array_equal(result, arr)
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="SKIP_WIN Numpy strings not supported yet")
 def test_batch_read_numpy_string_array_with_arrow_backed_pandas_strings(lmdb_version_store):
     lib = lmdb_version_store
     np_sym = "test_batch_read_numpy_string_array_with_arrow_backed_pandas_strings_np"

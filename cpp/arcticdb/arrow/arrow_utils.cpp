@@ -534,6 +534,9 @@ std::pair<std::vector<Column>, entity::StreamDescriptor> record_batches_to_colum
 
     uint64_t start_row{0};
     for (const auto& batch : record_batches) {
+        if (batch.nb_rows() == 0) {
+            continue;
+        }
         for (size_t idx = 0; idx < batch.nb_columns(); ++idx) {
             auto& column = columns[idx];
             const auto data_type = column.type().data_type();

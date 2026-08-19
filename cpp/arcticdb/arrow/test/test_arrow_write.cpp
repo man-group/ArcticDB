@@ -354,6 +354,32 @@ TEST(ArrowDataToSegment, MultiColumnDifferentTypes) {
     }
 }
 
+TEST(ArrowDataToSegment, StringLeadingAndTrailingEmptyRecordBatch) {
+    const std::vector<std::string> strings{"a", "b"};
+    std::vector<sparrow::record_batch> record_batches;
+    record_batches.emplace_back(create_record_batch({{"col", create_array(std::vector<std::string>{})}}));
+    record_batches.emplace_back(create_record_batch({{"col", create_array(strings)}}));
+    record_batches.emplace_back(create_record_batch({{"col", create_array(std::vector<std::string>{})}}));
+
+    proto::descriptors::NormalizationMetadata::ExperimentalArrow arrow_meta;
+    auto [cols, desc] = record_batches_to_columns(record_batches, arrow_meta);
+
+    ASSERT_EQ(cols.size(), 1);
+    const auto& col = cols[0];
+    ASSERT_EQ(col.row_count(), strings.size());
+    ASSERT_EQ(col.last_row(), static_cast<ssize_t>(strings.size()) - 1);
+
+    ASSERT_TRUE(col.has_extra_buffer(0, ExtraBufferType::STRING));
+    auto& string_buffer = col.get_extra_buffer(0, ExtraBufferType::STRING);
+    const std::string concatenated = std::accumulate(strings.cbegin(), strings.cend(), std::string{});
+    ASSERT_EQ(string_buffer.bytes(), concatenated.size());
+    ASSERT_EQ(string_buffer.num_blocks(), 1);
+    ASSERT_EQ(
+            std::string_view(reinterpret_cast<const char*>(string_buffer.block(0)->data()), concatenated.size()),
+            concatenated
+    );
+}
+
 struct AllocationCounter {
     size_t num_allocations = 0;
     size_t num_deallocations = 0;

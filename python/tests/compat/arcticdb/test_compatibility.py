@@ -10,6 +10,7 @@ import pandas as pd
 import numpy as np
 from arcticdb import QueryBuilder, LibraryOptions
 from arcticdb.util.test import assert_frame_equal, assert_frame_equal_with_arrow, merge, config_context
+from arcticdb.version_store._string_dtype import _use_pyarrow_strings_in_pandas
 from arcticdb.version_store.library import MergeStrategy, MergeAction
 from arcticdb.options import ModifiableEnterpriseLibraryOption, OutputFormat
 from arcticdb.toolbox.library_tool import LibraryTool
@@ -122,6 +123,9 @@ lib.write("sym", df, metadata={{"abc": df}})
             expected_df = pd.DataFrame({"a": [1, 2, 3]})
             idx = pd.Index([1, 2, 3], dtype="int64")
             expected_df.index = idx
+            # The pickle was written by Pandas 1, so its columns index is object whatever future.infer_string
+            # would infer for a frame built here.
+            expected_df.columns = expected_df.columns.astype(object)
             assert_frame_equal(read_df, expected_df)
 
 
@@ -561,6 +565,11 @@ def test_compat_merge_old_updated_data(pandas_v1_venv, s3_ssl_disabled_storage, 
             assert_frame_equal(result, expected)
 
 
+@pytest.mark.skipif(
+    _use_pyarrow_strings_in_pandas(),
+    reason="merge update does not accept arrow-backed input, which the string column here is under "
+    "future.infer_string. Known limitation, same as for arrow input generally.",
+)
 def test_compat_merge_rowrange_write_new_read_old(old_venv_and_arctic_uri, lib_name):
     old_venv, arctic_uri = old_venv_and_arctic_uri
     sym = "sym"

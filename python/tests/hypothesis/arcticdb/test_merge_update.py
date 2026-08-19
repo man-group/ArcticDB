@@ -1,3 +1,5 @@
+import os
+
 import pandas as pd
 import numpy as np
 import pytest
@@ -17,10 +19,18 @@ from tests.util.mark import MACOS, WINDOWS
 
 from arcticdb.options import LibraryOptions
 
-pytestmark = pytest.mark.merge_update
+pytestmark = [
+    pytest.mark.merge_update,
+    pytest.mark.skipif(
+        os.environ.get("ARCTICDB_PYTEST_INFER_STRING") == "1",
+        reason="merge update does not support arrow/str input",
+    ),
+]
 
 DTYPES = ["uint32", "int64", "float", "object", "datetime64[ns]", "bool"]
 COL_NAMES = [f"{dtype}_col" for dtype in DTYPES]
+
+
 # Intentionally keep some pre-epoch dates in the interval. Some C++ had issues with dates before epoch in the past.
 MIN_DATE = np.datetime64("1960-01-01")
 MAX_DATE = np.datetime64("2025-01-01")

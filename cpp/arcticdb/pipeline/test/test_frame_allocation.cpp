@@ -70,7 +70,7 @@ TEST(OutputFrame, AllocateContiguousNumpy) {
             }
     );
 
-    context->set_descriptor(desc);
+    context->set_on_disk_descriptor(desc);
     auto read_options = ReadOptions{};
     read_options.set_output_config(PandasOutputConfig{});
     auto frame = allocate_frame(context, read_options);
@@ -104,7 +104,7 @@ TEST(OutputFrame, AllocateMixedNumpyArrow) {
             }
     );
 
-    context->set_descriptor(desc);
+    context->set_on_disk_descriptor(desc);
     auto read_options = ReadOptions{};
     read_options.set_output_config(PandasOutputConfig{PandasStringFormat::ARROW_LARGE_STRING});
     auto frame = allocate_frame(context, read_options);
