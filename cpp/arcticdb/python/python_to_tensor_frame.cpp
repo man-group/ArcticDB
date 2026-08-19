@@ -243,6 +243,21 @@ NativeTensor obj_to_tensor(PyObject* ptr, bool empty_types, std::optional<std::s
     return {nbytes, desc.arr_->nd, strides.data(), shapes.data(), dt, desc.elsize_, data, desc.ndim_};
 }
 
+// Decodes arrow record batches into the single column they are expected to contain, along with the sparrow
+// owners that keep that column's buffers alive. The caller must keep the owners alive for as long as the column.
+static std::pair<Column, std::vector<sparrow::record_batch>> record_batches_to_single_column(
+        const std::vector<std::shared_ptr<RecordBatchData>>& chunks, std::string_view column_name
+) {
+    auto owners = util::reserve_vector<sparrow::record_batch>(chunks.size());
+    for (const auto& rbd : chunks) {
+        owners.emplace_back(std::move(rbd->array_), std::move(rbd->schema_));
+    }
+    proto::descriptors::NormalizationMetadata::ExperimentalArrow arrow_meta;
+    auto cols = record_batches_to_columns(owners, arrow_meta).first;
+    util::check(cols.size() == 1, "Expected exactly one Arrow column for '{}', got {}", column_name, cols.size());
+    return {std::move(cols[0]), std::move(owners)};
+}
+
 void pandas_data_to_frame(const PandasData& pandas_data, const bool empty_types, InputFrame& frame) {
     frame.num_rows = 0u;
     const auto& idx_names = pandas_data.index_names;
@@ -282,26 +297,16 @@ void pandas_data_to_frame(const PandasData& pandas_data, const bool empty_types,
                 [&](const std::vector<std::shared_ptr<RecordBatchData>>& chunks
                 ) -> std::tuple<InputFrame::FieldData, TypeDescriptor, size_t> {
                     // Arrow-backed string column
-                    auto owners = util::reserve_vector<sparrow::record_batch>(chunks.size());
-                    for (const auto& rbd : chunks)
-                        owners.emplace_back(std::move(rbd->array_), std::move(rbd->schema_));
-                    proto::descriptors::NormalizationMetadata::ExperimentalArrow arrow_meta;
-                    auto cols = record_batches_to_columns(owners, arrow_meta).first;
-                    util::check(
-                            cols.size() == 1,
-                            "Expected exactly one column from Arrow index '{}', got {}",
-                            index_column_name,
-                            cols.size()
-                    );
-                    TypeDescriptor type = cols[0].type();
-                    auto rows = static_cast<size_t>(cols[0].row_count());
+                    auto [col, owners] = record_batches_to_single_column(chunks, index_column_name);
+                    TypeDescriptor type = col.type();
+                    auto rows = static_cast<size_t>(col.row_count());
                     arrow_owners.insert(
                             arrow_owners.end(),
                             std::make_move_iterator(owners.begin()),
                             std::make_move_iterator(owners.end())
                     );
                     has_only_tensors = false;
-                    return {std::move(cols[0]), type, rows};
+                    return {std::move(col), type, rows};
                 }
         );
 
@@ -364,21 +369,10 @@ void pandas_data_to_frame(const PandasData& pandas_data, const bool empty_types,
                     columns.push_back(std::move(tensor));
                 },
                 [&](const std::vector<std::shared_ptr<RecordBatchData>>& chunks) {
-                    auto owners = util::reserve_vector<sparrow::record_batch>(chunks.size());
-                    for (const auto& rbd : chunks) {
-                        owners.emplace_back(std::move(rbd->array_), std::move(rbd->schema_));
-                    }
-                    proto::descriptors::NormalizationMetadata::ExperimentalArrow arrow_meta;
-                    auto cols = record_batches_to_columns(owners, arrow_meta).first;
-                    util::check(
-                            cols.size() == 1,
-                            "Expected exactly one column from Arrow column '{}', got {}",
-                            col_names[i],
-                            cols.size()
-                    );
-                    frame.num_rows = std::max(frame.num_rows, static_cast<size_t>(cols[0].row_count()));
-                    desc.add_field(FieldRef{cols[0].type(), col_names[i]});
-                    columns.emplace_back(std::move(cols[0]));
+                    auto [col, owners] = record_batches_to_single_column(chunks, col_names[i]);
+                    frame.num_rows = std::max(frame.num_rows, static_cast<size_t>(col.row_count()));
+                    desc.add_field(FieldRef{col.type(), col_names[i]});
+                    columns.emplace_back(std::move(col));
                     arrow_owners.insert(
                             arrow_owners.end(),
                             std::make_move_iterator(owners.begin()),
