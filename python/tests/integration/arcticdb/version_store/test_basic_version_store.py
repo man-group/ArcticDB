@@ -47,6 +47,7 @@ from arcticdb.util.test import (
     sample_dataframe_only_strings,
     get_sample_dataframe,
     arrow_string_read,
+    assert_null_string,
     assert_frame_equal,
     assert_series_equal,
     config_context,
@@ -1621,12 +1622,8 @@ def test_dynamic_strings_with_all_nones(basic_store):
     df = pd.DataFrame({"x": [None, None]})
     basic_store.write("strings", df, dynamic_strings=True)
     data = basic_store.read("strings")
-    if _use_pyarrow_strings_in_pandas():
-        assert pd.isna(data.data["x"][0])
-        assert pd.isna(data.data["x"][1])
-    else:
-        assert data.data["x"][0] is None
-        assert data.data["x"][1] is None
+    assert_null_string(data.data["x"][0], _use_pyarrow_strings_in_pandas())
+    assert_null_string(data.data["x"][1], _use_pyarrow_strings_in_pandas())
 
 
 @pytest.mark.storage

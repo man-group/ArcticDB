@@ -17,7 +17,7 @@ IS_PANDAS_ZERO = PANDAS_VERSION < version.Version("1.0")
 IS_PANDAS_ONE = PANDAS_VERSION >= version.Version("1.0") and PANDAS_VERSION < version.Version("2.0")
 IS_PANDAS_TWO = PANDAS_VERSION >= version.Version("2.0")
 # The StringDtype(storage=..., na_value=...) arrow-backed "str" dtype was added in pandas 2.3.
-IS_PANDAS_TWO_THREE = PANDAS_VERSION >= version.Version("2.3")
+IS_AT_LEAST_PANDAS_TWO_THREE = PANDAS_VERSION >= version.Version("2.3")
 
 NUMPY_VERSION = version.parse(np.__version__)
 IS_NUMPY_ONE = NUMPY_VERSION >= version.Version("1.0") and NUMPY_VERSION < version.Version("2.0")

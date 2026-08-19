@@ -26,7 +26,7 @@ from arcticdb_ext.types import (
 )
 from arcticdb_ext.stream import FixedTickRowBuilder, SegmentHolder, FixedTimestampAggregator, TickReader
 from arcticdb import QueryBuilder
-from arcticdb.util.test import assert_frame_equal, arrow_string_read
+from arcticdb.util.test import assert_frame_equal, arrow_string_read, assert_null_string
 
 
 def test_vl_string_simple():
@@ -262,29 +262,16 @@ def test_read_string_column_dtype(lmdb_version_store_v2, read_string_dtype, skip
     if skip_consolidation:
         lmdb_version_store_v2._normalizer.df.set_skip_df_consolidation()
     values = ["Aaba", "A", "B", "C", "Baca", "CABA", "dog", "cat", "here is a very long one"]
-    lmdb_version_store_v2.write("strings", pd.DataFrame({"x": values}), dynamic_strings=True)
+    # Multiple adjacent string columns so that consolidation has something to merge into one block, and a
+    # trailing numeric column that must not be pulled into it.
+    data = {"x": values, "y": [v.upper() for v in values], "z": [v[::-1] for v in values], "n": range(len(values))}
+    lmdb_version_store_v2.write("strings", pd.DataFrame(data), dynamic_strings=True)
     with arrow_string_read(read_string_dtype):
-        expected = pd.DataFrame({"x": values})
+        expected = pd.DataFrame(data)
         vit = lmdb_version_store_v2.read("strings")
     assert_frame_equal(expected, vit.data)
-    assert (str(vit.data["x"].dtype) == "str") == read_string_dtype
-
-
-def test_none_and_nan_string_semantics(lmdb_version_store_v2, read_string_dtype):
-    lib = lmdb_version_store_v2
-    # Build the input as object so None is stored as None (not collapsed to NaN at construction, which
-    # future.infer_string would do); the read dtype is what we are exercising here.
-    lib.write("s", pd.DataFrame({"x": pd.Series(["a", None, np.nan, "b"], dtype=object)}), dynamic_strings=True)
-    with arrow_string_read(read_string_dtype):
-        col = lib.read("s").data["x"]
-    assert list(col.isna()) == [False, True, True, False]
-    assert col.iloc[0] == "a" and col.iloc[3] == "b"
-    assert np.isnan(col.iloc[2])
-    if read_string_dtype:
-        assert str(col.dtype) == "str"
-        assert np.isnan(col.iloc[1])
-    else:
-        assert col.iloc[1] is None
+    for col in ("x", "y", "z"):
+        assert (str(vit.data[col].dtype) == "str") == read_string_dtype
 
 
 def test_none_vs_nan_null_distinction(lmdb_version_store_v2, read_string_dtype):
@@ -300,14 +287,11 @@ def test_none_vs_nan_null_distinction(lmdb_version_store_v2, read_string_dtype):
         col = lib.read("s").data["c"]
     assert list(col.isna()) == [False, True, True, True, False]
     assert col.iloc[0] == "x" and col.iloc[4] == "y"
-    if read_string_dtype:
-        assert str(col.dtype) == "str"
-        # every null (whether written as None or NaN) is np.nan
-        assert all(np.isnan(col.iloc[i]) for i in (1, 2, 3))
-    else:
-        assert col.dtype == object
-        assert col.iloc[1] is None  # None preserved
-        assert np.isnan(col.iloc[2]) and np.isnan(col.iloc[3])  # NaN preserved
+    assert (str(col.dtype) == "str") == read_string_dtype
+    # The written None comes back as None under object but as np.nan under the str dtype, whose only null
+    # sentinel is np.nan. A written NaN is NaN either way.
+    assert_null_string(col.iloc[1], read_string_dtype)
+    assert np.isnan(col.iloc[2]) and np.isnan(col.iloc[3])
 
 
 def test_isnull_filter_treats_none_and_nan_alike(lmdb_version_store_v2, read_string_dtype):
@@ -391,6 +375,29 @@ def test_write_arrow_backed_string_index(lmdb_version_store_v2, read_string_dtyp
     assert list(sliced.index) == [f"k{i}" for i in range(3, 8)]
     assert list(sliced["v"]) == list(range(3, 8))
     assert (str(sliced.index.dtype) == "str") == read_string_dtype
+
+
+@pytest.mark.parametrize(
+    "storage, na_value, match",
+    [
+        ("python", "pd.NA", "pd.NA"),
+        ("pyarrow", "pd.NA", "pd.NA"),
+        ("python", "nan", "pyarrow-backed storage"),
+    ],
+)
+def test_write_unsupported_string_dtype_rejected(lmdb_version_store_v2, storage, na_value, match):
+    # Only StringDtype(storage="pyarrow", na_value=np.nan) is supported. pd.NA is rejected because its
+    # three-valued comparison semantics cannot be reproduced on read or by the filter engine; python storage
+    # has no arrow buffer to hand over and is not supported yet.
+    if not _ARROW_BACKED_STR_DTYPE_SUPPORTED:
+        pytest.skip("pandas too old for the arrow-backed str dtype (StringDtype na_value, added in 2.3)")
+    lib = lmdb_version_store_v2
+    dtype = pd.StringDtype(storage=storage, na_value=pd.NA if na_value == "pd.NA" else np.nan)
+    values = pd.array(["a", None, "b"], dtype=dtype)
+    with pytest.raises(ArcticDbNotYetImplemented, match=match):
+        lib.write("s", pd.DataFrame({"c": values}), dynamic_strings=True)
+    with pytest.raises(ArcticDbNotYetImplemented, match=match):
+        lib.write("s", pd.DataFrame({"v": range(3)}, index=pd.Index(values, name="k")), dynamic_strings=True)
 
 
 def test_none_column_name_read_dtype(lmdb_version_store_v2, read_string_dtype):

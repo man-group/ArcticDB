@@ -33,6 +33,7 @@ from arcticdb.util.test import (
     generic_filter_test_nans,
     unicode_symbols,
     equals,
+    assert_null_string,
 )
 from arcticdb.util._versions import IS_PANDAS_TWO, PANDAS_VERSION, IS_NUMPY_TWO
 
@@ -796,13 +797,10 @@ def test_filter_nones_and_nans_retained_in_string_column(
     assert string_column.iloc[0] == "1"
     # Under future.infer_string the column is the arrow-backed `str` dtype, whose only null sentinel is np.nan.
     received_is_str_dtype = str(string_column.dtype) == "str"
-    if any_output_format == OutputFormat.PANDAS or received_is_str_dtype:
-        assert np.isnan(string_column.iloc[1])
-    else:
-        # When reading as arrow `None` vs `NaN` information is lost. It's all stored as arrow `null`s which then is
-        # converted to pandas `None`s
-        assert string_column.iloc[1] is None
-    assert np.isnan(string_column.iloc[2]) if received_is_str_dtype else string_column.iloc[2] is None
+    # When reading as arrow `None` vs `NaN` information is lost. It's all stored as arrow `null`s which then is
+    # converted to pandas `None`s
+    assert_null_string(string_column.iloc[1], any_output_format == OutputFormat.PANDAS or received_is_str_dtype)
+    assert_null_string(string_column.iloc[2], received_is_str_dtype)
 
 
 # Tests that false matches aren't generated when list members truncate to column values

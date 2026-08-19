@@ -12,10 +12,10 @@ import numpy as np
 import pandas as pd
 
 from arcticdb.dependencies import _PYARROW_AVAILABLE, pyarrow as pa
-from arcticdb.util._versions import IS_PANDAS_TWO_THREE
+from arcticdb.util._versions import IS_AT_LEAST_PANDAS_TWO_THREE
 from arcticdb_ext.version_store import RecordBatchData
 
-_ARROW_BACKED_STR_DTYPE_SUPPORTED = _PYARROW_AVAILABLE and IS_PANDAS_TWO_THREE
+_ARROW_BACKED_STR_DTYPE_SUPPORTED = _PYARROW_AVAILABLE and IS_AT_LEAST_PANDAS_TWO_THREE
 
 
 def _use_pyarrow_strings_in_pandas():
@@ -48,13 +48,3 @@ def _pandas_str_column_to_record_batches(chunked, arr_name) -> List[RecordBatchD
         record_batch._export_to_c(rbd.array(), rbd.schema())
         batches.append(rbd)
     return batches
-
-
-__all__ = [
-    "_ARROW_BACKED_STR_DTYPE_SUPPORTED",
-    "_use_pyarrow_strings_in_pandas",
-    "_is_arrow_string_column",
-    "_arrow_string_arrays_to_pd_array",
-    "_adopt_arrow_strings",
-    "_pandas_str_column_to_record_batches",
-]

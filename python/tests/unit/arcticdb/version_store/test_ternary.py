@@ -134,7 +134,9 @@ def test_project_ternary_column_column_dynamic_strings(lmdb_version_store_v1, an
 
 @pytest.mark.skipif(WINDOWS, reason="We do not support fixed-width strings on Windows")
 @pytest.mark.skipif(
-    _use_pyarrow_strings_in_pandas(), reason="fixed-width strings not applicable under future.infer_string"
+    _use_pyarrow_strings_in_pandas(),
+    reason="Under future.infer_string the string columns are arrow-backed, and arrow has no fixed-width string "
+    "type, so dynamic_strings=False is ignored and there is nothing fixed-width to test",
 )
 def test_project_ternary_fixed_width_strings(version_store_factory):
     # Explicitly not tested with arrow because arrow doesn't support fixed width strings

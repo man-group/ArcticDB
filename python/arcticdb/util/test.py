@@ -64,6 +64,7 @@ from arcticdb_ext.util import (
 )
 from packaging.version import Version
 from arcticdb.version_store._store import MergeStrategy, normalize_merge_strategy
+from arcticdb.version_store._string_dtype import _ARROW_BACKED_STR_DTYPE_SUPPORTED
 
 
 def create_df(start=0, columns=1) -> pd.DataFrame:
@@ -311,8 +312,6 @@ def arrow_string_read(enabled: bool):
     requested on pandas that lacks either ``future.infer_string`` (< 2.1) or the ``str`` dtype (StringDtype na_value,
     added in 2.3).
     """
-    from arcticdb.version_store._string_dtype import _ARROW_BACKED_STR_DTYPE_SUPPORTED
-
     if enabled and not _ARROW_BACKED_STR_DTYPE_SUPPORTED:
         import pytest
 
@@ -321,11 +320,16 @@ def arrow_string_read(enabled: bool):
         with pd.option_context("future.infer_string", enabled):
             yield
     except pd.errors.OptionError:
-        if enabled:
-            import pytest
-
-            pytest.skip("pandas too old for future.infer_string")
+        # enabled=False on pandas < 2.1, where the option does not exist. enabled=True is skipped above.
         yield
+
+
+def assert_null_string(value, is_str_dtype: bool):
+    """Assert a missing string: ``np.nan`` under the arrow-backed ``str`` dtype, ``None`` under ``object``."""
+    if is_str_dtype:
+        assert value is not None and np.isnan(value), f"expected NaN, got {value!r}"
+    else:
+        assert value is None, f"expected None, got {value!r}"
 
 
 def random_string(length: int):
@@ -979,14 +983,11 @@ def generic_filter_test_nans(lib, symbol, arctic_query, expected, output_format=
                 if isinstance(expected_val, str):
                     assert isinstance(received_val, str) and expected_val == received_val
                 elif expected_val is None:
-                    assert np.isnan(received_val) if received_is_str_dtype else received_val is None
+                    assert_null_string(received_val, received_is_str_dtype)
                 elif np.isnan(expected_val):
-                    if output_format == OutputFormat.PANDAS or received_is_str_dtype:
-                        assert np.isnan(received_val)
-                    else:
-                        # When reading as arrow `None` vs `NaN` information is lost. It's all stored as arrow `null`s
-                        # which then is converted to pandas `None`s
-                        assert received_val is None
+                    # When reading as arrow `None` vs `NaN` information is lost. It's all stored as arrow `null`s
+                    # which then is converted to pandas `None`s
+                    assert_null_string(received_val, output_format == OutputFormat.PANDAS or received_is_str_dtype)
 
 
 def generic_aggregation_test(lib, symbol, df, grouping_column, aggs_dict):

@@ -13,6 +13,7 @@
 #include <arcticdb/python/python_utils.hpp>
 #include <arcticdb/python/python_types.hpp>
 #include <arcticdb/stream/index.hpp>
+#include <arcticdb/util/collection_utils.hpp>
 #include <pybind11/numpy.h>
 #include <sparrow/record_batch.hpp>
 
@@ -101,6 +102,8 @@ static std::tuple<char, int> parse_array_descriptor(PyObject* obj) {
 
 struct PyArrayDescriptor {
     PyArrayDescriptor(PyObject* ptr, bool empty_types) {
+        auto& api = pybind11::detail::npy_api::get();
+        util::check(api.PyArray_Check_(ptr), "Expected Python array");
         arr_ = pybind11::detail::array_proxy(ptr);
         std::tie(kind_, elsize_) = parse_array_descriptor(arr_->descr);
         ndim_ = arr_->nd;
@@ -257,8 +260,7 @@ void pandas_data_to_frame(const PandasData& pandas_data, const bool empty_types,
     );
 
     StreamDescriptor desc;
-    std::vector<InputFrame::FieldData> columns;
-    columns.reserve(idx_names.size() + col_vals.size());
+    auto columns = util::reserve_vector<InputFrame::FieldData>(idx_names.size() + col_vals.size());
     bool has_only_tensors{true};
     std::vector<sparrow::record_batch> arrow_owners;
     if (!idx_names.empty()) {
@@ -279,13 +281,12 @@ void pandas_data_to_frame(const PandasData& pandas_data, const bool empty_types,
                 },
                 [&](const std::vector<std::shared_ptr<RecordBatchData>>& chunks
                 ) -> std::tuple<InputFrame::FieldData, TypeDescriptor, size_t> {
-                    // Arrow-backed sring column
-                    std::vector<sparrow::record_batch> owners;
-                    owners.reserve(chunks.size());
+                    // Arrow-backed string column
+                    auto owners = util::reserve_vector<sparrow::record_batch>(chunks.size());
                     for (const auto& rbd : chunks)
                         owners.emplace_back(std::move(rbd->array_), std::move(rbd->schema_));
                     proto::descriptors::NormalizationMetadata::ExperimentalArrow arrow_meta;
-                    auto [cols, _] = record_batches_to_columns(owners, arrow_meta);
+                    auto cols = record_batches_to_columns(owners, arrow_meta).first;
                     util::check(
                             cols.size() == 1,
                             "Expected exactly one column from Arrow index '{}', got {}",
@@ -363,13 +364,12 @@ void pandas_data_to_frame(const PandasData& pandas_data, const bool empty_types,
                     columns.push_back(std::move(tensor));
                 },
                 [&](const std::vector<std::shared_ptr<RecordBatchData>>& chunks) {
-                    std::vector<sparrow::record_batch> owners;
-                    owners.reserve(chunks.size());
+                    auto owners = util::reserve_vector<sparrow::record_batch>(chunks.size());
                     for (const auto& rbd : chunks) {
                         owners.emplace_back(std::move(rbd->array_), std::move(rbd->schema_));
                     }
                     proto::descriptors::NormalizationMetadata::ExperimentalArrow arrow_meta;
-                    auto [cols, _] = record_batches_to_columns(owners, arrow_meta);
+                    auto cols = record_batches_to_columns(owners, arrow_meta).first;
                     util::check(
                             cols.size() == 1,
                             "Expected exactly one column from Arrow column '{}', got {}",
