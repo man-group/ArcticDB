@@ -1848,9 +1848,10 @@ def test_batch_read_missing_keys(basic_store):
     df3 = pd.DataFrame({"a": [5, 7, 9]})
     lib.write("s1", df1)
     lib.write("s2", df2)
-    # Need two versions for this symbol as we're going to delete a version key, and the optimisation of storing the
-    # latest index key in the version ref key means it will still work if we just write one version key and then delete
-    # it
+    # Need three versions for this symbol as we're going to delete a version key, and the optimisation of storing
+    # the latest two index keys in the version ref key means it will still work if we just write two version keys
+    # and then delete the oldest
+    lib.write("s3", df3)
     lib.write("s3", df3)
     lib.write("s3", df3)
     lib_tool = lib.library_tool()
