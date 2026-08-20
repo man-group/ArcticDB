@@ -12,10 +12,12 @@ import numpy as np
 import pandas as pd
 
 from arcticdb.dependencies import _PYARROW_AVAILABLE, pyarrow as pa
-from arcticdb.util._versions import IS_AT_LEAST_PANDAS_TWO_THREE
+from arcticdb.util._versions import IS_AT_LEAST_PANDAS_TWO_THREE, IS_AT_LEAST_PYARROW_TEN_ZERO_ONE
 from arcticdb_ext.version_store import RecordBatchData
 
-_ARROW_BACKED_STR_DTYPE_SUPPORTED = _PYARROW_AVAILABLE and IS_AT_LEAST_PANDAS_TWO_THREE
+_ARROW_BACKED_STR_DTYPE_SUPPORTED = (
+    _PYARROW_AVAILABLE and IS_AT_LEAST_PANDAS_TWO_THREE and IS_AT_LEAST_PYARROW_TEN_ZERO_ONE
+)
 
 
 def _use_pyarrow_strings_in_pandas():

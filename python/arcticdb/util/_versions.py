@@ -26,3 +26,5 @@ IS_NUMPY_TWO = NUMPY_VERSION >= version.Version("2.0") and NUMPY_VERSION < versi
 PYARROW_VERSION = version.parse(pa.__version__) if _PYARROW_AVAILABLE else None
 # Bug with null processing https://github.com/apache/arrow/issues/47234 is fixed as of 22.0.0
 IS_PYARROW_WINDOWS_NULL_COMPUTE_FIXED = PYARROW_VERSION and PYARROW_VERSION >= version.Version("22.0")
+# pandas raises ImportError constructing StringDtype(storage="pyarrow") below this version.
+IS_AT_LEAST_PYARROW_TEN_ZERO_ONE = PYARROW_VERSION is not None and PYARROW_VERSION >= version.Version("10.0.1")
