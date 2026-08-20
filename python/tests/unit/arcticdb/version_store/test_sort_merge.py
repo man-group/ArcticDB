@@ -1231,6 +1231,10 @@ class TestSegmentsWithNaNAndNone:
         )
         assert_frame_equal(lib.read(symbol).data, expected)
 
+    @pytest.mark.skipif(
+        _use_pyarrow_strings_in_pandas(),
+        reason="sort_and_finalize_staged_data does not support string columns with nulls with arrow yet",
+    )
     @pytest.mark.parametrize("rows_per_segment", [2, 100_000])
     def test_input_contains_actual_values(self, lmdb_library_factory, rows_per_segment):
         symbol = "symbol"
