@@ -11,7 +11,7 @@ import pandas as pd
 import numpy as np
 
 from arcticdb import QueryBuilder
-from arcticdb_ext.exceptions import InternalException
+from arcticdb_ext.exceptions import InternalException, NormalizationException
 from arcticdb.version_store._common import TimeFrame
 from arcticdb.util.test import assert_frame_equal, assert_series_equal
 
@@ -171,12 +171,12 @@ def test_append_empty_series(lmdb_version_store_dynamic_schema, sym, dtype, seri
     )
 
 
-def test_append_empty_dataframe_does_not_add_its_columns(lmdb_version_store_dynamic_schema):
+def test_append_empty_dataframe_does_not_add_its_columns(in_memory_version_store_dynamic_schema):
     # A zero-row frame contributes no columns, in either direction. Pandas would union them, so this is a
     # deliberate divergence; concat matches it - see
     # test_symbol_concatenation.py::test_symbol_concat_empty_dataframe_does_not_contribute_its_columns.
     # Monday 12781487305.
-    lib = lmdb_version_store_dynamic_schema
+    lib = in_memory_version_store_dynamic_schema
     rows = pd.DataFrame({"col1": np.arange(2, dtype=np.float64)}, index=pd.date_range("2025-01-01", periods=2))
     empty_with_extra_column = pd.DataFrame(
         {"col1": np.array([], dtype=np.float64), "col2": np.array([], dtype=np.float64)}, index=pd.DatetimeIndex([])
@@ -193,13 +193,18 @@ def test_append_empty_dataframe_does_not_add_its_columns(lmdb_version_store_dyna
     assert_frame_equal(rows, lib.read("empty_first").data)
 
 
-def test_append_rowcount_series_onto_non_empty_timeseries_series(lmdb_version_store_dynamic_schema, sym):
-    lib = lmdb_version_store_dynamic_schema
-    lib.write(sym, pd.Series([1.0, 2.0], index=pd.date_range("2025-01-01", periods=2)))
-    # This should raise a NormalizationException. Currently this slips through the normalization check in schema_checks:125 incorrectly
-    # In the follow up commits which unify schema operations this will be changed to a normalization exception.
-    with pytest.raises(InternalException):
-        lib.append(sym, pd.Series([3.0, 4.0]))
+@pytest.mark.parametrize("timeseries_first", [True, False])
+def test_append_rowcount_with_timeseries_non_empty_series(
+    in_memory_version_store_dynamic_schema, sym, timeseries_first
+):
+    lib = in_memory_version_store_dynamic_schema
+    timeseries = pd.Series([1.0, 2.0], index=pd.date_range("2025-01-01", periods=2))
+    rowcount = pd.Series([3.0, 4.0])
+    lib.write(sym, timeseries if timeseries_first else rowcount)
+    # Follow up commit will make this uniform
+    expected = InternalException if timeseries_first else NormalizationException
+    with pytest.raises(expected):
+        lib.append(sym, rowcount if timeseries_first else timeseries)
 
 
 @pytest.mark.parametrize("join", ["outer", "inner"])

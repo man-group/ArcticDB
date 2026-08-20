@@ -101,24 +101,10 @@ MIXED_SIGNEDNESS_TYPES = [("uint64", "int64"), ("int64", "uint64"), ("uint64", "
 
 
 @pytest.mark.parametrize("first_type,second_type", MIXED_SIGNEDNESS_TYPES)
-def test_symbol_concat_mixed_signedness_promotes_to_float64(lmdb_library, first_type, second_type, any_output_format):
-    # test_symbol_concat_type_promotion covers this pair too, but only via the pandas expected frame.
-    lib = lmdb_library
-    lib._nvs._set_output_format_for_pipeline_tests(any_output_format)
-    df_0 = pd.DataFrame({"col": np.arange(2, dtype=np.dtype(first_type))})
-    df_1 = pd.DataFrame({"col": np.arange(2, dtype=np.dtype(second_type))})
-    lib.write("sym0", df_0)
-    lib.write("sym1", df_1)
-
-    received = concat(lib.read_batch(["sym0", "sym1"], lazy=True)).collect().data
-    assert received["col"].dtype == np.float64
-    assert_frame_equal(pd.concat([df_0, df_1], ignore_index=True), received)
-
-
-@pytest.mark.parametrize("first_type,second_type", MIXED_SIGNEDNESS_TYPES)
-def test_append_dynamic_schema_mixed_signedness_raises(lmdb_library_factory, first_type, second_type):
-    # The append half of the asymmetry above; several other modules skip this combination rather than assert it.
-    lib = lmdb_library_factory(LibraryOptions(dynamic_schema=True))
+def test_append_dynamic_schema_mixed_signedness_raises(in_memory_library_dynamic, first_type, second_type):
+    # Shows that mixed signed types (e.g int64 with uint64) raise for append. Compared to concat's test
+    # test_symbol_concat_type_promotion, which promotes to float64
+    lib = in_memory_library_dynamic
     index = pd.date_range("2025-01-01", periods=2)
     lib.write("sym", pd.DataFrame({"col": np.arange(2, dtype=np.dtype(first_type))}, index=index))
     to_append = pd.DataFrame(
@@ -134,8 +120,8 @@ def test_append_dynamic_schema_mixed_signedness_raises(lmdb_library_factory, fir
     reason="A Series' value column is treated as an index-like field, so it is combined strictly and raises "
     "where the equivalent DataFrame column promotes to float64, as pandas does. Monday 12781411945",
 )
-def test_symbol_concat_series_mixed_signedness_promotes_to_float64(lmdb_library, first_type, second_type):
-    lib = lmdb_library
+def test_symbol_concat_series_mixed_signedness_promotes_to_float64(in_memory_library, first_type, second_type):
+    lib = in_memory_library
     series_0 = pd.Series(
         np.arange(2, dtype=np.dtype(first_type)), index=pd.date_range("2025-01-01", periods=2), name="v"
     )
@@ -155,19 +141,26 @@ def test_symbol_concat_series_mixed_signedness_promotes_to_float64(lmdb_library,
     [
         ("int32", "int64", np.int64),
         ("int32", "float64", np.float64),
-        # No exact common type. Unlike a data column this is not promoted to float64, because multiindex
-        # levels are index-like fields must preserve precise equality
+        # No exact common type. Unlike a data column this is not promoted to float64, because multi-index
+        # levels are index-like fields and must preserve precise equality.
         ("uint64", "int64", None),
     ],
 )
 @pytest.mark.parametrize("operation", ["append", "concat"])
-def test_multiindex_level_type_promotion(lmdb_library_factory, first_type, second_type, expected_type, operation):
-    lib = lmdb_library_factory(LibraryOptions(dynamic_schema=True))
+@pytest.mark.parametrize("levels", [2, 3])
+def test_multiindex_level_type_promotion(
+    in_memory_library_dynamic, first_type, second_type, expected_type, operation, levels
+):
+    lib = in_memory_library_dynamic
 
     def frame(level_type, level_values, dates):
-        index = pd.MultiIndex.from_arrays(
-            [dates, np.array(level_values, dtype=np.dtype(level_type))], names=["dt", "lvl"]
-        )
+        arrays, names = [dates], ["dt"]
+        if levels == 3:
+            arrays.append(np.arange(len(dates), dtype=np.int64))
+            names.append("untyped")
+        arrays.append(np.array(level_values, dtype=np.dtype(level_type)))
+        names.append("lvl")
+        index = pd.MultiIndex.from_arrays(arrays, names=names)
         return pd.DataFrame({"col": np.arange(2, dtype=np.float64)}, index=index)
 
     df_0 = frame(first_type, [1, 2], pd.date_range("2025-01-01", periods=2))
@@ -194,10 +187,10 @@ def test_multiindex_level_type_promotion(lmdb_library_factory, first_type, secon
 
 
 @pytest.mark.parametrize("join", ["inner", "outer"])
-def test_symbol_concat_incompatible_types_on_columns_not_in_output(lmdb_library, join):
+def test_symbol_concat_incompatible_types_only_matter_if_the_column_survives_the_join(in_memory_library, join):
     # Every pair of symbols has a column whose types cannot be combined, but none of those columns is in all
     # three, so an inner join drops them and only "common" survives. An outer join keeps them and must raise.
-    lib = lmdb_library
+    lib = in_memory_library
     strings = ["hello", "goodbye"]
     ints = np.arange(2, dtype=np.int64)
     floats = np.arange(2, dtype=np.float64)
@@ -397,7 +390,6 @@ def test_symbol_concat_empty_column_intersection(
         assert_frame_equal(expected, received)
 
 
-@pytest.mark.parametrize("dynamic_schema", [True, False])
 @pytest.mark.parametrize("empty_first", [True, False])
 @pytest.mark.parametrize("join", ["inner", "outer"])
 @pytest.mark.xfail(
@@ -405,9 +397,9 @@ def test_symbol_concat_empty_column_intersection(
     reason="A zero-row write records its index as not physically stored while still writing the index column, "
     "and concat rejects the disagreement. Append is unaffected. Monday: TODO",
 )
-def test_symbol_concat_with_empty_dataframe(lmdb_library_factory, dynamic_schema, empty_first, join):
+def test_symbol_concat_with_empty_dataframe(in_memory_library, empty_first, join):
     # A zero-row symbol contributes no rows, so the result is the non-empty symbol, as in pandas.
-    lib = lmdb_library_factory(LibraryOptions(dynamic_schema=dynamic_schema))
+    lib = in_memory_library
     df_empty = pd.DataFrame({"col1": np.array([], dtype=np.float64)}, index=pd.DatetimeIndex([]))
     df_rows = pd.DataFrame({"col1": np.arange(2, dtype=np.float64)}, index=pd.date_range("2025-01-01", periods=2))
     lib.write("sym_empty", df_empty)
@@ -423,11 +415,11 @@ def test_symbol_concat_with_empty_dataframe(lmdb_library_factory, dynamic_schema
     strict=True,
     reason="Same cause as test_symbol_concat_with_empty_dataframe. Monday: TODO",
 )
-def test_symbol_concat_empty_dataframe_does_not_contribute_its_columns(lmdb_library_factory, join):
+def test_symbol_concat_empty_dataframe_does_not_contribute_its_columns(in_memory_library_dynamic, join):
     # A zero-row symbol is skipped entirely, so a column only it has is dropped even by an outer join. Pandas
     # would keep it backfilled; matching append matters more here. See
     # test_empty_writes.py::test_append_empty_dataframe_does_not_add_its_columns. Monday 12781487305.
-    lib = lmdb_library_factory(LibraryOptions(dynamic_schema=True))
+    lib = in_memory_library_dynamic
     df_empty = pd.DataFrame(
         {"col1": np.array([], dtype=np.float64), "col2": np.array([], dtype=np.float64)}, index=pd.DatetimeIndex([])
     )
@@ -440,12 +432,11 @@ def test_symbol_concat_empty_dataframe_does_not_contribute_its_columns(lmdb_libr
     assert_frame_equal(df_rows, received)
 
 
-@pytest.mark.parametrize("dynamic_schema", [True, False])
 @pytest.mark.parametrize("join", ["inner", "outer"])
-def test_symbol_concat_of_only_empty_dataframes(lmdb_library_factory, dynamic_schema, join):
+def test_symbol_concat_of_only_empty_dataframes(in_memory_library, join):
     # The companion to the two tests above. Skipping the zero-row symbols cannot apply when every symbol is
     # zero-row, as that would leave nothing to join, so they are all kept and their schemas combined as usual.
-    lib = lmdb_library_factory(LibraryOptions(dynamic_schema=dynamic_schema))
+    lib = in_memory_library
     df_0 = pd.DataFrame({"col1": np.array([], dtype=np.float64)}, index=pd.DatetimeIndex([]))
     df_1 = pd.DataFrame({"col2": np.array([], dtype=np.float64)}, index=pd.DatetimeIndex([]))
     lib.write("sym0", df_0)
@@ -757,12 +748,12 @@ def test_symbol_concat_querybuilder_syntax(lmdb_library, any_output_format):
         ),
     ],
 )
-def test_concat_groupby_sum_matches_append_groupby_sum(lmdb_library_factory, dtype, any_output_format):
+def test_concat_groupby_sum_matches_append_groupby_sum(in_memory_library_dynamic, dtype, any_output_format):
     # Three routes that should combine two symbols and sum a column per group must agree:
     #   A) concat the symbols, then groupby-sum;
     #   B) write+append every row into one symbol, then read with a groupby-sum query;
     #   C) groupby-sum each symbol, then concat the results. (same output as A because groups are distinct between symbols)
-    lib = lmdb_library_factory(LibraryOptions(dynamic_schema=True))
+    lib = in_memory_library_dynamic
     lib._nvs._set_output_format_for_pipeline_tests(any_output_format)
     agg = {"agg_column": "sum"}
     df_0 = pd.DataFrame({"grouping": ["a", "b"], "agg_column": np.array([10, 20], dtype=dtype)})

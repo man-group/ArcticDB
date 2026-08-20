@@ -963,14 +963,22 @@ def test_regular_update_dynamic_schema_named_index(
         (pd.Series([1], index=pd.DatetimeIndex([pd.Timestamp(0)])), np.array([2])),
         (np.array([1]), pd.DataFrame({"a": [2]}, index=pd.DatetimeIndex([pd.Timestamp(0)]))),
         (np.array([1]), pd.Series([2], index=pd.DatetimeIndex([pd.Timestamp(0)]))),
+        (pd.DataFrame({"a": [1]}), pd.Series([2])),
+        (pd.Series([1]), pd.DataFrame({"a": [2]})),
+        (np.array([1]), np.array([2])),
     ],
 )
-def test_update_mismatched_object_kind(to_write, to_update, lmdb_version_store_dynamic_schema_v1):
-    lib = lmdb_version_store_dynamic_schema_v1
+def test_update_mismatched_object_kind(to_write, to_update, in_memory_version_store_dynamic_schema):
+    def row_count_indexed(obj):
+        return isinstance(obj, np.ndarray) or isinstance(obj.index, pd.RangeIndex)
+
+    lib = in_memory_version_store_dynamic_schema
     lib.write("sym", to_write)
-    if isinstance(to_update, np.ndarray) or isinstance(to_write, np.ndarray):
-        with pytest.raises(Exception) as e:
-            assert "Index mismatch" in str(e.value)
+    if row_count_indexed(to_write) or row_count_indexed(to_update):
+        # Update is only defined over a timestamp index, so the index guards reject these before the object
+        # kinds are compared.
+        with pytest.raises(InternalException):
+            lib.update("sym", to_update)
     else:
         with pytest.raises(NormalizationException) as e:
             lib.update("sym", to_update)

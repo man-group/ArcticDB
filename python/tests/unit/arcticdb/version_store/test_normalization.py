@@ -293,6 +293,17 @@ def test_write_tz(lmdb_version_store, sym, tz):
     assert end_ts == index[-1]
 
 
+def multiindex_with_tz(tz, tz_level, offset):
+    """A multi-index whose level tz_level is a timestamp level in timezone tz. Level 0 is
+    always a timestamp"""
+    timestamps = pd.DatetimeIndex([pd.Timestamp(offset, tz=tz)])
+    if tz_level == 0:
+        return pd.MultiIndex.from_arrays([timestamps, [1]], names=["date", "value"])
+    return pd.MultiIndex.from_arrays(
+        [pd.DatetimeIndex([pd.Timestamp(offset)]), timestamps], names=["date", "other_date"]
+    )
+
+
 @pytest.mark.parametrize("action", [lambda lib, sym, df: lib.append(sym, df), lambda lib, sym, df: lib.update(sym, df)])
 class TestTimezoneIsOverwritten:
     """
@@ -376,11 +387,14 @@ class TestTimezoneIsOverwritten:
     )
     @pytest.mark.parametrize("dynamic_schema", [True, False])
     @pytest.mark.parametrize("frame_type", ["dataframe", "series"])
-    def test_mismatched_multiindex_level_timezone(self, in_memory_store_factory, action, frame_type, dynamic_schema):
+    @pytest.mark.parametrize("tz_level", [0, 1])
+    def test_mismatched_multiindex_level_timezone(
+        self, in_memory_store_factory, action, frame_type, dynamic_schema, tz_level
+    ):
         lib = in_memory_store_factory(dynamic_schema=dynamic_schema)
         sym = "multiindex_with_different_index_timezone"
-        index_1 = pd.MultiIndex.from_tuples([(pd.Timestamp(0, tz="America/New_York"), 1)], names=["date", "value"])
-        index_2 = pd.MultiIndex.from_tuples([(pd.Timestamp(1, tz="Europe/London"), 2)], names=["date", "value"])
+        index_1 = multiindex_with_tz("America/New_York", tz_level, 0)
+        index_2 = multiindex_with_tz("Europe/London", tz_level, 1)
         if frame_type == "dataframe":
             first, second = pd.DataFrame({"a": [1]}, index=index_1), pd.DataFrame({"a": [2]}, index=index_2)
         else:
@@ -388,26 +402,23 @@ class TestTimezoneIsOverwritten:
         lib.write(sym, first)
         if dynamic_schema:
             action(lib, sym, second)
-            assert lib.read(sym).data.index.levels[0].tz is None
+            assert lib.read(sym).data.index.levels[tz_level].tz is None
         else:
             with pytest.raises(SchemaException):
                 action(lib, sym, second)
 
     @pytest.mark.parametrize("dynamic_schema", [True, False])
-    def test_matching_multiindex_level_timezone_is_preserved(self, in_memory_store_factory, action, dynamic_schema):
+    @pytest.mark.parametrize("tz_level", [0, 1])
+    def test_matching_multiindex_level_timezone_is_preserved(
+        self, in_memory_store_factory, action, dynamic_schema, tz_level
+    ):
         lib = in_memory_store_factory(dynamic_schema=dynamic_schema)
         sym = "multiindex_with_matching_index_timezone"
-        first = pd.DataFrame(
-            {"a": [1]},
-            index=pd.MultiIndex.from_tuples([(pd.Timestamp(0, tz="Europe/London"), 1)], names=["date", "value"]),
-        )
-        second = pd.DataFrame(
-            {"a": [2]},
-            index=pd.MultiIndex.from_tuples([(pd.Timestamp(1, tz="Europe/London"), 2)], names=["date", "value"]),
-        )
+        first = pd.DataFrame({"a": [1]}, index=multiindex_with_tz("Europe/London", tz_level, 0))
+        second = pd.DataFrame({"a": [2]}, index=multiindex_with_tz("Europe/London", tz_level, 1))
         lib.write(sym, first)
         action(lib, sym, second)
-        assert str(lib.read(sym).data.index.levels[0].tz) == "Europe/London"
+        assert str(lib.read(sym).data.index.levels[tz_level].tz) == "Europe/London"
 
     def test_dataframe_multiindex_with_different_index_timezone(self, in_memory_store_factory, action):
         lib = in_memory_store_factory()
