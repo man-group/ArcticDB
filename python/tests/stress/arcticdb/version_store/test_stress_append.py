@@ -136,7 +136,7 @@ def test_write_parallel_stress_schema_change_strings(lmdb_version_store_dynamic_
 
 @pytest.mark.skipif(
     _use_pyarrow_strings_in_pandas(),
-    reason="finalize_staged_data does not support string columns with nulls with arrow yet",
+    reason="Monday ref 12852897792, finalize_staged_data does not support string columns with nulls with arrow yet",
 )
 def test_write_parallel_stress_schema_change_strings_with_nan(lmdb_version_store_dynamic_schema):
     num_rows_per_day = 1000

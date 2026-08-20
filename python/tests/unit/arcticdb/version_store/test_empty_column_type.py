@@ -19,7 +19,7 @@ from arcticdb_ext.exceptions import NormalizationException
 
 pyarrow_strings_empty_string_skip = pytest.mark.skipif(
     _use_pyarrow_strings_in_pandas(),
-    reason="Mix of EMPTYVAL segments and string-typed segments not yet supported with arrow",
+    reason="Monday ref 12853004116, Mix of EMPTYVAL segments and string-typed segments not yet supported with arrow",
 )
 
 
