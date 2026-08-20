@@ -3677,6 +3677,8 @@ class NativeVersionStore:
             return "pickled"
         elif input_type == "ts":
             return "normalized_timeseries"
+        elif input_type == "experimental_arrow":
+            return "arrow"
         else:
             return "missing_type_info"
 
@@ -3738,6 +3740,11 @@ class NativeVersionStore:
         if input_type == "df":
             index_metadata = desc.normalization.df.common
             tz = get_timezone_from_metadata(index_metadata)
+        elif input_type == "experimental_arrow":
+            index_column_name = desc.fields[0].name
+            index_column_meta = desc.normalization.experimental_arrow.columns.get(index_column_name, None)
+            if index_column_meta is not None:
+                tz = index_column_meta.timezone
         if date_range_ns_precision:
             # V2 API expects pandas timestamps with nanosecond precision
             min_ts_pd = pd.Timestamp(min_ts)
@@ -3882,6 +3889,11 @@ class NativeVersionStore:
                     index_dtype.append(dtypes.pop(0))
             if timeseries_descriptor.normalization.df.has_synthetic_columns:
                 columns = pd.RangeIndex(0, len(columns))
+        elif input_type == "experimental_arrow":
+            arrow_meta = timeseries_descriptor.normalization.experimental_arrow
+            if arrow_meta.has_index:
+                index = [columns.pop(0)]
+                index_dtype = [dtypes.pop(0)]
 
         date_range = self._get_time_range_from_ts(
             timeseries_descriptor, dit.start_index, dit.end_index, date_range_ns_precision

@@ -400,3 +400,88 @@ def test_read_batch_and_join_strings(mem_storage, lib_name, default, per_column)
     assert result.schema.field(2).type == per_column or default or pa.large_string()
     expected_df = pd.concat([df_1, df_2]).reset_index(drop=True)
     assert_frame_equal_with_arrow(expected_df, result)
+
+
+# See test with the same name in test_arrow_read.py for V1 API equivalent
+def test_arrow_written_data_get_info_non_timeseries(mem_library):
+    lib = mem_library
+    sym = "test_arrow_written_data_get_info_non_timeseries"
+    lib._nvs._set_allow_arrow_input()
+    table = pa.table({"col": pa.array(np.arange(10), type=pa.int64())})
+    lib.write(sym, table)
+    desc = lib.get_description(sym)
+    assert len(desc.columns) == 1
+    assert desc.columns[0].name == "col"
+    assert len(desc.index) == 0
+    assert "INT64" in str(desc.columns[0].dtype)
+    assert np.isnat(desc.date_range[0]) and np.isnat(desc.date_range[1])
+    assert desc.index_type == "NA"
+    assert desc.row_count == 10
+    assert desc.sorted == "UNKNOWN"
+
+
+# See test with the same name in test_arrow_read.py for V1 API equivalent
+@pytest.mark.parametrize(
+    "table",
+    [
+        pytest.param(
+            pa.table(
+                {
+                    "ts": pa.Array.from_pandas(
+                        pd.date_range("2025-01-01", periods=20),
+                        type=pa.timestamp("ns"),
+                    ),
+                    "col": pa.array(np.arange(20), type=pa.uint8()),
+                }
+            ),
+            id="sorted",
+        ),
+        pytest.param(
+            pa.table(
+                {
+                    "ts": pa.Array.from_pandas(
+                        reversed(pd.date_range("2025-01-01", periods=20)),
+                        type=pa.timestamp("ns"),
+                    ),
+                    "col": pa.array(np.arange(20), type=pa.uint8()),
+                }
+            ),
+            id="unsorted",
+        ),
+    ],
+)
+@pytest.mark.parametrize("tz", [None, "UTC", "Europe/Brussels"])
+@pytest.mark.parametrize("has_index", [False, True])
+@pytest.mark.parametrize("validate_index", [False, True])
+def test_arrow_written_data_get_info_timeseries(mem_library, table, tz, has_index, validate_index):
+    lib = mem_library
+    sym = "test_arrow_written_data_get_info_timeseries"
+    lib._nvs._set_allow_arrow_input()
+    if tz is not None:
+        table = table.set_column(0, "ts", table.column(0).cast(pa.timestamp("ns", tz=tz)))
+    sorted = (pa.compute.sort_indices(table.column(0)).to_numpy() == np.arange(20, dtype=np.uint64)).all()
+    if has_index and validate_index and not sorted:
+        pytest.skip("Write will fail")
+    lib.write(sym, table, validate_index=validate_index, index_column=has_index)
+    desc = lib.get_description(sym)
+    assert len(desc.columns) == (1 if has_index else 2)
+    assert desc.columns[-1].name == "col"
+    assert "UINT8" in str(desc.columns[-1].dtype)
+    if not has_index:
+        assert desc.columns[0].name == "ts"
+        assert "NANOSECONDS_UTC64" in str(desc.columns[0].dtype)
+    assert len(desc.index) == (1 if has_index else 0)
+    if has_index:
+        assert desc.index[0].name == "ts"
+        assert "NANOSECONDS_UTC64" in str(desc.index[0].dtype)
+    if has_index:
+        assert desc.date_range == (table.to_pandas()["ts"][0], table.to_pandas()["ts"][19])
+    else:
+        assert np.isnat(desc.date_range[0]) and np.isnat(desc.date_range[1])
+    assert desc.index_type == "NA"
+    assert desc.row_count == 20
+    # # With Arrow and validate_index enabled, it is impossible to write sorted-descending data
+    if has_index and validate_index and sorted:
+        assert desc.sorted == "ASCENDING"
+    else:
+        assert desc.sorted == "UNKNOWN"
