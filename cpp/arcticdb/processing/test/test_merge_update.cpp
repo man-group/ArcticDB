@@ -16,6 +16,8 @@ using namespace arcticdb;
 using namespace std::ranges;
 
 namespace {
+constexpr size_t rows_per_segment = 100'000;
+
 constexpr MergeStrategy update_only_strategy{.matched = MergeAction::UPDATE};
 constexpr MergeStrategy update_and_insert_strategy{
         .matched = MergeAction::UPDATE,
@@ -106,7 +108,9 @@ MergeUpdateClause create_clause(
         const MergeStrategy strategy, std::shared_ptr<ComponentManager> component_manager, InputFrame&& input_frame,
         std::vector<std::string> on = {}
 ) {
-    MergeUpdateClause clause(std::move(on), strategy, std::make_shared<InputFrame>(std::move(input_frame)));
+    MergeUpdateClause clause(
+            std::move(on), strategy, std::make_shared<InputFrame>(std::move(input_frame)), rows_per_segment
+    );
     clause.set_component_manager(std::move(component_manager));
     return clause;
 }

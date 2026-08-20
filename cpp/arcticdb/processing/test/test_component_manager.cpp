@@ -28,9 +28,9 @@ TEST(ComponentManager, Simple) {
     uint64_t entity_fetch_count_1{2};
 
     auto ids = component_manager.get_new_entity_ids(2);
-    component_manager.add_entity(ids[0], segment_0, row_range_0, col_range_0, key_0, entity_fetch_count_0);
+    component_manager.add_components(ids[0], segment_0, row_range_0, col_range_0, key_0, entity_fetch_count_0);
 
-    component_manager.add_entity(ids[1], segment_1, row_range_1, col_range_1, key_1, entity_fetch_count_1);
+    component_manager.add_components(ids[1], segment_1, row_range_1, col_range_1, key_1, entity_fetch_count_1);
 
     auto [segments, row_ranges, col_ranges, keys, entity_fetch_counts] =
             component_manager.get_entities_and_decrement_refcount<
