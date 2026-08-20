@@ -219,6 +219,10 @@ inline long get_default_cpu_count() {
     );
 }
 
+inline long get_default_io_count(long cpu_count = get_default_cpu_count()) {
+    return ConfigsMap::instance()->get_int("VersionStore.NumIOThreads", static_cast<int>(cpu_count * 1.5));
+}
+
 /*
  * Possible areas of inprovement in the future:
  * 1/ Task/op decoupling: push task and then use strategy to implement smart batching to
@@ -238,11 +242,7 @@ class TaskScheduler {
             const std::optional<size_t>& io_thread_count = std::nullopt
     ) :
         cpu_thread_count_(cpu_thread_count ? *cpu_thread_count : get_default_cpu_count()),
-        io_thread_count_(
-                io_thread_count
-                        ? *io_thread_count
-                        : ConfigsMap::instance()->get_int("VersionStore.NumIOThreads", (int)(cpu_thread_count_ * 1.5))
-        ),
+        io_thread_count_(io_thread_count ? *io_thread_count : get_default_io_count(cpu_thread_count_)),
         cpu_exec_(cpu_thread_count_, std::make_shared<InstrumentedNamedFactory>("CPUPool")),
         io_exec_(io_thread_count_, std::make_shared<InstrumentedNamedFactory>("IOPool", &io_pool_thread_started)) {
         util::check(
@@ -299,6 +299,7 @@ class TaskScheduler {
     static void init();
 
     static TaskScheduler* instance();
+    static bool is_initialized();
     static void reattach_instance();
     static void stop_active_threads();
     static bool forked_;

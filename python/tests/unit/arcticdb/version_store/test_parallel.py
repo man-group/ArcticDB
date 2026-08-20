@@ -10,6 +10,8 @@ import numpy as np
 import pandas as pd
 import random
 import datetime
+import subprocess
+import sys
 import pytest
 
 
@@ -240,6 +242,37 @@ def test_parallel_write(basic_store_tiny_segment, num_segments_live_during_compa
             assert len(get_append_keys(store, sym)) == 0
     finally:
         adb_async.reinit_task_scheduler()
+
+
+@pytest.mark.parametrize("num_cpu_threads, num_io_threads", [(None, None), (3, 5), (3, None), (None, 5)])
+def test_default_thread_counts(num_cpu_threads, num_io_threads):
+    with config_context_multi(
+        {
+            "VersionStore.NumCPUThreads": num_cpu_threads,
+            "VersionStore.NumIOThreads": num_io_threads,
+        }
+    ):
+        if num_cpu_threads is not None:
+            assert adb_async.get_default_cpu_count() == num_cpu_threads
+
+        if num_io_threads is not None:
+            assert adb_async.get_default_io_count() == num_io_threads
+        else:
+            assert adb_async.get_default_io_count() == int(adb_async.get_default_cpu_count() * 1.5)
+
+
+def test_task_scheduler_is_initialized():
+    adb_async.cpu_thread_count()
+    assert adb_async.is_task_scheduler_initialized()
+
+
+def test_default_thread_counts_do_not_initialize_scheduler():
+    script = (
+        "import arcticdb_ext.cpp_async as adb_async; "
+        "adb_async.get_default_cpu_count(); adb_async.get_default_io_count(); "
+        "assert not adb_async.is_task_scheduler_initialized()"
+    )
+    subprocess.check_call([sys.executable, "-c", script])
 
 
 @pytest.mark.parametrize(
