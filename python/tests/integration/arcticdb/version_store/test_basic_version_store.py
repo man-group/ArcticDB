@@ -1814,14 +1814,16 @@ def test_batch_read_metadata_missing_keys(basic_store):
     lib_tool.remove(s1_index_key)
     lib_tool.remove(s2_key_to_delete)
 
-    vits = lib.batch_read_metadata(["s2"], [1])
-    metadata = vits["s2"].metadata
-    assert metadata["s2"] == "more_metadata"
+    # Disable version map cache so the read hits storage and sees the missing keys
+    with config_context("VersionMap.ReloadInterval", 0):
+        vits = lib.batch_read_metadata(["s2"], [1])
+        metadata = vits["s2"].metadata
+        assert metadata["s2"] == "more_metadata"
 
-    with pytest.raises(StorageException):
-        _ = lib.batch_read_metadata(["s1"], [None])
-    with pytest.raises(StorageException):
-        _ = lib.batch_read_metadata(["s2"], [0])
+        with pytest.raises(StorageException):
+            _ = lib.batch_read_metadata(["s1"], [None])
+        with pytest.raises(StorageException):
+            _ = lib.batch_read_metadata(["s2"], [0])
 
 
 @pytest.mark.storage
@@ -1846,9 +1848,10 @@ def test_batch_read_missing_keys(basic_store):
     df3 = pd.DataFrame({"a": [5, 7, 9]})
     lib.write("s1", df1)
     lib.write("s2", df2)
-    # Need two versions for this symbol as we're going to delete a version key, and the optimisation of storing the
-    # latest index key in the version ref key means it will still work if we just write one version key and then delete
-    # it
+    # Need three versions for this symbol as we're going to delete a version key, and the optimisation of storing
+    # the latest two index keys in the version ref key means it will still work if we just write two version keys
+    # and then delete the oldest
+    lib.write("s3", df3)
     lib.write("s3", df3)
     lib.write("s3", df3)
     lib_tool = lib.library_tool()
@@ -1862,8 +1865,10 @@ def test_batch_read_missing_keys(basic_store):
 
     # The exception thrown is different for missing version keys to everything else, and so depends on which symbol is
     # processed first
-    with pytest.raises((NoDataFoundException, StorageException)):
-        _ = lib.batch_read(["s1", "s2", "s3"], [None, None, 0])
+    # Disable version map cache so the read hits storage and sees the missing keys
+    with config_context("VersionMap.ReloadInterval", 0):
+        with pytest.raises((NoDataFoundException, StorageException)):
+            _ = lib.batch_read(["s1", "s2", "s3"], [None, None, 0])
 
 
 @pytest.mark.storage
@@ -1886,12 +1891,14 @@ def test_batch_get_info_missing_keys(basic_store):
     lib_tool.remove(s1_index_key)
     lib_tool.remove(s2_key_to_delete)
 
-    info = lib.batch_get_info(["s2"], [1])
+    # Disable version map cache so the read hits storage and sees the missing keys
+    with config_context("VersionMap.ReloadInterval", 0):
+        info = lib.batch_get_info(["s2"], [1])
 
-    with pytest.raises(StorageException):
-        _ = lib.batch_get_info(["s1"], [None])
-    with pytest.raises(StorageException):
-        _ = lib.batch_get_info(["s2"], [0])
+        with pytest.raises(StorageException):
+            _ = lib.batch_get_info(["s1"], [None])
+        with pytest.raises(StorageException):
+            _ = lib.batch_get_info(["s2"], [0])
 
 
 @pytest.mark.storage
