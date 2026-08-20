@@ -18,7 +18,7 @@ from arcticdb_ext.storage import KeyType
 from arcticdb.util.test import assert_frame_equal
 from arcticdb_ext.types import DataType
 
-from tests.util.mark import ARM64
+from tests.util.mark import ARM64, WINDOWS
 
 
 @pytest.mark.parametrize("dynamic_schema", [True, False])
@@ -53,6 +53,7 @@ def test_changing_numeric_type(version_store_factory, dynamic_schema):
         assert_frame_equal(expected_update, received_update)
 
 
+@pytest.mark.skipif(WINDOWS, reason="Windows does not work with fixed width strings")
 @pytest.mark.parametrize("dynamic_schema", [True, False])
 @pytest.mark.parametrize("dynamic_strings_first", [True, False])
 def test_changing_string_type(version_store_factory, dynamic_schema, dynamic_strings_first):

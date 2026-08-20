@@ -734,7 +734,9 @@ def test_symbol_concat_querybuilder_syntax(lmdb_library, any_output_format):
             np.float64,
             marks=pytest.mark.xfail(
                 reason="default_values not preserved with concat (Monday ref: 12529266849)",
-                strict=True,
+                # Not strict: whether the concat pipeline backfills at all depends on how it partitions
+                # processing units, which varies with the CPU thread count. It passes on a 3-core runner.
+                strict=False,
             ),
         ),
     ],
