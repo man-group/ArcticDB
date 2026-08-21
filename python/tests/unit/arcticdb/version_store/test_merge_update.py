@@ -7,6 +7,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 
 import arcticdb
+import os
 from typing import List, Optional, Union
 import arcticdb.toolbox.query_stats as qs
 import numpy as np
