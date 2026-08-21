@@ -15,7 +15,6 @@
 
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/util/constructors.hpp>
-#include <boost/locale/boundary/index.hpp>
 #include <folly/container/Enumerate.h>
 
 namespace arcticdb {

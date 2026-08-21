@@ -6,8 +6,6 @@
  * will be governed by the Apache License, version 2.0.
  */
 
-#include "util/collection_utils.hpp"
-
 #include <arcticdb/processing/clause.hpp>
 #include <arcticdb/processing/processing_unit.hpp>
 #include <arcticdb/column_store/string_pool.hpp>
@@ -18,6 +16,7 @@
 #include <arcticdb/pipeline/slicing.hpp>
 #include <arcticdb/stream/index.hpp>
 #include <arcticdb/column_store/column_reslicer.hpp>
+#include <arcticdb/util/collection_utils.hpp>
 #include <ankerl/unordered_dense.h>
 #include <boost/regex.hpp>
 
@@ -306,6 +305,7 @@ std::vector<std::shared_ptr<Column>> merge(
     size_t new_column_row_idx{};
     // Position in the combined [0, total_rows()) output
     size_t output_row_idx{};
+    size_t rows_in_current_slice = reslicing_info.rows_in_slice(0);
     auto new_column_it = new_column_datas.front().begin<TargetColumnTypeDescriptorTag>();
 
     size_t target_row_slice = 0;
@@ -351,9 +351,10 @@ std::vector<std::shared_ptr<Column>> merge(
         ++output_row_idx;
         ++new_column_it;
 
-        if (new_column_it == new_column_datas[new_column_row_slice_index].end<TargetColumnTypeDescriptorTag>() &&
+        if (new_column_row_idx == rows_in_current_slice &&
             new_column_row_slice_index + 1 < reslicing_info.num_segments()) [[unlikely]] {
             ++new_column_row_slice_index;
+            rows_in_current_slice = reslicing_info.rows_in_slice(new_column_row_slice_index);
             new_column_row_idx = 0;
             new_column_it = new_column_datas[new_column_row_slice_index].begin<TargetColumnTypeDescriptorTag>();
         }
@@ -578,11 +579,13 @@ RowRange get_row_range(std::span<const ProcessingUnit> row_slice) {
     return {row_slice.front().row_ranges_->front()->first, row_slice.back().row_ranges_->back()->second};
 }
 
-ssize_t first_different_index_value_position(const ColumnData index) {
+std::optional<ssize_t> first_different_index_value_position(const ColumnData index) {
     using IndexType = ScalarTagType<DataTypeTag<DataType::NANOSECONDS_UTC64>>;
     auto it = index.cbegin<IndexType, IteratorType::ENUMERATED>();
     const timestamp first_source_row = it->value();
-    return exponential_upper_bound(++it, index.cend<IndexType, IteratorType::ENUMERATED>(), first_source_row)->idx();
+    const auto end = index.cend<IndexType, IteratorType::ENUMERATED>();
+    const auto first_different_position = exponential_upper_bound(++it, end, first_source_row);
+    return end == first_different_position ? std::nullopt : std::optional{first_different_position->idx()};
 };
 
 TargetRange get_target_start_end(std::span<const ProcessingUnit> row_slices) {
@@ -593,11 +596,13 @@ TargetRange get_target_start_end(std::span<const ProcessingUnit> row_slices) {
     if (row_slices.front().entity_fetch_count_) {
         if (row_slices.front().entity_fetch_count_->front() > 1) {
             const ColumnData index = row_slices.front().segments_->front()->column(0).data();
-            result.start_row_in_first_row_slice = first_different_index_value_position(index);
+            result.start_row_in_first_row_slice = first_different_index_value_position(index).value_or(0);
         }
         if (row_slices.size() > 1 && row_slices.back().entity_fetch_count_->back() > 1) {
             const ColumnData index = row_slices.back().segments_->back()->column(0).data();
-            result.end_row_in_last_row_slice = first_different_index_value_position(index);
+            result.end_row_in_last_row_slice = first_different_index_value_position(index).value_or(
+                    row_slices.back().segments_->back()->row_count()
+            );
         }
     }
     return result;
@@ -1137,6 +1142,9 @@ std::vector<ProcessingUnit> MergeUpdateClause::update_and_insert(
             max_rows_per_segment(rows_per_segment_)
     };
     std::vector<ProcessingUnit> result(reslicing_info.num_segments());
+    for (ProcessingUnit& proc : result) {
+        proc.segments_.emplace(util::reserve_vector<std::shared_ptr<SegmentInMemory>>(num_col_slices));
+    }
     std::vector<StringPool> new_string_pools(reslicing_info.num_segments());
     std::vector<std::shared_ptr<Column>> new_indexes = merge<IndexType>(
             InsertSourceData{.index = source_index, .data = source_index, .global_row_range = source_start_end},
@@ -1151,61 +1159,73 @@ std::vector<ProcessingUnit> MergeUpdateClause::update_and_insert(
             MergeStrategy{.not_matched_by_target = MergeAction::INSERT},
             reslicing_info
     );
-    size_t col_slice_idx = 0;
-    const auto [source_start, source_end] = source_start_end;
-    for (size_t field_idx = target_descriptor.index().field_count(); field_idx < target_descriptor.field_count();
-         ++field_idx) {
-        const Field& target_field = target_descriptor.field(field_idx);
-        const std::string_view column_name = target_field.name();
-        target_datas.clear();
-        std::ranges::transform(row_slices, std::back_inserter(target_datas), [&](ProcessingUnit& row_slice) {
-            return std::get<ColumnWithStrings>(row_slice.get(ColumnName{column_name}));
-        });
-        std::vector<std::shared_ptr<Column>> new_column_slices =
-                details::visit_type(target_field.type().data_type(), [&]<typename TypeTag>(TypeTag) {
-                    using TargetDataTDT = ScalarTagType<TypeTag>;
-                    has_string_column_in_column_slice |= is_sequence_type(TargetDataTDT::data_type());
-                    return merge<TargetDataTDT>(
-                            InsertSourceData{
-                                    .index = source_index,
-                                    .data = source_->get_tensor(field_idx).span<SourceRawType<TargetDataTDT>>(
-                                            source_start, source_end - source_start
-                                    ),
-                                    .global_row_range = source_start_end
-                            },
-                            InsertTargetData{
-                                    .indexes = target_index_datas,
-                                    .columns = target_datas,
-                                    .type = target_field.type(),
-                                    .range = target_range,
-                                    .new_string_pools = new_string_pools
-                            },
-                            match_record,
-                            // By construction, we cannot update the columns used to perform the match; only inserts are
-                            // allowed
-                            on_set_.contains(column_name) ? MergeStrategy{.not_matched_by_target = MergeAction::INSERT}
-                                                          : strategy_,
-                            reslicing_info
-                    );
-                });
-        // Start working on new column slice.
-        if (field_idx == (*row_slices.front().col_ranges_)[col_slice_idx]->first) {
-            initialize_col_slices((*row_slices.front().segments_)[col_slice_idx]->descriptor(), new_indexes, result);
-        }
-        // For each row slice set the corresponding column.
-        const size_t col_in_slice = field_idx - (*row_slices.front().col_ranges_)[col_slice_idx]->first + 1;
-        for (auto&& [row_slice_idx, row_slice] : folly::enumerate(result)) {
-            row_slice.segments_->back()->columns()[col_in_slice] = std::move(new_column_slices[row_slice_idx]);
-        }
+    if (target_descriptor.field_count() == target_descriptor.index().field_count()) {
+        // Handle degenerate case of index-only dataframe
+        initialize_col_slices((*row_slices.front().segments_)[0]->descriptor(), new_indexes, result);
+        finalize_col_slices(new_indexes, nullptr, result);
+    } else {
+        size_t col_slice_idx = 0;
+        const auto [source_start, source_end] = source_start_end;
+        for (size_t field_idx = target_descriptor.index().field_count(); field_idx < target_descriptor.field_count();
+             ++field_idx) {
+            const Field& target_field = target_descriptor.field(field_idx);
+            const std::string_view column_name = target_field.name();
+            target_datas.clear();
+            std::ranges::transform(row_slices, std::back_inserter(target_datas), [&](ProcessingUnit& row_slice) {
+                return std::get<ColumnWithStrings>(row_slice.get(ColumnName{column_name}));
+            });
+            std::vector<std::shared_ptr<Column>> new_column_slices =
+                    details::visit_type(target_field.type().data_type(), [&]<typename TypeTag>(TypeTag) {
+                        using TargetDataTDT = ScalarTagType<TypeTag>;
+                        has_string_column_in_column_slice |= is_sequence_type(TargetDataTDT::data_type());
+                        return merge<TargetDataTDT>(
+                                InsertSourceData{
+                                        .index = source_index,
+                                        .data = source_->get_tensor(field_idx).span<SourceRawType<TargetDataTDT>>(
+                                                source_start, source_end - source_start
+                                        ),
+                                        .global_row_range = source_start_end
+                                },
+                                InsertTargetData{
+                                        .indexes = target_index_datas,
+                                        .columns = target_datas,
+                                        .type = target_field.type(),
+                                        .range = target_range,
+                                        .new_string_pools = new_string_pools
+                                },
+                                match_record,
+                                // By construction, we cannot update the columns used to perform the match; only inserts
+                                // are allowed
+                                on_set_.contains(column_name)
+                                        ? MergeStrategy{.not_matched_by_target = MergeAction::INSERT}
+                                        : strategy_,
+                                reslicing_info
+                        );
+                    });
+            // Start working on new column slice.
+            if (field_idx == (*row_slices.front().col_ranges_)[col_slice_idx]->first) {
+                initialize_col_slices(
+                        (*row_slices.front().segments_)[col_slice_idx]->descriptor(), new_indexes, result
+                );
+            }
+            // For each row slice set the corresponding column.
+            const size_t col_in_slice = field_idx - (*row_slices.front().col_ranges_)[col_slice_idx]->first + 1;
+            for (auto&& [row_slice_idx, row_slice] : folly::enumerate(result)) {
+                row_slice.segments_->back()->columns()[col_in_slice] = std::move(new_column_slices[row_slice_idx]);
+            }
 
-        // The last column in the column slice is processed. Finish working on th segment by setting the string pool and
-        // the row data.
-        if (field_idx == (*row_slices.front().col_ranges_)[col_slice_idx]->second - 1) {
-            finalize_col_slices(new_indexes, has_string_column_in_column_slice ? &new_string_pools : nullptr, result);
-            ++col_slice_idx;
-            has_string_column_in_column_slice = false;
+            // The last column in the column slice is processed. Finish working on th segment by setting the string pool
+            // and the row data.
+            if (field_idx == (*row_slices.front().col_ranges_)[col_slice_idx]->second - 1) {
+                finalize_col_slices(
+                        new_indexes, has_string_column_in_column_slice ? &new_string_pools : nullptr, result
+                );
+                ++col_slice_idx;
+                has_string_column_in_column_slice = false;
+            }
         }
     }
+
     set_upsert_ranges(target_range, row_slices, result);
     return std::vector{std::move(result)};
 }

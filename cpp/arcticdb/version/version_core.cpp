@@ -441,7 +441,7 @@ util::BitSet source_rows_to_insert_for_row_range_merge_update(const ComponentMan
             rows_to_insert = *unmatched_source_rows.unmatched_source_rows;
         }
     });
-    return *std::move(rows_to_insert);
+    return std::move(rows_to_insert).value_or(util::BitSet{});
 }
 
 std::vector<StreamDescriptor> split_rowrange_descriptor(
