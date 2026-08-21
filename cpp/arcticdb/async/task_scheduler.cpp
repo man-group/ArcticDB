@@ -15,6 +15,8 @@ TaskScheduler* TaskScheduler::instance() {
     return instance_->ptr_;
 }
 
+bool TaskScheduler::is_initialized() { return static_cast<bool>(instance_); }
+
 std::shared_ptr<TaskSchedulerPtrWrapper> TaskScheduler::instance_;
 std::once_flag TaskScheduler::init_flag_;
 std::once_flag TaskScheduler::shutdown_flag_;
