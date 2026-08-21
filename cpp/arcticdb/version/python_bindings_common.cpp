@@ -24,8 +24,8 @@ void register_version_store_common_bindings(py::module& version, BindingScope sc
 
     using PandasOutputFrame = arcticdb::pipelines::PandasOutputFrame;
     py::class_<PandasOutputFrame>(version, "PandasOutputFrame", py::module_local(local_bindings))
-            .def("extract_numpy_arrays",
-                 [](PandasOutputFrame& self) { return python_util::extract_numpy_arrays(self); });
+            .def("extract_pandas_columns",
+                 [](PandasOutputFrame& self) { return python_util::extract_pandas_columns(self); });
 
     py::class_<ArrowOutputFrame, std::shared_ptr<ArrowOutputFrame>>(
             version, "ArrowOutputFrame", py::module_local(local_bindings)

@@ -46,6 +46,8 @@ from arcticdb.util.test import (
     sample_dataframe,
     sample_dataframe_only_strings,
     get_sample_dataframe,
+    arrow_string_read,
+    assert_null_string,
     assert_frame_equal,
     assert_series_equal,
     config_context,
@@ -55,6 +57,7 @@ from tests.conftest import Marks
 from tests.util.date import DateRange
 from arcticdb.util.test import equals
 from arcticdb.version_store._store import resolve_defaults
+from arcticdb.version_store._string_dtype import _use_pyarrow_strings_in_pandas
 from tests.util.mark import xfail_azure_chars
 from tests.util.marking import marks
 
@@ -1542,12 +1545,17 @@ def test_negative_strides(basic_store_tiny_segment):
 
 
 @pytest.mark.storage
-def test_dynamic_strings(basic_store):
-    row = pd.Series(["A", "B", "C", "Aaba", "Baca", "CABA", "dog", "cat"])
-    df = pd.DataFrame({"x": row})
-    basic_store.write("strings", df, dynamic_strings=True)
-    vit = basic_store.read("strings")
-    assert_equal(vit.data, df)
+def test_dynamic_strings(basic_store, read_string_dtype):
+    # The write dtype follows the ambient pandas option (object normally, str under the infer_string CI
+    # variant) while the read dtype is parametrised, so this covers both write/read representations.
+    values = ["A", "B", "C", "Aaba", "Baca", "CABA", "dog", "cat"]
+    basic_store.write("strings", pd.DataFrame({"x": values}), dynamic_strings=True)
+    with arrow_string_read(read_string_dtype):
+        # expected must be built under the same option as the read
+        expected = pd.DataFrame({"x": values})
+        vit = basic_store.read("strings")
+    assert_equal(vit.data, expected)
+    assert (str(vit.data["x"].dtype) == "str") == read_string_dtype
 
 
 @pytest.mark.storage
@@ -1614,8 +1622,8 @@ def test_dynamic_strings_with_all_nones(basic_store):
     df = pd.DataFrame({"x": [None, None]})
     basic_store.write("strings", df, dynamic_strings=True)
     data = basic_store.read("strings")
-    assert data.data["x"][0] is None
-    assert data.data["x"][1] is None
+    assert_null_string(data.data["x"][0], _use_pyarrow_strings_in_pandas())
+    assert_null_string(data.data["x"][1], _use_pyarrow_strings_in_pandas())
 
 
 @pytest.mark.storage
@@ -1996,6 +2004,9 @@ def test_dataframe_with_nan_and_nat_only(basic_store):
 
 
 @pytest.mark.storage
+@pytest.mark.skipif(
+    _use_pyarrow_strings_in_pandas(), reason="object-dtype coercion path not reachable under future.infer_string"
+)
 def test_coercion_to_float(basic_store):
     lib = basic_store
     df = pd.DataFrame({"col": [np.nan, "1", np.nan]})
@@ -2016,6 +2027,9 @@ def test_coercion_to_float(basic_store):
 
 
 @pytest.mark.storage
+@pytest.mark.skipif(
+    _use_pyarrow_strings_in_pandas(), reason="object-dtype coercion path not reachable under future.infer_string"
+)
 def test_coercion_to_str_with_dynamic_strings(basic_store):
     # assert that the getting sample function is not called
     lib = basic_store

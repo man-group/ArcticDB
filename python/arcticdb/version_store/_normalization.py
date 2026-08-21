@@ -27,9 +27,16 @@ import pickle
 from abc import ABCMeta, abstractmethod
 
 from arcticdb.dependencies import _PYARROW_AVAILABLE, _POLARS_AVAILABLE, pyarrow as pa, polars as pl
+from arcticdb.version_store._string_dtype import (
+    _use_pyarrow_strings_in_pandas,
+    _is_arrow_string_column,
+    _arrow_string_arrays_to_pd_array,
+    _adopt_arrow_strings,
+    _pandas_str_column_to_record_batches,
+)
 from arcticdb.preconditions import check
 from arcticdb_ext import get_config_string
-from pandas.api.types import is_integer_dtype
+from pandas.api.types import infer_dtype, is_integer_dtype
 from arcticc.pb2.descriptors_pb2 import UserDefinedMetadata, NormalizationMetadata, MsgPackSerialization
 from arcticc.pb2.storage_pb2 import VersionStoreConfig
 from collections import Counter
@@ -217,7 +224,9 @@ def get_timezone_from_metadata(norm_meta):
     return None
 
 
-def _to_primitive(arr, arr_name, dynamic_strings, string_max_len=None, coerce_column_type=None, norm_meta=None):
+def _to_primitive(
+    arr, arr_name, dynamic_strings, string_max_len=None, coerce_column_type=None, norm_meta=None
+) -> Union[np.ndarray, List[RecordBatchData]]:
     arr_dtype_as_str = str(arr.dtype)
     if "pyarrow" in arr_dtype_as_str:
         raise ArcticDbNotYetImplemented(
@@ -234,6 +243,17 @@ def _to_primitive(arr, arr_name, dynamic_strings, string_max_len=None, coerce_co
             norm_meta.common.categories[arr_name].category.extend(arr.categories)
         return arr.codes
 
+    if isinstance(arr.dtype, pd.StringDtype):
+        if arr.dtype.na_value is pd.NA:
+            raise ArcticDbNotYetImplemented(
+                f"Failed to normalize column '{arr_name}' with dtype '{arr.dtype}': pd.NA dtype not supported"
+            )
+        if arr.dtype.storage != "pyarrow":
+            raise ArcticDbNotYetImplemented(
+                f"Failed to normalize column '{arr_name}' with dtype '{arr.dtype}': only pyarrow-backed storage is "
+                "supported"
+            )
+        return _pandas_str_column_to_record_batches(arr._pa_array, arr_name)
     # This check has to come after the categorical check above, as Categoricals are a Pandas concept, not numpy, which
     # causes issubdtype to throw if arr.dtype == CategoricalDtype
     if np.issubdtype(arr.dtype, np.timedelta64):
@@ -443,7 +463,7 @@ def _denormalize_single_index(item, norm_meta):
         if norm_meta.WhichOneof("index_type") == "index" and not norm_meta.index.is_physically_stored:
             if len(item.data) > 0:
                 if hasattr(norm_meta.index, "step") and norm_meta.index.step != 0:
-                    stop = norm_meta.index.start + norm_meta.index.step * len(item.data[0])
+                    stop = norm_meta.index.start + norm_meta.index.step * item.row_count
                     name = norm_meta.index.name if norm_meta.index.name else None
                     return RangeIndex(start=norm_meta.index.start, stop=stop, step=norm_meta.index.step, name=name)
                 else:
@@ -455,7 +475,8 @@ def _denormalize_single_index(item, norm_meta):
 
     if len(item.index_columns) == 1:
         name = int(item.index_columns[0]) if norm_meta.index.is_int else item.index_columns[0]
-        rtn = Index(item.data[0] if len(item.data) > 0 else [], name=name)
+        index_data = _adopt_arrow_strings(item.data[0]) if len(item.data) > 0 else []
+        rtn = Index(index_data, name=name)
 
         tz = get_timezone_from_metadata(norm_meta)
         if isinstance(rtn, DatetimeIndex) and tz:
@@ -520,7 +541,8 @@ def _normalize_columns_names(columns_names, index_names, norm_meta, dynamic_sche
     counter = Counter(columns_names)
     for idx in range(len(columns_names)):
         col = columns_names[idx]
-        if col is None:
+        # None, or NaN (an unnamed column in a future.infer_string str-dtype columns Index), is unnamed.
+        if pd.isna(col):
             if dynamic_schema and counter[col] > 1:
                 raise ArcticNativeException("Multiple None columns not allowed in dynamic_schema")
             new_name = "__none__{}".format(0 if dynamic_schema else idx)
@@ -1092,9 +1114,14 @@ class DataFrameNormalizer(_PandasNormalizer):
         def df_from_arrays(arrays, cols, ind, n_ind):
             def gen_blocks():
                 _len = len(index)
+                infer_string = _use_pyarrow_strings_in_pandas()
                 column_placement_in_block = 0
                 for idx, a in enumerate(arrays):
                     if idx < n_ind:
+                        continue
+                    if _is_arrow_string_column(a):
+                        yield make_block(_arrow_string_arrays_to_pd_array(a), placement=(column_placement_in_block,))
+                        column_placement_in_block += 1
                         continue
                     # In Pandas 1 the dtype param of make_block is ignored for empty blocks and the dtype is always object
                     # Pre-empty type Arctic has a default dtype of float64 for empty columns. Thus a casting to float64
@@ -1155,6 +1182,8 @@ class DataFrameNormalizer(_PandasNormalizer):
         )
 
         if not self._skip_df_consolidation:
+            if data is not None:
+                data = {name: _adopt_arrow_strings(value) for name, value in data.items()}
             df = DataFrame(data, index=index, columns=columns)
             # Setting the columns' dtype manually, since pandas might just convert the dtype of some
             # (empty) columns to another one and since the `dtype` keyword for `pd.DataFrame` constructor
@@ -1192,10 +1221,17 @@ class DataFrameNormalizer(_PandasNormalizer):
                 df = self.df_without_consolidation(columns, item.data[0], item, n_indexes, data)
 
         if denormed_columns is not None:
-            # Set the dtype to object otherwise columns with names int(1) and None will become 1.0 and np.nan, because
-            # Pandas assumes this is a float64 array
             if denormed_columns_contain_none:
-                df.columns = pd.Index(denormed_columns, dtype=object)
+                if _use_pyarrow_strings_in_pandas() and all(
+                    col is None or isinstance(col, str) for col in denormed_columns
+                ):
+                    # Under future.infer_string an all-string columns axis is the str dtype, where None
+                    # reads back as nan — matching how pandas builds such a columns Index.
+                    df.columns = pd.Index(denormed_columns)
+                else:
+                    # Force object otherwise: names like int(1) with None would become 1.0 and nan, because
+                    # pandas infers a float64 array. Object preserves the exact int/None labels.
+                    df.columns = pd.Index(denormed_columns, dtype=object)
             else:
                 df.columns = denormed_columns
         if norm_meta.common.columns.fake_name is False and len(norm_meta.common.columns.name) > 0:
@@ -1308,7 +1344,7 @@ class DataFrameNormalizer(_PandasNormalizer):
         if isinstance(item.columns, MultiIndex):
             raise ArcticDbNotYetImplemented("MultiIndex column are not supported yet")
 
-        index_names, ix_vals = self._index_to_records(
+        index_names, index_values = self._index_to_records(
             item, norm_meta.df.common, dynamic_strings, string_max_len=string_max_len, empty_types=empty_types
         )
         # The first branch of this if is faster, but does not work with null/duplicated column names
@@ -1316,7 +1352,7 @@ class DataFrameNormalizer(_PandasNormalizer):
             columns_vals = [item[col].values for col in item.columns]
         else:
             columns_vals = [item.iloc[:, idx].values for idx in range(len(item.columns))]
-        columns, column_vals = _normalize_columns(
+        column_names, column_vals = _normalize_columns(
             item.columns,
             columns_vals,
             norm_meta.df,
@@ -1347,8 +1383,8 @@ class DataFrameNormalizer(_PandasNormalizer):
         return NormalizedInput(
             item=PandasData(
                 index_names=index_names,
-                index_values=ix_vals,
-                column_names=columns,
+                index_values=index_values,
+                column_names=column_names,
                 columns_values=column_vals,
                 sorted=sort_status,
             ),
@@ -1782,7 +1818,7 @@ def denormalize_user_metadata(udm, ext_obj=None):
 def denormalize_dataframe(ret):
     pandas_output_frame = ret[1]
     norm = ret[2]
-    frame_data = FrameData(*pandas_output_frame.extract_numpy_arrays())
+    frame_data = FrameData(*pandas_output_frame.extract_pandas_columns())
     if len(frame_data.names) == 0:
         return None
 

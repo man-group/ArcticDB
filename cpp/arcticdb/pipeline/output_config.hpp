@@ -8,13 +8,26 @@
 
 #pragma once
 
+#include <cstdint>
+#include <string>
+#include <unordered_map>
+#include <variant>
+
 namespace arcticdb {
 
 enum class ArrowOutputStringFormat : uint8_t { CATEGORICAL, LARGE_STRING, SMALL_STRING };
+
+enum class PandasStringFormat : uint8_t { OBJECT, ARROW_LARGE_STRING };
+
+struct PandasOutputConfig {
+    PandasStringFormat default_string_format_ = PandasStringFormat::OBJECT;
+};
 
 struct ArrowOutputConfig {
     ArrowOutputStringFormat default_string_format_ = ArrowOutputStringFormat::LARGE_STRING;
     std::unordered_map<std::string, ArrowOutputStringFormat> per_column_string_format_;
 };
+
+using OutputConfig = std::variant<PandasOutputConfig, ArrowOutputConfig>;
 
 } // namespace arcticdb

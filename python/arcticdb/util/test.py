@@ -64,6 +64,7 @@ from arcticdb_ext.util import (
 )
 from packaging.version import Version
 from arcticdb.version_store._store import MergeStrategy, normalize_merge_strategy
+from arcticdb.version_store._string_dtype import _ARROW_BACKED_STR_DTYPE_SUPPORTED
 
 
 def create_df(start=0, columns=1) -> pd.DataFrame:
@@ -301,6 +302,34 @@ def unicode_symbols():
 def random_unicode_string(length: int) -> str:
 
     return "".join(random.choices(string.ascii_uppercase + unicode_symbols(), k=length))
+
+
+@contextmanager
+def arrow_string_read(enabled: bool):
+    """Read strings back as the pandas arrow-backed ``str`` dtype (``future.infer_string``) or as ``object``.
+
+    Wrap only the read call, not the write: writing that dtype is not supported yet. Skips when ``enabled`` is
+    requested on pandas that lacks either ``future.infer_string`` (< 2.1) or the ``str`` dtype (StringDtype na_value,
+    added in 2.3).
+    """
+    if enabled and not _ARROW_BACKED_STR_DTYPE_SUPPORTED:
+        import pytest
+
+        pytest.skip("pandas too old for the arrow-backed str dtype (StringDtype na_value, added in 2.3)")
+    try:
+        with pd.option_context("future.infer_string", enabled):
+            yield
+    except pd.errors.OptionError:
+        # enabled=False on pandas < 2.1, where the option does not exist. enabled=True is skipped above.
+        yield
+
+
+def assert_null_string(value, is_str_dtype: bool):
+    """Assert a missing string: ``np.nan`` under the arrow-backed ``str`` dtype, ``None`` under ``object``."""
+    if is_str_dtype:
+        assert value is not None and np.isnan(value), f"expected NaN, got {value!r}"
+    else:
+        assert value is None, f"expected None, got {value!r}"
 
 
 def random_string(length: int):
@@ -800,7 +829,9 @@ def make_dynamic(df, num_slices=10):
 
 def regularize_dataframe(df):
     output = df.copy(deep=True)
-    for col in output.select_dtypes(include=["object"]).columns:
+    # Include "string" so the arrow-backed str dtype (future.infer_string) is filled with "" here, not
+    # with 0 by the numeric fillna below (which raises for a str column).
+    for col in output.select_dtypes(include=["object", "string"]).columns:
         output[col] = output[col].fillna("")
 
     # TODO remove this when filtering code returns NaN
@@ -875,10 +906,11 @@ def get_query_processing_functions(lib, symbol, arctic_query, date_range=None):
     return processing_functions
 
 
-def generic_filter_test(lib, symbol, arctic_query, expected):
+def generic_filter_test(lib, symbol, arctic_query, expected, read_string_dtype=False):
     query_processing_functions = get_query_processing_functions(lib, symbol, arctic_query)
     for processing in query_processing_functions:
-        received = processing()
+        with arrow_string_read(read_string_dtype):
+            received = processing()
         if not np.array_equal(expected, received):
             original_df = lib.read(symbol).data
             print(
@@ -889,12 +921,12 @@ def generic_filter_test(lib, symbol, arctic_query, expected):
 
 
 # For string queries, test both with and without dynamic strings, and with the query both optimised for speed and memory
-def generic_filter_test_strings(lib, base_symbol, arctic_query, expected):
+def generic_filter_test_strings(lib, base_symbol, arctic_query, expected, read_string_dtype=False):
     for symbol in [f"{base_symbol}_{DYNAMIC_STRINGS_SUFFIX}", f"{base_symbol}_{FIXED_STRINGS_SUFFIX}"]:
         arctic_query.optimise_for_speed()
-        generic_filter_test(lib, symbol, arctic_query, expected)
+        generic_filter_test(lib, symbol, arctic_query, expected, read_string_dtype)
         arctic_query.optimise_for_memory()
-        generic_filter_test(lib, symbol, arctic_query, expected)
+        generic_filter_test(lib, symbol, arctic_query, expected, read_string_dtype)
 
 
 def generic_filter_test_dynamic(lib, symbol, arctic_query, queried_slices):
@@ -947,17 +979,15 @@ def generic_filter_test_nans(lib, symbol, arctic_query, expected, output_format=
             received_col = received.loc[:, col]
             for idx, expected_val in expected_col.items():
                 received_val = received_col[idx]
+                received_is_str_dtype = str(received_col.dtype) == "str"
                 if isinstance(expected_val, str):
                     assert isinstance(received_val, str) and expected_val == received_val
                 elif expected_val is None:
-                    assert received_val is None
+                    assert_null_string(received_val, received_is_str_dtype)
                 elif np.isnan(expected_val):
-                    if output_format == OutputFormat.PANDAS:
-                        assert np.isnan(received_val)
-                    else:
-                        # When reading as arrow `None` vs `NaN` information is lost. It's all stored as arrow `null`s
-                        # which then is converted to pandas `None`s
-                        assert received_val is None
+                    # When reading as arrow `None` vs `NaN` information is lost. It's all stored as arrow `null`s
+                    # which then is converted to pandas `None`s
+                    assert_null_string(received_val, output_format == OutputFormat.PANDAS or received_is_str_dtype)
 
 
 def generic_aggregation_test(lib, symbol, df, grouping_column, aggs_dict):

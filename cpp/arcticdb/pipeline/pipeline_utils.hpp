@@ -75,14 +75,15 @@ inline ReadResult create_python_read_result(
         }
     }
 
-    auto get_python_frame = [output_format](auto& result) -> OutputFrame {
-        if (output_format == OutputFormat::ARROW) {
-            return ArrowOutputFrame{segment_to_arrow_data(result.frame_, result.desc_.proto().normalization())};
+    auto get_python_frame = [](auto& result, OutputFormat requested_format) -> OutputFrame {
+        const auto& norm = result.desc_.proto().normalization();
+        if (requested_format == OutputFormat::ARROW) {
+            return ArrowOutputFrame{segment_to_arrow_data(result.frame_, norm)};
         } else {
             return pipelines::PandasOutputFrame{result.frame_};
         }
     };
-    auto python_frame = get_python_frame(result);
+    auto python_frame = get_python_frame(result, output_format);
     util::print_total_mem_usage(__FILE__, __LINE__, __FUNCTION__);
 
     const auto& desc_proto = result.desc_.proto();
@@ -101,7 +102,7 @@ inline ReadResult create_python_read_result(
     std::vector<NodeReadResult> node_results;
     for (auto& node_output : node_outputs) {
         auto& node_fd = node_output.frame_and_descriptor_;
-        auto node_python_frame = get_python_frame(node_fd);
+        auto node_python_frame = get_python_frame(node_fd, output_format);
         auto node_metadata = node_fd.desc_.proto().normalization();
         auto node_sorted = node_fd.desc_.sorted();
         node_results.emplace_back(

@@ -35,7 +35,15 @@ import time
 from arcticdb.dependencies import pyarrow as pa
 from arcticdb.dependencies import polars as pl
 from arcticc.pb2.descriptors_pb2 import IndexDescriptor, TypeDescriptor
-from arcticdb_ext.version_store import CompactDataInfo, RecordBatchData, SortedValue, StageResult
+from arcticdb_ext.version_store import (
+    ArrowOutputConfig,
+    CompactDataInfo,
+    InternalPandasStringFormat,
+    PandasOutputConfig,
+    RecordBatchData,
+    SortedValue,
+    StageResult,
+)
 from arcticc.pb2.storage_pb2 import LibraryConfig, EnvironmentConfigsMap
 from arcticdb.preconditions import check
 from arcticdb.supported_types import DateRangeInput, ExplicitlySupportedDates
@@ -90,6 +98,10 @@ from arcticdb.exceptions import (
 from arcticdb.flattener import Flattener
 from arcticdb.log import version as log
 from arcticdb.version_store._custom_normalizers import get_custom_normalizer, CompositeCustomNormalizer
+from arcticdb.version_store._string_dtype import (
+    _is_arrow_string_column,
+    _use_pyarrow_strings_in_pandas,
+)
 from arcticdb.version_store._normalization import (
     PandasData,
     normalize_metadata,
@@ -2340,13 +2352,12 @@ class NativeVersionStore:
         output_format = self.resolve_runtime_defaults(
             "output_format", proto_cfg, global_default=OutputFormat.PANDAS, **kwargs
         )
-        read_options.set_output_format(output_format_to_internal(output_format))
         read_options.set_dynamic_schema(resolve_defaults("dynamic_schema", proto_cfg, global_default=False, **kwargs))
         read_options.set_set_tz(resolve_defaults("set_tz", proto_cfg, global_default=False, **kwargs))
         read_options.set_allow_sparse(resolve_defaults("allow_sparse", proto_cfg, global_default=False, **kwargs))
         read_options.set_incompletes(resolve_defaults("incomplete", proto_cfg, global_default=False, **kwargs))
-        if read_options.output_format == InternalOutputFormat.ARROW:
-            read_options.set_arrow_output_default_string_format(
+        if output_format_to_internal(output_format) == InternalOutputFormat.ARROW:
+            output_config = ArrowOutputConfig(
                 arrow_output_string_format_to_internal(
                     self.resolve_runtime_defaults(
                         "arrow_string_format_default",
@@ -2355,16 +2366,22 @@ class NativeVersionStore:
                         **kwargs,
                     ),
                     output_format,
-                )
-            )
-            read_options.set_arrow_output_per_column_string_format(
+                ),
                 {
                     key: arrow_output_string_format_to_internal(value, output_format)
                     for key, value in resolve_defaults(
                         "arrow_string_format_per_column", proto_cfg, global_default={}, **kwargs
                     ).items()
-                }
+                },
             )
+        else:  # Pandas
+            string_format = (
+                InternalPandasStringFormat.ARROW_LARGE_STRING
+                if _use_pyarrow_strings_in_pandas()
+                else InternalPandasStringFormat.OBJECT
+            )
+            output_config = PandasOutputConfig(default_string_format=string_format)
+        read_options.set_output_config(output_config)
         return read_options, output_format
 
     def _get_batch_read_options(
@@ -2671,10 +2688,11 @@ class NativeVersionStore:
             if read_query.row_filter is not None and read_query.needs_post_processing:
                 # post filter
                 start_idx, end_idx = self._compute_filter_start_end_row(read_result, read_query)
+                row_count = end_idx - start_idx
                 data = []
                 for c in read_result.frame_data.data:
-                    data.append(c[start_idx:end_idx])
-                row_count = len(data[0]) if len(data) else 0
+                    # Arrow string columns are a list of RecordBatchData already truncated in C++ so only numpy columns are trimmed here.
+                    data.append(c if _is_arrow_string_column(c) else c[start_idx:end_idx])
                 read_result.frame_data = FrameData(
                     data,
                     read_result.frame_data.names,
@@ -2718,7 +2736,9 @@ class NativeVersionStore:
                 end_idx = index.searchsorted(datetime64(read_query.row_filter.end_ts, "ns"), side="right")
         else:
             raise ArcticNativeException("Unrecognised row_filter type: {}".format(type(read_query.row_filter)))
-        return (start_idx, end_idx)
+        # Resolve start_idx/end_idx (may be negative or beyond row_count) into valid bounds within [0, row_count].
+        start, stop, _ = slice(start_idx, end_idx).indices(read_result.frame_data.row_count)
+        return (start, stop)
 
     def _find_version(
         self, symbol: str, as_of: Optional[VersionQueryInput] = None, raise_on_missing: Optional[bool] = False, **kwargs

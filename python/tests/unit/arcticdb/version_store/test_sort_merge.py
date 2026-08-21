@@ -12,6 +12,7 @@ from arcticdb.exceptions import (
     SchemaException,
 )
 from arcticdb.util._versions import IS_PANDAS_TWO
+from arcticdb.version_store._string_dtype import _use_pyarrow_strings_in_pandas
 from arcticdb_ext import set_config_int
 from arcticdb.options import LibraryOptions
 import arcticdb.toolbox.library_tool
@@ -390,6 +391,9 @@ class TestEmptySegments:
                 },
                 index=[pd.Timestamp("1970-01-01")],
             )
+        if _use_pyarrow_strings_in_pandas():
+            # The all-null object column "d" reads back as the arrow-backed str dtype.
+            expected["d"] = expected["d"].astype(pd.StringDtype(storage="pyarrow", na_value=np.nan))
         assert_frame_equal(lib.read("sym").data, expected)
 
 
@@ -1191,6 +1195,9 @@ class TestSegmentsWithNaNAndNone:
         )
         lib.write(symbol, df, staged=True)
         lib.sort_and_finalize_staged_data(symbol)
+        if _use_pyarrow_strings_in_pandas() and df["a"].dtype == object:
+            # The all-None object column reads back as the arrow-backed str dtype.
+            df["a"] = df["a"].astype(pd.StringDtype(storage="pyarrow", na_value=np.nan))
         assert_frame_equal(lib.read(symbol).data, df)
 
     def test_float_column_contains_only_nan_none(self, lmdb_library):
@@ -1224,6 +1231,10 @@ class TestSegmentsWithNaNAndNone:
         )
         assert_frame_equal(lib.read(symbol).data, expected)
 
+    @pytest.mark.skipif(
+        _use_pyarrow_strings_in_pandas(),
+        reason="Monday ref 12852897792, sort_and_finalize_staged_data does not support string columns with nulls with arrow yet",
+    )
     @pytest.mark.parametrize("rows_per_segment", [2, 100_000])
     def test_input_contains_actual_values(self, lmdb_library_factory, rows_per_segment):
         symbol = "symbol"

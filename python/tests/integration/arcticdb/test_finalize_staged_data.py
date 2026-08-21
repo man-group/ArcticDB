@@ -14,6 +14,7 @@ import pytest
 
 from arcticdb.exceptions import UnsortedDataException, UserInputException
 from arcticdb.util.test import dataframe_dump_to_log, assert_frame_equal
+from arcticdb.version_store._string_dtype import _use_pyarrow_strings_in_pandas
 from arcticdb.util.test_utils import CachedDFGenerator, TimestampNumber, stage_chunks
 from arcticdb.version_store.library import Library, StagedDataFinalizeMethod
 from tests.stress.arcticdb.version_store.test_stress_finalize_staged_data import generate_chunk_sizes
@@ -100,8 +101,8 @@ def verify_dataframe_column(df: pd.DataFrame, row_name, max_type, expected_array
                     False == actual_value_from_df
                 ), f"When adding new boolean column, previous missing values should be False for row {row}"
             else:
-                assert (
-                    actual_value_from_df is None
+                assert actual_value_from_df is None or (
+                    _use_pyarrow_strings_in_pandas() and pd.isna(actual_value_from_df)
                 ), f"When adding str/object column, previous missing values should be None for row {row}"
         else:
             if "str" in str(max_type):

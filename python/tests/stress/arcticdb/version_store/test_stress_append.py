@@ -9,6 +9,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 import datetime
 import random
 import pandas as pd
+import pytest
 
 from arcticdb.util.test import (
     assert_frame_equal,
@@ -17,6 +18,7 @@ from arcticdb.util.test import (
     random_floats,
     random_strings_of_length_with_nan,
 )
+from arcticdb.version_store._string_dtype import _use_pyarrow_strings_in_pandas
 
 
 def test_append_stress(object_version_store):
@@ -132,6 +134,10 @@ def test_write_parallel_stress_schema_change_strings(lmdb_version_store_dynamic_
     assert_frame_equal(vit.data, df)
 
 
+@pytest.mark.skipif(
+    _use_pyarrow_strings_in_pandas(),
+    reason="Monday ref 12852897792, finalize_staged_data does not support string columns with nulls with arrow yet",
+)
 def test_write_parallel_stress_schema_change_strings_with_nan(lmdb_version_store_dynamic_schema):
     num_rows_per_day = 1000
     num_days = 100

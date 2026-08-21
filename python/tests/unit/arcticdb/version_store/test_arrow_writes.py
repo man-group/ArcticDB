@@ -72,6 +72,21 @@ def test_write_zero_row_table(lmdb_version_store_arrow):
     assert table.equals(received)
 
 
+@pytest.mark.parametrize("position", ["leading", "trailing"])
+def test_write_empty_chunk_position_arrow(lmdb_version_store_arrow, position):
+    # pyarrow keeps a *leading* empty table as a zero-row chunk but doesn't keep a *trailing* one
+    lib = lmdb_version_store_arrow
+    sym = f"test_write_empty_chunk_position_arrow_{position}"
+    empty = pa.table({"ts": pa.array([], pa.timestamp("ns")), "col": pa.array([], pa.large_string())})
+    populated = pa.table({"ts": pa.array([0, 1], pa.timestamp("ns")), "col": pa.array(["a", "b"], pa.large_string())})
+    tables = [empty, populated] if position == "leading" else [populated, empty]
+    table = pa.concat_tables(tables)
+    expected_layout = [0, 2] if position == "leading" else [2]
+    assert [batch.num_rows for batch in table.to_batches()] == expected_layout
+    lib.write(sym, table, index_column=True)
+    assert lib.read(sym).data.column("col").to_pylist() == ["a", "b"]
+
+
 def test_write_zero_row_table_view(in_memory_version_store_arrow):
     lib = in_memory_version_store_arrow
     sym = "test_write_zero_row_table_view"

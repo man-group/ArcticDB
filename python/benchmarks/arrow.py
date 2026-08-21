@@ -298,6 +298,15 @@ class ArrowStrings:
         ]
         return pa.Table.from_arrays(columns, names=names)
 
+    def _generate_pandas_frame(self, num_rows, num_cols, unique_string_count, use_str_dtype):
+        np.random.seed(42)
+        random.seed(42)
+        strings = np.array(random_strings_of_length(unique_string_count, 10, unique=True, kind="ascii"))
+        index = pd.date_range("1970-01-01", freq="ns", periods=num_rows)
+        data = {f"col{idx}": np.random.choice(strings, num_rows) for idx in range(num_cols)}
+        with pd.option_context("future.infer_string", use_str_dtype):
+            return pd.DataFrame(data, index=index)
+
     def _setup_cache(self):
         self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)
         num_rows, date_ranges, unique_string_counts, arrow_string_format = self.params
@@ -329,6 +338,8 @@ class ArrowStrings:
         self.fresh_lib = self.get_fresh_lib()
         self.fresh_lib._nvs._set_allow_arrow_input()
         self.table = self._generate_table(rows, self.num_cols, unique_string_count, arrow_string_format)
+        self.pandas_frame_object = self._generate_pandas_frame(rows, self.num_cols, unique_string_count, False)
+        self.pandas_frame_str = self._generate_pandas_frame(rows, self.num_cols, unique_string_count, True)
 
     def get_fresh_lib(self):
         self.ac.delete_library(self.lib_name_fresh)
@@ -360,6 +371,73 @@ class ArrowStrings:
             date_range=self.date_range,
             arrow_string_format_default=arrow_string_format,
         )
+
+    def _check_should_run_pandas_benchmark(self, arrow_string_format):
+        # arrow_string_format only affects pyarrow output; the pandas paths ignore it, so only run once.
+        if arrow_string_format != ArrowOutputStringFormat.LARGE_STRING:
+            raise SkipNotImplemented
+
+    def _check_should_run_pandas_write_benchmark(self, *, date_range, arrow_string_format):
+        # date_range/arrow_string_format don't affect a pandas write; only run once.
+        if date_range is not None:
+            raise SkipNotImplemented
+        self._check_should_run_pandas_benchmark(arrow_string_format=arrow_string_format)
+
+    def time_write_pandas_object(self, rows, date_range, unique_string_count, arrow_string_format):
+        self._check_should_run_pandas_write_benchmark(date_range=date_range, arrow_string_format=arrow_string_format)
+        with pd.option_context("future.infer_string", False):
+            self.fresh_lib.write(self.symbol_name(rows, unique_string_count), self.pandas_frame_object)
+
+    def peakmem_write_pandas_object(self, rows, date_range, unique_string_count, arrow_string_format):
+        self._check_should_run_pandas_write_benchmark(date_range=date_range, arrow_string_format=arrow_string_format)
+        with pd.option_context("future.infer_string", False):
+            self.fresh_lib.write(self.symbol_name(rows, unique_string_count), self.pandas_frame_object)
+
+    def time_write_pandas_str(self, rows, date_range, unique_string_count, arrow_string_format):
+        self._check_should_run_pandas_write_benchmark(date_range=date_range, arrow_string_format=arrow_string_format)
+        with pd.option_context("future.infer_string", True):
+            self.fresh_lib.write(self.symbol_name(rows, unique_string_count), self.pandas_frame_str)
+
+    def peakmem_write_pandas_str(self, rows, date_range, unique_string_count, arrow_string_format):
+        self._check_should_run_pandas_write_benchmark(date_range=date_range, arrow_string_format=arrow_string_format)
+        with pd.option_context("future.infer_string", True):
+            self.fresh_lib.write(self.symbol_name(rows, unique_string_count), self.pandas_frame_str)
+
+    def time_read_pandas_object(self, rows, date_range, unique_string_count, arrow_string_format):
+        self._check_should_run_pandas_benchmark(arrow_string_format=arrow_string_format)
+        with pd.option_context("future.infer_string", False):
+            self.lib.read(
+                self.symbol_name(rows, unique_string_count),
+                date_range=self.date_range,
+                output_format=OutputFormat.PANDAS,
+            )
+
+    def peakmem_read_pandas_object(self, rows, date_range, unique_string_count, arrow_string_format):
+        self._check_should_run_pandas_benchmark(arrow_string_format=arrow_string_format)
+        with pd.option_context("future.infer_string", False):
+            self.lib.read(
+                self.symbol_name(rows, unique_string_count),
+                date_range=self.date_range,
+                output_format=OutputFormat.PANDAS,
+            )
+
+    def time_read_pandas_str(self, rows, date_range, unique_string_count, arrow_string_format):
+        self._check_should_run_pandas_benchmark(arrow_string_format=arrow_string_format)
+        with pd.option_context("future.infer_string", True):
+            self.lib.read(
+                self.symbol_name(rows, unique_string_count),
+                date_range=self.date_range,
+                output_format=OutputFormat.PANDAS,
+            )
+
+    def peakmem_read_pandas_str(self, rows, date_range, unique_string_count, arrow_string_format):
+        self._check_should_run_pandas_benchmark(arrow_string_format=arrow_string_format)
+        with pd.option_context("future.infer_string", True):
+            self.lib.read(
+                self.symbol_name(rows, unique_string_count),
+                date_range=self.date_range,
+                output_format=OutputFormat.PANDAS,
+            )
 
     def peakmem_read(self, rows, date_range, unique_string_count, arrow_string_format):
         self._check_should_run_benchmark(date_range=date_range, arrow_string_format=arrow_string_format)

@@ -30,14 +30,15 @@ sparrow::array create_array(const std::vector<T>& data) {
         sparrow::primitive_array<T> primitive_array{std::move(u8_buffer), data.size()};
         return sparrow::array{std::move(primitive_array)};
     } else { // Strings
-        auto offsets_buffer = new int32_t[data.size() + 1];
+        auto offsets_buffer =
+                reinterpret_cast<int32_t*>(allocate_detachable_memory((data.size() + 1) * sizeof(int32_t)));
         size_t idx{0};
         offsets_buffer[idx] = 0;
         auto strings_buffer_size =
                 std::accumulate(data.cbegin(), data.cend(), size_t(0), [](const size_t& accum, const std::string& str) {
                     return accum + str.size();
                 });
-        auto strings_buffer = new char[strings_buffer_size];
+        auto strings_buffer = reinterpret_cast<char*>(allocate_detachable_memory(strings_buffer_size));
         size_t str_idx{0};
         for (const auto& str : data) {
             offsets_buffer[idx + 1] = offsets_buffer[idx] + str.size();

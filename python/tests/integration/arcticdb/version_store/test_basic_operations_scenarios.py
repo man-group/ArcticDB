@@ -17,6 +17,7 @@ import numpy as np
 from arcticdb.util.arctic_simulator import ArcticSymbolSimulator
 from arcticdb.util.test import assert_series_equal_pandas_1, assert_frame_equal_rebuild_index_first, assert_frame_equal
 from arcticdb.util.test_utils import DFGenerator, generate_random_series, set_seed, supported_types_list
+from arcticdb.version_store._string_dtype import _use_pyarrow_strings_in_pandas
 from arcticdb.version_store._store import NativeVersionStore, VersionedItem
 from datetime import timedelta, timezone
 
@@ -681,7 +682,7 @@ def test_batch_read_and_join_scenarios(basic_store_factory, dynamic_strings):
     # Pandas concat will fill NaN for bools, Arcticdb is using False
     expected["bool"] = expected["bool"].fillna(False)
     # Pandas concat will fill NaN for strings, Arcticdb is using None
-    if not dynamic_strings:
+    if not dynamic_strings and not _use_pyarrow_strings_in_pandas():
         # make expected result like the actual due to static string
         if not WINDOWS:
             # windows does not have static strings

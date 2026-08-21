@@ -12,6 +12,7 @@
 #include <arcticdb/column_store/column.hpp>
 #include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/util/allocator.hpp>
+#include <arcticdb/util/collection_utils.hpp>
 #include <sparrow/layout/array_access.hpp>
 #include <sparrow/layout/primitive_data_access.hpp>
 #include <sparrow/utils/temporal.hpp>
@@ -379,6 +380,18 @@ std::optional<ArrowMeta::ColumnMeta> column_metadata(
     return std::nullopt;
 }
 
+std::vector<std::shared_ptr<RecordBatchData>> column_to_arrow_arrays(const Column& column, std::string_view name) {
+    auto column_arrays = arrow_arrays_from_column(column, name);
+    auto output = util::reserve_vector<std::shared_ptr<RecordBatchData>>(column_arrays.size());
+    for (auto& column_array : column_arrays) {
+        sparrow::record_batch batch{};
+        batch.add_column(std::string{name}, std::move(column_array));
+        auto [arr, schema] = sparrow::extract_arrow_structures(std::move(batch));
+        output.emplace_back(std::make_shared<RecordBatchData>(arr, schema));
+    }
+    return output;
+}
+
 std::vector<sparrow::record_batch> segment_to_arrow_data(
         SegmentInMemory& segment, const proto::descriptors::NormalizationMetadata& norm_meta
 ) {
@@ -521,6 +534,9 @@ std::pair<std::vector<Column>, entity::StreamDescriptor> record_batches_to_colum
 
     uint64_t start_row{0};
     for (const auto& batch : record_batches) {
+        if (batch.nb_rows() == 0) {
+            continue;
+        }
         for (size_t idx = 0; idx < batch.nb_columns(); ++idx) {
             auto& column = columns[idx];
             const auto data_type = column.type().data_type();

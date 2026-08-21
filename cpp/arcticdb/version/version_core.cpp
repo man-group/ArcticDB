@@ -1703,7 +1703,8 @@ void copy_frame_data_to_buffer(
             dst_column.type(),
             destination.field(target_index).name()
     );
-    if (auto handler = get_type_handler(read_options.output_format(), src_column.type(), dst_column.type()); handler) {
+    auto output_format_for_column = read_options.output_format_for_column_type(dst_column.type());
+    if (auto handler = get_type_handler(output_format_for_column, src_column.type(), dst_column.type()); handler) {
         const auto type_size = data_type_size(dst_column.type());
         const ColumnMapping mapping{
                 src_column.type(),
@@ -1729,7 +1730,7 @@ void copy_frame_data_to_buffer(
                     offset,
                     num_rows,
                     dst_rawtype_size,
-                    read_options.output_format(),
+                    output_format_for_column,
                     std::nullopt,
                     default_value
             );
@@ -1748,7 +1749,7 @@ void copy_frame_data_to_buffer(
                         offset,
                         num_rows,
                         dst_rawtype_size,
-                        read_options.output_format(),
+                        output_format_for_column,
                         src_column.opt_sparse_map(),
                         default_value
                 );
@@ -1779,7 +1780,7 @@ void copy_frame_data_to_buffer(
                             offset,
                             num_rows,
                             dst_rawtype_size,
-                            read_options.output_format(),
+                            output_format_for_column,
                             src_column.opt_sparse_map(),
                             default_value
                     );
@@ -1825,7 +1826,7 @@ void copy_frame_data_to_buffer(
                                     offset,
                                     num_rows,
                                     dst_rawtype_size,
-                                    read_options.output_format(),
+                                    output_format_for_column,
                                     src_column.opt_sparse_map(),
                                     default_value
                             );
@@ -2941,9 +2942,17 @@ folly::Future<ReadVersionOutput> read_frame_for_version(
                 .via(&async::cpu_executor())
                 .thenValue([store,
                             read_query,
-                            read_options,
+                            read_options = read_options,
                             res_versioned_item = std::move(res_versioned_item),
                             handler_data](auto&& pipeline_context) mutable {
+                    // TODO: Handle ndarray data when requesting ARROW output
+                    if (pipeline_context->has_normalization() && pipeline_context->normalization().has_np() &&
+                        read_options.output_format_for_frame() == OutputFormat::PANDAS) {
+                        read_options = read_options.clone();
+                        // We can't have arrow strings for ndarray data (that is not a dataframe), so we force it as
+                        // object
+                        read_options.set_output_config(PandasOutputConfig{PandasStringFormat::OBJECT});
+                    }
                     if (pipeline_context->multi_key_) {
                         if (read_query) {
                             check_can_perform_processing(pipeline_context, *read_query);

@@ -195,7 +195,8 @@ def test_read_data_key_from_version_ref(in_memory_version_store, use_time_index)
         stored_df.index.name = None
     else:
         stored_df = stored_df.reset_index()
-    assert_frame_equal(stored_df, df)
+    # read_to_dataframe column-label dtype (str vs object) differs from the written frame
+    assert_frame_equal(stored_df, df, check_column_type=False)
 
 
 def test_iterate_version_chain_with_lib_tool(in_memory_version_store):

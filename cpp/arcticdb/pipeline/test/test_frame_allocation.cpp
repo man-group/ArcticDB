@@ -41,7 +41,75 @@ TEST(OutputFrame, AllocateChunked) {
 
     context->set_on_disk_descriptor(std::move(desc));
     auto read_options = ReadOptions{};
-    read_options.set_output_format(OutputFormat::ARROW);
+    read_options.set_output_config(ArrowOutputConfig{});
     auto frame = allocate_frame(context, read_options);
     ASSERT_EQ(frame.row_count(), 720);
+}
+
+TEST(OutputFrame, AllocateContiguousNumpy) {
+    using namespace arcticdb;
+    using namespace arcticdb::pipelines;
+
+    auto context = std::make_shared<PipelineContext>();
+    FrameSlice slice1{{1, 45}, {0, 10}};
+    context->slice_and_keys_.emplace_back(SliceAndKey{slice1, AtomKey{}});
+    FrameSlice slice2{{1, 45}, {10, 30}};
+    context->slice_and_keys_.emplace_back(SliceAndKey{slice2, AtomKey{}});
+    FrameSlice slice3{{1, 45}, {30, 60}};
+    context->slice_and_keys_.emplace_back(SliceAndKey{slice3, AtomKey{}});
+    context->fetch_index_.set_bit(0);
+    context->fetch_index_.set_bit(1);
+    context->fetch_index_.set_bit(2);
+
+    auto index = stream::TimeseriesIndex::default_index();
+    auto desc = index.create_stream_descriptor(
+            NumericId{123},
+            {
+                    scalar_field(DataType::ASCII_DYNAMIC64, "col_1"),
+                    scalar_field(DataType::FLOAT64, "col_2"),
+            }
+    );
+
+    context->set_on_disk_descriptor(desc);
+    auto read_options = ReadOptions{};
+    read_options.set_output_config(PandasOutputConfig{});
+    auto frame = allocate_frame(context, read_options);
+    ASSERT_EQ(frame.row_count(), 60);
+    for (auto& column : frame.columns()) {
+        ASSERT_EQ(column->num_blocks(), 1);
+    }
+}
+
+TEST(OutputFrame, AllocateMixedNumpyArrow) {
+    using namespace arcticdb;
+    using namespace arcticdb::pipelines;
+
+    auto context = std::make_shared<PipelineContext>();
+    FrameSlice slice1{{1, 45}, {0, 10}};
+    context->slice_and_keys_.emplace_back(SliceAndKey{slice1, AtomKey{}});
+    FrameSlice slice2{{1, 45}, {10, 30}};
+    context->slice_and_keys_.emplace_back(SliceAndKey{slice2, AtomKey{}});
+    FrameSlice slice3{{1, 45}, {30, 60}};
+    context->slice_and_keys_.emplace_back(SliceAndKey{slice3, AtomKey{}});
+    context->fetch_index_.set_bit(0);
+    context->fetch_index_.set_bit(1);
+    context->fetch_index_.set_bit(2);
+
+    auto index = stream::TimeseriesIndex::default_index();
+    auto desc = index.create_stream_descriptor(
+            NumericId{123},
+            {
+                    scalar_field(DataType::ASCII_DYNAMIC64, "col_1"),
+                    scalar_field(DataType::FLOAT64, "col_2"),
+            }
+    );
+
+    context->set_on_disk_descriptor(desc);
+    auto read_options = ReadOptions{};
+    read_options.set_output_config(PandasOutputConfig{PandasStringFormat::ARROW_LARGE_STRING});
+    auto frame = allocate_frame(context, read_options);
+    ASSERT_EQ(frame.row_count(), 60);
+    ASSERT_EQ(frame.column(0).num_blocks(), 1);
+    ASSERT_EQ(frame.column(1).num_blocks(), 3);
+    ASSERT_EQ(frame.column(2).num_blocks(), 1);
 }
