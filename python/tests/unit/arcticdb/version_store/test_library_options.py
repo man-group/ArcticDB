@@ -27,8 +27,9 @@ def setup_write_then_stage(lib):
     lib.write(SYM, DF_1, prune_previous_versions=False)
     lib.stage(SYM, DF_2)
 
+
 def list_versions(lib):
-    return sorted(v.version for v in lib.list_versions(SYM)) 
+    return sorted(v.version for v in lib.list_versions(SYM))
 
 
 Operation = namedtuple("Operation", ["setup", "run", "created_versions"])
