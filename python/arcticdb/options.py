@@ -35,6 +35,8 @@ class LibraryOptions:
         See `__init__` for details.
     recursive_normalizers: bool
         See `__init__` for details.
+    prune_previous_versions: bool
+        See `__init__` for details.
     """
 
     def __init__(
@@ -46,6 +48,7 @@ class LibraryOptions:
         columns_per_segment: int = 127,
         encoding_version: Optional[EncodingVersion] = None,
         recursive_normalizers: bool = False,
+        prune_previous_versions: bool = False,
     ):
         """
         Parameters
@@ -139,6 +142,18 @@ class LibraryOptions:
                 lib.write(symbol, data) # ArcticUnsupportedDataTypeException will be thrown by default
                 lib2 = ac.create_library(lib_name, LibraryOptions(recursive_normalizers=True))
                 lib2.write(symbol, data) # data will be successfully written
+
+        prune_previous_versions: bool, default False
+            The default value of the ``prune_previous_versions`` argument for the library's modification methods
+            (``write``, ``append``, ``update``, and so on). When those methods are called without an explicit
+            ``prune_previous_versions`` argument, this library-level setting is used.
+
+            If False (the default), modification methods keep previous versions unless the caller passes
+            ``prune_previous_versions=True``. If True, modification methods prune previous (non-snapshotted) versions
+            by default; a caller can still override per call by passing ``prune_previous_versions=False``.
+
+            This option can be changed after creation via ``Arctic.modify_library_option`` with
+            ``ModifiableLibraryOption.PRUNE_PREVIOUS_VERSIONS``.
         """
         self.dynamic_schema = dynamic_schema
         self.dedup = dedup
@@ -146,6 +161,7 @@ class LibraryOptions:
         self.columns_per_segment = columns_per_segment
         self.encoding_version = encoding_version
         self.recursive_normalizers = recursive_normalizers
+        self.prune_previous_versions = prune_previous_versions
 
     def __eq__(self, right):
         return (
@@ -155,6 +171,7 @@ class LibraryOptions:
             and self.columns_per_segment == right.columns_per_segment
             and self.encoding_version == right.encoding_version
             and self.recursive_normalizers == right.recursive_normalizers
+            and self.prune_previous_versions == right.prune_previous_versions
         )
 
     def __repr__(self):
@@ -162,7 +179,8 @@ class LibraryOptions:
             f"LibraryOptions(dynamic_schema={self.dynamic_schema}, dedup={self.dedup},"
             f" rows_per_segment={self.rows_per_segment}, columns_per_segment={self.columns_per_segment},"
             f" encoding_version={self.encoding_version if self.encoding_version is not None else 'Default'},"
-            f" recursive_normalizers={self.recursive_normalizers})"
+            f" recursive_normalizers={self.recursive_normalizers},"
+            f" prune_previous_versions={self.prune_previous_versions})"
         )
 
 

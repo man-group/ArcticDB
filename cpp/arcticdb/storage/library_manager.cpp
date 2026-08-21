@@ -158,6 +158,9 @@ void LibraryManager::modify_library_option(
                 case ModifiableLibraryOption::RECURSIVE_NORMALIZERS:
                     mutable_write_options->set_recursive_normalizers(get_bool(new_value));
                     break;
+                case ModifiableLibraryOption::PRUNE_PREVIOUS_VERSIONS:
+                    mutable_write_options->set_prune_previous_version(get_bool(new_value));
+                    break;
                 default:
                     throw UnsupportedLibraryOptionValue(fmt::format("Invalid library option: {}", option));
                 }

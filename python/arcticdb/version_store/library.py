@@ -1010,7 +1010,7 @@ class Library:
         symbol: str,
         data: NormalizableType,
         metadata: Any = None,
-        prune_previous_versions: bool = False,
+        prune_previous_versions: Optional[bool] = None,
         staged=False,
         validate_index=True,
         index_column: bool = False,
@@ -1050,8 +1050,9 @@ class Library:
             Data to be written. To write non-normalizable data, use `write_pickle`.
         metadata : Any, default=None
             Optional metadata to persist along with the symbol.
-        prune_previous_versions : bool, default=False
-            Removes previous (non-snapshotted) versions from the database.
+        prune_previous_versions : Optional[bool], default=None
+            Removes previous (non-snapshotted) versions from the database. If None, the value is taken from the
+            library configuration (defaults to False).
         staged: bool, default=False
             Deprecated. Use stage() instead.
             Whether to write to a staging area rather than immediately to the library.
@@ -1145,7 +1146,7 @@ class Library:
         symbol: str,
         data: Any,
         metadata: Any = None,
-        prune_previous_versions: bool = False,
+        prune_previous_versions: Optional[bool] = None,
         staged=False,
         recursive_normalizers: bool = None,
     ) -> VersionedItem:
@@ -1228,7 +1229,7 @@ class Library:
         raise ArcticUnsupportedDataTypeException(error_message)
 
     def write_batch(
-        self, payloads: List[WritePayload], prune_previous_versions: bool = False, validate_index=True
+        self, payloads: List[WritePayload], prune_previous_versions: Optional[bool] = None, validate_index=True
     ) -> List[Union[VersionedItem, DataError]]:
         """
         Write a batch of multiple symbols.
@@ -1237,8 +1238,9 @@ class Library:
         ----------
         payloads : `List[WritePayload]`
             Symbols and their corresponding data. There must not be any duplicate symbols in `payload`.
-        prune_previous_versions: `bool`, default=False
-            Removes previous (non-snapshotted) versions from the database.
+        prune_previous_versions: `Optional[bool]`, default=None
+            Removes previous (non-snapshotted) versions from the database. If None, the value is taken from the
+            library configuration (defaults to False).
         validate_index: bool, default=True
             Verify that each entry in the batch has an index that supports date range searches and update operations.
             This tests that the data is sorted in ascending order, using Pandas DataFrame.index.is_monotonic_increasing.
@@ -1306,7 +1308,7 @@ class Library:
         )
 
     def write_pickle_batch(
-        self, payloads: List[WritePayload], prune_previous_versions: bool = False
+        self, payloads: List[WritePayload], prune_previous_versions: Optional[bool] = None
     ) -> List[Union[VersionedItem, DataError]]:
         """
         Write a batch of multiple symbols, pickling their data if necessary.
@@ -1315,8 +1317,9 @@ class Library:
         ----------
         payloads : `List[WritePayload]`
             Symbols and their corresponding data. There must not be any duplicate symbols in `payload`.
-        prune_previous_versions: `bool`, default=False
-            Removes previous (non-snapshotted) versions from the database.
+        prune_previous_versions: `Optional[bool]`, default=None
+            Removes previous (non-snapshotted) versions from the database. If None, the value is taken from the
+            library configuration (defaults to False).
 
         Returns
         -------
@@ -1352,7 +1355,7 @@ class Library:
         symbol: str,
         data: NormalizableType,
         metadata: Any = None,
-        prune_previous_versions: bool = False,
+        prune_previous_versions: Optional[bool] = None,
         validate_index: bool = True,
         index_column: bool = False,
         compact_data: bool = False,
@@ -1380,8 +1383,9 @@ class Library:
         metadata
             Optional metadata to persist along with the new symbol version. Note that the metadata is
             not combined in any way with the metadata stored in the previous version.
-        prune_previous_versions
-            Removes previous (non-snapshotted) versions from the database.
+        prune_previous_versions: Optional[bool], default=None
+            Removes previous (non-snapshotted) versions from the database. If None, the value is taken from the
+            library configuration (defaults to False).
         validate_index
             If True, verify that the index of `data` supports date range searches and update operations.
             This tests that the data is sorted in ascending order, using Pandas DataFrame.index.is_monotonic_increasing.
@@ -1458,7 +1462,7 @@ class Library:
     def append_batch(
         self,
         append_payloads: List[WritePayload],
-        prune_previous_versions: bool = False,
+        prune_previous_versions: Optional[bool] = None,
         validate_index: bool = True,
         compact_data: bool = False,
     ) -> List[Union[VersionedItem, DataError]]:
@@ -1473,8 +1477,9 @@ class Library:
         ----------
         append_payloads : `List[WritePayload]`
             Symbols and their corresponding data. There must not be any duplicate symbols in `append_payloads`.
-        prune_previous_versions : bool, default=False
-            Removes previous (non-snapshotted) versions from the database.
+        prune_previous_versions : Optional[bool], default=None
+            Removes previous (non-snapshotted) versions from the database. If None, the value is taken from the
+            library configuration (defaults to False).
         validate_index: bool, default=True
             Verify that each entry in the batch has an index that supports date range searches and update operations.
             This tests that the data is sorted in ascending order, using Pandas DataFrame.index.is_monotonic_increasing.
@@ -1525,7 +1530,7 @@ class Library:
         metadata: Any = None,
         upsert: bool = False,
         date_range: Optional[Tuple[Optional[Timestamp], Optional[Timestamp]]] = None,
-        prune_previous_versions: bool = False,
+        prune_previous_versions: Optional[bool] = None,
         index_column: bool = False,
     ) -> VersionedItem:
         """
@@ -1565,8 +1570,9 @@ class Library:
             ``data``. This allows the user to update with data that might only be a subset of the stored value. Leaving
             any part of the tuple as None leaves that part of the range open ended. Only data with date_range will be
             modified, even if ``data`` covers a wider date range.
-        prune_previous_versions: bool, default=False
-            Removes previous (non-snapshotted) versions from the database.
+        prune_previous_versions: Optional[bool], default=None
+            Removes previous (non-snapshotted) versions from the database. If None, the value is taken from the
+            library configuration (defaults to False).
         index_column: bool, default=False
             Only applicable when data is a PyArrow Table or Polars DataFrame. If True, the first column
             is treated as the timeseries index.
@@ -1645,7 +1651,7 @@ class Library:
         self,
         update_payloads: List[UpdatePayload],
         upsert: bool = False,
-        prune_previous_versions: bool = False,
+        prune_previous_versions: Optional[bool] = None,
     ) -> List[Union[VersionedItem, DataError]]:
         """
         Perform an update operation on a list of symbols in parallel. All constrains on
@@ -1657,8 +1663,9 @@ class Library:
             List of `UpdatePayload`. Each element of the list describes an update operation for a
             particular symbol. Providing the symbol name, data, etc. The same symbol should not appear twice in this
             list.
-        prune_previous_versions: bool, default=False
-            Removes previous (non-snapshotted) versions from the library.
+        prune_previous_versions: Optional[bool], default=None
+            Removes previous (non-snapshotted) versions from the library. If None, the value is taken from the
+            library configuration (defaults to False).
         upsert: bool, default=False
             If True any symbol in `update_payloads` which is not already in the library will be created.
 
@@ -1741,7 +1748,7 @@ class Library:
         self,
         symbol: str,
         mode: Optional[Union[StagedDataFinalizeMethod, str]] = StagedDataFinalizeMethod.WRITE,
-        prune_previous_versions: bool = False,
+        prune_previous_versions: Optional[bool] = None,
         metadata: Any = None,
         validate_index=True,
         delete_staged_data_on_failure: bool = False,
@@ -1776,8 +1783,9 @@ class Library:
 
             Also accepts strings "write" or "append" (case-insensitive).
 
-        prune_previous_versions: bool, default=False
-            Removes previous (non-snapshotted) versions from the database.
+        prune_previous_versions: Optional[bool], default=None
+            Removes previous (non-snapshotted) versions from the database. If None, the value is taken from the
+            library configuration (defaults to False).
         metadata : Any, default=None
             Optional metadata to persist along with the symbol.
         validate_index: bool, default=True
@@ -1875,7 +1883,7 @@ class Library:
         self,
         symbol: str,
         mode: Optional[Union[StagedDataFinalizeMethod, str]] = StagedDataFinalizeMethod.WRITE,
-        prune_previous_versions: bool = False,
+        prune_previous_versions: Optional[bool] = None,
         metadata: Any = None,
         delete_staged_data_on_failure: bool = False,
         stage_results: Optional[List[StageResult]] = None,
@@ -1910,8 +1918,9 @@ class Library:
 
             Also accepts strings "write" or "append" (case-insensitive).
 
-        prune_previous_versions : bool, default=False
-            Removes previous (non-snapshotted) versions from the database.
+        prune_previous_versions : Optional[bool], default=None
+            Removes previous (non-snapshotted) versions from the database. If None, the value is taken from the
+            library configuration (defaults to False).
 
         metadata : Any, default=None
             Optional metadata to persist along with the symbol.
@@ -1979,6 +1988,12 @@ class Library:
         2024-01-04    4
         """
         mode = Library._normalize_staged_data_mode(mode)
+        prune_previous_versions = self._nvs.resolve_defaults(
+            "prune_previous_version",
+            self._nvs._write_options(),
+            global_default=False,
+            existing_value=prune_previous_versions,
+        )
         compaction_result = self._nvs.version_store.sort_merge(
             symbol,
             normalize_metadata(metadata),
@@ -2536,7 +2551,7 @@ class Library:
         self,
         symbol: str,
         metadata: Any,
-        prune_previous_versions: bool = False,
+        prune_previous_versions: Optional[bool] = None,
     ) -> VersionedItem:
         """
         Write metadata under the specified symbol name to this library. The data will remain unchanged.
@@ -2555,9 +2570,10 @@ class Library:
             Symbol name for the item
         metadata
             Metadata to persist along with the symbol
-        prune_previous_versions : bool, default=False
+        prune_previous_versions : Optional[bool], default=None
             Removes previous (non-snapshotted) versions from the database. Note that metadata is versioned alongside the
-            data it is referring to, and so this operation removes old versions of data as well as metadata.
+            data it is referring to, and so this operation removes old versions of data as well as metadata. If None,
+            the value is taken from the library configuration (defaults to False).
 
         Returns
         -------
@@ -2569,7 +2585,7 @@ class Library:
     def write_metadata_batch(
         self,
         write_metadata_payloads: List[WriteMetadataPayload],
-        prune_previous_versions: bool = False,
+        prune_previous_versions: Optional[bool] = None,
     ) -> List[Union[VersionedItem, DataError]]:
         """
         Write metadata to multiple symbols in a batch fashion. This is more efficient than making multiple `write_metadata` calls
@@ -2584,9 +2600,10 @@ class Library:
         ----------
         write_metadata_payloads : `List[WriteMetadataPayload]`
             Symbols and their corresponding metadata. There must not be any duplicate symbols in `payload`.
-        prune_previous_versions : bool, default=False
+        prune_previous_versions : Optional[bool], default=None
             Removes previous (non-snapshotted) versions from the database. Note that metadata is versioned alongside the
-            data it is referring to, and so this operation removes old versions of data as well as metadata.
+            data it is referring to, and so this operation removes old versions of data as well as metadata. If None,
+            the value is taken from the library configuration (defaults to False).
 
         Returns
         -------
@@ -2752,7 +2769,7 @@ class Library:
         self,
         symbol: str,
         date_range: Tuple[Optional[Timestamp], Optional[Timestamp]],
-        prune_previous_versions: bool = False,
+        prune_previous_versions: Optional[bool] = None,
     ) -> None:
         """Delete data within the given date range, creating a new version of ``symbol``.
 
@@ -2765,8 +2782,9 @@ class Library:
         date_range
             The date range in which to delete data. Leaving any part of the tuple as None leaves that part of the range
             open ended.
-        prune_previous_versions : bool, default=False
-            Removes previous (non-snapshotted) versions from the database.
+        prune_previous_versions : Optional[bool], default=None
+            Removes previous (non-snapshotted) versions from the database. If None, the value is taken from the
+            library configuration (defaults to False).
 
         Examples
         --------
@@ -3260,7 +3278,7 @@ class Library:
         self,
         symbol: str,
         rows_per_segment: Optional[int] = None,
-        prune_previous_versions: bool = False,
+        prune_previous_versions: Optional[bool] = None,
     ) -> VersionedItem:
         """
         Compact the data keys associated with the latest version of a symbol such that the number of rows in each
@@ -3279,8 +3297,9 @@ class Library:
             The target number of rows for each segment after the compaction. If None, uses the library configuration
             setting. Note that subsequent calls to write, append, and update will continue to use the library
             configuration setting.
-        prune_previous_versions : bool, default=False
-            If True, removes previous versions from the version list.
+        prune_previous_versions : Optional[bool], default=None
+            If True, removes previous versions from the version list. If None, the value is taken from the
+            library configuration (defaults to False).
 
         Returns
         -------
@@ -3317,7 +3336,7 @@ class Library:
         self,
         symbols: List[str],
         rows_per_segment: Optional[int] = None,
-        prune_previous_versions: bool = False,
+        prune_previous_versions: Optional[bool] = None,
     ) -> List[Union[VersionedItem, DataError]]:
         """
         Compact the data keys associated with the latest versions of a collection of symbols such that the number of
@@ -3336,8 +3355,9 @@ class Library:
             The target number of rows for each segment after the compaction. If None, uses the library configuration
             setting. Note that subsequent calls to write, append, and update will continue to use the library
             configuration setting.
-        prune_previous_versions : bool, default=False
-            If True, removes previous versions from the version list.
+        prune_previous_versions : Optional[bool], default=None
+            If True, removes previous versions from the version list. If None, the value is taken from the
+            library configuration (defaults to False).
 
         Returns
         -------
@@ -3414,7 +3434,7 @@ class Library:
         self,
         symbol: str,
         segment_size: Optional[int] = None,
-        prune_previous_versions: bool = False,
+        prune_previous_versions: Optional[bool] = None,
     ) -> VersionedItem:
         """
         This method has been deprecated and will be removed in a future release. Please use compact_data instead.
@@ -3440,8 +3460,9 @@ class Library:
             If parameter is not provided, library option - "segment_row_size" will be used
             Note that no. of rows per segment, after compaction, may exceed the target.
             It is for achieving smallest no. of segment after compaction. Please refer to below example for further explanation.
-        prune_previous_versions : bool, default=False
-            Removes previous (non-snapshotted) versions from the database.
+        prune_previous_versions : Optional[bool], default=None
+            Removes previous (non-snapshotted) versions from the database. If None, the value is taken from the
+            library configuration (defaults to False).
 
         Returns
         -------
@@ -3486,7 +3507,7 @@ class Library:
         strategy: MergeStrategy = MergeStrategy(),
         on: Optional[List[str]] = None,
         metadata: Any = None,
-        prune_previous_versions: bool = False,
+        prune_previous_versions: Optional[bool] = None,
         upsert: bool = False,
     ):
         """
@@ -3533,8 +3554,9 @@ class Library:
             index.
         metadata : Any, optional
             Metadata to save alongside the new version.
-        prune_previous_versions : bool, default False
-            If True, removes previous versions from the version list.
+        prune_previous_versions : Optional[bool], default None
+            If True, removes previous versions from the version list. If None, the value is taken from the
+            library configuration (defaults to False).
         upsert : bool, default False
             If True and the symbol does not exist, create it by writing `source` to the store. Requires a strategy
             with `not_matched_by_target="insert"`; combining it with an update-only strategy raises
