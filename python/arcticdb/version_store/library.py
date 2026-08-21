@@ -935,6 +935,8 @@ class Library:
             rows_per_segment=write_options.segment_row_size,
             columns_per_segment=write_options.column_group_size,
             encoding_version=self._nvs.lib_cfg().lib_desc.version.encoding_version,
+            recursive_normalizers=write_options.recursive_normalizers,
+            prune_previous_versions=write_options.prune_previous_version,
         )
 
     def enterprise_options(self) -> EnterpriseLibraryOptions:
