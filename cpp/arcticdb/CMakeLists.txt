@@ -180,6 +180,16 @@ if(ARCTICDB_USING_CONDA AND CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT DEFINED E
     list(APPEND CMAKE_INSTALL_RPATH "$ENV{CONDA_PREFIX}/lib")
 endif()
 
+if(CMAKE_BUILD_TYPE STREQUAL "Debug" AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    set(ARCTICDB_SHARED_CORE ON)
+    set(arcticdb_core_link_target arcticdb_core)
+else()
+    set(ARCTICDB_SHARED_CORE OFF)
+    set(arcticdb_core_link_target arcticdb_core_static)
+endif()
+message(STATUS "Linking dependent targets against ${arcticdb_core_link_target}")
+
+
 if (NOT MSVC)
     if(NOT ${ARCTICDB_USING_CONDA})
         # Compilers on conda-forge are relatively strict.
@@ -187,7 +197,9 @@ if (NOT MSVC)
         add_compile_options("-Werror")
     endif()
     add_compile_options("-ggdb")
-    if (NOT ${ARCTICDB_USING_CONDA} OR NOT CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+    if (ARCTICDB_SHARED_CORE)
+        add_compile_definitions(PYBIND11_NAMESPACE=pybind11 ARCTICDB_SHARED_CORE)
+    elseif (NOT ${ARCTICDB_USING_CONDA} OR NOT CMAKE_SYSTEM_NAME STREQUAL "Darwin")
         add_compile_options("-fvisibility=hidden")
     endif()
     add_compile_options("-fno-omit-frame-pointer")
@@ -931,26 +943,47 @@ if(ARCTICDB_THIN_ARCHIVES)
     set(CMAKE_C_ARCHIVE_FINISH   "true")
 endif()
 
-add_library(arcticdb_core_static STATIC $<TARGET_OBJECTS:arcticdb_core_object>)
+if (ARCTICDB_SHARED_CORE)
+    add_library(arcticdb_core_static STATIC $<TARGET_OBJECTS:arcticdb_core_object>)
 
-# Disable default api so both UTF-8 and UTF-32 can be supported
-target_compile_definitions(arcticdb_core_static PUBLIC PCRE2_CODE_UNIT_WIDTH=0 ENTT_ID_TYPE=std::uint64_t)
+    # Disable default api so both UTF-8 and UTF-32 can be supported
+    target_compile_definitions(arcticdb_core_static PUBLIC PCRE2_CODE_UNIT_WIDTH=0 ENTT_ID_TYPE=std::uint64_t)
 
-target_include_directories(arcticdb_core_static PUBLIC
-        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
-        $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
-        )
+    target_include_directories(arcticdb_core_static PUBLIC
+            $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+            $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
+            )
 
-target_link_libraries(arcticdb_core_static PUBLIC ${arcticdb_core_libraries})
+    target_link_libraries(arcticdb_core_static PUBLIC ${arcticdb_core_libraries})
+endif()
 
 add_library(arcticdb_core SHARED $<TARGET_OBJECTS:arcticdb_core_object>)
 
-target_link_libraries(arcticdb_core PRIVATE
+if(NOT ARCTICDB_SHARED_CORE)
+    # George: I don't think this comment or branch make sense.
+    # Nothing links against it, and it is expensive to produce in a debug tree
+    set_target_properties(arcticdb_core PROPERTIES EXCLUDE_FROM_ALL TRUE)
+endif()
+
+target_link_libraries(arcticdb_core PUBLIC
         ${arcticdb_core_libraries}
+        PRIVATE
         ${AWSSDK_LINK_LIBRARIES}
         )
 
+# vcpkg compiles glog with hidden visibility, so this library cannot re-export it and
+# every consumer has to link its own copy.
+if(ARCTICDB_SHARED_CORE AND TARGET gflags::gflags_static)
+    target_link_options(arcticdb_core PRIVATE
+        "LINKER:--exclude-libs,$<PATH:GET_FILENAME,$<TARGET_FILE:gflags::gflags_static>>")
+endif()
+
 target_compile_definitions(arcticdb_core PUBLIC PCRE2_CODE_UNIT_WIDTH=0 ENTT_ID_TYPE=std::uint64_t)
+
+target_include_directories(arcticdb_core PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
+    )
 
 GENERATE_EXPORT_HEADER(arcticdb_core)
 
@@ -985,7 +1018,7 @@ endif()
 
 target_link_libraries(arcticdb_python
         PUBLIC
-        arcticdb_core_static
+        ${arcticdb_core_link_target}
         ${AWSSDK_LINK_LIBRARIES}
         )
 
@@ -1021,10 +1054,10 @@ if (HIDE_LINKED_SYMBOLS AND NOT WIN32)
         # symbol so statically-linked deps (AWS SDK, folly, ...) are localized and
         # cannot be coalesced/preempted by another extension's copy — e.g. pyarrow's
         # bundled AWS SDK in libarrow, which otherwise causes an aws_fatal_assert
-        # abort when libarrow is loaded first. 
+        # abort when libarrow is loaded first.
         set(_arcticdb_exported_symbols "${CMAKE_CURRENT_BINARY_DIR}/exported_symbols.txt")
         file(WRITE "${_arcticdb_exported_symbols}" "_PyInit_arcticdb_ext\n")
-        
+
         # -dead_strip == --gc-sections.
         target_link_options(arcticdb_ext PRIVATE
             -Wl,-dead_strip
@@ -1233,13 +1266,13 @@ if(${TEST})
                 ${AWSSDK_LINK_LIBRARIES}
                 GTest::gtest
                 GTest::gmock
-                arcticdb_core_static
+                ${arcticdb_core_link_target}
         )
 
         # Fix gtest/folly unistd conflict until one of them fixes it. There's another copy for rapidcheck
         target_compile_options(test_unit_arcticdb PRIVATE /FI "${CMAKE_CURRENT_SOURCE_DIR}/util/test/gtest.hpp")
 
-        # gtest_discover_tests runs the exe in order to dynamically list all tests. In case the executable depends on a DLL
+        # gtest_discover_tests runs the exe in order to dynamicablly list all tests. In case the executable depends on a DLL
         # which is not in PATH gtest_discover_tests will return a cryptic error. The tests depend on a few DLLs one of which
         # is python<version>.dll. On Windows there is no RPATH and in addition to that gtest_discover_tests cannot take/modify
         # environment variables (known issue: https://gitlab.kitware.com/cmake/cmake/-/issues/21453). Thus we are left with two options:
@@ -1255,7 +1288,7 @@ if(${TEST})
         )
     else()
         set(COMMON_PUBLIC_TEST_LIBRARIES
-                arcticdb_core_static
+                ${arcticdb_core_link_target}
                 GTest::gtest
                 GTest::gmock
                 Python::Python # + pybind11::pybind11 (transitively included) = pybind11::embed, but latter is sometimes not found...
@@ -1333,7 +1366,7 @@ if(${TEST})
             ${COMMON_PUBLIC_TEST_LIBRARIES}
             PRIVATE
             ${AWSSDK_LINK_LIBRARIES}
-            arcticdb_core_static
+            ${arcticdb_core_link_target}
             )
     # Add third_party include directories for benchmark targets (only used for vcpkg builds)
     if(NOT ${ARCTICDB_USING_CONDA})
@@ -1379,7 +1412,7 @@ if(${TEST})
         target_link_libraries(
             arcticdb_rapidcheck_tests
             PRIVATE
-                arcticdb_core_static
+                ${arcticdb_core_link_target}
                 GTest::gtest
                 GTest::gmock
                 rapidcheck
