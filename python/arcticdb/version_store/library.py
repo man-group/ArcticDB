@@ -137,7 +137,9 @@ class SymbolDescription(NamedTuple):
     index : Tuple[NameWithDType]
         Index of the symbol.
     index_type : str {"NA", "index", "multi_index"}
-        Whether the index is a simple index or a multi_index. ``NA`` indicates that the stored data does not have an index.
+        If the written data was a Pandas object, whether the index is a simple index or a multi_index. ``NA`` for all
+        other written object types. This includes Arrow data with ``index_column=True``. With Arrow data, the ``index``
+        field of this object can be used to determine whether the on-disk data is a timeseries or not.
     row_count : Optional[int]
         Number of rows, or None if the symbol is pickled.
     last_update_time : datetime.datetime

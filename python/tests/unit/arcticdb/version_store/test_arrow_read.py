@@ -1390,7 +1390,7 @@ def test_arrow_written_data_get_info_timeseries(in_memory_version_store_arrow, t
     sym = "test_arrow_written_data_get_info_timeseries"
     if tz is not None:
         table = table.set_column(0, "ts", table.column(0).cast(pa.timestamp("ns", tz=tz)))
-    sorted = (pa.compute.sort_indices(table.column(0)).to_numpy() == np.arange(20, dtype=np.uint64)).all()
+    sorted = (pc.sort_indices(table.column(0)).to_numpy() == np.arange(20, dtype=np.uint64)).all()
     if has_index and validate_index and not sorted:
         pytest.skip("Write will fail")
     lib.write(sym, table, validate_index=validate_index, index_column=has_index)

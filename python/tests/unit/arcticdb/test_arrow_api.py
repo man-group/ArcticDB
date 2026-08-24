@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import pyarrow as pa
+import pyarrow.compute as pc
 import polars as pl
 import pytest
 
@@ -459,7 +460,7 @@ def test_arrow_written_data_get_info_timeseries(mem_library, table, tz, has_inde
     lib._nvs._set_allow_arrow_input()
     if tz is not None:
         table = table.set_column(0, "ts", table.column(0).cast(pa.timestamp("ns", tz=tz)))
-    sorted = (pa.compute.sort_indices(table.column(0)).to_numpy() == np.arange(20, dtype=np.uint64)).all()
+    sorted = (pc.sort_indices(table.column(0)).to_numpy() == np.arange(20, dtype=np.uint64)).all()
     if has_index and validate_index and not sorted:
         pytest.skip("Write will fail")
     lib.write(sym, table, validate_index=validate_index, index_column=has_index)
