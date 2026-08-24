@@ -13,6 +13,7 @@ import arcticdb
 import arcticdb.exceptions
 from arcticdb.version_store import NativeVersionStore
 from arcticdb_ext.exceptions import InternalException, NormalizationException, UnsortedDataException, SchemaException
+from arcticdb.exceptions import NoSuchVersionException
 from arcticdb_ext.storage import KeyType
 from arcticdb_ext import set_config_int
 from arcticdb.util.test import random_integers, assert_frame_equal, assert_series_equal
@@ -37,6 +38,21 @@ def create_random_data(at_date: datetime, num_cols: int = 5) -> pd.DataFrame:
     data = np.round(np.random.random(size=(len(date_range), num_cols)) * 100, 2)
 
     return pd.DataFrame(data=data, index=date_range, columns=[f"c{i + 1}" for i in range(num_cols)])
+
+
+def test_append_missing_symbol_no_write_if_missing_raises(lmdb_version_store):
+    lib = lmdb_version_store
+    df = pd.DataFrame({"a": [1, 2]}, index=pd.date_range("2024-01-01", periods=2))
+    with pytest.raises(NoSuchVersionException) as ex_info:
+        lib.append("does_not_exist", df, write_if_missing=False)
+    assert all(s in str(ex_info.value) for s in ["write_if_missing", "Cannot append", "does_not_exist"])
+
+
+def test_append_missing_symbol_write_if_missing_creates(lmdb_version_store):
+    lib = lmdb_version_store
+    df = pd.DataFrame({"a": [1, 2]}, index=pd.date_range("2024-01-01", periods=2))
+    lib.append("new_symbol", df, write_if_missing=True)
+    assert_frame_equal(lib.read("new_symbol").data, df)
 
 
 @pytest.mark.xfail(reason="Needs to be fixed with issue #496")
