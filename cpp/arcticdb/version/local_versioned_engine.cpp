@@ -772,8 +772,7 @@ VersionedItem LocalVersionedEngine::update_internal(
                    frame,
                    upsert,
                    dynamic_schema,
-                   prune_previous_versions,
-                   false
+                   prune_previous_versions
     )
             .get();
 }
@@ -1749,7 +1748,7 @@ folly::Future<VersionedItem> LocalVersionedEngine::async_write_versioned_datafra
 
 folly::Future<VersionedItem> LocalVersionedEngine::async_append_internal(
         const StreamId& stream_id, UpdateInfo&& update_info, const std::shared_ptr<InputFrame>& frame,
-        const AppendOptions& append_options, const bool batch
+        const AppendOptions& append_options
 ) {
     const bool add_new_symbol_list_entry = !update_info.previous_index_key_.has_value() && cfg().symbol_list();
     auto index_key_fut = folly::Future<AtomKey>::makeEmpty();
@@ -1779,24 +1778,12 @@ folly::Future<VersionedItem> LocalVersionedEngine::async_append_internal(
                                       );
         }
     } else {
-        if (!append_options.upsert) {
-            auto error_msg = fmt::format(
-                    "Cannot append to non-existent symbol {}. Using \"write_if_missing=True\" will create the symbol"
-                    "instead of throwing this exception.",
-                    stream_id
-            );
-            if (batch) {
-                missing_data::raise<ErrorCode::E_NO_SUCH_VERSION>(error_msg);
-            } else {
-                util::raise_rte(error_msg);
-            }
-        }
-        // Replace above with this as part of Monday ticket 12551552848 for 7.0.0
-        //        missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(
-        //                append_options.upsert,
-        //                "Cannot append to non-existent symbol {}. Using \"write_if_missing=True\" will create the
-        //                symbol" "instead of throwing this exception.", stream_id
-        //        );
+        missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(
+                append_options.upsert,
+                "Cannot append to non-existent symbol {}. Using \"write_if_missing=True\" will create the symbol "
+                "instead of throwing this exception.",
+                stream_id
+        );
         index_key_fut = async_write_dataframe_impl(
                 store(),
                 update_info.next_version_id_,
@@ -1824,8 +1811,7 @@ folly::Future<VersionedItem> LocalVersionedEngine::async_append_internal(
 
 folly::Future<VersionedItem> LocalVersionedEngine::async_update_internal(
         const StreamId& stream_id, UpdateInfo&& update_info, const UpdateQuery& query,
-        const std::shared_ptr<InputFrame>& frame, bool upsert, bool dynamic_schema, bool prune_previous_versions,
-        const bool batch
+        const std::shared_ptr<InputFrame>& frame, bool upsert, bool dynamic_schema, bool prune_previous_versions
 ) {
     const bool add_new_symbol_list_entry = !update_info.previous_index_key_.has_value() && cfg().symbol_list();
     auto index_key_fut = folly::Future<AtomKey>::makeEmpty();
@@ -1834,24 +1820,12 @@ folly::Future<VersionedItem> LocalVersionedEngine::async_update_internal(
                                 ? async_write_metadata_impl(store(), update_info, std::move(frame->user_meta))
                                 : async_update_impl(store(), update_info, query, frame, write_options_, dynamic_schema);
     } else {
-        if (!upsert) {
-            auto error_msg = fmt::format(
-                    "Cannot update non-existent symbol {}. Using \"upsert=True\" will create the symbol instead of "
-                    "throwing this exception.",
-                    stream_id
-            );
-            if (batch) {
-                missing_data::raise<ErrorCode::E_NO_SUCH_VERSION>(error_msg);
-            } else {
-                util::raise_rte(error_msg);
-            }
-        }
-        // Replace above with this as part of Monday ticket 12551552848 for 7.0.0
-        //        missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(
-        //                upsert,
-        //                "Cannot update non-existent symbol {}. Using \"upsert=True\" will create the symbol instead of
-        //                " "throwing this exception.", stream_id
-        //        );
+        missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(
+                upsert,
+                "Cannot update non-existent symbol {}. Using \"upsert=True\" will create the symbol instead of "
+                "throwing this exception.",
+                stream_id
+        );
         // Make a copy as we're possibly changing a flag here. dynamic_schema as an explicit argument to modification
         // methods are on the way out, remove when this is done
         auto write_options = write_options_;
@@ -2020,7 +1994,7 @@ VersionedItem LocalVersionedEngine::append_internal(
 ) {
     py::gil_scoped_release release_gil;
     auto update_info = get_next_version_id_and_optionally_latest_undeleted_version(store(), version_map(), stream_id);
-    return async_append_internal(stream_id, std::move(update_info), frame, append_options, false).get();
+    return async_append_internal(stream_id, std::move(update_info), frame, append_options).get();
 }
 
 std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_append_internal(
@@ -2045,7 +2019,7 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
                                            UpdateInfo&& update_info
                                    ) {
                             return async_append_internal(
-                                    stream_id, std::move(update_info), frame, append_options, true
+                                    stream_id, std::move(update_info), frame, append_options
                             );
                         })
         );
@@ -2090,8 +2064,7 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
                                                            frame,
                                                            upsert,
                                                            write_options_.dynamic_schema,
-                                                           prune_previous_versions,
-                                                           true
+                                                           prune_previous_versions
                                                    );
                                                }));
     }
