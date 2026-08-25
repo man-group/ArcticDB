@@ -289,7 +289,8 @@ add_subdirectory(arcticdb)
 # arcticdb_core_static is used by other projects so we expose the headers via `arcticdb/.../abc.hpp`.
 # We plan to introduce a new target that exposes only a "public" subset of headers from this project
 # soon instead, as exposing all headers is fragile for consumers.
-foreach(core_target arcticdb_core_static arcticdb_core)
+# foreach(core_target arcticdb_core_static arcticdb_core)
+foreach(core_target arcticdb_core)
     target_include_directories(${core_target} PUBLIC
         "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>"
         "$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>"

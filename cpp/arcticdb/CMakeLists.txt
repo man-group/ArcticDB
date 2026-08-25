@@ -943,7 +943,7 @@ if(ARCTICDB_THIN_ARCHIVES)
     set(CMAKE_C_ARCHIVE_FINISH   "true")
 endif()
 
-if (ARCTICDB_SHARED_CORE)
+if (NOT ARCTICDB_SHARED_CORE)
     add_library(arcticdb_core_static STATIC $<TARGET_OBJECTS:arcticdb_core_object>)
 
     # Disable default api so both UTF-8 and UTF-32 can be supported
