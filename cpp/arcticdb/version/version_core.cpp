@@ -1475,7 +1475,7 @@ void check_multi_key_is_not_index_only(const PipelineContext& pipeline_context, 
     );
 }
 
-void check_can_perform_processing(
+void check_can_be_filtered(
         const std::shared_ptr<PipelineContext>& pipeline_context, const ReadQuery& read_query
 ) {
     // To remain backward compatibility, pending new major release to merge into below section
@@ -1570,7 +1570,7 @@ static void read_indexed_keys_to_pipeline(
     // tsd_ carries the existing version's normalization and user metadata (and, for the compact path, its descriptor,
     // total rows and sorted state). The normalization metadata is read back via pipeline_context->normalization().
     pipeline_context->set_tsd(std::move(index_segment_reader.mutable_tsd()));
-    check_can_perform_processing(pipeline_context, read_query);
+    check_can_be_filtered(pipeline_context, read_query);
     ARCTICDB_DEBUG(
             log::version(),
             "read_indexed_keys_to_pipeline: Symbol {} found {} keys with {} total rows",
@@ -3082,7 +3082,7 @@ folly::Future<ReadVersionOutput> read_frame_for_version(
                             handler_data](auto&& pipeline_context) mutable {
                     if (pipeline_context->multi_key_) {
                         if (read_query) {
-                            check_can_perform_processing(pipeline_context, *read_query);
+                            check_can_be_filtered(pipeline_context, *read_query);
                         }
                         return read_multi_key(
                                 store,
