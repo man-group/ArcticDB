@@ -2547,7 +2547,7 @@ void LocalVersionedEngine::_test_set_store(std::shared_ptr<Store> store) { set_s
 
 VersionedItem LocalVersionedEngine::merge_internal(
         const StreamId& stream_id, std::shared_ptr<InputFrame> source, const bool prune_previous_versions,
-        const bool upsert, const MergeStrategy& strategy, std::vector<std::string>&& on
+        const bool upsert, const MergeStrategy& strategy, std::vector<std::string>&& on, const bool match_na
 ) {
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: merge_update");
     sorting::check<ErrorCode::E_UNSORTED_DATA>(
@@ -2572,6 +2572,7 @@ VersionedItem LocalVersionedEngine::merge_internal(
                                                   IndexPartialKey{stream_id, update_info.next_version_id_},
                                                   std::move(on),
                                                   strategy,
+                                                  match_na,
                                                   std::move(source),
                                                   get_de_dup_map(stream_id, update_info, write_options_)
                                           );

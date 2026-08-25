@@ -861,9 +861,13 @@ struct MergeUpdateClause {
     MergeStrategy strategy_;
     std::shared_ptr<InputFrame> source_;
     bool fake_index_name_ = false;
+    /// When false (the default), a missing value (float NaN, string None/NaN, or NaT in a non-index datetime64 on
+    /// column) never matches anything, on either side. When true, NaN matches NaN, string None and  NaN are
+    /// indistinguishable, and NaT matches NaT.
+    bool match_na_ = false;
     MergeUpdateClause(
             std::vector<std::string>&& on, MergeStrategy strategy, std::shared_ptr<InputFrame> source,
-            size_t rows_per_segment
+            size_t rows_per_segment, bool match_na
     );
     ARCTICDB_MOVE_COPY_DEFAULT(MergeUpdateClause)
 
@@ -899,7 +903,7 @@ struct MergeUpdateClause {
         void add_match(size_t source_row, size_t target_row_slice, std::span<size_t> target_rows);
         void filter_matching_rows(
                 std::string_view column_name, DataType source_type, DataType target_type, size_t source_offset,
-                std::span<const std::byte> source_data_bytes
+                std::span<const std::byte> source_data_bytes, bool match_na
         );
         void clone_source_match(size_t source_row_src, size_t source_row_dst, size_t row_slice);
         void validate_rows_to_update(const MergeStrategy& strategy) const;

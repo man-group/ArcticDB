@@ -4435,6 +4435,7 @@ class NativeVersionStore:
         metadata: Any = None,
         prune_previous_versions: Optional[bool] = None,
         upsert: bool = False,
+        match_na: bool = False,
     ):
         """
         Merge new data into an existing symbol's DataFrame according to a specified strategy.
@@ -4469,9 +4470,19 @@ class NativeVersionStore:
             IMPORTANT: For date-time indexed data, the index is always included in matching and cannot be excluded.
 
             Note on equality semantics:
+                By default (`match_na=False`), a missing value in an `on` column never matches anything, on either
+                side:
+                - In float columns, NaN never matches (plain IEEE equality), including NaN against NaN.
+                - In string columns, None and NaN match nothing, so None does not match None and NaN does not
+                  match NaN.
+                - In datetime64 `on` columns, NaT matches nothing, including NaT against NaT.
+                Non-missing values are compared by plain equality in both modes.
+
+                Set `match_na=True` for missing values to match each other instead:
                 - In float columns, NaN is considered equal to NaN.
                 - In string columns, None and NaN are indistinguishable. NaN == None, NaN == NaN, None == None,
                   and None == NaN all evaluate to True.
+                - In datetime64 `on` columns, NaT is considered equal to NaT.
 
             If a column name appears more than once in the source or the target it must not be added in the on
             parameter.
@@ -4486,6 +4497,9 @@ class NativeVersionStore:
             If True and the symbol does not exist, create it by writing `source` to the store. Requires a strategy
             with `not_matched_by_target="insert"`; combining it with an update-only strategy raises
             `UserInputException` as the newly created symbol would be empty.
+        match_na : bool, default False
+            Controls whether a missing value (float NaN, string None/NaN, or NaT in a datetime64 `on`
+            column) can match another missing value in the `on` columns. See "Note on equality semantics" above.
 
         Returns
         -------
@@ -4534,7 +4548,9 @@ class NativeVersionStore:
             global_default=False,
             existing_value=prune_previous_versions,
         )
-        vit = self.version_store.merge(symbol, item, norm_meta, udm, prune_previous_versions, upsert, strategy, on)
+        vit = self.version_store.merge(
+            symbol, item, norm_meta, udm, prune_previous_versions, upsert, strategy, on, match_na
+        )
         return self._convert_thin_cxx_item_to_python(vit, metadata)
 
 
