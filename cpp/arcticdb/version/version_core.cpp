@@ -1502,7 +1502,7 @@ void check_can_be_filtered(const std::shared_ptr<PipelineContext>& pipeline_cont
                     "Cannot perform processing such as row/column filtering, projection, aggregation, resampling, "
                     "etc.. on numpy array"
             );
-        } else if (is_pickled) {
+        } else if (is_pickled && !is_compaction) {
             schema::raise<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_PICKLED_DATA>(
                     "Cannot perform processing such as row/column filtering, projection, aggregation, resampling, "
                     "etc.. on pickled data"
