@@ -1530,7 +1530,7 @@ def test_filter_pickled_symbol(request, lib_type, any_output_format):
     assert lib.is_symbol_pickled(symbol)
     q = QueryBuilder()
     q = q[q.a == 0]
-    with pytest.raises(InternalException):
+    with pytest.raises(SchemaException):
         _ = lib.read(symbol, query_builder=q)
 
 
@@ -1543,7 +1543,7 @@ def test_filter_date_range_pickled_symbol(request, lib_type, any_output_format):
     df = pd.DataFrame({"a": [[1, 2], [3, 4], [5, 6], [7, 8]]}, index=idx)
     lib.write(symbol, df, pickle_on_failure=True)
     assert lib.is_symbol_pickled(symbol)
-    with pytest.raises(InternalException):
+    with pytest.raises(SchemaException):
         lib.read(symbol, date_range=(idx[1], idx[2]))
 
 

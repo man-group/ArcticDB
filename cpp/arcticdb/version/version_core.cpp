@@ -1475,28 +1475,11 @@ void check_multi_key_is_not_index_only(const PipelineContext& pipeline_context, 
     );
 }
 
-void check_can_be_filtered(
-        const std::shared_ptr<PipelineContext>& pipeline_context, const ReadQuery& read_query
-) {
+void check_can_be_filtered(const std::shared_ptr<PipelineContext>& pipeline_context, const ReadQuery& read_query) {
     if (pipeline_context->multi_key_) {
         check_multi_key_is_not_index_only(*pipeline_context, read_query);
     }
 
-    // To keep
-    if (pipeline_context->desc_) {
-        util::check(
-                pipeline_context->descriptor().index().type() == IndexDescriptor::Type::TIMESTAMP ||
-                        !std::holds_alternative<IndexRange>(read_query.row_filter),
-                "Cannot apply date range filter to symbol with non-timestamp index"
-        );
-        const auto sorted_value = pipeline_context->descriptor().sorted();
-        sorting::check<ErrorCode::E_UNSORTED_DATA>(
-                sorted_value == SortedValue::UNKNOWN || sorted_value == SortedValue::ASCENDING ||
-                        !std::holds_alternative<IndexRange>(read_query.row_filter),
-                "When filtering data using date_range, the symbol must be sorted in ascending order. ArcticDB believes "
-                "it is not sorted in ascending order and cannot therefore filter the data using date_range."
-        );
-    }
     const bool is_query_empty =
             (!read_query.columns && !read_query.row_range &&
              std::holds_alternative<std::monostate>(read_query.row_filter) && read_query.clauses_.empty());
@@ -1506,6 +1489,8 @@ void check_can_be_filtered(
     // compact_data argument to append) must work with numpy arrays as well as Series/DataFrames
     const bool is_compaction =
             !read_query.clauses_.empty() && folly::poly_type(*read_query.clauses_.front()) == typeid(CompactDataClause);
+    // Reject any filtering of unfilterable data before validating the query itself, so the caller always gets the
+    // dedicated error code rather than an incidental complaint (e.g. a non-timestamp index for a date_range read).
     if (!is_query_empty) {
         if (pipeline_context->multi_key_) {
             schema::raise<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_RECURSIVE_NORMALIZED_DATA>(
@@ -1523,6 +1508,21 @@ void check_can_be_filtered(
                     "etc.. on pickled data"
             );
         }
+    }
+
+    if (pipeline_context->desc_) {
+        util::check(
+                pipeline_context->descriptor().index().type() == IndexDescriptor::Type::TIMESTAMP ||
+                        !std::holds_alternative<IndexRange>(read_query.row_filter),
+                "Cannot apply date range filter to symbol with non-timestamp index"
+        );
+        const auto sorted_value = pipeline_context->descriptor().sorted();
+        sorting::check<ErrorCode::E_UNSORTED_DATA>(
+                sorted_value == SortedValue::UNKNOWN || sorted_value == SortedValue::ASCENDING ||
+                        !std::holds_alternative<IndexRange>(read_query.row_filter),
+                "When filtering data using date_range, the symbol must be sorted in ascending order. ArcticDB believes "
+                "it is not sorted in ascending order and cannot therefore filter the data using date_range."
+        );
     }
 }
 

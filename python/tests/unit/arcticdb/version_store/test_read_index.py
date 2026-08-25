@@ -14,8 +14,9 @@ from functools import reduce
 from packaging.version import Version
 from arcticdb.encoding_version import EncodingVersion
 from arcticdb.util._versions import PANDAS_VERSION
-from arcticdb_ext.exceptions import UserInputException
+from arcticdb_ext.exceptions import UserInputException, SchemaException
 from arcticdb.options import LibraryOptions
+from arcticdb.version_store.processing import QueryBuilder
 from arcticdb import ReadRequest
 from arcticdb.util.test import assert_frame_equal
 
@@ -288,6 +289,31 @@ class TestWithNormalizers:
         with pytest.raises(UserInputException) as exception_info:
             lib.read("sym_recursive", columns=[])
         assert "normalizers" in str(exception_info.value)
+
+    def test_recursive_filter_throws(
+        self, in_memory_library_tiny_segment_static_dynamic, all_recursive_metastructure_versions
+    ):
+        data = {"a": np.arange(5), "b": np.arange(8)}
+        lib = in_memory_library_tiny_segment_static_dynamic
+        lib._nvs.write("sym_recursive", data, recursive_normalizers=True)
+        q = QueryBuilder()
+        q = q[q["a"] == 0]
+        with pytest.raises(SchemaException):
+            lib.read("sym_recursive", query_builder=q)
+
+    def test_numpy_array_head_throws(self, in_memory_library_tiny_segment_static_dynamic):
+        lib = in_memory_library_tiny_segment_static_dynamic
+        lib._nvs.write("sym_np", np.arange(8))
+        with pytest.raises(SchemaException):
+            lib.head("sym_np", n=5)
+
+    def test_numpy_array_filter_throws(self, in_memory_library_tiny_segment_static_dynamic):
+        lib = in_memory_library_tiny_segment_static_dynamic
+        lib._nvs.write("sym_np", np.arange(8))
+        q = QueryBuilder()
+        q = q[q["a"] == 0]
+        with pytest.raises(SchemaException):
+            lib.read("sym_np", query_builder=q)
 
     @pytest.mark.parametrize("dynamic_schema", [False, True])
     def test_custom_throws(self, lmdb_storage, lib_name, dynamic_schema, custom_thing_with_registered_normalizer):
