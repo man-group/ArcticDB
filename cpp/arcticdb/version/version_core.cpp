@@ -1475,23 +1475,41 @@ void check_multi_key_is_not_index_only(const PipelineContext& pipeline_context, 
     );
 }
 
-void check_can_perform_processing(
-        const std::shared_ptr<PipelineContext>& pipeline_context, const ReadQuery& read_query
-) {
-    // To remain backward compatibility, pending new major release to merge into below section
-    // Ticket: 18038782559
-    const bool is_pickled = pipeline_context->has_normalization() && pipeline_context->is_pickled();
-    util::check(
-            !is_pickled ||
-                    (!read_query.columns.has_value() && std::holds_alternative<std::monostate>(read_query.row_filter)),
-            "Cannot perform processing such as row/column filtering, projection, aggregation, resampling, "
-            "etc.. on pickled data"
-    );
+void check_can_be_filtered(const std::shared_ptr<PipelineContext>& pipeline_context, const ReadQuery& read_query) {
     if (pipeline_context->multi_key_) {
         check_multi_key_is_not_index_only(*pipeline_context, read_query);
     }
 
-    // To keep
+    const bool is_query_empty =
+            (!read_query.columns && !read_query.row_range &&
+             std::holds_alternative<std::monostate>(read_query.row_filter) && read_query.clauses_.empty());
+    const bool is_pickled = pipeline_context->has_normalization() && pipeline_context->is_pickled();
+    const bool is_numpy_array = pipeline_context->has_normalization() && pipeline_context->is_numpy_array();
+    // We do not support processing over numpy arrays in general, but compact_data (either directly, or via the
+    // compact_data argument to append) must work with numpy arrays as well as Series/DataFrames
+    const bool is_compaction =
+            !read_query.clauses_.empty() && folly::poly_type(*read_query.clauses_.front()) == typeid(CompactDataClause);
+    // Reject any filtering of unfilterable data before validating the query itself, so the caller always gets the
+    // dedicated error code rather than an incidental complaint (e.g. a non-timestamp index for a date_range read).
+    if (!is_query_empty) {
+        if (pipeline_context->multi_key_) {
+            schema::raise<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_RECURSIVE_NORMALIZED_DATA>(
+                    "Cannot perform processing such as row/column filtering, projection, aggregation, resampling, "
+                    "etc.. on recursively normalized data"
+            );
+        } else if (is_numpy_array && !is_compaction) {
+            schema::raise<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_NUMPY_ARRAY>(
+                    "Cannot perform processing such as row/column filtering, projection, aggregation, resampling, "
+                    "etc.. on numpy array"
+            );
+        } else if (is_pickled && !is_compaction) {
+            schema::raise<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_PICKLED_DATA>(
+                    "Cannot perform processing such as row/column filtering, projection, aggregation, resampling, "
+                    "etc.. on pickled data"
+            );
+        }
+    }
+
     if (pipeline_context->desc_) {
         util::check(
                 pipeline_context->descriptor().index().type() == IndexDescriptor::Type::TIMESTAMP ||
@@ -1505,28 +1523,6 @@ void check_can_perform_processing(
                 "When filtering data using date_range, the symbol must be sorted in ascending order. ArcticDB believes "
                 "it is not sorted in ascending order and cannot therefore filter the data using date_range."
         );
-    }
-    const bool is_query_empty =
-            (!read_query.columns && !read_query.row_range &&
-             std::holds_alternative<std::monostate>(read_query.row_filter) && read_query.clauses_.empty());
-    const bool is_numpy_array = pipeline_context->has_normalization() && pipeline_context->normalization().has_np();
-    // We do not support processing over numpy arrays in general, but compact_data (either directly, or via the
-    // compact_data argument to append) must work with numpy arrays as well as Series/DataFrames
-    const bool is_compaction =
-            !read_query.clauses_.empty() && folly::poly_type(*read_query.clauses_.front()) == typeid(CompactDataClause);
-    if (!is_query_empty) {
-        // Exception for filtering pickled data is skipped for now for backward compatibility
-        if (pipeline_context->multi_key_) {
-            schema::raise<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_RECURSIVE_NORMALIZED_DATA>(
-                    "Cannot perform processing such as row/column filtering, projection, aggregation, resampling, "
-                    "etc.. on recursively normalized data"
-            );
-        } else if (is_numpy_array && !is_compaction) {
-            schema::raise<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_NUMPY_ARRAY>(
-                    "Cannot perform processing such as row/column filtering, projection, aggregation, resampling, "
-                    "etc.. on numpy array"
-            );
-        }
     }
 }
 
@@ -1570,7 +1566,7 @@ static void read_indexed_keys_to_pipeline(
     // tsd_ carries the existing version's normalization and user metadata (and, for the compact path, its descriptor,
     // total rows and sorted state). The normalization metadata is read back via pipeline_context->normalization().
     pipeline_context->set_tsd(std::move(index_segment_reader.mutable_tsd()));
-    check_can_perform_processing(pipeline_context, read_query);
+    check_can_be_filtered(pipeline_context, read_query);
     ARCTICDB_DEBUG(
             log::version(),
             "read_indexed_keys_to_pipeline: Symbol {} found {} keys with {} total rows",
@@ -2190,7 +2186,7 @@ void create_column_stats_impl(
 
     IndexInformation index_info(std::move(index_try).value(), std::nullopt);
 
-    schema::check<ErrorCode::E_UNSUPPORTED_INDEX_TYPE>(
+    schema::check<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_RECURSIVE_NORMALIZED_DATA>(
             variant_key_type(index_info.index_.first) != KeyType::MULTI_KEY,
             "Column stats generation not supported with recursively normalized symbols"
     );
@@ -2361,17 +2357,12 @@ folly::Future<SegmentInMemory> do_direct_read_or_process(
     const bool direct_read = read_query->clauses_.empty();
     if (!direct_read) {
         ARCTICDB_SAMPLE(RunPipelineAndOutput, 0)
-        util::check_rte(!pipeline_context->is_pickled(), "Cannot filter pickled data");
         return read_process_and_collect(store, pipeline_context, read_query, read_options)
                 .thenValue([store, pipeline_context, read_options, handler_data](std::vector<SliceAndKey>&& segs) {
                     return prepare_output_frame(std::move(segs), pipeline_context, store, read_options, handler_data);
                 });
     } else {
         ARCTICDB_SAMPLE(MarkAndReadDirect, 0)
-        util::check_rte(
-                !(pipeline_context->is_pickled() && std::holds_alternative<RowRange>(read_query->row_filter)),
-                "Cannot use head/tail/row_range with pickled data, use plain read instead"
-        );
         mark_index_slices(pipeline_context);
         auto frame = allocate_frame(pipeline_context, read_options);
         util::print_total_mem_usage(__FILE__, __LINE__, __FUNCTION__);
@@ -3082,7 +3073,7 @@ folly::Future<ReadVersionOutput> read_frame_for_version(
                             handler_data](auto&& pipeline_context) mutable {
                     if (pipeline_context->multi_key_) {
                         if (read_query) {
-                            check_can_perform_processing(pipeline_context, *read_query);
+                            check_can_be_filtered(pipeline_context, *read_query);
                         }
                         return read_multi_key(
                                 store,
@@ -3681,7 +3672,7 @@ folly::Future<SymbolProcessingResult> read_and_process(
                         auto pipeline_context =
                                 setup_pipeline_context(store, std::move(resolved_version), *read_query, read_options);
 
-                        user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                        schema::check<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_RECURSIVE_NORMALIZED_DATA>(
                                 !pipeline_context->multi_key_,
                                 "Multi-symbol joins not supported with recursively normalized data"
                         );
@@ -3690,7 +3681,7 @@ folly::Future<SymbolProcessingResult> read_and_process(
                             return SymbolProcessingResult{std::move(res_versioned_item), {}, {}, {}};
                         }
 
-                        schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
+                        schema::check<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_PICKLED_DATA>(
                                 !pipeline_context->is_pickled(), "Cannot perform multi-symbol join on pickled data"
                         );
 
