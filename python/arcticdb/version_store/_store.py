@@ -4418,7 +4418,7 @@ class NativeVersionStore:
         strategy: MergeStrategy = MergeStrategy(),
         on: Optional[List[str]] = None,
         metadata: Any = None,
-        prune_previous_versions: bool = False,
+        prune_previous_versions: Optional[bool] = None,
         upsert: bool = False,
     ):
         """
@@ -4465,8 +4465,8 @@ class NativeVersionStore:
             index.
         metadata : Any, optional
             Metadata to save alongside the new version.
-        prune_previous_versions : bool, default False
-            If True, removes previous versions from the version list.
+        prune_previous_versions : bool, default=None
+            If True, removes previous versions from the version list. Uses library default if left as None.
         upsert : bool, default False
             If True and the symbol does not exist, create it by writing `source` to the store. Requires a strategy
             with `not_matched_by_target="insert"`; combining it with an update-only strategy raises
@@ -4513,6 +4513,12 @@ class NativeVersionStore:
             norm_failure_options_msg="Source data must be normalizable in order to merge it into existing dataframe",
         )
         on = [] if on is None else on
+        prune_previous_versions = resolve_defaults(
+            "prune_previous_version",
+            self._write_options(),
+            global_default=False,
+            existing_value=prune_previous_versions,
+        )
         vit = self.version_store.merge(symbol, item, norm_meta, udm, prune_previous_versions, upsert, strategy, on)
         return self._convert_thin_cxx_item_to_python(vit, metadata)
 

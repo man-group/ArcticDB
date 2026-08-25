@@ -28,7 +28,6 @@ def set_library_options(
     write_options.fast_tombstone_all = True
     lib_desc.version.symbol_list = True
 
-    write_options.prune_previous_version = False
     write_options.pickle_on_failure = False
     write_options.snapshot_dedup = False
     write_options.delayed_deletes = False
@@ -38,6 +37,7 @@ def set_library_options(
     write_options.segment_row_size = options.rows_per_segment
     write_options.column_group_size = options.columns_per_segment
     write_options.recursive_normalizers = options.recursive_normalizers
+    write_options.prune_previous_version = options.prune_previous_versions
 
     lib_desc.version.encoding_version = (
         options.encoding_version if options.encoding_version is not None else DEFAULT_ENCODING_VERSION
