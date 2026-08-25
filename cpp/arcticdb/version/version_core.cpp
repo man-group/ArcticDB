@@ -1509,7 +1509,7 @@ void check_can_be_filtered(
     const bool is_query_empty =
             (!read_query.columns && !read_query.row_range &&
              std::holds_alternative<std::monostate>(read_query.row_filter) && read_query.clauses_.empty());
-    const bool is_numpy_array = pipeline_context->has_normalization() && pipeline_context->normalization().has_np();
+    const bool is_numpy_array = pipeline_context->has_normalization() && pipeline_context->is_numpy_array();
     // We do not support processing over numpy arrays in general, but compact_data (either directly, or via the
     // compact_data argument to append) must work with numpy arrays as well as Series/DataFrames
     const bool is_compaction =
