@@ -12,7 +12,7 @@ import numpy as np
 from pandas import DataFrame
 import pytest
 
-from arcticdb_ext.exceptions import InternalException
+from arcticdb_ext.exceptions import SchemaException
 
 pytestmark = pytest.mark.pipeline
 
@@ -124,5 +124,5 @@ def test_tail_pickled_symbol(lmdb_version_store, any_output_format):
     symbol = "test_tail_pickled_symbol"
     lmdb_version_store.write(symbol, np.arange(100).tolist())
     assert lmdb_version_store.is_symbol_pickled(symbol)
-    with pytest.raises(InternalException):
+    with pytest.raises(SchemaException):
         _ = lmdb_version_store.tail(symbol)

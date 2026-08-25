@@ -11,7 +11,7 @@ import pandas as pd
 import pytest
 
 from arcticdb.version_store.processing import QueryBuilder
-from arcticdb_ext.exceptions import InternalException
+from arcticdb_ext.exceptions import SchemaException
 
 from arcticdb.util.test import assert_frame_equal
 
@@ -99,7 +99,7 @@ def test_row_range_pickled_symbol(lmdb_version_store, any_output_format):
     symbol = "test_row_range_pickled_symbol"
     lmdb_version_store.write(symbol, np.arange(100).tolist())
     assert lmdb_version_store.is_symbol_pickled(symbol)
-    with pytest.raises(InternalException):
+    with pytest.raises(SchemaException):
         _ = lmdb_version_store.read(symbol, row_range=(1, 2))
 
 
