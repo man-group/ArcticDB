@@ -794,31 +794,6 @@ class TestMergeTimeseriesUpdate:
         expected = target.copy()
         generic_merge_test(lib, "sym", target, source, self.strategy, expected, on=["a", "b"])
 
-    def test_match_on_string_none_nan_indistinguishable(self, lmdb_version_store_v1):
-        lib = lmdb_version_store_v1
-        target = pd.DataFrame(
-            {"a": ["a", np.nan, None, np.nan, None], "b": [1, 2, 3, 4, 5]}, index=pd.date_range("2024-01-01", periods=5)
-        )
-        source = pd.DataFrame(
-            {"a": ["a", np.nan, None, None, np.nan], "b": [10, 20, 30, 40, 50]},
-            index=pd.date_range("2024-01-01", periods=5),
-        )
-        expected = pd.DataFrame(
-            {"a": ["a", np.nan, None, np.nan, None], "b": [10, 20, 30, 40, 50]},
-            index=pd.date_range("2024-01-01", periods=5),
-        )
-        generic_merge_test(lib, "sym", target, source, self.strategy, expected)
-
-    def test_match_on_float_nan(self, lmdb_version_store_v1):
-        lib = lmdb_version_store_v1
-        target = pd.DataFrame({"a": [1.0, np.nan, 3.0], "b": [1, 2, 3]}, index=pd.date_range("2024-01-01", periods=3))
-        source = pd.DataFrame({"a": [np.nan], "b": [20]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-02")]))
-        # NaN matches NaN at Jan2 → update b=20
-        expected = pd.DataFrame(
-            {"a": [1.0, np.nan, 3.0], "b": [1, 20, 3]}, index=pd.date_range("2024-01-01", periods=3)
-        )
-        generic_merge_test(lib, "sym", target, source, self.strategy, expected, on=["a"])
-
     def test_on_column_one_source_row_matches_multiple_target_rows(self, lmdb_library):
         lib = lmdb_library
         target = pd.DataFrame(
@@ -932,20 +907,6 @@ class TestMergeTimeseriesUpdate:
         source = pd.DataFrame(
             {"a": [2, 2], "b": [10.0, 20.0]},
             index=pd.DatetimeIndex([pd.Timestamp(1), pd.Timestamp(1)]),
-        )
-        lib.write("sym", target)
-        with pytest.raises(UserInputException, match="Multiple source rows match the same target row"):
-            lib.merge_experimental("sym", source, strategy=self.strategy, on=["a"])
-
-    def test_throws_when_multiple_source_rows_match_same_target_row_via_nan(self, lmdb_library):
-        lib = lmdb_library
-        target = pd.DataFrame(
-            {"a": [None, "x", "y"], "b": [1.0, 2.0, 3.0]},
-            index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(1), pd.Timestamp(2)]),
-        )
-        source = pd.DataFrame(
-            {"a": np.array([None, np.nan], dtype=object), "b": [10.0, 20.0]},
-            index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(0)]),
         )
         lib.write("sym", target)
         with pytest.raises(UserInputException, match="Multiple source rows match the same target row"):
@@ -2808,22 +2769,6 @@ class TestMergeRowrangeUpdate:
         )
         generic_merge_test(lib, "sym", target, source, self.strategy, expected, on=["a"])
 
-    def test_match_on_float_nan(self, lmdb_version_store_v1):
-        lib = lmdb_version_store_v1
-        target = pd.DataFrame({"a": [1.0, np.nan, 3.0], "b": [1, 2, 3]})
-        source = pd.DataFrame({"a": [np.nan], "b": [20]})
-        # NaN matches NaN → update b=20
-        expected = pd.DataFrame({"a": [1.0, np.nan, 3.0], "b": [1, 20, 3]})
-        generic_merge_test(lib, "sym", target, source, self.strategy, expected, on=["a"])
-
-    def test_match_on_string_none_nan_indistinguishable(self, lmdb_version_store_v1):
-        lib = lmdb_version_store_v1
-        target = pd.DataFrame({"a": ["x", np.nan, None, np.nan, None], "b": [1, 2, 3, 4, 5], "c": [1, 2, 3, 4, 5]})
-        source = pd.DataFrame({"a": ["x", np.nan, None, None, np.nan], "b": [4, 5, 3, 2, 1], "c": [10, 20, 30, 40, 50]})
-        # Match on (a,b): (NaN,5)→row4, (NaN,3)→row2, (NaN,2)→row1; "x" b mismatch, (NaN,1) no match
-        expected = pd.DataFrame({"a": ["x", np.nan, None, np.nan, None], "b": [1, 2, 3, 4, 5], "c": [1, 40, 30, 4, 20]})
-        generic_merge_test(lib, "sym", target, source, self.strategy, expected, on=["a", "b"])
-
     def test_all_columns_in_on(self, lmdb_library):
         lib = lmdb_library
         target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]})
@@ -2946,14 +2891,6 @@ class TestMergeRowrangeUpdate:
         lib = lmdb_library
         target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]})
         source = pd.DataFrame({"a": [2, 2], "b": [10.0, 20.0]})
-        lib.write("sym", target)
-        with pytest.raises(UserInputException, match="Multiple source rows match the same target row"):
-            lib.merge_experimental("sym", source, strategy=self.strategy, on=["a"])
-
-    def test_throws_when_multiple_source_rows_match_same_target_row_via_nan(self, lmdb_library):
-        lib = lmdb_library
-        target = pd.DataFrame({"a": [None, "x", "y"], "b": [1.0, 2.0, 3.0]})
-        source = pd.DataFrame({"a": np.array([np.nan, None], dtype=object), "b": [10.0, 20.0]})
         lib.write("sym", target)
         with pytest.raises(UserInputException, match="Multiple source rows match the same target row"):
             lib.merge_experimental("sym", source, strategy=self.strategy, on=["a"])
@@ -4787,3 +4724,195 @@ class TestMergeMultiindexInsert:
         sym = f"nonexistent_{is_datetime}"
         lib.merge_experimental(sym, source, strategy=strategy, upsert=True, on=on)
         assert_frame_equal(lib.read(sym).data, source)
+
+
+# ---- match_na semantics (consolidated from TestMergeTimeseriesUpdate /
+# TestMergeRowrangeUpdate duplicates, plus requester-approved NaT and insert-path
+# additions) ----
+
+
+@pytest.mark.parametrize("match_na", [True, False], ids=["match_na_true", "match_na_false"])
+@pytest.mark.parametrize(
+    "target, source, expected_match_na_true, expected_match_na_false",
+    [
+        (
+            pd.DataFrame({"a": [1.0, np.nan, 3.0], "b": [1, 2, 3]}, index=pd.date_range("2024-01-01", periods=3)),
+            pd.DataFrame(
+                {"a": [np.nan, 3.0], "b": [20, 30]},
+                index=pd.DatetimeIndex([pd.Timestamp("2024-01-02"), pd.Timestamp("2024-01-03")]),
+            ),
+            pd.DataFrame({"a": [1.0, np.nan, 3.0], "b": [1, 20, 30]}, index=pd.date_range("2024-01-01", periods=3)),
+            pd.DataFrame({"a": [1.0, np.nan, 3.0], "b": [1, 2, 30]}, index=pd.date_range("2024-01-01", periods=3)),
+        ),
+        (
+            pd.DataFrame({"a": [1.0, np.nan, 3.0], "b": [1, 2, 3]}),
+            pd.DataFrame({"a": [np.nan, 3.0], "b": [20, 30]}),
+            pd.DataFrame({"a": [1.0, np.nan, 3.0], "b": [1, 20, 30]}),
+            pd.DataFrame({"a": [1.0, np.nan, 3.0], "b": [1, 2, 30]}),
+        ),
+    ],
+    ids=["datetime", "rowrange"],
+)
+def test_match_on_float_nan(lmdb_library, match_na, target, source, expected_match_na_true, expected_match_na_false):
+    lib = lmdb_library
+    strategy = MergeStrategy(MergeAction.UPDATE, MergeAction.DO_NOTHING)
+    lib.write("sym", target)
+    lib.merge_experimental("sym", source, strategy=strategy, on=["a"], match_na=match_na)
+    expected = expected_match_na_true if match_na else expected_match_na_false
+    assert_frame_equal(lib.read("sym").data, expected)
+    lt = lib._dev_tools.library_tool()
+    assert len(lt.find_keys_for_symbol(KeyType.TABLE_DATA, "sym")) == 2
+
+
+@pytest.mark.parametrize("match_na", [True, False], ids=["match_na_true", "match_na_false"])
+@pytest.mark.parametrize(
+    "target, source, on, expected_match_na_true, expected_match_na_false",
+    [
+        (
+            pd.DataFrame(
+                {"a": ["x", np.nan, None, np.nan, None], "b": [1, 2, 3, 4, 5]},
+                index=pd.date_range("2024-01-01", periods=5),
+            ),
+            pd.DataFrame(
+                {"a": ["x", np.nan, None, None, np.nan], "b": [10, 20, 30, 40, 50]},
+                index=pd.date_range("2024-01-01", periods=5),
+            ),
+            ["a"],
+            pd.DataFrame(
+                {"a": ["x", np.nan, None, np.nan, None], "b": [10, 20, 30, 40, 50]},
+                index=pd.date_range("2024-01-01", periods=5),
+            ),
+            pd.DataFrame(
+                {"a": ["x", np.nan, None, np.nan, None], "b": [10, 2, 3, 4, 5]},
+                index=pd.date_range("2024-01-01", periods=5),
+            ),
+        ),
+        (
+            pd.DataFrame({"a": ["x", np.nan, None, np.nan, None], "b": [1, 2, 3, 4, 5], "c": [1, 2, 3, 4, 5]}),
+            pd.DataFrame({"a": ["x", np.nan, None, None, np.nan], "b": [1, 2, 3, 4, 5], "c": [10, 20, 30, 40, 50]}),
+            ["a", "b"],
+            pd.DataFrame({"a": ["x", np.nan, None, np.nan, None], "b": [1, 2, 3, 4, 5], "c": [10, 20, 30, 40, 50]}),
+            pd.DataFrame({"a": ["x", np.nan, None, np.nan, None], "b": [1, 2, 3, 4, 5], "c": [10, 2, 3, 4, 5]}),
+        ),
+    ],
+    ids=["datetime", "rowrange"],
+)
+def test_match_on_string_none_nan(
+    lmdb_version_store_v1, match_na, target, source, on, expected_match_na_true, expected_match_na_false
+):
+    lib = lmdb_version_store_v1
+    strategy = MergeStrategy(MergeAction.UPDATE, MergeAction.DO_NOTHING)
+    lib.write("sym", target)
+    lib.merge_experimental("sym", source, strategy=strategy, on=on, match_na=match_na)
+    expected = expected_match_na_true if match_na else expected_match_na_false
+    assert_frame_equal(lib.read("sym").data, expected)
+
+
+@pytest.mark.parametrize("match_na", [True, False], ids=["match_na_true", "match_na_false"])
+@pytest.mark.parametrize(
+    "target, source",
+    [
+        (
+            pd.DataFrame(
+                {"a": [None, "x", "y"], "b": [1.0, 2.0, 3.0]},
+                index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(1), pd.Timestamp(2)]),
+            ),
+            pd.DataFrame(
+                {"a": np.array([None, np.nan], dtype=object), "b": [10.0, 20.0]},
+                index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(0)]),
+            ),
+        ),
+        (
+            pd.DataFrame({"a": [None, "x", "y"], "b": [1.0, 2.0, 3.0]}),
+            pd.DataFrame({"a": np.array([np.nan, None], dtype=object), "b": [10.0, 20.0]}),
+        ),
+    ],
+    ids=["datetime", "rowrange"],
+)
+def test_multiple_source_rows_match_via_missing(lmdb_library, match_na, target, source):
+    lib = lmdb_library
+    strategy = MergeStrategy(MergeAction.UPDATE, MergeAction.DO_NOTHING)
+    lib.write("sym", target)
+    if match_na:
+        with pytest.raises(UserInputException, match="Multiple source rows match the same target row"):
+            lib.merge_experimental("sym", source, strategy=strategy, on=["a"], match_na=match_na)
+    else:
+        lib.merge_experimental("sym", source, strategy=strategy, on=["a"], match_na=match_na)
+        assert_frame_equal(lib.read("sym").data, target)
+
+
+@pytest.mark.parametrize("match_na", [True, False], ids=["match_na_true", "match_na_false"])
+@pytest.mark.parametrize(
+    "target, source, expected_match_na_true, expected_match_na_false",
+    [
+        (
+            pd.DataFrame(
+                {"a": [pd.Timestamp("2024-01-01"), pd.NaT, pd.Timestamp("2024-01-03")], "b": [1, 2, 3]},
+                index=pd.date_range("2024-06-01", periods=3),
+            ),
+            pd.DataFrame(
+                {"a": [pd.NaT, pd.Timestamp("2024-01-03")], "b": [20, 30]},
+                index=pd.DatetimeIndex([pd.Timestamp("2024-06-02"), pd.Timestamp("2024-06-03")]),
+            ),
+            pd.DataFrame(
+                {"a": [pd.Timestamp("2024-01-01"), pd.NaT, pd.Timestamp("2024-01-03")], "b": [1, 20, 30]},
+                index=pd.date_range("2024-06-01", periods=3),
+            ),
+            pd.DataFrame(
+                {"a": [pd.Timestamp("2024-01-01"), pd.NaT, pd.Timestamp("2024-01-03")], "b": [1, 2, 30]},
+                index=pd.date_range("2024-06-01", periods=3),
+            ),
+        ),
+        (
+            pd.DataFrame({"a": [pd.Timestamp("2024-01-01"), pd.NaT, pd.Timestamp("2024-01-03")], "b": [1, 2, 3]}),
+            pd.DataFrame({"a": [pd.NaT, pd.Timestamp("2024-01-03")], "b": [20, 30]}),
+            pd.DataFrame({"a": [pd.Timestamp("2024-01-01"), pd.NaT, pd.Timestamp("2024-01-03")], "b": [1, 20, 30]}),
+            pd.DataFrame({"a": [pd.Timestamp("2024-01-01"), pd.NaT, pd.Timestamp("2024-01-03")], "b": [1, 2, 30]}),
+        ),
+    ],
+    ids=["datetime", "rowrange"],
+)
+def test_match_on_datetime_nat(lmdb_library, match_na, target, source, expected_match_na_true, expected_match_na_false):
+    lib = lmdb_library
+    strategy = MergeStrategy(MergeAction.UPDATE, MergeAction.DO_NOTHING)
+    lib.write("sym", target)
+    lib.merge_experimental("sym", source, strategy=strategy, on=["a"], match_na=match_na)
+    expected = expected_match_na_true if match_na else expected_match_na_false
+    assert_frame_equal(lib.read("sym").data, expected)
+
+
+@pytest.mark.parametrize(
+    "target, source, expected",
+    [
+        (
+            pd.DataFrame(
+                {"a": [1.0, np.nan], "b": [1, 2]},
+                index=pd.DatetimeIndex([pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-02")]),
+            ),
+            pd.DataFrame(
+                {"a": [np.nan, 1.0], "b": [20, 10]},
+                index=pd.DatetimeIndex([pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-01")]),
+            ),
+            # the inserted NaN row follows the target row sharing its timestamp
+            pd.DataFrame(
+                {"a": [1.0, np.nan, np.nan], "b": [10, 20, 2]},
+                index=pd.DatetimeIndex(
+                    [pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-02")]
+                ),
+            ),
+        ),
+        (
+            pd.DataFrame({"a": [1.0, np.nan], "b": [1, 2]}),
+            pd.DataFrame({"a": [np.nan, 1.0], "b": [20, 10]}),
+            # unmatched rows append after all target rows in source order
+            pd.DataFrame({"a": [1.0, np.nan, np.nan], "b": [10, 2, 20]}),
+        ),
+    ],
+    ids=["datetime", "rowrange"],
+)
+def test_unmatched_nan_source_rows_inserted_default(lmdb_library, target, source, expected):
+    lib = lmdb_library
+    strategy = MergeStrategy(MergeAction.UPDATE, MergeAction.INSERT)
+    lib.write("sym", target)
+    lib.merge_experimental("sym", source, strategy=strategy, on=["a"])
+    assert_frame_equal(lib.read("sym").data, expected)

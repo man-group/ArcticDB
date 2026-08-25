@@ -106,10 +106,10 @@ void sort_by_rowslice(std::span<RowRange> rows, std::span<ColRange> cols, Other&
 
 MergeUpdateClause create_clause(
         const MergeStrategy strategy, std::shared_ptr<ComponentManager> component_manager, InputFrame&& input_frame,
-        std::vector<std::string> on = {}
+        std::vector<std::string> on = {}, bool match_na = false
 ) {
     MergeUpdateClause clause(
-            std::move(on), strategy, std::make_shared<InputFrame>(std::move(input_frame)), rows_per_segment
+            std::move(on), strategy, std::make_shared<InputFrame>(std::move(input_frame)), rows_per_segment, match_na
     );
     clause.set_component_manager(std::move(component_manager));
     return clause;
@@ -1379,7 +1379,8 @@ TEST_F(MergeUpdateClauseUpdateStrategyRowRange, MatchNaN) {
             std::array{std::numeric_limits<float>::quiet_NaN()},
             std::array<timestamp, 1>{2000}
     );
-    MergeUpdateClause clause = create_clause(std::move(input_frame), {"float32"});
+    MergeUpdateClause clause =
+            ::create_clause(strategy_, component_manager_, std::move(input_frame), {"float32"}, true);
     const std::vector<std::vector<size_t>> structure_indices = clause.structure_for_processing(ranges_and_keys_);
     const size_t row_slices_to_process = structure_indices.size();
     ASSERT_EQ(row_slices_to_process, 3);

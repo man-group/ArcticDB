@@ -9,7 +9,6 @@ from arcticdb.util.hypothesis import (
     use_of_function_scoped_fixtures_in_hypothesis_checked,
     DataframeStrategyIndexType,
 )
-from arcticdb.exceptions import DuplicateKeyException, UserInputException
 from arcticdb.version_store._store import MergeStrategy, MergeAction, normalize_merge_action
 from hypothesis import assume, strategies as st, given, settings, HealthCheck
 from typing import List, Tuple, Optional
@@ -17,7 +16,6 @@ from typing import List, Tuple, Optional
 from arcticdb.util.test import (
     assert_frame_equal,
     assert_index_key_structure_static_schema,
-    merge,
     random_strings_of_length_with_nan,
 )
 from tests.util.mark import MACOS, WINDOWS
@@ -103,104 +101,93 @@ def source_for_merge(
 
 
 @st.composite
-def merge_arguments(
-    draw,
-    column_names,
-    column_dtypes,
-    min_date=MIN_DATE,
-    max_date=MAX_DATE,
-    index_type=DataframeStrategyIndexType.DATETIME,
-) -> Tuple[List[pd.DataFrame], pd.DataFrame, List[str]]:
-
-    if index_type == DataframeStrategyIndexType.DATETIME:
-        target_list = draw(ordered_dataframe_list(column_names, column_dtypes, min_date, max_date))
-        target = pd.concat(target_list)
-        on_columns_min_size = 0
+def merge_update_arguments(draw, index_type=DataframeStrategyIndexType.DATETIME):
+    rowrange = index_type == DataframeStrategyIndexType.ROWRANGE
+    on = draw(st.lists(st.sampled_from(COL_NAMES), unique=True, min_size=1 if rowrange else 0))
+    # Drawn independently of index type and data, so both semantics are exercised regardless of what else is drawn.
+    match_na = draw(st.booleans())
+    strategy = MergeStrategy(matched="update", not_matched_by_target="do_nothing")
+    target, source, expected = draw(
+        merge_dataframes_from_result(
+            COL_NAMES, DTYPES, MIN_DATE, MAX_DATE, on, strategy, index_type=index_type, match_na=match_na
+        )
+    )
+    assume(not target.empty)
+    if rowrange:
+        target_list = [target]
     else:
-        target_list = [draw(dataframe(column_names, column_dtypes, min_date, max_date, index_type=index_type))]
-        target = target_list[0]
-        on_columns_min_size = 1
-    on = draw(st.lists(st.sampled_from(COL_NAMES), unique=True, min_size=on_columns_min_size))
-    source = draw(source_for_merge(target, on=on))
-    return target_list, source, on
+        # Split the target into chunks appended in separate writes, at strictly increasing index positions only, so
+        # each appended chunk starts strictly after the previous one ends and the sorted-append validation holds.
+        valid = [i for i in range(1, len(target)) if target.index[i] > target.index[i - 1]]
+        bounds = sorted(draw(st.lists(st.sampled_from(valid), unique=True, max_size=3))) if valid else []
+        target_list = [target.iloc[start:stop] for start, stop in zip([0] + bounds, bounds + [len(target)])]
+    return target_list, source, expected, on, match_na
 
 
 @use_of_function_scoped_fixtures_in_hypothesis_checked
-@given(merge_args=merge_arguments(COL_NAMES, DTYPES))
+@given(merge_args=merge_update_arguments())
 @settings(deadline=None, suppress_health_check=[HealthCheck.data_too_large])
 def test_timeseries_merge_update(s3_version_store_v1, merge_args):
-    target_list, source, on = merge_args
+    target_list, source, expected, on, match_na = merge_args
     lib = s3_version_store_v1
     symbol = "test_merge_update"
     lib.version_store.force_delete_symbol(symbol)
-    strategy = MergeStrategy(matched="update", not_matched_by_target="do_nothing")
     for df in target_list:
         lib.append(symbol, df)
-    try:
-        lib.merge_experimental(symbol, source, strategy=strategy, on=on)
-    except UserInputException as e:
-        if "Multiple source rows match the same target row" not in str(e):
-            raise
-        with pytest.raises(ValueError, match="Multiple source rows match the same target row"):
-            merge(pd.concat(target_list), source, strategy=strategy, on=on)
-        return
-    result = lib.read(symbol).data
-    expected = merge(pd.concat(target_list), source, strategy=strategy, on=on)
-    assert_frame_equal(result, expected)
+    lib.merge_experimental(
+        symbol,
+        source,
+        strategy=MergeStrategy(matched="update", not_matched_by_target="do_nothing"),
+        on=on,
+        match_na=match_na,
+    )
+    assert_frame_equal(lib.read(symbol).data, expected)
 
 
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @given(
-    merge_args=merge_arguments(COL_NAMES, DTYPES),
+    merge_args=merge_update_arguments(),
     cols_to_promote=st.lists(st.sampled_from(COL_NAMES), unique=True, min_size=1),
 )
 @settings(deadline=None, suppress_health_check=[HealthCheck.data_too_large])
 def test_multiindex_merge_update(s3_version_store_v1, merge_args, cols_to_promote):
-    target_list, source, on = merge_args
+    target_list, source, expected, on, match_na = merge_args
     target_list = [df.set_index(cols_to_promote, append=True) for df in target_list]
     source = source.set_index(cols_to_promote, append=True)
+    expected = expected.set_index(cols_to_promote, append=True)
 
     lib = s3_version_store_v1
     symbol = "test_multiindex_merge_update"
     lib.version_store.force_delete_symbol(symbol)
     for df in target_list:
         lib.append(symbol, df)
-    strategy = MergeStrategy(matched="update", not_matched_by_target="do_nothing")
-    try:
-        lib.merge_experimental(symbol, source, strategy=strategy, on=on)
-    except UserInputException as e:
-        if "Multiple source rows match the same target row" not in str(e):
-            raise
-        with pytest.raises(ValueError, match="Multiple source rows match the same target row"):
-            merge(pd.concat(target_list), source, strategy=strategy, on=on)
-        return
-    result = lib.read(symbol).data
-    expected = merge(pd.concat(target_list), source, strategy=strategy, on=on)
-    assert_frame_equal(result, expected)
+    lib.merge_experimental(
+        symbol,
+        source,
+        strategy=MergeStrategy(matched="update", not_matched_by_target="do_nothing"),
+        on=on,
+        match_na=match_na,
+    )
+    assert_frame_equal(lib.read(symbol).data, expected)
 
 
 @use_of_function_scoped_fixtures_in_hypothesis_checked
-@given(merge_args=merge_arguments(COL_NAMES, DTYPES, index_type=DataframeStrategyIndexType.ROWRANGE))
+@given(merge_args=merge_update_arguments(index_type=DataframeStrategyIndexType.ROWRANGE))
 @settings(deadline=None, suppress_health_check=[HealthCheck.data_too_large])
 def test_rowrange_merge_update(s3_version_store_v1, merge_args):
-    target, source, on = merge_args
-    assert len(target) == 1
+    target_list, source, expected, on, match_na = merge_args
     lib = s3_version_store_v1
     symbol = "test_merge_update"
     lib.version_store.force_delete_symbol(symbol)
-    strategy = MergeStrategy(matched="update", not_matched_by_target="do_nothing")
-    lib.write(symbol, target[0])
-    try:
-        lib.merge_experimental(symbol, source, strategy=strategy, on=on)
-    except UserInputException as e:
-        if "Multiple source rows match the same target row" not in str(e):
-            raise
-        with pytest.raises(ValueError, match="Multiple source rows match the same target row"):
-            merge(target[0], source, strategy=strategy, on=on)
-        return
-    result = lib.read(symbol).data
-    expected = merge(target[0], source, strategy=strategy, on=on)
-    assert_frame_equal(result, expected)
+    lib.write(symbol, target_list[0])
+    lib.merge_experimental(
+        symbol,
+        source,
+        strategy=MergeStrategy(matched="update", not_matched_by_target="do_nothing"),
+        on=on,
+        match_na=match_na,
+    )
+    assert_frame_equal(lib.read(symbol).data, expected)
 
 
 ########################################################################################
@@ -232,13 +219,16 @@ def test_rowrange_merge_update(s3_version_store_v1, merge_args):
 # In both cases the expected result is simply the end result from step 1, reordered so inserted rows follow the
 # target rows sharing their timestamp.
 
-# Single sentinel used only when building match keys: None/NaN/NaT collapse to it so they compare equal, mirroring the
-# way the merge treats missing values (a source None matches a target NaN and vice versa). It is never written into the
-# data - target/source/expected are slices/reorders of the generated frame, so the real None/NaN values are preserved.
+# Single sentinel used when match_na=True: None/NaN/NaT collapse to it so they compare equal, mirroring how the merge
+# compares missing values when match_na=True (a source None matches a target NaN and vice versa). Under match_na=False
+# each missing cell gets a fresh, per-cell-unique object() instead (see match_keys), so it matches nothing else,
+# including another missing cell with the same underlying PyObject sliced from the same generated frame. Never
+# written into the data - target/source/expected are slices/reorders of the generated frame, so the real None/NaN
+# values are preserved.
 _MISSING = object()
 
 
-def match_keys(frame, on, include_index=True):
+def match_keys(frame, on, include_index=True, match_na=True):
     # Datetime index matches on (index, *on). Row range index has no meaningful index to match on, so it matches on
     # the "on" columns only.
     columns = [frame[col] for col in on]
@@ -246,7 +236,7 @@ def match_keys(frame, on, include_index=True):
         [
             (
                 *((index,) if include_index else ()),
-                *(_MISSING if pd.isna(col.iat[pos]) else col.iat[pos] for col in columns),
+                *((_MISSING if match_na else object()) if pd.isna(col.iat[pos]) else col.iat[pos] for col in columns),
             )
             for pos, index in enumerate(frame.index)
         ]
@@ -259,9 +249,9 @@ def generate_rows_to_insert(draw, keys):
     return keys.isin(inserted_keys).to_numpy()
 
 
-def generate_matched_rows(draw, keys, is_inserted):
+def generate_matched_rows(draw, keys, is_inserted, can_be_matched):
     remaining = np.flatnonzero(~is_inserted)
-    matchable = remaining[~keys.iloc[remaining].duplicated(keep=False).to_numpy()]
+    matchable = remaining[~keys.iloc[remaining].duplicated(keep=False).to_numpy() & can_be_matched[remaining]]
     positions = draw(st.lists(st.sampled_from(matchable), unique=True)) if len(matchable) else []
     is_matched = np.zeros(len(is_inserted), dtype=bool)
     is_matched[positions] = True
@@ -296,39 +286,61 @@ def randomize_values(frame, positions, columns):
 
 
 @st.composite
-def merge_insert_dataframes(
-    draw, column_names, column_dtypes, min_date, max_date, on, strategy, index_type=DataframeStrategyIndexType.DATETIME
+def merge_dataframes_from_result(
+    draw,
+    column_names,
+    column_dtypes,
+    min_date,
+    max_date,
+    on,
+    strategy,
+    index_type=DataframeStrategyIndexType.DATETIME,
+    match_na=True,
 ):
     rowrange = index_type == DataframeStrategyIndexType.ROWRANGE
     merged = draw(dataframe(column_names, column_dtypes, min_date, max_date, index_type=index_type)).sort_index()
-    keys = match_keys(merged, on, include_index=not rowrange)
-    is_inserted = generate_rows_to_insert(draw, keys)
-    is_matched = generate_matched_rows(draw, keys, is_inserted)
-    is_source = is_inserted | is_matched
-    target = merged[~is_inserted].copy(deep=True)
+    keys = match_keys(merged, on, include_index=not rowrange, match_na=match_na)
+    # Rows removed from target and present only in source: inserted under an insert strategy, dropped under
+    # not_matched_by_target=do_nothing.
+    is_source_only = generate_rows_to_insert(draw, keys)
+    can_be_matched = (
+        np.ones(len(merged), dtype=bool) if (match_na or not on) else ~merged[on].isna().any(axis=1).to_numpy()
+    )
+    is_matched = generate_matched_rows(draw, keys, is_source_only, can_be_matched)
+    is_source = is_source_only | is_matched
+    target = merged[~is_source_only].copy(deep=True)
     source = merged[is_source].copy(deep=True)
     non_on_columns = [col for col in merged.columns if col not in on]
     if normalize_merge_action(strategy.matched) == MergeAction.UPDATE:
         # merge overwrites target with source, so randomize target to prove the merge actually updates it.
-        randomize_values(target, np.flatnonzero(is_matched[~is_inserted]), non_on_columns)
+        randomize_values(target, np.flatnonzero(is_matched[~is_source_only]), non_on_columns)
     else:
         # matched=do_nothing: merge ignores source, so randomize source to prove the merge doesn't use it.
         randomize_values(source, np.flatnonzero(is_matched[is_source]), non_on_columns)
 
-    if rowrange:
-        # Row range index has no ordering key: unmatched rows are appended after all target rows in source order and
-        # the result is re-indexed with a fresh RangeIndex. A stable sort by the inserted flag keeps target rows in
-        # their original order followed by the inserted rows in theirs. target/source are slices of a RangeIndex, so
-        # they need a fresh contiguous RangeIndex before being written/merged.
-        order = sorted(range(len(merged)), key=lambda i: bool(is_inserted[i]))
-        expected = merged.iloc[order]
-        for frame in (target, source, expected):
-            frame.index = pd.RangeIndex(len(frame))
-            frame.index.name = "index"
+    if normalize_merge_action(strategy.not_matched_by_target) == MergeAction.INSERT:
+        if rowrange:
+            # Row range index has no ordering key: unmatched rows are appended after all target rows in source order
+            # and the result is re-indexed with a fresh RangeIndex. A stable sort by the inserted flag keeps target
+            # rows in their original order followed by the inserted rows in theirs. target/source are slices of a
+            # RangeIndex, so they need a fresh contiguous RangeIndex before being written/merged.
+            order = sorted(range(len(merged)), key=lambda i: bool(is_source_only[i]))
+            expected = merged.iloc[order]
+            for frame in (target, source, expected):
+                frame.index = pd.RangeIndex(len(frame))
+                frame.index.name = "index"
+        else:
+            # Reorder so inserted rows follow the target rows sharing their timestamp
+            order = sorted(range(len(merged)), key=lambda i: (merged.index[i], bool(is_source_only[i])))
+            expected = merged.iloc[order]
     else:
-        # Reorder so inserted rows follow the target rows sharing their timestamp
-        order = sorted(range(len(merged)), key=lambda i: (merged.index[i], bool(is_inserted[i])))
-        expected = merged.iloc[order]
+        # not_matched_by_target=do_nothing: source-only rows match nothing and are dropped from the expected result
+        # instead of being reordered into it.
+        expected = merged[~is_source_only].copy(deep=True)
+        if rowrange:
+            for frame in (target, source, expected):
+                frame.index = pd.RangeIndex(len(frame))
+                frame.index.name = "index"
 
     return target, source, expected
 
@@ -338,12 +350,15 @@ def merge_insert_arguments(draw, strategy, index_type=DataframeStrategyIndexType
     # Row range index cannot match on the index, so at least one "on" column is required.
     on_min_size = 1 if index_type == DataframeStrategyIndexType.ROWRANGE else 0
     on = draw(st.lists(st.sampled_from(COL_NAMES), unique=True, min_size=on_min_size))
+    match_na = draw(st.booleans())
     target, source, expected = draw(
-        merge_insert_dataframes(COL_NAMES, DTYPES, MIN_DATE, MAX_DATE, on, strategy, index_type=index_type)
+        merge_dataframes_from_result(
+            COL_NAMES, DTYPES, MIN_DATE, MAX_DATE, on, strategy, index_type=index_type, match_na=match_na
+        )
     )
     rows_per_segment = draw(st.integers(1, len(expected)))
     cols_per_segment = draw(st.integers(1, len(COL_NAMES)))
-    return target, source, expected, strategy, on, cols_per_segment, rows_per_segment
+    return target, source, expected, strategy, on, cols_per_segment, rows_per_segment, match_na
 
 
 @pytest.mark.parametrize(
@@ -363,7 +378,7 @@ def merge_insert_arguments(draw, strategy, index_type=DataframeStrategyIndexType
 @given(data=st.data())
 @settings(deadline=None, suppress_health_check=[HealthCheck.data_too_large])
 def test_insert(s3_storage, strategy, index_type, data):
-    target, source, expected, _, on, cols_per_segment, rows_per_segment = data.draw(
+    target, source, expected, _, on, cols_per_segment, rows_per_segment, match_na = data.draw(
         merge_insert_arguments(strategy, index_type=index_type)
     )
     ac = s3_storage.create_arctic()
@@ -374,7 +389,7 @@ def test_insert(s3_storage, strategy, index_type, data):
         name, library_options=LibraryOptions(rows_per_segment=rows_per_segment, columns_per_segment=cols_per_segment)
     )
     lib.write("symbol", target)
-    lib.merge_experimental("symbol", source, strategy=strategy, on=on)
+    lib.merge_experimental("symbol", source, strategy=strategy, on=on, match_na=match_na)
     index_df = lib._dev_tools.library_tool().read_index("symbol")
     assert_index_key_structure_static_schema(index_df, rows_per_segment=rows_per_segment)
     result = lib.read("symbol").data
