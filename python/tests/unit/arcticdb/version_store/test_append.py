@@ -55,6 +55,14 @@ def test_append_missing_symbol_write_if_missing_creates(lmdb_version_store):
     assert_frame_equal(lib.read("new_symbol").data, df)
 
 
+def test_append_missing_symbol_creates_v2(lmdb_library):
+    lib = lmdb_library
+    df = pd.DataFrame({"a": [1, 2]}, index=pd.date_range("2024-01-01", periods=2))
+    lib.append("new_symbol", df)
+    assert "new_symbol" in lib.list_symbols()
+    assert_frame_equal(lib.read("new_symbol").data, df)
+
+
 @pytest.mark.xfail(reason="Needs to be fixed with issue #496")
 def test_append_with_cont_mem_problem(sym, lmdb_version_store_tiny_segment_dynamic):
     set_config_int("SymbolDataCompact.SegmentCount", 1)

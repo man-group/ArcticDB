@@ -14,7 +14,6 @@ from polars.testing import assert_frame_equal as assert_frame_equal_pl
 import pyarrow as pa
 import pytest
 
-from arcticdb_ext.exceptions import InternalException
 from arcticdb_ext.version_store import NoSuchVersionException
 import arcticdb.toolbox.query_stats as qs
 from arcticdb.util.hypothesis import (
@@ -242,7 +241,7 @@ class TestAppendCompactData:
             # True
             assert row_counts == [10, 5]
         else:
-            with pytest.raises(NoSuchVersionException if batch else InternalException):
+            with pytest.raises(NoSuchVersionException):
                 (
                     lib.batch_append([sym], [df], compact_data=compact_data, write_if_missing=write_if_missing)
                     if batch
