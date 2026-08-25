@@ -284,80 +284,101 @@ template<
     int log_every_percent = ConfigsMap::instance()->get_int("Compact.LogProgressPercentage", 10);
     int next_log_pct = log_every_percent;
 
-    for (auto it = to_compact_start; it != to_compact_end; ++it) {
-        auto sk = [&it]() {
-            if constexpr (std::is_same_v<IteratorType, pipelines::PipelineContext::iterator>)
-                return it->slice_and_key();
-            else
-                return *it;
-        }();
-
-        ++processed;
-        if (log_every_percent > 0) {
-            int pct = static_cast<int>(processed * 100 / total);
-            if (pct >= next_log_pct) {
-                auto elapsed =
-                        std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - start)
-                                .count();
-                log::version().info(
-                        "do_compact: processed {}/{} segments for symbol {}, elapsed {}s",
-                        processed,
-                        total,
-                        pipeline_context->stream_id_,
-                        elapsed
-                );
-                next_log_pct += log_every_percent;
+    auto cleanup_written_keys = [&write_futures, &store]() {
+        auto write_tries = folly::collectAll(write_futures).get();
+        std::vector<VariantKey> written_keys;
+        written_keys.reserve(write_tries.size());
+        for (auto& t : write_tries) {
+            if (t.hasValue()) {
+                written_keys.emplace_back(std::move(t.value()));
             }
         }
-        if (sk.slice().rows().diff() == 0) {
-            continue;
+        remove_written_keys(store.get(), std::move(written_keys));
+    };
+
+    auto best_effort_cleanup_written_keys = [&cleanup_written_keys]() {
+        try {
+            cleanup_written_keys();
+        } catch (...) {
+            // Suppress secondary cleanup exceptions during stack unwinding to preserve the primary error
         }
+    };
 
-        const SegmentInMemory& segment = sk.segment(store);
-        ARCTICDB_DEBUG(
-                log::version(),
-                "do_compact Symbol {} Segment {}: Segment has rows {} columns {} uncompressed bytes {}",
-                pipeline_context->stream_id_,
-                count++,
-                segment.row_count(),
-                segment.columns().size(),
-                segment.descriptor().uncompressed_bytes()
-        );
-
-        if (!index_names_match(segment.descriptor(), pipeline_context->on_disk_descriptor())) {
-            auto written_keys = folly::collect(write_futures).get();
-            remove_written_keys(store.get(), std::move(written_keys));
-            return Error{
-                    throw_error<ErrorCode::E_DESCRIPTOR_MISMATCH>,
-                    fmt::format(
-                            "Index names in segment {} and pipeline context {} do not match",
-                            segment.descriptor(),
-                            pipeline_context->on_disk_descriptor()
-                    )
-            };
-        }
-
-        if (options.validate_index && is_segment_unsorted(segment)) {
-            auto written_keys = folly::collect(write_futures).get();
-            remove_written_keys(store.get(), std::move(written_keys));
-            return Error{throw_error<ErrorCode::E_UNSORTED_DATA>, "Cannot compact unordered segment"};
-        }
-
-        if constexpr (std::is_same_v<SchemaType, FixedSchema>) {
-            if (options.perform_schema_checks) {
-                CheckOutcome outcome = check_schema_matches_incomplete(
-                        segment.descriptor(), pipeline_context->on_disk_descriptor(), options.convert_int_to_float
-                );
-                if (std::holds_alternative<Error>(outcome)) {
-                    auto written_keys = folly::collect(write_futures).get();
-                    remove_written_keys(store.get(), std::move(written_keys));
-                    return std::get<Error>(std::move(outcome));
+    try {
+        for (auto it = to_compact_start; it != to_compact_end; ++it) {
+            auto& sk = [&it]() -> auto& {
+                if constexpr (std::is_same_v<IteratorType, pipelines::PipelineContext::iterator>)
+                    return it->slice_and_key();
+                else
+                    return *it;
+            }();
+            ++processed;
+            if (log_every_percent > 0) {
+                int pct = static_cast<int>(processed * 100 / total);
+                if (pct >= next_log_pct) {
+                    auto elapsed =
+                            std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - start)
+                                    .count();
+                    log::version().info(
+                            "do_compact: processed {}/{} segments for symbol {}, elapsed {}s",
+                            processed,
+                            total,
+                            pipeline_context->stream_id_,
+                            elapsed
+                    );
+                    next_log_pct += log_every_percent;
                 }
             }
-        }
+            if (sk.slice().rows().diff() == 0) {
+                continue;
+            }
 
-        aggregator.add_segment(std::move(sk.segment(store)), sk.slice(), options.convert_int_to_float);
-        sk.unset_segment();
+            const SegmentInMemory& segment = sk.segment(store);
+            ARCTICDB_DEBUG(
+                    log::version(),
+                    "do_compact Symbol {} Segment {}: Segment has rows {} columns {} uncompressed bytes {}",
+                    pipeline_context->stream_id_,
+                    count++,
+                    segment.row_count(),
+                    segment.columns().size(),
+                    segment.descriptor().uncompressed_bytes()
+            );
+
+            if (!index_names_match(segment.descriptor(), pipeline_context->on_disk_descriptor())) {
+                cleanup_written_keys();
+                return Error{
+                        throw_error<ErrorCode::E_DESCRIPTOR_MISMATCH>,
+                        fmt::format(
+                                "Index names in segment {} and pipeline context {} do not match",
+                                segment.descriptor(),
+                                pipeline_context->on_disk_descriptor()
+                        )
+                };
+            }
+
+            if (options.validate_index && is_segment_unsorted(segment)) {
+                cleanup_written_keys();
+                return Error{throw_error<ErrorCode::E_UNSORTED_DATA>, "Cannot compact unordered segment"};
+            }
+
+            if constexpr (std::is_same_v<SchemaType, FixedSchema>) {
+                if (options.perform_schema_checks) {
+                    CheckOutcome outcome = check_schema_matches_incomplete(
+                            segment.descriptor(), pipeline_context->on_disk_descriptor(), options.convert_int_to_float
+                    );
+                    if (std::holds_alternative<Error>(outcome)) {
+                        cleanup_written_keys();
+                        return std::get<Error>(std::move(outcome));
+                    }
+                }
+            }
+
+            aggregator.add_segment(std::move(sk.segment(store)), sk.slice(), options.convert_int_to_float);
+            sk.unset_segment();
+        }
+    } catch (...) {
+        best_effort_cleanup_written_keys();
+        throw;
     }
 
     aggregator.commit();
