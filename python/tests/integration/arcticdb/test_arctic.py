@@ -1153,8 +1153,9 @@ def test_update_with_daterange_restrictive(arctic_library):
 @pytest.mark.storage
 def test_update_with_upsert(arctic_library):
     lib = arctic_library
-    with pytest.raises(Exception):
+    with pytest.raises(NoSuchVersionException) as ex_info:
         lib.update("symbol", pd.DataFrame())
+    assert all(s in str(ex_info.value) for s in ["upsert", "Cannot update", "symbol"])
     assert not lib.list_symbols()
     lib.update("symbol", pd.DataFrame(), upsert=True)
     assert "symbol" in lib.list_symbols()

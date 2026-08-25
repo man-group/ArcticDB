@@ -21,13 +21,7 @@ from arcticdb.util.test import (
     assert_frame_equal,
     assert_series_equal,
 )
-from arcticdb.exceptions import (
-    InternalException,
-    UnsortedDataException,
-    NormalizationException,
-    SchemaException,
-    NoSuchVersionException,
-)
+from arcticdb.exceptions import InternalException, UnsortedDataException, NormalizationException, SchemaException
 from arcticdb_ext.version_store import StreamDescriptorMismatch
 from tests.util.date import DateRange
 from pandas import MultiIndex
@@ -632,22 +626,6 @@ def test_update_not_sorted_range_index_exception(lmdb_version_store):
     assert df.index.is_monotonic_increasing == True
     with pytest.raises(NormalizationException):
         lmdb_version_store.update(symbol, df)
-
-
-def test_update_missing_symbol_raises_no_such_version(lmdb_library):
-    lib = lmdb_library
-    df = pd.DataFrame({"a": [1, 2]}, index=pd.date_range("2024-01-01", periods=2))
-    with pytest.raises(NoSuchVersionException) as ex_info:
-        lib.update("does_not_exist", df)
-    assert all(s in str(ex_info.value) for s in ["upsert", "Cannot update", "does_not_exist"])
-
-
-def test_update_missing_symbol_upsert_creates(lmdb_library):
-    lib = lmdb_library
-    df = pd.DataFrame({"a": [1, 2]}, index=pd.date_range("2024-01-01", periods=2))
-    lib.update("new_symbol", df, upsert=True)
-    assert "new_symbol" in lib.list_symbols()
-    assert_frame_equal(lib.read("new_symbol").data, df)
 
 
 class TestBatchUpdate:
