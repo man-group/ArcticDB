@@ -975,6 +975,15 @@ def test_append_prune_previous_versions(arctic_library):
 
 
 @pytest.mark.storage
+def test_append_missing_symbol_creates(arctic_library):
+    lib = arctic_library
+    df = pd.DataFrame({"a": [1, 2]}, index=pd.date_range("2024-01-01", periods=2))
+    lib.append("new_symbol", df)
+    assert "new_symbol" in lib.list_symbols()
+    assert_frame_equal(lib.read("new_symbol").data, df)
+
+
+@pytest.mark.storage
 def test_update_documented_example(arctic_library):
     """Test the example given on the `update` docstring."""
     lib = arctic_library
