@@ -20,18 +20,35 @@ struct StatColumn {
     TypeDescriptor type_descriptor;
 };
 
+// Identifies a stat column
+struct StatKey {
+    ColumnStatTypeInternal type;
+    size_t data_col_offset;
+
+    friend bool operator==(const StatKey& left, const StatKey& right) {
+        return left.type == right.type && left.data_col_offset == right.data_col_offset;
+    }
+};
+
+struct StatKeyHash {
+    size_t operator()(const StatKey& key) const noexcept {
+        return folly::hash::hash_combine(key.type, key.data_col_offset);
+    }
+};
+
 bool is_count_stat(ColumnStatTypeInternal type) {
     return type == ColumnStatTypeInternal::NAN_COUNT_V1 || type == ColumnStatTypeInternal::NULL_COUNT_V1;
 }
 
 std::vector<StatColumn> collect_stat_columns(
-        const std::vector<ColumnStatsRow>& components, const StreamDescriptor& descriptor,
-        ankerl::unordered_dense::map<std::string, size_t>& name_to_index
+        const std::vector<ColumnStatsRow>& column_stats_rows, const StreamDescriptor& descriptor,
+        ankerl::unordered_dense::map<StatKey, size_t, StatKeyHash>& stat_key_to_index
 ) {
     std::vector<StatColumn> stat_columns;
-    for (const auto& component : components) {
-        for (const auto& stat : component.stats) {
-            if (name_to_index.contains(stat.segment_column_name)) {
+    for (const auto& column_stats_row : column_stats_rows) {
+        for (const auto& stat : column_stats_row.stats) {
+            const StatKey stat_key{stat.type, stat.data_col_offset};
+            if (stat_key_to_index.contains(stat_key)) {
                 continue;
             }
             internal::check<ErrorCode::E_ASSERTION_FAILURE>(
@@ -43,10 +60,9 @@ std::vector<StatColumn> collect_stat_columns(
             );
             const auto resolved_type = is_count_stat(stat.type) ? make_scalar_type(DataType::UINT64)
                                                                 : descriptor.field(stat.data_col_offset).type();
-            name_to_index.emplace(stat.segment_column_name, stat_columns.size());
-            stat_columns.emplace_back(
-                    StatColumn{stat.segment_column_name, stat.type, stat.data_col_offset, resolved_type}
-            );
+            auto name = to_segment_column_name(descriptor.field(stat.data_col_offset).name(), stat.type);
+            stat_key_to_index.emplace(stat_key, stat_columns.size());
+            stat_columns.emplace_back(StatColumn{std::move(name), stat.type, stat.data_col_offset, resolved_type});
         }
     }
     return stat_columns;
@@ -67,47 +83,61 @@ void set_stat_value(Column& column, size_t row, const Value& value) {
 } // namespace
 
 SegmentInMemory build_column_stats_segment(
-        std::vector<ColumnStatsRow>&& components, const StreamDescriptor& descriptor
+        std::vector<ColumnStatsRow>&& column_stats_rows, const StreamDescriptor& descriptor
 ) {
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-            !components.empty(), "build_column_stats_segment requires at least one component"
+            !column_stats_rows.empty(), "build_column_stats_segment requires at least one component"
     );
-    std::sort(components.begin(), components.end(), [](const auto& left, const auto& right) {
-        return left.start_row < right.start_row;
+    std::sort(column_stats_rows.begin(), column_stats_rows.end(), [](const auto& left, const auto& right) {
+        return left.row_range.start() < right.row_range.start();
     });
-    for (size_t i = 0; i < components.size(); ++i) {
+
+    auto start_row_col = std::make_shared<Column>(
+            make_scalar_type(DataType::UINT64),
+            column_stats_rows.size(),
+            AllocationType::PRESIZED,
+            Sparsity::NOT_PERMITTED
+    );
+    auto end_row_col = std::make_shared<Column>(
+            make_scalar_type(DataType::UINT64),
+            column_stats_rows.size(),
+            AllocationType::PRESIZED,
+            Sparsity::NOT_PERMITTED
+    );
+    using RowTDT = ScalarTagType<DataTypeTag<DataType::UINT64>>;
+    auto start_row_data = start_row_col->data();
+    auto end_row_data = end_row_col->data();
+    auto start_it = start_row_data.begin<RowTDT>();
+    auto end_it = end_row_data.begin<RowTDT>();
+    for (size_t i = 0; i < column_stats_rows.size(); ++i, ++start_it, ++end_it) {
         internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-                components.at(i).end_row > components.at(i).start_row,
+                column_stats_rows.at(i).row_range.end() > column_stats_rows.at(i).row_range.start(),
                 "Column stats component has empty row range [{}, {})",
-                components.at(i).start_row,
-                components.at(i).end_row
+                column_stats_rows.at(i).row_range.start(),
+                column_stats_rows.at(i).row_range.end()
         );
         if (i > 0) {
             internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-                    components.at(i).start_row > components.at(i - 1).start_row,
+                    column_stats_rows.at(i).row_range.start() > column_stats_rows.at(i - 1).row_range.start(),
                     "Column stats components must have strictly increasing start_row, got [{}, {}) after [{}, {})",
-                    components.at(i).start_row,
-                    components.at(i).end_row,
-                    components.at(i - 1).start_row,
-                    components.at(i - 1).end_row
+                    column_stats_rows.at(i).row_range.start(),
+                    column_stats_rows.at(i).row_range.end(),
+                    column_stats_rows.at(i - 1).row_range.start(),
+                    column_stats_rows.at(i - 1).row_range.end()
             );
         }
+        *start_it = column_stats_rows.at(i).row_range.start();
+        *end_it = column_stats_rows.at(i).row_range.end();
     }
 
-    ankerl::unordered_dense::map<std::string, size_t> name_to_index;
-    const auto stat_columns = collect_stat_columns(components, descriptor, name_to_index);
+    ankerl::unordered_dense::map<StatKey, size_t, StatKeyHash> stat_key_to_index;
+    const auto stat_columns = collect_stat_columns(column_stats_rows, descriptor, stat_key_to_index);
 
-    const auto last_row = static_cast<ssize_t>(components.size()) - 1;
+    const auto last_row = static_cast<ssize_t>(column_stats_rows.size()) - 1;
     SegmentInMemory seg(Sparsity::PERMITTED);
     seg.init_column_map();
     seg.descriptor().set_index(IndexDescriptorImpl{IndexDescriptor::Type::ROWCOUNT, 0});
 
-    auto start_row_col = std::make_shared<Column>(make_scalar_type(DataType::UINT64), Sparsity::NOT_PERMITTED);
-    auto end_row_col = std::make_shared<Column>(make_scalar_type(DataType::UINT64), Sparsity::NOT_PERMITTED);
-    for (const auto& component : components) {
-        start_row_col->push_back<uint64_t>(component.start_row);
-        end_row_col->push_back<uint64_t>(component.end_row);
-    }
     start_row_col->set_row_data(last_row);
     end_row_col->set_row_data(last_row);
     seg.add_column(scalar_field(DataType::UINT64, start_row_column_name), start_row_col);
@@ -119,9 +149,10 @@ SegmentInMemory build_column_stats_segment(
         columns.emplace_back(std::make_shared<Column>(stat_column.type_descriptor, Sparsity::PERMITTED));
     }
     // set_scalar creates and backfills the sparse map where a stat is missing from a row slice
-    for (const auto& [row, component] : folly::enumerate(components)) {
-        for (const auto& stat : component.stats) {
-            set_stat_value(*columns.at(name_to_index.at(stat.segment_column_name)), row, stat.value);
+    for (const auto& [row, column_stats_row] : folly::enumerate(column_stats_rows)) {
+        for (const auto& stat : column_stats_row.stats) {
+            const StatKey stat_key{stat.type, stat.data_col_offset};
+            set_stat_value(*columns.at(stat_key_to_index.at(stat_key)), row, stat.value);
         }
     }
 
@@ -193,11 +224,12 @@ std::vector<ColumnStatsRow> decode_column_stats_segment(const SegmentInMemory& s
             "Column stats start_row/end_row columns must be dense and cover every row of the segment"
     );
 
-    std::vector<ColumnStatsRow> components(segment.row_count());
+    std::vector<ColumnStatsRow> column_stats_rows(segment.row_count());
     for (size_t row = 0; row < segment.row_count(); ++row) {
-        components.at(row).start_row =
-                *segment.scalar_at<uint64_t>(static_cast<position_t>(row), start_row_column_offset);
-        components.at(row).end_row = *segment.scalar_at<uint64_t>(static_cast<position_t>(row), end_row_column_offset);
+        column_stats_rows.at(row).row_range = pipelines::RowRange{
+                *start_row_col.scalar_at<uint64_t>(static_cast<position_t>(row)),
+                *end_row_col.scalar_at<uint64_t>(static_cast<position_t>(row))
+        };
     }
 
     for (const auto& [data_col_offset, entry_list] : header.stats_by_column()) {
@@ -216,25 +248,19 @@ std::vector<ColumnStatsRow> decode_column_stats_segment(const SegmentInMemory& s
                     fields.size()
             );
 
-            const auto field_name = fields.at(stats_seg_offset).name();
-
             const auto& column = segment.column(stats_seg_offset);
-            const std::string segment_column_name{field_name};
             details::visit_type(column.type().data_type(), [&]([[maybe_unused]] auto tag) {
                 using type_info = ScalarTypeInfo<decltype(tag)>;
                 for_each_enumerated<typename type_info::TDT>(column, [&](const auto& it) {
-                    components.at(static_cast<size_t>(it.idx()))
+                    column_stats_rows.at(static_cast<size_t>(it.idx()))
                             .stats.emplace_back(ColumnStatValue{
-                                    segment_column_name,
-                                    entry.type(),
-                                    data_col_offset,
-                                    Value{it.value(), type_info::data_type}
+                                    entry.type(), data_col_offset, Value{it.value(), type_info::data_type}
                             });
                 });
             });
         }
     }
-    return components;
+    return column_stats_rows;
 }
 
 std::string type_to_name(ColumnStatType type) {
@@ -253,7 +279,7 @@ std::optional<ColumnStatType> name_to_type(const std::string& name) {
     return std::nullopt;
 }
 
-std::string to_segment_column_name(const std::string& column, ColumnStatTypeInternal type) {
+std::string to_segment_column_name(std::string_view column, ColumnStatTypeInternal type) {
     return fmt::format("{}({})", type_to_operator_string(type), column);
 }
 
@@ -420,22 +446,9 @@ std::optional<Clause> ColumnStats::clause() const {
         for (const auto& column_stat_type : name_and_stat_types.column_stats) {
             switch (column_stat_type) {
             case ColumnStatType::MINMAX:
-                index_generation_aggregators->emplace_back(MinMaxAggregator(
-                        ColumnName(name_and_stat_types.mangled_name),
-                        offset,
-                        ColumnName(
-                                to_segment_column_name(name_and_stat_types.mangled_name, ColumnStatTypeInternal::MIN_V1)
-                        ),
-                        ColumnName(
-                                to_segment_column_name(name_and_stat_types.mangled_name, ColumnStatTypeInternal::MAX_V1)
-                        ),
-                        ColumnName(to_segment_column_name(
-                                name_and_stat_types.mangled_name, ColumnStatTypeInternal::NAN_COUNT_V1
-                        )),
-                        ColumnName(to_segment_column_name(
-                                name_and_stat_types.mangled_name, ColumnStatTypeInternal::NULL_COUNT_V1
-                        ))
-                ));
+                index_generation_aggregators->emplace_back(
+                        MinMaxAggregator(ColumnName(name_and_stat_types.mangled_name), offset)
+                );
                 break;
             default:
                 internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Unrecognised ColumnStatType");

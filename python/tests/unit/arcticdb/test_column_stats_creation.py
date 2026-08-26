@@ -23,6 +23,7 @@ from arcticdb_ext.exceptions import SchemaException, SortingException, StorageEx
 from arcticdb_ext.storage import KeyType
 from arcticdb_ext.version_store import NoSuchVersionException
 from arcticdb import QueryBuilder
+from arcticdb.exceptions import ArcticNativeException
 from arcticdb.util.hypothesis import use_of_function_scoped_fixtures_in_hypothesis_checked
 from arcticdb.util.test import config_context
 
@@ -82,12 +83,11 @@ def assert_stats_equal(received, expected, check_dtypes=False):
     pl_assert_frame_equal(received_pl, expected, check_column_order=False, check_dtypes=check_dtypes)
 
 
-def test_column_stats_basic_flow(version_store_factory, lib_name, encoding_version, any_output_format):
-    lib = version_store_factory(
+def test_column_stats_basic_flow(in_memory_store_factory, lib_name, encoding_version, any_output_format):
+    lib = in_memory_store_factory(
         column_group_size=2,
         segment_row_size=2,
         encoding_version=int(encoding_version),
-        lmdb_config={"map_size": 2**30},
         name=lib_name + f"_{encoding_version.name}",
     )
     lib._set_output_format_for_pipeline_tests(any_output_format)
@@ -110,12 +110,11 @@ def test_column_stats_basic_flow(version_store_factory, lib_name, encoding_versi
         lib.read_column_stats_experimental(sym)
 
 
-def test_column_stats_infinity(version_store_factory, lib_name, encoding_version, any_output_format):
-    lib = version_store_factory(
+def test_column_stats_infinity(in_memory_store_factory, lib_name, encoding_version, any_output_format):
+    lib = in_memory_store_factory(
         column_group_size=2,
         segment_row_size=2,
         encoding_version=int(encoding_version),
-        lmdb_config={"map_size": 2**30},
         name=lib_name + f"_{encoding_version.name}",
     )
     lib._set_output_format_for_pipeline_tests(any_output_format)
@@ -137,8 +136,8 @@ def test_column_stats_infinity(version_store_factory, lib_name, encoding_version
     assert_stats_equal(column_stats, expected_column_stats)
 
 
-def test_column_stats_nan_values(lmdb_version_store, any_output_format):
-    lib = lmdb_version_store
+def test_column_stats_nan_values(in_memory_store_factory, lib_name, encoding_version, any_output_format):
+    lib = in_memory_store_factory(encoding_version=int(encoding_version), name=lib_name)
     lib._set_output_format_for_pipeline_tests(any_output_format)
     sym = "test_column_stats_nan_values"
     df0 = pd.DataFrame({"col_1": [1.0, 3.0]}, index=pd.date_range("2000-01-01", periods=2))
@@ -166,8 +165,8 @@ def test_column_stats_nan_values(lmdb_version_store, any_output_format):
     assert_stats_equal(column_stats, expected_column_stats)
 
 
-def test_column_stats_nat_values(lmdb_version_store, any_output_format):
-    lib = lmdb_version_store
+def test_column_stats_nat_values(in_memory_store_factory, lib_name, encoding_version, any_output_format):
+    lib = in_memory_store_factory(encoding_version=int(encoding_version), name=lib_name)
     lib._set_output_format_for_pipeline_tests(any_output_format)
     sym = "test_column_stats_nat_values"
     df0 = pd.DataFrame(
@@ -244,8 +243,8 @@ def test_column_stats_nat_values(lmdb_version_store, any_output_format):
     assert raw_stats["v1_MAX(col_1)"].values.view("int64")[3] == nat_sentinel
 
 
-def test_column_stats_nan_and_null_counts(lmdb_version_store, any_output_format):
-    lib = lmdb_version_store
+def test_column_stats_nan_and_null_counts(in_memory_store_factory, lib_name, encoding_version, any_output_format):
+    lib = in_memory_store_factory(encoding_version=int(encoding_version), name=lib_name)
     lib._set_output_format_for_pipeline_tests(any_output_format)
     sym = "test_column_stats_nan_and_null_counts"
 
@@ -307,10 +306,10 @@ def test_column_stats_nan_and_null_counts(lmdb_version_store, any_output_format)
     assert_stats_equal(column_stats, expected_column_stats)
 
 
-def test_column_stats_nan_count_single_segment(lmdb_version_store, any_output_format):
+def test_column_stats_nan_count_single_segment(in_memory_store_factory, lib_name, encoding_version, any_output_format):
     """In-band sentinels (NaN in a float column, NaT in a timestamp column) count towards
     v1_NAN_COUNT. v1_NULL_COUNT is reserved for genuinely-missing rows (sparse-map gaps)."""
-    lib = lmdb_version_store
+    lib = in_memory_store_factory(encoding_version=int(encoding_version), name=lib_name)
     lib._set_output_format_for_pipeline_tests(any_output_format)
     sym = "test_column_stats_nan_count_single_segment"
     df = pd.DataFrame(
@@ -336,17 +335,16 @@ def test_column_stats_nan_count_single_segment(lmdb_version_store, any_output_fo
     assert cs["v1_NULL_COUNT(ts_col)"].to_list() == [0]
 
 
-def test_column_stats_null_count_sparse_floats(version_store_factory, lib_name, encoding_version, any_output_format):
+def test_column_stats_null_count_sparse_floats(in_memory_store_factory, lib_name, encoding_version, any_output_format):
     """sparsify_floats=True stores NaN floats as sparse-map gaps rather than dense NaN values.
     Those gaps are counted as nulls (v1_NULL_COUNT), not NaNs (v1_NAN_COUNT).
 
     The 6 rows span multiple segments (segment_row_size=3) with a different null count in each,
     so the per-segment null calculation is exercised rather than a single-segment case."""
-    lib = version_store_factory(
+    lib = in_memory_store_factory(
         column_group_size=2,
         segment_row_size=3,
         encoding_version=int(encoding_version),
-        lmdb_config={"map_size": 2**30},
         name=lib_name + f"_{encoding_version.name}",
     )
     lib._set_output_format_for_pipeline_tests(any_output_format)
@@ -364,8 +362,8 @@ def test_column_stats_null_count_sparse_floats(version_store_factory, lib_name, 
     assert cs["v1_MAX(col_1)"].to_list() == [2.0, 4.0]
 
 
-def test_column_stats_arrow_nan_and_null_same_column(lmdb_version_store_arrow):
-    lib = lmdb_version_store_arrow
+def test_column_stats_arrow_nan_and_null_same_column(in_memory_version_store_arrow):
+    lib = in_memory_version_store_arrow
     lib._cfg.write_options.segment_row_size = 100
     sym = "test_column_stats_arrow_nan_and_null_same_column"
 
@@ -403,8 +401,8 @@ def _segment_values():
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(segments=st.lists(_segment_values(), min_size=1, max_size=6))
-def test_column_stats_arrow_nan_null_counts_hypothesis(lmdb_version_store_arrow, segments):
-    lib = lmdb_version_store_arrow
+def test_column_stats_arrow_nan_null_counts_hypothesis(in_memory_version_store_arrow, segments):
+    lib = in_memory_version_store_arrow
     lib._cfg.write_options.segment_row_size = 100
     lib.version_store.clear()
     sym = "test_column_stats_arrow_nan_null_counts_hypothesis"
@@ -424,12 +422,11 @@ def test_column_stats_arrow_nan_null_counts_hypothesis(lmdb_version_store_arrow,
     assert cs["v1_NULL_COUNT(f)"].to_list() == expected_null
 
 
-def test_column_stats_as_of(version_store_factory, lib_name, encoding_version, any_output_format):
-    lib = version_store_factory(
+def test_column_stats_as_of(in_memory_store_factory, lib_name, encoding_version, any_output_format):
+    lib = in_memory_store_factory(
         column_group_size=2,
         segment_row_size=2,
         encoding_version=int(encoding_version),
-        lmdb_config={"map_size": 2**30},
         name=lib_name + f"_{encoding_version.name}",
     )
     lib._set_output_format_for_pipeline_tests(any_output_format)
@@ -453,12 +450,13 @@ def test_column_stats_as_of(version_store_factory, lib_name, encoding_version, a
         lib.read_column_stats_experimental(sym, as_of=0)
 
 
-def test_column_stats_as_of_version_doesnt_exist(version_store_factory, lib_name, encoding_version, any_output_format):
-    lib = version_store_factory(
+def test_column_stats_as_of_version_doesnt_exist(
+    in_memory_store_factory, lib_name, encoding_version, any_output_format
+):
+    lib = in_memory_store_factory(
         column_group_size=2,
         segment_row_size=2,
         encoding_version=int(encoding_version),
-        lmdb_config={"map_size": 2**30},
         name=lib_name + f"_{encoding_version.name}",
     )
     lib._set_output_format_for_pipeline_tests(any_output_format)
@@ -476,13 +474,12 @@ def test_column_stats_as_of_version_doesnt_exist(version_store_factory, lib_name
 
 
 def test_column_stats_multiple_indexes_different_columns(
-    version_store_factory, lib_name, encoding_version, any_output_format
+    in_memory_store_factory, lib_name, encoding_version, any_output_format
 ):
-    lib = version_store_factory(
+    lib = in_memory_store_factory(
         column_group_size=2,
         segment_row_size=2,
         encoding_version=int(encoding_version),
-        lmdb_config={"map_size": 2**30},
         name=lib_name + f"_{encoding_version.name}",
     )
     lib._set_output_format_for_pipeline_tests(any_output_format)
@@ -496,12 +493,11 @@ def test_column_stats_multiple_indexes_different_columns(
     assert_stats_equal(column_stats, expected_column_stats)
 
 
-def test_column_stats_pickled_symbol(version_store_factory, lib_name, encoding_version, any_output_format):
-    lib = version_store_factory(
+def test_column_stats_pickled_symbol(in_memory_store_factory, lib_name, encoding_version, any_output_format):
+    lib = in_memory_store_factory(
         column_group_size=2,
         segment_row_size=2,
         encoding_version=int(encoding_version),
-        lmdb_config={"map_size": 2**30},
         name=lib_name + f"_{encoding_version.name}",
     )
     lib._set_output_format_for_pipeline_tests(any_output_format)
@@ -513,12 +509,11 @@ def test_column_stats_pickled_symbol(version_store_factory, lib_name, encoding_v
         lib.create_column_stats_experimental(sym)
 
 
-def test_column_stats_duplicated_primary_index(version_store_factory, lib_name, encoding_version, any_output_format):
-    lib = version_store_factory(
+def test_column_stats_duplicated_primary_index(in_memory_store_factory, lib_name, encoding_version, any_output_format):
+    lib = in_memory_store_factory(
         column_group_size=2,
         segment_row_size=2,
         encoding_version=int(encoding_version),
-        lmdb_config={"map_size": 2**30},
         name=lib_name + f"_{encoding_version.name}",
     )
     lib._set_output_format_for_pipeline_tests(any_output_format)
@@ -540,8 +535,10 @@ def test_column_stats_duplicated_primary_index(version_store_factory, lib_name, 
     assert_stats_equal(column_stats, expected_column_stats)
 
 
-def test_column_stats_dynamic_schema_missing_data(version_store_factory, lib_name, encoding_version, any_output_format):
-    lib = version_store_factory(
+def test_column_stats_dynamic_schema_missing_data(
+    in_memory_store_factory, lib_name, encoding_version, any_output_format
+):
+    lib = in_memory_store_factory(
         column_group_size=2,
         segment_row_size=2,
         dynamic_schema=True,
@@ -662,9 +659,9 @@ def assert_dynamic_schema_types_changing_schema(schema):
 
 
 def test_column_stats_dynamic_schema_types_changing(
-    version_store_factory, lib_name, encoding_version, any_output_format
+    in_memory_store_factory, lib_name, encoding_version, any_output_format
 ):
-    lib = version_store_factory(
+    lib = in_memory_store_factory(
         column_group_size=2,
         segment_row_size=2,
         dynamic_schema=True,
@@ -717,7 +714,9 @@ def test_column_stats_dynamic_schema_types_changing(
     assert_dynamic_schema_types_changing_schema(pl.from_arrow(column_stats).schema)
 
 
-def test_column_stats_object_deleted_with_index_key(lmdb_version_store, any_output_format):
+def test_column_stats_object_deleted_with_index_key(
+    in_memory_store_factory, lib_name, encoding_version, any_output_format
+):
     def clear():
         nonlocal expected_count
         lib.version_store.clear()
@@ -850,7 +849,7 @@ def test_column_stats_object_deleted_with_index_key(lmdb_version_store, any_outp
         expected_count = 1
         assert_column_stats_key_count()
 
-    lib = lmdb_version_store
+    lib = in_memory_store_factory(encoding_version=int(encoding_version), name=lib_name)
     lib._set_output_format_for_pipeline_tests(any_output_format)
     lib_tool = lib.library_tool()
     sym = "test_column_stats_object_deleted_with_index_key"
@@ -927,12 +926,11 @@ def assert_header_offsets_match_field_names(lib, sym, header, col_name_by_offset
         assert fields[entry.stats_seg_offset].name == expected
 
 
-def test_column_stats_header_metadata(version_store_factory, lib_name, encoding_version, any_output_format):
-    lib = version_store_factory(
+def test_column_stats_header_metadata(in_memory_store_factory, lib_name, encoding_version, any_output_format):
+    lib = in_memory_store_factory(
         column_group_size=2,
         segment_row_size=2,
         encoding_version=int(encoding_version),
-        lmdb_config={"map_size": 2**30},
         name=lib_name + f"_{encoding_version.name}",
     )
     lib._set_output_format_for_pipeline_tests(any_output_format)
@@ -962,8 +960,8 @@ def test_column_stats_header_metadata(version_store_factory, lib_name, encoding_
     assert_header_offsets_match_field_names(lib, sym, header, {2: "col_1", 3: "col_2"})
 
 
-def test_column_stats_create_twice_is_idempotent(version_store_factory, lib_name):
-    lib = version_store_factory(
+def test_column_stats_create_twice_is_idempotent(in_memory_store_factory, lib_name):
+    lib = in_memory_store_factory(
         column_group_size=2,
         segment_row_size=2,
         name=lib_name,
@@ -987,12 +985,11 @@ def test_column_stats_create_twice_is_idempotent(version_store_factory, lib_name
     assert_stats_equal(lib.read_column_stats_experimental(sym), expected_column_stats)
 
 
-def test_column_stats_duplicated_column_names(version_store_factory, lib_name, encoding_version, any_output_format):
-    lib = version_store_factory(
+def test_column_stats_duplicated_column_names(in_memory_store_factory, lib_name, encoding_version, any_output_format):
+    lib = in_memory_store_factory(
         column_group_size=2,
         segment_row_size=2,
         encoding_version=int(encoding_version),
-        lmdb_config={"map_size": 2**30},
         name=lib_name + f"_{encoding_version.name}",
     )
     lib._set_output_format_for_pipeline_tests(any_output_format)
@@ -1017,15 +1014,14 @@ def test_column_stats_duplicated_column_names(version_store_factory, lib_name, e
 
 @pytest.mark.parametrize("index_name", ("index", "some-other-name"))
 def test_column_stats_col_called_index(
-    version_store_factory, lib_name, encoding_version, any_output_format, index_name
+    in_memory_store_factory, lib_name, encoding_version, any_output_format, index_name
 ):
     """Check some edge cases where the data column's name matches the index column. 'index' is used as an internal
     name for un-named indexes, so using it can expose some bugs."""
-    lib = version_store_factory(
+    lib = in_memory_store_factory(
         column_group_size=2,
         segment_row_size=2,
         encoding_version=int(encoding_version),
-        lmdb_config={"map_size": 2**30},
         name=lib_name + f"_{encoding_version.name}",
     )
     lib._set_output_format_for_pipeline_tests(any_output_format)
@@ -1071,15 +1067,14 @@ def test_column_stats_col_called_index(
     ],
 )
 def test_column_stats_multiindex(
-    version_store_factory, lib_name, encoding_version, any_output_format, index_level_name, stored_col_name
+    in_memory_store_factory, lib_name, encoding_version, any_output_format, index_level_name, stored_col_name
 ):
     """Column stats on a multiindex DataFrame: auto-discovery picks up data columns and the inner
     index level; the outer/primary index is excluded (already pruned by the index)."""
-    lib = version_store_factory(
+    lib = in_memory_store_factory(
         column_group_size=2,
         segment_row_size=2,
         encoding_version=int(encoding_version),
-        lmdb_config={"map_size": 2**30},
         name=lib_name + f"_{encoding_version.name}",
     )
     lib._set_output_format_for_pipeline_tests(any_output_format)
@@ -1160,16 +1155,15 @@ def test_column_stats_multiindex(
     ],
 )
 def test_column_stats_series(
-    version_store_factory, lib_name, encoding_version, any_output_format, series_name, stored_col_name
+    in_memory_store_factory, lib_name, encoding_version, any_output_format, series_name, stored_col_name
 ):
     """Column stats on a datetime-indexed pd.Series. A Series is normalized with input_type == "series"
     (not "df"); the outer/primary index must still be excluded (it is already pruned by the index
     mechanism) and only the single value column gets MINMAX stats."""
-    lib = version_store_factory(
+    lib = in_memory_store_factory(
         column_group_size=2,
         segment_row_size=2,
         encoding_version=int(encoding_version),
-        lmdb_config={"map_size": 2**30},
         name=lib_name + f"_{encoding_version.name}",
     )
     lib._set_output_format_for_pipeline_tests(any_output_format)
@@ -1197,14 +1191,13 @@ def test_column_stats_series(
         lib.read_column_stats_experimental(sym)
 
 
-def test_column_stats_series_rangeindex(version_store_factory, lib_name, encoding_version, any_output_format):
+def test_column_stats_series_rangeindex(in_memory_store_factory, lib_name, encoding_version, any_output_format):
     """A RangeIndex pd.Series has no physically-stored index, so the single value column gets stats and
     nothing is treated as an index to exclude."""
-    lib = version_store_factory(
+    lib = in_memory_store_factory(
         column_group_size=2,
         segment_row_size=2,
         encoding_version=int(encoding_version),
-        lmdb_config={"map_size": 2**30},
         name=lib_name + f"_{encoding_version.name}",
     )
     lib._set_output_format_for_pipeline_tests(any_output_format)
@@ -1216,8 +1209,8 @@ def test_column_stats_series_rangeindex(version_store_factory, lib_name, encodin
     assert lib.get_column_stats_info_experimental(sym) == {"myval": {"MINMAX"}}
 
 
-def test_column_stats_string_indexed_symbol(version_store_factory, lib_name):
-    lib = version_store_factory(
+def test_column_stats_string_indexed_symbol(in_memory_store_factory, lib_name):
+    lib = in_memory_store_factory(
         column_group_size=2,
         segment_row_size=2,
         name=lib_name,
@@ -1248,15 +1241,14 @@ def test_column_stats_string_indexed_symbol(version_store_factory, lib_name):
     ],
 )
 def test_column_stats_series_multiindex(
-    version_store_factory, lib_name, encoding_version, any_output_format, index_level_name, stored_col_name
+    in_memory_store_factory, lib_name, encoding_version, any_output_format, index_level_name, stored_col_name
 ):
     """Column stats on a MultiIndex pd.Series: the outer/primary index is excluded, while the inner
     index level and the value column both get MINMAX stats (mirrors the multiindex DataFrame case)."""
-    lib = version_store_factory(
+    lib = in_memory_store_factory(
         column_group_size=2,
         segment_row_size=2,
         encoding_version=int(encoding_version),
-        lmdb_config={"map_size": 2**30},
         name=lib_name + f"_{encoding_version.name}",
     )
     lib._set_output_format_for_pipeline_tests(any_output_format)
@@ -1289,15 +1281,14 @@ def test_column_stats_series_multiindex(
 
 
 def test_column_stats_create_tiny_thread_pool(
-    version_store_factory, lib_name, encoding_version, any_output_format, tiny_thread_pool
+    in_memory_store_factory, lib_name, encoding_version, any_output_format, tiny_thread_pool
 ):
     """Simple test with tiny thread pool to check against deadlocks from the parallel load of the index key
     and the column stats key."""
-    lib = version_store_factory(
+    lib = in_memory_store_factory(
         column_group_size=2,
         segment_row_size=2,
         encoding_version=int(encoding_version),
-        lmdb_config={"map_size": 2**30},
         name=lib_name + f"_{encoding_version.name}",
     )
     lib._set_output_format_for_pipeline_tests(any_output_format)
@@ -1312,15 +1303,14 @@ def test_column_stats_create_tiny_thread_pool(
 
 
 def test_column_stats_drop_tiny_thread_pool(
-    version_store_factory, lib_name, encoding_version, any_output_format, tiny_thread_pool
+    in_memory_store_factory, lib_name, encoding_version, any_output_format, tiny_thread_pool
 ):
     """Simple test with tiny thread pool to check against deadlocks from the parallel load of the index key
     and the column stats key."""
-    lib = version_store_factory(
+    lib = in_memory_store_factory(
         column_group_size=2,
         segment_row_size=2,
         encoding_version=int(encoding_version),
-        lmdb_config={"map_size": 2**30},
         name=lib_name + f"_{encoding_version.name}",
     )
     lib._set_output_format_for_pipeline_tests(any_output_format)
@@ -1409,9 +1399,9 @@ def test_column_stats_create_single_unit(
 
 
 def test_column_stats_duplicate_index_values_across_slice_boundary(
-    lmdb_version_store_tiny_segment, column_stats_filtering_enabled
+    in_memory_version_store_tiny_segment, column_stats_filtering_enabled
 ):
-    lib = lmdb_version_store_tiny_segment
+    lib = in_memory_version_store_tiny_segment
     sym = "test_column_stats_duplicate_index_values_across_slice_boundary"
     ts = pd.Timestamp("2000-01-01")
     lib.write(sym, pd.DataFrame({"col_1": [1, 2, 3, 4]}, index=[ts] * 4))
@@ -1525,8 +1515,8 @@ def expected_row_range_stats(df, expected_slices):
         ((None, -6), [(0, 3)]),
     ],
 )
-def test_column_stats_create_row_range(version_store_factory, lib_name, row_range, expected_slices):
-    lib = version_store_factory(segment_row_size=3, name=lib_name)
+def test_column_stats_create_row_range(in_memory_store_factory, lib_name, row_range, expected_slices):
+    lib = in_memory_store_factory(segment_row_size=3, name=lib_name)
     sym = "test_column_stats_create_row_range"
     df = write_nine_row_symbol(lib, sym)
 
@@ -1546,8 +1536,8 @@ def test_column_stats_create_row_range(version_store_factory, lib_name, row_rang
         ((pd.Timestamp("2000-01-07"), pd.Timestamp("2000-01-09")), [(6, 9)]),
     ],
 )
-def test_column_stats_create_date_range(version_store_factory, lib_name, date_range, expected_slices):
-    lib = version_store_factory(segment_row_size=3, name=lib_name)
+def test_column_stats_create_date_range(in_memory_store_factory, lib_name, date_range, expected_slices):
+    lib = in_memory_store_factory(segment_row_size=3, name=lib_name)
     sym = "test_column_stats_create_date_range"
     df = write_nine_row_symbol(lib, sym)
 
@@ -1580,10 +1570,14 @@ def test_column_stats_create_date_range(version_store_factory, lib_name, date_ra
         ([(0, 4), (2, 10)], [(0, 3), (3, 6), (6, 9), (9, 11)]),
         # [3, 6) is recalculated, [0, 3) is kept, [6, 9) is new
         ([(0, 4), (5, 9)], [(0, 3), (3, 6), (6, 9)]),
+        # read_index output, one row_range per row-slice
+        ([(0, 3), (3, 6), (6, 9), (9, 11)], [(0, 3), (3, 6), (6, 9), (9, 11)]),
+        # read_index output coalesced into fewer, larger row_ranges
+        ([(0, 6), (6, 11)], [(0, 3), (3, 6), (6, 9), (9, 11)]),
     ],
 )
-def test_column_stats_create_incrementally_by_row_range(version_store_factory, lib_name, row_ranges, expected_slices):
-    lib = version_store_factory(segment_row_size=3, name=lib_name)
+def test_column_stats_create_incrementally_by_row_range(in_memory_store_factory, lib_name, row_ranges, expected_slices):
+    lib = in_memory_store_factory(segment_row_size=3, name=lib_name)
     sym = "sym"
     df = write_eleven_row_symbol(lib, sym)
 
@@ -1616,8 +1610,10 @@ def test_column_stats_create_incrementally_by_row_range(version_store_factory, l
         ([(jan(1), jan(4)), (jan(6), jan(9))], [(0, 3), (3, 6), (6, 9)]),
     ],
 )
-def test_column_stats_create_incrementally_by_date_range(version_store_factory, lib_name, date_ranges, expected_slices):
-    lib = version_store_factory(segment_row_size=3, name=lib_name)
+def test_column_stats_create_incrementally_by_date_range(
+    in_memory_store_factory, lib_name, date_ranges, expected_slices
+):
+    lib = in_memory_store_factory(segment_row_size=3, name=lib_name)
     sym = "sym"
     df = write_eleven_row_symbol(lib, sym)
 
@@ -1629,10 +1625,10 @@ def test_column_stats_create_incrementally_by_date_range(version_store_factory, 
     )
 
 
-def test_column_stats_create_dynamic_schema_partial_create_uses_descriptor_type(version_store_factory, lib_name):
+def test_column_stats_create_dynamic_schema_partial_create_uses_descriptor_type(in_memory_store_factory, lib_name):
     """A range covering only the first row slice must still type MIN/MAX from the version's descriptor,
     not from that slice's own dtype"""
-    lib = version_store_factory(column_group_size=2, segment_row_size=2, dynamic_schema=True, name=lib_name)
+    lib = in_memory_store_factory(column_group_size=2, segment_row_size=2, dynamic_schema=True, name=lib_name)
     sym = "test_column_stats_create_dynamic_schema_partial_create_uses_descriptor_type"
 
     df0, df1 = dynamic_schema_types_changing_dfs()
@@ -1644,8 +1640,8 @@ def test_column_stats_create_dynamic_schema_partial_create_uses_descriptor_type(
     assert_dynamic_schema_types_changing_schema(pl.from_arrow(lib.read_column_stats_experimental(sym)).schema)
 
 
-def test_column_stats_create_partial_coverage_with_column_slicing(version_store_factory, lib_name):
-    lib = version_store_factory(column_group_size=2, segment_row_size=3, name=lib_name)
+def test_column_stats_create_partial_coverage_with_column_slicing(in_memory_store_factory, lib_name):
+    lib = in_memory_store_factory(column_group_size=2, segment_row_size=3, name=lib_name)
     sym = "test_column_stats_create_partial_coverage_with_column_slicing"
     df = pd.DataFrame(
         {f"col_{i}": np.arange(i * 100, i * 100 + 9) for i in range(1, 5)},
@@ -1673,8 +1669,8 @@ def test_column_stats_create_partial_coverage_with_column_slicing(version_store_
     assert_stats_equal(lib.read_column_stats_experimental(sym), expected)
 
 
-def test_column_stats_create_empty_range_is_noop(version_store_factory, lib_name):
-    lib = version_store_factory(segment_row_size=3, name=lib_name)
+def test_column_stats_create_empty_range_is_noop(in_memory_store_factory, lib_name):
+    lib = in_memory_store_factory(segment_row_size=3, name=lib_name)
     sym = "test_column_stats_create_empty_range_is_noop"
     df = write_nine_row_symbol(lib, sym)
 
@@ -1700,8 +1696,8 @@ def test_column_stats_create_empty_range_is_noop(version_store_factory, lib_name
     [{"row_range": (5, 2)}, {"date_range": (jan(7), jan(2))}],
     ids=["row_range", "date_range"],
 )
-def test_column_stats_create_reversed_range_is_noop(version_store_factory, lib_name, reversed_range):
-    lib = version_store_factory(segment_row_size=3, name=lib_name)
+def test_column_stats_create_reversed_range_is_noop(in_memory_store_factory, lib_name, reversed_range):
+    lib = in_memory_store_factory(segment_row_size=3, name=lib_name)
     sym = "test_column_stats_create_reversed_range_is_noop"
     df = write_nine_row_symbol(lib, sym)
 
@@ -1717,11 +1713,11 @@ def test_column_stats_create_reversed_range_is_noop(version_store_factory, lib_n
 
 
 def test_column_stats_create_dynamic_schema_preserves_stats_for_column_outside_the_range(
-    version_store_factory, lib_name
+    in_memory_store_factory, lib_name
 ):
     """col_2 exists only in the second row slice, so recomputing only the first must carry its stats
     over from the stored segment rather than from anything the create just calculated."""
-    lib = version_store_factory(segment_row_size=3, dynamic_schema=True, name=lib_name)
+    lib = in_memory_store_factory(segment_row_size=3, dynamic_schema=True, name=lib_name)
     sym = "test_column_stats_create_dynamic_schema_preserves_stats_for_column_outside_the_range"
     lib.write(sym, pd.DataFrame({"col_1": [1, 2, 3]}, index=pd.date_range("2000-01-01", periods=3)))
     lib.append(sym, pd.DataFrame({"col_2": [4, 5, 6]}, index=pd.date_range("2000-01-04", periods=3)))
@@ -1749,17 +1745,17 @@ def test_column_stats_create_dynamic_schema_preserves_stats_for_column_outside_t
     assert lib.get_column_stats_info_experimental(sym) == {"col_1": {"MINMAX"}, "col_2": {"MINMAX"}}
 
 
-def test_column_stats_create_date_range_and_row_range_both_specified_raises(lmdb_version_store_tiny_segment):
-    lib = lmdb_version_store_tiny_segment
+def test_column_stats_create_date_range_and_row_range_both_specified_raises(in_memory_version_store_tiny_segment):
+    lib = in_memory_version_store_tiny_segment
     sym = "test_column_stats_create_date_range_and_row_range_both_specified_raises"
     lib.write(sym, df0)
 
-    with pytest.raises(UserInputException):
+    with pytest.raises(ArcticNativeException):
         lib.create_column_stats_experimental(sym, date_range=(df0.index[0], df0.index[-1]), row_range=(0, 2))
 
 
-def test_column_stats_create_date_range_non_timestamp_index_raises(version_store_factory, lib_name):
-    lib = version_store_factory(segment_row_size=2, name=lib_name)
+def test_column_stats_create_date_range_non_timestamp_index_raises(in_memory_store_factory, lib_name):
+    lib = in_memory_store_factory(segment_row_size=2, name=lib_name)
     sym = "test_column_stats_create_date_range_non_timestamp_index_raises"
     lib.write(sym, pd.Series([1, 2, 3, 4], name="myval"))
 
@@ -1767,8 +1763,8 @@ def test_column_stats_create_date_range_non_timestamp_index_raises(version_store
         lib.create_column_stats_experimental(sym, date_range=(pd.Timestamp("2000-01-01"), pd.Timestamp("2000-01-02")))
 
 
-def test_column_stats_create_date_range_unsorted_raises(version_store_factory, lib_name):
-    lib = version_store_factory(segment_row_size=2, name=lib_name)
+def test_column_stats_create_date_range_unsorted_raises(in_memory_store_factory, lib_name):
+    lib = in_memory_store_factory(segment_row_size=2, name=lib_name)
     sym = "test_column_stats_create_date_range_unsorted_raises"
     unsorted_index = [pd.Timestamp("2000-01-03"), pd.Timestamp("2000-01-01")]
     lib.write(sym, pd.DataFrame({"col_1": [1, 2]}, index=unsorted_index))

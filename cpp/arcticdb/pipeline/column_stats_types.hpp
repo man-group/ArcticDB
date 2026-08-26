@@ -9,6 +9,7 @@
 #pragma once
 
 #include <arcticdb/entity/index_range.hpp>
+#include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/pipeline/value.hpp>
 #include <column_stats.pb.h>
 
@@ -20,19 +21,15 @@ namespace arcticdb {
 using ColumnStatTypeInternal = arcticc::pb2::column_stats_pb2::ColumnStatsType;
 
 struct ColumnStatValue {
-    // to_segment_column_name(<name of the column at data_col_offset>, type), e.g. "v1_MIN(col)"
-    std::string segment_column_name;
     ColumnStatTypeInternal type;
     size_t data_col_offset;
     Value value;
 };
 
 /// One per row slice. Added to the ComponentManager as a standalone entity by
-/// ColumnStatsGenerationClause::process and read back by create_column_stats_impl via
-/// process_entities
+/// ColumnStatsGenerationClause::process and read back by create_column_stats_impl
 struct ColumnStatsRow {
-    uint64_t start_row;
-    uint64_t end_row;
+    pipelines::RowRange row_range;
     std::vector<ColumnStatValue> stats;
 };
 

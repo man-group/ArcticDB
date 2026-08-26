@@ -890,12 +890,11 @@ VersionedItem PythonVersionStore::write_metadata(
 }
 
 void PythonVersionStore::create_column_stats_version(
-        const StreamId& stream_id, const VersionQuery& version_query, const std::optional<IndexRange>& date_range,
-        const std::optional<SignedRowRange>& row_range
+        const StreamId& stream_id, const VersionQuery& version_query, const std::shared_ptr<ReadQuery>& read_query
 ) {
     ReadOptions read_options;
     read_options.set_dynamic_schema(cfg().write_options().dynamic_schema());
-    create_column_stats_version_internal(stream_id, version_query, read_options, date_range, row_range);
+    create_column_stats_version_internal(stream_id, version_query, read_options, read_query);
 }
 
 void PythonVersionStore::drop_column_stats_version(const StreamId& stream_id, const VersionQuery& version_query) {

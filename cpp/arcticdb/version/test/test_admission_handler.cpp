@@ -78,7 +78,7 @@ int64_t high_water_for_create_column_stats(
 ) {
     ScopedConfig config_guard{PROCESSING_UNITS_BOUND_KEY, k};
     ResidencyGuard residency_guard;
-    pvs.create_column_stats_version(stream_id, VersionQuery{});
+    pvs.create_column_stats_version(stream_id, VersionQuery{}, std::make_shared<ReadQuery>());
     return util::SegmentResidencyTracker::instance().high_water();
 }
 } // namespace

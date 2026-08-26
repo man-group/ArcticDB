@@ -240,14 +240,12 @@ class LocalVersionedEngine : public VersionedEngine {
 
     void create_column_stats_internal(
             const VersionedItem& versioned_item, const ReadOptions& read_options,
-            const std::optional<IndexRange>& date_range = std::nullopt,
-            const std::optional<SignedRowRange>& row_range = std::nullopt
+            const std::shared_ptr<ReadQuery>& read_query
     );
 
     void create_column_stats_version_internal(
             const StreamId& stream_id, const VersionQuery& version_query, const ReadOptions& read_options,
-            const std::optional<IndexRange>& date_range = std::nullopt,
-            const std::optional<SignedRowRange>& row_range = std::nullopt
+            const std::shared_ptr<ReadQuery>& read_query
     );
 
     void drop_column_stats_internal(const VersionedItem& versioned_item);

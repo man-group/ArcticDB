@@ -79,8 +79,7 @@ AtomKey index_key_to_column_stats_key(const IndexTypeKey& index_key);
 
 void create_column_stats_impl(
         const std::shared_ptr<Store>& store, const VersionedItem& versioned_item, const ReadOptions& read_options,
-        const std::optional<IndexRange>& date_range = std::nullopt,
-        const std::optional<SignedRowRange>& row_range = std::nullopt
+        const std::shared_ptr<ReadQuery>& read_query
 );
 
 void drop_column_stats_impl(const std::shared_ptr<Store>& store, const VersionedItem& versioned_item);

@@ -823,16 +823,16 @@ std::vector<EntityId> ColumnStatsGenerationClause::process(std::vector<EntityId>
                 "Expected all data segments in one processing unit to have the same row range"
         );
     }
-    ColumnStatsRow component{.start_row = row_range.first, .end_row = row_range.second, .stats = {}};
+    ColumnStatsRow column_stats_row{.row_range = row_range, .stats = {}};
     for (const auto& agg_data : folly::enumerate(aggregators_data)) {
-        auto finalized = agg_data->finalize(column_stats_aggregators_->at(agg_data.index).get_output_column_names());
-        component.stats.insert(
-                component.stats.end(),
+        auto finalized = agg_data->finalize();
+        column_stats_row.stats.insert(
+                column_stats_row.stats.end(),
                 std::make_move_iterator(finalized.begin()),
                 std::make_move_iterator(finalized.end())
         );
     }
-    return component_manager_->add_entities(std::vector{std::move(component)});
+    return component_manager_->add_entities(std::vector{std::move(column_stats_row)});
 }
 
 std::vector<std::vector<size_t>> RowRangeClause::structure_for_processing(std::vector<RangesAndKey>& ranges_and_keys) {

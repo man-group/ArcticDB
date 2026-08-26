@@ -10,13 +10,14 @@
 #include <map>
 #include <set>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <unordered_set>
 
 namespace arcticdb {
 
 SegmentInMemory build_column_stats_segment(
-        std::vector<ColumnStatsRow>&& components, const StreamDescriptor& descriptor
+        std::vector<ColumnStatsRow>&& column_stats_rows, const StreamDescriptor& descriptor
 );
 
 std::vector<ColumnStatsRow> decode_column_stats_segment(const SegmentInMemory& segment);
@@ -48,7 +49,7 @@ void validate_column_stats_header_version(
         const arcticc::pb2::column_stats_pb2::ColumnStatsHeader& header, ColumnStatsHeaderVersionMismatchAction action
 );
 
-std::string to_segment_column_name(const std::string& column, ColumnStatTypeInternal type);
+std::string to_segment_column_name(std::string_view column, ColumnStatTypeInternal type);
 
 class ColumnStats {
   public:

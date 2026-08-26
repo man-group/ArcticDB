@@ -84,36 +84,21 @@ void MinMaxAggregatorData::aggregate(const ColumnWithStrings& input_column) {
     });
 }
 
-std::vector<ColumnStatValue> MinMaxAggregatorData::finalize(const std::vector<ColumnName>& output_column_names) const {
-    internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-            output_column_names.size() == 4,
-            "Expected 4 output column names in MinMaxAggregatorData::finalize, but got {}",
-            output_column_names.size()
-    );
+std::vector<ColumnStatValue> MinMaxAggregatorData::finalize() const {
     std::vector<ColumnStatValue> res;
     if (min_.has_value()) {
         res.reserve(4);
-        res.emplace_back(ColumnStatValue{
-                output_column_names.at(0).value, ColumnStatTypeInternal::MIN_V1, data_col_offset_, *min_
-        });
-        res.emplace_back(ColumnStatValue{
-                output_column_names.at(1).value, ColumnStatTypeInternal::MAX_V1, data_col_offset_, *max_
-        });
+        res.emplace_back(ColumnStatValue{ColumnStatTypeInternal::MIN_V1, data_col_offset_, *min_});
+        res.emplace_back(ColumnStatValue{ColumnStatTypeInternal::MAX_V1, data_col_offset_, *max_});
     } else if (null_count_ == 0) {
         // The column is absent from this slice entirely, so there is nothing to record
         return res;
     }
+    res.emplace_back(
+            ColumnStatValue{ColumnStatTypeInternal::NAN_COUNT_V1, data_col_offset_, Value{nan_count_, DataType::UINT64}}
+    );
     res.emplace_back(ColumnStatValue{
-            output_column_names.at(2).value,
-            ColumnStatTypeInternal::NAN_COUNT_V1,
-            data_col_offset_,
-            Value{nan_count_, DataType::UINT64}
-    });
-    res.emplace_back(ColumnStatValue{
-            output_column_names.at(3).value,
-            ColumnStatTypeInternal::NULL_COUNT_V1,
-            data_col_offset_,
-            Value{null_count_, DataType::UINT64}
+            ColumnStatTypeInternal::NULL_COUNT_V1, data_col_offset_, Value{null_count_, DataType::UINT64}
     });
     return res;
 }

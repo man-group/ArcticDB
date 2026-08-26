@@ -25,7 +25,6 @@ import warnings
 import difflib
 from datetime import datetime
 
-from arcticdb_ext.exceptions import UserInputException
 from numpy import datetime64
 from pandas import Timestamp, to_datetime, Timedelta
 from typing import Any, Optional, Union, List, Sequence, Tuple, Dict, Set, NamedTuple
@@ -1354,12 +1353,9 @@ class NativeVersionStore:
         -------
         None
         """
-        if date_range is not None and row_range is not None:
-            raise UserInputException("Date range and row range both specified")
         version_query = self._get_version_query(as_of)
-        cxx_date_range = None if date_range is None else _normalize_dt_range(date_range)
-        cxx_row_range = None if row_range is None else _SignedRowRange(row_range[0], row_range[1])
-        self.version_store.create_column_stats_version(symbol, version_query, cxx_date_range, cxx_row_range)
+        read_query = self._get_read_query(date_range=date_range, row_range=row_range, columns=None, query_builder=None)
+        self.version_store.create_column_stats_version(symbol, version_query, read_query)
 
     def drop_column_stats_experimental(self, symbol: str, as_of: Optional[VersionQueryInput] = None) -> None:
         """

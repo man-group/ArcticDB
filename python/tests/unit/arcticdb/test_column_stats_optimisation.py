@@ -190,12 +190,12 @@ def test_column_stats_query_optimisation_no_stats(
 
 
 def test_column_stats_query_optimisation_column_not_in_stats(
-    lmdb_version_store_tiny_segment, column_stats_filtering_enabled
+    in_memory_version_store_tiny_segment, column_stats_filtering_enabled
 ):
     """
     Test that queries work when column stats exist but not for the filtered column.
     """
-    lib = lmdb_version_store_tiny_segment
+    lib = in_memory_version_store_tiny_segment
 
     df0 = pd.DataFrame({"col_1": [1, 2], "col_2": [10, 20]}, index=pd.date_range("2000-01-01", periods=2))
     df1 = pd.DataFrame({"col_1": [3, 4], "col_2": [30, 40]}, index=pd.date_range("2000-01-03", periods=2))
@@ -2371,21 +2371,12 @@ def test_column_stats_still_prunes_when_nan_does_not_save_row(
     assert table_data_reads == 0, "Both segments must still be pruned; NaN never satisfies a magnitude comparison"
 
 
-def write_six_segments(lib):
-    """Six single-slice segments, col_1 ascending in pairs, two rows each."""
-    for i in range(6):
-        df = pd.DataFrame(
-            {"col_1": [2 * i + 1, 2 * i + 2]},
-            index=pd.date_range(pd.Timestamp("2000-01-01") + pd.Timedelta(days=2 * i), periods=2),
-        )
-        lib.append(sym, df)
-
-
 def test_column_stats_date_range_clause_still_prunes(
-    in_memory_version_store, clear_query_stats, column_stats_filtering_enabled
+    in_memory_version_store_tiny_segment, clear_query_stats, column_stats_filtering_enabled
 ):
-    lib = in_memory_version_store
-    write_six_segments(lib)
+    lib = in_memory_version_store_tiny_segment
+    # segment_row_size=2 splits this into six two-row segments, col_1 ascending in pairs
+    lib.write(sym, pd.DataFrame({"col_1": list(range(1, 13))}, index=pd.date_range("2000-01-01", periods=12)))
     lib.create_column_stats_experimental(sym)
 
     qs.enable()
