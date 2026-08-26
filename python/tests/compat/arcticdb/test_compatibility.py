@@ -524,7 +524,7 @@ def test_compat_merge_old_updated_data(pandas_v1_venv, s3_ssl_disabled_storage, 
     # There was a bug where data written using update and old versions of ArcticDB produced data keys where the
     # end_index value was not 1 nanosecond larger than the last index value in the segment (as it should be), but
     # instead contained the start of the date_range passed into the update call.
-    # We want to verify merge_experimental works correctly with such data.
+    # We want to verify merge works correctly with such data.
     arctic_uri = s3_ssl_disabled_storage.arctic_uri
     with CompatLibrary(pandas_v1_venv, arctic_uri, lib_name) as compat:
         sym = "sym"
@@ -559,7 +559,7 @@ def test_compat_merge_old_updated_data(pandas_v1_venv, s3_ssl_disabled_storage, 
             target = curr.lib.read(sym).data
             expected = merge(target, source, strategy)
 
-            curr.lib.merge_experimental(sym, source, strategy=strategy)
+            curr.lib.merge(sym, source, strategy=strategy)
 
             result = curr.lib.read(sym).data
             assert_frame_equal(result, expected)
@@ -609,7 +609,7 @@ def test_compat_merge_rowrange_write_new_read_old(old_venv_and_arctic_uri, lib_n
             curr.lib = curr.ac.get_library(lib_name)
 
             curr.lib.write(sym, target)
-            curr.lib.merge_experimental(sym, source, strategy=strategy, on=["a"])
+            curr.lib.merge(sym, source, strategy=strategy, on=["a"])
 
         if (arctic_uri.startswith("s3") or arctic_uri.startswith("azure")) and "1.6.2" in old_venv.version:
             pytest.skip("Reading the new library on s3 or azure with 1.6.2 requires some work arounds")
