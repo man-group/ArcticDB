@@ -628,7 +628,7 @@ std::pair<std::vector<Column>, entity::StreamDescriptor> record_batches_to_colum
 }
 
 RecordBatchData empty_record_batch_from_descriptor(
-        const entity::StreamDescriptor& stream_desc, ArrowOutputConfig&& arrow_output_config,
+        const entity::StreamDescriptor& stream_desc, ArrowOutputConfig arrow_output_config,
         const std::optional<ankerl::unordered_dense::set<std::string_view>>& columns,
         const proto::descriptors::NormalizationMetadata& norm_meta
 ) {
@@ -731,26 +731,7 @@ void modify_arrow_output_config_from_norm_meta(
         // Data was written as Arrow. Any ArrowOutputStringFormat::UNSPECIFIED should be taken from the norm meta if
         // present, and become LARGE_STRING otherwise
         const auto& columns_norm_meta = norm_meta.experimental_arrow().columns();
-        const auto default_string_format = arrow_config.default_string_format_ == ArrowOutputStringFormat::UNSPECIFIED
-                                                   ? ArrowOutputStringFormat::LARGE_STRING
-                                                   : arrow_config.default_string_format_;
-        for (auto& [col_name, final_string_format] : arrow_config.per_column_string_format_) {
-            if (final_string_format == ArrowOutputStringFormat::UNSPECIFIED) {
-                if (auto it = columns_norm_meta.find(col_name); it != columns_norm_meta.end()) {
-                    const auto& col_meta = it->second;
-                    if (col_meta.has_string_format()) {
-                        final_string_format =
-                                convert_arrow_string_format_enum(col_meta.string_format(), arrow_config.output_format);
-                    } else {
-                        final_string_format = default_string_format;
-                    }
-                } else {
-                    final_string_format = default_string_format;
-                }
-            }
-        }
         if (arrow_config.default_string_format_ == ArrowOutputStringFormat::UNSPECIFIED) {
-            // The above loop guarantees that no values in the per_column_string_format_ map are now UNSPECIFIED
             // Add any columns from the norm meta NOT already present in per_column_string_format_
             for (const auto& [col_name, col_meta] : columns_norm_meta) {
                 if (!arrow_config.per_column_string_format_.contains(col_name) && col_meta.has_string_format()) {
@@ -759,6 +740,22 @@ void modify_arrow_output_config_from_norm_meta(
                 }
             }
             arrow_config.default_string_format_ = ArrowOutputStringFormat::LARGE_STRING;
+        }
+
+        for (auto& [col_name, final_string_format] : arrow_config.per_column_string_format_) {
+            if (final_string_format == ArrowOutputStringFormat::UNSPECIFIED) {
+                if (auto it = columns_norm_meta.find(col_name); it != columns_norm_meta.end()) {
+                    const auto& col_meta = it->second;
+                    if (col_meta.has_string_format()) {
+                        final_string_format =
+                                convert_arrow_string_format_enum(col_meta.string_format(), arrow_config.output_format);
+                    } else {
+                        final_string_format = arrow_config.default_string_format_;
+                    }
+                } else {
+                    final_string_format = arrow_config.default_string_format_;
+                }
+            }
         }
     } else {
         // Data was not written as Arrow. If the default type is unspecified it should become large string. If a

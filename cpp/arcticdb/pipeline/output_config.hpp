@@ -26,11 +26,11 @@ struct PandasOutputConfig {
 };
 
 struct ArrowOutputConfig {
-    ArrowOutputStringFormat default_string_format_ = ArrowOutputStringFormat::UNSPECIFIED;
-    std::unordered_map<std::string, ArrowOutputStringFormat> per_column_string_format_ = {};
     // Needed only for ArrowOutputStringFormat::UNSPECIFIED, as Polars doesn't support SMALL_STRING. When unspecified,
     // data written as small string will get read back into large string if Polars is the output format
     ArrowOutputFormat output_format = ArrowOutputFormat::PYARROW;
+    ArrowOutputStringFormat default_string_format_ = ArrowOutputStringFormat::UNSPECIFIED;
+    std::unordered_map<std::string, ArrowOutputStringFormat> per_column_string_format_ = {};
 };
 
 using OutputConfig = std::variant<PandasOutputConfig, ArrowOutputConfig>;

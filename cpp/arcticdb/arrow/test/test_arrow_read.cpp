@@ -191,7 +191,7 @@ TEST_P(ArrowStringColumnRead, Basic) {
     auto handler = ArrowStringHandler();
     auto column_name = "col";
     auto read_options = ReadOptions();
-    read_options.set_output_config(ArrowOutputConfig{output_string_format()});
+    read_options.set_output_config(ArrowOutputConfig{.default_string_format_ = output_string_format()});
     auto [type_desc, block_config] = handler.output_type_and_block_config(
             TypeDescriptor{DataType::UTF_DYNAMIC64, Dimension::Dim0}, column_name, read_options
     );
@@ -395,7 +395,10 @@ TEST(ArrowRead, ConvertSegmentMultipleStringColumns) {
     auto read_options = ReadOptions();
     auto per_column_string_format =
             std::unordered_map<std::string, ArrowOutputStringFormat>{{"str_2", ArrowOutputStringFormat::LARGE_STRING}};
-    read_options.set_output_config(ArrowOutputConfig{ArrowOutputStringFormat::CATEGORICAL, per_column_string_format});
+    read_options.set_output_config(ArrowOutputConfig{
+            .default_string_format_ = ArrowOutputStringFormat::CATEGORICAL,
+            .per_column_string_format_ = per_column_string_format
+    });
     auto segment = get_detachable_segment(fields, num_rows, chunk_size, read_options);
     auto string_pool = std::make_shared<StringPool>();
     fill_chunked_string_column(
@@ -544,8 +547,10 @@ TEST(ModifyArrowOutputConfigFromNormMeta, NonArrowNormMeta) {
     ASSERT_EQ(arrow_output_config.per_column_string_format_.at("col"), ArrowOutputStringFormat::LARGE_STRING);
 
     // Specified default/unspecified per-column makes per-column match the default
-    arrow_output_config =
-            ArrowOutputConfig{ArrowOutputStringFormat::CATEGORICAL, {{"col", ArrowOutputStringFormat::UNSPECIFIED}}};
+    arrow_output_config = ArrowOutputConfig{
+            .default_string_format_ = ArrowOutputStringFormat::CATEGORICAL,
+            .per_column_string_format_ = {{"col", ArrowOutputStringFormat::UNSPECIFIED}}
+    };
     modify_arrow_output_config_from_norm_meta(norm_meta, arrow_output_config);
     ASSERT_EQ(arrow_output_config.default_string_format_, ArrowOutputStringFormat::CATEGORICAL);
     ASSERT_EQ(arrow_output_config.per_column_string_format_.at("col"), ArrowOutputStringFormat::CATEGORICAL);
@@ -606,7 +611,8 @@ TEST(ModifyArrowOutputConfigFromNormMeta, ArrowNormMeta) {
 
     // Default specified and a per-column override leave arrow output config unchanged
     arrow_output_config = ArrowOutputConfig{
-            ArrowOutputStringFormat::SMALL_STRING, {{"small string", ArrowOutputStringFormat::CATEGORICAL}}
+            .default_string_format_ = ArrowOutputStringFormat::SMALL_STRING,
+            .per_column_string_format_ = {{"small string", ArrowOutputStringFormat::CATEGORICAL}}
     };
     modify_arrow_output_config_from_norm_meta(norm_meta, arrow_output_config);
     ASSERT_EQ(arrow_output_config.default_string_format_, ArrowOutputStringFormat::SMALL_STRING);
@@ -614,7 +620,8 @@ TEST(ModifyArrowOutputConfigFromNormMeta, ArrowNormMeta) {
 
     // Default specified and a per-column override to unspecified sets the per-column unspecified from the norm meta
     arrow_output_config = ArrowOutputConfig{
-            ArrowOutputStringFormat::CATEGORICAL, {{"small string", ArrowOutputStringFormat::UNSPECIFIED}}
+            .default_string_format_ = ArrowOutputStringFormat::CATEGORICAL,
+            .per_column_string_format_ = {{"small string", ArrowOutputStringFormat::UNSPECIFIED}}
     };
     modify_arrow_output_config_from_norm_meta(norm_meta, arrow_output_config);
     ASSERT_EQ(arrow_output_config.default_string_format_, ArrowOutputStringFormat::CATEGORICAL);
@@ -631,8 +638,10 @@ TEST(ModifyArrowOutputConfigFromNormMeta, ArrowNormMeta) {
     ASSERT_EQ(arrow_output_config.per_column_string_format_.at("new"), ArrowOutputStringFormat::CATEGORICAL);
 
     // Default specified and a per-column override to unspecified of a column not in norm meta uses the default
-    arrow_output_config =
-            ArrowOutputConfig{ArrowOutputStringFormat::CATEGORICAL, {{"new", ArrowOutputStringFormat::UNSPECIFIED}}};
+    arrow_output_config = ArrowOutputConfig{
+            .default_string_format_ = ArrowOutputStringFormat::CATEGORICAL,
+            .per_column_string_format_ = {{"new", ArrowOutputStringFormat::UNSPECIFIED}}
+    };
     modify_arrow_output_config_from_norm_meta(norm_meta, arrow_output_config);
     ASSERT_EQ(arrow_output_config.default_string_format_, ArrowOutputStringFormat::CATEGORICAL);
     ASSERT_EQ(arrow_output_config.per_column_string_format_.at("new"), ArrowOutputStringFormat::CATEGORICAL);

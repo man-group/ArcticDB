@@ -45,25 +45,6 @@ def undictionarify_table(table: Union[pa.Table, pl.DataFrame]) -> Union[pa.Table
     return table
 
 
-def _to_large_string(fmt):
-    if fmt == pa.string() or fmt == ArrowOutputStringFormat.SMALL_STRING:
-        return pa.large_string()
-    return fmt
-
-
-def string_format_kwargs(arrow_output_format: OutputFormat, default=None, per_column=None):
-    """Build arrow string format kwargs, replacing pa.string() with pa.large_string() for polars."""
-    is_polars = arrow_output_format == OutputFormat.POLARS
-    kwargs = {}
-    if default is not None:
-        kwargs["arrow_string_format_default"] = _to_large_string(default) if is_polars else default
-    if per_column is not None:
-        if is_polars:
-            per_column = {col: _to_large_string(fmt) for col, fmt in per_column.items()}
-        kwargs["arrow_string_format_per_column"] = per_column
-    return kwargs
-
-
 def arrow_output_string_format_to_pa_type(arrow_output_string_format):
     check(
         arrow_output_string_format != ArrowOutputStringFormat.UNSPECIFIED,

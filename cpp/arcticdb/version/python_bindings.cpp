@@ -250,17 +250,17 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
 
     py::class_<ArrowOutputConfig>(version, "ArrowOutputConfig")
             .def(py::init<>())
-            .def(py::init([](ArrowOutputStringFormat default_string_format,
+            .def(py::init([](ArrowOutputFormat output_format,
+                             ArrowOutputStringFormat default_string_format,
                              std::unordered_map<std::string, ArrowOutputStringFormat>
-                                     per_column_string_format,
-                             ArrowOutputFormat output_format) {
+                                     per_column_string_format) {
                      return ArrowOutputConfig{
-                             default_string_format, std::move(per_column_string_format), output_format
+                             output_format, default_string_format, std::move(per_column_string_format)
                      };
                  }),
+                 py::arg("output_format"),
                  py::arg("default_string_format") = ArrowOutputStringFormat::UNSPECIFIED,
-                 py::arg("per_column_string_format") = std::unordered_map<std::string, ArrowOutputStringFormat>{},
-                 py::arg("output_format") = ArrowOutputFormat::PYARROW);
+                 py::arg("per_column_string_format") = std::unordered_map<std::string, ArrowOutputStringFormat>{});
 
     py::class_<ReadOptions>(version, "PythonVersionStoreReadOptions")
             .def(py::init())
@@ -1301,9 +1301,8 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                         return std::nullopt;
                     }
                 }();
-                // See comment in bindings for read_dataframe_version regarding clone
                 auto record_batch = empty_record_batch_from_descriptor(
-                        stream_desc, std::move(read_options.clone().arrow_output_config()), columns, norm
+                        stream_desc, read_options.arrow_output_config(), columns, norm
                 );
                 return std::make_pair(std::move(record_batch), python_util::pb_to_python(schema.norm_metadata_));
             }

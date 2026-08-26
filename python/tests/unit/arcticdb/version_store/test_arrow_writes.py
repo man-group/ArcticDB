@@ -33,7 +33,6 @@ from tests.util.arrow import (
     arrow_output_string_format_to_pa_type,
     assert_arrow_equal,
     deep_copy,
-    string_format_kwargs,
     to_format,
     undictionarify_table,
 )
@@ -130,7 +129,7 @@ def test_basic_write_strings(in_memory_version_store_arrow, type):
     sym = "test_basic_write_strings"
     table = pa.table({"col": pa.array(["hello", "bonjour", "gutentag", "nihao", "konnichiwa"], type)})
     lib.write(sym, table)
-    received = lib.read(sym, arrow_string_format_default=type).data
+    received = lib.read(sym).data
     assert table.equals(received)
 
 
@@ -185,8 +184,7 @@ def test_write_multiple_record_batches(in_memory_version_store_arrow, type):
     rb2 = pa.RecordBatch.from_arrays([arr2], names=["col"])
     table = pa.Table.from_batches([rb0, rb1, rb2])
     lib.write(sym, table)
-    arrow_string_format = type if type == pa.large_string() or type == pa.string() else None
-    received = lib.read(sym, arrow_string_format_default=arrow_string_format).data
+    received = lib.read(sym).data
     assert table.equals(received)
 
 
@@ -201,11 +199,7 @@ def test_write_with_index(in_memory_version_store_arrow, arrow_output_format):
         }
     )
     lib.write(sym, to_format(table, arrow_output_format), index_column=True)
-    received = lib.read(
-        sym,
-        output_format=arrow_output_format,
-        **string_format_kwargs(arrow_output_format, default=ArrowOutputStringFormat.SMALL_STRING),
-    ).data
+    received = lib.read(sym, output_format=arrow_output_format).data
     assert_arrow_equal(table, received)
 
 
@@ -258,11 +252,7 @@ def test_write_sliced(in_memory_version_store_tiny_segment_arrow, num_rows, num_
         }
     )
     lib.write(sym, to_format(table, arrow_output_format))
-    received = lib.read(
-        sym,
-        output_format=arrow_output_format,
-        **string_format_kwargs(arrow_output_format, default=ArrowOutputStringFormat.SMALL_STRING),
-    ).data
+    received = lib.read(sym, output_format=arrow_output_format).data
     assert_arrow_equal(table, received)
 
 
@@ -351,11 +341,7 @@ def test_many_record_batches_many_slices(in_memory_store_factory, rows_per_slice
         )
     table = pa.concat_tables(tables)
     lib.write(sym, table)
-    received = lib.read(
-        sym,
-        arrow_string_format_default=ArrowOutputStringFormat.SMALL_STRING,
-        arrow_string_format_per_column={"categorical": ArrowOutputStringFormat.CATEGORICAL},
-    ).data
+    received = lib.read(sym).data
     # pyarrow.equals blindly compares the keys and dictionaries for dictionary encoded columns
     # That fails if record batch structure is different between table and received, thus we undictionarify
     assert undictionarify_table(table).equals(undictionarify_table(received))
@@ -384,7 +370,7 @@ def test_many_record_batches_edge_cases(in_memory_store_factory, rows_per_slice,
         )
     table = pa.concat_tables(tables)
     lib.write(sym, table)
-    received = lib.read(sym, arrow_string_format_default=ArrowOutputStringFormat.SMALL_STRING).data
+    received = lib.read(sym).data
     assert table.equals(received)
 
 
@@ -400,7 +386,7 @@ def test_write_view(in_memory_version_store_arrow):
     )
     view = table.slice(3, 3)
     lib.write(sym, view)
-    received = lib.read(sym, arrow_string_format_default=ArrowOutputStringFormat.SMALL_STRING).data
+    received = lib.read(sym).data
     expected = pa.table(
         {
             "numeric": pa.array([3, 4, 5], pa.uint16()),
@@ -420,7 +406,7 @@ def test_write_view_strings(in_memory_version_store_arrow, type):
     table = pa.concat_tables([table_0, table_1])
     view = table.slice(1, 4)
     lib.write(sym, view)
-    received = lib.read(sym, arrow_string_format_default=type).data
+    received = lib.read(sym).data
     assert view.equals(received)
 
 
@@ -737,12 +723,7 @@ def test_write_categorical_strings(in_memory_version_store_arrow, format, sparse
         data = pl.DataFrame({"col": pl.Series(values, dtype=pl.Categorical)})
     lib.write(sym, data)
 
-    # TODO: Remove string format once we store the input format used in normalization
-    received = lib.read(
-        sym,
-        output_format=format,
-        arrow_string_format_default=ArrowOutputStringFormat.CATEGORICAL,
-    ).data
+    received = lib.read(sym, output_format=format).data
     assert_arrow_equal(data, received)
 
 
@@ -757,12 +738,7 @@ def test_write_mixed_categorical_and_variable_length_columns(in_memory_version_s
     )
     lib.write(sym, data)
 
-    # TODO: Remove string format once we store the input format used in normalization
-    received = lib.read(
-        sym,
-        output_format="polars",
-        arrow_string_format_per_column={"cat": ArrowOutputStringFormat.CATEGORICAL},
-    ).data
+    received = lib.read(sym, output_format="polars").data
     assert_arrow_equal(data, received)
 
 
@@ -793,11 +769,7 @@ def test_append(in_memory_version_store_arrow, existing_data, arrow_output_forma
     append_table = pa.table({"col0": pa.array([2, 3], pa.int64()), "col1": pa.array(["ccc", "dddd"], pa.string())})
     lib.append(sym, to_format(append_table, arrow_output_format))
 
-    received = lib.read(
-        sym,
-        output_format=arrow_output_format,
-        **string_format_kwargs(arrow_output_format, default=ArrowOutputStringFormat.SMALL_STRING),
-    ).data
+    received = lib.read(sym, output_format=arrow_output_format).data
     expected = pa.concat_tables([write_table, append_table]) if existing_data else append_table
     assert_arrow_equal(expected, received)
 
@@ -885,11 +857,7 @@ def test_update(in_memory_version_store_arrow, existing_data, arrow_output_forma
     )
     lib.update(sym, to_format(update_table, arrow_output_format), upsert=not existing_data, index_column=True)
 
-    received = lib.read(
-        sym,
-        output_format=arrow_output_format,
-        **string_format_kwargs(arrow_output_format, default=ArrowOutputStringFormat.SMALL_STRING),
-    ).data
+    received = lib.read(sym, output_format=arrow_output_format).data
     if existing_data:
         expected = pa.table(
             {
@@ -1075,7 +1043,7 @@ def test_staging_without_sorting(in_memory_store_factory, method):
     assert len(lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, sym)) == 4
     lib.compact_incomplete(sym, False, False)
     expected = pa.concat_tables([table_0, table_1])
-    received = lib.read(sym, arrow_string_format_default=ArrowOutputStringFormat.SMALL_STRING).data
+    received = lib.read(sym).data
     assert expected.equals(received)
 
 
@@ -1112,11 +1080,7 @@ def test_staging_with_sorting(in_memory_store_factory, arrow_output_format):
     assert len(lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, sym)) == 4
     lib.compact_incomplete(sym, False, False)
     expected = pa.concat_tables([table_0, table_1]).sort_by("ts")
-    received = lib.read(
-        sym,
-        output_format=arrow_output_format,
-        **string_format_kwargs(arrow_output_format, default=ArrowOutputStringFormat.SMALL_STRING),
-    ).data
+    received = lib.read(sym, output_format=arrow_output_format).data
     assert_arrow_equal(expected, received)
 
 
@@ -1138,11 +1102,7 @@ def test_staging_with_sorting_secondary_column(in_memory_store_factory, arrow_ou
         lib.stage(sym, input_table, sort_on_index=True, sort_columns=["col0"], index_column=True)
     lib.compact_incomplete(sym, False, False)
     expected = table.sort_by([("ts", "ascending"), ("col0", "ascending")])
-    received = lib.read(
-        sym,
-        output_format=arrow_output_format,
-        **string_format_kwargs(arrow_output_format, default=ArrowOutputStringFormat.SMALL_STRING),
-    ).data
+    received = lib.read(sym, output_format=arrow_output_format).data
     assert_arrow_equal(expected, received)
 
 
@@ -1428,8 +1388,7 @@ def test_sparse_write_different_types(in_memory_version_store_arrow, data, arrow
     sym = "test_sparse_write_different_types"
     table = pa.table({"col": pa.array(data, arrow_type)})
     lib.write(sym, table)
-    arrow_string_format = arrow_type if arrow_type in (pa.string(), pa.large_string()) else None
-    received = lib.read(sym, arrow_string_format_default=arrow_string_format).data
+    received = lib.read(sym).data
     assert table.equals(received)
     pandas_received = lib.read(sym, output_format="PANDAS").data
     assert_frame_equal_with_arrow_for_sparse(table, pandas_received)
@@ -1452,10 +1411,7 @@ def test_sparse_write_multiple_columns_different_types(in_memory_store_factory, 
         }
     )
     lib.write(sym, table)
-    received = lib.read(
-        sym,
-        arrow_string_format_per_column={"string_col": pa.string(), "large_string_col": pa.large_string()},
-    ).data
+    received = lib.read(sym).data
     assert table.equals(received)
     pandas_received = lib.read(sym, output_format="PANDAS").data
     assert_frame_equal_with_arrow_for_sparse(table, pandas_received)
@@ -1489,8 +1445,7 @@ def test_sparse_many_different_size_batches(in_memory_store_factory, rows_per_sl
     ]
     table = pa.concat_tables(tables)
     lib.write(sym, table)
-    arrow_string_format = arrow_type if arrow_type in (pa.string(), pa.large_string()) else None
-    received = lib.read(sym, arrow_string_format_default=arrow_string_format).data
+    received = lib.read(sym).data
     assert table.equals(received)
     pandas_received = lib.read(sym, output_format="PANDAS").data
     assert_frame_equal_with_arrow_for_sparse(table, pandas_received)
@@ -1550,10 +1505,7 @@ def test_sparse_write_many_batches_many_slices(in_memory_store_factory, rows_per
 
     table = pa.concat_tables(tables)
     lib.write(sym, table)
-    received = lib.read(
-        sym,
-        arrow_string_format_per_column={"string_col": pa.string(), "large_string_col": pa.large_string()},
-    ).data
+    received = lib.read(sym).data
     assert table.equals(received)
     pandas_received = lib.read(sym, output_format="PANDAS").data
     assert_frame_equal_with_arrow_for_sparse(table, pandas_received)
@@ -1582,7 +1534,7 @@ def test_sparse_write_view(in_memory_version_store_arrow, offset, length):
     )
     view = table.slice(offset, length)
     lib.write(sym, view)
-    received = lib.read(sym, arrow_string_format_default=ArrowOutputStringFormat.SMALL_STRING).data
+    received = lib.read(sym).data
     assert view.equals(received)
 
 
@@ -1619,10 +1571,7 @@ def test_sparse_write_with_index(in_memory_version_store_arrow):
         }
     )
     lib.write(sym, table, index_column=True)
-    received = lib.read(
-        sym,
-        arrow_string_format_per_column={"string_col": pa.string(), "large_string_col": pa.large_string()},
-    ).data
+    received = lib.read(sym).data
     assert table.equals(received)
     pandas_received = lib.read(sym, output_format="PANDAS").data.reset_index()
     assert_frame_equal_with_arrow_for_sparse(table, pandas_received)

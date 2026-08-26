@@ -2359,6 +2359,11 @@ class NativeVersionStore:
         read_options.set_incompletes(resolve_defaults("incomplete", proto_cfg, global_default=False, **kwargs))
         if output_format_to_internal(output_format) == InternalOutputFormat.ARROW:
             output_config = ArrowOutputConfig(
+                (
+                    InternalArrowOutputFormat.POLARS
+                    if output_format.lower() == OutputFormat.POLARS.lower()
+                    else InternalArrowOutputFormat.PYARROW
+                ),
                 arrow_output_string_format_to_internal(
                     self.resolve_runtime_defaults(
                         "arrow_string_format_default",
@@ -2374,11 +2379,6 @@ class NativeVersionStore:
                         "arrow_string_format_per_column", proto_cfg, global_default={}, **kwargs
                     ).items()
                 },
-                (
-                    InternalArrowOutputFormat.POLARS
-                    if output_format.lower() == OutputFormat.POLARS.lower()
-                    else InternalArrowOutputFormat.PYARROW
-                ),
             )
         else:  # Pandas
             string_format = (
