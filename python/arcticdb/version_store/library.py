@@ -3497,7 +3497,7 @@ class Library:
         """
         return self._nvs.defragment_symbol_data(symbol, segment_size, prune_previous_versions)
 
-    def merge_experimental(
+    def merge(
         self,
         symbol: str,
         source: NormalizableType,
@@ -3514,9 +3514,6 @@ class Library:
         See [Merge Notebook](../notebooks/ArcticDB_merge.ipynb) for usage examples.
 
         !!! warning
-            This API is under development and is subject to change. The API is not subject to semver and can change in
-            minor or patch releases.
-
             Dynamic schema is not supported.
 
         Parameters
@@ -3594,14 +3591,14 @@ class Library:
         --------
 
         >>> lib.write("symbol", pd.DataFrame({'a': [1, 2, 3]}, index=pd.DatetimeIndex([pd.Timestamp(1), pd.Timestamp(2), pd.Timestamp(3)])))
-        >>> lib.merge_experimental("symbol", pd.DataFrame({"a": [100, 200]}, index=pd.DatetimeIndex([pd.Timestamp(2), pd.Timestamp(4)])), strategy=MergeStrategy(matched="update", not_matched_by_target="do_nothing"))))
+        >>> lib.merge("symbol", pd.DataFrame({"a": [100, 200]}, index=pd.DatetimeIndex([pd.Timestamp(2), pd.Timestamp(4)])), strategy=MergeStrategy(matched="update", not_matched_by_target="do_nothing"))))
         >>> lib.read("symbol").data
                                        a
         1970-01-01 00:00:00.000000001  1
         1970-01-01 00:00:00.000000002  100
         1970-01-01 00:00:00.000000003  3
         """
-        return self._nvs.merge_experimental(
+        return self._nvs.merge(
             symbol=symbol,
             source=source,
             strategy=strategy,
