@@ -132,8 +132,7 @@ TEST_F(IngestionStressStore, ScalarIntAppend) {
     register_native_handler_data_factory();
     auto handler_data =
             std::make_shared<std::any>(TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE));
-    auto read_result =
-            test_store_->read_dataframe_version(symbol, VersionQuery{}, read_query, std::move(ro), handler_data);
+    auto read_result = test_store_->read_dataframe_version(symbol, VersionQuery{}, read_query, ro, handler_data);
 }
 
 TEST_F(IngestionStressStore, ScalarIntDynamicSchema) {
@@ -288,7 +287,6 @@ TEST_F(IngestionStressStore, DynamicSchemaWithStrings) {
     register_native_handler_data_factory();
     auto handler_data =
             std::make_shared<std::any>(TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE));
-    auto read_result = test_store_->read_dataframe_version(
-            symbol, VersionQuery{}, read_query, std::move(read_options), handler_data
-    );
+    auto read_result =
+            test_store_->read_dataframe_version(symbol, VersionQuery{}, read_query, read_options, handler_data);
 }

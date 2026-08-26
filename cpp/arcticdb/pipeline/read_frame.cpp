@@ -8,7 +8,6 @@
 
 #include <arcticdb/util/variant.hpp>
 
-#include <arcticdb/arrow/arrow_utils.hpp>
 #include <arcticdb/codec/encoding_sizes.hpp>
 #include <arcticdb/codec/codec.hpp>
 #include <arcticdb/column_store/column_algorithms.hpp>
@@ -113,23 +112,8 @@ void finalize_segment_setup(
     handle_modified_descriptor(context, output);
 }
 
-void modify_read_options_from_norm_meta(
-        const proto::descriptors::NormalizationMetadata& norm_meta, ReadOptions& read_options
-) {
-    if (read_options.output_format_for_frame() == OutputFormat::ARROW) {
-        modify_arrow_output_config_from_norm_meta(norm_meta, read_options.arrow_output_config());
-    }
-}
-
-void modify_read_options_from_norm_meta(const PipelineContext& context, ReadOptions& read_options) {
-    if (context.has_normalization()) {
-        modify_read_options_from_norm_meta(context.normalization(), read_options);
-    }
-}
-
-SegmentInMemory allocate_frame(const std::shared_ptr<PipelineContext>& context, ReadOptions& read_options) {
+SegmentInMemory allocate_frame(const std::shared_ptr<PipelineContext>& context, const ReadOptions& read_options) {
     ARCTICDB_SAMPLE_DEFAULT(AllocateFrame)
-    modify_read_options_from_norm_meta(*context, read_options);
     auto [offset, row_count] = offset_and_row_count(context);
     auto block_row_counts = output_block_row_counts(context);
     auto [desc, block_config_per_column] = get_filtered_descriptor_and_block_config(context, read_options);

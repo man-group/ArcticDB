@@ -514,9 +514,8 @@ TEST(ArrowWriteMemoryLifetime, InputFrameKeepsBufferAlive) {
     register_native_handler_data_factory();
     auto handler_data =
             std::make_shared<std::any>(TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE));
-    ReadOptions read_options;
     auto read_result =
-            engine.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, read_options, handler_data);
+            engine.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, ReadOptions{}, handler_data);
     const auto& seg = read_result.root_.frame_and_descriptor_.frame_;
     constexpr auto num_rows = num_record_batches * num_rows_per_record_batch;
     ASSERT_EQ(seg.row_count(), num_rows);

@@ -289,10 +289,8 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                 auto handler_data = std::make_shared<std::any>(
                         TypeHandlerRegistry::instance()->get_handler_data(read_options.output_format_for_frame())
                 );
-                // See comment in bindings for read_dataframe_version regarding clone
                 return adapt_read_df(
-                        read_dataframe_from_file(sid, path, read_query, read_options.clone(), handler_data),
-                        handler_data.get()
+                        read_dataframe_from_file(sid, path, read_query, read_options, handler_data), handler_data.get()
                 );
             }
     );
@@ -922,14 +920,8 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                                 std::make_shared<std::any>(TypeHandlerRegistry::instance()->get_handler_data(
                                         read_options.output_format_for_frame()
                                 ));
-                        // ReadOptions copy-ctor is shallow, so passing by copy does not achieve the same thing as the
-                        // clone here. Although ReadOptions are not currently reused in the Python layer, if this
-                        // changed in the future then modifying them in a read call for Arrow string format
-                        // round-tripping would produce counterintuitive behaviour
                         return adapt_read_df(
-                                v.read_dataframe_version(
-                                        sid, version_query, read_query, read_options.clone(), handler_data
-                                ),
+                                v.read_dataframe_version(sid, version_query, read_query, read_options, handler_data),
                                 handler_data.get()
                         );
                     },
@@ -1079,14 +1071,9 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                         auto handler_data = std::make_shared<std::any>(
                                 TypeHandlerRegistry::instance()->get_handler_data(batch_read_options.output_format())
                         );
-                        // See comment in bindings for read_dataframe_version regarding clone
                         return python_util::adapt_read_dfs(
                                 v.batch_read(
-                                        stream_ids,
-                                        version_queries,
-                                        read_queries,
-                                        batch_read_options.clone(),
-                                        handler_data
+                                        stream_ids, version_queries, read_queries, batch_read_options, handler_data
                                 ),
                                 handler_data.get()
                         );
@@ -1132,13 +1119,12 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                         auto handler_data = std::make_shared<std::any>(
                                 TypeHandlerRegistry::instance()->get_handler_data(output_format)
                         );
-                        // See comment in bindings for read_dataframe_version regarding clone
                         return adapt_read_df(
                                 v.batch_read_and_join(
                                         std::make_shared<std::vector<StreamId>>(std::move(stream_ids)),
                                         std::make_shared<std::vector<VersionQuery>>(std::move(version_queries)),
                                         read_queries,
-                                        read_options.clone(),
+                                        read_options,
                                         std::move(_clauses),
                                         handler_data
                                 ),

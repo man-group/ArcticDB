@@ -32,11 +32,10 @@ TEST(InMemory, ReadTwice) {
     register_native_handler_data_factory();
     auto handler_data =
             std::make_shared<std::any>(TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE));
-    ReadOptions read_options;
     auto read_result1 = version_store.read_dataframe_version_internal(
-            symbol, VersionQuery{}, read_query, read_options, handler_data
+            symbol, VersionQuery{}, read_query, ReadOptions{}, handler_data
     );
     auto read_result2 = version_store.read_dataframe_version_internal(
-            symbol, VersionQuery{}, read_query, read_options, handler_data
+            symbol, VersionQuery{}, read_query, ReadOptions{}, handler_data
     );
 }

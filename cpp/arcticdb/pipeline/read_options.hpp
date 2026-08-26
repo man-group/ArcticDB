@@ -173,19 +173,7 @@ class BatchReadOptions {
 
     [[nodiscard]] OutputFormat output_format() const { return data_->output_format_; }
 
-    [[nodiscard]] BatchReadOptions clone() const {
-        BatchReadOptionsData data{data_->batch_throw_on_error_};
-        data.output_format_ = data_->output_format_;
-        std::ranges::transform(
-                data_->read_options_per_symbol_,
-                std::back_inserter(data.read_options_per_symbol_),
-                [](const ReadOptions& read_options) { return read_options.clone(); }
-        );
-        return BatchReadOptions(std::make_shared<BatchReadOptionsData>(std::move(data)));
-    }
-
   private:
-    explicit BatchReadOptions(std::shared_ptr<BatchReadOptionsData> data) : data_(std::move(data)) {}
     std::shared_ptr<BatchReadOptionsData> data_;
 };
 

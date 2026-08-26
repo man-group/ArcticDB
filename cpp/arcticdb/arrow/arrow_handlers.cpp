@@ -389,11 +389,7 @@ void ArrowStringHandler::convert_type(
         encode_variable_length<int32_t>(source_column, dest_column, mapping, string_pool);
         break;
     case ArrowOutputStringFormat::UNSPECIFIED:
-        // TODO 12841500984: we currently reach here with concat. When fixed as part of schema_combine change, throw
-        // this exception again
-        //        util::raise_rte("ArrowStringHandler::convert_type should never be called with unspecified string
-        //        format");
-        encode_variable_length<int64_t>(source_column, dest_column, mapping, string_pool);
+        util::raise_rte("ArrowStringHandler::convert_type should never be called with unspecified string format");
     }
 }
 
@@ -409,13 +405,9 @@ std::pair<TypeDescriptor, DetachableBlockConfig> ArrowStringHandler::output_type
     case ArrowOutputStringFormat::SMALL_STRING:
         return {make_scalar_type(DataType::UTF_DYNAMIC32), detachable_block_config::Regular{sizeof(int32_t)}};
     case ArrowOutputStringFormat::UNSPECIFIED:
-        // TODO 12841500984: we currently reach here with concat. When fixed as part of schema_combine change, throw
-        // this exception again
-        //        util::raise_rte(
-        //                "ArrowStringHandler::output_type_and_block_config should never be called with unspecified
-        //                string format"
-        //        );
-        return {make_scalar_type(DataType::UTF_DYNAMIC64), detachable_block_config::Regular{sizeof(int64_t)}};
+        util::raise_rte(
+                "ArrowStringHandler::output_type_and_block_config should never be called with unspecified string format"
+        );
     }
     // Avoid control reaches end of non-void function style compilation errors
     return {};
