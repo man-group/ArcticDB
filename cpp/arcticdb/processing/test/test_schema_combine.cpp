@@ -124,6 +124,7 @@ OutputSchema rowcount_df(
     return {std::move(desc), std::move(norm)};
 }
 
+// Helper to take an `std::vector` so we can pass in an initializer_list like `combine({a, b}, options)`
 OutputSchema combine(std::vector<OutputSchema> schemas, const SchemaCombineOptions& options) {
     return combine_schema(schemas, options);
 }
@@ -215,6 +216,8 @@ TEST(CombineSchema, ConcatRenamedMultiIndexLevelsReconciledToFake) {
     });
 }
 
+// Disagreeing Series names leave the result unnamed, named the way a write of an unnamed Series names it rather than
+// with the __fkidx__ scheme the index levels use.
 TEST(CombineSchema, ConcatRenamedSeriesValueColumnDropsTheName) {
     const auto series_a = timeseries_series("ts", "a", DataType::FLOAT64);
     const auto series_b = timeseries_series("ts", "b", DataType::FLOAT64);
@@ -223,7 +226,7 @@ TEST(CombineSchema, ConcatRenamedSeriesValueColumnDropsTheName) {
          {std::vector<OutputSchema>{series_a, series_b}, std::vector<OutputSchema>{series_b, series_a}}) {
         auto combined = combine(schemas, concat_options(JoinType::OUTER));
         ASSERT_EQ(combined.stream_descriptor().field(0).name(), "ts");
-        ASSERT_EQ(combined.stream_descriptor().field(1).name(), "__fkidx__1");
+        ASSERT_EQ(combined.stream_descriptor().field(1).name(), "0");
         ASSERT_FALSE(combined.norm_metadata_.series().common().has_name());
     }
 
@@ -285,14 +288,23 @@ TEST(CombineSchema, IncompatibleRequiredFieldShapesRaise) {
     const auto scalar_index = timeseries_df("dt", columns);
     const auto series = timeseries_series("dt", "v", DataType::FLOAT64);
 
+    // Every shape disagrees with every other, in either order.
+    const std::vector<std::pair<std::string, OutputSchema>> shapes{
+            {"two_levels", two_levels},
+            {"three_levels", three_levels},
+            {"scalar_index", scalar_index},
+            {"series", series}
+    };
     for (const auto& options : {concat_options(JoinType::OUTER), append_options(true)}) {
-        ASSERT_THROW(combine({two_levels, three_levels}, options), NormalizationException);
-        ASSERT_THROW(combine({three_levels, two_levels}, options), NormalizationException);
-        ASSERT_THROW(combine({two_levels, scalar_index}, options), NormalizationException);
-        ASSERT_THROW(combine({scalar_index, two_levels}, options), NormalizationException);
-        ASSERT_THROW(combine({scalar_index, series}, options), NormalizationException);
-        ASSERT_THROW(combine({series, scalar_index}, options), NormalizationException);
-        ASSERT_THROW(combine({two_levels, series}, options), NormalizationException);
+        for (const auto& [base_name, base] : shapes) {
+            for (const auto& [other_name, other] : shapes) {
+                if (&base == &other) {
+                    continue;
+                }
+                ASSERT_THROW(combine({base, other}, options), NormalizationException)
+                        << base_name << " combined with " << other_name << " for " << options.name();
+            }
+        }
     }
 }
 
@@ -363,18 +375,31 @@ TEST(CombineSchema, AppendStaticMissingColumnRaises) {
     ASSERT_THROW(combine({base, other}, append_options(false)), SchemaException);
 }
 
+// Both promotions static schema allows are symmetric: whichever side is the base, the wider type wins.
 TEST(CombineSchema, AppendStaticEmptyToConcretePromotion) {
-    auto base = timeseries_df("ts", {{"a", DataType::EMPTYVAL}});
-    auto other = timeseries_df("ts", {{"a", DataType::FLOAT64}});
-    auto combined = combine({base, other}, append_options(false));
-    ASSERT_EQ(combined.stream_descriptor().field(1).type().data_type(), DataType::FLOAT64);
+    const auto empty = timeseries_df("ts", {{"a", DataType::EMPTYVAL}});
+    const auto concrete = timeseries_df("ts", {{"a", DataType::FLOAT64}});
+    ASSERT_EQ(
+            combine({empty, concrete}, append_options(false)).stream_descriptor().field(1).type().data_type(),
+            DataType::FLOAT64
+    );
+    ASSERT_EQ(
+            combine({concrete, empty}, append_options(false)).stream_descriptor().field(1).type().data_type(),
+            DataType::FLOAT64
+    );
 }
 
 TEST(CombineSchema, AppendStaticFixedToDynamicStringPromotion) {
-    auto base = timeseries_df("ts", {{"a", DataType::UTF_FIXED64}});
-    auto other = timeseries_df("ts", {{"a", DataType::UTF_DYNAMIC64}});
-    auto combined = combine({base, other}, append_options(false));
-    ASSERT_EQ(combined.stream_descriptor().field(1).type().data_type(), DataType::UTF_DYNAMIC64);
+    const auto fixed = timeseries_df("ts", {{"a", DataType::UTF_FIXED64}});
+    const auto dynamic = timeseries_df("ts", {{"a", DataType::UTF_DYNAMIC64}});
+    ASSERT_EQ(
+            combine({fixed, dynamic}, append_options(false)).stream_descriptor().field(1).type().data_type(),
+            DataType::UTF_DYNAMIC64
+    );
+    ASSERT_EQ(
+            combine({dynamic, fixed}, append_options(false)).stream_descriptor().field(1).type().data_type(),
+            DataType::UTF_DYNAMIC64
+    );
 }
 
 TEST(CombineSchema, AppendMismatchedIndexNameRaises) {

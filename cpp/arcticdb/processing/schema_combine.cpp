@@ -16,16 +16,19 @@
 #include <arcticdb/pipeline/index_utils.hpp>
 #include <arcticdb/python/normalization_utils.hpp>
 #include <arcticdb/pipeline/input_frame.hpp>
+#include <arcticdb/util/collection_utils.hpp>
 #include <arcticdb/util/preconditions.hpp>
-#include <arcticdb/util/type_traits.hpp>
+#include <arcticdb/util/variant.hpp>
 
 #include <iterator>
 #include <optional>
 #include <ranges>
 #include <set>
+#include <span>
 #include <string>
-#include <unordered_map>
 #include <unordered_set>
+#include <utility>
+#include <variant>
 #include <vector>
 
 namespace arcticdb {
@@ -37,6 +40,10 @@ using entity::IndexDescriptorImpl;
 using entity::OutputSchema;
 using entity::StreamDescriptor;
 using entity::TypeDescriptor;
+using ArrowColumnMeta = NormalizationMetadata_ExperimentalArrow_ColumnMeta;
+using Pandas = NormalizationMetadata_Pandas;
+using PandasIndex = NormalizationMetadata_PandasIndex;
+using PandasMultiIndex = NormalizationMetadata_PandasMultiIndex;
 
 namespace {
 // Whether the metadata describes the empty index a zero-row write produces with empty_types enabled.
@@ -49,9 +56,59 @@ bool has_empty_index(const NormalizationMetadata& norm) {
 using pipelines::index::required_fields_info;
 using pipelines::index::RequiredFieldInfo;
 
+// A user facing reason something could not be combined, so that a signature says which of its strings is one.
+using Error = std::string;
+
 // The two sides of a name disagreement, quoted so that an unnamed field is visible as ''.
-std::string names_differ(std::string_view accumulated, std::string_view other) {
+Error names_differ(std::string_view accumulated, std::string_view other) {
     return fmt::format("'{}' against '{}'", accumulated, other);
+}
+
+// What the normalization metadata records about the name of an index, a multi-index level or a Series value column.
+// Built by the named constructors below rather than read off the metadata directly, because each of the three spells
+// "this has no name" differently.
+struct PandasName {
+    bool has_name{false};
+    bool is_int{false};
+    std::string_view name{};
+
+    // A faked name is a placeholder for "this index has no name".
+    static PandasName of_index(const PandasIndex& index) {
+        return {.has_name = !index.fake_name(), .is_int = index.is_int(), .name = index.name()};
+    }
+
+    // A multi-index records its unnamed levels in fake_field_pos rather than with a fake_name flag. Only level 0 has
+    // a name and an is_int flag of its own; the rest are named by their descriptor field alone.
+    static PandasName of_multi_index_level_0(const PandasMultiIndex& multi_index) {
+        const auto& unnamed = multi_index.fake_field_pos();
+        return {.has_name = std::ranges::find(unnamed, 0u) == unnamed.end(),
+                .is_int = multi_index.is_int(),
+                .name = multi_index.name()};
+    }
+
+    // A Series name is never an integer. A client older than the has_name field wrote the name without setting it and
+    // denormalization still honours such a name, so a non-empty name counts as one whether the flag was set or not.
+    static PandasName of_series(const Pandas& common) {
+        return {.has_name = common.has_name() || !common.name().empty(), .is_int = false, .name = common.name()};
+    }
+};
+
+// Compares pandas names (index, multindex or series) and returns a user friendly error message if they don't match
+std::optional<Error> compare_pandas_names(const PandasName& left, const PandasName& right) {
+    if (left.has_name != right.has_name) {
+        return fmt::format("'{}' is named on one side only", left.has_name ? left.name : right.name);
+    }
+    // Neither side has a name, so both store a placeholder.
+    if (!left.has_name) {
+        return std::nullopt;
+    }
+    if (left.name != right.name) {
+        return names_differ(left.name, right.name);
+    }
+    if (left.is_int != right.is_int) {
+        return fmt::format("'{}' is an integer on one side only", left.name);
+    }
+    return std::nullopt;
 }
 
 // What disagreed about the names of the required fields, accumulated across every schema being combined.
@@ -62,7 +119,7 @@ class RequiredNameMismatches {
     // A multi-index's level names are reported as an index incompatibility: they are what keeps the normalization
     // metadata in step with the data, which is why they must match even under dynamic schema. A single index's
     // name is a descriptor field, so a disagreement about it is a descriptor mismatch.
-    void add_index(size_t position, bool multi_index, const std::string& detail) {
+    void add_index(size_t position, bool multi_index, std::string_view detail) {
         if (raises()) {
             if (multi_index) {
                 normalization::raise<ErrorCode::E_INCOMPATIBLE_INDEX>(
@@ -76,7 +133,7 @@ class RequiredNameMismatches {
         index_positions_.emplace(position);
     }
 
-    void add_series_name(const std::string& detail) {
+    void add_series_name(std::string_view detail) {
         if (raises()) {
             schema::raise<ErrorCode::E_DESCRIPTOR_MISMATCH>(
                     "Cannot {}: Series names must match, {}", options_.name(), detail
@@ -105,8 +162,8 @@ class RequiredNameMismatches {
 // Field types
 // ---------------------------------------------------------------------------------------------------------------------
 
-// Reconcile the type of a field according to the type promotion policy.
-std::optional<TypeDescriptor> try_combine_field_type(
+// Reconcile the type of a field according to the type promotion policy. Nullopt if the two have no common type.
+std::optional<TypeDescriptor> promote_field_type(
         const TypeDescriptor& base, const TypeDescriptor& other, TypePromotionPolicy policy
 ) {
     if (base == other) {
@@ -135,20 +192,29 @@ std::optional<TypeDescriptor> try_combine_field_type(
     return std::nullopt;
 }
 
+// The combined type of a field, or why the two could not be combined. Carrying the reason lets a caller that only
+// finds out later whether the column matters report the types that clashed rather than just the column name.
+using CombinedFieldType = std::variant<TypeDescriptor, Error>;
+
+CombinedFieldType try_combine_field_type(
+        const TypeDescriptor& base, const TypeDescriptor& other, const SchemaCombineOptions& options,
+        std::string_view name
+) {
+    if (const auto promoted = promote_field_type(base, other, options.type_promotion)) {
+        return *promoted;
+    }
+    return fmt::format("Cannot {}: no common type for column '{}', {} and {}", options.name(), name, base, other);
+}
+
 TypeDescriptor combine_field_type(
         const TypeDescriptor& base, const TypeDescriptor& other, const SchemaCombineOptions& options,
         std::string_view name
 ) {
-    const auto combined = try_combine_field_type(base, other, options.type_promotion);
-    schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
-            combined.has_value(),
-            "Cannot {}: no common type for column '{}', {} and {}",
-            options.name(),
-            name,
-            base,
-            other
+    return util::variant_match(
+            try_combine_field_type(base, other, options, name),
+            [](const TypeDescriptor& combined) { return combined; },
+            [](const Error& error) -> TypeDescriptor { schema::raise<ErrorCode::E_DESCRIPTOR_MISMATCH>(error); }
     );
-    return *combined;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -236,13 +302,17 @@ void add_required_fields(
                 fields[idx].has_value(), "No schema described required field {} of {}", idx, required_fields
         );
         const auto& field = *fields[idx];
-        const bool unnamed = idx < info.num_physical_indices ? mismatches.index_at(idx) : mismatches.series_name();
-        if (unnamed) {
+        const bool is_index_level = idx < info.num_physical_indices;
+        const bool unnamed = is_index_level ? mismatches.index_at(idx) : mismatches.series_name();
+        if (!unnamed) {
+            out.add_scalar_field(field.type().data_type(), field.name());
+        } else if (is_index_level) {
             // Use the same naming scheme as _normalization.py does for unnamed multiindex levels, so that
             // later processing which looks for columns of that form keeps working.
             out.fields().add_field(field.type(), idx == 0 ? "index" : fmt::format("__fkidx__{}", idx));
         } else {
-            out.add_scalar_field(field.type().data_type(), field.name());
+            // An unnamed Series is written with its value column named "0", the name Series.to_frame() gives it.
+            out.fields().add_field(field.type(), "0");
         }
     }
 }
@@ -254,6 +324,18 @@ auto data_columns(const StreamDescriptor& desc, const RequiredFieldInfo& info) {
 
 size_t data_column_count(const StreamDescriptor& desc, const RequiredFieldInfo& info) {
     return desc.field_count() - info.num_required_columns_for(desc.index().type());
+}
+
+// The non-index columns as an associative list, so that a union of two of them stays in descriptor order.
+using DataColumns = std::vector<std::pair<std::string_view, TypeDescriptor>>;
+
+DataColumns data_columns_of(const StreamDescriptor& desc, const RequiredFieldInfo& info) {
+    DataColumns columns;
+    columns.reserve(data_column_count(desc, info));
+    for (const auto& field : data_columns(desc, info)) {
+        columns.emplace_back(field.name(), field.type());
+    }
+    return columns;
 }
 
 // More detailed error message in case static schema recieves different number of columns.
@@ -334,38 +416,53 @@ void add_data_columns_intersection(
         const SchemaCombineOptions& options
 ) {
     const auto& base = schemas.front().stream_descriptor();
-    // The combined type is optional because two schemas may disagree irreconcilably about a column that a
-    // third schema does not have at all, in which case the column is dropped and the clash is irrelevant.
-    // Cannot use ankerl::unordered_dense as its iterators are not stable across erase.
-    std::unordered_map<std::string_view, std::optional<TypeDescriptor>> columns_to_keep;
+    // What every schema seen so far says about a column: the combined type, why the schemas disagreed about it, or
+    // monostate once a schema turns up that does not have it at all. A column dropped for being absent stays dropped
+    // even if the schemas disagreed about its type, because a type clash on a column not in the output is irrelevant.
+    using Combined = std::variant<TypeDescriptor, Error, std::monostate>;
+    ankerl::unordered_dense::map<std::string_view, Combined> columns_to_keep;
     for (const auto& field : data_columns(base, info)) {
         columns_to_keep.emplace(field.name(), field.type());
     }
     for (const auto& schema : schemas.subspan(1)) {
-        ankerl::unordered_dense::map<std::string_view, TypeDescriptor> other_columns;
-        for (const auto& field : data_columns(schema.stream_descriptor(), info)) {
-            other_columns.emplace(field.name(), field.type());
-        }
-        for (auto it = columns_to_keep.begin(); it != columns_to_keep.end();) {
-            const auto other_it = other_columns.find(it->first);
-            if (other_it == other_columns.end()) {
-                it = columns_to_keep.erase(it);
-                continue;
-            }
-            if (it->second.has_value()) {
-                it->second = try_combine_field_type(*it->second, other_it->second, options.type_promotion);
-            }
-            ++it;
-        }
+        util::for_each_key_union(
+                data_columns_of(schema.stream_descriptor(), info),
+                columns_to_keep,
+                [&](std::string_view name, const TypeDescriptor* current, Combined* to_keep) {
+                    // An intersection only ever shrinks, so a column the accumulated set never had is not of interest.
+                    if (to_keep == nullptr) {
+                        return;
+                    }
+                    if (current == nullptr) {
+                        *to_keep = std::monostate{};
+                        return;
+                    }
+                    util::variant_match(
+                            *to_keep,
+                            [](const std::monostate&) {},
+                            [](const Error&) {},
+                            [&](const TypeDescriptor& kept) {
+                                *to_keep = util::variant_match(
+                                        try_combine_field_type(kept, *current, options, name),
+                                        [](const auto& combined) { return Combined{combined}; }
+                                );
+                            }
+                    );
+                }
+        );
     }
     // Everything retained was present in every schema, so emit it in the base schema's order.
     for (const auto& field : data_columns(base, info)) {
-        if (const auto it = columns_to_keep.find(field.name()); it != columns_to_keep.end()) {
-            schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
-                    it->second.has_value(), "Cannot {}: no common type for column '{}'", options.name(), field.name()
-            );
-            out.add_scalar_field(it->second->data_type(), field.name());
+        const auto it = columns_to_keep.find(field.name());
+        if (it == columns_to_keep.end()) {
+            continue;
         }
+        util::variant_match(
+                it->second,
+                [&](const TypeDescriptor& combined) { out.add_scalar_field(combined.data_type(), field.name()); },
+                [](const Error& error) { schema::raise<ErrorCode::E_DESCRIPTOR_MISMATCH>(error); },
+                [](const std::monostate&) {}
+        );
     }
 }
 
@@ -422,10 +519,9 @@ bool operator==(
            lhs.original_name() == rhs.original_name();
 }
 
-template<typename ColumnNameMapParent>
-requires util::any_of<
-        ColumnNameMapParent, NormalizationMetadata_NormalisedTimeSeries, NormalizationMetadata_PandasDataFrame>
-void accumulate_norm_metadata_column_names(ColumnNameMapParent& accumulated, const ColumnNameMapParent& new_entry) {
+void accumulate_norm_metadata_column_names(
+        NormalizationMetadata_PandasDataFrame& accumulated, const NormalizationMetadata_PandasDataFrame& new_entry
+) {
     accumulated.set_has_synthetic_columns(accumulated.has_synthetic_columns() && new_entry.has_synthetic_columns());
     auto* accumulated_col_names = accumulated.mutable_common()->mutable_col_names();
     for (auto& [col_name, col_name_info] : new_entry.common().col_names()) {
@@ -492,12 +588,34 @@ void check_same_input_type(
     );
 }
 
+// How a timezone reads in an error message. A timezone that was never set is not the same as one set to the empty
+// string, so the two have to look different.
+std::string timezone_name(std::optional<std::string_view> timezone) {
+    return timezone.has_value() ? fmt::format("'{}'", *timezone) : std::string{"unset"};
+}
+
 // Disagreeing timezones are not allowed for static schema.
 // Otherwise are reconciled by treating the result as timezone naive.
-void on_timezone_mismatch(const SchemaCombineOptions& options, std::string_view column) {
+void on_timezone_mismatch(
+        const SchemaCombineOptions& options, std::string_view column, std::optional<std::string_view> accumulated,
+        std::optional<std::string_view> other
+) {
     schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
             options.type_promotion != TypePromotionPolicy::STATIC,
-            "Cannot {}: timezones for column '{}' must match under static schema",
+            "Cannot {}: timezones for column '{}' must match under static schema, {} against {}",
+            options.name(),
+            column,
+            timezone_name(accumulated),
+            timezone_name(other)
+    );
+}
+
+// Only one side carries Arrow metadata for this column. Not allowed for static schema, otherwise whatever the one
+// side says about the column is kept.
+void on_column_metadata_one_sided(const SchemaCombineOptions& options, std::string_view column) {
+    schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
+            options.type_promotion != TypePromotionPolicy::STATIC,
+            "Cannot {}: only one side has arrow metadata for column '{}', which must match under static schema",
             options.name(),
             column
     );
@@ -546,7 +664,13 @@ NormalizationMetadata accumulate_norm_metadata(
         if (accumulated.has_np()) {
             return combine_ndarray_metadata(accumulated, other, options);
         }
-        // Preserve append behavior to overwrite with the new schema.
+        // arrow_or_pandas are handled below and we raise for MsgPackFrame. This leaves only unset input types
+        // used in C++ tests
+        util::check(
+                accumulated.input_type_case() == NormalizationMetadata::INPUT_TYPE_NOT_SET,
+                "All cases apart from NdArray and unset should have been covered but got {}",
+                input_type_name(accumulated)
+        );
         return other;
     }
 
@@ -566,31 +690,39 @@ NormalizationMetadata accumulate_norm_metadata(
                 operation
         );
         // Per-column metadata is merged rather than taking only the base schema's, so that a column only a later
-        // schema has keeps what that schema says about it.
+        // schema has keeps what that schema says about it. Presence is checked per column rather than by comparing
+        // map sizes, so that a metadata field a future client adds does not make existing data un-appendable.
         auto res = accumulated;
         auto& res_columns = *res.mutable_experimental_arrow()->mutable_columns();
-        schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
-                options.type_promotion != TypePromotionPolicy::STATIC ||
-                        res_columns.size() == other.experimental_arrow().columns().size(),
-                "Cannot {}: number of columns with metadata does not match under static schema, {} columns carry it "
-                "against {}",
-                options.name(),
-                res_columns.size(),
-                other.experimental_arrow().columns().size()
-        );
-        for (const auto& [column_name, other_column] : other.experimental_arrow().columns()) {
-            const auto it = res_columns.find(column_name);
-            const bool matches = it != res_columns.end() && other_column.timezone() == it->second.timezone();
-            if (!matches) {
-                on_timezone_mismatch(options, column_name);
-                if (it == res_columns.end()) {
-                    res_columns[column_name] = other_column;
-                } else {
-                    // Present in both, so drop anything they disagree on, such as the timezone.
-                    it->second.clear_timezone();
+        util::for_each_key_union(
+                accumulated.experimental_arrow().columns(),
+                other.experimental_arrow().columns(),
+                [&](const std::string& column_name,
+                    const ArrowColumnMeta* accumulated_column,
+                    const ArrowColumnMeta* other_column) {
+                    if (accumulated_column == nullptr) {
+                        on_column_metadata_one_sided(options, column_name);
+                        res_columns[column_name] = *other_column;
+                        return;
+                    }
+                    if (other_column == nullptr) {
+                        on_column_metadata_one_sided(options, column_name);
+                        return;
+                    }
+                    // An absent timezone is not the same as an empty one, so compare presence as well as value.
+                    const auto timezone_of = [](const ArrowColumnMeta& column) {
+                        return column.has_timezone() ? std::optional{std::string_view{column.timezone()}}
+                                                     : std::nullopt;
+                    };
+                    if (timezone_of(*accumulated_column) != timezone_of(*other_column)) {
+                        on_timezone_mismatch(
+                                options, column_name, timezone_of(*accumulated_column), timezone_of(*other_column)
+                        );
+                        // Present in both, so drop anything they disagree on, such as the timezone.
+                        res_columns[column_name].clear_timezone();
+                    }
                 }
-            }
-        }
+        );
         return res;
     }
 
@@ -649,20 +781,20 @@ NormalizationMetadata accumulate_norm_metadata(
         const std::set<uint32_t> other_unnamed{
                 other_index.fake_field_pos().begin(), other_index.fake_field_pos().end()
         };
-        // As for a single index, the level 0 name is a placeholder when both sides record it as unnamed, and which
-        // placeholder gets stored differs between client versions.
-        const bool both_faked = res_unnamed.contains(0) && other_unnamed.contains(0);
-        if (other_index.is_int() != res_index->is_int() || (!both_faked && other_index.name() != res_index->name())) {
-            mismatches.add_index(0, true, names_differ(res_index->name(), other_index.name()));
+        if (const auto error = compare_pandas_names(
+                    PandasName::of_multi_index_level_0(*res_index), PandasName::of_multi_index_level_0(other_index)
+            )) {
+            mismatches.add_index(0, true, *error);
         }
         if (other_index.tz() != res_index->tz()) {
-            on_timezone_mismatch(options, "Top level index");
+            on_timezone_mismatch(options, "Top level index", res_index->tz(), other_index.tz());
             res_index->clear_tz();
         }
         for (const auto& [idx, idx_timezone] : other_index.timezone()) {
-            if ((*res_index->mutable_timezone())[idx] != idx_timezone) {
-                on_timezone_mismatch(options, fmt::format("Index level {}", idx));
-                (*res_index->mutable_timezone())[idx] = "";
+            auto& res_timezone = (*res_index->mutable_timezone())[idx];
+            if (res_timezone != idx_timezone) {
+                on_timezone_mismatch(options, fmt::format("Index level {}", idx), res_timezone, idx_timezone);
+                res_timezone = "";
             }
         }
         // A level both sides already record as unnamed agrees, and stays unnamed by virtue of already being in
@@ -676,18 +808,23 @@ NormalizationMetadata accumulate_norm_metadata(
     } else {
         auto* res_index = res_common->mutable_index();
         const auto& other_index = other_common.index();
-        // A faked name is a placeholder for "this index has no name", and which placeholder gets stored has changed
-        // between client versions - 1.6.2 left it empty where we write "index" - so only a real name can be compared.
-        const bool both_faked = res_index->fake_name() && other_index.fake_name();
-        if (other_index.fake_name() != res_index->fake_name() || other_index.is_int() != res_index->is_int() ||
-            (!both_faked && other_index.name() != res_index->name())) {
-            mismatches.add_index(0, false, names_differ(res_index->name(), other_index.name()));
+        if (const auto error =
+                    compare_pandas_names(PandasName::of_index(*res_index), PandasName::of_index(other_index))) {
+            mismatches.add_index(0, false, *error);
         }
         if (other_index.tz() != res_index->tz()) {
-            on_timezone_mismatch(options, "Index");
+            on_timezone_mismatch(options, "Index", res_index->tz(), other_index.tz());
             res_index->clear_tz();
         }
         if (other_index.step() != res_index->step()) {
+            // This case can only be reached for concat.
+            // Update doesn't support range indices and append has special handling for range indices to make sure they
+            // are aligned.
+            util::check(
+                    options.operation == NormalizationOperation::CONCAT,
+                    "Encountered mismatched range indices for operation {} which should have been handled earlier.",
+                    options.name()
+            );
             log::version().warn("Mismatching RangeIndexes being combined, setting to start=0, step=1");
             res_index->set_start(0);
             res_index->set_step(1);
@@ -695,9 +832,11 @@ NormalizationMetadata accumulate_norm_metadata(
     }
     // Last of the required fields, so that a disagreement about the index - which every schema has - is reported
     // ahead of one about the value column, which only a Series has.
-    if (res.has_series() &&
-        (res_common->has_name() != other_common.has_name() || res_common->name() != other_common.name())) {
-        mismatches.add_series_name(names_differ(res_common->name(), other_common.name()));
+    if (res.has_series()) {
+        if (const auto error =
+                    compare_pandas_names(PandasName::of_series(*res_common), PandasName::of_series(other_common))) {
+            mismatches.add_series_name(*error);
+        }
     }
     accumulate_norm_metadata_column_names(res, other);
     return res;
