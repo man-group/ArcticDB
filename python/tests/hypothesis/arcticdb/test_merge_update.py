@@ -40,17 +40,6 @@ MAX_DATE = np.datetime64("2025-01-01")
 
 
 @st.composite
-def ordered_dataframe_list(
-    draw, column_names, column_dtypes, min_date=MIN_DATE, max_date=MAX_DATE
-) -> List[pd.DataFrame]:
-    index_ranges = sorted(draw(st.lists(date(min_date=min_date, max_date=max_date, unit="s"), min_size=2)))
-    return [
-        draw(dataframe(column_names, column_dtypes, index_ranges[i], index_ranges[i + 1]))
-        for i in range(len(index_ranges) - 1)
-    ]
-
-
-@st.composite
 def source_for_merge(
     draw, target: pd.DataFrame, min_date=MIN_DATE, max_date=MAX_DATE, on: List[str] = None
 ) -> pd.DataFrame:
