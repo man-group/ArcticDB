@@ -173,7 +173,7 @@ class MergeBase:
 
     def __init__(self):
         self.rounds = 1
-        # merge_experimental is destructive, so we must restore a fresh base and run once per measurement
+        # merge is destructive, so we must restore a fresh base and run once per measurement
         self.number = 1
         self.warmup_time = 0
         self.repeat = 10
@@ -240,7 +240,7 @@ class MergeBase:
             self._source_key = key
 
     def merge(self, strategy):
-        self.lib.merge_experimental(self.SYM, self.source, strategy=self.STRATEGIES[strategy], on=self.on)
+        self.lib.merge(self.SYM, self.source, strategy=self.STRATEGIES[strategy], on=self.on)
 
 
 class MergeThinDatetime(MergeBase):

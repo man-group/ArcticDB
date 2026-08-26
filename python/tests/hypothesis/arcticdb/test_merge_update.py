@@ -123,7 +123,7 @@ def test_timeseries_merge_update(s3_version_store_v1, merge_args):
     lib.version_store.force_delete_symbol(symbol)
     for df in target_list:
         lib.append(symbol, df)
-    lib.merge_experimental(
+    lib.merge(
         symbol,
         source,
         strategy=MergeStrategy(matched="update", not_matched_by_target="do_nothing"),
@@ -150,7 +150,7 @@ def test_multiindex_merge_update(s3_version_store_v1, merge_args, cols_to_promot
     lib.version_store.force_delete_symbol(symbol)
     for df in target_list:
         lib.append(symbol, df)
-    lib.merge_experimental(
+    lib.merge(
         symbol,
         source,
         strategy=MergeStrategy(matched="update", not_matched_by_target="do_nothing"),
@@ -169,7 +169,7 @@ def test_rowrange_merge_update(s3_version_store_v1, merge_args):
     symbol = "test_merge_update"
     lib.version_store.force_delete_symbol(symbol)
     lib.write(symbol, target_list[0])
-    lib.merge_experimental(
+    lib.merge(
         symbol,
         source,
         strategy=MergeStrategy(matched="update", not_matched_by_target="do_nothing"),
@@ -378,7 +378,7 @@ def test_insert(s3_storage, strategy, index_type, data):
         name, library_options=LibraryOptions(rows_per_segment=rows_per_segment, columns_per_segment=cols_per_segment)
     )
     lib.write("symbol", target)
-    lib.merge_experimental("symbol", source, strategy=strategy, on=on, match_na=match_na)
+    lib.merge("symbol", source, strategy=strategy, on=on, match_na=match_na)
     index_df = lib._dev_tools.library_tool().read_index("symbol")
     assert_index_key_structure_static_schema(index_df, rows_per_segment=rows_per_segment)
     result = lib.read("symbol").data
