@@ -36,10 +36,10 @@ TEST(Append, Simple) {
     async::TaskScheduler scheduler{5};
 
     pipeline_context->slice_and_keys_ = arcticdb::get_incomplete(store, stream_id, range, 0, false, false);
-    generate_filtered_field_descriptors(pipeline_context, {});
+    pipeline_context->generate_filtered_field_descriptors({});
 
     auto read_options = ReadOptions{};
-    read_options.set_output_format(OutputFormat::NATIVE);
+    read_options.set_output_config(PandasOutputConfig{});
     SegmentInMemory allocated_frame = allocate_frame(pipeline_context, read_options);
     ASSERT_EQ(allocated_frame.row_count(), frame->num_rows);
 }

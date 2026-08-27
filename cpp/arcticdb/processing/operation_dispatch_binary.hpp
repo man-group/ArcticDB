@@ -50,7 +50,7 @@ inline std::string binary_operation_column_name(
 }
 
 template<typename Func>
-inline std::string binary_operation_with_types_to_string(
+std::string binary_operation_with_types_to_string(
         std::string_view left, const TypeDescriptor& type_left, Func&& func, std::string_view right,
         const TypeDescriptor& type_right, bool arguments_reversed = false
 ) {

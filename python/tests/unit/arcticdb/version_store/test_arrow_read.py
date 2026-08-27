@@ -1,3 +1,5 @@
+import datetime
+
 import pandas as pd
 import numpy as np
 import pytest
@@ -23,6 +25,7 @@ from arcticdb.util.test import get_sample_dataframe, make_dynamic
 from arcticdb.util._versions import IS_PANDAS_ONE
 from arcticdb_ext.storage import KeyType
 from tests.util.mark import WINDOWS
+from tests.util.arrow import arrow_output_string_format_to_pa_type
 
 
 def test_basic(lmdb_version_store_arrow):
@@ -279,12 +282,7 @@ def test_strings_in_multi_index(in_memory_version_store_arrow, any_arrow_string_
     }
     lib.write("arrow", df, dynamic_strings=True)
     table = lib.read("arrow", arrow_string_format_per_column=arrow_string_format_per_column).data
-    if any_arrow_string_format == ArrowOutputStringFormat.LARGE_STRING:
-        expected_type = pa.large_string()
-    elif any_arrow_string_format == ArrowOutputStringFormat.SMALL_STRING:
-        expected_type = pa.string()
-    else:
-        expected_type = pa.dictionary(pa.int32(), pa.large_string())
+    expected_type = arrow_output_string_format_to_pa_type(any_arrow_string_format)
     assert table.field("index1").type == expected_type
     assert table.field("index2").type == expected_type
     assert table.field("x").type == expected_type
@@ -1328,3 +1326,90 @@ def test_arrow_read_all_empty_strings(in_memory_version_store_arrow, any_arrow_s
     result = lib.read(sym, arrow_string_format_default=any_arrow_string_format).data
     expected = lib.read(sym, output_format=OutputFormat.PANDAS).data
     assert_frame_equal_with_arrow(result, expected)
+
+
+# See test with the same name in test_arrow_api.py for V2 API equivalent
+def test_arrow_written_data_get_info_non_timeseries(in_memory_version_store_arrow):
+    lib = in_memory_version_store_arrow
+    sym = "test_arrow_written_data_get_info_non_timeseries"
+    table = pa.table({"col": pa.array(np.arange(10), type=pa.int64())})
+    lib.write(sym, table)
+    info = lib.get_info(sym)
+    assert info["col_names"]["columns"] == ["col"]
+    assert len(info["dtype"]) == 1
+    assert "INT64" in str(info["dtype"][0])
+    assert len(info["col_names"]["index"]) == 0
+    assert len(info["col_names"]["index_dtype"]) == 0
+    assert info["rows"] == 10
+    assert info["input_type"] == "experimental_arrow"
+    assert info["index_type"] == "NA"
+    assert info["type"] == "arrow"
+    assert np.isnat(info["date_range"][0]) and np.isnat(info["date_range"][1])
+    assert info["sorted"] == "UNKNOWN"
+
+
+# See test with the same name in test_arrow_api.py for V2 API equivalent
+@pytest.mark.parametrize(
+    "table",
+    [
+        pytest.param(
+            pa.table(
+                {
+                    "ts": pa.Array.from_pandas(
+                        pd.date_range("2025-01-01", periods=20),
+                        type=pa.timestamp("ns"),
+                    ),
+                    "col": pa.array(np.arange(20), type=pa.uint8()),
+                }
+            ),
+            id="sorted",
+        ),
+        pytest.param(
+            pa.table(
+                {
+                    "ts": pa.Array.from_pandas(
+                        reversed(pd.date_range("2025-01-01", periods=20)),
+                        type=pa.timestamp("ns"),
+                    ),
+                    "col": pa.array(np.arange(20), type=pa.uint8()),
+                }
+            ),
+            id="unsorted",
+        ),
+    ],
+)
+@pytest.mark.parametrize("tz", [None, "UTC", "Europe/Brussels"])
+@pytest.mark.parametrize("has_index", [False, True])
+@pytest.mark.parametrize("validate_index", [False, True])
+def test_arrow_written_data_get_info_timeseries(in_memory_version_store_arrow, table, tz, has_index, validate_index):
+    lib = in_memory_version_store_arrow
+    sym = "test_arrow_written_data_get_info_timeseries"
+    if tz is not None:
+        table = table.set_column(0, "ts", table.column(0).cast(pa.timestamp("ns", tz=tz)))
+    sorted = (pc.sort_indices(table.column(0)).to_numpy() == np.arange(20, dtype=np.uint64)).all()
+    if has_index and validate_index and not sorted:
+        pytest.skip("Write will fail")
+    lib.write(sym, table, validate_index=validate_index, index_column=has_index)
+    info = lib.get_info(sym)
+    assert info["col_names"]["columns"] == (["col"] if has_index else ["ts", "col"])
+    assert len(info["dtype"]) == (1 if has_index else 2)
+    if not has_index:
+        assert "NANOSECONDS_UTC64" in str(info["dtype"][0])
+    assert "UINT8" in str(info["dtype"][-1])
+    assert info["col_names"]["index"] == (["ts"] if has_index else [])
+    assert len(info["col_names"]["index_dtype"]) == (1 if has_index else 0)
+    if has_index:
+        assert "NANOSECONDS_UTC64" in str(info["col_names"]["index_dtype"][0])
+    assert info["rows"] == 20
+    assert info["input_type"] == "experimental_arrow"
+    assert info["index_type"] == "NA"
+    assert info["type"] == "arrow"
+    if has_index:
+        assert info["date_range"] == (table.to_pandas()["ts"][0], table.to_pandas()["ts"][19])
+    else:
+        assert np.isnat(info["date_range"][0]) and np.isnat(info["date_range"][1])
+    # With Arrow and validate_index enabled, it is impossible to write sorted-descending data
+    if has_index and validate_index and sorted:
+        assert info["sorted"] == "ASCENDING"
+    else:
+        assert info["sorted"] == "UNKNOWN"

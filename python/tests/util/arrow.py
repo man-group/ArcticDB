@@ -5,6 +5,7 @@ import polars as pl
 import pyarrow as pa
 
 from arcticdb.options import ArrowOutputStringFormat, OutputFormat
+from arcticdb.preconditions import check
 
 
 def to_format(table: Union[pa.Table, pl.DataFrame], arrow_output_format: OutputFormat):
@@ -24,11 +25,11 @@ def deep_copy(table: Union[pa.Table, pl.DataFrame]) -> Union[pa.Table, pl.DataFr
 
 
 def assert_arrow_equal(expected: Union[pa.Table, pl.DataFrame], received: Union[pa.Table, pl.DataFrame]):
-    # Convert expected to be the same type as received
+    # If types differ, convert both to pl.DataFrame, as this gracefully handles the int32/uint32 difference in dict keys
     if isinstance(expected, pa.Table) and isinstance(received, pl.DataFrame):
         expected = pl.from_arrow(expected)
     if isinstance(expected, pl.DataFrame) and isinstance(received, pa.Table):
-        expected = expected.to_arrow()
+        received = pl.from_arrow(received)
     # Both pyarrow.Table and polars.DataFrame have `equals`
     assert expected.equals(received)
 
@@ -44,20 +45,17 @@ def undictionarify_table(table: Union[pa.Table, pl.DataFrame]) -> Union[pa.Table
     return table
 
 
-def _to_large_string(fmt):
-    if fmt == pa.string() or fmt == ArrowOutputStringFormat.SMALL_STRING:
+def arrow_output_string_format_to_pa_type(arrow_output_string_format):
+    check(
+        arrow_output_string_format != ArrowOutputStringFormat.UNSPECIFIED,
+        "Cannot convert unspecified string format to pyarrow type",
+    )
+    if arrow_output_string_format == ArrowOutputStringFormat.SMALL_STRING:
+        return pa.string()
+    elif arrow_output_string_format == ArrowOutputStringFormat.LARGE_STRING:
         return pa.large_string()
-    return fmt
-
-
-def string_format_kwargs(arrow_output_format: OutputFormat, default=None, per_column=None):
-    """Build arrow string format kwargs, replacing pa.string() with pa.large_string() for polars."""
-    is_polars = arrow_output_format == OutputFormat.POLARS
-    kwargs = {}
-    if default is not None:
-        kwargs["arrow_string_format_default"] = _to_large_string(default) if is_polars else default
-    if per_column is not None:
-        if is_polars:
-            per_column = {col: _to_large_string(fmt) for col, fmt in per_column.items()}
-        kwargs["arrow_string_format_per_column"] = per_column
-    return kwargs
+    elif arrow_output_string_format in [
+        ArrowOutputStringFormat.CATEGORICAL,
+        ArrowOutputStringFormat.DICTIONARY_ENCODED,
+    ]:
+        return pa.dictionary(pa.int32(), pa.large_string())

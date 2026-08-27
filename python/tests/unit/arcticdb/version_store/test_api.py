@@ -113,7 +113,7 @@ def test_finalize_staged_data(arctic_library_lmdb, input_mode, expected_append):
     default_args = {
         "convert_int_to_float": False,
         "metadata": None,
-        "prune_previous_version": False,
+        "prune_previous_version": None,
         "validate_index": True,
         "delete_staged_data_on_failure": False,
         "stage_results": None,

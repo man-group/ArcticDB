@@ -341,8 +341,9 @@ def test_write_pandas_named_index_clashes_with_special_col_names(in_memory_versi
 
     received = lib.read(sym).data
     assert received.column_names == expected_columns
-    # Arrow column names are always strings, so an all-integer columns index round-trips as object dtype.
-    df.columns = df.columns.astype(object)
+    # Arrow column names are always strings, so integer and None labels come back as object/str depending on the infer_string flag.
+    if df.columns.inferred_type != "string":
+        df.columns = df.columns.astype(object)
     assert_frame_equal_with_arrow(received, df)
 
 
@@ -481,8 +482,8 @@ def test_write_pandas_multiindex_level_clashes_with_special_col_names(
 
     received = lib.read(sym).data
     assert received.column_names == expected_columns
-    # Arrow column names are always strings, so an all-integer columns index round-trips as object dtype.
-    df.columns = df.columns.astype(object)
+    if df.columns.inferred_type != "string":
+        df.columns = df.columns.astype(object)
     assert_frame_equal_with_arrow(received, df)
 
 

@@ -22,16 +22,7 @@ from arcticdb.options import LibraryOptions, OutputFormat
 from arcticdb.util.hypothesis import use_of_function_scoped_fixtures_in_hypothesis_checked
 from arcticdb.util.test import assert_frame_equal_with_arrow_for_sparse
 from arcticdb.version_store.processing import QueryBuilder
-from tests.util.arrow import assert_arrow_equal, string_format_kwargs, to_format, undictionarify_table
-
-# In all tests in this file we test all string formats as part of a single table.
-# Since arrow writes do not support writing categorical columns we write `cat_str_col` as `large_string`
-# and then use `undictionarify_table` to convert it back to large string so we can compare.
-STRING_FORMAT_PER_COLUMN = {
-    "str_col": pa.string(),
-    "large_str_col": pa.large_string(),
-    "cat_str_col": pa.dictionary(pa.int32(), pa.large_string()),
-}
+from tests.util.arrow import assert_arrow_equal, to_format, undictionarify_table
 
 
 @pytest.mark.parametrize("dynamic_schema", [True, False])
@@ -68,10 +59,10 @@ def test_sparse_arrow_row_range(
     expected = table.slice(offset=row_range_start, length=row_range_width)
     if use_query_builder:
         q = QueryBuilder().row_range(row_range)
-        received = lib.read(sym, query_builder=q, arrow_string_format_per_column=STRING_FORMAT_PER_COLUMN).data
+        received = lib.read(sym, query_builder=q).data
         received_pandas = lib.read(sym, query_builder=q, output_format="PANDAS").data
     else:
-        received = lib.read(sym, row_range=row_range, arrow_string_format_per_column=STRING_FORMAT_PER_COLUMN).data
+        received = lib.read(sym, row_range=row_range).data
         received_pandas = lib.read(sym, row_range=row_range, output_format="PANDAS").data
     assert expected.equals(undictionarify_table(received))
     assert_frame_equal_with_arrow_for_sparse(expected, received_pandas)
@@ -114,10 +105,10 @@ def test_sparse_arrow_date_range(
     expected = table.slice(offset=offset, length=date_range_width)
     if use_query_builder:
         q = QueryBuilder().date_range(date_range)
-        received = lib.read(sym, query_builder=q, arrow_string_format_per_column=STRING_FORMAT_PER_COLUMN).data
+        received = lib.read(sym, query_builder=q).data
         received_pandas = lib.read(sym, query_builder=q, output_format="PANDAS").data.reset_index()
     else:
-        received = lib.read(sym, date_range=date_range, arrow_string_format_per_column=STRING_FORMAT_PER_COLUMN).data
+        received = lib.read(sym, date_range=date_range).data
         received_pandas = lib.read(sym, date_range=date_range, output_format="PANDAS").data.reset_index()
     assert expected.equals(undictionarify_table(received))
     assert_frame_equal_with_arrow_for_sparse(expected, received_pandas)
@@ -161,11 +152,11 @@ def test_sparse_arrow_hypothesis(in_memory_version_store_arrow, df, rows_per_sli
     if use_row_range:
         row_range = (row_count // 3, (2 * row_count) // 3)
         expected = table.slice(offset=row_range[0], length=row_range[1] - row_range[0])
-        received = lib.read(sym, row_range=row_range, arrow_string_format_per_column=STRING_FORMAT_PER_COLUMN).data
+        received = lib.read(sym, row_range=row_range).data
         received_pandas = lib.read(sym, row_range=row_range, output_format="PANDAS").data
     else:
         expected = table
-        received = lib.read(sym, arrow_string_format_per_column=STRING_FORMAT_PER_COLUMN).data
+        received = lib.read(sym).data
         received_pandas = lib.read(sym, output_format="PANDAS").data
     assert expected.equals(undictionarify_table(received))
     assert_frame_equal_with_arrow_for_sparse(expected, received_pandas)
@@ -441,11 +432,7 @@ def test_sparse_append_roundtrip(in_memory_version_store_arrow, write_sparse, ap
         )
     lib.write(sym, to_format(t1, arrow_output_format))
     lib.append(sym, to_format(t2, arrow_output_format))
-    received = lib.read(
-        sym,
-        output_format=arrow_output_format,
-        **string_format_kwargs(arrow_output_format, per_column=STRING_FORMAT_PER_COLUMN),
-    ).data
+    received = lib.read(sym, output_format=arrow_output_format).data
     expected = pa.concat_tables([t1, t2])
     assert_arrow_equal(expected, undictionarify_table(received))
     received_pandas = lib.read(sym, output_format="PANDAS").data
@@ -551,11 +538,7 @@ def test_sparse_update_roundtrip(
     applied_update = update_table.filter(pa.array([start <= t <= end for t in update_ts]))
     expected = pa.concat_tables([write_before, applied_update, write_after])
 
-    received = lib.read(
-        sym,
-        output_format=arrow_output_format,
-        **string_format_kwargs(arrow_output_format, per_column=STRING_FORMAT_PER_COLUMN),
-    ).data
+    received = lib.read(sym, output_format=arrow_output_format).data
     assert_arrow_equal(expected, undictionarify_table(received))
     received_pandas = lib.read(sym, output_format="PANDAS").data.reset_index()
     assert_frame_equal_with_arrow_for_sparse(expected, received_pandas)
@@ -623,7 +606,7 @@ def test_sparse_dynamic_schema_combined(in_memory_store_factory):
     lib.write(sym, t1)
     lib.append(sym, t2)
     lib.append(sym, t3)
-    received = lib.read(sym, arrow_string_format_per_column=STRING_FORMAT_PER_COLUMN).data
+    received = lib.read(sym).data
     str_data_expected = [None, None, None, "d", None, "f", None, None]
     expected = pa.table(
         {

@@ -48,9 +48,8 @@ class InMemoryStore : public Store {
         return storage::OpenMode::DELETE;
     }
 
-    std::vector<folly::Future<pipelines::SegmentAndSlice>>
-    batch_read_uncompressed(std::vector<pipelines::RangesAndKey>&&, std::shared_ptr<std::unordered_set<std::string>>)
-            override {
+    std::function<folly::Future<pipelines::SegmentAndSlice>(pipelines::RangesAndKey&&)>
+    make_uncompressed_reader(std::shared_ptr<std::unordered_set<std::string>>) override {
         throw std::runtime_error("Not implemented for tests");
     }
 

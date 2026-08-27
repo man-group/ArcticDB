@@ -59,14 +59,14 @@ sparrow::array create_timestamp_array(
     }
 }
 
-TEST(ArrowGenerateColumnMetadata, NonTimestamp) {
+TEST(ArrowGenerateColumnMetadata, NonMetadataType) {
     std::vector<uint8_t> data(10);
     std::iota(data.begin(), data.end(), 0U);
     auto array = create_array(data);
     ASSERT_FALSE(generate_column_metadata(array, DataType::UINT8).has_value());
 }
 
-TEST(ArrowGenerateColumnMetadata, TimezoneNaive) {
+TEST(ArrowGenerateColumnMetadataTimestamp, TimezoneNaive) {
     size_t num_rows = 10;
     auto* data_ptr = reinterpret_cast<timestamp*>(allocate_detachable_memory(num_rows * sizeof(timestamp)));
     std::iota(data_ptr, data_ptr + num_rows, 0UL);
@@ -74,9 +74,10 @@ TEST(ArrowGenerateColumnMetadata, TimezoneNaive) {
     auto opt_column_metadata = generate_column_metadata(array, DataType::NANOSECONDS_UTC64);
     ASSERT_TRUE(opt_column_metadata.has_value());
     ASSERT_FALSE(opt_column_metadata->has_timezone());
+    ASSERT_FALSE(opt_column_metadata->has_string_format());
 }
 
-TEST(ArrowGenerateColumnMetadata, TimezoneAware) {
+TEST(ArrowGenerateColumnMetadataTimestamp, TimezoneAware) {
     size_t num_rows = 10;
     auto* data_ptr = reinterpret_cast<timestamp*>(allocate_detachable_memory(num_rows * sizeof(timestamp)));
     std::iota(data_ptr, data_ptr + num_rows, 0UL);
@@ -87,6 +88,42 @@ TEST(ArrowGenerateColumnMetadata, TimezoneAware) {
     ASSERT_TRUE(opt_column_metadata.has_value());
     ASSERT_TRUE(opt_column_metadata->has_timezone());
     ASSERT_EQ(opt_column_metadata->timezone(), tz_str);
+    ASSERT_FALSE(opt_column_metadata->has_string_format());
+}
+
+TEST(ArrowGenerateColumnMetadataStrings, SmallString) {
+    sparrow::array array{sparrow::string_array{std::vector<std::string>{}}};
+    ASSERT_EQ(array.data_type(), sparrow::data_type::STRING);
+    auto opt_column_metadata = generate_column_metadata(array, DataType::UTF_DYNAMIC32);
+    ASSERT_TRUE(opt_column_metadata.has_value());
+    ASSERT_TRUE(opt_column_metadata->has_string_format());
+    ASSERT_EQ(opt_column_metadata->string_format(), proto::descriptors::ArrowStringFormat::SMALL_STRING);
+    ASSERT_FALSE(opt_column_metadata->has_timezone());
+}
+
+TEST(ArrowGenerateColumnMetadataStrings, LargeString) {
+    sparrow::array array{sparrow::big_string_array{std::vector<std::string>{}}};
+    ASSERT_EQ(array.data_type(), sparrow::data_type::LARGE_STRING);
+    auto opt_column_metadata = generate_column_metadata(array, DataType::UTF_DYNAMIC64);
+    ASSERT_TRUE(opt_column_metadata.has_value());
+    ASSERT_TRUE(opt_column_metadata->has_string_format());
+    ASSERT_EQ(opt_column_metadata->string_format(), proto::descriptors::ArrowStringFormat::LARGE_STRING);
+    ASSERT_FALSE(opt_column_metadata->has_timezone());
+}
+
+TEST(ArrowGenerateColumnMetadataStrings, Categorical) {
+    sparrow::array array{sparrow::dictionary_encoded_array<int32_t>{
+            typename sparrow::dictionary_encoded_array<int32_t>::keys_buffer_type(
+                    sparrow::u8_buffer<int32_t>{nullptr, 0, get_detachable_allocator()}
+            ),
+            sparrow::array{sparrow::big_string_array(std::vector<std::string>{"a"})},
+    }};
+    ASSERT_TRUE(array.is_dictionary());
+    auto opt_column_metadata = generate_column_metadata(array, DataType::UTF_DYNAMIC64);
+    ASSERT_TRUE(opt_column_metadata.has_value());
+    ASSERT_TRUE(opt_column_metadata->has_string_format());
+    ASSERT_EQ(opt_column_metadata->string_format(), proto::descriptors::ArrowStringFormat::CATEGORICAL);
+    ASSERT_FALSE(opt_column_metadata->has_timezone());
 }
 
 template<typename types>
@@ -352,6 +389,32 @@ TEST(ArrowDataToSegment, MultiColumnDifferentTypes) {
             }
         });
     }
+}
+
+TEST(ArrowDataToSegment, StringLeadingAndTrailingEmptyRecordBatch) {
+    const std::vector<std::string> strings{"a", "b"};
+    std::vector<sparrow::record_batch> record_batches;
+    record_batches.emplace_back(create_record_batch({{"col", create_array(std::vector<std::string>{})}}));
+    record_batches.emplace_back(create_record_batch({{"col", create_array(strings)}}));
+    record_batches.emplace_back(create_record_batch({{"col", create_array(std::vector<std::string>{})}}));
+
+    proto::descriptors::NormalizationMetadata::ExperimentalArrow arrow_meta;
+    auto [cols, desc] = record_batches_to_columns(record_batches, arrow_meta);
+
+    ASSERT_EQ(cols.size(), 1);
+    const auto& col = cols[0];
+    ASSERT_EQ(col.row_count(), strings.size());
+    ASSERT_EQ(col.last_row(), static_cast<ssize_t>(strings.size()) - 1);
+
+    ASSERT_TRUE(col.has_extra_buffer(0, ExtraBufferType::STRING));
+    auto& string_buffer = col.get_extra_buffer(0, ExtraBufferType::STRING);
+    const std::string concatenated = std::accumulate(strings.cbegin(), strings.cend(), std::string{});
+    ASSERT_EQ(string_buffer.bytes(), concatenated.size());
+    ASSERT_EQ(string_buffer.num_blocks(), 1);
+    ASSERT_EQ(
+            std::string_view(reinterpret_cast<const char*>(string_buffer.block(0)->data()), concatenated.size()),
+            concatenated
+    );
 }
 
 struct AllocationCounter {

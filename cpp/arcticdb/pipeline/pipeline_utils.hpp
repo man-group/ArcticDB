@@ -75,14 +75,15 @@ inline ReadResult create_python_read_result(
         }
     }
 
-    auto get_python_frame = [output_format](auto& result) -> OutputFrame {
-        if (output_format == OutputFormat::ARROW) {
-            return ArrowOutputFrame{segment_to_arrow_data(result.frame_, result.desc_.proto().normalization())};
+    auto get_python_frame = [](auto& result, OutputFormat requested_format) -> OutputFrame {
+        const auto& norm = result.desc_.proto().normalization();
+        if (requested_format == OutputFormat::ARROW) {
+            return ArrowOutputFrame{segment_to_arrow_data(result.frame_, norm)};
         } else {
             return pipelines::PandasOutputFrame{result.frame_};
         }
     };
-    auto python_frame = get_python_frame(result);
+    auto python_frame = get_python_frame(result, output_format);
     util::print_total_mem_usage(__FILE__, __LINE__, __FUNCTION__);
 
     const auto& desc_proto = result.desc_.proto();
@@ -101,7 +102,7 @@ inline ReadResult create_python_read_result(
     std::vector<NodeReadResult> node_results;
     for (auto& node_output : node_outputs) {
         auto& node_fd = node_output.frame_and_descriptor_;
-        auto node_python_frame = get_python_frame(node_fd);
+        auto node_python_frame = get_python_frame(node_fd, output_format);
         auto node_metadata = node_fd.desc_.proto().normalization();
         auto node_sorted = node_fd.desc_.sorted();
         node_results.emplace_back(
@@ -133,7 +134,7 @@ inline std::pair<std::shared_ptr<PipelineContext>, std::shared_ptr<std::any>> pr
     pipeline_context->fetch_index_ = std::move(bitset);
     pipeline_context->ensure_vectors();
 
-    generate_filtered_field_descriptors(pipeline_context, {});
+    pipeline_context->generate_filtered_field_descriptors({});
     pipeline_context->begin()->set_string_pool(frame_and_desc.frame_.string_pool_ptr());
     auto descriptor = std::make_shared<StreamDescriptor>(frame_and_desc.frame_.descriptor());
     pipeline_context->begin()->set_descriptor(std::move(descriptor));

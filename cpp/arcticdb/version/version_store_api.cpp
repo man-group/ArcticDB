@@ -420,19 +420,12 @@ VersionResultVector PythonVersionStore::list_versions(
 namespace {
 
 py::object get_metadata_from_segment(const SegmentInMemory& segment) {
-    py::object pyobj;
     if (segment.has_user_metadata()) {
         // Between v4.5.0 and v5.2.1 we saved this metadata here (commit 516d16968f0)
-        arcticdb::proto::descriptors::UserDefinedMetadata user_meta_proto;
         return python_util::pb_to_python(segment.user_metadata());
-    } else if (segment.metadata()) {
-        // Before v4.5.0 and after v5.2.1 we saved this metadata here
-        arcticdb::proto::descriptors::UserDefinedMetadata user_meta_proto;
-        if (segment.metadata()->UnpackTo(&user_meta_proto)) {
-            return python_util::pb_to_python(user_meta_proto);
-        }
     }
-    return pybind11::none();
+    // Before v4.5.0 and after v5.2.1 we saved this metadata here
+    return python_util::any_metadata_to_py(segment.metadata());
 }
 
 py::object get_metadata_for_snapshot(const std::shared_ptr<Store>& store, const VariantKey& snap_key) {
@@ -1073,7 +1066,7 @@ ReadResult PythonVersionStore::batch_read_and_join(
     );
     return create_python_read_result(
             versions_and_frame.versioned_items_,
-            read_options.output_format(),
+            read_options.output_format_for_frame(),
             std::move(versions_and_frame.frame_and_descriptor_),
             std::move(versions_and_frame.metadatas_)
     );
@@ -1126,7 +1119,7 @@ ReadResult PythonVersionStore::read_dataframe_version(
             read_dataframe_version_internal(stream_id, version_query, read_query, read_options, handler_data);
     return create_python_read_result(
             opt_version_and_frame.root_.versioned_item_,
-            read_options.output_format(),
+            read_options.output_format_for_frame(),
             std::move(opt_version_and_frame.root_.frame_and_descriptor_),
             std::nullopt,
             std::move(opt_version_and_frame.nodes_)
@@ -1546,7 +1539,7 @@ ReadResult read_dataframe_from_file(
 
     return create_python_read_result(
             opt_version_and_frame.versioned_item_,
-            read_options.output_format(),
+            read_options.output_format_for_frame(),
             std::move(opt_version_and_frame.frame_and_descriptor_)
     );
 }
@@ -1592,6 +1585,13 @@ VersionedItem PythonVersionStore::compact_data(
         const StreamId& stream_id, std::optional<uint64_t> rows_per_segment, bool prune_previous_versions
 ) {
     return compact_data_internal(stream_id, rows_per_segment, prune_previous_versions);
+}
+
+std::vector<std::variant<VersionedItem, DataError>> PythonVersionStore::batch_compact_data(
+        const std::vector<StreamId>& stream_ids, std::optional<uint64_t> rows_per_segment, bool prune_previous_versions,
+        bool throw_on_error
+) {
+    return batch_compact_data_internal(stream_ids, rows_per_segment, prune_previous_versions, throw_on_error);
 }
 
 } // namespace arcticdb::version_store

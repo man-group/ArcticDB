@@ -16,6 +16,8 @@
 #include <arcticdb/toolbox/library_tool.hpp>
 #include <arcticdb/toolbox/query_stats.hpp>
 #include <arcticdb/toolbox/storage_mover.hpp>
+#include <arcticdb/python/python_utils.hpp>
+#include <arcticdb/entity/protobufs.hpp>
 
 namespace arcticdb::toolbox::apy {
 
@@ -56,6 +58,19 @@ void register_bindings(py::module& m, py::exception<arcticdb::ArcticException>& 
             .def("count_keys", &LibraryTool::count_keys)
             .def("get_key_path", &LibraryTool::get_key_path)
             .def("find_keys_for_id", &LibraryTool::find_keys_for_id)
+            .def("list_storage_locks",
+                 [](LibraryTool& self) {
+                     py::list result;
+                     for (auto& info : self.list_storage_locks()) {
+                         py::dict d;
+                         d["name"] = info.name;
+                         d["timestamp"] = info.acquire_time;
+                         d["active"] = info.active;
+                         d["metadata"] = python_util::any_metadata_to_py(info.metadata);
+                         result.append(std::move(d));
+                     }
+                     return result;
+                 })
             .def("clear_ref_keys", &LibraryTool::clear_ref_keys)
             .def("batch_key_exists", &LibraryTool::batch_key_exists, py::call_guard<SingleThreadMutexHolder>())
             .def("inspect_env_variable", &LibraryTool::inspect_env_variable)
@@ -126,10 +141,32 @@ void register_bindings(py::module& m, py::exception<arcticdb::ArcticException>& 
     tools.add_object("CompactionLockName", py::str(arcticdb::CompactionLockName));
 
     py::class_<StorageLockWrapper>(tools, "StorageLock")
-            .def("lock", &StorageLockWrapper::lock)
+            .def(
+                    "lock",
+                    [](StorageLockWrapper& self, const py::object& metadata) {
+                        self.lock(python_util::py_metadata_to_any(metadata));
+                    },
+                    py::arg("metadata") = py::none()
+            )
             .def("unlock", &StorageLockWrapper::unlock)
-            .def("lock_timeout", &StorageLockWrapper::lock_timeout)
-            .def("try_lock", &StorageLockWrapper::try_lock);
+            .def(
+                    "lock_timeout",
+                    [](StorageLockWrapper& self, size_t timeout_ms, const py::object& metadata) {
+                        self.lock_timeout(timeout_ms, python_util::py_metadata_to_any(metadata));
+                    },
+                    py::arg("timeout_ms"),
+                    py::arg("metadata") = py::none()
+            )
+            .def(
+                    "try_lock",
+                    [](StorageLockWrapper& self, const py::object& metadata) {
+                        return self.try_lock(python_util::py_metadata_to_any(metadata));
+                    },
+                    py::arg("metadata") = py::none()
+            )
+            .def("read_metadata",
+                 [](StorageLockWrapper& self) { return python_util::any_metadata_to_py(self.read_metadata()); })
+            .def("_test_release_local_lock", &StorageLockWrapper::_test_release_local_lock);
 
     using namespace arcticdb::query_stats;
     auto query_stats_module = tools.def_submodule("query_stats", "Query stats functionality");

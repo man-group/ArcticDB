@@ -215,12 +215,11 @@ inline void fill_test_frame(
     auto field = segment.descriptor().begin();
     auto desc = frame.desc().clone();
     std::vector<entity::NativeTensor> field_tensors;
-    std::optional<entity::NativeTensor> index_tensor;
 
     if (frame.has_index()) {
         visit_field(*field, [&](auto type_desc_tag) {
             using DTT = typename decltype(type_desc_tag)::DataTypeTag;
-            index_tensor = fill_test_column(segment.column(0), DTT{}, num_rows, start_val, true);
+            field_tensors.emplace_back(fill_test_column(segment.column(0), DTT{}, num_rows, start_val, true));
         });
         std::advance(field, 1);
     }
@@ -237,7 +236,7 @@ inline void fill_test_frame(
             ));
         });
     }
-    frame.set_from_tensors(std::move(desc), std::move(field_tensors), std::move(index_tensor));
+    frame.set_from_tensors(std::move(desc), std::move(field_tensors));
     segment.set_row_data(num_rows - 1);
 }
 

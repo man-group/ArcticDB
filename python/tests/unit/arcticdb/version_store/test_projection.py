@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from arcticdb_ext.exceptions import InternalException, UserInputException
+from arcticdb_ext.exceptions import SchemaException, UserInputException
 from arcticdb.exceptions import ArcticNativeException
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb.util.test import assert_frame_equal, make_dynamic, regularize_dataframe
@@ -26,7 +26,7 @@ def test_project_column_not_present(lmdb_version_store_v1, any_output_format):
     q = q.apply("new", q["b"] + 1)
     symbol = "test_project_column_not_present"
     lib.write(symbol, df)
-    with pytest.raises(InternalException):
+    with pytest.raises(SchemaException):
         _ = lib.read(symbol, query_builder=q)
 
 

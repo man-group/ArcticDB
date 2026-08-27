@@ -11,6 +11,7 @@ import pandas as pd
 import pytest
 
 from arcticdb.exceptions import ArcticNativeException
+from arcticdb.util.test import config_context
 from arcticdb_ext.storage import KeyType, NoDataFoundException
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb_ext.exceptions import InternalException, StorageException, UserInputException
@@ -137,9 +138,10 @@ def test_filter_batch_missing_keys(lmdb_version_store_v1, any_output_format):
     df3 = pd.DataFrame({"a": [5, 7, 9]})
     lib.write("s1", df1)
     lib.write("s2", df2)
-    # Need two versions for this symbol as we're going to delete a version key, and the optimisation of storing the
-    # latest index key in the version ref key means it will still work if we just write one version key and then delete
-    # it
+    # Need three versions for this symbol as we're going to delete a version key, and the optimisation of storing
+    # the latest two index keys in the version ref key means it will still work if we just write two version keys
+    # and then delete the oldest
+    lib.write("s3", df3)
     lib.write("s3", df3)
     lib.write("s3", df3)
     lib_tool = lib.library_tool()
@@ -156,5 +158,7 @@ def test_filter_batch_missing_keys(lmdb_version_store_v1, any_output_format):
 
     # The exception thrown is different for missing version keys to everything else, and so depends on which symbol is
     # processed first
-    with pytest.raises((NoDataFoundException, StorageException)):
-        lib.batch_read(["s1", "s2", "s3"], [None, None, 0], query_builder=q)
+    # Disable version map cache so the read hits storage and sees the missing keys
+    with config_context("VersionMap.ReloadInterval", 0):
+        with pytest.raises((NoDataFoundException, StorageException)):
+            lib.batch_read(["s1", "s2", "s3"], [None, None, 0], query_builder=q)

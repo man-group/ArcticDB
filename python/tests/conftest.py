@@ -58,6 +58,7 @@ from arcticdb_ext import set_config_int, unset_config_int
 import arcticdb_ext.cpp_async as adb_async
 from arcticdb_ext.cpp_async import reinit_task_scheduler
 from arcticdb.version_store._normalization import MsgPackNormalizer
+from arcticdb.version_store._string_dtype import _ARROW_BACKED_STR_DTYPE_SUPPORTED
 from arcticdb.util.test import create_df, CustomThing, TestCustomNormalizer
 from arcticdb.arctic import Arctic
 from tests.util.marking import Mark
@@ -142,6 +143,14 @@ _faulthandler_file = None  # kept open so faulthandler can write to the fd
 
 # silence warnings about custom markers
 def pytest_configure(config):
+    if os.environ.get("ARCTICDB_PYTEST_INFER_STRING") == "1":
+        if not _ARROW_BACKED_STR_DTYPE_SUPPORTED:
+            raise pytest.UsageError(
+                f"ARCTICDB_PYTEST_INFER_STRING=1 requires pandas>=2.3 for the arrow-backed str dtype, "
+                f"but found pandas {pd.__version__}"
+            )
+        pd.set_option("future.infer_string", True)
+
     config.addinivalue_line("markers", "storage: Mark tests related to storage functionality")
     config.addinivalue_line("markers", "authentication: Mark tests related to authentication functionality")
     config.addinivalue_line("markers", "pipeline: Mark tests related to pipeline functionality")
@@ -300,6 +309,18 @@ def only_test_encoding_version_v1(request):
     ],
 )
 def encoding_version(request):
+    return request.param
+
+
+@pytest.fixture(params=[False, True], ids=["read_object", "read_str"])
+def read_string_dtype(request):
+    if request.param and not _ARROW_BACKED_STR_DTYPE_SUPPORTED:
+        pytest.skip("pandas too old for the arrow-backed str dtype (StringDtype na_value, added in 2.3)")
+    return request.param
+
+
+@pytest.fixture(params=[False, True], ids=["consolidate", "skip_consolidation"])
+def skip_consolidation(request):
     return request.param
 
 
@@ -635,8 +656,28 @@ def route_env_to_extension(monkeypatch):
     if os.name == "nt":
         from arcticdb_ext.tools import putenv_s
 
-        monkeypatch.setattr(os, "putenv", putenv_s)
-        monkeypatch.setattr(os, "unsetenv", lambda n: putenv_s(n, ""))
+        routed = set()
+
+        def putenv(name, value):
+            routed.add(name)
+            putenv_s(name, value)
+
+        monkeypatch.setattr(os, "putenv", putenv)
+        monkeypatch.setattr(os, "unsetenv", lambda n: putenv(n, ""))
+
+        undo = monkeypatch.undo
+
+        # The undo wrapper is there because monkeypatch cleans up in two stages, in an unhelpful
+        # order for us: it restores patched functions first (unsetenv and putenv), then the
+        # environment variables. So by the time it's restoring env vars, the hooks are already gone
+        # and the restore has only been done on the Python's copy. The arcticdb binaries would keep
+        # the test's value for the rest of the session and leak it into later tests, causing flaky tests
+        def undo_and_resync():
+            undo()  # undo() restore only the Python's copy of the environment
+            for name in routed:
+                putenv_s(name, os.environ.get(name, ""))
+
+        monkeypatch.undo = undo_and_resync
     yield
 
 
@@ -1300,7 +1341,8 @@ def arrow_output_format(request) -> OutputFormat:
     return request.param
 
 
-@pytest.fixture(params=list(ArrowOutputStringFormat))
+# ArrowOutputStringFormat.UNSPECIFIED has its own specific tests
+@pytest.fixture(params=[f for f in ArrowOutputStringFormat if f is not ArrowOutputStringFormat.UNSPECIFIED])
 def any_arrow_string_format(request) -> ArrowOutputStringFormat:
     return request.param
 

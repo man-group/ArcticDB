@@ -26,9 +26,14 @@
 #include <arcticdb/entity/read_result.hpp>
 #include <arcticdb/util/constructors.hpp>
 #include <arcticdb/version/version_tasks.hpp>
+#include <arcticdb/version/admission_handler.hpp>
+#include <arcticdb/pipeline/frame_slice.hpp>
+#include <folly/futures/Future.h>
+#include <memory>
 #include <string>
 #include <chrono>
 #include <arcticdb/util/configs_map.hpp>
+#include <vector>
 
 namespace arcticdb::version_store {
 
@@ -82,20 +87,13 @@ FrameAndDescriptor read_column_stats_impl(const std::shared_ptr<Store>& store, c
 
 ColumnStats get_column_stats_info_impl(const std::shared_ptr<Store>& store, const VersionedItem& versioned_item);
 
-folly::Future<ReadVersionOutput> read_multi_key(
-        const std::shared_ptr<Store>& store, const ReadOptions& read_options, const SegmentInMemory& index_key_seg,
-        std::shared_ptr<std::any> handler_data
-);
-
 folly::Future<std::vector<EntityId>> schedule_remaining_iterations(
         std::vector<std::vector<EntityId>>&& entity_ids_vec_fut,
         std::shared_ptr<std::vector<std::shared_ptr<Clause>>> clauses
 );
 
 folly::Future<std::vector<EntityId>> schedule_clause_processing(
-        std::shared_ptr<ComponentManager> component_manager,
-        std::vector<folly::Future<pipelines::SegmentAndSlice>>&& segment_and_slice_futures,
-        std::vector<std::vector<size_t>>&& processing_unit_indexes,
+        std::shared_ptr<ComponentManager> component_manager, std::shared_ptr<ProcessingUnitAdmissionHandler> admission,
         std::shared_ptr<std::vector<std::shared_ptr<Clause>>> clauses
 );
 
@@ -135,6 +133,10 @@ std::variant<VersionedItem, CompactionError> sort_merge_impl(
 );
 
 void add_index_columns_to_query(const ReadQuery& read_query, const TimeseriesDescriptor& desc);
+
+ReadOptions modify_read_options_from_norm_meta(
+        const proto::descriptors::NormalizationMetadata& norm_meta, const ReadOptions& read_options
+);
 
 folly::Future<ReadVersionOutput> read_frame_for_version(
         const std::shared_ptr<Store>& store, const VersionIdentifier& version_info,
@@ -246,14 +248,14 @@ template<
         const std::shared_ptr<Store>& store, std::optional<size_t> segment_size, const CompactionOptions& options
 ) {
     CompactionResult result;
-    auto index = stream::index_type_from_descriptor(pipeline_context->descriptor());
+    auto index = stream::index_type_from_descriptor(pipeline_context->on_disk_descriptor());
 
     std::vector<folly::Future<VariantKey>> write_futures;
 
     auto semaphore = std::make_shared<folly::NativeSemaphore>(n_segments_live_during_compaction());
     stream::SegmentAggregator<IndexType, SchemaType, SegmentationPolicy, DensityPolicy> aggregator{
             [&slices](pipelines::FrameSlice&& slice) { slices.emplace_back(std::move(slice)); },
-            SchemaType{pipeline_context->descriptor(), index},
+            SchemaType{pipeline_context->on_disk_descriptor(), index},
             [&write_futures, &store, &pipeline_context, &semaphore](SegmentInMemory&& segment) {
                 auto local_index_start = IndexType::start_value_for_segment(segment);
                 auto local_index_end = pipelines::end_index_generator(IndexType::end_value_for_segment(segment));
@@ -321,7 +323,7 @@ template<
                 segment.descriptor().uncompressed_bytes()
         );
 
-        if (!index_names_match(segment.descriptor(), pipeline_context->descriptor())) {
+        if (!index_names_match(segment.descriptor(), pipeline_context->on_disk_descriptor())) {
             auto written_keys = folly::collect(write_futures).get();
             remove_written_keys(store.get(), std::move(written_keys));
             return Error{
@@ -329,7 +331,7 @@ template<
                     fmt::format(
                             "Index names in segment {} and pipeline context {} do not match",
                             segment.descriptor(),
-                            pipeline_context->descriptor()
+                            pipeline_context->on_disk_descriptor()
                     )
             };
         }
@@ -343,7 +345,7 @@ template<
         if constexpr (std::is_same_v<SchemaType, FixedSchema>) {
             if (options.perform_schema_checks) {
                 CheckOutcome outcome = check_schema_matches_incomplete(
-                        segment.descriptor(), pipeline_context->descriptor(), options.convert_int_to_float
+                        segment.descriptor(), pipeline_context->on_disk_descriptor(), options.convert_int_to_float
                 );
                 if (std::holds_alternative<Error>(outcome)) {
                     auto written_keys = folly::collect(write_futures).get();

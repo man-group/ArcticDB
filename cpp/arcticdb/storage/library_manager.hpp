@@ -20,7 +20,8 @@ enum class ModifiableLibraryOption {
     DEDUP = 1,
     ROWS_PER_SEGMENT = 2,
     COLUMNS_PER_SEGMENT = 3,
-    RECURSIVE_NORMALIZERS = 4
+    RECURSIVE_NORMALIZERS = 4,
+    PRUNE_PREVIOUS_VERSIONS = 5
 };
 enum class ModifiableEnterpriseLibraryOption { REPLICATION = 1, BACKGROUND_DELETION = 2 };
 using LibraryOptionValue = std::variant<bool, int64_t>;
@@ -108,6 +109,8 @@ struct formatter<arcticdb::storage::ModifiableLibraryOption> {
             return fmt::format_to(ctx.out(), "COLUMNS_PER_SEGMENT");
         case arcticdb::storage::ModifiableLibraryOption::RECURSIVE_NORMALIZERS:
             return fmt::format_to(ctx.out(), "RECURSIVE_NORMALIZERS");
+        case arcticdb::storage::ModifiableLibraryOption::PRUNE_PREVIOUS_VERSIONS:
+            return fmt::format_to(ctx.out(), "PRUNE_PREVIOUS_VERSIONS");
         default:
             arcticdb::util::raise_rte("Unrecognized modifiable option {}", int(o));
         }

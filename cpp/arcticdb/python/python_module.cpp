@@ -35,6 +35,12 @@
 
 #include <logger.pb.h>
 
+#include <atomic>
+
+// Python 3.12 raises its own DeprecationWarning when a multi-threaded process forks, but attributes it
+// to the caller of os.fork(), so for multiprocessing the default filters drop it. We warn instead.
+#define ARCTICDB_PY_FORK_DEPRECATED_HEX 0x030C0000
+
 namespace py = pybind11;
 
 void register_configs_map_api(py::module& m) {
@@ -198,6 +204,46 @@ void reinit_lmdb_warning() {
     arcticdb::storage::lmdb::LmdbStorage::reset_warning_counter();
 }
 
+// Windows has no fork(), so there is nothing to warn about there.
+//
+// macOS is excluded too: pthread_atfork handlers cannot tell a plain fork() from a fork() that is
+// immediately followed by exec() in the child, and on macOS CPython's subprocess/multiprocessing
+// routinely fork() for that fork+exec case (e.g. subprocess.run with a non-default env, or the
+// spawn/forkserver start methods)
+#if !defined(WIN32) && !defined(__APPLE__) && PY_VERSION_HEX >= ARCTICDB_PY_FORK_DEPRECATED_HEX
+
+static std::atomic_flag warned_about_fork;
+
+// Registered as a prepare handler so that it runs in the parent. Logging from a child handler can
+// hang: the sink's mutex may be inherited locked, and an async logger has no flusher thread there.
+void warn_about_fork() {
+    using namespace arcticdb;
+    // Importing arcticdb, and even creating libraries, starts no pool threads, so there would be
+    // nothing to warn about. This also keeps a multiprocessing forkserver quiet: it forks every
+    // worker, but does no ArcticDB work itself.
+    if (!async::io_pool_thread_started.load(std::memory_order_relaxed)) {
+        return;
+    }
+    if (ConfigsMap::instance()->get_int("Fork.WarnOnFork", 1) == 0) {
+        return;
+    }
+    if (warned_about_fork.test_and_set(std::memory_order_relaxed)) {
+        return;
+    }
+    log::version().warn(
+            "fork() called in a process using ArcticDB. ArcticDB and the storage SDKs run background threads "
+            "which are not duplicated into the child, so Arctic, Library and NativeVersionStore objects created "
+            "before the fork must not be used in the child; doing so may deadlock or crash. Create a new Arctic "
+            "instance in the child, or use the 'spawn' multiprocessing start method. Later forks are not logged. "
+            "Set Fork.WarnOnFork to 0 to silence this warning."
+    );
+}
+
+void register_fork_warning() { pthread_atfork(&warn_about_fork, nullptr, nullptr); }
+#else
+void register_fork_warning() {}
+#endif
+
 void register_instrumentation(py::module&& m) {
     auto remotery = m.def_submodule("remotery");
 #if defined(USE_REMOTERY)
@@ -227,6 +273,7 @@ PYBIND11_MODULE(arcticdb_ext, m) {
     pthread_atfork(nullptr, nullptr, &reinit_lmdb_warning);
     pthread_atfork(nullptr, nullptr, &register_python_handler_data_factory);
 #endif
+    register_fork_warning();
     // Set up the global exception handlers first, so module-specific exception handler can override it:
     auto exceptions = m.def_submodule("exceptions");
     auto base_exception =

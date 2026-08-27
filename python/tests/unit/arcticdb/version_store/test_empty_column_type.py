@@ -14,7 +14,13 @@ import numpy as np
 import pytest
 from packaging.version import Version
 from arcticdb.util._versions import PANDAS_VERSION
+from arcticdb.version_store._string_dtype import _use_pyarrow_strings_in_pandas
 from arcticdb_ext.exceptions import NormalizationException
+
+pyarrow_strings_empty_string_skip = pytest.mark.skipif(
+    _use_pyarrow_strings_in_pandas(),
+    reason="Monday ref 12853004116, Mix of EMPTYVAL segments and string-typed segments not yet supported with arrow",
+)
 
 
 class DtypeGenerator:
@@ -170,6 +176,7 @@ class TestCanAppendToColumnWithNones:
         )
         assert_frame_equal(lmdb_version_store_static_and_dynamic.read("sym", row_range=[2, 5]).data, df_non_empty)
 
+    @pyarrow_strings_empty_string_skip
     def test_string(self, lmdb_version_store_static_and_dynamic):
         df_non_empty = pd.DataFrame({"col": np.array(["some_string", "long_string" * 100])})
         lmdb_version_store_static_and_dynamic.append("sym", df_non_empty)
@@ -276,6 +283,7 @@ class TestCanAppendColumnWithNonesToColumn:
         assert_frame_equal(lmdb_version_store_static_and_dynamic.tail("sym", n=1).data, expected_tail)
         assert_frame_equal(lmdb_version_store_static_and_dynamic.head("sym", n=1).data, expected_df.head(n=1))
 
+    @pyarrow_strings_empty_string_skip
     def test_string(self, lmdb_version_store_static_and_dynamic):
         df_initial = pd.DataFrame({"col": np.array(["some_string", "long_string" * 100, ""]), "other": [1, 2, 3]})
         df_with_none = pd.DataFrame({"col": np.array([None, None]), "other": [4, 5]})
@@ -401,6 +409,7 @@ class TestCanUpdateNones:
             pd.DataFrame({"col": [None]}, dtype=boolean_dtype, index=[pd.to_datetime("1/1/2024")]),
         )
 
+    @pyarrow_strings_empty_string_skip
     def test_string(self, lmdb_version_store_static_and_dynamic):
         lmdb_version_store_static_and_dynamic.update(
             "sym", pd.DataFrame({"col": ["a", 20 * "long_string"]}, index=self.update_index())
@@ -506,6 +515,7 @@ class TestCanUpdateWithNone:
             pd.DataFrame({"col": [True, None, None, True]}, index=self.index(), dtype=boolean_dtype),
         )
 
+    @pyarrow_strings_empty_string_skip
     def test_string(self, lmdb_version_store_static_and_dynamic):
         lmdb_version_store_static_and_dynamic.write(
             "sym", pd.DataFrame({"col": ["a", "longstr" * 20, "b", "longstr" * 20]}, index=self.index())

@@ -204,7 +204,7 @@ void check_arrow_column_metadata(
     if (!dynamic_schema) {
         const auto& old_col_meta_map = old_norm.columns();
         auto& new_col_meta_map = *new_norm.mutable_columns();
-        // Column metadata must match exactly
+        // Column metadata must match exactly except for string formats, which are last writer wins
         bool should_raise{old_col_meta_map.size() != new_col_meta_map.size()};
         if (!should_raise) {
             for (const auto& [col_name, old_col_meta] : old_col_meta_map) {
@@ -212,10 +212,17 @@ void check_arrow_column_metadata(
                     should_raise = true;
                     break;
                 } else {
-                    if (!google::protobuf::util::MessageDifferencer::Equals(old_col_meta, it->second)) {
+                    // Timezones must match exactly
+                    if (old_col_meta.has_timezone()) {
+                        if (!it->second.has_timezone() || old_col_meta.timezone() != it->second.timezone()) {
+                            should_raise = true;
+                            break;
+                        }
+                    } else if (it->second.has_timezone()) {
                         should_raise = true;
                         break;
                     }
+                    // String formats take the input frames norm meta, so no work to do here
                 }
             }
         }

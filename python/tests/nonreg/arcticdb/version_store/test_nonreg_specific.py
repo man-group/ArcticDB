@@ -16,6 +16,7 @@ from arcticdb import QueryBuilder
 from arcticdb.exceptions import UserInputException
 import arcticdb.toolbox.query_stats as qs
 from arcticdb.util.test import assert_frame_equal, assert_series_equal, config_context
+from arcticdb.version_store._string_dtype import _use_pyarrow_strings_in_pandas
 from arcticdb.version_store.library import Library
 from arcticdb_ext import set_config_int
 import arcticdb_ext.cpp_async as adb_async
@@ -97,6 +98,9 @@ def test_update_int_nan(object_and_mem_and_lmdb_version_store_dynamic_schema):
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="SKIP_WIN Only dynamic strings are supported on Windows")
+@pytest.mark.skipif(
+    _use_pyarrow_strings_in_pandas(), reason="Fixed-width strings unsupported with string dtype columns"
+)
 @pytest.mark.storage
 def test_append_dynamic_to_fixed_width_strings(object_and_mem_and_lmdb_version_store_dynamic_schema):
     lib = object_and_mem_and_lmdb_version_store_dynamic_schema
@@ -148,6 +152,9 @@ def test_append_fixed_width_to_dynamic_strings(object_and_mem_and_lmdb_version_s
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="SKIP_WIN Only dynamic strings are supported on Windows")
+@pytest.mark.skipif(
+    _use_pyarrow_strings_in_pandas(), reason="Fixed-width strings unsupported with string dtype columns"
+)
 @pytest.mark.storage
 def test_update_dynamic_to_fixed_width_strings(object_and_mem_and_lmdb_version_store_dynamic_schema):
     lib = object_and_mem_and_lmdb_version_store_dynamic_schema
@@ -310,9 +317,11 @@ def test_date_range_multi_index(lmdb_version_store):
     )
     lib.write(sym, existing_df)
 
+    # Empty slice of a string index rather than a bare [], so the level's dtype matches whatever pandas infers
+    # for strings: object without future.infer_string, str with it.
     expected_df = pd.DataFrame(
         {"col": pd.Series([], dtype=np.int64)},
-        index=pd.MultiIndex.from_arrays([pd.DatetimeIndex([]), []], names=["dt_level", "str_level"]),
+        index=pd.MultiIndex.from_arrays([pd.DatetimeIndex([]), pd.Index(["a"])[:0]], names=["dt_level", "str_level"]),
     )
     result_df = lib.read(sym, date_range=DateRange(pd.Timestamp("2099-01-01"), pd.Timestamp("2099-01-02"))).data
     assert_frame_equal(result_df, expected_df)
@@ -329,6 +338,7 @@ def test_date_range_multi_index(lmdb_version_store):
         "batch_write",
         "batch_append",
         "batch_write_metadata",
+        "batch_compact_data",
     ),
 )
 @pytest.mark.parametrize("lib_config", (True, False))
@@ -350,12 +360,12 @@ def test_prune_previous_general(version_store_factory, monkeypatch, method, lib_
 
     df_1 = pd.DataFrame({"col": np.arange(10)}, index=pd.date_range("2024-01-11", periods=10))
     arg_0 = [sym] if method.startswith("batch") else sym
-    if method.startswith("batch"):
-        arg_1 = [df_1]
-    elif method == "compact_data":
+    if method.endswith("compact_data"):
         # Prune previous on this call so that we start with 1 index key for the method under test
         lib.append(sym, df_1, prune_previous_version=True)
         arg_1 = 100_000  # rows_per_segment
+    elif method.startswith("batch"):
+        arg_1 = [df_1]
     else:
         arg_1 = df_1
     getattr(lib, method)(arg_0, arg_1, prune_previous_version=arg)
@@ -503,7 +513,7 @@ def test_resampling_non_timeseries(lmdb_version_store_v1):
     df = pd.DataFrame({"col": np.arange(10)})
     lib.write(sym, df)
     q = QueryBuilder().resample("1min").agg({"col": "sum"})
-    with pytest.raises(UserInputException):
+    with pytest.raises(SchemaException):
         lib.read(sym, query_builder=q)
     q = (
         QueryBuilder()
@@ -511,7 +521,7 @@ def test_resampling_non_timeseries(lmdb_version_store_v1):
         .resample("1min")
         .agg({"col": "sum"})
     )
-    with pytest.raises(UserInputException) as e:
+    with pytest.raises(SchemaException) as e:
         lib.read(sym, query_builder=q)
     assert "std::length_error(vector::reserve)" not in str(e.value)
 

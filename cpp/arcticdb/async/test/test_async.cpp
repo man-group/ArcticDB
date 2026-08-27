@@ -310,6 +310,35 @@ TEST(Async, DynamicSizing) {
     (void)std::move(f2).get();
 }
 
+TEST(Async, DefaultThreadCounts) {
+    {
+        ScopedConfig cpu_config({{"VersionStore.NumCPUThreads", std::nullopt}});
+        ScopedConfig io_config({{"VersionStore.NumIOThreads", std::nullopt}});
+        ASSERT_EQ(
+                arcticdb::async::get_default_io_count(),
+                static_cast<int>(arcticdb::async::get_default_cpu_count() * 1.5)
+        );
+    }
+    {
+        ScopedConfig cpu_config("VersionStore.NumCPUThreads", 7);
+        ASSERT_EQ(arcticdb::async::get_default_cpu_count(), 7);
+    }
+    {
+        ScopedConfig io_config("VersionStore.NumIOThreads", 11);
+        ASSERT_EQ(arcticdb::async::get_default_io_count(), 11);
+        ASSERT_EQ(arcticdb::async::get_default_io_count(5), 11);
+    }
+    {
+        ScopedConfig io_config({{"VersionStore.NumIOThreads", std::nullopt}});
+        ASSERT_EQ(arcticdb::async::get_default_io_count(5), 7);
+    }
+}
+
+TEST(Async, IsInitialized) {
+    ASSERT_TRUE(arcticdb::async::TaskScheduler::instance() != nullptr);
+    ASSERT_TRUE(arcticdb::async::TaskScheduler::is_initialized());
+}
+
 TEST(Async, NumCoresCgroupV1) {
     std::string test_path{"./test_v1"};
     std::string cpu_quota_path{"./test_v1/cpu/cpu.cfs_quota_us"};

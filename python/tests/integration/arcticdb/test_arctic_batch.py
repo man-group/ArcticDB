@@ -9,12 +9,11 @@ As of the Change Date specified in that file, in accordance with the Business So
 import pytz
 from arcticdb_ext.exceptions import ErrorCode, ErrorCategory
 
-from arcticdb.version_store import VersionedItem as PythonVersionedItem
 from arcticdb_ext.storage import KeyType
 from arcticdb_ext.version_store import VersionRequestType
 
 from arcticdb.options import LibraryOptions
-from arcticdb import QueryBuilder, DataError
+from arcticdb import QueryBuilder, DataError, VersionedItem
 from arcticdb_ext.version_store import AtomKey, RefKey
 from arcticdb.toolbox.library_tool import LibraryTool
 
@@ -400,7 +399,7 @@ def test_write_batch(library_factory):
         list_dataframes[sym] = df
 
     write_batch_result = lib.write_batch(write_requests)
-    assert all(type(w) == PythonVersionedItem for w in write_batch_result)
+    assert all(type(w) == VersionedItem for w in write_batch_result)
 
     read_batch_result = lib.read_batch(read_requests)
     for sym in range(num_symbols):
@@ -433,7 +432,7 @@ def test_write_batch_dedup(library_factory):
             read_requests.append("symbol_" + str(sym))
             list_dataframes[sym] = df
         write_batch_result = lib.write_batch(write_requests)
-        assert all(type(w) == PythonVersionedItem for w in write_batch_result)
+        assert all(type(w) == VersionedItem for w in write_batch_result)
 
     read_batch_result = lib.read_batch(read_requests)
     for sym in range(num_symbols):
@@ -661,7 +660,7 @@ def test_append_batch(library_factory, compact_data):
 
     # When a symbol doesn't exist, we expect it to be created. In effect, append_batch functions as write_batch
     batch = lib.append_batch(list_append_requests, compact_data=compact_data)
-    assert all(type(w) == PythonVersionedItem for w in batch)
+    assert all(type(w) == VersionedItem for w in batch)
 
     # Then
     for sym in range(num_symbols):
@@ -680,7 +679,7 @@ def test_append_batch(library_factory, compact_data):
 
     # When the symbol already exists, we expect the current dataframe to be appended to the previous dataframe
     batch = lib.append_batch(list_append_requests, compact_data=compact_data)
-    assert all(type(w) == PythonVersionedItem for w in batch)
+    assert all(type(w) == VersionedItem for w in batch)
 
     # Then
     for sym in range(num_symbols):
@@ -895,7 +894,7 @@ def test_read_batch_as_of(arctic_library):
     # Then
     assert batch[0].data.empty
     assert not batch[1].data.empty
-    assert type(batch[1]) == PythonVersionedItem
+    assert type(batch[1]) == VersionedItem
 
 
 @pytest.mark.storage
@@ -1080,7 +1079,9 @@ def test_read_batch_missing_keys(arctic_library):
     lib_tool.remove(s2_data_key)
     lib_tool.remove(s3_key_to_delete)
     # When
-    batch = lib.read_batch(["s1", "s2", ReadRequest("s3", as_of=0)])
+    # Disable version map cache so the read hits storage and sees the missing keys
+    with config_context("VersionMap.ReloadInterval", 0):
+        batch = lib.read_batch(["s1", "s2", ReadRequest("s3", as_of=0)])
     # Then
     assert isinstance(batch[0], DataError)
     assert batch[0].symbol == "s1"
@@ -1219,7 +1220,9 @@ def test_get_description_batch_missing_keys(arctic_library):
     lib_tool.remove(s2_key_to_delete)
 
     # When
-    batch = lib.get_description_batch(["s1", ReadInfoRequest("s2", as_of=0), "s3"])
+    # Disable version map cache so the read hits storage and sees the missing keys
+    with config_context("VersionMap.ReloadInterval", 0):
+        batch = lib.get_description_batch(["s1", ReadInfoRequest("s2", as_of=0), "s3"])
 
     # Then
     assert isinstance(batch[0], DataError)
@@ -1680,3 +1683,68 @@ def test_read_batch_mixed_with_snapshots(arctic_library):
     assert_frame_equal(vits[4].data, expected)
     expected = dataframe_for_offset(4, 6)
     assert_frame_equal(vits[5].data, expected)
+
+
+# V1 API equivalent tested in test_nonreg_specifc.py::test_prune_previous_general
+@pytest.mark.parametrize("prune_previous_versions", [True, False])
+def test_compact_data_batch_prune_previous(lmdb_library, prune_previous_versions):
+    lib = lmdb_library
+    syms = [f"test_compact_data_batch_prune_previous_{i}" for i in range(3)]
+    lib.write_batch([WritePayload(sym, pd.DataFrame({"col": [0]})) for sym in syms])
+    lib.append_batch([WritePayload(sym, pd.DataFrame({"col": [1]})) for sym in syms])
+    lib_tool = lib._nvs.library_tool()
+    # 2 per symbol
+    assert len(lib_tool.find_keys(KeyType.TABLE_INDEX)) == 6
+    lib.compact_data_batch(syms, prune_previous_versions=prune_previous_versions)
+    assert len(lib_tool.find_keys(KeyType.TABLE_INDEX)) == (3 if prune_previous_versions else 9)
+
+
+# These compact_data_batch tests have equivalents in test_compact_data.py for the V1 API. This tests the V1 vs V2 API
+# differences, namely:
+# * DataError objects returned when one symbol fails, rather than the whole method raising
+# * Exception raised on duplicated symbol names
+def test_compact_data_batch_one_symbol_doesnt_exist(lmdb_library):
+    lib = lmdb_library
+    num_symbols = 3
+    syms = [f"test_compact_data_batch_one_symbol_doesnt_exist_{i}" for i in range(num_symbols)]
+    lib.write_batch([WritePayload(sym, pd.DataFrame({"col": [0]})) for sym in syms[:2]])
+    lib.append_batch([WritePayload(sym, pd.DataFrame({"col": [1]})) for sym in syms[:2]])
+    res = lib.compact_data_batch(syms)
+    for idx in range(2):
+        assert isinstance(res[idx], VersionedItem)
+        assert_frame_equal(lib.read(syms[idx]).data, pd.DataFrame({"col": [0, 1]}))
+        assert len(lib._nvs.read_index(syms[idx])) == 1
+    assert isinstance(res[2], DataError)
+    assert res[2].symbol == "test_compact_data_batch_one_symbol_doesnt_exist_2"
+    assert res[2].version_request_type is None
+    assert res[2].version_request_data is None
+    assert res[2].error_code == ErrorCode.E_NO_SUCH_VERSION
+    assert res[2].error_category == ErrorCategory.MISSING_DATA
+
+
+def test_compact_data_batch_one_symbol_recursively_normalized(lmdb_library):
+    lib = lmdb_library
+    num_symbols = 3
+    syms = [f"test_compact_data_batch_one_symbol_recursively_normalized_{i}" for i in range(num_symbols)]
+    lib.write_batch([WritePayload(sym, pd.DataFrame({"col": [0]})) for sym in syms[:2]])
+    lib.append_batch([WritePayload(sym, pd.DataFrame({"col": [1]})) for sym in syms[:2]])
+    data = {"a": pd.DataFrame({"col": [42]})}
+    lib.write(syms[2], data, recursive_normalizers=True)
+    res = lib.compact_data_batch(syms)
+    for idx in range(2):
+        assert isinstance(res[idx], VersionedItem)
+        assert_frame_equal(lib.read(syms[idx]).data, pd.DataFrame({"col": [0, 1]}))
+        assert len(lib._nvs.read_index(syms[idx])) == 1
+    assert isinstance(res[2], DataError)
+    assert res[2].symbol == "test_compact_data_batch_one_symbol_recursively_normalized_2"
+    assert res[2].version_request_type is None
+    assert res[2].version_request_data is None
+    assert res[2].error_code == ErrorCode.E_OPERATION_NOT_SUPPORTED_WITH_RECURSIVE_NORMALIZED_DATA
+    assert res[2].error_category == ErrorCategory.SCHEMA
+
+
+def test_compact_data_batch_duplicated_symbols(lmdb_library):
+    lib = lmdb_library
+    syms = ["duplicated_sym", "unique_sym", "duplicated_sym"]
+    with pytest.raises(ArcticDuplicateSymbolsInBatchException):
+        lib.compact_data_batch(syms)

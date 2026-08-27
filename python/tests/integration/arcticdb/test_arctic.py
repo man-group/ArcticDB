@@ -6,6 +6,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 
+import contextlib
 import logging
 import sys
 import time
@@ -13,6 +14,7 @@ import psutil
 import pytz
 import math
 import pytest
+import requests
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
@@ -21,17 +23,18 @@ from enum import Enum
 import multiprocessing
 
 from arcticdb_ext import get_config_int, set_config_int
-from arcticdb_ext.exceptions import InternalException, UnsortedDataException, UserInputException
+from arcticdb_ext.exceptions import InternalException, StorageException, UnsortedDataException, UserInputException
 from arcticdb_ext.storage import NoDataFoundException, KeyType, AWSAuthMethod
 from arcticdb.exceptions import ArcticDbNotYetImplemented, NoSuchVersionException
 from arcticdb.adapters.mongo_library_adapter import MongoLibraryAdapter
 from arcticdb.arctic import Arctic
+import arcticdb.toolbox.query_stats as qs
 from arcticdb.options import LibraryOptions
 from arcticdb import QueryBuilder
 from arcticdb.storage_fixtures.api import StorageFixture, ArcticUriFields, StorageFixtureFactory
 from arcticdb.storage_fixtures.mongo import MongoDatabase
 from arcticdb.storage_fixtures.utils import GracefulProcessUtils
-from arcticdb.util.test import assert_frame_equal, sample_dataframe, config_context
+from arcticdb.util.test import assert_frame_equal, sample_dataframe, config_context, config_context_string
 from arcticdb.storage_fixtures.s3 import S3Bucket
 from arcticdb.config import Defaults
 from arcticdb.version_store.library import (
@@ -55,7 +58,6 @@ from ...util.mark import (
     SSL_TESTS_MARK,
     SSL_TEST_SUPPORTED,
     FORK_SUPPORTED,
-    ARCTICDB_USING_CONDA,
     xfail_azure_chars,
 )
 
@@ -1486,17 +1488,123 @@ def test_s3_checksum_off_by_env_var(s3_storage, lib_name, multiprocess):
         p.join()
 
 
-@pytest.mark.skipif(
-    not ARCTICDB_USING_CONDA,
-    reason="aws sdk on pypi is pinned at version which doesn't turn on checksumming by default",
-)
-@pytest.mark.skip(
-    reason="aws sdk is stuck at 1.11.449 on conda CI due to libarrow pin, which doesn't run checksumming by default"
-)
-def test_s3_checksum_on_by_env_var(s3_storage, lib_name, monkeypatch):
-    monkeypatch.setenv("AWS_RESPONSE_CHECKSUM_VALIDATION", "when_supported")
-    with pytest.raises(Exception):
+# Setting either variable makes configure_s3_checksum_validation leave both alone, and the SDK defaults
+# the unset one to when_supported too, so either one on its own turns response validation on.
+@pytest.mark.parametrize("env_var", ["AWS_RESPONSE_CHECKSUM_VALIDATION", "AWS_REQUEST_CHECKSUM_CALCULATION"])
+def test_s3_checksum_on_by_env_var(s3_storage, lib_name, monkeypatch, route_env_to_extension, env_var):
+    monkeypatch.setenv(env_var, "when_supported")
+    with pytest.raises(StorageException):  # moto is set to reject checksum header
         create_library(s3_storage.arctic_uri, lib_name)
+
+
+@pytest.mark.parametrize("checksum", [None, "crc64nvme", "md5"])
+def test_s3_delete_survives_md5_only_backend(s3_storage, lib_name, checksum):
+    # moto is set to reject the CRC64-NVME digest the SDK sends by default and to require a correct
+    # Content-MD5 instead, so only the MD5 opt-in should be able to delete.
+    endpoint = s3_storage.factory.endpoint
+    verify = s3_storage.factory.client_cert_file or False
+    requests.post(endpoint + "/require_md5_checksum_on_delete_objs_request", b"1", verify=verify).raise_for_status()
+    try:
+        create_library(s3_storage.arctic_uri, lib_name)
+        lib = Arctic(s3_storage.arctic_uri)[lib_name]
+        for i in range(3):
+            lib._nvs.write("test", i)
+        lt = lib._nvs.library_tool()
+        assert len(lib.list_versions(symbol="test")) == 3
+        if checksum is None:
+            config = contextlib.nullcontext()
+        else:
+            config = config_context_string("S3Storage.DeleteObjectsChecksum", checksum)
+        with config:
+            # Deleting named versions routes through delete_tree, which removes the index keys of both
+            # versions in a single DeleteObjects request and propagates storage errors. lib.delete(symbol)
+            # cannot be used here because it catches StorageException and only logs it.
+            with qs.query_stats():
+                if checksum == "md5":
+                    lib.delete("test", versions=[0, 1])
+                else:
+                    with pytest.raises(StorageException):
+                        lib.delete("test", versions=[0, 1])
+                stats = qs.get_query_stats()
+        assert "S3_DeleteObjects" in stats["storage_operations"], stats
+        assert len(lt.find_keys(KeyType.TABLE_INDEX)) == (1 if checksum == "md5" else 3)
+    finally:
+        requests.post(endpoint + "/require_md5_checksum_on_delete_objs_request", b"0", verify=verify).raise_for_status()
+
+
+@pytest.mark.parametrize("checksum_setting", [("when_supported", None), (None, "when_supported")])
+def test_s3_delete_objects_checksum_no_effect_in_when_supported_mode(
+    s3_storage, lib_name, monkeypatch, route_env_to_extension, checksum_setting
+):
+    # In when_supported mode the SDK attaches its crc64nvme digest to DeleteObjects whatever
+    # ChecksumConfigurableDeleteObjectsRequest::RequestChecksumRequired() returns, so the md5 opt-in cannot
+    # rescue an md5-only backend. Setting either variable is enough: configure_s3_checksum_validation leaves
+    # both alone once one is when_supported, and the SDK defaults the other to when_supported too. The vars
+    # must be set before the client is built because the SDK reads them into ClientConfiguration once at
+    # construction, unlike S3Storage.DeleteObjectsChecksum which is read from ConfigsMap per request.
+    request_checksum, response_checksum = checksum_setting
+    if request_checksum:
+        monkeypatch.setenv("AWS_REQUEST_CHECKSUM_CALCULATION", request_checksum)
+    if response_checksum:
+        monkeypatch.setenv("AWS_RESPONSE_CHECKSUM_VALIDATION", response_checksum)
+    endpoint = s3_storage.factory.endpoint
+    verify = s3_storage.factory.client_cert_file or False
+    try:
+        # Response checksums are on in both cases here, so the mock has to answer them rather than 411
+        requests.post(endpoint + "/reject_checksum_mode", b"0", verify=verify).raise_for_status()
+        requests.post(endpoint + "/require_md5_checksum_on_delete_objs_request", b"1", verify=verify).raise_for_status()
+        create_library(s3_storage.arctic_uri, lib_name)
+        lib = Arctic(s3_storage.arctic_uri)[lib_name]
+        lt = lib._nvs.library_tool()
+        for i in range(3):
+            lib._nvs.write("test", i)
+        with config_context_string("S3Storage.DeleteObjectsChecksum", "md5"), qs.query_stats():
+            with pytest.raises(StorageException, match="CRC64NVME"):
+                lib.delete("test", versions=[0, 1])
+            stats = qs.get_query_stats()
+        assert "S3_DeleteObjects" in stats["storage_operations"], stats
+        assert len(lt.find_keys(KeyType.TABLE_INDEX)) == 3
+    finally:
+        requests.post(endpoint + "/require_md5_checksum_on_delete_objs_request", b"0", verify=verify).raise_for_status()
+        requests.post(endpoint + "/reject_checksum_mode", b"1", verify=verify).raise_for_status()
+
+
+@pytest.mark.parametrize("checksum", ["MD5", "CRC64NVME", "crc32", "sha256"])
+def test_s3_delete_objects_checksum_invalid_value(s3_storage, lib_name, checksum):
+    create_library(s3_storage.arctic_uri, lib_name)
+    lib = Arctic(s3_storage.arctic_uri)[lib_name]
+    for i in range(3):
+        lib._nvs.write("test", i)
+    lt = lib._nvs.library_tool()
+    with config_context_string("S3Storage.DeleteObjectsChecksum", checksum):
+        with pytest.raises(UserInputException, match="DeleteObjectsChecksum"):
+            lib.delete("test", versions=[0, 1])
+    assert len(lt.find_keys(KeyType.TABLE_INDEX)) == 3
+
+
+@REAL_S3_TESTS_MARK
+@pytest.mark.storage
+@pytest.mark.parametrize("checksum", [None, "crc64nvme", "md5"])
+def test_s3_delete_objects_checksum_real_s3(real_s3_storage, lib_name, checksum):
+    # AWS accepts both the SDK's CRC64-NVME digest and the legacy Content-MD5 on multi-object DeleteObjects,
+    # so every mode must succeed
+    ac = Arctic(real_s3_storage.arctic_uri)
+    try:
+        lib = ac.create_library(lib_name)
+        for i in range(3):
+            lib._nvs.write("sym", i)
+        lt = lib._nvs.library_tool()
+        config = (
+            contextlib.nullcontext()
+            if checksum is None
+            else config_context_string("S3Storage.DeleteObjectsChecksum", checksum)
+        )
+        with config:
+            lib.delete("sym", versions=[0, 1])
+        assert len(lt.find_keys(KeyType.TABLE_INDEX)) == 1
+        assert lib.read("sym").data == 2
+    finally:
+        ac.delete_library(lib_name)
 
 
 @pytest.mark.parametrize("snap", [chr(0), chr(30), chr(127), chr(128), "", "l" * 255, "*<>"])

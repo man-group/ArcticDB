@@ -37,6 +37,37 @@ bool is_valid_merge_strategy(const arcticdb::MergeStrategy& strategy) {
     };
     return std::ranges::find(valid_strategies, strategy) != std::ranges::end(valid_strategies);
 }
+
+void check_for_duplicated_symbols(const std::vector<StreamId>& stream_ids, std::string_view method) {
+    std::unordered_set<StreamId> unique_stream_ids;
+    std::vector<StreamId> non_unique_stream_ids;
+    unique_stream_ids.reserve(stream_ids.size());
+    for (const auto& stream_id : stream_ids) {
+        if (!unique_stream_ids.emplace(stream_id).second) {
+            non_unique_stream_ids.emplace_back(stream_id);
+        }
+    }
+    user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+            non_unique_stream_ids.empty(),
+            "Duplicate symbols in {} request. Symbols submitted more than once [{}]",
+            method,
+            fmt::join(non_unique_stream_ids, ",")
+    );
+}
+
+void compact_data_checks(const StreamId& stream_id, const version_store::UpdateInfo& update_info) {
+    storage::check<ErrorCode::E_SYMBOL_NOT_FOUND>(
+            update_info.previous_index_key_.has_value(), "Cannot compact data of non-existent symbol \"{}\".", stream_id
+    );
+    // We could make this work by compacting the leaf nodes, but it is not obviously worth the effort at this stage
+    // Leaf nodes of recursively normalized data cannot become fragmented through appends/updates, so it would only be
+    // useful for changing the slicing by an explicitly provided rows_per_segment
+    schema::check<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_RECURSIVE_NORMALIZED_DATA>(
+            update_info.previous_index_key_->type() != KeyType::MULTI_KEY,
+            "Cannot compact data of recursively normalized symbol {}",
+            stream_id
+    );
+}
 } // namespace
 
 namespace arcticdb::version_store {
@@ -136,13 +167,18 @@ std::vector<std::variant<ResultValueType, DataError>> transform_batch_items_or_t
                                 : DataError(
                                           stream_ids[idx], exception.what().toStdString(), version_queries[idx].content_
                                   );
-                if (exception.template is_compatible_with<NoSuchVersionException>()) {
+                // SymbolNotFoundException currently only raised by compact_data_batch, for consistency with other batch
+                // methods, set the error code to E_NO_SUCH_VERSION
+                if (exception.template is_compatible_with<NoSuchVersionException>() ||
+                    exception.template is_compatible_with<SymbolNotFoundException>()) {
                     data_error.set_error_code(ErrorCode::E_NO_SUCH_VERSION);
                 } else if (exception.template is_compatible_with<storage::KeyNotFoundException>()) {
                     data_error.set_error_code(ErrorCode::E_KEY_NOT_FOUND);
                 } else if (flags.convert_no_data_found_to_key_not_found_ &&
                            exception.template is_compatible_with<storage::NoDataFoundException>()) {
                     data_error.set_error_code(ErrorCode::E_KEY_NOT_FOUND);
+                } else if (exception.template is_compatible_with<RecursivelyNormalizedDataException>()) {
+                    data_error.set_error_code(ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_RECURSIVE_NORMALIZED_DATA);
                 }
                 result.emplace_back(std::move(data_error));
             }
@@ -1259,28 +1295,13 @@ std::variant<VersionedItem, CompactionError> LocalVersionedEngine::compact_incom
     return versioned_item;
 }
 
-UpdateInfo LocalVersionedEngine::compact_data_preamble(const StreamId& stream_id) {
-    auto update_info = get_next_version_id_and_optionally_latest_undeleted_version(store(), version_map(), stream_id);
-    storage::check<ErrorCode::E_SYMBOL_NOT_FOUND>(
-            update_info.previous_index_key_.has_value(), "Cannot compact data of non-existent symbol \"{}\".", stream_id
-    );
-    // We could make this work by compacting the leaf nodes, but it is not obviously worth the effort at this stage
-    // Leaf nodes of recursively normalized data cannot become fragmented through appends/updates, so it would only be
-    // useful for changing the slicing by an explicitly provided rows_per_segment
-    schema::check<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_RECURSIVE_NORMALIZED_DATA>(
-            update_info.previous_index_key_->type() != KeyType::MULTI_KEY,
-            "Cannot compact data of recursively normalized symbol {}",
-            stream_id
-    );
-    return update_info;
-}
-
 CompactDataInfo LocalVersionedEngine::compact_data_explain_plan_internal(
         const StreamId& stream_id, std::optional<uint64_t> rows_per_segment
 ) {
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: compact_data_explain_plan");
     py::gil_scoped_release release_gil;
-    UpdateInfo update_info = compact_data_preamble(stream_id);
+    auto update_info = get_next_version_id_and_optionally_latest_undeleted_version(store(), version_map(), stream_id);
+    compact_data_checks(stream_id, update_info);
     return compact_data_explain_plan_impl(
                    store(), update_info, rows_per_segment.value_or(write_options_.segment_row_size)
     )
@@ -1292,13 +1313,49 @@ VersionedItem LocalVersionedEngine::compact_data_internal(
 ) {
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: compact_data");
     py::gil_scoped_release release_gil;
-    UpdateInfo update_info = compact_data_preamble(stream_id);
+    auto update_info = get_next_version_id_and_optionally_latest_undeleted_version(store(), version_map(), stream_id);
+    compact_data_checks(stream_id, update_info);
     return async_compact_data_internal(
                    std::move(update_info),
                    rows_per_segment.value_or(write_options_.segment_row_size),
                    prune_previous_versions
     )
             .get();
+}
+
+std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_compact_data_internal(
+        const std::vector<StreamId>& stream_ids, std::optional<uint64_t> rows_per_segment, bool prune_previous_versions,
+        bool throw_on_error
+) {
+    ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: batch_compact_data");
+    py::gil_scoped_release release_gil;
+    check_for_duplicated_symbols(stream_ids, "batch_compact_data");
+    auto update_info_futs =
+            batch_get_next_version_id_and_optionally_latest_undeleted_version_async(store(), version_map(), stream_ids);
+    internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+            stream_ids.size() == update_info_futs.size(), "stream_ids and update_info_futs must be of the same size"
+    );
+    std::vector<folly::Future<VersionedItem>> version_futures;
+    auto resolved_rows_per_segment = rows_per_segment.value_or(write_options_.segment_row_size);
+    for (auto&& [idx, update_info_fut] : folly::enumerate(update_info_futs)) {
+        version_futures.push_back(std::move(update_info_fut)
+                                          .via(&async::cpu_executor())
+                                          .thenValue([this,
+                                                      &stream_id = stream_ids[idx],
+                                                      resolved_rows_per_segment,
+                                                      prune_previous_versions](UpdateInfo&& update_info) {
+                                              compact_data_checks(stream_id, update_info);
+                                              return async_compact_data_internal(
+                                                      std::move(update_info),
+                                                      resolved_rows_per_segment,
+                                                      prune_previous_versions
+                                              );
+                                          }));
+    }
+    auto compacted_versions = folly::collectAll(version_futures).get();
+    TransformBatchResultsFlags flags;
+    flags.throw_on_error_ = throw_on_error;
+    return transform_batch_items_or_throw(std::move(compacted_versions), stream_ids, flags);
 }
 
 bool LocalVersionedEngine::is_symbol_fragmented(const StreamId& stream_id, std::optional<size_t> segment_size) {
@@ -1454,8 +1511,7 @@ std::shared_ptr<PipelineContext> setup_join_pipeline_context(
 ) {
     auto output_schema = modify_schema(clauses.front()->join_schemas(std::move(input_schemas)), clauses);
     auto pipeline_context = std::make_shared<PipelineContext>();
-    pipeline_context->set_descriptor(output_schema.stream_descriptor());
-    pipeline_context->set_normalization(std::move(output_schema.norm_metadata_));
+    pipeline_context->set_output_schema(std::move(output_schema));
     return pipeline_context;
 }
 
@@ -1481,7 +1537,7 @@ MultiSymbolReadOutput LocalVersionedEngine::batch_read_and_join_internal(
                                             read_queries.empty() ? std::make_shared<ReadQuery>() : read_queries[idx],
                                     idx,
                                     read_options,
-                                    component_manager](std::optional<AtomKey>&& opt_index_key) mutable {
+                                    component_manager](std::optional<AtomKey>&& opt_index_key) {
                             auto version_info = get_version_identifier(
                                     (*stream_ids)[idx],
                                     (*version_queries)[idx],
@@ -1504,10 +1560,12 @@ MultiSymbolReadOutput LocalVersionedEngine::batch_read_and_join_internal(
             .via(&async::io_executor())
             .thenValueInline([this, handler_data, clauses_ptr, component_manager, read_options](
                                      std::vector<SymbolProcessingResult>&& symbol_processing_results
-                             ) mutable {
+                             ) {
                 auto [input_schemas, entity_ids, res_versioned_items, res_metadatas] =
                         unpack_symbol_processing_results(std::move(symbol_processing_results));
                 auto pipeline_context = setup_join_pipeline_context(std::move(input_schemas), *clauses_ptr);
+                auto modified_read_options =
+                        modify_read_options_from_norm_meta(pipeline_context->output_normalization(), read_options);
                 return schedule_remaining_iterations(std::move(entity_ids), clauses_ptr)
                         .thenValueInline([component_manager](std::vector<EntityId>&& processed_entity_ids) {
                             auto proc = gather_entities<
@@ -1516,21 +1574,27 @@ MultiSymbolReadOutput LocalVersionedEngine::batch_read_and_join_internal(
                                     std::shared_ptr<ColRange>>(*component_manager, std::move(processed_entity_ids));
                             return collect_segments(std::move(proc));
                         })
-                        .thenValueInline([store = store(), handler_data, pipeline_context, read_options](
+                        .thenValueInline([store = store(), handler_data, pipeline_context, modified_read_options](
                                                  std::vector<SliceAndKey>&& slice_and_keys
-                                         ) mutable {
+                                         ) {
                             return prepare_output_frame(
-                                    std::move(slice_and_keys), pipeline_context, store, read_options, handler_data
+                                    std::move(slice_and_keys),
+                                    pipeline_context,
+                                    store,
+                                    modified_read_options,
+                                    handler_data
                             );
                         })
                         .thenValueInline([handler_data,
                                           pipeline_context,
                                           res_versioned_items,
                                           res_metadatas,
-                                          read_options](SegmentInMemory&& frame) mutable {
+                                          modified_read_options](SegmentInMemory&& frame) mutable {
                             // Needed to force our usual backfilling behaviour when columns have been outer-joined and
                             // some are not present in all input symbols
-                            ReadOptions read_options_with_dynamic_schema = read_options.clone();
+                            // modified_read_options might be a shallow copy of the input read_options, so clone again
+                            // here
+                            ReadOptions read_options_with_dynamic_schema = modified_read_options.clone();
                             read_options_with_dynamic_schema.set_dynamic_schema(true);
                             return reduce_and_fix_columns(
                                            pipeline_context, frame, read_options_with_dynamic_schema, handler_data
@@ -1999,7 +2063,7 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
     TransformBatchResultsFlags flags;
     flags.throw_on_error_ = throw_on_error;
     // Missing index keys raise NoDataFoundException on compact_data path, but KeyNotFoundException on non-compact path
-    // Setting this flag makes the exception bubbed up to the user the same in both cases
+    // Setting this flag makes the exception bubbled up to the user the same in both cases
     flags.convert_no_data_found_to_key_not_found_ = append_options.compact_data;
     return transform_batch_items_or_throw(std::move(append_versions), stream_ids, flags);
 }
@@ -2089,20 +2153,7 @@ std::map<StreamId, VersionVectorType> get_multiple_sym_versions_from_query(
 std::vector<std::pair<VersionedItem, TimeseriesDescriptor>> LocalVersionedEngine::batch_restore_version_internal(
         const std::vector<StreamId>& stream_ids, const std::vector<VersionQuery>& version_queries
 ) {
-    std::unordered_set<StreamId> streams_set;
-    std::vector<StreamId> duplicate_streams;
-    for (const auto& stream : stream_ids) {
-        auto&& [it, inserted] = streams_set.insert(stream);
-        if (!inserted) {
-            duplicate_streams.push_back(stream);
-        }
-    }
-    user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
-            duplicate_streams.empty(),
-            "Duplicate symbols in restore_version request. Symbols submitted more than once [{}]",
-            fmt::join(duplicate_streams, ",")
-    );
-
+    check_for_duplicated_symbols(stream_ids, "restore_version");
     auto previous = batch_get_latest_version_with_deletion_info(store(), version_map(), stream_ids, true);
     auto versions_to_restore =
             folly::collect(batch_get_versions_async(store(), version_map(), stream_ids, version_queries)).get();
@@ -2371,7 +2422,7 @@ timestamp LocalVersionedEngine::latest_timestamp(const std::string& symbol) {
 
 // Some key types are historical or very specialized, so restrict to these in size calculations to avoid extra
 // listing operations
-static constexpr std::array<KeyType, 10> TYPES_FOR_SIZE_CALCULATION = {
+static constexpr std::array<KeyType, 11> TYPES_FOR_SIZE_CALCULATION = {
         KeyType::VERSION_REF,
         KeyType::VERSION,
         KeyType::TABLE_INDEX,
@@ -2382,20 +2433,38 @@ static constexpr std::array<KeyType, 10> TYPES_FOR_SIZE_CALCULATION = {
         KeyType::LOG,
         KeyType::LOG_COMPACTED,
         KeyType::SYMBOL_LIST,
+        KeyType::COLUMN_STATS,
 };
 
-std::vector<storage::ObjectSizes> LocalVersionedEngine::scan_object_sizes() {
+std::vector<storage::ObjectSizes> LocalVersionedEngine::scan_object_sizes(OnScanFailure on_failure) {
     using ObjectSizes = storage::ObjectSizes;
-    std::vector<folly::Future<std::shared_ptr<ObjectSizes>>> sizes_futs;
+    const std::span<const KeyType> types_to_scan{TYPES_FOR_SIZE_CALCULATION};
 
-    for (const auto& key_type : TYPES_FOR_SIZE_CALCULATION) {
+    std::vector<folly::Future<std::shared_ptr<ObjectSizes>>> sizes_futs;
+    sizes_futs.reserve(types_to_scan.size());
+    for (const auto& key_type : types_to_scan) {
         sizes_futs.push_back(store()->get_object_sizes(key_type, std::nullopt));
     }
 
-    auto ptrs = folly::collect(sizes_futs).via(&async::cpu_executor()).get();
+    // collectAll rather than collect, so that a key type that cannot be listed costs us only its own numbers
+    // rather than the whole scan. Callers ask for that with OnScanFailure::Skip.
+    auto results = folly::collectAll(sizes_futs).via(&async::cpu_executor()).get();
     std::vector<storage::ObjectSizes> res;
-    for (const auto& p : ptrs) {
-        res.emplace_back(p->key_type_, p->count_, p->compressed_size_);
+    res.reserve(results.size());
+    for (size_t i = 0; i < results.size(); ++i) {
+        if (results[i].hasException()) {
+            if (on_failure == OnScanFailure::Raise) {
+                results[i].throwUnlessValue();
+            }
+            log::version().warn(
+                    "Failed to scan sizes for key type {}, omitting it from the result: {}",
+                    key_type_long_name(types_to_scan[i]),
+                    results[i].exception().what()
+            );
+            continue;
+        }
+        const auto& p = results[i].value();
+        res.emplace_back(p->key_type_, p->count_, p->compressed_size_, p->scan_duration_ns_);
     }
     return res;
 }
@@ -2420,7 +2489,7 @@ std::vector<storage::ObjectSizes> LocalVersionedEngine::scan_object_sizes_for_st
     auto ptrs = folly::collect(sizes_futs).via(&async::cpu_executor()).get();
     std::vector<storage::ObjectSizes> res;
     for (const auto& p : ptrs) {
-        res.emplace_back(p->key_type_, p->count_, p->compressed_size_);
+        res.emplace_back(p->key_type_, p->count_, p->compressed_size_, p->scan_duration_ns_);
     }
     return res;
 }

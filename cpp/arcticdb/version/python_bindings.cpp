@@ -10,6 +10,7 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/numpy.h>
 #include <pybind11/operators.h>
+#include <pybind11/stl.h>
 #include <arcticdb/entity/data_error.hpp>
 #include <arcticdb/entity/protobuf_mappings.hpp>
 #include <arcticdb/python/python_to_tensor_frame.hpp>
@@ -229,7 +230,37 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
     py::enum_<ArrowOutputStringFormat>(version, "InternalArrowOutputStringFormat")
             .value("CATEGORICAL", ArrowOutputStringFormat::CATEGORICAL)
             .value("LARGE_STRING", ArrowOutputStringFormat::LARGE_STRING)
-            .value("SMALL_STRING", ArrowOutputStringFormat::SMALL_STRING);
+            .value("SMALL_STRING", ArrowOutputStringFormat::SMALL_STRING)
+            .value("UNSPECIFIED", ArrowOutputStringFormat::UNSPECIFIED);
+
+    py::enum_<PandasStringFormat>(version, "InternalPandasStringFormat")
+            .value("OBJECT", PandasStringFormat::OBJECT)
+            .value("ARROW_LARGE_STRING", PandasStringFormat::ARROW_LARGE_STRING);
+
+    py::enum_<ArrowOutputFormat>(version, "InternalArrowOutputFormat")
+            .value("PYARROW", ArrowOutputFormat::PYARROW)
+            .value("POLARS", ArrowOutputFormat::POLARS);
+
+    py::class_<PandasOutputConfig>(version, "PandasOutputConfig")
+            .def(py::init<>())
+            .def(py::init([](PandasStringFormat default_string_format) {
+                     return PandasOutputConfig{default_string_format};
+                 }),
+                 py::arg("default_string_format") = PandasStringFormat::OBJECT);
+
+    py::class_<ArrowOutputConfig>(version, "ArrowOutputConfig")
+            .def(py::init<>())
+            .def(py::init([](ArrowOutputFormat output_format,
+                             ArrowOutputStringFormat default_string_format,
+                             std::unordered_map<std::string, ArrowOutputStringFormat>
+                                     per_column_string_format) {
+                     return ArrowOutputConfig{
+                             output_format, default_string_format, std::move(per_column_string_format)
+                     };
+                 }),
+                 py::arg("output_format"),
+                 py::arg("default_string_format") = ArrowOutputStringFormat::UNSPECIFIED,
+                 py::arg("per_column_string_format") = std::unordered_map<std::string, ArrowOutputStringFormat>{});
 
     py::class_<ReadOptions>(version, "PythonVersionStoreReadOptions")
             .def(py::init())
@@ -239,16 +270,13 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
             .def("set_incompletes", &ReadOptions::set_incompletes)
             .def("set_set_tz", &ReadOptions::set_set_tz)
             .def("set_optimise_string_memory", &ReadOptions::set_optimise_string_memory)
-            .def("set_output_format", &ReadOptions::set_output_format)
-            .def("set_arrow_output_default_string_format", &ReadOptions::set_arrow_output_default_string_format)
-            .def("set_arrow_output_per_column_string_format", &ReadOptions::set_arrow_output_per_column_string_format)
+            .def("set_output_config", &ReadOptions::set_output_config)
             .def_property_readonly("incompletes", &ReadOptions::get_incompletes)
-            .def_property_readonly("output_format", &ReadOptions::output_format);
+            .def_property_readonly("output_format", &ReadOptions::output_format_for_frame);
 
     py::class_<BatchReadOptions>(version, "PythonVersionStoreBatchReadOptions")
             .def(py::init([](bool batch_throw_on_error) { return BatchReadOptions(batch_throw_on_error); }))
             .def("set_read_options", &BatchReadOptions::set_read_options)
-            .def("set_read_options_per_symbol", &BatchReadOptions::set_read_options_per_symbol)
             .def("set_output_format", &BatchReadOptions::set_output_format)
             .def("set_batch_throw_on_error", &BatchReadOptions::set_batch_throw_on_error)
             .def("at", &BatchReadOptions::at);
@@ -259,7 +287,7 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
             [](StreamId sid, std::string path, std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options
             ) {
                 auto handler_data = std::make_shared<std::any>(
-                        TypeHandlerRegistry::instance()->get_handler_data(read_options.output_format())
+                        TypeHandlerRegistry::instance()->get_handler_data(read_options.output_format_for_frame())
                 );
                 return adapt_read_df(
                         read_dataframe_from_file(sid, path, read_query, read_options, handler_data), handler_data.get()
@@ -279,8 +307,8 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
             .def(py::init<
                          std::vector<std::string>&&,
                          std::vector<std::string>&&,
-                         std::vector<py::object>&&,
-                         std::vector<py::object>&&,
+                         std::vector<convert::PandasColumn>&&,
+                         std::vector<convert::PandasColumn>&&,
                          SortedValue>(),
                  py::arg("index_names"),
                  py::arg("column_names"),
@@ -619,11 +647,25 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
             .def_readonly("compressed_size", &KeySizesInfo::compressed_size)
             .doc() = "Count of keys and their compressed and uncompressed sizes in bytes.";
 
+    py::enum_<OnScanFailure>(version, "OnScanFailure", R"pbdoc(
+        What a size scan does with a key type it cannot list.
+    )pbdoc")
+            .value("RAISE", OnScanFailure::Raise, R"pbdoc(
+            Raise, so that a caller totalling a library never silently under-reports.
+    )pbdoc")
+            .value("SKIP", OnScanFailure::Skip, R"pbdoc(
+            Log a warning naming the key type and leave it out of the result, so that one key type that cannot be
+            listed does not cost the whole scan. An omitted key type is indistinguishable from an empty one.
+    )pbdoc");
+
     py::class_<storage::ObjectSizes>(version, "ObjectSizes")
             .def_readonly("key_type", &storage::ObjectSizes::key_type_)
             .def_property_readonly("count", [](storage::ObjectSizes& self) { return self.count_.load(); })
             .def_property_readonly(
                     "compressed_size", [](storage::ObjectSizes& self) { return self.compressed_size_.load(); }
+            )
+            .def_property_readonly(
+                    "scan_duration_ns", [](storage::ObjectSizes& self) { return self.scan_duration_ns_.load(); }
             )
             .def("__repr__", [](storage::ObjectSizes object_sizes) { return fmt::format("{}", object_sizes); })
             .doc() = "Count of keys and their uncompressed sizes in bytes for a given key type";
@@ -769,6 +811,10 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                  &PythonVersionStore::compact_data,
                  py::call_guard<SingleThreadMutexHolder>(),
                  "Compact data segments")
+            .def("_batch_compact_data",
+                 &PythonVersionStore::batch_compact_data,
+                 py::call_guard<SingleThreadMutexHolder>(),
+                 "Compact data segments for multiple symbols")
             .def("is_symbol_fragmented",
                  &PythonVersionStore::is_symbol_fragmented,
                  py::call_guard<SingleThreadMutexHolder>(),
@@ -870,9 +916,10 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                         const VersionQuery& version_query,
                         const std::shared_ptr<ReadQuery>& read_query,
                         const ReadOptions& read_options) {
-                        auto handler_data = std::make_shared<std::any>(
-                                TypeHandlerRegistry::instance()->get_handler_data(read_options.output_format())
-                        );
+                        auto handler_data =
+                                std::make_shared<std::any>(TypeHandlerRegistry::instance()->get_handler_data(
+                                        read_options.output_format_for_frame()
+                                ));
                         return adapt_read_df(
                                 v.read_dataframe_version(sid, version_query, read_query, read_options, handler_data),
                                 handler_data.get()
@@ -907,8 +954,10 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                  "Get the most recent update time for a list of stream ids")
             .def("scan_object_sizes",
                  &PythonVersionStore::scan_object_sizes,
+                 py::arg("on_failure") = OnScanFailure::Raise,
                  py::call_guard<SingleThreadMutexHolder>(),
-                 "Scan the compressed sizes of all objects in the library.")
+                 "Scan the compressed sizes of all objects in the library. With on_failure=OnScanFailure.SKIP, a "
+                 "key type that cannot be listed is left out of the result rather than failing the whole scan.")
             .def("scan_object_sizes_by_stream",
                  &PythonVersionStore::scan_object_sizes_by_stream,
                  py::call_guard<SingleThreadMutexHolder>(),
@@ -963,7 +1012,7 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                         ReadResult res{
                                 vit,
                                 PandasOutputFrame{SegmentInMemory{tsd.as_stream_descriptor()}},
-                                read_options.output_format(),
+                                read_options.output_format_for_frame(),
                                 tsd_proto.normalization(),
                                 tsd_proto.user_meta(),
                                 tsd_proto.multi_key_meta(),
@@ -1066,7 +1115,7 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                                 );
                             });
                         }
-                        const OutputFormat output_format = read_options.output_format();
+                        const OutputFormat output_format = read_options.output_format_for_frame();
                         auto handler_data = std::make_shared<std::any>(
                                 TypeHandlerRegistry::instance()->get_handler_data(output_format)
                         );
@@ -1119,7 +1168,7 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                             ReadResult res{
                                     vit,
                                     PandasOutputFrame{SegmentInMemory{tsd.as_stream_descriptor()}},
-                                    read_options.output_format(),
+                                    read_options.output_format_for_frame(),
                                     tsd_proto.normalization(),
                                     tsd_proto.user_meta(),
                                     tsd_proto.multi_key_meta(),
@@ -1203,10 +1252,6 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
             util::raise_rte("Unknown sorted value: {}", static_cast<uint8_t>(sorted_value));
         }
     });
-
-    version.def("write_dataframe_to_file", &write_dataframe_to_file);
-
-    version.def("read_dataframe_from_file", &read_dataframe_from_file);
 
     version.def(
             "_modify_schema",

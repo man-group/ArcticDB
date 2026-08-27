@@ -6,6 +6,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 
+import os
 import pytest
 import pandas as pd
 from arcticdb.util.test import assert_frame_equal, assert_vit_equals_except_data, merge, query_stats_operation_count
@@ -25,7 +26,15 @@ from arcticdb.version_store._store import normalize_merge_action
 from typing import Union, List, Optional
 import arcticdb.toolbox.query_stats as qs
 
-pytestmark = pytest.mark.merge_update
+from arcticdb_ext.version_store import MergeAction
+
+pytestmark = [
+    pytest.mark.merge_update,
+    pytest.mark.skipif(
+        os.environ.get("ARCTICDB_PYTEST_INFER_STRING") == "1",
+        reason="merge update does not support arrow/str input",
+    ),
+]
 
 
 def mock_find_keys_for_symbol(key_types):
@@ -82,14 +91,8 @@ def test_normalize_merge_action(action):
     "strategy",
     (
         MergeStrategy(MergeAction.UPDATE, MergeAction.DO_NOTHING),
-        pytest.param(
-            MergeStrategy(MergeAction.DO_NOTHING, MergeAction.INSERT),
-            marks=pytest.mark.xfail(reason="Insert is not implemented"),
-        ),
-        pytest.param(
-            MergeStrategy(MergeAction.UPDATE, MergeAction.INSERT),
-            marks=pytest.mark.xfail(reason="Insert is not implemented"),
-        ),
+        MergeStrategy(MergeAction.DO_NOTHING, MergeAction.INSERT),
+        MergeStrategy(MergeAction.UPDATE, MergeAction.INSERT),
     ),
 )
 class TestMergeTimeseriesCommon:
@@ -2618,14 +2621,8 @@ class TestMergeUpdateInsertIndexSpansMultipleSegmentsChain:
     "strategy",
     (
         MergeStrategy(MergeAction.UPDATE, MergeAction.DO_NOTHING),
-        pytest.param(
-            MergeStrategy(MergeAction.DO_NOTHING, MergeAction.INSERT),
-            marks=pytest.mark.xfail(reason="Insert is not implemented"),
-        ),
-        pytest.param(
-            MergeStrategy(MergeAction.UPDATE, MergeAction.INSERT),
-            marks=pytest.mark.xfail(reason="Insert is not implemented"),
-        ),
+        MergeStrategy(MergeAction.DO_NOTHING, MergeAction.INSERT),
+        MergeStrategy(MergeAction.UPDATE, MergeAction.INSERT),
     ),
 )
 class TestMergeRowrangeCommon:
@@ -2652,8 +2649,11 @@ class TestMergeRowrangeCommon:
         assert_vit_equals_except_data(merge_vit, read_vit)
 
         lt = lib._dev_tools.library_tool()
-
-        assert len(lt.find_keys_for_symbol(KeyType.TABLE_DATA, "sym")) == 2
+        # +1 for the never-pruned v0 key, +1 per write path exercised (UPDATE rewrites in place, INSERT appends).
+        expected_data_keys = (
+            3 if strategy.not_matched_by_target == MergeAction.INSERT and strategy.matched == MergeAction.UPDATE else 2
+        )
+        assert len(lt.find_keys_for_symbol(KeyType.TABLE_DATA, "sym")) == expected_data_keys
         assert len(lt.find_keys_for_symbol(KeyType.TABLE_INDEX, "sym")) == 2
         assert len(lt.find_keys_for_symbol(KeyType.VERSION, "sym")) == 2
 
@@ -3024,6 +3024,154 @@ class TestMergeRowrangeUpdate:
         expected = pd.DataFrame({"my_index": [1, 2, 3], "b": [10.0, 2.0, 3.0]}, index=pd.RangeIndex(start=0, stop=3))
         expected.index.name = "my_index"
         generic_merge_test(lib, "sym", target, source, self.strategy, expected, on=["my_index"])
+
+
+class TestMergeRowrangeInsert:
+    """Row count indexed merge with strategy do_nothing/insert: unmatched source rows are appended to the target in
+    source order; matched source rows are left untouched (no in-place rewrite)."""
+
+    def setup_method(self):
+        self.strategy = MergeStrategy(MergeAction.DO_NOTHING, MergeAction.INSERT)
+
+    def test_basic_append_unmatched(self, in_memory_store_factory):
+        lib = in_memory_store_factory()
+        target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]})
+        # a=1 matches (do_nothing leaves it untouched), a=99 and a=100 are unmatched and appended in source order.
+        source = pd.DataFrame({"a": [1, 99, 100], "b": [10.0, 99.0, 100.0]})
+        lib.write("sym", target)
+        qs.reset_stats()
+        with qs.query_stats():
+            lib.merge_experimental("sym", source, strategy=self.strategy, on=["a"])
+        stats = qs.get_query_stats()
+        # a single-column-slice target's unmatched rows are appended as exactly one new data segment.
+        assert query_stats_operation_count(stats, "Memory_PutObject", "TABLE_DATA") == 1
+        expected = pd.DataFrame({"a": [1, 2, 3, 99, 100], "b": [1.0, 2.0, 3.0, 99.0, 100.0]})
+        assert_frame_equal(lib.read("sym").data, expected)
+
+    def test_none_matched_appends_all(self, lmdb_library):
+        lib = lmdb_library
+        target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]})
+        source = pd.DataFrame({"a": [10, 20], "b": [10.0, 20.0]})
+        lib.write("sym", target)
+        lib.merge_experimental("sym", source, strategy=self.strategy, on=["a"])
+        expected = pd.DataFrame({"a": [1, 2, 3, 10, 20], "b": [1.0, 2.0, 3.0, 10.0, 20.0]})
+        assert_frame_equal(lib.read("sym").data, expected)
+
+    def test_all_matched_writes_no_new_data_keys(self, lmdb_library):
+        lib = lmdb_library
+        target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]})
+        source = pd.DataFrame({"a": [3, 1, 2], "b": [30.0, 10.0, 20.0]})
+        lib.write("sym", target)
+        lt = lib._dev_tools.library_tool()
+        assert len(lt.find_keys_for_symbol(KeyType.TABLE_DATA, "sym")) == 1
+        lib.merge_experimental("sym", source, strategy=self.strategy, on=["a"])
+        # do_nothing on matched means no row slice is rewritten, and every source row matched means nothing is
+        # inserted, so no new data key is created.
+        assert len(lt.find_keys_for_symbol(KeyType.TABLE_DATA, "sym")) == 1
+        assert_frame_equal(lib.read("sym").data, target)
+
+    def test_match_in_one_row_slice_only_suppresses_insert(self, lmdb_library_factory):
+        lib = lmdb_library_factory(arcticdb.LibraryOptions(rows_per_segment=2))
+        target = pd.DataFrame({"a": [1, 2, 3, 4], "b": [1.0, 2.0, 3.0, 4.0]})  # row slices [0,2) and [2,4)
+        # a=3 lives in the second row slice, so only that slice's processing unit matches it. The matched bitsets are
+        # ORed across all units, so a=3 must NOT be inserted even though the first slice's unit did not match it.
+        source = pd.DataFrame({"a": [3, 5], "b": [30.0, 50.0]})
+        lib.write("sym", target)
+        lib.merge_experimental("sym", source, strategy=self.strategy, on=["a"])
+        expected = pd.DataFrame({"a": [1, 2, 3, 4, 5], "b": [1.0, 2.0, 3.0, 4.0, 50.0]})
+        assert_frame_equal(lib.read("sym").data, expected)
+
+    def test_duplicate_unmatched_source_rows_both_inserted(self, lmdb_library):
+        lib = lmdb_library
+        target = pd.DataFrame({"a": [1], "b": [1.0]})
+        source = pd.DataFrame({"a": [7, 7], "b": [70.0, 71.0]})
+        lib.write("sym", target)
+        lib.merge_experimental("sym", source, strategy=self.strategy, on=["a"])
+        expected = pd.DataFrame({"a": [1, 7, 7], "b": [1.0, 70.0, 71.0]})
+        assert_frame_equal(lib.read("sym").data, expected)
+
+    def test_string_columns_inserted(self, lmdb_library):
+        lib = lmdb_library
+        target = pd.DataFrame({"a": [1, 2], "s": ["x", "y"]})
+        # Non-ASCII string exercises the GIL/string-pool path in build_row_range_insert_segments.
+        source = pd.DataFrame({"a": [1, 3, 4], "s": ["x", "café", None]})
+        lib.write("sym", target)
+        lib.merge_experimental("sym", source, strategy=self.strategy, on=["a"])
+        expected = pd.DataFrame({"a": [1, 2, 3, 4], "s": ["x", "y", "café", None]})
+        assert_frame_equal(lib.read("sym").data, expected)
+
+    def test_column_sliced_insert(self, lmdb_library_factory):
+        lib = lmdb_library_factory(arcticdb.LibraryOptions(columns_per_segment=2))
+        target = pd.DataFrame({"a": [1, 2], "b": [1.0, 2.0], "c": [10, 20]})  # column slices [a, b] and [c]
+        source = pd.DataFrame({"a": [1, 3], "b": [1.0, 30.0], "c": [10, 300]})
+        lib.write("sym", target)
+        lt = lib._dev_tools.library_tool()
+        assert len(lt.find_keys_for_symbol(KeyType.TABLE_DATA, "sym")) == 2  # 1 row slice x 2 column slices
+        lib.merge_experimental("sym", source, strategy=self.strategy, on=["a"])
+        expected = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 30.0], "c": [10, 20, 300]})
+        assert_frame_equal(lib.read("sym").data, expected)
+        # One insert segment is appended per column slice; do_nothing leaves the matched rows untouched.
+        assert len(lt.find_keys_for_symbol(KeyType.TABLE_DATA, "sym")) == 4
+
+
+class TestMergeRowrangeUpdateAndInsert:
+    """Row count indexed merge with strategy update/insert: matched source rows update the target in place and
+    unmatched source rows are appended in source order."""
+
+    def setup_method(self):
+        self.strategy = MergeStrategy(MergeAction.UPDATE, MergeAction.INSERT)
+
+    def test_update_matched_and_append_unmatched(self, in_memory_store_factory):
+        lib = in_memory_store_factory(dynamic_strings=True)
+        target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0], "c": ["x", "y", "z"]})
+        source = pd.DataFrame({"a": [1, 99, 3, 100], "b": [10.0, 99.0, 30.0, 100.0], "c": ["X", "N", "Z", "M"]})
+        # a=1 updates row 0, a=3 updates row 2; a=99 and a=100 are unmatched and appended in source order.
+        lib.write("sym", target)
+        qs.reset_stats()
+        with qs.query_stats():
+            lib.merge_experimental("sym", source, strategy=self.strategy, on=["a"])
+        stats = qs.get_query_stats()
+        # update one segment in place and append one segment for insertion
+        assert query_stats_operation_count(stats, "Memory_PutObject", "TABLE_DATA") == 2
+        expected = pd.DataFrame(
+            {
+                "a": [1, 2, 3, 99, 100],
+                "b": [10.0, 2.0, 30.0, 99.0, 100.0],
+                "c": ["X", "y", "Z", "N", "M"],
+            }
+        )
+        assert_frame_equal(lib.read("sym").data, expected)
+
+    def test_only_matches_no_insert_segment(self, lmdb_library):
+        lib = lmdb_library
+        target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]})
+        source = pd.DataFrame({"a": [1, 2], "b": [10.0, 20.0]})
+        lib.write("sym", target)
+        lt = lib._dev_tools.library_tool()
+        lib.merge_experimental("sym", source, strategy=self.strategy, on=["a"])
+        expected = pd.DataFrame({"a": [1, 2, 3], "b": [10.0, 20.0, 3.0]})
+        assert_frame_equal(lib.read("sym").data, expected)
+        # The update rewrites the single row slice (one new data key); nothing is inserted.
+        assert len(lt.find_keys_for_symbol(KeyType.TABLE_DATA, "sym")) == 2
+
+    def test_multiple_on_columns(self, lmdb_library):
+        lib = lmdb_library
+        target = pd.DataFrame({"a": [1, 2], "b": ["x", "y"], "c": [1.0, 2.0]})
+        source = pd.DataFrame({"a": [1, 3], "b": ["x", "q"], "c": [10.0, 30.0]})
+        # (a=1, b="x") matches row 0 and updates c; (a=3, b="q") is unmatched and appended.
+        lib.write("sym", target)
+        lib.merge_experimental("sym", source, strategy=self.strategy, on=["a", "b"])
+        expected = pd.DataFrame({"a": [1, 2, 3], "b": ["x", "y", "q"], "c": [10.0, 2.0, 30.0]})
+        assert_frame_equal(lib.read("sym").data, expected)
+
+    def test_ambiguous_multi_match_raises(self, lmdb_library):
+        lib = lmdb_library
+        # Two source rows match the same target row on "a"; an update strategy cannot resolve which value wins.
+        target = pd.DataFrame({"a": [1, 2], "b": [1.0, 2.0]})
+        source = pd.DataFrame({"a": [1, 1], "b": [10.0, 11.0]})
+        lib.write("sym", target)
+        with pytest.raises(UserInputException):
+            lib.merge_experimental("sym", source, strategy=self.strategy, on=["a"])
 
 
 class TestMergeMultiindexUpdate:
@@ -3633,3 +3781,235 @@ def test_merge_insert_only_into_chain_with_shared_boundaries(lmdb_library):
         index=pd.DatetimeIndex([10, 20, 20, 25, 30, 30, 40, 40, 50]),
     )
     assert_frame_equal(lib.read("sym").data, expected)
+
+
+class TestMergeMultiindexInsert:
+    """MultiIndex insert tests for datetime and row-range merge strategies."""
+
+    @pytest.mark.parametrize(
+        "strategy",
+        [
+            MergeStrategy(MergeAction.DO_NOTHING, MergeAction.INSERT),
+            MergeStrategy(MergeAction.UPDATE, MergeAction.INSERT),
+        ],
+        ids=["do_nothing_insert", "update_insert"],
+    )
+    def test_datetime_basic(self, lmdb_library, strategy):
+        lib = lmdb_library
+        index_names = [None, "sec"]
+        primary_target_vals = pd.DatetimeIndex(["2024-01-01", "2024-01-02", "2024-01-03"])
+        target_idx = pd.MultiIndex.from_arrays([primary_target_vals, ["A", "B", "C"]], names=index_names)
+        target = pd.DataFrame({"c": [1, 2, 3], "d": [-1.0, -2.0, -3.0]}, index=target_idx)
+
+        primary_source_vals = pd.DatetimeIndex(["2023-12-31", "2024-01-02", "2024-01-02 10:00:00", "2024-01-05"])
+        source_idx = pd.MultiIndex.from_arrays([primary_source_vals, ["p", "q", "r", "s"]], names=index_names)
+        source = pd.DataFrame({"c": [10, 20, 30, 40], "d": [10.0, 20.0, 30.0, 40.0]}, index=source_idx)
+
+        if strategy.matched == MergeAction.DO_NOTHING:
+            expected_primary = pd.DatetimeIndex(
+                [
+                    "2023-12-31",
+                    "2024-01-01",
+                    "2024-01-02",
+                    "2024-01-02 10:00:00",
+                    "2024-01-03",
+                    "2024-01-05",
+                ]
+            )
+            expected_secondary = ["p", "A", "B", "r", "C", "s"]
+            expected_c = [10, 1, 2, 30, 3, 40]
+            expected_d = [10.0, -1.0, -2.0, 30.0, -3.0, 40.0]
+        else:  # UPDATE
+            expected_primary = pd.DatetimeIndex(
+                [
+                    "2023-12-31",
+                    "2024-01-01",
+                    "2024-01-02",
+                    "2024-01-02 10:00:00",
+                    "2024-01-03",
+                    "2024-01-05",
+                ]
+            )
+            expected_secondary = ["p", "A", "q", "r", "C", "s"]
+            expected_c = [10, 1, 20, 30, 3, 40]
+            expected_d = [10.0, -1.0, 20.0, 30.0, -3.0, 40.0]
+
+        expected_idx = pd.MultiIndex.from_arrays([expected_primary, expected_secondary], names=index_names)
+        expected = pd.DataFrame({"c": expected_c, "d": expected_d}, index=expected_idx)
+
+        lib.write("sym", target)
+        lib.merge_experimental("sym", source, strategy=strategy, on=None)
+        assert_frame_equal(lib.read("sym").data, expected)
+
+    @pytest.mark.parametrize(
+        "strategy",
+        [
+            MergeStrategy(MergeAction.DO_NOTHING, MergeAction.INSERT),
+            MergeStrategy(MergeAction.UPDATE, MergeAction.INSERT),
+        ],
+        ids=["do_nothing_insert", "update_insert"],
+    )
+    def test_rowrange_basic(self, lmdb_library, strategy):
+        lib = lmdb_library
+        index_names = ["p", "s"]
+        target_idx = pd.MultiIndex.from_arrays([["P", "Q", "R"], [1, 2, 3]], names=index_names)
+        target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]}, index=target_idx)
+
+        source_idx = pd.MultiIndex.from_arrays([["X", "Y"], [20, 90]], names=index_names)
+        source = pd.DataFrame({"a": [2, 9], "b": [20.0, 90.0]}, index=source_idx)
+
+        if strategy.matched == MergeAction.DO_NOTHING:
+            expected_idx = pd.MultiIndex.from_arrays([["P", "Q", "R", "Y"], [1, 2, 3, 90]], names=index_names)
+            expected = pd.DataFrame({"a": [1, 2, 3, 9], "b": [1.0, 2.0, 3.0, 90.0]}, index=expected_idx)
+        else:  # UPDATE
+            expected_idx = pd.MultiIndex.from_arrays([["P", "X", "R", "Y"], [1, 20, 3, 90]], names=index_names)
+            expected = pd.DataFrame({"a": [1, 2, 3, 9], "b": [1.0, 20.0, 3.0, 90.0]}, index=expected_idx)
+
+        lib.write("sym", target)
+        lib.merge_experimental("sym", source, strategy=strategy, on=["a"])
+        assert_frame_equal(lib.read("sym").data, expected)
+
+    @pytest.mark.parametrize(
+        "strategy",
+        [
+            MergeStrategy(MergeAction.DO_NOTHING, MergeAction.INSERT),
+            MergeStrategy(MergeAction.UPDATE, MergeAction.INSERT),
+        ],
+        ids=["do_nothing_insert", "update_insert"],
+    )
+    def test_rowrange_requires_on(self, lmdb_library, strategy):
+        lib = lmdb_library
+        index_names = ["p", "s"]
+        target_idx = pd.MultiIndex.from_arrays([["P", "Q", "R"], [1, 2, 3]], names=index_names)
+        target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]}, index=target_idx)
+
+        source_idx = pd.MultiIndex.from_arrays([["X", "Y"], [20, 90]], names=index_names)
+        source = pd.DataFrame({"a": [2, 9], "b": [20.0, 90.0]}, index=source_idx)
+
+        lib.write("sym", target)
+        with pytest.raises(UserInputException):
+            lib.merge_experimental("sym", source, strategy=strategy, on=None)
+
+    @pytest.mark.parametrize(
+        "is_datetime",
+        [True, False],
+        ids=["datetime", "rowrange"],
+    )
+    def test_on_secondary_index_level(self, lmdb_library, is_datetime):
+        lib = lmdb_library
+        strategy = MergeStrategy(MergeAction.UPDATE, MergeAction.INSERT)
+
+        if is_datetime:
+            index_names = [None, "a"]
+            primary_target_vals = pd.DatetimeIndex(["2024-01-01", "2024-01-02", "2024-01-03"])
+            target_idx = pd.MultiIndex.from_arrays([primary_target_vals, ["A", "B", "C"]], names=index_names)
+            target = pd.DataFrame({"c": [1, 2, 3]}, index=target_idx)
+
+            primary_source_vals = pd.DatetimeIndex(["2024-01-02", "2024-01-02", "2024-01-05"])
+            source_idx = pd.MultiIndex.from_arrays([primary_source_vals, ["B", "Z", "E"]], names=index_names)
+            source = pd.DataFrame({"c": [20, 99, 50]}, index=source_idx)
+
+            expected_primary = pd.DatetimeIndex(["2024-01-01", "2024-01-02", "2024-01-02", "2024-01-03", "2024-01-05"])
+            expected_secondary = ["A", "B", "Z", "C", "E"]
+            expected_c = [1, 20, 99, 3, 50]
+        else:  # rowrange
+            index_names = ["p", "a"]
+            target_idx = pd.MultiIndex.from_arrays([["P", "Q", "R"], ["A", "B", "C"]], names=index_names)
+            target = pd.DataFrame({"c": [1, 2, 3]}, index=target_idx)
+
+            source_idx = pd.MultiIndex.from_arrays([["X", "Y"], ["B", "Z"]], names=index_names)
+            source = pd.DataFrame({"c": [20, 90]}, index=source_idx)
+
+            expected_primary = ["P", "X", "R", "Y"]
+            expected_secondary = ["A", "B", "C", "Z"]
+            expected_c = [1, 20, 3, 90]
+
+        expected_idx = pd.MultiIndex.from_arrays([expected_primary, expected_secondary], names=index_names)
+        expected = pd.DataFrame({"c": expected_c}, index=expected_idx)
+
+        lib.write("sym", target)
+        lib.merge_experimental("sym", source, strategy=strategy, on=["a"])
+        assert_frame_equal(lib.read("sym").data, expected)
+
+    def test_string_secondary_level_insert(self, lmdb_library):
+        lib = lmdb_library
+        strategy = MergeStrategy(MergeAction.DO_NOTHING, MergeAction.INSERT)
+        index_names = [None, "s"]
+
+        primary_target_vals = pd.DatetimeIndex(["2024-01-01", "2024-01-02"])
+        target_idx = pd.MultiIndex.from_arrays([primary_target_vals, ["x", "y"]], names=index_names)
+        target = pd.DataFrame({"a": [1, 2]}, index=target_idx)
+
+        primary_source_vals = pd.DatetimeIndex(["2024-01-02", "2024-01-03", "2024-01-04"])
+        source_idx = pd.MultiIndex.from_arrays([primary_source_vals, ["y", "café", None]], names=index_names)
+        source = pd.DataFrame({"a": [2, 3, 4]}, index=source_idx)
+
+        expected_primary = pd.DatetimeIndex(["2024-01-01", "2024-01-02", "2024-01-03", "2024-01-04"])
+        expected_secondary = ["x", "y", "café", None]
+        expected_idx = pd.MultiIndex.from_arrays([expected_primary, expected_secondary], names=index_names)
+        expected = pd.DataFrame({"a": [1, 2, 3, 4]}, index=expected_idx)
+
+        lib.write("sym", target)
+        lib.merge_experimental("sym", source, strategy=strategy, on=None)
+        assert_frame_equal(lib.read("sym").data, expected)
+
+    def test_datetime_insert_across_row_slices(self, lmdb_library_factory):
+        lib = lmdb_library_factory(arcticdb.LibraryOptions(rows_per_segment=2))
+        strategy = MergeStrategy(MergeAction.DO_NOTHING, MergeAction.INSERT)
+        index_names = [None, "s"]
+
+        target_idx = pd.MultiIndex.from_arrays(
+            [
+                pd.to_datetime([10, 20, 30], unit="ns"),
+                [1, 2, 3],
+            ],
+            names=index_names,
+        )
+        target = pd.DataFrame({"a": [0, 1, 2]}, index=target_idx)
+
+        source_idx = pd.MultiIndex.from_arrays(
+            [
+                pd.to_datetime([15, 25], unit="ns"),
+                [15, 25],
+            ],
+            names=index_names,
+        )
+        source = pd.DataFrame({"a": [100, 101]}, index=source_idx)
+
+        expected_idx = pd.MultiIndex.from_arrays(
+            [
+                pd.to_datetime([10, 15, 20, 25, 30], unit="ns"),
+                [1, 15, 2, 25, 3],
+            ],
+            names=index_names,
+        )
+        expected = pd.DataFrame({"a": [0, 100, 1, 101, 2]}, index=expected_idx)
+
+        lib.write("sym", target)
+        lib.merge_experimental("sym", source, strategy=strategy, on=None)
+        assert_frame_equal(lib.read("sym").data, expected)
+
+    @pytest.mark.parametrize(
+        "is_datetime",
+        [True, False],
+        ids=["datetime", "rowrange"],
+    )
+    def test_upsert_nonexistent_symbol(self, lmdb_library, is_datetime):
+        lib = lmdb_library
+        strategy = MergeStrategy(MergeAction.UPDATE, MergeAction.INSERT)
+
+        if is_datetime:
+            index_names = [None, "s"]
+            primary_vals = pd.DatetimeIndex(["2024-01-01", "2024-01-02"])
+            source_idx = pd.MultiIndex.from_arrays([primary_vals, ["A", "B"]], names=index_names)
+            source = pd.DataFrame({"a": [1, 2]}, index=source_idx)
+            on = None
+        else:  # rowrange
+            index_names = ["p", "s"]
+            source_idx = pd.MultiIndex.from_arrays([["P", "Q"], [1, 2]], names=index_names)
+            source = pd.DataFrame({"a": [1, 2]}, index=source_idx)
+            on = ["s"]
+
+        sym = f"nonexistent_{is_datetime}"
+        lib.merge_experimental(sym, source, strategy=strategy, upsert=True, on=on)
+        assert_frame_equal(lib.read(sym).data, source)

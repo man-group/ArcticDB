@@ -904,6 +904,7 @@ struct MergeUpdateClause {
         [[nodiscard]] const std::vector<std::vector<size_t>>& matched_rows(size_t target_row_slice) const;
         [[nodiscard]] bool is_source_row_matched(size_t source_row) const;
         [[nodiscard]] bool has_matched_target_rows() const;
+        [[nodiscard]] util::BitSet unmatched_source_rows() const;
 
       private:
         /// For each row slice, for each source row, store all target rows that match it

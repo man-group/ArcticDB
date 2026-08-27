@@ -136,7 +136,7 @@ inline FilterQuery<index::IndexSegmentReader> create_dynamic_col_filter(
             // we use raw_hashes for each col
             // A FrameSlice stores (hash_bucket, total_buckets) at the time of writing that slice
             // so a column will exist inside a slice iff col_hash % total_buckets == hash_bucket
-            cols_hashes.insert(bucketize(pipeline->desc_->field(*col).name(), std::nullopt));
+            cols_hashes.insert(bucketize(pipeline->on_disk_descriptor().field(*col).name(), std::nullopt));
             ++col;
         }
 

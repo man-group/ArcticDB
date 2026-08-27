@@ -21,6 +21,7 @@
 #include <arcticdb/stream/incompletes.hpp>
 #include <arcticdb/entity/protobuf_mappings.hpp>
 #include <arcticdb/python/adapt_read_dataframe.hpp>
+#include <arcticdb/util/storage_lock.hpp>
 #include <cstdlib>
 
 namespace arcticdb::toolbox::apy {
@@ -162,6 +163,25 @@ std::vector<VariantKey> LibraryTool::find_keys_for_id(entity::KeyType kt, const 
     };
 
     store()->iterate_type(kt, visitor, string_id);
+    return res;
+}
+
+std::vector<StorageLockInfo> LibraryTool::list_storage_locks() {
+    std::vector<StorageLockInfo> res;
+    auto now = util::SysClock::nanos_since_epoch();
+    auto ttl = ConfigsMap::instance()->get_int("StorageLock.TTL", StorageLock<>::DEFAULT_TTL_INTERVAL);
+
+    store()->iterate_type(KeyType::LOCK, [&](VariantKey&& key) {
+        auto name = fmt::format("{}", variant_key_id(key));
+        try {
+            auto kv = store()->read_sync(key, storage::ReadKeyOpts{.dont_warn_about_missing_key = true});
+            auto data = extract_lock_segment_data(kv.second);
+            auto active = lock_is_active(data.acquire_time, now, ttl);
+            res.push_back(StorageLockInfo{std::move(name), data.acquire_time, active, std::move(data.metadata)});
+        } catch (const storage::KeyNotFoundException&) {
+        }
+    });
+
     return res;
 }
 

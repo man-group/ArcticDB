@@ -31,7 +31,7 @@ VariantData unary_boolean(FullResult, OperationType operation);
 VariantData visit_unary_boolean(const VariantData& left, OperationType operation);
 
 template<typename Func>
-inline std::string unary_operation_to_string(Func&& func, std::string_view operand_str) {
+std::string unary_operation_to_string(Func&& func, std::string_view operand_str) {
     return fmt::format("{}({})", func, operand_str);
 }
 

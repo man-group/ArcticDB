@@ -35,7 +35,16 @@ import time
 from arcticdb.dependencies import pyarrow as pa
 from arcticdb.dependencies import polars as pl
 from arcticc.pb2.descriptors_pb2 import IndexDescriptor, TypeDescriptor
-from arcticdb_ext.version_store import CompactDataInfo, RecordBatchData, SortedValue, StageResult
+from arcticdb_ext.version_store import (
+    ArrowOutputConfig,
+    CompactDataInfo,
+    InternalPandasStringFormat,
+    InternalArrowOutputFormat,
+    PandasOutputConfig,
+    RecordBatchData,
+    SortedValue,
+    StageResult,
+)
 from arcticc.pb2.storage_pb2 import LibraryConfig, EnvironmentConfigsMap
 from arcticdb.preconditions import check
 from arcticdb.supported_types import DateRangeInput, ExplicitlySupportedDates
@@ -81,10 +90,19 @@ from arcticdb.options import (
 )
 from arcticdb_ext.log import LogLevel as _LogLevel
 from arcticdb.authorization.permissions import OpenMode
-from arcticdb.exceptions import ArcticDbNotYetImplemented, ArcticNativeException, MissingKeysInStageResultsError
+from arcticdb.exceptions import (
+    ArcticDbNotYetImplemented,
+    ArcticNativeException,
+    MissingKeysInStageResultsError,
+    ArcticDuplicateSymbolsInBatchException,
+)
 from arcticdb.flattener import Flattener
 from arcticdb.log import version as log
 from arcticdb.version_store._custom_normalizers import get_custom_normalizer, CompositeCustomNormalizer
+from arcticdb.version_store._string_dtype import (
+    _is_arrow_string_column,
+    _use_pyarrow_strings_in_pandas,
+)
 from arcticdb.version_store._normalization import (
     PandasData,
     normalize_metadata,
@@ -563,6 +581,12 @@ class NativeVersionStore:
         except Exception as e:
             log.error("Could not get primary backing store for lib due to: {}".format(e))
         return backing_store
+
+    @staticmethod
+    def _raise_if_duplicate_symbols_in_batch(batch):
+        symbols = {(p if isinstance(p, str) else p.symbol) for p in batch}
+        if len(symbols) < len(batch):
+            raise ArcticDuplicateSymbolsInBatchException
 
     def _try_normalize(
         self,
@@ -2329,31 +2353,41 @@ class NativeVersionStore:
         output_format = self.resolve_runtime_defaults(
             "output_format", proto_cfg, global_default=OutputFormat.PANDAS, **kwargs
         )
-        read_options.set_output_format(output_format_to_internal(output_format))
         read_options.set_dynamic_schema(resolve_defaults("dynamic_schema", proto_cfg, global_default=False, **kwargs))
         read_options.set_set_tz(resolve_defaults("set_tz", proto_cfg, global_default=False, **kwargs))
         read_options.set_allow_sparse(resolve_defaults("allow_sparse", proto_cfg, global_default=False, **kwargs))
         read_options.set_incompletes(resolve_defaults("incomplete", proto_cfg, global_default=False, **kwargs))
-        if read_options.output_format == InternalOutputFormat.ARROW:
-            read_options.set_arrow_output_default_string_format(
+        if output_format_to_internal(output_format) == InternalOutputFormat.ARROW:
+            output_config = ArrowOutputConfig(
+                (
+                    InternalArrowOutputFormat.POLARS
+                    if output_format.lower() == OutputFormat.POLARS.lower()
+                    else InternalArrowOutputFormat.PYARROW
+                ),
                 arrow_output_string_format_to_internal(
                     self.resolve_runtime_defaults(
                         "arrow_string_format_default",
                         proto_cfg,
-                        global_default=ArrowOutputStringFormat.LARGE_STRING,
+                        global_default=ArrowOutputStringFormat.UNSPECIFIED,
                         **kwargs,
                     ),
                     output_format,
-                )
-            )
-            read_options.set_arrow_output_per_column_string_format(
+                ),
                 {
                     key: arrow_output_string_format_to_internal(value, output_format)
                     for key, value in resolve_defaults(
                         "arrow_string_format_per_column", proto_cfg, global_default={}, **kwargs
                     ).items()
-                }
+                },
             )
+        else:  # Pandas
+            string_format = (
+                InternalPandasStringFormat.ARROW_LARGE_STRING
+                if _use_pyarrow_strings_in_pandas()
+                else InternalPandasStringFormat.OBJECT
+            )
+            output_config = PandasOutputConfig(default_string_format=string_format)
+        read_options.set_output_config(output_config)
         return read_options, output_format
 
     def _get_batch_read_options(
@@ -2405,7 +2439,7 @@ class NativeVersionStore:
             read_options_per_symbol.append(read_options)
 
         batch_read_options = _PythonVersionStoreBatchReadOptions(batch_throw_on_error)
-        batch_read_options.set_read_options_per_symbol(read_options_per_symbol)
+        batch_read_options.set_read_options(read_options_per_symbol)
         # output_format is also a batch level setting, because we currently don't support mixed output formats
         output_format = self.resolve_runtime_defaults("output_format", {}, global_default=OutputFormat.PANDAS, **kwargs)
         batch_read_options.set_output_format(output_format_to_internal(output_format))
@@ -2660,10 +2694,11 @@ class NativeVersionStore:
             if read_query.row_filter is not None and read_query.needs_post_processing:
                 # post filter
                 start_idx, end_idx = self._compute_filter_start_end_row(read_result, read_query)
+                row_count = end_idx - start_idx
                 data = []
                 for c in read_result.frame_data.data:
-                    data.append(c[start_idx:end_idx])
-                row_count = len(data[0]) if len(data) else 0
+                    # Arrow string columns are a list of RecordBatchData already truncated in C++ so only numpy columns are trimmed here.
+                    data.append(c if _is_arrow_string_column(c) else c[start_idx:end_idx])
                 read_result.frame_data = FrameData(
                     data,
                     read_result.frame_data.names,
@@ -2707,7 +2742,9 @@ class NativeVersionStore:
                 end_idx = index.searchsorted(datetime64(read_query.row_filter.end_ts, "ns"), side="right")
         else:
             raise ArcticNativeException("Unrecognised row_filter type: {}".format(type(read_query.row_filter)))
-        return (start_idx, end_idx)
+        # Resolve start_idx/end_idx (may be negative or beyond row_count) into valid bounds within [0, row_count].
+        start, stop, _ = slice(start_idx, end_idx).indices(read_result.frame_data.row_count)
+        return (start, stop)
 
     def _find_version(
         self, symbol: str, as_of: Optional[VersionQueryInput] = None, raise_on_missing: Optional[bool] = False, **kwargs
@@ -3646,6 +3683,8 @@ class NativeVersionStore:
             return "pickled"
         elif input_type == "ts":
             return "normalized_timeseries"
+        elif input_type == "experimental_arrow":
+            return "arrow"
         else:
             return "missing_type_info"
 
@@ -3707,6 +3746,11 @@ class NativeVersionStore:
         if input_type == "df":
             index_metadata = desc.normalization.df.common
             tz = get_timezone_from_metadata(index_metadata)
+        elif input_type == "experimental_arrow":
+            index_column_name = desc.fields[0].name
+            index_column_meta = desc.normalization.experimental_arrow.columns.get(index_column_name, None)
+            if index_column_meta is not None:
+                tz = index_column_meta.timezone
         if date_range_ns_precision:
             # V2 API expects pandas timestamps with nanosecond precision
             min_ts_pd = pd.Timestamp(min_ts)
@@ -3851,6 +3895,11 @@ class NativeVersionStore:
                     index_dtype.append(dtypes.pop(0))
             if timeseries_descriptor.normalization.df.has_synthetic_columns:
                 columns = pd.RangeIndex(0, len(columns))
+        elif input_type == "experimental_arrow":
+            arrow_meta = timeseries_descriptor.normalization.experimental_arrow
+            if arrow_meta.has_index:
+                index = [columns.pop(0)]
+                index_dtype = [dtypes.pop(0)]
 
         date_range = self._get_time_range_from_ts(
             timeseries_descriptor, dit.start_index, dit.end_index, date_range_ns_precision
@@ -4146,6 +4195,93 @@ class NativeVersionStore:
         cxx_versioned_item = self.version_store._compact_data(symbol, rows_per_segment, prune_previous_version)
         return self._convert_thin_cxx_item_to_python(cxx_versioned_item, None)
 
+    def batch_compact_data(
+        self,
+        symbols: List[str],
+        rows_per_segment: Optional[int] = None,
+        prune_previous_version: Optional[bool] = None,
+    ) -> List[VersionedItem]:
+        """
+        Compact the data keys associated with the latest versions of a collection of symbols such that the number of
+        rows in each segment is close to rows_per_segment. After compaction, all segments will have a row count within
+        33% of rows_per_segment.
+
+        For each symbol, this operation creates a new version, unless the data for that symbol is already compacted.
+
+        The metadata from the versions being compacted are maintained with the newly created versions.
+
+        Note that any fixed-width string columns that are compacted by this method will be coerced to dynamic UTF-8.
+
+        Parameters
+        ----------
+        symbols : List[str]
+            The symbols to compact the data keys of.
+        rows_per_segment : Optional[int], default=None
+            The target number of rows for each segment after the compaction. If None, uses the library configuration
+            setting. Note that subsequent calls to write, append, and update will continue to use the library
+            configuration setting.
+        prune_previous_version : bool, default=None
+            Remove previous versions from version list. Uses library default if left as None.
+
+        Returns
+        -------
+        List[VersionedItem]
+            The i-th element of the returned list corresponds to the i-th entry of the input symbols argument. List of
+            structures containing information including the version number of the written symbol in the store. The data
+            and metadata attributes will not be populated.  If no compaction occurs because the data is already
+            compacted, the version field will be that of the latest live version for the symbol.
+
+        Raises
+        ------
+        StorageException
+            If any of the symbols don't exist
+        ArcticNativeException
+            If invalid rows_per_segment is provided
+        SchemaException
+            If the existing data for any of the symbols is recursively normalized
+
+        Examples
+        --------
+
+        >>> df1 = pd.DataFrame({"col": np.arange(100_000)})
+        >>> df2 = pd.DataFrame({"col": np.arange(200_000)})
+        >>> for i in range(100):
+        >>>     lib.batch_append(["sym1", "sym2"], [df1[i * 1_000: (i + 1) * 1_000], df2[i * 2_000: (i + 1) * 2_000]])
+        >>> len(lib.read_index("sym1"))
+        100
+        >>> len(lib.read_index("sym2"))
+        100
+        >>> lib.batch_compact_data(["sym1", "sym2"])
+        >>> len(lib.read_index("sym1"))
+        1
+        >>> len(lib.read_index("sym2"))
+        2
+        """
+        return self._batch_compact_data_internal(symbols, rows_per_segment, prune_previous_version, throw_on_error=True)
+
+    def _batch_compact_data_internal(
+        self,
+        symbols: List[str],
+        rows_per_segment: Optional[int],
+        prune_previous_version: Optional[bool],
+        throw_on_error: bool,
+    ) -> List[Union[VersionedItem, DataError]]:
+        self._raise_if_duplicate_symbols_in_batch(symbols)
+        check(
+            rows_per_segment is None or rows_per_segment > 0,
+            f"rows_per_segment must be >0, received {rows_per_segment}",
+        )
+        prune_previous_version = resolve_defaults(
+            "prune_previous_version",
+            self._lib_cfg.lib_desc.version.write_options,
+            global_default=False,
+            existing_value=prune_previous_version,
+        )
+        cxx_versioned_items = self.version_store._batch_compact_data(
+            symbols, rows_per_segment, prune_previous_version, throw_on_error
+        )
+        return self._convert_cxx_batch_results_to_python(cxx_versioned_items, len(cxx_versioned_items) * [None])
+
     def is_symbol_fragmented(self, symbol: str, segment_size: Optional[int] = None) -> bool:
         """
         This method has been deprecated and will be removed in a future release. Please use compact_data_explain_plan
@@ -4288,7 +4424,7 @@ class NativeVersionStore:
         strategy: MergeStrategy = MergeStrategy(),
         on: Optional[List[str]] = None,
         metadata: Any = None,
-        prune_previous_versions: bool = False,
+        prune_previous_versions: Optional[bool] = None,
         upsert: bool = False,
     ):
         """
@@ -4300,7 +4436,7 @@ class NativeVersionStore:
             This API is under development and is subject to change. The API is not subject to semver and can change in
             minor or patch releases.
 
-            Only date time indexed symbols and sources are supported at the moment.
+            Dynamic schema is not supported.
 
         Parameters
         ----------
@@ -4309,9 +4445,6 @@ class NativeVersionStore:
         source : pandas.DataFrame or pandas.Series
             The new data to merge. In the case of timeseries, the index must be sorted.
         strategy : Optional[MergeStrategy], default=MergeStrategy(matched="update", not_matched_by_target="insert")
-            !!! warning
-                Strategies using insertion are implemented only for DatetimeIndex
-
             Determines how to handle matched and unmatched rows. Accepted strategies are:
                 - MergeStrategy(matched="update", not_matched_by_target="do_nothing"): Update matched rows, leave others unchanged.
                 - MergeStrategy(matched="do_nothing", not_matched_by_target="insert"): Insert unmatched rows from source.
@@ -4338,8 +4471,8 @@ class NativeVersionStore:
             index.
         metadata : Any, optional
             Metadata to save alongside the new version.
-        prune_previous_versions : bool, default False
-            If True, removes previous versions from the version list.
+        prune_previous_versions : bool, default=None
+            If True, removes previous versions from the version list. Uses library default if left as None.
         upsert : bool, default False
             If True and the symbol does not exist, create it by writing `source` to the store. Requires a strategy
             with `not_matched_by_target="insert"`; combining it with an update-only strategy raises
@@ -4386,6 +4519,12 @@ class NativeVersionStore:
             norm_failure_options_msg="Source data must be normalizable in order to merge it into existing dataframe",
         )
         on = [] if on is None else on
+        prune_previous_versions = resolve_defaults(
+            "prune_previous_version",
+            self._write_options(),
+            global_default=False,
+            existing_value=prune_previous_versions,
+        )
         vit = self.version_store.merge(symbol, item, norm_meta, udm, prune_previous_versions, upsert, strategy, on)
         return self._convert_thin_cxx_item_to_python(vit, metadata)
 

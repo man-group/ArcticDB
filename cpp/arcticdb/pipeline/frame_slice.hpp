@@ -153,7 +153,7 @@ struct FrameSlice {
     util::MagicNum<'F', 's', 'l', 'c'> magic_;
 };
 
-// Collection of these objects is the input to batch_read_uncompressed
+// Collection of these objects is the input to the uncompressed reader (Store::make_uncompressed_reader)
 struct RangesAndKey {
     explicit RangesAndKey(const FrameSlice& frame_slice, entity::AtomKey&& key, bool is_incomplete) :
         row_range_(frame_slice.rows()),
@@ -194,7 +194,7 @@ struct RangesAndKey {
 };
 
 /*
- * The return type of batch_read_uncompressed, the entry point to the processing pipeline.
+ * The return type of the uncompressed reader (Store::make_uncompressed_reader)
  * Intended as a replacement for SliceAndKey without the baggage that class has accumulated, use in preference where
  * possible.
  */

@@ -494,7 +494,7 @@
         "warmup_time": -1
     },
     "arrow.ArrowStrings.peakmem_read": {
-        "code": "class ArrowStrings:\n    def peakmem_read(self, rows, date_range, unique_string_count, arrow_string_format):\n        self._check_should_run_benchmark(date_range=date_range, arrow_string_format=arrow_string_format)\n        self.lib.read(\n            self.symbol_name(rows, unique_string_count),\n            date_range=self.date_range,\n            arrow_string_format_default=arrow_string_format,\n        )\n\n    def setup(self, rows, date_range, unique_string_count, arrow_string_format):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.lib._nvs._set_allow_arrow_input()\n        if date_range is None:\n            self.date_range = None\n        else:\n            # Create a date range that excludes the first and last 10 rows of the data only\n            self.date_range = (pd.Timestamp(10), pd.Timestamp(rows - 10))\n        self.fresh_lib = self.get_fresh_lib()\n        self.fresh_lib._nvs._set_allow_arrow_input()\n        self.table = self._generate_table(rows, self.num_cols, unique_string_count, arrow_string_format)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "code": "class ArrowStrings:\n    def peakmem_read(self, rows, date_range, unique_string_count, arrow_string_format):\n        self._check_should_run_benchmark(date_range=date_range, arrow_string_format=arrow_string_format)\n        self.lib.read(\n            self.symbol_name(rows, unique_string_count),\n            date_range=self.date_range,\n            arrow_string_format_default=arrow_string_format,\n        )\n\n    def setup(self, rows, date_range, unique_string_count, arrow_string_format):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.lib._nvs._set_allow_arrow_input()\n        if date_range is None:\n            self.date_range = None\n        else:\n            # Create a date range that excludes the first and last 10 rows of the data only\n            self.date_range = (pd.Timestamp(10), pd.Timestamp(rows - 10))\n        self.fresh_lib = self.get_fresh_lib()\n        self.fresh_lib._nvs._set_allow_arrow_input()\n        self.table = self._generate_table(rows, self.num_cols, unique_string_count, arrow_string_format)\n        self.pandas_frame_object = self._generate_pandas_frame(rows, self.num_cols, unique_string_count, False)\n        self.pandas_frame_str = self._generate_pandas_frame(rows, self.num_cols, unique_string_count, True)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
         "name": "arrow.ArrowStrings.peakmem_read",
         "param_names": [
             "rows",
@@ -517,19 +517,86 @@
             ],
             [
                 "<ArrowOutputStringFormat.CATEGORICAL: 'CATEGORICAL'>",
-                "<ArrowOutputStringFormat.DICTIONARY_ENCODED: 'DICTIONARY_ENCODED'>",
                 "<ArrowOutputStringFormat.LARGE_STRING: 'LARGE_STRING'>",
                 "<ArrowOutputStringFormat.SMALL_STRING: 'SMALL_STRING'>"
             ]
         ],
-        "setup_cache_key": "arrow:275",
+        "setup_cache_key": "arrow:284",
         "timeout": 600,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "63916d967d960cd4a12f1ae135fe529a5070b8df7772b585d147f015b37b2e0c"
+        "version": "23a4f7b5feeba9b921a4cac441c613355f4379d45622c4651c63f62789c9ba74"
+    },
+    "arrow.ArrowStrings.peakmem_read_pandas_object": {
+        "code": "class ArrowStrings:\n    def peakmem_read_pandas_object(self, rows, date_range, unique_string_count, arrow_string_format):\n        self._check_should_run_pandas_benchmark(arrow_string_format=arrow_string_format)\n        with pd.option_context(\"future.infer_string\", False):\n            self.lib.read(\n                self.symbol_name(rows, unique_string_count),\n                date_range=self.date_range,\n                output_format=OutputFormat.PANDAS,\n            )\n\n    def setup(self, rows, date_range, unique_string_count, arrow_string_format):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.lib._nvs._set_allow_arrow_input()\n        if date_range is None:\n            self.date_range = None\n        else:\n            # Create a date range that excludes the first and last 10 rows of the data only\n            self.date_range = (pd.Timestamp(10), pd.Timestamp(rows - 10))\n        self.fresh_lib = self.get_fresh_lib()\n        self.fresh_lib._nvs._set_allow_arrow_input()\n        self.table = self._generate_table(rows, self.num_cols, unique_string_count, arrow_string_format)\n        self.pandas_frame_object = self._generate_pandas_frame(rows, self.num_cols, unique_string_count, False)\n        self.pandas_frame_str = self._generate_pandas_frame(rows, self.num_cols, unique_string_count, True)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "name": "arrow.ArrowStrings.peakmem_read_pandas_object",
+        "param_names": [
+            "rows",
+            "date_range",
+            "unique_string_count",
+            "arrow_string_format"
+        ],
+        "params": [
+            [
+                "100000",
+                "1000000"
+            ],
+            [
+                "None",
+                "'middle'"
+            ],
+            [
+                "100",
+                "10000"
+            ],
+            [
+                "<ArrowOutputStringFormat.CATEGORICAL: 'CATEGORICAL'>",
+                "<ArrowOutputStringFormat.LARGE_STRING: 'LARGE_STRING'>",
+                "<ArrowOutputStringFormat.SMALL_STRING: 'SMALL_STRING'>"
+            ]
+        ],
+        "setup_cache_key": "arrow:284",
+        "timeout": 600,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "b75c59206f8e8ee601383c1e24779e45b24bdbca1a9fbc329cc5d3f2f2c28531"
+    },
+    "arrow.ArrowStrings.peakmem_read_pandas_str": {
+        "code": "class ArrowStrings:\n    def peakmem_read_pandas_str(self, rows, date_range, unique_string_count, arrow_string_format):\n        self._check_should_run_pandas_benchmark(arrow_string_format=arrow_string_format)\n        with pd.option_context(\"future.infer_string\", True):\n            self.lib.read(\n                self.symbol_name(rows, unique_string_count),\n                date_range=self.date_range,\n                output_format=OutputFormat.PANDAS,\n            )\n\n    def setup(self, rows, date_range, unique_string_count, arrow_string_format):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.lib._nvs._set_allow_arrow_input()\n        if date_range is None:\n            self.date_range = None\n        else:\n            # Create a date range that excludes the first and last 10 rows of the data only\n            self.date_range = (pd.Timestamp(10), pd.Timestamp(rows - 10))\n        self.fresh_lib = self.get_fresh_lib()\n        self.fresh_lib._nvs._set_allow_arrow_input()\n        self.table = self._generate_table(rows, self.num_cols, unique_string_count, arrow_string_format)\n        self.pandas_frame_object = self._generate_pandas_frame(rows, self.num_cols, unique_string_count, False)\n        self.pandas_frame_str = self._generate_pandas_frame(rows, self.num_cols, unique_string_count, True)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "name": "arrow.ArrowStrings.peakmem_read_pandas_str",
+        "param_names": [
+            "rows",
+            "date_range",
+            "unique_string_count",
+            "arrow_string_format"
+        ],
+        "params": [
+            [
+                "100000",
+                "1000000"
+            ],
+            [
+                "None",
+                "'middle'"
+            ],
+            [
+                "100",
+                "10000"
+            ],
+            [
+                "<ArrowOutputStringFormat.CATEGORICAL: 'CATEGORICAL'>",
+                "<ArrowOutputStringFormat.LARGE_STRING: 'LARGE_STRING'>",
+                "<ArrowOutputStringFormat.SMALL_STRING: 'SMALL_STRING'>"
+            ]
+        ],
+        "setup_cache_key": "arrow:284",
+        "timeout": 600,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "4d7a11bd3e4973113ce61c67ea4396014a47a7d490a28671a0649f312cbd09ea"
     },
     "arrow.ArrowStrings.peakmem_write": {
-        "code": "class ArrowStrings:\n    def peakmem_write(self, rows, date_range, unique_string_count, arrow_string_format):\n        # No point in running with all read time options\n        if date_range is None:\n            self.fresh_lib.write(self.symbol_name(rows, unique_string_count), self.table, index_column=True)\n        else:\n            raise SkipNotImplemented\n\n    def setup(self, rows, date_range, unique_string_count, arrow_string_format):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.lib._nvs._set_allow_arrow_input()\n        if date_range is None:\n            self.date_range = None\n        else:\n            # Create a date range that excludes the first and last 10 rows of the data only\n            self.date_range = (pd.Timestamp(10), pd.Timestamp(rows - 10))\n        self.fresh_lib = self.get_fresh_lib()\n        self.fresh_lib._nvs._set_allow_arrow_input()\n        self.table = self._generate_table(rows, self.num_cols, unique_string_count, arrow_string_format)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "code": "class ArrowStrings:\n    def peakmem_write(self, rows, date_range, unique_string_count, arrow_string_format):\n        # No point in running with all read time options\n        if date_range is None:\n            self.fresh_lib.write(self.symbol_name(rows, unique_string_count), self.table, index_column=True)\n        else:\n            raise SkipNotImplemented\n\n    def setup(self, rows, date_range, unique_string_count, arrow_string_format):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.lib._nvs._set_allow_arrow_input()\n        if date_range is None:\n            self.date_range = None\n        else:\n            # Create a date range that excludes the first and last 10 rows of the data only\n            self.date_range = (pd.Timestamp(10), pd.Timestamp(rows - 10))\n        self.fresh_lib = self.get_fresh_lib()\n        self.fresh_lib._nvs._set_allow_arrow_input()\n        self.table = self._generate_table(rows, self.num_cols, unique_string_count, arrow_string_format)\n        self.pandas_frame_object = self._generate_pandas_frame(rows, self.num_cols, unique_string_count, False)\n        self.pandas_frame_str = self._generate_pandas_frame(rows, self.num_cols, unique_string_count, True)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
         "name": "arrow.ArrowStrings.peakmem_write",
         "param_names": [
             "rows",
@@ -552,19 +619,86 @@
             ],
             [
                 "<ArrowOutputStringFormat.CATEGORICAL: 'CATEGORICAL'>",
-                "<ArrowOutputStringFormat.DICTIONARY_ENCODED: 'DICTIONARY_ENCODED'>",
                 "<ArrowOutputStringFormat.LARGE_STRING: 'LARGE_STRING'>",
                 "<ArrowOutputStringFormat.SMALL_STRING: 'SMALL_STRING'>"
             ]
         ],
-        "setup_cache_key": "arrow:275",
+        "setup_cache_key": "arrow:284",
         "timeout": 600,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "ff66cbf49cb02452d9b97b577bfc80aef6626e42161d778970bcc9407a93a9a7"
+        "version": "46561dd8c0a4174ca7e182dd56d8a0f0bea17c77fb7348dce2b00ec3489e69d7"
+    },
+    "arrow.ArrowStrings.peakmem_write_pandas_object": {
+        "code": "class ArrowStrings:\n    def peakmem_write_pandas_object(self, rows, date_range, unique_string_count, arrow_string_format):\n        self._check_should_run_pandas_write_benchmark(date_range=date_range, arrow_string_format=arrow_string_format)\n        with pd.option_context(\"future.infer_string\", False):\n            self.fresh_lib.write(self.symbol_name(rows, unique_string_count), self.pandas_frame_object)\n\n    def setup(self, rows, date_range, unique_string_count, arrow_string_format):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.lib._nvs._set_allow_arrow_input()\n        if date_range is None:\n            self.date_range = None\n        else:\n            # Create a date range that excludes the first and last 10 rows of the data only\n            self.date_range = (pd.Timestamp(10), pd.Timestamp(rows - 10))\n        self.fresh_lib = self.get_fresh_lib()\n        self.fresh_lib._nvs._set_allow_arrow_input()\n        self.table = self._generate_table(rows, self.num_cols, unique_string_count, arrow_string_format)\n        self.pandas_frame_object = self._generate_pandas_frame(rows, self.num_cols, unique_string_count, False)\n        self.pandas_frame_str = self._generate_pandas_frame(rows, self.num_cols, unique_string_count, True)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "name": "arrow.ArrowStrings.peakmem_write_pandas_object",
+        "param_names": [
+            "rows",
+            "date_range",
+            "unique_string_count",
+            "arrow_string_format"
+        ],
+        "params": [
+            [
+                "100000",
+                "1000000"
+            ],
+            [
+                "None",
+                "'middle'"
+            ],
+            [
+                "100",
+                "10000"
+            ],
+            [
+                "<ArrowOutputStringFormat.CATEGORICAL: 'CATEGORICAL'>",
+                "<ArrowOutputStringFormat.LARGE_STRING: 'LARGE_STRING'>",
+                "<ArrowOutputStringFormat.SMALL_STRING: 'SMALL_STRING'>"
+            ]
+        ],
+        "setup_cache_key": "arrow:284",
+        "timeout": 600,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "168ce25bffe77cd9d4146a336758f110f768f7ce3056be984f3a46875a5f6d0a"
+    },
+    "arrow.ArrowStrings.peakmem_write_pandas_str": {
+        "code": "class ArrowStrings:\n    def peakmem_write_pandas_str(self, rows, date_range, unique_string_count, arrow_string_format):\n        self._check_should_run_pandas_write_benchmark(date_range=date_range, arrow_string_format=arrow_string_format)\n        with pd.option_context(\"future.infer_string\", True):\n            self.fresh_lib.write(self.symbol_name(rows, unique_string_count), self.pandas_frame_str)\n\n    def setup(self, rows, date_range, unique_string_count, arrow_string_format):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.lib._nvs._set_allow_arrow_input()\n        if date_range is None:\n            self.date_range = None\n        else:\n            # Create a date range that excludes the first and last 10 rows of the data only\n            self.date_range = (pd.Timestamp(10), pd.Timestamp(rows - 10))\n        self.fresh_lib = self.get_fresh_lib()\n        self.fresh_lib._nvs._set_allow_arrow_input()\n        self.table = self._generate_table(rows, self.num_cols, unique_string_count, arrow_string_format)\n        self.pandas_frame_object = self._generate_pandas_frame(rows, self.num_cols, unique_string_count, False)\n        self.pandas_frame_str = self._generate_pandas_frame(rows, self.num_cols, unique_string_count, True)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "name": "arrow.ArrowStrings.peakmem_write_pandas_str",
+        "param_names": [
+            "rows",
+            "date_range",
+            "unique_string_count",
+            "arrow_string_format"
+        ],
+        "params": [
+            [
+                "100000",
+                "1000000"
+            ],
+            [
+                "None",
+                "'middle'"
+            ],
+            [
+                "100",
+                "10000"
+            ],
+            [
+                "<ArrowOutputStringFormat.CATEGORICAL: 'CATEGORICAL'>",
+                "<ArrowOutputStringFormat.LARGE_STRING: 'LARGE_STRING'>",
+                "<ArrowOutputStringFormat.SMALL_STRING: 'SMALL_STRING'>"
+            ]
+        ],
+        "setup_cache_key": "arrow:284",
+        "timeout": 600,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "24d20f18075c83b386a00a98dc041b3189a72fdd9ddcd611146de8cbc63ed139"
     },
     "arrow.ArrowStrings.time_read": {
-        "code": "class ArrowStrings:\n    def time_read(self, rows, date_range, unique_string_count, arrow_string_format):\n        self._check_should_run_benchmark(date_range=date_range, arrow_string_format=arrow_string_format)\n        self.lib.read(\n            self.symbol_name(rows, unique_string_count),\n            date_range=self.date_range,\n            arrow_string_format_default=arrow_string_format,\n        )\n\n    def setup(self, rows, date_range, unique_string_count, arrow_string_format):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.lib._nvs._set_allow_arrow_input()\n        if date_range is None:\n            self.date_range = None\n        else:\n            # Create a date range that excludes the first and last 10 rows of the data only\n            self.date_range = (pd.Timestamp(10), pd.Timestamp(rows - 10))\n        self.fresh_lib = self.get_fresh_lib()\n        self.fresh_lib._nvs._set_allow_arrow_input()\n        self.table = self._generate_table(rows, self.num_cols, unique_string_count, arrow_string_format)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "code": "class ArrowStrings:\n    def time_read(self, rows, date_range, unique_string_count, arrow_string_format):\n        self._check_should_run_benchmark(date_range=date_range, arrow_string_format=arrow_string_format)\n        self.lib.read(\n            self.symbol_name(rows, unique_string_count),\n            date_range=self.date_range,\n            arrow_string_format_default=arrow_string_format,\n        )\n\n    def setup(self, rows, date_range, unique_string_count, arrow_string_format):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.lib._nvs._set_allow_arrow_input()\n        if date_range is None:\n            self.date_range = None\n        else:\n            # Create a date range that excludes the first and last 10 rows of the data only\n            self.date_range = (pd.Timestamp(10), pd.Timestamp(rows - 10))\n        self.fresh_lib = self.get_fresh_lib()\n        self.fresh_lib._nvs._set_allow_arrow_input()\n        self.table = self._generate_table(rows, self.num_cols, unique_string_count, arrow_string_format)\n        self.pandas_frame_object = self._generate_pandas_frame(rows, self.num_cols, unique_string_count, False)\n        self.pandas_frame_str = self._generate_pandas_frame(rows, self.num_cols, unique_string_count, True)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
         "min_run_count": 2,
         "name": "arrow.ArrowStrings.time_read",
         "number": 0,
@@ -589,7 +723,6 @@
             ],
             [
                 "<ArrowOutputStringFormat.CATEGORICAL: 'CATEGORICAL'>",
-                "<ArrowOutputStringFormat.DICTIONARY_ENCODED: 'DICTIONARY_ENCODED'>",
                 "<ArrowOutputStringFormat.LARGE_STRING: 'LARGE_STRING'>",
                 "<ArrowOutputStringFormat.SMALL_STRING: 'SMALL_STRING'>"
             ]
@@ -597,15 +730,95 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "arrow:275",
+        "setup_cache_key": "arrow:284",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
-        "version": "16b319863e969f19acff5f065101f98d40d6e39a2a982f36823ce71177837faa",
+        "version": "ea5f82aaacf3eaa71d1418364e3534f681a9216fd915dac67fffdc0b6ae030d8",
+        "warmup_time": -1
+    },
+    "arrow.ArrowStrings.time_read_pandas_object": {
+        "code": "class ArrowStrings:\n    def time_read_pandas_object(self, rows, date_range, unique_string_count, arrow_string_format):\n        self._check_should_run_pandas_benchmark(arrow_string_format=arrow_string_format)\n        with pd.option_context(\"future.infer_string\", False):\n            self.lib.read(\n                self.symbol_name(rows, unique_string_count),\n                date_range=self.date_range,\n                output_format=OutputFormat.PANDAS,\n            )\n\n    def setup(self, rows, date_range, unique_string_count, arrow_string_format):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.lib._nvs._set_allow_arrow_input()\n        if date_range is None:\n            self.date_range = None\n        else:\n            # Create a date range that excludes the first and last 10 rows of the data only\n            self.date_range = (pd.Timestamp(10), pd.Timestamp(rows - 10))\n        self.fresh_lib = self.get_fresh_lib()\n        self.fresh_lib._nvs._set_allow_arrow_input()\n        self.table = self._generate_table(rows, self.num_cols, unique_string_count, arrow_string_format)\n        self.pandas_frame_object = self._generate_pandas_frame(rows, self.num_cols, unique_string_count, False)\n        self.pandas_frame_str = self._generate_pandas_frame(rows, self.num_cols, unique_string_count, True)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "min_run_count": 2,
+        "name": "arrow.ArrowStrings.time_read_pandas_object",
+        "number": 0,
+        "param_names": [
+            "rows",
+            "date_range",
+            "unique_string_count",
+            "arrow_string_format"
+        ],
+        "params": [
+            [
+                "100000",
+                "1000000"
+            ],
+            [
+                "None",
+                "'middle'"
+            ],
+            [
+                "100",
+                "10000"
+            ],
+            [
+                "<ArrowOutputStringFormat.CATEGORICAL: 'CATEGORICAL'>",
+                "<ArrowOutputStringFormat.LARGE_STRING: 'LARGE_STRING'>",
+                "<ArrowOutputStringFormat.SMALL_STRING: 'SMALL_STRING'>"
+            ]
+        ],
+        "repeat": 0,
+        "rounds": 2,
+        "sample_time": 0.01,
+        "setup_cache_key": "arrow:284",
+        "timeout": 600,
+        "type": "time",
+        "unit": "seconds",
+        "version": "58a91495b2c53243296a69c1cfbc7f9d6c13735965d69676897046e368fa51e7",
+        "warmup_time": -1
+    },
+    "arrow.ArrowStrings.time_read_pandas_str": {
+        "code": "class ArrowStrings:\n    def time_read_pandas_str(self, rows, date_range, unique_string_count, arrow_string_format):\n        self._check_should_run_pandas_benchmark(arrow_string_format=arrow_string_format)\n        with pd.option_context(\"future.infer_string\", True):\n            self.lib.read(\n                self.symbol_name(rows, unique_string_count),\n                date_range=self.date_range,\n                output_format=OutputFormat.PANDAS,\n            )\n\n    def setup(self, rows, date_range, unique_string_count, arrow_string_format):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.lib._nvs._set_allow_arrow_input()\n        if date_range is None:\n            self.date_range = None\n        else:\n            # Create a date range that excludes the first and last 10 rows of the data only\n            self.date_range = (pd.Timestamp(10), pd.Timestamp(rows - 10))\n        self.fresh_lib = self.get_fresh_lib()\n        self.fresh_lib._nvs._set_allow_arrow_input()\n        self.table = self._generate_table(rows, self.num_cols, unique_string_count, arrow_string_format)\n        self.pandas_frame_object = self._generate_pandas_frame(rows, self.num_cols, unique_string_count, False)\n        self.pandas_frame_str = self._generate_pandas_frame(rows, self.num_cols, unique_string_count, True)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "min_run_count": 2,
+        "name": "arrow.ArrowStrings.time_read_pandas_str",
+        "number": 0,
+        "param_names": [
+            "rows",
+            "date_range",
+            "unique_string_count",
+            "arrow_string_format"
+        ],
+        "params": [
+            [
+                "100000",
+                "1000000"
+            ],
+            [
+                "None",
+                "'middle'"
+            ],
+            [
+                "100",
+                "10000"
+            ],
+            [
+                "<ArrowOutputStringFormat.CATEGORICAL: 'CATEGORICAL'>",
+                "<ArrowOutputStringFormat.LARGE_STRING: 'LARGE_STRING'>",
+                "<ArrowOutputStringFormat.SMALL_STRING: 'SMALL_STRING'>"
+            ]
+        ],
+        "repeat": 0,
+        "rounds": 2,
+        "sample_time": 0.01,
+        "setup_cache_key": "arrow:284",
+        "timeout": 600,
+        "type": "time",
+        "unit": "seconds",
+        "version": "2481aedc53bf8dec89fb2372dcba3c8835646321a959c3dedac749025216dad3",
         "warmup_time": -1
     },
     "arrow.ArrowStrings.time_write": {
-        "code": "class ArrowStrings:\n    def time_write(self, rows, date_range, unique_string_count, arrow_string_format):\n        # No point in running with all read time options\n        if date_range is None:\n            self.fresh_lib.write(self.symbol_name(rows, unique_string_count), self.table, index_column=True)\n        else:\n            raise SkipNotImplemented\n\n    def setup(self, rows, date_range, unique_string_count, arrow_string_format):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.lib._nvs._set_allow_arrow_input()\n        if date_range is None:\n            self.date_range = None\n        else:\n            # Create a date range that excludes the first and last 10 rows of the data only\n            self.date_range = (pd.Timestamp(10), pd.Timestamp(rows - 10))\n        self.fresh_lib = self.get_fresh_lib()\n        self.fresh_lib._nvs._set_allow_arrow_input()\n        self.table = self._generate_table(rows, self.num_cols, unique_string_count, arrow_string_format)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "code": "class ArrowStrings:\n    def time_write(self, rows, date_range, unique_string_count, arrow_string_format):\n        # No point in running with all read time options\n        if date_range is None:\n            self.fresh_lib.write(self.symbol_name(rows, unique_string_count), self.table, index_column=True)\n        else:\n            raise SkipNotImplemented\n\n    def setup(self, rows, date_range, unique_string_count, arrow_string_format):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.lib._nvs._set_allow_arrow_input()\n        if date_range is None:\n            self.date_range = None\n        else:\n            # Create a date range that excludes the first and last 10 rows of the data only\n            self.date_range = (pd.Timestamp(10), pd.Timestamp(rows - 10))\n        self.fresh_lib = self.get_fresh_lib()\n        self.fresh_lib._nvs._set_allow_arrow_input()\n        self.table = self._generate_table(rows, self.num_cols, unique_string_count, arrow_string_format)\n        self.pandas_frame_object = self._generate_pandas_frame(rows, self.num_cols, unique_string_count, False)\n        self.pandas_frame_str = self._generate_pandas_frame(rows, self.num_cols, unique_string_count, True)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
         "min_run_count": 2,
         "name": "arrow.ArrowStrings.time_write",
         "number": 0,
@@ -630,7 +843,6 @@
             ],
             [
                 "<ArrowOutputStringFormat.CATEGORICAL: 'CATEGORICAL'>",
-                "<ArrowOutputStringFormat.DICTIONARY_ENCODED: 'DICTIONARY_ENCODED'>",
                 "<ArrowOutputStringFormat.LARGE_STRING: 'LARGE_STRING'>",
                 "<ArrowOutputStringFormat.SMALL_STRING: 'SMALL_STRING'>"
             ]
@@ -638,11 +850,91 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "arrow:275",
+        "setup_cache_key": "arrow:284",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
-        "version": "071ffa56b7ed23a3c326ce40d6b04509ca5b65455c94fa03f8618ddf8f3214c0",
+        "version": "1341e7ca69e21e36e097b3cfc387caa4da6523cd487ceefec086b5e98d20e3e1",
+        "warmup_time": -1
+    },
+    "arrow.ArrowStrings.time_write_pandas_object": {
+        "code": "class ArrowStrings:\n    def time_write_pandas_object(self, rows, date_range, unique_string_count, arrow_string_format):\n        self._check_should_run_pandas_write_benchmark(date_range=date_range, arrow_string_format=arrow_string_format)\n        with pd.option_context(\"future.infer_string\", False):\n            self.fresh_lib.write(self.symbol_name(rows, unique_string_count), self.pandas_frame_object)\n\n    def setup(self, rows, date_range, unique_string_count, arrow_string_format):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.lib._nvs._set_allow_arrow_input()\n        if date_range is None:\n            self.date_range = None\n        else:\n            # Create a date range that excludes the first and last 10 rows of the data only\n            self.date_range = (pd.Timestamp(10), pd.Timestamp(rows - 10))\n        self.fresh_lib = self.get_fresh_lib()\n        self.fresh_lib._nvs._set_allow_arrow_input()\n        self.table = self._generate_table(rows, self.num_cols, unique_string_count, arrow_string_format)\n        self.pandas_frame_object = self._generate_pandas_frame(rows, self.num_cols, unique_string_count, False)\n        self.pandas_frame_str = self._generate_pandas_frame(rows, self.num_cols, unique_string_count, True)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "min_run_count": 2,
+        "name": "arrow.ArrowStrings.time_write_pandas_object",
+        "number": 0,
+        "param_names": [
+            "rows",
+            "date_range",
+            "unique_string_count",
+            "arrow_string_format"
+        ],
+        "params": [
+            [
+                "100000",
+                "1000000"
+            ],
+            [
+                "None",
+                "'middle'"
+            ],
+            [
+                "100",
+                "10000"
+            ],
+            [
+                "<ArrowOutputStringFormat.CATEGORICAL: 'CATEGORICAL'>",
+                "<ArrowOutputStringFormat.LARGE_STRING: 'LARGE_STRING'>",
+                "<ArrowOutputStringFormat.SMALL_STRING: 'SMALL_STRING'>"
+            ]
+        ],
+        "repeat": 0,
+        "rounds": 2,
+        "sample_time": 0.01,
+        "setup_cache_key": "arrow:284",
+        "timeout": 600,
+        "type": "time",
+        "unit": "seconds",
+        "version": "babf8e173fb9bfb666931e3afca169064a111f7e82d490c0280db5ce2e736c4c",
+        "warmup_time": -1
+    },
+    "arrow.ArrowStrings.time_write_pandas_str": {
+        "code": "class ArrowStrings:\n    def time_write_pandas_str(self, rows, date_range, unique_string_count, arrow_string_format):\n        self._check_should_run_pandas_write_benchmark(date_range=date_range, arrow_string_format=arrow_string_format)\n        with pd.option_context(\"future.infer_string\", True):\n            self.fresh_lib.write(self.symbol_name(rows, unique_string_count), self.pandas_frame_str)\n\n    def setup(self, rows, date_range, unique_string_count, arrow_string_format):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.lib._nvs._set_allow_arrow_input()\n        if date_range is None:\n            self.date_range = None\n        else:\n            # Create a date range that excludes the first and last 10 rows of the data only\n            self.date_range = (pd.Timestamp(10), pd.Timestamp(rows - 10))\n        self.fresh_lib = self.get_fresh_lib()\n        self.fresh_lib._nvs._set_allow_arrow_input()\n        self.table = self._generate_table(rows, self.num_cols, unique_string_count, arrow_string_format)\n        self.pandas_frame_object = self._generate_pandas_frame(rows, self.num_cols, unique_string_count, False)\n        self.pandas_frame_str = self._generate_pandas_frame(rows, self.num_cols, unique_string_count, True)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "min_run_count": 2,
+        "name": "arrow.ArrowStrings.time_write_pandas_str",
+        "number": 0,
+        "param_names": [
+            "rows",
+            "date_range",
+            "unique_string_count",
+            "arrow_string_format"
+        ],
+        "params": [
+            [
+                "100000",
+                "1000000"
+            ],
+            [
+                "None",
+                "'middle'"
+            ],
+            [
+                "100",
+                "10000"
+            ],
+            [
+                "<ArrowOutputStringFormat.CATEGORICAL: 'CATEGORICAL'>",
+                "<ArrowOutputStringFormat.LARGE_STRING: 'LARGE_STRING'>",
+                "<ArrowOutputStringFormat.SMALL_STRING: 'SMALL_STRING'>"
+            ]
+        ],
+        "repeat": 0,
+        "rounds": 2,
+        "sample_time": 0.01,
+        "setup_cache_key": "arrow:284",
+        "timeout": 600,
+        "type": "time",
+        "unit": "seconds",
+        "version": "1827a512cf941ecf6e4762e03c528824eaae2a21349a24f8d6af7e4bd84207d8",
         "warmup_time": -1
     },
     "basic_functions.BasicFunctions.peakmem_read": {
@@ -1033,7 +1325,7 @@
                 "<Storage.AMAZON: 1>"
             ]
         ],
-        "setup_cache_key": "basic_functions:313",
+        "setup_cache_key": "basic_functions:310",
         "type": "peakmemory",
         "unit": "bytes",
         "version": "f4a967266cd6ea1d0d981ad126d561f2f00dbb8eeab69cc3e865dffa411e06f7"
@@ -1060,7 +1352,7 @@
                 "<Storage.AMAZON: 1>"
             ]
         ],
-        "setup_cache_key": "basic_functions:313",
+        "setup_cache_key": "basic_functions:310",
         "type": "peakmemory",
         "unit": "bytes",
         "version": "c0ae8f163bf19c07653b6f60ab6e995158aa563e662c2d8ccd347a5ba505688c"
@@ -1087,7 +1379,7 @@
                 "<Storage.AMAZON: 1>"
             ]
         ],
-        "setup_cache_key": "basic_functions:313",
+        "setup_cache_key": "basic_functions:310",
         "type": "peakmemory",
         "unit": "bytes",
         "version": "d362cfb67572e9f68968dfe29777803a15c4691f01653af49ea32bdb7c158b01"
@@ -1119,7 +1411,7 @@
         "repeat": 0,
         "rounds": 1,
         "sample_time": 0.1,
-        "setup_cache_key": "basic_functions:313",
+        "setup_cache_key": "basic_functions:310",
         "type": "time",
         "unit": "seconds",
         "version": "9c67c6ac2385d57d12dc1d8d49b7a0d0711d60e36d0e7d6a99a23e5fcc7cfbb5",
@@ -1152,7 +1444,7 @@
         "repeat": 0,
         "rounds": 1,
         "sample_time": 0.1,
-        "setup_cache_key": "basic_functions:313",
+        "setup_cache_key": "basic_functions:310",
         "type": "time",
         "unit": "seconds",
         "version": "a93ba8dc7f258d45759f62c1d3d2a48bcf6ea4d091a58f36008ed020b4eeefb9",
@@ -1185,7 +1477,7 @@
         "repeat": 0,
         "rounds": 1,
         "sample_time": 0.1,
-        "setup_cache_key": "basic_functions:313",
+        "setup_cache_key": "basic_functions:310",
         "type": "time",
         "unit": "seconds",
         "version": "64aec41d93970093050e6a4b50565a81f071487c2b3a63f9e6fabe9afe0b0f7f",
@@ -1218,7 +1510,7 @@
         "repeat": 0,
         "rounds": 1,
         "sample_time": 0.1,
-        "setup_cache_key": "basic_functions:313",
+        "setup_cache_key": "basic_functions:310",
         "type": "time",
         "unit": "seconds",
         "version": "f2cdd6b45cd2d49f2358097a18969b2ad5f2efc6cf26a854ab889d6b23fc4c4f",
@@ -2120,7 +2412,7 @@
         "warmup_time": 0.5
     },
     "compact_data.AppendCompactDataNumericDynamicSchema.peakmem_append_compact_data": {
-        "code": "class AppendCompactDataNumericDynamicSchema:\n    def peakmem_append_compact_data(self, num_symbols, existing_data_fragmented, append_rows):\n        self.append(num_symbols)\n\n    def setup(self, num_symbols, existing_data_fragmented, append_rows):\n        columns = rng.choice(self.COLUMN_NAMES, self.NUM_COLUMNS // 2, replace=False)\n        self.append_df = pd.DataFrame({column: np.arange(append_rows) for column in columns})\n        self._setup(self.lib_name(existing_data_fragmented))\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "code": "class AppendCompactDataNumericDynamicSchema:\n    def peakmem_append_compact_data(self, num_symbols, existing_data_fragmented, append_rows):\n        self.append(num_symbols)\n\n    def setup(self, num_symbols, existing_data_fragmented, append_rows):\n        columns = rng.choice(self.COLUMN_NAMES, self.NUM_COLUMNS // 2, replace=False)\n        self.append_df = pd.DataFrame({column: np.arange(append_rows) for column in columns})\n        self._setup(lib_name(existing_data_fragmented))\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
         "name": "compact_data.AppendCompactDataNumericDynamicSchema.peakmem_append_compact_data",
         "param_names": [
             "num_symbols",
@@ -2141,13 +2433,13 @@
                 "1000"
             ]
         ],
-        "setup_cache_key": "compact_data:430",
+        "setup_cache_key": "compact_data:427",
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "ef9a24a988741ffb5729c46d7e75bc83ebb7cd3757890eea3160303f1f1053a8"
+        "version": "ba4165befb708b8f7f58643cda9872d9cb793aad070c02999d2cc7114fa42ec9"
     },
     "compact_data.AppendCompactDataNumericDynamicSchema.time_append_compact_data": {
-        "code": "class AppendCompactDataNumericDynamicSchema:\n    def time_append_compact_data(self, num_symbols, existing_data_fragmented, append_rows):\n        self.append(num_symbols)\n\n    def setup(self, num_symbols, existing_data_fragmented, append_rows):\n        columns = rng.choice(self.COLUMN_NAMES, self.NUM_COLUMNS // 2, replace=False)\n        self.append_df = pd.DataFrame({column: np.arange(append_rows) for column in columns})\n        self._setup(self.lib_name(existing_data_fragmented))\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "code": "class AppendCompactDataNumericDynamicSchema:\n    def time_append_compact_data(self, num_symbols, existing_data_fragmented, append_rows):\n        self.append(num_symbols)\n\n    def setup(self, num_symbols, existing_data_fragmented, append_rows):\n        columns = rng.choice(self.COLUMN_NAMES, self.NUM_COLUMNS // 2, replace=False)\n        self.append_df = pd.DataFrame({column: np.arange(append_rows) for column in columns})\n        self._setup(lib_name(existing_data_fragmented))\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
         "min_run_count": 2,
         "name": "compact_data.AppendCompactDataNumericDynamicSchema.time_append_compact_data",
         "number": 1,
@@ -2173,14 +2465,14 @@
         "repeat": 7,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "compact_data:430",
+        "setup_cache_key": "compact_data:427",
         "type": "time",
         "unit": "seconds",
-        "version": "e8851c6ceb9da5f5c4ae5526de0225ead5f6f2d221165ea2772afeb4112a7220",
+        "version": "213d83968732a37caeb4a6199db291b7ff4720e1ba81da9b8f9d335bf863e675",
         "warmup_time": 0
     },
     "compact_data.AppendCompactDataNumericStaticSchema.peakmem_append_compact_data": {
-        "code": "class AppendCompactDataNumericStaticSchema:\n    def peakmem_append_compact_data(self, num_symbols, existing_data_fragmented, append_rows):\n        self.append(num_symbols)\n\n    def setup(self, num_symbols, existing_data_fragmented, append_rows):\n        self.append_df = pd.DataFrame(\n            {f\"col_{i}\": np.arange(i * append_rows, (i + 1) * append_rows) for i in range(self.NUM_COLUMNS)}\n        )\n        self._setup(self.lib_name(existing_data_fragmented))\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "code": "class AppendCompactDataNumericStaticSchema:\n    def peakmem_append_compact_data(self, num_symbols, existing_data_fragmented, append_rows):\n        self.append(num_symbols)\n\n    def setup(self, num_symbols, existing_data_fragmented, append_rows):\n        self.append_df = pd.DataFrame(\n            {f\"col_{i}\": np.arange(i * append_rows, (i + 1) * append_rows) for i in range(self.NUM_COLUMNS)}\n        )\n        self._setup(lib_name(existing_data_fragmented))\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
         "name": "compact_data.AppendCompactDataNumericStaticSchema.peakmem_append_compact_data",
         "param_names": [
             "num_symbols",
@@ -2202,13 +2494,13 @@
                 "1000000"
             ]
         ],
-        "setup_cache_key": "compact_data:332",
+        "setup_cache_key": "compact_data:329",
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "85ec2af75fa362379363f90d807083ca4f66a1043a89122b6152e5c109e8535c"
+        "version": "1581bf5cf4f523b1dba5029cd77944e091eb35ea35bb67e679bda577d5e5ace3"
     },
     "compact_data.AppendCompactDataNumericStaticSchema.time_append_compact_data": {
-        "code": "class AppendCompactDataNumericStaticSchema:\n    def time_append_compact_data(self, num_symbols, existing_data_fragmented, append_rows):\n        self.append(num_symbols)\n\n    def setup(self, num_symbols, existing_data_fragmented, append_rows):\n        self.append_df = pd.DataFrame(\n            {f\"col_{i}\": np.arange(i * append_rows, (i + 1) * append_rows) for i in range(self.NUM_COLUMNS)}\n        )\n        self._setup(self.lib_name(existing_data_fragmented))\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "code": "class AppendCompactDataNumericStaticSchema:\n    def time_append_compact_data(self, num_symbols, existing_data_fragmented, append_rows):\n        self.append(num_symbols)\n\n    def setup(self, num_symbols, existing_data_fragmented, append_rows):\n        self.append_df = pd.DataFrame(\n            {f\"col_{i}\": np.arange(i * append_rows, (i + 1) * append_rows) for i in range(self.NUM_COLUMNS)}\n        )\n        self._setup(lib_name(existing_data_fragmented))\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
         "min_run_count": 2,
         "name": "compact_data.AppendCompactDataNumericStaticSchema.time_append_compact_data",
         "number": 1,
@@ -2235,14 +2527,14 @@
         "repeat": 7,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "compact_data:332",
+        "setup_cache_key": "compact_data:329",
         "type": "time",
         "unit": "seconds",
-        "version": "98b2898dbb3b3750ffc35b30d035311796631e6d863708fb5c505b4dc59a6a1b",
+        "version": "fec1a6b2e52e6380a99b1666c49b3461b4fb24f28221b495f60e1be274bb9023",
         "warmup_time": 0
     },
     "compact_data.AppendCompactDataStringsStaticSchema.peakmem_append_compact_data": {
-        "code": "class AppendCompactDataStringsStaticSchema:\n    def peakmem_append_compact_data(self, num_symbols, existing_data_fragmented, append_rows):\n        self.append(num_symbols)\n\n    def setup(self, num_symbols, existing_data_fragmented, append_rows):\n        self.append_df = pd.DataFrame(\n            {f\"col_{i}\": rng.choice(self.unique_strings, append_rows) for i in range(self.NUM_COLUMNS)}\n        )\n        self._setup(self.lib_name(existing_data_fragmented))\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "code": "class AppendCompactDataStringsStaticSchema:\n    def peakmem_append_compact_data(self, num_symbols, existing_data_fragmented, append_rows):\n        self.append(num_symbols)\n\n    def setup(self, num_symbols, existing_data_fragmented, append_rows):\n        self.append_df = pd.DataFrame(\n            {f\"col_{i}\": rng.choice(self.unique_strings, append_rows) for i in range(self.NUM_COLUMNS)}\n        )\n        self._setup(lib_name(existing_data_fragmented))\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
         "name": "compact_data.AppendCompactDataStringsStaticSchema.peakmem_append_compact_data",
         "param_names": [
             "num_symbols",
@@ -2264,13 +2556,13 @@
                 "1000000"
             ]
         ],
-        "setup_cache_key": "compact_data:381",
+        "setup_cache_key": "compact_data:378",
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "01966458fac955b928515db294e7f868a08bff9312199ee1b5b3a32cf5128259"
+        "version": "7a58c10ef4b2a352df474a8f1904d021f721652d3837e10680d47d47c3d275b6"
     },
     "compact_data.AppendCompactDataStringsStaticSchema.time_append_compact_data": {
-        "code": "class AppendCompactDataStringsStaticSchema:\n    def time_append_compact_data(self, num_symbols, existing_data_fragmented, append_rows):\n        self.append(num_symbols)\n\n    def setup(self, num_symbols, existing_data_fragmented, append_rows):\n        self.append_df = pd.DataFrame(\n            {f\"col_{i}\": rng.choice(self.unique_strings, append_rows) for i in range(self.NUM_COLUMNS)}\n        )\n        self._setup(self.lib_name(existing_data_fragmented))\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "code": "class AppendCompactDataStringsStaticSchema:\n    def time_append_compact_data(self, num_symbols, existing_data_fragmented, append_rows):\n        self.append(num_symbols)\n\n    def setup(self, num_symbols, existing_data_fragmented, append_rows):\n        self.append_df = pd.DataFrame(\n            {f\"col_{i}\": rng.choice(self.unique_strings, append_rows) for i in range(self.NUM_COLUMNS)}\n        )\n        self._setup(lib_name(existing_data_fragmented))\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
         "min_run_count": 2,
         "name": "compact_data.AppendCompactDataStringsStaticSchema.time_append_compact_data",
         "number": 1,
@@ -2297,10 +2589,10 @@
         "repeat": 7,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "compact_data:381",
+        "setup_cache_key": "compact_data:378",
         "type": "time",
         "unit": "seconds",
-        "version": "a049f0099f95d04ec69d08ebabcd44d596eff4fe34034ad6d9da0b3fbd1e2f94",
+        "version": "8665815997d55eb8deeb5b37f5eafc228bc6aed867aee9a5f0e5171296cbbd26",
         "warmup_time": 0
     },
     "compact_data.CompactDataNumericDynamicSchema.peakmem_compact_data": {
@@ -2815,7 +3107,7 @@
         "warmup_time": 0.1
     },
     "merge_functions.MergeThinDatetime.peakmem_merge": {
-        "code": "class MergeThinDatetime:\n    def peakmem_merge(self, scenario, strategy, on_count, source_size, matched_slices):\n        self.merge(strategy)\n\n    def setup(self, scenario, strategy, on_count, source_size, matched_slices):\n        self._prepare_merge(lib_name(*scenario, self.INDEX_KIND), on_count, source_size, matched_slices)\n\n    def setup_cache(self):\n        reset_bucket(self.seaweed, CACHE_BUCKET)\n        for scenario in self.params[0]:\n            num_rows, num_value_cols = scenario\n            rng = np.random.default_rng([num_rows, num_value_cols])\n            target = generate_merge_target(num_rows, num_value_cols, self.value_dtype, self.INDEX_KIND, rng)\n            lib_name = lib_name(*scenario, self.INDEX_KIND)\n            self._write_cache_target(lib_name, target)\n            self._precompute_sources(lib_name, target)",
+        "code": "class MergeThinDatetime:\n    def peakmem_merge(self, scenario, strategy, on_count, source_size, matched_slices):\n        self.merge(strategy)\n\n    def setup(self, scenario, strategy, on_count, source_size, matched_slices):\n        self._prepare_merge(lib_name(*scenario, self.INDEX_KIND), on_count, source_size, matched_slices)\n\n    def setup_cache(self):\n        reset_bucket(self.seaweed, CACHE_BUCKET)\n        for scenario in self.params[0]:\n            num_rows, num_value_cols = scenario\n            rng = np.random.default_rng([num_rows, num_value_cols])\n            target = generate_merge_target(num_rows, num_value_cols, self.value_dtype, self.INDEX_KIND, rng)\n            library_name = lib_name(*scenario, self.INDEX_KIND)\n            self._write_cache_target(library_name, target)\n            self._precompute_sources(library_name, target)",
         "name": "merge_functions.MergeThinDatetime.peakmem_merge",
         "param_names": [
             "scenario",
@@ -2849,10 +3141,10 @@
         "timeout": 600,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "cbfab97f86b2e4dcf663168cbc55298e56ae941d902c8cb6a3fd79ba3814f707"
+        "version": "bda038e7ac799f351dadb49a529e87aa2762d0993fa7b3f2fb5534f80d20c5d6"
     },
     "merge_functions.MergeThinDatetime.time_merge": {
-        "code": "class MergeThinDatetime:\n    def time_merge(self, scenario, strategy, on_count, source_size, matched_slices):\n        self.merge(strategy)\n\n    def setup(self, scenario, strategy, on_count, source_size, matched_slices):\n        self._prepare_merge(lib_name(*scenario, self.INDEX_KIND), on_count, source_size, matched_slices)\n\n    def setup_cache(self):\n        reset_bucket(self.seaweed, CACHE_BUCKET)\n        for scenario in self.params[0]:\n            num_rows, num_value_cols = scenario\n            rng = np.random.default_rng([num_rows, num_value_cols])\n            target = generate_merge_target(num_rows, num_value_cols, self.value_dtype, self.INDEX_KIND, rng)\n            lib_name = lib_name(*scenario, self.INDEX_KIND)\n            self._write_cache_target(lib_name, target)\n            self._precompute_sources(lib_name, target)",
+        "code": "class MergeThinDatetime:\n    def time_merge(self, scenario, strategy, on_count, source_size, matched_slices):\n        self.merge(strategy)\n\n    def setup(self, scenario, strategy, on_count, source_size, matched_slices):\n        self._prepare_merge(lib_name(*scenario, self.INDEX_KIND), on_count, source_size, matched_slices)\n\n    def setup_cache(self):\n        reset_bucket(self.seaweed, CACHE_BUCKET)\n        for scenario in self.params[0]:\n            num_rows, num_value_cols = scenario\n            rng = np.random.default_rng([num_rows, num_value_cols])\n            target = generate_merge_target(num_rows, num_value_cols, self.value_dtype, self.INDEX_KIND, rng)\n            library_name = lib_name(*scenario, self.INDEX_KIND)\n            self._write_cache_target(library_name, target)\n            self._precompute_sources(library_name, target)",
         "min_run_count": 2,
         "name": "merge_functions.MergeThinDatetime.time_merge",
         "number": 1,
@@ -2891,11 +3183,11 @@
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
-        "version": "a34ddbececbef9f6234500dd1f6efb2ed19e12e0620f1b29f93a7f0066501523",
+        "version": "5fa0f07cbaf18da0b38b5fa5a212bd62af352193686538be081fad7bfd09497f",
         "warmup_time": 0
     },
     "merge_functions.MergeThinRowRange.peakmem_merge": {
-        "code": "class MergeThinRowRange:\n    def peakmem_merge(self, scenario, strategy, on_count, source_size):\n        self.merge(strategy)\n\n    def setup(self, scenario, strategy, on_count, source_size):\n        self._prepare_merge(lib_name(*scenario, self.INDEX_KIND), on_count, source_size)\n\n    def setup_cache(self):\n        reset_bucket(self.seaweed, CACHE_BUCKET)\n        for scenario in self.params[0]:\n            num_rows, num_value_cols = scenario\n            rng = np.random.default_rng([num_rows, num_value_cols])\n            target = generate_merge_target(num_rows, num_value_cols, self.value_dtype, self.INDEX_KIND, rng)\n            lib_name = lib_name(*scenario, self.INDEX_KIND)\n            self._write_cache_target(lib_name, target)\n            self._precompute_sources(lib_name, target)",
+        "code": "class MergeThinRowRange:\n    def peakmem_merge(self, scenario, strategy, on_count, source_size):\n        self.merge(strategy)\n\n    def setup(self, scenario, strategy, on_count, source_size):\n        self._prepare_merge(lib_name(*scenario, self.INDEX_KIND), on_count, source_size)\n\n    def setup_cache(self):\n        reset_bucket(self.seaweed, CACHE_BUCKET)\n        for scenario in self.params[0]:\n            num_rows, num_value_cols = scenario\n            rng = np.random.default_rng([num_rows, num_value_cols])\n            target = generate_merge_target(num_rows, num_value_cols, self.value_dtype, self.INDEX_KIND, rng)\n            library_name = lib_name(*scenario, self.INDEX_KIND)\n            self._write_cache_target(library_name, target)\n            self._precompute_sources(library_name, target)",
         "name": "merge_functions.MergeThinRowRange.peakmem_merge",
         "param_names": [
             "scenario",
@@ -2908,7 +3200,9 @@
                 "(5000000, 3)"
             ],
             [
-                "'update'"
+                "'update'",
+                "'insert'",
+                "'update_and_insert'"
             ],
             [
                 "1"
@@ -2922,10 +3216,10 @@
         "timeout": 600,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "83ce0f1d857f8367a41b0eda0ae44c9b09680e06d7402639b4e2715e9f3fcaec"
+        "version": "aa4096cc5f46058c309c21eb33ebaabc2e84d6e07560aac829027da71086ea6b"
     },
     "merge_functions.MergeThinRowRange.time_merge": {
-        "code": "class MergeThinRowRange:\n    def time_merge(self, scenario, strategy, on_count, source_size):\n        self.merge(strategy)\n\n    def setup(self, scenario, strategy, on_count, source_size):\n        self._prepare_merge(lib_name(*scenario, self.INDEX_KIND), on_count, source_size)\n\n    def setup_cache(self):\n        reset_bucket(self.seaweed, CACHE_BUCKET)\n        for scenario in self.params[0]:\n            num_rows, num_value_cols = scenario\n            rng = np.random.default_rng([num_rows, num_value_cols])\n            target = generate_merge_target(num_rows, num_value_cols, self.value_dtype, self.INDEX_KIND, rng)\n            lib_name = lib_name(*scenario, self.INDEX_KIND)\n            self._write_cache_target(lib_name, target)\n            self._precompute_sources(lib_name, target)",
+        "code": "class MergeThinRowRange:\n    def time_merge(self, scenario, strategy, on_count, source_size):\n        self.merge(strategy)\n\n    def setup(self, scenario, strategy, on_count, source_size):\n        self._prepare_merge(lib_name(*scenario, self.INDEX_KIND), on_count, source_size)\n\n    def setup_cache(self):\n        reset_bucket(self.seaweed, CACHE_BUCKET)\n        for scenario in self.params[0]:\n            num_rows, num_value_cols = scenario\n            rng = np.random.default_rng([num_rows, num_value_cols])\n            target = generate_merge_target(num_rows, num_value_cols, self.value_dtype, self.INDEX_KIND, rng)\n            library_name = lib_name(*scenario, self.INDEX_KIND)\n            self._write_cache_target(library_name, target)\n            self._precompute_sources(library_name, target)",
         "min_run_count": 2,
         "name": "merge_functions.MergeThinRowRange.time_merge",
         "number": 1,
@@ -2940,7 +3234,9 @@
                 "(5000000, 3)"
             ],
             [
-                "'update'"
+                "'update'",
+                "'insert'",
+                "'update_and_insert'"
             ],
             [
                 "1"
@@ -2957,11 +3253,11 @@
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
-        "version": "32cb2f20ab4c79563a5aea377ad6caabb8fd7230fd759389d42d242bd13a5bad",
+        "version": "256a83ebc7be8dd867cee611d7e3e1fafe2e35dc4ccc40358530caf35984706f",
         "warmup_time": 0
     },
     "merge_functions.MergeThinStringDatetime.peakmem_merge": {
-        "code": "class MergeThinStringDatetime:\n    def peakmem_merge(self, scenario, strategy, on_count, source_size, matched_slices, num_unique_strings):\n        self.merge(strategy)\n\n    def setup(self, scenario, strategy, on_count, source_size, matched_slices, num_unique_strings):\n        self.target_prefix = f\"target_{num_unique_strings}\"\n        self.source_prefix = f\"source_{num_unique_strings}\"\n        self._prepare_merge(lib_name(*scenario, self.INDEX_KIND), on_count, source_size, matched_slices)\n\n    def setup_cache(self):\n        reset_bucket(self.seaweed, CACHE_BUCKET)\n        parameter_map = dict(zip(self.param_names, self.params))\n        for scenario in parameter_map[\"scenario\"]:\n            for num_unique_strings in parameter_map[\"num_unique_strings\"]:\n                num_rows, num_value_cols = scenario\n                rng = np.random.default_rng([num_rows, num_value_cols, num_unique_strings])\n                target = generate_merge_target(\n                    num_rows,\n                    num_value_cols,\n                    self.value_dtype,\n                    self.INDEX_KIND,\n                    rng,\n                    num_unique_strings=num_unique_strings,\n                )\n                # One target per pool size; per-size prefixes let setup copy only the variant being merged.\n                self.target_prefix = f\"target_{num_unique_strings}\"\n                self.source_prefix = f\"source_{num_unique_strings}\"\n                lib_name = lib_name(*scenario, self.INDEX_KIND)\n                self._write_cache_target(lib_name, target)\n                self._precompute_sources(lib_name, target)",
+        "code": "class MergeThinStringDatetime:\n    def peakmem_merge(self, scenario, strategy, on_count, source_size, matched_slices, num_unique_strings):\n        self.merge(strategy)\n\n    def setup(self, scenario, strategy, on_count, source_size, matched_slices, num_unique_strings):\n        self.target_prefix = f\"target_{num_unique_strings}\"\n        self.source_prefix = f\"source_{num_unique_strings}\"\n        self._prepare_merge(lib_name(*scenario, self.INDEX_KIND), on_count, source_size, matched_slices)\n\n    def setup_cache(self):\n        reset_bucket(self.seaweed, CACHE_BUCKET)\n        parameter_map = dict(zip(self.param_names, self.params))\n        for scenario in parameter_map[\"scenario\"]:\n            for num_unique_strings in parameter_map[\"num_unique_strings\"]:\n                num_rows, num_value_cols = scenario\n                rng = np.random.default_rng([num_rows, num_value_cols, num_unique_strings])\n                target = generate_merge_target(\n                    num_rows,\n                    num_value_cols,\n                    self.value_dtype,\n                    self.INDEX_KIND,\n                    rng,\n                    num_unique_strings=num_unique_strings,\n                )\n                # One target per pool size; per-size prefixes let setup copy only the variant being merged.\n                self.target_prefix = f\"target_{num_unique_strings}\"\n                self.source_prefix = f\"source_{num_unique_strings}\"\n                library_name = lib_name(*scenario, self.INDEX_KIND)\n                self._write_cache_target(library_name, target)\n                self._precompute_sources(library_name, target)",
         "name": "merge_functions.MergeThinStringDatetime.peakmem_merge",
         "param_names": [
             "scenario",
@@ -3000,10 +3296,10 @@
         "timeout": 600,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "9a4715db7915ea7b2b73942e7a0a2cd83c063e074c67547ec1ed44288513c101"
+        "version": "4deaada28c22d2cd8a4edfb8d8d9c558ab7b4c68bd9c3bc81cf099cdd90d2585"
     },
     "merge_functions.MergeThinStringDatetime.time_merge": {
-        "code": "class MergeThinStringDatetime:\n    def time_merge(self, scenario, strategy, on_count, source_size, matched_slices, num_unique_strings):\n        self.merge(strategy)\n\n    def setup(self, scenario, strategy, on_count, source_size, matched_slices, num_unique_strings):\n        self.target_prefix = f\"target_{num_unique_strings}\"\n        self.source_prefix = f\"source_{num_unique_strings}\"\n        self._prepare_merge(lib_name(*scenario, self.INDEX_KIND), on_count, source_size, matched_slices)\n\n    def setup_cache(self):\n        reset_bucket(self.seaweed, CACHE_BUCKET)\n        parameter_map = dict(zip(self.param_names, self.params))\n        for scenario in parameter_map[\"scenario\"]:\n            for num_unique_strings in parameter_map[\"num_unique_strings\"]:\n                num_rows, num_value_cols = scenario\n                rng = np.random.default_rng([num_rows, num_value_cols, num_unique_strings])\n                target = generate_merge_target(\n                    num_rows,\n                    num_value_cols,\n                    self.value_dtype,\n                    self.INDEX_KIND,\n                    rng,\n                    num_unique_strings=num_unique_strings,\n                )\n                # One target per pool size; per-size prefixes let setup copy only the variant being merged.\n                self.target_prefix = f\"target_{num_unique_strings}\"\n                self.source_prefix = f\"source_{num_unique_strings}\"\n                lib_name = lib_name(*scenario, self.INDEX_KIND)\n                self._write_cache_target(lib_name, target)\n                self._precompute_sources(lib_name, target)",
+        "code": "class MergeThinStringDatetime:\n    def time_merge(self, scenario, strategy, on_count, source_size, matched_slices, num_unique_strings):\n        self.merge(strategy)\n\n    def setup(self, scenario, strategy, on_count, source_size, matched_slices, num_unique_strings):\n        self.target_prefix = f\"target_{num_unique_strings}\"\n        self.source_prefix = f\"source_{num_unique_strings}\"\n        self._prepare_merge(lib_name(*scenario, self.INDEX_KIND), on_count, source_size, matched_slices)\n\n    def setup_cache(self):\n        reset_bucket(self.seaweed, CACHE_BUCKET)\n        parameter_map = dict(zip(self.param_names, self.params))\n        for scenario in parameter_map[\"scenario\"]:\n            for num_unique_strings in parameter_map[\"num_unique_strings\"]:\n                num_rows, num_value_cols = scenario\n                rng = np.random.default_rng([num_rows, num_value_cols, num_unique_strings])\n                target = generate_merge_target(\n                    num_rows,\n                    num_value_cols,\n                    self.value_dtype,\n                    self.INDEX_KIND,\n                    rng,\n                    num_unique_strings=num_unique_strings,\n                )\n                # One target per pool size; per-size prefixes let setup copy only the variant being merged.\n                self.target_prefix = f\"target_{num_unique_strings}\"\n                self.source_prefix = f\"source_{num_unique_strings}\"\n                library_name = lib_name(*scenario, self.INDEX_KIND)\n                self._write_cache_target(library_name, target)\n                self._precompute_sources(library_name, target)",
         "min_run_count": 2,
         "name": "merge_functions.MergeThinStringDatetime.time_merge",
         "number": 1,
@@ -3047,11 +3343,11 @@
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
-        "version": "7aa19f2e81803ed621ab348a8958540af05e64898025e41dc25844a5919a2ecf",
+        "version": "cfc2523da2cb2b2cc7892532ef9027eeeaf039dd512c09875e6cc054fd3e977b",
         "warmup_time": 0
     },
     "merge_functions.MergeThinStringRowRange.peakmem_merge": {
-        "code": "class MergeThinStringRowRange:\n    def peakmem_merge(self, scenario, strategy, on_count, source_size, num_unique_strings):\n        self.merge(strategy)\n\n    def setup(self, scenario, strategy, on_count, source_size, num_unique_strings):\n        self.target_prefix = f\"target_{num_unique_strings}\"\n        self.source_prefix = f\"source_{num_unique_strings}\"\n        self._prepare_merge(lib_name(*scenario, self.INDEX_KIND), on_count, source_size)\n\n    def setup_cache(self):\n        reset_bucket(self.seaweed, CACHE_BUCKET)\n        param_map = dict(zip(self.param_names, self.params))\n        for scenario in param_map[\"scenario\"]:\n            for num_unique_strings in param_map[\"num_unique_strings\"]:\n                num_rows, num_value_cols = scenario\n                rng = np.random.default_rng([num_rows, num_value_cols, num_unique_strings])\n                target = generate_merge_target(\n                    num_rows,\n                    num_value_cols,\n                    self.value_dtype,\n                    self.INDEX_KIND,\n                    rng,\n                    num_unique_strings=num_unique_strings,\n                )\n                # One target per pool size; per-size prefixes let setup copy only the variant being merged.\n                self.target_prefix = f\"target_{num_unique_strings}\"\n                self.source_prefix = f\"source_{num_unique_strings}\"\n                lib_name = lib_name(*scenario, self.INDEX_KIND)\n                self._write_cache_target(lib_name, target)\n                self._precompute_sources(lib_name, target)",
+        "code": "class MergeThinStringRowRange:\n    def peakmem_merge(self, scenario, strategy, on_count, source_size, num_unique_strings):\n        self.merge(strategy)\n\n    def setup(self, scenario, strategy, on_count, source_size, num_unique_strings):\n        self.target_prefix = f\"target_{num_unique_strings}\"\n        self.source_prefix = f\"source_{num_unique_strings}\"\n        self._prepare_merge(lib_name(*scenario, self.INDEX_KIND), on_count, source_size)\n\n    def setup_cache(self):\n        reset_bucket(self.seaweed, CACHE_BUCKET)\n        param_map = dict(zip(self.param_names, self.params))\n        for scenario in param_map[\"scenario\"]:\n            for num_unique_strings in param_map[\"num_unique_strings\"]:\n                num_rows, num_value_cols = scenario\n                rng = np.random.default_rng([num_rows, num_value_cols, num_unique_strings])\n                target = generate_merge_target(\n                    num_rows,\n                    num_value_cols,\n                    self.value_dtype,\n                    self.INDEX_KIND,\n                    rng,\n                    num_unique_strings=num_unique_strings,\n                )\n                # One target per pool size; per-size prefixes let setup copy only the variant being merged.\n                self.target_prefix = f\"target_{num_unique_strings}\"\n                self.source_prefix = f\"source_{num_unique_strings}\"\n                library_name = lib_name(*scenario, self.INDEX_KIND)\n                self._write_cache_target(library_name, target)\n                self._precompute_sources(library_name, target)",
         "name": "merge_functions.MergeThinStringRowRange.peakmem_merge",
         "param_names": [
             "scenario",
@@ -3065,7 +3361,9 @@
                 "(1000000, 3)"
             ],
             [
-                "'update'"
+                "'update'",
+                "'insert'",
+                "'update_and_insert'"
             ],
             [
                 "2"
@@ -3083,10 +3381,10 @@
         "timeout": 600,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "ad7361d4bf2af736b0a1463d93711c64694b195cf605818d11da012a3ac03699"
+        "version": "16b046fab8ab2ff6a54e7b6c1b6bca4b1f3518b5a093be95fc3b02422b00a2ec"
     },
     "merge_functions.MergeThinStringRowRange.time_merge": {
-        "code": "class MergeThinStringRowRange:\n    def time_merge(self, scenario, strategy, on_count, source_size, num_unique_strings):\n        self.merge(strategy)\n\n    def setup(self, scenario, strategy, on_count, source_size, num_unique_strings):\n        self.target_prefix = f\"target_{num_unique_strings}\"\n        self.source_prefix = f\"source_{num_unique_strings}\"\n        self._prepare_merge(lib_name(*scenario, self.INDEX_KIND), on_count, source_size)\n\n    def setup_cache(self):\n        reset_bucket(self.seaweed, CACHE_BUCKET)\n        param_map = dict(zip(self.param_names, self.params))\n        for scenario in param_map[\"scenario\"]:\n            for num_unique_strings in param_map[\"num_unique_strings\"]:\n                num_rows, num_value_cols = scenario\n                rng = np.random.default_rng([num_rows, num_value_cols, num_unique_strings])\n                target = generate_merge_target(\n                    num_rows,\n                    num_value_cols,\n                    self.value_dtype,\n                    self.INDEX_KIND,\n                    rng,\n                    num_unique_strings=num_unique_strings,\n                )\n                # One target per pool size; per-size prefixes let setup copy only the variant being merged.\n                self.target_prefix = f\"target_{num_unique_strings}\"\n                self.source_prefix = f\"source_{num_unique_strings}\"\n                lib_name = lib_name(*scenario, self.INDEX_KIND)\n                self._write_cache_target(lib_name, target)\n                self._precompute_sources(lib_name, target)",
+        "code": "class MergeThinStringRowRange:\n    def time_merge(self, scenario, strategy, on_count, source_size, num_unique_strings):\n        self.merge(strategy)\n\n    def setup(self, scenario, strategy, on_count, source_size, num_unique_strings):\n        self.target_prefix = f\"target_{num_unique_strings}\"\n        self.source_prefix = f\"source_{num_unique_strings}\"\n        self._prepare_merge(lib_name(*scenario, self.INDEX_KIND), on_count, source_size)\n\n    def setup_cache(self):\n        reset_bucket(self.seaweed, CACHE_BUCKET)\n        param_map = dict(zip(self.param_names, self.params))\n        for scenario in param_map[\"scenario\"]:\n            for num_unique_strings in param_map[\"num_unique_strings\"]:\n                num_rows, num_value_cols = scenario\n                rng = np.random.default_rng([num_rows, num_value_cols, num_unique_strings])\n                target = generate_merge_target(\n                    num_rows,\n                    num_value_cols,\n                    self.value_dtype,\n                    self.INDEX_KIND,\n                    rng,\n                    num_unique_strings=num_unique_strings,\n                )\n                # One target per pool size; per-size prefixes let setup copy only the variant being merged.\n                self.target_prefix = f\"target_{num_unique_strings}\"\n                self.source_prefix = f\"source_{num_unique_strings}\"\n                library_name = lib_name(*scenario, self.INDEX_KIND)\n                self._write_cache_target(library_name, target)\n                self._precompute_sources(library_name, target)",
         "min_run_count": 2,
         "name": "merge_functions.MergeThinStringRowRange.time_merge",
         "number": 1,
@@ -3102,7 +3400,9 @@
                 "(1000000, 3)"
             ],
             [
-                "'update'"
+                "'update'",
+                "'insert'",
+                "'update_and_insert'"
             ],
             [
                 "2"
@@ -3123,11 +3423,11 @@
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
-        "version": "22ccdef99021933f2dc537f4d6ba6d6b71b4541cc80997b54aaf359d16a045ef",
+        "version": "5b1ad5a07078537f4b40748fd746b8053078bd52e4f3ff7d2c141470c7ccb6a7",
         "warmup_time": 0
     },
     "merge_functions.MergeWideDatetime.peakmem_merge": {
-        "code": "class MergeWideDatetime:\n    def peakmem_merge(self, scenario, strategy, on_count, source_size):\n        self.merge(strategy)\n\n    def setup(self, scenario, strategy, on_count, source_size):\n        self._prepare_merge(lib_name(*scenario, self.INDEX_KIND), on_count, source_size)\n\n    def setup_cache(self):\n        reset_bucket(self.seaweed, CACHE_BUCKET)\n        for scenario in self.params[0]:\n            num_rows, num_value_cols = scenario\n            rng = np.random.default_rng([num_rows, num_value_cols])\n            target = generate_merge_target(num_rows, num_value_cols, self.value_dtype, self.INDEX_KIND, rng)\n            lib_name = lib_name(*scenario, self.INDEX_KIND)\n            self._write_cache_target(lib_name, target)\n            self._precompute_sources(lib_name, target)",
+        "code": "class MergeWideDatetime:\n    def peakmem_merge(self, scenario, strategy, on_count, source_size):\n        self.merge(strategy)\n\n    def setup(self, scenario, strategy, on_count, source_size):\n        self._prepare_merge(lib_name(*scenario, self.INDEX_KIND), on_count, source_size)\n\n    def setup_cache(self):\n        reset_bucket(self.seaweed, CACHE_BUCKET)\n        for scenario in self.params[0]:\n            num_rows, num_value_cols = scenario\n            rng = np.random.default_rng([num_rows, num_value_cols])\n            target = generate_merge_target(num_rows, num_value_cols, self.value_dtype, self.INDEX_KIND, rng)\n            library_name = lib_name(*scenario, self.INDEX_KIND)\n            self._write_cache_target(library_name, target)\n            self._precompute_sources(library_name, target)",
         "name": "merge_functions.MergeWideDatetime.peakmem_merge",
         "param_names": [
             "scenario",
@@ -3156,10 +3456,10 @@
         "timeout": 600,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "28ef558b79b92e01a385d0ecec377258a6201802c6eedcb369c0075a56f116d9"
+        "version": "5f3a5dffc5a5810c9c7edad0c697800df32682f9c4ec49442c6e85cca031184b"
     },
     "merge_functions.MergeWideDatetime.time_merge": {
-        "code": "class MergeWideDatetime:\n    def time_merge(self, scenario, strategy, on_count, source_size):\n        self.merge(strategy)\n\n    def setup(self, scenario, strategy, on_count, source_size):\n        self._prepare_merge(lib_name(*scenario, self.INDEX_KIND), on_count, source_size)\n\n    def setup_cache(self):\n        reset_bucket(self.seaweed, CACHE_BUCKET)\n        for scenario in self.params[0]:\n            num_rows, num_value_cols = scenario\n            rng = np.random.default_rng([num_rows, num_value_cols])\n            target = generate_merge_target(num_rows, num_value_cols, self.value_dtype, self.INDEX_KIND, rng)\n            lib_name = lib_name(*scenario, self.INDEX_KIND)\n            self._write_cache_target(lib_name, target)\n            self._precompute_sources(lib_name, target)",
+        "code": "class MergeWideDatetime:\n    def time_merge(self, scenario, strategy, on_count, source_size):\n        self.merge(strategy)\n\n    def setup(self, scenario, strategy, on_count, source_size):\n        self._prepare_merge(lib_name(*scenario, self.INDEX_KIND), on_count, source_size)\n\n    def setup_cache(self):\n        reset_bucket(self.seaweed, CACHE_BUCKET)\n        for scenario in self.params[0]:\n            num_rows, num_value_cols = scenario\n            rng = np.random.default_rng([num_rows, num_value_cols])\n            target = generate_merge_target(num_rows, num_value_cols, self.value_dtype, self.INDEX_KIND, rng)\n            library_name = lib_name(*scenario, self.INDEX_KIND)\n            self._write_cache_target(library_name, target)\n            self._precompute_sources(library_name, target)",
         "min_run_count": 2,
         "name": "merge_functions.MergeWideDatetime.time_merge",
         "number": 1,
@@ -3193,11 +3493,11 @@
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
-        "version": "8d0da60fabfacd13ca11c1699891ed2cd5d1c600e01f01603881e627290d590b",
+        "version": "4d658e12e079c00f5d468ed7a82c1b2facd8de1b98e5388b569c1737a3d82607",
         "warmup_time": 0
     },
     "merge_functions.MergeWideRowRange.peakmem_merge": {
-        "code": "class MergeWideRowRange:\n    def peakmem_merge(self, scenario, strategy, on_count, source_size):\n        self.merge(strategy)\n\n    def setup(self, scenario, strategy, on_count, source_size):\n        self._prepare_merge(lib_name(*scenario, self.INDEX_KIND), on_count, source_size)\n\n    def setup_cache(self):\n        reset_bucket(self.seaweed, CACHE_BUCKET)\n        for scenario in self.params[0]:\n            num_rows, num_value_cols = scenario\n            rng = np.random.default_rng([num_rows, num_value_cols])\n            target = generate_merge_target(num_rows, num_value_cols, self.value_dtype, self.INDEX_KIND, rng)\n            lib_name = lib_name(*scenario, self.INDEX_KIND)\n            self._write_cache_target(lib_name, target)\n            self._precompute_sources(lib_name, target)",
+        "code": "class MergeWideRowRange:\n    def peakmem_merge(self, scenario, strategy, on_count, source_size):\n        self.merge(strategy)\n\n    def setup(self, scenario, strategy, on_count, source_size):\n        self._prepare_merge(lib_name(*scenario, self.INDEX_KIND), on_count, source_size)\n\n    def setup_cache(self):\n        reset_bucket(self.seaweed, CACHE_BUCKET)\n        for scenario in self.params[0]:\n            num_rows, num_value_cols = scenario\n            rng = np.random.default_rng([num_rows, num_value_cols])\n            target = generate_merge_target(num_rows, num_value_cols, self.value_dtype, self.INDEX_KIND, rng)\n            library_name = lib_name(*scenario, self.INDEX_KIND)\n            self._write_cache_target(library_name, target)\n            self._precompute_sources(library_name, target)",
         "name": "merge_functions.MergeWideRowRange.peakmem_merge",
         "param_names": [
             "scenario",
@@ -3210,7 +3510,9 @@
                 "(5000, 10000)"
             ],
             [
-                "'update'"
+                "'update'",
+                "'insert'",
+                "'update_and_insert'"
             ],
             [
                 "1",
@@ -3224,10 +3526,10 @@
         "timeout": 600,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "c4c62f623fa4e712d1f56e9441cca2abdd0b4ccc2ca88d3d80e6f46ef0c28b2f"
+        "version": "f33e277e4413aa7b086be54628ec33080037cbdf369f347c5dd190ffca5a6fff"
     },
     "merge_functions.MergeWideRowRange.time_merge": {
-        "code": "class MergeWideRowRange:\n    def time_merge(self, scenario, strategy, on_count, source_size):\n        self.merge(strategy)\n\n    def setup(self, scenario, strategy, on_count, source_size):\n        self._prepare_merge(lib_name(*scenario, self.INDEX_KIND), on_count, source_size)\n\n    def setup_cache(self):\n        reset_bucket(self.seaweed, CACHE_BUCKET)\n        for scenario in self.params[0]:\n            num_rows, num_value_cols = scenario\n            rng = np.random.default_rng([num_rows, num_value_cols])\n            target = generate_merge_target(num_rows, num_value_cols, self.value_dtype, self.INDEX_KIND, rng)\n            lib_name = lib_name(*scenario, self.INDEX_KIND)\n            self._write_cache_target(lib_name, target)\n            self._precompute_sources(lib_name, target)",
+        "code": "class MergeWideRowRange:\n    def time_merge(self, scenario, strategy, on_count, source_size):\n        self.merge(strategy)\n\n    def setup(self, scenario, strategy, on_count, source_size):\n        self._prepare_merge(lib_name(*scenario, self.INDEX_KIND), on_count, source_size)\n\n    def setup_cache(self):\n        reset_bucket(self.seaweed, CACHE_BUCKET)\n        for scenario in self.params[0]:\n            num_rows, num_value_cols = scenario\n            rng = np.random.default_rng([num_rows, num_value_cols])\n            target = generate_merge_target(num_rows, num_value_cols, self.value_dtype, self.INDEX_KIND, rng)\n            library_name = lib_name(*scenario, self.INDEX_KIND)\n            self._write_cache_target(library_name, target)\n            self._precompute_sources(library_name, target)",
         "min_run_count": 2,
         "name": "merge_functions.MergeWideRowRange.time_merge",
         "number": 1,
@@ -3242,7 +3544,9 @@
                 "(5000, 10000)"
             ],
             [
-                "'update'"
+                "'update'",
+                "'insert'",
+                "'update_and_insert'"
             ],
             [
                 "1",
@@ -3259,7 +3563,7 @@
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
-        "version": "717843d0191fbcd48ec7704510ce9f6683963afc0159987528abafd57c63479d",
+        "version": "8be4bc6bfde5a0e7db280ac5e667e58f53c945de9de79a16e0965936c6b6f547",
         "warmup_time": 0
     },
     "modification_functions.DeleteBatchSymbols.time_delete_batch_symbols": {

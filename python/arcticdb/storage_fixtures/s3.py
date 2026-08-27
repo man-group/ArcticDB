@@ -6,6 +6,8 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 
+import base64
+import hashlib
 import logging
 import multiprocessing
 import json
@@ -14,6 +16,7 @@ import re
 import sys
 import platform
 import pprint
+from io import BytesIO
 from tempfile import mkdtemp
 import boto3
 import time
@@ -687,6 +690,33 @@ class HostDispatcherApplication(DomainDispatcherApplication):
     _reqs_till_rate_limit = -1
     # When set to an access key id, any S3 request not signed with that key is rejected with 403. None disables.
     _enforced_access_key = None
+    # When True, mimic a backend (e.g. Scality) that only accepts the legacy Content-MD5 digest on batch delete:
+    # reject the flexible-checksum header the SDK forces by default, and require a correct Content-MD5 instead.
+    _require_md5_checksum_on_delete_objs_request = False
+    # When True, mimic a backend that does not implement response checksums at all, by rejecting any request
+    # asking for them. Turn off to let requests through to moto, which does support them.
+    _reject_checksum_mode = True
+
+    @staticmethod
+    def _is_delete_objects(environ):
+        query = environ.get("QUERY_STRING", "")
+        if isinstance(query, bytes):
+            query = query.decode("ascii", "replace")
+        return environ.get("REQUEST_METHOD") == "POST" and "delete" in query.split("&")
+
+    @staticmethod
+    def _md5_checksum_error(environ):
+        if environ.get("HTTP_X_AMZ_CHECKSUM_CRC64NVME"):
+            return "BadDigest", "The CRC64NVME checksum is not supported by this backend."
+        supplied = environ.get("HTTP_CONTENT_MD5")
+        if not supplied:
+            return "InvalidRequest", "Missing required header for this request: Content-MD5."
+        body = environ["wsgi.input"].read(int(environ.get("CONTENT_LENGTH") or 0))
+        environ["wsgi.input"] = BytesIO(body)
+        expected = base64.b64encode(hashlib.md5(body).digest()).decode("ascii")
+        if supplied != expected:
+            return "BadDigest", "The Content-MD5 you specified did not match what we received."
+        return None
 
     @staticmethod
     def _request_access_key(environ):
@@ -713,7 +743,7 @@ class HostDispatcherApplication(DomainDispatcherApplication):
 
         with self.lock:
             # Check for x-amz-checksum-mode header
-            if environ.get("HTTP_X_AMZ_CHECKSUM_MODE") == "enabled":
+            if self._reject_checksum_mode and environ.get("HTTP_X_AMZ_CHECKSUM_MODE") == "enabled":
                 response_body = (
                     b'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
                     b"<Error><Code>MissingContentLength</Code>"
@@ -723,6 +753,25 @@ class HostDispatcherApplication(DomainDispatcherApplication):
                     "411 Length Required", [("Content-Type", "text/xml"), ("Content-Length", str(len(response_body)))]
                 )
                 return [response_body]
+
+            # Mimic a backend that only accepts the legacy Content-MD5 digest on batch delete. The check is scoped
+            # to DeleteObjects (POST ?delete) because that is the only request the SDK requires a checksum header to
+            # by default
+            if self._require_md5_checksum_on_delete_objs_request and self._is_delete_objects(environ):
+                error = self._md5_checksum_error(environ)
+                if error:
+                    code, message = error
+                    response_body = (
+                        b'<?xml version="1.0" encoding="UTF-8"?><Error><Code>'
+                        + code.encode()
+                        + b"</Code><Message>"
+                        + message.encode()
+                        + b"</Message></Error>"
+                    )
+                    start_response(
+                        "400 Bad Request", [("Content-Type", "text/xml"), ("Content-Length", str(len(response_body)))]
+                    )
+                    return [response_body]
             # Mock ec2 imds responses for testing
             if path_info in (
                 "/latest/dynamic/instance-identity/document",
@@ -746,6 +795,25 @@ class HostDispatcherApplication(DomainDispatcherApplication):
                 self._enforced_access_key = body or None
                 start_response("200 OK", [("Content-Type", "text/plain")])
                 return [b"Access key enforcement set"]
+
+            # Allow toggling the Content-MD5-only batch delete behaviour (body "1" to enable, "0" to disable)
+            if path_info in (
+                "/require_md5_checksum_on_delete_objs_request",
+                b"/require_md5_checksum_on_delete_objs_request",
+            ):
+                length = int(environ["CONTENT_LENGTH"])
+                body = environ["wsgi.input"].read(length).decode("ascii")
+                self._require_md5_checksum_on_delete_objs_request = bool(int(body))
+                start_response("200 OK", [("Content-Type", "text/plain")])
+                return [b"md5 checksum requirement set"]
+
+            # Allow toggling the rejection of response checksum requests (body "1" to reject, "0" to allow)
+            if path_info in ("/reject_checksum_mode", b"/reject_checksum_mode"):
+                length = int(environ["CONTENT_LENGTH"])
+                body = environ["wsgi.input"].read(length).decode("ascii")
+                self._reject_checksum_mode = bool(int(body))
+                start_response("200 OK", [("Content-Type", "text/plain")])
+                return [b"checksum mode rejection set"]
 
             if self._reqs_till_rate_limit == 0:
                 response_body = (

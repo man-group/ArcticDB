@@ -13,8 +13,13 @@ from arcticdb_ext.storage import KeyType
 from arcticdb_ext.stream import SegmentInMemory
 from arcticdb_ext.tools import LibraryTool as LibraryToolImpl
 from arcticdb_ext.version_store import AtomKey, RefKey
-from arcticdb.version_store._normalization import denormalize_dataframe, normalize_dataframe
+from arcticdb.version_store._normalization import (
+    denormalize_dataframe,
+    normalize_dataframe,
+    denormalize_user_metadata,
+)
 from arcticdb_ext.version_store import Slicing
+from arcticdb.toolbox.storage_lock import StorageLock
 
 VariantKey = Union[AtomKey, RefKey]
 VersionQueryInput = Union[int, str, ExplicitlySupportedDates, None]
@@ -66,6 +71,24 @@ class LibraryTool(LibraryToolImpl):
 
     def find_keys_for_symbol(self, key_type: KeyType, id: Union[str, int]) -> Union[List[AtomKey], List[RefKey]]:
         return self.find_keys_for_id(key_type, id)
+
+    def get_storage_lock(self, name: str):
+        """Return a :class:`~arcticdb.toolbox.storage_lock.StorageLock` for the given lock name."""
+        return StorageLock(self._nvs.version_store.get_storage_lock(name))
+
+    def list_storage_locks(self) -> List[Dict[str, Any]]:
+        """List the (unreliable) ``StorageLock`` locks in the library, with their metadata denormalised.
+
+        Does not cover ``ReliableStorageLock``, which is stored separately and is not returned here.
+
+        Each entry has ``name``, ``timestamp`` (nanoseconds), ``active`` (within the lock TTL), and ``metadata``
+        (any msgpack-able object, or None).
+        """
+        locks = super().list_storage_locks()
+        for lock in locks:
+            meta = lock.get("metadata")
+            lock["metadata"] = denormalize_user_metadata(meta) if meta is not None else None
+        return locks
 
     def read_to_segment_in_memory(self, key: VariantKey) -> SegmentInMemory:
         return decode_segment(self.read_to_segment(key))
