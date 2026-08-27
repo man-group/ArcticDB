@@ -216,4 +216,11 @@ void check_column_presence(
 
 void check_is_timeseries(const StreamDescriptor& stream_descriptor, std::string_view clause_name);
 
+// Drop the symbols that have no rows to contribute for concat, matching append, where appending a zero-row frame is a
+// no-op. If all symbols are empty doesn't remove any, so we are not left with an empty list.
+void drop_rowless_symbols(
+        std::vector<OutputSchema>& input_schemas, std::vector<std::vector<EntityId>>& entity_ids,
+        ComponentManager& component_manager
+);
+
 } // namespace arcticdb

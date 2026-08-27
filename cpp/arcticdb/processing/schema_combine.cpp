@@ -647,6 +647,177 @@ NormalizationMetadata combine_ndarray_metadata(
     return res;
 }
 
+NormalizationMetadata accumulate_arrow_and_arrow_norm(
+        const NormalizationMetadata& accumulated, const NormalizationMetadata& other,
+        const SchemaCombineOptions& options
+) {
+    normalization::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
+            accumulated.experimental_arrow().has_index() == other.experimental_arrow().has_index(),
+            "Cannot {}: cannot combine indexed arrow data with unindexed arrow data",
+            options.name()
+    );
+    // Per-column metadata is merged rather than taking only the base schema's, so that a column only a later
+    // schema has keeps what that schema says about it. Presence is checked per column rather than by comparing
+    // map sizes, so that a metadata field a future client adds does not make existing data un-appendable.
+    auto res = accumulated;
+    auto& res_columns = *res.mutable_experimental_arrow()->mutable_columns();
+    util::for_each_key_union(
+            accumulated.experimental_arrow().columns(),
+            other.experimental_arrow().columns(),
+            [&](const std::string& column_name,
+                const ArrowColumnMeta* accumulated_column,
+                const ArrowColumnMeta* other_column) {
+                if (accumulated_column == nullptr) {
+                    on_column_metadata_one_sided(options, column_name);
+                    res_columns[column_name] = *other_column;
+                    return;
+                }
+                if (other_column == nullptr) {
+                    on_column_metadata_one_sided(options, column_name);
+                    return;
+                }
+                // An absent timezone is not the same as an empty one, so compare presence as well as value.
+                const auto timezone_of = [](const ArrowColumnMeta& column) {
+                    return column.has_timezone() ? std::optional{std::string_view{column.timezone()}} : std::nullopt;
+                };
+                if (timezone_of(*accumulated_column) != timezone_of(*other_column)) {
+                    on_timezone_mismatch(
+                            options, column_name, timezone_of(*accumulated_column), timezone_of(*other_column)
+                    );
+                    // Present in both, so drop anything they disagree on, such as the timezone.
+                    res_columns[column_name].clear_timezone();
+                }
+            }
+    );
+    return res;
+}
+
+// TODO (monday ref 11325694339): To be changed when working on arrow with pandas interop
+// One arrow, one pandas: pandas is preferred as it carries more detail. Compatible when
+// arrow.has_index() == pandas.index().is_physically_stored().
+NormalizationMetadata accumulate_arrow_and_pandas_norm(
+        const NormalizationMetadata& arrow_meta, const NormalizationMetadata& pandas_meta,
+        const SchemaCombineOptions& options
+) {
+    const auto& common = *pandas_common(pandas_meta);
+    normalization::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
+            common.has_index(),
+            "Cannot {}: cannot combine arrow-written data with multi-indexed pandas data",
+            options.name()
+    );
+    normalization::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
+            arrow_meta.experimental_arrow().has_index() == common.index().is_physically_stored(),
+            "Cannot {}: cannot combine unindexed data with indexed data",
+            options.name()
+    );
+    return pandas_meta;
+}
+
+void accumulate_multi_index(
+        PandasMultiIndex* res_index, const PandasMultiIndex& other_index, RequiredNameMismatches& mismatches,
+        const SchemaCombineOptions& options
+) {
+    normalization::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
+            res_index->field_count() == other_index.field_count(),
+            "Cannot {}: schemas have different index level counts, {} and {}",
+            options.name(),
+            res_index->field_count() + 1,
+            other_index.field_count() + 1
+    );
+    const std::set<uint32_t> res_unnamed{res_index->fake_field_pos().begin(), res_index->fake_field_pos().end()};
+    const std::set<uint32_t> other_unnamed{other_index.fake_field_pos().begin(), other_index.fake_field_pos().end()};
+    if (const auto error = compare_pandas_names(
+                PandasName::of_multi_index_level_0(*res_index), PandasName::of_multi_index_level_0(other_index)
+        )) {
+        mismatches.add_index(0, true, *error);
+    }
+    if (other_index.tz() != res_index->tz()) {
+        on_timezone_mismatch(options, "Top level index", res_index->tz(), other_index.tz());
+        res_index->clear_tz();
+    }
+    for (const auto& [idx, idx_timezone] : other_index.timezone()) {
+        auto& res_timezone = (*res_index->mutable_timezone())[idx];
+        if (res_timezone != idx_timezone) {
+            on_timezone_mismatch(options, fmt::format("Index level {}", idx), res_timezone, idx_timezone);
+            res_timezone = "";
+        }
+    }
+    // A level both sides already record as unnamed agrees, and stays unnamed by virtue of already being in
+    // the accumulated positions. A level only one side records as unnamed is a disagreement, so it is the
+    // symmetric difference that matters.
+    std::vector<uint32_t> disagreed;
+    std::ranges::set_symmetric_difference(res_unnamed, other_unnamed, std::back_inserter(disagreed));
+    for (const auto position : disagreed) {
+        mismatches.add_index(position, true, fmt::format("level {} is unnamed on one side only", position));
+    }
+}
+
+void accumulate_index(
+        PandasIndex* res_index, const PandasIndex& other_index, RequiredNameMismatches& mismatches,
+        const SchemaCombineOptions& options
+) {
+    normalization::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
+            res_index->is_physically_stored() == other_index.is_physically_stored(),
+            "Cannot {}: one index is physically stored and the other is not",
+            options.name()
+    );
+    if (const auto error = compare_pandas_names(PandasName::of_index(*res_index), PandasName::of_index(other_index))) {
+        mismatches.add_index(0, false, *error);
+    }
+    if (other_index.tz() != res_index->tz()) {
+        on_timezone_mismatch(options, "Index", res_index->tz(), other_index.tz());
+        res_index->clear_tz();
+    }
+    if (other_index.step() != res_index->step()) {
+        // This case can only be reached for concat.
+        // Update doesn't support range indices and append has special handling for range indices to make sure they
+        // are aligned.
+        util::check(
+                options.operation == NormalizationOperation::CONCAT,
+                "Encountered mismatched range indices for operation {} which should have been handled earlier.",
+                options.name()
+        );
+        log::version().warn("Mismatching RangeIndexes being combined, setting to start=0, step=1");
+        res_index->set_start(0);
+        res_index->set_step(1);
+    }
+}
+
+NormalizationMetadata accumulate_pandas_and_pandas_norm(
+        const NormalizationMetadata& accumulated, const NormalizationMetadata& other,
+        RequiredNameMismatches& mismatches, const SchemaCombineOptions& options
+) {
+    // Pandas + Pandas. A TimeFrame and a DataFrame describe their index alike but denormalize differently, and a
+    // Series carries a value column a DataFrame does not, so the kind of object has to agree.
+    check_same_input_type(accumulated, other, options);
+    auto res = accumulated;
+    auto* res_common = mutable_pandas_common(res);
+    const auto& other_common = *pandas_common(other);
+    // First check pandas + pandas shapes are compatible
+    normalization::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
+            res_common->has_multi_index() == other_common.has_multi_index(),
+            "Cannot {}: cannot combine multi-indexed data with non-multi-indexed data",
+            options.name()
+    );
+
+    if (res_common->has_multi_index()) {
+        accumulate_multi_index(res_common->mutable_multi_index(), other_common.multi_index(), mismatches, options);
+    } else {
+        accumulate_index(res_common->mutable_index(), other_common.index(), mismatches, options);
+    }
+
+    // Last of the required fields, so that a disagreement about the index - which every schema has - is reported
+    // ahead of one about the value column, which only a Series has.
+    if (res.has_series()) {
+        if (const auto error =
+                    compare_pandas_names(PandasName::of_series(*res_common), PandasName::of_series(other_common))) {
+            mismatches.add_series_name(*error);
+        }
+    }
+    accumulate_norm_metadata_column_names(res, other);
+    return res;
+}
+
 // Pairwise merge of two normalization metadata objects: timezones, RangeIndex start/step, multi-index fields
 // and per-column Arrow metadata. Required field name disagreements are added to mismatches.
 NormalizationMetadata accumulate_norm_metadata(
@@ -682,164 +853,17 @@ NormalizationMetadata accumulate_norm_metadata(
         return accumulated;
     }
 
-    // Arrow + arrow
     if (accumulated.has_experimental_arrow() && other.has_experimental_arrow()) {
-        normalization::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
-                accumulated.experimental_arrow().has_index() == other.experimental_arrow().has_index(),
-                "Cannot {}: cannot combine indexed arrow data with unindexed arrow data",
-                operation
-        );
-        // Per-column metadata is merged rather than taking only the base schema's, so that a column only a later
-        // schema has keeps what that schema says about it. Presence is checked per column rather than by comparing
-        // map sizes, so that a metadata field a future client adds does not make existing data un-appendable.
-        auto res = accumulated;
-        auto& res_columns = *res.mutable_experimental_arrow()->mutable_columns();
-        util::for_each_key_union(
-                accumulated.experimental_arrow().columns(),
-                other.experimental_arrow().columns(),
-                [&](const std::string& column_name,
-                    const ArrowColumnMeta* accumulated_column,
-                    const ArrowColumnMeta* other_column) {
-                    if (accumulated_column == nullptr) {
-                        on_column_metadata_one_sided(options, column_name);
-                        res_columns[column_name] = *other_column;
-                        return;
-                    }
-                    if (other_column == nullptr) {
-                        on_column_metadata_one_sided(options, column_name);
-                        return;
-                    }
-                    // An absent timezone is not the same as an empty one, so compare presence as well as value.
-                    const auto timezone_of = [](const ArrowColumnMeta& column) {
-                        return column.has_timezone() ? std::optional{std::string_view{column.timezone()}}
-                                                     : std::nullopt;
-                    };
-                    if (timezone_of(*accumulated_column) != timezone_of(*other_column)) {
-                        on_timezone_mismatch(
-                                options, column_name, timezone_of(*accumulated_column), timezone_of(*other_column)
-                        );
-                        // Present in both, so drop anything they disagree on, such as the timezone.
-                        res_columns[column_name].clear_timezone();
-                    }
-                }
-        );
-        return res;
+        return accumulate_arrow_and_arrow_norm(accumulated, other, options);
     }
 
-    // TODO (monday ref 11325694339): To be changed when working on arrow with pandas interop
-    // One arrow, one pandas: pandas is preferred as it carries more detail. Compatible when
-    // arrow.has_index() == pandas.index().is_physically_stored().
     if (accumulated.has_experimental_arrow() || other.has_experimental_arrow()) {
         const auto& arrow_meta = accumulated.has_experimental_arrow() ? accumulated : other;
         const auto& pandas_meta = accumulated.has_experimental_arrow() ? other : accumulated;
-        const auto& common = *pandas_common(pandas_meta);
-        normalization::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
-                common.has_index(),
-                "Cannot {}: cannot combine arrow-written data with multi-indexed pandas data",
-                operation
-        );
-        normalization::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
-                arrow_meta.experimental_arrow().has_index() == common.index().is_physically_stored(),
-                "Cannot {}: cannot combine unindexed data with indexed data",
-                operation
-        );
-        return pandas_meta;
+        return accumulate_arrow_and_pandas_norm(arrow_meta, pandas_meta, options);
     }
 
-    // Pandas + Pandas. A TimeFrame and a DataFrame describe their index alike but denormalize differently, and a
-    // Series carries a value column a DataFrame does not, so the kind of object has to agree.
-    check_same_input_type(accumulated, other, options);
-    auto res = accumulated;
-    auto* res_common = mutable_pandas_common(res);
-    const auto& other_common = *pandas_common(other);
-    // First check pandas + pandas shapes are compatible
-    normalization::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
-            res_common->has_multi_index() == other_common.has_multi_index(),
-            "Cannot {}: cannot combine multi-indexed data with non-multi-indexed data",
-            operation
-    );
-    if (res_common->has_multi_index()) {
-        normalization::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
-                res_common->multi_index().field_count() == other_common.multi_index().field_count(),
-                "Cannot {}: schemas have different index level counts, {} and {}",
-                operation,
-                res_common->multi_index().field_count() + 1,
-                other_common.multi_index().field_count() + 1
-        );
-    } else {
-        normalization::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
-                res_common->index().is_physically_stored() == other_common.index().is_physically_stored(),
-                "Cannot {}: one index is physically stored and the other is not",
-                operation
-        );
-    }
-
-    if (res_common->has_multi_index()) {
-        auto* res_index = res_common->mutable_multi_index();
-        const auto& other_index = other_common.multi_index();
-        const std::set<uint32_t> res_unnamed{res_index->fake_field_pos().begin(), res_index->fake_field_pos().end()};
-        const std::set<uint32_t> other_unnamed{
-                other_index.fake_field_pos().begin(), other_index.fake_field_pos().end()
-        };
-        if (const auto error = compare_pandas_names(
-                    PandasName::of_multi_index_level_0(*res_index), PandasName::of_multi_index_level_0(other_index)
-            )) {
-            mismatches.add_index(0, true, *error);
-        }
-        if (other_index.tz() != res_index->tz()) {
-            on_timezone_mismatch(options, "Top level index", res_index->tz(), other_index.tz());
-            res_index->clear_tz();
-        }
-        for (const auto& [idx, idx_timezone] : other_index.timezone()) {
-            auto& res_timezone = (*res_index->mutable_timezone())[idx];
-            if (res_timezone != idx_timezone) {
-                on_timezone_mismatch(options, fmt::format("Index level {}", idx), res_timezone, idx_timezone);
-                res_timezone = "";
-            }
-        }
-        // A level both sides already record as unnamed agrees, and stays unnamed by virtue of already being in
-        // the accumulated positions. A level only one side records as unnamed is a disagreement, so it is the
-        // symmetric difference that matters.
-        std::vector<uint32_t> disagreed;
-        std::ranges::set_symmetric_difference(res_unnamed, other_unnamed, std::back_inserter(disagreed));
-        for (const auto position : disagreed) {
-            mismatches.add_index(position, true, fmt::format("level {} is unnamed on one side only", position));
-        }
-    } else {
-        auto* res_index = res_common->mutable_index();
-        const auto& other_index = other_common.index();
-        if (const auto error =
-                    compare_pandas_names(PandasName::of_index(*res_index), PandasName::of_index(other_index))) {
-            mismatches.add_index(0, false, *error);
-        }
-        if (other_index.tz() != res_index->tz()) {
-            on_timezone_mismatch(options, "Index", res_index->tz(), other_index.tz());
-            res_index->clear_tz();
-        }
-        if (other_index.step() != res_index->step()) {
-            // This case can only be reached for concat.
-            // Update doesn't support range indices and append has special handling for range indices to make sure they
-            // are aligned.
-            util::check(
-                    options.operation == NormalizationOperation::CONCAT,
-                    "Encountered mismatched range indices for operation {} which should have been handled earlier.",
-                    options.name()
-            );
-            log::version().warn("Mismatching RangeIndexes being combined, setting to start=0, step=1");
-            res_index->set_start(0);
-            res_index->set_step(1);
-        }
-    }
-    // Last of the required fields, so that a disagreement about the index - which every schema has - is reported
-    // ahead of one about the value column, which only a Series has.
-    if (res.has_series()) {
-        if (const auto error =
-                    compare_pandas_names(PandasName::of_series(*res_common), PandasName::of_series(other_common))) {
-            mismatches.add_series_name(*error);
-        }
-    }
-    accumulate_norm_metadata_column_names(res, other);
-    return res;
+    return accumulate_pandas_and_pandas_norm(accumulated, other, mismatches, options);
 }
 
 // Apply the recorded name disagreements to the normalization metadata.

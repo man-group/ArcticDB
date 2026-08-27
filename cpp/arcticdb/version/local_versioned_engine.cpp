@@ -1506,37 +1506,6 @@ auto unpack_symbol_processing_results(std::vector<SymbolProcessingResult>&& symb
     );
 }
 
-// Drop the symbols that have no rows to contribute, matching append, where appending a zero-row frame is a no-op.
-// If all symbols are empty doesn't remove any, so we are not left with an empty list.
-void drop_rowless_symbols(
-        std::vector<OutputSchema>& input_schemas, std::vector<std::vector<EntityId>>& entity_ids,
-        ComponentManager& component_manager
-) {
-    const auto has_rows = [&component_manager](const std::vector<EntityId>& ids) {
-        auto [row_ranges] = component_manager.get_entities<std::shared_ptr<RowRange>>(ids);
-        return std::ranges::any_of(row_ranges, [](const auto& row_range) { return row_range->diff() > 0; });
-    };
-    std::vector<size_t> to_keep;
-    for (size_t idx = 0; idx < entity_ids.size(); ++idx) {
-        if (has_rows(entity_ids[idx])) {
-            to_keep.emplace_back(idx);
-        }
-    }
-    if (to_keep.empty() || to_keep.size() == entity_ids.size()) {
-        return;
-    }
-    std::vector<OutputSchema> kept_schemas;
-    std::vector<std::vector<EntityId>> kept_entity_ids;
-    kept_schemas.reserve(to_keep.size());
-    kept_entity_ids.reserve(to_keep.size());
-    for (const auto idx : to_keep) {
-        kept_schemas.emplace_back(std::move(input_schemas[idx]));
-        kept_entity_ids.emplace_back(std::move(entity_ids[idx]));
-    }
-    input_schemas = std::move(kept_schemas);
-    entity_ids = std::move(kept_entity_ids);
-}
-
 std::shared_ptr<PipelineContext> setup_join_pipeline_context(
         std::vector<OutputSchema>&& input_schemas, const std::vector<std::shared_ptr<Clause>>& clauses
 ) {
