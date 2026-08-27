@@ -346,18 +346,24 @@ std::vector<std::shared_ptr<Column>> merge(
         }
     };
 
-    const auto advance_output = [&] {
-        ++new_column_row_idx;
-        ++output_row_idx;
-        ++new_column_it;
-
-        if (new_column_row_idx == rows_in_current_slice &&
-            new_column_row_slice_index + 1 < reslicing_info.num_segments()) [[unlikely]] {
+    const auto advance_output = [&](size_t step_size = 1) {
+        util::check(
+                output_row_idx + step_size <= reslicing_info.total_rows(),
+                "Cannot advance the output by {} rows, only {} are left in the output",
+                step_size,
+                reslicing_info.total_rows() - output_row_idx
+        );
+        output_row_idx += step_size;
+        while (new_column_row_idx + step_size >= rows_in_current_slice &&
+               new_column_row_slice_index + 1 < reslicing_info.num_segments()) {
+            step_size -= rows_in_current_slice - new_column_row_idx;
             ++new_column_row_slice_index;
             rows_in_current_slice = reslicing_info.rows_in_slice(new_column_row_slice_index);
             new_column_row_idx = 0;
             new_column_it = new_column_datas[new_column_row_slice_index].begin<TargetColumnTypeDescriptorTag>();
         }
+        new_column_row_idx += step_size;
+        std::advance(new_column_it, step_size);
     };
 
     // GIL will be acquired if there is a string that is not pure ASCII/UTF-8
@@ -523,17 +529,16 @@ std::vector<std::shared_ptr<Column>> merge(
             advance_output();
         }
     } else {
-        while (new_column_row_slice_index < new_columns.size()) {
-            const size_t free_elements_in_column =
-                    static_cast<size_t>(new_columns[new_column_row_slice_index]->row_count()) - new_column_row_idx;
+        while (source_row_idx < source.index.size()) {
+            const size_t free_elements_in_column = rows_in_current_slice - new_column_row_idx;
+            util::check(
+                    free_elements_in_column > 0,
+                    "The output row slices are full but {} source rows are left to copy",
+                    source.index.size() - source_row_idx
+            );
             std::copy_n(source.data.begin() + source_row_idx, free_elements_in_column, new_column_it);
             source_row_idx += free_elements_in_column;
-            output_row_idx += free_elements_in_column;
-            ++new_column_row_slice_index;
-            new_column_row_idx = 0;
-            if (new_column_row_slice_index < new_columns.size()) {
-                new_column_it = new_column_datas[new_column_row_slice_index].begin<TargetColumnTypeDescriptorTag>();
-            }
+            advance_output(free_elements_in_column);
         }
     }
 
@@ -596,7 +601,12 @@ TargetRange get_target_start_end(std::span<const ProcessingUnit> row_slices) {
     if (row_slices.front().entity_fetch_count_) {
         if (row_slices.front().entity_fetch_count_->front() > 1) {
             const ColumnData index = row_slices.front().segments_->front()->column(0).data();
-            result.start_row_in_first_row_slice = first_different_index_value_position(index).value_or(0);
+            const std::optional<ssize_t> first_different = first_different_index_value_position(index);
+            util::check(
+                    first_different.has_value(),
+                    "A row slice shared between two processing units cannot consist of a single index value"
+            );
+            result.start_row_in_first_row_slice = *first_different;
         }
         if (row_slices.size() > 1 && row_slices.back().entity_fetch_count_->back() > 1) {
             const ColumnData index = row_slices.back().segments_->back()->column(0).data();
@@ -1135,12 +1145,11 @@ std::vector<ProcessingUnit> MergeUpdateClause::update_and_insert(
     bool has_string_column_in_column_slice = false;
     const TargetRange target_range = get_target_start_end(row_slices);
     using IndexType = ScalarTagType<DataTypeTag<DataType::NANOSECONDS_UTC64>>;
-    const ReslicingInfo reslicing_info{
-            compute_total_upsert_row_count(
-                    target_index_datas, target_range, match_record.total_unmatched_source_rows()
-            ),
-            max_rows_per_segment(rows_per_segment_)
-    };
+    const size_t total_upsert_row_count = compute_total_upsert_row_count(
+            target_index_datas, target_range, match_record.total_unmatched_source_rows()
+    );
+    util::check(total_upsert_row_count > 0, "Merge update produced a row slice group containing no rows");
+    const ReslicingInfo reslicing_info{total_upsert_row_count, max_rows_per_segment(rows_per_segment_)};
     std::vector<ProcessingUnit> result(reslicing_info.num_segments());
     for (ProcessingUnit& proc : result) {
         proc.segments_.emplace(util::reserve_vector<std::shared_ptr<SegmentInMemory>>(num_col_slices));

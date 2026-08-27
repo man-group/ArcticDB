@@ -318,7 +318,7 @@ std::vector<std::vector<EntityId>> AggregationClause::structure_for_processing(
     // Experimentation shows flattening the entities into a single vector and a single call to
     // component_manager_->get is faster than not flattening and making multiple calls
     auto entity_ids = util::flatten_vectors(std::move(entity_ids_vec));
-    auto [buckets] = component_manager_->get_entities<bucket_id>(entity_ids);
+    auto [buckets] = component_manager_->get_components<bucket_id>(entity_ids);
     for (auto [idx, entity_id] : folly::enumerate(entity_ids)) {
         res[buckets[idx]].emplace_back(entity_id);
     }
@@ -850,7 +850,7 @@ std::vector<std::vector<EntityId>> RowRangeClause::structure_for_processing(
     if (entity_ids.empty()) {
         return {};
     }
-    auto [segments, old_row_ranges, col_ranges] = component_manager_->get_entities<
+    auto [segments, old_row_ranges, col_ranges] = component_manager_->get_components<
             std::shared_ptr<SegmentInMemory>,
             std::shared_ptr<RowRange>,
             std::shared_ptr<ColRange>>(entity_ids);
@@ -1052,7 +1052,7 @@ std::vector<std::vector<EntityId>> ConcatClause::structure_for_processing(
     size_t prev_range_end{0};
     for (const auto& entity_ids : entity_ids_vec) {
         auto [old_row_ranges, col_ranges] =
-                component_manager_->get_entities<std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(entity_ids);
+                component_manager_->get_components<std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(entity_ids);
         // Map from old row ranges WITHIN THIS SYMBOL to new ones
         std::map<RowRange, RowRange> row_range_mapping;
         for (const auto& row_range : old_row_ranges) {

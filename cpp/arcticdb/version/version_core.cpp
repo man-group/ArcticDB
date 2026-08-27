@@ -461,26 +461,25 @@ std::vector<StreamDescriptor> split_rowrange_descriptor(
     return descriptors;
 }
 
-/// One instance is the single output data segment covering one column slice's columns for one output row slice's
-/// rows.
-struct MergeUpdateRowRangeInsertInfo {
-    /// Check which source rows within this range must be inserted. Note, not all source rows within this range will be
-    /// inserted.
-    RowRange source_range_to_check_for_appends{};
+/// Used only by merge update for row-range (integer) indexed targets, where the unmatched source rows are
+/// appended after the last target row.
+struct MergeUpdateSliceInfo {
+    /// The window of source rows this output segment scans. Note, not all source rows within this range will be
+    /// inserted, only those set in the bitset of unmatched source rows.
+    RowRange candidate_source_rows{};
     /// The row range in the final result inserted rows from source will be placed
     RowRange output_row_range{};
     /// Column slice inside the row slice
     size_t col_slice_index{};
 };
 
-std::vector<MergeUpdateRowRangeInsertInfo> plan_inserted_segments_for_row_range_merge_update(
+std::vector<MergeUpdateSliceInfo> plan_inserted_segments_for_row_range_merge_update(
         const util::BitSet& source_rows_to_insert, const ReslicingInfo& reslicing_info, size_t last_row_in_target,
         size_t num_column_slices
 ) {
-    auto insert_plans =
-            util::reserve_vector<MergeUpdateRowRangeInsertInfo>(num_column_slices * reslicing_info.num_segments());
+    auto insert_plans = util::reserve_vector<MergeUpdateSliceInfo>(num_column_slices * reslicing_info.num_segments());
     auto set_insert_info_for_col_slices = [&] {
-        MergeUpdateRowRangeInsertInfo current_row_slice = insert_plans.back();
+        MergeUpdateSliceInfo current_row_slice = insert_plans.back();
         for (size_t col_slice_index = 1; col_slice_index < num_column_slices; ++col_slice_index) {
             current_row_slice.col_slice_index = col_slice_index;
             insert_plans.push_back(current_row_slice);
@@ -491,24 +490,24 @@ std::vector<MergeUpdateRowRangeInsertInfo> plan_inserted_segments_for_row_range_
     insert_plans.back().output_row_range = RowRange{last_row_in_target, last_row_in_target};
     iterate_over_set_positions(source_rows_to_insert, [&](const size_t source_row) {
         if (insert_plans.back().output_row_range.diff() >= reslicing_info.rows_in_slice(row_slice_index)) {
-            insert_plans.back().source_range_to_check_for_appends.second = source_row;
+            insert_plans.back().candidate_source_rows.second = source_row;
             set_insert_info_for_col_slices();
             const size_t next_output_row_begin = insert_plans.back().output_row_range.second;
             insert_plans.emplace_back();
-            insert_plans.back().source_range_to_check_for_appends.first = source_row;
+            insert_plans.back().candidate_source_rows.first = source_row;
             insert_plans.back().output_row_range = RowRange{next_output_row_begin, next_output_row_begin};
             ++row_slice_index;
         }
         ++insert_plans.back().output_row_range.second;
     });
-    insert_plans.back().source_range_to_check_for_appends.second = source_rows_to_insert.size();
+    insert_plans.back().candidate_source_rows.second = source_rows_to_insert.size();
     set_insert_info_for_col_slices();
     return insert_plans;
 }
 
 SegmentInMemory create_segment_for_merge_update_row_range_insert(
-        const StreamDescriptor& col_slice_descriptor, const MergeUpdateRowRangeInsertInfo& insert_info,
-        size_t columns_per_slice, const InputFrame& source, const util::BitSet& source_rows_to_insert
+        const StreamDescriptor& col_slice_descriptor, const MergeUpdateSliceInfo& insert_info, size_t columns_per_slice,
+        const InputFrame& source, const util::BitSet& source_rows_to_insert
 ) {
     const size_t rows_to_insert = insert_info.output_row_range.diff();
     SegmentInMemory new_segment(
@@ -530,8 +529,8 @@ SegmentInMemory create_segment_for_merge_update_row_range_insert(
             std::span<const SourceRawType> source_data = source.get_tensor(source_field_pos).span<SourceRawType>();
             iterate_over_set_positions(
                     source_rows_to_insert,
-                    insert_info.source_range_to_check_for_appends.first,
-                    insert_info.source_range_to_check_for_appends.second,
+                    insert_info.candidate_source_rows.first,
+                    insert_info.candidate_source_rows.second,
                     [&](size_t source_row) {
                         if constexpr (is_sequence_type(TDT::data_type())) {
                             *data_it = write_py_string_to_pool_or_throw<TDT>(
@@ -582,7 +581,7 @@ folly::SemiFuture<std::vector<SliceAndKey>> write_inserted_row_range_data(
              de_dup_map,
              target_index_partial_key,
              columns_per_slice = write_opts.column_group_size,
-             store = &store](MergeUpdateRowRangeInsertInfo insert_info) {
+             store = &store](MergeUpdateSliceInfo insert_info) {
                 return store->async_write(
                         folly::via(
                                 &async::cpu_executor(),
@@ -803,21 +802,19 @@ folly::Future<std::vector<EntityId>> read_modify_write_data_keys(
     return read_and_schedule_processing(store, pipeline_context, read_query, read_options, component_manager)
             .thenValue([component_manager = std::move(component_manager),
                         read_query = std::move(read_query)](std::vector<EntityId>&& processed_entity_ids) {
-                std::vector<std::shared_ptr<folly::Future<SliceAndKey>>> slice_components =
-                        std::get<0>(component_manager->get_entities<std::shared_ptr<folly::Future<SliceAndKey>>>(
-                                processed_entity_ids
-                        ));
-                auto write_segments_futures = util::reserve_vector<folly::Future<EntityId>>(slice_components.size());
-                for (auto&& [index, slice_future] : folly::enumerate(slice_components)) {
+                std::vector<std::shared_ptr<folly::Future<SliceAndKey>>> slice_futures =
+                        std::get<0>(component_manager->get_components_and_remove_components<
+                                    std::shared_ptr<folly::Future<SliceAndKey>>>(processed_entity_ids));
+                auto write_segments_futures = util::reserve_vector<folly::Future<EntityId>>(slice_futures.size());
+                for (auto&& [index, slice_future] : folly::enumerate(slice_futures)) {
                     write_segments_futures.push_back(
                             std::move(*slice_future)
-                                    .thenValueInline([component_manager,
-                                                      entt = processed_entity_ids[index]](SliceAndKey&& slice_and_key) {
-                                        component_manager
-                                                ->remove_component<std::shared_ptr<folly::Future<SliceAndKey>>>(entt);
+                                    .thenValueInline([component_manager, entity_id = processed_entity_ids[index]](
+                                                             SliceAndKey&& slice_and_key
+                                                     ) {
                                         slice_and_key.unset_segment();
-                                        component_manager->add_components(entt, std::move(slice_and_key));
-                                        return entt;
+                                        component_manager->add_components(entity_id, std::move(slice_and_key));
+                                        return entity_id;
                                     })
                     );
                 }
@@ -833,7 +830,7 @@ std::vector<SliceAndMergeInfo> gather_slices_and_infos_for_merge_update_index_co
             processed_entities.size() + row_slices_appended_for_rowcount_index.size()
     );
     auto [new_slices, new_infos] =
-            component_manager.get_entities<SliceAndKey, MergeUpdateRowSlicingInfoComponent>(processed_entities);
+            component_manager.get_components<SliceAndKey, MergeUpdateRowSlicingInfoComponent>(processed_entities);
     for (size_t i = 0; i < new_slices.size(); ++i) {
         total_slices_and_infos.emplace_back(std::move(new_slices[i]), new_infos[i]);
     }
@@ -3198,7 +3195,7 @@ folly::Future<VersionedItem> read_modify_write_impl(
                         store,
                         target_partial_index_key](std::vector<EntityId>&& entities) mutable {
                 std::vector<SliceAndKey> data_keys_and_slices =
-                        std::get<0>(component_manager->get_entities<SliceAndKey>(entities));
+                        std::get<0>(component_manager->get_components<SliceAndKey>(entities));
                 ARCTICDB_DEBUG_CHECK(
                         ErrorCode::E_ASSERTION_FAILURE,
                         std::ranges::all_of(
@@ -3614,7 +3611,7 @@ folly::Future<std::optional<AtomKey>> async_compact_data_impl(
                                  component_manager](std::vector<EntityId>&& entities
                                 ) -> folly::Future<std::optional<AtomKey>> {
                                     std::vector<SliceAndKey> slices_and_keys =
-                                            std::get<0>(component_manager->get_entities<SliceAndKey>(entities));
+                                            std::get<0>(component_manager->get_components<SliceAndKey>(entities));
                                     if (slices_and_keys.empty() && !frame) {
                                         return folly::makeFuture(std::optional<AtomKey>());
                                     }

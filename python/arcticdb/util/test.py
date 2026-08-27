@@ -1658,6 +1658,12 @@ def query_stats_operation_count(stats, operation, key_type):
     return stats.get("storage_operations", {}).get(operation, {}).get(key_type, {}).get("count", 0)
 
 
+def min_rows_per_segment(rows_per_segment: int) -> int:
+    """Lower bound on the number of rows the C++ ColumnReslicer can put in a single row slice when resegmenting,
+    given a target of `rows_per_segment`. Mirrors cpp/arcticdb/column_store/column_reslicer.cpp."""
+    return max((2 * rows_per_segment) // 3, 1)
+
+
 def max_rows_per_segment(rows_per_segment: int) -> int:
     """Upper bound on the number of rows the C++ ColumnReslicer can put in a single row slice when resegmenting,
     given a target of `rows_per_segment`. Mirrors cpp/arcticdb/column_store/column_reslicer.cpp."""

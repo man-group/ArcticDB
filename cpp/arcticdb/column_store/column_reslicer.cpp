@@ -16,8 +16,18 @@
 
 namespace arcticdb {
 
+// Magic range for min/max rows per segment of +-33% chosen so that:
+// - 2 row slices with < min_rows_per_segment cannot be combined into one row slice with > max_rows_per_segment
+// - 1 row slice with a little more than max_rows_per_segment when split in half will still have
+//   >= min_rows_per_segment in each resulting row slice
+
+size_t min_rows_per_segment(size_t rows_per_segment) {
+    // If rows_per_segment == 1 the result would be 0 without the std::max
+    return std::max((2 * rows_per_segment) / 3, size_t(1));
+}
+
 size_t max_rows_per_segment(size_t rows_per_segment) {
-    // If rows_per_segment_ == 2 max_rows_per_segment_ would be 2 without the std::max
+    // If rows_per_segment == 2 the result would be 2 without the std::max
     return std::max((4 * rows_per_segment) / 3, rows_per_segment + 1);
 }
 

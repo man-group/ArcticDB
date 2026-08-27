@@ -61,7 +61,7 @@ class ComponentManager {
 
     std::vector<EntityId> get_new_entity_ids(size_t count);
 
-    // Add a single entity with the components defined by args
+    // Add components defined by args to entity id
     template<class... Args>
     void add_components(EntityId id, Args... args) {
         std::unique_lock lock(mtx_);
@@ -144,16 +144,26 @@ class ComponentManager {
 
     static_assert(sizeof(entt::entity) == sizeof(uint64_t));
 
-    // Get a collection of entities. Returns a tuple of vectors, one for each component requested via Args
+    // Get the requested components for a collection of entities. Returns a tuple of vectors, one for each component
+    // requested via Args
     template<class... Args>
-    std::tuple<std::vector<Args>...> get_entities_and_decrement_refcount(const std::vector<EntityId>& ids) {
-        return get_entities_impl<Args...>(ids, true);
+    std::tuple<std::vector<Args>...> get_components_and_decrement_refcount(const std::vector<EntityId>& ids) {
+        return get_components_impl<Args...>(ids, true, false);
     }
 
-    // Get a collection of entities. Returns a tuple of vectors, one for each component requested via Args
+    // Get the requested components for a collection of entities. Returns a tuple of vectors, one for each component
+    // requested via Args
     template<class... Args>
-    std::tuple<std::vector<Args>...> get_entities(const std::vector<EntityId>& ids) {
-        return get_entities_impl<Args...>(ids, false);
+    std::tuple<std::vector<Args>...> get_components(const std::vector<EntityId>& ids) {
+        return get_components_impl<Args...>(ids, false, false);
+    }
+
+    // Get the requested components for a collection of entities and remove them from the entities. Returns a tuple of
+    // vectors, one for each component requested via Args
+    template<class... Args>
+    requires(!std::same_as<Args, EntityFetchCount> && ...)
+    std::tuple<std::vector<Args>...> get_components_and_remove_components(const std::vector<EntityId>& ids) {
+        return get_components_impl<Args...>(ids, false, true);
     }
 
     template<typename ProcessComponents>
@@ -182,7 +192,9 @@ class ComponentManager {
     void update_entity_fetch_count(EntityId id, EntityFetchCount count);
 
     template<class... Args>
-    std::tuple<std::vector<Args>...> get_entities_impl(const std::vector<EntityId>& ids, bool decrement_ref_count) {
+    std::tuple<std::vector<Args>...> get_components_impl(
+            const std::vector<EntityId>& ids, bool decrement_ref_count, bool remove_components
+    ) {
         std::vector<std::tuple<Args...>> tuple_res;
         ARCTICDB_SAMPLE_DEFAULT(GetEntities)
         tuple_res.reserve(ids.size());
@@ -197,6 +209,17 @@ class ComponentManager {
                 for (const auto id : ids) {
                     decrement_entity_fetch_count(id);
                 }
+            }
+        }
+        if (remove_components) {
+            internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+                    (!std::same_as<Args, EntityFetchCount> && ...),
+                    "Removing the EntityFetchCount component is not allowed yet and must be implemented"
+            );
+            // Safe to erase only after tuple_res has copied the component values out
+            std::unique_lock lock(mtx_);
+            for (const auto id : ids) {
+                registry_.remove<Args...>(id);
             }
         }
         // Convert vector of tuples into tuple of vectors

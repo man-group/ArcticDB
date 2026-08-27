@@ -26,13 +26,7 @@ CompactDataClause::CompactDataClause(uint64_t rows_per_segment, std::shared_ptr<
     if (frame && frame->num_rows > 0) {
         frame_ = std::move(frame);
     }
-    // Magic range of +-33% chosen so that:
-    // - 2 row slices with < min_rows_per_segment_ cannot be combined into one row slice with > max_rows_per_segment_
-    // - 1 row slice with a little more than max_rows_per_segment_ when split in half will still have
-    //   >= min_rows_per_segment_ in each resulting row slice
-    // If rows_per_segment_ == 1 min_rows_per_segment_ would be 0 without the std::max
-    min_rows_per_segment_ = std::max((2 * rows_per_segment_) / 3, uint64_t(1));
-    // If rows_per_segment_ == 2 max_rows_per_segment_ would be 2 without the std::max
+    min_rows_per_segment_ = min_rows_per_segment(rows_per_segment_);
     max_rows_per_segment_ = max_rows_per_segment(rows_per_segment_);
     clause_info_.input_structure_ = ProcessingStructure::ONE_COL_SLICE_MULTIPLE_ROW_SLICES;
     clause_info_.output_structure_ = ProcessingStructure::ONE_COL_SLICE_MULTIPLE_ROW_SLICES;

@@ -13,7 +13,7 @@ import pandas as pd
 
 from arcticdb import Arctic
 from arcticdb.version_store.library import MergeStrategy
-from arcticdb.util.test import random_strings_of_length
+from arcticdb.util.test import max_rows_per_segment, random_strings_of_length
 
 from benchmarks.common import lib_name
 from benchmarks.seaweed_utils import SeaweedClient
@@ -22,6 +22,10 @@ CACHE_BUCKET = "arcticdb-merge-update-cache"
 WORK_BUCKET = "arcticdb-merge-work"
 ROWS_PER_SEGMENT = 100_000
 START_DATE = pd.Timestamp("1960-01-01")
+# Target of exactly one row slice, merged with a source large enough that reslicing splits it into MIN_SPLIT_SEGMENTS
+SPLIT_TARGET_ROWS = ROWS_PER_SEGMENT
+SPLIT_SOURCE_ROWS = 600_000
+MIN_SPLIT_SEGMENTS = 5
 random.seed(0)  # random_strings_of_length draws string pools from stdlib random
 
 
@@ -77,6 +81,10 @@ def generate_source_for_row_range(target, source_size, matched_count, rng, on=No
                 else np.linspace(0, 100_000, len(matched), dtype=value_dtype)
             )
     rest_count = source_size - len(matched)
+    if is_string and matched_count == 0:
+        # No row may match, so the pool must hold strings absent from the target. The target's strings are all 10
+        # characters long, so a longer one cannot be among them.
+        string_pool = [f"zz{value}" for value in string_pool]
     rest = pd.DataFrame(
         {
             col: (
@@ -88,7 +96,8 @@ def generate_source_for_row_range(target, source_size, matched_count, rng, on=No
             for col in target.columns
         }
     )
-    source = pd.concat([matched, rest])
+    # Concatenating an empty frame would upcast the dtypes
+    source = rest if matched.empty else pd.concat([matched, rest])
     source = source[~source.duplicated(subset=on, keep="first").values]
     source.index = pd.RangeIndex(len(source))
     return source.sample(frac=1, random_state=42).reset_index(drop=True)
@@ -210,8 +219,11 @@ class MergeBase:
                 value_dtype=self.value_dtype,
             )
         return generate_source_for_row_range(
-            target, source_size, source_size // 2, rng, on=on, value_dtype=self.value_dtype
+            target, source_size, self._row_range_matched_count(source_size), rng, on=on, value_dtype=self.value_dtype
         )
+
+    def _row_range_matched_count(self, source_size):
+        return source_size // 2
 
     def _source_sym(self, source_size, matched_slices=None):
         return f"src_{source_size}" if matched_slices is None else f"src_{source_size}_{matched_slices}"
@@ -513,4 +525,205 @@ class MergeWideRowRange(MergeBase):
         self.merge(strategy)
 
     def peakmem_merge(self, scenario, strategy, on_count, source_size):
+        self.merge(strategy)
+
+
+class MergeSplitSegmentsThinDatetime(MergeBase):
+    """
+    Insertion into a single full 100k row segment, long-thin numeric dataframe, datetime index. The source is
+    much larger than the target, so the merged row slice group is resliced into several output segments. All source
+    rows fall inside the target's index range and matching is done on an additional column.
+    """
+
+    INDEX_KIND = "datetime"
+
+    def __init__(self):
+        super().__init__()
+        self.value_dtype = "float32"
+        self.param_names = ["scenario", "strategy", "on_count", "source_size", "matched_slices"]
+        self.params = [
+            [(SPLIT_TARGET_ROWS, 3)],  # scenario: (num_rows, num_value_cols) — exactly one row slice
+            ["update_and_insert"],  # strategy
+            [1],  # on_count
+            [SPLIT_SOURCE_ROWS],  # source_size (source row count)
+            [1],  # matched_slices: the whole source lands in the target's single row slice
+        ]
+
+    def setup_cache(self):
+        reset_bucket(self.seaweed, CACHE_BUCKET)
+        for scenario in self.params[0]:
+            num_rows, num_value_cols = scenario
+            rng = np.random.default_rng([num_rows, num_value_cols])
+            target = generate_merge_target(num_rows, num_value_cols, self.value_dtype, self.INDEX_KIND, rng)
+            library_name = lib_name(*scenario, self.INDEX_KIND)
+            self._write_cache_target(library_name, target)
+            self._precompute_sources(library_name, target)
+
+    def setup(self, scenario, strategy, on_count, source_size, matched_slices):
+        self._prepare_merge(lib_name(*scenario, self.INDEX_KIND), on_count, source_size, matched_slices)
+
+    def teardown(self, scenario, strategy, on_count, source_size, matched_slices):
+        self.seaweed.delete_bucket(WORK_BUCKET)
+
+    def time_merge(self, scenario, strategy, on_count, source_size, matched_slices):
+        self.merge(strategy)
+
+    def peakmem_merge(self, scenario, strategy, on_count, source_size, matched_slices):
+        self.merge(strategy)
+
+
+class MergeSplitSegmentsThinStringDatetime(MergeBase):
+    """As MergeSplitSegmentsThinDatetime, with string columns so a string pool is rebuilt for every output segment."""
+
+    INDEX_KIND = "datetime"
+
+    def __init__(self):
+        super().__init__()
+        self.value_dtype = "string"
+        self.param_names = ["scenario", "strategy", "on_count", "source_size", "matched_slices", "num_unique_strings"]
+        self.params = [
+            [(SPLIT_TARGET_ROWS, 3)],  # scenario: (num_rows, num_value_cols) — exactly one row slice
+            ["update_and_insert"],  # strategy
+            [1],  # on_count
+            [SPLIT_SOURCE_ROWS],  # source_size (source row count)
+            [1],  # matched_slices: the whole source lands in the target's single row slice
+            [5_000, 100_00],  # num_unique_strings (size of the pool each column is drawn from)
+        ]
+
+    def setup_cache(self):
+        reset_bucket(self.seaweed, CACHE_BUCKET)
+        parameter_map = dict(zip(self.param_names, self.params))
+        for scenario in parameter_map["scenario"]:
+            for num_unique_strings in parameter_map["num_unique_strings"]:
+                num_rows, num_value_cols = scenario
+                rng = np.random.default_rng([num_rows, num_value_cols, num_unique_strings])
+                target = generate_merge_target(
+                    num_rows,
+                    num_value_cols,
+                    self.value_dtype,
+                    self.INDEX_KIND,
+                    rng,
+                    num_unique_strings=num_unique_strings,
+                )
+                self.target_prefix = f"target_{num_unique_strings}"
+                self.source_prefix = f"source_{num_unique_strings}"
+                library_name = lib_name(*scenario, self.INDEX_KIND)
+                self._write_cache_target(library_name, target)
+                self._precompute_sources(library_name, target)
+
+    def setup(self, scenario, strategy, on_count, source_size, matched_slices, num_unique_strings):
+        self.target_prefix = f"target_{num_unique_strings}"
+        self.source_prefix = f"source_{num_unique_strings}"
+        self._prepare_merge(lib_name(*scenario, self.INDEX_KIND), on_count, source_size, matched_slices)
+
+    def teardown(self, scenario, strategy, on_count, source_size, matched_slices, num_unique_strings):
+        self.seaweed.delete_bucket(WORK_BUCKET)
+
+    def time_merge(self, scenario, strategy, on_count, source_size, matched_slices, num_unique_strings):
+        self.merge(strategy)
+
+    def peakmem_merge(self, scenario, strategy, on_count, source_size, matched_slices, num_unique_strings):
+        self.merge(strategy)
+
+
+class MergeSplitSegmentsThinRowRange(MergeBase):
+    """
+    Insertion after a single full 100k row segment, long-thin numeric dataframe, row-range index. No source row
+    matches, so all of them are appended and resliced into several output segments.
+    """
+
+    INDEX_KIND = "rowrange"
+
+    def __init__(self):
+        super().__init__()
+        self.value_dtype = "float32"
+        self.param_names = ["scenario", "strategy", "on_count", "source_size"]
+        self.params = [
+            [(SPLIT_TARGET_ROWS, 3)],  # scenario: (num_rows, num_value_cols) — exactly one row slice
+            ["update_and_insert"],  # strategy
+            [1],  # on_count: row-range indexes cannot be a join key on their own, so on_count >= 1
+            [SPLIT_SOURCE_ROWS],  # source_size (source row count)
+        ]
+
+    def _row_range_matched_count(self, source_size):
+        return 0
+
+    def setup_cache(self):
+        reset_bucket(self.seaweed, CACHE_BUCKET)
+        for scenario in self.params[0]:
+            num_rows, num_value_cols = scenario
+            rng = np.random.default_rng([num_rows, num_value_cols])
+            target = generate_merge_target(num_rows, num_value_cols, self.value_dtype, self.INDEX_KIND, rng)
+            library_name = lib_name(*scenario, self.INDEX_KIND)
+            self._write_cache_target(library_name, target)
+            self._precompute_sources(library_name, target)
+
+    def setup(self, scenario, strategy, on_count, source_size):
+        self._prepare_merge(lib_name(*scenario, self.INDEX_KIND), on_count, source_size)
+
+    def teardown(self, scenario, strategy, on_count, source_size):
+        self.seaweed.delete_bucket(WORK_BUCKET)
+
+    def time_merge(self, scenario, strategy, on_count, source_size):
+        self.merge(strategy)
+
+    def peakmem_merge(self, scenario, strategy, on_count, source_size):
+        self.merge(strategy)
+
+
+class MergeSplitSegmentsThinStringRowRange(MergeBase):
+    """As MergeSplitSegmentsThinRowRange, with string columns so a string pool is rebuilt for every output segment."""
+
+    INDEX_KIND = "rowrange"
+
+    def __init__(self):
+        super().__init__()
+        self.value_dtype = "string"
+        self.param_names = ["scenario", "strategy", "on_count", "source_size", "num_unique_strings"]
+        self.params = [
+            [(SPLIT_TARGET_ROWS, 3)],  # scenario: (num_rows, num_value_cols) — exactly one row slice
+            ["update_and_insert"],  # strategy
+            # on_count: the source needs source_size unique join keys and the key space is
+            # num_unique_strings ** on_count, so one column would cap the source at the pool size.
+            [2],
+            [SPLIT_SOURCE_ROWS],  # source_size (source row count)
+            [5_000, 100_000],  # num_unique_strings (size of the pool each column is drawn from)
+        ]
+
+    def _row_range_matched_count(self, source_size):
+        return 0
+
+    def setup_cache(self):
+        reset_bucket(self.seaweed, CACHE_BUCKET)
+        param_map = dict(zip(self.param_names, self.params))
+        for scenario in param_map["scenario"]:
+            for num_unique_strings in param_map["num_unique_strings"]:
+                num_rows, num_value_cols = scenario
+                rng = np.random.default_rng([num_rows, num_value_cols, num_unique_strings])
+                target = generate_merge_target(
+                    num_rows,
+                    num_value_cols,
+                    self.value_dtype,
+                    self.INDEX_KIND,
+                    rng,
+                    num_unique_strings=num_unique_strings,
+                )
+                self.target_prefix = f"target_{num_unique_strings}"
+                self.source_prefix = f"source_{num_unique_strings}"
+                library_name = lib_name(*scenario, self.INDEX_KIND)
+                self._write_cache_target(library_name, target)
+                self._precompute_sources(library_name, target)
+
+    def setup(self, scenario, strategy, on_count, source_size, num_unique_strings):
+        self.target_prefix = f"target_{num_unique_strings}"
+        self.source_prefix = f"source_{num_unique_strings}"
+        self._prepare_merge(lib_name(*scenario, self.INDEX_KIND), on_count, source_size)
+
+    def teardown(self, scenario, strategy, on_count, source_size, num_unique_strings):
+        self.seaweed.delete_bucket(WORK_BUCKET)
+
+    def time_merge(self, scenario, strategy, on_count, source_size, num_unique_strings):
+        self.merge(strategy)
+
+    def peakmem_merge(self, scenario, strategy, on_count, source_size, num_unique_strings):
         self.merge(strategy)

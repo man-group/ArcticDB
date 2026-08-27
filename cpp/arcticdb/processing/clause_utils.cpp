@@ -29,7 +29,7 @@ std::vector<std::vector<EntityId>> structure_by_row_slice(
         ComponentManager& component_manager, std::vector<EntityId>&& entity_ids
 ) {
     auto [row_ranges, col_ranges] =
-            component_manager.get_entities<std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(entity_ids);
+            component_manager.get_components<std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(entity_ids);
     std::vector<RangesAndEntity> ranges_and_entities;
     ranges_and_entities.reserve(entity_ids.size());
     for (size_t idx = 0; idx < entity_ids.size(); ++idx) {

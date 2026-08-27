@@ -18,6 +18,8 @@
 
 namespace arcticdb {
 
+[[nodiscard]] size_t min_rows_per_segment(size_t rows_per_segment);
+
 [[nodiscard]] size_t max_rows_per_segment(size_t rows_per_segment);
 
 // Helper class used by both the column and segment reslicer classes

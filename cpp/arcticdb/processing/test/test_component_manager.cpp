@@ -33,7 +33,7 @@ TEST(ComponentManager, Simple) {
     component_manager.add_components(ids[1], segment_1, row_range_1, col_range_1, key_1, entity_fetch_count_1);
 
     auto [segments, row_ranges, col_ranges, keys, entity_fetch_counts] =
-            component_manager.get_entities_and_decrement_refcount<
+            component_manager.get_components_and_decrement_refcount<
                     std::shared_ptr<SegmentInMemory>,
                     std::shared_ptr<RowRange>,
                     std::shared_ptr<ColRange>,
@@ -53,7 +53,7 @@ TEST(ComponentManager, Simple) {
     ASSERT_EQ(entity_fetch_counts[1], entity_fetch_count_1);
 
     // EntityFetchCount for entity with id_1 is 2, so can be fetched again without exceptions
-    component_manager.get_entities_and_decrement_refcount<
+    component_manager.get_components_and_decrement_refcount<
             std::shared_ptr<SegmentInMemory>,
             std::shared_ptr<RowRange>,
             std::shared_ptr<ColRange>,
