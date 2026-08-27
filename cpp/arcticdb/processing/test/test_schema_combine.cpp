@@ -444,49 +444,6 @@ TEST(CombineSchema, RequiredFieldsNeverTakeTheFloat64Fallback) {
     ASSERT_EQ(combined.stream_descriptor().field(1).type().data_type(), DataType::INT64);
 }
 
-TEST(CombineSchema, EmptyIndexTakesOnTheConcreteIndexItIsCombinedWith) {
-    auto empty = empty_index_df({{"a", DataType::EMPTYVAL}});
-    auto timeseries = timeseries_df("ts", {{"a", DataType::FLOAT64}});
-    for (const auto& options :
-         {concat_options(JoinType::OUTER), concat_options(JoinType::INNER), append_options(true)}) {
-        for (auto schemas :
-             {std::vector<OutputSchema>{empty, timeseries}, std::vector<OutputSchema>{timeseries, empty}}) {
-            auto combined = combine(schemas, options);
-            ASSERT_EQ(combined.stream_descriptor().index().type(), IndexDescriptor::Type::TIMESTAMP);
-            ASSERT_EQ(
-                    columns_of(combined),
-                    (std::vector<std::pair<std::string, DataType>>{
-                            {"ts", DataType::NANOSECONDS_UTC64}, {"a", DataType::FLOAT64}
-                    })
-            );
-            ASSERT_TRUE(combined.norm_metadata_.df().common().index().is_physically_stored());
-        }
-    }
-}
-
-// Callers that want a zero-row frame to contribute nothing drop it before combining, rather than relying on
-// the combine to ignore it.
-TEST(CombineSchema, EmptyIndexSchemaContributesItsDataColumns) {
-    auto empty = empty_index_df({{"a", DataType::EMPTYVAL}, {"only_empty", DataType::EMPTYVAL}});
-    auto timeseries = timeseries_df("ts", {{"a", DataType::FLOAT64}});
-
-    auto outer = combine({timeseries, empty}, concat_options(JoinType::OUTER));
-    ASSERT_EQ(
-            columns_of(outer),
-            (std::vector<std::pair<std::string, DataType>>{
-                    {"ts", DataType::NANOSECONDS_UTC64}, {"a", DataType::FLOAT64}, {"only_empty", DataType::EMPTYVAL}
-            })
-    );
-
-    auto inner = combine({timeseries, empty}, concat_options(JoinType::INNER));
-    ASSERT_EQ(
-            columns_of(inner),
-            (std::vector<std::pair<std::string, DataType>>{
-                    {"ts", DataType::NANOSECONDS_UTC64}, {"a", DataType::FLOAT64}
-            })
-    );
-}
-
 TEST(CombineSchema, AllEmptyIndicesCombineToAnEmptyIndex) {
     auto empty_a = empty_index_df({{"a", DataType::EMPTYVAL}});
     auto empty_b = empty_index_df({{"b", DataType::EMPTYVAL}});

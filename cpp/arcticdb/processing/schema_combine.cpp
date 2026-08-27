@@ -46,11 +46,11 @@ using PandasIndex = NormalizationMetadata_PandasIndex;
 using PandasMultiIndex = NormalizationMetadata_PandasMultiIndex;
 
 namespace {
-// Whether the metadata describes the empty index a zero-row write produces with empty_types enabled.
-bool has_empty_index(const NormalizationMetadata& norm) {
-    const auto* common = pandas_common(norm);
-    return common != nullptr && !common->has_multi_index() && !common->index().is_physically_stored() &&
-           common->index().step() == 0;
+// Whether a schema carries the empty index a zero-row write produces with empty_types enabled. Taken from the
+// descriptor rather than the normalization metadata, which cannot distinguish it from a pre-Nov-2020 RangeIndex - both
+// have no step.
+bool has_empty_index(const OutputSchema& schema) {
+    return schema.stream_descriptor().index().type() == IndexDescriptorImpl::Type::EMPTY;
 }
 
 using pipelines::index::required_fields_info;
@@ -845,14 +845,6 @@ NormalizationMetadata accumulate_norm_metadata(
         return other;
     }
 
-    // Allow combining an empty index with any other index
-    if (has_empty_index(accumulated)) {
-        return other;
-    }
-    if (has_empty_index(other)) {
-        return accumulated;
-    }
-
     if (accumulated.has_experimental_arrow() && other.has_experimental_arrow()) {
         return accumulate_arrow_and_arrow_norm(accumulated, other, options);
     }
@@ -979,6 +971,20 @@ SortedValue deduce_sorted(SortedValue existing_frame, SortedValue input_frame) {
 
 OutputSchema combine_schema(std::span<const OutputSchema> schemas, const SchemaCombineOptions& options) {
     util::check(!schemas.empty(), "Cannot combine an empty list of schemas");
+    // An empty index must be combinable with any other type of index. All non index related metadata and descriptor
+    // fields should be combined as usual. combine_norm_metadata doesn't handle this currently.
+    // All of append, update, concat filter out empty symbols (hence empty indices), so the logic to merge empty
+    // index with non-empty one is not currently needed.
+    // TODO (monday ref 12911136883): support combining an empty index with a non-empty one.
+    const auto empty_indexes = std::ranges::count_if(schemas, has_empty_index);
+    internal::check<ErrorCode::E_NOT_IMPLEMENTED>(
+            empty_indexes == 0 || empty_indexes == std::ssize(schemas),
+            "Cannot {}: combining an empty index with a non-empty one is not implemented yet, {} of {} schemas have an "
+            "empty index",
+            options.name(),
+            empty_indexes,
+            schemas.size()
+    );
     // The normalization metadata goes first because it is what decides which shapes may combine at all
     RequiredNameMismatches mismatches{options};
     auto norm = combine_norm_metadata(schemas, mismatches, options);
