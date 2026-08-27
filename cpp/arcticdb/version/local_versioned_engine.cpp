@@ -795,6 +795,7 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
         std::vector<arcticdb::proto::descriptors::UserDefinedMetadata>&& user_meta_protos
 ) {
     py::gil_scoped_release release_gil;
+    check_for_duplicated_symbols(stream_ids, "write_metadata");
     auto stream_update_info_futures =
             batch_get_next_version_id_and_optionally_latest_undeleted_version_async(store(), version_map(), stream_ids);
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(
@@ -1331,7 +1332,7 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
 ) {
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: batch_compact_data");
     py::gil_scoped_release release_gil;
-    check_for_duplicated_symbols(stream_ids, "batch_compact_data");
+    check_for_duplicated_symbols(stream_ids, "compact_data");
     auto update_info_futs =
             batch_get_next_version_id_and_optionally_latest_undeleted_version_async(store(), version_map(), stream_ids);
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(
@@ -1930,6 +1931,7 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
         bool prune_previous_versions, bool validate_index, bool throw_on_error
 ) {
     py::gil_scoped_release release_gil;
+    check_for_duplicated_symbols(stream_ids, "write");
 
     auto update_info_futs = batch_get_next_version_id_and_optionally_latest_undeleted_version_async(
             store(), version_map(), stream_ids, write_options_.de_duplication
@@ -2026,6 +2028,7 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
         const AppendOptions& append_options, bool throw_on_error
 ) {
     py::gil_scoped_release release_gil;
+    check_for_duplicated_symbols(stream_ids, "append");
 
     auto stream_update_info_futures =
             batch_get_next_version_id_and_optionally_latest_undeleted_version_async(store(), version_map(), stream_ids);
@@ -2062,6 +2065,7 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
         const std::vector<UpdateQuery>& update_queries, bool prune_previous_versions, bool upsert
 ) {
     py::gil_scoped_release release_gil;
+    check_for_duplicated_symbols(stream_ids, "update");
 
     auto stream_update_info_futures =
             batch_get_next_version_id_and_optionally_latest_undeleted_version_async(store(), version_map(), stream_ids);
