@@ -61,7 +61,7 @@ class Arctic:
         output_format: Union[OutputFormat, str] = OutputFormat.PANDAS,
         arrow_string_format_default: Union[
             ArrowOutputStringFormat, "pa.DataType"
-        ] = ArrowOutputStringFormat.LARGE_STRING,
+        ] = ArrowOutputStringFormat.UNSPECIFIED,
     ):
         """
         Initializes a top-level Arctic library management instance.
@@ -84,7 +84,7 @@ class Arctic:
             Can be overridden per library or per read operation.
             See `OutputFormat` documentation for details on available formats.
 
-        arrow_string_format_default: Union[ArrowOutputStringFormat, "pa.DataType"], default = ArrowOutputStringFormat.LARGE_STRING
+        arrow_string_format_default: Union[ArrowOutputStringFormat, "pa.DataType"], default = ArrowOutputStringFormat.UNSPECIFIED
             Default string column format when using `PYARROW` or `POLARS` output formats.
             Can be overridden per library or per read operation.
             See `ArrowOutputStringFormat` documentation for details on available string formats.

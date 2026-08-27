@@ -25,6 +25,7 @@ from arcticdb.util.test import get_sample_dataframe, make_dynamic
 from arcticdb.util._versions import IS_PANDAS_ONE
 from arcticdb_ext.storage import KeyType
 from tests.util.mark import WINDOWS
+from tests.util.arrow import arrow_output_string_format_to_pa_type
 
 
 def test_basic(lmdb_version_store_arrow):
@@ -281,12 +282,7 @@ def test_strings_in_multi_index(in_memory_version_store_arrow, any_arrow_string_
     }
     lib.write("arrow", df, dynamic_strings=True)
     table = lib.read("arrow", arrow_string_format_per_column=arrow_string_format_per_column).data
-    if any_arrow_string_format == ArrowOutputStringFormat.LARGE_STRING:
-        expected_type = pa.large_string()
-    elif any_arrow_string_format == ArrowOutputStringFormat.SMALL_STRING:
-        expected_type = pa.string()
-    else:
-        expected_type = pa.dictionary(pa.int32(), pa.large_string())
+    expected_type = arrow_output_string_format_to_pa_type(any_arrow_string_format)
     assert table.field("index1").type == expected_type
     assert table.field("index2").type == expected_type
     assert table.field("x").type == expected_type

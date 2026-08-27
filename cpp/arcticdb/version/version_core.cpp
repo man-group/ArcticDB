@@ -2929,6 +2929,35 @@ VersionedItem generate_result_versioned_item(const VersionIdentifier& version_in
     );
 }
 
+// TODO 12841500984: Maybe move these to schema_combine.cpp?
+ReadOptions modify_read_options_from_norm_meta(
+        const proto::descriptors::NormalizationMetadata& norm_meta, const ReadOptions& read_options
+) {
+    // TODO: Handle ndarray data when requesting ARROW output
+    if (norm_meta.has_np() && read_options.output_format_for_frame() == OutputFormat::PANDAS) {
+        // We can't have arrow strings for ndarray data (that is not a dataframe), so we force it as
+        // object
+        auto modified_read_options = read_options.clone();
+        modified_read_options.set_output_config(PandasOutputConfig{PandasStringFormat::OBJECT});
+        return modified_read_options;
+    } else if (read_options.output_format_for_frame() == OutputFormat::ARROW) {
+        auto modified_read_options = read_options.clone();
+        modify_arrow_output_config_from_norm_meta(norm_meta, modified_read_options.arrow_output_config());
+        return modified_read_options;
+    }
+    // ReadOptions is pimpl, so ReadOptions copy is shallow and this is cheap
+    return read_options;
+}
+
+static ReadOptions modify_read_options_from_norm_meta(const PipelineContext& context, const ReadOptions& read_options) {
+    if (context.has_normalization()) {
+        return modify_read_options_from_norm_meta(context.normalization(), read_options);
+    } else {
+        // ReadOptions is pimpl, so ReadOptions copy is shallow and this is cheap
+        return read_options;
+    }
+}
+
 folly::Future<ReadVersionOutput> read_frame_for_version(
         const std::shared_ptr<Store>& store, const VersionIdentifier& version_info,
         const std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options,
@@ -2942,17 +2971,9 @@ folly::Future<ReadVersionOutput> read_frame_for_version(
                 .via(&async::cpu_executor())
                 .thenValue([store,
                             read_query,
-                            read_options = read_options,
+                            read_options,
                             res_versioned_item = std::move(res_versioned_item),
                             handler_data](auto&& pipeline_context) mutable {
-                    // TODO: Handle ndarray data when requesting ARROW output
-                    if (pipeline_context->has_normalization() && pipeline_context->normalization().has_np() &&
-                        read_options.output_format_for_frame() == OutputFormat::PANDAS) {
-                        read_options = read_options.clone();
-                        // We can't have arrow strings for ndarray data (that is not a dataframe), so we force it as
-                        // object
-                        read_options.set_output_config(PandasOutputConfig{PandasStringFormat::OBJECT});
-                    }
                     if (pipeline_context->multi_key_) {
                         if (read_query) {
                             check_can_perform_processing(pipeline_context, *read_query);
@@ -2965,19 +2986,22 @@ folly::Future<ReadVersionOutput> read_frame_for_version(
                                 std::move(res_versioned_item.key_)
                         );
                     }
+                    auto modified_read_options = modify_read_options_from_norm_meta(*pipeline_context, read_options);
                     ARCTICDB_DEBUG(log::version(), "Fetching data to frame");
                     DecodePathData shared_data;
                     return do_direct_read_or_process(
-                                   store, read_query, read_options, pipeline_context, shared_data, handler_data
+                                   store, read_query, modified_read_options, pipeline_context, shared_data, handler_data
                     )
                             .thenValue([res_versioned_item = std::move(res_versioned_item),
                                         pipeline_context,
-                                        read_options,
+                                        modified_read_options,
                                         handler_data,
                                         read_query,
                                         shared_data](auto&& frame) mutable {
                                 ARCTICDB_DEBUG(log::version(), "Reduce and fix columns");
-                                return reduce_and_fix_columns(pipeline_context, frame, read_options, handler_data)
+                                return reduce_and_fix_columns(
+                                               pipeline_context, frame, modified_read_options, handler_data
+                                )
                                         .via(&async::cpu_executor())
                                         .thenValue([res_versioned_item,
                                                     pipeline_context,

@@ -230,11 +230,16 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
     py::enum_<ArrowOutputStringFormat>(version, "InternalArrowOutputStringFormat")
             .value("CATEGORICAL", ArrowOutputStringFormat::CATEGORICAL)
             .value("LARGE_STRING", ArrowOutputStringFormat::LARGE_STRING)
-            .value("SMALL_STRING", ArrowOutputStringFormat::SMALL_STRING);
+            .value("SMALL_STRING", ArrowOutputStringFormat::SMALL_STRING)
+            .value("UNSPECIFIED", ArrowOutputStringFormat::UNSPECIFIED);
 
     py::enum_<PandasStringFormat>(version, "InternalPandasStringFormat")
             .value("OBJECT", PandasStringFormat::OBJECT)
             .value("ARROW_LARGE_STRING", PandasStringFormat::ARROW_LARGE_STRING);
+
+    py::enum_<ArrowOutputFormat>(version, "InternalArrowOutputFormat")
+            .value("PYARROW", ArrowOutputFormat::PYARROW)
+            .value("POLARS", ArrowOutputFormat::POLARS);
 
     py::class_<PandasOutputConfig>(version, "PandasOutputConfig")
             .def(py::init<>())
@@ -245,12 +250,16 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
 
     py::class_<ArrowOutputConfig>(version, "ArrowOutputConfig")
             .def(py::init<>())
-            .def(py::init([](ArrowOutputStringFormat default_string_format,
+            .def(py::init([](ArrowOutputFormat output_format,
+                             ArrowOutputStringFormat default_string_format,
                              std::unordered_map<std::string, ArrowOutputStringFormat>
                                      per_column_string_format) {
-                     return ArrowOutputConfig{default_string_format, std::move(per_column_string_format)};
+                     return ArrowOutputConfig{
+                             output_format, default_string_format, std::move(per_column_string_format)
+                     };
                  }),
-                 py::arg("default_string_format") = ArrowOutputStringFormat::LARGE_STRING,
+                 py::arg("output_format"),
+                 py::arg("default_string_format") = ArrowOutputStringFormat::UNSPECIFIED,
                  py::arg("per_column_string_format") = std::unordered_map<std::string, ArrowOutputStringFormat>{});
 
     py::class_<ReadOptions>(version, "PythonVersionStoreReadOptions")
@@ -268,7 +277,6 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
     py::class_<BatchReadOptions>(version, "PythonVersionStoreBatchReadOptions")
             .def(py::init([](bool batch_throw_on_error) { return BatchReadOptions(batch_throw_on_error); }))
             .def("set_read_options", &BatchReadOptions::set_read_options)
-            .def("set_read_options_per_symbol", &BatchReadOptions::set_read_options_per_symbol)
             .def("set_output_format", &BatchReadOptions::set_output_format)
             .def("set_batch_throw_on_error", &BatchReadOptions::set_batch_throw_on_error)
             .def("at", &BatchReadOptions::at);
@@ -1244,10 +1252,6 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
             util::raise_rte("Unknown sorted value: {}", static_cast<uint8_t>(sorted_value));
         }
     });
-
-    version.def("write_dataframe_to_file", &write_dataframe_to_file);
-
-    version.def("read_dataframe_from_file", &read_dataframe_from_file);
 
     version.def(
             "_modify_schema",
