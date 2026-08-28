@@ -651,6 +651,17 @@ jobs:
         if: matrix.os == 'linux'
         run: |
           command -v azurite >/dev/null && echo "HAS_AZURITE=1" | tee -a $GITHUB_ENV || true
+      # Real-time scanning of the thousands of small LMDB/temp files the tests create makes
+      # Windows test jobs 5-10x slower per test than Linux.
+      - name: Exclude test paths from Windows Defender
+        if: matrix.os == 'windows'
+        shell: pwsh
+        run: |
+          Add-MpPreference -ExclusionPath "$env:GITHUB_WORKSPACE", "$env:RUNNER_TEMP", "$env:TEMP", "$env:LOCALAPPDATA\Temp", "C:\hostedtoolcache", "C:\tmp", "D:\tmp"
+          Add-MpPreference -ExclusionProcess "python.exe", "pytest.exe", "node.exe", "azurite.exe"
+          Set-MpPreference -DisableRealtimeMonitoring $true
+          Get-MpPreference | Select-Object DisableRealtimeMonitoring, ExclusionPath, ExclusionProcess
+        continue-on-error: true
 
       # GitHub runner image does not come with npm
       - name: Install npm (Linux and macOS)
