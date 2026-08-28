@@ -166,7 +166,8 @@ lib = ac.create_library("mylib", library_options=LibraryOptions(
   for every LMDB env opened by the process (`lmdb_extra_env_flags()` in `lmdb_storage.cpp`). Opt-in, default 0.
   Skipping the fsync per commit makes the Windows CI unit jobs ~3x faster. `MDB_WRITEMAP` makes Windows allocate the
   full `map_size` per library on disk, so it is not usable on the CI runners. The `MDB_MAP_RESIZED`/`MDB_BAD_TXN`
-  flakes seen with `MDB_NOSYNC` (and rarely on master) were log lines being written into `data.mdb` on Windows; see
+  flakes seen with `MDB_NOSYNC` (and rarely on master) were log lines being written into `data.mdb` on Windows
+  (static CRT fd table vs pytest's `dup2` through Python's CRT); see
   `cpp/arcticdb/log/console_sink.hpp` and `docs/claude/plans/gpetrov/ci_win_console_sink/branch-work-log.md`.
 - `LMDBStorage.WarnIfOpened`: see `warn_if_lmdb_already_open()`.
 

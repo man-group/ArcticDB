@@ -17,10 +17,16 @@
 
 namespace arcticdb::log {
 
-/// Console sink that writes through the C stdio FILE* on every call. spdlog's stdout/stderr sinks cache the Win32
-/// HANDLE of fd 1/2 at construction and WriteFile to it; once something dup2()s over that fd (pytest capture) the
-/// cached handle is closed and its value is recycled by the next CreateFile (e.g. LMDB's data.mdb), so log lines end
-/// up written into that file. fwrite() resolves the handle from the fd on each write, so it follows redirections.
+/// Writes to the stdio stream so that output follows fd redirections (dup2) done after the sink was created.
+/// On Windows, if a process-shared CRT (ucrtbase.dll, the one Python uses) is loaded, the fd's current handle is
+/// looked up there on every write; arcticdb_ext links the CRT statically so its own fd table does not see redirections
+/// made through Python's CRT. Otherwise, or on other platforms, this is fwrite + fflush.
+void write_to_console(FILE* file, const char* data, size_t size);
+
+/// Console sink that goes through write_to_console(). spdlog's stdout/stderr sinks cache the Win32 HANDLE of fd 1/2
+/// at construction and WriteFile to it; once something dup2()s over that fd (pytest capture) the cached handle is
+/// closed and its value is recycled by the next CreateFile (e.g. LMDB's data.mdb), so log lines end up written into
+/// that file. The same happens to a static CRT's own fd table when another CRT in the process does the dup2.
 template<typename Mutex>
 class ConsoleSink final : public spdlog::sinks::base_sink<Mutex> {
   public:
@@ -30,8 +36,7 @@ class ConsoleSink final : public spdlog::sinks::base_sink<Mutex> {
     void sink_it_(const spdlog::details::log_msg& msg) override {
         spdlog::memory_buf_t formatted;
         this->formatter_->format(msg, formatted);
-        std::fwrite(formatted.data(), 1, formatted.size(), file_);
-        std::fflush(file_);
+        write_to_console(file_, formatted.data(), formatted.size());
     }
 
     void flush_() override { std::fflush(file_); }
