@@ -21,6 +21,11 @@ if [ "$VERSION_MAP_RELOAD_INTERVAL" != "-1" ]; then
     export ARCTICDB_VersionMap_ReloadInterval_int=$VERSION_MAP_RELOAD_INTERVAL
 fi
 
+# Unset means default. 0 would be the kill switch (unbounded residency), so it must not be used as the sentinel.
+if [ -n "$NUM_PROCESSING_UNITS_LIVE" ] && [ "$NUM_PROCESSING_UNITS_LIVE" != "-1" ]; then
+    export ARCTICDB_VersionStore_NumProcessingUnitsLive_int=$NUM_PROCESSING_UNITS_LIVE
+fi
+
 # Enable faulthandler so SIGSEGV/SIGBUS dump tracebacks to stderr
 export PYTHONFAULTHANDLER=1
 # Arm a C-level per-test watchdog that dumps tracebacks and kills the worker

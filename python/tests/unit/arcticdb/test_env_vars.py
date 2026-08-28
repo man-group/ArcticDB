@@ -9,7 +9,9 @@ As of the Change Date specified in that file, in accordance with the Business So
 import pytest
 
 from unittest.mock import patch
+from arcticdb_ext import get_config_int
 from arcticdb.tools import set_config_from_env_vars, _ARCTICDB_ENV_VAR_PREFIX, _ARCTIC_NATIVE_ENV_VAR_PREFIX
+from arcticdb.util.test import config_context
 from arcticdb.util.utils import strtobool
 
 _MODULE = set_config_from_env_vars.__module__  # Insulate the tests from any move of the function
@@ -42,6 +44,15 @@ def test_bad_format(key, value, mocks):
 
     for setter in mocks.values():
         setter.assert_not_called()
+
+
+def test_serial_admission_env_var_reaches_config():
+    """build_tooling/parallel_test.sh sets this env var for the CI serial admission run."""
+    label = "VersionStore.NumProcessingUnitsLive"
+    # config_context restores the value the CI run's env var set at import, rather than leaving the key unset
+    with config_context(label, -1):
+        set_config_from_env_vars({"ARCTICDB_VersionStore_NumProcessingUnitsLive_int": "1"})
+        assert get_config_int(label) == 1
 
 
 @pytest.fixture()

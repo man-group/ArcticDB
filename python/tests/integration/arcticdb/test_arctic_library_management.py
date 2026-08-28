@@ -386,6 +386,8 @@ def test_library_options(arctic_client, lib_name):
         rows_per_segment=20,
         columns_per_segment=3,
         encoding_version=EncodingVersion.V2,
+        recursive_normalizers=True,
+        prune_previous_versions=True,
     )
     lib_name_eo = f"{lib_name}_eo"  # explicit options
     ac.create_library(
@@ -400,7 +402,61 @@ def test_library_options(arctic_client, lib_name):
     assert write_options.segment_row_size == 20
     assert write_options.column_group_size == 3
     assert write_options.dynamic_strings
+    assert write_options.recursive_normalizers
+    assert write_options.prune_previous_version
     assert lib._nvs._lib_cfg.lib_desc.version.encoding_version == EncodingVersion.V2
+
+
+def test_library_options_recursive_normalizers_round_trip(lmdb_storage, lib_name):
+    ac = lmdb_storage.create_arctic()
+    ac.create_library(lib_name, LibraryOptions(recursive_normalizers=True))
+    options = ac[lib_name].options()
+    assert options.recursive_normalizers is True
+    assert options == LibraryOptions(recursive_normalizers=True, encoding_version=ac._encoding_version)
+
+
+def test_library_options_prune_previous_versions_round_trip(lmdb_storage, lib_name):
+    ac = lmdb_storage.create_arctic()
+    ac.create_library(lib_name, LibraryOptions(prune_previous_versions=True))
+    options = ac[lib_name].options()
+    assert options.prune_previous_versions is True
+    assert options == LibraryOptions(prune_previous_versions=True, encoding_version=ac._encoding_version)
+
+
+def test_get_library_create_if_missing_with_recursive_normalizers(lmdb_storage, lib_name):
+    ac = lmdb_storage.create_arctic()
+    ac.create_library(lib_name, LibraryOptions(recursive_normalizers=True))
+    lib = ac.get_library(lib_name, create_if_missing=True, library_options=LibraryOptions(recursive_normalizers=True))
+    assert lib.options() == LibraryOptions(recursive_normalizers=True, encoding_version=ac._encoding_version)
+    with pytest.raises(MismatchingLibraryOptions):
+        ac.get_library(lib_name, create_if_missing=True, library_options=LibraryOptions(recursive_normalizers=False))
+
+
+def test_get_library_create_if_missing_with_prune_previous_versions(lmdb_storage, lib_name):
+    ac = lmdb_storage.create_arctic()
+    ac.create_library(lib_name, LibraryOptions(prune_previous_versions=True))
+    lib = ac.get_library(lib_name, create_if_missing=True, library_options=LibraryOptions(prune_previous_versions=True))
+    assert lib.options() == LibraryOptions(prune_previous_versions=True, encoding_version=ac._encoding_version)
+    with pytest.raises(MismatchingLibraryOptions):
+        ac.get_library(lib_name, create_if_missing=True, library_options=LibraryOptions(prune_previous_versions=False))
+
+
+def test_modify_recursive_normalizers_reflected_in_library_options(lmdb_storage, lib_name):
+    ac = lmdb_storage.create_arctic()
+    lib = ac.create_library(lib_name)
+    ac.modify_library_option(lib, ModifiableLibraryOption.RECURSIVE_NORMALIZERS, True)
+    options = Arctic(ac.get_uri())[lib_name].options()
+    assert options.recursive_normalizers is True
+    assert options == LibraryOptions(recursive_normalizers=True, encoding_version=ac._encoding_version)
+
+
+def test_modify_prune_previous_versions_reflected_in_library_options(lmdb_storage, lib_name):
+    ac = lmdb_storage.create_arctic()
+    lib = ac.create_library(lib_name)
+    ac.modify_library_option(lib, ModifiableLibraryOption.PRUNE_PREVIOUS_VERSIONS, True)
+    options = Arctic(ac.get_uri())[lib_name].options()
+    assert options.prune_previous_versions is True
+    assert options == LibraryOptions(prune_previous_versions=True, encoding_version=ac._encoding_version)
 
 
 @pytest.mark.storage

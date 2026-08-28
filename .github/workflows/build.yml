@@ -319,14 +319,19 @@ jobs:
         python3: ${{fromJson( !inputs.run_full_matrix_of_persistent_tests && (needs.storage_type.outputs.storage != 'no') && '[11]' || '[9, 10, 11, 12, 13, 14]')}}
         include:
           - python_deps_ids: [""]
+            infer_string_ids: [""]
             matrix_override: ${{fromJson(needs.common_config.outputs.linux_matrix)}}
             pytest_xdist_mode: "-n logical --dist worksteal"
           - python3: 11
             python_deps_ids: ["", -compat311]
+            infer_string_ids: ${{ needs.storage_type.outputs.storage == 'no' && fromJSON('["", "-inferstr"]') || fromJSON('[""]') }}
             matrix_override:
               - ${{fromJson(needs.common_config.outputs.linux_matrix)[0]}}
               - python_deps_id: -compat311
                 python_deps: requirements-compatibility-py311.txt
+          # Only the normal run (and not the storage one gets the infer_string=True variant, and we dont need to create a 14 variant for the storage case
+          - python3: ${{ needs.storage_type.outputs.storage == 'no' && 14 || 11 }}
+            infer_string_ids: ${{ needs.storage_type.outputs.storage == 'no' && fromJSON('["", "-inferstr"]') || fromJSON('[""]') }}
     name: 3.${{matrix.python3}} Linux
     uses: ./.github/workflows/build_steps.yml
     secrets: inherit
@@ -339,12 +344,14 @@ jobs:
       cmake_preset_type: ${{needs.common_config.outputs.cmake_preset_type_resolved}}
       matrix: ${{toJson(matrix.matrix_override)}}
       python_deps_ids: ${{toJson(matrix.python_deps_ids)}}
+      infer_string_ids: ${{toJson(matrix.infer_string_ids)}}
       # When scheduled job persistence storage will be AWS
       # When not triggered via workflow_dispatch always assume local tests to run only
       persistent_storage: ${{ needs.storage_type.outputs.storage }}
       pytest_xdist_mode: ${{matrix.pytest_xdist_mode}}
       pytest_args: ${{inputs.pytest_args || ''}}
       version_cache_full_test: ${{inputs.version_cache_full_test || false}}
+      serial_admission_test: true
       DEBUG_LOGGING_ENABLED: ${{ needs.storage_type.outputs.DEBUG_LOGGING_ENABLED }}
 
 
@@ -378,7 +385,15 @@ jobs:
         # For storage runs that are not full matrix will have only one Python version
         python3: ${{fromJson( !inputs.run_full_matrix_of_persistent_tests && (needs.storage_type.outputs.storage != 'no') && '[11]' || '[9, 10, 11, 12, 13, 14]')}}
         include:
-          - matrix_override: ${{fromJson(needs.common_config.outputs.windows_matrix)}}
+          - python_deps_ids: [""]
+            infer_string_ids: [""]
+            matrix_override: ${{fromJson(needs.common_config.outputs.windows_matrix)}}
+          - python3: 11
+            python_deps_ids: [""]
+            infer_string_ids: ${{ needs.storage_type.outputs.storage == 'no' && fromJSON('["", "-inferstr"]') || fromJSON('[""]') }}
+            matrix_override: ${{fromJson(needs.common_config.outputs.windows_matrix)}}
+          - python3: ${{ needs.storage_type.outputs.storage == 'no' && 14 || 11 }}
+            infer_string_ids: ${{ needs.storage_type.outputs.storage == 'no' && fromJSON('["", "-inferstr"]') || fromJSON('[""]') }}
     name: 3.${{matrix.python3}} Windows
     uses: ./.github/workflows/build_steps.yml
     secrets: inherit
@@ -389,6 +404,8 @@ jobs:
       cibw_version: ${{needs.common_config.outputs.cibuildwheel_ver}}
       cmake_preset_type: ${{needs.common_config.outputs.cmake_preset_type_resolved}}
       matrix: ${{toJson(matrix.matrix_override)}}
+      python_deps_ids: ${{toJson(matrix.python_deps_ids)}}
+      infer_string_ids: ${{toJson(matrix.infer_string_ids)}}
       # When scheduled job persistence storage will be AWS
       # When not triggered via workflow_dispatch always assume local tests to run only
       persistent_storage: ${{ needs.storage_type.outputs.storage }}
@@ -454,8 +471,16 @@ jobs:
         python3: ${{ fromJson( !inputs.run_full_matrix_of_persistent_tests && (needs.storage_type.outputs.storage != 'no') && '[11]' || '[9, 10, 11, 12, 13, 14]' ) }}
         include:
           - python_deps_ids: [""]
+            infer_string_ids: [""]
             matrix_override: ${{fromJson(needs.common_config.outputs.macos_matrix)}}
             pytest_xdist_mode: "-n logical --dist worksteal"
+          - python3: 11
+            python_deps_ids: [""]
+            infer_string_ids: ${{ needs.storage_type.outputs.storage == 'no' && fromJSON('["", "-inferstr"]') || fromJSON('[""]') }}
+            matrix_override: ${{fromJson(needs.common_config.outputs.macos_matrix)}}
+            pytest_xdist_mode: "-n logical --dist worksteal"
+          - python3: ${{ needs.storage_type.outputs.storage == 'no' && 14 || 11 }}
+            infer_string_ids: ${{ needs.storage_type.outputs.storage == 'no' && fromJSON('["", "-inferstr"]') || fromJSON('[""]') }}
     name: 3.${{matrix.python3}} macOS
     uses: ./.github/workflows/build_steps.yml
     secrets: inherit
@@ -467,6 +492,7 @@ jobs:
       cmake_preset_type: ${{needs.common_config.outputs.cmake_preset_type_resolved}}
       matrix: ${{toJson(matrix.matrix_override)}}
       python_deps_ids: ${{toJson(matrix.python_deps_ids)}}
+      infer_string_ids: ${{toJson(matrix.infer_string_ids)}}
       persistent_storage: ${{ needs.storage_type.outputs.storage }}
       pytest_xdist_mode: ${{matrix.pytest_xdist_mode}}
       pytest_args: ${{inputs.pytest_args}}

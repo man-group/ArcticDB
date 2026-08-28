@@ -46,6 +46,8 @@ from arcticdb.util.test import (
     sample_dataframe,
     sample_dataframe_only_strings,
     get_sample_dataframe,
+    arrow_string_read,
+    assert_null_string,
     assert_frame_equal,
     assert_series_equal,
     config_context,
@@ -55,6 +57,7 @@ from tests.conftest import Marks
 from tests.util.date import DateRange
 from arcticdb.util.test import equals
 from arcticdb.version_store._store import resolve_defaults
+from arcticdb.version_store._string_dtype import _use_pyarrow_strings_in_pandas
 from tests.util.mark import xfail_azure_chars
 from tests.util.marking import marks
 
@@ -1542,12 +1545,17 @@ def test_negative_strides(basic_store_tiny_segment):
 
 
 @pytest.mark.storage
-def test_dynamic_strings(basic_store):
-    row = pd.Series(["A", "B", "C", "Aaba", "Baca", "CABA", "dog", "cat"])
-    df = pd.DataFrame({"x": row})
-    basic_store.write("strings", df, dynamic_strings=True)
-    vit = basic_store.read("strings")
-    assert_equal(vit.data, df)
+def test_dynamic_strings(basic_store, read_string_dtype):
+    # The write dtype follows the ambient pandas option (object normally, str under the infer_string CI
+    # variant) while the read dtype is parametrised, so this covers both write/read representations.
+    values = ["A", "B", "C", "Aaba", "Baca", "CABA", "dog", "cat"]
+    basic_store.write("strings", pd.DataFrame({"x": values}), dynamic_strings=True)
+    with arrow_string_read(read_string_dtype):
+        # expected must be built under the same option as the read
+        expected = pd.DataFrame({"x": values})
+        vit = basic_store.read("strings")
+    assert_equal(vit.data, expected)
+    assert (str(vit.data["x"].dtype) == "str") == read_string_dtype
 
 
 @pytest.mark.storage
@@ -1614,8 +1622,8 @@ def test_dynamic_strings_with_all_nones(basic_store):
     df = pd.DataFrame({"x": [None, None]})
     basic_store.write("strings", df, dynamic_strings=True)
     data = basic_store.read("strings")
-    assert data.data["x"][0] is None
-    assert data.data["x"][1] is None
+    assert_null_string(data.data["x"][0], _use_pyarrow_strings_in_pandas())
+    assert_null_string(data.data["x"][1], _use_pyarrow_strings_in_pandas())
 
 
 @pytest.mark.storage
@@ -1814,14 +1822,16 @@ def test_batch_read_metadata_missing_keys(basic_store):
     lib_tool.remove(s1_index_key)
     lib_tool.remove(s2_key_to_delete)
 
-    vits = lib.batch_read_metadata(["s2"], [1])
-    metadata = vits["s2"].metadata
-    assert metadata["s2"] == "more_metadata"
+    # Disable version map cache so the read hits storage and sees the missing keys
+    with config_context("VersionMap.ReloadInterval", 0):
+        vits = lib.batch_read_metadata(["s2"], [1])
+        metadata = vits["s2"].metadata
+        assert metadata["s2"] == "more_metadata"
 
-    with pytest.raises(StorageException):
-        _ = lib.batch_read_metadata(["s1"], [None])
-    with pytest.raises(StorageException):
-        _ = lib.batch_read_metadata(["s2"], [0])
+        with pytest.raises(StorageException):
+            _ = lib.batch_read_metadata(["s1"], [None])
+        with pytest.raises(StorageException):
+            _ = lib.batch_read_metadata(["s2"], [0])
 
 
 @pytest.mark.storage
@@ -1846,9 +1856,10 @@ def test_batch_read_missing_keys(basic_store):
     df3 = pd.DataFrame({"a": [5, 7, 9]})
     lib.write("s1", df1)
     lib.write("s2", df2)
-    # Need two versions for this symbol as we're going to delete a version key, and the optimisation of storing the
-    # latest index key in the version ref key means it will still work if we just write one version key and then delete
-    # it
+    # Need three versions for this symbol as we're going to delete a version key, and the optimisation of storing
+    # the latest two index keys in the version ref key means it will still work if we just write two version keys
+    # and then delete the oldest
+    lib.write("s3", df3)
     lib.write("s3", df3)
     lib.write("s3", df3)
     lib_tool = lib.library_tool()
@@ -1862,8 +1873,10 @@ def test_batch_read_missing_keys(basic_store):
 
     # The exception thrown is different for missing version keys to everything else, and so depends on which symbol is
     # processed first
-    with pytest.raises((NoDataFoundException, StorageException)):
-        _ = lib.batch_read(["s1", "s2", "s3"], [None, None, 0])
+    # Disable version map cache so the read hits storage and sees the missing keys
+    with config_context("VersionMap.ReloadInterval", 0):
+        with pytest.raises((NoDataFoundException, StorageException)):
+            _ = lib.batch_read(["s1", "s2", "s3"], [None, None, 0])
 
 
 @pytest.mark.storage
@@ -1886,12 +1899,14 @@ def test_batch_get_info_missing_keys(basic_store):
     lib_tool.remove(s1_index_key)
     lib_tool.remove(s2_key_to_delete)
 
-    info = lib.batch_get_info(["s2"], [1])
+    # Disable version map cache so the read hits storage and sees the missing keys
+    with config_context("VersionMap.ReloadInterval", 0):
+        info = lib.batch_get_info(["s2"], [1])
 
-    with pytest.raises(StorageException):
-        _ = lib.batch_get_info(["s1"], [None])
-    with pytest.raises(StorageException):
-        _ = lib.batch_get_info(["s2"], [0])
+        with pytest.raises(StorageException):
+            _ = lib.batch_get_info(["s1"], [None])
+        with pytest.raises(StorageException):
+            _ = lib.batch_get_info(["s2"], [0])
 
 
 @pytest.mark.storage
@@ -1989,6 +2004,9 @@ def test_dataframe_with_nan_and_nat_only(basic_store):
 
 
 @pytest.mark.storage
+@pytest.mark.skipif(
+    _use_pyarrow_strings_in_pandas(), reason="object-dtype coercion path not reachable under future.infer_string"
+)
 def test_coercion_to_float(basic_store):
     lib = basic_store
     df = pd.DataFrame({"col": [np.nan, "1", np.nan]})
@@ -2009,6 +2027,9 @@ def test_coercion_to_float(basic_store):
 
 
 @pytest.mark.storage
+@pytest.mark.skipif(
+    _use_pyarrow_strings_in_pandas(), reason="object-dtype coercion path not reachable under future.infer_string"
+)
 def test_coercion_to_str_with_dynamic_strings(basic_store):
     # assert that the getting sample function is not called
     lib = basic_store

@@ -116,38 +116,13 @@ std::optional<util::BitSet> overall_column_bitset(
         const std::optional<util::BitSet>& requested_columns
 );
 
-inline void generate_filtered_field_descriptors(
-        PipelineContext& context, const std::optional<std::vector<std::string>>& columns
-) {
-    if (columns.has_value()) {
-        const ankerl::unordered_dense::set<std::string_view> column_set{std::begin(*columns), std::end(*columns)};
-
-        context.filter_columns_ = std::make_shared<FieldCollection>();
-        const auto& desc = context.descriptor();
-        ARCTICDB_DEBUG(log::version(), "Context descriptor: {}", desc);
-        for (const auto& field : desc.fields()) {
-            if (column_set.find(field.name()) != column_set.end())
-                context.filter_columns_->add_field(field.type(), field.name());
-        }
-
-        context.filter_columns_set_ = std::unordered_set<std::string_view>{};
-        for (const auto& field : *context.filter_columns_)
-            context.filter_columns_set_->insert(field.name());
-    }
-}
-
-inline void generate_filtered_field_descriptors(
-        std::shared_ptr<PipelineContext>& context, const std::optional<std::vector<std::string>>& columns
-) {
-    generate_filtered_field_descriptors(*context, columns);
-}
-
 inline void get_column_bitset_in_context(
         const ReadQuery& query, const std::shared_ptr<PipelineContext>& pipeline_context
 ) {
     pipeline_context->set_selected_columns(query.columns);
-    pipeline_context->overall_column_bitset_ =
-            overall_column_bitset(pipeline_context->descriptor(), query.clauses_, pipeline_context->selected_columns_);
+    pipeline_context->overall_column_bitset_ = overall_column_bitset(
+            pipeline_context->on_disk_descriptor(), query.clauses_, pipeline_context->selected_columns_
+    );
 }
 
 template<class ContainerType>

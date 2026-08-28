@@ -17,6 +17,7 @@ import pytest
 from arcticdb import QueryBuilder, where, OutputFormat
 from arcticdb_ext.exceptions import InternalException, SchemaException, UserInputException
 from arcticdb.util.hypothesis import use_of_function_scoped_fixtures_in_hypothesis_checked
+from arcticdb.version_store._string_dtype import _use_pyarrow_strings_in_pandas
 from arcticdb.util.test import assert_frame_equal
 from tests.util.mark import WINDOWS
 
@@ -132,6 +133,11 @@ def test_project_ternary_column_column_dynamic_strings(lmdb_version_store_v1, an
 
 
 @pytest.mark.skipif(WINDOWS, reason="We do not support fixed-width strings on Windows")
+@pytest.mark.skipif(
+    _use_pyarrow_strings_in_pandas(),
+    reason="Under future.infer_string the string columns are arrow-backed, and arrow has no fixed-width string "
+    "type, so dynamic_strings=False is ignored and there is nothing fixed-width to test",
+)
 def test_project_ternary_fixed_width_strings(version_store_factory):
     # Explicitly not tested with arrow because arrow doesn't support fixed width strings
     lib = version_store_factory(dynamic_strings=False)
@@ -149,13 +155,13 @@ def test_project_ternary_fixed_width_strings(version_store_factory):
     # Column/value
     q = QueryBuilder()
     q = q.apply("new_col", where(q["conditional"], q["width_1"], "hello"))
-    with pytest.raises(SchemaException):
+    with pytest.raises(UserInputException):
         lib.read(symbol, query_builder=q)
 
     # Column/column
     q = QueryBuilder()
     q = q.apply("new_col", where(q["conditional"], q["width_1"], q["width_2"]))
-    with pytest.raises(SchemaException):
+    with pytest.raises(UserInputException):
         lib.read(symbol, query_builder=q)
 
 
@@ -978,7 +984,7 @@ def test_filter_ternary_invalid_conditions(lmdb_version_store_v1, any_output_for
     # Non-bool column
     q = QueryBuilder()
     q = q[where(q["conditional"], q["conditional"] < 0, q["conditional"] >= 0)]
-    with pytest.raises(InternalException):
+    with pytest.raises(UserInputException):
         lib.read(symbol, query_builder=q)
 
     # Value

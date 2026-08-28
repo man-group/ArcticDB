@@ -116,6 +116,15 @@ In `cpp/arcticdb/pipeline/read_frame.hpp`:
 - `fetch_data()` - Fetch and decode data from keys
 - `decode_into_frame()` - Decode segment into SegmentInMemory
 
+### Direct read vs processing pipeline
+
+`do_direct_read_or_process()` in `version_core.cpp` branches on whether the `ReadQuery` has clauses. With
+none it takes the direct path above (`fetch_data()`); with clauses it goes through
+`read_process_and_collect()` and the clause pipeline, whose reads are gated by
+`ProcessingUnitAdmissionHandler` (see [PROCESSING.md](PROCESSING.md#read-admission-control)). The two paths
+have separate read-concurrency controls — `VersionStore.SegmentReadWindow` and
+`VersionStore.NumProcessingUnitsLive` apply only to the clause pipeline.
+
 ## Column Stats Filtering
 
 ### Location

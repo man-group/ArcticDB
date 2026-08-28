@@ -9,7 +9,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 import pytest
 
 import arcticdb.toolbox.query_stats as qs
-from arcticdb.util.test import query_stats_operation_count
+from arcticdb.util.test import config_context, query_stats_operation_count
 from arcticdb_ext.exceptions import InternalException, KeyNotFoundException
 from arcticdb_ext.storage import KeyType, NoDataFoundException
 
@@ -391,8 +391,10 @@ def test_broken_version_chain(lmdb_version_store_v1, latest_only):
     # The version chain traversal raises KeyNotFoundException directly, but if the
     # symbol list load path hits the missing key first, ExponentialBackoff retries and
     # eventually throws InternalException ("Exhausted retry attempts").
-    with pytest.raises((KeyNotFoundException, InternalException)) as e:
-        lib.list_versions(latest_only=latest_only)
+    # Disable version map cache so the read hits storage and sees the missing key
+    with config_context("VersionMap.ReloadInterval", 0):
+        with pytest.raises((KeyNotFoundException, InternalException)) as e:
+            lib.list_versions(latest_only=latest_only)
     assert broken_sym in str(e.value)
 
 

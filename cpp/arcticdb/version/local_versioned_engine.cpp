@@ -1511,8 +1511,7 @@ std::shared_ptr<PipelineContext> setup_join_pipeline_context(
 ) {
     auto output_schema = modify_schema(clauses.front()->join_schemas(std::move(input_schemas)), clauses);
     auto pipeline_context = std::make_shared<PipelineContext>();
-    pipeline_context->set_descriptor(output_schema.stream_descriptor());
-    pipeline_context->set_normalization(std::move(output_schema.norm_metadata_));
+    pipeline_context->set_output_schema(std::move(output_schema));
     return pipeline_context;
 }
 
@@ -1538,7 +1537,7 @@ MultiSymbolReadOutput LocalVersionedEngine::batch_read_and_join_internal(
                                             read_queries.empty() ? std::make_shared<ReadQuery>() : read_queries[idx],
                                     idx,
                                     read_options,
-                                    component_manager](std::optional<AtomKey>&& opt_index_key) mutable {
+                                    component_manager](std::optional<AtomKey>&& opt_index_key) {
                             auto version_info = get_version_identifier(
                                     (*stream_ids)[idx],
                                     (*version_queries)[idx],
@@ -1561,10 +1560,12 @@ MultiSymbolReadOutput LocalVersionedEngine::batch_read_and_join_internal(
             .via(&async::io_executor())
             .thenValueInline([this, handler_data, clauses_ptr, component_manager, read_options](
                                      std::vector<SymbolProcessingResult>&& symbol_processing_results
-                             ) mutable {
+                             ) {
                 auto [input_schemas, entity_ids, res_versioned_items, res_metadatas] =
                         unpack_symbol_processing_results(std::move(symbol_processing_results));
                 auto pipeline_context = setup_join_pipeline_context(std::move(input_schemas), *clauses_ptr);
+                auto modified_read_options =
+                        modify_read_options_from_norm_meta(pipeline_context->output_normalization(), read_options);
                 return schedule_remaining_iterations(std::move(entity_ids), clauses_ptr)
                         .thenValueInline([component_manager](std::vector<EntityId>&& processed_entity_ids) {
                             auto proc = gather_entities<
@@ -1573,21 +1574,27 @@ MultiSymbolReadOutput LocalVersionedEngine::batch_read_and_join_internal(
                                     std::shared_ptr<ColRange>>(*component_manager, std::move(processed_entity_ids));
                             return collect_segments(std::move(proc));
                         })
-                        .thenValueInline([store = store(), handler_data, pipeline_context, read_options](
+                        .thenValueInline([store = store(), handler_data, pipeline_context, modified_read_options](
                                                  std::vector<SliceAndKey>&& slice_and_keys
-                                         ) mutable {
+                                         ) {
                             return prepare_output_frame(
-                                    std::move(slice_and_keys), pipeline_context, store, read_options, handler_data
+                                    std::move(slice_and_keys),
+                                    pipeline_context,
+                                    store,
+                                    modified_read_options,
+                                    handler_data
                             );
                         })
                         .thenValueInline([handler_data,
                                           pipeline_context,
                                           res_versioned_items,
                                           res_metadatas,
-                                          read_options](SegmentInMemory&& frame) mutable {
+                                          modified_read_options](SegmentInMemory&& frame) mutable {
                             // Needed to force our usual backfilling behaviour when columns have been outer-joined and
                             // some are not present in all input symbols
-                            ReadOptions read_options_with_dynamic_schema = read_options.clone();
+                            // modified_read_options might be a shallow copy of the input read_options, so clone again
+                            // here
+                            ReadOptions read_options_with_dynamic_schema = modified_read_options.clone();
                             read_options_with_dynamic_schema.set_dynamic_schema(true);
                             return reduce_and_fix_columns(
                                            pipeline_context, frame, read_options_with_dynamic_schema, handler_data
@@ -2415,7 +2422,7 @@ timestamp LocalVersionedEngine::latest_timestamp(const std::string& symbol) {
 
 // Some key types are historical or very specialized, so restrict to these in size calculations to avoid extra
 // listing operations
-static constexpr std::array<KeyType, 10> TYPES_FOR_SIZE_CALCULATION = {
+static constexpr std::array<KeyType, 11> TYPES_FOR_SIZE_CALCULATION = {
         KeyType::VERSION_REF,
         KeyType::VERSION,
         KeyType::TABLE_INDEX,
@@ -2426,20 +2433,38 @@ static constexpr std::array<KeyType, 10> TYPES_FOR_SIZE_CALCULATION = {
         KeyType::LOG,
         KeyType::LOG_COMPACTED,
         KeyType::SYMBOL_LIST,
+        KeyType::COLUMN_STATS,
 };
 
-std::vector<storage::ObjectSizes> LocalVersionedEngine::scan_object_sizes() {
+std::vector<storage::ObjectSizes> LocalVersionedEngine::scan_object_sizes(OnScanFailure on_failure) {
     using ObjectSizes = storage::ObjectSizes;
-    std::vector<folly::Future<std::shared_ptr<ObjectSizes>>> sizes_futs;
+    const std::span<const KeyType> types_to_scan{TYPES_FOR_SIZE_CALCULATION};
 
-    for (const auto& key_type : TYPES_FOR_SIZE_CALCULATION) {
+    std::vector<folly::Future<std::shared_ptr<ObjectSizes>>> sizes_futs;
+    sizes_futs.reserve(types_to_scan.size());
+    for (const auto& key_type : types_to_scan) {
         sizes_futs.push_back(store()->get_object_sizes(key_type, std::nullopt));
     }
 
-    auto ptrs = folly::collect(sizes_futs).via(&async::cpu_executor()).get();
+    // collectAll rather than collect, so that a key type that cannot be listed costs us only its own numbers
+    // rather than the whole scan. Callers ask for that with OnScanFailure::Skip.
+    auto results = folly::collectAll(sizes_futs).via(&async::cpu_executor()).get();
     std::vector<storage::ObjectSizes> res;
-    for (const auto& p : ptrs) {
-        res.emplace_back(p->key_type_, p->count_, p->compressed_size_);
+    res.reserve(results.size());
+    for (size_t i = 0; i < results.size(); ++i) {
+        if (results[i].hasException()) {
+            if (on_failure == OnScanFailure::Raise) {
+                results[i].throwUnlessValue();
+            }
+            log::version().warn(
+                    "Failed to scan sizes for key type {}, omitting it from the result: {}",
+                    key_type_long_name(types_to_scan[i]),
+                    results[i].exception().what()
+            );
+            continue;
+        }
+        const auto& p = results[i].value();
+        res.emplace_back(p->key_type_, p->count_, p->compressed_size_, p->scan_duration_ns_);
     }
     return res;
 }
@@ -2464,7 +2489,7 @@ std::vector<storage::ObjectSizes> LocalVersionedEngine::scan_object_sizes_for_st
     auto ptrs = folly::collect(sizes_futs).via(&async::cpu_executor()).get();
     std::vector<storage::ObjectSizes> res;
     for (const auto& p : ptrs) {
-        res.emplace_back(p->key_type_, p->count_, p->compressed_size_);
+        res.emplace_back(p->key_type_, p->count_, p->compressed_size_, p->scan_duration_ns_);
     }
     return res;
 }

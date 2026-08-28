@@ -131,7 +131,7 @@ def test_aggregation_numeric_dynamic(lmdb_version_store_dynamic_schema_v1, any_o
     aggregations = ["mean", "sum", "min", "max", "count"]
     aggregation_column = "agg_column"
     required_types = {agg: expected_aggregation_type(agg, dfs, aggregation_column) for agg in aggregations}
-    required_types["grouping_column"] = object
+    required_types["grouping_column"] = pd.Index(["a"]).dtype
 
     generic_named_aggregation_test(
         lib,

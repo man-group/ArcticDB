@@ -35,6 +35,8 @@ class LibraryOptions:
         See `__init__` for details.
     recursive_normalizers: bool
         See `__init__` for details.
+    prune_previous_versions: bool
+        See `__init__` for details.
     """
 
     def __init__(
@@ -46,8 +48,11 @@ class LibraryOptions:
         columns_per_segment: int = 127,
         encoding_version: Optional[EncodingVersion] = None,
         recursive_normalizers: bool = False,
+        prune_previous_versions: bool = False,
     ):
         """
+        Construct a `LibraryOptions` instance.
+
         Parameters
         ----------
 
@@ -139,6 +144,18 @@ class LibraryOptions:
                 lib.write(symbol, data) # ArcticUnsupportedDataTypeException will be thrown by default
                 lib2 = ac.create_library(lib_name, LibraryOptions(recursive_normalizers=True))
                 lib2.write(symbol, data) # data will be successfully written
+
+        prune_previous_versions: bool, default False
+            The default value of the ``prune_previous_versions`` argument for the library's modification methods
+            (``write``, ``append``, ``update``, and so on). When those methods are called without an explicit
+            ``prune_previous_versions`` argument, this library-level setting is used.
+
+            If False (the default), modification methods keep previous versions unless the caller passes
+            ``prune_previous_versions=True``. If True, modification methods prune previous (non-snapshotted) versions
+            by default; a caller can still override per call by passing ``prune_previous_versions=False``.
+
+            This option can be changed after creation via ``Arctic.modify_library_option`` with
+            ``ModifiableLibraryOption.PRUNE_PREVIOUS_VERSIONS``.
         """
         self.dynamic_schema = dynamic_schema
         self.dedup = dedup
@@ -146,6 +163,7 @@ class LibraryOptions:
         self.columns_per_segment = columns_per_segment
         self.encoding_version = encoding_version
         self.recursive_normalizers = recursive_normalizers
+        self.prune_previous_versions = prune_previous_versions
 
     def __eq__(self, right):
         return (
@@ -155,6 +173,7 @@ class LibraryOptions:
             and self.columns_per_segment == right.columns_per_segment
             and self.encoding_version == right.encoding_version
             and self.recursive_normalizers == right.recursive_normalizers
+            and self.prune_previous_versions == right.prune_previous_versions
         )
 
     def __repr__(self):
@@ -162,7 +181,8 @@ class LibraryOptions:
             f"LibraryOptions(dynamic_schema={self.dynamic_schema}, dedup={self.dedup},"
             f" rows_per_segment={self.rows_per_segment}, columns_per_segment={self.columns_per_segment},"
             f" encoding_version={self.encoding_version if self.encoding_version is not None else 'Default'},"
-            f" recursive_normalizers={self.recursive_normalizers})"
+            f" recursive_normalizers={self.recursive_normalizers},"
+            f" prune_previous_versions={self.prune_previous_versions})"
         )
 
 
@@ -220,7 +240,12 @@ class ArrowOutputStringFormat(str, Enum):
     Controls the string column format when using `PYARROW` or `POLARS` output formats.
     Accepts either the enum value or the corresponding `pyarrow.DataType`.
 
-    LARGE_STRING (default):
+    UNSPECIFIED (default):
+        If data was written using an Arrow format, then for each column, use the format that was
+        written. If it was not written using an Arrow format, then it will default to
+        LARGE_STRING.
+
+    LARGE_STRING:
         Uses 64-bit variable-size encoding.
         PyArrow: `pa.large_string()`, Polars: `pl.String`
         Supports up to 2⁶³-1 bytes total string length per Arrow array.
@@ -244,6 +269,7 @@ class ArrowOutputStringFormat(str, Enum):
     https://arrow.apache.org/docs/format/Columnar.html
     """
 
+    UNSPECIFIED = "UNSPECIFIED"
     CATEGORICAL = "CATEGORICAL"
     DICTIONARY_ENCODED = "DICTIONARY_ENCODED"
     LARGE_STRING = "LARGE_STRING"
@@ -276,8 +302,10 @@ def arrow_output_string_format_to_internal(
                 "SMALL_STRING is not supported with POLARS output format. Please use LARGE_STRING instead."
             )
         return InternalArrowOutputStringFormat.SMALL_STRING
+    elif arrow_string_format == ArrowOutputStringFormat.UNSPECIFIED:
+        return InternalArrowOutputStringFormat.UNSPECIFIED
     else:
-        raise ValueError(f"Unkown ArrowOutputStringFormat: {arrow_string_format}")
+        raise ValueError(f"Unknown ArrowOutputStringFormat: {arrow_string_format}")
 
 
 class RuntimeOptions:
@@ -285,7 +313,7 @@ class RuntimeOptions:
         self,
         *,
         output_format: Union[OutputFormat, str] = OutputFormat.PANDAS,
-        arrow_string_format_default: ArrowOutputStringFormat = ArrowOutputStringFormat.LARGE_STRING,
+        arrow_string_format_default: ArrowOutputStringFormat = ArrowOutputStringFormat.UNSPECIFIED,
     ):
         self.output_format = output_format
         self.arrow_string_format_default = arrow_string_format_default
@@ -299,8 +327,7 @@ class RuntimeOptions:
 
 class EnterpriseLibraryOptions:
     """
-    Configuration options for ArcticDB libraries, that should only be used when you are using the ArcticDB enterprise
-    features.
+    Configuration options for ArcticDB libraries, that should only be used when you are using the ArcticDB enterprise features.
 
     Contact `info@arcticdb.io` for more information about the Enterprise features.
 
@@ -321,6 +348,8 @@ class EnterpriseLibraryOptions:
         background_deletion: bool = False,
     ):
         """
+        Construct an `EnterpriseLibraryOptions` instance.
+
         Parameters
         ----------
 

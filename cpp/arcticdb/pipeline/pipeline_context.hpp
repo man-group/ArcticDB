@@ -12,6 +12,7 @@
 #include <arcticdb/entity/index_range.hpp>
 #include <arcticdb/entity/timeseries_descriptor.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
+#include <arcticdb/pipeline/read_options.hpp>
 #include <arcticdb/util/bitset.hpp>
 #include <memory>
 
@@ -97,22 +98,15 @@ struct PipelineContext : public std::enable_shared_from_this<PipelineContext> {
 
     PipelineContext() = default;
 
-    explicit PipelineContext(StreamDescriptor desc) : desc_(std::move(desc)) {}
+    explicit PipelineContext(StreamDescriptor desc) : on_disk_descriptor_(std::move(desc)) {}
 
     explicit PipelineContext(SegmentInMemory& frame, const AtomKey& key);
 
     PipelineContext(const PipelineContext& other) = delete;
     PipelineContext& operator=(const PipelineContext& other) = delete;
 
-    // StreamDescriptor that can mutated for modifying operations. At the end of the pipeline,
-    // the modified descriptor can be written out to storage, otherwise this'll match what was read from storage.
-    std::optional<StreamDescriptor> desc_;
-    // If user requests strings to be returned in a different format (e.g. fixed rather than dynamic) than they were
-    // written in, desc_ will be modified such that the return matches what's requested, and this'll be set to the
-    // original value. It's only set in this edge case.
-    std::optional<StreamDescriptor> orig_desc_;
     // When there are staged segments this holds the combined stream descriptor for all staged segments
-    // This can be different than desc_ in case dynamic schema is used. Otherwise they must be the same.
+    // This can be different than on_disk_descriptor_ in case dynamic schema is used. Otherwise they must be the same.
     std::optional<StreamDescriptor> staged_descriptor_;
     StreamId stream_id_;
     VersionId version_id_ = 0;
@@ -138,9 +132,6 @@ struct PipelineContext : public std::enable_shared_from_this<PipelineContext> {
     std::optional<SegmentInMemory> multi_key_;
     std::vector<unsigned char> compacted_;
     std::optional<size_t> incompletes_after_;
-    /// Used to override the default values of types when the NullValueReducer fills missing segments. For example, in
-    /// the sum unordered aggregation and the sum resampling clause, the value must 0 even if the output type is float.
-    ankerl::unordered_dense::map<std::string, Value> default_values_;
     bool bucketize_dynamic_ = false;
 
     PipelineContextRow operator[](size_t num) { return PipelineContextRow{shared_from_this(), num}; }
@@ -163,16 +154,22 @@ struct PipelineContext : public std::enable_shared_from_this<PipelineContext> {
 
     size_t calc_rows() const { return last_row() - first_row(); }
 
-    const StreamDescriptor& descriptor() const {
-        util::check(static_cast<bool>(desc_), "Stream descriptor not found in pipeline context");
-        return *desc_;
-    }
+    /// The descriptor of the dataframe that will be presented to the user.
+    const StreamDescriptor& output_descriptor() const;
 
-    void set_descriptor(StreamDescriptor&& desc) { desc_ = std::move(desc); }
+    const proto::descriptors::NormalizationMetadata& output_normalization() const;
 
-    void set_descriptor(const StreamDescriptor& desc) { desc_ = desc; }
+    /// Number of leading required fields in the output, accounting for multi-index/series normalization. Returns the
+    /// count with no normalization applied when the context carries neither an output schema nor a TSD.
+    uint32_t output_required_fields_count() const;
+
+    const ankerl::unordered_dense::map<std::string, Value>& output_default_values() const;
 
     void set_selected_columns(const std::optional<std::vector<std::string>>& columns);
+
+    void generate_string_coerced_descriptor(const ReadOptions& read_options);
+
+    void generate_filtered_field_descriptors(const std::optional<std::vector<std::string>>& columns);
 
     IndexRange index_range() const {
         if (slice_and_keys_.empty())
@@ -184,7 +181,7 @@ struct PipelineContext : public std::enable_shared_from_this<PipelineContext> {
     friend void swap(PipelineContext& left, PipelineContext& right) noexcept {
         using std::swap;
 
-        swap(left.desc_, right.desc_);
+        swap(left.on_disk_descriptor_, right.on_disk_descriptor_);
         swap(left.slice_and_keys_, right.slice_and_keys_);
         swap(left.stream_id_, right.stream_id_);
         swap(left.version_id_, right.version_id_);
@@ -200,6 +197,8 @@ struct PipelineContext : public std::enable_shared_from_this<PipelineContext> {
         swap(left.filter_columns_set_, right.filter_columns_set_);
         swap(left.compacted_, right.compacted_);
         swap(left.staged_descriptor_, right.staged_descriptor_);
+        swap(left.output_schema_, right.output_schema_);
+        swap(left.string_coerced_descriptor_, right.string_coerced_descriptor_);
     }
 
     using iterator = PipelineContextIterator<PipelineContextRow>;
@@ -256,12 +255,29 @@ struct PipelineContext : public std::enable_shared_from_this<PipelineContext> {
 
     std::optional<proto::descriptors::UserDefinedMetadata> release_opt_user_defined_metadata();
 
+    const StreamDescriptor& on_disk_descriptor() const;
+    StreamDescriptor& on_disk_descriptor();
+    [[nodiscard]] bool has_on_disk_descriptor() const;
+    void set_on_disk_descriptor(StreamDescriptor&& desc);
+    void set_on_disk_descriptor(const StreamDescriptor& desc);
+    [[nodiscard]] bool are_string_fields_coerced() const;
+    void set_output_schema(OutputSchema&& output_schema);
+
   private:
     // Carries the normalization metadata and user metadata for the pipeline. On indexed reads it is initialised from
     // the existing on-disk version (the compact path additionally relies on its descriptor, total rows and sorted
     // state being those of the existing version); on writes / incompletes / joins it is created solely to carry the
     // working normalization metadata.
     std::optional<TimeseriesDescriptor> tsd_;
+    /// The descriptor of the data on disk.
+    std::optional<StreamDescriptor> on_disk_descriptor_;
+    /// Mutated version of the on_disk_descriptor, where all string columns respect the user defined options in
+    /// ReadOptions::force_strings_to_fixed_ and ReadOptions::force_strings_to_objects_
+    std::optional<StreamDescriptor> string_coerced_descriptor_;
+    /// Holds the schema of the output produced by the processing pipeline. This is what will be returned to the user
+    /// after the pipeline runs. Computed by applying the modify_schema methods of all clauses in order they appear in
+    /// the pipeline.
+    std::optional<OutputSchema> output_schema_;
 };
 
 } // namespace arcticdb::pipelines

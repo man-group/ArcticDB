@@ -26,8 +26,11 @@ void register_bindings(py::module& m) {
     async.def("print_scheduler_stats", &print_scheduler_stats);
 
     async.def("reinit_task_scheduler", &arcticdb::async::TaskScheduler::reattach_instance);
+    async.def("is_task_scheduler_initialized", &arcticdb::async::TaskScheduler::is_initialized);
     async.def("cpu_thread_count", []() { return arcticdb::async::TaskScheduler::instance()->cpu_thread_count(); });
     async.def("io_thread_count", []() { return arcticdb::async::TaskScheduler::instance()->io_thread_count(); });
+    async.def("get_default_cpu_count", &arcticdb::async::get_default_cpu_count);
+    async.def("get_default_io_count", []() { return arcticdb::async::get_default_io_count(); });
 }
 
 } // namespace arcticdb::async

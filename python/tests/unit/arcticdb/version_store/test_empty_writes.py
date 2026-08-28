@@ -12,6 +12,14 @@ import numpy as np
 
 from arcticdb.version_store._common import TimeFrame
 from arcticdb.util.test import assert_frame_equal, assert_series_equal
+from arcticdb.version_store._string_dtype import _use_pyarrow_strings_in_pandas
+
+
+def _maybe_arrow_str(obj):
+    # Under future.infer_string, empty/all-null object columns read back as the arrow-backed str dtype.
+    if _use_pyarrow_strings_in_pandas() and len(obj) == 0 and obj.dtype == object:
+        return obj.astype(pd.StringDtype(storage="pyarrow", na_value=np.nan))
+    return obj
 
 
 def test_write_no_rows(lmdb_version_store, sym):
@@ -56,7 +64,7 @@ def test_write_no_columns_dynamic_schema(lmdb_version_store_dynamic_schema, sym)
     df3["b"] = df3["b"].astype("int64")
     lmdb_version_store_dynamic_schema.append(sym, df2)
     ans = lmdb_version_store_dynamic_schema.read(sym).data
-    assert_frame_equal(ans, df3)
+    assert_frame_equal(ans, df3, check_column_type=False)
 
     df4 = pd.DataFrame(
         [[3.3, 8, None, 3.5], [2.3, 10, "test2"]],
@@ -144,7 +152,7 @@ def test_empty_series(lmdb_version_store_dynamic_schema, sym):
 
     # ArcticDB stores empty columns under a dedicated `EMPTYVAL` type, so the types are not going to match with pandas
     # until the first append.
-    assert_series_equal(lmdb_version_store_dynamic_schema.read(sym).data, ser, check_index_type=False)
+    assert_series_equal(lmdb_version_store_dynamic_schema.read(sym).data, _maybe_arrow_str(ser), check_index_type=False)
 
 
 @pytest.mark.parametrize(
@@ -161,11 +169,15 @@ def test_append_empty_series(lmdb_version_store_dynamic_schema, sym, dtype, seri
     assert not lmdb_version_store_dynamic_schema.is_symbol_pickled(sym)
     # ArcticDB stores empty columns under a dedicated `EMPTYVAL` type, so the types are not going to match with pandas
     # if the series is empty.
-    assert_series_equal(lmdb_version_store_dynamic_schema.read(sym).data, series, check_index_type=(len(series) > 0))
+    assert_series_equal(
+        lmdb_version_store_dynamic_schema.read(sym).data, _maybe_arrow_str(series), check_index_type=(len(series) > 0)
+    )
     lmdb_version_store_dynamic_schema.append(sym, append_series)
     result_ser = pd.concat([series, append_series])
     assert_series_equal(
-        lmdb_version_store_dynamic_schema.read(sym).data, result_ser, check_index_type=(len(result_ser) > 0)
+        lmdb_version_store_dynamic_schema.read(sym).data,
+        _maybe_arrow_str(result_ser),
+        check_index_type=(len(result_ser) > 0),
     )
 
 
@@ -176,6 +188,9 @@ def test_entirely_empty_column(lmdb_version_store):
     df = pd.DataFrame(data, columns=columns)
     lib = lmdb_version_store
     lib.write("test_entirely_empty_column", df)
+    if _use_pyarrow_strings_in_pandas():
+        # The all-null "Cow" column reads back as the arrow-backed str dtype.
+        df["Cow"] = df["Cow"].astype(pd.StringDtype(storage="pyarrow", na_value=np.nan))
     assert_frame_equal(df, lib.read("test_entirely_empty_column").data)
 
 

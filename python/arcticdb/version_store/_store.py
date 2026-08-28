@@ -35,7 +35,16 @@ import time
 from arcticdb.dependencies import pyarrow as pa
 from arcticdb.dependencies import polars as pl
 from arcticc.pb2.descriptors_pb2 import IndexDescriptor, TypeDescriptor
-from arcticdb_ext.version_store import CompactDataInfo, RecordBatchData, SortedValue, StageResult
+from arcticdb_ext.version_store import (
+    ArrowOutputConfig,
+    CompactDataInfo,
+    InternalPandasStringFormat,
+    InternalArrowOutputFormat,
+    PandasOutputConfig,
+    RecordBatchData,
+    SortedValue,
+    StageResult,
+)
 from arcticc.pb2.storage_pb2 import LibraryConfig, EnvironmentConfigsMap
 from arcticdb.preconditions import check
 from arcticdb.supported_types import DateRangeInput, ExplicitlySupportedDates
@@ -90,6 +99,10 @@ from arcticdb.exceptions import (
 from arcticdb.flattener import Flattener
 from arcticdb.log import version as log
 from arcticdb.version_store._custom_normalizers import get_custom_normalizer, CompositeCustomNormalizer
+from arcticdb.version_store._string_dtype import (
+    _is_arrow_string_column,
+    _use_pyarrow_strings_in_pandas,
+)
 from arcticdb.version_store._normalization import (
     PandasData,
     normalize_metadata,
@@ -2340,31 +2353,41 @@ class NativeVersionStore:
         output_format = self.resolve_runtime_defaults(
             "output_format", proto_cfg, global_default=OutputFormat.PANDAS, **kwargs
         )
-        read_options.set_output_format(output_format_to_internal(output_format))
         read_options.set_dynamic_schema(resolve_defaults("dynamic_schema", proto_cfg, global_default=False, **kwargs))
         read_options.set_set_tz(resolve_defaults("set_tz", proto_cfg, global_default=False, **kwargs))
         read_options.set_allow_sparse(resolve_defaults("allow_sparse", proto_cfg, global_default=False, **kwargs))
         read_options.set_incompletes(resolve_defaults("incomplete", proto_cfg, global_default=False, **kwargs))
-        if read_options.output_format == InternalOutputFormat.ARROW:
-            read_options.set_arrow_output_default_string_format(
+        if output_format_to_internal(output_format) == InternalOutputFormat.ARROW:
+            output_config = ArrowOutputConfig(
+                (
+                    InternalArrowOutputFormat.POLARS
+                    if output_format.lower() == OutputFormat.POLARS.lower()
+                    else InternalArrowOutputFormat.PYARROW
+                ),
                 arrow_output_string_format_to_internal(
                     self.resolve_runtime_defaults(
                         "arrow_string_format_default",
                         proto_cfg,
-                        global_default=ArrowOutputStringFormat.LARGE_STRING,
+                        global_default=ArrowOutputStringFormat.UNSPECIFIED,
                         **kwargs,
                     ),
                     output_format,
-                )
-            )
-            read_options.set_arrow_output_per_column_string_format(
+                ),
                 {
                     key: arrow_output_string_format_to_internal(value, output_format)
                     for key, value in resolve_defaults(
                         "arrow_string_format_per_column", proto_cfg, global_default={}, **kwargs
                     ).items()
-                }
+                },
             )
+        else:  # Pandas
+            string_format = (
+                InternalPandasStringFormat.ARROW_LARGE_STRING
+                if _use_pyarrow_strings_in_pandas()
+                else InternalPandasStringFormat.OBJECT
+            )
+            output_config = PandasOutputConfig(default_string_format=string_format)
+        read_options.set_output_config(output_config)
         return read_options, output_format
 
     def _get_batch_read_options(
@@ -2416,7 +2439,7 @@ class NativeVersionStore:
             read_options_per_symbol.append(read_options)
 
         batch_read_options = _PythonVersionStoreBatchReadOptions(batch_throw_on_error)
-        batch_read_options.set_read_options_per_symbol(read_options_per_symbol)
+        batch_read_options.set_read_options(read_options_per_symbol)
         # output_format is also a batch level setting, because we currently don't support mixed output formats
         output_format = self.resolve_runtime_defaults("output_format", {}, global_default=OutputFormat.PANDAS, **kwargs)
         batch_read_options.set_output_format(output_format_to_internal(output_format))
@@ -2671,10 +2694,11 @@ class NativeVersionStore:
             if read_query.row_filter is not None and read_query.needs_post_processing:
                 # post filter
                 start_idx, end_idx = self._compute_filter_start_end_row(read_result, read_query)
+                row_count = end_idx - start_idx
                 data = []
                 for c in read_result.frame_data.data:
-                    data.append(c[start_idx:end_idx])
-                row_count = len(data[0]) if len(data) else 0
+                    # Arrow string columns are a list of RecordBatchData already truncated in C++ so only numpy columns are trimmed here.
+                    data.append(c if _is_arrow_string_column(c) else c[start_idx:end_idx])
                 read_result.frame_data = FrameData(
                     data,
                     read_result.frame_data.names,
@@ -2718,7 +2742,9 @@ class NativeVersionStore:
                 end_idx = index.searchsorted(datetime64(read_query.row_filter.end_ts, "ns"), side="right")
         else:
             raise ArcticNativeException("Unrecognised row_filter type: {}".format(type(read_query.row_filter)))
-        return (start_idx, end_idx)
+        # Resolve start_idx/end_idx (may be negative or beyond row_count) into valid bounds within [0, row_count].
+        start, stop, _ = slice(start_idx, end_idx).indices(read_result.frame_data.row_count)
+        return (start, stop)
 
     def _find_version(
         self, symbol: str, as_of: Optional[VersionQueryInput] = None, raise_on_missing: Optional[bool] = False, **kwargs
@@ -3657,6 +3683,8 @@ class NativeVersionStore:
             return "pickled"
         elif input_type == "ts":
             return "normalized_timeseries"
+        elif input_type == "experimental_arrow":
+            return "arrow"
         else:
             return "missing_type_info"
 
@@ -3718,6 +3746,11 @@ class NativeVersionStore:
         if input_type == "df":
             index_metadata = desc.normalization.df.common
             tz = get_timezone_from_metadata(index_metadata)
+        elif input_type == "experimental_arrow":
+            index_column_name = desc.fields[0].name
+            index_column_meta = desc.normalization.experimental_arrow.columns.get(index_column_name, None)
+            if index_column_meta is not None:
+                tz = index_column_meta.timezone
         if date_range_ns_precision:
             # V2 API expects pandas timestamps with nanosecond precision
             min_ts_pd = pd.Timestamp(min_ts)
@@ -3862,6 +3895,11 @@ class NativeVersionStore:
                     index_dtype.append(dtypes.pop(0))
             if timeseries_descriptor.normalization.df.has_synthetic_columns:
                 columns = pd.RangeIndex(0, len(columns))
+        elif input_type == "experimental_arrow":
+            arrow_meta = timeseries_descriptor.normalization.experimental_arrow
+            if arrow_meta.has_index:
+                index = [columns.pop(0)]
+                index_dtype = [dtypes.pop(0)]
 
         date_range = self._get_time_range_from_ts(
             timeseries_descriptor, dit.start_index, dit.end_index, date_range_ns_precision
@@ -4386,7 +4424,7 @@ class NativeVersionStore:
         strategy: MergeStrategy = MergeStrategy(),
         on: Optional[List[str]] = None,
         metadata: Any = None,
-        prune_previous_versions: bool = False,
+        prune_previous_versions: Optional[bool] = None,
         upsert: bool = False,
     ):
         """
@@ -4433,8 +4471,8 @@ class NativeVersionStore:
             index.
         metadata : Any, optional
             Metadata to save alongside the new version.
-        prune_previous_versions : bool, default False
-            If True, removes previous versions from the version list.
+        prune_previous_versions : bool, default=None
+            If True, removes previous versions from the version list. Uses library default if left as None.
         upsert : bool, default False
             If True and the symbol does not exist, create it by writing `source` to the store. Requires a strategy
             with `not_matched_by_target="insert"`; combining it with an update-only strategy raises
@@ -4481,6 +4519,12 @@ class NativeVersionStore:
             norm_failure_options_msg="Source data must be normalizable in order to merge it into existing dataframe",
         )
         on = [] if on is None else on
+        prune_previous_versions = resolve_defaults(
+            "prune_previous_version",
+            self._write_options(),
+            global_default=False,
+            existing_value=prune_previous_versions,
+        )
         vit = self.version_store.merge(symbol, item, norm_meta, udm, prune_previous_versions, upsert, strategy, on)
         return self._convert_thin_cxx_item_to_python(vit, metadata)
 

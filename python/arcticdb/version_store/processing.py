@@ -288,8 +288,9 @@ class ExpressionNode:
 
 def where(condition: Any, left: Any, right: Any) -> ExpressionNode:
     """
-    Ternary operator choosing from the left expression where condition is true, and from the right expression where
-    it is false. Similar to numpy.where, or the Python statement `left if condition else right`.
+    Ternary operator choosing from the left expression where condition is true, and from the right expression where it is false.
+
+    Similar to numpy.where, or the Python statement `left if condition else right`.
 
     Parameters
     ----------
@@ -541,9 +542,10 @@ class QueryBuilder:
 
     def apply(self, name, expr):
         """
-        Apply enables new columns to be created using supported QueryBuilder numeric operations. See the documentation for the
-        QueryBuilder class for more information on supported expressions - any expression valid in a filter is valid when using
-        `apply`.
+        Apply enables new columns to be created using supported QueryBuilder numeric operations.
+
+        See the documentation for the QueryBuilder class for more information on supported expressions - any
+        expression valid in a filter is valid when using `apply`.
 
         Parameters
         ----------
@@ -591,7 +593,9 @@ class QueryBuilder:
 
     def groupby(self, name: str):
         """
-        Group symbol by column name. GroupBy operations must be followed by an aggregation operator. Currently the following five aggregation
+        Group symbol by column name.
+
+        GroupBy operations must be followed by an aggregation operator. Currently the following five aggregation
         operators are supported:
 
         * "mean" - compute the mean of the group
@@ -729,8 +733,10 @@ class QueryBuilder:
         origin: Union[str, pd.Timestamp] = "epoch",
     ):
         """
-        Resample a symbol on the index. The symbol must be datetime indexed. Resample operations must be followed by
-        an aggregation operator. Currently, the following 7 aggregation operators are supported:
+        Resample a symbol on the index.
+
+        The symbol must be datetime indexed. Resample operations must be followed by an aggregation operator.
+        Currently, the following 7 aggregation operators are supported:
 
         * "mean" - compute the mean of the group
         * "sum" - compute the sum of the group
@@ -865,6 +871,74 @@ class QueryBuilder:
 
                                  agg_1_min  agg_1_max     agg_2
             2024-01-01 00:00:00          1          5      2.75
+
+        The offset parameter shifts the start of every bucket. Resampling minutely data to hourly buckets with an
+        offset of 30 minutes places the bucket boundaries at half-past each hour:
+
+        >>> df = pd.DataFrame(
+            {
+                "to_sum": np.arange(120),
+            },
+            index=pd.date_range("2024-01-01", freq="min", periods=120),
+        )
+        >>> q = adb.QueryBuilder()
+        >>> q = q.resample("h", offset="30min").agg({"to_sum": "sum", "to_min": ("to_sum", "min"), "to_max": ("to_sum", "max")})
+        >>> lib.write("symbol", df)
+        >>> lib.read("symbol", query_builder=q).data
+
+                                 to_max  to_min  to_sum
+            2023-12-31 23:30:00      29       0     435
+            2024-01-01 00:30:00      89      30    3570
+            2024-01-01 01:30:00     119      90    3135
+
+        Bucket boundaries are anchored to the origin (the epoch, 1970-01-01, by default) shifted by the offset, so they
+        fall at half-past each hour whatever the first index value is. The first value here, at 2024-01-01 00:00:00,
+        belongs to the bucket [2023-12-31 23:30:00, 2024-01-01 00:30:00), and with the default left label the bucket
+        takes its left boundary as the index, 2023-12-31 23:30:00.
+
+        An offset greater than the rule wraps around, so the effective offset is offset modulo rule. With an hourly rule
+        an offset of 1 hour 30 minutes reduces to 30 minutes and yields the same buckets as above:
+
+        >>> q = adb.QueryBuilder()
+        >>> q = q.resample("h", offset="1h30min").agg({"to_sum": "sum", "to_min": ("to_sum", "min"), "to_max": ("to_sum", "max")})
+        >>> lib.read("symbol", query_builder=q).data
+
+                                 to_max  to_min  to_sum
+            2023-12-31 23:30:00      29       0     435
+            2024-01-01 00:30:00      89      30    3570
+            2024-01-01 01:30:00     119      90    3135
+
+        The offset is measured from the origin, which the origin parameter selects. The data below starts at
+        2024-01-01 00:20:00. With the default origin of epoch, the 30 minute offset is measured from 1970-01-01, so the
+        boundaries fall at half-past each hour:
+
+        >>> df = pd.DataFrame(
+            {
+                "to_sum": np.arange(120),
+            },
+            index=pd.date_range("2024-01-01 00:20:00", freq="min", periods=120),
+        )
+        >>> q = adb.QueryBuilder()
+        >>> q = q.resample("h", offset="30min").agg({"to_sum": "sum", "to_min": ("to_sum", "min"), "to_max": ("to_sum", "max")})
+        >>> lib.write("symbol", df)
+        >>> lib.read("symbol", query_builder=q).data
+
+                                 to_max  to_min  to_sum
+            2023-12-31 23:30:00       9       0      45
+            2024-01-01 00:30:00      69      10    2370
+            2024-01-01 01:30:00     119      70    4725
+
+        With origin="start" the same 30 minute offset is measured from the first index value, 2024-01-01 00:20:00, so
+        the boundaries move to fifty minutes past each hour:
+
+        >>> q = adb.QueryBuilder()
+        >>> q = q.resample("h", offset="30min", origin="start").agg({"to_sum": "sum", "to_min": ("to_sum", "min"), "to_max": ("to_sum", "max")})
+        >>> lib.read("symbol", query_builder=q).data
+
+                                 to_max  to_min  to_sum
+            2023-12-31 23:50:00      29       0     435
+            2024-01-01 00:50:00      89      30    3570
+            2024-01-01 01:50:00     119      90    3135
         """
         rule = rule.freqstr if isinstance(rule, pd.DateOffset) else rule
         # We use floor and ceiling later to round user-provided date ranges and or start/end index values of the symbol
@@ -1032,10 +1106,12 @@ class QueryBuilder:
 
     def date_range(self, date_range: DateRangeInput):
         """
-        DateRange to read data for.  Applicable only for Pandas data with a DateTime index. Returns only the part
-        of the data that falls within the given range. If this is the only processing clause being applied, then the
-        returned data object will use less memory than passing date_range directly as an argument to the read method, at
-         the cost of possibly being slightly slower.
+        DateRange to read data for.
+
+        Applicable only for Pandas data with a DateTime index. Returns only the part of the data that falls
+        within the given range. If this is the only processing clause being applied, then the returned data
+        object will use less memory than passing date_range directly as an argument to the read method, at the
+        cost of possibly being slightly slower.
 
         Parameters
         ----------
@@ -1059,8 +1135,10 @@ class QueryBuilder:
 
     def concat(self, join: str = "outer"):
         """
-        Concatenate a list of symbols together. Should be the first clause in a QueryBuilder provided to either
-        NativeVersionStore.batch_read_and_join or Library.read_batch_and_join.
+        Concatenate a list of symbols together.
+
+        Should be the first clause in a QueryBuilder provided to either NativeVersionStore.batch_read_and_join
+        or Library.read_batch_and_join.
 
         Parameters
         ----------

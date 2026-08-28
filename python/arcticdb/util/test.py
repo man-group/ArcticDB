@@ -7,10 +7,11 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 
 import copy
+import gc
 import os
 import sys
 from contextlib import contextmanager
-from typing import Mapping, Any, Optional, NamedTuple, List, AnyStr, Union, Dict
+from typing import Mapping, Any, Iterator, Optional, NamedTuple, List, AnyStr, Union, Dict
 import numpy as np
 import pandas as pd
 from pandas import DateOffset, Timedelta
@@ -55,8 +56,15 @@ from arcticdb_ext import (
     set_config_string,
     unset_config_string,
 )
+from arcticdb_ext.util import (
+    reset_segment_residency_tracking,
+    segment_residency_high_water,
+    segment_residency_live,
+    set_segment_residency_tracking,
+)
 from packaging.version import Version
 from arcticdb.version_store._store import MergeStrategy, normalize_merge_strategy
+from arcticdb.version_store._string_dtype import _ARROW_BACKED_STR_DTYPE_SUPPORTED
 
 
 def create_df(start=0, columns=1) -> pd.DataFrame:
@@ -296,6 +304,34 @@ def random_unicode_string(length: int) -> str:
     return "".join(random.choices(string.ascii_uppercase + unicode_symbols(), k=length))
 
 
+@contextmanager
+def arrow_string_read(enabled: bool):
+    """Read strings back as the pandas arrow-backed ``str`` dtype (``future.infer_string``) or as ``object``.
+
+    Wrap only the read call, not the write: writing that dtype is not supported yet. Skips when ``enabled`` is
+    requested on pandas that lacks either ``future.infer_string`` (< 2.1) or the ``str`` dtype (StringDtype na_value,
+    added in 2.3).
+    """
+    if enabled and not _ARROW_BACKED_STR_DTYPE_SUPPORTED:
+        import pytest
+
+        pytest.skip("pandas too old for the arrow-backed str dtype (StringDtype na_value, added in 2.3)")
+    try:
+        with pd.option_context("future.infer_string", enabled):
+            yield
+    except pd.errors.OptionError:
+        # enabled=False on pandas < 2.1, where the option does not exist. enabled=True is skipped above.
+        yield
+
+
+def assert_null_string(value, is_str_dtype: bool):
+    """Assert a missing string: ``np.nan`` under the arrow-backed ``str`` dtype, ``None`` under ``object``."""
+    if is_str_dtype:
+        assert value is not None and np.isnan(value), f"expected NaN, got {value!r}"
+    else:
+        assert value is None, f"expected None, got {value!r}"
+
+
 def random_string(length: int):
     # (probably) Give a unicode string one time in three, we have special handling in C++ for unicode
     return random_unicode_string(length) if random.randint(0, 3) == 0 else random_ascii_string(length)
@@ -402,6 +438,46 @@ def config_context_multi(config: Dict[str, int]):
                 set_config_int(name, initial[name])
             else:
                 unset_config_int(name)
+
+
+class SegmentResidency:
+    """View of the process-wide SegmentResidencyTracker counters."""
+
+    @property
+    def high_water(self) -> int:
+        return segment_residency_high_water()
+
+    @property
+    def live(self) -> int:
+        return segment_residency_live()
+
+
+@contextmanager
+def segment_residency_tracking() -> Iterator[SegmentResidency]:
+    """Count segments decoded from storage by the processing pipeline that are resident in memory at once.
+
+    Read `high_water` inside the block: the counters are reset on exit.
+
+    Test-only instrumentation, disabled outside this block. Only `DecodeSliceTask` marks segments, so a plain read
+    (which decodes straight into the output frame) counts nothing; this measures `QueryBuilder` reads and the other
+    clause-pipeline entry points.
+    """
+    live = segment_residency_live()
+    assert live == 0, f"counted segment leaked from an earlier block: live={live}"
+    reset_segment_residency_tracking()
+    set_segment_residency_tracking(True)
+    try:
+        yield SegmentResidency()
+        # On a clean exit every read has completed and every clause has run, so the count is already zero. The poll
+        # only covers a release landing on another thread as the read unwinds, hence the short deadline.
+        gc.collect()
+        deadline = time.time() + 2.0
+        while segment_residency_live() != 0 and time.time() < deadline:
+            time.sleep(0.01)
+        assert segment_residency_live() == 0, f"segments still resident after the block: {segment_residency_live()}"
+    finally:
+        set_segment_residency_tracking(False)
+        reset_segment_residency_tracking()
 
 
 @contextmanager
@@ -753,7 +829,9 @@ def make_dynamic(df, num_slices=10):
 
 def regularize_dataframe(df):
     output = df.copy(deep=True)
-    for col in output.select_dtypes(include=["object"]).columns:
+    # Include "string" so the arrow-backed str dtype (future.infer_string) is filled with "" here, not
+    # with 0 by the numeric fillna below (which raises for a str column).
+    for col in output.select_dtypes(include=["object", "string"]).columns:
         output[col] = output[col].fillna("")
 
     # TODO remove this when filtering code returns NaN
@@ -828,10 +906,11 @@ def get_query_processing_functions(lib, symbol, arctic_query, date_range=None):
     return processing_functions
 
 
-def generic_filter_test(lib, symbol, arctic_query, expected):
+def generic_filter_test(lib, symbol, arctic_query, expected, read_string_dtype=False):
     query_processing_functions = get_query_processing_functions(lib, symbol, arctic_query)
     for processing in query_processing_functions:
-        received = processing()
+        with arrow_string_read(read_string_dtype):
+            received = processing()
         if not np.array_equal(expected, received):
             original_df = lib.read(symbol).data
             print(
@@ -842,12 +921,12 @@ def generic_filter_test(lib, symbol, arctic_query, expected):
 
 
 # For string queries, test both with and without dynamic strings, and with the query both optimised for speed and memory
-def generic_filter_test_strings(lib, base_symbol, arctic_query, expected):
+def generic_filter_test_strings(lib, base_symbol, arctic_query, expected, read_string_dtype=False):
     for symbol in [f"{base_symbol}_{DYNAMIC_STRINGS_SUFFIX}", f"{base_symbol}_{FIXED_STRINGS_SUFFIX}"]:
         arctic_query.optimise_for_speed()
-        generic_filter_test(lib, symbol, arctic_query, expected)
+        generic_filter_test(lib, symbol, arctic_query, expected, read_string_dtype)
         arctic_query.optimise_for_memory()
-        generic_filter_test(lib, symbol, arctic_query, expected)
+        generic_filter_test(lib, symbol, arctic_query, expected, read_string_dtype)
 
 
 def generic_filter_test_dynamic(lib, symbol, arctic_query, queried_slices):
@@ -900,17 +979,15 @@ def generic_filter_test_nans(lib, symbol, arctic_query, expected, output_format=
             received_col = received.loc[:, col]
             for idx, expected_val in expected_col.items():
                 received_val = received_col[idx]
+                received_is_str_dtype = str(received_col.dtype) == "str"
                 if isinstance(expected_val, str):
                     assert isinstance(received_val, str) and expected_val == received_val
                 elif expected_val is None:
-                    assert received_val is None
+                    assert_null_string(received_val, received_is_str_dtype)
                 elif np.isnan(expected_val):
-                    if output_format == OutputFormat.PANDAS:
-                        assert np.isnan(received_val)
-                    else:
-                        # When reading as arrow `None` vs `NaN` information is lost. It's all stored as arrow `null`s
-                        # which then is converted to pandas `None`s
-                        assert received_val is None
+                    # When reading as arrow `None` vs `NaN` information is lost. It's all stored as arrow `null`s
+                    # which then is converted to pandas `None`s
+                    assert_null_string(received_val, output_format == OutputFormat.PANDAS or received_is_str_dtype)
 
 
 def generic_aggregation_test(lib, symbol, df, grouping_column, aggs_dict):
