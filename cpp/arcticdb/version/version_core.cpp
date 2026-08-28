@@ -105,23 +105,12 @@ void sorted_data_check_append(const InputFrame& frame, const TimeseriesDescripto
     );
 }
 
-void check_index_match(const Index& index, const IndexDescriptorImpl& desc) {
-    if (std::holds_alternative<TimeseriesIndex>(index))
-        util::check(
-                desc.type() == IndexDescriptor::Type::TIMESTAMP || desc.type() == IndexDescriptor::Type::EMPTY,
-                "Index mismatch, cannot update a non-timeseries-indexed frame with a timeseries"
-        );
-    else
-        util::check(
-                desc.type() == IndexDescriptorImpl::Type::ROWCOUNT,
-                "Index mismatch, cannot update a timeseries with a non-timeseries-indexed frame"
-        );
-}
-
-void check_update_data_is_sorted(const InputFrame& frame, const index::IndexSegmentReader& index_segment_reader) {
+void check_update_data_is_sorted_timeseries(
+        const InputFrame& frame, const index::IndexSegmentReader& index_segment_reader
+) {
     bool is_time_series = std::holds_alternative<stream::TimeseriesIndex>(frame.index);
-    sorting::check<ErrorCode::E_UNSORTED_DATA>(
-            is_time_series, "When calling update, the input data must be a time series."
+    normalization::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
+            is_time_series, "When calling update, the input data must have a time series index."
     );
     bool input_data_is_sorted =
             frame.desc().sorted() == SortedValue::ASCENDING || frame.desc().sorted() == SortedValue::UNKNOWN;
@@ -130,6 +119,10 @@ void check_update_data_is_sorted(const InputFrame& frame, const index::IndexSegm
     sorting::check<ErrorCode::E_UNSORTED_DATA>(
             input_data_is_sorted, "When calling update, the input data must be sorted."
     );
+    normalization::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
+            index::is_timeseries_or_empty_index(index_segment_reader.tsd().index()),
+            "When calling update, the existing data must have a time series index."
+    );
     bool existing_data_is_sorted = index_segment_reader.sorted() == SortedValue::ASCENDING ||
                                    index_segment_reader.sorted() == SortedValue::UNKNOWN;
     sorting::check<ErrorCode::E_UNSORTED_DATA>(
@@ -137,15 +130,18 @@ void check_update_data_is_sorted(const InputFrame& frame, const index::IndexSegm
     );
 }
 
-static void check_can_append(
-        const InputFrame& frame, const TimeseriesDescriptor& existing_tsd,
+static void set_frame_offset_and_bucketize_dynamic(InputFrame& frame, const TimeseriesDescriptor& existing_tsd) {
+    frame.set_offset(static_cast<ssize_t>(existing_tsd.total_rows()));
+    frame.set_bucketize_dynamic(existing_tsd.column_groups());
+}
+
+// Performs checks and returs the TimeseriesDescriptor as a result of an append
+static TimeseriesDescriptor prepare_append(
+        InputFrame& frame, const TimeseriesDescriptor& existing_tsd,
         const std::optional<IndexValue>& last_existing_index_value, const WriteOptions& write_options,
-        bool validate_index, bool empty_types
+        bool validate_index
 ) {
-    const bool is_pickled = existing_tsd.proto().normalization().input_type_case() ==
-                            arcticdb::proto::descriptors::NormalizationMetadata::InputTypeCase::kMsgPackFrame;
-    util::check_rte(!is_pickled, "Cannot append to pickled data");
-    fix_descriptor_mismatch_or_throw(APPEND, write_options.dynamic_schema, existing_tsd, frame, empty_types);
+    auto combined = combine_existing_tsd_with_frame(APPEND, write_options.dynamic_schema, existing_tsd, frame);
     if (validate_index) {
         sorted_data_check_append(frame, existing_tsd);
     }
@@ -173,30 +169,29 @@ static void check_can_append(
                 // Do whatever, but you can't range search it
             }
     );
+    set_frame_offset_and_bucketize_dynamic(frame, existing_tsd);
+    return tsd_from_schema(std::move(combined), frame.num_rows + frame.offset, frame);
 }
 
-// A frame being appended starts at the end of the existing data, and inherits its column bucketing
-static void set_frame_offset_and_bucketize_dynamic(InputFrame& frame, const TimeseriesDescriptor& existing_tsd) {
-    frame.set_offset(static_cast<ssize_t>(existing_tsd.total_rows()));
-    frame.set_bucketize_dynamic(existing_tsd.column_groups());
-}
-
-static void check_can_update(
-        const InputFrame& frame, const index::IndexSegmentReader& index_segment_reader, bool dynamic_schema,
-        bool empty_types
+// Performs checks and returns the TimeseriesDescriptor as a result of an update. Combining the schemas is also the
+// compatibility check, so it happens here, before any data keys are written; doing it the other way round would
+// orphan data keys when the schemas turn out not to combine.
+static TimeseriesDescriptor prepare_update(
+        InputFrame& frame, const index::IndexSegmentReader& index_segment_reader, bool dynamic_schema
 ) {
-    util::check_rte(!index_segment_reader.is_pickled(), "Cannot update to pickled data");
-    check_index_match(frame.index, index_segment_reader.tsd().index());
-    const auto index_desc = index_segment_reader.tsd().index();
-    util::check(index::is_timeseries_index(index_desc), "Update not supported for non-timeseries indexes");
-    check_update_data_is_sorted(frame, index_segment_reader);
+    check_update_data_is_sorted_timeseries(frame, index_segment_reader);
     (void)check_and_mark_slices(index_segment_reader, false, std::nullopt);
-    fix_descriptor_mismatch_or_throw(UPDATE, dynamic_schema, index_segment_reader.tsd(), frame, empty_types);
+    auto combined = combine_existing_tsd_with_frame(UPDATE, dynamic_schema, index_segment_reader.tsd(), frame);
+    frame.set_bucketize_dynamic(index_segment_reader.bucketize_dynamic());
+    // Unlike an append, the row count is only known once the new segments have been intersected with the existing
+    // ones, so the descriptor carries a placeholder that async_update_impl overwrites with set_total_rows.
+    constexpr size_t placeholder_total_rows = 1;
+    return tsd_from_schema(std::move(combined), placeholder_total_rows, frame);
 }
 
 folly::Future<AtomKey> async_append_impl(
         const std::shared_ptr<Store>& store, const UpdateInfo& update_info, const std::shared_ptr<InputFrame>& frame,
-        const WriteOptions& options, bool validate_index, bool empty_types
+        const WriteOptions& options, bool validate_index
 ) {
     util::check(
             update_info.previous_index_key_.has_value(), "Cannot append as there is no previous index key to append to"
@@ -206,21 +201,15 @@ folly::Future<AtomKey> async_append_impl(
     );
     return index::async_get_index_reader(*(update_info.previous_index_key_), store)
             // This future will complete on the IO executor
-            .thenValueInline([store, update_info, frame, options, validate_index, empty_types](
+            .thenValueInline([store, update_info, frame, options, validate_index](
                                      index::IndexSegmentReader&& index_segment_reader
                              ) {
                 const std::optional<IndexValue> last_existing_index_value =
                         index_segment_reader.tsd().total_rows() == 0 ? std::optional<IndexValue>()
                                                                      : index_segment_reader.last()->key().end_index();
-                check_can_append(
-                        *frame,
-                        index_segment_reader.tsd(),
-                        last_existing_index_value,
-                        options,
-                        validate_index,
-                        empty_types
+                auto merged_tsd = prepare_append(
+                        *frame, index_segment_reader.tsd(), last_existing_index_value, options, validate_index
                 );
-                set_frame_offset_and_bucketize_dynamic(*frame, index_segment_reader.tsd());
                 auto slicing_arg = get_slicing_policy(options, *frame);
                 return append_frame(
                         IndexPartialKey{frame->desc().id(), update_info.next_version_id_},
@@ -228,7 +217,7 @@ folly::Future<AtomKey> async_append_impl(
                         slicing_arg,
                         index_segment_reader,
                         store,
-                        options.dynamic_schema
+                        std::move(merged_tsd)
                 );
             });
 }
@@ -1020,25 +1009,20 @@ static std::pair<std::vector<SliceAndKey>, size_t> get_slice_and_keys_for_update
 
 folly::Future<AtomKey> async_update_impl(
         const std::shared_ptr<Store>& store, const UpdateInfo& update_info, const UpdateQuery& query,
-        const std::shared_ptr<InputFrame>& frame, const WriteOptions& options, bool dynamic_schema, bool empty_types
+        const std::shared_ptr<InputFrame>& frame, const WriteOptions& options, bool dynamic_schema
 ) {
     return index::async_get_index_reader(*(update_info.previous_index_key_), store)
             // This future will complete on the IO executor
-            .thenValueInline([store, update_info, query, frame, options, dynamic_schema, empty_types](
+            .thenValueInline([store, update_info, query, frame, options, dynamic_schema](
                                      index::IndexSegmentReader&& index_segment_reader
                              ) {
-                check_can_update(*frame, index_segment_reader, dynamic_schema, empty_types);
+                auto tsd = prepare_update(*frame, index_segment_reader, dynamic_schema);
                 ARCTICDB_DEBUG(
                         log::version(),
                         "Update versioned dataframe for stream_id: {} , version_id = {}",
                         frame->desc().id(),
                         update_info.previous_index_key_->version_id()
                 );
-                frame->set_bucketize_dynamic(index_segment_reader.bucketize_dynamic());
-                // This also checks that types are compatible, so create with a dummy row-count here, and then modify
-                // the row count later once it is known. This avoids orphaning data keys if this function throws
-                // because of incompatible schemas
-                auto tsd = index::get_merged_tsd(1, dynamic_schema, index_segment_reader.tsd(), frame);
                 return slice_and_write(
                                frame,
                                get_slicing_policy(options, *frame),
@@ -1605,7 +1589,7 @@ static void read_indexed_keys_to_pipeline(
     pipeline_context->rows_ = index_segment_reader.tsd().total_rows();
     pipeline_context->bucketize_dynamic_ = bucketize_dynamic;
     // Capture the end index of the last existing row-slice before discarding the reader. This is needed by
-    // check_can_append on the inline-compaction path, and avoids retaining the whole index segment in the context.
+    // prepare_append on the inline-compaction path, and avoids retaining the whole index segment in the context.
     if (!index_segment_reader.empty()) {
         pipeline_context->last_existing_index_value_ = index_segment_reader.last()->key().end_index();
     }
@@ -2040,7 +2024,7 @@ struct CopyToBufferTask : async::BaseTask {
     SegmentInMemory source_segment_;
     SegmentInMemory target_segment_;
     FrameSlice frame_slice_;
-    uint32_t required_fields_count_;
+    size_t required_fields_count_;
     DecodePathData shared_data_;
     std::shared_ptr<std::any> handler_data_;
     const ReadOptions read_options_;
@@ -2048,7 +2032,7 @@ struct CopyToBufferTask : async::BaseTask {
 
     CopyToBufferTask(
             SegmentInMemory&& source_segment, SegmentInMemory target_segment, FrameSlice frame_slice,
-            uint32_t required_fields_count, DecodePathData shared_data, std::shared_ptr<std::any> handler_data,
+            size_t required_fields_count, DecodePathData shared_data, std::shared_ptr<std::any> handler_data,
             const ReadOptions& read_options, std::shared_ptr<PipelineContext> pipeline_context
     ) :
         source_segment_(std::move(source_segment)),
@@ -2119,9 +2103,11 @@ folly::Future<folly::Unit> copy_segments_to_frame(
         const std::shared_ptr<Store>& store, const std::shared_ptr<PipelineContext>& pipeline_context,
         SegmentInMemory frame, std::shared_ptr<std::any> handler_data, const ReadOptions& read_options
 ) {
-    const auto required_fields_count = pipelines::index::required_fields_count(
-            pipeline_context->output_descriptor(), pipeline_context->output_normalization()
-    );
+    const auto required_fields_count =
+            pipelines::index::required_fields_info(
+                    pipeline_context->output_descriptor(), pipeline_context->output_normalization()
+            )
+                    .num_physical_required_columns();
     std::vector<folly::Future<folly::Unit>> copy_tasks;
     DecodePathData shared_data;
     for (auto context_row : folly::enumerate(*pipeline_context)) {
@@ -3545,23 +3531,19 @@ static std::shared_ptr<TimeseriesDescriptor> compact_data_tsd(
         ));
     }
     auto& frame = compact_data_frame->frame_;
-    set_frame_offset_and_bucketize_dynamic(*frame, existing_tsd);
     if (frame->num_rows == 0) {
+        set_frame_offset_and_bucketize_dynamic(*frame, existing_tsd);
         auto merged_tsd = std::make_shared<TimeseriesDescriptor>(existing_tsd);
         *merged_tsd->mutable_proto().mutable_user_meta() = std::move(frame->user_meta);
         return merged_tsd;
     }
-    check_can_append(
+    return std::make_shared<TimeseriesDescriptor>(prepare_append(
             *frame,
             existing_tsd,
             pipeline_context.last_existing_index_value_,
             write_options,
-            compact_data_frame->validate_index_,
-            compact_data_frame->empty_types_
-    );
-    return std::make_shared<TimeseriesDescriptor>(
-            index::get_merged_tsd(frame->offset + frame->num_rows, write_options.dynamic_schema, existing_tsd, frame)
-    );
+            compact_data_frame->validate_index_
+    ));
 }
 
 folly::Future<std::optional<AtomKey>> async_compact_data_impl(

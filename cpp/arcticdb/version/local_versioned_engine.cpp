@@ -1565,6 +1565,7 @@ MultiSymbolReadOutput LocalVersionedEngine::batch_read_and_join_internal(
                              ) {
                 auto [input_schemas, entity_ids, res_versioned_items, res_metadatas] =
                         unpack_symbol_processing_results(std::move(symbol_processing_results));
+                drop_rowless_symbols(input_schemas, entity_ids, *component_manager);
                 auto pipeline_context = setup_join_pipeline_context(std::move(input_schemas), *clauses_ptr);
                 auto modified_read_options =
                         modify_read_options_from_norm_meta(pipeline_context->output_normalization(), read_options);
@@ -1757,9 +1758,7 @@ folly::Future<VersionedItem> LocalVersionedEngine::async_append_internal(
     // ReslicingInfo
     if (update_info.previous_index_key_.has_value()) {
         if (append_options.compact_data) {
-            auto compact_data_frame = std::make_optional<CompactDataFrame>(
-                    frame, append_options.validate_index, write_options_.empty_types
-            );
+            auto compact_data_frame = std::make_optional<CompactDataFrame>(frame, append_options.validate_index);
             index_key_fut =
                     async_compact_data_impl(
                             store(), update_info, write_options_, write_options_.segment_row_size, compact_data_frame
@@ -1775,12 +1774,7 @@ folly::Future<VersionedItem> LocalVersionedEngine::async_append_internal(
             index_key_fut = frame->empty()
                                     ? async_write_metadata_impl(store(), update_info, std::move(frame->user_meta))
                                     : async_append_impl(
-                                              store(),
-                                              update_info,
-                                              frame,
-                                              write_options_,
-                                              append_options.validate_index,
-                                              write_options_.empty_types
+                                              store(), update_info, frame, write_options_, append_options.validate_index
                                       );
         }
     } else {
@@ -1835,16 +1829,9 @@ folly::Future<VersionedItem> LocalVersionedEngine::async_update_internal(
     const bool add_new_symbol_list_entry = !update_info.previous_index_key_.has_value() && cfg().symbol_list();
     auto index_key_fut = folly::Future<AtomKey>::makeEmpty();
     if (update_info.previous_index_key_.has_value()) {
-        index_key_fut = frame->empty() ? async_write_metadata_impl(store(), update_info, std::move(frame->user_meta))
-                                       : async_update_impl(
-                                                 store(),
-                                                 update_info,
-                                                 query,
-                                                 frame,
-                                                 write_options_,
-                                                 dynamic_schema,
-                                                 write_options_.empty_types
-                                         );
+        index_key_fut = frame->empty()
+                                ? async_write_metadata_impl(store(), update_info, std::move(frame->user_meta))
+                                : async_update_impl(store(), update_info, query, frame, write_options_, dynamic_schema);
     } else {
         if (!upsert) {
             auto error_msg = fmt::format(
