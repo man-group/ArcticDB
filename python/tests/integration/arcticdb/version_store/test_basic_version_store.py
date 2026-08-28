@@ -3261,8 +3261,8 @@ def test_long_stream_descriptor_mismatch_names_the_columns(basic_store, method, 
         msg = str(e)
         assert f"Cannot {method} (symbol 'x')" in msg
         # col1 and col2 are in the symbol but not in the argument; col{num} is the other way round.
-        assert "missing [col1, col2]" in msg
-        assert f"unexpected [col{num}]" in msg
+        assert "missing 2 [col1, col2]" in msg
+        assert f"unexpected 1 [col{num}]" in msg
 
 
 @pytest.mark.storage
