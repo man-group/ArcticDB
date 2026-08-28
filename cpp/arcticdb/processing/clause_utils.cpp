@@ -241,219 +241,6 @@ template std::vector<std::vector<size_t>> structure_by_time_bucket<ResampleBound
         std::vector<RangesAndEntity>& ranges, const std::vector<timestamp>& bucket_boundaries
 );
 
-std::pair<StreamDescriptor, NormalizationMetadata> join_indexes(std::vector<OutputSchema>& input_schemas) {
-    StreamDescriptor stream_desc{StreamId{}, generate_index_descriptor(input_schemas)};
-    // Returns a set of indices of index fields where not all the input schema field names matched, which is needed to
-    // generate the output norm metadata
-    auto non_matching_name_indices = add_index_fields(stream_desc, input_schemas);
-    auto norm_meta = generate_norm_meta(input_schemas, std::move(non_matching_name_indices));
-    return {std::move(stream_desc), std::move(norm_meta)};
-}
-
-IndexDescriptorImpl generate_index_descriptor(const std::vector<OutputSchema>& input_schemas) {
-    // Ensure:
-    //  - Type is the same
-    //  - Field count is the same
-    std::optional<IndexDescriptor::Type> index_type;
-    std::optional<uint32_t> index_desc_field_count;
-    for (const auto& schema : input_schemas) {
-        const auto& index_desc = schema.stream_descriptor().index();
-        if (!index_type.has_value()) {
-            index_type = index_desc.type();
-        } else {
-            schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
-                    index_desc.type() == *index_type, "Mismatching IndexDescriptor in schema join"
-            );
-        }
-        if (!index_desc_field_count.has_value()) {
-            index_desc_field_count = index_desc.field_count();
-        } else {
-            schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
-                    index_desc.field_count() == *index_desc_field_count, "Mismatching IndexDescriptor in schema join"
-            );
-        }
-    }
-    return {*index_type, *index_desc_field_count};
-}
-
-std::unordered_set<size_t> add_index_fields(StreamDescriptor& stream_desc, std::vector<OutputSchema>& input_schemas) {
-    std::unordered_set<size_t> non_matching_name_indices;
-    // If the first schema is multiindexed then use this field count
-    // It will be checked later if the other norm metas are compatible
-    const auto& first_norm_meta = input_schemas.front().norm_metadata_;
-    auto required_fields_count = index::required_fields_count(stream_desc, first_norm_meta);
-    if (required_fields_count == 0) {
-        return non_matching_name_indices;
-    }
-    // FieldCollection does not support renaming fields, so use a vector of FieldRef and then turn this into a
-    // FieldCollection at the end
-    std::vector<FieldRef> index_fields;
-    bool first_schema{true};
-    for (auto& schema : input_schemas) {
-        const auto& fields = schema.stream_descriptor().fields();
-        schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
-                fields.size() >= required_fields_count,
-                "Expected at least {} fields for index, but received {}",
-                required_fields_count,
-                fields.size()
-        );
-        if (first_schema) {
-            for (size_t idx = 0; idx < required_fields_count; ++idx) {
-                const auto& field = fields.at(idx);
-                index_fields.emplace_back(field.type(), field.name());
-                // Index columns, and the first non-index column in the case of Series are always included, so remove
-                // from the column types map so they are not considered in inner/outer join
-                schema.column_types().erase(std::string(field.name()));
-            }
-            first_schema = false;
-        } else {
-            for (size_t idx = 0; idx < required_fields_count; ++idx) {
-                const auto& field = fields.at(idx);
-                auto& current_type = index_fields.at(idx).type_;
-                auto opt_common_type = has_valid_common_type(current_type, field.type());
-                if (opt_common_type.has_value()) {
-                    current_type = *opt_common_type;
-                } else {
-                    schema::raise<ErrorCode::E_DESCRIPTOR_MISMATCH>(
-                            "No common type between {} and {} when joining schemas", current_type, field.type()
-                    );
-                }
-                // Index columns, and the first non-index column in the case of Series are always included, so remove
-                // from the column types map so they are not considered in inner/outer join
-                schema.column_types().erase(std::string(field.name()));
-                const auto& current_name = index_fields.at(idx).name_;
-                if (current_name != field.name()) {
-                    non_matching_name_indices.emplace(idx);
-                }
-            }
-        }
-    }
-    for (size_t idx = 0; idx < index_fields.size(); ++idx) {
-        if (non_matching_name_indices.contains(idx)) {
-            // This is the samsame naming scheme used in _normalization.py for unnamed multiindex levels. Ensures that
-            // any subsequent processing that checks for columns of this format will continue to work
-            stream_desc.fields().add_field(
-                    index_fields.at(idx).type(), idx == 0 ? "index" : fmt::format("__fkidx__{}", idx)
-            );
-        } else {
-            stream_desc.add_field(index_fields.at(idx));
-        }
-    }
-    return non_matching_name_indices;
-}
-
-void inner_join(StreamDescriptor& stream_desc, std::vector<OutputSchema>& input_schemas) {
-    if (input_schemas.empty()) {
-        return;
-    }
-    // Value must be optional to handle the case covered in MatchingNamesIncompatibleTypesOnUnusedColumns test in
-    // test_join_schemas.cpp
-    // i.e. There may be a column where the types between two input schemas to not match, but it doesn't matter, as the
-    // column is missing from another schema
-    // Cannot use ankerl::unordered_dense as iterators are not stable on erase
-    std::unordered_map<std::string, std::optional<DataType>> columns_to_keep;
-    bool first_element{true};
-    for (auto& schema : input_schemas) {
-        if (first_element) {
-            // Start with the columns in the first element, and remove anything that isn't present in all other elements
-            for (const auto& [name, data_type] : schema.column_types()) {
-                columns_to_keep.emplace(name, data_type);
-            }
-            first_element = false;
-        } else {
-            // Iterate through the columns we are currently planning to keep
-            for (auto columns_to_keep_it = columns_to_keep.begin(); columns_to_keep_it != columns_to_keep.end();) {
-                const auto& column_name = columns_to_keep_it->first;
-                if (auto it = schema.column_types().find(column_name); it != schema.column_types().end()) {
-                    // Current set of columns under consideration contains column_name, so ensure types are compatible
-                    // and if necessary modify the columns_to_keep value to a type capable of representing all
-                    auto& current_data_type = columns_to_keep_it->second;
-                    if (current_data_type.has_value()) {
-                        auto opt_promotable_type =
-                                promotable_type(make_scalar_type(*current_data_type), make_scalar_type(it->second));
-                        if (opt_promotable_type.has_value()) {
-                            current_data_type = opt_promotable_type->data_type();
-                        } else {
-                            current_data_type.reset();
-                        }
-                    }
-                    ++columns_to_keep_it;
-                } else {
-                    columns_to_keep_it = columns_to_keep.erase(columns_to_keep_it);
-                }
-            }
-        }
-    }
-    // All the columns we are retaining were in every schema. Just use the order from the first schema
-    for (const auto& field : input_schemas.front().stream_descriptor().fields()) {
-        std::string column_name(field.name());
-        if (auto it = columns_to_keep.find(column_name); it != columns_to_keep.end()) {
-            schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
-                    it->second.has_value(), "No common type for column {} when joining schemas", it->first
-            );
-            stream_desc.add_scalar_field(it->second.value(), column_name);
-        }
-    }
-}
-
-void outer_join(StreamDescriptor& stream_desc, std::vector<OutputSchema>& input_schemas) {
-    // If the first schema is multiindexed then use this field count
-    // It will be checked later if the other norm metas are compatible
-    const auto& first_norm_meta = input_schemas.front().norm_metadata_;
-    auto required_fields_count = index::required_fields_count(stream_desc, first_norm_meta);
-    ankerl::unordered_dense::map<std::string, DataType> columns_to_keep;
-    // Maintain the order that columns appeared in through the schemas
-    std::vector<std::string> column_names_to_keep;
-    bool first_element{true};
-    for (auto& schema : input_schemas) {
-        if (first_element) {
-            // Start with the columns in the first element, and add in anything that is present in all other elements
-            columns_to_keep = schema.column_types();
-            for (size_t idx = required_fields_count; idx < schema.stream_descriptor().field_count(); ++idx) {
-                column_names_to_keep.emplace_back(schema.stream_descriptor().field(idx).name());
-            }
-            first_element = false;
-        } else {
-            const auto& column_types = schema.column_types();
-            // Iterate through the columns of this element
-            // Have to use stream descriptor instead of column_types() to get the output order right
-            for (const auto& field : schema.stream_descriptor().fields()) {
-                std::string column_name(field.name());
-                // column_types has had all index names erased
-                if (auto it = column_types.find(column_name); it != column_types.end()) {
-                    const auto& data_type = it->second;
-                    if (auto columns_to_keep_it = columns_to_keep.find(column_name);
-                        columns_to_keep_it != columns_to_keep.end()) {
-                        // Current set of columns under consideration contains column_name, so ensure types are
-                        // compatible and if necessary modify the columns_to_keep value to a type capable of
-                        // representing all
-                        auto& current_data_type = columns_to_keep_it->second;
-                        auto opt_promotable_type =
-                                promotable_type(make_scalar_type(current_data_type), make_scalar_type(data_type));
-                        if (opt_promotable_type.has_value()) {
-                            current_data_type = opt_promotable_type->data_type();
-                        } else {
-                            schema::raise<ErrorCode::E_DESCRIPTOR_MISMATCH>(
-                                    "No common type between {} and {} when joining schemas",
-                                    current_data_type,
-                                    data_type
-                            );
-                        }
-                    } else {
-                        // This column is new, add it in
-                        auto [_, inserted] = columns_to_keep.emplace(column_name, data_type);
-                        util::check(inserted, "Adding same column name to map twice in outer_join");
-                        column_names_to_keep.emplace_back(std::move(column_name));
-                    }
-                }
-            }
-        }
-    }
-    for (const auto& column_name : column_names_to_keep) {
-        stream_desc.add_scalar_field(columns_to_keep.at(column_name), column_name);
-    }
-}
-
 static auto first_missing_column(OutputSchema& output_schema, const std::unordered_set<std::string>& required_columns) {
     const auto& column_types = output_schema.column_types();
     for (auto input_column_it = required_columns.begin(); input_column_it != required_columns.end();
@@ -487,6 +274,39 @@ void check_is_timeseries(const StreamDescriptor& stream_descriptor, std::string_
             "{}Clause can only be applied to timeseries",
             clause_name
     );
+}
+
+void drop_rowless_symbols(
+        std::vector<OutputSchema>& input_schemas, std::vector<std::vector<EntityId>>& entity_ids,
+        ComponentManager& component_manager
+) {
+    const auto has_rows = [&component_manager](const std::vector<EntityId>& ids) {
+        auto [row_ranges] = component_manager.get_entities<std::shared_ptr<RowRange>>(ids);
+        return std::ranges::any_of(row_ranges, [](const auto& row_range) { return row_range->diff() > 0; });
+    };
+    std::vector<size_t> to_keep;
+    for (size_t idx = 0; idx < entity_ids.size(); ++idx) {
+        if (has_rows(entity_ids[idx])) {
+            to_keep.emplace_back(idx);
+        }
+    }
+    if (to_keep.size() == entity_ids.size()) {
+        return;
+    }
+    if (to_keep.empty()) {
+        // Nothing has rows, so there is nothing to drop down to. Keep only the first symbol, rather than every
+        // symbol, so that the result's columns do not depend on whether some unrelated symbol happened to have
+        // rows, and so that every schema reaching combine_schema agrees about the index type.
+        to_keep.emplace_back(0);
+    }
+    auto kept_schemas = util::reserve_vector<OutputSchema>(to_keep.size());
+    auto kept_entity_ids = util::reserve_vector<std::vector<EntityId>>(to_keep.size());
+    for (const auto idx : to_keep) {
+        kept_schemas.emplace_back(std::move(input_schemas[idx]));
+        kept_entity_ids.emplace_back(std::move(entity_ids[idx]));
+    }
+    input_schemas = std::move(kept_schemas);
+    entity_ids = std::move(kept_entity_ids);
 }
 
 } // namespace arcticdb
