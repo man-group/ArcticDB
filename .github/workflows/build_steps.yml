@@ -637,6 +637,18 @@ jobs:
           disk-root: "D:"  # This is also the checkout directory. Total size 12GB.
         continue-on-error: true
 
+      # Real-time scanning of the thousands of small LMDB/temp files the tests create makes
+      # Windows test jobs 5-10x slower per test than Linux.
+      - name: Exclude test paths from Windows Defender
+        if: matrix.os == 'windows'
+        shell: pwsh
+        run: |
+          Add-MpPreference -ExclusionPath "$env:GITHUB_WORKSPACE", "$env:RUNNER_TEMP", "$env:TEMP", "$env:LOCALAPPDATA\Temp", "C:\hostedtoolcache", "C:\tmp", "D:\tmp"
+          Add-MpPreference -ExclusionProcess "python.exe", "pytest.exe", "node.exe", "azurite.exe"
+          Set-MpPreference -DisableRealtimeMonitoring $true
+          Get-MpPreference | Select-Object DisableRealtimeMonitoring, ExclusionPath, ExclusionProcess
+        continue-on-error: true
+
       # GitHub runner image does not come with npm
       - name: Install npm (Linux and macOS)
         if: matrix.os == 'linux' || matrix.os == 'macos'
