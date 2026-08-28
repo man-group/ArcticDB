@@ -263,6 +263,7 @@ set(arcticdb_srcs
         entity/field_collection_proto.hpp
         entity/python_bindings_common.hpp
         log/log.hpp
+        log/console_sink.hpp
         log/trace.hpp
         pipeline/column_mapping.hpp
         pipeline/column_name_resolution.hpp
@@ -498,6 +499,7 @@ set(arcticdb_srcs
         entity/type_utils.cpp
         entity/types_proto.cpp
         log/log.cpp
+        log/console_sink.cpp
         pipeline/column_mapping.cpp
         pipeline/column_name_resolution.cpp
         pipeline/column_stats.cpp
