@@ -737,7 +737,10 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
             .def("create_column_stats_version",
                  &PythonVersionStore::create_column_stats_version,
                  py::call_guard<SingleThreadMutexHolder>(),
-                 "Create column stats")
+                 "Create column stats",
+                 py::arg("stream_id"),
+                 py::arg("version_query"),
+                 py::arg("read_query"))
             .def("drop_column_stats_version",
                  &PythonVersionStore::drop_column_stats_version,
                  py::call_guard<SingleThreadMutexHolder>(),

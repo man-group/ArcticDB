@@ -266,6 +266,7 @@ set(arcticdb_srcs
         log/trace.hpp
         pipeline/column_mapping.hpp
         pipeline/column_name_resolution.hpp
+        pipeline/column_stats_types.hpp
         pipeline/column_stats.hpp
         pipeline/column_stats_filter.hpp
         pipeline/column_stats_dispatch.hpp
@@ -1096,6 +1097,7 @@ if(${TEST})
             pipeline/test/test_frame_allocation.cpp
             pipeline/test/test_rollback.cpp
             pipeline/test/test_value.cpp
+            pipeline/test/test_column_stats_build_segment.cpp
             pipeline/test/test_column_stats_data.cpp
             pipeline/test/test_column_stats_dispatch.cpp
             pipeline/test/test_column_stats_dispatch_range_vs_range.cpp

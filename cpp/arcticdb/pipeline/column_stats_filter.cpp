@@ -246,40 +246,41 @@ std::unordered_map<std::string, StatsForColumn> load_stats_by_column(
 
 } // anonymous namespace
 
-std::pair<size_t, size_t> ColumnStatsData::calculate_start_and_end_indices(
-        const std::optional<std::pair<timestamp, timestamp>>& date_range, const size_t segment_row_count,
-        const Column& start_index_col, const Column& end_index_col
+std::pair<size_t, size_t> ColumnStatsData::parse_row_ranges(
+        const std::optional<pipelines::RowRange>& window, const size_t segment_row_count, const Column& start_row_col,
+        const Column& end_row_col
 ) {
-    // Construct start_indices and end_indices with date range pruning.
+    // Build the row range lookup, skipping row slices outside the window.
     // Also construct the interval [first_kept, last_kept_excl) to quickly skip stats for row ranges
     // we are not interested in when we read the statistics themselves.
     size_t first_kept = segment_row_count;
     size_t last_kept_excl = 0;
-    start_indices_.reserve(segment_row_count);
-    end_indices_.reserve(segment_row_count);
-    using TsTDT = ScalarTagType<DataTypeTag<DataType::NANOSECONDS_UTC64>>;
-    auto start_data = start_index_col.data();
-    auto end_data = end_index_col.data();
-    auto start_it = start_data.begin<TsTDT>();
-    auto end_it = end_data.begin<TsTDT>();
-    timestamp prev_start = 0;
+    row_range_to_row_.reserve(segment_row_count);
+    using RowTDT = ScalarTagType<DataTypeTag<DataType::UINT64>>;
+    auto start_data = start_row_col.data();
+    auto end_data = end_row_col.data();
+    auto start_it = start_data.begin<RowTDT>();
+    auto end_it = end_data.begin<RowTDT>();
+    uint64_t prev_start = 0;
     for (size_t r = 0; r < segment_row_count; ++r, ++start_it, ++end_it) {
-        const timestamp start_index_ts = *start_it;
-        const timestamp end_index_ts = *end_it;
+        const uint64_t start_row = *start_it;
+        const uint64_t end_row = *end_it;
         if (r > 0) {
             util::check(
-                    start_index_ts >= prev_start,
-                    "Column stats segment start_index must be monotonically increasing "
+                    start_row > prev_start,
+                    "Column stats segment start_row must be strictly monotonically increasing "
                     "(violated at row {})",
                     r
             );
         }
-        prev_start = start_index_ts;
-        if (date_range.has_value()) {
-            if (start_index_ts > date_range->second) {
+        prev_start = start_row;
+        if (window.has_value()) {
+            // Sorted on start_row, so once a slice starts at or after the window nothing later can
+            // intersect it.
+            if (start_row >= window->second) {
                 break;
             }
-            if (end_index_ts < date_range->first) {
+            if (end_row <= window->first) {
                 continue;
             }
         }
@@ -287,32 +288,17 @@ std::pair<size_t, size_t> ColumnStatsData::calculate_start_and_end_indices(
             first_kept = r;
         }
         last_kept_excl = r + 1;
-        start_indices_.push_back(start_index_ts);
-        end_indices_.push_back(end_index_ts);
+        // r - first_kept is the same convention load_stats_by_column uses to index the value vectors
+        auto [_, inserted] = row_range_to_row_.emplace(pipelines::RowRange{start_row, end_row}, r - first_kept);
+        internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+                inserted, "Duplicate row range [{}, {}) in column stats segment at row {}", start_row, end_row, r
+        );
     }
     return std::make_pair(first_kept, last_kept_excl);
 }
 
-void ColumnStatsData::drop_duplicate_rows() {
-    index_to_row_.reserve(num_rows_);
-    std::unordered_set<std::pair<timestamp, timestamp>, util::PairHasher> duplicate_keys;
-    for (size_t r = 0; r < num_rows_; ++r) {
-        auto key = std::make_pair(start_indices_.at(r), end_indices_.at(r));
-        if (auto [_, inserted] = index_to_row_.emplace(key, r); !inserted) {
-            // Duplicate (start_index, end_index) — can happen with timestamp indices when multiple
-            // segments span the same time range.
-            duplicate_keys.insert(key);
-        }
-    }
-    for (const auto& key : duplicate_keys) {
-        log::version().debug("Duplicate key detected in column stats - dropping {}", key);
-        index_to_row_.erase(key);
-    }
-}
-
 ColumnStatsData::ColumnStatsData(
-        SegmentInMemory&& segment, const TimeseriesDescriptor& tsd,
-        std::optional<std::pair<timestamp, timestamp>> date_range
+        SegmentInMemory&& segment, const TimeseriesDescriptor& tsd, const std::optional<pipelines::RowRange>& window
 ) {
     using namespace arcticc::pb2::column_stats_pb2;
     if (segment.row_count() == 0) {
@@ -324,36 +310,34 @@ ColumnStatsData::ColumnStatsData(
     util::check(metadata != nullptr, "Column stats segment has no metadata");
     bool unpacked = metadata->UnpackTo(&header);
     util::check(unpacked, "Could not unpack ColumnStatsHeader from column stats segment metadata");
-    validate_column_stats_header_version(header);
+    validate_column_stats_header_version(header, ColumnStatsHeaderVersionMismatchAction::Warn);
 
     segment.init_column_map();
     const auto& fields = segment.descriptor().fields();
     const auto segment_row_count = segment.row_count();
 
-    const auto& start_index_col = segment.column(start_index_column_offset);
-    const auto& end_index_col = segment.column(end_index_column_offset);
-    if (start_index_col.is_sparse() || end_index_col.is_sparse() ||
-        static_cast<size_t>(start_index_col.row_count()) != segment_row_count ||
-        static_cast<size_t>(end_index_col.row_count()) != segment_row_count) {
-        log::version().warn("Saw column stats row without start_index or end_index, discarding all column stats");
+    const auto& start_row_col = segment.column(start_row_column_offset);
+    const auto& end_row_col = segment.column(end_row_column_offset);
+    if (start_row_col.is_sparse() || end_row_col.is_sparse() ||
+        static_cast<size_t>(start_row_col.row_count()) != segment_row_count ||
+        static_cast<size_t>(end_row_col.row_count()) != segment_row_count) {
+        log::version().warn("Saw column stats row without start_row or end_row, discarding all column stats");
         return;
     }
 
     std::vector<StatsMetadataForColumn> stats_metadata = calculate_stats_metadata(segment, tsd, header, fields);
 
-    auto [first_kept, last_kept_excl] =
-            calculate_start_and_end_indices(date_range, segment_row_count, start_index_col, end_index_col);
-    num_rows_ = start_indices_.size();
+    auto [first_kept, last_kept_excl] = parse_row_ranges(window, segment_row_count, start_row_col, end_row_col);
+    num_rows_ = last_kept_excl > first_kept ? last_kept_excl - first_kept : 0;
     if (num_rows_ == 0) {
         return;
     }
 
     stats_by_column_ = load_stats_by_column(segment, stats_metadata, first_kept, last_kept_excl, num_rows_);
-    drop_duplicate_rows();
 }
 
-std::optional<size_t> ColumnStatsData::find_row(timestamp start_index, timestamp end_index) const {
-    if (auto it = index_to_row_.find({start_index, end_index}); it != index_to_row_.end()) {
+std::optional<size_t> ColumnStatsData::find_row(const pipelines::RowRange& row_range) const {
+    if (auto it = row_range_to_row_.find(row_range); it != row_range_to_row_.end()) {
         return it->second;
     }
     return std::nullopt;
@@ -412,9 +396,6 @@ FilterQuery<index::IndexSegmentReader> create_column_stats_filter(
             res->invert();
         }
 
-        auto start_index_col = isr.column(Fields::start_index).begin<stream::TimeseriesIndex::TypeDescTag>();
-        auto end_index_col = isr.column(Fields::end_index).begin<stream::TimeseriesIndex::TypeDescTag>();
-
         StatsRowIndices row_indices;
         row_indices.reserve(isr.size());
         [[maybe_unused]] size_t total_count = 0; // for debug logging only, unused in release build
@@ -425,9 +406,7 @@ FilterQuery<index::IndexSegmentReader> create_column_stats_filter(
                 continue;
             }
             total_count++;
-            timestamp start_idx = *(start_index_col + row);
-            timestamp end_idx = *(end_index_col + row);
-            row_indices.emplace_back(column_stats_data.find_row(start_idx, end_idx));
+            row_indices.emplace_back(column_stats_data.find_row(slice_row_range_at(isr, row)));
         }
         util::check(row_indices.size() == isr.size(), "Expected row_indices.size() == isr.size()");
 
@@ -509,11 +488,11 @@ SegmentInMemory partial_decode_column_stats_segment(
     ColumnStatsHeader header;
     bool unpacked = maybe_metadata->UnpackTo(&header);
     util::check(unpacked, "Could not unpack ColumnStatsHeader from column stats segment metadata");
-    validate_column_stats_header_version(header);
+    validate_column_stats_header_version(header, ColumnStatsHeaderVersionMismatchAction::Warn);
 
     std::unordered_set<std::string> retain_field_names;
-    retain_field_names.insert(start_index_column_name);
-    retain_field_names.insert(end_index_column_name);
+    retain_field_names.insert(start_row_column_name);
+    retain_field_names.insert(end_row_column_name);
     for (const auto& [data_col_offset, entry_list] : header.stats_by_column()) {
         std::string col_name{tsd.fields().at(data_col_offset).name()};
         if (!columns_of_interest.contains(col_name)) {
@@ -524,8 +503,8 @@ SegmentInMemory partial_decode_column_stats_segment(
         }
     }
 
-    // Preserve the order so start_index lands at offset 0 and end_index at offset 1, matching the
-    // start_index_column_offset / end_index_column_offset constants used downstream.
+    // Preserve the order so start_row lands at offset 0 and end_row at offset 1, matching the
+    // start_row_column_offset / end_row_column_offset constants used downstream.
     StreamDescriptor partial_desc;
     partial_desc.set_index(column_stats_segment.descriptor().index());
     for (const auto& field : column_stats_segment.descriptor().fields()) {
@@ -534,9 +513,9 @@ SegmentInMemory partial_decode_column_stats_segment(
         }
     }
     util::check(
-            partial_desc.fields().size() >= 2 && partial_desc.fields(0).name() == start_index_column_name &&
-                    partial_desc.fields(1).name() == end_index_column_name,
-            "Expected start_index/end_index at the front of the column stats segment"
+            partial_desc.fields().size() >= 2 && partial_desc.fields(0).name() == start_row_column_name &&
+                    partial_desc.fields(1).name() == end_row_column_name,
+            "Expected start_row/end_row at the front of the column stats segment"
     );
 
     SegmentInMemory partial(std::move(partial_desc), 0, AllocationType::DYNAMIC);
@@ -546,6 +525,54 @@ SegmentInMemory partial_decode_column_stats_segment(
     return partial;
 }
 
+namespace {
+// Restrict which rows in the column stats segment we parse.
+// This is a single RowRange spanning all the row ranges that survived build_row_read_query_filters,
+// narrowed by a DateRangeClause if the query had one. Empty if nothing survived.
+pipelines::RowRange row_window_of_interest(
+        const index::IndexSegmentReader& isr, const util::BitSet& surviving,
+        const std::optional<std::pair<timestamp, timestamp>>& date_range
+) {
+    using namespace pipelines;
+    std::optional<RowRange> window;
+    auto extend_to = [&window, &isr](size_t row) {
+        const auto slice_row_range = slice_row_range_at(isr, row);
+        if (window.has_value()) {
+            window = RowRange{
+                    std::min(window->first, slice_row_range.first), std::max(window->second, slice_row_range.second)
+            };
+        } else {
+            window = slice_row_range;
+        }
+    };
+
+    // A DateRangeClause prunes ranges_and_keys in structure_for_processing, which runs after
+    // filter_index, so it is not yet reflected in the bitset.
+    if (date_range.has_value() && isr.has_timestamp_index()) {
+        using TsTDT = stream::TimeseriesIndex::TypeDescTag;
+        const IndexRange date_filter{date_range->first, date_range->second};
+        auto start_index_it = isr.column(index::Fields::start_index).begin<TsTDT>();
+        auto end_index_it = isr.column(index::Fields::end_index).begin<TsTDT>();
+        for (size_t row = 0; row < isr.size(); ++row) {
+            if (!surviving.get_bit(row)) {
+                continue;
+            }
+            const IndexRange slice_index_range{*(start_index_it + row), *(end_index_it + row)};
+            if (is_slice_in_index_range(slice_index_range, date_filter, true)) {
+                extend_to(row);
+            }
+        }
+    } else {
+        for (size_t row = 0; row < isr.size(); ++row) {
+            if (surviving.get_bit(row)) {
+                extend_to(row);
+            }
+        }
+    }
+    return window.value_or(RowRange{0, 0});
+}
+} // namespace
+
 FilterQuery<index::IndexSegmentReader> create_column_stats_filter(
         std::shared_ptr<Segment> column_stats_compressed, const TimeseriesDescriptor& tsd,
         ColumnStatsQueryMetadata&& query_metadata
@@ -554,11 +581,26 @@ FilterQuery<index::IndexSegmentReader> create_column_stats_filter(
             query_metadata.should_try_column_stats_read(),
             "Should not try to create column stats filter if !should_try_column_stats_read()"
     );
-    SegmentInMemory partial_segment =
-            partial_decode_column_stats_segment(*column_stats_compressed, tsd, query_metadata.columns_of_interest);
-    ColumnStatsData column_stats{std::move(partial_segment), tsd, query_metadata.date_range};
-    ExpressionContext expression_context = *query_metadata.filter_expression;
-    return create_column_stats_filter(std::move(column_stats), std::move(expression_context));
+    return [column_stats_compressed = std::move(column_stats_compressed),
+            tsd,
+            query_metadata = std::move(query_metadata
+            )](const index::IndexSegmentReader& isr, std::unique_ptr<util::BitSet>&& input) mutable {
+        std::unique_ptr<util::BitSet> surviving;
+        if (input) {
+            surviving = std::move(input);
+        } else {
+            surviving = std::make_unique<util::BitSet>(static_cast<util::BitSetSizeType>(isr.size()));
+            surviving->invert();
+        }
+
+        auto window = row_window_of_interest(isr, *surviving, query_metadata.date_range);
+        SegmentInMemory partial_segment =
+                partial_decode_column_stats_segment(*column_stats_compressed, tsd, query_metadata.columns_of_interest);
+        ColumnStatsData column_stats{std::move(partial_segment), tsd, window};
+        ExpressionContext expression_context = *query_metadata.filter_expression;
+        auto filter = create_column_stats_filter(std::move(column_stats), std::move(expression_context));
+        return filter(isr, std::move(surviving));
+    };
 }
 
 } // namespace arcticdb

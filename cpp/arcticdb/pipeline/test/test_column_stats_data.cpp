@@ -6,16 +6,16 @@
 
 namespace arcticdb {
 // Helper to build a column stats SegmentInMemory with the expected schema:
-//   col 0: "start_index" (NANOSECONDS_UTC64)
-//   col 1: "end_index"   (NANOSECONDS_UTC64)
+//   col 0: "start_row" (UINT64)
+//   col 1: "end_row"   (UINT64)
 //   col 2: "v1_MIN(price)" (INT64)
 //   col 3: "v1_MAX(price)" (INT64)
 //
-// Each entry in |rows| is (start_index, end_index, min_price, max_price).
-// If a row's start_index is std::nullopt, that row has an absent start_index
+// Each entry in |rows| is (start_row, end_row, min_price, max_price).
+// If a row's start_row is std::nullopt, that row has an absent start_row
 struct StatsSegmentRow {
-    std::optional<timestamp> start_index;
-    std::optional<timestamp> end_index;
+    std::optional<uint64_t> start_row;
+    std::optional<uint64_t> end_row;
     int64_t min_price;
     int64_t max_price;
 };
@@ -38,19 +38,19 @@ TimeseriesDescriptor build_test_tsd() {
 SegmentInMemory build_stats_segment(const std::vector<StatsSegmentRow>& rows) {
     using namespace arcticc::pb2::column_stats_pb2;
 
-    auto start_col = std::make_shared<Column>(make_scalar_type(DataType::NANOSECONDS_UTC64), Sparsity::PERMITTED);
-    auto end_col = std::make_shared<Column>(make_scalar_type(DataType::NANOSECONDS_UTC64), Sparsity::PERMITTED);
+    auto start_col = std::make_shared<Column>(make_scalar_type(DataType::UINT64), Sparsity::PERMITTED);
+    auto end_col = std::make_shared<Column>(make_scalar_type(DataType::UINT64), Sparsity::PERMITTED);
     auto min_col = std::make_shared<Column>(make_scalar_type(DataType::INT64), Sparsity::PERMITTED);
     auto max_col = std::make_shared<Column>(make_scalar_type(DataType::INT64), Sparsity::PERMITTED);
 
     for (const auto& row : rows) {
-        if (row.start_index.has_value()) {
-            start_col->push_back<timestamp>(*row.start_index);
+        if (row.start_row.has_value()) {
+            start_col->push_back<uint64_t>(*row.start_row);
         } else {
             start_col->mark_absent_rows(1);
         }
-        if (row.end_index.has_value()) {
-            end_col->push_back<timestamp>(*row.end_index);
+        if (row.end_row.has_value()) {
+            end_col->push_back<uint64_t>(*row.end_row);
         } else {
             end_col->mark_absent_rows(1);
         }
@@ -66,8 +66,8 @@ SegmentInMemory build_stats_segment(const std::vector<StatsSegmentRow>& rows) {
 
     SegmentInMemory seg;
     seg.descriptor().set_index(IndexDescriptorImpl(IndexDescriptorImpl::Type::ROWCOUNT, 0));
-    seg.add_column(scalar_field(DataType::NANOSECONDS_UTC64, start_index_column_name), start_col);
-    seg.add_column(scalar_field(DataType::NANOSECONDS_UTC64, end_index_column_name), end_col);
+    seg.add_column(scalar_field(DataType::UINT64, start_row_column_name), start_col);
+    seg.add_column(scalar_field(DataType::UINT64, end_row_column_name), end_col);
     seg.add_column(scalar_field(DataType::INT64, "v1_MIN(price)"), min_col);
     seg.add_column(scalar_field(DataType::INT64, "v1_MAX(price)"), max_col);
     seg.set_row_data(last_row);
@@ -102,37 +102,37 @@ TEST(ColumnStatsDataTest, FindStatsAllRowsPresent) {
     ColumnStatsData data(std::move(seg), tsd);
     ASSERT_FALSE(data.empty());
 
-    auto row0 = data.find_row(100, 200);
+    auto row0 = data.find_row({100, 200});
     ASSERT_TRUE(row0.has_value());
     auto v0 = stats_for(data, "price", *row0);
     ASSERT_EQ(v0.min->get<int64_t>(), 10);
     ASSERT_EQ(v0.max->get<int64_t>(), 20);
 
-    auto row2 = data.find_row(500, 600);
+    auto row2 = data.find_row({500, 600});
     ASSERT_TRUE(row2.has_value());
     auto v2 = stats_for(data, "price", *row2);
     ASSERT_EQ(v2.min->get<int64_t>(), 50);
     ASSERT_EQ(v2.max->get<int64_t>(), 60);
 }
 
-// A malformed row (absent start_index) causes the entire ColumnStatsData to be discarded,
+// A malformed row (absent start_row) causes the entire ColumnStatsData to be discarded,
 // even if valid rows were already parsed.
 TEST(ColumnStatsDataTest, MalformedMiddleRowDiscardsAll) {
     auto seg = build_stats_segment({
             {100, 200, 10, 20},          // valid
-            {std::nullopt, 400, 30, 40}, // malformed — absent start_index
+            {std::nullopt, 400, 30, 40}, // malformed — absent start_row
             {500, 600, 50, 60},          // never reached
     });
 
     auto tsd = build_test_tsd();
     ColumnStatsData data(std::move(seg), tsd);
     ASSERT_TRUE(data.empty());
-    ASSERT_FALSE(data.find_row(100, 200).has_value());
-    ASSERT_FALSE(data.find_row(500, 600).has_value());
+    ASSERT_FALSE(data.find_row({100, 200}).has_value());
+    ASSERT_FALSE(data.find_row({500, 600}).has_value());
 }
 
-// Absent end_index also triggers discard.
-TEST(ColumnStatsDataTest, MalformedEndIndexDiscardsAll) {
+// Absent end_row also triggers discard.
+TEST(ColumnStatsDataTest, MalformedEndRowDiscardsAll) {
     auto seg = build_stats_segment({
             {100, std::nullopt, 10, 20},
     });
@@ -150,7 +150,7 @@ TEST(ColumnStatsDataTest, FindStatsNonExistentIndex) {
 
     auto tsd = build_test_tsd();
     ColumnStatsData data(std::move(seg), tsd);
-    ASSERT_FALSE(data.find_row(999, 888).has_value());
+    ASSERT_FALSE(data.find_row({999, 888}).has_value());
 }
 
 // An empty segment produces empty ColumnStatsData.
@@ -160,29 +160,23 @@ TEST(ColumnStatsDataTest, EmptySegment) {
     auto tsd = build_test_tsd();
     ColumnStatsData data(std::move(seg), tsd);
     ASSERT_TRUE(data.empty());
-    ASSERT_FALSE(data.find_row(0, 0).has_value());
+    ASSERT_FALSE(data.find_row({0, 0}).has_value());
 }
 
-// Two row-slices with the same (start_index, end_index) but different min/max stats.
-// This can happen with timestamp-indexed symbols when two segments span identical timestamp ranges
-// (e.g. segments where all rows share the same timestamp).
-// Both entries are dropped from the lookup so that find_row returns nullopt, forcing the
-// segments to be read without pruning rather than using the wrong stats.
-TEST(ColumnStatsDataTest, DuplicateIndexPairDropsBothRows) {
+// Row ranges are unique per row slice, so a repeated one means a corrupt segment. Unlike the
+// (start_index, end_index) key this replaced, there is no legitimate way to produce one, so say so
+// rather than silently dropping both rows.
+TEST(ColumnStatsDataTest, DuplicateRowRangeThrows) {
     auto seg = build_stats_segment({
-            {100, 200, 10, 20}, // row 0: price in [10, 20]
-            {100, 200, 50, 60}, // row 1: same index range, price in [50, 60]
+            {100, 200, 10, 20},
+            {100, 200, 50, 60},
     });
 
     auto tsd = build_test_tsd();
-    ColumnStatsData data(std::move(seg), tsd);
-    ASSERT_FALSE(data.empty());
-
-    // Neither row is reachable via find_row because the key is ambiguous.
-    ASSERT_FALSE(data.find_row(100, 200).has_value());
+    ASSERT_THROW(ColumnStatsData(std::move(seg), tsd), InternalException);
 }
 
-TEST(ColumnStatsDataTest, DateRangePrunesNonOverlappingRows) {
+TEST(ColumnStatsDataTest, WindowPrunesNonIntersectingRows) {
     auto seg = build_stats_segment({
             {100, 200, 10, 20},
             {300, 400, 30, 40},
@@ -191,26 +185,28 @@ TEST(ColumnStatsDataTest, DateRangePrunesNonOverlappingRows) {
     });
 
     auto tsd = build_test_tsd();
-    ColumnStatsData data(std::move(seg), tsd, std::make_pair<timestamp, timestamp>(250, 650));
+    ColumnStatsData data(std::move(seg), tsd, pipelines::RowRange{250, 650});
     ASSERT_FALSE(data.empty());
 
-    ASSERT_FALSE(data.find_row(100, 200).has_value());
-    ASSERT_FALSE(data.find_row(700, 800).has_value());
+    ASSERT_FALSE(data.find_row({100, 200}).has_value());
+    ASSERT_FALSE(data.find_row({700, 800}).has_value());
 
-    auto row1 = data.find_row(300, 400);
+    auto row1 = data.find_row({300, 400});
     ASSERT_TRUE(row1.has_value());
     auto v1 = stats_for(data, "price", *row1);
     ASSERT_EQ(v1.min->get<int64_t>(), 30);
     ASSERT_EQ(v1.max->get<int64_t>(), 40);
 
-    auto row2 = data.find_row(500, 600);
+    auto row2 = data.find_row({500, 600});
     ASSERT_TRUE(row2.has_value());
     auto v2 = stats_for(data, "price", *row2);
     ASSERT_EQ(v2.min->get<int64_t>(), 50);
     ASSERT_EQ(v2.max->get<int64_t>(), 60);
 }
 
-TEST(ColumnStatsDataTest, DateRangeBoundariesAreInclusive) {
+// Row ranges are half-open, so a slice is of interest iff it overlaps the window: touching it at
+// either end is not enough.
+TEST(ColumnStatsDataTest, WindowBoundariesAreHalfOpen) {
     auto seg = build_stats_segment({
             {100, 200, 10, 20},
             {300, 400, 30, 40},
@@ -219,46 +215,30 @@ TEST(ColumnStatsDataTest, DateRangeBoundariesAreInclusive) {
     });
 
     auto tsd = build_test_tsd();
-    ColumnStatsData data(std::move(seg), tsd, std::make_pair<timestamp, timestamp>(200, 500));
+    ColumnStatsData data(std::move(seg), tsd, pipelines::RowRange{200, 500});
     ASSERT_FALSE(data.empty());
 
-    ASSERT_TRUE(data.find_row(100, 200).has_value());
-    ASSERT_TRUE(data.find_row(300, 400).has_value());
-    ASSERT_TRUE(data.find_row(500, 600).has_value());
-    ASSERT_FALSE(data.find_row(700, 800).has_value());
+    ASSERT_FALSE(data.find_row({100, 200}).has_value()); // ends exactly where the window starts
+    ASSERT_TRUE(data.find_row({300, 400}).has_value());
+    ASSERT_FALSE(data.find_row({500, 600}).has_value()); // starts exactly where the window ends
+    ASSERT_FALSE(data.find_row({700, 800}).has_value());
 }
 
-// Duplicate keys are dropped but non-duplicate keys in the same segment are unaffected.
-TEST(ColumnStatsDataTest, DuplicateIndexPairDoesNotAffectOtherRows) {
+// An empty window is what row_window_of_interest returns when no row slice survived the preceding
+// queries. Nothing is parsed, and nothing is prunable, which is moot because nothing is left.
+TEST(ColumnStatsDataTest, EmptyWindowParsesNothing) {
     auto seg = build_stats_segment({
-            {100, 300, 10, 20}, // row 0: unique key
-            {300, 400, 30, 40}, // row 1: duplicate key (first)
-            {300, 400, 50, 60}, // row 2: duplicate key (second)
-            {400, 600, 70, 80}, // row 3: unique key
+            {100, 200, 10, 20},
+            {300, 400, 30, 40},
     });
 
     auto tsd = build_test_tsd();
-    ColumnStatsData data(std::move(seg), tsd);
-    ASSERT_FALSE(data.empty());
-
-    // Unique rows are still reachable.
-    auto row0 = data.find_row(100, 300);
-    ASSERT_TRUE(row0.has_value());
-    auto v0 = stats_for(data, "price", *row0);
-    ASSERT_EQ(v0.min->get<int64_t>(), 10);
-    ASSERT_EQ(v0.max->get<int64_t>(), 20);
-
-    auto row3 = data.find_row(400, 600);
-    ASSERT_TRUE(row3.has_value());
-    auto v3 = stats_for(data, "price", *row3);
-    ASSERT_EQ(v3.min->get<int64_t>(), 70);
-    ASSERT_EQ(v3.max->get<int64_t>(), 80);
-
-    // Duplicate key is not reachable.
-    ASSERT_FALSE(data.find_row(300, 400).has_value());
+    ColumnStatsData data(std::move(seg), tsd, pipelines::RowRange{0, 0});
+    ASSERT_TRUE(data.empty());
+    ASSERT_FALSE(data.find_row({100, 200}).has_value());
 }
 
-TEST(ColumnStatsDataTest, NonMonotonicStartIndexThrows) {
+TEST(ColumnStatsDataTest, NonMonotonicStartRowThrows) {
     auto seg = build_stats_segment({
             {100, 200, 10, 20},
             {300, 400, 30, 40},
@@ -269,39 +249,6 @@ TEST(ColumnStatsDataTest, NonMonotonicStartIndexThrows) {
     ASSERT_THROW(ColumnStatsData(std::move(seg), tsd), InternalException);
 }
 
-// Writers only sort on start_index, so when two rows share a start_index their end_indexes
-// can appear in any order. Like normal reads, ColumnStatsData must accept this rather than throwing,
-// even though this suggests an out of order index.
-TEST(ColumnStatsDataTest, NonMonotonicEndIndexesAllowed) {
-    auto seg = build_stats_segment({
-            {100, 300, 10, 20},
-            {100, 200, 30, 40},
-            {200, 400, 50, 60},
-    });
-
-    auto tsd = build_test_tsd();
-    ColumnStatsData data(std::move(seg), tsd);
-    ASSERT_FALSE(data.empty());
-
-    auto row0 = data.find_row(100, 300);
-    ASSERT_TRUE(row0.has_value());
-    auto v0 = stats_for(data, "price", *row0);
-    ASSERT_EQ(v0.min->get<int64_t>(), 10);
-    ASSERT_EQ(v0.max->get<int64_t>(), 20);
-
-    auto row1 = data.find_row(100, 200);
-    ASSERT_TRUE(row1.has_value());
-    auto v1 = stats_for(data, "price", *row1);
-    ASSERT_EQ(v1.min->get<int64_t>(), 30);
-    ASSERT_EQ(v1.max->get<int64_t>(), 40);
-
-    auto row2 = data.find_row(200, 400);
-    ASSERT_TRUE(row2.has_value());
-    auto v2 = stats_for(data, "price", *row2);
-    ASSERT_EQ(v2.min->get<int64_t>(), 50);
-    ASSERT_EQ(v2.max->get<int64_t>(), 60);
-}
-
 // Build a two-column stats segment where "volume" is absent (sparse) for certain rows.
 // Verify that values_for_column reports column_absent = true for those entries.
 TEST(ColumnStatsDataTest, SparseColumnAbsentMarkedCorrectly) {
@@ -309,8 +256,8 @@ TEST(ColumnStatsDataTest, SparseColumnAbsentMarkedCorrectly) {
 
     // Two data columns: price (offset 1) and volume (offset 2) in the TSD.
     // Stats segment layout:
-    //   col 0: start_index
-    //   col 1: end_index
+    //   col 0: start_row
+    //   col 1: end_row
     //   col 2: v1_MIN(price)
     //   col 3: v1_MAX(price)
     //   col 4: v1_MIN(volume)
@@ -319,24 +266,24 @@ TEST(ColumnStatsDataTest, SparseColumnAbsentMarkedCorrectly) {
     // Row 0: price=[10,20], volume=[100,200]  (both present)
     // Row 1: price=[30,40], volume absent      (sparse)
 
-    auto start_col = std::make_shared<Column>(make_scalar_type(DataType::NANOSECONDS_UTC64), Sparsity::PERMITTED);
-    auto end_col = std::make_shared<Column>(make_scalar_type(DataType::NANOSECONDS_UTC64), Sparsity::PERMITTED);
+    auto start_col = std::make_shared<Column>(make_scalar_type(DataType::UINT64), Sparsity::PERMITTED);
+    auto end_col = std::make_shared<Column>(make_scalar_type(DataType::UINT64), Sparsity::PERMITTED);
     auto min_price_col = std::make_shared<Column>(make_scalar_type(DataType::INT64), Sparsity::PERMITTED);
     auto max_price_col = std::make_shared<Column>(make_scalar_type(DataType::INT64), Sparsity::PERMITTED);
     auto min_vol_col = std::make_shared<Column>(make_scalar_type(DataType::INT64), Sparsity::PERMITTED);
     auto max_vol_col = std::make_shared<Column>(make_scalar_type(DataType::INT64), Sparsity::PERMITTED);
 
     // Row 0: all present
-    start_col->push_back<timestamp>(100);
-    end_col->push_back<timestamp>(200);
+    start_col->push_back<uint64_t>(100);
+    end_col->push_back<uint64_t>(200);
     min_price_col->push_back<int64_t>(10);
     max_price_col->push_back<int64_t>(20);
     min_vol_col->push_back<int64_t>(100);
     max_vol_col->push_back<int64_t>(200);
 
     // Row 1: volume absent
-    start_col->push_back<timestamp>(300);
-    end_col->push_back<timestamp>(400);
+    start_col->push_back<uint64_t>(300);
+    end_col->push_back<uint64_t>(400);
     min_price_col->push_back<int64_t>(30);
     max_price_col->push_back<int64_t>(40);
     min_vol_col->mark_absent_rows(1);
@@ -345,8 +292,8 @@ TEST(ColumnStatsDataTest, SparseColumnAbsentMarkedCorrectly) {
     ssize_t last_row = 1;
     SegmentInMemory seg;
     seg.descriptor().set_index(IndexDescriptorImpl(IndexDescriptorImpl::Type::ROWCOUNT, 0));
-    seg.add_column(scalar_field(DataType::NANOSECONDS_UTC64, start_index_column_name), start_col);
-    seg.add_column(scalar_field(DataType::NANOSECONDS_UTC64, end_index_column_name), end_col);
+    seg.add_column(scalar_field(DataType::UINT64, start_row_column_name), start_col);
+    seg.add_column(scalar_field(DataType::UINT64, end_row_column_name), end_col);
     seg.add_column(scalar_field(DataType::INT64, "v1_MIN(price)"), min_price_col);
     seg.add_column(scalar_field(DataType::INT64, "v1_MAX(price)"), max_price_col);
     seg.add_column(scalar_field(DataType::INT64, "v1_MIN(volume)"), min_vol_col);
@@ -387,7 +334,7 @@ TEST(ColumnStatsDataTest, SparseColumnAbsentMarkedCorrectly) {
     ColumnStatsData data(std::move(seg), tsd);
     ASSERT_FALSE(data.empty());
 
-    auto row0 = data.find_row(100, 200);
+    auto row0 = data.find_row({100, 200});
     ASSERT_TRUE(row0.has_value());
     auto p0 = stats_for(data, "price", *row0);
     ASSERT_TRUE(p0.min.has_value());
@@ -399,7 +346,7 @@ TEST(ColumnStatsDataTest, SparseColumnAbsentMarkedCorrectly) {
     ASSERT_EQ(v0.min->get<int64_t>(), 100);
     ASSERT_FALSE(v0.column_absent);
 
-    auto row1 = data.find_row(300, 400);
+    auto row1 = data.find_row({300, 400});
     ASSERT_TRUE(row1.has_value());
     auto p1 = stats_for(data, "price", *row1);
     ASSERT_TRUE(p1.min.has_value());
@@ -419,8 +366,8 @@ TEST(ColumnStatsDataTest, AllNullSliceKeepsCountsAndNotAbsent) {
     using namespace arcticc::pb2::column_stats_pb2;
 
     // Stats segment layout:
-    //   col 0: start_index
-    //   col 1: end_index
+    //   col 0: start_row
+    //   col 1: end_row
     //   col 2: v1_MIN(price)
     //   col 3: v1_MAX(price)
     //   col 4: v1_NAN_COUNT(price)
@@ -429,24 +376,24 @@ TEST(ColumnStatsDataTest, AllNullSliceKeepsCountsAndNotAbsent) {
     // Row 0: price=[10,20]            (real values)
     // Row 1: price all null           (no MIN/MAX, null_count=3)
 
-    auto start_col = std::make_shared<Column>(make_scalar_type(DataType::NANOSECONDS_UTC64), Sparsity::PERMITTED);
-    auto end_col = std::make_shared<Column>(make_scalar_type(DataType::NANOSECONDS_UTC64), Sparsity::PERMITTED);
+    auto start_col = std::make_shared<Column>(make_scalar_type(DataType::UINT64), Sparsity::PERMITTED);
+    auto end_col = std::make_shared<Column>(make_scalar_type(DataType::UINT64), Sparsity::PERMITTED);
     auto min_price_col = std::make_shared<Column>(make_scalar_type(DataType::INT64), Sparsity::PERMITTED);
     auto max_price_col = std::make_shared<Column>(make_scalar_type(DataType::INT64), Sparsity::PERMITTED);
     auto nan_count_col = std::make_shared<Column>(make_scalar_type(DataType::UINT64), Sparsity::PERMITTED);
     auto null_count_col = std::make_shared<Column>(make_scalar_type(DataType::UINT64), Sparsity::PERMITTED);
 
     // Row 0: real values present, no nulls
-    start_col->push_back<timestamp>(100);
-    end_col->push_back<timestamp>(200);
+    start_col->push_back<uint64_t>(100);
+    end_col->push_back<uint64_t>(200);
     min_price_col->push_back<int64_t>(10);
     max_price_col->push_back<int64_t>(20);
     nan_count_col->push_back<uint64_t>(0);
     null_count_col->push_back<uint64_t>(0);
 
     // Row 1: all null - min/max absent, counts present
-    start_col->push_back<timestamp>(300);
-    end_col->push_back<timestamp>(400);
+    start_col->push_back<uint64_t>(300);
+    end_col->push_back<uint64_t>(400);
     min_price_col->mark_absent_rows(1);
     max_price_col->mark_absent_rows(1);
     nan_count_col->push_back<uint64_t>(0);
@@ -455,8 +402,8 @@ TEST(ColumnStatsDataTest, AllNullSliceKeepsCountsAndNotAbsent) {
     ssize_t last_row = 1;
     SegmentInMemory seg;
     seg.descriptor().set_index(IndexDescriptorImpl(IndexDescriptorImpl::Type::ROWCOUNT, 0));
-    seg.add_column(scalar_field(DataType::NANOSECONDS_UTC64, start_index_column_name), start_col);
-    seg.add_column(scalar_field(DataType::NANOSECONDS_UTC64, end_index_column_name), end_col);
+    seg.add_column(scalar_field(DataType::UINT64, start_row_column_name), start_col);
+    seg.add_column(scalar_field(DataType::UINT64, end_row_column_name), end_col);
     seg.add_column(scalar_field(DataType::INT64, "v1_MIN(price)"), min_price_col);
     seg.add_column(scalar_field(DataType::INT64, "v1_MAX(price)"), max_price_col);
     seg.add_column(scalar_field(DataType::UINT64, "v1_NAN_COUNT(price)"), nan_count_col);
@@ -486,7 +433,7 @@ TEST(ColumnStatsDataTest, AllNullSliceKeepsCountsAndNotAbsent) {
     ColumnStatsData data(std::move(seg), build_test_tsd());
     ASSERT_FALSE(data.empty());
 
-    auto row0 = data.find_row(100, 200);
+    auto row0 = data.find_row({100, 200});
     ASSERT_TRUE(row0.has_value());
     auto v0 = stats_for(data, "price", *row0);
     ASSERT_TRUE(v0.min.has_value());
@@ -495,7 +442,7 @@ TEST(ColumnStatsDataTest, AllNullSliceKeepsCountsAndNotAbsent) {
     ASSERT_EQ(v0.max->get<int64_t>(), 20);
     ASSERT_FALSE(v0.column_absent);
 
-    auto row1 = data.find_row(300, 400);
+    auto row1 = data.find_row({300, 400});
     ASSERT_TRUE(row1.has_value());
     auto v1 = stats_for(data, "price", *row1);
     ASSERT_FALSE(v1.min.has_value());

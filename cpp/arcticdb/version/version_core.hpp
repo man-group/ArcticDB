@@ -78,7 +78,8 @@ folly::Future<IndexInformation> read_index_key_without_column_stats(
 AtomKey index_key_to_column_stats_key(const IndexTypeKey& index_key);
 
 void create_column_stats_impl(
-        const std::shared_ptr<Store>& store, const VersionedItem& versioned_item, const ReadOptions& read_options
+        const std::shared_ptr<Store>& store, const VersionedItem& versioned_item, const ReadOptions& read_options,
+        const std::shared_ptr<ReadQuery>& read_query
 );
 
 void drop_column_stats_impl(const std::shared_ptr<Store>& store, const VersionedItem& versioned_item);
