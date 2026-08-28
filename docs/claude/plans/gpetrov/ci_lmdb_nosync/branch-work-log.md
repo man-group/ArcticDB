@@ -81,3 +81,21 @@ Branched from `gpetrov/ci_speedup` (PR #3350, Windows Defender exclusion) so CI 
   pytest_args = "ARCTICDB_LMDBStorage_ExtraFlags_int=327680 pytest -n 4 --count=2 -v <the 3 files>" so Windows jobs
   run NOSYNC|NOMETASYNC (~50% hit rate per job) and Linux jobs act as control. Then the same with 262144
   (NOMETASYNC only: data still flushed, meta via the buffered handle) to split meta-path vs data-flush.
+
+## Root cause found and fixed (2026-08-28)
+
+- Diagnostics from run 33190522184 showed ASCII log text (`arcticdb | ... V1 ... deprecated`) inside LMDB's meta
+  pages, both in memory and in `data.mdb` on disk.
+- Cause: spdlog's `stderr_sink_mt` (ArcticDB's default sink) caches `_get_osfhandle(_fileno(stderr))` at
+  construction on Windows and writes with `WriteFile(handle_, ...)`. pytest capture `dup2`s a temp file over fd 2,
+  the CRT closes the original HANDLE, Windows recycles that handle value for the next `CreateFileW` — LMDB's
+  `data.mdb` — and every later log line lands in the database at its current file offset (the meta pages at the
+  start of the file). Windows-only, test-only; explains the ~1/50 master flakes (`MDB_CORRUPTED`, `MDB_PAGE_NOTFOUND`)
+  and why NOSYNC raised the rate (more tests hit the warn path between syncs).
+- Fix: `cpp/arcticdb/log/console_sink.hpp` — `ConsoleSink` writes via `fwrite(stderr/stdout)` + `fflush`, which
+  resolves the handle from the fd on each call. `make_console_sink()` in `log.cpp` is used for the default logger
+  and for `console` sinks from config (ANSI colour sinks kept off Windows only). Regression gtest
+  `TestLog.ConsoleSinkFollowsStderrRedirection` dup2s a file over fd 2 after the sink is created and asserts the
+  line lands in that file.
+- Next: commit/push, rerun the NOSYNC repro dispatch (expect 0 LMDB errors), then set
+  `ARCTICDB_LMDBStorage_ExtraFlags_int: 327680` on Windows test jobs and re-measure a full build.
