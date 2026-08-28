@@ -222,3 +222,9 @@ Interested in learning more about ArcticDB? Head over to our [blog](https://medi
 
 Do you have any questions or issues? Chat to us and other users through our dedicated Slack Workspace - sign up for Slack access on [our website](https://arcticdb.io).
 
+### Community projects
+
+The following independently maintained community projects extend the ArcticDB ecosystem:
+
+- [arcticdb-mcp](https://github.com/YMuskrat/arcticdb_mcp): A community-maintained Model Context Protocol server that enables compatible AI assistants and agents to interact with ArcticDB libraries, symbols, versions, snapshots, batch operations and queries.
+
