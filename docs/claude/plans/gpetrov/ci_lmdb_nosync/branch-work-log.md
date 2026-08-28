@@ -42,3 +42,42 @@ Branched from `gpetrov/ci_speedup` (PR #3350, Windows Defender exclusion) so CI 
 - History (last 20 failed build runs, Windows test jobs): 3 jobs on other branches incl. master already show
   LMDB read-corruption errors in sync mode (`MDB_CORRUPTED` mdb_get on master run 30895908105; `MDB_BAD_TXN` on
   30527747377, 30466219731). Pre-existing Windows flakiness; WRITEMAP is expected to remove it as well.
+- Run 33172769498 (WRITEMAP|NOSYNC): Windows unit still 13-17 min, but 4 of 8 Windows unit jobs failed with LMDB
+  errors (`MDB_BAD_TXN` mdb_get x8, `MDB_PAGE_NOTFOUND` mdb_put x2) in test_parallel, test_empty_column_type,
+  test_recursive_normalizers. WRITEMAP removes the WriteFile/mapping split, so the coherence theory is wrong.
+  Whatever breaks scales with commit rate -> suspect a latent ArcticDB-side LMDB usage bug (txn/thread) that the
+  fsync per commit was masking. Next: does Linux break under the same flags (local full unit run); audit
+  lmdb_storage.cpp txn usage.
+- Linux under WRITEMAP|NOSYNC (local, debug build, 8 xdist workers): full `unit` suite 18462 passed / 0 LMDB
+  errors (48 errors = missing local mongod/azurite), and the 4 Windows-failing tests x20 = 24380 passed. So the
+  fast-commit breakage is Windows-specific; not an ArcticDB txn/thread bug reproducible on Linux.
+- Observation: on Windows every LMDB failure was in a 4-worker xdist job; the serial (`-n 0`) `stress` jobs never
+  failed in any run. Next probe: the 3 failing test files x3 with `-n 0` on Windows via `pytest_args`.
+- Probe run 33182222047 (WRITEMAP|NOSYNC, `-n 0`, 3 files x3 per job): 30 of 37 Windows jobs hit LMDB errors, i.e.
+  worse serially. Root cause found in the job logs: C: (where %TEMP% and every LMDB test library live) ended at
+  100% full, with 34x `mdb_env_open: There is not enough space on the disk`. Sync-mode control jobs end at 68% used,
+  plain-NOSYNC jobs at 84%, WRITEMAP jobs at 100%: a writable file mapping makes Windows back the whole map_size
+  (2 GiB per URI-created library, 100 GB for the `map_size=100GB` fixture) whereas LMDB's SetEndOfFile
+  pre-extension is lazy. With NOSYNC there is no flush to report ERROR_DISK_FULL, so pages are lost silently ->
+  PAGE_NOTFOUND / BAD_TXN. WRITEMAP is therefore unusable for the Windows test suite regardless of temp location.
+- Plain NOSYNC (exp 3) jobs were NOT disk-full (41-46 GB free), so its MDB_MAP_RESIZED is a separate Windows-only
+  effect; mechanism still unknown after reading mdb.c 0.9.35 (no overlapped I/O; meta goes via the buffered
+  handle; reader txnid retry loop present). Failure rate ~1 per 2 Windows unit jobs; not shippable.
+- Side findings: (1) fixture cleanup warnings (`ExceptionInCleanUpWarning`, file in use) are 0 in sync-mode jobs
+  and ~24 in NOSYNC jobs - Windows keeps a closed file "in use" while the cache manager still holds dirty pages;
+  (2) `test_recursive_normalizer_with_custom_class` is not repeat-safe (fails on `--count` repeats 2+);
+  (3) the custom `pytest_args` path breaks on macOS py3.10 (`setup.py protoc` needs pkg_resources).
+- Decision: CI value reverted to 0 (knob kept, opt-in, documented with the caveats). Windows LMDB speed-up is
+  parked; remaining CI levers are matrix policy, hypothesis max_examples on Windows/macOS, and sharding.
+
+## Root-cause investigation (started 2026-08-28)
+- Added `LmdbEnvDiagnostics` (`lmdb_storage.{hpp,cpp}`): on MAP_RESIZED / PAGE_NOTFOUND / CORRUPTED / BAD_TXN /
+  PANIC / INVALID the raised message and the storage log now carry mdb_env_info/stat (mapsize, last_pgno,
+  last_txnid, readers, flags) plus both meta pages read from data.mdb via pread/ReadFile (bypassing the map):
+  magic, version, mapsize, psize, roots, last_pg, txnid. Purpose: at the failure point, tell apart "map and file
+  disagree" (Windows mapping coherence), "both garbage" (earlier corruption) and "both sane" (LMDB in-memory state).
+  gtests `LmdbDiagnostics.*` pass locally; `LmdbStorage::diagnostics()` is public for tooling.
+- Repro plan on CI (no workflow change): dispatch with
+  pytest_args = "ARCTICDB_LMDBStorage_ExtraFlags_int=327680 pytest -n 4 --count=2 -v <the 3 files>" so Windows jobs
+  run NOSYNC|NOMETASYNC (~50% hit rate per job) and Linux jobs act as control. Then the same with 262144
+  (NOMETASYNC only: data still flushed, meta via the buffered handle) to split meta-path vs data-flush.

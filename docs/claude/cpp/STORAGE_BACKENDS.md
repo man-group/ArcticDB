@@ -163,9 +163,11 @@ lib = ac.create_library("mylib", library_options=LibraryOptions(
 ### Runtime configuration
 
 - `LMDBStorage.ExtraFlags` (env `ARCTICDB_LMDBStorage_ExtraFlags_int`): extra `MDB_*` flags passed to `mdb_env_open`
-  for every LMDB env opened by the process (`lmdb_extra_env_flags()` in `lmdb_storage.cpp`). CI sets
-  `MDB_WRITEMAP | MDB_NOSYNC` (0x90000) on Windows test jobs to skip the fsync per commit. Plain `MDB_NOSYNC` gave
-  sporadic `MDB_MAP_RESIZED` on Windows (WriteFile vs mapped-view coherence is not guaranteed there). Default 0.
+  for every LMDB env opened by the process (`lmdb_extra_env_flags()` in `lmdb_storage.cpp`). Opt-in, default 0.
+  Skipping the fsync per commit makes the Windows CI unit jobs ~3x faster but is not enabled: `MDB_NOSYNC` gave
+  sporadic `MDB_MAP_RESIZED` on Windows (cause unknown), and `MDB_WRITEMAP` makes Windows allocate the full
+  `map_size` per library on disk, which filled the runner disk and silently lost pages. See
+  `docs/claude/plans/gpetrov/ci_lmdb_nosync/branch-work-log.md`.
 - `LMDBStorage.WarnIfOpened`: see `warn_if_lmdb_already_open()`.
 
 ### Limitations
