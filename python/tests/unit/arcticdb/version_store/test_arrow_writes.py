@@ -2248,10 +2248,6 @@ def test_roundtrip_string_types_batch(in_memory_version_store_arrow):
     assert received_1.schema.field(2).type == pa.dictionary(pa.int32(), pa.large_string())
 
 
-@pytest.mark.xfail(
-    reason="Monday 12841500984: Not worth making work on this branch as will need re-coding after #3326 is merged",
-    strict=True,
-)
 def test_symbol_concat_arrow_string_types(in_memory_version_store_arrow):
     lib = in_memory_version_store_arrow
     sym_0 = "test_symbol_concat_arrow_string_types_0"
@@ -2293,11 +2289,11 @@ def test_symbol_concat_arrow_string_types(in_memory_version_store_arrow):
     received = lib.batch_read_and_join([sym_0, sym_1], QueryBuilder().concat()).data
     assert received.schema.field(0).type == pa.string()
     assert received.schema.field(1).type == pa.large_string()
-    assert received.schema.field(2).type == pa.large_string()
-    assert received.schema.field(3).type == pa.large_string()
+    assert received.schema.field(2).type == pa.dictionary(pa.int32(), pa.large_string())
+    assert received.schema.field(3).type == pa.string()
     assert received.schema.field(4).type == pa.large_string()
-    assert received.schema.field(5).type == pa.large_string()
-    assert received.schema.field(6).type == pa.large_string()
+    assert received.schema.field(5).type == pa.dictionary(pa.int32(), pa.large_string())
+    assert received.schema.field(6).type == pa.string()
     assert received.schema.field(7).type == pa.large_string()
     assert received.schema.field(8).type == pa.dictionary(pa.int32(), pa.large_string())
     assert received.schema.field(9).type == pa.string()
