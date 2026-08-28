@@ -44,7 +44,7 @@ def test_compat_exception():
 
 def test_pickling_error(lmdb_version_store):
     lmdb_version_store.write("sym", [1, 2, 3])
-    with pytest.raises(InternalException):
+    with pytest.raises(NormalizationException):
         lmdb_version_store.append("sym", [4, 5, 6])
 
 
