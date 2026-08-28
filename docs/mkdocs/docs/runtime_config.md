@@ -114,6 +114,16 @@ Values:
 * 0: Use WinHTTP
 * 1: Use WinINet
 
+### LMDBStorage.ExtraFlags
+
+Extra LMDB environment flags (a bitwise OR of `MDB_*` values from `lmdb.h`) applied to every LMDB library opened by the
+process, on top of the flags in the library's storage config.
+
+Intended for throwaway data such as test suites, where `MDB_NOSYNC | MDB_NOMETASYNC` (`0x50000`, i.e. `327680`) avoids
+an fsync on every commit. Do not use those flags for data you need to survive a crash or power loss.
+
+Default: 0 (no extra flags).
+
 ### VersionStore.NumCPUThreads and VersionStore.NumIOThreads
 
 ArcticDB uses two threadpools in order to manage computational resources:

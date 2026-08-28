@@ -23,6 +23,11 @@ struct LmdbInstance {
     std::unordered_map<std::string, std::unique_ptr<::lmdb::dbi>> dbi_by_key_type_;
 };
 
+/// Environment flags for the LMDB env: the config's flags OR-ed with LMDBStorage.ExtraFlags from ConfigsMap.
+/// The latter lets a process opt into e.g. MDB_NOSYNC | MDB_NOMETASYNC (via ARCTICDB_LMDBStorage_ExtraFlags_int)
+/// without changing the library config, e.g. to avoid an fsync per commit on CI where durability is irrelevant.
+unsigned int lmdb_env_flags(const arcticdb::proto::lmdb_storage::Config& conf);
+
 class LmdbStorage final : public Storage {
   public:
     using Config = arcticdb::proto::lmdb_storage::Config;

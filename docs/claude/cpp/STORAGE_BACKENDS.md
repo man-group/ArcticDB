@@ -160,6 +160,13 @@ lib = ac.create_library("mylib", library_options=LibraryOptions(
 | `cpp/arcticdb/storage/lmdb/lmdb_storage.cpp` | LMDB storage implementation |
 | `cpp/third_party/lmdbxx/` | LMDB C++ wrapper |
 
+### Runtime configuration
+
+- `LMDBStorage.ExtraFlags` (env `ARCTICDB_LMDBStorage_ExtraFlags_int`): extra `MDB_*` env flags OR-ed into every
+  LMDB env opened by the process (`lmdb_env_flags()` in `lmdb_storage.cpp`). CI sets `MDB_NOSYNC | MDB_NOMETASYNC`
+  (0x50000) on Windows test jobs to skip the fsync per commit. Default 0.
+- `LMDBStorage.WarnIfOpened`: see `warn_if_lmdb_already_open()`.
+
 ### Limitations
 
 - **Single process**: LMDB doesn't support multiple processes writing simultaneously

@@ -750,6 +750,9 @@ jobs:
           ARCTICDB_WARN_ON_WRITING_EMPTY_DATAFRAME: 0
           ARCTICDB_LMDBSTORAGE_WARNIFOPENED_STR: all
           ARCTICDB_PYTEST_INFER_STRING: ${{ matrix.infer_string_id == '-inferstr' && '1' || '0' }}
+          # MDB_NOSYNC | MDB_NOMETASYNC (0x50000): skip the fsync per LMDB commit, which dominates the
+          # small-write-heavy tests on NTFS. Test data is throwaway so durability is irrelevant.
+          ARCTICDB_LMDBStorage_ExtraFlags_int: ${{ matrix.os == 'windows' && '327680' || '0' }}
 
       - name: Collect crash dumps (Windows)
         if: matrix.os == 'windows' && failure()

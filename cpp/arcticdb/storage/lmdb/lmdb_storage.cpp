@@ -405,6 +405,11 @@ T or_else(T val, T or_else_val, T def = T()) {
 }
 } // namespace
 
+unsigned int lmdb_env_flags(const arcticdb::proto::lmdb_storage::Config& conf) {
+    const auto extra_flags = ConfigsMap::instance()->get_int("LMDBStorage.ExtraFlags", 0);
+    return static_cast<unsigned int>(conf.flags()) | static_cast<unsigned int>(extra_flags);
+}
+
 LmdbStorage::LmdbStorage(const LibraryPath& library_path, OpenMode mode, const Config& conf) :
     Storage(library_path, mode) {
     if (conf.use_mock_storage_for_testing()) {
@@ -417,7 +422,7 @@ LmdbStorage::LmdbStorage(const LibraryPath& library_path, OpenMode mode, const C
     lib_dir_ = root_path / lib_path_str;
 
     write_mutex_ = std::make_unique<std::mutex>();
-    lmdb_instance_ = std::make_shared<LmdbInstance>(LmdbInstance{::lmdb::env::create(conf.flags()), {}});
+    lmdb_instance_ = std::make_shared<LmdbInstance>(LmdbInstance{::lmdb::env::create(lmdb_env_flags(conf)), {}});
 
     warn_if_lmdb_already_open();
 
