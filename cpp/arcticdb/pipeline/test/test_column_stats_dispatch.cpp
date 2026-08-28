@@ -179,7 +179,8 @@ TEST_P(UnaryBooleanStatsFromColumnStatsTest, AllCombinations) {
     auto [min_opt, max_opt, op, expected] = GetParam();
     ColumnStatsValues stats{
             min_opt.has_value() ? std::optional<Value>{construct_value(*min_opt)} : std::nullopt,
-            max_opt.has_value() ? std::optional<Value>{construct_value(*max_opt)} : std::nullopt
+            max_opt.has_value() ? std::optional<Value>{construct_value(*max_opt)} : std::nullopt,
+            IsNullStats{0, 1}
     };
     ASSERT_EQ(unary_boolean_stats(stats, op), expected);
 }
@@ -228,6 +229,165 @@ INSTANTIATE_TEST_SUITE_P(
         )
 );
 
+// Tests for unary_null_stats(ColumnStatsValues, OperationType) — ISNULL/NOTNULL pruning.
+// Parameters: (has_min, isnull_stats, column_absent, op, expected)
+// isnull_stats is nullopt to represent "no stats found for this row-slice", distinct from a
+// populated stats row that counted zero nulls (isnull_count 0, but slice_row_count still set).
+struct UnaryNullStatsParams {
+    bool has_min;
+    std::optional<IsNullStats> isnull_stats;
+    bool column_absent;
+    OperationType op;
+    StatsComparison expected;
+};
+
+class UnaryNullStatsFromColumnStatsTest : public ::testing::TestWithParam<UnaryNullStatsParams> {};
+
+TEST_P(UnaryNullStatsFromColumnStatsTest, AllCombinations) {
+    auto params = GetParam();
+    ColumnStatsValues stats;
+    if (params.has_min) {
+        stats.min = construct_value(1.0);
+        stats.max = construct_value(1.0);
+    }
+    stats.isnull_stats = params.isnull_stats;
+    stats.column_absent = params.column_absent;
+    ASSERT_EQ(unary_null_stats(stats, params.op), params.expected);
+}
+
+// column_absent inverts relative to value comparisons: absent from the row-slice decodes as an
+// all-gaps sparse column, so ISNULL is true for every row.
+INSTANTIATE_TEST_SUITE_P(
+        ColumnAbsent, UnaryNullStatsFromColumnStatsTest,
+        ::testing::Values(
+                UnaryNullStatsParams{false, std::nullopt, true, OperationType::ISNULL, StatsComparison::ALL_MATCH},
+                UnaryNullStatsParams{false, std::nullopt, true, OperationType::NOTNULL, StatsComparison::NONE_MATCH}
+        )
+);
+
+// Default-constructed ColumnStatsValues (min absent, isnull_stats nullopt, column_absent false) is
+// what values_for_column leaves when there are no stats at all for this row-slice. It must come out
+// UNKNOWN, checked before the has_value() arithmetic below runs at all — bundling isnull_count and
+// slice_row_count into one optional means there is no way to read a slice_row_count of 0 from a
+// slice we have no stats for, unlike a lone isnull_count == 0 would have allowed.
+INSTANTIATE_TEST_SUITE_P(
+        NoStatsForSlice, UnaryNullStatsFromColumnStatsTest,
+        ::testing::Values(
+                UnaryNullStatsParams{false, std::nullopt, false, OperationType::ISNULL, StatsComparison::UNKNOWN},
+                UnaryNullStatsParams{false, std::nullopt, false, OperationType::NOTNULL, StatsComparison::UNKNOWN}
+        )
+);
+
+INSTANTIATE_TEST_SUITE_P(
+        NoNulls, UnaryNullStatsFromColumnStatsTest,
+        ::testing::Values(
+                UnaryNullStatsParams{
+                        true,
+                        IsNullStats{0, 5},
+                        false,
+                        OperationType::ISNULL,
+                        StatsComparison::NONE_MATCH
+                },
+                UnaryNullStatsParams{true, IsNullStats{0, 5}, false, OperationType::NOTNULL, StatsComparison::ALL_MATCH}
+        )
+);
+
+// Sparse all-gaps slice: min never set, isnull_count == slice_row_count.
+INSTANTIATE_TEST_SUITE_P(
+        AllNullNoMin, UnaryNullStatsFromColumnStatsTest,
+        ::testing::Values(
+                UnaryNullStatsParams{
+                        false,
+                        IsNullStats{5, 5},
+                        false,
+                        OperationType::ISNULL,
+                        StatsComparison::ALL_MATCH
+                },
+                UnaryNullStatsParams{
+                        false,
+                        IsNullStats{5, 5},
+                        false,
+                        OperationType::NOTNULL,
+                        StatsComparison::NONE_MATCH
+                }
+        )
+);
+
+// A wholly-NaN float slice records a NaN sentinel min/max, so min IS set here even though every row
+// is null. all_isnull() (which requires !min.has_value()) would miss this; the rule must be purely
+// isnull_count == slice_row_count.
+INSTANTIATE_TEST_SUITE_P(
+        AllNullWithNaNSentinelMin, UnaryNullStatsFromColumnStatsTest,
+        ::testing::Values(
+                UnaryNullStatsParams{true, IsNullStats{5, 5}, false, OperationType::ISNULL, StatsComparison::ALL_MATCH},
+                UnaryNullStatsParams{
+                        true,
+                        IsNullStats{5, 5},
+                        false,
+                        OperationType::NOTNULL,
+                        StatsComparison::NONE_MATCH
+                }
+        )
+);
+
+INSTANTIATE_TEST_SUITE_P(
+        SomeNulls, UnaryNullStatsFromColumnStatsTest,
+        ::testing::Values(
+                UnaryNullStatsParams{true, IsNullStats{2, 5}, false, OperationType::ISNULL, StatsComparison::UNKNOWN},
+                UnaryNullStatsParams{true, IsNullStats{2, 5}, false, OperationType::NOTNULL, StatsComparison::UNKNOWN}
+        )
+);
+
+// A slice with some but not all rows null (isnull_count < slice_row_count) must not be treated as
+// wholly null: all_isnull() must be false, so stats_comparator falls through to the normal min/max
+// comparison (then adjust_for_missing), rather than short-circuiting via the all-null branch.
+TEST(ColumnStatsAllIsNull, PartialNullIsNotAllNull) {
+    ColumnStatsValues stats{
+            std::optional<Value>{construct_value(int64_t{1})},
+            std::optional<Value>{construct_value(int64_t{10})},
+            IsNullStats{3, 10}
+    };
+    ASSERT_FALSE(stats.all_isnull());
+}
+
+// The reachable state where the old `!min.has_value() && isnull_count > 0` definition of
+// all_isnull() and the current `isnull_count == slice_row_count` one diverge. A wholly-NaN slice
+// records a NaN sentinel min/max, so the old form did not fire, and the ordered operators have no
+// NaN handling of their own (only Equals/NotEquals call check_range_for_nan), leaving UNKNOWN.
+TEST(ColumnStatsAllIsNull, WhollyNanSliceWithSentinelMinMaxIsAllNull) {
+    ColumnStatsValues stats{std::optional<Value>{nan_value}, std::optional<Value>{nan_value}, IsNullStats{10, 10}};
+    ASSERT_TRUE(stats.all_isnull());
+    const auto threshold = construct_value(100.0);
+    ASSERT_EQ(stats_comparator(stats, threshold, LessThanOperator{}), StatsComparison::NONE_MATCH);
+    ASSERT_EQ(stats_comparator(stats, threshold, LessThanEqualsOperator{}), StatsComparison::NONE_MATCH);
+    ASSERT_EQ(stats_comparator(stats, threshold, GreaterThanOperator{}), StatsComparison::NONE_MATCH);
+    ASSERT_EQ(stats_comparator(stats, threshold, GreaterThanEqualsOperator{}), StatsComparison::NONE_MATCH);
+    ASSERT_EQ(stats_comparator(stats, threshold, EqualsOperator{}), StatsComparison::NONE_MATCH);
+    ASSERT_EQ(stats_comparator(stats, threshold, NotEqualsOperator{}), StatsComparison::ALL_MATCH);
+}
+
+// Positive-side companion: with min/max present, a partial-null slice runs the ordinary comparison
+// and then adjust_for_missing, rather than being short-circuited by the all-null branch at all.
+TEST(ColumnStatsAllIsNull, PartialNullWithPresentMinMaxUsesOrdinaryComparisonPath) {
+    ColumnStatsValues stats{
+            std::optional<Value>{construct_value(int64_t{1})},
+            std::optional<Value>{construct_value(int64_t{10})},
+            IsNullStats{3, 10}
+    };
+    // [1, 10] < 100 is ALL_MATCH before accounting for nulls; adjust_for_missing downgrades it to
+    // UNKNOWN because a null row does not satisfy `< 100`.
+    ASSERT_EQ(stats_comparator(stats, construct_value(int64_t{100}), LessThanOperator{}), StatsComparison::UNKNOWN);
+
+    ColumnStatsValues no_nulls{
+            std::optional<Value>{construct_value(int64_t{1})},
+            std::optional<Value>{construct_value(int64_t{10})},
+            IsNullStats{0, 10}
+    };
+    ASSERT_EQ(
+            stats_comparator(no_nulls, construct_value(int64_t{100}), LessThanOperator{}), StatsComparison::ALL_MATCH
+    );
+}
+
 // Parameters: (min, max, query_value, op, expected)
 class BinaryComparisonTest
     : public ::testing::TestWithParam<
@@ -237,7 +397,7 @@ TEST_P(BinaryComparisonTest, AllCases) {
     auto [min, max, value, op, expected] = GetParam();
     std::optional<Value> min_value = min.has_value() ? std::make_optional(Value(*min, DataType::INT64)) : std::nullopt;
     std::optional<Value> max_value = max.has_value() ? std::make_optional(Value(*max, DataType::INT64)) : std::nullopt;
-    std::vector<ColumnStatsValues> column_stats_values{{min_value, max_value}};
+    std::vector<ColumnStatsValues> column_stats_values{{min_value, max_value, IsNullStats{0, 1}}};
     std::shared_ptr<Value> value_ptr = std::make_shared<Value>(Value(value, DataType::INT64));
     auto result = dispatch_binary_stats(column_stats_values, value_ptr, op);
     auto visitation_result = std::get<std::vector<StatsComparison>>(result);
@@ -455,7 +615,7 @@ TEST_P(FlippedBinaryComparisonTest, AllCases) {
     auto [min, max, value, op, expected] = GetParam();
     std::optional<Value> min_value = min.has_value() ? std::make_optional(Value(*min, DataType::INT64)) : std::nullopt;
     std::optional<Value> max_value = max.has_value() ? std::make_optional(Value(*max, DataType::INT64)) : std::nullopt;
-    std::vector<ColumnStatsValues> column_stats_values{{min_value, max_value}};
+    std::vector<ColumnStatsValues> column_stats_values{{min_value, max_value, IsNullStats{0, 1}}};
     std::shared_ptr<Value> value_ptr = std::make_shared<Value>(Value(value, DataType::INT64));
     auto result = dispatch_binary_stats(value_ptr, column_stats_values, op);
     auto visitation_result = std::get<std::vector<StatsComparison>>(result);
@@ -555,7 +715,7 @@ class StatsComparatorBothNaTTest : public ::testing::TestWithParam<std::tuple<Op
 
 TEST_P(StatsComparatorBothNaTTest, BothNaT) {
     auto [op, value_type] = GetParam();
-    std::vector<ColumnStatsValues> stats{{nat_value, nat_value}};
+    std::vector<ColumnStatsValues> stats{{nat_value, nat_value, IsNullStats{1, 1}}};
 
     Value query;
     if (value_type == ComparisonValueType::NA) {
@@ -593,7 +753,7 @@ TEST_P(StatsComparatorNaTValueTest, NaTInQuery) {
     auto [op] = GetParam();
     Value min_val = Value(timestamp{1}, DataType::NANOSECONDS_UTC64);
     Value max_val = Value(timestamp{5}, DataType::NANOSECONDS_UTC64);
-    std::vector<ColumnStatsValues> stats{{std::move(min_val), std::move(max_val)}};
+    std::vector<ColumnStatsValues> stats{{std::move(min_val), std::move(max_val), IsNullStats{0, 1}}};
 
     auto result =
             std::get<std::vector<StatsComparison>>(dispatch_binary_stats(stats, std::make_shared<Value>(nat_value), op)
@@ -621,7 +781,7 @@ class StatsComparatorBothNaNTest : public ::testing::TestWithParam<std::tuple<Op
 
 TEST_P(StatsComparatorBothNaNTest, BothNaN) {
     auto [op, value_type] = GetParam();
-    std::vector<ColumnStatsValues> stats{{nan_value, nan_value}};
+    std::vector<ColumnStatsValues> stats{{nan_value, nan_value, IsNullStats{1, 1}}};
 
     Value query;
     if (value_type == ComparisonValueType::NA) {
@@ -659,7 +819,7 @@ TEST_P(StatsComparatorNaNValueTest, NaNInQuery) {
     auto [op] = GetParam();
     Value min_val = construct_value(1.0);
     Value max_val = construct_value(5.0);
-    std::vector<ColumnStatsValues> stats{{std::move(min_val), std::move(max_val)}};
+    std::vector<ColumnStatsValues> stats{{std::move(min_val), std::move(max_val), IsNullStats{0, 1}}};
 
     auto result =
             std::get<std::vector<StatsComparison>>(dispatch_binary_stats(stats, std::make_shared<Value>(nan_value), op)
@@ -689,7 +849,7 @@ class BinaryComparisonInfinityTest
 
 TEST_P(BinaryComparisonInfinityTest, AllCases) {
     auto [min, max, value, op, expected] = GetParam();
-    std::vector<ColumnStatsValues> column_stats_values{{construct_value(min), construct_value(max)}};
+    std::vector<ColumnStatsValues> column_stats_values{{construct_value(min), construct_value(max), IsNullStats{0, 1}}};
     std::shared_ptr<Value> value_ptr = std::make_shared<Value>(construct_value(value));
     auto result = dispatch_binary_stats(column_stats_values, value_ptr, op);
     auto visitation_result = std::get<std::vector<StatsComparison>>(result);
@@ -816,7 +976,9 @@ namespace {
 
 template<typename StatsType, typename QueryType, typename Func>
 StatsComparison typed_stats_comparator(StatsType min, StatsType max, QueryType query_val, Func&& func) {
-    ColumnStatsValues csv{std::optional<Value>{construct_value(min)}, std::optional<Value>{construct_value(max)}};
+    ColumnStatsValues csv{
+            std::optional<Value>{construct_value(min)}, std::optional<Value>{construct_value(max)}, IsNullStats{0, 1}
+    };
     Value query = construct_value(query_val);
     return stats_comparator(csv, query, std::forward<Func>(func));
 }
@@ -1284,7 +1446,7 @@ class Float32NaNStatsWithFloat64QueryTest
 TEST_P(Float32NaNStatsWithFloat64QueryTest, AllOps) {
     auto [op, expected] = GetParam();
     const float nan_f = std::numeric_limits<float>::quiet_NaN();
-    std::vector<ColumnStatsValues> stats{{construct_value(nan_f), construct_value(nan_f)}};
+    std::vector<ColumnStatsValues> stats{{construct_value(nan_f), construct_value(nan_f), IsNullStats{1, 1}}};
     auto query = std::make_shared<Value>(construct_value(5.0)); // FLOAT64
 
     auto result = std::get<std::vector<StatsComparison>>(dispatch_binary_stats(stats, query, op));
@@ -1310,7 +1472,7 @@ class BoolValueRangeComparisonTest
 
 TEST_P(BoolValueRangeComparisonTest, AllCases) {
     auto [min, max, value, op, expected] = GetParam();
-    std::vector<ColumnStatsValues> stats{{construct_value(min), construct_value(max)}};
+    std::vector<ColumnStatsValues> stats{{construct_value(min), construct_value(max), IsNullStats{0, 1}}};
     auto query = std::make_shared<Value>(construct_value(value));
     auto result = std::get<std::vector<StatsComparison>>(dispatch_binary_stats(stats, query, op));
     ASSERT_EQ(result.size(), 1);
@@ -1434,7 +1596,7 @@ TEST_P(BoolStatsComparatorTest, AllCases) {
     auto [min_opt, max_opt, query_val, op, expected] = GetParam();
     std::optional<Value> min_val = min_opt.has_value() ? std::optional{construct_value(*min_opt)} : std::nullopt;
     std::optional<Value> max_val = max_opt.has_value() ? std::optional{construct_value(*max_opt)} : std::nullopt;
-    std::vector<ColumnStatsValues> stats{{min_val, max_val}};
+    std::vector<ColumnStatsValues> stats{{min_val, max_val, IsNullStats{0, 1}}};
     auto query = std::make_shared<Value>(construct_value(query_val));
     auto result = std::get<std::vector<StatsComparison>>(dispatch_binary_stats(stats, query, op));
     ASSERT_EQ(result.size(), 1);

@@ -440,6 +440,33 @@ TEST(ColumnStatsDataTest, AllNullSliceKeepsCountsAndNotAbsent) {
     ASSERT_FALSE(v1.min.has_value());
     ASSERT_FALSE(v1.max.has_value());
     ASSERT_FALSE(v1.column_absent); // present-but-all-null, not absent
-    ASSERT_EQ(v1.isnull_count, 3u);
+    ASSERT_TRUE(v1.isnull_stats.has_value());
+    ASSERT_EQ(v1.isnull_stats->isnull_count, 3u);
+}
+
+// values_for_column must report the row-slice's width (end_row - start_row) as
+// isnull_stats->slice_row_count, needed by ISNULL/NOTNULL stats pruning to distinguish "some rows
+// are null" from "every row is null".
+TEST(ColumnStatsDataTest, SliceRowCountIsRowRangeWidth) {
+    auto seg = build_stats_segment({
+            {100, 250, 10, 20}, // width 150
+            {300, 400, 30, 40}, // width 100
+    });
+
+    auto tsd = build_test_tsd();
+    ColumnStatsData data(std::move(seg), tsd);
+    ASSERT_FALSE(data.empty());
+
+    auto row0 = data.find_row({100, 250});
+    ASSERT_TRUE(row0.has_value());
+    auto v0 = stats_for(data, "price", *row0);
+    ASSERT_TRUE(v0.isnull_stats.has_value());
+    ASSERT_EQ(v0.isnull_stats->slice_row_count, 150u);
+
+    auto row1 = data.find_row({300, 400});
+    ASSERT_TRUE(row1.has_value());
+    auto v1 = stats_for(data, "price", *row1);
+    ASSERT_TRUE(v1.isnull_stats.has_value());
+    ASSERT_EQ(v1.isnull_stats->slice_row_count, 100u);
 }
 } // namespace arcticdb

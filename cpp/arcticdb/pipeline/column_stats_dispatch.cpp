@@ -43,6 +43,10 @@ StatsComparison stats_membership_comparator(const ColumnStatsValues& stats, Valu
         return StatsComparison::NONE_MATCH;
     }
 
+    if (!stats.isnull_stats) {
+        return StatsComparison::UNKNOWN;
+    }
+
     if (stats.all_isnull()) {
         // Every row is null: a null is never in the set, so isin matches none and isnotin matches all.
         return is_isin ? StatsComparison::NONE_MATCH : StatsComparison::ALL_MATCH;
@@ -149,7 +153,7 @@ StatsComparison stats_membership_comparator(const ColumnStatsValues& stats, Valu
                 // overstate (NaN never matches isin), so the corresponding `isnotin` NONE_MATCH
                 // (after the flip below) would also be wrong. Downgrade before the flip so both
                 // paths agree.
-                if (stats.isnull_count > 0 && isin_result == StatsComparison::ALL_MATCH) {
+                if (stats.isnull_count() > 0 && isin_result == StatsComparison::ALL_MATCH) {
                     isin_result = StatsComparison::UNKNOWN;
                 }
 
@@ -411,6 +415,53 @@ StatsVariantData visit_unary_boolean_stats(const StatsVariantData& left, Operati
             },
             [](const std::shared_ptr<ValueSet>&) -> std::vector<StatsComparison> {
                 util::raise_rte("ValueSet should never be provided to visit_unary_boolean_stats");
+            }
+    );
+}
+
+StatsComparison unary_null_stats(const ColumnStatsValues& stats_values, OperationType operation) {
+    util::check(
+            operation == OperationType::ISNULL || operation == OperationType::NOTNULL,
+            "Expected ISNULL or NOTNULL in unary_null_stats, got {}",
+            int(operation)
+    );
+    const bool is_isnull = operation == OperationType::ISNULL;
+    if (stats_values.column_absent) {
+        return is_isnull ? StatsComparison::ALL_MATCH : StatsComparison::NONE_MATCH;
+    }
+    if (!stats_values.isnull_stats.has_value()) {
+        return StatsComparison::UNKNOWN;
+    }
+    const auto& isnull_stats = *stats_values.isnull_stats;
+    if (isnull_stats.isnull_count == 0) {
+        return is_isnull ? StatsComparison::NONE_MATCH : StatsComparison::ALL_MATCH;
+    }
+    if (isnull_stats.isnull_count == isnull_stats.slice_row_count) {
+        return is_isnull ? StatsComparison::ALL_MATCH : StatsComparison::NONE_MATCH;
+    }
+    return StatsComparison::UNKNOWN;
+}
+
+StatsVariantData visit_unary_null_stats(const StatsVariantData& left, OperationType operation) {
+    return util::variant_match(
+            left,
+            [operation](const std::vector<ColumnStatsValues>& l) -> std::vector<StatsComparison> {
+                std::vector<StatsComparison> result;
+                result.reserve(l.size());
+                for (const auto& column_stats_values : l) {
+                    result.emplace_back(unary_null_stats(column_stats_values, operation));
+                }
+                return result;
+            },
+            [](const std::vector<StatsComparison>&) -> std::vector<StatsComparison> {
+                util::raise_rte("ISNULL/NOTNULL should always have a column operand, never a nested boolean "
+                                "expression, in the stats path");
+            },
+            [](const std::shared_ptr<Value>&) -> std::vector<StatsComparison> {
+                util::raise_rte("Value should never be provided to visit_unary_null_stats");
+            },
+            [](const std::shared_ptr<ValueSet>&) -> std::vector<StatsComparison> {
+                util::raise_rte("ValueSet should never be provided to visit_unary_null_stats");
             }
     );
 }

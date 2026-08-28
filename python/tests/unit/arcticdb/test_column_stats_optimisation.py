@@ -6,7 +6,7 @@ import pyarrow as pa
 import pytest
 from arcticdb_ext.storage import KeyType
 
-from arcticdb.util.test import assert_frame_equal, query_stats_operation_count
+from arcticdb.util.test import assert_frame_equal, config_context, query_stats_operation_count
 from arcticdb.version_store.processing import QueryBuilder
 import arcticdb.toolbox.query_stats as qs
 import pandas as pd
@@ -71,6 +71,38 @@ def test_create_column_stats_with_row_range_reads_and_writes_stats_key_once(in_m
     assert get_table_index_read_count() == 1, qs.get_query_stats()
     assert get_column_stats_read_count() == 1, qs.get_query_stats()
     assert get_column_stats_write_count() == 1, qs.get_query_stats()
+
+
+@pytest.mark.parametrize(
+    "query_expr, expected_reads",
+    [
+        (lambda q: q["f"] < 100.0, 1),
+        (lambda q: q["f"] <= 100.0, 1),
+        (lambda q: q["f"] > 0.0, 1),
+        (lambda q: q["f"] >= 0.0, 1),
+        (lambda q: q["f"] == 1.0, 1),
+        # NaN != 1.0 is true, so every row of the NaN slice matches and it cannot be pruned
+        (lambda q: q["f"] != 1.0, 2),
+    ],
+    ids=["lt", "le", "gt", "ge", "eq", "ne"],
+)
+def test_column_stats_wholly_nan_slice_ordered_comparison_pruning(
+    in_memory_store_factory, clear_query_stats, column_stats_filtering_enabled, query_expr, expected_reads
+):
+    lib = in_memory_store_factory(segment_row_size=3)
+    df = pd.DataFrame({"f": [1.0, 2.0, 3.0, np.nan, np.nan, np.nan]}, index=pd.date_range("2000-01-01", periods=6))
+    lib.write(sym, df)
+    lib.create_column_stats_experimental(sym)
+
+    qs.enable()
+    q = QueryBuilder()
+    q = q[query_expr(q)]
+    qs.reset_stats()
+    result = lib.read(sym, query_builder=q).data
+    table_data_reads = get_table_data_read_count()
+
+    assert_frame_equal(df[query_expr(df)], result, check_freq=False)
+    assert table_data_reads == expected_reads, f"Expected {expected_reads} TABLE_DATA read(s), got {table_data_reads}"
 
 
 # Stats cover only the first of three row slices, so the other two must be read whatever the query:
@@ -2619,3 +2651,210 @@ def test_column_stats_index_is_only_stat_column(
         assert get_table_data_read_count() == 1, "Only row slice 0 holds timestamps after 2000-01-05"
     else:
         assert get_table_data_read_count() == 3, "Filtering is disabled, so all 3 slices should be read"
+
+
+@pytest.mark.parametrize("method, expected_reads", [("isna", 2), ("notna", 3)])
+def test_column_stats_isna_notna_pruning(
+    in_memory_store_factory, clear_query_stats, column_stats_filtering_enabled_and_disabled, method, expected_reads
+):
+    """isna/notna pruning against four two-row segments: no-null, wholly-null (sparse gaps), no-null,
+    and partial-null. The partial-null segment (isnull_count=1 of 2) must never be pruned by either
+    method - it must come out UNKNOWN, not be caught by an all_isnull() short-circuit."""
+    lib = in_memory_store_factory(segment_row_size=2)
+    df = pd.DataFrame(
+        {"col_1": [1.0, 2.0, np.nan, np.nan, 5.0, 6.0, 3.0, np.nan]}, index=pd.date_range("2000-01-01", periods=8)
+    )
+    lib.write(sym, df, sparsify_floats=True)
+    lib.create_column_stats_experimental(sym)
+
+    qs.enable()
+    q = QueryBuilder()
+    q = q[getattr(q["col_1"], method)()]
+    qs.reset_stats()
+    result = lib.read(sym, query_builder=q).data
+    table_data_reads = get_table_data_read_count()
+
+    expected = df[getattr(df["col_1"], method)()]
+    assert_frame_equal(expected, result)
+    if column_stats_filtering_enabled_and_disabled:
+        assert (
+            table_data_reads == expected_reads
+        ), f"Expected {expected_reads} TABLE_DATA reads but got {table_data_reads}"
+    else:
+        assert table_data_reads == 4, "Filtering is disabled, so all 4 slices should be read"
+
+
+@pytest.mark.parametrize("method, expected_reads", [("isna", 1), ("notna", 2)])
+def test_column_stats_isna_notna_wholly_nan_sentinel_slice(
+    in_memory_store_factory, clear_query_stats, column_stats_filtering_enabled_and_disabled, method, expected_reads
+):
+    """A wholly-NaN slice written without sparsify_floats keeps NaN in-band as its MIN/MAX sentinel
+    (min/max ARE present, unlike a sparse-gap slice). all_isnull() must be judged purely from
+    isnull_count == slice_row_count, not from whether min is absent, or this slice would be missed."""
+    lib = in_memory_store_factory(segment_row_size=2)
+    df = pd.DataFrame({"col_1": [1.0, 2.0, np.nan, np.nan, 5.0, 6.0]}, index=pd.date_range("2000-01-01", periods=6))
+    lib.write(sym, df)
+    lib.create_column_stats_experimental(sym)
+
+    qs.enable()
+    q = QueryBuilder()
+    q = q[getattr(q["col_1"], method)()]
+    qs.reset_stats()
+    result = lib.read(sym, query_builder=q).data
+    table_data_reads = get_table_data_read_count()
+
+    expected = df[getattr(df["col_1"], method)()]
+    assert_frame_equal(expected, result)
+    if column_stats_filtering_enabled_and_disabled:
+        assert (
+            table_data_reads == expected_reads
+        ), f"Expected {expected_reads} TABLE_DATA reads but got {table_data_reads}"
+    else:
+        assert table_data_reads == 3, "Filtering is disabled, so all 3 slices should be read"
+
+
+@pytest.mark.parametrize("method, expected_reads", [("isna", 2), ("notna", 1)])
+def test_column_stats_isna_notna_wholly_null_sparse_int_slice(
+    in_memory_store_factory, clear_query_stats, column_stats_filtering_enabled_and_disabled, method, expected_reads
+):
+    """Integer columns have no NaN sentinel: a wholly-null integer slice has no MIN/MAX at all
+    (only ISNULL_COUNT), distinct from the float sentinel case above."""
+    lib = in_memory_store_factory(segment_row_size=2)
+    lib._set_allow_arrow_input()
+    table = pa.table({"f": pa.array([None, None, 10, 20, None, None], pa.int64())})
+    lib.write(sym, table)
+    lib.create_column_stats_experimental(sym)
+
+    stats = lib.read_column_stats_experimental(sym)
+    assert stats.column("v1_ISNULL_COUNT(f)").to_pylist() == [2, 0, 2]
+
+    qs.enable()
+    q = QueryBuilder()
+    q = q[getattr(q["f"], method)()]
+    qs.reset_stats()
+    result = lib.read(sym, query_builder=q).data
+    table_data_reads = get_table_data_read_count()
+
+    # ArcticDB backfills missing/null int64 values with 0 (not NaN) when materialising rows selected
+    # by isna()/notna(), so compare against a ground-truth read with column stats forced off, rather
+    # than hand-deriving the expected values from pandas/pyarrow null semantics.
+    with config_context("ColumnStats.UseForQueries", 0):
+        expected = lib.read(sym, query_builder=q).data
+    assert_frame_equal(result, expected)
+    if column_stats_filtering_enabled_and_disabled:
+        assert (
+            table_data_reads == expected_reads
+        ), f"Expected {expected_reads} TABLE_DATA reads but got {table_data_reads}"
+    else:
+        assert table_data_reads == 3, "Filtering is disabled, so all 3 slices should be read"
+
+
+@pytest.mark.parametrize("dtype", [np.int64, np.float64], ids=["int", "float"])
+@pytest.mark.parametrize("method, expected_reads", [("isna", 1), ("notna", 1)])
+def test_column_stats_isna_notna_dynamic_schema_column_absent(
+    in_memory_version_store_dynamic_schema,
+    clear_query_stats,
+    column_stats_filtering_enabled_and_disabled,
+    dtype,
+    method,
+    expected_reads,
+):
+    """column_absent inverts for isna/notna relative to value comparisons: a segment where the
+    column was never written decodes as an all-gaps sparse column, so isna() must keep it
+    (ALL_MATCH) and notna() must prune it (NONE_MATCH) - the opposite of value-comparison pruning."""
+    lib = in_memory_version_store_dynamic_schema
+
+    df0 = pd.DataFrame({"a": [1, 2]}, index=pd.date_range("2000-01-01", periods=2))
+    df1 = pd.DataFrame(
+        {"a": [3, 4], "b": np.array([10, 20], dtype=dtype)}, index=pd.date_range("2000-01-03", periods=2)
+    )
+    lib.write(sym, df0)
+    lib.append(sym, df1)
+    lib.create_column_stats_experimental(sym)
+
+    qs.enable()
+    q = QueryBuilder()
+    q = q[getattr(q["b"], method)()]
+    qs.reset_stats()
+    result = lib.read(sym, query_builder=q).data
+    table_data_reads = get_table_data_read_count()
+
+    # As above, a backfilled-absent int64 column displays as 0 rather than NaN, so compare against a
+    # ground-truth read with column stats forced off rather than a pandas-derived expected value.
+    with config_context("ColumnStats.UseForQueries", 0):
+        expected = lib.read(sym, query_builder=q).data
+    assert_frame_equal(result, expected)
+    if column_stats_filtering_enabled_and_disabled:
+        assert (
+            table_data_reads == expected_reads
+        ), f"Expected {expected_reads} TABLE_DATA reads but got {table_data_reads}"
+    else:
+        assert table_data_reads == 2, "Filtering is disabled, so both slices should be read"
+
+
+@pytest.mark.parametrize("method, expected_reads", [("isna", 2), ("notna", 3)])
+def test_column_stats_isna_notna_partial_coverage_does_not_change_results(
+    in_memory_store_factory, clear_query_stats, column_stats_filtering_enabled, method, expected_reads
+):
+    """Stats cover only the first of three row slices. A slice with no stats at all must be treated
+    as UNKNOWN for ISNULL/NOTNULL, never mistaken for isnull_count == 0 - the no-stats guard must
+    run before the isnull_count/slice_row_count arithmetic, not after."""
+    lib = in_memory_store_factory(segment_row_size=3)
+    df = pd.DataFrame(
+        {"col_1": [1.0, 2.0, 3.0, 4.0, np.nan, 6.0, 7.0, 8.0, np.nan]}, index=pd.date_range("2000-01-01", periods=9)
+    )
+    lib.write(sym, df)
+    lib.create_column_stats_experimental(sym, row_range=(0, 3))
+
+    qs.enable()
+    q = QueryBuilder()
+    q = q[getattr(q["col_1"], method)()]
+    qs.reset_stats()
+    result = lib.read(sym, query_builder=q).data
+    table_data_reads = get_table_data_read_count()
+
+    expected = df[getattr(df["col_1"], method)()]
+    assert_frame_equal(expected, result)
+    assert (
+        table_data_reads == expected_reads
+    ), f"Expected {expected_reads} TABLE_DATA reads (only the covered, all-non-null slice can be pruned) but got {table_data_reads}"
+
+
+@pytest.mark.parametrize("sparsify_floats", [True, False])
+@pytest.mark.parametrize("method, expected_reads", [("isna", 3), ("notna", 2)])
+def test_column_stats_isna_notna_soundness_precondition(
+    in_memory_store_factory,
+    clear_query_stats,
+    column_stats_filtering_enabled_and_disabled,
+    sparsify_floats,
+    method,
+    expected_reads,
+):
+    """Re-verify the ISNULL/NOTNULL decision table directly against the real ISNULL_COUNT stat, for
+    both the in-band-NaN-sentinel and sparse-gap encodings of the same null pattern: the two
+    genuinely-mixed slices (isnull_count between 0 and slice_row_count) must always come out UNKNOWN
+    and be read, regardless of which encoding produced the stat; only the wholly-null middle slice
+    is prunable, and only for isna."""
+    lib = in_memory_store_factory(segment_row_size=3)
+    df = pd.DataFrame(
+        {"col_1": [1.0, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, 1.0]},
+        index=pd.date_range("2000-01-01", periods=9),
+    )
+    lib.write(sym, df, sparsify_floats=sparsify_floats)
+    lib.create_column_stats_experimental(sym)
+
+    qs.enable()
+    q = QueryBuilder()
+    q = q[getattr(q["col_1"], method)()]
+    qs.reset_stats()
+    result = lib.read(sym, query_builder=q).data
+    table_data_reads = get_table_data_read_count()
+
+    expected = df[getattr(df["col_1"], method)()]
+    assert_frame_equal(expected, result)
+    if column_stats_filtering_enabled_and_disabled:
+        assert (
+            table_data_reads == expected_reads
+        ), f"Expected {expected_reads} TABLE_DATA reads but got {table_data_reads}"
+    else:
+        assert table_data_reads == 3, "Filtering is disabled, so all 3 slices should be read"

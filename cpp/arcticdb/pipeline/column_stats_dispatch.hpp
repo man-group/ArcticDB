@@ -131,6 +131,9 @@ StatsComparison stats_comparator(const ColumnStatsValues& stats_lhs, const Value
     if (stats_lhs.column_absent) {
         return StatsComparison::NONE_MATCH;
     }
+    if (!stats_lhs.isnull_stats) {
+        return StatsComparison::UNKNOWN;
+    }
     if (stats_lhs.all_isnull()) {
         // Every row is null: `!=` matches all of them, every other comparison matches none.
         return std::is_same_v<std::remove_cvref_t<Func>, NotEqualsOperator> ? StatsComparison::ALL_MATCH
@@ -179,13 +182,16 @@ StatsComparison stats_comparator(const ColumnStatsValues& stats_lhs, const Value
             return StatsComparison::UNKNOWN;
         });
     });
-    return adjust_for_missing<Func>(result, stats_lhs.isnull_count);
+    return adjust_for_missing<Func>(result, stats_lhs.isnull_count());
 }
 
 template<typename Func>
 StatsComparison stats_comparator(const ColumnStatsValues& stats_lhs, const ColumnStatsValues& stats_rhs, Func&& func) {
     if (stats_lhs.column_absent || stats_rhs.column_absent) {
         return StatsComparison::NONE_MATCH;
+    }
+    if (!stats_lhs.isnull_stats || !stats_rhs.isnull_stats) {
+        return StatsComparison::UNKNOWN;
     }
     if (!stats_lhs.min || !stats_rhs.min) {
         return StatsComparison::UNKNOWN;
@@ -230,7 +236,7 @@ StatsComparison stats_comparator(const ColumnStatsValues& stats_lhs, const Colum
             return StatsComparison::UNKNOWN;
         });
     });
-    return adjust_for_missing<Func>(result, stats_lhs.isnull_count + stats_rhs.isnull_count);
+    return adjust_for_missing<Func>(result, stats_lhs.isnull_count() + stats_rhs.isnull_count());
 }
 
 template<typename Func>
@@ -304,6 +310,10 @@ StatsComparison unary_boolean_stats(const StatsComparison& stats_values, Operati
 StatsComparison unary_boolean_stats(const ColumnStatsValues& stats_values, OperationType operation);
 
 StatsVariantData visit_unary_boolean_stats(const StatsVariantData& left, OperationType operation);
+
+StatsComparison unary_null_stats(const ColumnStatsValues& stats_values, OperationType operation);
+
+StatsVariantData visit_unary_null_stats(const StatsVariantData& left, OperationType operation);
 
 } // namespace column_stats_detail
 

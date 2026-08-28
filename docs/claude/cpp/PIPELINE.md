@@ -153,13 +153,24 @@ Key types:
 |------|----------|---------|
 | `ColumnStatsData` | `column_stats_filter.hpp` | Parsed stats segment, indexed by `RowRange` |
 | `ColumnStatsRow` | `column_stats_types.hpp` | Stats for a single row-slice: start/end row + per-column min/max |
-| `ColumnStatsValues` | `column_stats_filter.hpp` | Min/max `Value` pair for one column in one row-slice, plus `isnull_count` (rows where `ISNULL` is true — sparse-map gaps or in-band NaN/NaT) and `column_absent` flag marking segments where the column was not present |
+| `ColumnStatsValues` | `column_stats_filter.hpp` | Min/max `Value` pair for one column in one row-slice, plus `isnull_stats` (an `std::optional<IsNullStats>` — `nullopt` means no stats row was found for this slice at all, as distinct from stats being present with zero nulls) and `column_absent` flag marking segments where the column was not present |
+| `IsNullStats` | `column_stats_filter.hpp` | `{isnull_count, slice_row_count}` for one column in one row-slice — rows where `ISNULL` is true (sparse-map gaps or in-band NaN/NaT), out of the slice's total row count |
 
 `StatsVariantData` is a `std::variant` over `std::vector<StatsComparison>`, `std::shared_ptr<Value>`, `std::vector<ColumnStatsValues>`, and `std::shared_ptr<ValueSet>`. The `ValueSet` alternative is used by `isin`/`isnotin` expressions.
 
 ### Evaluation
 
 The filter expression AST is walked by `compute_stats()` / `evaluate_ast_node_against_stats()` in `column_stats_filter.cpp`. Leaf `ColumnName` nodes produce `ColumnStatsValues` vectors; leaf `ValueName` nodes produce `Value` pointers; leaf `ValueSetName` nodes produce `ValueSet` pointers. Binary comparison operators (in `column_stats_dispatch.hpp`) apply three-valued logic (`StatsComparison`: `ALL_MATCH`, `NONE_MATCH`, `UNKNOWN`) using `ValueRange<T>` overloads on the existing comparison operator structs. Column-to-column predicates (`col1 < col2`, etc.) dispatch via the `(ColumnStatsValues, ColumnStatsValues)` overload of `stats_comparator`, which requires the left and right stats vectors to match in length. Boolean operators (`AND`, `OR`, `XOR`, `NOT`) compose these results. Membership operators (`ISIN`, `ISNOTIN`) are handled by `visit_binary_membership_stats()`, which delegates to `stats_membership_comparator()` for each row-slice.
+
+`ISNULL`/`NOTNULL` are unary operators handled separately by `visit_unary_null_stats()` / `unary_null_stats()` in `column_stats_dispatch.cpp`, driven purely by `isnull_stats` (min/max are irrelevant to these operators). The decision table, evaluated in this order:
+
+1. `column_absent` — the column was never written in this slice, so every row decodes as null: `ISNULL` is `ALL_MATCH`, `NOTNULL` is `NONE_MATCH`. This is the inverse of the `column_absent` handling for value comparisons (`UNKNOWN`), because for isna/notna a fully-absent column is a definite answer, not a missing one.
+2. No stats row for this slice at all (`isnull_stats` is `nullopt`) — `UNKNOWN`. This check must precede the arithmetic below: a slice with `isnull_count() == 0` because it has no isnull-count stat at all is indistinguishable, in the raw numbers, from a slice with a real stat of zero nulls, unless the `nullopt` case is excluded first.
+3. `isnull_count() == 0` — no nulls in the slice: `ISNULL` is `NONE_MATCH`, `NOTNULL` is `ALL_MATCH`.
+4. `all_isnull()` (i.e. `isnull_count() == slice_row_count`) — every row in the slice is null: `ISNULL` is `ALL_MATCH`, `NOTNULL` is `NONE_MATCH`.
+5. Otherwise (some but not all rows null) — `UNKNOWN`.
+
+`all_isnull()` is judged solely from the isnull-count arithmetic, not from whether `min`/`max` are present. A wholly-NaN float slice written without `sparsify_floats` still carries an in-band NaN sentinel as its min/max, so `min.has_value()` is true even though every row is null; only the `isnull_count() == slice_row_count` check identifies it correctly.
 
 If all filter clauses AND together to `NONE_MATCH` for a row-slice, that slice is excluded from the read via `create_column_stats_filter()`, which returns a `FilterQuery` lambda passed to `filter_index()`.
 

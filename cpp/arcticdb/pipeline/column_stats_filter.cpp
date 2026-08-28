@@ -100,6 +100,9 @@ StatsVariantData dispatch_unary_stats(const StatsVariantData& left, OperationTyp
     case OperationType::NOT:
     case OperationType::IDENTITY:
         return column_stats_detail::visit_unary_boolean_stats(left, operation);
+    case OperationType::ISNULL:
+    case OperationType::NOTNULL:
+        return column_stats_detail::visit_unary_null_stats(left, operation);
     default:
         ARCTICDB_DEBUG(log::version(), "Unsupported unary operator for stats {}", operation);
         return util::variant_match(
@@ -289,6 +292,7 @@ std::pair<size_t, size_t> ColumnStatsData::parse_row_ranges(
         internal::check<ErrorCode::E_ASSERTION_FAILURE>(
                 inserted, "Duplicate row range [{}, {}) in column stats segment at row {}", start_row, end_row, r
         );
+        row_counts_.push_back(end_row - start_row);
     }
     return std::make_pair(first_kept, last_kept_excl);
 }
@@ -364,9 +368,9 @@ std::vector<ColumnStatsValues> ColumnStatsData::values_for_column(
         if (min_set) {
             result_entry.min = stats.mins.at(r);
             result_entry.max = stats.maxes.at(r);
-            result_entry.isnull_count = stats.isnull_counts.at(r);
+            result_entry.isnull_stats = IsNullStats{stats.isnull_counts.at(r), row_counts_.at(r)};
         } else if (stats.isnull_counts.at(r) > 0) {
-            result_entry.isnull_count = stats.isnull_counts.at(r);
+            result_entry.isnull_stats = IsNullStats{stats.isnull_counts.at(r), row_counts_.at(r)};
         } else {
             result_entry.column_absent = true;
         }

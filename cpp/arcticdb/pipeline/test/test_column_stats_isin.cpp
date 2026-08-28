@@ -27,7 +27,9 @@ std::shared_ptr<ValueSet> make_empty_value_set() {
 
 TEST(StatsMembershipComparator, EmptySetIsinNoneMatch) {
     ColumnStatsValues csv{
-            std::optional<Value>{construct_value(int64_t{1})}, std::optional<Value>{construct_value(int64_t{10})}
+            std::optional<Value>{construct_value(int64_t{1})},
+            std::optional<Value>{construct_value(int64_t{10})},
+            IsNullStats{0, 1}
     };
     auto vs = make_empty_value_set<int64_t>();
     ASSERT_EQ(stats_membership_comparator(csv, *vs, OperationType::ISIN), StatsComparison::NONE_MATCH);
@@ -35,7 +37,9 @@ TEST(StatsMembershipComparator, EmptySetIsinNoneMatch) {
 
 TEST(StatsMembershipComparator, EmptySetIsnotinAllMatch) {
     ColumnStatsValues csv{
-            std::optional<Value>{construct_value(int64_t{1})}, std::optional<Value>{construct_value(int64_t{10})}
+            std::optional<Value>{construct_value(int64_t{1})},
+            std::optional<Value>{construct_value(int64_t{10})},
+            IsNullStats{0, 1}
     };
     auto vs = make_empty_value_set<int64_t>();
     ASSERT_EQ(stats_membership_comparator(csv, *vs, OperationType::ISNOTIN), StatsComparison::ALL_MATCH);
@@ -44,7 +48,9 @@ TEST(StatsMembershipComparator, EmptySetIsnotinAllMatch) {
 TEST(StatsMembershipComparator, SetBelowBlockRange) {
     // Block [10, 20], set {1, 5} -> set_max=5 < block_min=10 -> NONE_MATCH for ISIN
     ColumnStatsValues csv{
-            std::optional<Value>{construct_value(int64_t{10})}, std::optional<Value>{construct_value(int64_t{20})}
+            std::optional<Value>{construct_value(int64_t{10})},
+            std::optional<Value>{construct_value(int64_t{20})},
+            IsNullStats{0, 1}
     };
     auto vs = make_numeric_value_set<int64_t>({1, 5});
     ASSERT_EQ(stats_membership_comparator(csv, *vs, OperationType::ISIN), StatsComparison::NONE_MATCH);
@@ -54,7 +60,9 @@ TEST(StatsMembershipComparator, SetBelowBlockRange) {
 TEST(StatsMembershipComparator, SetAboveBlockRange) {
     // Block [1, 5], set {10, 20} -> set_min=10 > block_max=5 -> NONE_MATCH for ISIN
     ColumnStatsValues csv{
-            std::optional<Value>{construct_value(int64_t{1})}, std::optional<Value>{construct_value(int64_t{5})}
+            std::optional<Value>{construct_value(int64_t{1})},
+            std::optional<Value>{construct_value(int64_t{5})},
+            IsNullStats{0, 1}
     };
     auto vs = make_numeric_value_set<int64_t>({10, 20});
     ASSERT_EQ(stats_membership_comparator(csv, *vs, OperationType::ISIN), StatsComparison::NONE_MATCH);
@@ -64,7 +72,9 @@ TEST(StatsMembershipComparator, SetAboveBlockRange) {
 TEST(StatsMembershipComparator, SetOverlapsBlockRange) {
     // Block [1, 10], set {5, 15} -> overlaps -> UNKNOWN
     ColumnStatsValues csv{
-            std::optional<Value>{construct_value(int64_t{1})}, std::optional<Value>{construct_value(int64_t{10})}
+            std::optional<Value>{construct_value(int64_t{1})},
+            std::optional<Value>{construct_value(int64_t{10})},
+            IsNullStats{0, 1}
     };
     auto vs = make_numeric_value_set<int64_t>({5, 15});
     ASSERT_EQ(stats_membership_comparator(csv, *vs, OperationType::ISIN), StatsComparison::UNKNOWN);
@@ -74,7 +84,9 @@ TEST(StatsMembershipComparator, SetOverlapsBlockRange) {
 TEST(StatsMembershipComparator, SingleElementMatchesSingleValueBlock) {
     // Block [5, 5], set {5} -> ALL_MATCH for ISIN
     ColumnStatsValues csv{
-            std::optional<Value>{construct_value(int64_t{5})}, std::optional<Value>{construct_value(int64_t{5})}
+            std::optional<Value>{construct_value(int64_t{5})},
+            std::optional<Value>{construct_value(int64_t{5})},
+            IsNullStats{0, 1}
     };
     auto vs = make_numeric_value_set<int64_t>({5});
     ASSERT_EQ(stats_membership_comparator(csv, *vs, OperationType::ISIN), StatsComparison::ALL_MATCH);
@@ -84,14 +96,16 @@ TEST(StatsMembershipComparator, SingleElementMatchesSingleValueBlock) {
 TEST(StatsMembershipComparator, MixedTypesInt32StatsDoubleSet) {
     // Block [1, 10] as int32, set {15.0, 20.0} as double -> set_min=15 > block_max=10 -> NONE_MATCH
     ColumnStatsValues csv{
-            std::optional<Value>{construct_value(int32_t{1})}, std::optional<Value>{construct_value(int32_t{10})}
+            std::optional<Value>{construct_value(int32_t{1})},
+            std::optional<Value>{construct_value(int32_t{10})},
+            IsNullStats{0, 1}
     };
     auto vs = make_numeric_value_set<double>({15.0, 20.0});
     ASSERT_EQ(stats_membership_comparator(csv, *vs, OperationType::ISIN), StatsComparison::NONE_MATCH);
 }
 
 TEST(StatsMembershipComparator, MissingStats) {
-    ColumnStatsValues csv{std::nullopt, std::nullopt};
+    ColumnStatsValues csv;
     auto vs = make_numeric_value_set<double>({5.0});
     ASSERT_EQ(stats_membership_comparator(csv, *vs, OperationType::ISIN), StatsComparison::UNKNOWN);
 }
@@ -99,7 +113,9 @@ TEST(StatsMembershipComparator, MissingStats) {
 TEST(StatsMembershipComparator, SetContainedWithinBlockRange) {
     // Block [1, 100], set {3, 7} -> overlap -> UNKNOWN
     ColumnStatsValues csv{
-            std::optional<Value>{construct_value(int64_t{1})}, std::optional<Value>{construct_value(int64_t{100})}
+            std::optional<Value>{construct_value(int64_t{1})},
+            std::optional<Value>{construct_value(int64_t{100})},
+            IsNullStats{0, 1}
     };
     auto vs = make_numeric_value_set<int64_t>({3, 7});
     ASSERT_EQ(stats_membership_comparator(csv, *vs, OperationType::ISIN), StatsComparison::UNKNOWN);
@@ -115,7 +131,9 @@ class StatsMembershipPerElementInt64Test
 TEST_P(StatsMembershipPerElementInt64Test, IsinAndIsnotin) {
     auto [block_min, block_max, set_values, expected_isin, expected_isnotin] = GetParam();
     ColumnStatsValues csv{
-            std::optional<Value>{construct_value(block_min)}, std::optional<Value>{construct_value(block_max)}
+            std::optional<Value>{construct_value(block_min)},
+            std::optional<Value>{construct_value(block_max)},
+            IsNullStats{0, 1}
     };
     auto vs = std::make_shared<ValueSet>(
             NumericSetType{std::make_shared<std::unordered_set<int64_t>>(set_values.begin(), set_values.end())}
@@ -162,8 +180,12 @@ class StatsMembershipNaNTest
 
 TEST_P(StatsMembershipNaNTest, IsinAndIsnotin) {
     auto [block_min, block_max, set_values, expected_isin, expected_isnotin] = GetParam();
+    // A wholly-NaN block records isnull_count == slice_row_count; every other case has no nulls.
+    const bool block_wholly_nan = std::isnan(block_min) && std::isnan(block_max);
     ColumnStatsValues csv{
-            std::optional<Value>{construct_value(block_min)}, std::optional<Value>{construct_value(block_max)}
+            std::optional<Value>{construct_value(block_min)},
+            std::optional<Value>{construct_value(block_max)},
+            IsNullStats{block_wholly_nan ? uint64_t{1} : uint64_t{0}, 1}
     };
     auto vs = std::make_shared<ValueSet>(
             NumericSetType{std::make_shared<std::unordered_set<double>>(set_values.begin(), set_values.end())}
@@ -210,8 +232,12 @@ class StatsMembershipNaTTest
 
 TEST_P(StatsMembershipNaTTest, IsinAndIsnotin) {
     auto [block_min, block_max, set_values, expected_isin, expected_isnotin] = GetParam();
+    // A wholly-NaT block records isnull_count == slice_row_count; every other case has no nulls.
+    const bool block_wholly_nat = block_min == NaT && block_max == NaT;
     ColumnStatsValues csv{
-            std::optional<Value>{make_timestamp_value(block_min)}, std::optional<Value>{make_timestamp_value(block_max)}
+            std::optional<Value>{make_timestamp_value(block_min)},
+            std::optional<Value>{make_timestamp_value(block_max)},
+            IsNullStats{block_wholly_nat ? uint64_t{1} : uint64_t{0}, 1}
     };
     auto vs = std::make_shared<ValueSet>(
             NumericSetType{std::make_shared<std::unordered_set<int64_t>>(set_values.begin(), set_values.end())}

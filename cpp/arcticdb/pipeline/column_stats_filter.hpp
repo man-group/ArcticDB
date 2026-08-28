@@ -25,22 +25,43 @@
 
 namespace arcticdb {
 
+struct IsNullStats {
+    // Rows for which ArcticDB's ISNULL would be true
+    uint64_t isnull_count;
+    // Number of rows in the row-slice this entry describes
+    uint64_t slice_row_count;
+};
+
 struct ColumnStatsValues {
     std::optional<Value> min;
     std::optional<Value> max;
-    // Rows for which ArcticDB's ISNULL would be true, counted during write-time aggregation:
-    // sparse-map gaps (rows genuinely absent from the data segment) plus in-band sentinel values
-    // (NaN for floats, NaT for time types).
-    uint64_t isnull_count = 0;
+    // nullopt means values_for_column found no stats at all for this row-slice,
+    // not that there were no nulls
+    std::optional<IsNullStats> isnull_stats;
     bool column_absent = false;
 
     ColumnStatsValues() = default;
 
-    ColumnStatsValues(std::optional<Value> min, std::optional<Value> max) : min(std::move(min)), max(std::move(max)) {
+    ColumnStatsValues(std::optional<Value> min, std::optional<Value> max, IsNullStats isnull_stats) :
+        min(std::move(min)),
+        max(std::move(max)),
+        isnull_stats(isnull_stats) {
         util::check(min.has_value() == max.has_value(), "min and max should either both be present or both be absent");
     };
 
-    bool all_isnull() const { return !min.has_value() && isnull_count > 0; }
+    bool all_isnull() const {
+        internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+                isnull_stats.has_value(), "all_isnull() called on a ColumnStatsValues with no isnull_stats"
+        );
+        return isnull_stats->isnull_count == isnull_stats->slice_row_count;
+    }
+
+    uint64_t isnull_count() const {
+        internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+                isnull_stats.has_value(), "isnull_count() called on a ColumnStatsValues with no isnull_stats"
+        );
+        return isnull_stats->isnull_count;
+    }
 };
 
 struct StatsIndexAndType {
@@ -105,6 +126,9 @@ class ColumnStatsData {
     std::unordered_map<std::string, StatsForColumn> stats_by_column_;
 
     std::unordered_map<pipelines::RowRange, size_t, pipelines::RowRange::Hasher> row_range_to_row_;
+    // row_counts_.at(r) is the number of data rows in the row-slice at row index r, i.e. end_row -
+    // start_row, populated by parse_row_ranges alongside row_range_to_row_.
+    std::vector<uint64_t> row_counts_;
 };
 
 struct ColumnStatsQueryMetadata {

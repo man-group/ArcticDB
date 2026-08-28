@@ -16,12 +16,22 @@
 using namespace arcticdb;
 using namespace arcticdb::column_stats_detail;
 
+template<typename T>
+IsNullStats isnull_stats_for_range(T min_val, T max_val) {
+    if constexpr (std::is_floating_point_v<T>) {
+        if (std::isnan(min_val) && std::isnan(max_val)) {
+            return IsNullStats{1, 1};
+        }
+    }
+    return IsNullStats{0, 1};
+}
+
 template<typename LhsType, typename RhsType, typename Func>
 StatsComparison typed_range_stats_comparator(
         LhsType lhs_min, LhsType lhs_max, RhsType rhs_min, RhsType rhs_max, Func&& func
 ) {
-    ColumnStatsValues lhs{construct_value(lhs_min), construct_value(lhs_max)};
-    ColumnStatsValues rhs{construct_value(rhs_min), construct_value(rhs_max)};
+    ColumnStatsValues lhs{construct_value(lhs_min), construct_value(lhs_max), isnull_stats_for_range(lhs_min, lhs_max)};
+    ColumnStatsValues rhs{construct_value(rhs_min), construct_value(rhs_max), isnull_stats_for_range(rhs_min, rhs_max)};
     return stats_comparator(lhs, rhs, std::forward<Func>(func));
 }
 
@@ -29,8 +39,12 @@ template<typename LhsType, typename RhsType>
 StatsComparison dispatch_range_vs_range(
         LhsType lhs_min, LhsType lhs_max, RhsType rhs_min, RhsType rhs_max, OperationType op
 ) {
-    std::vector<ColumnStatsValues> lhs{{construct_value(lhs_min), construct_value(lhs_max)}};
-    std::vector<ColumnStatsValues> rhs{{construct_value(rhs_min), construct_value(rhs_max)}};
+    std::vector<ColumnStatsValues> lhs{
+            {construct_value(lhs_min), construct_value(lhs_max), isnull_stats_for_range(lhs_min, lhs_max)}
+    };
+    std::vector<ColumnStatsValues> rhs{
+            {construct_value(rhs_min), construct_value(rhs_max), isnull_stats_for_range(rhs_min, rhs_max)}
+    };
     auto result = std::get<std::vector<StatsComparison>>(dispatch_binary_stats(lhs, rhs, op));
     EXPECT_EQ(result.size(), 1);
     return result.at(0);
@@ -491,8 +505,8 @@ class Float32NaNRangeVsFloat64RangeTest : public ::testing::TestWithParam<std::t
 TEST_P(Float32NaNRangeVsFloat64RangeTest, AllOps) {
     auto [op, expected] = GetParam();
     const float nan_f = std::numeric_limits<float>::quiet_NaN();
-    std::vector<ColumnStatsValues> lhs{{construct_value(nan_f), construct_value(nan_f)}};
-    std::vector<ColumnStatsValues> rhs{{construct_value(5.0), construct_value(10.0)}}; // FLOAT64
+    std::vector<ColumnStatsValues> lhs{{construct_value(nan_f), construct_value(nan_f), IsNullStats{1, 1}}};
+    std::vector<ColumnStatsValues> rhs{{construct_value(5.0), construct_value(10.0), IsNullStats{0, 1}}}; // FLOAT64
 
     auto result = std::get<std::vector<StatsComparison>>(dispatch_binary_stats(lhs, rhs, op));
     ASSERT_EQ(result.size(), 1);
@@ -518,8 +532,8 @@ class Float64RangeVsFloat32NaNRangeTest : public ::testing::TestWithParam<std::t
 TEST_P(Float64RangeVsFloat32NaNRangeTest, AllOps) {
     auto [op, expected] = GetParam();
     const float nan_f = std::numeric_limits<float>::quiet_NaN();
-    std::vector<ColumnStatsValues> lhs{{construct_value(5.0), construct_value(10.0)}}; // FLOAT64
-    std::vector<ColumnStatsValues> rhs{{construct_value(nan_f), construct_value(nan_f)}};
+    std::vector<ColumnStatsValues> lhs{{construct_value(5.0), construct_value(10.0), IsNullStats{0, 1}}}; // FLOAT64
+    std::vector<ColumnStatsValues> rhs{{construct_value(nan_f), construct_value(nan_f), IsNullStats{1, 1}}};
 
     auto result = std::get<std::vector<StatsComparison>>(dispatch_binary_stats(lhs, rhs, op));
     ASSERT_EQ(result.size(), 1);
