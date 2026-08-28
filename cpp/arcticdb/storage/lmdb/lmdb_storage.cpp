@@ -405,9 +405,8 @@ T or_else(T val, T or_else_val, T def = T()) {
 }
 } // namespace
 
-unsigned int lmdb_env_flags(const arcticdb::proto::lmdb_storage::Config& conf) {
-    const auto extra_flags = ConfigsMap::instance()->get_int("LMDBStorage.ExtraFlags", 0);
-    return static_cast<unsigned int>(conf.flags()) | static_cast<unsigned int>(extra_flags);
+unsigned int lmdb_extra_env_flags() {
+    return static_cast<unsigned int>(ConfigsMap::instance()->get_int("LMDBStorage.ExtraFlags", 0));
 }
 
 LmdbStorage::LmdbStorage(const LibraryPath& library_path, OpenMode mode, const Config& conf) :
@@ -422,7 +421,7 @@ LmdbStorage::LmdbStorage(const LibraryPath& library_path, OpenMode mode, const C
     lib_dir_ = root_path / lib_path_str;
 
     write_mutex_ = std::make_unique<std::mutex>();
-    lmdb_instance_ = std::make_shared<LmdbInstance>(LmdbInstance{::lmdb::env::create(lmdb_env_flags(conf)), {}});
+    lmdb_instance_ = std::make_shared<LmdbInstance>(LmdbInstance{::lmdb::env::create(conf.flags()), {}});
 
     warn_if_lmdb_already_open();
 
@@ -461,7 +460,7 @@ LmdbStorage::LmdbStorage(const LibraryPath& library_path, OpenMode mode, const C
     env().set_mapsize(mapsize);
     env().set_max_dbs(or_else(static_cast<unsigned int>(conf.max_dbs()), 1024U));
     env().set_max_readers(or_else(conf.max_readers(), 1024U));
-    env().open(lib_dir_.generic_string().c_str(), MDB_NOTLS);
+    env().open(lib_dir_.generic_string().c_str(), MDB_NOTLS | lmdb_extra_env_flags());
 
     auto txn = ::lmdb::txn::begin(env());
 

@@ -22,27 +22,18 @@ namespace ac = arcticdb;
 namespace as = arcticdb::storage;
 using LmdbStorage = as::lmdb::LmdbStorage;
 
-constexpr int64_t NOSYNC_FLAGS = MDB_NOSYNC | MDB_NOMETASYNC;
+// MDB_WRITEMAP can only be given to mdb_env_open, so it is the interesting case for this hook
+constexpr int64_t WRITEMAP_NOSYNC = MDB_WRITEMAP | MDB_NOSYNC;
 
-TEST(LmdbFlags, DefaultsToConfigFlags) {
-    LmdbStorage::Config cfg;
-    ASSERT_EQ(as::lmdb::lmdb_env_flags(cfg), 0U);
+TEST(LmdbFlags, DefaultsToNoExtraFlags) { ASSERT_EQ(as::lmdb::lmdb_extra_env_flags(), 0U); }
 
-    cfg.set_flags(MDB_RDONLY);
-    ASSERT_EQ(as::lmdb::lmdb_env_flags(cfg), static_cast<unsigned int>(MDB_RDONLY));
-}
-
-TEST(LmdbFlags, ExtraFlagsFromConfigsMapAreOredIn) {
-    ac::ScopedConfig extra("LMDBStorage.ExtraFlags", NOSYNC_FLAGS);
-    LmdbStorage::Config cfg;
-    ASSERT_EQ(as::lmdb::lmdb_env_flags(cfg), static_cast<unsigned int>(NOSYNC_FLAGS));
-
-    cfg.set_flags(MDB_RDONLY);
-    ASSERT_EQ(as::lmdb::lmdb_env_flags(cfg), static_cast<unsigned int>(MDB_RDONLY | NOSYNC_FLAGS));
+TEST(LmdbFlags, ExtraFlagsComeFromConfigsMap) {
+    ac::ScopedConfig extra("LMDBStorage.ExtraFlags", WRITEMAP_NOSYNC);
+    ASSERT_EQ(as::lmdb::lmdb_extra_env_flags(), static_cast<unsigned int>(WRITEMAP_NOSYNC));
 }
 
 TEST(LmdbFlags, StorageOpensAndWritesWithExtraFlags) {
-    ac::ScopedConfig extra("LMDBStorage.ExtraFlags", NOSYNC_FLAGS);
+    ac::ScopedConfig extra("LMDBStorage.ExtraFlags", WRITEMAP_NOSYNC);
     const auto db_path = std::filesystem::temp_directory_path() / "arcticdb_test_lmdb_flags";
     std::filesystem::remove_all(db_path);
     std::filesystem::create_directories(db_path);
