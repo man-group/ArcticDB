@@ -8,19 +8,25 @@
 
 #include <google/protobuf/util/message_differencer.h>
 
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 #include <arcticdb/processing/schema_combine.hpp>
 
 using namespace arcticdb;
 using namespace arcticdb::entity;
 using namespace google::protobuf::util;
+using ::testing::ElementsAre;
+using ::testing::ElementsAreArray;
+using ::testing::IsEmpty;
 using NormalizationMetadata = arcticdb::proto::descriptors::NormalizationMetadata;
 
 namespace {
 
+// A descriptor field as the tests describe one: its name and its type.
+using ColumnSpec = std::pair<std::string, DataType>;
+
 OutputSchema timeseries_df(
-        const std::string& index_name, const std::vector<std::pair<std::string, DataType>>& columns,
-        const std::string& tz = ""
+        const std::string& index_name, const std::vector<ColumnSpec>& columns, const std::string& tz = ""
 ) {
     StreamDescriptor desc{StreamId{}, IndexDescriptorImpl{IndexDescriptor::Type::TIMESTAMP, 1}};
     desc.add_scalar_field(DataType::NANOSECONDS_UTC64, index_name);
@@ -35,17 +41,16 @@ OutputSchema timeseries_df(
     return {std::move(desc), std::move(norm)};
 }
 
-// Level 0 is a timestamp; the rest default to INT32 unless level_types says otherwise. The norm metadata's field
-// count is one less than the number of levels, as _normalization.py records it.
+// Levels are named and typed the same way as columns. The norm metadata's field count is one less than the number
+// of levels, as _normalization.py records it.
 OutputSchema multiindex_df(
-        const std::vector<std::string>& level_names, const std::vector<std::pair<std::string, DataType>>& columns,
-        const std::vector<uint32_t>& unnamed_levels = {}, const std::vector<DataType>& level_types = {}
+        const std::vector<ColumnSpec>& levels, const std::vector<ColumnSpec>& columns,
+        const std::vector<uint32_t>& unnamed_levels = {}
 ) {
-    const auto num_levels = static_cast<uint32_t>(level_names.size());
+    const auto num_levels = static_cast<uint32_t>(levels.size());
     StreamDescriptor desc{StreamId{}, IndexDescriptorImpl{IndexDescriptor::Type::TIMESTAMP, num_levels}};
-    desc.add_scalar_field(DataType::NANOSECONDS_UTC64, level_names.front());
-    for (size_t idx = 1; idx < level_names.size(); ++idx) {
-        desc.add_scalar_field(idx - 1 < level_types.size() ? level_types[idx - 1] : DataType::INT32, level_names[idx]);
+    for (const auto& [name, type] : levels) {
+        desc.add_scalar_field(type, name);
     }
     for (const auto& [name, type] : columns) {
         desc.add_scalar_field(type, name);
@@ -53,7 +58,7 @@ OutputSchema multiindex_df(
     NormalizationMetadata norm;
     auto* multi_index = norm.mutable_df()->mutable_common()->mutable_multi_index();
     multi_index->set_field_count(num_levels - 1);
-    multi_index->set_name(level_names.front());
+    multi_index->set_name(levels.front().first);
     for (const auto position : unnamed_levels) {
         multi_index->add_fake_field_pos(position);
     }
@@ -98,7 +103,7 @@ std::vector<uint32_t> fake_field_pos_of(const OutputSchema& schema) {
     return positions;
 }
 
-OutputSchema empty_index_df(const std::vector<std::pair<std::string, DataType>>& columns) {
+OutputSchema empty_index_df(const std::vector<ColumnSpec>& columns) {
     StreamDescriptor desc{StreamId{}, IndexDescriptorImpl{IndexDescriptor::Type::EMPTY, 0}};
     for (const auto& [name, type] : columns) {
         desc.add_scalar_field(type, name);
@@ -108,9 +113,7 @@ OutputSchema empty_index_df(const std::vector<std::pair<std::string, DataType>>&
     return {std::move(desc), std::move(norm)};
 }
 
-OutputSchema rowcount_df(
-        const std::vector<std::pair<std::string, DataType>>& columns, const std::string& index_name = ""
-) {
+OutputSchema rowcount_df(const std::vector<ColumnSpec>& columns, const std::string& index_name = "") {
     StreamDescriptor desc{StreamId{}, IndexDescriptorImpl{IndexDescriptor::Type::ROWCOUNT, 0}};
     for (const auto& [name, type] : columns) {
         desc.add_scalar_field(type, name);
@@ -129,8 +132,8 @@ OutputSchema combine(std::vector<OutputSchema> schemas, const SchemaCombineOptio
     return combine_schema(schemas, options);
 }
 
-std::vector<std::pair<std::string, DataType>> columns_of(const OutputSchema& schema) {
-    std::vector<std::pair<std::string, DataType>> out;
+std::vector<ColumnSpec> columns_of(const OutputSchema& schema) {
+    std::vector<ColumnSpec> out;
     for (const auto& field : schema.stream_descriptor().fields()) {
         out.emplace_back(std::string(field.name()), field.type().data_type());
     }
@@ -143,30 +146,30 @@ TEST(CombineSchema, ConcatOuterUnionOfColumns) {
     auto base = timeseries_df("ts", {{"a", DataType::FLOAT64}, {"b", DataType::FLOAT64}});
     auto other = timeseries_df("ts", {{"b", DataType::FLOAT64}, {"c", DataType::FLOAT64}});
     auto combined = combine({base, other}, concat_options(JoinType::OUTER));
-    std::vector<std::pair<std::string, DataType>> expected{
-            {"ts", DataType::NANOSECONDS_UTC64},
-            {"a", DataType::FLOAT64},
-            {"b", DataType::FLOAT64},
-            {"c", DataType::FLOAT64}
+    const std::array expected{
+            ColumnSpec{"ts", DataType::NANOSECONDS_UTC64},
+            ColumnSpec{"a", DataType::FLOAT64},
+            ColumnSpec{"b", DataType::FLOAT64},
+            ColumnSpec{"c", DataType::FLOAT64}
     };
-    ASSERT_EQ(columns_of(combined), expected);
+    ASSERT_THAT(columns_of(combined), ElementsAreArray(expected));
 }
 
 TEST(CombineSchema, ConcatInnerIntersectionOfColumns) {
     auto base = timeseries_df("ts", {{"a", DataType::FLOAT64}, {"b", DataType::FLOAT64}});
     auto other = timeseries_df("ts", {{"b", DataType::FLOAT64}, {"c", DataType::FLOAT64}});
     auto combined = combine({base, other}, concat_options(JoinType::INNER));
-    std::vector<std::pair<std::string, DataType>> expected{
-            {"ts", DataType::NANOSECONDS_UTC64}, {"b", DataType::FLOAT64}
-    };
-    ASSERT_EQ(columns_of(combined), expected);
+    const std::array expected{ColumnSpec{"ts", DataType::NANOSECONDS_UTC64}, ColumnSpec{"b", DataType::FLOAT64}};
+    ASSERT_THAT(columns_of(combined), ElementsAreArray(expected));
 }
 
-TEST(CombineSchema, ConcatOuterTypePromotion) {
+TEST(CombineSchema, ConcatTypePromotion) {
     auto base = timeseries_df("ts", {{"a", DataType::INT32}});
     auto other = timeseries_df("ts", {{"a", DataType::INT64}});
-    auto combined = combine({base, other}, concat_options(JoinType::OUTER));
-    ASSERT_EQ(combined.stream_descriptor().field(1).type().data_type(), DataType::INT64);
+    for (auto join_type : {JoinType::OUTER, JoinType::INNER}) {
+        auto combined = combine({base, other}, concat_options(join_type));
+        ASSERT_EQ(combined.stream_descriptor().field(1).type().data_type(), DataType::INT64);
+    }
 }
 
 TEST(CombineSchema, ConcatMismatchedIndexNameReconciledToFake) {
@@ -177,13 +180,17 @@ TEST(CombineSchema, ConcatMismatchedIndexNameReconciledToFake) {
 }
 
 TEST(CombineSchema, ConcatRenamedMultiIndexLevelsReconciledToFake) {
-    const std::vector<std::pair<std::string, DataType>> columns{{"a", DataType::FLOAT64}};
-    const auto both_named = multiindex_df({"dt", "lvl"}, columns);
-    const auto first_renamed = multiindex_df({"ts", "lvl"}, columns);
-    const auto second_renamed = multiindex_df({"dt", "level2"}, columns);
-    const auto both_renamed = multiindex_df({"ts", "level2"}, columns);
+    const std::vector<ColumnSpec> columns{{"a", DataType::FLOAT64}};
+    const ColumnSpec lvl{"lvl", DataType::INT32};
+    const ColumnSpec level2{"level2", DataType::INT32};
+    const ColumnSpec dt{"dt", DataType::NANOSECONDS_UTC64};
+    const ColumnSpec ts{"ts", DataType::NANOSECONDS_UTC64};
+    const auto both_named = multiindex_df({dt, lvl}, columns);
+    const auto first_renamed = multiindex_df({ts, lvl}, columns);
+    const auto second_renamed = multiindex_df({dt, level2}, columns);
+    const auto both_renamed = multiindex_df({ts, level2}, columns);
 
-    const auto combine_both_ways = [&](const OutputSchema& lhs, const OutputSchema& rhs, auto&& assertions) {
+    const auto combine_both_ways = [](const OutputSchema& lhs, const OutputSchema& rhs, auto&& assertions) {
         assertions(combine({lhs, rhs}, concat_options(JoinType::OUTER)));
         assertions(combine({rhs, lhs}, concat_options(JoinType::OUTER)));
     };
@@ -192,7 +199,7 @@ TEST(CombineSchema, ConcatRenamedMultiIndexLevelsReconciledToFake) {
     combine_both_ways(both_named, first_renamed, [](const OutputSchema& combined) {
         ASSERT_EQ(combined.stream_descriptor().field(0).name(), "index");
         ASSERT_EQ(combined.stream_descriptor().field(1).name(), "lvl");
-        ASSERT_EQ(fake_field_pos_of(combined), std::vector<uint32_t>{0});
+        ASSERT_THAT(fake_field_pos_of(combined), ElementsAre(0));
         ASSERT_EQ(combined.norm_metadata_.df().common().multi_index().name(), "index");
     });
 
@@ -200,19 +207,19 @@ TEST(CombineSchema, ConcatRenamedMultiIndexLevelsReconciledToFake) {
     combine_both_ways(both_named, second_renamed, [](const OutputSchema& combined) {
         ASSERT_EQ(combined.stream_descriptor().field(0).name(), "dt");
         ASSERT_EQ(combined.stream_descriptor().field(1).name(), "__fkidx__1");
-        ASSERT_EQ(fake_field_pos_of(combined), std::vector<uint32_t>{1});
+        ASSERT_THAT(fake_field_pos_of(combined), ElementsAre(1));
     });
 
     combine_both_ways(both_named, both_renamed, [](const OutputSchema& combined) {
         ASSERT_EQ(combined.stream_descriptor().field(0).name(), "index");
         ASSERT_EQ(combined.stream_descriptor().field(1).name(), "__fkidx__1");
-        ASSERT_EQ(fake_field_pos_of(combined), (std::vector<uint32_t>{0, 1}));
+        ASSERT_THAT(fake_field_pos_of(combined), ElementsAre(0, 1));
     });
 
     combine_both_ways(both_named, both_named, [](const OutputSchema& combined) {
         ASSERT_EQ(combined.stream_descriptor().field(0).name(), "dt");
         ASSERT_EQ(combined.stream_descriptor().field(1).name(), "lvl");
-        ASSERT_TRUE(fake_field_pos_of(combined).empty());
+        ASSERT_THAT(fake_field_pos_of(combined), IsEmpty());
     });
 }
 
@@ -239,33 +246,38 @@ TEST(CombineSchema, ConcatRenamedSeriesValueColumnDropsTheName) {
 // The read side decides a level has no name from fake_field_pos, so a level every schema agrees is unnamed -
 // and which therefore records no mismatch - must still come out in it.
 TEST(CombineSchema, AlreadyUnnamedMultiIndexLevelsStayUnnamed) {
-    const std::vector<std::pair<std::string, DataType>> columns{{"a", DataType::FLOAT64}};
-    const auto unnamed_level_1 = multiindex_df({"dt", "__fkidx__1"}, columns, {1});
+    const std::vector<ColumnSpec> columns{{"a", DataType::FLOAT64}};
+    const ColumnSpec fake_1{"__fkidx__1", DataType::INT32};
+    const auto unnamed_level_1 = multiindex_df({{"dt", DataType::NANOSECONDS_UTC64}, fake_1}, columns, {1});
 
     auto combined = combine({unnamed_level_1, unnamed_level_1}, concat_options(JoinType::OUTER));
-    ASSERT_EQ(fake_field_pos_of(combined), std::vector<uint32_t>{1});
+    ASSERT_THAT(fake_field_pos_of(combined), ElementsAre(1));
     ASSERT_EQ(combined.stream_descriptor().field(1).name(), "__fkidx__1");
 
     // Level 0 disagrees, so there is a mismatch, and level 1 must not be lost while it is applied.
-    const auto renamed_level_0 = multiindex_df({"ts", "__fkidx__1"}, columns, {1});
+    const auto renamed_level_0 = multiindex_df({{"ts", DataType::NANOSECONDS_UTC64}, fake_1}, columns, {1});
     combined = combine({unnamed_level_1, renamed_level_0}, concat_options(JoinType::OUTER));
-    ASSERT_EQ(fake_field_pos_of(combined), (std::vector<uint32_t>{0, 1}));
+    ASSERT_THAT(fake_field_pos_of(combined), ElementsAre(0, 1));
 
-    // And appending them is fine, since nothing about the names disagrees.
-    combined = combine({unnamed_level_1, unnamed_level_1}, append_options(true));
-    ASSERT_EQ(fake_field_pos_of(combined), std::vector<uint32_t>{1});
+    // And appending them is fine under either schema, since nothing about the names disagrees.
+    for (const auto& options : {append_options(true), append_options(false)}) {
+        combined = combine({unnamed_level_1, unnamed_level_1}, options);
+        ASSERT_THAT(fake_field_pos_of(combined), ElementsAre(1)) << "for " << options.name();
+    }
 }
 
 TEST(CombineSchema, AgreedUnnamedLevelSurvivesAlongsideADisagreeingOne) {
-    const auto both = multiindex_df({"dt", "__fkidx__1", "__fkidx__2"}, {{"a", DataType::FLOAT64}}, {1, 2});
-    const auto only_level_1 = multiindex_df({"dt", "__fkidx__1", "lvl2"}, {{"a", DataType::FLOAT64}}, {1});
+    const ColumnSpec dt{"dt", DataType::NANOSECONDS_UTC64};
+    const ColumnSpec fake_1{"__fkidx__1", DataType::INT32};
+    const auto both = multiindex_df({dt, fake_1, {"__fkidx__2", DataType::INT32}}, {{"a", DataType::FLOAT64}}, {1, 2});
+    const auto only_level_1 = multiindex_df({dt, fake_1, {"lvl2", DataType::INT32}}, {{"a", DataType::FLOAT64}}, {1});
 
     auto combined = combine({both, only_level_1}, concat_options(JoinType::OUTER));
-    ASSERT_EQ(fake_field_pos_of(combined), (std::vector<uint32_t>{1, 2}));
+    ASSERT_THAT(fake_field_pos_of(combined), ElementsAre(1, 2));
 
     // Independent of the ordering of the inputs.
     combined = combine({only_level_1, both}, concat_options(JoinType::OUTER));
-    ASSERT_EQ(fake_field_pos_of(combined), (std::vector<uint32_t>{1, 2}));
+    ASSERT_THAT(fake_field_pos_of(combined), ElementsAre(1, 2));
 }
 
 // A RangeIndexed Series has no index field, so its value column is required field 0 - the position a scalar
@@ -282,9 +294,11 @@ TEST(CombineSchema, RowCountSeriesNameMismatchLeavesTheIndexAlone) {
 }
 
 TEST(CombineSchema, IncompatibleRequiredFieldShapesRaise) {
-    const std::vector<std::pair<std::string, DataType>> columns{{"a", DataType::FLOAT64}};
-    const auto two_levels = multiindex_df({"dt", "lvl"}, {{"a", DataType::FLOAT64}});
-    const auto three_levels = multiindex_df({"dt", "lvl", "lvl2"}, {{"a", DataType::FLOAT64}});
+    const std::vector<ColumnSpec> columns{{"a", DataType::FLOAT64}};
+    const ColumnSpec dt{"dt", DataType::NANOSECONDS_UTC64};
+    const ColumnSpec lvl{"lvl", DataType::INT32};
+    const auto two_levels = multiindex_df({dt, lvl}, columns);
+    const auto three_levels = multiindex_df({dt, lvl, {"lvl2", DataType::INT32}}, columns);
     const auto scalar_index = timeseries_df("dt", columns);
     const auto series = timeseries_series("dt", "v", DataType::FLOAT64);
 
@@ -315,14 +329,10 @@ TEST(CombineSchema, ArrowSchemaHasNoShapeToDisagreeAbout) {
     auto arrow = timeseries_df("ts", {{"col", DataType::INT64}});
     arrow.norm_metadata_.mutable_experimental_arrow()->set_has_index(true);
 
+    const std::array expected{ColumnSpec{"ts", DataType::NANOSECONDS_UTC64}, ColumnSpec{"col", DataType::INT64}};
     for (auto schemas : {std::vector<OutputSchema>{series, arrow}, std::vector<OutputSchema>{arrow, series}}) {
         auto combined = combine(schemas, concat_options(JoinType::OUTER));
-        ASSERT_EQ(
-                columns_of(combined),
-                (std::vector<std::pair<std::string, DataType>>{
-                        {"ts", DataType::NANOSECONDS_UTC64}, {"col", DataType::INT64}
-                })
-        );
+        ASSERT_THAT(columns_of(combined), ElementsAreArray(expected));
     }
 }
 
@@ -342,18 +352,21 @@ TEST(CombineSchema, ErrorMessagesNameTheOperation) {
     ASSERT_NE(message_for(concat_options(JoinType::OUTER)).find("concat"), std::string::npos);
 }
 
+// A name disagreement is a descriptor mismatch wherever it occurs. Only the shape of the required fields - their
+// count, or Series versus DataFrame - is an index incompatibility. See IncompatibleRequiredFieldShapesRaise.
 TEST(CombineSchema, AppendRejectsRenamedRequiredFields) {
-    const std::vector<std::pair<std::string, DataType>> columns{{"a", DataType::FLOAT64}};
+    const std::vector<ColumnSpec> columns{{"a", DataType::FLOAT64}};
+    const ColumnSpec dt{"dt", DataType::NANOSECONDS_UTC64};
+    const ColumnSpec ts{"ts", DataType::NANOSECONDS_UTC64};
+    const ColumnSpec lvl{"lvl", DataType::INT32};
     const auto options = append_options(true);
-    // A multi-index level name is what keeps the normalization metadata in step with the data, so a disagreement
-    // is an index incompatibility rather than a descriptor mismatch.
     ASSERT_THROW(
-            combine({multiindex_df({"dt", "lvl"}, columns), multiindex_df({"ts", "lvl"}, columns)}, options),
-            NormalizationException
+            combine({multiindex_df({dt, lvl}, columns), multiindex_df({ts, lvl}, columns)}, options), SchemaException
     );
     ASSERT_THROW(
-            combine({multiindex_df({"dt", "lvl"}, columns), multiindex_df({"dt", "level2"}, columns)}, options),
-            NormalizationException
+            combine({multiindex_df({dt, lvl}, columns), multiindex_df({dt, {"level2", DataType::INT32}}, columns)},
+                    options),
+            SchemaException
     );
     ASSERT_THROW(
             combine({timeseries_series("ts", "a", DataType::FLOAT64), timeseries_series("ts", "b", DataType::FLOAT64)},
@@ -412,10 +425,12 @@ TEST(CombineSchema, AppendDynamicKeepsUnionAndPromotes) {
     auto base = timeseries_df("ts", {{"a", DataType::INT32}});
     auto other = timeseries_df("ts", {{"a", DataType::INT64}, {"b", DataType::FLOAT64}});
     auto combined = combine({base, other}, append_options(true));
-    std::vector<std::pair<std::string, DataType>> expected{
-            {"ts", DataType::NANOSECONDS_UTC64}, {"a", DataType::INT64}, {"b", DataType::FLOAT64}
+    const std::array expected{
+            ColumnSpec{"ts", DataType::NANOSECONDS_UTC64},
+            ColumnSpec{"a", DataType::INT64},
+            ColumnSpec{"b", DataType::FLOAT64}
     };
-    ASSERT_EQ(columns_of(combined), expected);
+    ASSERT_THAT(columns_of(combined), ElementsAreArray(expected));
 }
 
 TEST(CombineSchema, ConcatPromotesMixedSignednessDataColumnToFloat64) {
@@ -434,12 +449,14 @@ TEST(CombineSchema, AppendRejectsMixedSignednessDataColumn) {
 }
 
 TEST(CombineSchema, RequiredFieldsNeverTakeTheFloat64Fallback) {
-    auto base = multiindex_df({"dt", "lvl"}, {{"a", DataType::FLOAT64}}, {}, {DataType::UINT64});
-    auto other = multiindex_df({"dt", "lvl"}, {{"a", DataType::FLOAT64}}, {}, {DataType::INT64});
+    const std::vector<ColumnSpec> columns{{"a", DataType::FLOAT64}};
+    const ColumnSpec dt{"dt", DataType::NANOSECONDS_UTC64};
+    auto base = multiindex_df({dt, {"lvl", DataType::UINT64}}, columns);
+    auto other = multiindex_df({dt, {"lvl", DataType::INT64}}, columns);
     ASSERT_THROW(combine({base, other}, concat_options(JoinType::OUTER)), SchemaException);
     ASSERT_THROW(combine({base, other}, append_options(true)), SchemaException);
     // A level pair that does have an exact common type still promotes.
-    auto promotable = multiindex_df({"dt", "lvl"}, {{"a", DataType::FLOAT64}});
+    auto promotable = multiindex_df({dt, {"lvl", DataType::INT32}}, columns);
     auto combined = combine({promotable, other}, concat_options(JoinType::OUTER));
     ASSERT_EQ(combined.stream_descriptor().field(1).type().data_type(), DataType::INT64);
 }
@@ -450,12 +467,10 @@ TEST(CombineSchema, AllEmptyIndicesCombineToAnEmptyIndex) {
 
     auto combined = combine({empty_a, empty_b}, concat_options(JoinType::OUTER));
     ASSERT_EQ(combined.stream_descriptor().index().type(), IndexDescriptor::Type::EMPTY);
-    ASSERT_EQ(
-            columns_of(combined),
-            (std::vector<std::pair<std::string, DataType>>{{"a", DataType::EMPTYVAL}, {"b", DataType::EMPTYVAL}})
-    );
+    const std::array expected{ColumnSpec{"a", DataType::EMPTYVAL}, ColumnSpec{"b", DataType::EMPTYVAL}};
+    ASSERT_THAT(columns_of(combined), ElementsAreArray(expected));
 
-    ASSERT_TRUE(columns_of(combine({empty_a, empty_b}, concat_options(JoinType::INNER))).empty());
+    ASSERT_THAT(columns_of(combine({empty_a, empty_b}, concat_options(JoinType::INNER))), IsEmpty());
 }
 
 // Append used to let the last write's index name silently win (Monday 9797097831).
@@ -479,16 +494,23 @@ TEST(CombineSchema, RowCountIndexNameMismatchIsReconciledForConcatAndRaisesForAp
 // where we write "index". Both record fake_name, so the name itself must not be compared, or data written by an old
 // client can no longer be appended to. See test_compatibility.py::test_compat_update_old_updated_data.
 TEST(CombineSchema, UnnamedIndexPlaceholderNamesFromDifferentClientVersionsAgree) {
-    const std::vector<std::pair<std::string, DataType>> columns{{"a", DataType::FLOAT64}};
+    const std::vector<ColumnSpec> columns{{"a", DataType::FLOAT64}};
     auto old_client = timeseries_df("index", columns);
     old_client.norm_metadata_.mutable_df()->mutable_common()->mutable_index()->set_name("");
     old_client.norm_metadata_.mutable_df()->mutable_common()->mutable_index()->set_fake_name(true);
     auto new_client = timeseries_df("index", columns);
     new_client.norm_metadata_.mutable_df()->mutable_common()->mutable_index()->set_fake_name(true);
 
+    // Whichever placeholder the base carries is the one that survives, and the result stays marked unnamed - an
+    // old-client symbol must not come back named "index", nor a new-client one un-named.
     for (const auto& options : {append_options(false), append_options(true), update_options(false)}) {
-        ASSERT_NO_THROW(combine({old_client, new_client}, options));
-        ASSERT_NO_THROW(combine({new_client, old_client}, options));
+        for (const auto& [base, other, expected_name] :
+             {std::tuple{old_client, new_client, ""}, std::tuple{new_client, old_client, "index"}}) {
+            const auto combined = combine({base, other}, options);
+            const auto& index = combined.norm_metadata_.df().common().index();
+            ASSERT_EQ(index.name(), expected_name) << "for " << options.name();
+            ASSERT_TRUE(index.fake_name()) << "for " << options.name();
+        }
     }
 
     // An index one side names and the other does not is still a disagreement.
@@ -497,12 +519,18 @@ TEST(CombineSchema, UnnamedIndexPlaceholderNamesFromDifferentClientVersionsAgree
 }
 
 TEST(CombineSchema, UnnamedMultiIndexLevel0PlaceholderNamesAgree) {
-    auto old_client = multiindex_df({"index", "lvl"}, {{"a", DataType::FLOAT64}}, {0});
+    const std::vector<ColumnSpec> levels{{"index", DataType::NANOSECONDS_UTC64}, {"lvl", DataType::INT32}};
+    auto old_client = multiindex_df(levels, {{"a", DataType::FLOAT64}}, {0});
     old_client.norm_metadata_.mutable_df()->mutable_common()->mutable_multi_index()->set_name("");
-    auto new_client = multiindex_df({"index", "lvl"}, {{"a", DataType::FLOAT64}}, {0});
+    auto new_client = multiindex_df(levels, {{"a", DataType::FLOAT64}}, {0});
 
-    ASSERT_NO_THROW(combine({old_client, new_client}, append_options(true)));
-    ASSERT_NO_THROW(combine({new_client, old_client}, append_options(true)));
+    for (const auto& [base, other, expected_name] :
+         {std::tuple{old_client, new_client, ""}, std::tuple{new_client, old_client, "index"}}) {
+        const auto combined = combine({base, other}, append_options(true));
+        const auto& multi_index = combined.norm_metadata_.df().common().multi_index();
+        ASSERT_EQ(multi_index.name(), expected_name);
+        ASSERT_THAT(fake_field_pos_of(combined), ElementsAre(0));
+    }
 }
 
 // Append used to let the new frame's timezone overwrite the existing one (Monday 12029540807).
@@ -523,9 +551,10 @@ TEST(CombineSchema, MismatchedTimezoneIsClearedUnderDynamicSchemaAndRaisesUnderS
 }
 
 TEST(CombineSchema, MismatchedMultiIndexLevelTimezoneFollowsTheSameRule) {
-    auto london = multiindex_df({"dt", "lvl"}, {{"a", DataType::FLOAT64}});
+    const std::vector<ColumnSpec> levels{{"dt", DataType::NANOSECONDS_UTC64}, {"lvl", DataType::INT32}};
+    auto london = multiindex_df(levels, {{"a", DataType::FLOAT64}});
     london.norm_metadata_.mutable_df()->mutable_common()->mutable_multi_index()->set_tz("Europe/London");
-    auto new_york = multiindex_df({"dt", "lvl"}, {{"a", DataType::FLOAT64}});
+    auto new_york = multiindex_df(levels, {{"a", DataType::FLOAT64}});
     new_york.norm_metadata_.mutable_df()->mutable_common()->mutable_multi_index()->set_tz("America/New_York");
 
     ASSERT_EQ(combine({london, new_york}, append_options(true)).norm_metadata_.df().common().multi_index().tz(), "");
@@ -546,10 +575,8 @@ TEST(CombineSchema, InnerJoinIgnoresIncompatibleTypesOnDroppedColumns) {
     auto schema_2 = timeseries_df("ts", {{"common", DataType::FLOAT64}});
 
     auto combined = combine({schema_0, schema_1, schema_2}, concat_options(JoinType::INNER));
-    std::vector<std::pair<std::string, DataType>> expected{
-            {"ts", DataType::NANOSECONDS_UTC64}, {"common", DataType::FLOAT64}
-    };
-    ASSERT_EQ(columns_of(combined), expected);
+    const std::array expected{ColumnSpec{"ts", DataType::NANOSECONDS_UTC64}, ColumnSpec{"common", DataType::FLOAT64}};
+    ASSERT_THAT(columns_of(combined), ElementsAreArray(expected));
 
     // An outer join keeps "a", so there the clash does matter.
     ASSERT_THROW(combine({schema_0, schema_1, schema_2}, concat_options(JoinType::OUTER)), SchemaException);
@@ -560,12 +587,12 @@ TEST(CombineSchema, ThreeSchemasKeepFirstSeenColumnOrder) {
     auto schema_1 = timeseries_df("ts", {{"c", DataType::FLOAT64}, {"b", DataType::FLOAT64}});
     auto schema_2 = timeseries_df("ts", {{"b", DataType::FLOAT64}, {"d", DataType::FLOAT64}});
     auto combined = combine({schema_0, schema_1, schema_2}, concat_options(JoinType::OUTER));
-    std::vector<std::pair<std::string, DataType>> expected{
-            {"ts", DataType::NANOSECONDS_UTC64},
-            {"a", DataType::FLOAT64},
-            {"c", DataType::FLOAT64},
-            {"b", DataType::FLOAT64},
-            {"d", DataType::FLOAT64}
+    const std::array expected{
+            ColumnSpec{"ts", DataType::NANOSECONDS_UTC64},
+            ColumnSpec{"a", DataType::FLOAT64},
+            ColumnSpec{"c", DataType::FLOAT64},
+            ColumnSpec{"b", DataType::FLOAT64},
+            ColumnSpec{"d", DataType::FLOAT64}
     };
-    ASSERT_EQ(columns_of(combined), expected);
+    ASSERT_THAT(columns_of(combined), ElementsAreArray(expected));
 }

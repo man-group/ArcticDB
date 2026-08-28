@@ -31,6 +31,11 @@ enum class MissingColumnPolicy { STRICT, DROP, KEEP };
 //   DYNAMIC         - Dynamic schema: promote via (has_valid_common_type)
 //   MOST_PERMISSIVE - as DYNAMIC, but promotes to float64 when no exact common type exists
 //                     for integral types. E.g. int32 + uint64 -> float64. Used for concat.
+//
+// MOST_PERMISSIVE applies to data columns only. The required fields - the index levels and a Series' value
+// column - fall back to DYNAMIC, because float64 cannot represent every 64-bit integer exactly, and an index
+// column is compared for equality when sorting and searching, so a lossy promotion there would silently
+// corrupt lookups rather than merely lose precision on read.
 enum class TypePromotionPolicy { STATIC, DYNAMIC, MOST_PERMISSIVE };
 
 // How a mismatch in the names of the required (index / Series) fields is treated.
@@ -65,43 +70,22 @@ struct SchemaCombineOptions {
     NormalizationOperation operation;
     std::optional<StreamId> stream_id{};
 
-    [[nodiscard]] std::string name() const {
-        const auto operation_str = operation_name(operation);
-        if (stream_id.has_value()) {
-            return fmt::format("{} (symbol '{}')", operation_str, *stream_id);
-        }
-        return std::string{operation_str};
-    }
+    [[nodiscard]] std::string name() const;
 };
 
-inline SchemaCombineOptions append_or_update_options(
+SchemaCombineOptions append_or_update_options(
         bool dynamic_schema, NormalizationOperation operation, std::optional<StreamId> stream_id = std::nullopt
-) {
-    const auto missing_column = dynamic_schema ? MissingColumnPolicy::KEEP : MissingColumnPolicy::STRICT;
-    const auto type_promotion = dynamic_schema ? TypePromotionPolicy::DYNAMIC : TypePromotionPolicy::STATIC;
-    return {missing_column, type_promotion, RequiredNameMismatchPolicy::RAISE, operation, std::move(stream_id)};
-}
+);
 
 // Only the symbol-less forms the tests need; every production caller knows its symbol and passes it.
-inline SchemaCombineOptions append_options(bool dynamic_schema) {
-    return append_or_update_options(dynamic_schema, APPEND);
-}
+SchemaCombineOptions append_options(bool dynamic_schema);
 
-inline SchemaCombineOptions update_options(bool dynamic_schema) {
-    return append_or_update_options(dynamic_schema, UPDATE);
-}
+SchemaCombineOptions update_options(bool dynamic_schema);
 
 // Multi-symbol join utilities
 enum class JoinType : uint8_t { OUTER, INNER };
 
-inline SchemaCombineOptions concat_options(JoinType join_type) {
-    const auto missing_column = join_type == JoinType::OUTER ? MissingColumnPolicy::KEEP : MissingColumnPolicy::DROP;
-    return {missing_column,
-            TypePromotionPolicy::MOST_PERMISSIVE,
-            RequiredNameMismatchPolicy::RECONCILE_TO_UNNAMED,
-            NormalizationOperation::CONCAT,
-            std::nullopt};
-}
+SchemaCombineOptions concat_options(JoinType join_type);
 
 // Combine schemas into one. Resolves differences according to SchemaCombineOptions. The first schema is the
 // base: its column order leads the output, and for append/update it is the existing symbol's schema.

@@ -45,6 +45,35 @@ using Pandas = NormalizationMetadata_Pandas;
 using PandasIndex = NormalizationMetadata_PandasIndex;
 using PandasMultiIndex = NormalizationMetadata_PandasMultiIndex;
 
+std::string SchemaCombineOptions::name() const {
+    const auto operation_str = operation_name(operation);
+    if (stream_id.has_value()) {
+        return fmt::format("{} (symbol '{}')", operation_str, *stream_id);
+    }
+    return std::string{operation_str};
+}
+
+SchemaCombineOptions append_or_update_options(
+        bool dynamic_schema, NormalizationOperation operation, std::optional<StreamId> stream_id
+) {
+    const auto missing_column = dynamic_schema ? MissingColumnPolicy::KEEP : MissingColumnPolicy::STRICT;
+    const auto type_promotion = dynamic_schema ? TypePromotionPolicy::DYNAMIC : TypePromotionPolicy::STATIC;
+    return {missing_column, type_promotion, RequiredNameMismatchPolicy::RAISE, operation, std::move(stream_id)};
+}
+
+SchemaCombineOptions append_options(bool dynamic_schema) { return append_or_update_options(dynamic_schema, APPEND); }
+
+SchemaCombineOptions update_options(bool dynamic_schema) { return append_or_update_options(dynamic_schema, UPDATE); }
+
+SchemaCombineOptions concat_options(JoinType join_type) {
+    const auto missing_column = join_type == JoinType::OUTER ? MissingColumnPolicy::KEEP : MissingColumnPolicy::DROP;
+    return {missing_column,
+            TypePromotionPolicy::MOST_PERMISSIVE,
+            RequiredNameMismatchPolicy::RECONCILE_TO_UNNAMED,
+            NormalizationOperation::CONCAT,
+            std::nullopt};
+}
+
 namespace {
 // Whether a schema carries the empty index a zero-row write produces with empty_types enabled. Taken from the
 // descriptor rather than the normalization metadata, which cannot distinguish it from a pre-Nov-2020 RangeIndex - both
@@ -116,18 +145,16 @@ class RequiredNameMismatches {
   public:
     explicit RequiredNameMismatches(const SchemaCombineOptions& options) : options_(options) {}
 
-    // A multi-index's level names are reported as an index incompatibility: they are what keeps the normalization
-    // metadata in step with the data, which is why they must match even under dynamic schema. A single index's
-    // name is a descriptor field, so a disagreement about it is a descriptor mismatch.
+    // A name disagreement is a descriptor mismatch wherever it occurs - index level, Series value column or data
+    // column. Only a disagreement about the *shape* of the required fields (their count, or Series versus DataFrame)
+    // is an index incompatibility. The multi_index flag only picks the wording.
     void add_index(size_t position, bool multi_index, std::string_view detail) {
         if (raises()) {
-            if (multi_index) {
-                normalization::raise<ErrorCode::E_INCOMPATIBLE_INDEX>(
-                        "Cannot {}: multi-index level names must match, {}", options_.name(), detail
-                );
-            }
             schema::raise<ErrorCode::E_DESCRIPTOR_MISMATCH>(
-                    "Cannot {}: index names must match, {}", options_.name(), detail
+                    "Cannot {}: {} names must match, {}",
+                    options_.name(),
+                    multi_index ? "multi-index level" : "index",
+                    detail
             );
         }
         index_positions_.emplace(position);
@@ -330,8 +357,7 @@ size_t data_column_count(const StreamDescriptor& desc, const RequiredFieldInfo& 
 using DataColumns = std::vector<std::pair<std::string_view, TypeDescriptor>>;
 
 DataColumns data_columns_of(const StreamDescriptor& desc, const RequiredFieldInfo& info) {
-    DataColumns columns;
-    columns.reserve(data_column_count(desc, info));
+    auto columns = util::reserve_vector<DataColumns::value_type>(data_column_count(desc, info));
     for (const auto& field : data_columns(desc, info)) {
         columns.emplace_back(field.name(), field.type());
     }
@@ -358,10 +384,15 @@ std::string data_column_differences(
     std::vector<std::string_view> unexpected;
     std::ranges::set_difference(base_names, other_names, std::back_inserter(missing));
     std::ranges::set_difference(other_names, base_names, std::back_inserter(unexpected));
+    // The count goes in the message so that a truncated list still says how much work the disagreement is, rather
+    // than leaving the reader to discover the rest five at a time.
     const auto listed = [max_listed](const std::vector<std::string_view>& names) {
         const auto shown = std::min(names.size(), max_listed);
         return fmt::format(
-                "[{}{}]", fmt::join(names.begin(), names.begin() + shown, ", "), names.size() > shown ? ", etc." : ""
+                "{} [{}{}]",
+                names.size(),
+                fmt::join(names.begin(), names.begin() + shown, ", "),
+                names.size() > shown ? ", etc." : ""
         );
     };
     return fmt::format("missing {}, unexpected {}", listed(missing), listed(unexpected));
@@ -375,8 +406,7 @@ void add_data_columns_static(
     const auto& base = schemas.front().stream_descriptor();
     const auto column_count = data_column_count(base, info);
     const auto num_required_for_base = info.num_required_columns_for(base.index().type());
-    std::vector<TypeDescriptor> types;
-    types.reserve(column_count);
+    auto types = util::reserve_vector<TypeDescriptor>(column_count);
     for (const auto& field : data_columns(base, info)) {
         types.emplace_back(field.type());
     }
@@ -559,13 +589,26 @@ bool has_arrow_or_pandas(const NormalizationMetadata& norm) {
     return norm.has_experimental_arrow() || pandas_common(norm) != nullptr;
 }
 
-// The kind of object as the normalization metadata names it - "df", "series", "np", "msg_pack_frame" - which is what
-// a user comparing two error messages needs, rather than the oneof's tag number.
-std::string input_type_name(const NormalizationMetadata& norm) {
-    const auto* field = NormalizationMetadata::descriptor()->FindFieldByNumber(norm.input_type_case());
-    // FieldDescriptor::name() returns a string_view on newer protobuf and a const string& on older, so neither arm
-    // of the conditional can be left to deduce the common type.
-    return field != nullptr ? std::string{field->name()} : std::string{"unset"};
+// The kind of object named as the user knows it, rather than by the protobuf field the normalization metadata
+// happens to store it under - "ndarray", not "np".
+std::string_view input_type_name(const NormalizationMetadata& norm) {
+    switch (norm.input_type_case()) {
+    case NormalizationMetadata::kDf:
+        return "DataFrame";
+    case NormalizationMetadata::kSeries:
+        return "Series";
+    case NormalizationMetadata::kTs:
+        return "TimeFrame";
+    case NormalizationMetadata::kMsgPackFrame:
+        return "pickled object";
+    case NormalizationMetadata::kNp:
+        return "ndarray";
+    case NormalizationMetadata::kExperimentalArrow:
+        return "arrow table";
+    case NormalizationMetadata::INPUT_TYPE_NOT_SET:
+        break;
+    }
+    return "unset";
 }
 
 void check_same_input_type(
@@ -758,7 +801,7 @@ void accumulate_index(
 ) {
     normalization::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
             res_index->is_physically_stored() == other_index.is_physically_stored(),
-            "Cannot {}: one index is physically stored and the other is not",
+            "Cannot {}: one index is a DatetimeIndex and the other is a RangeIndex",
             options.name()
     );
     if (const auto error = compare_pandas_names(PandasName::of_index(*res_index), PandasName::of_index(other_index))) {

@@ -93,17 +93,17 @@ def test_symbol_concat_type_promotion(lmdb_library, first_type, second_type, any
     assert_frame_equal(expected, received)
 
 
-# Mixed-signedness 64-bit ints have no type that represents both exactly. Concat and append deliberately
-# differ here: concat promotes a *data column* to float64, append refuses. This is the only type pair where
-# the two operations disagree - anything promotable exactly (e.g. int32+int64) behaves the same under both,
-# and anything unpromotable (e.g. string+int) raises under both.
-MIXED_SIGNEDNESS_TYPES = [("uint64", "int64"), ("int64", "uint64"), ("uint64", "int32")]
+# Mixed signedness is only a problem when no signed type is wide enough to hold both sides exactly - uint16
+# with int16 promotes to int32 quite happily, but nothing represents the full range of uint64 and int64.
+# Concat and append deliberately differ on those: concat promotes a *data column* to float64, append refuses.
+# These are the only pairs where the two operations disagree - anything promotable exactly (e.g. int32+int64)
+# behaves the same under both, and anything unpromotable (e.g. string+int) raises under both.
+UNPROMOTABLE_MIXED_SIGNEDNESS_TYPES = [("uint64", "int64"), ("int64", "uint64"), ("uint64", "int32")]
 
 
-@pytest.mark.parametrize("first_type,second_type", MIXED_SIGNEDNESS_TYPES)
+@pytest.mark.parametrize("first_type,second_type", UNPROMOTABLE_MIXED_SIGNEDNESS_TYPES)
 def test_append_dynamic_schema_mixed_signedness_raises(in_memory_library_dynamic, first_type, second_type):
-    # Shows that mixed signed types (e.g int64 with uint64) raise for append. Compared to concat's test
-    # test_symbol_concat_type_promotion, which promotes to float64
+    # Append refuses these, where concat's test_symbol_concat_type_promotion promotes them to float64.
     lib = in_memory_library_dynamic
     index = pd.date_range("2025-01-01", periods=2)
     lib.write("sym", pd.DataFrame({"col": np.arange(2, dtype=np.dtype(first_type))}, index=index))
@@ -114,7 +114,7 @@ def test_append_dynamic_schema_mixed_signedness_raises(in_memory_library_dynamic
         lib.append("sym", to_append)
 
 
-@pytest.mark.parametrize("first_type,second_type", MIXED_SIGNEDNESS_TYPES)
+@pytest.mark.parametrize("first_type,second_type", UNPROMOTABLE_MIXED_SIGNEDNESS_TYPES)
 @pytest.mark.xfail(
     strict=True,
     reason="A Series' value column is treated as an index-like field, so it is combined strictly and raises "
@@ -425,8 +425,8 @@ def test_symbol_concat_empty_dataframe_does_not_contribute_its_columns(in_memory
 
 @pytest.mark.parametrize("join", ["inner", "outer"])
 def test_symbol_concat_of_only_empty_dataframes(in_memory_library, join):
-    # The companion to the two tests above. Skipping the zero-row symbols cannot apply when every symbol is
-    # zero-row, as that would leave nothing to join, so they are all kept and their schemas combined as usual.
+    # The companion to the two tests above. Concating empty only dataframes preserves only the first schema.
+    # This is to make it consistent with append.
     lib = in_memory_library
     df_0 = pd.DataFrame({"col1": np.array([], dtype=np.float64)}, index=pd.DatetimeIndex([]))
     df_1 = pd.DataFrame({"col2": np.array([], dtype=np.float64)}, index=pd.DatetimeIndex([]))
@@ -435,7 +435,12 @@ def test_symbol_concat_of_only_empty_dataframes(in_memory_library, join):
 
     received = concat(lib.read_batch(["sym0", "sym1"], lazy=True), join).collect().data
     assert not len(received)
-    assert list(received.columns) == ([] if join == "inner" else ["col1", "col2"])
+    assert list(received.columns) == ["col1"]
+
+    # And symmetrically, the other way round.
+    received = concat(lib.read_batch(["sym1", "sym0"], lazy=True), join).collect().data
+    assert not len(received)
+    assert list(received.columns) == ["col2"]
 
 
 @pytest.mark.parametrize("dynamic_schema", [True, False])

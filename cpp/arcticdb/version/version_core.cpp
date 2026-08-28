@@ -146,7 +146,7 @@ void check_update_data_is_sorted_timeseries(
             input_data_is_sorted, "When calling update, the input data must be sorted."
     );
     normalization::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
-            index::is_timeseries_index(index_segment_reader.tsd().index()),
+            index::is_timeseries_or_empty_index(index_segment_reader.tsd().index()),
             "When calling update, the existing data must have a time series index."
     );
     bool existing_data_is_sorted = index_segment_reader.sorted() == SortedValue::ASCENDING ||
@@ -199,12 +199,20 @@ static TimeseriesDescriptor prepare_append(
     return tsd_from_schema(std::move(combined), frame.num_rows + frame.offset, frame);
 }
 
-static OutputSchema check_can_update(
-        const InputFrame& frame, const index::IndexSegmentReader& index_segment_reader, bool dynamic_schema
+// Performs checks and returns the TimeseriesDescriptor as a result of an update. Combining the schemas is also the
+// compatibility check, so it happens here, before any data keys are written; doing it the other way round would
+// orphan data keys when the schemas turn out not to combine.
+static TimeseriesDescriptor prepare_update(
+        InputFrame& frame, const index::IndexSegmentReader& index_segment_reader, bool dynamic_schema
 ) {
     check_update_data_is_sorted_timeseries(frame, index_segment_reader);
     (void)check_and_mark_slices(index_segment_reader, false, std::nullopt);
-    return combine_existing_tsd_with_frame(UPDATE, dynamic_schema, index_segment_reader.tsd(), frame);
+    auto combined = combine_existing_tsd_with_frame(UPDATE, dynamic_schema, index_segment_reader.tsd(), frame);
+    frame.set_bucketize_dynamic(index_segment_reader.bucketize_dynamic());
+    // Unlike an append, the row count is only known once the new segments have been intersected with the existing
+    // ones, so the descriptor carries a placeholder that async_update_impl overwrites with set_total_rows.
+    constexpr size_t placeholder_total_rows = 1;
+    return tsd_from_schema(std::move(combined), placeholder_total_rows, frame);
 }
 
 folly::Future<AtomKey> async_append_impl(
@@ -694,19 +702,13 @@ folly::Future<AtomKey> async_update_impl(
             .thenValueInline([store, update_info, query, frame, options, dynamic_schema](
                                      index::IndexSegmentReader&& index_segment_reader
                              ) {
-                // Combining the schemas is also the compatibility check, so it happens here, before any data keys are
-                // written; only the row count is unknown at this point, so the descriptor is assembled with a dummy
-                // one and corrected below. Doing it the other way round would orphan data keys when the schemas turn
-                // out not to combine.
-                auto combined = check_can_update(*frame, index_segment_reader, dynamic_schema);
+                auto tsd = prepare_update(*frame, index_segment_reader, dynamic_schema);
                 ARCTICDB_DEBUG(
                         log::version(),
                         "Update versioned dataframe for stream_id: {} , version_id = {}",
                         frame->desc().id(),
                         update_info.previous_index_key_->version_id()
                 );
-                frame->set_bucketize_dynamic(index_segment_reader.bucketize_dynamic());
-                auto tsd = tsd_from_schema(std::move(combined), 1, *frame);
                 return slice_and_write(
                                frame,
                                get_slicing_policy(options, *frame),
@@ -1230,8 +1232,7 @@ std::vector<folly::Future<pipelines::SegmentAndSlice>> add_schema_check(
         std::vector<folly::Future<pipelines::SegmentAndSlice>>&& segment_and_slice_futures,
         util::BitSet&& incomplete_bitset, const ProcessingConfig& processing_config
 ) {
-    std::vector<folly::Future<pipelines::SegmentAndSlice>> res;
-    res.reserve(segment_and_slice_futures.size());
+    auto res = util::reserve_vector<folly::Future<pipelines::SegmentAndSlice>>(segment_and_slice_futures.size());
     for (size_t i = 0; i < segment_and_slice_futures.size(); ++i) {
         auto&& fut = segment_and_slice_futures.at(i);
         const bool is_incomplete = incomplete_bitset[i];

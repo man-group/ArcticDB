@@ -936,5 +936,5 @@ def test_append_mismatched_column_count_message_is_truncated(lmdb_version_store_
         lib.append(sym, pd.DataFrame({"col0": [0], "col1": [1]}, index=pd.date_range("2024-01-02", periods=1)))
     msg = str(e.value)
     assert f"Cannot append (symbol '{sym}')" in msg
-    # Eight columns are missing, so only the first five are named.
-    assert "missing [col2, col3, col4, col5, col6, etc.], unexpected []" in msg
+    # Eight columns are missing, so only the first five are named, but the count says how many there are.
+    assert "missing 8 [col2, col3, col4, col5, col6, etc.], unexpected 0 []" in msg

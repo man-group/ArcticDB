@@ -126,7 +126,7 @@ std::pair<index::IndexSegmentReader, std::vector<SliceAndKey>> read_index_to_vec
         const std::shared_ptr<Store>& store, const AtomKey& index_key
 );
 
-[[nodiscard]] bool is_timeseries_index(const IndexDescriptorImpl& index_desc);
+[[nodiscard]] bool is_timeseries_or_empty_index(const IndexDescriptorImpl& index_desc);
 
 // The shape of a frame's required fields - its index columns, plus its value column if it is a Series. Those are
 // always the leading fields of the descriptor, so a count of them says where the data columns begin.

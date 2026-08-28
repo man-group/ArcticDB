@@ -8,6 +8,7 @@
 
 #pragma once
 #include <arcticdb/pipeline/input_frame.hpp>
+#include <arcticdb/util/collection_utils.hpp>
 namespace arcticdb::pipelines {
 
 template<std::ranges::contiguous_range T>
@@ -55,8 +56,7 @@ auto input_frame_from_tensors(const StreamDescriptor& desc, T&&... input) {
         );
     }(std::make_index_sequence<sizeof...(T)>{});
     std::vector<NativeTensor> tensors = [&]<size_t... Is>(std::index_sequence<Is...>) {
-        std::vector<NativeTensor> result_tensors;
-        result_tensors.reserve(data_columns);
+        auto result_tensors = util::reserve_vector<NativeTensor>(data_columns);
         (result_tensors.push_back(one_dimensional_tensor(
                  std::get<Is + Index::field_count()>(materialized_input),
                  desc.field(Is + Index::field_count()).type().data_type()

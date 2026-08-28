@@ -253,7 +253,7 @@ class TestAppendHypothesis:
         "initial, append, match",
         [
             # (InputFactories.DF_RC_NON_RANGE, InputFactories.DF_DTI, "TODO(AN-722)"),
-            (InputFactories.DF_RC, InputFactories.ND_ARRAY_1D, "df"),
+            (InputFactories.DF_RC, InputFactories.ND_ARRAY_1D, "DataFrame"),
             (InputFactories.DF_RC, InputFactories.DF_MULTI_RC, "E_INCOMPATIBLE_INDEX"),
             (
                 InputFactories.DF_RC,

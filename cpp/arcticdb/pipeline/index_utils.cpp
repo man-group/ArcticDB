@@ -73,7 +73,7 @@ std::pair<index::IndexSegmentReader, std::vector<SliceAndKey>> read_index_to_vec
     return {std::move(index_segment_reader), std::move(slice_and_keys)};
 }
 
-bool is_timeseries_index(const IndexDescriptorImpl& index_desc) {
+bool is_timeseries_or_empty_index(const IndexDescriptorImpl& index_desc) {
     return index_desc.type() == IndexDescriptor::Type::TIMESTAMP || index_desc.type() == IndexDescriptor::Type::EMPTY;
 }
 

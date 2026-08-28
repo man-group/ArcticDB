@@ -290,13 +290,17 @@ void drop_rowless_symbols(
             to_keep.emplace_back(idx);
         }
     }
-    if (to_keep.empty() || to_keep.size() == entity_ids.size()) {
+    if (to_keep.size() == entity_ids.size()) {
         return;
     }
-    std::vector<OutputSchema> kept_schemas;
-    std::vector<std::vector<EntityId>> kept_entity_ids;
-    kept_schemas.reserve(to_keep.size());
-    kept_entity_ids.reserve(to_keep.size());
+    if (to_keep.empty()) {
+        // Nothing has rows, so there is nothing to drop down to. Keep only the first symbol, rather than every
+        // symbol, so that the result's columns do not depend on whether some unrelated symbol happened to have
+        // rows, and so that every schema reaching combine_schema agrees about the index type.
+        to_keep.emplace_back(0);
+    }
+    auto kept_schemas = util::reserve_vector<OutputSchema>(to_keep.size());
+    auto kept_entity_ids = util::reserve_vector<std::vector<EntityId>>(to_keep.size());
     for (const auto idx : to_keep) {
         kept_schemas.emplace_back(std::move(input_schemas[idx]));
         kept_entity_ids.emplace_back(std::move(entity_ids[idx]));
