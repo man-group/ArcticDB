@@ -28,10 +28,10 @@ namespace arcticdb {
 struct ColumnStatsValues {
     std::optional<Value> min;
     std::optional<Value> max;
-    // In-band sentinels (NaN for floats, NaT for time types) counted during write-time aggregation.
-    uint64_t nan_count = 0;
-    // Sparse-map gaps (rows genuinely absent from the data segment) counted during write-time aggregation.
-    uint64_t null_count = 0;
+    // Rows for which ArcticDB's ISNULL would be true, counted during write-time aggregation:
+    // sparse-map gaps (rows genuinely absent from the data segment) plus in-band sentinel values
+    // (NaN for floats, NaT for time types).
+    uint64_t isnull_count = 0;
     bool column_absent = false;
 
     ColumnStatsValues() = default;
@@ -40,7 +40,7 @@ struct ColumnStatsValues {
         util::check(min.has_value() == max.has_value(), "min and max should either both be present or both be absent");
     };
 
-    bool only_nulls() const { return !min.has_value() && (nan_count + null_count) > 0; }
+    bool all_isnull() const { return !min.has_value() && isnull_count > 0; }
 };
 
 struct StatsIndexAndType {
@@ -57,8 +57,7 @@ struct StatsMetadataForColumn {
 struct StatsForColumn {
     std::vector<std::optional<Value>> mins;  // size == num_rows_
     std::vector<std::optional<Value>> maxes; // size == num_rows_
-    std::vector<uint64_t> nan_counts;        // size == num_rows_, default 0
-    std::vector<uint64_t> null_counts;       // size == num_rows_, default 0
+    std::vector<uint64_t> isnull_counts;     // size == num_rows_, default 0
 };
 
 /**
