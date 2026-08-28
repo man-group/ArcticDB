@@ -498,6 +498,7 @@ set(arcticdb_srcs
         entity/type_utils.cpp
         entity/types_proto.cpp
         log/log.cpp
+        log/console_sink.cpp
         pipeline/column_mapping.cpp
         pipeline/column_name_resolution.cpp
         pipeline/column_stats.cpp

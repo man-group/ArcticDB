@@ -99,3 +99,16 @@ Branched from `gpetrov/ci_speedup` (PR #3350, Windows Defender exclusion) so CI 
   line lands in that file.
 - Next: commit/push, rerun the NOSYNC repro dispatch (expect 0 LMDB errors), then set
   `ARCTICDB_LMDBStorage_ExtraFlags_int: 327680` on Windows test jobs and re-measure a full build.
+
+### Second iteration: fwrite was not enough (run 33200293066)
+
+- With the fwrite-based sink, 20/56 Windows jobs still failed with `MDB_MAP_RESIZED`/`MDB_INVALID`/`MDB_BAD_TXN`,
+  and the meta page still held the ArcticDB log line (`arcticdb | ... DB v7.0.0 release. Pleas...`).
+- Reason: `arcticdb_ext` is built with `/MT` (`x64-windows-static-msvc`, `VCPKG_CRT_LINKAGE static`), so it has its
+  own CRT fd table. pytest's `os.dup2` goes through Python's CRT (`ucrtbase.dll`): it closes the OS handle behind
+  fd 2 there, but our CRT's fd 2 still names that (now recycled) handle, so `fwrite(stderr)` hits `data.mdb` just as
+  `WriteFile(cached_handle)` did.
+- Fix: `write_to_console()` (`log/console_sink.cpp`) looks up `_get_osfhandle` in `ucrtbase.dll` when it is loaded
+  and writes to the fd's current handle in that table; fallback is fwrite. Python end-to-end regression test
+  `python/tests/unit/arcticdb/test_log_capture.py` (capfd must contain a C++ log line) — fails on Windows before
+  the fix, passes on Linux regardless.
