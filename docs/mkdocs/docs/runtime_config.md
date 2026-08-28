@@ -119,9 +119,12 @@ Values:
 Extra LMDB environment flags (a bitwise OR of `MDB_*` values from `lmdb.h`) passed to `mdb_env_open` for every LMDB
 library opened by the process, on top of the flags in the library's storage config.
 
-Intended for throwaway data such as test suites, where `MDB_WRITEMAP | MDB_NOSYNC` (`0x90000`, i.e. `589824`) writes
-through the memory map and skips the fsync on every commit. Do not use those flags for data you need to survive a
-crash or power loss.
+Intended for throwaway data, e.g. `MDB_NOSYNC | MDB_NOMETASYNC` (`0x50000`, i.e. `327680`) skips the fsync on every
+commit. Do not use those flags for data you need to survive a crash or power loss.
+
+On Windows, `MDB_WRITEMAP` makes the OS allocate the whole `map_size` of every library on disk (LMDB otherwise extends
+the file lazily there), and with `MDB_NOSYNC` a full disk is not reported and pages are lost silently. Neither
+variant is currently used by ArcticDB's own CI on Windows.
 
 Default: 0 (no extra flags).
 
