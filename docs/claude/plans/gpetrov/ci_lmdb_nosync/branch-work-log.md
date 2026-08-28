@@ -13,3 +13,13 @@ Branched from `gpetrov/ci_speedup` (PR #3350, Windows Defender exclusion) so CI 
 - Docs: docs/mkdocs/docs/runtime_config.md, docs/claude/cpp/STORAGE_BACKENDS.md.
 - Local Linux `test_realistic`: 28s with or without the flags (fsync is cheap on ext4), so the Windows CI run
   is the real test.
+- Run 33162500710, first result: `3.9 Windows / unit` job 51 (baseline) -> 44 (Defender) -> **17 min**;
+  per-test CPU sum 171 -> 144 -> **34.5 min** (Linux: 36). `test_realistic` 684 -> 549 -> **20s** (Linux 25s).
+  All 20,174 tests pass. The fsync-per-commit hypothesis is confirmed: Windows now matches Linux per test.
+- Run 33162500710: all Windows `unit` jobs 17-20 min (were 44-107), `stress` 20-22 (were 40-65). Two failures:
+  (a) `LmdbFlags.StorageOpensAndWritesWithExtraFlags` on Windows: `remove_all` while the env was still open
+  (file lock) - fixed by scoping the storage; (b) `3.13 Windows / unit`:
+  `test_parallel_write_static_schema_type_changing_cleans_up_data_keys[True-True]` failed with
+  `MDB_MAP_RESIZED` on `mdb_txn_begin` (1 of 6 Windows unit jobs; passed on the others). No occurrence of that
+  error in the Windows unit/integration jobs of the last 12 failed build runs, so it cannot yet be written
+  off as a pre-existing flake. Plan: rerun the failed job(s) and watch the repeat rate.

@@ -52,16 +52,19 @@ TEST(LmdbFlags, StorageOpensAndWritesWithExtraFlags) {
     cfg.set_map_size(128ULL * (1ULL << 20));
     cfg.set_recreate_if_exists(true);
     as::LibraryPath library_path{"a", "b"};
-    LmdbStorage lmdb_storage(library_path, as::OpenMode::WRITE, cfg);
+    {
+        // Scoped so the env is closed before remove_all: Windows refuses to delete open files
+        LmdbStorage lmdb_storage(library_path, as::OpenMode::WRITE, cfg);
 
-    ac::entity::AtomKey k =
-            ac::entity::atom_key_builder().gen_id(1).build<ac::entity::KeyType::TABLE_DATA>(ac::NumericId{999});
-    auto segment_in_memory = ac::get_test_frame<ac::stream::TimeseriesIndex>("symbol", {}, 10, 0).segment_;
-    auto codec_opts = ac::proto::encoding::VariantCodec();
-    auto segment = ac::encode_dispatch(std::move(segment_in_memory), codec_opts, ac::EncodingVersion::V2);
-    as::KeySegmentPair kv(k, std::move(segment));
-    lmdb_storage.write(std::move(kv));
-    ASSERT_TRUE(lmdb_storage.key_exists(k));
+        ac::entity::AtomKey k =
+                ac::entity::atom_key_builder().gen_id(1).build<ac::entity::KeyType::TABLE_DATA>(ac::NumericId{999});
+        auto segment_in_memory = ac::get_test_frame<ac::stream::TimeseriesIndex>("symbol", {}, 10, 0).segment_;
+        auto codec_opts = ac::proto::encoding::VariantCodec();
+        auto segment = ac::encode_dispatch(std::move(segment_in_memory), codec_opts, ac::EncodingVersion::V2);
+        as::KeySegmentPair kv(k, std::move(segment));
+        lmdb_storage.write(std::move(kv));
+        ASSERT_TRUE(lmdb_storage.key_exists(k));
+    }
 
     std::filesystem::remove_all(db_path);
 }
