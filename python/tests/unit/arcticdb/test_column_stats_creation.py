@@ -76,8 +76,8 @@ def assert_stats_equal(received, expected, check_dtypes=False):
     assert isinstance(received, pa.Table)
     assert isinstance(expected, pl.DataFrame)
     received_pl = pl.from_arrow(received)
-    # The C++ aggregator always emits v1_NAN_COUNT and v1_NULL_COUNT columns alongside MIN/MAX.
-    # Tests that aren't exercising the count behaviour omit those columns from `expected`;
+    # The C++ aggregator always emits a v1_ISNULL_COUNT column alongside MIN/MAX.
+    # Tests that aren't exercising the count behaviour omit that column from `expected`;
     # subselect `received` down to the expected columns so the comparison stays focused.
     missing = set(expected.columns) - set(received_pl.columns)
     assert not missing, f"Expected columns missing from received: {missing}"
@@ -249,13 +249,13 @@ def test_column_stats_nat_values(in_memory_store_factory, lib_name, encoding_ver
     assert raw_stats["v1_MAX(col_1)"].values.view("int64")[3] == nat_sentinel
 
 
-def test_column_stats_nan_and_null_counts(in_memory_store_factory, lib_name, encoding_version, any_output_format):
+def test_column_stats_isnull_count_nan_and_nat(in_memory_store_factory, lib_name, encoding_version, any_output_format):
     lib = in_memory_store_factory(encoding_version=int(encoding_version), name=lib_name)
     lib._set_output_format_for_pipeline_tests(any_output_format)
-    sym = "test_column_stats_nan_and_null_counts"
+    sym = "test_column_stats_isnull_count_nan_and_nat"
 
     # Each write/append produces a separate segment, so we get one row per dataframe in the stats.
-    # Both NaN (float) and NaT (timestamp) are in-band sentinels and count toward v1_NAN_COUNT.
+    # Both NaN (float) and NaT (timestamp) are in-band sentinels and count toward v1_ISNULL_COUNT.
     df0 = pd.DataFrame(
         {"float_col": [1.0, 2.0], "ts_col": [pd.Timestamp("2020-01-01"), pd.Timestamp("2020-06-01")]},
         index=pd.date_range("2000-01-01", periods=2),
@@ -282,8 +282,7 @@ def test_column_stats_nan_and_null_counts(in_memory_store_factory, lib_name, enc
     expected_column_stats = row_range_columns_to_pl(lib, sym).with_columns(
         pl.Series("v1_MIN(float_col)", [1.0, 5.0, np.nan, 1.0]),
         pl.Series("v1_MAX(float_col)", [2.0, 5.0, np.nan, 2.0]),
-        pl.Series("v1_NAN_COUNT(float_col)", [0, 1, 2, 1], dtype=pl.UInt64),
-        pl.Series("v1_NULL_COUNT(float_col)", [0, 0, 0, 0], dtype=pl.UInt64),
+        pl.Series("v1_ISNULL_COUNT(float_col)", [0, 1, 2, 1], dtype=pl.UInt64),
         pl.Series(
             "v1_MIN(ts_col)",
             [
@@ -304,49 +303,23 @@ def test_column_stats_nan_and_null_counts(in_memory_store_factory, lib_name, enc
             ],
             dtype=pl.Int64,
         ).cast(pl.Datetime("ns")),
-        pl.Series("v1_NAN_COUNT(ts_col)", [0, 1, 2, 1], dtype=pl.UInt64),
-        pl.Series("v1_NULL_COUNT(ts_col)", [0, 0, 0, 0], dtype=pl.UInt64),
+        pl.Series("v1_ISNULL_COUNT(ts_col)", [0, 1, 2, 1], dtype=pl.UInt64),
     )
 
     column_stats = lib.read_column_stats_experimental(sym)
     assert_stats_equal(column_stats, expected_column_stats)
 
 
-def test_column_stats_nan_count_single_segment(in_memory_store_factory, lib_name, encoding_version, any_output_format):
-    """In-band sentinels (NaN in a float column, NaT in a timestamp column) count towards
-    v1_NAN_COUNT. v1_NULL_COUNT is reserved for genuinely-missing rows (sparse-map gaps)."""
-    lib = in_memory_store_factory(encoding_version=int(encoding_version), name=lib_name)
-    lib._set_output_format_for_pipeline_tests(any_output_format)
-    sym = "test_column_stats_nan_count_single_segment"
-    df = pd.DataFrame(
-        {
-            "float_col": [1.0, np.nan, 2.0, np.nan, np.nan],
-            "ts_col": [
-                pd.Timestamp("2020-01-01"),
-                pd.NaT,
-                pd.Timestamp("2020-06-01"),
-                pd.NaT,
-                pd.Timestamp("2020-12-01"),
-            ],
-        },
-        index=pd.date_range("2000-01-01", periods=5),
-    )
-    lib.write(sym, df)
-    lib.create_column_stats_experimental(sym)
+def test_column_stats_isnull_count_invariant_to_sparsify(
+    in_memory_store_factory, lib_name, encoding_version, any_output_format
+):
+    """v1_ISNULL_COUNT counts rows for which ISNULL is true, regardless of whether the storage
+    layer represents that as an in-band NaN or a sparse-map gap. Writing the same NaN-containing
+    frame with and without sparsify_floats=True must therefore produce an identical isnull count,
+    equal to the NaN count.
 
-    cs = pl.from_arrow(lib.read_column_stats_experimental(sym))
-    assert cs["v1_NAN_COUNT(float_col)"].to_list() == [3]
-    assert cs["v1_NULL_COUNT(float_col)"].to_list() == [0]
-    assert cs["v1_NAN_COUNT(ts_col)"].to_list() == [2]
-    assert cs["v1_NULL_COUNT(ts_col)"].to_list() == [0]
-
-
-def test_column_stats_null_count_sparse_floats(in_memory_store_factory, lib_name, encoding_version, any_output_format):
-    """sparsify_floats=True stores NaN floats as sparse-map gaps rather than dense NaN values.
-    Those gaps are counted as nulls (v1_NULL_COUNT), not NaNs (v1_NAN_COUNT).
-
-    The 6 rows span multiple segments (segment_row_size=3) with a different null count in each,
-    so the per-segment null calculation is exercised rather than a single-segment case."""
+    The 6 rows span multiple segments (segment_row_size=3) with a different count in each, so the
+    per-segment calculation is exercised rather than a single-segment case."""
     lib = in_memory_store_factory(
         column_group_size=2,
         segment_row_size=3,
@@ -354,18 +327,53 @@ def test_column_stats_null_count_sparse_floats(in_memory_store_factory, lib_name
         name=lib_name + f"_{encoding_version.name}",
     )
     lib._set_output_format_for_pipeline_tests(any_output_format)
-    sym = "test_column_stats_null_count_sparse_floats"
-    # Segment 0 (rows 0-2): [1.0, nan, 2.0] -> 1 null, min 1.0, max 2.0
-    # Segment 1 (rows 3-5): [nan, nan, 4.0] -> 2 nulls, min 4.0, max 4.0
+    # Segment 0 (rows 0-2): [1.0, nan, 2.0] -> isnull_count 1, min 1.0, max 2.0
+    # Segment 1 (rows 3-5): [nan, nan, 4.0] -> isnull_count 2, min 4.0, max 4.0
     df = pd.DataFrame({"col_1": [1.0, np.nan, 2.0, np.nan, np.nan, 4.0]}, index=pd.date_range("2000-01-01", periods=6))
-    lib.write(sym, df, sparsify_floats=True)
-    lib.create_column_stats_experimental(sym)
+    expected_isnull_count = [1, 2]
+    expected_min = [1.0, 4.0]
+    expected_max = [2.0, 4.0]
 
+    sym_dense = "test_column_stats_isnull_count_invariant_to_sparsify_dense"
+    lib.write(sym_dense, df)
+    lib.create_column_stats_experimental(sym_dense)
+    dense_stats = pl.from_arrow(lib.read_column_stats_experimental(sym_dense)).sort("start_row")
+
+    sym_sparse = "test_column_stats_isnull_count_invariant_to_sparsify_sparse"
+    lib.write(sym_sparse, df, sparsify_floats=True)
+    lib.create_column_stats_experimental(sym_sparse)
+    sparse_stats = pl.from_arrow(lib.read_column_stats_experimental(sym_sparse)).sort("start_row")
+
+    assert dense_stats["v1_ISNULL_COUNT(col_1)"].to_list() == expected_isnull_count
+    assert sparse_stats["v1_ISNULL_COUNT(col_1)"].to_list() == expected_isnull_count
+    assert dense_stats["v1_MIN(col_1)"].to_list() == expected_min
+    assert dense_stats["v1_MAX(col_1)"].to_list() == expected_max
+    assert sparse_stats["v1_MIN(col_1)"].to_list() == expected_min
+    assert sparse_stats["v1_MAX(col_1)"].to_list() == expected_max
+
+
+def test_column_stats_isnull_count_nat_and_sparse_gap(in_memory_version_store_arrow):
+    """v1_ISNULL_COUNT counts both mechanisms that produce a null timestamp: an in-band NaT
+    value and a genuine sparse-map gap (an Arrow null), regardless of which produced it."""
+    lib = in_memory_version_store_arrow
+    lib._cfg.write_options.segment_row_size = 100
+    sym = "test_column_stats_isnull_count_nat_and_sparse_gap"
+    nat_sentinel = np.iinfo(np.int64).min
+
+    def ts_table(int64_values):
+        return pa.table({"ts": pa.array(int64_values, pa.int64()).cast(pa.timestamp("ns"))})
+
+    # segment 0: one in-band NaT and one sparse gap in the same column -> isnull_count = 2
+    lib.write(sym, ts_table([1_000_000_000, nat_sentinel, None, 2_000_000_000]))
+    # segment 1: in-band NaT only -> isnull_count = 1
+    lib.append(sym, ts_table([nat_sentinel, 3_000_000_000]))
+    # segment 2: sparse gap only -> isnull_count = 1
+    lib.append(sym, ts_table([None, 4_000_000_000]))
+
+    lib.create_column_stats_experimental(sym)
     cs = pl.from_arrow(lib.read_column_stats_experimental(sym)).sort("start_row")
-    assert cs["v1_NULL_COUNT(col_1)"].to_list() == [1, 2]
-    assert cs["v1_NAN_COUNT(col_1)"].to_list() == [0, 0]
-    assert cs["v1_MIN(col_1)"].to_list() == [1.0, 4.0]
-    assert cs["v1_MAX(col_1)"].to_list() == [2.0, 4.0]
+
+    assert cs["v1_ISNULL_COUNT(ts)"].to_list() == [2, 1, 1]
 
 
 def test_column_stats_arrow_nan_and_null_same_column(in_memory_version_store_arrow):
@@ -376,16 +384,15 @@ def test_column_stats_arrow_nan_and_null_same_column(in_memory_version_store_arr
     def table(values):
         return pa.table({"f": pa.array(values, pa.float64())})
 
-    lib.write(sym, table([1.0, np.nan, None, 2.0]))  # nan=1, null=1, min=1, max=2
-    lib.append(sym, table([np.nan, np.nan, None]))  # nan=2, null=1, all stored values are NaN
-    lib.append(sym, table([None, None]))  # all null: nan=0, null=2, no min/max
-    lib.append(sym, table([3.0, None, np.nan, 4.0, None]))  # nan=1, null=2, min=3, max=4
+    lib.write(sym, table([1.0, np.nan, None, 2.0]))  # nan=1, null=1, isnull=2, min=1, max=2
+    lib.append(sym, table([np.nan, np.nan, None]))  # nan=2, null=1, isnull=3, all stored values are NaN
+    lib.append(sym, table([None, None]))  # all null: isnull=2, no min/max
+    lib.append(sym, table([3.0, None, np.nan, 4.0, None]))  # nan=1, null=2, isnull=3, min=3, max=4
 
     lib.create_column_stats_experimental(sym)
     cs = pl.from_arrow(lib.read_column_stats_experimental(sym)).sort("start_row")
 
-    assert cs["v1_NAN_COUNT(f)"].to_list() == [1, 2, 0, 1]
-    assert cs["v1_NULL_COUNT(f)"].to_list() == [1, 1, 2, 2]
+    assert cs["v1_ISNULL_COUNT(f)"].to_list() == [2, 3, 2, 3]
 
     mins = cs["v1_MIN(f)"].to_list()
     maxs = cs["v1_MAX(f)"].to_list()
@@ -407,11 +414,11 @@ def _segment_values():
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(segments=st.lists(_segment_values(), min_size=1, max_size=6))
-def test_column_stats_arrow_nan_null_counts_hypothesis(in_memory_version_store_arrow, segments):
+def test_column_stats_arrow_isnull_count_hypothesis(in_memory_version_store_arrow, segments):
     lib = in_memory_version_store_arrow
     lib._cfg.write_options.segment_row_size = 100
     lib.version_store.clear()
-    sym = "test_column_stats_arrow_nan_null_counts_hypothesis"
+    sym = "test_column_stats_arrow_isnull_count_hypothesis"
 
     lib.write(sym, pa.table({"f": pa.array(segments[0], pa.float64())}))
     for seg in segments[1:]:
@@ -421,11 +428,9 @@ def test_column_stats_arrow_nan_null_counts_hypothesis(in_memory_version_store_a
     cs = pl.from_arrow(lib.read_column_stats_experimental(sym)).sort("start_row")
 
     # Each write/append is its own row-slice, so column stats rows line up with segments in index order.
-    expected_nan = [sum(1 for v in seg if v is not None and np.isnan(v)) for seg in segments]
-    expected_null = [sum(1 for v in seg if v is None) for seg in segments]
+    expected_isnull = [sum(1 for v in seg if v is None or np.isnan(v)) for seg in segments]
 
-    assert cs["v1_NAN_COUNT(f)"].to_list() == expected_nan
-    assert cs["v1_NULL_COUNT(f)"].to_list() == expected_null
+    assert cs["v1_ISNULL_COUNT(f)"].to_list() == expected_isnull
 
 
 def test_column_stats_as_of(in_memory_store_factory, lib_name, encoding_version, any_output_format):
@@ -580,9 +585,9 @@ def test_column_stats_dynamic_schema_missing_data(
 
     # Slices that are missing the column come back as null via the validity bitmap. df4["col_2"] is
     # all-NaN but the column is present so the stat is computed and stored as NaN, not null.
-    # The count columns follow the same rule: a fully-missing column has no aggregator run for that
-    # slice, so its NAN_COUNT/NULL_COUNT are null (not 0). Present columns count their NaNs in
-    # NAN_COUNT and leave NULL_COUNT at 0 (NaN floats are stored densely here, not as sparse gaps).
+    # The count column follows the same rule: a fully-missing column has no aggregator run for that
+    # slice, so its ISNULL_COUNT is null (not 0). Present columns count their NaNs in ISNULL_COUNT
+    # (NaN floats are stored densely here, not as sparse gaps).
     expected_column_stats = row_range_columns_to_pl(lib, sym).with_columns(
         pl.Series(
             "v1_MIN(col_1)",
@@ -592,8 +597,7 @@ def test_column_stats_dynamic_schema_missing_data(
             "v1_MAX(col_1)",
             [df0["col_1"].max(), None, df2["col_1"].max(), None, df4["col_1"].max(), None],
         ),
-        pl.Series("v1_NAN_COUNT(col_1)", [0, None, 0, None, 1, None], dtype=pl.UInt64),
-        pl.Series("v1_NULL_COUNT(col_1)", [0, None, 0, None, 0, None], dtype=pl.UInt64),
+        pl.Series("v1_ISNULL_COUNT(col_1)", [0, None, 0, None, 1, None], dtype=pl.UInt64),
         pl.Series(
             "v1_MIN(col_2)",
             [df0["col_2"].min(), df1["col_2"].min(), None, None, df4["col_2"].min(), None],
@@ -602,12 +606,10 @@ def test_column_stats_dynamic_schema_missing_data(
             "v1_MAX(col_2)",
             [df0["col_2"].max(), df1["col_2"].max(), None, None, df4["col_2"].max(), None],
         ),
-        pl.Series("v1_NAN_COUNT(col_2)", [0, 0, None, None, 2, None], dtype=pl.UInt64),
-        pl.Series("v1_NULL_COUNT(col_2)", [0, 0, None, None, 0, None], dtype=pl.UInt64),
+        pl.Series("v1_ISNULL_COUNT(col_2)", [0, 0, None, None, 2, None], dtype=pl.UInt64),
         pl.Series("v1_MIN(col_5)", [None, None, None, None, None, df5["col_5"].min()], dtype=pl.Int64),
         pl.Series("v1_MAX(col_5)", [None, None, None, None, None, df5["col_5"].max()], dtype=pl.Int64),
-        pl.Series("v1_NAN_COUNT(col_5)", [None, None, None, None, None, 0], dtype=pl.UInt64),
-        pl.Series("v1_NULL_COUNT(col_5)", [None, None, None, None, None, 0], dtype=pl.UInt64),
+        pl.Series("v1_ISNULL_COUNT(col_5)", [None, None, None, None, None, 0], dtype=pl.UInt64),
     )
     lib.create_column_stats_experimental(sym)
     assert lib.get_column_stats_info_experimental(sym) == {
@@ -932,8 +934,7 @@ def assert_header_offsets_match_field_names(lib, sym, header):
     field_name_by_type = {
         ColumnStatsType.MIN_V1: "v1_MIN",
         ColumnStatsType.MAX_V1: "v1_MAX",
-        ColumnStatsType.NAN_COUNT_V1: "v1_NAN_COUNT",
-        ColumnStatsType.NULL_COUNT_V1: "v1_NULL_COUNT",
+        ColumnStatsType.ISNULL_COUNT_V1: "v1_ISNULL_COUNT",
     }
     lib_tool = lib.library_tool()
     index_key = lib_tool.find_keys_for_symbol(KeyType.TABLE_INDEX, sym)[0]
@@ -958,12 +959,11 @@ def test_column_stats_header_metadata(in_memory_store_factory, lib_name, encodin
 
     # Auto-discovery creates stats for all eligible columns: the index at offset 0, col_1 at offset 2
     # and col_2 at offset 3. col_0 at offset 1 is a string, so it is ineligible.
-    # MINMAX emits 4 stat entries per column: MIN, MAX, NAN_COUNT, NULL_COUNT.
+    # MINMAX emits 3 stat entries per column: MIN, MAX, ISNULL_COUNT.
     minmax_types = {
         ColumnStatsType.MIN_V1,
         ColumnStatsType.MAX_V1,
-        ColumnStatsType.NAN_COUNT_V1,
-        ColumnStatsType.NULL_COUNT_V1,
+        ColumnStatsType.ISNULL_COUNT_V1,
     }
     lib.create_column_stats_experimental(sym)
     header = read_column_stats_header(lib, sym)
@@ -971,10 +971,10 @@ def test_column_stats_header_metadata(in_memory_store_factory, lib_name, encodin
     assert header.version == 1
     # if you change the structure, consider whether you need to change header.version too
     assert len(header.ListFields()) == 2
-    assert header_stat_count(header) == 12
+    assert header_stat_count(header) == 9
     assert header_stat_pairs(header) == {(offset, t) for offset in (0, 2, 3) for t in minmax_types}
     offsets = [entry.stats_seg_offset for _, entry in header_all_entries(header)]
-    assert len(set(offsets)) == 12
+    assert len(set(offsets)) == 9
 
     # Verify descriptor field names match the offsets
     assert_header_offsets_match_field_names(lib, sym, header)
@@ -998,8 +998,8 @@ def test_column_stats_create_twice_is_idempotent(in_memory_store_factory, lib_na
 
     assert header_offset_by_stat(second_header) == header_offset_by_stat(first_header)
     assert second_header.version == first_header.version
-    assert header_stat_count(second_header) == 12
-    assert len({entry.stats_seg_offset for _, entry in header_all_entries(second_header)}) == 12
+    assert header_stat_count(second_header) == 9
+    assert len({entry.stats_seg_offset for _, entry in header_all_entries(second_header)}) == 9
     assert_header_offsets_match_field_names(lib, sym, second_header)
     assert lib.get_column_stats_info_experimental(sym) == {
         "index": {"MINMAX"},
@@ -1564,9 +1564,8 @@ def expected_row_range_stats(df, expected_slices):
             [int(values.isna().sum()) for values in values_by_slice],
         )
 
-    col_1_min, col_1_max, col_1_nan = slice_stats("col_1")
-    col_2_min, col_2_max, col_2_nan = slice_stats("col_2")
-    null_counts = [0] * len(expected_slices)
+    col_1_min, col_1_max, col_1_isnull = slice_stats("col_1")
+    col_2_min, col_2_max, col_2_isnull = slice_stats("col_2")
     index_by_slice = [df.index[s:e] for s, e in expected_slices]
     zero_counts = pl.Series([0] * len(expected_slices), dtype=pl.UInt64)
 
@@ -1576,16 +1575,13 @@ def expected_row_range_stats(df, expected_slices):
             "end_row": pl.Series([e for _, e in expected_slices], dtype=pl.UInt64),
             "v1_MIN(index)": pl.Series([idx.min() for idx in index_by_slice], dtype=pl.Datetime("ns")),
             "v1_MAX(index)": pl.Series([idx.max() for idx in index_by_slice], dtype=pl.Datetime("ns")),
-            "v1_NAN_COUNT(index)": zero_counts,
-            "v1_NULL_COUNT(index)": zero_counts,
+            "v1_ISNULL_COUNT(index)": zero_counts,
             "v1_MIN(col_1)": pl.Series([int(v) for v in col_1_min], dtype=pl.Int64),
             "v1_MAX(col_1)": pl.Series([int(v) for v in col_1_max], dtype=pl.Int64),
-            "v1_NAN_COUNT(col_1)": pl.Series(col_1_nan, dtype=pl.UInt64),
-            "v1_NULL_COUNT(col_1)": pl.Series(null_counts, dtype=pl.UInt64),
+            "v1_ISNULL_COUNT(col_1)": pl.Series(col_1_isnull, dtype=pl.UInt64),
             "v1_MIN(col_2)": pl.Series(col_2_min, dtype=pl.Float64),
             "v1_MAX(col_2)": pl.Series(col_2_max, dtype=pl.Float64),
-            "v1_NAN_COUNT(col_2)": pl.Series(col_2_nan, dtype=pl.UInt64),
-            "v1_NULL_COUNT(col_2)": pl.Series(null_counts, dtype=pl.UInt64),
+            "v1_ISNULL_COUNT(col_2)": pl.Series(col_2_isnull, dtype=pl.UInt64),
         }
     )
 
@@ -1817,12 +1813,10 @@ def test_column_stats_create_dynamic_schema_preserves_stats_for_column_outside_t
             "end_row": pl.Series([3, 6], dtype=pl.UInt64),
             "v1_MIN(col_1)": pl.Series([1, None], dtype=pl.Int64),
             "v1_MAX(col_1)": pl.Series([3, None], dtype=pl.Int64),
-            "v1_NAN_COUNT(col_1)": pl.Series([0, None], dtype=pl.UInt64),
-            "v1_NULL_COUNT(col_1)": pl.Series([0, None], dtype=pl.UInt64),
+            "v1_ISNULL_COUNT(col_1)": pl.Series([0, None], dtype=pl.UInt64),
             "v1_MIN(col_2)": pl.Series([None, 4], dtype=pl.Int64),
             "v1_MAX(col_2)": pl.Series([None, 6], dtype=pl.Int64),
-            "v1_NAN_COUNT(col_2)": pl.Series([None, 0], dtype=pl.UInt64),
-            "v1_NULL_COUNT(col_2)": pl.Series([None, 0], dtype=pl.UInt64),
+            "v1_ISNULL_COUNT(col_2)": pl.Series([None, 0], dtype=pl.UInt64),
         }
     )
 

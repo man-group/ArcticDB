@@ -1167,9 +1167,7 @@ def test_filter_on_multi_index_primary_level(
     }
     stats_columns = set(lib.read_column_stats_experimental(symbol).column_names)
     assert stats_columns == {"start_row", "end_row"} | {
-        f"v1_{stat}({col})"
-        for col in ("datetime", "__idx__level", "a")
-        for stat in ("MIN", "MAX", "NAN_COUNT", "NULL_COUNT")
+        f"v1_{stat}({col})" for col in ("datetime", "__idx__level", "a") for stat in ("MIN", "MAX", "ISNULL_COUNT")
     }
 
     threshold = pd.Timestamp("2000-01-01")

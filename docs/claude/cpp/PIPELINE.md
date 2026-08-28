@@ -152,9 +152,8 @@ Key types:
 | Type | Location | Purpose |
 |------|----------|---------|
 | `ColumnStatsData` | `column_stats_filter.hpp` | Parsed stats segment, indexed by `RowRange` |
-| `ColumnStatsRow` | `column_stats_filter.hpp` | Stats for a single row-slice: start/end row + per-column min/max |
-| `ColumnStatsValues` | `column_stats_filter.hpp` | Min/max `Value` pair for one column in one row-slice, plus `column_absent` flag marking segments where the column was not present |
-| `ColumnStatElement` | `column_stats.hpp` | `MIN` or `MAX` — the individual stat within a `MINMAX` stat type |
+| `ColumnStatsRow` | `column_stats_types.hpp` | Stats for a single row-slice: start/end row + per-column min/max |
+| `ColumnStatsValues` | `column_stats_filter.hpp` | Min/max `Value` pair for one column in one row-slice, plus `isnull_count` (rows where `ISNULL` is true — sparse-map gaps or in-band NaN/NaT) and `column_absent` flag marking segments where the column was not present |
 
 `StatsVariantData` is a `std::variant` over `std::vector<StatsComparison>`, `std::shared_ptr<Value>`, `std::vector<ColumnStatsValues>`, and `std::shared_ptr<ValueSet>`. The `ValueSet` alternative is used by `isin`/`isnotin` expressions.
 

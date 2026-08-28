@@ -708,11 +708,11 @@ def test_column_stats_comparison_operators(
 def test_column_stats_all_null_slice_pruning(
     in_memory_store_factory, clear_query_stats, column_stats_filtering_enabled, query_expr, pandas_expr, expected_reads
 ):
-    """A wholly-null row-slice has no MIN/MAX, only NAN_COUNT/NULL_COUNT. It must be kept for
+    """A wholly-null row-slice has no MIN/MAX, only ISNULL_COUNT. It must be kept for
     `!=`/`isnotin` (every null row matches) and pruned for `==`/`isin` (no null row matches).
     Regression test for the slice being marked column_absent and always pruned to NONE_MATCH."""
     # segment_row_size=2 splits into 3 row-slices: [1,2], [NaN,NaN], [5,6]. sparsify_floats stores the
-    # NaNs as sparse-map gaps, so the middle slice is wholly null with no MIN/MAX (only NAN/NULL counts).
+    # NaNs as sparse-map gaps, so the middle slice is wholly null with no MIN/MAX (only ISNULL_COUNT).
     lib = in_memory_store_factory(column_group_size=2, segment_row_size=2)
     df = pd.DataFrame({"col_1": [1.0, 2.0, np.nan, np.nan, 5.0, 6.0]}, index=pd.date_range("2000-01-01", periods=6))
     lib.write(sym, df, sparsify_floats=True)
@@ -742,7 +742,7 @@ def test_column_stats_column_null_in_every_slice_prunes(
 
     stats = lib.read_column_stats_experimental(sym)
     assert "v1_MIN(f)" not in stats.column_names
-    assert stats.column("v1_NULL_COUNT(f)").to_pylist() == [2, 2, 2, 2]
+    assert stats.column("v1_ISNULL_COUNT(f)").to_pylist() == [2, 2, 2, 2]
 
     qs.enable()
     q = QueryBuilder()
@@ -2341,7 +2341,7 @@ NE_FLOAT_EXPRS = [
 def test_column_stats_no_prune_when_in_band_nan(
     in_memory_version_store, clear_query_stats, column_stats_filtering_enabled, query_expr, pandas_expr
 ):
-    """[3.0, NaN, NaN, 3.0] in one segment: min=max=3, nan_count=2.
+    """[3.0, NaN, NaN, 3.0] in one segment: min=max=3, isnull_count=2.
     Filters that would normally prune the segment must include the NaN rows."""
     lib = in_memory_version_store
 
@@ -2388,7 +2388,7 @@ NE_TS_EXPRS = [
 def test_column_stats_no_prune_ne_when_nat(
     in_memory_version_store, clear_query_stats, column_stats_filtering_enabled, query_expr, pandas_expr
 ):
-    """Time-type analogue of the in-band NaN case: min=max=ts, nan_count=2."""
+    """Time-type analogue of the in-band NaN case: min=max=ts, isnull_count=2."""
     lib = in_memory_version_store
 
     df = pd.DataFrame(
@@ -2414,8 +2414,8 @@ def test_column_stats_no_prune_ne_when_nat(
 def test_column_stats_no_prune_ne_when_sparse_null(
     in_memory_version_store, clear_query_stats, column_stats_filtering_enabled, query_expr, pandas_expr
 ):
-    """sparsify_floats stores NaN floats as sparse-map gaps -> null_count > 0, nan_count = 0.
-    The downgrade must still fire."""
+    """sparsify_floats stores NaN floats as sparse-map gaps -> isnull_count > 0 via the gap rather
+    than an in-band NaN. The downgrade must still fire."""
     lib = in_memory_version_store
 
     df = pd.DataFrame({"a": [3.0, np.nan, np.nan, 3.0]}, index=pd.date_range("2000-01-01", periods=4))
@@ -2449,7 +2449,7 @@ def test_column_stats_still_prunes_when_nan_does_not_save_row(
     in_memory_version_store, clear_query_stats, column_stats_filtering_enabled, query_expr, pandas_expr
 ):
     """Negative control: NaN rows do NOT satisfy a magnitude comparison, so NONE_MATCH must
-    stay NONE_MATCH and the segments must still be pruned even though nan_count > 0."""
+    stay NONE_MATCH and the segments must still be pruned even though isnull_count > 0."""
     lib = in_memory_version_store
 
     df0 = pd.DataFrame({"a": [3.0, np.nan, np.nan, 3.0]}, index=pd.date_range("2000-01-01", periods=4))

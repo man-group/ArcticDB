@@ -36,9 +36,7 @@ struct StatKeyHash {
     }
 };
 
-bool is_count_stat(ColumnStatTypeInternal type) {
-    return type == ColumnStatTypeInternal::NAN_COUNT_V1 || type == ColumnStatTypeInternal::NULL_COUNT_V1;
-}
+bool is_count_stat(ColumnStatTypeInternal type) { return type == ColumnStatTypeInternal::ISNULL_COUNT_V1; }
 
 std::vector<StatColumn> collect_stat_columns(
         const std::vector<ColumnStatsRow>& column_stats_rows, const StreamDescriptor& descriptor,
@@ -183,10 +181,8 @@ std::string type_to_operator_string(ColumnStatTypeInternal type) {
         return "v1_MIN";
     case ColumnStatTypeInternal::MAX_V1:
         return "v1_MAX";
-    case ColumnStatTypeInternal::NAN_COUNT_V1:
-        return "v1_NAN_COUNT";
-    case ColumnStatTypeInternal::NULL_COUNT_V1:
-        return "v1_NULL_COUNT";
+    case ColumnStatTypeInternal::ISNULL_COUNT_V1:
+        return "v1_ISNULL_COUNT";
     default:
         internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Unknown column stat type requested");
     }
@@ -314,9 +310,8 @@ ColumnStats::ColumnStats(
             switch (entry.type()) {
             case MIN_V1:
             case MAX_V1:
-            case NAN_COUNT_V1:
-            case NULL_COUNT_V1:
-                external_type = ColumnStatType::MINMAX; // null and nan are calculated inline with minmax
+            case ISNULL_COUNT_V1:
+                external_type = ColumnStatType::MINMAX; // isnull count is calculated inline with minmax
                 break;
             case UNKNOWN:
             default:
