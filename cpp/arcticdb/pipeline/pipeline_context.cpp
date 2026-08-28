@@ -176,11 +176,11 @@ const proto::descriptors::NormalizationMetadata& PipelineContext::output_normali
     return output_schema_ ? output_schema_->norm_metadata_ : normalization();
 }
 
-uint32_t PipelineContext::output_required_fields_count() const {
+index::RequiredFieldInfo PipelineContext::output_required_fields_info() const {
     if (output_schema_ || tsd_) {
-        return index::required_fields_count(output_descriptor(), output_normalization());
+        return index::required_fields_info(output_descriptor(), output_normalization());
     }
-    return index::required_fields_count(output_descriptor());
+    return index::required_fields_info(output_descriptor());
 }
 
 const ankerl::unordered_dense::map<std::string, Value>& PipelineContext::output_default_values() const {
