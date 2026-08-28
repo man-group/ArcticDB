@@ -10,6 +10,8 @@ import pytest
 import pandas as pd
 import numpy as np
 
+from arcticdb import QueryBuilder
+from arcticdb_ext.exceptions import NormalizationException
 from arcticdb.version_store._common import TimeFrame
 from arcticdb.util.test import assert_frame_equal, assert_series_equal
 from arcticdb.version_store._string_dtype import _use_pyarrow_strings_in_pandas
@@ -179,6 +181,55 @@ def test_append_empty_series(lmdb_version_store_dynamic_schema, sym, dtype, seri
         _maybe_arrow_str(result_ser),
         check_index_type=(len(result_ser) > 0),
     )
+
+
+def test_append_empty_dataframe_does_not_add_its_columns(in_memory_version_store_dynamic_schema):
+    # A zero-row frame contributes no columns, in either direction. Pandas would union them, so this is a
+    # deliberate divergence; concat matches it - see
+    # test_symbol_concatenation.py::test_symbol_concat_empty_dataframe_does_not_contribute_its_columns.
+    # Monday 12781487305.
+    lib = in_memory_version_store_dynamic_schema
+    rows = pd.DataFrame({"col1": np.arange(2, dtype=np.float64)}, index=pd.date_range("2025-01-01", periods=2))
+    empty_with_extra_column = pd.DataFrame(
+        {"col1": np.array([], dtype=np.float64), "col2": np.array([], dtype=np.float64)}, index=pd.DatetimeIndex([])
+    )
+
+    lib.write("rows_first", rows)
+    lib.append("rows_first", empty_with_extra_column)
+    assert list(lib.read("rows_first").data.columns) == ["col1"]
+    assert_frame_equal(rows, lib.read("rows_first").data)
+
+    lib.write("empty_first", empty_with_extra_column)
+    lib.append("empty_first", rows)
+    assert list(lib.read("empty_first").data.columns) == ["col1"]
+    assert_frame_equal(rows, lib.read("empty_first").data)
+
+
+@pytest.mark.parametrize("timeseries_first", [True, False])
+def test_append_rowcount_with_timeseries_non_empty_series(
+    in_memory_version_store_dynamic_schema, sym, timeseries_first
+):
+    lib = in_memory_version_store_dynamic_schema
+    timeseries = pd.Series([1.0, 2.0], index=pd.date_range("2025-01-01", periods=2))
+    rowcount = pd.Series([3.0, 4.0])
+    lib.write(sym, timeseries if timeseries_first else rowcount)
+    # A RowCount-indexed Series cannot be appended to a timeseries one in either order; the exception is only for
+    # appending to an *empty* Series, which pandas 2 stores with a DatetimeIndex regardless.
+    with pytest.raises(NormalizationException):
+        lib.append(sym, rowcount if timeseries_first else timeseries)
+
+
+@pytest.mark.parametrize("join", ["outer", "inner"])
+@pytest.mark.parametrize("empty_first", [True, False])
+def test_concat_empty_index_with_timeseries_index(lmdb_version_store_empty_types_dynamic_schema_v1, join, empty_first):
+    lib = lmdb_version_store_empty_types_dynamic_schema_v1
+    expected = pd.DataFrame({"a": [1.0, 2.0]}, index=pd.date_range("2025-01-01", periods=2))
+    lib.write("empty_sym", pd.DataFrame({"a": []}))
+    lib.write("ts_sym", expected)
+
+    symbols = ["empty_sym", "ts_sym"] if empty_first else ["ts_sym", "empty_sym"]
+    received = lib.batch_read_and_join(symbols, QueryBuilder().concat(join)).data
+    assert_frame_equal(expected, received)
 
 
 def test_entirely_empty_column(lmdb_version_store):
