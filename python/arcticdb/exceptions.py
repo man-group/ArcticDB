@@ -9,10 +9,15 @@ As of the Change Date specified in that file, in accordance with the Business So
 from typing import List as _List
 
 from arcticdb_ext.exceptions import *
-from arcticdb_ext.exceptions import ArcticException as ArcticNativeException, DuplicateKeyException, PermissionException
+from arcticdb_ext.exceptions import (
+    ArcticException as ArcticNativeException,
+    DuplicateKeyException,
+    PermissionException,
+    StreamDescriptorMismatch,
+)
 from arcticdb_ext.storage import NoDataFoundException
 from arcticdb_ext.storage import UnknownLibraryOption, UnsupportedLibraryOptionValue
-from arcticdb_ext.version_store import NoSuchVersionException, StreamDescriptorMismatch
+from arcticdb_ext.version_store import NoSuchVersionException
 from arcticdb_ext.version_store import KeyNotFoundInStageResultInfo as _KeyNotFoundInStageResultInfo
 
 

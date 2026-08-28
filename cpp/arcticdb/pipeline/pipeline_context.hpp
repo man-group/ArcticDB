@@ -13,6 +13,7 @@
 #include <arcticdb/entity/timeseries_descriptor.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/pipeline/read_options.hpp>
+#include <arcticdb/pipeline/index_utils.hpp>
 #include <arcticdb/util/bitset.hpp>
 #include <memory>
 
@@ -159,9 +160,9 @@ struct PipelineContext : public std::enable_shared_from_this<PipelineContext> {
 
     const proto::descriptors::NormalizationMetadata& output_normalization() const;
 
-    /// Number of leading required fields in the output, accounting for multi-index/series normalization. Returns the
-    /// count with no normalization applied when the context carries neither an output schema nor a TSD.
-    uint32_t output_required_fields_count() const;
+    /// Information about the required fields in the output, accounting for multi-index/series normalization.
+    /// Returns just the index count if no normalization metadata is available.
+    index::RequiredFieldInfo output_required_fields_info() const;
 
     const ankerl::unordered_dense::map<std::string, Value>& output_default_values() const;
 

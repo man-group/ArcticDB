@@ -200,6 +200,7 @@ using MongoRetryableException = ArcticSpecificException<ErrorCode::E_MONGO_RETRY
 using NonIncreasingIndexVersionException = ArcticSpecificException<ErrorCode::E_NON_INCREASING_INDEX_VERSION>;
 using SortingException = ArcticCategorizedException<ErrorCategory::SORTING>;
 using UnsortedDataException = ArcticSpecificException<ErrorCode::E_UNSORTED_DATA>;
+using StreamDescriptorMismatch = ArcticSpecificException<ErrorCode::E_DESCRIPTOR_MISMATCH>;
 using UserInputException = ArcticCategorizedException<ErrorCategory::USER_INPUT>;
 using CompatibilityException = ArcticCategorizedException<ErrorCategory::COMPATIBILITY>;
 using CodecException = ArcticCategorizedException<ErrorCategory::CODEC>;
@@ -274,6 +275,11 @@ template<>
 template<>
 [[noreturn]] inline void throw_error<ErrorCode::E_UNSORTED_DATA>(const std::string& msg) {
     throw ArcticSpecificException<ErrorCode::E_UNSORTED_DATA>(msg);
+}
+
+template<>
+[[noreturn]] inline void throw_error<ErrorCode::E_DESCRIPTOR_MISMATCH>(const std::string& msg) {
+    throw ArcticSpecificException<ErrorCode::E_DESCRIPTOR_MISMATCH>(msg);
 }
 
 template<>

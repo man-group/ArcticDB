@@ -12,7 +12,7 @@ import pyarrow as pa
 import pytest
 
 from arcticdb import col, concat, LazyDataFrame, LazyDataFrameCollection, QueryBuilder, ReadRequest
-from arcticdb.exceptions import NoSuchVersionException, SchemaException
+from arcticdb.exceptions import NormalizationException, NoSuchVersionException, SchemaException
 from arcticdb.options import LibraryOptions
 from arcticdb.util.test import assert_frame_equal, assert_series_equal
 from tests.util.mark import WINDOWS
@@ -91,6 +91,120 @@ def test_symbol_concat_type_promotion(lmdb_library, first_type, second_type, any
     expected = pd.concat([df0, df1])
     expected.index = pd.RangeIndex(len(expected))
     assert_frame_equal(expected, received)
+
+
+# Mixed signedness is only a problem when no signed type is wide enough to hold both sides exactly - uint16
+# with int16 promotes to int32 quite happily, but nothing represents the full range of uint64 and int64.
+# Concat and append deliberately differ on those: concat promotes a *data column* to float64, append refuses.
+# These are the only pairs where the two operations disagree - anything promotable exactly (e.g. int32+int64)
+# behaves the same under both, and anything unpromotable (e.g. string+int) raises under both.
+UNPROMOTABLE_MIXED_SIGNEDNESS_TYPES = [("uint64", "int64"), ("int64", "uint64"), ("uint64", "int32")]
+
+
+@pytest.mark.parametrize("first_type,second_type", UNPROMOTABLE_MIXED_SIGNEDNESS_TYPES)
+def test_append_dynamic_schema_mixed_signedness_raises(in_memory_library_dynamic, first_type, second_type):
+    # Append refuses these, where concat's test_symbol_concat_type_promotion promotes them to float64.
+    lib = in_memory_library_dynamic
+    index = pd.date_range("2025-01-01", periods=2)
+    lib.write("sym", pd.DataFrame({"col": np.arange(2, dtype=np.dtype(first_type))}, index=index))
+    to_append = pd.DataFrame(
+        {"col": np.arange(2, dtype=np.dtype(second_type))}, index=pd.date_range("2025-01-03", periods=2)
+    )
+    with pytest.raises(SchemaException):
+        lib.append("sym", to_append)
+
+
+@pytest.mark.parametrize("first_type,second_type", UNPROMOTABLE_MIXED_SIGNEDNESS_TYPES)
+@pytest.mark.xfail(
+    strict=True,
+    reason="A Series' value column is treated as an index-like field, so it is combined strictly and raises "
+    "where the equivalent DataFrame column promotes to float64, as pandas does. Monday 12781411945",
+)
+def test_symbol_concat_series_mixed_signedness_promotes_to_float64(in_memory_library, first_type, second_type):
+    lib = in_memory_library
+    series_0 = pd.Series(
+        np.arange(2, dtype=np.dtype(first_type)), index=pd.date_range("2025-01-01", periods=2), name="v"
+    )
+    series_1 = pd.Series(
+        np.arange(2, dtype=np.dtype(second_type)), index=pd.date_range("2025-01-03", periods=2), name="v"
+    )
+    lib.write("sym0", series_0)
+    lib.write("sym1", series_1)
+
+    received = concat(lib.read_batch(["sym0", "sym1"], lazy=True)).collect().data
+    assert received.dtype == np.float64
+    assert_series_equal(pd.concat([series_0, series_1]), received)
+
+
+@pytest.mark.parametrize(
+    "first_type,second_type,expected_type",
+    [
+        ("int32", "int64", np.int64),
+        ("int32", "float64", np.float64),
+        # No exact common type. Unlike a data column this is not promoted to float64, because multi-index
+        # levels are index-like fields and must preserve precise equality.
+        ("uint64", "int64", None),
+    ],
+)
+@pytest.mark.parametrize("operation", ["append", "concat"])
+@pytest.mark.parametrize("levels", [2, 3])
+def test_multiindex_level_type_promotion(
+    in_memory_library_dynamic, first_type, second_type, expected_type, operation, levels
+):
+    lib = in_memory_library_dynamic
+
+    def frame(level_type, level_values, dates):
+        arrays, names = [dates], ["dt"]
+        if levels == 3:
+            arrays.append(np.arange(len(dates), dtype=np.int64))
+            names.append("untyped")
+        arrays.append(np.array(level_values, dtype=np.dtype(level_type)))
+        names.append("lvl")
+        index = pd.MultiIndex.from_arrays(arrays, names=names)
+        return pd.DataFrame({"col": np.arange(2, dtype=np.float64)}, index=index)
+
+    df_0 = frame(first_type, [1, 2], pd.date_range("2025-01-01", periods=2))
+    df_1 = frame(second_type, [3, 4], pd.date_range("2025-01-03", periods=2))
+
+    if operation == "append":
+        lib.write("sym", df_0)
+        if expected_type is None:
+            with pytest.raises(SchemaException):
+                lib.append("sym", df_1)
+            return
+        lib.append("sym", df_1)
+        received = lib.read("sym").data
+    else:
+        lib.write("sym0", df_0)
+        lib.write("sym1", df_1)
+        if expected_type is None:
+            with pytest.raises(SchemaException):
+                concat(lib.read_batch(["sym0", "sym1"], lazy=True)).collect()
+            return
+        received = concat(lib.read_batch(["sym0", "sym1"], lazy=True)).collect().data
+
+    assert received.index.get_level_values("lvl").dtype == expected_type
+
+
+@pytest.mark.parametrize("join", ["inner", "outer"])
+def test_symbol_concat_incompatible_types_only_matter_if_the_column_survives_the_join(in_memory_library, join):
+    # Every pair of symbols has a column whose types cannot be combined, but none of those columns is in all
+    # three, so an inner join drops them and only "common" survives. An outer join keeps them and must raise.
+    lib = in_memory_library
+    strings = ["hello", "goodbye"]
+    ints = np.arange(2, dtype=np.int64)
+    floats = np.arange(2, dtype=np.float64)
+    lib.write("sym0", pd.DataFrame({"common": floats, "a": strings, "b": ints}))
+    lib.write("sym1", pd.DataFrame({"common": floats, "a": ints, "c": strings}))
+    lib.write("sym2", pd.DataFrame({"common": floats, "b": strings, "c": ints}))
+
+    if join == "inner":
+        received = concat(lib.read_batch(["sym0", "sym1", "sym2"], lazy=True), join).collect().data
+        assert list(received.columns) == ["common"]
+        assert len(received) == 6
+    else:
+        with pytest.raises(SchemaException):
+            concat(lib.read_batch(["sym0", "sym1", "sym2"], lazy=True), join).collect()
 
 
 @pytest.mark.parametrize(
@@ -274,6 +388,59 @@ def test_symbol_concat_empty_column_intersection(
         if index is None:
             expected.index = pd.RangeIndex(len(expected))
         assert_frame_equal(expected, received)
+
+
+@pytest.mark.parametrize("empty_first", [True, False])
+@pytest.mark.parametrize("join", ["inner", "outer"])
+def test_symbol_concat_with_empty_dataframe(in_memory_library, empty_first, join):
+    # A zero-row symbol contributes no rows, so the result is the non-empty symbol, as in pandas.
+    lib = in_memory_library
+    df_empty = pd.DataFrame({"col1": np.array([], dtype=np.float64)}, index=pd.DatetimeIndex([]))
+    df_rows = pd.DataFrame({"col1": np.arange(2, dtype=np.float64)}, index=pd.date_range("2025-01-01", periods=2))
+    lib.write("sym_empty", df_empty)
+    lib.write("sym_rows", df_rows)
+
+    symbols = ["sym_empty", "sym_rows"] if empty_first else ["sym_rows", "sym_empty"]
+    received = concat(lib.read_batch(symbols, lazy=True), join).collect().data
+    assert_frame_equal(df_rows, received)
+
+
+@pytest.mark.parametrize("join", ["inner", "outer"])
+def test_symbol_concat_empty_dataframe_does_not_contribute_its_columns(in_memory_library_dynamic, join):
+    # A zero-row symbol is skipped entirely, so a column only it has is dropped even by an outer join. Pandas
+    # would keep it backfilled; matching append matters more here. See
+    # test_empty_writes.py::test_append_empty_dataframe_does_not_add_its_columns. Monday 12781487305.
+    lib = in_memory_library_dynamic
+    df_empty = pd.DataFrame(
+        {"col1": np.array([], dtype=np.float64), "col2": np.array([], dtype=np.float64)}, index=pd.DatetimeIndex([])
+    )
+    df_rows = pd.DataFrame({"col1": np.arange(2, dtype=np.float64)}, index=pd.date_range("2025-01-01", periods=2))
+    lib.write("sym_empty", df_empty)
+    lib.write("sym_rows", df_rows)
+
+    received = concat(lib.read_batch(["sym_empty", "sym_rows"], lazy=True), join).collect().data
+    assert list(received.columns) == ["col1"]
+    assert_frame_equal(df_rows, received)
+
+
+@pytest.mark.parametrize("join", ["inner", "outer"])
+def test_symbol_concat_of_only_empty_dataframes(in_memory_library, join):
+    # The companion to the two tests above. Concating empty only dataframes preserves only the first schema.
+    # This is to make it consistent with append.
+    lib = in_memory_library
+    df_0 = pd.DataFrame({"col1": np.array([], dtype=np.float64)}, index=pd.DatetimeIndex([]))
+    df_1 = pd.DataFrame({"col2": np.array([], dtype=np.float64)}, index=pd.DatetimeIndex([]))
+    lib.write("sym0", df_0)
+    lib.write("sym1", df_1)
+
+    received = concat(lib.read_batch(["sym0", "sym1"], lazy=True), join).collect().data
+    assert not len(received)
+    assert list(received.columns) == ["col1"]
+
+    # And symmetrically, the other way round.
+    received = concat(lib.read_batch(["sym1", "sym0"], lazy=True), join).collect().data
+    assert not len(received)
+    assert list(received.columns) == ["col2"]
 
 
 @pytest.mark.parametrize("dynamic_schema", [True, False])
@@ -564,6 +731,57 @@ def test_symbol_concat_querybuilder_syntax(lmdb_library, any_output_format):
     assert_frame_equal(expected, received)
 
 
+@pytest.mark.parametrize(
+    "dtype",
+    [
+        np.int64,
+        pytest.param(
+            np.float64,
+            marks=pytest.mark.xfail(
+                reason="default_values not preserved with concat (Monday ref: 12529266849)",
+                # Not strict: whether the concat pipeline backfills at all depends on how it partitions
+                # processing units, which varies with the CPU thread count. It passes on a 3-core runner.
+                strict=False,
+            ),
+        ),
+    ],
+)
+def test_concat_groupby_sum_matches_append_groupby_sum(in_memory_library_dynamic, dtype, any_output_format):
+    # Three routes that should combine two symbols and sum a column per group must agree:
+    #   A) concat the symbols, then groupby-sum;
+    #   B) write+append every row into one symbol, then read with a groupby-sum query;
+    #   C) groupby-sum each symbol, then concat the results. (same output as A because groups are distinct between symbols)
+    lib = in_memory_library_dynamic
+    lib._nvs._set_output_format_for_pipeline_tests(any_output_format)
+    agg = {"agg_column": "sum"}
+    df_0 = pd.DataFrame({"grouping": ["a", "b"], "agg_column": np.array([10, 20], dtype=dtype)})
+    df_1_write = pd.DataFrame({"grouping": ["c"], "agg_column": np.array([30], dtype=dtype)})
+    df_1_append = pd.DataFrame({"grouping": ["d"]})  # missing agg_column; backfilled on append
+
+    lib.write("sym0", df_0)
+    lib.write("sym1", df_1_write)
+    lib.append("sym1", df_1_append)
+
+    # Route A: concat then aggregate.
+    concat_then_agg = (
+        concat(lib.read_batch(["sym0", "sym1"], lazy=True), join="outer").groupby("grouping").agg(agg).collect().data
+    )
+
+    # Route B: single symbol built from the same rows, aggregated on read.
+    lib.write("sym_combined", df_0)
+    lib.append("sym_combined", df_1_write)
+    lib.append("sym_combined", df_1_append)
+    append_then_agg = lib.read("sym_combined", query_builder=QueryBuilder().groupby("grouping").agg(agg)).data
+
+    # Route C: aggregate each symbol then concat.
+    agg_0 = lib.read("sym0", lazy=True).groupby("grouping").agg(agg)
+    agg_1 = lib.read("sym1", lazy=True).groupby("grouping").agg(agg)
+    agg_then_concat = concat([agg_0, agg_1], join="outer").collect().data
+
+    assert_frame_equal(concat_then_agg.sort_index(), append_then_agg.sort_index())
+    assert_frame_equal(concat_then_agg.sort_index(), agg_then_concat.sort_index())
+
+
 @pytest.mark.parametrize("index_name_0", [None, "ts1", "ts2"])
 @pytest.mark.parametrize("index_name_1", [None, "ts1", "ts2"])
 @pytest.mark.parametrize("join", ["inner", "outer"])
@@ -728,22 +946,22 @@ def test_symbol_concat_symbols_with_different_indexes(lmdb_library, join, any_ou
     lib.write("timestamp_index_sym", df_1)
     lib.write("multiindex_sym", df_2)
 
-    with pytest.raises(SchemaException):
+    with pytest.raises(NormalizationException):
         concat(lib.read_batch(["range_index_sym", "timestamp_index_sym"], lazy=True), join).collect()
 
-    with pytest.raises(SchemaException):
+    with pytest.raises(NormalizationException):
         concat(lib.read_batch(["timestamp_index_sym", "range_index_sym"], lazy=True), join).collect()
 
-    with pytest.raises(SchemaException):
+    with pytest.raises(NormalizationException):
         concat(lib.read_batch(["range_index_sym", "multiindex_sym"], lazy=True), join).collect()
 
-    with pytest.raises(SchemaException):
+    with pytest.raises(NormalizationException):
         concat(lib.read_batch(["multiindex_sym", "range_index_sym"], lazy=True), join).collect()
 
-    with pytest.raises(SchemaException):
+    with pytest.raises(NormalizationException):
         concat(lib.read_batch(["timestamp_index_sym", "multiindex_sym"], lazy=True), join).collect()
 
-    with pytest.raises(SchemaException):
+    with pytest.raises(NormalizationException):
         concat(lib.read_batch(["timestamp_index_sym", "multiindex_sym"], lazy=True), join).collect()
 
 
@@ -880,9 +1098,9 @@ class TestMixedArrowPandasConcat:
         pandas_df = pd.DataFrame({"val": [4, 5, 6]})
         self.lib.write("arrow_sym", arrow_table, index_column=True)
         self.lib.write("pandas_sym", pandas_df)
-        with pytest.raises(SchemaException):
+        with pytest.raises(NormalizationException):
             concat(self.lib.read_batch(["arrow_sym", "pandas_sym"], lazy=True)).collect()
-        with pytest.raises(SchemaException):
+        with pytest.raises(NormalizationException):
             concat(self.lib.read_batch(["pandas_sym", "arrow_sym"], lazy=True)).collect()
 
     def test_arrow_unindexed_with_pandas_timestamp_index_raises(self):
@@ -891,9 +1109,9 @@ class TestMixedArrowPandasConcat:
         pandas_df = pd.DataFrame({"val": [4, 5, 6]}, index=pd.DatetimeIndex(dates, name="ts"))
         self.lib.write("arrow_sym", arrow_table)
         self.lib.write("pandas_sym", pandas_df)
-        with pytest.raises(SchemaException):
+        with pytest.raises(NormalizationException):
             concat(self.lib.read_batch(["arrow_sym", "pandas_sym"], lazy=True)).collect()
-        with pytest.raises(SchemaException):
+        with pytest.raises(NormalizationException):
             concat(self.lib.read_batch(["pandas_sym", "arrow_sym"], lazy=True)).collect()
 
     def test_arrow_with_pandas_multiindex_raises(self):
@@ -902,9 +1120,9 @@ class TestMixedArrowPandasConcat:
         pandas_df = pd.DataFrame({"val": [4, 5, 6]}, index=index)
         self.lib.write("arrow_sym", arrow_table)
         self.lib.write("pandas_sym", pandas_df)
-        with pytest.raises(SchemaException):
+        with pytest.raises(NormalizationException):
             concat(self.lib.read_batch(["arrow_sym", "pandas_sym"], lazy=True)).collect()
-        with pytest.raises(SchemaException):
+        with pytest.raises(NormalizationException):
             concat(self.lib.read_batch(["pandas_sym", "arrow_sym"], lazy=True)).collect()
 
     def test_arrow_arrow_concat_no_index(self):

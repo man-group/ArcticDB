@@ -26,6 +26,7 @@ from pytz import timezone
 from arcticdb.exceptions import (
     ArcticDbNotYetImplemented,
     InternalException,
+    SchemaException,
     UserInputException,
     ArcticException,
 )
@@ -34,11 +35,10 @@ from arcticdb.flattener import Flattener
 from arcticdb.util.test_utils import generate_random_numpy_array, generate_random_series
 from arcticdb.version_store import NativeVersionStore
 from arcticdb.version_store._store import VersionedItem
-from arcticdb_ext.exceptions import _ArcticLegacyCompatibilityException, KeyNotFoundException, StorageException
+from arcticdb_ext.exceptions import KeyNotFoundException, StorageException, StreamDescriptorMismatch
 from arcticdb_ext.storage import KeyType, NoDataFoundException
 from arcticdb_ext.version_store import (
     NoSuchVersionException,
-    StreamDescriptorMismatch,
     ManualClockVersionStore,
     DataError,
 )
@@ -3263,7 +3263,9 @@ def test_modification_methods_dont_return_input_data(basic_store, batch, method)
 @pytest.mark.parametrize("method", ("append", "update"))
 @pytest.mark.parametrize("num", (5, 50, 1001))
 @pytest.mark.storage
-def test_diff_long_stream_descriptor_mismatch(basic_store, method, num):
+def test_long_stream_descriptor_mismatch_names_the_columns(basic_store, method, num):
+    # A wide symbol used to be reported by diffing the two full descriptors in Python. The message now comes from the
+    # schema combine, so it has to name the symbol, the operation and the columns actually at issue by itself.
     lib: NativeVersionStore = basic_store
     lib.write("x", pd.DataFrame({f"col{i}": [i, i + 1, i + 2] for i in range(num)}, index=pd.date_range(0, periods=3)))
     bad_row = {f"col{i}": ["a"] if i % 20 == 4 else [i] for i in (0, *range(3, num + 1))}
@@ -3275,12 +3277,13 @@ def test_diff_long_stream_descriptor_mismatch(basic_store, method, num):
             lib.update("x", pd.DataFrame(bad_row, index=dr), date_range=dr)
         assert False, "should throw"
     except StreamDescriptorMismatch as e:
-        assert not isinstance(e, _ArcticLegacyCompatibilityException)
+        # A descriptor mismatch derives from SchemaException, as it does in C++.
+        assert isinstance(e, SchemaException)
         msg = str(e)
-        for i in (1, 2, *(x for x in range(num) if x % 20 == 4), num):
-            assert f"FD<name=col{i}, type=TD<type=INT64, dim=0>" in msg
-            if i % 20 == 4:
-                assert f"FD<name=col{i}, type=TD<type=UTF" in msg
+        assert f"Cannot {method} (symbol 'x')" in msg
+        # col1 and col2 are in the symbol but not in the argument; col{num} is the other way round.
+        assert "missing 2 [col1, col2]" in msg
+        assert f"unexpected 1 [col{num}]" in msg
 
 
 @pytest.mark.storage
@@ -3292,7 +3295,7 @@ def test_wrong_df_col_order(basic_store):
     lib.write(sym, df1)
 
     df2 = pd.DataFrame({"col2": [4, 5, 6], "col1": [14, 15, 16]})
-    with pytest.raises(StreamDescriptorMismatch, match="type=TD<type=INT64, dim=0>, idx="):
+    with pytest.raises(StreamDescriptorMismatch, match="mismatching column name at position 0, 'col1' against 'col2'"):
         lib.append(sym, df2)
 
 

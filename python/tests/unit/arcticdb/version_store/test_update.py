@@ -22,7 +22,7 @@ from arcticdb.util.test import (
     assert_series_equal,
 )
 from arcticdb.exceptions import InternalException, UnsortedDataException, NormalizationException, SchemaException
-from arcticdb_ext.version_store import StreamDescriptorMismatch
+from arcticdb_ext.exceptions import StreamDescriptorMismatch
 from tests.util.date import DateRange
 from pandas import MultiIndex
 import arcticdb
@@ -471,7 +471,7 @@ def test_update_pickled_data(lmdb_version_store):
     lmdb_version_store.write(symbol, df, pickle_on_failure=True)
     assert lmdb_version_store.is_symbol_pickled(symbol)
     df2 = pd.DataFrame({"a": [1000]}, index=idx[1:2])
-    with pytest.raises(InternalException) as e_info:
+    with pytest.raises(NormalizationException):
         lmdb_version_store.update(symbol, df2)
 
 
@@ -624,7 +624,7 @@ def test_update_not_sorted_range_index_exception(lmdb_version_store):
     dtidx = pd.RangeIndex(0, num_rows, 1)
     df = pd.DataFrame({"c": np.arange(0, num_rows, dtype=np.int64)}, index=dtidx)
     assert df.index.is_monotonic_increasing == True
-    with pytest.raises(InternalException):
+    with pytest.raises(NormalizationException):
         lmdb_version_store.update(symbol, df)
 
 
@@ -963,18 +963,26 @@ def test_regular_update_dynamic_schema_named_index(
         (pd.Series([1], index=pd.DatetimeIndex([pd.Timestamp(0)])), np.array([2])),
         (np.array([1]), pd.DataFrame({"a": [2]}, index=pd.DatetimeIndex([pd.Timestamp(0)]))),
         (np.array([1]), pd.Series([2], index=pd.DatetimeIndex([pd.Timestamp(0)]))),
+        (pd.DataFrame({"a": [1]}), pd.Series([2])),
+        (pd.Series([1]), pd.DataFrame({"a": [2]})),
+        (np.array([1]), np.array([2])),
     ],
 )
-def test_update_mismatched_object_kind(to_write, to_update, lmdb_version_store_dynamic_schema_v1):
-    lib = lmdb_version_store_dynamic_schema_v1
+def test_update_mismatched_object_kind(to_write, to_update, in_memory_version_store_dynamic_schema):
+    def row_count_indexed(obj):
+        return isinstance(obj, np.ndarray) or isinstance(obj.index, pd.RangeIndex)
+
+    lib = in_memory_version_store_dynamic_schema
     lib.write("sym", to_write)
-    if isinstance(to_update, np.ndarray) or isinstance(to_write, np.ndarray):
-        with pytest.raises(Exception) as e:
-            assert "Index mismatch" in str(e.value)
+    if row_count_indexed(to_write) or row_count_indexed(to_update):
+        # Update is only defined over a timestamp index, so the index guards reject these before the object
+        # kinds are compared.
+        with pytest.raises(NormalizationException):
+            lib.update("sym", to_update)
     else:
         with pytest.raises(NormalizationException) as e:
             lib.update("sym", to_update)
-        assert "Update" in str(e.value)
+        assert "update" in str(e.value)
 
 
 def test_update_series_with_different_column_name_throws(lmdb_version_store_dynamic_schema_v1):
