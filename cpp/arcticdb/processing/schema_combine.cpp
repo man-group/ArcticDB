@@ -99,7 +99,8 @@ Error names_differ(std::string_view accumulated, std::string_view other) {
 struct PandasName {
     bool has_name{false};
     bool is_int{false};
-    std::string_view name{};
+    // Owned rather than a view, so that mutating the protobuf it came from cannot dangle it.
+    std::string name{};
 
     // A faked name is a placeholder for "this index has no name".
     static PandasName of_index(const PandasIndex& index) {
@@ -653,15 +654,21 @@ void on_timezone_mismatch(
     );
 }
 
-// Only one side carries Arrow metadata for this column. Not allowed for static schema, otherwise whatever the one
-// side says about the column is kept.
-void on_column_metadata_one_sided(const SchemaCombineOptions& options, std::string_view column) {
-    schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
-            options.type_promotion != TypePromotionPolicy::STATIC,
-            "Cannot {}: only one side has arrow metadata for column '{}', which must match under static schema",
-            options.name(),
-            column
-    );
+// Only one side carries Arrow metadata for this column. Not allowed for static schema, if the other has a timezone.
+void on_column_metadata_one_sided(
+        const ArrowColumnMeta& column_meta, const SchemaCombineOptions& options, std::string_view column
+) {
+    if (options.type_promotion != TypePromotionPolicy::STATIC) {
+        return;
+    }
+    if (column_meta.has_timezone()) {
+        schema::raise<ErrorCode::E_DESCRIPTOR_MISMATCH>(
+                "Cannot {}: only one side has timezone metadata for column '{}', which must match under static schema",
+                options.name(),
+                column
+        );
+    }
+    // TODO (monday ref 12841500984): Add a similar check for string format
 }
 
 // The leading dimension of an ndarray is the row count, thus has to be combined when combining norm metadata.
@@ -711,12 +718,12 @@ NormalizationMetadata accumulate_arrow_and_arrow_norm(
                 const ArrowColumnMeta* accumulated_column,
                 const ArrowColumnMeta* other_column) {
                 if (accumulated_column == nullptr) {
-                    on_column_metadata_one_sided(options, column_name);
+                    on_column_metadata_one_sided(*other_column, options, column_name);
                     res_columns[column_name] = *other_column;
                     return;
                 }
                 if (other_column == nullptr) {
-                    on_column_metadata_one_sided(options, column_name);
+                    on_column_metadata_one_sided(*accumulated_column, options, column_name);
                     return;
                 }
                 // An absent timezone is not the same as an empty one, so compare presence as well as value.
@@ -757,29 +764,29 @@ NormalizationMetadata accumulate_arrow_and_pandas_norm(
 }
 
 void accumulate_multi_index(
-        PandasMultiIndex* res_index, const PandasMultiIndex& other_index, RequiredNameMismatches& mismatches,
+        PandasMultiIndex& res_index, const PandasMultiIndex& other_index, RequiredNameMismatches& mismatches,
         const SchemaCombineOptions& options
 ) {
     normalization::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
-            res_index->field_count() == other_index.field_count(),
+            res_index.field_count() == other_index.field_count(),
             "Cannot {}: schemas have different index level counts, {} and {}",
             options.name(),
-            res_index->field_count() + 1,
+            res_index.field_count() + 1,
             other_index.field_count() + 1
     );
-    const std::set<uint32_t> res_unnamed{res_index->fake_field_pos().begin(), res_index->fake_field_pos().end()};
+    const std::set<uint32_t> res_unnamed{res_index.fake_field_pos().begin(), res_index.fake_field_pos().end()};
     const std::set<uint32_t> other_unnamed{other_index.fake_field_pos().begin(), other_index.fake_field_pos().end()};
     if (const auto error = compare_pandas_names(
-                PandasName::of_multi_index_level_0(*res_index), PandasName::of_multi_index_level_0(other_index)
+                PandasName::of_multi_index_level_0(res_index), PandasName::of_multi_index_level_0(other_index)
         )) {
         mismatches.add_index(0, true, *error);
     }
-    if (other_index.tz() != res_index->tz()) {
-        on_timezone_mismatch(options, "Top level index", res_index->tz(), other_index.tz());
-        res_index->clear_tz();
+    if (other_index.tz() != res_index.tz()) {
+        on_timezone_mismatch(options, "Top level index", res_index.tz(), other_index.tz());
+        res_index.clear_tz();
     }
     for (const auto& [idx, idx_timezone] : other_index.timezone()) {
-        auto& res_timezone = (*res_index->mutable_timezone())[idx];
+        auto& res_timezone = (*res_index.mutable_timezone())[idx];
         if (res_timezone != idx_timezone) {
             on_timezone_mismatch(options, fmt::format("Index level {}", idx), res_timezone, idx_timezone);
             res_timezone = "";
@@ -796,22 +803,22 @@ void accumulate_multi_index(
 }
 
 void accumulate_index(
-        PandasIndex* res_index, const PandasIndex& other_index, RequiredNameMismatches& mismatches,
+        PandasIndex& res_index, const PandasIndex& other_index, RequiredNameMismatches& mismatches,
         const SchemaCombineOptions& options
 ) {
     normalization::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
-            res_index->is_physically_stored() == other_index.is_physically_stored(),
+            res_index.is_physically_stored() == other_index.is_physically_stored(),
             "Cannot {}: one index is a DatetimeIndex and the other is a RangeIndex",
             options.name()
     );
-    if (const auto error = compare_pandas_names(PandasName::of_index(*res_index), PandasName::of_index(other_index))) {
+    if (const auto error = compare_pandas_names(PandasName::of_index(res_index), PandasName::of_index(other_index))) {
         mismatches.add_index(0, false, *error);
     }
-    if (other_index.tz() != res_index->tz()) {
-        on_timezone_mismatch(options, "Index", res_index->tz(), other_index.tz());
-        res_index->clear_tz();
+    if (other_index.tz() != res_index.tz()) {
+        on_timezone_mismatch(options, "Index", res_index.tz(), other_index.tz());
+        res_index.clear_tz();
     }
-    if (other_index.step() != res_index->step()) {
+    if (other_index.step() != res_index.step()) {
         // This case can only be reached for concat.
         // Update doesn't support range indices and append has special handling for range indices to make sure they
         // are aligned.
@@ -821,8 +828,8 @@ void accumulate_index(
                 options.name()
         );
         log::version().warn("Mismatching RangeIndexes being combined, setting to start=0, step=1");
-        res_index->set_start(0);
-        res_index->set_step(1);
+        res_index.set_start(0);
+        res_index.set_step(1);
     }
 }
 
@@ -844,9 +851,9 @@ NormalizationMetadata accumulate_pandas_and_pandas_norm(
     );
 
     if (res_common->has_multi_index()) {
-        accumulate_multi_index(res_common->mutable_multi_index(), other_common.multi_index(), mismatches, options);
+        accumulate_multi_index(*res_common->mutable_multi_index(), other_common.multi_index(), mismatches, options);
     } else {
-        accumulate_index(res_common->mutable_index(), other_common.index(), mismatches, options);
+        accumulate_index(*res_common->mutable_index(), other_common.index(), mismatches, options);
     }
 
     // Last of the required fields, so that a disagreement about the index - which every schema has - is reported
