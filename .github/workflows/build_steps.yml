@@ -795,6 +795,9 @@ jobs:
           # faster and durability is irrelevant on CI. Not MDB_WRITEMAP, which makes Windows allocate the whole
           # map_size per library on disk. See docs/claude/plans/gpetrov/ci_win_console_sink/.
           ARCTICDB_LMDBStorage_ExtraFlags_int: ${{ matrix.os == 'windows' && '327680' || '0' }}
+          # The Azure C++ SDK pools connections; reusing one azurite has already closed (node closes idle
+          # connections after 5s) blocks the next request for seconds, or ~2 minutes when several are in flight.
+          ARCTICDB_AzureStorage_HttpKeepAlive_int: '0'
 
       - name: Collect crash dumps (Windows)
         if: matrix.os == 'windows' && failure()
