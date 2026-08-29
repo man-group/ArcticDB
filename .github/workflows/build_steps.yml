@@ -125,18 +125,6 @@ jobs:
           disk-root: "D:"  # This is also the checkout directory. Total size 12GB.
         continue-on-error: true
 
-      # Linking writes multi-GB .lib/.pdb files, which real-time scanning makes much slower (the same exclusions cut
-      # the Windows test jobs by ~3x).
-      - name: Exclude build paths from Windows Defender
-        if: matrix.os == 'windows'
-        shell: pwsh
-        run: |
-          Add-MpPreference -ExclusionPath "$env:GITHUB_WORKSPACE", "$env:RUNNER_TEMP", "$env:TEMP", "${{matrix.build_dir}}", "${{matrix.vcpkg_packages_dir}}", "C:\hostedtoolcache", "D:\a"
-          Add-MpPreference -ExclusionProcess "cl.exe", "link.exe", "lib.exe", "ninja.exe", "sccache.exe", "python.exe", "cmake.exe", "vcpkg.exe"
-          Set-MpPreference -DisableRealtimeMonitoring $true
-          Get-MpPreference | Select-Object DisableRealtimeMonitoring, ExclusionPath, ExclusionProcess
-        continue-on-error: true
-
       - name: Install AWS CLI
         # For VCPKG source asset upload to cache in S3
         if: matrix.os == 'linux' && inputs.job_type == 'cpp-tests'
