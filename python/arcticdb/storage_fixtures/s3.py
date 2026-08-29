@@ -729,9 +729,12 @@ class HostDispatcherApplication(DomainDispatcherApplication):
         """The stand-alone server needs a way to distinguish between S3 and IAM. We use the host for that"""
         if host is None:
             return None
-        if "s3" in host or host == "localhost":
+        # S3 uses the IPv4 literal and IAM the name: on Windows "localhost" resolves to ::1 first and, since the
+        # server binds IPv4 only, every connection wastes ~2s failing over. S3 is the hot path, IAM is a handful
+        # of tests.
+        if "s3" in host or host == "127.0.0.1":
             return "s3"
-        elif host == "127.0.0.1":
+        elif host == "localhost":
             return "iam"
         elif host == "moto_api":
             return "moto_api"
@@ -926,7 +929,8 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
     default_key = Key(id="awd", secret="awd", user_name="dummy")
     _RO_POLICY: str
     _RW_POLICY: str
-    host = "localhost"
+    # An IPv4 literal, not "localhost": see get_backend_for_host
+    host = "127.0.0.1"
     region = "us-east-1"
     port: int
     endpoint: str

@@ -44,4 +44,6 @@ def test_localhost_vs_ipv4_literal(s3_storage):
         families = [a[0].name for a in addrs]
         conn = _time_connects(host, port)
         req = _time_requests(host, port)
-        print(f"PROBE host={host:10} families={families} 100 connects={conn:6.2f}s 100 requests={req:6.2f}s", flush=True)
+        print(
+            f"PROBE host={host:10} families={families} 100 connects={conn:6.2f}s 100 requests={req:6.2f}s", flush=True
+        )

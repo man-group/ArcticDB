@@ -28,18 +28,23 @@ namespace {
 
 using GetOsfHandleFn = intptr_t(__cdecl*)(int);
 
-// _get_osfhandle from the process-shared CRT, or nullptr when no such CRT is loaded (e.g. a static-CRT executable)
+// _get_osfhandle from the process-shared CRT, resolved once: GetModuleHandle/GetProcAddress take the loader lock,
+// which would serialise logging threads if done per line. nullptr when no shared CRT is loaded at that point (a
+// static-CRT executable such as the C++ test binary), where nothing else can dup2 our fds anyway and fwrite is
+// correct.
 GetOsfHandleFn shared_crt_get_osfhandle() {
-    HMODULE ucrt = ::GetModuleHandleW(L"ucrtbase.dll");
-    if (ucrt == nullptr)
-        return nullptr;
-    return reinterpret_cast<GetOsfHandleFn>(::GetProcAddress(ucrt, "_get_osfhandle"));
+    static const GetOsfHandleFn fn = [] {
+        HMODULE ucrt = ::GetModuleHandleW(L"ucrtbase.dll");
+        return ucrt == nullptr ? nullptr : reinterpret_cast<GetOsfHandleFn>(::GetProcAddress(ucrt, "_get_osfhandle"));
+    }();
+    return fn;
 }
 
 bool write_via_shared_crt(int fd, const char* data, size_t size) {
     auto get_osfhandle = shared_crt_get_osfhandle();
     if (get_osfhandle == nullptr)
         return false;
+    // Looked up per write: the fd's handle changes when something dup2s over it, which is the whole point
     auto handle = reinterpret_cast<HANDLE>(get_osfhandle(fd));
     if (handle == INVALID_HANDLE_VALUE || handle == nullptr)
         return false;
