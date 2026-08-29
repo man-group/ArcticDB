@@ -281,14 +281,25 @@ class VersionStoreComparison(RuleBasedStateMachine):
         self.test_list_versions_snapshot(latest_only=True)
 
 
+# The examples are split over this many tests so that xdist can run them in parallel: as one test per library type
+# this was ~20 minutes and set the wall time of the whole hypothesis job, while other workers sat idle. Examples are
+# generated independently, so N shards of M examples explore as much as one run of N*M.
+HYPOTHESIS_STATEFUL_SHARDS = int(os.getenv("HYPOTHESIS_STATEFUL_SHARDS", 4))
+
+
 @pytest.mark.parametrize("lib_type", ["lmdb_version_store_delayed_deletes_v1", "lmdb_version_store_delayed_deletes_v2"])
+@pytest.mark.parametrize("shard", range(HYPOTHESIS_STATEFUL_SHARDS))
 @SLOW_TESTS_MARK
-def test_stateful(lib_type, request):
+def test_stateful(lib_type, shard, request):
+    total_examples = int(os.getenv("HYPOTHESIS_EXAMPLES", 100))
+    examples = total_examples // HYPOTHESIS_STATEFUL_SHARDS + (shard < total_examples % HYPOTHESIS_STATEFUL_SHARDS)
+    if examples == 0:
+        pytest.skip(f"{total_examples} examples spread over {HYPOTHESIS_STATEFUL_SHARDS} shards leaves none here")
     VersionStoreComparison._lib = request.getfixturevalue(lib_type)
     run_state_machine_as_test(
         VersionStoreComparison,
         settings=settings(  # Note: timeout is a legacy parameter
-            max_examples=int(os.getenv("HYPOTHESIS_EXAMPLES", 100)),
+            max_examples=examples,
             deadline=None,
             stateful_step_count=100,
             suppress_health_check=[HealthCheck.filter_too_much],
