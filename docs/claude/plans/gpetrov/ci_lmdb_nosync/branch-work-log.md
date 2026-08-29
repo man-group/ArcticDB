@@ -114,3 +114,24 @@ Branched from `gpetrov/ci_speedup` (PR #3350, Windows Defender exclusion) so CI 
   the fix, passes on Linux regardless.
 - Run 33206552356 (shared-CRT fix, NOSYNC|NOMETASYNC): 0/54 Windows jobs with LMDB errors (was 20/56), the capfd
   test passed 108/108 on Windows. Re-enabled `ARCTICDB_LMDBStorage_ExtraFlags_int=327680` for Windows test jobs.
+
+## Integration-suite outliers (2026-08-29)
+
+- Full run 33234529507 (sink fix + NOSYNC on Windows): success, 63 min wall, 3,756 job-min (master ~100 min /
+  ~4,900). Integration jobs (45–47 min on Linux and Windows alike) are now the critical path; from the junit XML the
+  suite is 114 CPU-min on Linux / 169 on Windows over 4 xdist workers.
+- `test_mongo_retryable_network_error` took ~1,000 s in every run: the test kills mongod and runs 6 operations, each
+  waiting `MongoClient.SelectionTimeoutMs` (default 120 s) per backoff attempt; teardown then spent 72 s on a
+  `shutdown` command to the dead server. Fixed by scoping `MongoClient.SelectionTimeoutMs=500` and
+  `MongoClient.RetryWaitMaxMs=200` in the test, and by skipping the shutdown command in
+  `ManagedMongoDBServer.__exit__` when the process has already exited. Cannot be run locally (no mongod); verified on CI.
+- Six azurite tests in `test_arctic.py` take ~123 s or ~186 s in every run but <1 s when run alone. Reproduced
+  locally with `-n 4 --dist worksteal -k azurite` on `test_arctic.py` (20-core box, so not CPU starvation), and the
+  time is in `call`, not fixture setup. `ARCTICDB_all_loglevel=debug` timing of the
+  `Submitting/Submitted DeleteBlob batch` pairs shows 967 batch deletes in the run, 966 instant and exactly one
+  taking 122.4 s. All six slow tests are ones that delete/prune. The slow submit is one of three
+  `SubmitBatch` calls issued by different IO threads in the same millisecond (tdata/tindex/cstats keys): the other
+  two return immediately, the third blocks ~122 s and then succeeds, i.e. concurrent batch requests to Azurite
+  (or a stale keep-alive connection in the Azure C++ SDK's curl pool) stall until something times out and retries.
+  Costs ~2 min per integration job. Not fixed: the remaining lever for integration is sharding (~114 CPU-min over
+  4 workers), not this.
