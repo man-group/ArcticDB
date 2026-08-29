@@ -171,6 +171,15 @@ lib = ac.create_library("mylib", library_options=LibraryOptions(
   `cpp/arcticdb/log/console_sink.hpp`.
 - `LMDBStorage.WarnIfOpened`: see `warn_if_lmdb_already_open()`.
 
+### Azure runtime configuration
+
+- `AzureStorage.HttpKeepAlive` (env `ARCTICDB_AzureStorage_HttpKeepAlive_int`, default 1): passed to
+  `CurlTransportOptions::HttpKeepAlive` on Linux/macOS. The Azure C++ SDK (azure-core-cpp 1.12.0) pools connections
+  and reusing one the server has already closed blocks the request for seconds before it is retried — ~2 minutes when
+  several batch deletes are in flight. Azurite closes idle connections after 5s, so CI test jobs set this to 0. Real
+  Azure keeps connections alive much longer, so the default is unchanged. Regression test:
+  `test_keep_alive_disabled_avoids_stale_connection_stall`.
+
 ### Limitations
 
 - **Single process**: LMDB doesn't support multiple processes writing simultaneously
