@@ -503,15 +503,16 @@ jobs:
       - name: Discover test directory names
         if: inputs.job_type == 'build-python-wheels'
         # We only run the compat tests on for newer python versions.
-        # There are so few nonreg tests, run them in the hypothesis runner.
+        # There are so few nonreg and enduser tests, run them in the hypothesis runner: a job of its own costs
+        # ~2.5 min of runner setup for ~6s of tests, and one less job per matrix entry means less runner contention.
         run: |
           if [ ${{inputs.python3}} -gt 8 ]
           then
-            find python/tests/* -maxdepth 0 -type d -not \( -name "__pycache__" -o -name "util" -o -name "nonreg" -o -name "scripts" -o -name "sanitizers" \) -exec basename {} \; | tr '\n' ',' |
-              sed 's/^/test_dirs=["/ ; s/,$/"]/ ; s/,/","/g ; s/"hypothesis"/"{hypothesis,nonreg,scripts,sanitizers}"/' | tee -a $GITHUB_ENV
+            find python/tests/* -maxdepth 0 -type d -not \( -name "__pycache__" -o -name "util" -o -name "nonreg" -o -name "scripts" -o -name "sanitizers" -o -name "enduser" \) -exec basename {} \; | tr '\n' ',' |
+              sed 's/^/test_dirs=["/ ; s/,$/"]/ ; s/,/","/g ; s/"hypothesis"/"{hypothesis,nonreg,scripts,sanitizers,enduser}"/' | tee -a $GITHUB_ENV
           else
-            find python/tests/* -maxdepth 0 -type d -not \( -name "__pycache__" -o -name "util" -o -name "nonreg" -o -name "scripts" -o -name "compat" -o -name "sanitizers" \) -exec basename {} \; | tr '\n' ',' |
-              sed 's/^/test_dirs=["/ ; s/,$/"]/ ; s/,/","/g ; s/"hypothesis"/"{hypothesis,nonreg,scripts,sanitizers}"/' | tee -a $GITHUB_ENV
+            find python/tests/* -maxdepth 0 -type d -not \( -name "__pycache__" -o -name "util" -o -name "nonreg" -o -name "scripts" -o -name "compat" -o -name "sanitizers" -o -name "enduser" \) -exec basename {} \; | tr '\n' ',' |
+              sed 's/^/test_dirs=["/ ; s/,$/"]/ ; s/,/","/g ; s/"hypothesis"/"{hypothesis,nonreg,scripts,sanitizers,enduser}"/' | tee -a $GITHUB_ENV
           fi
 
       # ========================= Common ==================
