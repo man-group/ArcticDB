@@ -112,3 +112,5 @@ Branched from `gpetrov/ci_speedup` (PR #3350, Windows Defender exclusion) so CI 
   and writes to the fd's current handle in that table; fallback is fwrite. Python end-to-end regression test
   `python/tests/unit/arcticdb/test_log_capture.py` (capfd must contain a C++ log line) — fails on Windows before
   the fix, passes on Linux regardless.
+- Run 33206552356 (shared-CRT fix, NOSYNC|NOMETASYNC): 0/54 Windows jobs with LMDB errors (was 20/56), the capfd
+  test passed 108/108 on Windows. Re-enabled `ARCTICDB_LMDBStorage_ExtraFlags_int=327680` for Windows test jobs.
