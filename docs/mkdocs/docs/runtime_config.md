@@ -123,10 +123,20 @@ Intended for throwaway data, e.g. `MDB_NOSYNC | MDB_NOMETASYNC` (`0x50000`, i.e.
 commit. Do not use those flags for data you need to survive a crash or power loss.
 
 On Windows, `MDB_WRITEMAP` makes the OS allocate the whole `map_size` of every library on disk (LMDB otherwise extends
-the file lazily there), and with `MDB_NOSYNC` a full disk is not reported and pages are lost silently. Neither
-variant is currently used by ArcticDB's own CI on Windows.
+the file lazily there), and with `MDB_NOSYNC` a full disk is not reported and pages are lost silently, so avoid
+`MDB_WRITEMAP` there. ArcticDB's own CI uses `MDB_NOSYNC | MDB_NOMETASYNC` on its Windows test jobs.
 
 Default: 0 (no extra flags).
+
+### AzureStorage.HttpKeepAlive
+
+Whether the Azure client reuses pooled HTTP connections (`1`, the default) or opens a new connection per request
+(`0`). Only applies to the libcurl transport, i.e. Linux and macOS.
+
+The Azure SDK blocks for several seconds when it reuses a pooled connection the server has already closed, so set
+this to `0` against servers that close idle connections quickly — notably Azurite, which closes them after 5
+seconds. Leave it at the default against real Azure Blob Storage, where connection reuse avoids a TLS handshake per
+request.
 
 ### VersionStore.NumCPUThreads and VersionStore.NumIOThreads
 

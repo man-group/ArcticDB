@@ -135,3 +135,9 @@ Branched from `gpetrov/ci_speedup` (PR #3350, Windows Defender exclusion) so CI 
   (or a stale keep-alive connection in the Azure C++ SDK's curl pool) stall until something times out and retries.
   Costs ~2 min per integration job. Not fixed: the remaining lever for integration is sharding (~114 CPU-min over
   4 workers), not this.
+- Azurite follow-up: it is not Azurite's fault — 60 concurrent batch deletes from Python peak at 0.06 s. The stall is
+  the Azure C++ SDK's curl connection pool reusing a connection azurite (node, 5s keepAliveTimeout) has closed.
+  Deterministic repro: write, idle 6s, write with prune → 5–6 s instead of 0.08 s. Added
+  `AzureStorage.HttpKeepAlive` (default 1, unchanged) wired to `CurlTransportOptions::HttpKeepAlive`; with it off the
+  local xdist repro goes from "1 of 967 batches takes 122.4 s" to "1002 batches, slowest 0.0 s". CI test jobs set
+  `ARCTICDB_AzureStorage_HttpKeepAlive_int=0`. Worth reporting upstream to azure-sdk-for-cpp.
