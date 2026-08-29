@@ -135,7 +135,8 @@ class ManagedMongoDBServer(StorageFixtureFactory):
         self._client = get_mongo_client(self.mongo_uri)
 
     def __exit__(self, exc_type, exc_value, traceback):
-        if self._client:
+        # Skip the shutdown command if the test already killed the server: pymongo would wait for server selection
+        if self._client and self._p.poll() is None:
             with handle_cleanup_exception(self):
                 self._client["admin"].command({"shutdown": 1, "force": True, "timeoutSecs": 1})
 
