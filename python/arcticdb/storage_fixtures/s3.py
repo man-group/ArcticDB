@@ -726,16 +726,15 @@ class HostDispatcherApplication(DomainDispatcherApplication):
         return match.group(1) if match else None
 
     def get_backend_for_host(self, host):
-        """The stand-alone server needs a way to distinguish between S3 and IAM. We use the host for that"""
+        """Maps a request's host to the moto app instance that serves it."""
         if host is None:
             return None
-        # S3 uses the IPv4 literal and IAM the name: on Windows "localhost" resolves to ::1 first and, since the
-        # server binds IPv4 only, every connection wastes ~2s failing over. S3 is the hot path, IAM is a handful
-        # of tests.
-        if "s3" in host or host == "127.0.0.1":
+        # Both the S3 and the IAM endpoint map here, so they share one moto app instance and therefore one set of
+        # data: /moto-api/reset is posted to the IAM endpoint and must reset the S3 backend. Fixtures address the
+        # server by IPv4 literal, never by name, because on Windows "localhost" resolves to ::1 first and the
+        # server binds IPv4 only, so every connection wastes ~2s failing over.
+        if "s3" in host or host in ("localhost", "127.0.0.1"):
             return "s3"
-        elif host == "localhost":
-            return "iam"
         elif host == "moto_api":
             return "moto_api"
         else:
@@ -989,7 +988,7 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
         port = self.port = get_ephemeral_port(seed)
         self.endpoint = f"{self.http_protocol}://{self.host}:{port}"
         self.working_dir = mkdtemp(suffix="MotoS3StorageFixtureFactory")
-        self._iam_endpoint = f"{self.http_protocol}://localhost:{port}"
+        self._iam_endpoint = f"{self.http_protocol}://{self.host}:{port}"
 
         self.ssl = (
             self.http_protocol == "https"
@@ -1142,7 +1141,7 @@ class MotoGcpS3StorageFixtureFactory(MotoS3StorageFixtureFactory):
         port = self.port = get_ephemeral_port(seed)
         self.endpoint = f"{self.http_protocol}://{self.host}:{port}"
         self.working_dir = mkdtemp(suffix="MotoGcpS3StorageFixtureFactory")
-        self._iam_endpoint = f"{self.http_protocol}://localhost:{port}"
+        self._iam_endpoint = f"{self.http_protocol}://{self.host}:{port}"
 
         self.ssl = (
             self.http_protocol == "https"
