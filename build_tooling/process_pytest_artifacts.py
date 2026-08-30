@@ -118,11 +118,13 @@ def create_run_from_github_actions():
             f"GITHUB_RUN_ID: {run_id}, GITHUB_REF_NAME: {branch}, GITHUB_SHA: {commit_hash}"
         )
 
+    repo = os.environ.get("GITHUB_REPOSITORY", "man-group/ArcticDB")
     run_dict = {
         "id": run_id,
         "head_branch": branch,
         "run_started_at": start_time,
         "head_commit": {"id": commit_hash},
+        "artifacts_url": f"/repos/{repo}/actions/runs/{run_id}/artifacts",
     }
 
     return Run(run_dict)
@@ -482,17 +484,24 @@ def download_pytest_xmls_in_parallel(runs, download_dir, max_workers) -> List[st
         return runs_to_remove
 
 
-def process_workflow_run(run: Run, download_dir: Path, artifact_workers: int = 8) -> Dict[str, Path]:
-    """Process a single workflow run - get artifacts and download them"""
+def process_workflow_run(
+    run: Run, download_dir: Path, artifact_workers: int = 8, check_status: bool = True
+) -> Dict[str, Path]:
+    """Process a single workflow run - get artifacts and download them.
 
-    if run.run_conclusion and run.run_conclusion.lower() == "cancelled":
-        # print(f"Skipping run {run.run_id} - cancelled")
-        return {run.run_id: None}
+    check_status is off when we are publishing the run we are part of: such a run is in progress by definition,
+    since this job is one of its jobs.
+    """
 
-    # Only process completed runs
-    if run.run_status and run.run_status.lower() != "completed":
-        # print(f"Skipping run {run.run_id} - not completed")
-        return {run.run_id: None}
+    if check_status:
+        if run.run_conclusion and run.run_conclusion.lower() == "cancelled":
+            # print(f"Skipping run {run.run_id} - cancelled")
+            return {run.run_id: None}
+
+        # Only process completed runs
+        if run.run_status and run.run_status.lower() != "completed":
+            # print(f"Skipping run {run.run_id} - not completed")
+            return {run.run_id: None}
 
     print(f"Processing run {run.run_id}: ({run.run_status}/{run.run_conclusion}) {run.timestamp}")
 
@@ -614,7 +623,7 @@ def main(max_workers, download_dir, max_pages, use_github_actions):
             print(f"Downloading artifacts for run {run_obj.run_id} with {max_workers} workers...")
             start_time = time.time()
             download_dir.mkdir(parents=True, exist_ok=True)
-            process_workflow_run(run_obj, download_dir, max_workers)
+            process_workflow_run(run_obj, download_dir, max_workers, check_status=False)
             print(f"Time taken: {time.time() - start_time:.2f} seconds")
     else:
         # Get workflow runs
