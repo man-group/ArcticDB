@@ -333,6 +333,13 @@ jobs:
           rm -f cpp/out/${ARCTIC_CMAKE_PRESET}-build/test_unit_arcticdb.json
           find cpp/out/${ARCTIC_CMAKE_PRESET}-build/arcticdb/CMakeFiles -name "*test_unit*.o" -delete 2>/dev/null || true
 
+      # Hit rate is the first thing to look at when a compile job is slow; without this it is only ever
+      # visible inside the manylinux wheel build (setup.py prints it there).
+      - name: Show sccache stats
+        if: inputs.job_type != 'build-python-wheels' && always()
+        run: sccache --show-stats
+        continue-on-error: true
+
       # We don't do anything with the benchmarks automatically yet, but check that they at least compile and run.
       - name: Compile C++ Benchmarks
         if: inputs.job_type == 'cpp-tests' && env.ARCTICDB_USE_SANITIZER == ''
