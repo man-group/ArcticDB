@@ -167,7 +167,7 @@ lib = ac.create_library("mylib", library_options=LibraryOptions(
   Skipping the fsync per commit makes the Windows CI unit jobs ~3x faster but is not enabled: `MDB_NOSYNC` gave
   sporadic `MDB_MAP_RESIZED` on Windows (cause unknown), and `MDB_WRITEMAP` makes Windows allocate the full
   `map_size` per library on disk, which filled the runner disk and silently lost pages. See
-  `docs/claude/plans/gpetrov/ci_lmdb_nosync/branch-work-log.md`.
+  `docs/claude/plans/gpetrov/ci_lmdb_extra_flags/branch-work-log.md`.
 - `LMDBStorage.WarnIfOpened`: see `warn_if_lmdb_already_open()`.
 
 ### Limitations

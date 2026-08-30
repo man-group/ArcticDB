@@ -794,7 +794,7 @@ jobs:
           # Skipping the fsync per commit makes the Windows unit jobs ~3x faster, but neither variant is safe
           # there: MDB_NOSYNC|MDB_NOMETASYNC gave sporadic MDB_MAP_RESIZED, and MDB_WRITEMAP|MDB_NOSYNC makes
           # Windows allocate the whole map_size per library, filling the disk and silently losing pages.
-          # Kept at 0 until that is understood; details in docs/claude/plans/gpetrov/ci_lmdb_nosync/.
+          # Kept at 0 until that is understood; details in docs/claude/plans/gpetrov/ci_lmdb_extra_flags/.
           ARCTICDB_LMDBStorage_ExtraFlags_int: '0'
 
       - name: Collect crash dumps (Windows)
