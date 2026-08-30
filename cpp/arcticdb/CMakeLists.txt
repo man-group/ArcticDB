@@ -922,6 +922,19 @@ target_include_directories(arcticdb_core_static PUBLIC
 
 target_link_libraries(arcticdb_core_static PUBLIC ${arcticdb_core_libraries})
 
+# The objects of arcticdb_core_static without the archive step, carrying the same usage requirements. The generator
+# expressions are evaluated after the whole project is configured, so they also pick up what the top level
+# CMakeLists.txt adds to arcticdb_core_static.
+add_library(arcticdb_core_objects INTERFACE)
+target_sources(arcticdb_core_objects INTERFACE $<TARGET_OBJECTS:arcticdb_core_object>)
+target_include_directories(
+        arcticdb_core_objects INTERFACE $<TARGET_PROPERTY:arcticdb_core_static,INTERFACE_INCLUDE_DIRECTORIES>
+)
+target_compile_definitions(
+        arcticdb_core_objects INTERFACE $<TARGET_PROPERTY:arcticdb_core_static,INTERFACE_COMPILE_DEFINITIONS>
+)
+target_link_libraries(arcticdb_core_objects INTERFACE ${arcticdb_core_libraries})
+
 add_library(arcticdb_core SHARED $<TARGET_OBJECTS:arcticdb_core_object>)
 
 target_link_libraries(arcticdb_core PRIVATE
@@ -962,9 +975,15 @@ if(${ARCTICDB_USE_PCH})
     )
 endif()
 
+# arcticdb_core_objects rather than arcticdb_core_static: for the wheel build arcticdb_ext is the only consumer,
+# so archiving ~1GB of objects and reading them straight back is pure overhead. On Windows creating that archive
+# alone took 112-385s of every compile job, and arcticdb_ext pulls in nearly all of its members anyway (see the
+# ARCTICDB_THIN_ARCHIVES comment above, which does the same thing for GNU ar; lib.exe has no thin archives).
+# arcticdb_core_static is still built for the test binaries and for projects that consume this one as a
+# subdirectory.
 target_link_libraries(arcticdb_python
         PUBLIC
-        arcticdb_core_static
+        arcticdb_core_objects
         ${AWSSDK_LINK_LIBRARIES}
         )
 
