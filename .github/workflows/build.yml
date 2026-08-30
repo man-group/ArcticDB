@@ -564,8 +564,8 @@ jobs:
     runs-on: ubuntu-22.04
     permissions: {actions: read}
     steps:
+      # checkout v3 has no sparse-checkout inputs, and the repo is small enough that a full checkout is cheap
       - uses: actions/checkout@v3.3.0
-        with: {sparse-checkout: build_tooling/ci_critical_path.py, sparse-checkout-cone-mode: false}
       - name: Report what set the wall-clock time
         env:
           GH_TOKEN: ${{github.token}}

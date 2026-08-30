@@ -302,7 +302,10 @@ def test_stateful(lib_type, shard, request):
             max_examples=examples,
             deadline=None,
             stateful_step_count=100,
-            suppress_health_check=[HealthCheck.filter_too_much],
+            # data_too_large: with stateful_step_count=100 a single example is large, so hypothesis routinely
+            # overruns while generating; the ratio of overruns to valid examples is what trips the check, and it
+            # trips more readily now the examples are split across shards.
+            suppress_health_check=[HealthCheck.filter_too_much, HealthCheck.data_too_large],
         ),
     )
 
