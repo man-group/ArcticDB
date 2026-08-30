@@ -405,6 +405,10 @@ T or_else(T val, T or_else_val, T def = T()) {
 }
 } // namespace
 
+unsigned int lmdb_extra_env_flags() {
+    return static_cast<unsigned int>(ConfigsMap::instance()->get_int("LMDBStorage.ExtraFlags", 0));
+}
+
 LmdbStorage::LmdbStorage(const LibraryPath& library_path, OpenMode mode, const Config& conf) :
     Storage(library_path, mode) {
     if (conf.use_mock_storage_for_testing()) {
@@ -456,7 +460,7 @@ LmdbStorage::LmdbStorage(const LibraryPath& library_path, OpenMode mode, const C
     env().set_mapsize(mapsize);
     env().set_max_dbs(or_else(static_cast<unsigned int>(conf.max_dbs()), 1024U));
     env().set_max_readers(or_else(conf.max_readers(), 1024U));
-    env().open(lib_dir_.generic_string().c_str(), MDB_NOTLS);
+    env().open(lib_dir_.generic_string().c_str(), MDB_NOTLS | lmdb_extra_env_flags());
 
     auto txn = ::lmdb::txn::begin(env());
 

@@ -23,6 +23,12 @@ struct LmdbInstance {
     std::unordered_map<std::string, std::unique_ptr<::lmdb::dbi>> dbi_by_key_type_;
 };
 
+/// Extra flags passed to mdb_env_open for every LMDB env, from LMDBStorage.ExtraFlags in ConfigsMap
+/// (env var ARCTICDB_LMDBStorage_ExtraFlags_int). Lets a process opt into e.g. MDB_WRITEMAP | MDB_NOSYNC without
+/// changing library configs, e.g. to avoid an fsync per commit on CI where durability is irrelevant. Passed at open
+/// rather than mdb_env_set_flags because MDB_WRITEMAP can only be set at open.
+unsigned int lmdb_extra_env_flags();
+
 class LmdbStorage final : public Storage {
   public:
     using Config = arcticdb::proto::lmdb_storage::Config;
