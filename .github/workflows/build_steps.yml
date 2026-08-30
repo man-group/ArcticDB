@@ -574,6 +574,10 @@ jobs:
           - {version_cache_timeout: NoCache, infer_string_id: -inferstr}
           # The dependency pins are unrelated to the version cache reload interval
           - {python_deps_id: -compat311, version_cache_timeout: NoCache}
+          # The compat311 pins exist for the numpy 1 / pandas 2.1 normalization surface, which unit, integration
+          # and compat cover. The stress suite exercises C++ scale and storage throughput, where the pins make no
+          # difference (~18% slower, same 152 tests), and it is the longest job in the run.
+          - {python_deps_id: -compat311, type: stress}
           - {infer_string_id: -inferstr, admission_limit: Serial}
         include:
           ${{fromJSON(inputs.matrix)}}
@@ -798,7 +802,10 @@ jobs:
           # Use the Mongo created in the service container above to test against
           CI_MONGO_HOST: mongodb
           HYPOTHESIS_PROFILE: ci_${{matrix.os}}
-          PYTEST_XDIST_MODE: ${{matrix.type == 'stress' && '-n 0' || inputs.pytest_xdist_mode}}
+          # Stress runs serially elsewhere because a few of its tests peak at several GB and two of those at once
+          # OOM-killed the runner (#3097). On Linux (16GB, 4 vCPU) 4 workers fit as long as the heavy tests do not
+          # overlap, which the stress_heavy xdist_group guarantees - hence loadgroup, since worksteal ignores it.
+          PYTEST_XDIST_MODE: ${{matrix.type != 'stress' && inputs.pytest_xdist_mode || (matrix.os == 'linux' && '-n 4 --dist loadgroup' || '-n 0')}}
           ARCTICDB_PYTEST_ARGS: ${{inputs.pytest_args}}
           STORAGE_TYPE: ${{ env.real_tests_storage_type }}
           # Testing with 0(no version cache) and -1(will use default timeout)

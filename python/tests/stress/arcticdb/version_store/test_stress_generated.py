@@ -85,6 +85,9 @@ def test_stress(pct_null, repeats, symbol, object_version_store):
 
 
 # This test is running only against LMDB because it is **very** slow, if ran against a persistent storage
+# Peaks at several GB: keep it in the shared stress_heavy xdist_group so that only one such test runs at a
+# time under -n 4 (see PYTEST_XDIST_MODE in .github/workflows/build_steps.yml).
+@pytest.mark.xdist_group(name="stress_heavy")
 @SLOW_TESTS_MARK
 @param_dict("pct_null", "repeats", "symbol", high_entropy=(0.0, 1), low_entropy=(0.0, 1000))
 def test_stress_small_row(pct_null, repeats, symbol, lmdb_or_in_memory_version_store_tiny_segment):
