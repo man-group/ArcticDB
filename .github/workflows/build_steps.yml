@@ -171,9 +171,23 @@ jobs:
         # When the MSVC version is update custom-triplets/x64-windows-static-msvc.cmake must also be updated with the correct toolsed version.
       - name: Install Required MSVC
         if: matrix.os == 'windows'
+        shell: pwsh  # the job default is bash; this step needs PowerShell for the toolset check
+        # ~2 min of every Windows compile job. The install is only needed while the image ships a toolset other
+        # than the pinned one, so check first - this becomes a no-op once the image and the pin agree.
         run: |
-          choco install -y -f visualstudio2022buildtools --version=117.11.4 --params "--add Microsoft.VisualStudio.Component.VC.Tools.x86.x64 --installChannelUri https://aka.ms/vs/17/release/390666095_1317821361/channel"
-          choco install -y ninja
+          $toolsets = "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC"
+          $have = (Test-Path $toolsets) -and @(Get-ChildItem $toolsets -Directory -ErrorAction SilentlyContinue |
+                  Where-Object { $_.Name -like '14.41*' }).Count -gt 0
+          if ($have) {
+            Write-Output "MSVC 14.41 build tools already present, skipping the install"
+          } else {
+            choco install -y -f visualstudio2022buildtools --version=117.11.4 --params "--add Microsoft.VisualStudio.Component.VC.Tools.x86.x64 --installChannelUri https://aka.ms/vs/17/release/390666095_1317821361/channel"
+          }
+          if (Get-Command ninja -ErrorAction SilentlyContinue) {
+            Write-Output "ninja already present, skipping the install"
+          } else {
+            choco install -y ninja
+          }
 
       - name: Enable Windows compiler commands
         if: matrix.os == 'windows'
@@ -542,7 +556,7 @@ jobs:
           # On Windows, exclusions like "!**/*.ext" are prefixed with a drive letter (D:\) of the current working dir
           # before matching. This breaks since we moved the build_dir to C:. Work around by templating exclusions:
           path: ${{matrix.build_dir}}/*-build
-            ${{env._exclusion}}${{inputs.job_type == 'build-python-wheels' && 'nofile' || matrix.symbols}}
+            ${{env._exclusion}}${{(inputs.job_type == 'build-python-wheels' && github.event_name != 'pull_request') && 'nofile' || matrix.symbols}}
             ${{env._exclusion}}${{join(matrix.do_not_archive, env._exclusion)}}
 
     outputs:
