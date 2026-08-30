@@ -66,6 +66,9 @@ def test_write_and_update_large_df_in_chunks(lmdb_version_store_very_big_map):
     assert_frame_equal(lib.head(symbol).data, expected_head)
 
 
+# Peaks at several GB: keep it in the shared stress_heavy xdist_group so that only one such test runs at a
+# time under -n 4 (see PYTEST_XDIST_MODE in .github/workflows/build_steps.yml).
+@pytest.mark.xdist_group(name="stress_heavy")
 @SLOW_TESTS_MARK
 def test_write_large_df_in_chunks(lmdb_version_store_big_map):
     symbol = "symbol"
