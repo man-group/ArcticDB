@@ -556,6 +556,22 @@ jobs:
       - run: echo Dummy job to simplify PR merge checks configuration
       # FUTURE: add some test stats/reporting
 
+  # Wall time is the longest chain of jobs, not the sum of the work, so this reports which chain it was. It runs
+  # even when the build failed, since a run that fails slowly is worth seeing too.
+  critical_path:
+    needs: [cpp-test-linux, cpp-test-windows, cpp-test-macos, build-python-wheels-linux, build-python-wheels-windows, build-python-wheels-macos]
+    if: always() && !cancelled()
+    runs-on: ubuntu-22.04
+    permissions: {actions: read}
+    steps:
+      - uses: actions/checkout@v3.3.0
+        with: {sparse-checkout: build_tooling/ci_critical_path.py, sparse-checkout-cone-mode: false}
+      - name: Report what set the wall-clock time
+        env:
+          GH_TOKEN: ${{github.token}}
+        run: python3 build_tooling/ci_critical_path.py >> $GITHUB_STEP_SUMMARY
+        continue-on-error: true
+
   publish:
     needs: [common_config, can_merge]
     if: |
