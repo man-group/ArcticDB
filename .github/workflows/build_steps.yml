@@ -579,6 +579,10 @@ jobs:
           # difference (~18% slower, same 152 tests), and it is the longest job in the run.
           - {python_deps_id: -compat311, type: stress}
           - {infer_string_id: -inferstr, admission_limit: Serial}
+          # NumProcessingUnitsLive=1 collapses read concurrency, which costs the stress suite 15 min for no signal:
+          # the five heavy tests take 2-10x longer while the rest of the suite is unaffected, and Serial is still
+          # covered by unit, integration, compat and the hypothesis bundle plus the dedicated residency tests.
+          - {type: stress, admission_limit: Serial}
         include:
           ${{fromJSON(inputs.matrix)}}
     name: ${{matrix.type}}${{matrix.python_deps_id}}${{matrix.infer_string_id}}-${{matrix.version_cache_timeout}}${{matrix.admission_limit == 'Serial' && '-Serial' || ''}}
