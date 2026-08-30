@@ -302,7 +302,7 @@ class CMakeBuild(build_ext):
             _log_and_run(cmake, "--build", candidates[0], *jobs, "--target", "install_" + ext.name)
         finally:
             launcher = os.getenv("CMAKE_CXX_COMPILER_LAUNCHER", "")
-            if "sccache" in launcher and "AUDITWHEEL_PLAT" in os.environ:
+            if "sccache" in launcher:
                 subprocess.run([launcher, "--show-stats"])
 
         assert os.path.exists(dest), f"No output at {dest}, but we didn't get a bad return code from CMake?"
