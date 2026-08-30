@@ -921,18 +921,23 @@ target_include_directories(arcticdb_core_static PUBLIC
 
 target_link_libraries(arcticdb_core_static PUBLIC ${arcticdb_core_libraries})
 
-# The objects of arcticdb_core_static without the archive step, carrying the same usage requirements. The generator
-# expressions are evaluated after the whole project is configured, so they also pick up what the top level
-# CMakeLists.txt adds to arcticdb_core_static.
-add_library(arcticdb_core_objects INTERFACE)
-target_sources(arcticdb_core_objects INTERFACE $<TARGET_OBJECTS:arcticdb_core_object>)
+# The usage requirements of arcticdb_core_static without its sources, for intermediate targets that must compile
+# against the core but must not carry a second copy of its objects. The generator expressions are evaluated after
+# the whole project is configured, so they also pick up what the top level CMakeLists.txt adds.
+add_library(arcticdb_core_usage INTERFACE)
 target_include_directories(
-        arcticdb_core_objects INTERFACE $<TARGET_PROPERTY:arcticdb_core_static,INTERFACE_INCLUDE_DIRECTORIES>
+        arcticdb_core_usage INTERFACE $<TARGET_PROPERTY:arcticdb_core_static,INTERFACE_INCLUDE_DIRECTORIES>
 )
 target_compile_definitions(
-        arcticdb_core_objects INTERFACE $<TARGET_PROPERTY:arcticdb_core_static,INTERFACE_COMPILE_DEFINITIONS>
+        arcticdb_core_usage INTERFACE $<TARGET_PROPERTY:arcticdb_core_static,INTERFACE_COMPILE_DEFINITIONS>
 )
-target_link_libraries(arcticdb_core_objects INTERFACE ${arcticdb_core_libraries})
+target_link_libraries(arcticdb_core_usage INTERFACE ${arcticdb_core_libraries})
+
+# The same, plus the objects themselves. INTERFACE sources propagate into the consumer, so link this from the
+# final binary only - linking it from a static library would archive the objects into that library instead.
+add_library(arcticdb_core_objects INTERFACE)
+target_link_libraries(arcticdb_core_objects INTERFACE arcticdb_core_usage)
+target_sources(arcticdb_core_objects INTERFACE $<TARGET_OBJECTS:arcticdb_core_object>)
 
 add_library(arcticdb_core SHARED $<TARGET_OBJECTS:arcticdb_core_object>)
 
@@ -961,7 +966,9 @@ set(arcticdb_python_headers
     python/adapt_read_dataframe.hpp
 )
 set_pdb_name_per_translation_unit(${arcticdb_python_srcs})
-add_library(arcticdb_python STATIC ${arcticdb_python_srcs} ${arcticdb_python_headers})
+# OBJECT, not STATIC: arcticdb_ext is its only consumer, so archiving its objects (plus the core objects it
+# links) only to read them straight back cost 260s of every Windows compile job. See arcticdb_core_objects.
+add_library(arcticdb_python OBJECT ${arcticdb_python_srcs} ${arcticdb_python_headers})
 if(${ARCTICDB_USE_PCH})
     message(STATUS "Using precompiled headers for target arcticdb_python")
     target_precompile_headers(
@@ -982,7 +989,7 @@ endif()
 # subdirectory.
 target_link_libraries(arcticdb_python
         PUBLIC
-        arcticdb_core_objects
+        arcticdb_core_usage
         ${AWSSDK_LINK_LIBRARIES}
         )
 
@@ -1035,7 +1042,8 @@ endif()
 
 target_link_libraries(arcticdb_ext
         PRIVATE
-        arcticdb_python)
+        arcticdb_python
+        arcticdb_core_objects)
 
 if (WIN32)
     target_link_options(arcticdb_ext
