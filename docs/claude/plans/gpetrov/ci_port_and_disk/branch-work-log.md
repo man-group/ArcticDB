@@ -56,10 +56,43 @@ The `Free Disk Space (Base Runner)` variant beside it was skipped on all 44 jobs
   `test_compact_data` variants left, and three workers idle from 14:44:22 to 14:44:58. `pytest-split` is already
   installed by the workflow and never used. `--dist worksteal` cannot fix this: it rebalances queues but cannot
   split a single 60s test.
-- **The hypothesis job's real pathology**, which is separate work: 96% of that job is `test_stateful`, and 96% of
-  *that* is the nine `@invariant()` methods, whose per-step cost grows ~4x across the run because several iterate
-  every version or snapshot and do real storage reads. Cost is quadratic in `stateful_step_count`, which is set to
-  100 against hypothesis's default of 50. Gating the four heaviest with `@precondition` is the fix.
+- **Restricting `test_stateful` to fewer matrix variants** (~-5 wall min, ~-190 job-min) - a real coverage cut, so
+  it should be argued on its own rather than folded in here.
 - Also measured, for the record: `sanitizers` and `enduser` are **100% skipped** in that job (0.00s, 41 skips), and
   `compat311` is not inherently slower - across four runs of the same variant the non-stateful part is flat at
   20.6-24.5 CPU-min and all the variance is the hypothesis seed.
+
+## The stateful hypothesis test (added after the first two changes)
+
+96% of the merged `{hypothesis,...}` job is `test_stateful`, and 96% of *that* was the nine `@invariant()` methods
+rather than the code under test. `test_list_versions_all_and_read` dominated: `read_metadata` + `read` +
+`assert_frame_equal` for every version of every symbol, after every step. Since a step changes one symbol, at step
+50 with ~40 live versions 39 of those 40 reads re-proved what the previous step had already proved. Measured
+per-step invariant cost grew 37ms (step 10) -> 147ms (step 90).
+
+The rules now mark the `(symbol, version)` pairs they change and the invariant reads back only those. The full
+`list_versions()` comparison still runs every step, so the deleted flags, snapshot sets and the "failed to find
+these" check are unchanged - only the redundant re-reads go.
+
+The subtle case, and the reason this needs a guard rather than eyeballing: `delete_snapshot` changes no version's
+data, but un-pinning can make a tombstoned version deletable, which changes whether it reads back at all. So it
+has to mark every version the snapshot held.
+
+Two guards against a gap in the marking silently un-testing a version:
+- `teardown()` reads everything back once per example, so a gap still fails - one example later rather than one
+  step later. It returns early if an exception is already propagating, so it cannot mask a rule's own failure.
+- `test_dirty_versions_cover_every_model_change` fingerprints the model around each rule and asserts every change
+  was marked. Verified to bite: deleting the `delete_snapshot` marking fails it with the pinned version.
+
+Measured locally, 8 examples of one shard on an otherwise idle machine: **171.4s -> 57.2s (3.0x)**.
+
+### Why `stateful_step_count` was left at 100
+
+Cost per example is quadratic in it and hypothesis's own default is 50, so halving it looked like a free 4x. It
+is not: measured on top of the change above, 57.2s -> 46.5s, only **1.23x**, because scoping the reads had already
+removed most of the quadratic term. Paying for 19% by halving the length of the operation sequences explored is a
+bad trade in a test whose whole purpose is to find version-map and snapshot interactions that need a sequence of
+writes, prunes, snapshots and deletes to line up. Left at 100.
+
+A caution on measuring this locally: the first "after" reading was 70s rather than 46.5s because another process
+was busy on the same machine. Both halves of an A/B here have to be taken on an idle box.
