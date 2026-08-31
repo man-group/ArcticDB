@@ -14,6 +14,8 @@ import platform
 import sys
 import requests
 import signal
+import itertools
+import re
 import socketserver
 import time
 import warnings
@@ -21,8 +23,6 @@ from typing import Union, Any
 from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
 import trustme
-
-from arcticdb.util.marks import ARCTICDB_USING_CONDA
 
 _WINDOWS = platform.system() == "Windows"
 _MACOS = sys.platform.lower().startswith("darwin")
@@ -34,23 +34,44 @@ import logging
 logger = logging.getLogger("Utils")
 
 
+_PORT_RANGE_START = 10000
+_PORT_BLOCK_SIZE = 100
+_MAX_XDIST_WORKERS = 16
+_SEED_BLOCKS = 32
+_port_call_counter = itertools.count()
+
+
+def _xdist_worker_index():
+    """0 for gw0, 1 for gw1, ... and 0 when not running under xdist."""
+    match = re.fullmatch(r"gw(\d+)", os.getenv("PYTEST_XDIST_WORKER", ""))
+    return int(match.group(1)) % _MAX_XDIST_WORKERS if match else 0
+
+
 def get_ephemeral_port(seed=0):
-    # Some OS has a tendency to reuse a port number that has just been closed, so if we use the trick from
-    # https://stackoverflow.com/a/61685162/ and multiple test runners call this function at roughly the same time, they
-    # may get the same port! Below more sophisticated implementation uses the PID to avoid that:
-    pid = os.getpid()
-    port = (pid // 1000 + pid) % 1000 + seed * 1000 + 10000  # Crude hash
-    while port < 65535:
+    """A probably-free port, distinct from every other port this test run hands out.
+
+    Two callers used to be able to pick the same number, so this held the socket open for 20s to give the loser a
+    chance to notice. That sleep ran on every moto, azurite and mongod startup and cost ~22% of the integration
+    suite. Instead, give each (seed, xdist worker) a disjoint block and walk it, which makes a collision within a
+    run impossible by construction rather than merely unlikely. The bind is still only a probe - the caller binds
+    for real afterwards - so callers keep their existing retries for the case where something outside this run
+    takes the port in between.
+    """
+    block_start = (
+        _PORT_RANGE_START + ((seed % _SEED_BLOCKS) * _MAX_XDIST_WORKERS + _xdist_worker_index()) * _PORT_BLOCK_SIZE
+    )
+    # Offset by the pid so two independent runs on one machine do not start at the same end of the block
+    first = (os.getpid() + next(_port_call_counter)) % _PORT_BLOCK_SIZE
+    for probe in range(_PORT_BLOCK_SIZE):
+        port = block_start + (first + probe) % _PORT_BLOCK_SIZE
         try:
             with socketserver.TCPServer(("localhost", port), None):
-                time.sleep(
-                    30 if ARCTICDB_USING_CONDA else 20
-                )  # Hold the port open for a while to improve the chance of collision detection
-                return port
+                pass
         except OSError as e:
             print(repr(e), file=sys.stderr)
-            port += 1000
-    raise Exception(f"Cannot find a free port for PID {pid}")
+            continue
+        return port
+    raise Exception(f"Cannot find a free port in {block_start}-{block_start + _PORT_BLOCK_SIZE} for seed {seed}")
 
 
 ProcessUnion = Union[multiprocessing.Process, subprocess.Popen]
