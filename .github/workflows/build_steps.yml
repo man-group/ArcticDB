@@ -615,16 +615,6 @@ jobs:
           tool-cache: false
           large-packages: false # Time-consuming but doesn't save that much space (4GB)
           docker-images: false  # We're using docker images we don't want to clear
-      - name: Free Disk Space (Container)
-        if: matrix.os == 'linux' && matrix.container
-        run: |          
-          rm -rf /mnt/usr/local/lib/android 
-          rm -rf /mnt/usr/share/dotnet
-          rm -rf /mnt/usr/local/share/boost
-          rm -rf /mnt/opt/ghc
-          rm -rf /mnt/opt/hostedtoolcache/CodeQL
-          rm -rf /mnt/usr/local/lib/node_modules
-
       - name: Disk Space After Clean Up
         if: matrix.os == 'linux'
         run: |
