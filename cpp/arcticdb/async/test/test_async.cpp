@@ -39,8 +39,6 @@
 using namespace arcticdb;
 namespace aa = arcticdb::async;
 namespace as = arcticdb::storage;
-namespace asl = arcticdb::storage::lmdb;
-namespace ast = arcticdb::stream;
 
 TEST(Async, SinkBasic) {
     as::EnvironmentName environment_name{"research"};
