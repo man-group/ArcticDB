@@ -3633,6 +3633,7 @@ class NativeVersionStore:
             recursively normalized, it is considered `pickled` as well.
         """
         result = False
+        norm_meta = None
         try:
             _udm, _item, norm_meta = self._try_normalize(
                 symbol="",
@@ -3644,9 +3645,11 @@ class NativeVersionStore:
             )
         except Exception:
             # This will also log the exception inside composite normalizer's normalize
+            # An item that cannot be normalized is pickled by `write`, so the answer is
+            # True and there is no norm_meta to inspect below.
             result = True
 
-        result |= norm_meta.WhichOneof("input_type") == "msg_pack_frame"
+        result |= norm_meta is not None and norm_meta.WhichOneof("input_type") == "msg_pack_frame"
         log_warning_message = get_config_int("VersionStore.WillItemBePickledWarningMsg") != 0 and log.is_active(
             _LogLevel.WARN
         )
