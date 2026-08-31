@@ -14,6 +14,7 @@ from itertools import zip_longest
 import attr
 import os
 import pytest
+import sys
 
 from hypothesis import strategies as st, assume, stateful, settings, HealthCheck
 from hypothesis.stateful import RuleBasedStateMachine, Bundle, rule, invariant, run_state_machine_as_test
@@ -95,6 +96,10 @@ class VersionStoreComparison(RuleBasedStateMachine):
         self._versions = defaultdict(list)
         self._visible_snapshots = {}
         self._snapshot_tombstones = set()
+        # (symbol, version) pairs whose model state a rule has changed since they were last read back. Reading a
+        # version that no rule has touched can only re-prove what the previous step already proved, and doing it
+        # for every version on every step made the cost quadratic in stateful_step_count.
+        self._dirty = set()
 
         self._lib.version_store.clear()
         self._lib.version_store.flush_version_map()
@@ -103,9 +108,10 @@ class VersionStoreComparison(RuleBasedStateMachine):
 
     def _prune_previous_versions(self, sym):
         vers = self._versions[sym]
-        for value in vers:
+        for ver_num, value in enumerate(vers):
             if value.state == State.NORMAL:
                 value.state = State.TOMBSTONED  # Delayed deletes
+                self._dirty.add((sym, ver_num))
 
     def _get_latest_undeleted_version(self, sym) -> Tuple[Optional[int], Optional[Version]]:
         vers = self._versions[sym]
@@ -140,6 +146,7 @@ class VersionStoreComparison(RuleBasedStateMachine):
         assert created.symbol == sym
         assert created.version == len(vers)
         vers.append(Version(data, meta))
+        self._dirty.add((sym, len(vers) - 1))
 
     @rule(
         target=symbols,
@@ -162,6 +169,22 @@ class VersionStoreComparison(RuleBasedStateMachine):
     @invariant()
     def test_list_versions_all_and_read(self):
         """lib.list_versions() with args"""
+        self._check_list_versions(read_versions=self._dirty)
+        self._dirty = set()
+
+    def teardown(self):
+        """Read every version back once per example.
+
+        The invariant above only re-reads what the rules marked dirty, so a gap in that marking would silently
+        stop checking a version. Reading everything at the end of the example still catches it, one example later
+        than a full per-step read would.
+        """
+        if sys.exc_info()[0] is not None:
+            return  # a rule already failed; do not mask its traceback with a second failure here
+        self._check_list_versions(read_versions=None)
+
+    def _check_list_versions(self, read_versions):
+        """Compare list_versions() against the model, reading back `read_versions` (None means all of them)."""
         expected_vers = {}
         for sym, versions in self._versions.items():
             for ver_num, ver in enumerate(versions):
@@ -174,6 +197,9 @@ class VersionStoreComparison(RuleBasedStateMachine):
             expected = expected_vers.pop(sym_ver)
             assert actual["deleted"] is (expected.state == State.TOMBSTONED)
             assert set(actual["snapshots"]) == expected.active_snap_names()
+
+            if read_versions is not None and sym_ver not in read_versions:
+                continue  # nothing has touched it since it last read back correctly
 
             actual_meta = self._lib.read_metadata(*sym_ver)
             assert (actual_meta.symbol, actual_meta.version) == sym_ver
@@ -247,6 +273,7 @@ class VersionStoreComparison(RuleBasedStateMachine):
             vers = self._versions[sym]
             snap.sym_vers[sym] = len(vers) - 1
             vers[-1].snaps.add(snap)
+            self._dirty.add((sym, len(vers) - 1))
 
         self._visible_snapshots[name] = snap
         return name
@@ -257,6 +284,8 @@ class VersionStoreComparison(RuleBasedStateMachine):
         assume(snap)
         snap.state = State.TOMBSTONED  # Delayed deletes
         self._snapshot_tombstones.add(snap)
+        # Un-pinning can make a tombstoned version deletable, which changes whether it reads back
+        self._dirty.update(snap.sym_vers.items())
         self._lib.delete_snapshot(name)
 
     @invariant()
@@ -302,12 +331,45 @@ def test_stateful(lib_type, shard, request):
             max_examples=examples,
             deadline=None,
             stateful_step_count=100,
-            # data_too_large: with stateful_step_count=100 a single example is large, so hypothesis routinely
+            # data_too_large: a single example is large, so hypothesis routinely
             # overruns while generating; the ratio of overruns to valid examples is what trips the check, and it
             # trips more readily now the examples are split across shards.
             suppress_health_check=[HealthCheck.filter_too_much, HealthCheck.data_too_large],
         ),
     )
+
+
+def test_dirty_versions_cover_every_model_change(lmdb_version_store_delayed_deletes_v1):
+    """Every model change must be marked dirty, or the invariant silently stops re-reading that version."""
+    VersionStoreComparison._lib = lmdb_version_store_delayed_deletes_v1
+    state = VersionStoreComparison()
+
+    def fingerprint():
+        return {
+            (sym, i): (ver.state, frozenset(ver.active_snap_names()), ver.can_delete(), ver.metadata)
+            for sym, vers in state._versions.items()
+            for i, ver in enumerate(vers)
+        }
+
+    steps = [
+        lambda: state.write_new_symbol(sym="a", write_mode=WriteMode.DATA),
+        lambda: state.write_new_version_to_symbol(sym="a", prune=False, write_mode=WriteMode.BOTH),
+        lambda: state.snapshot(name="s0", with_meta=True),
+        lambda: state.write_new_version_to_symbol(sym="a", prune=True, write_mode=WriteMode.DATA),
+        lambda: state.write_new_symbol(sym="b", write_mode=WriteMode.META),
+        lambda: state.snapshot(name="s1", with_meta=False),
+        lambda: state.delete_snapshot(name="s0"),
+        lambda: state.delete_symbol(sym="b"),
+        lambda: state.delete_snapshot(name="s1"),
+    ]
+    for i, step in enumerate(steps):
+        before = fingerprint()
+        state._dirty.clear()
+        step()
+        after = fingerprint()
+        changed = {k for k in set(before) | set(after) if before.get(k) != after.get(k)}
+        missed = changed - state._dirty
+        assert not missed, f"step {i} changed {sorted(missed)} without marking them dirty"
 
 
 def test_single(lmdb_version_store_delayed_deletes_v1):
