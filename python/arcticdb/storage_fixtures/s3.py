@@ -899,10 +899,14 @@ def is_server_type(url: str, server_type: str):
     /whoami url is added to Moto* objects to identify GCP or S3"""
     try:
         response = requests.get(url, verify=False)
-        if response.status_code == 200 and server_type in response.text:
-            return True
     except Exception as e:
+        # Without returning here, the diagnostic logging below raises UnboundLocalError on
+        # `response` and hides the connection error it was meant to report.
         logger.error(f"Error during server type check: {e}")
+        return False
+
+    if response.status_code == 200 and server_type in response.text:
+        return True
     logger.error(f"Was not of expected type: status code {response.status_code}, text: {response.text}")
     return False
 
@@ -915,7 +919,7 @@ def create_bucket(s3_client, bucket_name, max_retries=15):
         except botocore.exceptions.EndpointConnectionError as e:
             if i >= max_retries - 1:
                 raise
-            logger.warning(f"S3 create bucket failed. Retry {1}/{max_retries}")
+            logger.warning(f"S3 create bucket failed. Retry {i + 1}/{max_retries}")
             time.sleep(1)
         except Exception as e:
             logger.error(f"create_bucket - Error: {e.response['Error']['Message']}")
@@ -971,15 +975,6 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
         # and not using the fixtures
         # so this guarantees a unique bucket name
         return f"test-{bucket_type}-bucket-{self.unique_id}-{self._bucket_id}"
-
-    def is_server_type(url: str, server_type: str):
-        try:
-            response = requests.get(url, verify=False)
-            if response.status_code == 200 and server_type in response.text:
-                return True
-        except Exception:
-            pass
-        return False
 
     def _start_server(self, seed=2):
         port = self.port = get_ephemeral_port(seed)
