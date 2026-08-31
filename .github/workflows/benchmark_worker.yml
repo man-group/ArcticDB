@@ -1,0 +1,175 @@
+# One benchmark worker, cradle to grave: start an EC2 runner, run one suite on it, upload
+# the result, stop the runner. Install as `.github/workflows/benchmark_worker.yml`.
+#
+# Called once per matrix entry by `benchmark_winds.yml`'s `worker` job. The start/stop pair
+# has to live *inside* the matrix job, exactly as `benchmark_commits.yml` does it today:
+# one `machulav/ec2-github-runner` start is one instance with one label, and a matrix's job
+# outputs collapse into a single map, so a shared `start` job cannot hand worker[i] its own
+# label (docs/research/gha-ec2-runner-matrix.md §Q1-Q2). For the same reason results leave
+# this workflow as an **artifact**, never as a workflow output: a reusable workflow run
+# under a matrix keeps only the last output that was set (§Q8).
+#
+# Shadow mode: this runs alongside `analysis_workflow.yml`, which is untouched.
+name: __benchmark_worker
+
+on:
+  workflow_call:
+    inputs:
+      worker:          {required: true,  type: string, description: "worker name from workers.toml; it names the artifact, asv's --machine and the results' worker column"}
+      suite:           {required: true,  type: string, description: "the asv --bench regex this worker runs"}
+      commit:          {required: true,  type: string, description: "full sha of the ArcticDB commit under benchmark"}
+      storage:         {required: false, type: string, default: LMDB, description: "LMDB, REAL or ALL"}
+      instance_type:   {required: false, type: string, default: m6i.4xlarge, description: "EC2 instance type for this worker"}
+      python:          {required: false, type: string, default: '3.11', description: "interpreter the benchmark venv is built on"}
+      # Two inputs beyond the ticket's list, both with defaults so callers may ignore them:
+      wheel_artifact:  {required: false, type: string, default: wheel-cp311-manylinux_x86_64, description: "name of the run's wheel artifact, from the build job"}
+      bucket:          {required: false, type: string, default: '', description: "throwaway S3 bucket for REAL/ALL storage, created once per run by the plan job (ticket 11)"}
+
+jobs:
+  # `benchmark_commits.yml:8-12` calls the shared `ec2_runner_jobs.yml` rather than inlining
+  # `machulav/ec2-github-runner`; do the same, so the AMI, subnet, security group and
+  # resource tags stay defined in exactly one place. `instance-type` is the one default we
+  # override, from the `instance_type` `plan` already emits per worker.
+  start:
+    name: start ${{ inputs.worker }} runner
+    uses: ./.github/workflows/ec2_runner_jobs.yml
+    secrets: inherit
+    with:
+      job_type: start
+      instance-type: ${{ inputs.instance_type }}
+
+  bench:
+    name: bench ${{ inputs.worker }}
+    needs: [start]
+    # `ec2_runner_jobs.yml:22` sets `continue-on-error: true` on the start job, so a failed
+    # start arrives here as a *successful* job with an empty label. Without this guard the
+    # bench job would queue against a label no runner ever claims until the timeout.
+    if: needs.start.result == 'success' && needs.start.outputs.label != ''
+    runs-on: ${{ needs.start.outputs.label }}
+    # ~31 min expected at N=8 (docs/research/gha-ec2-runner-matrix.md §Q6); today's
+    # `timeout-minutes: 1200` is a $17-per-worker blank cheque. 180 leaves room for the
+    # nightly ALL-storage run without leaving an instance up for a day.
+    timeout-minutes: 180
+    # The AMI's userland is undocumented — CI logs prove only Docker and the .NET runner's
+    # glibc, never git/python/uv on the host (§Q7). So keep a container, and keep the one
+    # that is known to work on this AMI. No source build happens here any more, so a thin
+    # image (or the bare AMI plus `pre-runner-script`) is a follow-up once someone has read
+    # the AMI. This image also gives `provision_env` the `git` and `c++` it checks for —
+    # its fallback installs them with `apt-get`, which would fail on this RHEL-family image.
+    container:
+      image: ghcr.io/man-group/arcticdb-dev:latest
+    env:
+      # Credentials and endpoints copied from `benchmark_commits.yml:36-40`. The benchmarks
+      # read ARCTICDB_REAL_S3_* through the process environment; `bench` passes it through.
+      ARCTICDB_REAL_S3_ACCESS_KEY: ${{ secrets.AWS_S3_ACCESS_KEY }}
+      ARCTICDB_REAL_S3_SECRET_KEY: ${{ secrets.AWS_S3_SECRET_KEY }}
+      ARCTICDB_REAL_S3_REGION: eu-west-1
+      ARCTICDB_REAL_S3_ENDPOINT: s3.eu-west-1.amazonaws.com
+      # Empty on LMDB runs; the per-run throwaway bucket otherwise (ticket 11).
+      ARCTICDB_REAL_S3_BUCKET: ${{ inputs.bucket }}
+      # `benchmark_commits.yml:129-130`: quieten two noisy warnings during the run.
+      ARCTICDB_WARN_ON_WRITING_EMPTY_DATAFRAME: "0"
+      ARCTICDB_LMDBSTORAGE_WARNIFOPENED_STR: all
+      # node20 actions inside this container, as `build_steps.yml:585` does.
+      ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
+    defaults:
+      run: {shell: bash}
+    steps:
+      # `fetch-depth: 1` with an explicit `ref` is enough, and it is what the mock proved
+      # (docs/gha-mock.md). `bench` runs `asv run --python=same <sha>^!`, which does no
+      # checkout and no build; all it asks of git is `git rev-list --first-parent <sha>^! --`
+      # (docs/research/asv-python-same.md §Q1), i.e. that the commit *object* is present.
+      # In a depth-1 clone the commit is the shallow boundary and has no recorded parents,
+      # so `<sha>^!` expands to the commit alone and resolves. `fetch-depth: 0` would drag
+      # ArcticDB's whole history onto every worker for nothing.
+      - name: check out ArcticDB at the commit under benchmark
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit }}
+          fetch-depth: 1
+          # `benchmark_commits.yml:53-57` fetches LFS and uses the PAT; kept for fidelity.
+          # LFS can be dropped once no benchmark module reads an LFS asset.
+          lfs: 'true'
+          token: ${{ secrets.ARCTICDB_TEST_PAT }}
+
+      - name: mark the checkout safe for git
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      # Same run, same repo: no run-id and no token needed. `download-artifact@v8` is the
+      # version ArcticDB pins, and it is proven inside this container on a self-hosted
+      # runner (`build_steps.yml:616-620`).
+      - name: download the run's wheel
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ inputs.wheel_artifact }}
+          path: ${{ runner.temp }}/wheel
+
+      # arctic-winds is a private repo today, so it is checked out with a read-only deploy
+      # key (`ARCTIC_WINDS_DEPLOY_KEY`, see the README) rather than pip-installed from a
+      # URL. It lands *inside* the ArcticDB checkout, which is harmless: `asv run
+      # --python=same <sha>^!` does no checkout and never looks outside python/benchmarks.
+      # A public repo — or a move into man-group — makes the key unnecessary.
+      # `ssh-key` needs an `ssh` binary in the container; if the dev image turns out not
+      # to have one, `dnf install -y openssh-clients` in a step above fixes it.
+      - name: check out arctic-winds
+        uses: actions/checkout@v4
+        with:
+          repository: G-D-Petrov/arctic-winds
+          ref: main
+          path: arctic-winds
+          ssh-key: ${{ secrets.ARCTIC_WINDS_DEPLOY_KEY }}
+
+      - name: install arctic-winds
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install ./arctic-winds
+
+      # Exit 1 = benchmarks failed but the result JSON exists: the job must go red *and*
+      # the artifact must still be uploaded. Exit 2 = nothing to upload (ticket 05).
+      # No `--home`: unlike a GitHub-hosted runner, this container's own $HOME is usable
+      # and holds the uv cache, the venv and `~/.asv-machine.json`.
+      - name: benchmark
+        env:
+          WORKER: ${{ inputs.worker }}
+          SUITE: ${{ inputs.suite }}
+          COMMIT: ${{ inputs.commit }}
+          STORAGE: ${{ inputs.storage }}
+          PYTHON: ${{ inputs.python }}
+        run: |
+          wheel=$(find "$RUNNER_TEMP/wheel" -name '*.whl' | head -1)
+          echo "wheel: $wheel"
+          arctic-winds bench \
+            --worker "$WORKER" \
+            --suite "$SUITE" \
+            --commit "$COMMIT" \
+            --tree . \
+            --wheel "$wheel" \
+            --output "artifacts/$WORKER.json" \
+            --python "$PYTHON" \
+            --storage "$STORAGE"
+
+      # Artifact name = worker name, and exactly one JSON inside it: that is the contract
+      # `collect` reads the worker off (ticket 07). The monitor's `<worker>.log` and
+      # `status.json` land in the same directory, so name the file explicitly rather than
+      # uploading `artifacts/`. This must happen before `stop` terminates the machine.
+      - name: upload this worker's results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ${{ inputs.worker }}
+          path: artifacts/${{ inputs.worker }}.json
+          if-no-files-found: warn
+
+  # `if: always()`, not `!cancelled()`: a cancelled run is exactly when a forgotten
+  # instance costs money (§Q3-Q4). The window this cannot cover is a cancel *during*
+  # start — sweepable by the `RunId` tag `ec2_runner_jobs.yml` already sets.
+  stop:
+    name: stop ${{ inputs.worker }} runner
+    needs: [start, bench]
+    if: always()
+    uses: ./.github/workflows/ec2_runner_jobs.yml
+    secrets: inherit
+    with:
+      job_type: stop
+      label: ${{ needs.start.outputs.label }}
+      ec2-instance-id: ${{ needs.start.outputs.ec2-instance-id }}

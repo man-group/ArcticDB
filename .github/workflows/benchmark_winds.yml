@@ -1,0 +1,485 @@
+# The arctic-winds benchmark pipeline, running in shadow mode beside
+# `analysis_workflow.yml`. Install as `.github/workflows/benchmark_winds.yml`; it changes
+# nothing about the existing workflow, and writes to its own results library
+# (`winds_asv_results`), so the two can run against the same commits and be compared.
+#
+#   plan ──┬─► cibw_docker_image ─► build ─┐
+#          └───────────────────────────────┴─► worker (matrix, 1 EC2 instance each) ─► collect
+#
+# The job graph is the mock proven in arctic-winds itself (docs/gha-mock.md, run
+# 33402171097), with the two substitutions that ticket documented: EC2 start/stop around
+# each worker (in `benchmark_worker.yml`) and a lean cibuildwheel `build` job feeding
+# `bench --wheel` instead of a PyPI requirement.
+#
+# Triggers mirror `analysis_workflow.yml` exactly, so the shadow sees the same events.
+name: Benchmarks (arctic-winds)
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_all_benchmarks:
+        description: Run all benchmarks (every release tag from v5.3.0 up)
+        type: boolean
+        default: false
+      storage:
+        description: Storage to run benchmarks against
+        type: choice
+        options:
+          - 'LMDB'
+          - 'REAL'
+          - 'ALL'
+        default: 'LMDB'
+      suite_overwrite:
+        description: Regular expression to run instead of the workers.toml split
+        type: string
+        default: ''
+
+  # Push to master, LMDB only, so PR runs have recent master results to compare against.
+  push:
+    branches:
+      - master
+
+  # Nightly, all storages. Same cron as `analysis_workflow.yml`; while both pipelines run,
+  # this doubles the nightly EC2 spend — offset or drop it if that matters.
+  schedule:
+    - cron: '0 0 * * *'
+
+  pull_request:
+    paths-ignore:
+      - "**/*.md"
+
+# No `concurrency:` block, deliberately. `analysis_workflow.yml` has none either, and
+# `cancel-in-progress` is actively dangerous here: cancelling a run *during* an EC2 start
+# orphans the instance (docs/research/gha-ec2-runner-matrix.md §Q4).
+
+jobs:
+  # What gets benchmarked, by whom, on what storage. Also the run's only guard against
+  # GitHub's 256-job matrix cap.
+  plan:
+    name: plan
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+      commit: ${{ steps.commit.outputs.commit }}
+      workers: ${{ steps.suites.outputs.workers }}
+      reference_suite: ${{ steps.suites.outputs.reference_suite }}
+      storage: ${{ steps.storage.outputs.storage }}
+      bucket: ${{ steps.bucket.outputs.bucket }}
+    steps:
+      # `fetch-depth: 0`: `plan --all-tags` walks the release tags with `git rev-list`.
+      - name: check out ArcticDB
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"   # arctic-winds requires >=3.11,<3.12
+
+      # arctic-winds is a private repo today, so it is checked out with a read-only deploy
+      # key (`ARCTIC_WINDS_DEPLOY_KEY`; see docs/arcticdb/README.md) instead of being
+      # pip-installed from a URL. A public repo — or a move into man-group — makes the key
+      # unnecessary and this can become `pip install git+https://…`.
+      - name: check out arctic-winds
+        uses: actions/checkout@v4
+        with:
+          repository: G-D-Petrov/arctic-winds
+          ref: main
+          path: arctic-winds
+          ssh-key: ${{ secrets.ARCTIC_WINDS_DEPLOY_KEY }}
+
+      - name: install arctic-winds
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install ./arctic-winds
+
+      # LMDB on push and PRs, every storage on the nightly, whatever the dispatch asked for
+      # otherwise. `analysis_workflow.yml:79` keys ALL off `github.ref_name == 'master'`;
+      # the shadow keys it off the schedule so master pushes stay cheap.
+      - name: resolve the storage
+        id: storage
+        env:
+          REQUESTED: ${{ inputs.storage }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = schedule ]; then
+            storage=ALL
+          else
+            storage="${REQUESTED:-LMDB}"
+          fi
+          echo "storage: $storage"
+          printf 'storage=%s\n' "$storage" >> "$GITHUB_OUTPUT"
+
+      - name: resolve the commit
+        id: commit
+        run: |
+          # On a pull_request this is the merge commit actions/checkout produced, which is
+          # what today's pipeline benchmarks too (`asv run … HEAD^!`).
+          printf 'commit=%s\n' "$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      # `arctic-winds plan` appends `matrix=<compact json>` to $GITHUB_OUTPUT itself.
+      - name: plan the matrix
+        id: plan
+        env:
+          ALL_TAGS: ${{ inputs.run_all_benchmarks }}
+          SUITE_OVERWRITE: ${{ inputs.suite_overwrite }}
+          COMMIT: ${{ steps.commit.outputs.commit }}
+        run: |
+          args=(--config python/benchmarks/workers.toml --repo .)
+          if [ "$ALL_TAGS" = "true" ]; then
+            args+=(--all-tags)
+          else
+            args+=(--commit "$COMMIT")
+          fi
+          if [ -n "$SUITE_OVERWRITE" ]; then
+            args+=(--suite-overwrite "$SUITE_OVERWRITE")
+          fi
+          arctic-winds plan "${args[@]}"
+
+      # GitHub caps a matrix at 256 jobs and silently truncates past it, which would look
+      # like a run where some workers simply never reported. Fail here instead. 8 workers
+      # x 69 release tags = 552, so `run_all_benchmarks` needs a tag subset or a narrower
+      # split (see the README's open decisions).
+      - name: check the matrix against GitHub's 256-job cap
+        env:
+          MATRIX: ${{ steps.plan.outputs.matrix }}
+        run: |
+          count=$(jq 'length' <<<"$MATRIX")
+          commits=$(jq '[.[].commit] | unique | length' <<<"$MATRIX")
+          echo "planned jobs: $count over $commits commit(s)"
+          if [ "$count" -gt 256 ]; then
+            echo "::error::planned $count matrix jobs, over GitHub's 256-job cap. Reduce the workers in python/benchmarks/workers.toml or benchmark fewer tags; a truncated matrix would silently drop workers."
+            exit 1
+          fi
+          if [ "$commits" -gt 1 ]; then
+            echo "::warning::$commits commits planned. Worker artifacts are named after the worker alone, so entries for different commits collide on upload and collect merges one commit only. Multi-commit runs need per-commit artifact namespacing first (see the README)."
+          fi
+
+      # Two things the matrix implies that later jobs need as plain strings: who must have
+      # uploaded (`collect --expect`) and the single regex a reference run would use.
+      # Derived from the matrix, so a `suite_overwrite` dispatch stays consistent.
+      - name: derive the worker list and the combined suite
+        id: suites
+        env:
+          MATRIX: ${{ steps.plan.outputs.matrix }}
+        run: |
+          printf 'workers=%s\n' "$(jq -r '[.[].worker] | unique | join(",")' <<<"$MATRIX")" \
+            >> "$GITHUB_OUTPUT"
+          printf 'reference_suite=%s\n' "$(python -c "import json, os; from arctic_winds.orchestrator import combined_suite; print(combined_suite({e['worker']: e['suite'] for e in json.loads(os.environ['MATRIX'])}))")" \
+            >> "$GITHUB_OUTPUT"
+
+      # ---------------------------------------------------------------------------
+      # TICKET 11 (REAL storage) — everything below is that ticket's scope, included
+      # here so the shape is visible, and inert unless the storage input asks for it.
+      # A per-run throwaway bucket, created once and shared by every worker, instead of
+      # `benchmark_commits.yml:83-92`'s per-commit-job bucket. Deleted in `collect`.
+      # ---------------------------------------------------------------------------
+      - name: create the throwaway test bucket
+        id: bucket
+        if: steps.storage.outputs.storage != 'LMDB'
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_S3_ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_S3_SECRET_KEY }}
+          ARCTICDB_REAL_S3_REGION: eu-west-1
+          ARCTICDB_REAL_S3_ENDPOINT: s3.eu-west-1.amazonaws.com
+        run: |
+          random_id=$(openssl rand -hex 4)
+          timestamp=$(date +%s)
+          bucket_name="arcticdb-asv-data-${timestamp}-${random_id}"
+          aws s3 mb --endpoint-url "http://${ARCTICDB_REAL_S3_ENDPOINT}" \
+            --region "${ARCTICDB_REAL_S3_REGION}" "s3://${bucket_name}"
+          echo "Created bucket s3://${bucket_name}"
+          printf 'bucket=%s\n' "$bucket_name" >> "$GITHUB_OUTPUT"
+
+      - name: report the plan
+        env:
+          MATRIX: ${{ steps.plan.outputs.matrix }}
+          STORAGE: ${{ steps.storage.outputs.storage }}
+          COMMIT: ${{ steps.commit.outputs.commit }}
+        run: |
+          {
+            echo "### 🌬️ arctic-winds plan"
+            echo
+            echo "- commit: \`$COMMIT\`"
+            echo "- storage: \`$STORAGE\`"
+            echo
+            echo "| worker | suite | instance |"
+            echo "| --- | --- | --- |"
+            jq -r '.[] | "| \(.worker) | `\(.suite)` | \(.instance_type) |"' <<<"$MATRIX"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ~6 s job; resolves ghcr.io/man-group/arcticdb_manylinux:<ver>-<hash> the same way
+  # `build.yml:122-128` does, so the benchmark wheel uses the identical manylinux image.
+  cibw_docker_image:
+    name: cibuildwheel image
+    uses: ./.github/workflows/cibw_docker_image.yml
+    permissions: {packages: write}
+    with:
+      cibuildwheel_ver: "3.1.4"   # keep in sync with build.yml:128
+      force_update: false
+
+  # One cp311 manylinux wheel per run, for every worker to install. Measured ~7 min, ~2 %
+  # of a benchmark run and cheaper than the 11 min source build the pipeline does today;
+  # calling `build_steps.yml` instead would drag its 38-job, 49-minute cp311 test matrix
+  # along. See docs/research/gha-wheel-build-job.md, which this job is copied from.
+  build:
+    name: build cp311 wheel
+    needs: [cibw_docker_image]
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    defaults:
+      run: {shell: bash}
+    env:
+      # ---- copied from build_steps.yml:46-79; keep the two in sync ----
+      SCCACHE_GHA_VERSION: ${{ secrets.AWS_S3_ACCESS_KEY == null }}
+      SCCACHE_BUCKET: arcticdb-ci-sccache-bucket
+      SCCACHE_ENDPOINT: http://s3.eu-west-1.amazonaws.com
+      SCCACHE_REGION: eu-west-1
+      SCCACHE_S3_USE_SSL: false
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_S3_ACCESS_KEY }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_S3_SECRET_KEY }}
+      VCPKG_NUGET_USER: ${{ secrets.VCPKG_NUGET_USER || github.repository_owner }}
+      VCPKG_NUGET_TOKEN: ${{ secrets.VCPKG_NUGET_TOKEN || secrets.GITHUB_TOKEN }}
+      VCPKG_MAN_NUGET_USER: ${{ secrets.VCPKG_MAN_NUGET_USER }}
+      VCPKG_MAN_NUGET_TOKEN: ${{ secrets.VCPKG_MAN_NUGET_TOKEN }}
+      CMAKE_C_COMPILER_LAUNCHER: sccache
+      CMAKE_CXX_COMPILER_LAUNCHER: sccache
+      ARCTIC_CMAKE_PRESET: linux-release   # benchmarks must never run a debug build
+      ARCTICDB_BUILD_DIR: /tmp/cpp_build
+      CIBW_BUILD: cp311-manylinux_x86_64   # the whole point: exactly one wheel
+      CIBW_ENVIRONMENT_PASS_LINUX: SCCACHE_GHA_VERSION ACTIONS_CACHE_URL ACTIONS_RUNTIME_TOKEN
+        VCPKG_INSTALLATION_ROOT VCPKG_BINARY_SOURCES VCPKG_NUGET_USER VCPKG_NUGET_TOKEN
+        VCPKG_MAN_NUGET_USER VCPKG_MAN_NUGET_TOKEN CMAKE_C_COMPILER_LAUNCHER
+        CMAKE_CXX_COMPILER_LAUNCHER CMAKE_BUILD_PARALLEL_LEVEL ARCTIC_CMAKE_PRESET
+        ARCTICDB_BUILD_DIR X_VCPKG_ASSET_SOURCES
+        SCCACHE_BUCKET SCCACHE_ENDPOINT AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY
+        SCCACHE_REGION SCCACHE_S3_USE_SSL
+      CIBW_ENVIRONMENT_LINUX: COPY_VCPKG_DOWNLOADS_TO_HOST=1
+      ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
+    steps:
+      # The run's own commit is the one that gets benchmarked, so no `ref:` here.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: init submodules
+        run: |
+          git submodule update --init --recursive
+          git -C cpp/vcpkg submodule update --init --recursive
+
+      - uses: mozilla-actions/sccache-action@v0.0.9
+        with:
+          disable_annotations: 'true'
+
+      - name: free disk space
+        uses: jlumbroso/free-disk-space@v1.3.1
+        with:
+          tool-cache: false
+          large-packages: false
+          docker-images: false
+
+      - uses: jwlawson/actions-setup-cmake@v2
+        with:
+          cmake-version: '3.31.6'   # same pin as build_steps.yml
+
+      - name: extra envs
+        env:
+          CMAKE_BUILD_PARALLEL_LEVEL: ${{ vars.CMAKE_BUILD_PARALLEL_LEVEL }}
+        run: |
+          HOME=~ . build_tooling/vcpkg_caching.sh
+          echo -e "VCPKG_BINARY_SOURCES=$VCPKG_BINARY_SOURCES
+          VCPKG_ROOT=$PLATFORM_VCPKG_ROOT
+          ${X_VCPKG_ASSET_SOURCES:+X_VCPKG_ASSET_SOURCES=$X_VCPKG_ASSET_SOURCES}" | tee -a "$GITHUB_ENV"
+          cmake -P cpp/CMake/CpuCount.cmake | sed 's/^-- //' | tee -a "$GITHUB_ENV"
+
+      - name: pull the cibuildwheel manylinux image
+        env:
+          IMAGE: ${{ needs.cibw_docker_image.outputs.tag }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          docker login ghcr.io -u token -p "$GHCR_TOKEN"
+          docker pull "$IMAGE"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'   # host interpreter that runs cibuildwheel
+
+      - name: build the wheel
+        env:
+          CIBW_MANYLINUX_X86_64_IMAGE: ${{ needs.cibw_docker_image.outputs.tag }}
+          CIBW_VERSION: ${{ needs.cibw_docker_image.outputs.cibuildwheel_ver }}
+        run: |
+          python -m pip install pipx --retries 3 --timeout 180
+          python -m pipx run "cibuildwheel==$CIBW_VERSION"
+
+      - name: store the wheel
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheel-cp311-manylinux_x86_64
+          path: wheelhouse/*.whl
+          if-no-files-found: error
+          retention-days: 7   # only ever needed inside this run
+
+  # The fan-out. One matrix entry = one call of the reusable worker workflow = one EC2
+  # instance, started and stopped inside that call (see benchmark_worker.yml).
+  worker:
+    needs: [plan, build]
+    strategy:
+      fail-fast: false   # one worker dying must not cancel the other seven
+      matrix:
+        include: ${{ fromJson(needs.plan.outputs.matrix) }}
+    name: worker ${{ matrix.worker }}
+    uses: ./.github/workflows/benchmark_worker.yml
+    # Carries AWS_S3_*, ARCTICDB_TEST_PAT and ARCTIC_WINDS_DEPLOY_KEY into the call.
+    secrets: inherit
+    with:
+      worker: ${{ matrix.worker }}
+      suite: ${{ matrix.suite }}
+      commit: ${{ matrix.commit }}
+      storage: ${{ needs.plan.outputs.storage }}
+      instance_type: ${{ matrix.instance_type }}
+      python: "3.11"
+      wheel_artifact: wheel-cp311-manylinux_x86_64
+      bucket: ${{ needs.plan.outputs.bucket }}
+
+  # Every worker's artifact back into one symbol in the S3 results store, the reports on
+  # the job summary, and — on a PR — the regression check against master.
+  collect:
+    name: collect
+    needs: [plan, worker]
+    # `always()` so a run where one worker died still stores what the others measured and
+    # still reports the missing worker (collect exits 1, and the job goes red).
+    if: always() && needs.plan.result == 'success'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    env:
+      # The bucket and prefix `transform_asv_results.py` writes to today. `aws_auth=true`
+      # means arcticdb takes the credentials from the standard AWS environment below.
+      RESULTS: "s3://s3.eu-west-1.amazonaws.com:arcticdb-ci-benchmark-results?aws_auth=true&region=eu-west-1&path_prefix=asv_results"
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_S3_ACCESS_KEY }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_S3_SECRET_KEY }}
+      AWS_DEFAULT_REGION: eu-west-1
+      COMMIT: ${{ needs.plan.outputs.commit }}
+      WORKERS: ${{ needs.plan.outputs.workers }}
+    steps:
+      # `fetch-depth: 0`: `compare-values` walks up to 50 `origin/master~N` commits looking
+      # for the newest one with stored results (it runs `git fetch origin master` first,
+      # which cannot deepen a shallow clone usefully).
+      - name: check out ArcticDB
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: check out arctic-winds
+        uses: actions/checkout@v4
+        with:
+          repository: G-D-Petrov/arctic-winds
+          ref: main
+          path: arctic-winds
+          ssh-key: ${{ secrets.ARCTIC_WINDS_DEPLOY_KEY }}
+
+      - name: install arctic-winds and asv
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install ./arctic-winds
+          # `compare-values` shells out to `asv compare`; asv is not an arctic-winds
+          # dependency. Same requirement `arctic_winds/env.py` provisions on a worker.
+          python -m pip install "asv @ git+https://github.com/airspeed-velocity/asv"
+
+      - name: download every artifact
+        uses: actions/download-artifact@v8
+        with:
+          path: all-artifacts
+          merge-multiple: false
+
+      # `download-artifact` gives each artifact its own subdirectory, and the directory
+      # name is how `collect` learns the worker's name. The run's wheel is an artifact too
+      # and is not a worker, so it is moved aside before collect sees the directory.
+      - name: separate the worker artifacts from the wheel
+        run: |
+          mkdir -p artifacts
+          for dir in all-artifacts/*/; do
+            name=$(basename "$dir")
+            case "$name" in
+              wheel-*) continue ;;
+            esac
+            mv "$dir" "artifacts/$name"
+          done
+          find artifacts -type f | sort
+
+      # Shadow mode writes to `winds_asv_results`, never CI's live `asv_results`. That is
+      # `library_for()`'s rule with a different base, which the CLI's `--ref-name` cannot
+      # express (it hardcodes `asv_results`), so the name is derived here instead.
+      - name: name the results library
+        id: library
+        run: |
+          if [ "$GITHUB_REF_NAME" = master ]; then
+            library=winds_asv_results
+          else
+            library="$(printf '%s' "$GITHUB_REF_NAME" | tr '/' '_')_winds_asv_results"
+          fi
+          echo "library: $library"
+          printf 'library=%s\n' "$library" >> "$GITHUB_OUTPUT"
+
+      # Exit 1 = a benchmark failed or a worker never uploaded; the job is meant to go red,
+      # and the results that did arrive are stored either way. Exit 2 = nothing was stored.
+      - name: collect the run
+        env:
+          LIBRARY: ${{ steps.library.outputs.library }}
+        run: |
+          arctic-winds collect \
+            --artifacts artifacts \
+            --commit "$COMMIT" \
+            --results "$RESULTS" \
+            --library "$LIBRARY" \
+            --expect "$WORKERS"
+
+      # The PR regression check, replacing `asv compare -s -f 1.15 <master> HEAD` from
+      # `benchmark_commits.yml:150-166`. Exit 1 = something got worse; exit 2 = the check
+      # could not be made (no fresh master reference) — both fail the job, as the `|| exit 1`
+      # chain does today.
+      #
+      # `--reference-lib asv_results` compares against **CI's own** master results, which
+      # are the only ones that exist while the shadow is young; the numbers come from one
+      # machine rather than eight, so treat early verdicts as directional. Switch this to
+      # `winds_asv_results` once nightly/master shadow runs have populated it.
+      - name: compare against master
+        if: github.event_name == 'pull_request'
+        env:
+          LIBRARY: ${{ steps.library.outputs.library }}
+        run: |
+          arctic-winds compare-values \
+            --commit "$COMMIT" \
+            --tree . \
+            --results "$RESULTS" \
+            --library "$LIBRARY" \
+            --reference-lib asv_results \
+            --repo .
+
+      # ---------------------------------------------------------------------------
+      # TICKET 11 (REAL storage) — the other half of the throwaway bucket created in
+      # `plan`, with `benchmark_commits.yml:176-187`'s name guard so a bug in the
+      # workflow can never delete a real bucket. Inert on LMDB runs.
+      # ---------------------------------------------------------------------------
+      - name: delete the throwaway test bucket
+        if: always() && needs.plan.outputs.bucket != ''
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_S3_ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_S3_SECRET_KEY }}
+          ARCTICDB_REAL_S3_REGION: eu-west-1
+          ARCTICDB_REAL_S3_ENDPOINT: s3.eu-west-1.amazonaws.com
+          BUCKET: ${{ needs.plan.outputs.bucket }}
+        run: |
+          if [[ $BUCKET == arcticdb-asv-data* ]]; then
+            echo "Removing ${BUCKET}"
+            aws s3 rb --force --endpoint-url "http://${ARCTICDB_REAL_S3_ENDPOINT}" \
+              --region "${ARCTICDB_REAL_S3_REGION}" "s3://${BUCKET}"
+          else
+            echo "Unexpected bucket to clean up! ${BUCKET}"
+            echo "This indicates a bug in the workflow. Not deleting anything and exiting..."
+            exit 1
+          fi

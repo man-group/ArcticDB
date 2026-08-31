@@ -1,0 +1,98 @@
+# Workers for ArcticDB's arctic-winds benchmark pipeline.
+#
+# Install as `python/benchmarks/workers.toml` in ArcticDB; `benchmark_winds.yml`'s `plan`
+# job reads it with `arctic-winds plan --config python/benchmarks/workers.toml --repo .`
+# and turns it into one matrix job — one EC2 instance — per `[[worker]]` table.
+#
+#   name           unique; names the matrix job, the uploaded artifact, the `worker`
+#                  column of the stored results, and asv's `--machine`
+#   suite          the asv `--bench` regex this worker runs
+#   instance_type  optional EC2 instance type; defaults to m6i.4xlarge
+#   memory_mib     optional memory limit, in MiB — read only by a local OrbStack run
+#   cpus           optional whole-core limit — read only by a local OrbStack run
+#
+# The entries below name `instance_type` only (by omission: they take the default). The
+# same config also drives a local run — `arctic-winds run --config <this file>` gives
+# each `[[worker]]` an OrbStack VM sized by `memory_mib`/`cpus` — but in CI the runner
+# was already sized by `instance_type` before the job started, so nothing here reads
+# them. Add them when reproducing a worker on a Mac, not to change what CI does.
+#
+# N = 8 is the knee of the cost model in docs/research/gha-ec2-runner-matrix.md: ~31 min
+# wall for ~$3.55 against today's 2h50m for $2.42 (5.5x faster, 1.46x the money). Past
+# N≈8 the per-worker fixed tax dominates and the 7.85-minute longest single benchmark
+# becomes the floor. Confirm N against the account's eu-west-1 EC2 Standard vCPU quota
+# (16 vCPU per m6i.4xlarge worker, AWS default 5) before the first real run.
+#
+# The split below is by *known duration*, not by module count. Two sources:
+#
+#   * the `durations` docstring in build_tooling/transform_asv_results.py — real
+#     `<setup_cache module:line>` seconds from the CI results database:
+#
+#       version_chain           585.9   list_snapshots           40.6
+#       list_versions           418.2   list_symbols             23.9
+#       modification_functions  247.4*  finalize_staged_data     20.0
+#       comparison_benchmarks   133.7*  query_builder            11.7*
+#       basic_functions          72.4   recursive_normalizer      6.1
+#                                       resample                  5.0
+#
+#     (* recorded under the older `real_*` / `local_*` module names of that snapshot.
+#     arrow, column_stats, compact_data, nonreg_random_read and merge_functions post-date
+#     it and have no measured setup time — they are treated as cheap and paired.)
+#
+#   * the `--durations all` table of run 33369295645 (docs/research/gha-ec2-runner-matrix.md
+#     §Q6): the two longest single benchmarks are `resample.Resample.time_resample` at
+#     7.85 min and `arrow.ArrowStrings.time_read` at 5.82 min. Those two set the wall-clock
+#     floor, so they sit on different workers and never behind a heavy setup_cache.
+#
+# Rebalance from real per-worker timings after the first shadow runs: `collect` prints a
+# timing report with a Worker column to the job summary precisely for this.
+#
+# `--suite-overwrite REGEX` replaces this whole split with a single worker running the
+# override, which is what `suite_overwrite` already means in ArcticDB's CI.
+#
+# `--all-tags` crosses these 8 workers with every release tag from v5.3.0 up (69 as of
+# v6.22.0) = 552 jobs, over GitHub's 256-job matrix cap. `plan` in benchmark_winds.yml
+# fails loudly on that rather than truncating; see the README's open decisions.
+
+[[worker]]
+# 586 s of setup_cache, the heaviest in the suite: alone.
+name = "version_chain"
+suite = "^version_chain\\."
+
+[[worker]]
+# 418 s of setup_cache: alone.
+name = "list_versions"
+suite = "^list_versions\\."
+
+[[worker]]
+# Three setup_caches (8.8 + 34.6 + 29.1 s) and the largest benchmark count: alone.
+name = "basic_functions"
+suite = "^basic_functions\\."
+
+[[worker]]
+# 247 s of setup_cache plus a 20 s one.
+name = "modification"
+suite = "^(?:modification_functions|finalize_staged_data)\\."
+
+[[worker]]
+# resample.Resample.time_resample is the longest single benchmark in the suite (7.85 min)
+# and the hard floor on the run's wall clock; recursive_normalizer is 6 s of setup.
+name = "resample"
+suite = "^(?:resample|recursive_normalizer)\\."
+
+[[worker]]
+# arrow.ArrowStrings.time_read is the second longest (5.82 min); column_stats is small.
+name = "arrow"
+suite = "^(?:arrow|column_stats)\\."
+
+[[worker]]
+# The cheap query/compaction modules.
+name = "query"
+suite = "^(?:query_builder|compact_data|nonreg_random_read)\\."
+
+[[worker]]
+# The two list operations (24 s + 41 s of setup) plus merge_functions, which is newer than
+# the durations snapshot. merge_functions drives SeaweedFS (benchmarks/seaweed_utils.py):
+# see the README — nothing starts SeaweedFS on an arctic-winds worker yet.
+name = "listing"
+suite = "^(?:list_symbols|list_snapshots|merge_functions)\\."
