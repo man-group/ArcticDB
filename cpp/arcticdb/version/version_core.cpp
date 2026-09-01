@@ -2293,7 +2293,7 @@ void create_column_stats_impl(
     auto processed_entity_ids =
             read_and_schedule_processing(store, pipeline_context, read_query, read_options, component_manager).get();
 
-    auto [new_column_stats_rows] = component_manager->get_entities<ColumnStatsRow>(processed_entity_ids);
+    auto [new_column_stats_rows] = component_manager->get_components<ColumnStatsRow>(processed_entity_ids);
     if (new_column_stats_rows.empty()) {
         return;
     }
