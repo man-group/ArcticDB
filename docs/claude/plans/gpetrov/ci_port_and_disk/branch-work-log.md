@@ -96,3 +96,62 @@ writes, prunes, snapshots and deletes to line up. Left at 100.
 
 A caution on measuring this locally: the first "after" reading was 70s rather than 46.5s because another process
 was busy on the same machine. Both halves of an A/B here have to be taken on an idle box.
+
+## The dedup flake, and the dead feature behind it
+
+`test_string_dedup_basic` failed in four separate runs over two days and four times in 25 failed master runs over
+60 days, always as `assert <with_dedup> <= <without_dedup>` with margins from 0.5% to 18%.
+
+`getsize()` keeps ids, not references. With Arrow-backed strings (every observed failure was an `-inferstr` job)
+each loop iteration materialises a temporary that is freed before the next, so its id is reused and the function
+sums a handful of arbitrary objects rather than 4000. Measuring **the same frame** five times running returns
+1582, 888, 888, 888, 888 - a 78% swing with no change in data. The assertion was reporting the sign of allocator
+noise.
+
+Replaced with a count of distinct string objects, holding the values alive so ids stay distinct, guarded on
+object dtype. 40 repeats under `-inferstr` show no variance.
+
+### `optimise_string_memory` has been a no-op since 2024-07-02
+
+The counts come out exactly equal under object dtype because the feature does nothing. Verified directly:
+
+- `DecodePathData::set_optimize_for_memory()` (`decode_path_data.hpp:45`), the switch read at
+  `python_strings.cpp:194` to choose global deduplication, **has no callers anywhere in the repo**.
+- `ReadOptions::optimise_string_memory_` (`read_options.hpp:32`) is written from Python and **never read** in C++;
+  there is no getter.
+- `7df641fba` "Release GIL on read" (2024-07-02) dropped the wiring: before it `read_frame.cpp` had the
+  `unique_string_map_` machinery, after it there are zero references.
+
+So a documented `read()` kwarg has silently done nothing for two years - users get one Python string object per
+row where they asked for one per distinct value. Recorded as `test_string_dedup_shares_string_objects`,
+`xfail(strict=True)`, which flips to a pass when the wiring returns.
+
+Anyone restoring it should first fix what looks like a refcount bug in the now-unreachable `assign_strings_shared`
+(`python_strings.cpp:135-183`): `get_allocated_strings` pre-populates `allocated` for strings an earlier column
+created, and the main loop then skips those offsets without `inc_ref` while `write_strings_to_destination` still
+stores `count` more pointers. That is a code reading of dead code, not a runtime observation.
+
+## Windows jobs that hit the 120-minute step limit
+
+Two `3.11 Windows / unit` jobs burned the full step limit. Neither hung: 20,209 of 20,212 tests had completed,
+the last one passed 13 seconds before the kill, and summed per-worker gaps show the workers ~99% busy throughout.
+
+The cause is the runner. The same job takes **46 min or 123 min** depending on which Windows VM it lands on, and
+the discriminator is the temp disk size reported by the `Disk usage` step:
+
+| D: size | duration |
+|---|---|
+| 220G | 123 min, 123 min (both timed out) |
+| 150G | 46 min |
+
+Both report `cores: 4, RAM: 16378MB` and the same runner image. The slowdown is uniform across unrelated test
+families (`test_realistic` 405s -> 1190s, `recursive_normalizers` 433s -> 1063s), so it is not a test regression.
+It affects roughly 5% of Windows `unit` jobs, and it is the same effect behind the Windows *compile* jobs that
+occasionally take 2-3x their usual time - `Install Required MSVC`, which only downloads and installs, doubles too.
+
+Three diagnostic gaps this exposed, all now fixed:
+- A step timeout SIGKILLs the step, so no junit XML, no `--durations`, no crash dumps. Now SIGINT at 100m first.
+- `--durations` was not enabled, so "everything is uniformly slower" was invisible in the log.
+- `ARCTICDB_FAULTHANDLER_DIR` is `$TEST_OUTPUT_DIR/faulthandler` but the artifact glob was `$TEST_OUTPUT_DIR/*test*`,
+  so the watchdog's output could never reach CI. (The watchdog itself behaved correctly here: it is a per-test
+  budget of 3300s and the slowest test was 1190s. Wrong tool for an aggregate overrun.)
