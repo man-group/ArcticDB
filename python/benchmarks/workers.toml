@@ -65,10 +65,17 @@ suite = "^(?:query_builder|compact_data|nonreg_random_read)\\."
 instance_type = "m6i.2xlarge"
 
 [[worker]]
-# 8 min, tiny data. merge_functions needs the worker's SeaweedFS.
+# ~8 min, tiny data.
 name = "listing"
-suite = "^(?:list_symbols|list_snapshots|merge_functions)\\."
+suite = "^(?:list_symbols|list_snapshots)\\."
 instance_type = "m6i.xlarge"
+
+[[worker]]
+# ~19 of the listing worker's 27 minutes in shadow run 3; needs the worker's SeaweedFS.
+# RAM unmeasured until the telemetry run, hence the middle size.
+name = "merge"
+suite = "^merge_functions\\."
+instance_type = "m6i.2xlarge"
 
 [[worker]]
 # 2 min of track_* counters.
