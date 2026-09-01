@@ -44,7 +44,8 @@ instance_type = "m6i.xlarge"
 name = "arrow_numeric"
 suite = "^arrow\\.(ArrowSparseNumeric|ArrowBools|ArrowNumeric)\\."
 # run 4 telemetry: peak 8.4 GiB; 21 min — keep 8 vCPU for now
-instance_type = "m6i.2xlarge"
+# run 6 experiment: run 5: 4 vCPU nearly free elsewhere; 7.9 GiB peak
+instance_type = "m6i.xlarge"
 
 [[worker]]
 # Under 3 minutes of benchmarks, but its setup_cache builds 10M-row frames (>9 GiB locally).
@@ -72,7 +73,8 @@ instance_type = "m6i.xlarge"
 name = "query"
 suite = "^(?:query_builder|compact_data|nonreg_random_read)\\."
 # run 4 telemetry: peak 7.5 GiB would fit xlarge, but 24 min is the long pole — keep 8 vCPU
-instance_type = "m6i.2xlarge"
+# run 6 experiment: run 5 showed 4 vCPU costs these suites 0–25 % time (resample 16→20 min): try xlarge; 7.8 GiB peak
+instance_type = "m6i.xlarge"
 
 [[worker]]
 # ~8 min, tiny data.
@@ -86,7 +88,8 @@ instance_type = "m6i.xlarge"
 name = "merge"
 suite = "^merge_functions\\."
 # run 4 telemetry: peak 6.7 GiB; 19 min — keep 8 vCPU for now
-instance_type = "m6i.2xlarge"
+# run 6 experiment: run 5: 4 vCPU nearly free elsewhere; 6.4 GiB peak
+instance_type = "m6i.xlarge"
 
 [[worker]]
 # 2 min of track_* counters.
