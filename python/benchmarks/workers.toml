@@ -52,14 +52,16 @@ instance_type = "m6i.xlarge"
 name = "column_stats"
 suite = "^column_stats\\."
 # run 4 telemetry: peak 27.3 of 30.8 GiB on m6i.2xlarge (88%) — needs 64 GB
-instance_type = "r6i.2xlarge"
+# run 8: run 7 anon/file split: anon 17.4 GiB — fits 32 GB; r6i no longer needed
+instance_type = "m6i.2xlarge"
 
 [[worker]]
 # 21 min, CPU-bound, modest data.
 name = "modification"
 suite = "^(?:modification_functions|finalize_staged_data)\\."
 # run 4 telemetry: peak 28.7 of 30.8 GiB on m6i.2xlarge (93%) — needs 64 GB; r6i keeps 8 vCPU for its 23 min at $0.564/h
-instance_type = "r6i.2xlarge"
+# run 8: run 7 anon/file split: anon 4.8 GiB, the other 54 GiB was LMDB page cache; 32 GB ran it in the same 23 min in run 4
+instance_type = "m6i.2xlarge"
 
 [[worker]]
 # 15 min; resample.Resample.time_resample is the longest single benchmark (7.85 min).
