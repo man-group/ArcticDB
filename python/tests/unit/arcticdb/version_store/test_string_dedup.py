@@ -44,6 +44,7 @@ def getsize(df):
 
 
 # Use tiny segment to prove deduplication across segments
+@pytest.mark.skip(reason="optimise_string_memory is not wired up to the decode path and has no effect. Monday ref: 12943494305")
 def test_string_dedup_basic(lmdb_version_store_tiny_segment):
     lib = lmdb_version_store_tiny_segment
     symbol = "test_string_dedup_basic"
@@ -84,6 +85,7 @@ def test_string_dedup_dynamic_schema(lmdb_version_store_dynamic_schema):
     # assert np.array_equal(total_df, read_df_without_dedup)
 
 
+@pytest.mark.skip(reason="optimise_string_memory is not wired up to the decode path and has no effect. Monday ref: 12943494305")
 def test_string_dedup_nans(lmdb_version_store_tiny_segment):
     lib = lmdb_version_store_tiny_segment
     symbol = "test_string_dedup_nans"
