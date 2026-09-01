@@ -14,7 +14,7 @@ import pytest
 import pandas as pd
 import sys
 
-from arcticdb_ext.exceptions import StorageException
+from arcticdb.exceptions import StorageException
 
 from arcticdb_ext import set_config_string
 from arcticdb_ext.storage import KeyType

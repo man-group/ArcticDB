@@ -12,7 +12,6 @@ import pytest
 from itertools import product
 import datetime
 import random
-from arcticdb import DataError
 
 from arcticdb.util.test import (
     random_strings_of_length,
@@ -21,8 +20,14 @@ from arcticdb.util.test import (
     assert_frame_equal,
     assert_series_equal,
 )
-from arcticdb.exceptions import InternalException, UnsortedDataException, NormalizationException, SchemaException
-from arcticdb_ext.exceptions import StreamDescriptorMismatch
+from arcticdb import DataError
+from arcticdb.exceptions import (
+    InternalException,
+    UnsortedDataException,
+    NormalizationException,
+    SchemaException,
+    StreamDescriptorMismatch,
+)
 from tests.util.date import DateRange
 from pandas import MultiIndex
 import arcticdb

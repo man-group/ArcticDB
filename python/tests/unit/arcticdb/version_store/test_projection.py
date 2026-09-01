@@ -10,8 +10,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from arcticdb_ext.exceptions import SchemaException, UserInputException
-from arcticdb.exceptions import ArcticNativeException
+from arcticdb.exceptions import ArcticNativeException, SchemaException, UserInputException
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb.util.test import assert_frame_equal, make_dynamic, regularize_dataframe
 

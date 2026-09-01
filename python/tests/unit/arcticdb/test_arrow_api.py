@@ -6,11 +6,11 @@ import polars as pl
 import pytest
 
 from arcticdb import LazyDataFrame, DataError, concat
-from arcticdb.exceptions import ArcticNativeException
+from arcticdb.exceptions import ArcticNativeException, ArcticUnsupportedDataTypeException
 from arcticdb.options import OutputFormat, ArrowOutputStringFormat, LibraryOptions
 from arcticdb.util.test import assert_frame_equal_with_arrow, sample_dataframe
 
-from arcticdb.version_store.library import ArcticUnsupportedDataTypeException, WritePayload, UpdatePayload, ReadRequest
+from arcticdb.version_store.library import WritePayload, UpdatePayload, ReadRequest
 
 all_output_format_args = [
     None,

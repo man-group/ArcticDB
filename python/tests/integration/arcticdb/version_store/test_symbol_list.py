@@ -22,7 +22,7 @@ from arcticdb.toolbox.library_tool import (
 from arcticdb_ext import set_config_int, unset_config_int
 from arcticdb_ext.storage import KeyType, OpenMode
 from arcticdb_ext.tools import CompactionId, CompactionLockName
-from arcticdb_ext.exceptions import InternalException, PermissionException
+from arcticdb.exceptions import InternalException, PermissionException
 
 from multiprocessing import Pool
 from arcticdb_ext import set_config_int

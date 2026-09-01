@@ -11,7 +11,7 @@ import pandas as pd
 import pytest
 
 from arcticdb.version_store.processing import QueryBuilder
-from arcticdb_ext.exceptions import InternalException
+from arcticdb.exceptions import InternalException
 
 from arcticdb.util.test import assert_frame_equal
 

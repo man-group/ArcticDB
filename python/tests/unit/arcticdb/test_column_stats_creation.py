@@ -19,9 +19,8 @@ from polars.testing import assert_frame_equal as pl_assert_frame_equal
 from arcticc.pb2.column_stats_pb2 import ColumnStatsHeader, ColumnStatsType
 from google.protobuf.any_pb2 import Any as ProtobufAny
 
-from arcticdb_ext.exceptions import SchemaException, SortingException, StorageException, UserInputException
+from arcticdb.exceptions import SchemaException, SortingException, StorageException, UserInputException, NoSuchVersionException
 from arcticdb_ext.storage import KeyType
-from arcticdb_ext.version_store import NoSuchVersionException
 from arcticdb import QueryBuilder
 from arcticdb.exceptions import ArcticNativeException
 from arcticdb.util.hypothesis import use_of_function_scoped_fixtures_in_hypothesis_checked

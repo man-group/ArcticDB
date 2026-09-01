@@ -10,8 +10,8 @@ import time
 import numpy as np
 import pandas as pd
 from arcticdb.util.logger import get_logger
-import arcticdb_ext
 import arcticdb_ext.storage
+from arcticdb.exceptions import StorageException
 from arcticdb.util.test import sample_dataframe
 from arcticdb import KeyType, Size, Arctic
 from arcticdb.toolbox.library_tool import LibraryTool
@@ -28,7 +28,7 @@ def retry_get_sizes(admin_tools: AdminTools, retries=3, base_delay=1):
         try:
             result = admin_tools.get_sizes()
             return result
-        except arcticdb_ext.exceptions.StorageException as e:
+        except StorageException as e:
             if ("E_UNEXPECTED_AZURE_ERROR" in str(e)) and (attempt < retries):
                 wait_time = base_delay * (2**attempt)
                 logger.info(f"Attempt {attempt + 1} failed: {e}. Retrying in {wait_time} seconds...")
