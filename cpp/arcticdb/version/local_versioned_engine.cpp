@@ -766,13 +766,7 @@ VersionedItem LocalVersionedEngine::update_internal(
     py::gil_scoped_release release_gil;
     auto update_info = get_next_version_id_and_optionally_latest_undeleted_version(store(), version_map(), stream_id);
     return async_update_internal(
-                   stream_id,
-                   std::move(update_info),
-                   query,
-                   frame,
-                   upsert,
-                   dynamic_schema,
-                   prune_previous_versions
+                   stream_id, std::move(update_info), query, frame, upsert, dynamic_schema, prune_previous_versions
     )
             .get();
 }
@@ -2018,9 +2012,7 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
                         .thenValue([this, frame = std::move(frames[idx]), append_options, &stream_id = stream_ids[idx]](
                                            UpdateInfo&& update_info
                                    ) {
-                            return async_append_internal(
-                                    stream_id, std::move(update_info), frame, append_options
-                            );
+                            return async_append_internal(stream_id, std::move(update_info), frame, append_options);
                         })
         );
     }
