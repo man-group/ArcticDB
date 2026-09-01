@@ -128,6 +128,13 @@ jobs:
       # the artifact must still be uploaded. Exit 2 = nothing to upload (ticket 05).
       # No `--home`: unlike a GitHub-hosted runner, this container's own $HOME is usable
       # and holds the uv cache, the venv and `~/.asv-machine.json`.
+      # One SeaweedFS per worker, as `benchmark_commits.yml:110-114` runs one per commit
+      # job: `merge_functions` (and any future module using `seaweed_utils`) talks to
+      # 127.0.0.1:8333 and fails its setup_cache without it (first shadow run, 2026-09-01).
+      - name: start SeaweedFS
+        shell: bash -el {0}
+        run: build_tooling/start_seaweed.sh start
+
       - name: benchmark
         env:
           WORKER: ${{ inputs.worker }}
@@ -152,6 +159,11 @@ jobs:
       # `collect` reads the worker off (ticket 07). The monitor's `<worker>.log` and
       # `status.json` land in the same directory, so name the file explicitly rather than
       # uploading `artifacts/`. This must happen before `stop` terminates the machine.
+      - name: stop SeaweedFS
+        if: always()
+        shell: bash -el {0}
+        run: build_tooling/start_seaweed.sh stop
+
       - name: upload this worker's results
         uses: actions/upload-artifact@v4
         if: always()
