@@ -25,7 +25,6 @@ import warnings
 import difflib
 from datetime import datetime
 
-from arcticdb_ext.exceptions import UserInputException
 from numpy import datetime64
 from pandas import Timestamp, to_datetime, Timedelta
 from typing import Any, Optional, Union, List, Sequence, Tuple, Dict, Set, NamedTuple
@@ -39,6 +38,7 @@ from arcticdb_ext.version_store import (
     ArrowOutputConfig,
     CompactDataInfo,
     InternalPandasStringFormat,
+    InternalArrowOutputFormat,
     PandasOutputConfig,
     RecordBatchData,
     SortedValue,
@@ -1320,6 +1320,8 @@ class NativeVersionStore:
         self,
         symbol: str,
         as_of: Optional[VersionQueryInput] = None,
+        date_range: Optional[DateRangeInput] = None,
+        row_range: Optional[Tuple[Optional[int], Optional[int]]] = None,
     ) -> None:
         """
         Calculates MINMAX column statistics for each row-slice for the given symbol. In the future, these
@@ -1328,8 +1330,10 @@ class NativeVersionStore:
 
         MINMAX stats are built for every data column and every inner multiindex index level whose dtype is numeric
         (uint/int/float/bool) or a UTC nanosecond timestamp. The outer/primary index is excluded, as it is already
-        pruned by the index mechanism. Any pre-existing stats are merged with the newly computed ones
-        (read-modify-write).
+        pruned by the index mechanism.
+
+        Stats for row slices that fall entirely outside `date_range`/`row_range` are preserved. Every row slice the
+        range intersects is recomputed. Omitting both `date_range` and `row_range` recomputes stats for the whole symbol.
 
         Parameters
         ----------
@@ -1337,13 +1341,21 @@ class NativeVersionStore:
             Symbol name.
         as_of : `Optional[VersionQueryInput]`, default=None
             See documentation of `read` method for more details.
+        date_range: `Optional[DateRangeInput]`, default=None
+            Only recompute stats for row slices intersecting this range. Requires a sorted timestamp index.
+            Only one of `date_range` or `row_range` can be provided.
+        row_range : `Optional[Tuple[Optional[int], Optional[int]]]`, default=None
+            Only recompute stats for row slices intersecting this range. Accepts negative indices, with the same
+            semantics as the `row_range` argument to `read`. Either end may be `None`, meaning the start or the end
+            of the symbol. Only one of `date_range` or `row_range` can be provided.
 
         Returns
         -------
         None
         """
         version_query = self._get_version_query(as_of)
-        self.version_store.create_column_stats_version(symbol, version_query)
+        read_query = self._get_read_query(date_range=date_range, row_range=row_range, columns=None, query_builder=None)
+        self.version_store.create_column_stats_version(symbol, version_query, read_query)
 
     def drop_column_stats_experimental(self, symbol: str, as_of: Optional[VersionQueryInput] = None) -> None:
         """
@@ -2356,11 +2368,16 @@ class NativeVersionStore:
         read_options.set_incompletes(resolve_defaults("incomplete", proto_cfg, global_default=False, **kwargs))
         if output_format_to_internal(output_format) == InternalOutputFormat.ARROW:
             output_config = ArrowOutputConfig(
+                (
+                    InternalArrowOutputFormat.POLARS
+                    if output_format.lower() == OutputFormat.POLARS.lower()
+                    else InternalArrowOutputFormat.PYARROW
+                ),
                 arrow_output_string_format_to_internal(
                     self.resolve_runtime_defaults(
                         "arrow_string_format_default",
                         proto_cfg,
-                        global_default=ArrowOutputStringFormat.LARGE_STRING,
+                        global_default=ArrowOutputStringFormat.UNSPECIFIED,
                         **kwargs,
                     ),
                     output_format,
@@ -2431,7 +2448,7 @@ class NativeVersionStore:
             read_options_per_symbol.append(read_options)
 
         batch_read_options = _PythonVersionStoreBatchReadOptions(batch_throw_on_error)
-        batch_read_options.set_read_options_per_symbol(read_options_per_symbol)
+        batch_read_options.set_read_options(read_options_per_symbol)
         # output_format is also a batch level setting, because we currently don't support mixed output formats
         output_format = self.resolve_runtime_defaults("output_format", {}, global_default=OutputFormat.PANDAS, **kwargs)
         batch_read_options.set_output_format(output_format_to_internal(output_format))

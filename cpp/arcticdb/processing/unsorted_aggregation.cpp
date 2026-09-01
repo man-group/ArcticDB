@@ -84,74 +84,23 @@ void MinMaxAggregatorData::aggregate(const ColumnWithStrings& input_column) {
     });
 }
 
-SegmentInMemory MinMaxAggregatorData::finalize(const std::vector<ColumnName>& output_column_names) const {
-    internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-            output_column_names.size() == 4,
-            "Expected 4 output column names in MinMaxAggregatorData::finalize, but got {}",
-            output_column_names.size()
-    );
-    SegmentInMemory seg;
-    arcticc::pb2::column_stats_pb2::ColumnStatsHeader header;
+std::vector<ColumnStatValue> MinMaxAggregatorData::finalize() const {
+    std::vector<ColumnStatValue> res;
     if (min_.has_value()) {
-        details::visit_type(min_->data_type(), [&output_column_names, &seg, &header, this](auto col_tag) {
-            using RawType = typename ScalarTypeInfo<decltype(col_tag)>::RawType;
-            auto min_col = std::make_shared<Column>(make_scalar_type(min_->data_type()), Sparsity::PERMITTED);
-            min_col->push_back<RawType>(min_->get<RawType>());
-
-            auto max_col = std::make_shared<Column>(make_scalar_type(max_->data_type()), Sparsity::PERMITTED);
-            max_col->push_back<RawType>(max_->get<RawType>());
-
-            auto nan_count_col = std::make_shared<Column>(make_scalar_type(DataType::UINT64), Sparsity::PERMITTED);
-            nan_count_col->push_back<uint64_t>(nan_count_);
-
-            auto null_count_col = std::make_shared<Column>(make_scalar_type(DataType::UINT64), Sparsity::PERMITTED);
-            null_count_col->push_back<uint64_t>(null_count_);
-
-            auto& entry_list = (*header.mutable_stats_by_column())[data_col_offset_];
-            auto* min_entry = entry_list.add_entries();
-            min_entry->set_stats_seg_offset(0);
-            min_entry->set_type(arcticc::pb2::column_stats_pb2::MIN_V1);
-            auto* max_entry = entry_list.add_entries();
-            max_entry->set_stats_seg_offset(1);
-            max_entry->set_type(arcticc::pb2::column_stats_pb2::MAX_V1);
-            auto* nan_entry = entry_list.add_entries();
-            nan_entry->set_stats_seg_offset(2);
-            nan_entry->set_type(arcticc::pb2::column_stats_pb2::NAN_COUNT_V1);
-            auto* null_entry = entry_list.add_entries();
-            null_entry->set_stats_seg_offset(3);
-            null_entry->set_type(arcticc::pb2::column_stats_pb2::NULL_COUNT_V1);
-
-            seg.add_column(scalar_field(min_col->type().data_type(), output_column_names[0].value), min_col);
-            seg.add_column(scalar_field(max_col->type().data_type(), output_column_names[1].value), max_col);
-            seg.add_column(scalar_field(DataType::UINT64, output_column_names[2].value), nan_count_col);
-            seg.add_column(scalar_field(DataType::UINT64, output_column_names[3].value), null_count_col);
-        });
-    } else if (null_count_ > 0) { // The whole col in the slice is null
-        auto nan_count_col = std::make_shared<Column>(make_scalar_type(DataType::UINT64), Sparsity::PERMITTED);
-        nan_count_col->push_back<uint64_t>(nan_count_);
-
-        auto null_count_col = std::make_shared<Column>(make_scalar_type(DataType::UINT64), Sparsity::PERMITTED);
-        null_count_col->push_back<uint64_t>(null_count_);
-
-        auto& entry_list = (*header.mutable_stats_by_column())[data_col_offset_];
-
-        auto* nan_entry = entry_list.add_entries();
-        nan_entry->set_stats_seg_offset(0);
-        nan_entry->set_type(arcticc::pb2::column_stats_pb2::NAN_COUNT_V1);
-
-        auto* null_entry = entry_list.add_entries();
-        null_entry->set_stats_seg_offset(1);
-        null_entry->set_type(arcticc::pb2::column_stats_pb2::NULL_COUNT_V1);
-
-        seg.add_column(scalar_field(DataType::UINT64, output_column_names[2].value), nan_count_col);
-        seg.add_column(scalar_field(DataType::UINT64, output_column_names[3].value), null_count_col);
+        res.reserve(4);
+        res.emplace_back(ColumnStatValue{ColumnStatTypeInternal::MIN_V1, data_col_offset_, *min_});
+        res.emplace_back(ColumnStatValue{ColumnStatTypeInternal::MAX_V1, data_col_offset_, *max_});
+    } else if (null_count_ == 0) {
+        // The column is absent from this slice entirely, so there is nothing to record
+        return res;
     }
-
-    google::protobuf::Any any;
-    bool packed = any.PackFrom(header);
-    util::check(packed, "Failed to pack header in to Any?");
-    seg.set_metadata(std::move(any));
-    return seg;
+    res.emplace_back(
+            ColumnStatValue{ColumnStatTypeInternal::NAN_COUNT_V1, data_col_offset_, Value{nan_count_, DataType::UINT64}}
+    );
+    res.emplace_back(ColumnStatValue{
+            ColumnStatTypeInternal::NULL_COUNT_V1, data_col_offset_, Value{null_count_, DataType::UINT64}
+    });
+    return res;
 }
 
 namespace {

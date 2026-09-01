@@ -18,6 +18,25 @@ RUN chmod 555 sccache
 
 RUN cp sccache /usr/local/bin/
 
+# The manylinux base ships a pipx-installed CMake (currently 4.4.0) which vcpkg prefers over
+# the 3.31.6 pinned in CI (build_steps.yml). 4.4's stricter -Werror=<category> validation
+# breaks the vcpkg `benchmark` port, so pin here too. Drop when the CI pin is dropped.
+RUN pipx install --force "cmake==3.31.6" && cmake --version
+
+# Test-time services baked in so the pytest CI jobs don't have to download them on every run
+RUN wget -nv https://fastdl.mongodb.org/linux/mongodb-linux-x86_64-rhel80-7.0.0.tgz && \
+    tar -xzf mongodb-linux-x86_64-rhel80-7.0.0.tgz && \
+    cp mongodb-linux-x86_64-rhel80-7.0.0/bin/* /usr/local/bin/ && \
+    rm -rf mongodb-linux-x86_64-rhel80-7.0.0* && \
+    mongod --version
+
+RUN wget -nv https://nodejs.org/dist/v24.11.0/node-v24.11.0-linux-x64.tar.xz && \
+    tar -xJf node-v24.11.0-linux-x64.tar.xz -C /usr/local --strip-components=1 && \
+    rm node-v24.11.0-linux-x64.tar.xz && \
+    node --version
+
+RUN npm install -g azurite@3.36.0 && azurite --version
+
 ENV CC=/opt/rh/gcc-toolset-11/root/bin/gcc
 ENV CMAKE_C_COMPILER=/opt/rh/gcc-toolset-11/root/bin/gcc
 ENV CXX=/opt/rh/gcc-toolset-11/root/bin/g++

@@ -5,7 +5,25 @@ runs:
     - name: Install MongoDB Community Edition
       shell: bash
       run: |
-        curl --retry 5 --retry-delay 5 --retry-connrefused -LO https://fastdl.mongodb.org/linux/mongodb-linux-x86_64-rhel80-7.0.0.tgz
+        # Skip the download when mongod is already baked into the container image (docker/Dockerfile*)
+        if command -v mongod >/dev/null; then
+          echo "mongod already available, skipping download"
+          mongod --version
+          exit 0
+        fi
+        # curl's --retry only covers a narrow set of "transient" errors - not connect
+        # failures (exit 7) or SSL handshake resets (exit 35), both seen in CI - so
+        # wrap it in a manual retry loop.
+        downloaded=0
+        for attempt in 1 2 3 4 5; do
+          if curl -fL --connect-timeout 30 -O https://fastdl.mongodb.org/linux/mongodb-linux-x86_64-rhel80-7.0.0.tgz; then
+            downloaded=1
+            break
+          fi
+          echo "MongoDB download attempt ${attempt} failed, retrying in 10s..."
+          sleep 10
+        done
+        [ "$downloaded" = 1 ]
         tar -xzf mongodb-linux-x86_64-rhel80-7.0.0.tgz
         cp mongodb-linux-x86_64-rhel80-7.0.0/bin/* /usr/local/bin/
         mongod --version

@@ -517,12 +517,11 @@
             ],
             [
                 "<ArrowOutputStringFormat.CATEGORICAL: 'CATEGORICAL'>",
-                "<ArrowOutputStringFormat.DICTIONARY_ENCODED: 'DICTIONARY_ENCODED'>",
                 "<ArrowOutputStringFormat.LARGE_STRING: 'LARGE_STRING'>",
                 "<ArrowOutputStringFormat.SMALL_STRING: 'SMALL_STRING'>"
             ]
         ],
-        "setup_cache_key": "arrow:275",
+        "setup_cache_key": "arrow:284",
         "timeout": 600,
         "type": "peakmemory",
         "unit": "bytes",
@@ -552,12 +551,11 @@
             ],
             [
                 "<ArrowOutputStringFormat.CATEGORICAL: 'CATEGORICAL'>",
-                "<ArrowOutputStringFormat.DICTIONARY_ENCODED: 'DICTIONARY_ENCODED'>",
                 "<ArrowOutputStringFormat.LARGE_STRING: 'LARGE_STRING'>",
                 "<ArrowOutputStringFormat.SMALL_STRING: 'SMALL_STRING'>"
             ]
         ],
-        "setup_cache_key": "arrow:275",
+        "setup_cache_key": "arrow:284",
         "timeout": 600,
         "type": "peakmemory",
         "unit": "bytes",
@@ -587,12 +585,11 @@
             ],
             [
                 "<ArrowOutputStringFormat.CATEGORICAL: 'CATEGORICAL'>",
-                "<ArrowOutputStringFormat.DICTIONARY_ENCODED: 'DICTIONARY_ENCODED'>",
                 "<ArrowOutputStringFormat.LARGE_STRING: 'LARGE_STRING'>",
                 "<ArrowOutputStringFormat.SMALL_STRING: 'SMALL_STRING'>"
             ]
         ],
-        "setup_cache_key": "arrow:275",
+        "setup_cache_key": "arrow:284",
         "timeout": 600,
         "type": "peakmemory",
         "unit": "bytes",
@@ -622,12 +619,11 @@
             ],
             [
                 "<ArrowOutputStringFormat.CATEGORICAL: 'CATEGORICAL'>",
-                "<ArrowOutputStringFormat.DICTIONARY_ENCODED: 'DICTIONARY_ENCODED'>",
                 "<ArrowOutputStringFormat.LARGE_STRING: 'LARGE_STRING'>",
                 "<ArrowOutputStringFormat.SMALL_STRING: 'SMALL_STRING'>"
             ]
         ],
-        "setup_cache_key": "arrow:275",
+        "setup_cache_key": "arrow:284",
         "timeout": 600,
         "type": "peakmemory",
         "unit": "bytes",
@@ -657,12 +653,11 @@
             ],
             [
                 "<ArrowOutputStringFormat.CATEGORICAL: 'CATEGORICAL'>",
-                "<ArrowOutputStringFormat.DICTIONARY_ENCODED: 'DICTIONARY_ENCODED'>",
                 "<ArrowOutputStringFormat.LARGE_STRING: 'LARGE_STRING'>",
                 "<ArrowOutputStringFormat.SMALL_STRING: 'SMALL_STRING'>"
             ]
         ],
-        "setup_cache_key": "arrow:275",
+        "setup_cache_key": "arrow:284",
         "timeout": 600,
         "type": "peakmemory",
         "unit": "bytes",
@@ -692,12 +687,11 @@
             ],
             [
                 "<ArrowOutputStringFormat.CATEGORICAL: 'CATEGORICAL'>",
-                "<ArrowOutputStringFormat.DICTIONARY_ENCODED: 'DICTIONARY_ENCODED'>",
                 "<ArrowOutputStringFormat.LARGE_STRING: 'LARGE_STRING'>",
                 "<ArrowOutputStringFormat.SMALL_STRING: 'SMALL_STRING'>"
             ]
         ],
-        "setup_cache_key": "arrow:275",
+        "setup_cache_key": "arrow:284",
         "timeout": 600,
         "type": "peakmemory",
         "unit": "bytes",
@@ -729,7 +723,6 @@
             ],
             [
                 "<ArrowOutputStringFormat.CATEGORICAL: 'CATEGORICAL'>",
-                "<ArrowOutputStringFormat.DICTIONARY_ENCODED: 'DICTIONARY_ENCODED'>",
                 "<ArrowOutputStringFormat.LARGE_STRING: 'LARGE_STRING'>",
                 "<ArrowOutputStringFormat.SMALL_STRING: 'SMALL_STRING'>"
             ]
@@ -737,7 +730,7 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "arrow:275",
+        "setup_cache_key": "arrow:284",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
@@ -770,7 +763,6 @@
             ],
             [
                 "<ArrowOutputStringFormat.CATEGORICAL: 'CATEGORICAL'>",
-                "<ArrowOutputStringFormat.DICTIONARY_ENCODED: 'DICTIONARY_ENCODED'>",
                 "<ArrowOutputStringFormat.LARGE_STRING: 'LARGE_STRING'>",
                 "<ArrowOutputStringFormat.SMALL_STRING: 'SMALL_STRING'>"
             ]
@@ -778,7 +770,7 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "arrow:275",
+        "setup_cache_key": "arrow:284",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
@@ -811,7 +803,6 @@
             ],
             [
                 "<ArrowOutputStringFormat.CATEGORICAL: 'CATEGORICAL'>",
-                "<ArrowOutputStringFormat.DICTIONARY_ENCODED: 'DICTIONARY_ENCODED'>",
                 "<ArrowOutputStringFormat.LARGE_STRING: 'LARGE_STRING'>",
                 "<ArrowOutputStringFormat.SMALL_STRING: 'SMALL_STRING'>"
             ]
@@ -819,7 +810,7 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "arrow:275",
+        "setup_cache_key": "arrow:284",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
@@ -852,7 +843,6 @@
             ],
             [
                 "<ArrowOutputStringFormat.CATEGORICAL: 'CATEGORICAL'>",
-                "<ArrowOutputStringFormat.DICTIONARY_ENCODED: 'DICTIONARY_ENCODED'>",
                 "<ArrowOutputStringFormat.LARGE_STRING: 'LARGE_STRING'>",
                 "<ArrowOutputStringFormat.SMALL_STRING: 'SMALL_STRING'>"
             ]
@@ -860,7 +850,7 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "arrow:275",
+        "setup_cache_key": "arrow:284",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
@@ -893,7 +883,6 @@
             ],
             [
                 "<ArrowOutputStringFormat.CATEGORICAL: 'CATEGORICAL'>",
-                "<ArrowOutputStringFormat.DICTIONARY_ENCODED: 'DICTIONARY_ENCODED'>",
                 "<ArrowOutputStringFormat.LARGE_STRING: 'LARGE_STRING'>",
                 "<ArrowOutputStringFormat.SMALL_STRING: 'SMALL_STRING'>"
             ]
@@ -901,7 +890,7 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "arrow:275",
+        "setup_cache_key": "arrow:284",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
@@ -934,7 +923,6 @@
             ],
             [
                 "<ArrowOutputStringFormat.CATEGORICAL: 'CATEGORICAL'>",
-                "<ArrowOutputStringFormat.DICTIONARY_ENCODED: 'DICTIONARY_ENCODED'>",
                 "<ArrowOutputStringFormat.LARGE_STRING: 'LARGE_STRING'>",
                 "<ArrowOutputStringFormat.SMALL_STRING: 'SMALL_STRING'>"
             ]
@@ -942,7 +930,7 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "arrow:275",
+        "setup_cache_key": "arrow:284",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",

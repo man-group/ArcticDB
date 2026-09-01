@@ -1341,7 +1341,8 @@ def arrow_output_format(request) -> OutputFormat:
     return request.param
 
 
-@pytest.fixture(params=list(ArrowOutputStringFormat))
+# ArrowOutputStringFormat.UNSPECIFIED has its own specific tests
+@pytest.fixture(params=[f for f in ArrowOutputStringFormat if f is not ArrowOutputStringFormat.UNSPECIFIED])
 def any_arrow_string_format(request) -> ArrowOutputStringFormat:
     return request.param
 

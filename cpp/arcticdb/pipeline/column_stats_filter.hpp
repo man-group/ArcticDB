@@ -25,17 +25,6 @@
 
 namespace arcticdb {
 
-namespace util {
-
-struct PairHasher {
-    template<typename T1, typename T2>
-    std::size_t operator()(const std::pair<T1, T2>& p) const {
-        return folly::hash::hash_combine(p.first, p.second);
-    }
-};
-
-} // namespace util
-
 struct ColumnStatsValues {
     std::optional<Value> min;
     std::optional<Value> max;
@@ -81,20 +70,21 @@ class ColumnStatsData {
      * @param segment The column stats segment.
      * @param tsd     The original symbol's TSD, used to resolve data_col_offsets in the column stats
      *                header back to user column names.
-     * @param date_range Date range to load stats for.
+     * @param window  Range of data rows to load stats for. Stats for row slices that do not
+     *                intersect it are not parsed, and find_row will not find them.
      */
     explicit ColumnStatsData(
             SegmentInMemory&& segment, const TimeseriesDescriptor& tsd,
-            std::optional<std::pair<timestamp, timestamp>> date_range = std::nullopt
+            const std::optional<pipelines::RowRange>& window = std::nullopt
     );
 
     ARCTICDB_MOVE_ONLY_DEFAULT(ColumnStatsData)
 
     /**
-     * Find the row index for a given row-slice identified by start_index and end_index.
+     * Find the row index for the row slice covering the given range of data rows.
      * Returns nullopt if no matching stats found.
      */
-    std::optional<size_t> find_row(timestamp start_index, timestamp end_index) const;
+    std::optional<size_t> find_row(const pipelines::RowRange& row_range) const;
 
     bool empty() const { return num_rows_ == 0; }
 
@@ -107,20 +97,15 @@ class ColumnStatsData {
     ) const;
 
   private:
-    std::pair<size_t, size_t> calculate_start_and_end_indices(
-            const std::optional<std::pair<timestamp, timestamp>>& date_range, size_t segment_row_count,
-            const Column& start_index_col, const Column& end_index_col
+    std::pair<size_t, size_t> parse_row_ranges(
+            const std::optional<pipelines::RowRange>& window, size_t segment_row_count, const Column& start_row_col,
+            const Column& end_row_col
     );
 
-    void drop_duplicate_rows();
-
     size_t num_rows_{0};
-    std::vector<timestamp> start_indices_; // size = num_rows_
-    std::vector<timestamp> end_indices_;   // size = num_rows_
     std::unordered_map<std::string, StatsForColumn> stats_by_column_;
 
-    // (start_index, end_index) -> row index. The index values are rowcounts for string-indexed symbols.
-    std::unordered_map<std::pair<timestamp, timestamp>, size_t, util::PairHasher> index_to_row_;
+    std::unordered_map<pipelines::RowRange, size_t, pipelines::RowRange::Hasher> row_range_to_row_;
 };
 
 struct ColumnStatsQueryMetadata {
@@ -156,7 +141,7 @@ FilterQuery<index::IndexSegmentReader> create_column_stats_filter(
  * Create a column stats filter from compressed column stats bytes.
  *
  * Partially decodes the column stats segment so only the stats columns referenced by the query's
- * filter clauses are loaded; rows outside the intersection of any DateRangeClause are pruned.
+ * filter clauses are loaded.
  *
  * Precondition: query_metadata.should_try_column_stats_read() == true.
  */

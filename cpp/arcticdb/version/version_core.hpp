@@ -78,7 +78,8 @@ folly::Future<IndexInformation> read_index_key_without_column_stats(
 AtomKey index_key_to_column_stats_key(const IndexTypeKey& index_key);
 
 void create_column_stats_impl(
-        const std::shared_ptr<Store>& store, const VersionedItem& versioned_item, const ReadOptions& read_options
+        const std::shared_ptr<Store>& store, const VersionedItem& versioned_item, const ReadOptions& read_options,
+        const std::shared_ptr<ReadQuery>& read_query
 );
 
 void drop_column_stats_impl(const std::shared_ptr<Store>& store, const VersionedItem& versioned_item);
@@ -86,11 +87,6 @@ void drop_column_stats_impl(const std::shared_ptr<Store>& store, const Versioned
 FrameAndDescriptor read_column_stats_impl(const std::shared_ptr<Store>& store, const VersionedItem& versioned_item);
 
 ColumnStats get_column_stats_info_impl(const std::shared_ptr<Store>& store, const VersionedItem& versioned_item);
-
-folly::Future<ReadVersionOutput> read_multi_key(
-        const std::shared_ptr<Store>& store, const ReadOptions& read_options, const SegmentInMemory& index_key_seg,
-        std::shared_ptr<std::any> handler_data
-);
 
 folly::Future<std::vector<EntityId>> schedule_remaining_iterations(
         std::vector<std::vector<EntityId>>&& entity_ids_vec_fut,
@@ -138,6 +134,10 @@ std::variant<VersionedItem, CompactionError> sort_merge_impl(
 );
 
 void add_index_columns_to_query(const ReadQuery& read_query, const TimeseriesDescriptor& desc);
+
+ReadOptions modify_read_options_from_norm_meta(
+        const proto::descriptors::NormalizationMetadata& norm_meta, const ReadOptions& read_options
+);
 
 folly::Future<ReadVersionOutput> read_frame_for_version(
         const std::shared_ptr<Store>& store, const VersionIdentifier& version_info,

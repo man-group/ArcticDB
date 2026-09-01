@@ -238,10 +238,14 @@ class LocalVersionedEngine : public VersionedEngine {
             const VersionQuery& version_query
     );
 
-    void create_column_stats_internal(const VersionedItem& versioned_item, const ReadOptions& read_options);
+    void create_column_stats_internal(
+            const VersionedItem& versioned_item, const ReadOptions& read_options,
+            const std::shared_ptr<ReadQuery>& read_query
+    );
 
     void create_column_stats_version_internal(
-            const StreamId& stream_id, const VersionQuery& version_query, const ReadOptions& read_options
+            const StreamId& stream_id, const VersionQuery& version_query, const ReadOptions& read_options,
+            const std::shared_ptr<ReadQuery>& read_query
     );
 
     void drop_column_stats_internal(const VersionedItem& versioned_item);

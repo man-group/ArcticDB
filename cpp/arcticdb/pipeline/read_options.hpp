@@ -120,13 +120,17 @@ class ReadOptions {
         );
     }
 
-    [[nodiscard]] const ArrowOutputConfig& arrow_output_config() const {
-        const auto& variant_config = data_->output_config_;
+    [[nodiscard]] ArrowOutputConfig& arrow_output_config() {
+        auto& variant_config = data_->output_config_;
         util::check(
                 std::holds_alternative<ArrowOutputConfig>(variant_config),
                 "ReadOptions::arrow_output_config called for non-Arrow config."
         );
         return std::get<ArrowOutputConfig>(variant_config);
+    }
+
+    [[nodiscard]] const ArrowOutputConfig& arrow_output_config() const {
+        return const_cast<ReadOptions*>(this)->arrow_output_config();
     }
 
     [[nodiscard]] ReadOptions clone() const { return ReadOptions(std::make_shared<ReadOptionsData>(*data_)); }
@@ -136,10 +140,8 @@ class ReadOptions {
     std::shared_ptr<ReadOptionsData> data_ = std::make_shared<ReadOptionsData>();
 };
 
-using ReadOptionsPerSymbol = std::variant<ReadOptions, std::vector<ReadOptions>>;
-
 struct BatchReadOptionsData {
-    ReadOptionsPerSymbol read_options_per_symbol_;
+    std::vector<ReadOptions> read_options_per_symbol_;
     bool batch_throw_on_error_;
     OutputFormat output_format_ = OutputFormat::PANDAS;
 
@@ -152,19 +154,11 @@ class BatchReadOptions {
         data_ = std::make_shared<BatchReadOptionsData>(batch_throw_on_error);
     }
 
-    void set_read_options(const ReadOptions& read_options) { data_->read_options_per_symbol_ = read_options; }
-
-    void set_read_options_per_symbol(const std::vector<ReadOptions>& read_options_per_symbol) {
+    void set_read_options(const std::vector<ReadOptions>& read_options_per_symbol) {
         data_->read_options_per_symbol_ = read_options_per_symbol;
     }
 
-    [[nodiscard]] ReadOptions at(size_t idx) const {
-        return util::variant_match(
-                data_->read_options_per_symbol_,
-                [&](const std::vector<ReadOptions>& read_options) { return read_options.at(idx); },
-                [&](ReadOptions read_options) { return read_options; }
-        );
-    }
+    [[nodiscard]] ReadOptions at(size_t idx) const { return data_->read_options_per_symbol_.at(idx); }
 
     void set_batch_throw_on_error(bool batch_throw_on_error) { data_->batch_throw_on_error_ = batch_throw_on_error; }
 

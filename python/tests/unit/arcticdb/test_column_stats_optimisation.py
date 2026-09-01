@@ -50,7 +50,56 @@ def test_create_column_stats_reads_index_key_once_and_writes_single_key(in_memor
     lib.create_column_stats_experimental(sym)
 
     assert get_table_index_read_count() == 1, qs.get_query_stats()
+    assert get_column_stats_read_count() == 0, qs.get_query_stats()
     assert get_column_stats_write_count() == 1, qs.get_query_stats()
+
+
+def test_create_column_stats_with_row_range_reads_and_writes_stats_key_once(in_memory_version_store, clear_query_stats):
+    lib = in_memory_version_store
+    df0 = pd.DataFrame({"col_1": [1, 2], "col_2": ["a", "b"]}, index=pd.date_range("2000-01-01", periods=2))
+    df1 = pd.DataFrame({"col_1": [3, 4], "col_2": ["c", "d"]}, index=pd.date_range("2000-01-03", periods=2))
+    lib.write(sym, df0)
+    lib.append(sym, df1)
+    lib.create_column_stats_experimental(sym)
+
+    qs.enable()
+    qs.reset_stats()
+    lib.create_column_stats_experimental(sym, row_range=(0, 2))
+
+    assert get_table_index_read_count() == 1, qs.get_query_stats()
+    assert get_column_stats_read_count() == 1, qs.get_query_stats()
+    assert get_column_stats_write_count() == 1, qs.get_query_stats()
+
+
+# Stats cover only the first of three row slices, so the other two must be read whatever the query:
+# a slice the stats say nothing about cannot be pruned.
+@pytest.mark.parametrize(
+    "threshold, expected_reads",
+    [
+        (-1, 3),  # the covered slice matches in full
+        (1, 3),  # the covered slice matches in part
+        (4, 2),  # the covered slice is pruned, max=2 < 4
+        (9, 2),  # nothing matches anywhere, but only the covered slice can be pruned
+    ],
+    ids=["gte_-1", "gte_1", "gte_4", "gte_9"],
+)
+def test_column_stats_partial_coverage_does_not_change_query_results(
+    in_memory_store_factory, clear_query_stats, column_stats_filtering_enabled, threshold, expected_reads
+):
+    lib = in_memory_store_factory(segment_row_size=3)
+    df = pd.DataFrame({"col_1": np.arange(9)}, index=pd.date_range("2000-01-01", periods=9))
+    lib.write(sym, df)
+    lib.create_column_stats_experimental(sym, row_range=(0, 3))
+
+    qs.enable()
+    q = QueryBuilder()
+    q = q[q["col_1"] >= threshold]
+    qs.reset_stats()
+    result = lib.read(sym, query_builder=q).data
+    table_data_reads = get_table_data_read_count()
+
+    assert_frame_equal(df[df["col_1"] >= threshold], result, check_freq=False)
+    assert table_data_reads == expected_reads, f"Expected {expected_reads} TABLE_DATA read(s), got {table_data_reads}"
 
 
 @pytest.mark.parametrize(
@@ -141,12 +190,12 @@ def test_column_stats_query_optimisation_no_stats(
 
 
 def test_column_stats_query_optimisation_column_not_in_stats(
-    lmdb_version_store_tiny_segment, column_stats_filtering_enabled
+    in_memory_version_store_tiny_segment, column_stats_filtering_enabled
 ):
     """
     Test that queries work when column stats exist but not for the filtered column.
     """
-    lib = lmdb_version_store_tiny_segment
+    lib = in_memory_version_store_tiny_segment
 
     df0 = pd.DataFrame({"col_1": [1, 2], "col_2": [10, 20]}, index=pd.date_range("2000-01-01", periods=2))
     df1 = pd.DataFrame({"col_1": [3, 4], "col_2": [30, 40]}, index=pd.date_range("2000-01-03", periods=2))
@@ -1468,12 +1517,12 @@ def test_column_stats_empty_dataframe(in_memory_version_store, column_stats_filt
     assert len(result) == 0
 
 
-def test_column_stats_duplicate_timestamp_index_drops_ambiguous_stats(
+def test_column_stats_duplicate_timestamp_index_prunes(
     in_memory_version_store, clear_query_stats, column_stats_filtering_enabled
 ):
     """
-    When two row-slices share the same (start_index, end_index) the stats for that key are
-    ambiguous and we should not use them.
+    Two row-slices sharing the same (start_index, end_index) are still distinct row ranges, so both
+    keep usable stats and the non-matching one is pruned.
     """
     lib = in_memory_version_store
 
@@ -1492,20 +1541,17 @@ def test_column_stats_duplicate_timestamp_index_drops_ambiguous_stats(
     qs.reset_stats()
     result = lib.read(sym, query_builder=q).data
 
-    # Both segments are read (stats are ambiguous for the duplicate key) and the filter in the
-    # processing pipeline keeps only rows where col_1 < 3.
     expected = pd.DataFrame({"col_1": [1, 2]}, index=[ts, ts])
     assert_frame_equal(expected, result)
-    # Both segments must be read because their stats were dropped.
-    assert get_table_data_read_count() == 2
+    # Only the first segment is read; the second is pruned on min=5 > 3
+    assert get_table_data_read_count() == 1
 
 
-def test_column_stats_duplicate_timestamp_index_still_prunes_unique_keys(
+def test_column_stats_duplicate_timestamp_index_prunes_all_slices(
     in_memory_version_store, clear_query_stats, column_stats_filtering_enabled
 ):
     """
-    When some row-slices share the same (start_index, end_index) but others are unique, only the
-    ambiguous entries are dropped. The unique entries should still be used for pruning.
+    A mixture of shared and unique (start_index, end_index) pairs.
     """
     lib = in_memory_version_store
 
@@ -1529,8 +1575,8 @@ def test_column_stats_duplicate_timestamp_index_still_prunes_unique_keys(
 
     expected = pd.DataFrame({"col_1": [1, 2]}, index=[ts1, ts1])
     assert_frame_equal(expected, result)
-    # seg0 and seg1 read (duplicate key, no pruning), seg2 pruned (unique key, min=100 > 3)
-    assert get_table_data_read_count() == 2
+    # seg1 (min=10) and seg2 (min=100) are both pruned. seg1 could not be pruned before.
+    assert get_table_data_read_count() == 1
 
 
 @pytest.mark.parametrize(
@@ -2323,3 +2369,24 @@ def test_column_stats_still_prunes_when_nan_does_not_save_row(
     expected = full_df[pandas_expr(full_df)]
     assert_frame_equal(expected, result)
     assert table_data_reads == 0, "Both segments must still be pruned; NaN never satisfies a magnitude comparison"
+
+
+def test_column_stats_date_range_clause_still_prunes(
+    in_memory_version_store_tiny_segment, clear_query_stats, column_stats_filtering_enabled
+):
+    lib = in_memory_version_store_tiny_segment
+    # segment_row_size=2 splits this into six two-row segments, col_1 ascending in pairs
+    lib.write(sym, pd.DataFrame({"col_1": list(range(1, 13))}, index=pd.date_range("2000-01-01", periods=12)))
+    lib.create_column_stats_experimental(sym)
+
+    qs.enable()
+    # Segments 0-2 hold col_1 1..6; only segment 2 (col_1 in [5, 6]) matches col_1 > 4.
+    q = QueryBuilder()
+    q = q.date_range((pd.Timestamp("2000-01-01"), pd.Timestamp("2000-01-06")))
+    q = q[q["col_1"] > 4]
+    qs.reset_stats()
+    result = lib.read(sym, query_builder=q).data
+
+    expected = pd.DataFrame({"col_1": [5, 6]}, index=pd.date_range("2000-01-05", periods=2))
+    assert_frame_equal(expected, result)
+    assert get_table_data_read_count() == 1

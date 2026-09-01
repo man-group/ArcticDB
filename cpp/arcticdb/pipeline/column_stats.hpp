@@ -1,29 +1,34 @@
 #pragma once
 
+#include <arcticdb/entity/stream_descriptor.hpp>
 #include <arcticdb/pipeline/column_name_resolution.hpp>
 #include <arcticdb/processing/clause.hpp>
+#include <arcticdb/pipeline/column_stats_types.hpp>
 #include <arcticdb/pipeline/index_fields.hpp>
 #include <column_stats.pb.h>
 #include <ankerl/unordered_dense.h>
 #include <map>
 #include <set>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <unordered_set>
 
 namespace arcticdb {
 
-SegmentInMemory merge_column_stats_segments(const std::vector<SegmentInMemory>& segments);
+SegmentInMemory build_column_stats_segment(
+        std::vector<ColumnStatsRow>&& column_stats_rows, const StreamDescriptor& descriptor
+);
+
+std::vector<ColumnStatsRow> decode_column_stats_segment(const SegmentInMemory& segment);
 
 // User facing types - eg users are only allowed to create min and max together, not one or the other
 enum class ColumnStatType { MINMAX };
-// Total universe of column stats we support - min and max are treated separately here
-using ColumnStatTypeInternal = arcticc::pb2::column_stats_pb2::ColumnStatsType;
 
-static const char* const start_index_column_name = "start_index";
-static constexpr size_t start_index_column_offset = 0;
-static const char* const end_index_column_name = "end_index";
-static constexpr size_t end_index_column_offset = 1;
+static const char* const start_row_column_name = "start_row";
+static constexpr size_t start_row_column_offset = 0;
+static const char* const end_row_column_name = "end_row";
+static constexpr size_t end_row_column_offset = 1;
 
 struct NameAndStatTypes {
     std::string mangled_name;
@@ -34,9 +39,17 @@ struct NameAndStatTypes {
     }
 };
 
-void validate_column_stats_header_version(const arcticc::pb2::column_stats_pb2::ColumnStatsHeader& header);
+// The version of the ColumnStatsHeader written by this build. See column_stats.proto for an
+// explanation of the header versioning scheme.
+static constexpr uint32_t CURRENT_COLUMN_STATS_HEADER_VERSION = 1;
 
-std::string to_segment_column_name(const std::string& column, ColumnStatTypeInternal type);
+enum class ColumnStatsHeaderVersionMismatchAction { Warn, Raise };
+
+void validate_column_stats_header_version(
+        const arcticc::pb2::column_stats_pb2::ColumnStatsHeader& header, ColumnStatsHeaderVersionMismatchAction action
+);
+
+std::string to_segment_column_name(std::string_view column, ColumnStatTypeInternal type);
 
 class ColumnStats {
   public:
@@ -44,9 +57,6 @@ class ColumnStats {
     explicit ColumnStats(
             const arcticc::pb2::column_stats_pb2::ColumnStatsHeader& header, const TimeseriesDescriptor& tsd
     );
-
-    // Returns the segment column names of the dropped stats (e.g. "v1_MIN(col)", "v1_MAX(col)")
-    std::vector<std::string> drop(const ColumnStats& to_drop, bool warn_if_missing = true);
 
     std::unordered_map<std::string, std::unordered_set<std::string>> to_map() const;
     std::optional<Clause> clause() const;

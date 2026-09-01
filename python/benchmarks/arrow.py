@@ -262,7 +262,16 @@ class ArrowStrings:
     connection_string = "lmdb://arrow_strings"
     lib_name_prewritten = "arrow_strings_prewritten"
     lib_name_fresh = "arrow_strings_fresh"
-    params = ([100_000, 1_000_000], [None, "middle"], [100, 10_000], list(ArrowOutputStringFormat))
+    params = (
+        [100_000, 1_000_000],
+        [None, "middle"],
+        [100, 10_000],
+        [
+            ArrowOutputStringFormat.CATEGORICAL,
+            ArrowOutputStringFormat.LARGE_STRING,
+            ArrowOutputStringFormat.SMALL_STRING,
+        ],
+    )
     param_names = ["rows", "date_range", "unique_string_count", "arrow_string_format"]
     num_cols = 10
 
