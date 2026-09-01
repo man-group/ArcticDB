@@ -7,6 +7,7 @@ on:
       ec2-instance-id:    {type: string, description: the ec2-instance-id of the machine that was create by the start-runner job needed by the stop-runner job}
       image-id:           {default: ami-0936679d3002e5be3, type: string, description: ID of the Amazon Image that should be used as a base for the runner}
       instance-type:      {default: m6i.4xlarge, type: string, description: Instace type that will be used to create the runner VM}
+      market-type:        {default: '', type: string, description: "'spot' to launch a one-time spot instance; empty keeps on-demand (the default for every existing caller)"}
       subnet-id:          {default: subnet-04ee7771eea5d61d9, type: string, description: VPC Subnet to be used when creating the runner}
       security-group-id:  {default: sg-08bd5ce9b15ba4f4b, type: string, description: Security Group to be used when creating the runner}
     outputs:
@@ -32,12 +33,16 @@ jobs:
           aws-region: "eu-west-1"
       - name: Start EC2 runner
         id: start-ec2-runner
-        uses: machulav/ec2-github-runner@v2.3.3
+        uses: machulav/ec2-github-runner@v2.3.8
         with:
           mode: start
           github-token: ${{ secrets.ARCTICDB_TEST_PAT }}
           ec2-image-id: ${{ inputs.image-id }}
           ec2-instance-type: ${{ inputs.instance-type }}
+          # Empty = on-demand. Note the action's own validation of this input is dead code
+          # (config.js reads the wrong field), so a typo silently launches on-demand;
+          # callers should confirm the lifecycle from the instance itself.
+          market-type: ${{ inputs.market-type }}
           subnet-id: ${{ inputs.subnet-id }}
           security-group-id: ${{ inputs.security-group-id }}
           aws-resource-tags: >
@@ -63,7 +68,7 @@ jobs:
           aws-secret-access-key: "${{ secrets.AWS_S3_SECRET_KEY }}"
           aws-region: "eu-west-1"
       - name: Stop EC2 runner
-        uses: machulav/ec2-github-runner@v2.3.3
+        uses: machulav/ec2-github-runner@v2.3.8
         with:
           mode: stop
           github-token: ${{ secrets.ARCTICDB_TEST_PAT }}

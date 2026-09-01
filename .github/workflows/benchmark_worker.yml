@@ -20,6 +20,7 @@ on:
       commit:          {required: true,  type: string, description: "full sha of the ArcticDB commit under benchmark"}
       storage:         {required: false, type: string, default: LMDB, description: "LMDB, REAL or ALL"}
       instance_type:   {required: false, type: string, default: m6i.4xlarge, description: "EC2 instance type for this worker"}
+      market_type:     {required: false, type: string, default: spot, description: "'spot' or '' for on-demand"}
       python:          {required: false, type: string, default: '3.11', description: "interpreter the benchmark venv is built on"}
       # Two inputs beyond the ticket's list, both with defaults so callers may ignore them:
       wheel_artifact:  {required: false, type: string, default: wheel-cp311-manylinux_x86_64, description: "name of the run's wheel artifact, from the build job"}
@@ -37,6 +38,10 @@ jobs:
     with:
       job_type: start
       instance-type: ${{ inputs.instance_type }}
+      # Spot: ~42 % cheaper at recent eu-west-1 prices, same instance type hence
+      # comparable numbers; an interruption fails this worker (collect reports it
+      # missing) and costs nothing in the first hour. Research: gha-spot-and-generations.
+      market-type: ${{ inputs.market_type }}
 
   bench:
     name: bench ${{ inputs.worker }}
@@ -131,6 +136,13 @@ jobs:
       # One SeaweedFS per worker, as `benchmark_commits.yml:110-114` runs one per commit
       # job: `merge_functions` (and any future module using `seaweed_utils`) talks to
       # 127.0.0.1:8333 and fails its setup_cache without it (first shadow run, 2026-09-01).
+      # The action's market-type validation is dead code, so ask the instance what it is.
+      - name: record the runner's lifecycle
+        run: |
+          token=$(curl -sS -m 2 -X PUT http://169.254.169.254/latest/api/token -H 'X-aws-ec2-metadata-token-ttl-seconds: 60' || true)
+          meta() { curl -sS -m 2 -H "X-aws-ec2-metadata-token: $token" "http://169.254.169.254/latest/meta-data/$1" 2>/dev/null || echo unknown; }
+          echo "runner: $(meta instance-id) $(meta instance-type) lifecycle=$(meta instance-life-cycle) az=$(meta placement/availability-zone)" | tee -a "$GITHUB_STEP_SUMMARY"
+
       - name: start SeaweedFS
         shell: bash -el {0}
         run: build_tooling/start_seaweed.sh start
