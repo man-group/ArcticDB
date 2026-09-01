@@ -338,7 +338,11 @@ jobs:
     with:
       worker: ${{ matrix.worker }}
       suite: ${{ matrix.suite }}
-      commit: ${{ matrix.commit }}
+      # The full SHA: actions/checkout treats anything shorter than 40 characters as a
+      # branch or tag name (the first shadow run failed on `refs/heads/44a66493*`). The
+      # matrix carries 8-char hashes, so single-commit runs take the plan's own SHA;
+      # multi-commit runs need full SHAs in the matrix first (see the README).
+      commit: ${{ needs.plan.outputs.commit }}
       storage: ${{ needs.plan.outputs.storage }}
       instance_type: ${{ matrix.instance_type }}
       python: "3.11"
