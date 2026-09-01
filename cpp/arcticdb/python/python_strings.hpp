@@ -9,7 +9,6 @@
 #include <any>
 
 #include <arcticdb/entity/types.hpp>
-#include <arcticdb/util/decode_path_data.hpp>
 #include <arcticdb/util/type_handler.hpp>
 #include <arcticdb/python/python_handler_data.hpp>
 
@@ -17,6 +16,7 @@ namespace arcticdb {
 
 struct ColumnMapping;
 class Column;
+struct DecodeDataPath;
 class StringPool;
 
 inline PythonHandlerData& cast_handler_data(std::any& any) { return std::any_cast<PythonHandlerData&>(any); }

@@ -7,10 +7,32 @@
  */
 
 #include <arcticdb/pipeline/pipeline_utils.hpp>
+#include <arcticdb/util/decode_path_data.hpp>
 
 #include <sparrow/record_batch.hpp>
 
 namespace arcticdb::pipelines {
+
+void apply_type_handlers(SegmentInMemory seg, std::any& handler_data, OutputFormat output_format) {
+    DecodePathData shared_data;
+    if (seg.empty())
+        return;
+
+    for (auto i = 0U; i < seg.num_columns(); ++i) {
+        auto& column = seg.column(i);
+        if (auto handler = get_type_handler(output_format, column.type()); handler) {
+            ColumnMapping mapping{column.type(), column.type(), seg.field(i), 0, seg.row_count(), 0, 0, 0, i};
+            Column dest_column(column.type(), seg.row_count(), AllocationType::DETACHABLE, Sparsity::PERMITTED);
+            handler->convert_type(column, dest_column, mapping, shared_data, handler_data, seg.string_pool_ptr(), {});
+            std::swap(column, dest_column);
+            // dest_column now holds the original column. This was allocated with detachable blocks, which should be
+            // manually freed before the column goes out of scope to avoid triggering debug logs in ~DynamicMemBlock
+            // complaining about freeing external data
+            util::check(dest_column.blocks().size() == 1, "Unexpected multi-block column when reading single frame");
+            dest_column.blocks().at(0)->abandon();
+        }
+    }
+}
 
 ReadResult create_python_read_result(
         const std::variant<VersionedItem, std::vector<VersionedItem>>& version, OutputFormat output_format,

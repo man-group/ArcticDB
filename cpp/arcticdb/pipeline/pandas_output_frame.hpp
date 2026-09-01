@@ -8,14 +8,9 @@
 
 #pragma once
 
-#include <pybind11/pybind11.h>
-
-#include <arcticdb/util/decode_path_data.hpp>
 #include <arcticdb/util/global_lifetimes.hpp>
 
 namespace arcticdb::pipelines {
-
-namespace py = pybind11;
 
 struct ARCTICDB_VISIBILITY_HIDDEN PandasOutputFrame {
 
