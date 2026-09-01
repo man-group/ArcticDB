@@ -81,9 +81,15 @@ name = "resample"
 suite = "^(?:resample|recursive_normalizer)\\."
 
 [[worker]]
-# arrow.ArrowStrings.time_read is the second longest (5.82 min); column_stats is small.
+# arrow.ArrowStrings.time_read is the second longest (5.82 min).
 name = "arrow"
-suite = "^(?:arrow|column_stats)\\."
+suite = "^arrow\\."
+
+[[worker]]
+# Not small after all: paired with arrow it was the 57-minute long pole of the first
+# shadow run (2026-09-01) while every other worker finished inside 23 minutes.
+name = "column_stats"
+suite = "^column_stats\\."
 
 [[worker]]
 # The cheap query/compaction modules.
