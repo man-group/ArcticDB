@@ -38,6 +38,9 @@ on:
   push:
     branches:
       - master
+      # TEMPORARY: lets the shadow branch trigger itself while `workflow_dispatch`
+      # cannot see a workflow that is not on the default branch. Remove at cut-over.
+      - benchmark-winds-shadow
 
   # Nightly, all storages. Same cron as `analysis_workflow.yml`; while both pipelines run,
   # this doubles the nightly EC2 spend — offset or drop it if that matters.
