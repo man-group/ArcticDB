@@ -18,7 +18,7 @@ from arcticdb.util.test import assert_frame_equal, random_strings_of_length
 
 from arcticdb.version_store.library import Library
 from arcticdb.version_store.library import UpdatePayload
-from arcticdb_ext.storage import NoDataFoundException
+from arcticdb.exceptions import NoDataFoundException
 
 unicode_str = "\u0420\u043e\u0441\u0441\u0438\u044f"
 copyright = "My Thing Not Your's \u00a9"

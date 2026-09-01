@@ -18,8 +18,8 @@ from arcticdb.util.tasks import (
     append_small_df_and_prune_previous,
     delete_snapshot,
 )
-from arcticdb_ext.exceptions import InternalException
-from arcticdb_ext.storage import KeyType, NoDataFoundException
+from arcticdb.exceptions import InternalException, NoDataFoundException
+from arcticdb_ext.storage import KeyType
 from arcticdb_ext.version_store import ManualClockVersionStore
 from arcticdb.version_store._normalization import PandasData
 from arcticdb.util.test import sample_dataframe

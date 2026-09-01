@@ -15,7 +15,7 @@ import pandas as pd
 import pytest
 
 from arcticdb import QueryBuilder, where, OutputFormat
-from arcticdb_ext.exceptions import InternalException, SchemaException, UserInputException
+from arcticdb.exceptions import InternalException, SchemaException, UserInputException
 from arcticdb.util.hypothesis import use_of_function_scoped_fixtures_in_hypothesis_checked
 from arcticdb.version_store._string_dtype import _use_pyarrow_strings_in_pandas
 from arcticdb.util.test import assert_frame_equal
