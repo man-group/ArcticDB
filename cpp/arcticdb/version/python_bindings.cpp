@@ -260,7 +260,6 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
             .def("set_allow_sparse", &ReadOptions::set_allow_sparse)
             .def("set_incompletes", &ReadOptions::set_incompletes)
             .def("set_set_tz", &ReadOptions::set_set_tz)
-            .def("set_optimise_string_memory", &ReadOptions::set_optimise_string_memory)
             .def("set_output_config", &ReadOptions::set_output_config)
             .def_property_readonly("incompletes", &ReadOptions::get_incompletes)
             .def_property_readonly("output_format", &ReadOptions::output_format_for_frame);
