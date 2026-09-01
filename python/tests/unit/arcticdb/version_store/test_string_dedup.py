@@ -43,6 +43,24 @@ def getsize(df):
     return size
 
 
+def distinct_string_objects(df):
+    """How many distinct Python string objects the frame holds - what deduplication is supposed to reduce.
+
+    getsize() cannot be used to compare two frames. It keeps only ids, not references, so when the strings are
+    Arrow-backed each iteration materialises a temporary that is freed before the next one and its id is reused:
+    it then sums a handful of arbitrary objects rather than all of them. Measuring the same frame repeatedly that
+    way returned 1582, 888, 888, 888, 888 - the number tracks allocator state, not the data. Holding the values
+    alive keeps the ids distinct and makes the count deterministic.
+    """
+    values = [val for col in df.columns for val in df.loc[:, col]]
+    return len({id(val) for val in values})
+
+
+def has_python_string_objects(df):
+    """False when strings are Arrow-backed, where there are no per-row Python objects to deduplicate."""
+    return all(df[col].dtype == object for col in df.columns)
+
+
 # Use tiny segment to prove deduplication across segments
 def test_string_dedup_basic(lmdb_version_store_tiny_segment):
     lib = lmdb_version_store_tiny_segment
@@ -53,7 +71,25 @@ def test_string_dedup_basic(lmdb_version_store_tiny_segment):
     read_df_without_dedup = lib.read(symbol, optimise_string_memory=False).data
     assert np.array_equal(original_df, read_df_with_dedup)
     assert np.array_equal(original_df, read_df_without_dedup)
-    assert getsize(read_df_with_dedup) <= getsize(read_df_without_dedup)
+    if has_python_string_objects(read_df_with_dedup):
+        assert distinct_string_objects(read_df_with_dedup) <= distinct_string_objects(read_df_without_dedup)
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason="optimise_string_memory has been a no-op since 7df641fba (Release GIL on read, 2024-07-02): the read "
+    "path stopped passing it through, DecodePathData::set_optimize_for_memory() now has no callers, and "
+    "ReadOptions::optimise_string_memory_ is written but never read. Flip to a pass when the wiring is restored.",
+)
+def test_string_dedup_shares_string_objects(lmdb_version_store_tiny_segment):
+    """With deduplication on, equal strings should be one Python object, not one per row."""
+    lib = lmdb_version_store_tiny_segment
+    symbol = "test_string_dedup_shares_string_objects"
+    unique_strings = random_ascii_strings(100, 10)
+    original_df = generate_dataframe(["col1", "col2", "col3", "col4"], 1000, unique_strings)
+    lib.write(symbol, original_df, dynamic_strings=True)
+    read_df_with_dedup = lib.read(symbol, optimise_string_memory=True).data
+    assert distinct_string_objects(read_df_with_dedup) <= len(unique_strings)
 
 
 # Test that dedup still works when writing fixed-width strings and appending dynamic strings, and vice-versa
@@ -110,7 +146,8 @@ def test_string_dedup_nans(lmdb_version_store_tiny_segment):
             except TypeError as e:
                 print("Differ at {}: '{}' vs '{}'\n{}".format(idx, original_val, read_val, e))
                 assert False
-    assert getsize(read_df_with_dedup) <= getsize(read_df_without_dedup)
+    if has_python_string_objects(read_df_with_dedup):
+        assert distinct_string_objects(read_df_with_dedup) <= distinct_string_objects(read_df_without_dedup)
 
 
 @pytest.mark.skip("Used for profiling")
