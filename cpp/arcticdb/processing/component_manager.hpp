@@ -162,7 +162,7 @@ class ComponentManager {
     // vectors, one for each component requested via Args
     template<class... Args>
     requires(!std::same_as<Args, EntityFetchCount> && ...)
-    std::tuple<std::vector<Args>...> get_components_and_remove_components(const std::vector<EntityId>& ids) {
+    std::tuple<std::vector<Args>...> get_and_remove_components(const std::vector<EntityId>& ids) {
         return get_components_impl<Args...>(ids, false, true);
     }
 

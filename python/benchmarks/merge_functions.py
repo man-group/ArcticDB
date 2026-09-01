@@ -11,9 +11,9 @@ import random
 import numpy as np
 import pandas as pd
 
-from arcticdb import Arctic
+from arcticdb import Arctic, LibraryOptions
 from arcticdb.version_store.library import MergeStrategy
-from arcticdb.util.test import max_rows_per_segment, random_strings_of_length
+from arcticdb.util.test import random_strings_of_length
 
 from benchmarks.common import lib_name
 from benchmarks.seaweed_utils import SeaweedClient
@@ -22,10 +22,8 @@ CACHE_BUCKET = "arcticdb-merge-update-cache"
 WORK_BUCKET = "arcticdb-merge-work"
 ROWS_PER_SEGMENT = 100_000
 START_DATE = pd.Timestamp("1960-01-01")
-# Target of exactly one row slice, merged with a source large enough that reslicing splits it into MIN_SPLIT_SEGMENTS
-SPLIT_TARGET_ROWS = ROWS_PER_SEGMENT
-SPLIT_SOURCE_ROWS = 600_000
-MIN_SPLIT_SEGMENTS = 5
+SPLIT_ROWS_PER_SEGMENT = 10_000
+SPLIT_SOURCE_ROWS = 1_000_000
 random.seed(0)  # random_strings_of_length draws string pools from stdlib random
 
 
@@ -199,22 +197,23 @@ class MergeBase:
 
     SYM = "sym"
 
-    def _write_cache_target(self, lib_name, target):
+    def _write_cache_target(self, lib_name, target, rows_per_segment):
         uri = self.seaweed.arctic_uri(CACHE_BUCKET, self.target_prefix)
-        Arctic(uri).create_library(lib_name).write(self.SYM, target)
+        options = LibraryOptions(rows_per_segment=rows_per_segment)
+        Arctic(uri).create_library(lib_name, library_options=options).write(self.SYM, target)
 
-    def _generate_source(self, target, source_size, matched_slices=None):
+    def _generate_source(self, target, source_size, rows_per_segment, matched_slices=None):
         # Params-seeded rng: the same (class, params) always generate the identical source.
         rng = np.random.default_rng([source_size, matched_slices or 0])
         on = [f"val_{j}" for j in range(max(dict(zip(self.param_names, self.params))["on_count"]))]
         if self.INDEX_KIND == "datetime":
-            slices = matched_slices or max(1, len(target) // ROWS_PER_SEGMENT)
+            slices = matched_slices or max(1, len(target) // rows_per_segment)
             return generate_source_for_datetime(
                 target,
                 source_size,
                 rng,
                 affected_row_slice_idx=affected_slices(len(target), slices),
-                rows_per_segment=ROWS_PER_SEGMENT,
+                rows_per_segment=rows_per_segment,
                 on=on,
                 value_dtype=self.value_dtype,
             )
@@ -228,12 +227,12 @@ class MergeBase:
     def _source_sym(self, source_size, matched_slices=None):
         return f"src_{source_size}" if matched_slices is None else f"src_{source_size}_{matched_slices}"
 
-    def _precompute_sources(self, lib_name, target):
+    def _precompute_sources(self, lib_name, target, rows_per_segment):
         src_lib = Arctic(self.seaweed.arctic_uri(CACHE_BUCKET, self.source_prefix)).create_library(lib_name)
         parameter_map = dict(zip(self.param_names, self.params))
         for source_size in parameter_map["source_size"]:
             for matched_slices in parameter_map.get("matched_slices", [None]):
-                source = self._generate_source(target, source_size, matched_slices)
+                source = self._generate_source(target, source_size, rows_per_segment, matched_slices)
                 src_lib.write(self._source_sym(source_size, matched_slices), source)
 
     def _prepare_merge(self, lib_name, on_count, source_size, matched_slices=None):
@@ -280,8 +279,8 @@ class MergeThinDatetime(MergeBase):
             rng = np.random.default_rng([num_rows, num_value_cols])
             target = generate_merge_target(num_rows, num_value_cols, self.value_dtype, self.INDEX_KIND, rng)
             library_name = lib_name(*scenario, self.INDEX_KIND)
-            self._write_cache_target(library_name, target)
-            self._precompute_sources(library_name, target)
+            self._write_cache_target(library_name, target, ROWS_PER_SEGMENT)
+            self._precompute_sources(library_name, target, ROWS_PER_SEGMENT)
 
     def setup(self, scenario, strategy, on_count, source_size, matched_slices):
         self._prepare_merge(lib_name(*scenario, self.INDEX_KIND), on_count, source_size, matched_slices)
@@ -320,8 +319,8 @@ class MergeThinRowRange(MergeBase):
             rng = np.random.default_rng([num_rows, num_value_cols])
             target = generate_merge_target(num_rows, num_value_cols, self.value_dtype, self.INDEX_KIND, rng)
             library_name = lib_name(*scenario, self.INDEX_KIND)
-            self._write_cache_target(library_name, target)
-            self._precompute_sources(library_name, target)
+            self._write_cache_target(library_name, target, ROWS_PER_SEGMENT)
+            self._precompute_sources(library_name, target, ROWS_PER_SEGMENT)
 
     def setup(self, scenario, strategy, on_count, source_size):
         self._prepare_merge(lib_name(*scenario, self.INDEX_KIND), on_count, source_size)
@@ -373,8 +372,8 @@ class MergeThinStringDatetime(MergeBase):
                 self.target_prefix = f"target_{num_unique_strings}"
                 self.source_prefix = f"source_{num_unique_strings}"
                 library_name = lib_name(*scenario, self.INDEX_KIND)
-                self._write_cache_target(library_name, target)
-                self._precompute_sources(library_name, target)
+                self._write_cache_target(library_name, target, ROWS_PER_SEGMENT)
+                self._precompute_sources(library_name, target, ROWS_PER_SEGMENT)
 
     def setup(self, scenario, strategy, on_count, source_size, matched_slices, num_unique_strings):
         self.target_prefix = f"target_{num_unique_strings}"
@@ -429,8 +428,8 @@ class MergeThinStringRowRange(MergeBase):
                 self.target_prefix = f"target_{num_unique_strings}"
                 self.source_prefix = f"source_{num_unique_strings}"
                 library_name = lib_name(*scenario, self.INDEX_KIND)
-                self._write_cache_target(library_name, target)
-                self._precompute_sources(library_name, target)
+                self._write_cache_target(library_name, target, ROWS_PER_SEGMENT)
+                self._precompute_sources(library_name, target, ROWS_PER_SEGMENT)
 
     def setup(self, scenario, strategy, on_count, source_size, num_unique_strings):
         self.target_prefix = f"target_{num_unique_strings}"
@@ -472,8 +471,8 @@ class MergeWideDatetime(MergeBase):
             rng = np.random.default_rng([num_rows, num_value_cols])
             target = generate_merge_target(num_rows, num_value_cols, self.value_dtype, self.INDEX_KIND, rng)
             library_name = lib_name(*scenario, self.INDEX_KIND)
-            self._write_cache_target(library_name, target)
-            self._precompute_sources(library_name, target)
+            self._write_cache_target(library_name, target, ROWS_PER_SEGMENT)
+            self._precompute_sources(library_name, target, ROWS_PER_SEGMENT)
 
     def setup(self, scenario, strategy, on_count, source_size):
         self._prepare_merge(lib_name(*scenario, self.INDEX_KIND), on_count, source_size)
@@ -512,8 +511,8 @@ class MergeWideRowRange(MergeBase):
             rng = np.random.default_rng([num_rows, num_value_cols])
             target = generate_merge_target(num_rows, num_value_cols, self.value_dtype, self.INDEX_KIND, rng)
             library_name = lib_name(*scenario, self.INDEX_KIND)
-            self._write_cache_target(library_name, target)
-            self._precompute_sources(library_name, target)
+            self._write_cache_target(library_name, target, ROWS_PER_SEGMENT)
+            self._precompute_sources(library_name, target, ROWS_PER_SEGMENT)
 
     def setup(self, scenario, strategy, on_count, source_size):
         self._prepare_merge(lib_name(*scenario, self.INDEX_KIND), on_count, source_size)
@@ -542,7 +541,7 @@ class MergeSplitSegmentsThinDatetime(MergeBase):
         self.value_dtype = "float32"
         self.param_names = ["scenario", "strategy", "on_count", "source_size", "matched_slices"]
         self.params = [
-            [(SPLIT_TARGET_ROWS, 3)],  # scenario: (num_rows, num_value_cols) — exactly one row slice
+            [(SPLIT_ROWS_PER_SEGMENT, 3)],  # scenario: (num_rows, num_value_cols) — exactly one row slice
             ["update_and_insert"],  # strategy
             [1],  # on_count
             [SPLIT_SOURCE_ROWS],  # source_size (source row count)
@@ -556,8 +555,8 @@ class MergeSplitSegmentsThinDatetime(MergeBase):
             rng = np.random.default_rng([num_rows, num_value_cols])
             target = generate_merge_target(num_rows, num_value_cols, self.value_dtype, self.INDEX_KIND, rng)
             library_name = lib_name(*scenario, self.INDEX_KIND)
-            self._write_cache_target(library_name, target)
-            self._precompute_sources(library_name, target)
+            self._write_cache_target(library_name, target, SPLIT_ROWS_PER_SEGMENT)
+            self._precompute_sources(library_name, target, SPLIT_ROWS_PER_SEGMENT)
 
     def setup(self, scenario, strategy, on_count, source_size, matched_slices):
         self._prepare_merge(lib_name(*scenario, self.INDEX_KIND), on_count, source_size, matched_slices)
@@ -582,12 +581,12 @@ class MergeSplitSegmentsThinStringDatetime(MergeBase):
         self.value_dtype = "string"
         self.param_names = ["scenario", "strategy", "on_count", "source_size", "matched_slices", "num_unique_strings"]
         self.params = [
-            [(SPLIT_TARGET_ROWS, 3)],  # scenario: (num_rows, num_value_cols) — exactly one row slice
+            [(SPLIT_ROWS_PER_SEGMENT, 3)],  # scenario: (num_rows, num_value_cols) — exactly one row slice
             ["update_and_insert"],  # strategy
             [1],  # on_count
             [SPLIT_SOURCE_ROWS],  # source_size (source row count)
             [1],  # matched_slices: the whole source lands in the target's single row slice
-            [5_000, 100_00],  # num_unique_strings (size of the pool each column is drawn from)
+            [5_000, 100_000],  # num_unique_strings (size of the pool each column is drawn from)
         ]
 
     def setup_cache(self):
@@ -608,8 +607,8 @@ class MergeSplitSegmentsThinStringDatetime(MergeBase):
                 self.target_prefix = f"target_{num_unique_strings}"
                 self.source_prefix = f"source_{num_unique_strings}"
                 library_name = lib_name(*scenario, self.INDEX_KIND)
-                self._write_cache_target(library_name, target)
-                self._precompute_sources(library_name, target)
+                self._write_cache_target(library_name, target, SPLIT_ROWS_PER_SEGMENT)
+                self._precompute_sources(library_name, target, SPLIT_ROWS_PER_SEGMENT)
 
     def setup(self, scenario, strategy, on_count, source_size, matched_slices, num_unique_strings):
         self.target_prefix = f"target_{num_unique_strings}"
@@ -639,7 +638,7 @@ class MergeSplitSegmentsThinRowRange(MergeBase):
         self.value_dtype = "float32"
         self.param_names = ["scenario", "strategy", "on_count", "source_size"]
         self.params = [
-            [(SPLIT_TARGET_ROWS, 3)],  # scenario: (num_rows, num_value_cols) — exactly one row slice
+            [(SPLIT_ROWS_PER_SEGMENT, 3)],  # scenario: (num_rows, num_value_cols) — exactly one row slice
             ["update_and_insert"],  # strategy
             [1],  # on_count: row-range indexes cannot be a join key on their own, so on_count >= 1
             [SPLIT_SOURCE_ROWS],  # source_size (source row count)
@@ -655,8 +654,8 @@ class MergeSplitSegmentsThinRowRange(MergeBase):
             rng = np.random.default_rng([num_rows, num_value_cols])
             target = generate_merge_target(num_rows, num_value_cols, self.value_dtype, self.INDEX_KIND, rng)
             library_name = lib_name(*scenario, self.INDEX_KIND)
-            self._write_cache_target(library_name, target)
-            self._precompute_sources(library_name, target)
+            self._write_cache_target(library_name, target, SPLIT_ROWS_PER_SEGMENT)
+            self._precompute_sources(library_name, target, SPLIT_ROWS_PER_SEGMENT)
 
     def setup(self, scenario, strategy, on_count, source_size):
         self._prepare_merge(lib_name(*scenario, self.INDEX_KIND), on_count, source_size)
@@ -681,7 +680,7 @@ class MergeSplitSegmentsThinStringRowRange(MergeBase):
         self.value_dtype = "string"
         self.param_names = ["scenario", "strategy", "on_count", "source_size", "num_unique_strings"]
         self.params = [
-            [(SPLIT_TARGET_ROWS, 3)],  # scenario: (num_rows, num_value_cols) — exactly one row slice
+            [(SPLIT_ROWS_PER_SEGMENT, 3)],  # scenario: (num_rows, num_value_cols) — exactly one row slice
             ["update_and_insert"],  # strategy
             # on_count: the source needs source_size unique join keys and the key space is
             # num_unique_strings ** on_count, so one column would cap the source at the pool size.
@@ -711,8 +710,8 @@ class MergeSplitSegmentsThinStringRowRange(MergeBase):
                 self.target_prefix = f"target_{num_unique_strings}"
                 self.source_prefix = f"source_{num_unique_strings}"
                 library_name = lib_name(*scenario, self.INDEX_KIND)
-                self._write_cache_target(library_name, target)
-                self._precompute_sources(library_name, target)
+                self._write_cache_target(library_name, target, SPLIT_ROWS_PER_SEGMENT)
+                self._precompute_sources(library_name, target, SPLIT_ROWS_PER_SEGMENT)
 
     def setup(self, scenario, strategy, on_count, source_size, num_unique_strings):
         self.target_prefix = f"target_{num_unique_strings}"

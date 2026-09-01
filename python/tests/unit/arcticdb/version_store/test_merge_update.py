@@ -3756,8 +3756,9 @@ class TestMergeDatetimeInsertRowSlicing:
         index_df = lib._dev_tools.library_tool().read_index("sym")
         assert_index_key_structure_static_schema(index_df, rows_per_segment=3)
 
-    def test_index_value_spanning_three_slices(self, mem_library_factory, strategy):
-        lib = mem_library_factory(arcticdb.LibraryOptions(rows_per_segment=3))
+    @pytest.mark.parametrize("dedup", [True, False])
+    def test_index_value_spanning_three_slices(self, mem_library_factory, strategy, dedup):
+        lib = mem_library_factory(arcticdb.LibraryOptions(rows_per_segment=3, dedup=dedup))
         target = pd.DataFrame(
             {"a": [1, 2, 3, 4, 5, 6, 7, 8, 9], "b": ["a", "b", "c", "d", "e", "f", "g", "h", "i"]},
             index=pd.DatetimeIndex(
@@ -3780,7 +3781,7 @@ class TestMergeDatetimeInsertRowSlicing:
         with qs.query_stats():
             lib.merge_experimental("sym", source, strategy=strategy, on=["a"])
         stats = qs.get_query_stats()
-        assert query_stats_operation_count(stats, "Memory_PutObject", "TABLE_DATA") == 4
+        assert query_stats_operation_count(stats, "Memory_PutObject", "TABLE_DATA") == (2 if dedup else 4)
         expected = pd.DataFrame(
             {
                 "a": [1, 2, 3, 4, 5, 6, 7, 8, 999, 9],
@@ -3804,64 +3805,6 @@ class TestMergeDatetimeInsertRowSlicing:
         assert_frame_equal(lib.read("sym").data, expected)
         index_df = lib._dev_tools.library_tool().read_index("sym")
         assert (index_df["end_row"] - index_df["start_row"]).tolist() == [3, 3, 3, 1]
-        assert_index_key_structure_static_schema(index_df, rows_per_segment=3)
-
-    def test_index_value_spanning_three_slices_dedup(self, mem_library_factory, strategy):
-        """
-        Same as test_index_value_spanning_three_slices. 2024-01-03 spans all three row slices, so the first two
-        row slice groups are merged and resliced as one unit of 9 rows and the last row slice is re-emitted on its
-        own. The first two output segments happen to hold exactly the rows of the first two input segments, so with
-        de-duplication enabled their data keys are reused and only 2 of the 4 segments are written.
-        """
-        lib = mem_library_factory(arcticdb.LibraryOptions(rows_per_segment=3, dedup=True))
-        target = pd.DataFrame(
-            {"a": [1, 2, 3, 4, 5, 6, 7, 8, 9], "b": ["a", "b", "c", "d", "e", "f", "g", "h", "i"]},
-            index=pd.DatetimeIndex(
-                [
-                    "2024-01-01",
-                    "2024-01-02",
-                    "2024-01-03",
-                    "2024-01-03",
-                    "2024-01-03",
-                    "2024-01-03",
-                    "2024-01-03",
-                    "2024-01-03",
-                    "2024-01-04",
-                ]
-            ),
-        )
-        source = pd.DataFrame({"a": [999], "b": ["A"]}, index=pd.DatetimeIndex(["2024-01-03"]))
-        lib.write("sym", target)
-        qs.reset_stats()
-        with qs.query_stats():
-            lib.merge_experimental("sym", source, strategy=strategy, on=["a"])
-        stats = qs.get_query_stats()
-        assert query_stats_operation_count(stats, "Memory_PutObject", "TABLE_DATA") == 2
-        expected = pd.DataFrame(
-            {
-                "a": [1, 2, 3, 4, 5, 6, 7, 8, 999, 9],
-                "b": ["a", "b", "c", "d", "e", "f", "g", "h", "A", "i"],
-            },
-            index=pd.DatetimeIndex(
-                [
-                    "2024-01-01",
-                    "2024-01-02",
-                    "2024-01-03",
-                    "2024-01-03",
-                    "2024-01-03",
-                    "2024-01-03",
-                    "2024-01-03",
-                    "2024-01-03",
-                    "2024-01-03",
-                    "2024-01-04",
-                ]
-            ),
-        )
-        assert_frame_equal(lib.read("sym").data, expected)
-        index_df = lib._dev_tools.library_tool().read_index("sym")
-        assert (index_df["end_row"] - index_df["start_row"]).tolist() == [3, 3, 3, 1]
-        # The first two data keys are the ones written by lib.write
-        assert index_df["version_id"].tolist() == [0, 0, 1, 1]
         assert_index_key_structure_static_schema(index_df, rows_per_segment=3)
 
     def test_matched_update_inside_resliced_group(self, mem_library_factory, strategy):

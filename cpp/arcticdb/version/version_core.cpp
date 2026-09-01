@@ -802,9 +802,11 @@ folly::Future<std::vector<EntityId>> read_modify_write_data_keys(
     return read_and_schedule_processing(store, pipeline_context, read_query, read_options, component_manager)
             .thenValue([component_manager = std::move(component_manager),
                         read_query = std::move(read_query)](std::vector<EntityId>&& processed_entity_ids) {
-                std::vector<std::shared_ptr<folly::Future<SliceAndKey>>> slice_futures =
-                        std::get<0>(component_manager->get_components_and_remove_components<
-                                    std::shared_ptr<folly::Future<SliceAndKey>>>(processed_entity_ids));
+                std::vector<std::shared_ptr<folly::Future<SliceAndKey>>> slice_futures = std::get<0>(
+                        component_manager->get_and_remove_components<std::shared_ptr<folly::Future<SliceAndKey>>>(
+                                processed_entity_ids
+                        )
+                );
                 auto write_segments_futures = util::reserve_vector<folly::Future<EntityId>>(slice_futures.size());
                 for (auto&& [index, slice_future] : folly::enumerate(slice_futures)) {
                     write_segments_futures.push_back(
