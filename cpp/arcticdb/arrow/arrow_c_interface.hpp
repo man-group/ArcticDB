@@ -10,7 +10,7 @@
 #include <vector>
 
 #include <sparrow/c_interface.hpp>
-#include <sparrow/record_batch.hpp>
+#include <arcticdb/arrow/sparrow_fwd.hpp>
 #include <arcticdb/util/constructors.hpp>
 
 namespace arcticdb {
@@ -53,8 +53,9 @@ struct RecordBatchData {
 
 struct ArrowOutputFrame {
     ArrowOutputFrame() = default;
+    ~ArrowOutputFrame();
 
-    ARCTICDB_MOVE_ONLY_DEFAULT(ArrowOutputFrame);
+    ARCTICDB_MOVE_ONLY_OUT_OF_LINE(ArrowOutputFrame);
 
     ArrowOutputFrame(std::vector<sparrow::record_batch>&& data);
 

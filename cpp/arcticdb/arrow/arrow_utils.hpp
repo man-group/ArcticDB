@@ -13,15 +13,9 @@
 
 #include <ankerl/unordered_dense.h>
 
+#include <arcticdb/arrow/sparrow_fwd.hpp>
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/entity/types.hpp>
-
-// Anything that transitively includes sparrow.array.hpp takes ages to build the (unused by us) std::format impl
-// So avoid including sparrow in headers where possible until this is resolved
-namespace sparrow {
-class array;
-class record_batch;
-} // namespace sparrow
 
 namespace arcticdb {
 

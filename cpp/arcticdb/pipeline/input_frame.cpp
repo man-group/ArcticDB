@@ -13,6 +13,7 @@
 #include <arcticdb/entity/stream_descriptor.hpp>
 #include <arcticdb/stream/index.hpp>
 #include <variant>
+#include <utility>
 
 namespace arcticdb::pipelines {
 
@@ -45,6 +46,29 @@ SortedValue compute_index_sortedness(const Column& index_column) {
 } // namespace
 
 InputFrame::InputFrame() : index(stream::empty_index()) {}
+InputFrame::~InputFrame() = default;
+
+InputFrame::InputFrame(InputFrame&&) noexcept = default;
+InputFrame& InputFrame::operator=(InputFrame&&) noexcept = default;
+
+template<ValidIndex Index>
+InputFrame::InputFrame(StreamDescriptor&& desc, std::vector<NativeTensor>&& field_tensors, Index&& index) :
+    index(std::forward<Index>(index)) {
+    set_from_tensors(std::move(desc), std::move(field_tensors));
+}
+
+template InputFrame::InputFrame(
+        StreamDescriptor&& desc, std::vector<NativeTensor>&& field_tensors, stream::TimeseriesIndex&& index
+);
+template InputFrame::InputFrame(
+        StreamDescriptor&& desc, std::vector<NativeTensor>&& field_tensors, stream::RowCountIndex&& index
+);
+template InputFrame::InputFrame(
+        StreamDescriptor&& desc, std::vector<NativeTensor>&& field_tensors, stream::TableIndex&& index
+);
+template InputFrame::InputFrame(
+        StreamDescriptor&& desc, std::vector<NativeTensor>&& field_tensors, stream::EmptyIndex&& index
+);
 
 void InputFrame::set_from_tensors(StreamDescriptor&& desc, std::vector<NativeTensor>&& field_tensors) {
     std::vector<FieldData> columns(

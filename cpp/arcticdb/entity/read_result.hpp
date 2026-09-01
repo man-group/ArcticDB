@@ -14,6 +14,7 @@
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/entity/frame_and_descriptor.hpp>
 #include <arcticdb/pipeline/pandas_output_frame.hpp>
+#include <arcticdb/processing/component_manager.hpp>
 #include <arcticdb/util/memory_tracing.hpp>
 #include <arcticdb/arrow/arrow_c_interface.hpp>
 #include <arcticdb/arrow/arrow_utils.hpp>
