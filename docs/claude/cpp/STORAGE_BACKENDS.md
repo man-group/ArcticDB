@@ -160,6 +160,17 @@ lib = ac.create_library("mylib", library_options=LibraryOptions(
 | `cpp/arcticdb/storage/lmdb/lmdb_storage.cpp` | LMDB storage implementation |
 | `cpp/third_party/lmdbxx/` | LMDB C++ wrapper |
 
+### Runtime configuration
+
+- `LMDBStorage.ExtraFlags` (env `ARCTICDB_LMDBStorage_ExtraFlags_int`): extra `MDB_*` flags passed to `mdb_env_open`
+  for every LMDB env opened by the process (`lmdb_extra_env_flags()` in `lmdb_storage.cpp`). Opt-in, default 0.
+  CI sets `MDB_NOSYNC | MDB_NOMETASYNC` on Windows test jobs (~3x faster unit jobs). `MDB_WRITEMAP` makes Windows allocate the
+  full `map_size` per library on disk, so it is not usable on the CI runners. The `MDB_MAP_RESIZED`/`MDB_BAD_TXN`
+  flakes seen with `MDB_NOSYNC` (and rarely on master) were log lines being written into `data.mdb` on Windows
+  (static CRT fd table vs pytest's `dup2` through Python's CRT); see
+  `cpp/arcticdb/log/console_sink.hpp`.
+- `LMDBStorage.WarnIfOpened`: see `warn_if_lmdb_already_open()`.
+
 ### Limitations
 
 - **Single process**: LMDB doesn't support multiple processes writing simultaneously

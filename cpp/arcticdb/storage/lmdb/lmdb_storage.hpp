@@ -12,7 +12,10 @@
 #include <arcticdb/util/pb_util.hpp>
 #include <arcticdb/storage/lmdb/lmdb_client_interface.hpp>
 #include <arcticdb/storage/lmdb/lmdb.hpp>
+#include <array>
+#include <cstdint>
 #include <filesystem>
+#include <string>
 
 namespace fs = std::filesystem;
 
@@ -22,6 +25,44 @@ struct LmdbInstance {
     ::lmdb::env env_;
     std::unordered_map<std::string, std::unique_ptr<::lmdb::dbi>> dbi_by_key_type_;
 };
+
+/// Extra flags passed to mdb_env_open for every LMDB env, from LMDBStorage.ExtraFlags in ConfigsMap
+/// (env var ARCTICDB_LMDBStorage_ExtraFlags_int). Lets a process opt into e.g. MDB_WRITEMAP | MDB_NOSYNC without
+/// changing library configs, e.g. to avoid an fsync per commit on CI where durability is irrelevant. Passed at open
+/// rather than mdb_env_set_flags because MDB_WRITEMAP can only be set at open.
+unsigned int lmdb_extra_env_flags();
+
+/// What LMDB believes about an env (mdb_env_info/stat) next to the two meta pages read straight from data.mdb with
+/// pread/ReadFile, bypassing the memory map. Attached to corruption-type errors so a failure in CI records whether
+/// the mapped view and the file disagree.
+struct LmdbEnvDiagnostics {
+    struct Meta {
+        uint32_t magic = 0;
+        uint32_t version = 0;
+        uint64_t mapsize = 0;
+        uint32_t psize = 0;
+        uint64_t free_root = 0;
+        uint64_t main_root = 0;
+        uint64_t last_pg = 0;
+        uint64_t txnid = 0;
+    };
+    unsigned int flags = 0;
+    size_t mapsize = 0;
+    size_t last_pgno = 0;
+    size_t last_txnid = 0;
+    unsigned int psize = 0;
+    unsigned int max_readers = 0;
+    unsigned int num_readers = 0;
+    std::array<Meta, 2> file_metas{};
+    std::string file_read_error;
+
+    std::string to_string() const;
+};
+
+/// True for LMDB error codes that indicate the env contents are not what LMDB expects
+bool is_lmdb_corruption_error(int error_code);
+
+LmdbEnvDiagnostics lmdb_env_diagnostics(::lmdb::env& env);
 
 class LmdbStorage final : public Storage {
   public:
@@ -34,7 +75,11 @@ class LmdbStorage final : public Storage {
 
     std::string name() const final;
 
+    LmdbEnvDiagnostics diagnostics() { return lmdb_env_diagnostics(env()); }
+
   private:
+    ::lmdb::env* env_ptr() { return lmdb_instance_ ? &lmdb_instance_->env_ : nullptr; }
+
     void do_write(KeySegmentPair& key_seg) final;
 
     void do_write_if_none(KeySegmentPair& kv [[maybe_unused]]) final {
