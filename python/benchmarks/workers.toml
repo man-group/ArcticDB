@@ -4,9 +4,10 @@
 # job reads it with `arctic-winds plan --config python/benchmarks/workers.toml --repo .`
 # and turns it into one matrix job — one EC2 instance — per `
 
-# Sizing and split from shadow run 33480799132 (2026-09-01): every worker's bench time is
+# Sizing from shadow run 4's per-worker peak memory (33497855610, 2026-09-01), split from run 2 (33480799132): every worker's bench time is
 # from that run's `--durations all` table. Instance types: m6i.xlarge $0.214/h (4 vCPU,
-# 16 GB), m6i.2xlarge $0.428/h (8 vCPU, 32 GB), m6i.4xlarge $0.856/h (16 vCPU, 64 GB).
+# 16 GB), m6i.2xlarge $0.428/h (8 vCPU, 32 GB), m6i.4xlarge $0.856/h (16 vCPU, 64 GB),
+# r6i.xlarge $0.282/h (4 vCPU, 32 GB), r6i.2xlarge $0.564/h (8 vCPU, 64 GB).
 # A smaller instance changes absolute timings; the machine name is the worker name, so
 # `asv compare` keeps comparing a worker with itself from the first master run onward.
 
@@ -14,54 +15,63 @@
 # 10M-row frames; RAM need unmeasured on the new pipeline, so the full box for now.
 name = "basic_functions"
 suite = "^basic_functions\\."
-instance_type = "m6i.4xlarge"
+# run 4 telemetry: peak 20.5 of 61.8 GiB on m6i.4xlarge — 32 GB is enough; keep 8 vCPU
+instance_type = "m6i.2xlarge"
 
 [[worker]]
 # ~7-minute setup_cache; RAM need unmeasured, so the full box for now.
 name = "list_versions"
 suite = "^list_versions\\."
-instance_type = "m6i.4xlarge"
+# run 4 telemetry: peak 1.8 GiB on m6i.4xlarge — tiny
+instance_type = "m6i.xlarge"
 
 [[worker]]
 # ArrowStrings was 31 of the arrow worker's 56 minutes: split read from write. Each half
 # repeats the class's setup_cache (a few minutes).
 name = "arrow_strings_read"
 suite = "^arrow\\.ArrowStrings\\.(time|peakmem)_read"
-instance_type = "m6i.2xlarge"
+# run 4 telemetry: peak 4.8 GiB; 18 min on 8 vCPU — watch the time on 4
+instance_type = "m6i.xlarge"
 
 [[worker]]
 name = "arrow_strings_write"
 suite = "^arrow\\.ArrowStrings\\.(time|peakmem)_write"
-instance_type = "m6i.2xlarge"
+# run 4 telemetry: peak 4.5 GiB; 16 min on 8 vCPU — watch the time on 4
+instance_type = "m6i.xlarge"
 
 [[worker]]
 # ArrowSparseNumeric 9.4 min + ArrowBools 7.9 + ArrowNumeric 1.2.
 name = "arrow_numeric"
 suite = "^arrow\\.(ArrowSparseNumeric|ArrowBools|ArrowNumeric)\\."
+# run 4 telemetry: peak 8.4 GiB; 21 min — keep 8 vCPU for now
 instance_type = "m6i.2xlarge"
 
 [[worker]]
 # Under 3 minutes of benchmarks, but its setup_cache builds 10M-row frames (>9 GiB locally).
 name = "column_stats"
 suite = "^column_stats\\."
-instance_type = "m6i.2xlarge"
+# run 4 telemetry: peak 27.3 of 30.8 GiB on m6i.2xlarge (88%) — needs 64 GB
+instance_type = "r6i.2xlarge"
 
 [[worker]]
 # 21 min, CPU-bound, modest data.
 name = "modification"
 suite = "^(?:modification_functions|finalize_staged_data)\\."
-instance_type = "m6i.2xlarge"
+# run 4 telemetry: peak 28.7 of 30.8 GiB on m6i.2xlarge (93%) — needs 64 GB; r6i keeps 8 vCPU for its 23 min at $0.564/h
+instance_type = "r6i.2xlarge"
 
 [[worker]]
 # 15 min; resample.Resample.time_resample is the longest single benchmark (7.85 min).
 name = "resample"
 suite = "^(?:resample|recursive_normalizer)\\."
-instance_type = "m6i.2xlarge"
+# run 4 telemetry: peak 4.5 GiB; 16 min on 8 vCPU — watch the time on 4
+instance_type = "m6i.xlarge"
 
 [[worker]]
 # 23 min of many small benchmarks.
 name = "query"
 suite = "^(?:query_builder|compact_data|nonreg_random_read)\\."
+# run 4 telemetry: peak 7.5 GiB would fit xlarge, but 24 min is the long pole — keep 8 vCPU
 instance_type = "m6i.2xlarge"
 
 [[worker]]
@@ -75,6 +85,7 @@ instance_type = "m6i.xlarge"
 # RAM unmeasured until the telemetry run, hence the middle size.
 name = "merge"
 suite = "^merge_functions\\."
+# run 4 telemetry: peak 6.7 GiB; 19 min — keep 8 vCPU for now
 instance_type = "m6i.2xlarge"
 
 [[worker]]
