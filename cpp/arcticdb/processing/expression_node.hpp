@@ -13,7 +13,6 @@
 #include <arcticdb/util/regex_filter.hpp>
 #include <arcticdb/processing/operation_types.hpp>
 #include <arcticdb/pipeline/value.hpp>
-#include <arcticdb/pipeline/value_set.hpp>
 #include <memory>
 #include <utility>
 
@@ -25,6 +24,7 @@ using ColumnName = util::StringWrappingValue<ColumnNameTag>;
 struct ProcessingUnit;
 class Column;
 class StringPool;
+class ValueSet;
 
 /*
  * Wrapper class combining a column with the string pool containing strings for that column
