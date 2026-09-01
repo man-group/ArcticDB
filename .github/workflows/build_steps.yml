@@ -852,6 +852,7 @@ jobs:
           name: pytest-${{env.distinguishing_name}}
           path: |
             ${{runner.temp}}/*test*
+            ${{runner.temp}}/faulthandler
         continue-on-error: true
 
   # This job installs the SAME freshly-built wheel on an different runner and verifies it

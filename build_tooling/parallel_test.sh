@@ -35,6 +35,19 @@ export PYTHONFAULTHANDLER=1
 export ARCTICDB_FAULTHANDLER_TIMEOUT=3300
 export ARCTICDB_FAULTHANDLER_DIR="$TEST_OUTPUT_DIR/faulthandler"
 
+# A step timeout SIGKILLs the whole step: no junit XML (it is only written at session end), no --durations, and
+# print_faulthandler_crashes below never runs - two hours of runner time that tell us nothing. This has happened
+# on slow Windows runners, where the same suite takes 46 min or 123 min depending on which VM SKU it lands on.
+# Send SIGINT a little before that instead, which makes pytest and xdist shut down, write the report and print
+# the slowest tests. --kill-after covers the case where the SIGINT itself is not enough.
+session_timeout=${PYTEST_SESSION_TIMEOUT:-100m}
+timeout_cmd=""
+if command -v timeout >/dev/null 2>&1; then
+    timeout_cmd="timeout --signal=INT --kill-after=5m $session_timeout"
+else
+    echo "No timeout(1) available; the session will run until the CI step limit kills it"
+fi
+
 print_faulthandler_crashes() {
     if [ -d "$ARCTICDB_FAULTHANDLER_DIR" ] && ls "$ARCTICDB_FAULTHANDLER_DIR"/crash_*.log 1>/dev/null 2>&1; then
         echo ""
@@ -54,7 +67,8 @@ set +e
 
 if [ -z "$ARCTICDB_PYTEST_ARGS" ]; then
     echo "Executing tests with no additional arguments"
-    $catch python -u -m pytest --timeout=3600 --timeout_method=thread $PYTEST_XDIST_MODE -v \
+    $timeout_cmd $catch python -u -m pytest --timeout=3600 --timeout_method=thread $PYTEST_XDIST_MODE -v \
+        --durations=50 \
         --log-file="$TEST_OUTPUT_DIR/pytest-logger.$group.log" \
         --junitxml="$TEST_OUTPUT_DIR/pytest.$group.xml" \
         --basetemp="$PARALLEL_TEST_ROOT/temp-pytest-output" \
@@ -67,7 +81,8 @@ else
     echo "Executing tests with additional pytest argiments:"
     echo "from user: $ARCTICDB_PYTEST_ARGS"
     echo "from automation: $PYTEST_ADD_TO_COMMAND_LINE"
-    $catch python -u -m pytest --timeout=3600 --timeout_method=thread $PYTEST_XDIST_MODE -v \
+    $timeout_cmd $catch python -u -m pytest --timeout=3600 --timeout_method=thread $PYTEST_XDIST_MODE -v \
+        --durations=50 \
         --log-file="$TEST_OUTPUT_DIR/pytest-logger.$group.log" \
         --junitxml="$TEST_OUTPUT_DIR/pytest.$group.xml" \
         --basetemp="$PARALLEL_TEST_ROOT/temp-pytest-output" \
