@@ -403,6 +403,7 @@ set(arcticdb_srcs
         util/bitset.hpp
         util/buffer.hpp
         util/buffer_pool.hpp
+        util/claim_flags.hpp
         util/clock.hpp
         util/collection_utils.hpp
         util/configs_map.hpp
@@ -1166,6 +1167,7 @@ if(${TEST})
             util/test/test_bitmagic.cpp
             util/test/test_bitset.cpp
             util/test/test_buffer_pool.cpp
+            util/test/test_claim_flags.cpp
             util/test/test_composite.cpp
             util/test/test_cursor.cpp
             util/test/test_decimal.cpp
