@@ -29,7 +29,6 @@ struct ReadOptionsData {
     std::optional<bool> dynamic_schema_;
     std::optional<bool> allow_sparse_;
     std::optional<bool> set_tz_;
-    std::optional<bool> optimise_string_memory_;
     OutputConfig output_config_ = PandasOutputConfig{};
 };
 
@@ -54,10 +53,6 @@ class ReadOptions {
     void set_allow_sparse(const std::optional<bool>& allow_sparse) { data_->allow_sparse_ = allow_sparse; }
 
     void set_set_tz(const std::optional<bool>& set_tz) { data_->set_tz_ = set_tz; }
-
-    void set_optimise_string_memory(const std::optional<bool>& optimise_string_memory) {
-        data_->optimise_string_memory_ = optimise_string_memory;
-    }
 
     [[nodiscard]] const std::optional<bool>& dynamic_schema() const { return data_->dynamic_schema_; }
 
