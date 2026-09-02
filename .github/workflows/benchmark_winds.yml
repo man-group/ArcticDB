@@ -142,7 +142,9 @@ jobs:
       # GitHub caps a matrix at 256 jobs and silently truncates past it, which would look
       # like a run where some workers simply never reported. Fail here instead. 8 workers
       # x 69 release tags = 552, so `run_all_benchmarks` needs a tag subset or a narrower
-      # split (see the README's open decisions).
+      # split (see the README's open decisions). The job count is the only guard left: a
+      # multi-commit run is otherwise fine now that artifacts are named per commit and
+      # `collect` writes a symbol for each (ticket 18).
       - name: check the matrix against GitHub's 256-job cap
         env:
           MATRIX: ${{ steps.plan.outputs.matrix }}
@@ -153,9 +155,6 @@ jobs:
           if [ "$count" -gt 256 ]; then
             echo "::error::planned $count matrix jobs, over GitHub's 256-job cap. Reduce the workers in python/benchmarks/workers.toml or benchmark fewer tags; a truncated matrix would silently drop workers."
             exit 1
-          fi
-          if [ "$commits" -gt 1 ]; then
-            echo "::warning::$commits commits planned. Worker artifacts are named after the worker alone, so entries for different commits collide on upload and collect merges one commit only. Multi-commit runs need per-commit artifact namespacing first (see the README)."
           fi
 
       # Two things the matrix implies that later jobs need as plain strings: who must have
@@ -203,12 +202,14 @@ jobs:
           {
             echo "### 🌬️ arctic-winds plan"
             echo
-            echo "- commit: \`$COMMIT\`"
+            echo "- head commit: \`$COMMIT\`"
             echo "- storage: \`$STORAGE\`"
             echo
-            echo "| worker | suite | instance |"
-            echo "| --- | --- | --- |"
-            jq -r '.[] | "| \(.worker) | `\(.suite)` | \(.instance_type) |"' <<<"$MATRIX"
+            # One row per matrix entry, commit included: `run_all_benchmarks` plans every
+            # release tag, and which commit a worker is on is then the first question.
+            echo "| commit | worker | suite | instance |"
+            echo "| --- | --- | --- | --- |"
+            jq -r '.[] | "| \(.commit[0:8]) | \(.worker) | `\(.suite)` | \(.instance_type) |"' <<<"$MATRIX"
           } >> "$GITHUB_STEP_SUMMARY"
 
   # ~6 s job; resolves ghcr.io/man-group/arcticdb_manylinux:<ver>-<hash> the same way
@@ -338,11 +339,12 @@ jobs:
     with:
       worker: ${{ matrix.worker }}
       suite: ${{ matrix.suite }}
-      # The full SHA: actions/checkout treats anything shorter than 40 characters as a
-      # branch or tag name (the first shadow run failed on `refs/heads/44a66493*`). The
-      # matrix carries 8-char hashes, so single-commit runs take the plan's own SHA;
-      # multi-commit runs need full SHAs in the matrix first (see the README).
-      commit: ${{ needs.plan.outputs.commit }}
+      # The matrix's own commit, in full: `plan` emits 40-char SHAs because
+      # `actions/checkout` treats anything shorter as a branch or tag name (the first
+      # shadow run failed on `refs/heads/44a66493*`). One entry per (commit, worker), so
+      # a `run_all_benchmarks` run sends each worker the tag it is benchmarking rather
+      # than the plan's single HEAD (ticket 18).
+      commit: ${{ matrix.commit }}
       storage: ${{ needs.plan.outputs.storage }}
       instance_type: ${{ matrix.instance_type }}
       python: "3.11"
@@ -359,6 +361,12 @@ jobs:
     if: always() && needs.plan.result == 'success'
     runs-on: ubuntu-22.04
     timeout-minutes: 30
+    # `contents: write` is for the pull request's page: the last step pushes one JSON
+    # file to the gh-pages branch. `actions: read` is what `download-artifact` needs
+    # once a job names its permissions at all — naming one drops every default.
+    permissions:
+      contents: write
+      actions: read
     env:
       # The bucket and prefix `transform_asv_results.py` writes to today. `aws_auth=true`
       # means arcticdb takes the credentials from the standard AWS environment below.
@@ -434,13 +442,16 @@ jobs:
 
       # Exit 1 = a benchmark failed or a worker never uploaded; the job is meant to go red,
       # and the results that did arrive are stored either way. Exit 2 = nothing was stored.
+      # No `--commit`: the download holds one artifact per (worker, commit), so `collect`
+      # groups them by the commit each result was measured at, writes a symbol for each,
+      # and puts a report per commit on this job's summary (ticket 18). A
+      # `run_all_benchmarks` run stores every tag it benchmarked, not just the first.
       - name: collect the run
         env:
           LIBRARY: ${{ steps.library.outputs.library }}
         run: |
           arctic-winds collect \
             --artifacts artifacts \
-            --commit "$COMMIT" \
             --results "$RESULTS" \
             --library "$LIBRARY" \
             --expect "$WORKERS"
@@ -454,6 +465,8 @@ jobs:
       # are the only ones that exist while the shadow is young; the numbers come from one
       # machine rather than eight, so treat early verdicts as directional. Switch this to
       # `winds_asv_results` once nightly/master shadow runs have populated it.
+      # `--report` writes the same verdict as JSON, which the PR page below is built
+      # from: asv must not be run a second time to say what this step already knows.
       - name: compare against master
         if: github.event_name == 'pull_request'
         env:
@@ -465,7 +478,75 @@ jobs:
             --results "$RESULTS" \
             --library "$LIBRARY" \
             --reference-lib asv_results \
-            --repo .
+            --repo . \
+            --report "$GITHUB_WORKSPACE/compare-report.json"
+
+      # The pull request's page on the benchmark site: this run's numbers, the values
+      # already published for the master commit it was judged against, and asv's
+      # verdict, written to `winds/data/pr/<number>.json` on the gh-pages branch and
+      # linked from this job's summary. Kept 90 days; the nightly rebuild prunes them
+      # (`prune_pr_json`, ticket 10).
+      #
+      # `always()`: a regression makes the step above exit 1, and that is precisely the
+      # run whose page is worth having. A run that stored nothing (collect exit 2) has
+      # no page to write and fails here too, on a job that is already red.
+      - name: publish the pull request's page
+        if: always() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          LIBRARY: ${{ steps.library.outputs.library }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          # The site lives on gh-pages under `winds/` until the cut-over (ticket 10);
+          # before that branch exists there is nothing to publish into, and saying so
+          # is not a reason to fail the run.
+          if ! git clone --depth 1 --branch gh-pages \
+              "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
+              gh-pages; then
+            echo "::notice::No gh-pages branch yet, so the benchmark site has nowhere to put this pull request's page (see ticket 10)."
+            exit 0
+          fi
+
+          args=(--results "$RESULTS" --library "$LIBRARY" --commit "$COMMIT"
+                --pr "$PR_NUMBER" --site-dir gh-pages/winds/data)
+          # No report means the comparison could not be made; the page still carries
+          # this run's own numbers, with every combination marked `new`.
+          if [ -f "$GITHUB_WORKSPACE/compare-report.json" ]; then
+            args+=(--compare-report "$GITHUB_WORKSPACE/compare-report.json")
+          fi
+          arctic-winds viz pr "${args[@]}"
+
+          git -C gh-pages config user.name "github-actions[bot]"
+          git -C gh-pages config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git -C gh-pages add winds/data
+          if git -C gh-pages diff --cached --quiet; then
+            echo "The page is unchanged; nothing to push."
+            exit 0
+          fi
+          git -C gh-pages commit -m "benchmarks: pull request #${PR_NUMBER} (${COMMIT:0:8})"
+          # One retry: two runs finishing together race for the branch tip, and the
+          # loser only has to replay its own file on top of the winner's.
+          if ! git -C gh-pages push origin HEAD:gh-pages; then
+            echo "Push raced with another run; rebasing onto the new tip and retrying."
+            git -C gh-pages pull --rebase origin gh-pages
+            git -C gh-pages push origin HEAD:gh-pages
+          fi
+
+          page="https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}/winds/pr/${PR_NUMBER}"
+          echo "::notice::Benchmark page for this pull request: ${page}"
+          {
+            echo "### 🌬️ Benchmark page"
+            echo
+            echo "[Pull request #${PR_NUMBER}](${page}) — every benchmark, this run against master, with links into each history."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # A fork's `GITHUB_TOKEN` is read-only, so nothing can be pushed to gh-pages from
+      # one. The comparison itself still ran and is on this job's summary.
+      - name: note the fork's missing page
+        if: always() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository
+        run: |
+          echo "::notice::No benchmark page for a pull request from a fork: a fork's GITHUB_TOKEN cannot write to gh-pages. The value comparison is in this job's summary."
 
       # ---------------------------------------------------------------------------
       # TICKET 11 (REAL storage) — the other half of the throwaway bucket created in
