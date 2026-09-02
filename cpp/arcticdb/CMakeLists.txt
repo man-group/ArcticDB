@@ -165,6 +165,21 @@ ENDIF()
 
 set(CMAKE_INSTALL_RPATH "\\$ORIGIN/lib")
 
+# conda-forge's compiler activation puts -Wl,-rpath,$PREFIX/lib in LDFLAGS; building in-tree does not go
+# through it, so arcticdb_ext and the test binaries would resolve libstdc++, libssl and libcrypto through the
+# system paths rather than the environment they were compiled against. Skipped under conda-build, which has the
+# activation and where CONDA_PREFIX is the build-tools prefix - relocation only rewrites RPATHs inside $PREFIX,
+# so that path would ship as a dangling absolute RPATH.
+if(ARCTICDB_USING_CONDA AND CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT DEFINED ENV{CONDA_BUILD})
+    if(NOT DEFINED ENV{CONDA_PREFIX})
+        message(FATAL_ERROR "ARCTICDB_USING_CONDA is set but no conda environment is active. Activate the "
+                "environment before configuring, or the built objects will load the host's libstdc++ and "
+                "OpenSSL and fail at import with missing GLIBCXX/OPENSSL symbol versions.")
+    endif()
+    list(APPEND CMAKE_BUILD_RPATH "$ENV{CONDA_PREFIX}/lib")
+    list(APPEND CMAKE_INSTALL_RPATH "$ENV{CONDA_PREFIX}/lib")
+endif()
+
 if (NOT MSVC)
     if(NOT ${ARCTICDB_USING_CONDA})
         # Compilers on conda-forge are relatively strict.
