@@ -216,7 +216,7 @@ Key methods: `set_segments()`, `set_row_ranges()`, `set_col_ranges()`, `set_atom
 Key methods:
 - `get_new_entity_ids(count)` - Allocate new entity IDs
 - `add_entity(id, args...)` / `add_entities(ids, tuples)` - Add entities with components
-- `get_entities_and_decrement_refcount(ids)` - Get entities (removed when fetch count reaches 0)
+- `get_components_and_decrement_refcount(ids)` - Get entities (removed when fetch count reaches 0)
 - `get<T>(id)` - Get a single component for an entity
 
 ## Read Admission Control

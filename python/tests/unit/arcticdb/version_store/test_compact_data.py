@@ -27,6 +27,8 @@ from arcticdb.util.test import (
     assert_frame_equal,
     assert_series_equal,
     config_context,
+    max_rows_per_segment,
+    min_rows_per_segment,
     query_stats_operation_count,
     random_strings_of_length,
 )
@@ -96,14 +98,13 @@ def generic_compact_data_test(lib, sym, method_arg=None, batch=False):
         assert_frame_equal_pl(expected, received)
     post_compaction_index = lib.read_index(sym)
     row_counts = post_compaction_index["end_row"] - post_compaction_index["start_row"]
-    # Definitions taken from CompactDataClause constructor
-    min_rows_per_segment = max((2 * rows_per_segment) // 3, 1)
-    max_rows_per_segment = max((4 * rows_per_segment) // 3, rows_per_segment + 1)
+    min_rows = min_rows_per_segment(rows_per_segment)
+    max_rows = max_rows_per_segment(rows_per_segment)
     if not pickled:
-        # There might be fewer rows in total than min_rows_per_segment
-        min_rows_per_segment = min(min_rows_per_segment, len(expected))
-    assert row_counts.min() >= min_rows_per_segment
-    assert row_counts.max() <= max_rows_per_segment
+        # There might be fewer rows in total than min_rows
+        min_rows = min(min_rows, len(expected))
+    assert row_counts.min() >= min_rows
+    assert row_counts.max() <= max_rows
 
     post_compaction_data_keys = len(post_compaction_index)
     new_data_keys = len(post_compaction_index[post_compaction_index["version_id"] > vit_before_compaction.version])

@@ -272,7 +272,7 @@ TEST(Clause, ScheduleRowSliceProcessingAndWrite) {
     std::vector<folly::Future<SliceAndKey>> write_segments_futures;
     std::ranges::transform(
             std::get<0>(
-                    component_manager->get_entities<std::shared_ptr<folly::Future<SliceAndKey>>>(processed_entity_ids)
+                    component_manager->get_components<std::shared_ptr<folly::Future<SliceAndKey>>>(processed_entity_ids)
             ),
             std::back_inserter(write_segments_futures),
             [](const std::shared_ptr<folly::Future<SliceAndKey>>& fut) { return std::move(*fut); }
