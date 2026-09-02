@@ -24,6 +24,9 @@
 #include <arcticdb/storage/file/file_store.hpp>
 #include <arcticdb/version/version_functions.hpp>
 
+#include <algorithm>
+#include <numeric>
+
 namespace arcticdb::version_store {
 
 using namespace arcticdb::entity;
@@ -419,13 +422,28 @@ VersionResultVector PythonVersionStore::list_versions(
 
 namespace {
 
-py::object get_metadata_from_segment(const SegmentInMemory& segment) {
+// Pulls the user metadata off a snapshot segment as protobuf. Unlike get_metadata_from_segment() this
+// constructs no Python objects, so it is safe to call from a storage callback thread without the GIL.
+std::optional<arcticdb::proto::descriptors::UserDefinedMetadata> extract_user_metadata(const SegmentInMemory& segment) {
     if (segment.has_user_metadata()) {
         // Between v4.5.0 and v5.2.1 we saved this metadata here (commit 516d16968f0)
-        return python_util::pb_to_python(segment.user_metadata());
+        return segment.user_metadata();
     }
     // Before v4.5.0 and after v5.2.1 we saved this metadata here
-    return python_util::any_metadata_to_py(segment.metadata());
+    arcticdb::proto::descriptors::UserDefinedMetadata user_metadata;
+    const auto* metadata = segment.metadata();
+    if (!metadata || !metadata->UnpackTo(&user_metadata)) {
+        return std::nullopt;
+    }
+    return user_metadata;
+}
+
+py::object user_metadata_to_py(const std::optional<arcticdb::proto::descriptors::UserDefinedMetadata>& user_metadata) {
+    return user_metadata ? python_util::pb_to_python(*user_metadata) : py::none();
+}
+
+py::object get_metadata_from_segment(const SegmentInMemory& segment) {
+    return user_metadata_to_py(extract_user_metadata(segment));
 }
 
 py::object get_metadata_for_snapshot(const std::shared_ptr<Store>& store, const VariantKey& snap_key) {
@@ -444,13 +462,47 @@ std::pair<std::vector<AtomKey>, py::object> get_versions_and_metadata_from_snaps
 
 std::vector<std::pair<SnapshotId, py::object>> PythonVersionStore::list_snapshots(std::optional<bool> load_metadata) {
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: list_snapshots");
-    auto snap_ids = std::vector<std::pair<SnapshotId, py::object>>();
-    auto fetch_metadata = opt_false(load_metadata);
-    iterate_snapshots(store(), [store = store(), &snap_ids, fetch_metadata](const VariantKey& vk) {
-        auto snapshot_meta_as_pyobject = fetch_metadata ? get_metadata_for_snapshot(store, vk) : py::none{};
-        auto snapshot_id = fmt::format("{}", variant_key_id(vk));
-        snap_ids.emplace_back(std::move(snapshot_id), std::move(snapshot_meta_as_pyobject));
-    });
+    auto snapshot_keys = list_snapshot_keys(store());
+
+    std::vector<std::pair<SnapshotId, py::object>> snap_ids;
+    snap_ids.reserve(snapshot_keys.size());
+    if (!opt_false(load_metadata)) {
+        for (const auto& snapshot_key : snapshot_keys) {
+            snap_ids.emplace_back(fmt::format("{}", variant_key_id(snapshot_key)), py::none{});
+        }
+        return snap_ids;
+    }
+
+    // Reading the snapshot segments one at a time costs a storage round trip per snapshot on the calling thread.
+    // Read them concurrently instead, as get_versions_from_snapshots() already does over the same segments. Only
+    // protobuf is touched on the storage threads; the Python objects are built below, on this thread.
+    std::vector<std::optional<arcticdb::proto::descriptors::UserDefinedMetadata>> user_metadata(snapshot_keys.size());
+    std::vector<size_t> indexes(snapshot_keys.size());
+    std::iota(indexes.begin(), indexes.end(), 0);
+    const auto window_size = async::TaskScheduler::instance()->io_thread_count();
+    auto futures = folly::window(
+            std::move(indexes),
+            [store = store(), &snapshot_keys, &user_metadata](size_t idx) {
+                return store->read(snapshot_keys[idx]).thenValueInline([&user_metadata, idx](auto&& key_seg) {
+                    user_metadata[idx] = extract_user_metadata(key_seg.second);
+                    return folly::Unit{};
+                });
+            },
+            window_size
+    );
+    // Need collectAll in case snapshot keys were deleted since the listing operation
+    auto results = folly::collectAll(futures).get();
+    check_only_deleted_snapshots_failed(results, snapshot_keys);
+
+    for (size_t idx = 0; idx < snapshot_keys.size(); ++idx) {
+        // A snapshot deleted between the listing and the read is dropped from the results, as it was when the
+        // reads happened inside the iterate_snapshots() callback.
+        if (!results[idx].hasException()) {
+            snap_ids.emplace_back(
+                    fmt::format("{}", variant_key_id(snapshot_keys[idx])), user_metadata_to_py(user_metadata[idx])
+            );
+        }
+    }
 
     return snap_ids;
 }
