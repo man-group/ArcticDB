@@ -38,9 +38,6 @@ on:
   push:
     branches:
       - master
-      # TEMPORARY: lets the shadow branch trigger itself while `workflow_dispatch`
-      # cannot see a workflow that is not on the default branch. Remove at cut-over.
-      - benchmark-winds-shadow
 
   # Nightly, all storages. Same cron as `analysis_workflow.yml`; while both pipelines run,
   # this doubles the nightly EC2 spend — offset or drop it if that matters.
@@ -170,29 +167,6 @@ jobs:
           printf 'reference_suite=%s\n' "$(python -c "import json, os; from arctic_winds.orchestrator import combined_suite; print(combined_suite({e['worker']: e['suite'] for e in json.loads(os.environ['MATRIX'])}))")" \
             >> "$GITHUB_OUTPUT"
 
-      # ---------------------------------------------------------------------------
-      # TICKET 11 (REAL storage) — everything below is that ticket's scope, included
-      # here so the shape is visible, and inert unless the storage input asks for it.
-      # A per-run throwaway bucket, created once and shared by every worker, instead of
-      # `benchmark_commits.yml:83-92`'s per-commit-job bucket. Deleted in `collect`.
-      # ---------------------------------------------------------------------------
-      - name: create the throwaway test bucket
-        id: bucket
-        if: steps.storage.outputs.storage != 'LMDB'
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_S3_ACCESS_KEY }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_S3_SECRET_KEY }}
-          ARCTICDB_REAL_S3_REGION: eu-west-1
-          ARCTICDB_REAL_S3_ENDPOINT: s3.eu-west-1.amazonaws.com
-        run: |
-          random_id=$(openssl rand -hex 4)
-          timestamp=$(date +%s)
-          bucket_name="arcticdb-asv-data-${timestamp}-${random_id}"
-          aws s3 mb --endpoint-url "http://${ARCTICDB_REAL_S3_ENDPOINT}" \
-            --region "${ARCTICDB_REAL_S3_REGION}" "s3://${bucket_name}"
-          echo "Created bucket s3://${bucket_name}"
-          printf 'bucket=%s\n' "$bucket_name" >> "$GITHUB_OUTPUT"
-
       - name: report the plan
         env:
           MATRIX: ${{ steps.plan.outputs.matrix }}
@@ -211,6 +185,42 @@ jobs:
             echo "| --- | --- | --- | --- |"
             jq -r '.[] | "| \(.commit[0:8]) | \(.worker) | `\(.suite)` | \(.instance_type) |"' <<<"$MATRIX"
           } >> "$GITHUB_STEP_SUMMARY"
+
+      # ---------------------------------------------------------------------------
+      # TICKET 11 (REAL storage) — everything below is that ticket's scope, and inert
+      # unless the storage input asks for it. A per-run throwaway bucket, created once
+      # and shared by every worker, instead of `benchmark_commits.yml:77-85`'s
+      # per-commit-job bucket; each worker writes under its own `path_prefix` inside it
+      # (`benchmark_worker.yml`'s `ARCTICDB_REAL_S3_BUCKET` comment). Deleted in
+      # `collect`.
+      #
+      # Deliberately the *last* step of this job. `collect` — the only thing that deletes
+      # the bucket — will not run at all unless `plan` succeeded, so a bucket created
+      # before a step that then fails is a bucket nothing ever removes. With nothing after
+      # it, the only way to strand one is for `aws s3 mb` to succeed and the very next
+      # `printf` to fail. It also means a run rejected by the 256-job check never creates
+      # a bucket in the first place.
+      # ---------------------------------------------------------------------------
+      - name: create the throwaway test bucket
+        id: bucket
+        if: steps.storage.outputs.storage != 'LMDB'
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_S3_ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_S3_SECRET_KEY }}
+          ARCTICDB_REAL_S3_REGION: eu-west-1
+          ARCTICDB_REAL_S3_ENDPOINT: s3.eu-west-1.amazonaws.com
+        run: |
+          random_id=$(openssl rand -hex 4)
+          timestamp=$(date +%s)
+          bucket_name="arcticdb-asv-data-${timestamp}-${random_id}"
+          aws s3 mb --endpoint-url "http://${ARCTICDB_REAL_S3_ENDPOINT}" \
+            --region "${ARCTICDB_REAL_S3_REGION}" "s3://${bucket_name}"
+          echo "Created bucket s3://${bucket_name}"
+          printf 'bucket=%s\n' "$bucket_name" >> "$GITHUB_OUTPUT"
+          # On the summary because it is the one name a human needs if a run ends
+          # without `collect` and the bucket has to be swept by hand.
+          echo "- throwaway bucket: \`$bucket_name\` (deleted by \`collect\`)" \
+            >> "$GITHUB_STEP_SUMMARY"
 
   # ~6 s job; resolves ghcr.io/man-group/arcticdb_manylinux:<ver>-<hash> the same way
   # `build.yml:122-128` does, so the benchmark wheel uses the identical manylinux image.

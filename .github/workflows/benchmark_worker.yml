@@ -54,6 +54,17 @@ jobs:
     # ~31 min expected at N=8 (docs/research/gha-ec2-runner-matrix.md §Q6); today's
     # `timeout-minutes: 1200` is a $17-per-worker blank cheque. 180 leaves room for the
     # nightly ALL-storage run without leaving an instance up for a day.
+    #
+    # Sizing the ALL headroom (ticket 11): CI's own ALL run on one box is 230 wall minutes
+    # (run 5b480c5a, 2026-08-29). Summing its per-benchmark durations into this repo's
+    # twelve suites and dividing by the same suites in shadow run f5ea0c14 (LMDB, 12
+    # workers) gives the ALL/LMDB cost ratio per worker: 1.0 for the suites with no
+    # storage parameter at all (arrow, resample, merge), 1.4 query, 2.8 basic_functions,
+    # 3.5 list_versions, 4.5 modification, 5.1 listing, 5.7 column_stats. Applied to each
+    # worker's LMDB wall the worst lane is `modification` at ~55 min, then list_versions
+    # ~35 and column_stats ~32. 180 is >3x the worst estimate, which is the margin S3
+    # throughput on a smaller instance could plausibly eat. Revisit after the first ALL
+    # run measures it rather than infers it.
     timeout-minutes: 180
     # The AMI's userland is undocumented — CI logs prove only Docker and the .NET runner's
     # glibc, never git/python/uv on the host (§Q7). So keep a container, and keep the one
@@ -71,6 +82,22 @@ jobs:
       ARCTICDB_REAL_S3_REGION: eu-west-1
       ARCTICDB_REAL_S3_ENDPOINT: s3.eu-west-1.amazonaws.com
       # Empty on LMDB runs; the per-run throwaway bucket otherwise (ticket 11).
+      # Every worker in the run shares this one bucket, where `benchmark_commits.yml:77-85`
+      # gives each of its jobs a bucket to itself. What keeps them apart is
+      # `ARCTICDB_PERSISTENT_STORAGE_SHARED_PATH_PREFIX`, and it is deliberately *not* set
+      # here: `arctic-winds bench` sets it from this job's own `worker` and `commit`
+      # (`bench.py:storage_prefix`, `<worker>-<sha8>`), because that is the one process
+      # that knows both and would override anything set here anyway. ArcticDB reads it in
+      # `real_s3_from_environment_variables(shared_path=True)` and turns it into the
+      # `path_prefix=` of the Arctic URI, which moves both the config library and every
+      # data library under it. Without it twelve workers share one `_arctic_cfg` and one
+      # set of deterministic library names that `create_libraries` deletes on setup.
+      #
+      # `ARCTICDB_REAL_S3_CLEAR` is deliberately absent, as it is in `benchmark_commits.yml`.
+      # Setting it makes the fixture clear the bucket on exit and then assert the *whole
+      # bucket* is empty (`storage_fixtures/s3.py:342-348`, then `S3Bucket.check_bucket`), which
+      # with eleven other workers still writing is both wrong and a guaranteed failure.
+      # Dropping the bucket in `collect` is what cleans up here.
       ARCTICDB_REAL_S3_BUCKET: ${{ inputs.bucket }}
       # `benchmark_commits.yml:129-130`: quieten two noisy warnings during the run.
       ARCTICDB_WARN_ON_WRITING_EMPTY_DATAFRAME: "0"
