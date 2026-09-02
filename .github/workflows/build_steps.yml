@@ -354,7 +354,13 @@ jobs:
         run: cd cpp; cmake --build --preset $ARCTIC_CMAKE_PRESET --target benchmarks -j $CMAKE_BUILD_PARALLEL_LEVEL
 
       - name: Run C++ Benchmarks
-        if: inputs.job_type == 'cpp-tests' && env.ARCTICDB_USE_SANITIZER == ''
+        # One iteration still costs 400s on Windows and 336s on macOS, against 100s on Linux, because the per-
+        # benchmark setup dominates. The benchmarks are not platform specific, so a pull request runs them on Linux
+        # only; push, schedule and dispatch still run them everywhere. They are compiled on every platform either
+        # way, which is what catches a Windows-only build break.
+        if: |
+          inputs.job_type == 'cpp-tests' && env.ARCTICDB_USE_SANITIZER == ''
+          && (github.event_name != 'pull_request' || matrix.os == 'linux')
         # Nothing consumes the timings, this only checks the benchmarks still run, so one iteration is enough on
         # pull requests. 20 iterations took ~5.5 min of the C++ test job; the full count still runs on master and
         # on the nightly schedule. (Running until a time limit is reached is much slower for benchmarks that pause
