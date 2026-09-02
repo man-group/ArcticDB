@@ -86,6 +86,8 @@ class KeyNotFoundException : public ArcticSpecificException<ErrorCode::E_KEY_NOT
 
     std::vector<VariantKey>& keys() { return *keys_; }
 
+    const std::vector<VariantKey>& keys() const { return *keys_; }
+
   private:
     std::shared_ptr<std::vector<VariantKey>> keys_;
     mutable std::string msg_;
