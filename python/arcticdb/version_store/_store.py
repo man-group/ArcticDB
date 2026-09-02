@@ -399,7 +399,6 @@ class NativeVersionStore:
         {
             "iterate_snapshots_if_tombstoned",
             "force_string_to_object",
-            "optimise_string_memory",
             "output_format",
             "dynamic_schema",
             "set_tz",
@@ -2360,7 +2359,6 @@ class NativeVersionStore:
         proto_cfg = self._lib_cfg.lib_desc.version.write_options
         read_options = _PythonVersionStoreReadOptions()
         read_options.set_force_strings_to_object(_assume_false("force_string_to_object", kwargs))
-        read_options.set_optimise_string_memory(_assume_false("optimise_string_memory", kwargs))
         output_format = self.resolve_runtime_defaults(
             "output_format", proto_cfg, global_default=OutputFormat.PANDAS, **kwargs
         )
