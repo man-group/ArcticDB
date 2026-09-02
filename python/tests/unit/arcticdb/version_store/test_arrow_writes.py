@@ -785,7 +785,8 @@ def test_append_mix_strings_and_large_strings(in_memory_version_store_arrow, fir
     lib.append(sym, append_table)
 
     received = lib.read(sym).data
-    expected = pa.table({"col": pa.array(["a", "bb", "ccc", "dddd"], second_type)})
+    # Mismatched formats always resolve to large_string, regardless of which side is small/large.
+    expected = pa.table({"col": pa.array(["a", "bb", "ccc", "dddd"], pa.large_string())})
     assert expected.equals(received)
 
 
@@ -1878,11 +1879,12 @@ class TestStringFormatRoundtrip:
         assert received.schema.field(0).type == pa.timestamp("ns")
         assert received.schema.field(1).type == pa.string()
         assert received.schema.field(2).type == pa.large_string()
-        assert received.schema.field(3).type == pa.dictionary(pa.int32(), pa.large_string())
-        assert received.schema.field(4).type == pa.string()
+        # Mismatched formats always resolve to large_string, regardless of which side is small/large/dict.
+        assert received.schema.field(3).type == pa.large_string()
+        assert received.schema.field(4).type == pa.large_string()
         assert received.schema.field(5).type == pa.large_string()
-        assert received.schema.field(6).type == pa.dictionary(pa.int32(), pa.large_string())
-        assert received.schema.field(7).type == pa.string()
+        assert received.schema.field(6).type == pa.large_string()
+        assert received.schema.field(7).type == pa.large_string()
         assert received.schema.field(8).type == pa.large_string()
         assert received.schema.field(9).type == pa.dictionary(pa.int32(), pa.large_string())
         expected_values = write_values + modify_values
@@ -1892,11 +1894,11 @@ class TestStringFormatRoundtrip:
             ),
             "small_to_small": pa.array(expected_values, pa.string()),
             "small_to_large": pa.array(expected_values, pa.large_string()),
-            "small_to_dict": pa.compute.dictionary_encode(pa.array(expected_values, pa.large_string())),
-            "large_to_small": pa.array(expected_values, pa.string()),
+            "small_to_dict": pa.array(expected_values, pa.large_string()),
+            "large_to_small": pa.array(expected_values, pa.large_string()),
             "large_to_large": pa.array(expected_values, pa.large_string()),
-            "large_to_dict": pa.compute.dictionary_encode(pa.array(expected_values, pa.large_string())),
-            "dict_to_small": pa.array(expected_values, pa.string()),
+            "large_to_dict": pa.array(expected_values, pa.large_string()),
+            "dict_to_small": pa.array(expected_values, pa.large_string()),
             "dict_to_large": pa.array(expected_values, pa.large_string()),
             "dict_to_dict": pa.compute.dictionary_encode(pa.array(expected_values, pa.large_string())),
         }
@@ -2168,11 +2170,12 @@ class TestStringFormatRoundtrip:
         received = lib.batch_read([sym])[sym].data if batch else lib.read(sym).data
         assert received.schema.field(0).type == pa.string()
         assert received.schema.field(1).type == pa.large_string()
-        assert received.schema.field(2).type == pa.dictionary(pa.int32(), pa.large_string())
-        assert received.schema.field(3).type == pa.string()
+        # Mismatched formats always resolve to large_string, regardless of which side is small/large/dict.
+        assert received.schema.field(2).type == pa.large_string()
+        assert received.schema.field(3).type == pa.large_string()
         assert received.schema.field(4).type == pa.large_string()
-        assert received.schema.field(5).type == pa.dictionary(pa.int32(), pa.large_string())
-        assert received.schema.field(6).type == pa.string()
+        assert received.schema.field(5).type == pa.large_string()
+        assert received.schema.field(6).type == pa.large_string()
         assert received.schema.field(7).type == pa.large_string()
         assert received.schema.field(8).type == pa.dictionary(pa.int32(), pa.large_string())
         assert received.schema.field(9).type == pa.string()
@@ -2289,11 +2292,12 @@ def test_symbol_concat_arrow_string_types(in_memory_version_store_arrow):
     received = lib.batch_read_and_join([sym_0, sym_1], QueryBuilder().concat()).data
     assert received.schema.field(0).type == pa.string()
     assert received.schema.field(1).type == pa.large_string()
-    assert received.schema.field(2).type == pa.dictionary(pa.int32(), pa.large_string())
-    assert received.schema.field(3).type == pa.string()
+    # Mismatched formats always resolve to large_string, regardless of which side is small/large/dict.
+    assert received.schema.field(2).type == pa.large_string()
+    assert received.schema.field(3).type == pa.large_string()
     assert received.schema.field(4).type == pa.large_string()
-    assert received.schema.field(5).type == pa.dictionary(pa.int32(), pa.large_string())
-    assert received.schema.field(6).type == pa.string()
+    assert received.schema.field(5).type == pa.large_string()
+    assert received.schema.field(6).type == pa.large_string()
     assert received.schema.field(7).type == pa.large_string()
     assert received.schema.field(8).type == pa.dictionary(pa.int32(), pa.large_string())
     assert received.schema.field(9).type == pa.string()

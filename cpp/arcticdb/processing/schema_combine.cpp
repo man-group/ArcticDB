@@ -739,8 +739,17 @@ NormalizationMetadata accumulate_arrow_and_arrow_norm(
                     res_columns[column_name].clear_timezone();
                 }
                 if (other_column->has_string_format()) {
-                    // Always override string format with the last.
-                    res_columns[column_name].set_string_format(other_column->string_format());
+                    if (res_columns[column_name].has_string_format()) {
+                        if (res_columns[column_name].string_format() != other_column->string_format()) {
+                            // If we are mixing different string formats we always use large_string
+                            res_columns[column_name].set_string_format(
+                                    proto::descriptors::ArrowStringFormat::LARGE_STRING
+                            );
+                        }
+                    } else {
+                        // If only other has_string_format we inherit it.
+                        res_columns[column_name].set_string_format(other_column->string_format());
+                    }
                 }
             }
     );
