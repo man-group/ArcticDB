@@ -169,7 +169,7 @@ std::vector<std::vector<EntityId>> offsets_to_entity_ids(
 template<class... Args>
 ProcessingUnit gather_entities(ComponentManager& component_manager, const std::vector<EntityId>& entity_ids) {
     ProcessingUnit res;
-    auto components = component_manager.get_entities_and_decrement_refcount<Args...>(entity_ids);
+    auto components = component_manager.get_components_and_decrement_refcount<Args...>(entity_ids);
     (
             [&] {
                 auto component = std::move(std::get<std::vector<Args>>(components));

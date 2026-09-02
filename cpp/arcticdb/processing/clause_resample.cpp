@@ -224,7 +224,7 @@ std::vector<std::vector<EntityId>> ResampleClause<closed_boundary>::structure_fo
         return {};
     }
     ARCTICDB_RUNTIME_DEBUG(log::memory(), "ResampleClause: structure for processing 2");
-    auto [segments, row_ranges, col_ranges] = component_manager_->get_entities<
+    auto [segments, row_ranges, col_ranges] = component_manager_->get_components<
             std::shared_ptr<SegmentInMemory>,
             std::shared_ptr<RowRange>,
             std::shared_ptr<ColRange>>(entity_ids);

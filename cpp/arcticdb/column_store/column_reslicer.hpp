@@ -14,39 +14,64 @@
 
 #include <arcticdb/column_store/column.hpp>
 #include <arcticdb/column_store/string_pool.hpp>
-#include <arcticdb/entity/type_utils.hpp>
 #include <arcticdb/processing/expression_node.hpp>
 
 namespace arcticdb {
+
+[[nodiscard]] size_t min_rows_per_segment(size_t rows_per_segment);
+
+[[nodiscard]] size_t max_rows_per_segment(size_t rows_per_segment);
 
 // Helper class used by both the column and segment reslicer classes
 class ReslicingInfo {
   public:
     ReslicingInfo(uint64_t _total_rows, uint64_t _rows_per_segment) :
-        total_rows(_total_rows),
-        num_segments((total_rows + _rows_per_segment - 1) / _rows_per_segment),
-        rows_per_segment(total_rows / num_segments),
-        num_remainder_segments(total_rows % num_segments),
-        num_exact_segments(num_segments - num_remainder_segments) {
+        total_rows_(_total_rows),
+        num_segments_((total_rows_ + _rows_per_segment - 1) / _rows_per_segment),
+        rows_per_segment(total_rows_ / num_segments_),
+        num_remainder_segments(total_rows_ % num_segments_),
+        num_exact_segments(num_segments_ - num_remainder_segments) {
         auto output_rows = num_exact_segments * rows_per_segment + num_remainder_segments * (rows_per_segment + 1);
         util::check(
-                output_rows == total_rows,
+                output_rows == total_rows_,
                 "SlicingInfo input rows does not match constructed output rows {} != {}",
-                total_rows,
+                total_rows_,
                 output_rows
         );
     }
 
     ARCTICDB_MOVE_COPY_DEFAULT(ReslicingInfo)
 
-    uint64_t rows_in_slice(uint64_t idx) const {
+    [[nodiscard]] uint64_t rows_in_slice(uint64_t idx) const {
         return idx < num_exact_segments ? rows_per_segment : rows_per_segment + 1;
     }
 
-    uint64_t total_rows;
-    uint64_t num_segments;
+    [[nodiscard]] uint64_t num_segments() const { return num_segments_; }
+
+    [[nodiscard]] uint64_t total_rows() const { return total_rows_; }
+
+    /// Inverse of ReslicingInfo::rows_in_slice: given a row index into the combined [0, total_rows) output, returns
+    /// the (slice index, offset within that slice) pair that rows_in_slice's slicing would place it in.
+    [[nodiscard]] std::pair<uint64_t, uint64_t> slice_and_offset_for_row(uint64_t global_row) const {
+        ARCTICDB_DEBUG_CHECK(
+                ErrorCode::E_ASSERTION_FAILURE,
+                global_row < total_rows_,
+                "ReslicingInfo::slice_and_offset_for_row: row {} is out of bounds for {} total rows",
+                global_row,
+                total_rows_
+        );
+        const uint64_t exact_rows = num_exact_segments * rows_per_segment;
+        if (global_row < exact_rows) {
+            return {global_row / rows_per_segment, global_row % rows_per_segment};
+        }
+        const uint64_t remainder_row = global_row - exact_rows;
+        return {num_exact_segments + remainder_row / (rows_per_segment + 1), remainder_row % (rows_per_segment + 1)};
+    }
 
   private:
+    uint64_t total_rows_;
+    uint64_t num_segments_;
+
     // This is how many rows most segments will have
     uint64_t rows_per_segment;
     // This is how many segments will have rows_per_segment+1 rows

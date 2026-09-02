@@ -406,9 +406,9 @@ TEST(Resample, ProcessMultipleSegments) {
     auto col_range_2 = std::make_shared<ColRange>(1, 2);
 
     auto ids = component_manager->get_new_entity_ids(3);
-    component_manager->add_entity(ids[0], seg_0, row_range_0, col_range_0, EntityFetchCount(1));
-    component_manager->add_entity(ids[1], seg_1, row_range_1, col_range_1, EntityFetchCount(2));
-    component_manager->add_entity(ids[2], seg_2, row_range_2, col_range_2, EntityFetchCount(1));
+    component_manager->add_components(ids[0], seg_0, row_range_0, col_range_0, EntityFetchCount(1));
+    component_manager->add_components(ids[1], seg_1, row_range_1, col_range_1, EntityFetchCount(2));
+    component_manager->add_components(ids[2], seg_2, row_range_2, col_range_2, EntityFetchCount(1));
 
     std::vector<EntityId> ids_0{ids[0], ids[1]};
     std::vector<EntityId> ids_1{ids[1]};
