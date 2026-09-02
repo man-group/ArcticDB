@@ -12,6 +12,7 @@ import sys
 
 from arcticdb import WritePayload
 
+from arcticdb.config import set_config_int
 from arcticdb.util.test_utils import CachedDFGenerator
 from asv_runner.benchmarks.mark import SkipNotImplemented
 from benchmarks.common import *
@@ -26,6 +27,11 @@ def get_metadata(n_entries: int):
 
 def get_lib_name(num_syms: int, num_snaps: int, metadata_size: str):
     return f"n_syms-{num_syms}__n_snaps-{num_snaps}__md_size-{metadata_size}"
+
+
+# `VersionMap.ReloadInterval`, in nanoseconds. ArcticDB's default is two seconds
+# (DEFAULT_RELOAD_INTERVAL, cpp/arcticdb/version/version_map.hpp:112).
+_POPULATION_VERSION_CACHE_NS = 24 * 60 * 60 * 1_000_000_000
 
 
 class Snapshots:
@@ -43,6 +49,25 @@ class Snapshots:
         self.logger = get_logger()
 
     def setup_cache(self):
+        # `lib.snapshot()` with no explicit `versions` snapshots the latest version of
+        # every symbol, which means reading the version ref key of every symbol in the
+        # library (PythonVersionStore::snapshot -> batch_get_latest_version). Those
+        # reads come from the version map's in-process cache, but the cache is only
+        # honoured for `VersionMap.ReloadInterval`, two seconds by default. Against
+        # real S3 a 1000-symbol pass takes longer than that, so the cache has always
+        # expired by the next snapshot and each one pays ~1000 extra GETs: 1004
+        # storage requests per snapshot instead of 4. At S3's ~25ms round trip and
+        # ArcticDB's default six IO threads that is ~4.4s per snapshot rather than
+        # ~0.13s, so each of the two 1000-symbol x 1000-snapshot libraries takes over
+        # an hour to populate and asv kills the whole setup (see setup_cache.timeout).
+        #
+        # Nothing writes to a library after its own write_batch below, so the cached
+        # versions cannot go stale during the snapshot loop and holding them for the
+        # duration is safe. It puts the 1000-symbol libraries back on the same four
+        # requests per snapshot as the single-symbol ones. asv runs setup_cache in its
+        # own process, so this does not reach the benchmarks themselves.
+        set_config_int("VersionMap.ReloadInterval", _POPULATION_VERSION_CACHE_NS)
+
         write_parameters = list(itertools.product(self.num_symbols, self.num_snapshots, self.metadata_entries))
         assert write_parameters
         libs_for_storage = dict()
@@ -73,6 +98,21 @@ class Snapshots:
                     lib.snapshot(f"snap_{i}", metadata=metadata)
 
         return libs_for_storage
+
+    # asv's budget for setup_cache. This is deliberately not the `timeout` class
+    # attribute above and not a `setup_cache_timeout` class attribute either: asv
+    # reads the setup_cache budget off the setup_cache function object
+    # (asv_runner/benchmarks/_base.py, Benchmark.__init__ -> `setup_cache_timeout =
+    # _get_first_attr([self._setup_cache], "timeout", None)`), so a class attribute of
+    # that name is silently ignored and the class `timeout` is used instead.
+    #
+    # Note also that asv applies it as an *idle* timeout on the child's output rather
+    # than a wall clock limit (asv/util.py, `select.select(..., timeout)` in
+    # _run_recursive). setup_cache prints only once per library, so in practice this
+    # caps the population of a single library. The slowest is ~2.5 minutes against
+    # real S3, so 30 minutes leaves a wide margin while still failing a regression in
+    # half the time the unbudgeted 3000s above took to fail.
+    setup_cache.timeout = 1_800
 
     def setup(self, libs_for_storage, storage, num_symbols, num_snapshots, metadata_entries, load_metadata):
         self.lib = libs_for_storage[storage][get_lib_name(num_symbols, num_snapshots, metadata_entries)]
