@@ -276,6 +276,12 @@ A segment shared by two units (resample bucket boundaries, for example) is enque
 freed on read completion rather than unit completion, a unit never waits on a segment it has itself
 blocked, so any budget >= 1 and window >= 1 makes progress regardless of unit shape.
 
+Because two units can complete their reads of a shared segment at the same time, the components for a
+segment must be added to the `ComponentManager` exactly once. `schedule_first_iteration` uses a
+`util::ClaimFlags` (`cpp/arcticdb/util/claim_flags.hpp`), one `std::atomic_flag` per segment, and only
+the thread whose `claim(pos)` returns true adds them. A second add of a component an entity already
+has now raises an `InternalException` from `ComponentManager::add_components`.
+
 ### Test instrumentation
 
 `util::SegmentResidencyTracker` (`cpp/arcticdb/util/segment_residency_tracker.hpp`) counts segments
