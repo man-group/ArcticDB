@@ -2561,7 +2561,7 @@ std::variant<VersionedItem, CompactionError> sort_merge_impl(
     validate_slicing_policy_for_compaction(compaction_parameters, update_info, pipeline_context, write_options);
     const auto num_versioned_rows = pipeline_context->total_rows_;
     const bool append_to_existing = compaction_parameters.append_ && update_info.previous_index_key_.has_value();
-    // Cache this before calling read_incompletes_to_pipeline as it changes the descripor
+    // Cache this before calling read_incompletes_to_pipeline as it changes the descriptor
     const std::optional<SortedValue> initial_index_sorted_status =
             append_to_existing ? std::optional{pipeline_context->on_disk_descriptor().sorted()} : std::nullopt;
     const ReadIncompletesFlags read_incomplete_flags{
@@ -2592,7 +2592,7 @@ std::variant<VersionedItem, CompactionError> sort_merge_impl(
     );
 
     std::vector<FrameSlice> slices;
-    std::vector<folly::Future<VariantKey>> fut_vec;
+    std::vector<folly::Future<VariantKey>> write_futures;
     auto semaphore = std::make_shared<folly::NativeSemaphore>(n_segments_live_during_compaction());
     auto index = stream::index_type_from_descriptor(pipeline_context->on_disk_descriptor());
     util::variant_match(
@@ -2638,18 +2638,14 @@ std::variant<VersionedItem, CompactionError> sort_merge_impl(
                         aggregator{
                                 [&slices](FrameSlice&& slice) { slices.emplace_back(std::move(slice)); },
                                 DynamicSchema{*pipeline_context->staged_descriptor_, index},
-                                [pipeline_context, &fut_vec, &store, &semaphore](SegmentInMemory&& segment) {
-                                    const auto local_index_start = TimeseriesIndex::start_value_for_segment(segment);
-                                    const auto local_index_end = TimeseriesIndex::end_value_for_segment(segment);
-                                    const PartialKey pk{
-                                            KeyType::TABLE_DATA,
-                                            pipeline_context->version_id_,
+                                [&write_futures, store, pipeline_context, semaphore](SegmentInMemory&& segment) {
+                                    write_futures.emplace_back(write_compacted_segment<TimeseriesIndex>(
+                                            *store,
                                             pipeline_context->stream_id_,
-                                            local_index_start,
-                                            local_index_end
-                                    };
-                                    fut_vec.emplace_back(store->write_maybe_blocking(pk, std::move(segment), semaphore)
-                                    );
+                                            pipeline_context->version_id_,
+                                            std::move(segment),
+                                            semaphore
+                                    ));
                                 },
                                 RowCountSegmentPolicy(write_options.segment_row_size)
                         };
@@ -2687,7 +2683,7 @@ std::variant<VersionedItem, CompactionError> sort_merge_impl(
             }
     );
 
-    auto keys = folly::collect(fut_vec).get();
+    auto keys = folly::collect(write_futures).get();
     auto vit =
             collate_and_write(store, pipeline_context, slices, keys, pipeline_context->incompletes_after(), user_meta);
     return vit;
@@ -2751,8 +2747,7 @@ std::variant<VersionedItem, CompactionError> compact_incomplete_impl(
             index,
             dynamic_schema ? VariantSchema{DynamicSchema::default_schema(index, stream_id)}
                            : VariantSchema{FixedSchema::default_schema(index, stream_id)},
-            compaction_parameters.sparsify_ ? VariantColumnPolicy{SparseColumnPolicy{}}
-                                            : VariantColumnPolicy{DenseColumnPolicy{}}
+            VariantColumnPolicy{SparseColumnPolicy{}}
     );
 
     CompactionResult result =
