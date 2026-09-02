@@ -540,7 +540,7 @@ void Column::append(const Column& other, position_t at_row) {
 
     util::check(last_physical_row_ + 1 == row_count(), "Row count calculation incorrect after dense append");
 
-    if (at_row == initial_row_count && !other.is_sparse() && !is_sparse()) {
+    if (at_row == initial_row_count && !other.is_sparse() && !was_sparse) {
         util::check(
                 last_logical_row_ == last_physical_row_,
                 "Expected logical and physical rows to line up in append of non-sparse columns"
