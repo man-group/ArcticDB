@@ -41,6 +41,7 @@ from arcticdb.version_store.library import (
     ReadInfoRequest,
     ArcticInvalidApiUsageException,
     DeleteRequest,
+    UpdatePayload,
 )
 from tests.conftest import Marks
 from tests.util.marking import marks
@@ -311,33 +312,28 @@ def test_write_object_in_batch_without_pickle_mode_many_symbols(arctic_library):
     assert "(and more)... 10 data in total have bad types." in message
 
 
-@pytest.mark.storage
-def test_write_batch_duplicate_symbols(arctic_library):
-    """Should throw and not write if duplicate symbols are provided."""
-    lib = arctic_library
-    with pytest.raises(ArcticDuplicateSymbolsInBatchException):
-        lib.write_batch(
-            [
-                WritePayload("symbol_1", pd.DataFrame()),
-                WritePayload("symbol_1", pd.DataFrame(), metadata="great_metadata"),
-            ]
-        )
-
-    assert not lib.list_symbols()
-
-
-@pytest.mark.storage
-def test_write_pickle_batch_duplicate_symbols(arctic_library):
-    """Should throw and not write if duplicate symbols are provided."""
-    lib = arctic_library
-    with pytest.raises(ArcticDuplicateSymbolsInBatchException):
-        lib.write_pickle_batch(
-            [
-                WritePayload("symbol_1", pd.DataFrame()),
-                WritePayload("symbol_1", pd.DataFrame(), metadata="great_metadata"),
-            ]
-        )
-
+# Equivalent V1 API test in test_basic_version_store.py
+@pytest.mark.parametrize(
+    "method",
+    ["write_batch", "write_pickle_batch", "append_batch", "update_batch", "write_metadata_batch", "compact_data_batch"],
+)
+def test_duplicate_symbols_in_modification_methods(in_memory_library, method):
+    lib = in_memory_library
+    syms = ["sym1", "sym2", "sym1", "sym2", "sym3"]
+    if method == "update_batch":
+        payloads = [UpdatePayload(sym, pd.DataFrame({"col": [0]}, index=[pd.Timestamp(0)])) for sym in syms]
+    elif method == "write_metadata_batch":
+        payloads = [WriteMetadataPayload(sym, "metadata") for sym in syms]
+    elif method == "compact_data_batch":
+        payloads = syms
+    else:  # write_batch/write_pickle_batch/append_batch
+        payloads = [WritePayload(sym, pd.DataFrame({"col": [0]})) for sym in syms]
+    with pytest.raises(ArcticDuplicateSymbolsInBatchException) as e:
+        getattr(lib, method)(payloads)
+    msg = str(e.value)
+    assert "sym1" in msg
+    assert "sym2" in msg
+    assert "sym3" not in msg
     assert not lib.list_symbols()
 
 
@@ -1700,9 +1696,7 @@ def test_compact_data_batch_prune_previous(lmdb_library, prune_previous_versions
 
 
 # These compact_data_batch tests have equivalents in test_compact_data.py for the V1 API. This tests the V1 vs V2 API
-# differences, namely:
-# * DataError objects returned when one symbol fails, rather than the whole method raising
-# * Exception raised on duplicated symbol names
+# differences, namely DataError objects returned when one symbol fails, rather than the whole method raising
 def test_compact_data_batch_one_symbol_doesnt_exist(lmdb_library):
     lib = lmdb_library
     num_symbols = 3
@@ -1741,10 +1735,3 @@ def test_compact_data_batch_one_symbol_recursively_normalized(lmdb_library):
     assert res[2].version_request_data is None
     assert res[2].error_code == ErrorCode.E_OPERATION_NOT_SUPPORTED_WITH_RECURSIVE_NORMALIZED_DATA
     assert res[2].error_category == ErrorCategory.SCHEMA
-
-
-def test_compact_data_batch_duplicated_symbols(lmdb_library):
-    lib = lmdb_library
-    syms = ["duplicated_sym", "unique_sym", "duplicated_sym"]
-    with pytest.raises(ArcticDuplicateSymbolsInBatchException):
-        lib.compact_data_batch(syms)
