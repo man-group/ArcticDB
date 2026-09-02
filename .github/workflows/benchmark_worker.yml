@@ -137,11 +137,19 @@ jobs:
       # job: `merge_functions` (and any future module using `seaweed_utils`) talks to
       # 127.0.0.1:8333 and fails its setup_cache without it (first shadow run, 2026-09-01).
       # The action's market-type validation is dead code, so ask the instance what it is.
-      - name: record the runner's lifecycle
+      # The AMI id is the one line of this that outlives the log: `bench` records it in
+      # the sidecar, so a whole run moving at once can afterwards be read as a runner
+      # image change rather than a regression (ticket 22). IMDS saying nothing is
+      # `unknown`, and an empty `--runner-image` is how the sidecar spells that.
+      - name: record the runner's image and lifecycle
+        id: runner
         run: |
           token=$(curl -sS -m 2 -X PUT http://169.254.169.254/latest/api/token -H 'X-aws-ec2-metadata-token-ttl-seconds: 60' || true)
           meta() { curl -sS -m 2 -H "X-aws-ec2-metadata-token: $token" "http://169.254.169.254/latest/meta-data/$1" 2>/dev/null || echo unknown; }
-          echo "runner: $(meta instance-id) $(meta instance-type) lifecycle=$(meta instance-life-cycle) az=$(meta placement/availability-zone)" | tee -a "$GITHUB_STEP_SUMMARY"
+          ami=$(meta ami-id)
+          echo "runner: $(meta instance-id) $(meta instance-type) ami=$ami lifecycle=$(meta instance-life-cycle) az=$(meta placement/availability-zone)" | tee -a "$GITHUB_STEP_SUMMARY"
+          if [ "$ami" = unknown ]; then ami=''; fi
+          printf 'ami=%s\n' "$ami" >> "$GITHUB_OUTPUT"
 
       - name: start SeaweedFS
         shell: bash -el {0}
@@ -161,7 +169,9 @@ jobs:
 
       # `--instance-type` is the one fact this job cannot read off its own box — an EC2
       # runner's metadata is not the plan's word — so it is passed down from the input the
-      # matrix filled, and `bench` records it in the sidecar (ticket 13).
+      # matrix filled, and `bench` records it in the sidecar (ticket 13). `--runner-image`
+      # is the other half of that record and travels the other way: only the box knows
+      # which AMI it booted from, so the IMDS step above read it and hands it over here.
       - name: benchmark
         env:
           WORKER: ${{ inputs.worker }}
@@ -171,6 +181,7 @@ jobs:
           STORAGE: ${{ inputs.storage }}
           PYTHON: ${{ inputs.python }}
           INSTANCE_TYPE: ${{ inputs.instance_type }}
+          AMI_ID: ${{ steps.runner.outputs.ami }}
         run: |
           wheel=$(find "$RUNNER_TEMP/wheel" -name '*.whl' | head -1)
           echo "wheel: $wheel"
@@ -183,7 +194,8 @@ jobs:
             --output "artifacts/$ARTIFACT.json" \
             --python "$PYTHON" \
             --storage "$STORAGE" \
-            --instance-type "$INSTANCE_TYPE"
+            --instance-type "$INSTANCE_TYPE" \
+            --runner-image "$AMI_ID"
 
       # Artifact name = `<worker>-<sha8>`, and exactly one *result* JSON inside it: that is
       # the contract `collect` reads the worker off, suffix stripped (tickets 07 and 18).
