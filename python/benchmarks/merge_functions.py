@@ -158,11 +158,6 @@ def affected_slices(num_rows_in_target, matched_slices_count):
     return np.linspace(0, num_slices - 1, count, dtype=int).tolist()
 
 
-def reset_bucket(seaweed, bucket):
-    seaweed.delete_bucket(bucket)
-    seaweed.create_bucket(bucket)
-
-
 class MergeBase:
 
     STRATEGIES = {
@@ -227,7 +222,7 @@ class MergeBase:
     def _prepare_merge(self, lib_name, on_count, source_size, matched_slices=None):
         # Fresh Arctic per sample so nothing cached from the previous sample's bucket survives.
         del self.ac
-        reset_bucket(self.seaweed, WORK_BUCKET)
+        self.seaweed.reset_bucket(WORK_BUCKET)
         self.seaweed.copy_bucket(CACHE_BUCKET, WORK_BUCKET, prefixes=[f"{self.target_prefix}/"])
         self.ac = Arctic(self.seaweed.arctic_uri(WORK_BUCKET, self.target_prefix))
         self.lib = self.ac.get_library(lib_name)
@@ -262,7 +257,7 @@ class MergeThinDatetime(MergeBase):
         ]
 
     def setup_cache(self):
-        reset_bucket(self.seaweed, CACHE_BUCKET)
+        self.seaweed.reset_bucket(CACHE_BUCKET)
         for scenario in self.params[0]:
             num_rows, num_value_cols = scenario
             rng = np.random.default_rng([num_rows, num_value_cols])
@@ -302,7 +297,7 @@ class MergeThinRowRange(MergeBase):
         ]
 
     def setup_cache(self):
-        reset_bucket(self.seaweed, CACHE_BUCKET)
+        self.seaweed.reset_bucket(CACHE_BUCKET)
         for scenario in self.params[0]:
             num_rows, num_value_cols = scenario
             rng = np.random.default_rng([num_rows, num_value_cols])
@@ -343,7 +338,7 @@ class MergeThinStringDatetime(MergeBase):
         ]
 
     def setup_cache(self):
-        reset_bucket(self.seaweed, CACHE_BUCKET)
+        self.seaweed.reset_bucket(CACHE_BUCKET)
         parameter_map = dict(zip(self.param_names, self.params))
         for scenario in parameter_map["scenario"]:
             for num_unique_strings in parameter_map["num_unique_strings"]:
@@ -399,7 +394,7 @@ class MergeThinStringRowRange(MergeBase):
         ]
 
     def setup_cache(self):
-        reset_bucket(self.seaweed, CACHE_BUCKET)
+        self.seaweed.reset_bucket(CACHE_BUCKET)
         param_map = dict(zip(self.param_names, self.params))
         for scenario in param_map["scenario"]:
             for num_unique_strings in param_map["num_unique_strings"]:
@@ -454,7 +449,7 @@ class MergeWideDatetime(MergeBase):
         ]
 
     def setup_cache(self):
-        reset_bucket(self.seaweed, CACHE_BUCKET)
+        self.seaweed.reset_bucket(CACHE_BUCKET)
         for scenario in self.params[0]:
             num_rows, num_value_cols = scenario
             rng = np.random.default_rng([num_rows, num_value_cols])
@@ -494,7 +489,7 @@ class MergeWideRowRange(MergeBase):
         ]
 
     def setup_cache(self):
-        reset_bucket(self.seaweed, CACHE_BUCKET)
+        self.seaweed.reset_bucket(CACHE_BUCKET)
         for scenario in self.params[0]:
             num_rows, num_value_cols = scenario
             rng = np.random.default_rng([num_rows, num_value_cols])

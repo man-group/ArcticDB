@@ -2433,7 +2433,8 @@
                 "1000"
             ]
         ],
-        "setup_cache_key": "compact_data:427",
+        "setup_cache_key": "compact_data:410",
+        "timeout": 600,
         "type": "peakmemory",
         "unit": "bytes",
         "version": "ba4165befb708b8f7f58643cda9872d9cb793aad070c02999d2cc7114fa42ec9"
@@ -2462,10 +2463,11 @@
                 "1000"
             ]
         ],
-        "repeat": 7,
+        "repeat": 15,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "compact_data:427",
+        "setup_cache_key": "compact_data:410",
+        "timeout": 600,
         "type": "time",
         "unit": "seconds",
         "version": "213d83968732a37caeb4a6199db291b7ff4720e1ba81da9b8f9d335bf863e675",
@@ -2494,7 +2496,8 @@
                 "1000000"
             ]
         ],
-        "setup_cache_key": "compact_data:329",
+        "setup_cache_key": "compact_data:316",
+        "timeout": 600,
         "type": "peakmemory",
         "unit": "bytes",
         "version": "1581bf5cf4f523b1dba5029cd77944e091eb35ea35bb67e679bda577d5e5ace3"
@@ -2524,10 +2527,11 @@
                 "1000000"
             ]
         ],
-        "repeat": 7,
+        "repeat": 15,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "compact_data:329",
+        "setup_cache_key": "compact_data:316",
+        "timeout": 600,
         "type": "time",
         "unit": "seconds",
         "version": "fec1a6b2e52e6380a99b1666c49b3461b4fb24f28221b495f60e1be274bb9023",
@@ -2556,7 +2560,8 @@
                 "1000000"
             ]
         ],
-        "setup_cache_key": "compact_data:378",
+        "setup_cache_key": "compact_data:363",
+        "timeout": 600,
         "type": "peakmemory",
         "unit": "bytes",
         "version": "7a58c10ef4b2a352df474a8f1904d021f721652d3837e10680d47d47c3d275b6"
@@ -2586,17 +2591,18 @@
                 "1000000"
             ]
         ],
-        "repeat": 7,
+        "repeat": 15,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "compact_data:378",
+        "setup_cache_key": "compact_data:363",
+        "timeout": 600,
         "type": "time",
         "unit": "seconds",
         "version": "8665815997d55eb8deeb5b37f5eafc228bc6aed867aee9a5f0e5171296cbbd26",
         "warmup_time": 0
     },
     "compact_data.CompactDataNumericDynamicSchema.peakmem_compact_data": {
-        "code": "class CompactDataNumericDynamicSchema:\n    def peakmem_compact_data(self, row_params, num_columns):\n        self.compact_data(row_params[2])\n\n    def setup(self, row_params, num_columns):\n        self._setup(lib_name(row_params, num_columns), row_params[2])\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "code": "class CompactDataNumericDynamicSchema:\n    def peakmem_compact_data(self, row_params, num_columns):\n        self.compact_data(row_params[2])\n\n    def setup(self, row_params, num_columns):\n        self._setup(lib_name(*row_params, num_columns), row_params[2])\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
         "name": "compact_data.CompactDataNumericDynamicSchema.peakmem_compact_data",
         "param_names": [
             "(num_rows, initial_rows_per_segment, target_rows_per_segment)",
@@ -2612,13 +2618,14 @@
                 "10000"
             ]
         ],
-        "setup_cache_key": "compact_data:219",
+        "setup_cache_key": "compact_data:210",
+        "timeout": 600,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "c15da0bab109a8a3ef408294394b0b4492de87510ce03ef817a72ddba0572700"
+        "version": "4eba478df8a7a2bde8359bf0787487af67eed48ae98e90934e7bc5efe426ca74"
     },
     "compact_data.CompactDataNumericDynamicSchema.time_compact_data": {
-        "code": "class CompactDataNumericDynamicSchema:\n    def time_compact_data(self, row_params, num_columns):\n        self.compact_data(row_params[2])\n\n    def setup(self, row_params, num_columns):\n        self._setup(lib_name(row_params, num_columns), row_params[2])\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "code": "class CompactDataNumericDynamicSchema:\n    def time_compact_data(self, row_params, num_columns):\n        self.compact_data(row_params[2])\n\n    def setup(self, row_params, num_columns):\n        self._setup(lib_name(*row_params, num_columns), row_params[2])\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
         "min_run_count": 2,
         "name": "compact_data.CompactDataNumericDynamicSchema.time_compact_data",
         "number": 1,
@@ -2639,14 +2646,15 @@
         "repeat": 15,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "compact_data:219",
+        "setup_cache_key": "compact_data:210",
+        "timeout": 600,
         "type": "time",
         "unit": "seconds",
-        "version": "1a7929bda8b3b10dd3e652f070e4ccc125a28aae4caf0e7ebe539f86bc24f897",
+        "version": "9e8213ec401f2c50caaa39004e18cc4cc4fde94e314a5ea34741ed635d8c9073",
         "warmup_time": 0
     },
     "compact_data.CompactDataNumericStaticSchema.peakmem_compact_data": {
-        "code": "class CompactDataNumericStaticSchema:\n    def peakmem_compact_data(self, row_params, num_columns, column_slicing):\n        self.compact_data(row_params[2])\n\n    def setup(self, row_params, num_columns, column_slicing):\n        self._setup(lib_name(row_params, num_columns, column_slicing), row_params[2])\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "code": "class CompactDataNumericStaticSchema:\n    def peakmem_compact_data(self, row_params, num_columns, column_slicing):\n        self.compact_data(row_params[2])\n\n    def setup(self, row_params, num_columns, column_slicing):\n        self._setup(lib_name(*row_params, num_columns, column_slicing), row_params[2])\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
         "name": "compact_data.CompactDataNumericStaticSchema.peakmem_compact_data",
         "param_names": [
             "(num_rows, initial_rows_per_segment, target_rows_per_segment)",
@@ -2669,12 +2677,13 @@
             ]
         ],
         "setup_cache_key": "compact_data:109",
+        "timeout": 600,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "37d8aadd1f1639c8702ca70ab8299d2d64e6b9e634862531b424ebde718e1275"
+        "version": "d19ee4339e8f2f77cb73b66603bbfab832d5e8f6fcd2c3d5438640cd84f4892d"
     },
     "compact_data.CompactDataNumericStaticSchema.time_compact_data": {
-        "code": "class CompactDataNumericStaticSchema:\n    def time_compact_data(self, row_params, num_columns, column_slicing):\n        self.compact_data(row_params[2])\n\n    def setup(self, row_params, num_columns, column_slicing):\n        self._setup(lib_name(row_params, num_columns, column_slicing), row_params[2])\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "code": "class CompactDataNumericStaticSchema:\n    def time_compact_data(self, row_params, num_columns, column_slicing):\n        self.compact_data(row_params[2])\n\n    def setup(self, row_params, num_columns, column_slicing):\n        self._setup(lib_name(*row_params, num_columns, column_slicing), row_params[2])\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
         "min_run_count": 2,
         "name": "compact_data.CompactDataNumericStaticSchema.time_compact_data",
         "number": 1,
@@ -2702,13 +2711,14 @@
         "rounds": 1,
         "sample_time": 0.01,
         "setup_cache_key": "compact_data:109",
+        "timeout": 600,
         "type": "time",
         "unit": "seconds",
-        "version": "1adb81796aa15ebb66f2b9cfa6d803ffb9687ea074115073d9e0ff49fd342d73",
+        "version": "d8b8f4fc085bb33219e3a0f6c507e2093867a9ce1122208a33d66d813f1dbaa2",
         "warmup_time": 0
     },
     "compact_data.CompactDataStringsStaticSchema.peakmem_compact_data": {
-        "code": "class CompactDataStringsStaticSchema:\n    def peakmem_compact_data(self, row_params, num_columns, column_slicing, num_unique_strings):\n        target_rows_per_segment = row_params[2]\n        self.compact_data(row_params[2])\n\n    def setup(self, row_params, num_columns, column_slicing, num_unique_strings):\n        self._setup(lib_name(row_params, num_columns, column_slicing, num_unique_strings), row_params[2])\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "code": "class CompactDataStringsStaticSchema:\n    def peakmem_compact_data(self, row_params, num_columns, column_slicing, num_unique_strings):\n        self.compact_data(row_params[2])\n\n    def setup(self, row_params, num_columns, column_slicing, num_unique_strings):\n        self._setup(lib_name(*row_params, num_columns, column_slicing, num_unique_strings), row_params[2])\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
         "name": "compact_data.CompactDataStringsStaticSchema.peakmem_compact_data",
         "param_names": [
             "(num_rows, initial_rows_per_segment, target_rows_per_segment)",
@@ -2735,13 +2745,14 @@
                 "100000"
             ]
         ],
-        "setup_cache_key": "compact_data:165",
+        "setup_cache_key": "compact_data:161",
+        "timeout": 600,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "c0318b30706b143ac685ec9a5c549702a5d82b8f0bbe7e4587e0ceb96620e91d"
+        "version": "9eec2b7e3b9413768c58da7c6ab73738e3289d2fe2fde076e3af615dd282953e"
     },
     "compact_data.CompactDataStringsStaticSchema.time_compact_data": {
-        "code": "class CompactDataStringsStaticSchema:\n    def time_compact_data(self, row_params, num_columns, column_slicing, num_unique_strings):\n        self.compact_data(row_params[2])\n\n    def setup(self, row_params, num_columns, column_slicing, num_unique_strings):\n        self._setup(lib_name(row_params, num_columns, column_slicing, num_unique_strings), row_params[2])\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "code": "class CompactDataStringsStaticSchema:\n    def time_compact_data(self, row_params, num_columns, column_slicing, num_unique_strings):\n        self.compact_data(row_params[2])\n\n    def setup(self, row_params, num_columns, column_slicing, num_unique_strings):\n        self._setup(lib_name(*row_params, num_columns, column_slicing, num_unique_strings), row_params[2])\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
         "min_run_count": 2,
         "name": "compact_data.CompactDataStringsStaticSchema.time_compact_data",
         "number": 1,
@@ -2773,10 +2784,11 @@
         "repeat": 15,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "compact_data:165",
+        "setup_cache_key": "compact_data:161",
+        "timeout": 600,
         "type": "time",
         "unit": "seconds",
-        "version": "dd1b297e52b126a9abb2023c06bfd999045e847f37e7ab00a34e7e842b39a305",
+        "version": "06ff4ce410b3ace5b0ee063a72a964dee4cd22f3cb8d24dcb027cc5b0037e8e1",
         "warmup_time": 0
     },
     "finalize_staged_data.FinalizeStagedData.peakmem_finalize_staged_data": {
@@ -3107,7 +3119,7 @@
         "warmup_time": 0.1
     },
     "merge_functions.MergeThinDatetime.peakmem_merge": {
-        "code": "class MergeThinDatetime:\n    def peakmem_merge(self, scenario, strategy, on_count, source_size, matched_slices):\n        self.merge(strategy)\n\n    def setup(self, scenario, strategy, on_count, source_size, matched_slices):\n        self._prepare_merge(lib_name(*scenario, self.INDEX_KIND), on_count, source_size, matched_slices)\n\n    def setup_cache(self):\n        reset_bucket(self.seaweed, CACHE_BUCKET)\n        for scenario in self.params[0]:\n            num_rows, num_value_cols = scenario\n            rng = np.random.default_rng([num_rows, num_value_cols])\n            target = generate_merge_target(num_rows, num_value_cols, self.value_dtype, self.INDEX_KIND, rng)\n            library_name = lib_name(*scenario, self.INDEX_KIND)\n            self._write_cache_target(library_name, target)\n            self._precompute_sources(library_name, target)",
+        "code": "class MergeThinDatetime:\n    def peakmem_merge(self, scenario, strategy, on_count, source_size, matched_slices):\n        self.merge(strategy)\n\n    def setup(self, scenario, strategy, on_count, source_size, matched_slices):\n        self._prepare_merge(lib_name(*scenario, self.INDEX_KIND), on_count, source_size, matched_slices)\n\n    def setup_cache(self):\n        self.seaweed.reset_bucket(CACHE_BUCKET)\n        for scenario in self.params[0]:\n            num_rows, num_value_cols = scenario\n            rng = np.random.default_rng([num_rows, num_value_cols])\n            target = generate_merge_target(num_rows, num_value_cols, self.value_dtype, self.INDEX_KIND, rng)\n            library_name = lib_name(*scenario, self.INDEX_KIND)\n            self._write_cache_target(library_name, target)\n            self._precompute_sources(library_name, target)",
         "name": "merge_functions.MergeThinDatetime.peakmem_merge",
         "param_names": [
             "scenario",
@@ -3137,14 +3149,14 @@
                 "40"
             ]
         ],
-        "setup_cache_key": "merge_functions:264",
+        "setup_cache_key": "merge_functions:259",
         "timeout": 600,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "bda038e7ac799f351dadb49a529e87aa2762d0993fa7b3f2fb5534f80d20c5d6"
+        "version": "0ef79a901e6e72d765404068b8a4e0cb5b452ca446103944041f1d2f1fee6b39"
     },
     "merge_functions.MergeThinDatetime.time_merge": {
-        "code": "class MergeThinDatetime:\n    def time_merge(self, scenario, strategy, on_count, source_size, matched_slices):\n        self.merge(strategy)\n\n    def setup(self, scenario, strategy, on_count, source_size, matched_slices):\n        self._prepare_merge(lib_name(*scenario, self.INDEX_KIND), on_count, source_size, matched_slices)\n\n    def setup_cache(self):\n        reset_bucket(self.seaweed, CACHE_BUCKET)\n        for scenario in self.params[0]:\n            num_rows, num_value_cols = scenario\n            rng = np.random.default_rng([num_rows, num_value_cols])\n            target = generate_merge_target(num_rows, num_value_cols, self.value_dtype, self.INDEX_KIND, rng)\n            library_name = lib_name(*scenario, self.INDEX_KIND)\n            self._write_cache_target(library_name, target)\n            self._precompute_sources(library_name, target)",
+        "code": "class MergeThinDatetime:\n    def time_merge(self, scenario, strategy, on_count, source_size, matched_slices):\n        self.merge(strategy)\n\n    def setup(self, scenario, strategy, on_count, source_size, matched_slices):\n        self._prepare_merge(lib_name(*scenario, self.INDEX_KIND), on_count, source_size, matched_slices)\n\n    def setup_cache(self):\n        self.seaweed.reset_bucket(CACHE_BUCKET)\n        for scenario in self.params[0]:\n            num_rows, num_value_cols = scenario\n            rng = np.random.default_rng([num_rows, num_value_cols])\n            target = generate_merge_target(num_rows, num_value_cols, self.value_dtype, self.INDEX_KIND, rng)\n            library_name = lib_name(*scenario, self.INDEX_KIND)\n            self._write_cache_target(library_name, target)\n            self._precompute_sources(library_name, target)",
         "min_run_count": 2,
         "name": "merge_functions.MergeThinDatetime.time_merge",
         "number": 1,
@@ -3179,15 +3191,15 @@
         "repeat": 10,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "merge_functions:264",
+        "setup_cache_key": "merge_functions:259",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
-        "version": "5fa0f07cbaf18da0b38b5fa5a212bd62af352193686538be081fad7bfd09497f",
+        "version": "13c4c47e848a222034cabc91b268eb29872d370994975b066e06d5433b20467e",
         "warmup_time": 0
     },
     "merge_functions.MergeThinRowRange.peakmem_merge": {
-        "code": "class MergeThinRowRange:\n    def peakmem_merge(self, scenario, strategy, on_count, source_size):\n        self.merge(strategy)\n\n    def setup(self, scenario, strategy, on_count, source_size):\n        self._prepare_merge(lib_name(*scenario, self.INDEX_KIND), on_count, source_size)\n\n    def setup_cache(self):\n        reset_bucket(self.seaweed, CACHE_BUCKET)\n        for scenario in self.params[0]:\n            num_rows, num_value_cols = scenario\n            rng = np.random.default_rng([num_rows, num_value_cols])\n            target = generate_merge_target(num_rows, num_value_cols, self.value_dtype, self.INDEX_KIND, rng)\n            library_name = lib_name(*scenario, self.INDEX_KIND)\n            self._write_cache_target(library_name, target)\n            self._precompute_sources(library_name, target)",
+        "code": "class MergeThinRowRange:\n    def peakmem_merge(self, scenario, strategy, on_count, source_size):\n        self.merge(strategy)\n\n    def setup(self, scenario, strategy, on_count, source_size):\n        self._prepare_merge(lib_name(*scenario, self.INDEX_KIND), on_count, source_size)\n\n    def setup_cache(self):\n        self.seaweed.reset_bucket(CACHE_BUCKET)\n        for scenario in self.params[0]:\n            num_rows, num_value_cols = scenario\n            rng = np.random.default_rng([num_rows, num_value_cols])\n            target = generate_merge_target(num_rows, num_value_cols, self.value_dtype, self.INDEX_KIND, rng)\n            library_name = lib_name(*scenario, self.INDEX_KIND)\n            self._write_cache_target(library_name, target)\n            self._precompute_sources(library_name, target)",
         "name": "merge_functions.MergeThinRowRange.peakmem_merge",
         "param_names": [
             "scenario",
@@ -3212,14 +3224,14 @@
                 "500000"
             ]
         ],
-        "setup_cache_key": "merge_functions:304",
+        "setup_cache_key": "merge_functions:299",
         "timeout": 600,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "aa4096cc5f46058c309c21eb33ebaabc2e84d6e07560aac829027da71086ea6b"
+        "version": "d910dbd918d7c4858f3bff1b325c87bd3000fb8832805d8582d649eaef14908f"
     },
     "merge_functions.MergeThinRowRange.time_merge": {
-        "code": "class MergeThinRowRange:\n    def time_merge(self, scenario, strategy, on_count, source_size):\n        self.merge(strategy)\n\n    def setup(self, scenario, strategy, on_count, source_size):\n        self._prepare_merge(lib_name(*scenario, self.INDEX_KIND), on_count, source_size)\n\n    def setup_cache(self):\n        reset_bucket(self.seaweed, CACHE_BUCKET)\n        for scenario in self.params[0]:\n            num_rows, num_value_cols = scenario\n            rng = np.random.default_rng([num_rows, num_value_cols])\n            target = generate_merge_target(num_rows, num_value_cols, self.value_dtype, self.INDEX_KIND, rng)\n            library_name = lib_name(*scenario, self.INDEX_KIND)\n            self._write_cache_target(library_name, target)\n            self._precompute_sources(library_name, target)",
+        "code": "class MergeThinRowRange:\n    def time_merge(self, scenario, strategy, on_count, source_size):\n        self.merge(strategy)\n\n    def setup(self, scenario, strategy, on_count, source_size):\n        self._prepare_merge(lib_name(*scenario, self.INDEX_KIND), on_count, source_size)\n\n    def setup_cache(self):\n        self.seaweed.reset_bucket(CACHE_BUCKET)\n        for scenario in self.params[0]:\n            num_rows, num_value_cols = scenario\n            rng = np.random.default_rng([num_rows, num_value_cols])\n            target = generate_merge_target(num_rows, num_value_cols, self.value_dtype, self.INDEX_KIND, rng)\n            library_name = lib_name(*scenario, self.INDEX_KIND)\n            self._write_cache_target(library_name, target)\n            self._precompute_sources(library_name, target)",
         "min_run_count": 2,
         "name": "merge_functions.MergeThinRowRange.time_merge",
         "number": 1,
@@ -3249,15 +3261,15 @@
         "repeat": 10,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "merge_functions:304",
+        "setup_cache_key": "merge_functions:299",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
-        "version": "256a83ebc7be8dd867cee611d7e3e1fafe2e35dc4ccc40358530caf35984706f",
+        "version": "a7ac2a58653560871b2ce42b663f35f79814c4c8c0e4ab83b908f65f19217917",
         "warmup_time": 0
     },
     "merge_functions.MergeThinStringDatetime.peakmem_merge": {
-        "code": "class MergeThinStringDatetime:\n    def peakmem_merge(self, scenario, strategy, on_count, source_size, matched_slices, num_unique_strings):\n        self.merge(strategy)\n\n    def setup(self, scenario, strategy, on_count, source_size, matched_slices, num_unique_strings):\n        self.target_prefix = f\"target_{num_unique_strings}\"\n        self.source_prefix = f\"source_{num_unique_strings}\"\n        self._prepare_merge(lib_name(*scenario, self.INDEX_KIND), on_count, source_size, matched_slices)\n\n    def setup_cache(self):\n        reset_bucket(self.seaweed, CACHE_BUCKET)\n        parameter_map = dict(zip(self.param_names, self.params))\n        for scenario in parameter_map[\"scenario\"]:\n            for num_unique_strings in parameter_map[\"num_unique_strings\"]:\n                num_rows, num_value_cols = scenario\n                rng = np.random.default_rng([num_rows, num_value_cols, num_unique_strings])\n                target = generate_merge_target(\n                    num_rows,\n                    num_value_cols,\n                    self.value_dtype,\n                    self.INDEX_KIND,\n                    rng,\n                    num_unique_strings=num_unique_strings,\n                )\n                # One target per pool size; per-size prefixes let setup copy only the variant being merged.\n                self.target_prefix = f\"target_{num_unique_strings}\"\n                self.source_prefix = f\"source_{num_unique_strings}\"\n                library_name = lib_name(*scenario, self.INDEX_KIND)\n                self._write_cache_target(library_name, target)\n                self._precompute_sources(library_name, target)",
+        "code": "class MergeThinStringDatetime:\n    def peakmem_merge(self, scenario, strategy, on_count, source_size, matched_slices, num_unique_strings):\n        self.merge(strategy)\n\n    def setup(self, scenario, strategy, on_count, source_size, matched_slices, num_unique_strings):\n        self.target_prefix = f\"target_{num_unique_strings}\"\n        self.source_prefix = f\"source_{num_unique_strings}\"\n        self._prepare_merge(lib_name(*scenario, self.INDEX_KIND), on_count, source_size, matched_slices)\n\n    def setup_cache(self):\n        self.seaweed.reset_bucket(CACHE_BUCKET)\n        parameter_map = dict(zip(self.param_names, self.params))\n        for scenario in parameter_map[\"scenario\"]:\n            for num_unique_strings in parameter_map[\"num_unique_strings\"]:\n                num_rows, num_value_cols = scenario\n                rng = np.random.default_rng([num_rows, num_value_cols, num_unique_strings])\n                target = generate_merge_target(\n                    num_rows,\n                    num_value_cols,\n                    self.value_dtype,\n                    self.INDEX_KIND,\n                    rng,\n                    num_unique_strings=num_unique_strings,\n                )\n                # One target per pool size; per-size prefixes let setup copy only the variant being merged.\n                self.target_prefix = f\"target_{num_unique_strings}\"\n                self.source_prefix = f\"source_{num_unique_strings}\"\n                library_name = lib_name(*scenario, self.INDEX_KIND)\n                self._write_cache_target(library_name, target)\n                self._precompute_sources(library_name, target)",
         "name": "merge_functions.MergeThinStringDatetime.peakmem_merge",
         "param_names": [
             "scenario",
@@ -3292,14 +3304,14 @@
                 "100000"
             ]
         ],
-        "setup_cache_key": "merge_functions:345",
+        "setup_cache_key": "merge_functions:340",
         "timeout": 600,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "4deaada28c22d2cd8a4edfb8d8d9c558ab7b4c68bd9c3bc81cf099cdd90d2585"
+        "version": "4226157416f9bdaabff60a3dd793b4aa8849d35f2c90dd99dabd184cc5774bef"
     },
     "merge_functions.MergeThinStringDatetime.time_merge": {
-        "code": "class MergeThinStringDatetime:\n    def time_merge(self, scenario, strategy, on_count, source_size, matched_slices, num_unique_strings):\n        self.merge(strategy)\n\n    def setup(self, scenario, strategy, on_count, source_size, matched_slices, num_unique_strings):\n        self.target_prefix = f\"target_{num_unique_strings}\"\n        self.source_prefix = f\"source_{num_unique_strings}\"\n        self._prepare_merge(lib_name(*scenario, self.INDEX_KIND), on_count, source_size, matched_slices)\n\n    def setup_cache(self):\n        reset_bucket(self.seaweed, CACHE_BUCKET)\n        parameter_map = dict(zip(self.param_names, self.params))\n        for scenario in parameter_map[\"scenario\"]:\n            for num_unique_strings in parameter_map[\"num_unique_strings\"]:\n                num_rows, num_value_cols = scenario\n                rng = np.random.default_rng([num_rows, num_value_cols, num_unique_strings])\n                target = generate_merge_target(\n                    num_rows,\n                    num_value_cols,\n                    self.value_dtype,\n                    self.INDEX_KIND,\n                    rng,\n                    num_unique_strings=num_unique_strings,\n                )\n                # One target per pool size; per-size prefixes let setup copy only the variant being merged.\n                self.target_prefix = f\"target_{num_unique_strings}\"\n                self.source_prefix = f\"source_{num_unique_strings}\"\n                library_name = lib_name(*scenario, self.INDEX_KIND)\n                self._write_cache_target(library_name, target)\n                self._precompute_sources(library_name, target)",
+        "code": "class MergeThinStringDatetime:\n    def time_merge(self, scenario, strategy, on_count, source_size, matched_slices, num_unique_strings):\n        self.merge(strategy)\n\n    def setup(self, scenario, strategy, on_count, source_size, matched_slices, num_unique_strings):\n        self.target_prefix = f\"target_{num_unique_strings}\"\n        self.source_prefix = f\"source_{num_unique_strings}\"\n        self._prepare_merge(lib_name(*scenario, self.INDEX_KIND), on_count, source_size, matched_slices)\n\n    def setup_cache(self):\n        self.seaweed.reset_bucket(CACHE_BUCKET)\n        parameter_map = dict(zip(self.param_names, self.params))\n        for scenario in parameter_map[\"scenario\"]:\n            for num_unique_strings in parameter_map[\"num_unique_strings\"]:\n                num_rows, num_value_cols = scenario\n                rng = np.random.default_rng([num_rows, num_value_cols, num_unique_strings])\n                target = generate_merge_target(\n                    num_rows,\n                    num_value_cols,\n                    self.value_dtype,\n                    self.INDEX_KIND,\n                    rng,\n                    num_unique_strings=num_unique_strings,\n                )\n                # One target per pool size; per-size prefixes let setup copy only the variant being merged.\n                self.target_prefix = f\"target_{num_unique_strings}\"\n                self.source_prefix = f\"source_{num_unique_strings}\"\n                library_name = lib_name(*scenario, self.INDEX_KIND)\n                self._write_cache_target(library_name, target)\n                self._precompute_sources(library_name, target)",
         "min_run_count": 2,
         "name": "merge_functions.MergeThinStringDatetime.time_merge",
         "number": 1,
@@ -3339,15 +3351,15 @@
         "repeat": 10,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "merge_functions:345",
+        "setup_cache_key": "merge_functions:340",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
-        "version": "cfc2523da2cb2b2cc7892532ef9027eeeaf039dd512c09875e6cc054fd3e977b",
+        "version": "477a413dc64c0c141c3e85c61dbab6dc5b7ce94cb32c4d528c0a394bb46d24b7",
         "warmup_time": 0
     },
     "merge_functions.MergeThinStringRowRange.peakmem_merge": {
-        "code": "class MergeThinStringRowRange:\n    def peakmem_merge(self, scenario, strategy, on_count, source_size, num_unique_strings):\n        self.merge(strategy)\n\n    def setup(self, scenario, strategy, on_count, source_size, num_unique_strings):\n        self.target_prefix = f\"target_{num_unique_strings}\"\n        self.source_prefix = f\"source_{num_unique_strings}\"\n        self._prepare_merge(lib_name(*scenario, self.INDEX_KIND), on_count, source_size)\n\n    def setup_cache(self):\n        reset_bucket(self.seaweed, CACHE_BUCKET)\n        param_map = dict(zip(self.param_names, self.params))\n        for scenario in param_map[\"scenario\"]:\n            for num_unique_strings in param_map[\"num_unique_strings\"]:\n                num_rows, num_value_cols = scenario\n                rng = np.random.default_rng([num_rows, num_value_cols, num_unique_strings])\n                target = generate_merge_target(\n                    num_rows,\n                    num_value_cols,\n                    self.value_dtype,\n                    self.INDEX_KIND,\n                    rng,\n                    num_unique_strings=num_unique_strings,\n                )\n                # One target per pool size; per-size prefixes let setup copy only the variant being merged.\n                self.target_prefix = f\"target_{num_unique_strings}\"\n                self.source_prefix = f\"source_{num_unique_strings}\"\n                library_name = lib_name(*scenario, self.INDEX_KIND)\n                self._write_cache_target(library_name, target)\n                self._precompute_sources(library_name, target)",
+        "code": "class MergeThinStringRowRange:\n    def peakmem_merge(self, scenario, strategy, on_count, source_size, num_unique_strings):\n        self.merge(strategy)\n\n    def setup(self, scenario, strategy, on_count, source_size, num_unique_strings):\n        self.target_prefix = f\"target_{num_unique_strings}\"\n        self.source_prefix = f\"source_{num_unique_strings}\"\n        self._prepare_merge(lib_name(*scenario, self.INDEX_KIND), on_count, source_size)\n\n    def setup_cache(self):\n        self.seaweed.reset_bucket(CACHE_BUCKET)\n        param_map = dict(zip(self.param_names, self.params))\n        for scenario in param_map[\"scenario\"]:\n            for num_unique_strings in param_map[\"num_unique_strings\"]:\n                num_rows, num_value_cols = scenario\n                rng = np.random.default_rng([num_rows, num_value_cols, num_unique_strings])\n                target = generate_merge_target(\n                    num_rows,\n                    num_value_cols,\n                    self.value_dtype,\n                    self.INDEX_KIND,\n                    rng,\n                    num_unique_strings=num_unique_strings,\n                )\n                # One target per pool size; per-size prefixes let setup copy only the variant being merged.\n                self.target_prefix = f\"target_{num_unique_strings}\"\n                self.source_prefix = f\"source_{num_unique_strings}\"\n                library_name = lib_name(*scenario, self.INDEX_KIND)\n                self._write_cache_target(library_name, target)\n                self._precompute_sources(library_name, target)",
         "name": "merge_functions.MergeThinStringRowRange.peakmem_merge",
         "param_names": [
             "scenario",
@@ -3377,14 +3389,14 @@
                 "100000"
             ]
         ],
-        "setup_cache_key": "merge_functions:401",
+        "setup_cache_key": "merge_functions:396",
         "timeout": 600,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "16b046fab8ab2ff6a54e7b6c1b6bca4b1f3518b5a093be95fc3b02422b00a2ec"
+        "version": "85988cb72879dd0467922d8946b2d65548861db12cefec231575b149d1fa8055"
     },
     "merge_functions.MergeThinStringRowRange.time_merge": {
-        "code": "class MergeThinStringRowRange:\n    def time_merge(self, scenario, strategy, on_count, source_size, num_unique_strings):\n        self.merge(strategy)\n\n    def setup(self, scenario, strategy, on_count, source_size, num_unique_strings):\n        self.target_prefix = f\"target_{num_unique_strings}\"\n        self.source_prefix = f\"source_{num_unique_strings}\"\n        self._prepare_merge(lib_name(*scenario, self.INDEX_KIND), on_count, source_size)\n\n    def setup_cache(self):\n        reset_bucket(self.seaweed, CACHE_BUCKET)\n        param_map = dict(zip(self.param_names, self.params))\n        for scenario in param_map[\"scenario\"]:\n            for num_unique_strings in param_map[\"num_unique_strings\"]:\n                num_rows, num_value_cols = scenario\n                rng = np.random.default_rng([num_rows, num_value_cols, num_unique_strings])\n                target = generate_merge_target(\n                    num_rows,\n                    num_value_cols,\n                    self.value_dtype,\n                    self.INDEX_KIND,\n                    rng,\n                    num_unique_strings=num_unique_strings,\n                )\n                # One target per pool size; per-size prefixes let setup copy only the variant being merged.\n                self.target_prefix = f\"target_{num_unique_strings}\"\n                self.source_prefix = f\"source_{num_unique_strings}\"\n                library_name = lib_name(*scenario, self.INDEX_KIND)\n                self._write_cache_target(library_name, target)\n                self._precompute_sources(library_name, target)",
+        "code": "class MergeThinStringRowRange:\n    def time_merge(self, scenario, strategy, on_count, source_size, num_unique_strings):\n        self.merge(strategy)\n\n    def setup(self, scenario, strategy, on_count, source_size, num_unique_strings):\n        self.target_prefix = f\"target_{num_unique_strings}\"\n        self.source_prefix = f\"source_{num_unique_strings}\"\n        self._prepare_merge(lib_name(*scenario, self.INDEX_KIND), on_count, source_size)\n\n    def setup_cache(self):\n        self.seaweed.reset_bucket(CACHE_BUCKET)\n        param_map = dict(zip(self.param_names, self.params))\n        for scenario in param_map[\"scenario\"]:\n            for num_unique_strings in param_map[\"num_unique_strings\"]:\n                num_rows, num_value_cols = scenario\n                rng = np.random.default_rng([num_rows, num_value_cols, num_unique_strings])\n                target = generate_merge_target(\n                    num_rows,\n                    num_value_cols,\n                    self.value_dtype,\n                    self.INDEX_KIND,\n                    rng,\n                    num_unique_strings=num_unique_strings,\n                )\n                # One target per pool size; per-size prefixes let setup copy only the variant being merged.\n                self.target_prefix = f\"target_{num_unique_strings}\"\n                self.source_prefix = f\"source_{num_unique_strings}\"\n                library_name = lib_name(*scenario, self.INDEX_KIND)\n                self._write_cache_target(library_name, target)\n                self._precompute_sources(library_name, target)",
         "min_run_count": 2,
         "name": "merge_functions.MergeThinStringRowRange.time_merge",
         "number": 1,
@@ -3419,15 +3431,15 @@
         "repeat": 10,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "merge_functions:401",
+        "setup_cache_key": "merge_functions:396",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
-        "version": "5b1ad5a07078537f4b40748fd746b8053078bd52e4f3ff7d2c141470c7ccb6a7",
+        "version": "da91fcf324155c14acef78bdbd86c4b88a0285f7e55d8a5fe4cf13722ab8f407",
         "warmup_time": 0
     },
     "merge_functions.MergeWideDatetime.peakmem_merge": {
-        "code": "class MergeWideDatetime:\n    def peakmem_merge(self, scenario, strategy, on_count, source_size):\n        self.merge(strategy)\n\n    def setup(self, scenario, strategy, on_count, source_size):\n        self._prepare_merge(lib_name(*scenario, self.INDEX_KIND), on_count, source_size)\n\n    def setup_cache(self):\n        reset_bucket(self.seaweed, CACHE_BUCKET)\n        for scenario in self.params[0]:\n            num_rows, num_value_cols = scenario\n            rng = np.random.default_rng([num_rows, num_value_cols])\n            target = generate_merge_target(num_rows, num_value_cols, self.value_dtype, self.INDEX_KIND, rng)\n            library_name = lib_name(*scenario, self.INDEX_KIND)\n            self._write_cache_target(library_name, target)\n            self._precompute_sources(library_name, target)",
+        "code": "class MergeWideDatetime:\n    def peakmem_merge(self, scenario, strategy, on_count, source_size):\n        self.merge(strategy)\n\n    def setup(self, scenario, strategy, on_count, source_size):\n        self._prepare_merge(lib_name(*scenario, self.INDEX_KIND), on_count, source_size)\n\n    def setup_cache(self):\n        self.seaweed.reset_bucket(CACHE_BUCKET)\n        for scenario in self.params[0]:\n            num_rows, num_value_cols = scenario\n            rng = np.random.default_rng([num_rows, num_value_cols])\n            target = generate_merge_target(num_rows, num_value_cols, self.value_dtype, self.INDEX_KIND, rng)\n            library_name = lib_name(*scenario, self.INDEX_KIND)\n            self._write_cache_target(library_name, target)\n            self._precompute_sources(library_name, target)",
         "name": "merge_functions.MergeWideDatetime.peakmem_merge",
         "param_names": [
             "scenario",
@@ -3452,14 +3464,14 @@
                 "100"
             ]
         ],
-        "setup_cache_key": "merge_functions:456",
+        "setup_cache_key": "merge_functions:451",
         "timeout": 600,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "5f3a5dffc5a5810c9c7edad0c697800df32682f9c4ec49442c6e85cca031184b"
+        "version": "cc1fc300858fb1ff03ada32354e0a2a7bb6eba18f4b3e0ebbda7bae22f0802bb"
     },
     "merge_functions.MergeWideDatetime.time_merge": {
-        "code": "class MergeWideDatetime:\n    def time_merge(self, scenario, strategy, on_count, source_size):\n        self.merge(strategy)\n\n    def setup(self, scenario, strategy, on_count, source_size):\n        self._prepare_merge(lib_name(*scenario, self.INDEX_KIND), on_count, source_size)\n\n    def setup_cache(self):\n        reset_bucket(self.seaweed, CACHE_BUCKET)\n        for scenario in self.params[0]:\n            num_rows, num_value_cols = scenario\n            rng = np.random.default_rng([num_rows, num_value_cols])\n            target = generate_merge_target(num_rows, num_value_cols, self.value_dtype, self.INDEX_KIND, rng)\n            library_name = lib_name(*scenario, self.INDEX_KIND)\n            self._write_cache_target(library_name, target)\n            self._precompute_sources(library_name, target)",
+        "code": "class MergeWideDatetime:\n    def time_merge(self, scenario, strategy, on_count, source_size):\n        self.merge(strategy)\n\n    def setup(self, scenario, strategy, on_count, source_size):\n        self._prepare_merge(lib_name(*scenario, self.INDEX_KIND), on_count, source_size)\n\n    def setup_cache(self):\n        self.seaweed.reset_bucket(CACHE_BUCKET)\n        for scenario in self.params[0]:\n            num_rows, num_value_cols = scenario\n            rng = np.random.default_rng([num_rows, num_value_cols])\n            target = generate_merge_target(num_rows, num_value_cols, self.value_dtype, self.INDEX_KIND, rng)\n            library_name = lib_name(*scenario, self.INDEX_KIND)\n            self._write_cache_target(library_name, target)\n            self._precompute_sources(library_name, target)",
         "min_run_count": 2,
         "name": "merge_functions.MergeWideDatetime.time_merge",
         "number": 1,
@@ -3489,15 +3501,15 @@
         "repeat": 5,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "merge_functions:456",
+        "setup_cache_key": "merge_functions:451",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
-        "version": "4d658e12e079c00f5d468ed7a82c1b2facd8de1b98e5388b569c1737a3d82607",
+        "version": "b7ba94035f85e4a1158fc9027724d32735cf7eb9fe747d0313b8099e4e9e3b8a",
         "warmup_time": 0
     },
     "merge_functions.MergeWideRowRange.peakmem_merge": {
-        "code": "class MergeWideRowRange:\n    def peakmem_merge(self, scenario, strategy, on_count, source_size):\n        self.merge(strategy)\n\n    def setup(self, scenario, strategy, on_count, source_size):\n        self._prepare_merge(lib_name(*scenario, self.INDEX_KIND), on_count, source_size)\n\n    def setup_cache(self):\n        reset_bucket(self.seaweed, CACHE_BUCKET)\n        for scenario in self.params[0]:\n            num_rows, num_value_cols = scenario\n            rng = np.random.default_rng([num_rows, num_value_cols])\n            target = generate_merge_target(num_rows, num_value_cols, self.value_dtype, self.INDEX_KIND, rng)\n            library_name = lib_name(*scenario, self.INDEX_KIND)\n            self._write_cache_target(library_name, target)\n            self._precompute_sources(library_name, target)",
+        "code": "class MergeWideRowRange:\n    def peakmem_merge(self, scenario, strategy, on_count, source_size):\n        self.merge(strategy)\n\n    def setup(self, scenario, strategy, on_count, source_size):\n        self._prepare_merge(lib_name(*scenario, self.INDEX_KIND), on_count, source_size)\n\n    def setup_cache(self):\n        self.seaweed.reset_bucket(CACHE_BUCKET)\n        for scenario in self.params[0]:\n            num_rows, num_value_cols = scenario\n            rng = np.random.default_rng([num_rows, num_value_cols])\n            target = generate_merge_target(num_rows, num_value_cols, self.value_dtype, self.INDEX_KIND, rng)\n            library_name = lib_name(*scenario, self.INDEX_KIND)\n            self._write_cache_target(library_name, target)\n            self._precompute_sources(library_name, target)",
         "name": "merge_functions.MergeWideRowRange.peakmem_merge",
         "param_names": [
             "scenario",
@@ -3522,14 +3534,14 @@
                 "100"
             ]
         ],
-        "setup_cache_key": "merge_functions:496",
+        "setup_cache_key": "merge_functions:491",
         "timeout": 600,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "f33e277e4413aa7b086be54628ec33080037cbdf369f347c5dd190ffca5a6fff"
+        "version": "0c6b30980e6236f0f0f089d6749e2daa018e6e9a10d13c8e1c2ea5b8dec1cfb6"
     },
     "merge_functions.MergeWideRowRange.time_merge": {
-        "code": "class MergeWideRowRange:\n    def time_merge(self, scenario, strategy, on_count, source_size):\n        self.merge(strategy)\n\n    def setup(self, scenario, strategy, on_count, source_size):\n        self._prepare_merge(lib_name(*scenario, self.INDEX_KIND), on_count, source_size)\n\n    def setup_cache(self):\n        reset_bucket(self.seaweed, CACHE_BUCKET)\n        for scenario in self.params[0]:\n            num_rows, num_value_cols = scenario\n            rng = np.random.default_rng([num_rows, num_value_cols])\n            target = generate_merge_target(num_rows, num_value_cols, self.value_dtype, self.INDEX_KIND, rng)\n            library_name = lib_name(*scenario, self.INDEX_KIND)\n            self._write_cache_target(library_name, target)\n            self._precompute_sources(library_name, target)",
+        "code": "class MergeWideRowRange:\n    def time_merge(self, scenario, strategy, on_count, source_size):\n        self.merge(strategy)\n\n    def setup(self, scenario, strategy, on_count, source_size):\n        self._prepare_merge(lib_name(*scenario, self.INDEX_KIND), on_count, source_size)\n\n    def setup_cache(self):\n        self.seaweed.reset_bucket(CACHE_BUCKET)\n        for scenario in self.params[0]:\n            num_rows, num_value_cols = scenario\n            rng = np.random.default_rng([num_rows, num_value_cols])\n            target = generate_merge_target(num_rows, num_value_cols, self.value_dtype, self.INDEX_KIND, rng)\n            library_name = lib_name(*scenario, self.INDEX_KIND)\n            self._write_cache_target(library_name, target)\n            self._precompute_sources(library_name, target)",
         "min_run_count": 2,
         "name": "merge_functions.MergeWideRowRange.time_merge",
         "number": 1,
@@ -3559,11 +3571,11 @@
         "repeat": 5,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "merge_functions:496",
+        "setup_cache_key": "merge_functions:491",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
-        "version": "8be4bc6bfde5a0e7db280ac5e667e58f53c945de9de79a16e0965936c6b6f547",
+        "version": "65105f60a33b50593daf8ec6f830d5bf0ba38f2cb54b2d4e28894f58c4fa0ad7",
         "warmup_time": 0
     },
     "modification_functions.DeleteBatchSymbols.time_delete_batch_symbols": {

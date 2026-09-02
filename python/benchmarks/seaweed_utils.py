@@ -113,6 +113,11 @@ class SeaweedClient:
         self._get_sync_client().create_bucket(Bucket=bucket)
         self.grow_bucket_volumes(bucket, volume_count)
 
+    def reset_bucket(self, bucket: str, volume_count: Optional[int] = None) -> None:
+        """Hard-delete and recreate the bucket so it starts empty with pre-grown volumes."""
+        self.delete_bucket(bucket)
+        self.create_bucket(bucket, volume_count)
+
     def delete_bucket(self, bucket: str) -> None:
         try:
             self._get_sync_client().delete_bucket(Bucket=bucket)
