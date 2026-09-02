@@ -3235,13 +3235,13 @@ folly::Future<VersionedItem> read_modify_write_impl(
 folly::Future<AtomKey> merge_update_impl(
         const std::shared_ptr<Store>& store, const UpdateInfo& update_info, const ReadOptions& read_options,
         const WriteOptions& write_options, const IndexPartialKey& target_partial_index_key,
-        std::vector<std::string>&& on, const MergeStrategy& strategy, const bool match_na,
-        std::shared_ptr<InputFrame> source, std::shared_ptr<DeDupMap> de_dup_map
+        std::vector<std::string>&& on, const MergeStrategy& strategy, std::shared_ptr<InputFrame> source,
+        std::shared_ptr<DeDupMap> de_dup_map
 ) {
     auto read_query = std::make_shared<ReadQuery>();
-    auto merge_update_clause = std::make_shared<Clause>(
-            MergeUpdateClause(std::move(on), strategy, source, write_options.segment_row_size, match_na)
-    );
+    auto merge_update_clause =
+            std::make_shared<Clause>(MergeUpdateClause(std::move(on), strategy, source, write_options.segment_row_size)
+            );
 
     read_query->clauses_.push_back(merge_update_clause);
     VersionIdentifier resolved = VersionedItem{*update_info.previous_index_key_};

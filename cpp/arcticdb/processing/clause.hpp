@@ -861,13 +861,9 @@ struct MergeUpdateClause {
     MergeStrategy strategy_;
     std::shared_ptr<InputFrame> source_;
     bool fake_index_name_ = false;
-    /// When false (the default), a missing value (float NaN, string None/NaN, or NaT in a non-index datetime64 on
-    /// column) never matches anything, on either side. When true, NaN matches NaN, string None and  NaN are
-    /// indistinguishable, and NaT matches NaT.
-    bool match_na_ = false;
     MergeUpdateClause(
             std::vector<std::string>&& on, MergeStrategy strategy, std::shared_ptr<InputFrame> source,
-            size_t rows_per_segment, bool match_na
+            size_t rows_per_segment
     );
     ARCTICDB_MOVE_COPY_DEFAULT(MergeUpdateClause)
 
@@ -950,8 +946,6 @@ struct MergeUpdateClause {
     ) const;
 
     size_t field_index_for_matching_on_column(std::string_view name, const StreamDescriptor& descriptor) const;
-
-    bool is_update_only() const;
 
     /// For each processing group, identified by its row range, stores the first and last row in the source that
     /// overlaps with it. The interval is closed in the start and open in the end: [start, end). The key is the row

@@ -1558,7 +1558,9 @@ VersionedItem PythonVersionStore::merge(
         const py::tuple& py_strategy, std::vector<std::string> on, const bool match_na
 ) {
     const MergeStrategy strategy{
-            .matched = py_strategy[0].cast<MergeAction>(), .not_matched_by_target = py_strategy[1].cast<MergeAction>()
+            .matched = py_strategy[0].cast<MergeAction>(),
+            .not_matched_by_target = py_strategy[1].cast<MergeAction>(),
+            .match_na = match_na
     };
     return merge_internal(
             stream_id,
@@ -1573,8 +1575,7 @@ VersionedItem PythonVersionStore::merge(
             prune_previous_versions,
             upsert,
             strategy,
-            std::move(on),
-            match_na
+            std::move(on)
     );
 }
 
