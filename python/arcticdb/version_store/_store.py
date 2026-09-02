@@ -6,6 +6,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 
+import collections
 import copy
 from dataclasses import dataclass
 import datetime
@@ -554,10 +555,15 @@ class NativeVersionStore:
         return backing_store
 
     @staticmethod
-    def _raise_if_duplicate_symbols_in_batch(batch):
-        symbols = {(p if isinstance(p, str) else p.symbol) for p in batch}
-        if len(symbols) < len(batch):
-            raise ArcticDuplicateSymbolsInBatchException
+    def _raise_if_duplicate_symbols_in_batch(symbols: List[str]):
+        symbol_counts = collections.defaultdict(int)
+        for sym in symbols:
+            symbol_counts[sym] += 1
+        duplicated_symbols = [sym for sym, count in symbol_counts.items() if count > 1]
+        if len(duplicated_symbols):
+            raise ArcticDuplicateSymbolsInBatchException(
+                f"Batch modification method received duplicate symbols {duplicated_symbols}"
+            )
 
     def _try_normalize(
         self,
@@ -1249,6 +1255,7 @@ class NativeVersionStore:
         upsert: bool = False,
         index_column_vector: Optional[List[bool]] = None,
     ):
+        self._raise_if_duplicate_symbols_in_batch(symbols)
         update_queries = [_PythonVersionStoreUpdateQuery() for _ in range(len(symbols))]
         for i in range(len(data_vector)):
             data_vector[i] = self._apply_date_range_to_update_query(
@@ -1935,6 +1942,7 @@ class NativeVersionStore:
         index_column_vector: Optional[List[bool]] = None,
         **kwargs,
     ) -> List[VersionedItem]:
+        self._raise_if_duplicate_symbols_in_batch(symbols)
         proto_cfg = self._lib_cfg.lib_desc.version.write_options
         prune_previous_version = resolve_defaults(
             "prune_previous_version", proto_cfg, global_default=False, existing_value=prune_previous_version
@@ -1965,6 +1973,7 @@ class NativeVersionStore:
     def _batch_write_metadata_to_versioned_items(
         self, symbols: List[str], metadata_vector: List[Any], prune_previous_version, throw_on_error
     ):
+        self._raise_if_duplicate_symbols_in_batch(symbols)
         proto_cfg = self._lib_cfg.lib_desc.version.write_options
         prune_previous_version = resolve_defaults(
             "prune_previous_version", proto_cfg, global_default=False, existing_value=prune_previous_version
@@ -2106,6 +2115,7 @@ class NativeVersionStore:
         compact_data,
         **kwargs,
     ):
+        self._raise_if_duplicate_symbols_in_batch(symbols)
         proto_cfg = self._lib_cfg.lib_desc.version.write_options
         prune_previous_version = resolve_defaults(
             "prune_previous_version", proto_cfg, global_default=False, existing_value=prune_previous_version
@@ -2175,7 +2185,7 @@ class NativeVersionStore:
             i-th entry corresponds to i-th element of `symbols`.
         """
         self._validate_kwargs("batch_restore_version", self._valid_read_kwargs, kwargs)
-
+        self._raise_if_duplicate_symbols_in_batch(symbols)
         _check_batch_kwargs(NativeVersionStore.batch_restore_version, NativeVersionStore.restore_version, kwargs)
         version_queries = self._get_version_queries(len(symbols), as_ofs, **kwargs)
         read_options, _ = self._get_read_options_and_output_format(**kwargs)
