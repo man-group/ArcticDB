@@ -342,7 +342,23 @@ jobs:
         if: inputs.job_type == 'cpp-tests' && env.ARCTICDB_USE_SANITIZER == ''
         # We set a benchmark_min_time=20x because running until a time limit is reached can take a lot of time on
         # benchmarks which pause the timer.
-        run: cpp/out/${ARCTIC_CMAKE_PRESET}-build/arcticdb/benchmarks --benchmark_time_unit=ms --benchmark_min_time=20x
+        # The JSON is written on every build (it costs nothing) but only kept for the builds we track over time.
+        run: cpp/out/${ARCTIC_CMAKE_PRESET}-build/arcticdb/benchmarks --benchmark_time_unit=ms --benchmark_min_time=20x --benchmark_out=cpp-benchmarks.json --benchmark_out_format=json
+
+      # Only master pushes and release tags: those are the builds whose numbers are worth a history.
+      # `github.*` in a reusable workflow is the *caller's* event, so this reads build.yml's own trigger
+      # (`on: push: {branches: [master], tags: [v**]}`) - which excludes pull requests, the nightly
+      # schedule and workflow_dispatch, all of which run on shared runners or repeat a commit we already have.
+      - name: Upload C++ benchmark results
+        if: >
+          inputs.job_type == 'cpp-tests' && env.ARCTICDB_USE_SANITIZER == ''
+          && github.event_name == 'push'
+          && (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v'))
+        uses: actions/upload-artifact@v4
+        with:
+          name: cpp-benchmarks-${{matrix.os}}
+          path: cpp-benchmarks.json
+          if-no-files-found: warn
 
       - name: Clean up benchmark binaries only
         if: inputs.job_type == 'cpp-tests'
