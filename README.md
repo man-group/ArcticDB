@@ -15,7 +15,7 @@
 <p align="center">
 :earth_americas: <a href="http://arcticdb.io">ArcticDB Website</a> | 📘 <a href="https://docs.arcticdb.com">ArcticDB Docs</a> | 📰: <a href="https://medium.com/arcticdb">ArcticDB Blog</a> | :mega: <a href="https://www.man.com/man-group-brings-powerful-dataframe-database-product-arcticdb-to-market-with-bloomberg">Press Release</a> | :mega: <a href="https://www.bloomberg.com/company/press/man-group-brings-powerful-dataframe-database-product-arcticdb-to-market-with-bloomberg/">Press Release</a> | :busts_in_silhouette: <a href="#community">Community</a>
 <br /><br />
-<a href="https://github.com/man-group/ArcticDB/actions"><img src="https://github.com/man-group/ArcticDB/actions/workflows/build.yml/badge.svg"/></a>
+<a href="https://github.com/man-group/ArcticDB/actions"></a>
 </p>
 
 ---
