@@ -135,10 +135,14 @@ jobs:
         # This has to come after msvc-dev-cmd to overwrite the bad VCPKG_ROOT it sets
         run: |
           HOME=~ . build_tooling/vcpkg_caching.sh # Linux build-python-wheels needs another call in CIBW
-          echo -e "VCPKG_BINARY_SOURCES=$VCPKG_BINARY_SOURCES
-          VCPKG_ROOT=$PLATFORM_VCPKG_ROOT
-          ${X_VCPKG_ASSET_SOURCES:+X_VCPKG_ASSET_SOURCES=$X_VCPKG_ASSET_SOURCES}
-          ${{matrix.envs || ''}}" | tee -a $GITHUB_ENV
+          # printf, not echo -e: the Windows workspace is D:\a\ArcticDB\ArcticDB, whose \a the escape processing
+          # turned into a BEL and whose trailing newline it dropped, so VCPKG_ROOT was corrupt and the CpuCount line
+          # was glued onto the end of it. CMAKE_BUILD_PARALLEL_LEVEL therefore never got set on Windows and every
+          # "cmake --build -j $CMAKE_BUILD_PARALLEL_LEVEL" ran as a bare -j, unbounded on a 4-core runner.
+          printf '%s\n' "VCPKG_BINARY_SOURCES=$VCPKG_BINARY_SOURCES" \
+            "VCPKG_ROOT=$PLATFORM_VCPKG_ROOT" \
+            ${X_VCPKG_ASSET_SOURCES:+"X_VCPKG_ASSET_SOURCES=$X_VCPKG_ASSET_SOURCES"} \
+            "${{matrix.envs || ''}}" | tee -a $GITHUB_ENV
           cmake -P cpp/CMake/CpuCount.cmake | sed 's/^-- //' | tee -a $GITHUB_ENV
         env:
           CMAKE_BUILD_PARALLEL_LEVEL: ${{vars.CMAKE_BUILD_PARALLEL_LEVEL}}
@@ -235,6 +239,16 @@ jobs:
         run: |
           ldconfig
           find /usr -name "libclang_rt.asan*.so*" 2>/dev/null || echo "ASan library not found in standard locations"
+
+      # run-cmake sets up the MSVC toolset by running "vcpkg env ... set" and importing the result, which leaks a
+      # truncated X_VCPKG_RECURSIVE_DATA into the environment and makes the vcpkg install inside the configure fail
+      # with "Unexpected EOF; expected property or close brace". Defining CC/CXX is the action's own documented way
+      # to skip that block, and cl.exe is exactly what it sets them to itself; msvc-dev-cmd has already put the
+      # toolset on PATH. This only surfaced once VCPKG_ROOT stopped being corrupted, which had been disabling the
+      # block by accident.
+      - name: Use the MSVC toolset msvc-dev-cmd already set up
+        if: matrix.os == 'windows' && inputs.job_type != 'build-python-wheels'
+        run: printf '%s\n' CC=cl.exe CXX=cl.exe | tee -a $GITHUB_ENV
 
       - name: CMake compile
         if: inputs.job_type != 'build-python-wheels'
