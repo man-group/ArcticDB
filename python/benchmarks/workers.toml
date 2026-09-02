@@ -91,7 +91,9 @@ name = "merge"
 suite = "^merge_functions\\."
 # run 4 telemetry: peak 6.7 GiB; 19 min — keep 8 vCPU for now
 # run 6 experiment: run 5: 4 vCPU nearly free elsewhere; 6.4 GiB peak
-instance_type = "m6i.xlarge"
+# run 8 triage (2026-09-02): the 4 vCPU downsize cost merge 1.67x and made it
+# the noisiest lane; memory was never the constraint here, vCPUs are — back to 8.
+instance_type = "m6i.2xlarge"
 
 [[worker]]
 # 2 min of track_* counters.
