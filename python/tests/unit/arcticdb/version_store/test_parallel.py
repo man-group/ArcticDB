@@ -126,6 +126,23 @@ def test_delete_staged_data_by_string_removes_all(lmdb_version_store_v1):
     assert len(get_append_keys(lib, sym)) == 0
 
 
+def test_delete_staged_data_by_numeric_symbol_removes_all(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    sym = 12345  # StreamId is variant<int, str>, so numeric symbols are valid
+
+    df1 = pd.DataFrame({"col": [0, 1]}, index=pd.date_range("2024-01-01", periods=2))
+    df2 = pd.DataFrame({"col": [2, 3]}, index=pd.date_range("2024-01-03", periods=2))
+
+    lib.stage(sym, df1)
+    lib.stage(sym, df2)
+    assert sym in lib.list_symbols_with_incomplete_data()
+
+    # Must not be misrouted into the stage-result branch (list(12345) would raise).
+    lib.remove_incomplete(sym)
+
+    assert sym not in lib.list_symbols_with_incomplete_data()
+
+
 def test_delete_staged_data_by_stage_result_is_idempotent(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
     sym = "test_delete_staged_data_by_stage_result_is_idempotent"
