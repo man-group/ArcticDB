@@ -108,8 +108,10 @@ MergeUpdateClause create_clause(
         const MergeStrategy strategy, std::shared_ptr<ComponentManager> component_manager, InputFrame&& input_frame,
         std::vector<std::string> on = {}, bool match_na = false
 ) {
+    auto strat = strategy;
+    strat.match_na = match_na;
     MergeUpdateClause clause(
-            std::move(on), strategy, std::make_shared<InputFrame>(std::move(input_frame)), rows_per_segment, match_na
+            std::move(on), strat, std::make_shared<InputFrame>(std::move(input_frame)), rows_per_segment
     );
     clause.set_component_manager(std::move(component_manager));
     return clause;

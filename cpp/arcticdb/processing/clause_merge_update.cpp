@@ -26,14 +26,14 @@ namespace {
 using namespace arcticdb;
 
 template<typename TDT, typename T>
-concept sequience_type_raw_value =
+concept sequence_type_raw_value =
         util::type_descriptor_tag<TDT> && is_sequence_type(TDT::data_type()) &&
         util::any_of<std::remove_cvref_t<T>, PyObject*, typename TDT::RawType, std::optional<std::string_view>>;
 
 template<typename TDT, typename T>
 concept raw_value_for_type_descriptor =
         util::type_descriptor_tag<TDT> &&
-        (std::same_as<T, typename TDT::DataTypeTag::raw_type> || sequience_type_raw_value<TDT, T>);
+        (std::same_as<T, typename TDT::DataTypeTag::raw_type> || sequence_type_raw_value<TDT, T>);
 
 template<util::type_descriptor_tag TDT>
 using SourceRawType =
@@ -236,25 +236,29 @@ std::variant<bool, convert::StringEncodingError> are_merge_values_matching(
         SourceRawType<SourceTDT> source_value, typename TargetTDT::DataTypeTag::raw_type target_value,
         const StringPool& target_string_pool, std::optional<ScopedGILLock>& scoped_gil_lock, bool match_na
 ) {
-
-    const bool source_is_na = is_na<SourceTDT>(source_value);
-    const bool target_is_na = is_na<TargetTDT>(target_value);
-    if (source_is_na || target_is_na) {
-        return match_na && source_is_na && target_is_na;
-    }
+    const NaAwareComparator<TargetTDT> comparator{match_na};
     if constexpr (is_sequence_type(SourceTDT::data_type())) {
+        const std::optional<std::string_view> target_string =
+                is_na<TargetTDT>(target_value)
+                        ? std::nullopt
+                        : std::optional<std::string_view>{target_string_pool.get_const_view(target_value)};
+        if (is_na<SourceTDT>(source_value)) {
+            return comparator(std::nullopt, target_string);
+        }
         return util::variant_match(
                 create_py_object_wrapper_or_error<TargetTDT::data_type()>(source_value, scoped_gil_lock),
                 [](convert::StringEncodingError&& err) -> std::variant<bool, convert::StringEncodingError> {
                     return err;
                 },
                 [&](convert::PyStringWrapper&& wrapper) -> std::variant<bool, convert::StringEncodingError> {
-                    return target_string_pool.get_const_view(target_value) ==
-                           std::string_view(wrapper.buffer_, wrapper.length_);
+                    return comparator(
+                            std::optional<std::string_view>{std::string_view(wrapper.buffer_, wrapper.length_)},
+                            target_string
+                    );
                 }
         );
     } else {
-        return source_value == target_value;
+        return comparator(source_value, target_value);
     }
 }
 
@@ -809,13 +813,12 @@ using namespace pipelines;
 
 MergeUpdateClause::MergeUpdateClause(
         std::vector<std::string>&& on, MergeStrategy strategy, std::shared_ptr<InputFrame> source,
-        size_t rows_per_segment, bool match_na
+        size_t rows_per_segment
 ) :
 
     on_(std::move(on)),
     strategy_(strategy),
     source_(std::move(source)),
-    match_na_(match_na),
     rows_per_segment_(rows_per_segment) {
     std::erase_if(on_, [&](const std::string& column) { return !on_set_.insert(column).second; });
 }
@@ -1038,12 +1041,13 @@ MergeUpdateClause::MatchRecord MergeUpdateClause::initialize_rows_to_update_for_
             details::visit_type(target_column.column_->type().data_type(), [&](auto target_field_dt) {
                 using TargetTDT = ScalarTagType<decltype(target_field_dt)>;
                 if constexpr (std::same_as<std::decay_t<SourceTDT>, std::decay_t<TargetTDT>>) {
-                    auto target_values_to_rows = map_column_values_to_rows<TargetTDT>(target_column, match_na_);
+                    auto target_values_to_rows =
+                            map_column_values_to_rows<TargetTDT>(target_column, strategy_.match_na);
                     std::span source_data = source_->get_tensor(source_field_position).span<SourceType>();
                     for (size_t source_row_idx = 0; source_row_idx < source_data.size(); ++source_row_idx) {
                         auto source_value = source_data[source_row_idx];
                         const bool source_is_na = is_na<SourceTDT>(source_value);
-                        if (!match_na_ && source_is_na) {
+                        if (!strategy_.match_na && source_is_na) {
                             continue;
                         }
                         if constexpr (is_sequence_type(SourceTDT::data_type())) {
@@ -1417,7 +1421,7 @@ MergeUpdateClause::MatchRecord MergeUpdateClause::filter_on_additional_columns_m
                 target_field.type().data_type(),
                 source_range.first,
                 get_source_data_bytes(source_field_position, source_range),
-                match_na_
+                strategy_.match_na
         );
     }
     return matched_rows;
@@ -1447,10 +1451,6 @@ OutputSchema MergeUpdateClause::join_schemas(std::vector<OutputSchema>&&) const 
 }
 
 std::string MergeUpdateClause::to_string() const { return "MERGE_UPDATE"; }
-
-bool MergeUpdateClause::is_update_only() const {
-    return strategy_ == MergeStrategy{MergeAction::UPDATE, MergeAction::DO_NOTHING};
-}
 
 size_t MergeUpdateClause::field_index_for_matching_on_column(std::string_view name, const StreamDescriptor& descriptor)
         const {

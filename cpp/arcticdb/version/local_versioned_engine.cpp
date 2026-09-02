@@ -30,12 +30,7 @@
 namespace {
 using namespace arcticdb;
 bool is_valid_merge_strategy(const arcticdb::MergeStrategy& strategy) {
-    constexpr static std::array valid_strategies = {
-            MergeStrategy{.matched = MergeAction::UPDATE, .not_matched_by_target = MergeAction::DO_NOTHING},
-            MergeStrategy{.matched = MergeAction::UPDATE, .not_matched_by_target = MergeAction::INSERT},
-            MergeStrategy{.matched = MergeAction::DO_NOTHING, .not_matched_by_target = MergeAction::INSERT}
-    };
-    return std::ranges::find(valid_strategies, strategy) != std::ranges::end(valid_strategies);
+    return strategy.update_only() || strategy.update_and_insert() || strategy.insert_only();
 }
 
 void check_for_duplicated_symbols(const std::vector<StreamId>& stream_ids, std::string_view method) {
@@ -2547,7 +2542,7 @@ void LocalVersionedEngine::_test_set_store(std::shared_ptr<Store> store) { set_s
 
 VersionedItem LocalVersionedEngine::merge_internal(
         const StreamId& stream_id, std::shared_ptr<InputFrame> source, const bool prune_previous_versions,
-        const bool upsert, const MergeStrategy& strategy, std::vector<std::string>&& on, const bool match_na
+        const bool upsert, const MergeStrategy& strategy, std::vector<std::string>&& on
 ) {
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: merge_update");
     sorting::check<ErrorCode::E_UNSORTED_DATA>(
@@ -2572,7 +2567,6 @@ VersionedItem LocalVersionedEngine::merge_internal(
                                                   IndexPartialKey{stream_id, update_info.next_version_id_},
                                                   std::move(on),
                                                   strategy,
-                                                  match_na,
                                                   std::move(source),
                                                   get_de_dup_map(stream_id, update_info, write_options_)
                                           );

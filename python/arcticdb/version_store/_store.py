@@ -4470,13 +4470,8 @@ class NativeVersionStore:
             IMPORTANT: For date-time indexed data, the index is always included in matching and cannot be excluded.
 
             Note on equality semantics:
-                By default (`match_na=False`), a missing value in an `on` column never matches anything, on either
-                side:
-                - In float columns, NaN never matches (plain IEEE equality), including NaN against NaN.
-                - In string columns, None and NaN match nothing, so None does not match None and NaN does not
-                  match NaN.
-                - In datetime64 `on` columns, NaT matches nothing, including NaT against NaT.
-                Non-missing values are compared by plain equality in both modes.
+                By default (`match_na=False`), missing values (float NaN, string None/NaN, or NaT in a datetime64
+                column) in an `on` column match nothing. Non-missing values are compared by plain equality.
 
                 Set `match_na=True` for missing values to match each other instead:
                 - In float columns, NaN is considered equal to NaN.

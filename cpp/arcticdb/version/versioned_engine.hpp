@@ -180,7 +180,7 @@ class VersionedEngine {
 
     virtual VersionedItem merge_internal(
             const StreamId& stream_id, std::shared_ptr<InputFrame> source, bool prune_previous_versions, bool upsert,
-            const MergeStrategy& strategy, std::vector<std::string>&& on, bool match_na
+            const MergeStrategy& strategy, std::vector<std::string>&& on
     ) = 0;
 };
 
