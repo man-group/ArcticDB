@@ -72,6 +72,112 @@ def test_staging_doesnt_write_append_ref(lmdb_version_store_v1):
     assert not len(lib_tool.find_keys_for_symbol(KeyType.APPEND_REF, sym))
 
 
+def test_delete_staged_data_by_single_stage_result(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    sym = "test_delete_staged_data_by_single_stage_result"
+
+    df1 = pd.DataFrame({"col": [0, 1]}, index=pd.date_range("2024-01-01", periods=2))
+    df2 = pd.DataFrame({"col": [2, 3]}, index=pd.date_range("2024-01-03", periods=2))
+
+    stage_result_1 = lib.stage(sym, df1)
+    stage_result_2 = lib.stage(sym, df2)
+
+    assert len(get_append_keys(lib, sym)) == len(stage_result_1.staged_segments) + len(stage_result_2.staged_segments)
+
+    # Delete only the first stage result's APPEND_DATA keys, by handing back its receipt.
+    lib.remove_incomplete(stage_result_1)
+
+    remaining = {str(k) for k in get_append_keys(lib, sym)}
+    assert remaining == {str(k) for k in stage_result_2.staged_segments}
+    assert remaining.isdisjoint({str(k) for k in stage_result_1.staged_segments})
+
+
+def test_delete_staged_data_by_list_of_stage_results(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    sym = "test_delete_staged_data_by_list_of_stage_results"
+
+    df1 = pd.DataFrame({"col": [0, 1]}, index=pd.date_range("2024-01-01", periods=2))
+    df2 = pd.DataFrame({"col": [2, 3]}, index=pd.date_range("2024-01-03", periods=2))
+    df3 = pd.DataFrame({"col": [4, 5]}, index=pd.date_range("2024-01-05", periods=2))
+
+    stage_result_1 = lib.stage(sym, df1)
+    stage_result_2 = lib.stage(sym, df2)
+    stage_result_3 = lib.stage(sym, df3)
+
+    lib.remove_incomplete([stage_result_1, stage_result_2])
+
+    remaining = {str(k) for k in get_append_keys(lib, sym)}
+    assert remaining == {str(k) for k in stage_result_3.staged_segments}
+
+
+def test_delete_staged_data_by_string_removes_all(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    sym = "test_delete_staged_data_by_string_removes_all"
+
+    df1 = pd.DataFrame({"col": [0, 1]}, index=pd.date_range("2024-01-01", periods=2))
+    df2 = pd.DataFrame({"col": [2, 3]}, index=pd.date_range("2024-01-03", periods=2))
+
+    lib.stage(sym, df1)
+    lib.stage(sym, df2)
+    assert len(get_append_keys(lib, sym)) > 0
+
+    lib.remove_incomplete(sym)
+
+    assert len(get_append_keys(lib, sym)) == 0
+
+
+def test_delete_staged_data_by_stage_result_is_idempotent(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    sym = "test_delete_staged_data_by_stage_result_is_idempotent"
+
+    df1 = pd.DataFrame({"col": [0, 1]}, index=pd.date_range("2024-01-01", periods=2))
+    df2 = pd.DataFrame({"col": [2, 3]}, index=pd.date_range("2024-01-03", periods=2))
+
+    stage_result_1 = lib.stage(sym, df1)
+    stage_result_2 = lib.stage(sym, df2)
+
+    lib.remove_incomplete(stage_result_1)
+    # Deleting the same receipt again is a no-op, not an error.
+    lib.remove_incomplete(stage_result_1)
+
+    remaining = {str(k) for k in get_append_keys(lib, sym)}
+    assert remaining == {str(k) for k in stage_result_2.staged_segments}
+
+
+def test_delete_staged_data_by_stage_result_cross_symbol(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    sym_a = "test_delete_staged_data_cross_symbol_a"
+    sym_b = "test_delete_staged_data_cross_symbol_b"
+
+    df = pd.DataFrame({"col": [0, 1]}, index=pd.date_range("2024-01-01", periods=2))
+
+    stage_result_a = lib.stage(sym_a, df)
+    stage_result_b = lib.stage(sym_b, df)
+    keep_a = lib.stage(sym_a, df)
+
+    lib.remove_incomplete([stage_result_a, stage_result_b])
+
+    remaining_a = {str(k) for k in get_append_keys(lib, sym_a)}
+    assert remaining_a == {str(k) for k in keep_a.staged_segments}
+    assert len(get_append_keys(lib, sym_b)) == 0
+
+
+def test_delete_staged_data_v2_by_stage_result(lmdb_library):
+    lib = lmdb_library
+    sym = "test_delete_staged_data_v2_by_stage_result"
+
+    df1 = pd.DataFrame({"col": [0, 1]}, index=pd.date_range("2024-01-01", periods=2))
+    df2 = pd.DataFrame({"col": [2, 3]}, index=pd.date_range("2024-01-03", periods=2))
+
+    stage_result_1 = lib.stage(sym, df1)
+    stage_result_2 = lib.stage(sym, df2)
+
+    lib.delete_staged_data(stage_result_1)
+
+    remaining = {str(k) for k in get_append_keys(lib._nvs, sym)}
+    assert remaining == {str(k) for k in stage_result_2.staged_segments}
+
+
 @pytest.mark.storage
 @pytest.mark.parametrize("batch", (True, False))
 @pytest.mark.parametrize("batch_size", (1000, 7))

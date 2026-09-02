@@ -1741,19 +1741,30 @@ class Library:
         )
         return batch_update_result
 
-    def delete_staged_data(self, symbol: str) -> None:
+    def delete_staged_data(self, symbol: Union[str, StageResult, List[StageResult]]) -> None:
         """
         Removes staged data.
 
         Parameters
         ----------
-        symbol : `str`
-            Symbol to remove staged data for.
+        symbol : `str`, `StageResult`, or `List[StageResult]`
+            If a symbol name (`str`), removes all staged data for that symbol.
+            If a `StageResult` or list of them (as returned by ``stage``), removes only the staged
+            segments named by those stage result(s). Missing keys are ignored.
 
         See Also
         --------
         write
             Documentation on the ``staged`` parameter explains the concept of staged data in more detail.
+        stage
+            Returns the ``StageResult`` receipts accepted by this method.
+
+        Examples
+        --------
+        >>> receipt_1 = lib.stage("symbol", df1)
+        >>> receipt_2 = lib.stage("symbol", df2)
+        >>> lib.delete_staged_data(receipt_1)  # delete only the first batch's staged keys
+        >>> lib.delete_staged_data("symbol")   # delete all remaining staged data for the symbol
         """
         self._nvs.remove_incomplete(symbol)
 

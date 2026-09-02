@@ -2830,17 +2830,23 @@ class NativeVersionStore:
         """
         return list(self.version_store.get_incomplete_symbols())
 
-    def remove_incomplete(self, symbol: str):
+    def remove_incomplete(self, symbol: Union[str, StageResult, List[StageResult]]) -> None:
         """
         Remove previously written un-indexed chunks of data, produced by a tick collector or parallel
         writes/appends.
 
         Parameters
         ----------
-        symbol : `str`
-            Symbol name.
+        symbol : `str`, `StageResult`, or `List[StageResult]`
+            If a symbol name (`str`), removes all incomplete segments for that symbol.
+            If a `StageResult` or list of them, removes only the APPEND_DATA keys named by
+            those stage result(s). Missing keys are ignored.
         """
-        self.version_store.remove_incomplete(symbol)
+        if isinstance(symbol, str):
+            self.version_store.remove_incomplete(symbol)
+        else:
+            stage_results = [symbol] if isinstance(symbol, StageResult) else list(symbol)
+            self.version_store.remove_incompletes_for_stage_results(stage_results)
 
     def compact_incomplete(
         self,

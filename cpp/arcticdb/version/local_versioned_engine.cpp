@@ -1213,6 +1213,10 @@ void LocalVersionedEngine::remove_incompletes(
     remove_incomplete_segments(store_, stream_ids, common_prefix);
 }
 
+void LocalVersionedEngine::remove_incompletes_for_stage_results(const std::vector<StageResult>& stage_results) {
+    delete_incomplete_keys_for_stage_results(store_, stage_results);
+}
+
 std::set<StreamId> LocalVersionedEngine::get_incomplete_symbols() { return ::arcticdb::get_incomplete_symbols(store_); }
 
 std::set<StreamId> LocalVersionedEngine::get_incomplete_refs() { return ::arcticdb::get_incomplete_refs(store_); }

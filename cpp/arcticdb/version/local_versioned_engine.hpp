@@ -145,6 +145,8 @@ class LocalVersionedEngine : public VersionedEngine {
 
     void remove_incompletes(const std::unordered_set<StreamId>& sids, const std::string& common_prefix);
 
+    void remove_incompletes_for_stage_results(const std::vector<StageResult>& stage_results);
+
     std::optional<VersionedItem> get_latest_version(const StreamId& stream_id);
 
     std::optional<VersionedItem> get_specific_version(

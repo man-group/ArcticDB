@@ -761,6 +761,10 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                  &PythonVersionStore::remove_incomplete,
                  py::call_guard<SingleThreadMutexHolder>(),
                  "Delete incomplete segments")
+            .def("remove_incompletes_for_stage_results",
+                 &PythonVersionStore::remove_incompletes_for_stage_results,
+                 py::call_guard<SingleThreadMutexHolder>(),
+                 "Delete the APPEND_DATA keys named by the given stage results")
             .def(
                     "remove_incompletes",
                     [&](PythonVersionStore& v,

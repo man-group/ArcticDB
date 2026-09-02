@@ -2331,15 +2331,12 @@ DeleteIncompleteKeysOnExit::~DeleteIncompleteKeysOnExit() {
         } else {
             // If an exception is thrown before read_incompletes_to_pipeline the keys won't be placed inside the
             // context thus they must be read manually.
-            std::vector<VariantKey> keys_to_delete;
             if (stage_results_) {
-                auto keys_to_delete_view =
-                        *stage_results_ | std::views::transform(&StageResult::staged_segments) | std::views::join;
-                keys_to_delete = std::vector<VariantKey>(keys_to_delete_view.begin(), keys_to_delete_view.end());
+                delete_incomplete_keys_for_stage_results(store_, *stage_results_);
             } else {
-                keys_to_delete = read_incomplete_keys_for_symbol(store_, context_->stream_id_, via_iteration_);
+                auto keys_to_delete = read_incomplete_keys_for_symbol(store_, context_->stream_id_, via_iteration_);
+                store_->remove_keys(keys_to_delete, opts).get();
             }
-            store_->remove_keys(keys_to_delete, opts).get();
         }
     } catch (const std::exception& e) {
         // Don't emit exceptions from destructor

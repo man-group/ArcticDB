@@ -159,6 +159,12 @@ std::vector<VariantKey> read_incomplete_keys_for_symbol(
         const std::shared_ptr<Store>& store, const StreamId& stream_id, bool via_iteration
 );
 
+// Delete exactly the APPEND_DATA keys named by these stage results.
+// Missing keys are ignored (idempotent).
+void delete_incomplete_keys_for_stage_results(
+        const std::shared_ptr<Store>& store, const std::vector<StageResult>& stage_results
+);
+
 /**
  * Load incomplete segments based on the provided stage results.
  *
