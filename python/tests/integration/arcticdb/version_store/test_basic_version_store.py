@@ -25,6 +25,7 @@ from pytz import timezone
 
 from arcticdb.exceptions import (
     ArcticDbNotYetImplemented,
+    ArcticDuplicateSymbolsInBatchException,
     InternalException,
     SchemaException,
     UserInputException,
@@ -2719,7 +2720,7 @@ def test_batch_restore_version_mixed_as_ofs(lmdb_version_store):
     assert latest["s3"].metadata == "s3-1"
 
 
-@pytest.mark.parametrize("bad_thing", ("symbol", "as_of", "duplicate"))
+@pytest.mark.parametrize("bad_thing", ("symbol", "as_of"))
 def test_batch_restore_version_bad_input_noop(lmdb_version_store, bad_thing):
     """Leave everything alone if anything in the batch is bad."""
     lib = lmdb_version_store
@@ -2755,14 +2756,6 @@ def test_batch_restore_version_bad_input_noop(lmdb_version_store, bad_thing):
             NoSuchVersionException, match=r"E_NO_SUCH_VERSION Could not find.*restore_version.*missing versions \[s3\]"
         ):
             lib.batch_restore_version(syms, as_ofs)
-    elif bad_thing == "duplicate":
-        restore_syms = ["s1", "s1", "s2"]
-        as_ofs = [1, second_ts, first_ts]
-        with pytest.raises(
-            UserInputException,
-            match=r"E_INVALID_USER_ARGUMENT Duplicate symbols in restore_version.*more than once \[s1\]",
-        ):
-            lib.batch_restore_version(restore_syms, as_ofs)
     else:
         raise RuntimeError(f"Unexpected bad_thing={bad_thing}")
 
@@ -3566,3 +3559,28 @@ def test_read_specific_version_reloads_when_new_versions_written(basic_store_fac
         result = lib_b.read(symbol, as_of=-6)
         assert result.version == 0
         assert_equal(result.data, dataframes[0])
+
+
+# Equivalent V2 API test in test_arctic_batch.py
+@pytest.mark.parametrize(
+    "method",
+    ["batch_write", "batch_append", "batch_write_metadata", "batch_compact_data", "batch_restore_version"],
+)
+def test_duplicate_symbols_in_modification_methods(in_memory_version_store, method):
+    lib = in_memory_version_store
+    syms = ["sym1", "sym2", "sym1", "sym2", "sym3"]
+    if method == "batch_write_metadata":
+        args = [["metadata"] * len(syms)]
+    elif method == "batch_compact_data":
+        args = []
+    elif method == "batch_restore_version":
+        args = [[0] * len(syms)]
+    else:  # batch_write/batch_append
+        args = [[pd.DataFrame({"col": [0]})] * len(syms)]
+    with pytest.raises(ArcticDuplicateSymbolsInBatchException) as e:
+        getattr(lib, method)(syms, *args)
+    msg = str(e.value)
+    assert "sym1" in msg
+    assert "sym2" in msg
+    assert "sym3" not in msg
+    assert not lib.list_symbols()
