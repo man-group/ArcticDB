@@ -62,6 +62,11 @@ TEST(OnceFlags, NeighbouringPositionsAreIndependent) {
                 for (size_t pos = thread_id; pos < num_positions; pos += num_threads) {
                     flags.call_once(pos, [&]() { ++calls; });
                 }
+                // Every thread then sweeps every position, so a flag lost in the strided pass is run a
+                // second time and shows up in the count rather than only in the check below.
+                for (size_t pos = 0; pos < num_positions; ++pos) {
+                    flags.call_once(pos, [&]() { ++calls; });
+                }
             });
         }
         while (ready.load() != num_threads) {
