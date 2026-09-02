@@ -668,7 +668,8 @@ void on_column_metadata_one_sided(
                 column
         );
     }
-    // TODO (monday ref 12841500984): Add a similar check for string format
+    // We explicitly allow has_string_format() to be combined with a missing column_meta.
+    // It will just inherit the value already specified in metadata.
 }
 
 // The leading dimension of an ndarray is the row count, thus has to be combined when combining norm metadata.
@@ -736,6 +737,19 @@ NormalizationMetadata accumulate_arrow_and_arrow_norm(
                     );
                     // Present in both, so drop anything they disagree on, such as the timezone.
                     res_columns[column_name].clear_timezone();
+                }
+                if (other_column->has_string_format()) {
+                    if (res_columns[column_name].has_string_format()) {
+                        if (res_columns[column_name].string_format() != other_column->string_format()) {
+                            // If we are mixing different string formats we always use large_string
+                            res_columns[column_name].set_string_format(
+                                    proto::descriptors::ArrowStringFormat::LARGE_STRING
+                            );
+                        }
+                    } else {
+                        // If only other has_string_format we inherit it.
+                        res_columns[column_name].set_string_format(other_column->string_format());
+                    }
                 }
             }
     );
