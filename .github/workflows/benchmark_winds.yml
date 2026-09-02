@@ -38,6 +38,9 @@ on:
   push:
     branches:
       - master
+      # TEMPORARY: lets the shadow branch trigger itself while `workflow_dispatch`
+      # cannot see a workflow that is not on the default branch. Remove at cut-over.
+      - benchmark-winds-shadow
 
   # Nightly, all storages. Same cron as `analysis_workflow.yml`; while both pipelines run,
   # this doubles the nightly EC2 spend — offset or drop it if that matters.
@@ -101,11 +104,22 @@ jobs:
         id: storage
         env:
           REQUESTED: ${{ inputs.storage }}
+          # Only a push event carries a head commit; empty otherwise.
+          HEAD_MESSAGE: ${{ github.event.head_commit.message }}
         run: |
           if [ "$GITHUB_EVENT_NAME" = schedule ]; then
             storage=ALL
+          elif [ -n "$REQUESTED" ]; then
+            storage="$REQUESTED"
           else
-            storage="${REQUESTED:-LMDB}"
+            # TEMPORARY, tied to the shadow push trigger above: `workflow_dispatch`
+            # cannot see a workflow that is not on the default branch, so until
+            # cut-over a shadow push asks for its storage in the commit message.
+            case "$HEAD_MESSAGE" in
+              *'[storage=ALL]'*) storage=ALL ;;
+              *'[storage=REAL]'*) storage=REAL ;;
+              *) storage=LMDB ;;
+            esac
           fi
           echo "storage: $storage"
           printf 'storage=%s\n' "$storage" >> "$GITHUB_OUTPUT"
