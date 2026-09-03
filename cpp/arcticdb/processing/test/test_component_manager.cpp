@@ -60,3 +60,13 @@ TEST(ComponentManager, Simple) {
             std::shared_ptr<AtomKey>,
             EntityFetchCount>({ids[1]});
 }
+
+// Regression test for #3381: adding a component an entity already has used to trip a plain assert()
+// inside EnTT, aborting the process instead of raising something the caller can handle.
+TEST(ComponentManager, AddSameComponentTwiceRaises) {
+    ComponentManager component_manager;
+    auto ids = component_manager.get_new_entity_ids(1);
+    auto segment = std::make_shared<SegmentInMemory>();
+    component_manager.add_components(ids[0], segment, EntityFetchCount{1});
+    EXPECT_THROW(component_manager.add_components(ids[0], segment), InternalException);
+}

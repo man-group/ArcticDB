@@ -428,6 +428,7 @@ set(arcticdb_srcs
         util/memory_mapped_file.hpp
         util/name_validation.hpp
         util/native_handler.hpp
+        util/once_flags.hpp
         util/offset_string.hpp
         util/optional_defaults.hpp
         util/pb_util.hpp
@@ -1175,6 +1176,7 @@ if(${TEST})
             util/test/test_hash.cpp
             util/test/test_id_transformation.cpp
             util/test/test_key_utils.cpp
+            util/test/test_once_flags.cpp
             util/test/test_ranges_from_future.cpp
             util/test/test_reliable_storage_lock.cpp
             util/test/test_slab_allocator.cpp
