@@ -32,7 +32,17 @@ void tombstone_snapshot(
         const std::shared_ptr<stream::StreamSink>& store, storage::KeySegmentPair& key_segment_pair, bool log_changes
 );
 
+// Enumerates the keys of every snapshot in the library, de-duplicating legacy SNAPSHOT keys that have been
+// superseded by a SNAPSHOT_REF of the same name.
+std::vector<entity::VariantKey> list_snapshot_keys(const std::shared_ptr<Store>& store);
+
 void iterate_snapshots(const std::shared_ptr<Store>& store, folly::Function<void(entity::VariantKey&)> visitor);
+
+// Reproduces the exception handling of iterate_snapshots() over the results of a windowed read of the snapshot
+// keys: a snapshot that was deleted between the listing and its read is ignored, and anything else is rethrown.
+void check_only_deleted_snapshots_failed(
+        const std::vector<folly::Try<folly::Unit>>& results, const std::vector<entity::VariantKey>& snapshot_keys
+);
 
 std::optional<size_t> row_id_for_stream_in_snapshot_segment(
         SegmentInMemory& seg, bool using_ref_key, const StreamId& stream_id,

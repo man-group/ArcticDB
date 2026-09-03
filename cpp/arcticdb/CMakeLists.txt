@@ -1191,6 +1191,7 @@ if(${TEST})
             version/test/test_append.cpp
             version/test/test_key_block.cpp
             version/test/test_object_sizes.cpp
+            version/test/test_snapshot.cpp
             version/test/test_sort_index.cpp
             version/test/test_sorting_info_state_machine.cpp
             version/test/test_sparse.cpp

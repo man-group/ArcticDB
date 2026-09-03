@@ -9,9 +9,12 @@
 #include <arcticdb/version/snapshot.hpp>
 #include <arcticdb/version/version_log.hpp>
 #include <arcticdb/stream/index_aggregator.hpp>
+#include <arcticdb/async/task_scheduler.hpp>
 #include <arcticdb/python/python_utils.hpp>
 
 #include <algorithm>
+#include <mutex>
+#include <numeric>
 
 using namespace arcticdb::entity;
 using namespace arcticdb::stream;
@@ -86,40 +89,103 @@ void tombstone_snapshot(
     store->write_compressed(std::move(key_segment_pair)).get();
 }
 
+std::vector<VariantKey> list_snapshot_keys(const std::shared_ptr<Store>& store) {
+    // SNAPSHOT_REF and the legacy SNAPSHOT key type live under different storage prefixes, so enumerating them
+    // requires two independent listing operations. Both must happen - libraries written by older versions can still
+    // hold SNAPSHOT keys - but they do not depend on each other, so run them concurrently instead of back to back.
+    // Against object storage each listing costs a full round trip (~11ms on S3) that is otherwise paid twice by
+    // every list_snapshots()/list_versions() call, even in a library with no snapshots at all.
+    std::vector<AtomKey> legacy_keys;
+    auto legacy_listing = folly::via(&async::io_executor(), [&store, &legacy_keys]() {
+        store->iterate_type(KeyType::SNAPSHOT, [&legacy_keys](VariantKey&& vk) {
+            legacy_keys.emplace_back(to_atom(std::move(vk)));
+        });
+    });
+
+    std::vector<RefKey> ref_keys;
+    std::exception_ptr ref_listing_exception;
+    try {
+        store->iterate_type(KeyType::SNAPSHOT_REF, [&ref_keys](VariantKey&& vk) {
+            util::check(
+                    std::holds_alternative<RefKey>(vk),
+                    "Expected snapshot ref to be reference type, got {}",
+                    variant_key_view(vk)
+            );
+            ref_keys.emplace_back(std::get<RefKey>(std::move(vk)));
+        });
+    } catch (...) {
+        ref_listing_exception = std::current_exception();
+    }
+
+    // getTry() does not throw, so the background listing is always joined before its captured state goes out of
+    // scope, whichever of the two listings failed.
+    auto legacy_listing_result = std::move(legacy_listing).getTry();
+    if (ref_listing_exception) {
+        std::rethrow_exception(ref_listing_exception);
+    }
+    if (legacy_listing_result.hasException()) {
+        legacy_listing_result.exception().throw_exception();
+    }
+
+    std::vector<VariantKey> snap_variant_keys;
+    snap_variant_keys.reserve(ref_keys.size() + legacy_keys.size());
+    std::unordered_set<SnapshotId> seen;
+    seen.reserve(ref_keys.size());
+    for (auto& ref_key : ref_keys) {
+        seen.insert(ref_key.id());
+        snap_variant_keys.emplace_back(std::move(ref_key));
+    }
+    for (auto& key : legacy_keys) {
+        if (!seen.contains(key.id())) {
+            snap_variant_keys.emplace_back(std::move(key));
+        }
+    }
+    return snap_variant_keys;
+}
+
 void iterate_snapshots(const std::shared_ptr<Store>& store, folly::Function<void(entity::VariantKey&)> visitor) {
     ARCTICDB_SAMPLE(IterateSnapshots, 0)
 
-    std::vector<VariantKey> snap_variant_keys;
-    std::unordered_set<SnapshotId> seen;
-
-    store->iterate_type(KeyType::SNAPSHOT_REF, [&snap_variant_keys, &seen](VariantKey&& vk) {
-        util::check(
-                std::holds_alternative<RefKey>(vk),
-                "Expected snapshot ref to be reference type, got {}",
-                variant_key_view(vk)
-        );
-        auto ref_key = std::get<RefKey>(std::move(vk));
-        seen.insert(ref_key.id());
-        snap_variant_keys.emplace_back(ref_key);
-    });
-
-    store->iterate_type(KeyType::SNAPSHOT, [&snap_variant_keys, &seen](VariantKey&& vk) {
-        auto key = to_atom(std::move(vk));
-        if (seen.find(key.id()) == seen.end()) {
-            snap_variant_keys.emplace_back(key);
-        }
-    });
+    auto snap_variant_keys = list_snapshot_keys(store);
 
     for (auto& vk : snap_variant_keys) {
         try {
             visitor(vk);
         } catch (storage::KeyNotFoundException& e) {
+            // An exception that names no key cannot be attributed to this snapshot, so it is not evidence that the
+            // snapshot has gone. Propagate rather than dropping a snapshot that may still be there.
+            if (!e.has_keys()) {
+                throw;
+            }
             std::for_each(e.keys().begin(), e.keys().end(), [&vk, &e](const VariantKey& key) {
                 if (key != vk)
                     throw storage::KeyNotFoundException(std::move(e.keys()));
             });
             ARCTICDB_DEBUG(log::version(), "Ignored exception due to {} being deleted during iterate_snapshots().");
         }
+    }
+}
+
+void check_only_deleted_snapshots_failed(
+        const std::vector<folly::Try<folly::Unit>>& results, const std::vector<VariantKey>& snapshot_keys
+) {
+    for (size_t idx = 0; idx < results.size(); ++idx) {
+        if (!results[idx].hasException()) {
+            continue;
+        }
+        const auto& snapshot_key = snapshot_keys[idx];
+        const auto* not_found = results[idx].tryGetExceptionObject<storage::KeyNotFoundException>();
+        // A KeyNotFoundException that names no key is not evidence that this snapshot has gone, so it propagates
+        // like any other failure rather than silently understating what the snapshots protect.
+        if (!not_found || !not_found->has_keys() ||
+            std::ranges::any_of(not_found->keys(), [&snapshot_key](const VariantKey& key) {
+                return key != snapshot_key;
+            })) {
+            results[idx].exception().throw_exception();
+        }
+        ARCTICDB_DEBUG(
+                log::version(), "Ignored {} being deleted during snapshot iteration", variant_key_view(snapshot_key)
+        );
     }
 }
 
@@ -396,17 +462,38 @@ MasterSnapshotMapWithStats get_master_snapshots_map_with_stats(
         std::shared_ptr<Store> store, const std::optional<std::unordered_set<StreamId>>& stream_ids
 ) {
     MasterSnapshotMapWithStats out;
-    iterate_snapshots(store, [&out, &store, &stream_ids](const VariantKey& sk) {
-        ++out.total_snapshots;
-        auto snapshot_id = variant_key_id(sk);
-        auto snapshot_segment = store->read_sync(sk).second;
-        for (size_t idx = 0; idx < snapshot_segment.row_count(); idx++) {
-            auto stream_index = read_key_row(snapshot_segment, static_cast<ssize_t>(idx));
-            if (!stream_ids || stream_ids->contains(stream_index.id())) {
-                out.map[stream_index.id()][stream_index].insert(snapshot_id);
-            }
-        }
-    });
+    auto snapshot_keys = list_snapshot_keys(store);
+    out.total_snapshots = snapshot_keys.size();
+
+    // One blocking read per snapshot costs a storage round trip per snapshot on the calling thread. Read them
+    // concurrently instead, as get_versions_from_snapshots() already does over the same segments. The map is
+    // built under a lock so that only window_size segments are ever held in memory.
+    std::mutex mutex;
+    std::vector<size_t> indexes(snapshot_keys.size());
+    std::iota(indexes.begin(), indexes.end(), 0);
+    const auto window_size = async::TaskScheduler::instance()->io_thread_count();
+    auto futures = folly::window(
+            std::move(indexes),
+            [store, &snapshot_keys, &out, &stream_ids, &mutex](size_t idx) {
+                return store->read(snapshot_keys[idx]).thenValueInline([&out, &stream_ids, &mutex](auto&& key_seg) {
+                    auto snapshot_id = variant_key_id(key_seg.first);
+                    const auto& snapshot_segment = key_seg.second;
+                    std::lock_guard lock{mutex};
+                    for (size_t idx = 0; idx < snapshot_segment.row_count(); idx++) {
+                        auto stream_index = read_key_row(snapshot_segment, static_cast<ssize_t>(idx));
+                        if (!stream_ids || stream_ids->contains(stream_index.id())) {
+                            out.map[stream_index.id()][stream_index].insert(snapshot_id);
+                        }
+                    }
+                    return folly::Unit{};
+                });
+            },
+            window_size
+    );
+    // Need collectAll in case snapshot keys were deleted since the listing operation. This map decides which
+    // index keys a delete is allowed to remove, so only a snapshot that has genuinely gone may be dropped from
+    // it: anything else must propagate rather than silently understate what the snapshots protect.
+    check_only_deleted_snapshots_failed(folly::collectAll(futures).get(), snapshot_keys);
     return out;
 }
 
