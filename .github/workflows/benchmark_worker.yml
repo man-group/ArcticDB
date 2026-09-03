@@ -36,7 +36,7 @@ on:
       market_type:     {required: false, type: string, default: spot, description: "'spot' or '' for on-demand; ignored on a managed lane"}
       python:          {required: false, type: string, default: '3.11', description: "interpreter the benchmark venv is built on"}
       # Two inputs beyond the ticket's list, both with defaults so callers may ignore them:
-      wheel_artifact:  {required: false, type: string, default: wheel-cp311-manylinux_x86_64, description: "name of the run's wheel artifact, from the build job"}
+      wheel_artifact:  {required: false, type: string, default: wheel-cp311-manylinux_x86_64, description: "name of the wheel artifact this lane installs: one of the run's per-platform build jobs (gha 41). Defaults to the manylinux one, which is what every EC2 lane wants"}
       bucket:          {required: false, type: string, default: '', description: "throwaway S3 bucket for REAL/ALL storage, created once per run by the plan job (ticket 11)"}
 
 jobs:
@@ -159,18 +159,25 @@ jobs:
       # version ArcticDB pins, and it is proven inside this container on a self-hosted
       # runner (`build_steps.yml:616-620`).
       #
-      # KNOWN GAP for a non-Linux managed lane (gha 37): the run builds exactly one wheel,
-      # `cp311-manylinux_x86_64`, and `uv pip install` will refuse it on Windows or macOS.
-      # The lane is measure-only precisely so that this costs nothing but a line on the
-      # summary while it is true. Closing it means a second `build` job per platform in
-      # `benchmark_winds.yml` and a per-worker `wheel_artifact` for the matrix to carry —
-      # deliberately not guessed at here, because what a Windows cibuildwheel run costs
-      # this pipeline per commit is the decision, not the plumbing.
+      # `wheel_artifact` is this lane's own platform (gha 41): the caller derived it from
+      # the same `runs_on` label that decided everything else on this job, so a Windows
+      # lane downloads `wheel-cp311-win_amd64` and every EC2 lane the manylinux wheel.
+      # There is no fallback and no guess here on purpose — the plan that named this
+      # artifact is the plan the build jobs were gated on, so if this download 404s the
+      # answer is a routing bug upstream, not a wheel to build on the worker.
+      #
+      # `path:` is workspace-relative rather than `${{ runner.temp }}/wheel`, and that is
+      # not cosmetic: on `windows-latest` `$RUNNER_TEMP` is `D:\a\_temp`, and the
+      # backslashes are escapes to every MSYS tool the `bash` shell below runs — `find`
+      # would look for `D:a_tempwheel`. A relative path is the one spelling that reads
+      # the same on both platforms. The directory lands inside the ArcticDB checkout,
+      # which is as harmless as the arctic-winds checkout already there: `asv run
+      # --python=same` does no checkout and never looks outside python/benchmarks.
       - name: download the run's wheel
         uses: actions/download-artifact@v8
         with:
           name: ${{ inputs.wheel_artifact }}
-          path: ${{ runner.temp }}/wheel
+          path: wheel
 
       # arctic-winds is a private repo today, so it is checked out with a read-only deploy
       # key (`ARCTIC_WINDS_DEPLOY_KEY`, see the README) rather than pip-installed from a
@@ -276,7 +283,13 @@ jobs:
           INSTANCE_TYPE: ${{ inputs.instance_type }}
           AMI_ID: ${{ steps.runner.outputs.ami }}
         run: |
-          wheel=$(find "$RUNNER_TEMP/wheel" -name '*.whl' | head -1)
+          # One artifact, one wheel in it, and the filename carries no SHA (every
+          # non-tag build is `0.0.0.dev0`), so the glob is the only way to name it.
+          wheel=$(find wheel -name '*.whl' | head -1)
+          if [ -z "$wheel" ]; then
+            echo "::error::No wheel in the ${{ inputs.wheel_artifact }} artifact."
+            exit 1
+          fi
           echo "wheel: $wheel"
           arctic-winds bench \
             --worker "$WORKER" \

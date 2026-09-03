@@ -3,9 +3,10 @@
 # nothing about the existing workflow, and writes to its own results library
 # (`winds_asv_results`), so the two can run against the same commits and be compared.
 #
-#   plan ──┬─► cibw_docker_image ─► build ─┐
-#          └───────────────────────────────┴─► worker (matrix, 1 EC2 instance each) ─► collect
-#                                                                                        └─► publish_pr_page
+#   plan ──┬─► cibw_docker_image ─► build ─────────┐
+#          ├──────────────────────► build_windows ─┤   (only when a lane needs it)
+#          └───────────────────────────────────────┴─► worker (matrix) ─► collect
+#                                                                            └─► publish_pr_page
 #
 # The site those pages belong to is rebuilt by `publish_winds_site.yml`, which reads the
 # results store and needs nothing from a benchmark run.
@@ -91,6 +92,11 @@ jobs:
       # workers.toml. `arctic-winds plan` writes this beside the matrix, because the plan
       # is the one thing that read the config; `collect` and `compare-values` both take it.
       measure_only: ${{ steps.plan.outputs.measure_only }}
+      # The wheels this run's lanes can install, derived from their `runs_on` labels
+      # (gha 41) — `manylinux_x86_64` always, plus `win_amd64` when a Windows lane is
+      # planned. The per-platform build jobs below are gated on it, so a run without
+      # such a lane never starts a Windows build.
+      wheel_platforms: ${{ steps.plan.outputs.wheel_platforms }}
       reference_suite: ${{ steps.suites.outputs.reference_suite }}
       storage: ${{ steps.storage.outputs.storage }}
       bucket: ${{ steps.bucket.outputs.bucket }}
@@ -260,12 +266,16 @@ jobs:
           MATRIX: ${{ steps.plan.outputs.matrix }}
           STORAGE: ${{ steps.storage.outputs.storage }}
           COMMIT: ${{ steps.commit.outputs.commit }}
+          WHEEL_PLATFORMS: ${{ steps.plan.outputs.wheel_platforms }}
         run: |
           {
             echo "### 🌬️ arctic-winds plan"
             echo
             echo "- head commit: \`$COMMIT\`"
             echo "- storage: \`$STORAGE\`"
+            # The one line that says why a run has two build jobs and the last one had
+            # one: a platform is here because some lane's label asked for it.
+            echo "- wheels: \`$WHEEL_PLATFORMS\`"
             if [ "$STORAGE" = REAL ]; then
               # The one line that explains a six-row table where a reader expects twelve.
               echo "- the workers marked \`real = false\` in \`workers.toml\` are skipped: they have no AMAZON-parameterized benchmarks"
@@ -355,6 +365,10 @@ jobs:
   # of a benchmark run and cheaper than the 11 min source build the pipeline does today;
   # calling `build_steps.yml` instead would drag its 38-job, 49-minute cp311 test matrix
   # along. See docs/research/gha-wheel-build-job.md, which this job is copied from.
+  #
+  # Unconditional, unlike `build_windows` below: every plan has at least one Linux lane —
+  # the twelve EC2 workers are Linux and so is any unrecognised label — so gating this
+  # would be a condition that is never false with a cost of its own to read.
   build:
     name: build cp311 wheel
     needs: [cibw_docker_image]
@@ -453,13 +467,170 @@ jobs:
           if-no-files-found: error
           retention-days: 7   # only ever needed inside this run
 
+  # The same job for `cp311-win_amd64`, and the reason ticket 41 exists: a lane on
+  # `windows-latest` cannot install a manylinux wheel, so `uv pip install` refuses it and
+  # the pilot lane can never go green (gha 37). The Windows half of `build_steps.yml` is
+  # what this is copied from — `build.yml:170-179`'s `windows_matrix` (preset
+  # `windows-cl`, build dir `C:/cpp_build`, vcpkg packages on `C:/`) plus the four
+  # Windows-only steps `build_steps.yml` guards on `matrix.os == 'windows'`.
+  #
+  # `if:` is the whole cost story. The plan derives each lane's wheel platform from its
+  # `runs_on` label and publishes the distinct set, so this job exists only on a run that
+  # planned a Windows lane. Until the `windows_pilot` worker is mirrored onto the shadow
+  # branch's `workers.toml` — it is staged in arctic-winds and held back until gha 42
+  # lands Windows provisioning — that is no run at all: every one skips this job and
+  # pays a skipped job's zero minutes, and a `storage=REAL` run keeps skipping it after
+  # the mirror, because the pilot is `real = false` and REAL drops it from the matrix.
+  # When it does run it is one hosted Windows runner for the length of a cibuildwheel
+  # build — free on a public repository, and concurrent with the manylinux build rather
+  # than after it.
+  #
+  # Not gated on `cibw_docker_image`'s *image* — that is the manylinux container and
+  # means nothing here — but it does `needs:` that job for the one thing it publishes
+  # that both builds must agree on: the cibuildwheel version.
+  build_windows:
+    name: build cp311 win_amd64 wheel
+    needs: [plan, cibw_docker_image]
+    if: contains(needs.plan.outputs.wheel_platforms, 'win_amd64')
+    # The ticket's choice, and it differs from `build.yml:172`, which pins `windows-2022`
+    # for its own wheels. What makes that safe is the pinned MSVC below: the toolchain
+    # this wheel is compiled with is installed by the job, not inherited from the image,
+    # and a `win_amd64` wheel runs on any Windows the lane may be. Pin `windows-2022`
+    # here too if the choco install ever stops working on the newer image.
+    runs-on: windows-latest
+    # Longer than the manylinux 45: Windows has no warm S3 sccache of its own to lean on
+    # for a first build, and the MSVC install alone is minutes.
+    timeout-minutes: 90
+    defaults:
+      run: {shell: bash}
+    env:
+      # ---- copied from build_steps.yml:46-79, Windows column; keep the two in sync ----
+      SCCACHE_GHA_VERSION: ${{ secrets.AWS_S3_ACCESS_KEY == null }}
+      SCCACHE_BUCKET: arcticdb-ci-sccache-bucket
+      SCCACHE_ENDPOINT: http://s3.eu-west-1.amazonaws.com
+      SCCACHE_REGION: eu-west-1
+      SCCACHE_S3_USE_SSL: false
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_S3_ACCESS_KEY }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_S3_SECRET_KEY }}
+      VCPKG_NUGET_USER: ${{ secrets.VCPKG_NUGET_USER || github.repository_owner }}
+      VCPKG_NUGET_TOKEN: ${{ secrets.VCPKG_NUGET_TOKEN || secrets.GITHUB_TOKEN }}
+      VCPKG_MAN_NUGET_USER: ${{ secrets.VCPKG_MAN_NUGET_USER }}
+      VCPKG_MAN_NUGET_TOKEN: ${{ secrets.VCPKG_MAN_NUGET_TOKEN }}
+      CMAKE_C_COMPILER_LAUNCHER: sccache
+      CMAKE_CXX_COMPILER_LAUNCHER: sccache
+      ARCTIC_CMAKE_PRESET: windows-cl-release   # benchmarks must never run a debug build
+      # Both on C: because the checkout is on D: and the build does not fit beside it —
+      # `build.yml:174-175`'s answer, and the reason its archive step templates its
+      # exclusions with a drive letter.
+      ARCTICDB_BUILD_DIR: C:/cpp_build
+      ARCTICDB_VCPKG_PACKAGES_DIR: C:/vcpkg_packages
+      CIBW_BUILD: cp311-win_amd64   # the whole point: exactly one wheel
+      ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
+    steps:
+      # The run's own commit is the one that gets benchmarked, so no `ref:` here.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: init submodules
+        run: |
+          git submodule update --init --recursive
+          git -C cpp/vcpkg submodule update --init --recursive
+
+      - uses: mozilla-actions/sccache-action@v0.0.9
+        with:
+          disable_annotations: 'true'
+
+      # `build_steps.yml:113-120`. The linker runs out of memory on the default pagefile;
+      # `continue-on-error` because the action fails on images that will not resize, and
+      # a build that then succeeds anyway must not be lost to it.
+      - name: enlarge the pagefile
+        uses: al-cheb/configure-pagefile-action@v1.3
+        continue-on-error: true
+        with:
+          minimum-size: 2GB
+          maximum-size: 6GB
+          disk-root: "D:"   # also the checkout drive; 12GB in total
+
+      # ArcticDB PR #945: a ccache on PATH hijacks the compiler launcher sccache is set
+      # to, and the build fails inside vcpkg where it is hardest to read.
+      - name: remove ccache
+        run: rm "$(which ccache)" || true
+
+      # `build_steps.yml:151-158`. A GitHub image update moves MSVC under us, and a new
+      # MSVC has broken both ArcticDB and its vcpkg dependencies before; the version and
+      # the toolset are pinned to what `custom-triplets/x64-windows-static-msvc.cmake`
+      # expects. Keep all three in sync with `build_steps.yml`.
+      - name: install the pinned MSVC
+        run: |
+          choco install -y -f visualstudio2022buildtools --version=117.11.4 \
+            --params "--add Microsoft.VisualStudio.Component.VC.Tools.x86.x64 --installChannelUri https://aka.ms/vs/17/release/390666095_1317821361/channel"
+          choco install -y ninja
+
+      - name: enable the Windows compiler commands
+        uses: TheMrMilchmann/setup-msvc-dev@v3
+        with:
+          arch: x64
+          toolset: 14.41
+          vs-path: 'C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools'
+
+      - uses: jwlawson/actions-setup-cmake@v2
+        with:
+          cmake-version: '3.31.6'   # same pin as build_steps.yml
+
+      # Must come after setup-msvc-dev, which sets a VCPKG_ROOT of its own that this
+      # overwrites (`build_steps.yml:122-123`).
+      - name: extra envs
+        env:
+          CMAKE_BUILD_PARALLEL_LEVEL: ${{ vars.CMAKE_BUILD_PARALLEL_LEVEL }}
+        run: |
+          HOME=~ . build_tooling/vcpkg_caching.sh
+          echo -e "VCPKG_BINARY_SOURCES=$VCPKG_BINARY_SOURCES
+          VCPKG_ROOT=$PLATFORM_VCPKG_ROOT
+          ${X_VCPKG_ASSET_SOURCES:+X_VCPKG_ASSET_SOURCES=$X_VCPKG_ASSET_SOURCES}" | tee -a "$GITHUB_ENV"
+          cmake -P cpp/CMake/CpuCount.cmake | sed 's/^-- //' | tee -a "$GITHUB_ENV"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'   # host interpreter that runs cibuildwheel
+
+      # No `CIBW_ENVIRONMENT_PASS_*` and no image: cibuildwheel builds Windows wheels in
+      # this job's own environment, so the sccache and vcpkg variables above are already
+      # in scope for the compiler. The cibuildwheel version comes from the same job the
+      # manylinux build takes it from, so the two wheels are built by one version.
+      - name: build the wheel
+        env:
+          CIBW_VERSION: ${{ needs.cibw_docker_image.outputs.cibuildwheel_ver }}
+        run: |
+          python -m pip install pipx --retries 3 --timeout 180
+          python -m pipx run "cibuildwheel==$CIBW_VERSION"
+
+      - name: store the wheel
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheel-cp311-win_amd64
+          path: wheelhouse/*.whl
+          if-no-files-found: error
+          retention-days: 7   # only ever needed inside this run
+
   # The fan-out. One matrix entry = one call of the reusable worker workflow. For a lane
   # with an `ec2` table (or the bare `instance_type` the twelve ArcticDB workers use) that
   # is one EC2 instance, started and stopped inside the call; for a lane with a `runs_on`
   # label it is a job that queues against that label and rents nothing (see
   # benchmark_worker.yml).
   worker:
-    needs: [plan, build]
+    needs: [plan, build, build_windows]
+    # `build_windows` is skipped on every run with no Windows lane, and a skipped `need`
+    # takes its dependents with it unless the job says otherwise — the same trap
+    # `benchmark_worker.yml`'s bench job steps around for a skipped `start`. So the
+    # guard names what actually has to have happened: the plan and the manylinux wheel
+    # succeeded, and the Windows wheel is anything but failed (success, or skipped
+    # because nobody asked for it). `!cancelled()` rather than `always()`, because a
+    # cancelled run must not go on to rent twelve instances.
+    if: >-
+      !cancelled() && needs.plan.result == 'success'
+      && needs.build.result == 'success'
+      && needs.build_windows.result != 'failure'
     strategy:
       fail-fast: false   # one worker dying must not cancel the other seven
       matrix:
@@ -486,7 +657,14 @@ jobs:
       runs_on: ${{ matrix.runs_on }}
       market_type: ${{ matrix.market_type }}
       python: "3.11"
-      wheel_artifact: wheel-cp311-manylinux_x86_64
+      # Which of the run's wheels this lane installs (gha 41). `plan` derived the
+      # platform from the lane's own label — `windows-*` is `win_amd64`, `macos-*` is
+      # `macosx_arm64`, everything else (an EC2 lane included) is `manylinux_x86_64` —
+      # and the build jobs above name their artifacts to the same shape, which is
+      # `build_steps.yml:500`'s `wheel-${CIBW_BUILD}`. A lane whose wheel was never
+      # built would fail on `download-artifact`, but it cannot arise: the platforms the
+      # build jobs are gated on are this same list, from this same plan.
+      wheel_artifact: wheel-cp311-${{ matrix.wheel_platform }}
       bucket: ${{ needs.plan.outputs.bucket }}
 
   # Every worker's artifact back into one symbol in the S3 results store, the reports on
@@ -554,8 +732,11 @@ jobs:
           merge-multiple: false
 
       # `download-artifact` gives each artifact its own subdirectory, and the directory
-      # name is how `collect` learns the worker's name. The run's wheel is an artifact too
-      # and is not a worker, so it is moved aside before collect sees the directory.
+      # name is how `collect` learns the worker's name. The run's wheels are artifacts too
+      # and are not workers, so they are moved aside before collect sees the directory.
+      # The `wheel-*` glob covers every platform the plan can name — the artifacts are
+      # `wheel-cp311-manylinux_x86_64` and `wheel-cp311-win_amd64` — so a second wheel
+      # changes nothing here, which is what `tests/test_workflow_lanes.py` pins.
       # So is `compare-report`, which this job uploads for `publish_pr_page` — on a
       # *re-run* of this job the previous attempt's copy is already there to download,
       # and an artifact called `compare-report` would otherwise become a worker of that

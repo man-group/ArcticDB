@@ -140,3 +140,36 @@ suite = "^version_chain\\."
 instance_type = "m6i.xlarge"
 # track_* counters over an in-memory version chain; no storage parameterisation at all.
 real = false
+
+# ---------------------------------------------------------------------------
+# The thirteenth worker is not one of ours (gha 37, the pilot for gha 26's seam).
+#
+# A native GitHub Windows runner, free on a public repo, proving the label-resolved
+# provider path end to end on real CI: `runs_on` and no `ec2` table, so
+# `benchmark_worker.yml` skips the start and stop jobs entirely and the bench job
+# queues against `windows-latest` directly. Nothing about it is Windows-specific in
+# our code — the same two lines would put a lane on `macos-14` or on a Blacksmith
+# label, which is the whole point of not having a provider enum.
+#
+# Suite: two modules that between them ask nothing of the platform. `version_chain`
+# is track_* counters over an in-memory version chain (2 min on EC2), and `resample`
+# is real LMDB work at ~4.5 GiB (16 min on 8 vCPU, so budget 25-40 on a hosted
+# 4-core VM). Both are already marked storage-blind above, so `real = false` here is
+# the same honest claim and not a dodge; neither touches `merge_functions`'
+# SeaweedFS, which the managed lane does not start.
+#
+# `gating = false` is not provisional politeness: gha 26 Q4 puts every managed lane
+# in measure-only until gha 38's variance experiment has measured it, and this lane
+# in particular runs the *same benchmark names* as the EC2 `resample` and
+# `version_chain` workers — so its rows have to be kept out of `asv compare`, which
+# would otherwise judge a Windows number against a Linux one.
+#
+# Memory telemetry comes from gha 36's Windows source (`cim.memory`) once that is in
+# the arctic-winds `main` this pipeline installs. Before it, the lane's memory columns
+# are simply null — the sidecar schema allows that, so nothing else is affected.
+[[worker]]
+name = "windows_pilot"
+suite = "^(?:version_chain|resample)\\."
+runs_on = "windows-latest"
+real = false
+gating = false
