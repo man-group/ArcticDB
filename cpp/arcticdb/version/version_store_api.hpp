@@ -128,8 +128,8 @@ class PythonVersionStore : public LocalVersionedEngine {
     );
 
     std::variant<VersionedItem, CompactionError> sort_merge(
-            const StreamId& stream_id, const py::object& user_meta, bool append, bool convert_int_to_float,
-            bool via_iteration, bool sparsify, bool prune_previous_versions, bool delete_staged_data_on_failure,
+            const StreamId& stream_id, const py::object& user_meta, bool append, bool prune_previous_versions,
+            bool delete_staged_data_on_failure,
             const std::optional<std::vector<StageResult>>& stage_results = std::nullopt
     );
 
