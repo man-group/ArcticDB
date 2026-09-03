@@ -940,8 +940,8 @@ static void validate_stage_results(
 
 std::variant<VersionedItem, CompactionError> PythonVersionStore::compact_incomplete(
         const StreamId& stream_id, bool append, bool convert_int_to_float, bool via_iteration /*= true */,
-        bool sparsify /*= false */, const std::optional<py::object>& user_meta /* = std::nullopt */,
-        bool prune_previous_versions, bool validate_index, bool delete_staged_data_on_failure,
+        const std::optional<py::object>& user_meta /* = std::nullopt */, bool prune_previous_versions,
+        bool validate_index, bool delete_staged_data_on_failure,
         const std::optional<std::vector<StageResult>>& stage_results
 ) {
     std::optional<arcticdb::proto::descriptors::UserDefinedMetadata> meta;
@@ -957,7 +957,7 @@ std::variant<VersionedItem, CompactionError> PythonVersionStore::compact_incompl
             .append_ = append,
             .convert_int_to_float_ = convert_int_to_float,
             .via_iteration_ = via_iteration,
-            .sparsify_ = sparsify,
+            .sparsify_ = false,
             .validate_index_ = validate_index,
             .delete_staged_data_on_failure_ = delete_staged_data_on_failure,
             .stage_results = stage_results

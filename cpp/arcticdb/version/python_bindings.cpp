@@ -778,7 +778,6 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                  py::arg("append"),
                  py::arg("convert_int_to_float"),
                  py::arg("via_iteration") = true,
-                 py::arg("sparsify") = false,
                  py::arg("user_meta") = std::nullopt,
                  py::arg("prune_previous_versions") = false,
                  py::arg("validate_index") = false,
