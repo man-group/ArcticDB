@@ -1555,10 +1555,12 @@ void PythonVersionStore::force_delete_symbol(const StreamId& stream_id) {
 VersionedItem PythonVersionStore::merge(
         const StreamId& stream_id, const std::shared_ptr<convert::PandasData>& source, const py::object& norm,
         const py::object& user_meta, const bool prune_previous_versions, const bool upsert,
-        const py::tuple& py_strategy, std::vector<std::string> on
+        const py::tuple& py_strategy, std::vector<std::string> on, const bool match_na
 ) {
     const MergeStrategy strategy{
-            .matched = py_strategy[0].cast<MergeAction>(), .not_matched_by_target = py_strategy[1].cast<MergeAction>()
+            .matched = py_strategy[0].cast<MergeAction>(),
+            .not_matched_by_target = py_strategy[1].cast<MergeAction>(),
+            .match_na = match_na
     };
     return merge_internal(
             stream_id,

@@ -25,9 +25,48 @@
 namespace {
 using namespace arcticdb;
 
+template<typename TDT, typename T>
+concept sequence_type_raw_value =
+        util::type_descriptor_tag<TDT> && is_sequence_type(TDT::data_type()) &&
+        util::any_of<std::remove_cvref_t<T>, PyObject*, typename TDT::RawType, std::optional<std::string_view>>;
+
+template<typename TDT, typename T>
+concept raw_value_for_type_descriptor =
+        util::type_descriptor_tag<TDT> &&
+        (std::same_as<T, typename TDT::DataTypeTag::raw_type> || sequence_type_raw_value<TDT, T>);
+
 template<util::type_descriptor_tag TDT>
 using SourceRawType =
         std::conditional_t<is_sequence_type(TDT::data_type()), PyObject* const, typename TDT::DataTypeTag::raw_type>;
+
+/// Type used as the key when target column values of type TDT are indexed for matching.
+template<util::type_descriptor_tag TDT>
+using MatchKeyType = std::conditional_t<
+        is_sequence_type(TDT::data_type()), std::optional<std::string_view>, typename TDT::DataTypeTag::raw_type>;
+
+/// Whether value, one of the representations merge-update uses for a column of type TDT, denotes a missing entry.
+/// TDT is always the type of the column itself. value can be the raw type stored in the target column, or, only for
+/// sequence types, the PyObject* read from the source tensor or the decoded std::optional<std::string_view> match
+/// key.
+template<util::type_descriptor_tag TDT, typename V>
+requires raw_value_for_type_descriptor<TDT, V>
+constexpr bool is_na(V value) {
+    if constexpr (is_floating_point_type(TDT::data_type())) {
+        return std::isnan(value);
+    } else if constexpr (is_time_type(TDT::data_type())) {
+        return value == NaT;
+    } else if constexpr (is_sequence_type(TDT::data_type())) {
+        if constexpr (std::same_as<std::remove_const_t<V>, PyObject*>) {
+            return is_py_none(value) || is_py_nan(value);
+        } else if constexpr (std::same_as<V, std::optional<std::string_view>>) {
+            return !value.has_value();
+        } else {
+            return !is_a_string(value);
+        }
+    } else {
+        return false;
+    }
+}
 
 struct TargetRange {
     size_t start_row_in_first_row_slice{};
@@ -162,85 +201,78 @@ void merge_update_string_column(
     );
 }
 
-struct NaNAwareFloatComparator {
-    template<std::floating_point T>
-    bool operator()(const T a, const T b) const {
-        return a == b || (std::isnan(a) && std::isnan(b));
-    }
-};
-
-struct NaNAwareFloatHasher {
-    using is_avalanching = void;
-    template<std::floating_point T>
-    uint64_t operator()(const T a) const {
-        if (std::isnan(a)) {
-            // IEEE allows multiple different bit representations of NaN. std::isnan is required to return true for all
-            // different bit bit representations of NaN, std::quient_NaN is an implementation defined constant.
-            return ankerl::unordered_dense::hash<T>()(std::numeric_limits<T>::quiet_NaN());
-        } else {
-            return std::hash<T>()(a);
+template<util::type_descriptor_tag TDT>
+struct NaAwareComparator {
+    bool match_na;
+    bool operator()(MatchKeyType<TDT> left, MatchKeyType<TDT> right) const {
+        const bool left_na = is_na<TDT>(left);
+        const bool right_na = is_na<TDT>(right);
+        if (left_na || right_na) {
+            return match_na && left_na && right_na;
         }
+        return left == right;
     }
 };
 
-template<
-        util::type_descriptor_tag SourceTDT, util::type_descriptor_tag TargetTDT,
-        typename SourceValueRawType = TargetTDT::DataTypeTag::raw_type,
-        typename TargetValueRawType = TargetTDT::DataTypeTag::raw_type>
+template<util::type_descriptor_tag TDT>
+struct NaAwareHasher : ankerl::unordered_dense::hash<MatchKeyType<TDT>> {
+    using Base = ankerl::unordered_dense::hash<MatchKeyType<TDT>>;
+    uint64_t operator()(MatchKeyType<TDT> value) const {
+        if constexpr (is_floating_point_type(TDT::data_type())) {
+            if (is_na<TDT>(value)) {
+                // IEEE allows multiple different bit representations of NaN. std::isnan is required to return true
+                // for all different bit representations of NaN, std::quiet_NaN is an implementation defined
+                // constant, so hashing it canonicalises every missing value to the same bucket.
+                return Base::operator()(std::numeric_limits<MatchKeyType<TDT>>::quiet_NaN());
+            }
+        }
+        return Base::operator()(value);
+    }
+};
+
+template<util::type_descriptor_tag SourceTDT, util::type_descriptor_tag TargetTDT>
 requires std::same_as<std::decay_t<SourceTDT>, std::decay_t<TargetTDT>>
 std::variant<bool, convert::StringEncodingError> are_merge_values_matching(
-        const SourceValueRawType& source_value, const TargetValueRawType& target_value,
-        const StringPool& target_string_pool, std::optional<ScopedGILLock>& scoped_gil_lock
+        SourceRawType<SourceTDT> source_value, typename TargetTDT::DataTypeTag::raw_type target_value,
+        const StringPool& target_string_pool, std::optional<ScopedGILLock>& scoped_gil_lock, bool match_na
 ) {
+    const NaAwareComparator<TargetTDT> comparator{match_na};
     if constexpr (is_sequence_type(SourceTDT::data_type())) {
-        const bool is_source_null = is_py_none(source_value) || is_py_nan(source_value);
-        const bool is_target_null = !is_a_string(target_value);
-        if (is_source_null ^ is_target_null) {
-            return false;
-        } else if (is_source_null && is_target_null) {
-            return true;
-        } else {
-            return util::variant_match(
-                    create_py_object_wrapper_or_error<TargetTDT::data_type()>(source_value, scoped_gil_lock),
-                    [](convert::StringEncodingError&& err) -> std::variant<bool, convert::StringEncodingError> {
-                        return err;
-                    },
-                    [&](convert::PyStringWrapper&& wrapper) -> std::variant<bool, convert::StringEncodingError> {
-                        return target_string_pool.get_const_view(target_value) ==
-                               std::string_view(wrapper.buffer_, wrapper.length_);
-                    }
-            );
+        const std::optional<std::string_view> target_string =
+                is_na<TargetTDT>(target_value)
+                        ? std::nullopt
+                        : std::optional<std::string_view>{target_string_pool.get_const_view(target_value)};
+        if (is_na<SourceTDT>(source_value)) {
+            return comparator(std::nullopt, target_string);
         }
-    } else if constexpr (is_floating_point_type(SourceTDT::data_type())) {
-        constexpr static NaNAwareFloatComparator comparator;
-        return comparator(source_value, target_value);
+        return util::variant_match(
+                create_py_object_wrapper_or_error<TargetTDT::data_type()>(source_value, scoped_gil_lock),
+                [](convert::StringEncodingError&& err) -> std::variant<bool, convert::StringEncodingError> {
+                    return err;
+                },
+                [&](convert::PyStringWrapper&& wrapper) -> std::variant<bool, convert::StringEncodingError> {
+                    return comparator(
+                            std::optional<std::string_view>{std::string_view(wrapper.buffer_, wrapper.length_)},
+                            target_string
+                    );
+                }
+        );
     } else {
-        return source_value == target_value;
+        return comparator(source_value, target_value);
     }
 }
 
 template<util::type_descriptor_tag TDT>
-auto map_column_values_to_rows(const ColumnWithStrings& column) {
-    constexpr static bool is_target_sequence_type = is_sequence_type(TDT::data_type());
-    constexpr static bool is_target_floating_point_type = is_floating_point_type(TDT::data_type());
-    using TargetRawType = typename TDT::DataTypeTag::raw_type;
-    using TargetValueType = std::conditional_t<is_target_sequence_type, std::optional<std::string_view>, TargetRawType>;
-    using Hasher = std::conditional_t<
-            is_target_floating_point_type,
-            NaNAwareFloatHasher,
-            ankerl::unordered_dense::hash<TargetValueType>>;
-    using Comparator =
-            std::conditional_t<is_target_floating_point_type, NaNAwareFloatComparator, std::equal_to<TargetValueType>>;
-    ankerl::unordered_dense::map<TargetValueType, std::vector<size_t>, Hasher, Comparator> target_values;
+auto map_column_values_to_rows(const ColumnWithStrings& column, bool match_na) {
+    ankerl::unordered_dense::map<MatchKeyType<TDT>, std::vector<size_t>, NaAwareHasher<TDT>, NaAwareComparator<TDT>>
+            target_values(0, NaAwareHasher<TDT>{}, NaAwareComparator<TDT>{match_na});
     arcticdb::for_each_enumerated<TDT>(*column.column_, [&](auto row) {
-        if constexpr (is_target_sequence_type) {
-            if (is_a_string(row.value())) {
+        if (match_na || !is_na<TDT>(row.value())) {
+            if constexpr (is_sequence_type(TDT::data_type())) {
                 target_values[column.string_at_offset(row.value())].emplace_back(row.idx());
             } else {
-                target_values[std::nullopt].emplace_back(row.idx());
+                target_values[row.value()].emplace_back(row.idx());
             }
-        } else {
-            target_values[row.value()].emplace_back(row.idx());
         }
     });
     return target_values;
@@ -1009,12 +1041,17 @@ MergeUpdateClause::MatchRecord MergeUpdateClause::initialize_rows_to_update_for_
             details::visit_type(target_column.column_->type().data_type(), [&](auto target_field_dt) {
                 using TargetTDT = ScalarTagType<decltype(target_field_dt)>;
                 if constexpr (std::same_as<std::decay_t<SourceTDT>, std::decay_t<TargetTDT>>) {
-                    auto target_values_to_rows = map_column_values_to_rows<TargetTDT>(target_column);
+                    auto target_values_to_rows =
+                            map_column_values_to_rows<TargetTDT>(target_column, strategy_.match_na);
                     std::span source_data = source_->get_tensor(source_field_position).span<SourceType>();
                     for (size_t source_row_idx = 0; source_row_idx < source_data.size(); ++source_row_idx) {
                         auto source_value = source_data[source_row_idx];
+                        const bool source_is_na = is_na<SourceTDT>(source_value);
+                        if (!strategy_.match_na && source_is_na) {
+                            continue;
+                        }
                         if constexpr (is_sequence_type(SourceTDT::data_type())) {
-                            if (is_py_none(source_value) || is_py_nan(source_value)) {
+                            if (source_is_na) {
                                 result.add_match(source_row_idx, row_slice_idx, target_values_to_rows[std::nullopt]);
                             } else {
                                 util::variant_match(
@@ -1383,7 +1420,8 @@ MergeUpdateClause::MatchRecord MergeUpdateClause::filter_on_additional_columns_m
                 source_field.type().data_type(),
                 target_field.type().data_type(),
                 source_range.first,
-                get_source_data_bytes(source_field_position, source_range)
+                get_source_data_bytes(source_field_position, source_range),
+                strategy_.match_na
         );
     }
     return matched_rows;
@@ -1413,10 +1451,6 @@ OutputSchema MergeUpdateClause::join_schemas(std::vector<OutputSchema>&&) const 
 }
 
 std::string MergeUpdateClause::to_string() const { return "MERGE_UPDATE"; }
-
-bool MergeUpdateClause::is_update_only() const {
-    return strategy_ == MergeStrategy{MergeAction::UPDATE, MergeAction::DO_NOTHING};
-}
 
 size_t MergeUpdateClause::field_index_for_matching_on_column(std::string_view name, const StreamDescriptor& descriptor)
         const {
@@ -1488,7 +1522,7 @@ void MergeUpdateClause::MatchRecord::add_match(
 
 void MergeUpdateClause::MatchRecord::filter_matching_rows(
         std::string_view column_name, const DataType source_type, const DataType target_type,
-        const size_t source_offset, const std::span<const std::byte> opaque_source_data
+        const size_t source_offset, const std::span<const std::byte> opaque_source_data, const bool match_na
 ) {
     if (total_matched_target_rows_count_ == 0) {
         // This function can only remove matches in case of a mismatch. In case there are no matched
@@ -1524,7 +1558,11 @@ void MergeUpdateClause::MatchRecord::filter_matching_rows(
                                     const TargetRawType target_value = target_column_accessor[target_row];
                                     const auto& source_value = source_data[source_row_idx];
                                     auto are_values_equal = are_merge_values_matching<SourceTDT, TargetTDT>(
-                                            source_value, target_value, *target_column.string_pool_, scoped_gil_lock
+                                            source_value,
+                                            target_value,
+                                            *target_column.string_pool_,
+                                            scoped_gil_lock,
+                                            match_na
                                     );
                                     bool discard_match = false;
                                     if constexpr (is_sequence_type(TargetDataTypeTag::data_type)) {

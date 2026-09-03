@@ -91,7 +91,7 @@ class TestStressTimeseriesMergeUpdate:
         source = make_matching_source(self.__class__.data, segments_to_update, self.__class__.rows_per_segment)
         strategy = MergeStrategy(matched="update", not_matched_by_target="do_nothing")
         with qs.query_stats():
-            lib.merge_experimental("sym", source, strategy=strategy)
+            lib.merge_experimental("sym", source, strategy=strategy, match_na=True)
         stats = qs.get_query_stats()
         expected_table_data_read_count = len(segments_to_update) * self.__class__.col_slices
         assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_DATA") == expected_table_data_read_count
@@ -115,7 +115,7 @@ class TestStressTimeseriesMergeUpdate:
         )
         strategy = MergeStrategy(matched="update", not_matched_by_target="do_nothing")
         with qs.query_stats():
-            lib.merge_experimental("sym", source, strategy=strategy, on=on)
+            lib.merge_experimental("sym", source, strategy=strategy, on=on, match_na=True)
         stats = qs.get_query_stats()
         expected_table_data_read_count = len(segments_to_update) * self.__class__.col_slices
         expected_table_data_write_count = (
