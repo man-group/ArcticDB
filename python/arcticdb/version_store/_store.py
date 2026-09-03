@@ -2842,15 +2842,9 @@ class NativeVersionStore:
             If a `StageResult` or list of them, removes only the APPEND_DATA keys named by
             those stage result(s). Missing keys are ignored.
         """
-        if isinstance(symbol, (str, int, list)):
-            self.version_store.remove_incomplete(symbol)
-        elif isinstance(symbol, StageResult):
-            self.version_store.remove_incomplete([symbol])
-        else:
-            raise UserInputException(
-                "remove_incomplete expected a symbol (str), a StageResult, or a list of StageResults, "
-                f"but got {type(symbol).__name__}"
-            )
+        if isinstance(symbol, StageResult):
+            symbol = [symbol]
+        self.version_store.remove_incomplete(symbol)
 
     def compact_incomplete(
         self,
