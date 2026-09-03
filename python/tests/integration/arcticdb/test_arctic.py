@@ -34,7 +34,13 @@ from arcticdb import QueryBuilder
 from arcticdb.storage_fixtures.api import StorageFixture, ArcticUriFields, StorageFixtureFactory
 from arcticdb.storage_fixtures.mongo import MongoDatabase
 from arcticdb.storage_fixtures.utils import GracefulProcessUtils
-from arcticdb.util.test import assert_frame_equal, sample_dataframe, config_context, config_context_string
+from arcticdb.util.test import (
+    assert_frame_equal,
+    sample_dataframe,
+    config_context,
+    config_context_multi,
+    config_context_string,
+)
 from arcticdb.storage_fixtures.s3 import S3Bucket
 from arcticdb.config import Defaults
 from arcticdb.version_store.library import (
@@ -1694,7 +1700,12 @@ def test_backing_store(lmdb_version_store_v1, s3_version_store_v1):
 @SLOW_TESTS_MARK
 @MONGO_TESTS_MARK
 def test_mongo_retryable_network_error(mongo_server_fn_scope, sym):
-    with config_context("VersionMap.MaxReadRefTrials", 0):
+    # The server is killed below, so every operation waits for server selection on each retry. The defaults
+    # (120s selection timeout, backoff up to 2s) make this test take ~15 minutes; the error path is the same
+    # with short timeouts. Both settings are read when the Arctic instance creates the mongo client.
+    with config_context_multi(
+        {"VersionMap.MaxReadRefTrials": 0, "MongoClient.SelectionTimeoutMs": 500, "MongoClient.RetryWaitMaxMs": 200}
+    ):
         ac = Arctic(mongo_server_fn_scope.mongo_uri)
         lib = ac.get_library("test", create_if_missing=True)
         lt = lib._nvs.library_tool()

@@ -14,6 +14,7 @@ on:
       pytest_xdist_mode: {default: "", type: string, description: additional argument to pass for pytest-xdist}
       pytest_args:       {default: "", type: string, description: a way to rewrite the pytest args to change what tests are being run}
       version_cache_full_test: {default: false, type: boolean, description: if true - tests will run with both version cache 0 and 2000000000 otherwise only 2000000000}
+      version_cache_test: {default: true, type: boolean, description: "if false - the cp311 NoCache variant is not run; the version cache reload interval is OS independent so only one OS needs it"}
       serial_admission_test: {default: false, type: boolean, description: if true - cp311 tests additionally run with VersionStore.NumProcessingUnitsLive=1}
       run_full_matrix_of_persistent_tests: {default: false, type: boolean, description: if true - persistent tests will run for all python versions else only for 12 }
       DEBUG_LOGGING_ENABLED: {default: "0", type: string, required: false, description: 'Enable debug logging "1" (disabled "0")'}
@@ -134,10 +135,14 @@ jobs:
         # This has to come after msvc-dev-cmd to overwrite the bad VCPKG_ROOT it sets
         run: |
           HOME=~ . build_tooling/vcpkg_caching.sh # Linux build-python-wheels needs another call in CIBW
-          echo -e "VCPKG_BINARY_SOURCES=$VCPKG_BINARY_SOURCES
-          VCPKG_ROOT=$PLATFORM_VCPKG_ROOT
-          ${X_VCPKG_ASSET_SOURCES:+X_VCPKG_ASSET_SOURCES=$X_VCPKG_ASSET_SOURCES}
-          ${{matrix.envs || ''}}" | tee -a $GITHUB_ENV
+          # printf, not echo -e: the Windows workspace is D:\a\ArcticDB\ArcticDB, whose \a the escape processing
+          # turned into a BEL and whose trailing newline it dropped, so VCPKG_ROOT was corrupt and the CpuCount line
+          # was glued onto the end of it. CMAKE_BUILD_PARALLEL_LEVEL therefore never got set on Windows and every
+          # "cmake --build -j $CMAKE_BUILD_PARALLEL_LEVEL" ran as a bare -j, unbounded on a 4-core runner.
+          printf '%s\n' "VCPKG_BINARY_SOURCES=$VCPKG_BINARY_SOURCES" \
+            "VCPKG_ROOT=$PLATFORM_VCPKG_ROOT" \
+            ${X_VCPKG_ASSET_SOURCES:+"X_VCPKG_ASSET_SOURCES=$X_VCPKG_ASSET_SOURCES"} \
+            "${{matrix.envs || ''}}" | tee -a $GITHUB_ENV
           cmake -P cpp/CMake/CpuCount.cmake | sed 's/^-- //' | tee -a $GITHUB_ENV
         env:
           CMAKE_BUILD_PARALLEL_LEVEL: ${{vars.CMAKE_BUILD_PARALLEL_LEVEL}}
@@ -234,6 +239,16 @@ jobs:
         run: |
           ldconfig
           find /usr -name "libclang_rt.asan*.so*" 2>/dev/null || echo "ASan library not found in standard locations"
+
+      # run-cmake sets up the MSVC toolset by running "vcpkg env ... set" and importing the result, which leaks a
+      # truncated X_VCPKG_RECURSIVE_DATA into the environment and makes the vcpkg install inside the configure fail
+      # with "Unexpected EOF; expected property or close brace". Defining CC/CXX is the action's own documented way
+      # to skip that block, and cl.exe is exactly what it sets them to itself; msvc-dev-cmd has already put the
+      # toolset on PATH. This only surfaced once VCPKG_ROOT stopped being corrupted, which had been disabling the
+      # block by accident.
+      - name: Use the MSVC toolset msvc-dev-cmd already set up
+        if: matrix.os == 'windows' && inputs.job_type != 'build-python-wheels'
+        run: printf '%s\n' CC=cl.exe CXX=cl.exe | tee -a $GITHUB_ENV
 
       - name: CMake compile
         if: inputs.job_type != 'build-python-wheels'
@@ -339,10 +354,18 @@ jobs:
         run: cd cpp; cmake --build --preset $ARCTIC_CMAKE_PRESET --target benchmarks -j $CMAKE_BUILD_PARALLEL_LEVEL
 
       - name: Run C++ Benchmarks
-        if: inputs.job_type == 'cpp-tests' && env.ARCTICDB_USE_SANITIZER == ''
-        # We set a benchmark_min_time=20x because running until a time limit is reached can take a lot of time on
-        # benchmarks which pause the timer.
-        run: cpp/out/${ARCTIC_CMAKE_PRESET}-build/arcticdb/benchmarks --benchmark_time_unit=ms --benchmark_min_time=20x
+        # One iteration still costs 400s on Windows and 336s on macOS, against 100s on Linux, because the per-
+        # benchmark setup dominates. The benchmarks are not platform specific, so a pull request runs them on Linux
+        # only; push, schedule and dispatch still run them everywhere. They are compiled on every platform either
+        # way, which is what catches a Windows-only build break.
+        if: |
+          inputs.job_type == 'cpp-tests' && env.ARCTICDB_USE_SANITIZER == ''
+          && (github.event_name != 'pull_request' || matrix.os == 'linux')
+        # Nothing consumes the timings, this only checks the benchmarks still run, so one iteration is enough on
+        # pull requests. 20 iterations took ~5.5 min of the C++ test job; the full count still runs on master and
+        # on the nightly schedule. (Running until a time limit is reached is much slower for benchmarks that pause
+        # the timer, hence a fixed iteration count rather than a duration.)
+        run: cpp/out/${ARCTIC_CMAKE_PRESET}-build/arcticdb/benchmarks --benchmark_time_unit=ms --benchmark_min_time=${{ github.event_name == 'pull_request' && '1x' || '20x' }}
 
       - name: Clean up benchmark binaries only
         if: inputs.job_type == 'cpp-tests'
@@ -503,15 +526,21 @@ jobs:
       - name: Discover test directory names
         if: inputs.job_type == 'build-python-wheels'
         # We only run the compat tests on for newer python versions.
-        # There are so few nonreg tests, run them in the hypothesis runner.
+        # There are so few nonreg and enduser tests, run them in the hypothesis runner: a job of its own costs
+        # ~2.5 min of runner setup for ~6s of tests, and one less job per matrix entry means less runner contention.
         run: |
+          # The stress suite has caught nothing in 90 days: 1 failure in 2465 jobs across 176 master runs, and that
+          # one was "the runner has received a shutdown signal". It is the second most expensive type in the run, so
+          # pull requests skip it and master, the nightly and manual dispatches still run it in full.
+          drop_stress=''
+          if [ "${{github.event_name}}" = 'pull_request' ]; then drop_stress='s/"stress",// ; s/,"stress"//'; fi
           if [ ${{inputs.python3}} -gt 8 ]
           then
-            find python/tests/* -maxdepth 0 -type d -not \( -name "__pycache__" -o -name "util" -o -name "nonreg" -o -name "scripts" -o -name "sanitizers" \) -exec basename {} \; | tr '\n' ',' |
-              sed 's/^/test_dirs=["/ ; s/,$/"]/ ; s/,/","/g ; s/"hypothesis"/"{hypothesis,nonreg,scripts,sanitizers}"/' | tee -a $GITHUB_ENV
+            find python/tests/* -maxdepth 0 -type d -not \( -name "__pycache__" -o -name "util" -o -name "nonreg" -o -name "scripts" -o -name "sanitizers" -o -name "enduser" \) -exec basename {} \; | tr '\n' ',' |
+              sed 's/^/test_dirs=["/ ; s/,$/"]/ ; s/,/","/g ; s/"hypothesis"/"{hypothesis,nonreg,scripts,sanitizers,enduser}"/' | sed "$drop_stress" | tee -a $GITHUB_ENV
           else
-            find python/tests/* -maxdepth 0 -type d -not \( -name "__pycache__" -o -name "util" -o -name "nonreg" -o -name "scripts" -o -name "compat" -o -name "sanitizers" \) -exec basename {} \; | tr '\n' ',' |
-              sed 's/^/test_dirs=["/ ; s/,$/"]/ ; s/,/","/g ; s/"hypothesis"/"{hypothesis,nonreg,scripts,sanitizers}"/' | tee -a $GITHUB_ENV
+            find python/tests/* -maxdepth 0 -type d -not \( -name "__pycache__" -o -name "util" -o -name "nonreg" -o -name "scripts" -o -name "compat" -o -name "sanitizers" -o -name "enduser" \) -exec basename {} \; | tr '\n' ',' |
+              sed 's/^/test_dirs=["/ ; s/,$/"]/ ; s/,/","/g ; s/"hypothesis"/"{hypothesis,nonreg,scripts,sanitizers,enduser}"/' | sed "$drop_stress" | tee -a $GITHUB_ENV
           fi
 
       # ========================= Common =========================
@@ -555,7 +584,7 @@ jobs:
         python_deps_id: ${{fromJson(inputs.python_deps_ids)}}
         infer_string_id: ${{fromJson(inputs.infer_string_ids)}}
         # Always run with both for cp311
-        version_cache_timeout: ${{ fromJSON((inputs.version_cache_full_test || needs.compile.outputs.python_impl_name == 'cp311') && '["NoCache", "DefaultCache"]' || '["DefaultCache"]') }}
+        version_cache_timeout: ${{ fromJSON((inputs.version_cache_full_test || (inputs.version_cache_test && needs.compile.outputs.python_impl_name == 'cp311')) && '["NoCache", "DefaultCache"]' || '["DefaultCache"]') }}
         admission_limit: ${{ fromJSON((inputs.serial_admission_test && needs.compile.outputs.python_impl_name == 'cp311') && '["Serial", "Default"]' || '["Default"]') }}
         # The admission limit is unrelated to the version cache and to the dependency pins, so Serial only runs
         # against the default cache and the default dependencies
@@ -568,7 +597,17 @@ jobs:
           # to the admission limit
           - {python_deps_id: -compat311, infer_string_id: -inferstr}
           - {version_cache_timeout: NoCache, infer_string_id: -inferstr}
+          # The dependency pins are unrelated to the version cache reload interval
+          - {python_deps_id: -compat311, version_cache_timeout: NoCache}
+          # The compat311 pins exist for the numpy 1 / pandas 2.1 normalization surface, which unit, integration
+          # and compat cover. The stress suite exercises C++ scale and storage throughput, where the pins make no
+          # difference (~18% slower, same 152 tests), and it is the longest job in the run.
+          - {python_deps_id: -compat311, type: stress}
           - {infer_string_id: -inferstr, admission_limit: Serial}
+          # NumProcessingUnitsLive=1 collapses read concurrency, which costs the stress suite 15 min for no signal:
+          # the five heavy tests take 2-10x longer while the rest of the suite is unaffected, and Serial is still
+          # covered by unit, integration, compat and the hypothesis bundle plus the dedicated residency tests.
+          - {type: stress, admission_limit: Serial}
         include:
           ${{fromJSON(inputs.matrix)}}
     name: ${{matrix.type}}${{matrix.python_deps_id}}${{matrix.infer_string_id}}-${{matrix.version_cache_timeout}}${{matrix.admission_limit == 'Serial' && '-Serial' || ''}}
@@ -651,6 +690,17 @@ jobs:
         if: matrix.os == 'linux'
         run: |
           command -v azurite >/dev/null && echo "HAS_AZURITE=1" | tee -a $GITHUB_ENV || true
+      # Real-time scanning of the thousands of small LMDB/temp files the tests create makes
+      # Windows test jobs 5-10x slower per test than Linux.
+      - name: Exclude test paths from Windows Defender
+        if: matrix.os == 'windows'
+        shell: pwsh
+        run: |
+          Add-MpPreference -ExclusionPath "$env:GITHUB_WORKSPACE", "$env:RUNNER_TEMP", "$env:TEMP", "$env:LOCALAPPDATA\Temp", "C:\hostedtoolcache", "C:\tmp", "D:\tmp"
+          Add-MpPreference -ExclusionProcess "python.exe", "pytest.exe", "node.exe", "azurite.exe"
+          Set-MpPreference -DisableRealtimeMonitoring $true
+          Get-MpPreference | Select-Object DisableRealtimeMonitoring, ExclusionPath, ExclusionProcess
+        continue-on-error: true
 
       # GitHub runner image does not come with npm
       - name: Install npm (Linux and macOS)
@@ -780,7 +830,10 @@ jobs:
           # Use the Mongo created in the service container above to test against
           CI_MONGO_HOST: mongodb
           HYPOTHESIS_PROFILE: ci_${{matrix.os}}
-          PYTEST_XDIST_MODE: ${{matrix.type == 'stress' && '-n 0' || inputs.pytest_xdist_mode}}
+          # Stress runs serially elsewhere because a few of its tests peak at several GB and two of those at once
+          # OOM-killed the runner (#3097). On Linux (16GB, 4 vCPU) 4 workers fit as long as the heavy tests do not
+          # overlap, which the stress_heavy xdist_group guarantees - hence loadgroup, since worksteal ignores it.
+          PYTEST_XDIST_MODE: ${{matrix.type != 'stress' && inputs.pytest_xdist_mode || (matrix.os == 'linux' && '-n 4 --dist loadgroup' || '-n 0')}}
           ARCTICDB_PYTEST_ARGS: ${{inputs.pytest_args}}
           STORAGE_TYPE: ${{ env.real_tests_storage_type }}
           # Testing with 0(no version cache) and -1(will use default timeout)
@@ -790,6 +843,14 @@ jobs:
           ARCTICDB_WARN_ON_WRITING_EMPTY_DATAFRAME: 0
           ARCTICDB_LMDBSTORAGE_WARNIFOPENED_STR: all
           ARCTICDB_PYTEST_INFER_STRING: ${{ matrix.infer_string_id == '-inferstr' && '1' || '0' }}
+          # Extra flags for mdb_env_open (see LMDBStorage.ExtraFlags in docs/mkdocs/docs/runtime_config.md).
+          # MDB_NOSYNC | MDB_NOMETASYNC (0x50000): skip the fsync per LMDB commit; the Windows unit jobs are ~3x
+          # faster and durability is irrelevant on CI. Not MDB_WRITEMAP, which makes Windows allocate the whole
+          # map_size per library on disk.
+          ARCTICDB_LMDBStorage_ExtraFlags_int: ${{ matrix.os == 'windows' && '327680' || '0' }}
+          # The Azure C++ SDK pools connections; reusing one azurite has already closed (node closes idle
+          # connections after 5s) blocks the next request for seconds, or ~2 minutes when several are in flight.
+          ARCTICDB_AzureStorage_HttpKeepAlive_int: '0'
 
       - name: Collect crash dumps (Windows)
         if: matrix.os == 'windows' && failure()

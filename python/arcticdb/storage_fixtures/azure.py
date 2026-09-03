@@ -173,7 +173,9 @@ class AzureContainer(StorageFixture):
 
 
 class AzuriteStorageFixtureFactory(StorageFixtureFactory):
-    host = "localhost"
+    # An IPv4 literal, not "localhost": azurite binds IPv4 only and on Windows "localhost" resolves to ::1 first,
+    # so every connection wastes ~2s failing over.
+    host = "127.0.0.1"
 
     # Per https://learn.microsoft.com/en-us/azure/storage/common/storage-configure-connection-string#configure-a-connection-string-for-azurite
     account_name = "devstoreaccount1"

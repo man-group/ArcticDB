@@ -58,9 +58,9 @@ def make_matching_source(
     return pd.DataFrame(data, index=pd.DatetimeIndex(indices, name=target_df.index.name))
 
 
-# Merge update stress tests use a lot of memory and can OOM if run in parallel. Add a xdist_group to ensure the tests
-# are not running in parallel with each other.
-@pytest.mark.xdist_group(name="stress_merge_update")
+# Merge update stress tests use a lot of memory and can OOM if run in parallel. The shared stress_heavy group
+# keeps them off the same worker as the other memory-heavy stress tests (see PYTEST_XDIST_MODE in build_steps.yml).
+@pytest.mark.xdist_group(name="stress_heavy")
 class TestStressTimeseriesMergeUpdate:
 
     @classmethod
