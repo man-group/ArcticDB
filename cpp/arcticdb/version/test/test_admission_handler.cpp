@@ -624,7 +624,11 @@ TEST(ColumnStatsMixedColSlicing, ResidencyBoundedWithUnevenUnits) {
 
     auto info = engine.get_column_stats_info_version(stream_id, VersionQuery{});
     const std::unordered_map<std::string, std::unordered_set<std::string>> expected{
-            {"col_0", {"MINMAX"}}, {"col_1", {"MINMAX"}}, {"col_2", {"MINMAX"}}, {"col_3", {"MINMAX"}}
+            {"col_0", {"MINMAX"}},
+            {"col_1", {"MINMAX"}},
+            {"col_2", {"MINMAX"}},
+            {"col_3", {"MINMAX"}},
+            {"time", {"MINMAX"}}
     };
     EXPECT_EQ(info.to_map(), expected);
 }
@@ -677,7 +681,11 @@ TEST(ColumnStatsMixedColSlicing, ResidencyBoundedWithUnevenUnitsWiderFirst) {
 
     auto info = engine.get_column_stats_info_version(stream_id, VersionQuery{});
     const std::unordered_map<std::string, std::unordered_set<std::string>> expected{
-            {"col_0", {"MINMAX"}}, {"col_1", {"MINMAX"}}, {"col_2", {"MINMAX"}}, {"col_3", {"MINMAX"}}
+            {"col_0", {"MINMAX"}},
+            {"col_1", {"MINMAX"}},
+            {"col_2", {"MINMAX"}},
+            {"col_3", {"MINMAX"}},
+            {"time", {"MINMAX"}}
     };
     EXPECT_EQ(info.to_map(), expected);
 }
