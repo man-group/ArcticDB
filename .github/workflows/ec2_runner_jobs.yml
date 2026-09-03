@@ -7,6 +7,7 @@ on:
       ec2-instance-id:    {type: string, description: the ec2-instance-id of the machine that was create by the start-runner job needed by the stop-runner job}
       image-id:           {default: ami-0936679d3002e5be3, type: string, description: ID of the Amazon Image that should be used as a base for the runner}
       instance-type:      {default: m6i.4xlarge, type: string, description: Instace type that will be used to create the runner VM}
+      runner-home-dir:    {default: '', type: string, description: "Directory in the AMI that already holds an unpacked actions-runner (e.g. /opt/actions-runner). Empty - the default - keeps today's behaviour, where the action's user-data downloads the runner tarball from GitHub's release CDN on every boot. Only set this against an AMI with the runner baked in: the action does not check, it cds into the directory and runs ./config.sh."}
       market-type:        {default: '', type: string, description: "'spot' to launch a one-time spot instance; empty keeps on-demand (the default for every existing caller)"}
       subnet-id:          {default: subnet-04ee7771eea5d61d9, type: string, description: VPC Subnet to be used when creating the runner}
       security-group-id:  {default: sg-08bd5ce9b15ba4f4b, type: string, description: Security Group to be used when creating the runner}
@@ -31,6 +32,18 @@ jobs:
           aws-access-key-id: "${{ secrets.AWS_S3_ACCESS_KEY }}"
           aws-secret-access-key: "${{ secrets.AWS_S3_SECRET_KEY }}"
           aws-region: "eu-west-1"
+
+      # A value unique to this execution of this start job, tagged onto the instance so the
+      # cleanup step below can find it even when the action published no instance id. RunId
+      # alone will not do: benchmark_worker.yml calls this workflow once per worker, so one
+      # run id names several live instances and terminating by run id would kill a sibling
+      # worker's healthy runner mid-benchmark.
+      - name: Mint a tag unique to this start job
+        id: start-job-token
+        run: |
+          set -euo pipefail
+          echo "value=${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-$(cat /proc/sys/kernel/random/uuid)" >> "$GITHUB_OUTPUT"
+
       - name: Start EC2 runner
         id: start-ec2-runner
         uses: machulav/ec2-github-runner@v2.3.8
@@ -39,6 +52,11 @@ jobs:
           github-token: ${{ secrets.ARCTICDB_TEST_PAT }}
           ec2-image-id: ${{ inputs.image-id }}
           ec2-instance-type: ${{ inputs.instance-type }}
+          # Empty is how this action spells "unset": config.js:16 reads the input through
+          # core.getInput, which gives '', and aws.js:8 branches on its truthiness, so an
+          # empty value takes the download-the-tarball user-data exactly as today. No
+          # conditional YAML is needed to preserve the default.
+          runner-home-dir: ${{ inputs.runner-home-dir }}
           # Empty = on-demand. Note the action's own validation of this input is dead code
           # (config.js reads the wrong field), so a typo silently launches on-demand;
           # callers should confirm the lifecycle from the instance itself.
@@ -52,8 +70,68 @@ jobs:
               {"Key": "Repository", "Value": "${{ github.repository }}"},
               {"Key": "Branch", "Value": "${{ github.head_ref || github.ref_name }}"},
               {"Key": "Workflow", "Value": "${{ github.workflow }}"},
-              {"Key": "RunId", "Value": "${{ github.run_id }}"}
+              {"Key": "RunId", "Value": "${{ github.run_id }}"},
+              {"Key": "StartJob", "Value": "${{ steps.start-job-token.outputs.value }}"}
             ]
+
+      # The action does not terminate the instance when registration times out. index.js:11-18
+      # launches it, publishes the outputs, then awaits gh.waitForRunnerRegistered, whose
+      # rejection (gh.js:71-73) is caught by the top-level handler at index.js:28-31, which
+      # only calls core.setFailed. The instance is left running, and since the start job
+      # failed the dependent jobs never reach the matching stop job - that is how the
+      # 2026-09-02 outage leaked seven m6i.4xlarge for ~15 hours.
+      #
+      # always() rather than failure(): it also covers a run cancelled while this job is in
+      # flight, the other window that orphans an instance, because a step that is not
+      # marked for cancellation still gets to run. The outcome guard keeps it a no-op
+      # whenever the runner did come up.
+      #
+      # continue-on-error so a cleanup that cannot do its job - no credentials, a throttled
+      # DescribeInstances - is reported without displacing the real error above it as the
+      # reason this job failed. The shell itself stays strict.
+      - name: Terminate the instance if the runner never registered
+        if: always() && steps.start-ec2-runner.outcome != 'success'
+        continue-on-error: true
+        env:
+          # index.js:15 publishes both outputs before the two waits, so a registration
+          # timeout still leaves the instance id here. The tag lookup is the fallback for a
+          # job killed between RunInstances returning and the output being written.
+          INSTANCE_ID: ${{ steps.start-ec2-runner.outputs.ec2-instance-id }}
+          RUN_ID: ${{ github.run_id }}
+          START_JOB: ${{ steps.start-job-token.outputs.value }}
+        run: |
+          set -euo pipefail
+
+          # configure-aws-credentials has exported AWS_REGION/AWS_DEFAULT_REGION, so the
+          # CLI is already pointed at eu-west-1.
+          instance_id="${INSTANCE_ID:-}"
+
+          if [ -n "$instance_id" ]; then
+            echo "The start step published instance $instance_id."
+          else
+            echo "The start step published no instance id; looking one up by tag."
+            instance_id="$(aws ec2 describe-instances \
+              --filters "Name=tag:StartJob,Values=${START_JOB}" \
+                        "Name=tag:RunId,Values=${RUN_ID}" \
+                        "Name=instance-state-name,Values=pending,running" \
+              --query 'Reservations[].Instances[].InstanceId' \
+              --output text)"
+          fi
+
+          # --output text prints "None" for an empty result and tab-separates several ids,
+          # so keep only things shaped like an instance id. This is also the guard that
+          # stops an empty lookup reaching terminate-instances with no ids at all.
+          instance_id="$(printf '%s\n' "$instance_id" | tr '\t' '\n' | grep -E '^i-[0-9a-f]+$' || true)"
+
+          if [ -z "$instance_id" ]; then
+            echo "No pending or running instance carries this start job's tag; nothing to terminate."
+            exit 0
+          fi
+
+          echo "Terminating $(echo "$instance_id" | tr '\n' ' ')"
+          # Word splitting is deliberate: it turns the ids into separate arguments.
+          # shellcheck disable=SC2086
+          aws ec2 terminate-instances --instance-ids $instance_id
 
   stop-runner:
     name: Stop self-hosted EC2 runner
