@@ -967,9 +967,8 @@ std::variant<VersionedItem, CompactionError> PythonVersionStore::compact_incompl
 }
 
 std::variant<VersionedItem, CompactionError> PythonVersionStore::sort_merge(
-        const StreamId& stream_id, const py::object& user_meta, bool append, bool convert_int_to_float,
-        bool via_iteration, bool sparsify, bool prune_previous_versions, bool delete_staged_data_on_failure,
-        const std::optional<std::vector<StageResult>>& stage_results
+        const StreamId& stream_id, const py::object& user_meta, bool append, bool prune_previous_versions,
+        bool delete_staged_data_on_failure, const std::optional<std::vector<StageResult>>& stage_results
 ) {
     std::optional<arcticdb::proto::descriptors::UserDefinedMetadata> meta;
     if (!user_meta.is_none()) {
@@ -982,9 +981,9 @@ std::variant<VersionedItem, CompactionError> PythonVersionStore::sort_merge(
     CompactIncompleteParameters params{
             .prune_previous_versions_ = prune_previous_versions,
             .append_ = append,
-            .convert_int_to_float_ = convert_int_to_float,
-            .via_iteration_ = via_iteration,
-            .sparsify_ = sparsify,
+            .convert_int_to_float_ = false,
+            .via_iteration_ = true,
+            .sparsify_ = false,
             .delete_staged_data_on_failure_ = delete_staged_data_on_failure,
             .stage_results = stage_results
     };
