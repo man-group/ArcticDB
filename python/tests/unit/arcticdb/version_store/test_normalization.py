@@ -52,6 +52,7 @@ from arcticdb.version_store._normalization import (
     DataFrameNormalizer,
     NdArrayNormalizer,
     PandasData,
+    _accept_array_string,
 )
 from arcticdb.version_store._common import TimeFrame
 from arcticdb.util.test import (
@@ -1008,6 +1009,47 @@ def test_arrays_throw_without_pickling(lmdb_version_store_v1):
 
     with pytest.raises(Exception):
         lib.write(sym, df)
+
+
+def test_accept_array_string_with_numpy_types():
+    """Regression test for https://github.com/man-group/ArcticDB/issues/2800"""
+    assert _accept_array_string("hello") is True
+    assert _accept_array_string(b"hello") is True
+    assert _accept_array_string(np.str_("hello")) is True
+    assert _accept_array_string(np.bytes_(b"hello")) is True
+    assert _accept_array_string(123) is False
+    assert _accept_array_string(12.34) is False
+    assert _accept_array_string([1, 2, 3]) is False
+    assert _accept_array_string({"key": "value"}) is False
+    assert _accept_array_string(None) is False
+
+
+def test_numpy_str_type_normalization(lmdb_version_store, sym):
+    """Regression test for https://github.com/man-group/ArcticDB/issues/2800"""
+    lib = lmdb_version_store
+
+    df = pd.DataFrame({"col": [np.str_("hello"), np.str_("world")]})
+    lib.write(sym, df)
+    result = lib.read(sym).data
+    assert result["col"][0] == "hello"
+    assert result["col"][1] == "world"
+
+    df_mixed = pd.DataFrame({"col": [np.str_("numpy_str"), "regular_str"]})
+    lib.write(sym + "_mixed", df_mixed)
+    result_mixed = lib.read(sym + "_mixed").data
+    assert result_mixed["col"][0] == "numpy_str"
+    assert result_mixed["col"][1] == "regular_str"
+
+
+def test_numpy_bytes_type_normalization(lmdb_version_store, sym):
+    """Test that np.bytes_ types are correctly normalized."""
+    lib = lmdb_version_store
+
+    df = pd.DataFrame({"col": [np.bytes_(b"hello"), np.bytes_(b"world")]})
+    lib.write(sym, df)
+    result = lib.read(sym).data
+    assert result["col"][0] == b"hello"
+    assert result["col"][1] == b"world"
 
 
 def test_series_zero_name(lmdb_version_store, sym):
