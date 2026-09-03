@@ -152,6 +152,11 @@ void iterate_snapshots(const std::shared_ptr<Store>& store, folly::Function<void
         try {
             visitor(vk);
         } catch (storage::KeyNotFoundException& e) {
+            // An exception that names no key cannot be attributed to this snapshot, so it is not evidence that the
+            // snapshot has gone. Propagate rather than dropping a snapshot that may still be there.
+            if (!e.has_keys()) {
+                throw;
+            }
             std::for_each(e.keys().begin(), e.keys().end(), [&vk, &e](const VariantKey& key) {
                 if (key != vk)
                     throw storage::KeyNotFoundException(std::move(e.keys()));
@@ -170,7 +175,10 @@ void check_only_deleted_snapshots_failed(
         }
         const auto& snapshot_key = snapshot_keys[idx];
         const auto* not_found = results[idx].tryGetExceptionObject<storage::KeyNotFoundException>();
-        if (!not_found || std::ranges::any_of(not_found->keys(), [&snapshot_key](const VariantKey& key) {
+        // A KeyNotFoundException that names no key is not evidence that this snapshot has gone, so it propagates
+        // like any other failure rather than silently understating what the snapshots protect.
+        if (!not_found || !not_found->has_keys() ||
+            std::ranges::any_of(not_found->keys(), [&snapshot_key](const VariantKey& key) {
                 return key != snapshot_key;
             })) {
             results[idx].exception().throw_exception();

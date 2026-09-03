@@ -157,6 +157,18 @@ TEST(CheckOnlyDeletedSnapshotsFailed, PropagatesNonKeyNotFoundStorageErrors) {
     EXPECT_THROW(check_only_deleted_snapshots_failed(results, snapshot_keys), UnexpectedS3ErrorException);
 }
 
+TEST(CheckOnlyDeletedSnapshotsFailed, PropagatesKeyNotFoundThatNamesNoKey) {
+    std::vector<VariantKey> snapshot_keys{RefKey{"snap_a", KeyType::SNAPSHOT_REF}};
+    std::vector<folly::Try<folly::Unit>> results;
+    // raise_s3_exception() raises a NoSuchKey from the async read path in this message-only form, which names no
+    // key at all. It is not evidence that this snapshot has gone, and it must not be read as if it were.
+    results.emplace_back(
+            failure<storage::KeyNotFoundException>(std::string{"Key Not Found Error: S3Error:15, HttpResponseCode:404"})
+    );
+
+    EXPECT_THROW(check_only_deleted_snapshots_failed(results, snapshot_keys), storage::KeyNotFoundException);
+}
+
 TEST(CheckOnlyDeletedSnapshotsFailed, PropagatesAFailureThatIsNotTheFirstResult) {
     std::vector<VariantKey> snapshot_keys{
             RefKey{"snap_a", KeyType::SNAPSHOT_REF}, RefKey{"snap_b", KeyType::SNAPSHOT_REF}
@@ -204,6 +216,15 @@ TEST(MasterSnapshotsMap, PropagatesKeyNotFoundNamingAnIndexKey) {
     // would let delete_version()/prune_previous_versions() remove index keys the snapshot still protects.
     auto index_key = VariantKey{f.index_key_a};
     f.store->fail_read_with(f.snapshot_key_a(), [index_key]() { throw storage::KeyNotFoundException(index_key); });
+
+    EXPECT_THROW(get_master_snapshots_map_with_stats(f.store), storage::KeyNotFoundException);
+}
+
+TEST(MasterSnapshotsMap, PropagatesKeyNotFoundThatNamesNoKey) {
+    SnapshotFixture f;
+    f.store->fail_read_with(f.snapshot_key_a(), []() {
+        throw storage::KeyNotFoundException(std::string{"Key Not Found Error: S3Error:15, HttpResponseCode:404"});
+    });
 
     EXPECT_THROW(get_master_snapshots_map_with_stats(f.store), storage::KeyNotFoundException);
 }
@@ -272,6 +293,16 @@ TEST(ListSnapshotsWithMetadata, PropagatesKeyNotFoundNamingAnIndexKey) {
     EXPECT_THROW(pvs.list_snapshots(true), storage::KeyNotFoundException);
 }
 
+TEST(ListSnapshotsWithMetadata, PropagatesKeyNotFoundThatNamesNoKey) {
+    SnapshotFixture f;
+    f.store->fail_read_with(f.snapshot_key_a(), []() {
+        throw storage::KeyNotFoundException(std::string{"Key Not Found Error: S3Error:15, HttpResponseCode:404"});
+    });
+    auto pvs = version_store_with(f.store, "list_snapshots_keyless_not_found");
+
+    EXPECT_THROW(pvs.list_snapshots(true), storage::KeyNotFoundException);
+}
+
 TEST(ListSnapshotsWithMetadata, PropagatesNonKeyNotFoundStorageErrors) {
     SnapshotFixture f;
     f.store->fail_read_with(f.snapshot_key_a(), []() {
@@ -295,4 +326,44 @@ TEST(ListSnapshotsWithMetadata, DoesNotReadTheSegmentsWhenMetadataIsNotRequested
     auto snapshots = pvs.list_snapshots(false);
 
     EXPECT_EQ(snapshots.size(), 2u);
+}
+
+// === iterate_snapshots(), which filters the same failures for the blocking callers ===
+
+TEST(IterateSnapshots, SkipsASnapshotDeletedDuringIteration) {
+    SnapshotFixture f;
+    auto missing = f.snapshot_key_a();
+    f.store->fail_read_with(missing, [missing]() { throw storage::KeyNotFoundException(missing); });
+
+    std::vector<SnapshotId> visited;
+    EXPECT_NO_THROW(iterate_snapshots(f.store, [&f, &visited](VariantKey& vk) {
+        f.store->read_sync(vk, storage::ReadKeyOpts{});
+        visited.emplace_back(variant_key_id(vk));
+    }));
+
+    ASSERT_EQ(visited.size(), 1u);
+    EXPECT_EQ(visited[0], SnapshotId{"snap_b"});
+}
+
+TEST(IterateSnapshots, PropagatesKeyNotFoundNamingAnIndexKey) {
+    SnapshotFixture f;
+    auto index_key = VariantKey{f.index_key_a};
+    f.store->fail_read_with(f.snapshot_key_a(), [index_key]() { throw storage::KeyNotFoundException(index_key); });
+
+    EXPECT_THROW(
+            iterate_snapshots(f.store, [&f](VariantKey& vk) { f.store->read_sync(vk, storage::ReadKeyOpts{}); }),
+            storage::KeyNotFoundException
+    );
+}
+
+TEST(IterateSnapshots, PropagatesKeyNotFoundThatNamesNoKey) {
+    SnapshotFixture f;
+    f.store->fail_read_with(f.snapshot_key_a(), []() {
+        throw storage::KeyNotFoundException(std::string{"Key Not Found Error: S3Error:15, HttpResponseCode:404"});
+    });
+
+    EXPECT_THROW(
+            iterate_snapshots(f.store, [&f](VariantKey& vk) { f.store->read_sync(vk, storage::ReadKeyOpts{}); }),
+            storage::KeyNotFoundException
+    );
 }
