@@ -5,6 +5,10 @@
 #
 #   plan ──┬─► cibw_docker_image ─► build ─┐
 #          └───────────────────────────────┴─► worker (matrix, 1 EC2 instance each) ─► collect
+#                                                                                        └─► publish_pr_page
+#
+# The site those pages belong to is rebuilt by `publish_winds_site.yml`, which reads the
+# results store and needs nothing from a benchmark run.
 #
 # The job graph is the mock proven in arctic-winds itself (docs/gha-mock.md, run
 # 33402171097), with the two substitutions that ticket documented: EC2 start/stop around
@@ -60,9 +64,11 @@ on:
     paths-ignore:
       - "**/*.md"
 
-# No `concurrency:` block, deliberately. `analysis_workflow.yml` has none either, and
-# `cancel-in-progress` is actively dangerous here: cancelling a run *during* an EC2 start
-# orphans the instance (docs/research/gha-ec2-runner-matrix.md §Q4).
+# No workflow-level `concurrency:` block, deliberately. `analysis_workflow.yml` has none
+# either, and `cancel-in-progress` is actively dangerous here: cancelling a run *during* an
+# EC2 start orphans the instance (docs/research/gha-ec2-runner-matrix.md §Q4). The one
+# concurrency group in this file is on `publish_pr_page`, which holds no runner but does
+# write to a shared branch; the comment there says why it is keyed per pull request.
 
 jobs:
   # What gets benchmarked, by whom, on what storage. Also the run's only guard against
@@ -81,6 +87,10 @@ jobs:
       matrix: ${{ steps.plan.outputs.matrix }}
       commit: ${{ steps.commit.outputs.commit }}
       workers: ${{ steps.suites.outputs.workers }}
+      # The lanes gha 26 Q4 says may never produce a verdict — `gating = false` in
+      # workers.toml. `arctic-winds plan` writes this beside the matrix, because the plan
+      # is the one thing that read the config; `collect` and `compare-values` both take it.
+      measure_only: ${{ steps.plan.outputs.measure_only }}
       reference_suite: ${{ steps.suites.outputs.reference_suite }}
       storage: ${{ steps.storage.outputs.storage }}
       bucket: ${{ steps.bucket.outputs.bucket }}
@@ -215,8 +225,8 @@ jobs:
           arctic-winds plan "${args[@]}"
 
       # GitHub caps a matrix at 256 jobs and silently truncates past it, which would look
-      # like a run where some workers simply never reported. Fail here instead. 8 workers
-      # x 69 release tags = 552, so `run_all_benchmarks` needs a tag subset or a narrower
+      # like a run where some workers simply never reported. Fail here instead. 13 workers
+      # x 69 release tags = 897, so `run_all_benchmarks` needs a tag subset or a narrower
       # split (see the README's open decisions). The job count is the only guard left: a
       # multi-commit run is otherwise fine now that artifacts are named per commit and
       # `collect` writes a symbol for each (ticket 18).
@@ -263,9 +273,12 @@ jobs:
             echo
             # One row per matrix entry, commit included: `run_all_benchmarks` plans every
             # release tag, and which commit a worker is on is then the first question.
-            echo "| commit | worker | suite | instance |"
-            echo "| --- | --- | --- | --- |"
-            jq -r '.[] | "| \(.commit[0:8]) | \(.worker) | `\(.suite)` | \(.instance_type) |"' <<<"$MATRIX"
+            # `runs on` is the label the job queues against — `ec2` for the lanes whose
+            # label only exists once an instance has been started for them — and `gates`
+            # is whether that lane's numbers may fail a pull request (gha 26 Q4).
+            echo "| commit | worker | suite | instance | runs on | gates |"
+            echo "| --- | --- | --- | --- | --- | --- |"
+            jq -r '.[] | "| \(.commit[0:8]) | \(.worker) | `\(.suite)` | \(.instance_type) | \(if .runs_on == "" then "ec2" else .runs_on end) | \(if .gating then "yes" else "measure-only" end) |"' <<<"$MATRIX"
           } >> "$GITHUB_STEP_SUMMARY"
 
       # ---------------------------------------------------------------------------
@@ -440,8 +453,11 @@ jobs:
           if-no-files-found: error
           retention-days: 7   # only ever needed inside this run
 
-  # The fan-out. One matrix entry = one call of the reusable worker workflow = one EC2
-  # instance, started and stopped inside that call (see benchmark_worker.yml).
+  # The fan-out. One matrix entry = one call of the reusable worker workflow. For a lane
+  # with an `ec2` table (or the bare `instance_type` the twelve ArcticDB workers use) that
+  # is one EC2 instance, started and stopped inside the call; for a lane with a `runs_on`
+  # label it is a job that queues against that label and rents nothing (see
+  # benchmark_worker.yml).
   worker:
     needs: [plan, build]
     strategy:
@@ -463,6 +479,12 @@ jobs:
       commit: ${{ matrix.commit }}
       storage: ${{ needs.plan.outputs.storage }}
       instance_type: ${{ matrix.instance_type }}
+      # gha 26's provider seam. Empty means "start us an EC2 instance"; a label means the
+      # lane runs on a runner somebody else owns, and `benchmark_worker.yml` skips its
+      # start and stop jobs entirely. `market_type` is spot for the EC2 lanes and empty
+      # for everything else, which is also how the action spells on-demand.
+      runs_on: ${{ matrix.runs_on }}
+      market_type: ${{ matrix.market_type }}
       python: "3.11"
       wheel_artifact: wheel-cp311-manylinux_x86_64
       bucket: ${{ needs.plan.outputs.bucket }}
@@ -477,12 +499,15 @@ jobs:
     if: always() && needs.plan.result == 'success'
     runs-on: ubuntu-22.04
     timeout-minutes: 30
-    # `contents: write` is for the pull request's page: the last step pushes one JSON
-    # file to the gh-pages branch. `actions: read` is what `download-artifact` needs
-    # once a job names its permissions at all — naming one drops every default.
+    # `actions: read` is what `download-artifact` needs once a job names its
+    # permissions at all — naming one drops every default. Nothing here writes to the
+    # repository any more: the pull request's page moved to `publish_pr_page` below,
+    # which is the job that holds `contents: write`.
     permissions:
-      contents: write
+      contents: read
       actions: read
+    outputs:
+      library: ${{ steps.library.outputs.library }}
     env:
       # The bucket and prefix `transform_asv_results.py` writes to today. `aws_auth=true`
       # means arcticdb takes the credentials from the standard AWS environment below.
@@ -492,6 +517,7 @@ jobs:
       AWS_DEFAULT_REGION: eu-west-1
       COMMIT: ${{ needs.plan.outputs.commit }}
       WORKERS: ${{ needs.plan.outputs.workers }}
+      MEASURE_ONLY: ${{ needs.plan.outputs.measure_only }}
     steps:
       # `fetch-depth: 0`: `compare-values` walks up to 50 `origin/master~N` commits looking
       # for the newest one with stored results (it runs `git fetch origin master` first,
@@ -530,13 +556,17 @@ jobs:
       # `download-artifact` gives each artifact its own subdirectory, and the directory
       # name is how `collect` learns the worker's name. The run's wheel is an artifact too
       # and is not a worker, so it is moved aside before collect sees the directory.
+      # So is `compare-report`, which this job uploads for `publish_pr_page` — on a
+      # *re-run* of this job the previous attempt's copy is already there to download,
+      # and an artifact called `compare-report` would otherwise become a worker of that
+      # name with no results in it.
       - name: separate the worker artifacts from the wheel
         run: |
           mkdir -p artifacts
           for dir in all-artifacts/*/; do
             name=$(basename "$dir")
             case "$name" in
-              wheel-*) continue ;;
+              wheel-*|compare-report) continue ;;
             esac
             mv "$dir" "artifacts/$name"
           done
@@ -566,11 +596,15 @@ jobs:
         env:
           LIBRARY: ${{ steps.library.outputs.library }}
         run: |
+          # `--measure-only` is still expected of, and reported for, every lane it names;
+          # it only stops a managed lane's silence or failures from turning the job red
+          # (gha 26 Q4). The summary says which lanes those were.
           arctic-winds collect \
             --artifacts artifacts \
             --results "$RESULTS" \
             --library "$LIBRARY" \
-            --expect "$WORKERS"
+            --expect "$WORKERS" \
+            --measure-only "$MEASURE_ONLY"
 
       # The PR regression check, replacing `asv compare -s -f 1.15 <master> HEAD` from
       # `benchmark_commits.yml:150-166`. Exit 1 = something got worse; exit 2 = the check
@@ -588,6 +622,11 @@ jobs:
         env:
           LIBRARY: ${{ steps.library.outputs.library }}
         run: |
+          # `--measure-only` drops the managed lanes' rows from *both* commits before asv
+          # sees them. Two reasons, and the second is the sharp one: a GitHub-hosted
+          # runner's ≈2.66 % CV would make the 1.15 threshold mostly false alarms, and an
+          # OS-portable subset runs the *same benchmark names* as an EC2 lane — so without
+          # this the pull request would be judged on whichever machine sorted last.
           arctic-winds compare-values \
             --commit "$COMMIT" \
             --tree . \
@@ -595,67 +634,25 @@ jobs:
             --library "$LIBRARY" \
             --reference-lib asv_results \
             --repo . \
+            --measure-only "$MEASURE_ONLY" \
             --report "$GITHUB_WORKSPACE/compare-report.json"
 
-      # The pull request's page on the benchmark site: this run's numbers, the values
-      # already published for the master commit it was judged against, and asv's
-      # verdict, written to `winds/data/pr/<number>.json` on the gh-pages branch and
-      # linked from this job's summary. Kept 90 days; the nightly rebuild prunes them
-      # (`prune_pr_json`, ticket 10).
+      # The verdict, handed to `publish_pr_page`. The comparison must not be run twice
+      # — asv would have to re-read both commits to say what this job already knows —
+      # and a job boundary is the only way to move a file across one.
       #
       # `always()`: a regression makes the step above exit 1, and that is precisely the
-      # run whose page is worth having. A run that stored nothing (collect exit 2) has
-      # no page to write and fails here too, on a job that is already red.
-      - name: publish the pull request's page
-        if: always() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          LIBRARY: ${{ steps.library.outputs.library }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: |
-          set -euo pipefail
-          # The site lives on gh-pages under `winds/` until the cut-over (ticket 10);
-          # before that branch exists there is nothing to publish into, and saying so
-          # is not a reason to fail the run.
-          if ! git clone --depth 1 --branch gh-pages \
-              "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
-              gh-pages; then
-            echo "::notice::No gh-pages branch yet, so the benchmark site has nowhere to put this pull request's page (see ticket 10)."
-            exit 0
-          fi
-
-          args=(--results "$RESULTS" --library "$LIBRARY" --commit "$COMMIT"
-                --pr "$PR_NUMBER" --site-dir gh-pages/winds/data)
-          # No report means the comparison could not be made; the page still carries
-          # this run's own numbers, with every combination marked `new`.
-          if [ -f "$GITHUB_WORKSPACE/compare-report.json" ]; then
-            args+=(--compare-report "$GITHUB_WORKSPACE/compare-report.json")
-          fi
-          arctic-winds viz pr "${args[@]}"
-
-          git -C gh-pages config user.name "github-actions[bot]"
-          git -C gh-pages config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git -C gh-pages add winds/data
-          if git -C gh-pages diff --cached --quiet; then
-            echo "The page is unchanged; nothing to push."
-            exit 0
-          fi
-          git -C gh-pages commit -m "benchmarks: pull request #${PR_NUMBER} (${COMMIT:0:8})"
-          # One retry: two runs finishing together race for the branch tip, and the
-          # loser only has to replay its own file on top of the winner's.
-          if ! git -C gh-pages push origin HEAD:gh-pages; then
-            echo "Push raced with another run; rebasing onto the new tip and retrying."
-            git -C gh-pages pull --rebase origin gh-pages
-            git -C gh-pages push origin HEAD:gh-pages
-          fi
-
-          page="https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}/winds/pr/${PR_NUMBER}"
-          echo "::notice::Benchmark page for this pull request: ${page}"
-          {
-            echo "### 🌬️ Benchmark page"
-            echo
-            echo "[Pull request #${PR_NUMBER}](${page}) — every benchmark, this run against master, with links into each history."
-          } >> "$GITHUB_STEP_SUMMARY"
+      # run whose page is worth having.
+      - name: keep the comparison for the page
+        if: always() && github.event_name == 'pull_request' && hashFiles('compare-report.json') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: compare-report
+          path: compare-report.json
+          retention-days: 1
+          # A re-run of this job uploads it a second time, and v4 refuses a name that
+          # already exists rather than replacing it.
+          overwrite: true
 
       # A fork's `GITHUB_TOKEN` is read-only, so nothing can be pushed to gh-pages from
       # one. The comparison itself still ran and is on this job's summary.
@@ -687,3 +684,140 @@ jobs:
             echo "This indicates a bug in the workflow. Not deleting anything and exiting..."
             exit 1
           fi
+
+  # The pull request's page on the benchmark site: this run's numbers, the values
+  # already published for the master commit it was judged against, and asv's verdict,
+  # written to `winds/data/pr/<number>.json` on the gh-pages branch and linked from
+  # this job's summary. Kept 90 days; `publish_winds_site.yml`'s nightly rebuild
+  # prunes the expired ones and relists the rest.
+  #
+  # Its own job, not a step of `collect`, for one reason: `concurrency` is a property
+  # of jobs, and the branch is the thing that needs serialising. Putting the group on
+  # `collect` would queue the whole 30-minute job behind another run's, and — worse —
+  # GitHub cancels a *pending* member of a group when a third arrives, so a busy
+  # afternoon would silently drop a run's results before it ever stored them.
+  #
+  # The group is therefore per pull request. Two publishes of the *same* PR are two
+  # attempts at one page, and cancelling the older pending one loses nothing, because
+  # the newer run supersedes it. Two publishes of *different* PRs must both land, so
+  # they are not in one group and are not queued behind each other at all — the race
+  # between them is settled by the retry in the publish step, which rebuilds against
+  # whatever the branch tip turns out to be instead of replaying a commit onto it.
+  # Nothing in this job holds an EC2 runner: the workers are stopped by the time
+  # `collect` finishes, and no `cancel-in-progress` appears anywhere near one.
+  publish_pr_page:
+    name: publish the pull request's page
+    needs: [plan, collect]
+    if: |
+      always() && needs.plan.result == 'success'
+      && github.event_name == 'pull_request'
+      && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    concurrency:
+      group: winds-gh-pages-pr-${{ github.event.pull_request.number }}
+      cancel-in-progress: false
+    # The push to gh-pages, and `download-artifact`'s `actions: read`.
+    permissions:
+      contents: write
+      actions: read
+    env:
+      RESULTS: "s3://s3.eu-west-1.amazonaws.com:arcticdb-ci-benchmark-results?aws_auth=true&region=eu-west-1&path_prefix=asv_results"
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_S3_ACCESS_KEY }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_S3_SECRET_KEY }}
+      AWS_DEFAULT_REGION: eu-west-1
+      COMMIT: ${{ needs.plan.outputs.commit }}
+      LIBRARY: ${{ needs.collect.outputs.library }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      SITE_PREFIX: winds
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: check out arctic-winds
+        uses: actions/checkout@v4
+        with:
+          repository: G-D-Petrov/arctic-winds
+          ref: main
+          path: arctic-winds
+          ssh-key: ${{ secrets.ARCTIC_WINDS_DEPLOY_KEY }}
+
+      - name: install arctic-winds
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install ./arctic-winds
+
+      # Absent when the comparison could not be made (no fresh master reference, or asv
+      # itself failed). The page is still written; every combination is then `new`.
+      - name: fetch the comparison
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          name: compare-report
+
+      - name: publish the pull request's page
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          # The site lives on gh-pages under `winds/` until the cut-over; before that
+          # branch exists there is nothing to publish into, and saying so is not a
+          # reason to fail the run.
+          if ! git clone --depth 1 --branch gh-pages \
+              "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
+              gh-pages; then
+            echo "::notice::No gh-pages branch yet, so the benchmark site has nowhere to put this pull request's page. Dispatch publish_winds_site.yml to build it."
+            exit 0
+          fi
+          git -C gh-pages config user.name "github-actions[bot]"
+          git -C gh-pages config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # Everything the page depends on, done against whatever the branch tip is
+          # *now*. The old shape was `push || (pull --rebase && push)`, which replays
+          # this run's commit onto the winner's — and fails, because `index.json` is
+          # one compact line that both sides rewrite whole, so the rebase conflicts
+          # textually and the loser's page waits for a human to re-run the job. Writing
+          # the page again on the new base has nothing to conflict with: `viz pr`
+          # rebuilds `index.json`'s `prs` listing from the files on disk, so the
+          # winner's page is in the listing this run publishes.
+          attempt() {
+            git -C gh-pages fetch --depth 1 origin gh-pages
+            git -C gh-pages reset --hard FETCH_HEAD
+
+            args=(--results "$RESULTS" --library "$LIBRARY" --commit "$COMMIT"
+                  --pr "$PR_NUMBER" --site-dir "gh-pages/${SITE_PREFIX}/data")
+            if [ -f compare-report.json ]; then
+              args+=(--compare-report compare-report.json)
+            fi
+            arctic-winds viz pr "${args[@]}"
+
+            git -C gh-pages add "${SITE_PREFIX}/data"
+            if git -C gh-pages diff --cached --quiet; then
+              echo "The page is unchanged; nothing to push."
+              return 0
+            fi
+            git -C gh-pages commit --quiet -m "benchmarks: pull request #${PR_NUMBER} (${COMMIT:0:8})"
+            git -C gh-pages push origin HEAD:gh-pages
+          }
+
+          published=no
+          for try in 1 2 3; do
+            if attempt; then
+              published=yes
+              break
+            fi
+            echo "::notice::Publish raced with another run (attempt ${try}); rewriting the page onto the new tip."
+          done
+          if [ "$published" != yes ]; then
+            echo "::error::Could not publish this pull request's page after three attempts."
+            exit 1
+          fi
+
+          page="https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}/${SITE_PREFIX}/pr/${PR_NUMBER}"
+          echo "::notice::Benchmark page for this pull request: ${page}"
+          {
+            echo "### 🌬️ Benchmark page"
+            echo
+            echo "[Pull request #${PR_NUMBER}](${page}) — every benchmark, this run against master, with links into each history."
+          } >> "$GITHUB_STEP_SUMMARY"

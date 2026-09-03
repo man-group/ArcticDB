@@ -17,6 +17,27 @@
 # ±3 % of their LMDB walls — 21 % of the run's EC2 spent re-measuring LMDB. Omitted
 # means `real = true`: a new worker runs on REAL until it is shown to be storage-blind.
 # `ALL` and `LMDB` runs keep all twelve either way.
+#
+# WHERE A WORKER RUNS (gha 26's provider seam; there is no provider enum):
+#
+#   runs_on = "<label>"                 a managed runner somebody else owns — GitHub's
+#                                       own `windows-latest`, or any drop-in label
+#                                       provider. Nothing is started and nothing is
+#                                       stopped, and the label is also the worker's
+#                                       `instance_type`, because on a machine with no
+#                                       IMDS to ask, the label is the only name its
+#                                       hardware has.
+#   ec2 = { instance_type = "...",      our own start/stop jobs, and the only place a
+#           market_type = "spot" }      lane can ask for `on-demand` instead of spot.
+#   instance_type = "..."               the same thing, in the spelling the twelve
+#                                       below were written in before the seam existed.
+#
+# `gating = false` makes a lane **measure-only** (gha 26 Q4): its series are recorded
+# and plotted like anyone's, but it is dropped from the `asv compare` verdict and its
+# silence or failures never redden a run. GitHub-hosted runners sit at a ≈2.66 % CV,
+# where the pipeline's 1.15 threshold would be mostly false positives; a managed lane
+# graduates to gating per-lane at ≥7 %, once gha 38's variance experiment has measured
+# it. Omitted means `gating = true`: an EC2 lane gates, as all twelve always have.
 
 [[worker]]
 # 10M-row frames; RAM need unmeasured on the new pipeline, so the full box for now.

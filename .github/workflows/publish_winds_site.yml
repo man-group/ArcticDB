@@ -1,0 +1,332 @@
+# The arctic-winds benchmark site, rebuilt nightly and published to gh-pages under
+# `winds/`. Install as `.github/workflows/publish_winds_site.yml`.
+#
+#   results store ─► viz backfill --batch ─► viz prune-prs ─► web build ─► gh-pages/winds/
+#
+# Separate from `benchmark_winds.yml` on purpose. The rebuild reads the whole results
+# store and needs none of a benchmark run's artifacts, workers or EC2 instances, so
+# binding it to a benchmark run would mean the site could only be rebuilt by
+# benchmarking something, and a store that will not read would colour a run that was
+# fine. It is also the job that must never be a laptop: three attempts to backfill the
+# 575-run store from a laptop died to machine sleep and expiring session credentials.
+#
+# Until the GHA cut-over the site lives at `winds/` beside asv's existing output at the
+# branch root, and nothing here touches anything outside `winds/`. At the cut-over,
+# change `SITE_PREFIX` and `WEB_BASE` below and delete asv's files in the same commit.
+name: Publish the benchmark site (arctic-winds)
+
+on:
+  # Three hours after `benchmark_winds.yml`'s nightly, so the night's runs are in the
+  # store before the site is rebuilt from it.
+  schedule:
+    - cron: '0 3 * * *'
+
+  workflow_dispatch:
+    inputs:
+      rebuild:
+        # The incremental nightly publishes only the runs `.backfill.json` has not seen.
+        # A rebuild throws that away and re-exports every run in the window, which is
+        # what a schema change to the exported dataset needs — and, thanks to
+        # `--batch`, costs one write rather than 575.
+        description: Re-export every run in the window instead of only the new ones
+        type: boolean
+        default: false
+      since:
+        description: 'Oldest commit day to publish (ISO); blank = the default window'
+        type: string
+        default: ''
+
+# Serialises the nightly against itself and against a manual dispatch: two rebuilds of
+# the same site racing for the branch tip is pure waste, and a *pending* rebuild that
+# GitHub cancels in favour of a newer one has lost nothing, because the newer one
+# rebuilds everything the cancelled one would have.
+#
+# `cancel-in-progress` is deliberately absent (defaults to false). Nothing in this
+# workflow holds an EC2 runner, but the same rule as `benchmark_winds.yml` applies to
+# the branch: cancelling a rebuild *between* its commit and its push leaves the site
+# half-written on nobody's disk, and there is no reason to want that.
+#
+# The pull request pages are published from `benchmark_winds.yml`'s own job and are
+# NOT in this group — see the comment on that job for why one shared group would lose
+# pages. Races between the two are settled by the retry below, not by queueing.
+concurrency:
+  group: winds-gh-pages-nightly
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: rebuild and publish
+    runs-on: ubuntu-22.04
+    # The first pass over an empty site reads 575 stored frames and writes once; later
+    # nights read only what `collect` added. An hour is generous for both.
+    timeout-minutes: 90
+    # `contents: write` is the push to gh-pages. Naming one permission drops every
+    # default, so the checkout's `contents: read` is subsumed by it and nothing else
+    # is needed: this workflow downloads no artifacts and asks the Actions API nothing.
+    permissions:
+      contents: write
+    env:
+      # The same store and prefix `benchmark_winds.yml`'s collect job writes to.
+      RESULTS: "s3://s3.eu-west-1.amazonaws.com:arcticdb-ci-benchmark-results?aws_auth=true&region=eu-west-1&path_prefix=asv_results"
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_S3_ACCESS_KEY }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_S3_SECRET_KEY }}
+      AWS_DEFAULT_REGION: eu-west-1
+      # `asv_results` is CI's live library, which is what the site publishes today.
+      # Switch to `winds_asv_results` at the cut-over, when the shadow's own library is
+      # the one with the history in it.
+      LIBRARY: asv_results
+      # Where on the branch the site goes, and the URL the bundle is built for. One
+      # pair of values; change both together at the cut-over.
+      SITE_PREFIX: winds
+      WEB_BASE: /ArcticDB/winds/
+      # Measured 2026-09-03 over the whole CI store: 575 runs, 350 benchmarks, 1,852
+      # files, **82.0 MB raw / 14.9 MB gzip** (40.4/7.6 benchmarks, 40.8/7.1 runs,
+      # 0.8/0.2 index), plus 0.6 MB for the app bundle. Pages allows a 1 GB site, so
+      # the budget worth guarding is not Pages' — it is the size at which the exporter
+      # has plainly broken, and 3× today's site is that.
+      SIZE_BUDGET_MB: 250
+
+    steps:
+      # `fetch-depth: 0`: the backfill hands every symbol's short SHA to this clone to
+      # be resolved and dated, and numbers the x-axis from `git rev-list
+      # --first-parent origin/master`. A shallow clone resolves nothing.
+      - name: check out ArcticDB
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"   # arctic-winds requires >=3.11,<3.12
+
+      - name: check out arctic-winds
+        uses: actions/checkout@v4
+        with:
+          repository: G-D-Petrov/arctic-winds
+          ref: main
+          path: arctic-winds
+          ssh-key: ${{ secrets.ARCTIC_WINDS_DEPLOY_KEY }}
+
+      - name: install arctic-winds
+        run: |
+          python -m pip install --upgrade pip
+          # `[viz]` is asv's step detection, which the exported dataset's summary
+          # steps are fitted with. Without it every benchmark publishes an empty
+          # `steps` list and the site's regression list is silently empty.
+          python -m pip install "./arctic-winds[viz]"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: arctic-winds/web/package-lock.json
+
+      # The published branch, and the site as it stands on it. The rebuild happens in
+      # `site/` — outside the clone — so that the clone can be reset to whatever the
+      # branch tip turns out to be at push time without losing the rebuild.
+      - name: clone gh-pages
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          remote="https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          if git clone --depth 1 --branch gh-pages "$remote" gh-pages; then
+            echo "gh-pages: $(git -C gh-pages rev-parse --short HEAD)"
+          else
+            # No gh-pages yet — before asv's first publish, or on a fork. An orphan
+            # branch is the same starting point asv would have made.
+            echo "::notice::No gh-pages branch; starting one."
+            git clone --depth 1 "$remote" gh-pages
+            git -C gh-pages checkout --orphan gh-pages
+            git -C gh-pages rm -rf . >/dev/null 2>&1 || true
+          fi
+          git -C gh-pages config user.name "github-actions[bot]"
+          git -C gh-pages config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          mkdir -p site
+          if [ -d "gh-pages/${SITE_PREFIX}" ]; then
+            cp -a "gh-pages/${SITE_PREFIX}/." site/
+          fi
+          mkdir -p site/data
+
+      # A rebuild keeps `data/pr/` and throws the rest away. The pull request pages are
+      # the one part of the site the results store cannot produce: they are written by
+      # the pull request's own job, out of a comparison that ran once, and deleting them
+      # here would delete the pages every open PR's summary links to.
+      - name: empty the exported data for a full rebuild
+        if: github.event_name == 'workflow_dispatch' && inputs.rebuild
+        run: |
+          set -euo pipefail
+          find site/data -mindepth 1 -maxdepth 1 ! -name pr -exec rm -rf {} +
+          echo "Rebuilding from an empty site; $(ls site/data/pr 2>/dev/null | wc -l) pull request pages kept."
+
+      # `--batch` reads every run and writes the site **once**. Incrementally each
+      # export re-reads, re-merges and rewrites every benchmark file it touches, so the
+      # cost of a run grows with the history under it — the first laptop backfill took
+      # 46 minutes of writing for 569 runs, 0.3 s at the first and 10 s at the last.
+      # The whole-store rebuild is the case that is quadratic, and it is exactly the
+      # case this job runs.
+      #
+      # What `--batch` gives up is resumability *within* one pass: nothing is published
+      # and no progress recorded until the last run has been read, so an interrupted
+      # rebuild starts over. In CI that is the right trade — the job either finishes or
+      # is re-run whole — and it is the wrong one on a laptop, which is why it is a flag
+      # and not the default.
+      #
+      # Exit 1 = nothing was published at all (every read refused, or the batched write
+      # did): the rebuild did not happen and this job must go red rather than push
+      # yesterday's site again in silence. A handful of unreadable runs among 575 is
+      # logged, skipped, and retried tomorrow, and does not fail the job.
+      #
+      # Measured on the whole CI store (2026-09-03, laptop, 8 workers): 575 runs,
+      # 920,313 measurements, 3.8 minutes end to end of which the single write was 17
+      # seconds, and a 2.8 GB peak resident set. A GitHub-hosted `ubuntu-22.04` runner
+      # has 7 GB, so the batch fits with room; if the window is ever widened far past
+      # 575 runs, that headroom — not the wall clock — is what runs out first.
+      #
+      # `site/data/.backfill.json` records which runs are published and is committed
+      # with the rest, which is what makes tomorrow night incremental: it reads only
+      # what `collect` added. A `rebuild` dispatch is how you throw it away.
+      - name: rebuild the exported dataset
+        run: |
+          set -euo pipefail
+          args=(--results "$RESULTS" --library "$LIBRARY"
+                --site-dir site/data --repo . --batch --workers 8)
+          if [ -n "${SINCE:-}" ]; then
+            args+=(--since "$SINCE")
+          fi
+          arctic-winds viz backfill "${args[@]}"
+        env:
+          SINCE: ${{ github.event_name == 'workflow_dispatch' && inputs.since || '' }}
+
+      # Retention, and the only step that puts the pull request listing back into a
+      # rebuilt index: `index.json`'s `prs` is carried forward from the old index by
+      # every other writer, and a full rebuild has no old index to carry it from.
+      - name: prune the expired pull request pages
+        run: arctic-winds viz prune-prs --site-dir site/data
+
+      # The app. `WEB_BASE` is what the bundle's asset URLs and the router's basepath
+      # are built against, and it is also where the app looks for its data
+      # (`<base>data/`) — so it has to match `SITE_PREFIX` exactly.
+      - name: build the site
+        working-directory: arctic-winds/web
+        run: |
+          npm ci
+          npm run build
+
+      - name: stage the built app beside the data
+        run: |
+          set -euo pipefail
+          # `--delete` drops the assets of an older build, whose hashed filenames
+          # nothing points at any more; `--exclude` keeps it away from the data.
+          rsync -a --delete --exclude=/data arctic-winds/web/dist/ site/
+          find site -maxdepth 1 -mindepth 1 | sort
+
+      # The Pages budget, measured rather than estimated. Pages allows a 1 GB published
+      # site and serves JSON gzipped, so the gzip figure is the one a reader pays and
+      # the raw figure is the one the branch pays. A number far over budget means an
+      # exporter bug, not a busy month of benchmarking.
+      - name: weigh the site
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import gzip, os, pathlib, sys
+
+          raw = packed = files = 0
+          for path in pathlib.Path("site").rglob("*"):
+              if path.is_file() and path.name != ".backfill.json":
+                  blob = path.read_bytes()
+                  files, raw, packed = files + 1, raw + len(blob), packed + len(gzip.compress(blob, 6))
+
+          if not files:
+              print("::error::Nothing was staged in site/; the rebuild produced no site.")
+              sys.exit(1)
+
+          budget = int(os.environ["SIZE_BUDGET_MB"])
+          # Megabytes of 1,000,000, so this agrees with what `viz backfill` just printed.
+          mb = lambda n: f"{n / 1_000_000:.1f} MB"
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as summary:
+              print("### 🌬️ Benchmark site\n", file=summary)
+              print("| files | raw | gzipped | budget |", file=summary)
+              print("|---|---|---|---|", file=summary)
+              print(f"| {files:,} | {mb(raw)} | {mb(packed)} | {budget} MB raw |\n", file=summary)
+              print("GitHub Pages allows a 1 GB published site and serves JSON gzipped.", file=summary)
+          print(f"{files:,} files, {mb(raw)} raw, {mb(packed)} gzipped (budget {budget} MB)")
+
+          if raw > budget * 1_000_000:
+              # Not a Pages limit — Pages would take ten times this. It is the size at
+              # which something has plainly gone wrong in the exporter (a benchmark file
+              # that stopped sharing its history, a run record that stopped being thin),
+              # and it is cheaper to notice here than in a reader's browser.
+              print(
+                  f"::error::The site is {mb(raw)}, over the {budget} MB budget. Look at "
+                  "the largest file under site/data/benchmarks before raising this."
+              )
+              sys.exit(1)
+          PY
+
+      # The push, and the answer to two publishes landing on one branch.
+      #
+      # The old shape was `push || (pull --rebase && push)`, which replays *this* run's
+      # commit onto the winner's. That fails on `index.json`: it is one compact line
+      # rewritten whole by both sides, so the rebase conflicts textually and the loser's
+      # page waits for somebody to re-run the job.
+      #
+      # This shape never replays anything. It takes the winner's branch as the base,
+      # copies this run's rebuilt site on top, takes the pull request pages from the
+      # *winner* (they are the one thing this job cannot rebuild — see above), and then
+      # rebuilds `index.json`'s listing from the files on disk. The result is a commit
+      # that is correct against the new base by construction, so there is nothing for a
+      # merge to get wrong. Three attempts, because a fourth simultaneous publisher of
+      # one branch is a different problem.
+      - name: publish to gh-pages
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          attempt() {
+            # Whatever is published *now* is the base. On a branch that does not exist
+            # yet the clone step left an orphan checkout, and there is nothing to fetch.
+            base=""
+            if git -C gh-pages fetch --depth 1 origin gh-pages 2>/dev/null; then
+              base="$(git -C gh-pages rev-parse FETCH_HEAD)"
+              git -C gh-pages reset --hard "$base"
+            fi
+
+            rm -rf "gh-pages/${SITE_PREFIX}"
+            mkdir -p "gh-pages/${SITE_PREFIX}"
+            cp -a site/. "gh-pages/${SITE_PREFIX}/"
+            # A pull request page the winner published while this job was rebuilding.
+            if [ -n "$base" ]; then
+              git -C gh-pages checkout "$base" -- "${SITE_PREFIX}/data/pr" 2>/dev/null || true
+            fi
+            arctic-winds viz prune-prs --site-dir "gh-pages/${SITE_PREFIX}/data"
+            # Jekyll would refuse to serve anything whose name begins with `_` or `.`,
+            # and it is the branch root that has to say so. asv writes this file too;
+            # creating it is a no-op on a branch that already has it.
+            touch gh-pages/.nojekyll
+
+            git -C gh-pages add -A "${SITE_PREFIX}" .nojekyll
+            if git -C gh-pages diff --cached --quiet; then
+              echo "The site is unchanged; nothing to push."
+              return 0
+            fi
+            git -C gh-pages commit --quiet -m "benchmarks: rebuild the arctic-winds site"
+            git -C gh-pages push origin HEAD:gh-pages
+          }
+
+          for try in 1 2 3; do
+            if attempt; then
+              exit 0
+            fi
+            echo "::notice::Publish raced with another run (attempt ${try}); rebuilding onto the new tip."
+          done
+          echo "::error::Could not publish after three attempts; the branch tip kept moving."
+          exit 1
+
+      - name: say where it went
+        run: |
+          site="https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}/${SITE_PREFIX}/"
+          echo "::notice::Benchmark site: ${site}"
+          echo "[The benchmark site](${site})" >> "$GITHUB_STEP_SUMMARY"

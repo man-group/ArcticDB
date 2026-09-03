@@ -1,6 +1,13 @@
 # One benchmark worker, cradle to grave: start an EC2 runner, run one suite on it, upload
 # the result, stop the runner. Install as `.github/workflows/benchmark_worker.yml`.
 #
+# …unless the worker named a `runs_on` label, in which case there is no runner to start
+# and none to stop, and `bench` simply queues against the label. That is gha 26's
+# provider seam, and it has no provider enum: `runs_on` carries a native GitHub label
+# (`windows-latest`), a Blacksmith label, or anything else drop-in, and the only thing
+# this workflow does differently is skip the two jobs it has no business running. Every
+# `inputs.runs_on == ''` guard below is that one distinction and nothing more.
+#
 # Called once per matrix entry by `benchmark_winds.yml`'s `worker` job. The start/stop pair
 # has to live *inside* the matrix job, exactly as `benchmark_commits.yml` does it today:
 # one `machulav/ec2-github-runner` start is one instance with one label, and a matrix's job
@@ -19,8 +26,14 @@ on:
       suite:           {required: true,  type: string, description: "the asv --bench regex this worker runs"}
       commit:          {required: true,  type: string, description: "full sha of the ArcticDB commit under benchmark"}
       storage:         {required: false, type: string, default: LMDB, description: "LMDB, REAL or ALL"}
-      instance_type:   {required: false, type: string, default: m6i.4xlarge, description: "EC2 instance type for this worker"}
-      market_type:     {required: false, type: string, default: spot, description: "'spot' or '' for on-demand"}
+      # `instance_type` is the machine's *identity*, recorded in the sidecar and keyed on
+      # by the epoch machinery. On an EC2 lane it is what `start` rents; on a managed lane
+      # it is the `runs_on` label itself, which is the only name that hardware has (gha 26).
+      instance_type:   {required: false, type: string, default: m6i.4xlarge, description: "EC2 instance type, or the runs-on label on a managed lane"}
+      # Empty = provision an EC2 runner. Non-empty = a label somebody else already answers,
+      # so `start` and `stop` are skipped and `bench` queues against it directly.
+      runs_on:         {required: false, type: string, default: '', description: "a runs-on label to use instead of starting an EC2 runner"}
+      market_type:     {required: false, type: string, default: spot, description: "'spot' or '' for on-demand; ignored on a managed lane"}
       python:          {required: false, type: string, default: '3.11', description: "interpreter the benchmark venv is built on"}
       # Two inputs beyond the ticket's list, both with defaults so callers may ignore them:
       wheel_artifact:  {required: false, type: string, default: wheel-cp311-manylinux_x86_64, description: "name of the run's wheel artifact, from the build job"}
@@ -33,6 +46,9 @@ jobs:
   # override, from the `instance_type` `plan` already emits per worker.
   start:
     name: start ${{ inputs.worker }} runner
+    # A managed lane has nothing to start: the label already answers. Skipping the job
+    # rather than making it a no-op keeps the run's graph honest about what it rented.
+    if: inputs.runs_on == ''
     uses: ./.github/workflows/ec2_runner_jobs.yml
     secrets: inherit
     with:
@@ -46,11 +62,19 @@ jobs:
   bench:
     name: bench ${{ inputs.worker }}
     needs: [start]
-    # `ec2_runner_jobs.yml:22` sets `continue-on-error: true` on the start job, so a failed
-    # start arrives here as a *successful* job with an empty label. Without this guard the
-    # bench job would queue against a label no runner ever claims until the timeout.
-    if: needs.start.result == 'success' && needs.start.outputs.label != ''
-    runs-on: ${{ needs.start.outputs.label }}
+    # `always()` because on a managed lane `start` is *skipped*, and a skipped need would
+    # otherwise take this job with it. Then the two cases: a label we were given runs
+    # unconditionally, and an EC2 label has to have actually arrived —
+    # `ec2_runner_jobs.yml:22` sets `continue-on-error: true` on the start job, so a
+    # failed start arrives here as a *successful* job with an empty label, and without
+    # that guard the bench job would queue against a label no runner ever claims until
+    # the timeout.
+    if: >-
+      always() && (
+      inputs.runs_on != '' ||
+      (needs.start.result == 'success' && needs.start.outputs.label != '')
+      )
+    runs-on: ${{ inputs.runs_on != '' && inputs.runs_on || needs.start.outputs.label }}
     # ~31 min expected at N=8 (docs/research/gha-ec2-runner-matrix.md §Q6); today's
     # `timeout-minutes: 1200` is a $17-per-worker blank cheque. 180 leaves room for the
     # nightly ALL-storage run without leaving an instance up for a day.
@@ -72,8 +96,12 @@ jobs:
     # image (or the bare AMI plus `pre-runner-script`) is a follow-up once someone has read
     # the AMI. This image also gives `provision_env` the `git` and `c++` it checks for —
     # its fallback installs them with `apt-get`, which would fail on this RHEL-family image.
-    container:
-      image: ghcr.io/man-group/arcticdb-dev:latest
+    #
+    # A managed lane gets no container: the image is Linux/amd64 and the label may not be
+    # (`windows-latest` certainly is not), and the whole reason for the container is an
+    # AMI whose userland we cannot read — a GitHub-hosted image is documented and has
+    # python, git and a compiler already. An empty string here is "run on the host".
+    container: ${{ inputs.runs_on == '' && 'ghcr.io/man-group/arcticdb-dev:latest' || '' }}
     env:
       # Credentials and endpoints copied from `benchmark_commits.yml:36-40`. The benchmarks
       # read ARCTICDB_REAL_S3_* through the process environment; `bench` passes it through.
@@ -130,6 +158,14 @@ jobs:
       # Same run, same repo: no run-id and no token needed. `download-artifact@v8` is the
       # version ArcticDB pins, and it is proven inside this container on a self-hosted
       # runner (`build_steps.yml:616-620`).
+      #
+      # KNOWN GAP for a non-Linux managed lane (gha 37): the run builds exactly one wheel,
+      # `cp311-manylinux_x86_64`, and `uv pip install` will refuse it on Windows or macOS.
+      # The lane is measure-only precisely so that this costs nothing but a line on the
+      # summary while it is true. Closing it means a second `build` job per platform in
+      # `benchmark_winds.yml` and a per-worker `wheel_artifact` for the matrix to carry —
+      # deliberately not guessed at here, because what a Windows cibuildwheel run costs
+      # this pipeline per commit is the decision, not the plumbing.
       - name: download the run's wheel
         uses: actions/download-artifact@v8
         with:
@@ -151,6 +187,15 @@ jobs:
           path: arctic-winds
           ssh-key: ${{ secrets.ARCTIC_WINDS_DEPLOY_KEY }}
 
+      # Only on a managed lane. The EC2 lane's container ships the interpreter this needs;
+      # a GitHub-hosted image ships several and defaults to whichever is on PATH, which on
+      # `windows-latest` is not the 3.11 arctic-winds requires (>=3.11,<3.12).
+      - name: set up python
+        if: inputs.runs_on != ''
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
       - name: install arctic-winds
         run: |
           python -m pip install --upgrade pip
@@ -168,9 +213,26 @@ jobs:
       # the sidecar, so a whole run moving at once can afterwards be read as a runner
       # image change rather than a regression (ticket 22). IMDS saying nothing is
       # `unknown`, and an empty `--runner-image` is how the sidecar spells that.
+      #
+      # A managed lane has no IMDS to ask, so gha 26's answer is the environment GitHub
+      # sets on every hosted runner: `ImageOS`/`ImageVersion` are the image (the machine's
+      # AMI equivalent, and the thing GitHub rolls forward under a fixed label), and
+      # `RUNNER_ENVIRONMENT` says `github-hosted` or `self-hosted` — which is the
+      # difference between a shared VM and somebody's own box under the same label. Both
+      # ride in `--runner-image`, so no schema changed to carry them. The rest of the
+      # machine's identity — CPU model, core count, RAM — is probed by `bench` itself and
+      # already lands in the results (portably, from gha 36 onward); together with the
+      # label as `instance_type` that is the full identity gha 26 asked for, which matters
+      # because the same label is 4c/16GB on a public repo and 2c/8GB on a private one.
       - name: record the runner's image and lifecycle
         id: runner
         run: |
+          if [ -n "${{ inputs.runs_on }}" ]; then
+            image="${RUNNER_ENVIRONMENT:-unknown}:${ImageOS:-unknown}/${ImageVersion:-unknown}"
+            echo "runner: ${{ inputs.runs_on }} image=$image arch=$RUNNER_ARCH" | tee -a "$GITHUB_STEP_SUMMARY"
+            printf 'ami=%s\n' "$image" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           token=$(curl -sS -m 2 -X PUT http://169.254.169.254/latest/api/token -H 'X-aws-ec2-metadata-token-ttl-seconds: 60' || true)
           meta() { curl -sS -m 2 -H "X-aws-ec2-metadata-token: $token" "http://169.254.169.254/latest/meta-data/$1" 2>/dev/null || echo unknown; }
           ami=$(meta ami-id)
@@ -178,7 +240,11 @@ jobs:
           if [ "$ami" = unknown ]; then ami=''; fi
           printf 'ami=%s\n' "$ami" >> "$GITHUB_OUTPUT"
 
+      # `start_seaweed.sh` is a bash script that fetches a Linux binary, and only
+      # `merge_functions` needs what it serves — which no managed lane runs, because the
+      # suite subset those lanes get is chosen to ask nothing of the platform.
       - name: start SeaweedFS
+        if: inputs.runs_on == ''
         shell: bash -el {0}
         run: build_tooling/start_seaweed.sh start
 
@@ -232,7 +298,7 @@ jobs:
       # explicitly rather than uploading `artifacts/`. This must happen before `stop`
       # terminates the machine.
       - name: stop SeaweedFS
-        if: always()
+        if: always() && inputs.runs_on == ''
         shell: bash -el {0}
         run: build_tooling/start_seaweed.sh stop
 
@@ -252,7 +318,9 @@ jobs:
   stop:
     name: stop ${{ inputs.worker }} runner
     needs: [start, bench]
-    if: always()
+    # A managed lane started nothing, so there is nothing to terminate and no
+    # `start` outputs to terminate it with.
+    if: always() && inputs.runs_on == ''
     uses: ./.github/workflows/ec2_runner_jobs.yml
     secrets: inherit
     with:
