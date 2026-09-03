@@ -69,6 +69,8 @@ struct ScopedConfig {
     ConfigOptions originals;
     ScopedConfig(std::string name, int64_t val) : ScopedConfig({{std::move(name), std::make_optional(val)}}) {}
 
+    static ScopedConfig unset_int(std::string name) { return ScopedConfig({{std::move(name), std::nullopt}}); }
+
     explicit ScopedConfig(ConfigOptions overrides) {
         for (auto& config : overrides) {
             auto& [name, new_value] = config;

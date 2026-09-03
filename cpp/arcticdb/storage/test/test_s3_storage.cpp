@@ -515,7 +515,7 @@ TEST(TestS3Storage, curl_http_client_factory_is_registered) {
 
 TEST(TestS3Storage, dns_shuffle_addresses_enabled_by_default) {
     using namespace arcticdb::storage::s3;
-    ConfigsMap::instance()->unset_int("S3Storage.DnsShuffleAddresses");
+    ScopedConfig::unset_int("S3Storage.DnsShuffleAddresses");
     ASSERT_TRUE(dns_shuffle_addresses_enabled());
 }
 
