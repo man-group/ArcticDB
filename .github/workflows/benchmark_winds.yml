@@ -492,12 +492,15 @@ jobs:
     name: build cp311 win_amd64 wheel
     needs: [plan, cibw_docker_image]
     if: contains(needs.plan.outputs.wheel_platforms, 'win_amd64')
-    # The ticket's choice, and it differs from `build.yml:172`, which pins `windows-2022`
-    # for its own wheels. What makes that safe is the pinned MSVC below: the toolchain
-    # this wheel is compiled with is installed by the job, not inherited from the image,
-    # and a `win_amd64` wheel runs on any Windows the lane may be. Pin `windows-2022`
-    # here too if the choco install ever stops working on the newer image.
-    runs-on: windows-latest
+    # `windows-2022`, matching `build.yml:172`, and not for the toolchain (the pinned
+    # MSVC below is installed by the job either way): vcpkg builds its ports with the
+    # highest-versioned CMake it can find, and `windows-latest`'s image CMake (>=4.4)
+    # outranks the 3.31.6 this job pins — 4.4 rejects the `benchmark` port's
+    # `-Werror=old-style-cast` and the configure dies (proven on run 33791851057;
+    # the same PATH-ordering trap `build_steps.yml` documents for macOS). On the
+    # 2022 image the pinned CMake is the newest one vcpkg sees. Revisit when the
+    # port is fixed upstream and build_steps.yml drops its pin.
+    runs-on: windows-2022
     # Longer than the manylinux 45: Windows has no warm S3 sccache of its own to lean on
     # for a first build, and the MSVC install alone is minutes.
     timeout-minutes: 90
