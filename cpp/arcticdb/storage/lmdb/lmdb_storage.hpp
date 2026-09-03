@@ -13,6 +13,9 @@
 #include <arcticdb/storage/lmdb/lmdb_client_interface.hpp>
 #include <arcticdb/storage/lmdb/lmdb.hpp>
 #include <filesystem>
+#include <memory>
+#include <mutex>
+#include <shared_mutex>
 
 namespace fs = std::filesystem;
 
@@ -69,9 +72,12 @@ class LmdbStorage final : public Storage {
 
     std::optional<char> do_verify_library_suffix(std::string_view path) const final;
 
-    ::lmdb::env& env();
+    // Returns a strong reference to the instance, which the caller must hold for as long as it touches the LMDB
+    // environment or any dbi. cleanup() can run concurrently on another thread and drop the storage's own reference;
+    // holding one here is what stops the MDB_env being closed (and lock.mdb unmapped) mid-transaction.
+    std::shared_ptr<LmdbInstance> instance() const;
 
-    ::lmdb::dbi& get_dbi(const std::string& db_name);
+    static ::lmdb::dbi& get_dbi(const LmdbInstance& instance, const std::string& db_name);
 
     std::string do_key_path(const VariantKey&) const final { return {}; };
 
@@ -83,11 +89,17 @@ class LmdbStorage final : public Storage {
     void print_warning_if_lmdb_already_open() const;
 
     // _internal methods assume the write mutex is already held
-    void do_write_internal(KeySegmentPair& key_seg, ::lmdb::txn& txn);
+    void do_write_internal(KeySegmentPair& key_seg, ::lmdb::txn& txn, const LmdbInstance& instance);
     boost::container::small_vector<VariantKey, 1> do_remove_internal(
-            std::span<VariantKey> variant_key, ::lmdb::txn& txn, RemoveOpts opts
+            std::span<VariantKey> variant_key, ::lmdb::txn& txn, const LmdbInstance& instance, RemoveOpts opts
     );
     std::unique_ptr<std::mutex> write_mutex_;
+
+    // Guards lmdb_instance_ itself, not the environment it points at. Only ever held for the length of a shared_ptr
+    // copy or reset. Shared because instance() is on the path of every storage call, including the reads the IO pool
+    // runs in parallel - an exclusive mutex there serialises them and costs more than the bug being fixed. The pointer
+    // is written exactly twice, when the constructor publishes it and when cleanup() drops it.
+    std::unique_ptr<std::shared_mutex> instance_mutex_;
     std::shared_ptr<LmdbInstance> lmdb_instance_;
 
     std::filesystem::path lib_dir_;
@@ -97,6 +109,8 @@ class LmdbStorage final : public Storage {
     // For log warning only
     // Number of times an LMDB path has been opened. See also reinit_lmdb_warning.
     // Opening an LMDB env over the same path twice in the same process is unsafe, so we warn the user about it.
+    // Storages over different paths are constructed and destroyed from arbitrary threads, so all access is guarded.
+    inline static std::mutex times_path_opened_mutex;
     inline static std::unordered_map<std::string, uint64_t> times_path_opened;
 };
 

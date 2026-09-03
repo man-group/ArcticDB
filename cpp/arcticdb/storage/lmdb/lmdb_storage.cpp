@@ -56,29 +56,29 @@ static void raise_lmdb_exception(const ::lmdb::error& e, const std::string& obje
     raise<ErrorCode::E_UNEXPECTED_LMDB_ERROR>(fmt::format("Unexpected LMDB Error: {}", error_message_suffix));
 }
 
-::lmdb::env& LmdbStorage::env() {
+std::shared_ptr<LmdbInstance> LmdbStorage::instance() const {
+    std::shared_ptr<LmdbInstance> instance;
+    {
+        std::shared_lock<std::shared_mutex> lock{*instance_mutex_};
+        instance = lmdb_instance_;
+    }
     storage::check<ErrorCode::E_UNEXPECTED_LMDB_ERROR>(
-            lmdb_instance_,
+            instance,
             "Unexpected LMDB Error: Invalid operation: LMDB environment has been removed. Possibly because the library "
             "has been deleted"
     );
-    return lmdb_instance_->env_;
+    return instance;
 }
 
-::lmdb::dbi& LmdbStorage::get_dbi(const std::string& db_name) {
-    storage::check<ErrorCode::E_UNEXPECTED_LMDB_ERROR>(
-            lmdb_instance_,
-            "Unexpected LMDB Error: Invalid operation: LMDB environment has been removed. Possibly because the library "
-            "has been deleted"
-    );
-    return *(lmdb_instance_->dbi_by_key_type_.at(db_name));
+::lmdb::dbi& LmdbStorage::get_dbi(const LmdbInstance& instance, const std::string& db_name) {
+    return *(instance.dbi_by_key_type_.at(db_name));
 }
 
-void LmdbStorage::do_write_internal(KeySegmentPair& key_seg, ::lmdb::txn& txn) {
+void LmdbStorage::do_write_internal(KeySegmentPair& key_seg, ::lmdb::txn& txn, const LmdbInstance& instance) {
     ARCTICDB_SUBSAMPLE(LmdbStorageOpenDb, 0)
 
     auto db_name = fmt::format(FMT_COMPILE("{}"), key_seg.key_type());
-    ::lmdb::dbi& dbi = get_dbi(db_name);
+    ::lmdb::dbi& dbi = get_dbi(instance, db_name);
 
     ARCTICDB_SUBSAMPLE(LmdbStorageWriteValues, 0)
     ARCTICDB_DEBUG(log::storage(), "Lmdb storage writing segment with key {}", key_seg.key_view());
@@ -99,9 +99,10 @@ std::string LmdbStorage::name() const { return fmt::format("lmdb_storage-{}", li
 void LmdbStorage::do_write(KeySegmentPair& key_seg) {
     ARCTICDB_SAMPLE(LmdbStorageWrite, 0)
     std::lock_guard<std::mutex> lock{*write_mutex_};
-    auto txn = ::lmdb::txn::begin(env()); // scoped abort on exception, so no partial writes
+    auto instance = this->instance();
+    auto txn = ::lmdb::txn::begin(instance->env_); // scoped abort on exception, so no partial writes
     ARCTICDB_SUBSAMPLE(LmdbStorageInTransaction, 0)
-    do_write_internal(key_seg, txn);
+    do_write_internal(key_seg, txn, *instance);
     ARCTICDB_SUBSAMPLE(LmdbStorageCommit, 0)
     txn.commit();
 }
@@ -109,14 +110,15 @@ void LmdbStorage::do_write(KeySegmentPair& key_seg) {
 void LmdbStorage::do_update(KeySegmentPair& key_seg, UpdateOpts opts) {
     ARCTICDB_SAMPLE(LmdbStorageUpdate, 0)
     std::lock_guard<std::mutex> lock{*write_mutex_};
-    auto txn = ::lmdb::txn::begin(env());
+    auto instance = this->instance();
+    auto txn = ::lmdb::txn::begin(instance->env_);
     ARCTICDB_SUBSAMPLE(LmdbStorageInTransaction, 0)
     auto key = key_seg.variant_key();
     // Deleting keys (no error is thrown if the keys already exist)
     RemoveOpts remove_opts;
     remove_opts.ignores_missing_key_ = opts.upsert_;
     std::array<VariantKey, 1> arr{std::move(key)};
-    auto failed_deletes = do_remove_internal(std::span(arr), txn, remove_opts);
+    auto failed_deletes = do_remove_internal(std::span(arr), txn, *instance, remove_opts);
     if (!failed_deletes.empty()) {
         ARCTICDB_SUBSAMPLE(LmdbStorageCommit, 0)
         txn.commit();
@@ -124,7 +126,7 @@ void LmdbStorage::do_update(KeySegmentPair& key_seg, UpdateOpts opts) {
                 fmt::format("do_update called with upsert=false on non-existent key(s): {}", failed_deletes);
         throw KeyNotFoundException(failed_deletes, err_message);
     }
-    do_write_internal(key_seg, txn);
+    do_write_internal(key_seg, txn, *instance);
     ARCTICDB_SUBSAMPLE(LmdbStorageCommit, 0)
     txn.commit();
 }
@@ -132,18 +134,19 @@ void LmdbStorage::do_update(KeySegmentPair& key_seg, UpdateOpts opts) {
 KeySegmentPair LmdbStorage::do_read(VariantKey&& variant_key, ReadKeyOpts) {
     ARCTICDB_SAMPLE(LmdbStorageReadReturn, 0)
     std::optional<VariantKey> failed_read;
+    auto instance = this->instance();
     auto db_name = fmt::format(FMT_COMPILE("{}"), variant_key_type(variant_key));
-    ::lmdb::dbi& dbi = get_dbi(db_name);
+    ::lmdb::dbi& dbi = get_dbi(*instance, db_name);
     ARCTICDB_SUBSAMPLE(LmdbStorageOpenDb, 0)
     auto stored_key = to_serialized_key(variant_key);
     try {
-        auto txn = std::make_shared<::lmdb::txn>(::lmdb::txn::begin(env(), nullptr, MDB_RDONLY));
+        auto txn = std::make_shared<::lmdb::txn>(::lmdb::txn::begin(instance->env_, nullptr, MDB_RDONLY));
         ARCTICDB_SUBSAMPLE(LmdbStorageInTransaction, 0)
         auto segment = lmdb_client_->read(db_name, stored_key, *txn, dbi);
 
         if (segment.has_value()) {
             ARCTICDB_SUBSAMPLE(LmdbStorageVisitSegment, 0)
-            segment->set_keepalive(std::any{LmdbKeepalive{lmdb_instance_, std::move(txn)}});
+            segment->set_keepalive(std::any{LmdbKeepalive{instance, std::move(txn)}});
             ARCTICDB_DEBUG(
                     log::storage(),
                     "Read key {}: {}, with {} bytes of data",
@@ -168,18 +171,19 @@ KeySegmentPair LmdbStorage::do_read(VariantKey&& variant_key, ReadKeyOpts) {
 void LmdbStorage::do_read(VariantKey&& key, const ReadVisitor& visitor, storage::ReadKeyOpts) {
     ARCTICDB_SAMPLE(LmdbStorageRead, 0)
     std::optional<VariantKey> failed_read;
+    auto instance = this->instance();
     auto db_name = fmt::format(FMT_COMPILE("{}"), variant_key_type(key));
-    ::lmdb::dbi& dbi = get_dbi(db_name);
+    ::lmdb::dbi& dbi = get_dbi(*instance, db_name);
     ARCTICDB_SUBSAMPLE(LmdbStorageOpenDb, 0)
     auto stored_key = to_serialized_key(key);
     try {
-        auto txn = std::make_shared<::lmdb::txn>(::lmdb::txn::begin(env(), nullptr, MDB_RDONLY));
+        auto txn = std::make_shared<::lmdb::txn>(::lmdb::txn::begin(instance->env_, nullptr, MDB_RDONLY));
         ARCTICDB_SUBSAMPLE(LmdbStorageInTransaction, 0)
         auto segment = lmdb_client_->read(db_name, stored_key, *txn, dbi);
 
         if (segment.has_value()) {
             ARCTICDB_SUBSAMPLE(LmdbStorageVisitSegment, 0)
-            segment->set_keepalive(std::any{LmdbKeepalive{lmdb_instance_, std::move(txn)}});
+            segment->set_keepalive(std::any{LmdbKeepalive{instance, std::move(txn)}});
             ARCTICDB_DEBUG(
                     log::storage(),
                     "Read key {}: {}, with {} bytes of data",
@@ -205,14 +209,15 @@ void LmdbStorage::do_read(VariantKey&& key, const ReadVisitor& visitor, storage:
 
 bool LmdbStorage::do_key_exists(const VariantKey& key) {
     ARCTICDB_SAMPLE(LmdbStorageKeyExists, 0)
-    auto txn = ::lmdb::txn::begin(env(), nullptr, MDB_RDONLY);
+    auto instance = this->instance();
+    auto txn = ::lmdb::txn::begin(instance->env_, nullptr, MDB_RDONLY);
     ARCTICDB_SUBSAMPLE(LmdbStorageInTransaction, 0)
     ARCTICDB_DEBUG_THROW(5)
     auto db_name = fmt::format("{}", variant_key_type(key));
     ARCTICDB_SUBSAMPLE(LmdbStorageOpenDb, 0)
     auto stored_key = to_serialized_key(key);
     try {
-        ::lmdb::dbi& dbi = get_dbi(db_name);
+        ::lmdb::dbi& dbi = get_dbi(*instance, db_name);
         return lmdb_client_->exists(db_name, stored_key, txn, dbi);
     } catch ([[maybe_unused]] const ::lmdb::not_found_error& ex) {
         ARCTICDB_DEBUG(log::storage(), "Caught lmdb not found error: {}", ex.what());
@@ -223,7 +228,7 @@ bool LmdbStorage::do_key_exists(const VariantKey& key) {
 }
 
 boost::container::small_vector<VariantKey, 1> LmdbStorage::do_remove_internal(
-        std::span<VariantKey> variant_keys, ::lmdb::txn& txn, RemoveOpts opts
+        std::span<VariantKey> variant_keys, ::lmdb::txn& txn, const LmdbInstance& instance, RemoveOpts opts
 ) {
     boost::container::small_vector<VariantKey, 1> failed_deletes;
 
@@ -232,7 +237,7 @@ boost::container::small_vector<VariantKey, 1> LmdbStorage::do_remove_internal(
         auto db_name = fmt::format("{}", variant_key_type(key));
         ARCTICDB_SUBSAMPLE(LmdbStorageOpenDb, 0)
         try {
-            ::lmdb::dbi& dbi = get_dbi(db_name);
+            ::lmdb::dbi& dbi = get_dbi(instance, db_name);
             auto stored_key = to_serialized_key(key);
 
             try {
@@ -262,10 +267,11 @@ boost::container::small_vector<VariantKey, 1> LmdbStorage::do_remove_internal(
 void LmdbStorage::do_remove(VariantKey&& variant_key, RemoveOpts opts) {
     ARCTICDB_SAMPLE(LmdbStorageRemove, 0)
     std::lock_guard<std::mutex> lock{*write_mutex_};
-    auto txn = ::lmdb::txn::begin(env());
+    auto instance = this->instance();
+    auto txn = ::lmdb::txn::begin(instance->env_);
     ARCTICDB_SUBSAMPLE(LmdbStorageInTransaction, 0)
     std::array<VariantKey, 1> arr{std::move(variant_key)};
-    auto failed_deletes = do_remove_internal(std::span{arr}, txn, opts);
+    auto failed_deletes = do_remove_internal(std::span{arr}, txn, *instance, opts);
     ARCTICDB_SUBSAMPLE(LmdbStorageCommit, 0)
     txn.commit();
 
@@ -276,9 +282,10 @@ void LmdbStorage::do_remove(VariantKey&& variant_key, RemoveOpts opts) {
 void LmdbStorage::do_remove(std::span<VariantKey> variant_keys, RemoveOpts opts) {
     ARCTICDB_SAMPLE(LmdbStorageRemoveMultiple, 0)
     std::lock_guard<std::mutex> lock{*write_mutex_};
-    auto txn = ::lmdb::txn::begin(env());
+    auto instance = this->instance();
+    auto txn = ::lmdb::txn::begin(instance->env_);
     ARCTICDB_SUBSAMPLE(LmdbStorageInTransaction, 0)
-    auto failed_deletes = do_remove_internal(variant_keys, txn, opts);
+    auto failed_deletes = do_remove_internal(variant_keys, txn, *instance, opts);
     ARCTICDB_SUBSAMPLE(LmdbStorageCommit, 0)
     txn.commit();
 
@@ -290,7 +297,8 @@ bool LmdbStorage::do_fast_delete() {
     std::lock_guard<std::mutex> lock{*write_mutex_};
     // bool is probably not the best return type here but it does help prevent the insane boilerplate for
     // an additional function that checks whether this is supported (like the prefix matching)
-    auto dtxn = ::lmdb::txn::begin(env());
+    auto instance = this->instance();
+    auto dtxn = ::lmdb::txn::begin(instance->env_);
     foreach_key_type([&](KeyType key_type) {
         if (key_type == KeyType::TOMBSTONE) {
             // TOMBSTONE and LOCK both format to code 'x' - do not try to drop both
@@ -299,7 +307,7 @@ bool LmdbStorage::do_fast_delete() {
         auto db_name = fmt::format("{}", key_type);
         ARCTICDB_SUBSAMPLE(LmdbStorageOpenDb, 0)
         ARCTICDB_TRACE(log::storage(), "LMDB storage dropping keytype {}", db_name);
-        ::lmdb::dbi& dbi = get_dbi(db_name);
+        ::lmdb::dbi& dbi = get_dbi(*instance, db_name);
         try {
             ::lmdb::dbi_drop(dtxn, dbi);
         } catch (const ::lmdb::error& ex) {
@@ -315,9 +323,10 @@ bool LmdbStorage::do_iterate_type_until_match(
         KeyType key_type, const IterateTypePredicate& visitor, const std::string& prefix
 ) {
     ARCTICDB_SAMPLE(LmdbStorageItType, 0)
-    auto txn = ::lmdb::txn::begin(env(), nullptr, MDB_RDONLY); // scoped abort on
+    auto instance = this->instance();
+    auto txn = ::lmdb::txn::begin(instance->env_, nullptr, MDB_RDONLY); // scoped abort on
     std::string type_db = fmt::format("{}", key_type);
-    ::lmdb::dbi& dbi = get_dbi(type_db);
+    ::lmdb::dbi& dbi = get_dbi(*instance, type_db);
 
     try {
         auto keys = lmdb_client_->list(type_db, prefix, txn, dbi, key_type);
@@ -394,7 +403,19 @@ void remove_db_files(const fs::path& lib_path) {
 }
 
 void LmdbStorage::cleanup() {
-    lmdb_instance_.reset();
+    // Dropping the storage's reference does not necessarily close the environment: any call already in flight on
+    // another thread holds its own reference (see LmdbStorage::instance) and the environment stays open until the last
+    // one goes away. On POSIX, unlinking the files underneath a live mapping is safe, whereas unmapping them
+    // underneath one is not - so remove_db_files() below can run while a writer still holds the environment.
+    // Windows refuses to delete a mapped file, so there remove_db_files() raises instead of racing: a cleanup()
+    // concurrent with an in-flight write reports an error rather than corrupting memory.
+    std::shared_ptr<LmdbInstance> instance;
+    {
+        std::unique_lock<std::shared_mutex> lock{*instance_mutex_};
+        instance = std::move(lmdb_instance_);
+    }
+    // Released outside the lock: this is where the environment is actually closed, if nobody else is still using it.
+    instance.reset();
     remove_db_files(lib_dir_);
 }
 
@@ -417,7 +438,10 @@ LmdbStorage::LmdbStorage(const LibraryPath& library_path, OpenMode mode, const C
     lib_dir_ = root_path / lib_path_str;
 
     write_mutex_ = std::make_unique<std::mutex>();
-    lmdb_instance_ = std::make_shared<LmdbInstance>(LmdbInstance{::lmdb::env::create(conf.flags()), {}});
+    instance_mutex_ = std::make_unique<std::shared_mutex>();
+    // Built locally and only published to lmdb_instance_ once it is fully open, so no other thread can ever observe a
+    // half-constructed environment.
+    auto instance = std::make_shared<LmdbInstance>(LmdbInstance{::lmdb::env::create(conf.flags()), {}});
 
     warn_if_lmdb_already_open();
 
@@ -453,24 +477,29 @@ LmdbStorage::LmdbStorage(const LibraryPath& library_path, OpenMode mode, const C
     constexpr uint64_t default_map_size = 400ULL * (1ULL << 30); /* 400 GiB */
 #endif
     auto mapsize = or_else(static_cast<uint64_t>(conf.map_size()), default_map_size);
-    env().set_mapsize(mapsize);
-    env().set_max_dbs(or_else(static_cast<unsigned int>(conf.max_dbs()), 1024U));
-    env().set_max_readers(or_else(conf.max_readers(), 1024U));
-    env().open(lib_dir_.generic_string().c_str(), MDB_NOTLS);
+    instance->env_.set_mapsize(mapsize);
+    instance->env_.set_max_dbs(or_else(static_cast<unsigned int>(conf.max_dbs()), 1024U));
+    instance->env_.set_max_readers(or_else(conf.max_readers(), 1024U));
+    instance->env_.open(lib_dir_.generic_string().c_str(), MDB_NOTLS);
 
-    auto txn = ::lmdb::txn::begin(env());
+    auto txn = ::lmdb::txn::begin(instance->env_);
 
     try {
-        arcticdb::entity::foreach_key_type([&txn, this](KeyType&& key_type) {
+        arcticdb::entity::foreach_key_type([&txn, &instance](KeyType&& key_type) {
             std::string db_name = fmt::format("{}", key_type);
             ::lmdb::dbi dbi = ::lmdb::dbi::open(txn, db_name.data(), MDB_CREATE);
-            lmdb_instance_->dbi_by_key_type_.emplace(std::move(db_name), std::make_unique<::lmdb::dbi>(std::move(dbi)));
+            instance->dbi_by_key_type_.emplace(std::move(db_name), std::make_unique<::lmdb::dbi>(std::move(dbi)));
         });
     } catch (const ::lmdb::error& ex) {
         raise_lmdb_exception(ex, "dbi creation");
     }
 
     txn.commit();
+
+    {
+        std::unique_lock<std::shared_mutex> lock{*instance_mutex_};
+        lmdb_instance_ = std::move(instance);
+    }
 
     ARCTICDB_DEBUG(
             log::storage(), "Opened lmdb storage at {} with map size {}", lib_dir_.string(), format_bytes(mapsize)
@@ -480,7 +509,13 @@ LmdbStorage::LmdbStorage(const LibraryPath& library_path, OpenMode mode, const C
 void LmdbStorage::warn_if_lmdb_already_open() const {
     const std::string warn_setting =
             util::to_lower(ConfigsMap::instance()->get_string("LMDBStorage.WarnIfOpened", "config"));
-    const uint64_t& count_for_pid = ++times_path_opened[lib_dir_.string()];
+    // Taken by value under the lock rather than as a reference into the map: another thread constructing a storage
+    // over a different path can rehash it, which would invalidate the reference.
+    uint64_t count_for_pid;
+    {
+        std::lock_guard<std::mutex> lock{times_path_opened_mutex};
+        count_for_pid = ++times_path_opened[lib_dir_.string()];
+    }
     if (warn_setting == "none") {
         return;
     }
@@ -522,6 +557,7 @@ void LmdbStorage::print_warning_if_lmdb_already_open() const {
 LmdbStorage::LmdbStorage(LmdbStorage&& other) noexcept :
     Storage(std::move(static_cast<Storage&>(other))),
     write_mutex_(std::move(other.write_mutex_)),
+    instance_mutex_(std::move(other.instance_mutex_)),
     lmdb_instance_(std::move(other.lmdb_instance_)),
     lib_dir_(std::move(other.lib_dir_)) {
     other.lib_dir_ = "";
@@ -530,10 +566,14 @@ LmdbStorage::LmdbStorage(LmdbStorage&& other) noexcept :
 
 LmdbStorage::~LmdbStorage() {
     if (!lib_dir_.empty()) {
+        std::lock_guard<std::mutex> lock{times_path_opened_mutex};
         --times_path_opened[lib_dir_.string()];
     }
 }
 
-void LmdbStorage::reset_warning_counter() { times_path_opened = std::unordered_map<std::string, uint64_t>{}; }
+void LmdbStorage::reset_warning_counter() {
+    std::lock_guard<std::mutex> lock{times_path_opened_mutex};
+    times_path_opened = std::unordered_map<std::string, uint64_t>{};
+}
 
 } // namespace arcticdb::storage::lmdb
