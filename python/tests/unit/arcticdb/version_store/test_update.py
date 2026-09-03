@@ -22,7 +22,7 @@ from arcticdb.util.test import (
     assert_series_equal,
 )
 from arcticdb.exceptions import InternalException, UnsortedDataException, NormalizationException, SchemaException
-from arcticdb_ext.version_store import StreamDescriptorMismatch
+from arcticdb_ext.exceptions import StreamDescriptorMismatch
 from tests.util.date import DateRange
 from pandas import MultiIndex
 import arcticdb
