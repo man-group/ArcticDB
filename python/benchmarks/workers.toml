@@ -10,6 +10,13 @@
 # r6i.xlarge $0.282/h (4 vCPU, 32 GB), r6i.2xlarge $0.564/h (8 vCPU, 64 GB).
 # A smaller instance changes absolute timings; the machine name is the worker name, so
 # `asv compare` keeps comparing a worker with itself from the first master run onward.
+#
+# `real = false` marks a worker a `storage=REAL` run skips (gha 31, from gha 28's
+# measurement of run 33636917369): six of the twelve have zero AMAZON-parameterized
+# benchmarks, wrote zero objects into that run's throwaway bucket, and came in within
+# ±3 % of their LMDB walls — 21 % of the run's EC2 spent re-measuring LMDB. Omitted
+# means `real = true`: a new worker runs on REAL until it is shown to be storage-blind.
+# `ALL` and `LMDB` runs keep all twelve either way.
 
 [[worker]]
 # 10M-row frames; RAM need unmeasured on the new pipeline, so the full box for now.
@@ -32,12 +39,16 @@ name = "arrow_strings_read"
 suite = "^arrow\\.ArrowStrings\\.(time|peakmem)_read"
 # run 4 telemetry: peak 4.8 GiB; 18 min on 8 vCPU — watch the time on 4
 instance_type = "m6i.xlarge"
+# `arrow` hard-wires an lmdb:// connection string; no AMAZON combos, no bucket objects.
+real = false
 
 [[worker]]
 name = "arrow_strings_write"
 suite = "^arrow\\.ArrowStrings\\.(time|peakmem)_write"
 # run 4 telemetry: peak 4.5 GiB; 16 min on 8 vCPU — watch the time on 4
 instance_type = "m6i.xlarge"
+# Same class as arrow_strings_read: lmdb:// only.
+real = false
 
 [[worker]]
 # ArrowSparseNumeric 9.4 min + ArrowBools 7.9 + ArrowNumeric 1.2.
@@ -46,6 +57,8 @@ suite = "^arrow\\.(ArrowSparseNumeric|ArrowBools|ArrowNumeric)\\."
 # run 4 telemetry: peak 8.4 GiB; 21 min — keep 8 vCPU for now
 # run 6 experiment: run 5: 4 vCPU nearly free elsewhere; 7.9 GiB peak
 instance_type = "m6i.xlarge"
+# Same `arrow` module: lmdb:// only, and run 33636917369 matched its LMDB wall to 1 %.
+real = false
 
 [[worker]]
 # Under 3 minutes of benchmarks, but its setup_cache builds 10M-row frames (>9 GiB locally).
@@ -69,6 +82,8 @@ name = "resample"
 suite = "^(?:resample|recursive_normalizer)\\."
 # run 4 telemetry: peak 4.5 GiB; 16 min on 8 vCPU — watch the time on 4
 instance_type = "m6i.xlarge"
+# `resample` hard-wires lmdb://; no AMAZON combos, no bucket objects, wall within ±3 %.
+real = false
 
 [[worker]]
 # 23 min of many small benchmarks.
@@ -94,9 +109,13 @@ suite = "^merge_functions\\."
 # run 8 triage (2026-09-02): the 4 vCPU downsize cost merge 1.67x and made it
 # the noisiest lane; memory was never the constraint here, vCPUs are — back to 8.
 instance_type = "m6i.2xlarge"
+# `merge_functions` talks to its own SeaweedFS, never the run's bucket: nothing REAL here.
+real = false
 
 [[worker]]
 # 2 min of track_* counters.
 name = "version_chain"
 suite = "^version_chain\\."
 instance_type = "m6i.xlarge"
+# track_* counters over an in-memory version chain; no storage parameterisation at all.
+real = false

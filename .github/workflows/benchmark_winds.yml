@@ -22,12 +22,17 @@ on:
         type: boolean
         default: false
       storage:
-        description: Storage to run benchmarks against
+        # NIGHTLY is not a storage: it asks for whatever the cron would have picked
+        # tonight (REAL, or ALL when this commit has no push run), and exists so the
+        # nightly's choice can be exercised on demand — a schedule only ever fires on
+        # the default branch, so until the cut-over nothing else runs that branch.
+        description: Storage to run benchmarks against (NIGHTLY = what the cron would pick)
         type: choice
         options:
           - 'LMDB'
           - 'REAL'
           - 'ALL'
+          - 'NIGHTLY'
         default: 'LMDB'
       suite_overwrite:
         description: Regular expression to run instead of the workers.toml split
@@ -44,8 +49,10 @@ on:
       # verified 2026-09-02.) Remove at cut-over.
       - benchmark-winds-shadow
 
-  # Nightly, all storages. Same cron as `analysis_workflow.yml`; while both pipelines run,
-  # this doubles the nightly EC2 spend — offset or drop it if that matters.
+  # Nightly REAL storage — the half the push trigger never measures — falling back to
+  # ALL when the head commit has no push run of its own (see `resolve the storage`).
+  # Same cron as `analysis_workflow.yml`; while both pipelines run, this adds to the
+  # nightly EC2 spend — offset or drop it if that matters.
   schedule:
     - cron: '0 0 * * *'
 
@@ -64,6 +71,12 @@ jobs:
     name: plan
     runs-on: ubuntu-22.04
     timeout-minutes: 20
+    # `actions: read` is what `resolve the storage` needs to ask the Actions API whether
+    # this commit already has a push run. Naming one permission drops every default, so
+    # `contents: read` — the checkout — has to be named alongside it.
+    permissions:
+      contents: read
+      actions: read
     outputs:
       matrix: ${{ steps.plan.outputs.matrix }}
       commit: ${{ steps.commit.outputs.commit }}
@@ -99,18 +112,68 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install ./arctic-winds
 
-      # LMDB on push and PRs, every storage on the nightly, whatever the dispatch asked for
+      - name: resolve the commit
+        id: commit
+        run: |
+          # On a pull_request this is the merge commit actions/checkout produced, which is
+          # what today's pipeline benchmarks too (`asv run … HEAD^!`). Resolved before the
+          # storage, which asks the Actions API about this exact SHA.
+          printf 'commit=%s\n' "$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      # LMDB on push and PRs, REAL on the nightly, whatever the dispatch asked for
       # otherwise. `analysis_workflow.yml:79` keys ALL off `github.ref_name == 'master'`;
-      # the shadow keys it off the schedule so master pushes stay cheap.
+      # the shadow keys the nightly off the schedule so master pushes stay cheap.
+      #
+      # Why the nightly is REAL and not ALL (gha 28, gha 31): the push trigger already
+      # measured LMDB for every master commit, so an ALL nightly re-measures a point that
+      # exists. The exception is a commit no push run ever benchmarked — a quiet day, a
+      # push whose run was cancelled, the shadow branch before its trigger existed — and
+      # for that commit the nightly is the only chance at an LMDB point, so it runs ALL.
+      #
+      # "Has an LMDB point" is asked of the Actions API, not of the results store, on
+      # purpose. The store is the ground truth, but reading it here would mean giving this
+      # job the AWS credentials it deliberately does without until the very last step,
+      # duplicating `collect`'s shadow library-name derivation, and failing the nightly
+      # outright on a transient S3 error. The API answers the question the fallback is
+      # actually about — *did a push run happen for this commit* — from a token the job
+      # already has, and can fail open to ALL.
       - name: resolve the storage
         id: storage
         env:
           REQUESTED: ${{ inputs.storage }}
           # Only a push event carries a head commit; empty otherwise.
           HEAD_MESSAGE: ${{ github.event.head_commit.message }}
+          COMMIT: ${{ steps.commit.outputs.commit }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # This file's own name: `/actions/workflows/<file>/runs` scopes the query to
+          # this workflow, so `analysis_workflow.yml`'s runs never answer for it.
+          WORKFLOW_FILE: benchmark_winds.yml
         run: |
-          if [ "$GITHUB_EVENT_NAME" = schedule ]; then
-            storage=ALL
+          # REAL unless this commit has no push run of its own, in which case ALL.
+          # `success` and `failure` both count: those are the two terminal conclusions
+          # where `collect` ran (`if: always() && needs.plan.result == 'success'`) and
+          # stored whatever the workers reported. A run that failed so early it stored
+          # nothing would fail identically tonight, so ALL would not have rescued it.
+          # Anything else — cancelled, timed out, still running, no run at all — means
+          # no dependable LMDB point, and ALL is the safe direction.
+          nightly_storage() {
+            if ! completed=$(gh api \
+                  "repos/${GITHUB_REPOSITORY}/actions/workflows/${WORKFLOW_FILE}/runs?event=push&status=completed&head_sha=${COMMIT}&per_page=100" \
+                  --jq '[.workflow_runs[] | select(.conclusion == "success" or .conclusion == "failure")] | length' \
+                  2>/dev/null); then
+              echo "::warning::Could not ask the Actions API whether ${COMMIT:0:8} has a push run; running ALL." >&2
+              echo ALL
+            elif [ "${completed:-0}" -gt 0 ] 2>/dev/null; then
+              echo "${COMMIT:0:8} already has ${completed} completed push run(s): the LMDB half is stored." >&2
+              echo REAL
+            else
+              echo "${COMMIT:0:8} has no completed push run, so nothing measured its LMDB half yet." >&2
+              echo ALL
+            fi
+          }
+
+          if [ "$GITHUB_EVENT_NAME" = schedule ] || [ "$REQUESTED" = NIGHTLY ]; then
+            storage=$(nightly_storage)
           elif [ -n "$REQUESTED" ]; then
             storage="$REQUESTED"
           else
@@ -126,13 +189,6 @@ jobs:
           echo "storage: $storage"
           printf 'storage=%s\n' "$storage" >> "$GITHUB_OUTPUT"
 
-      - name: resolve the commit
-        id: commit
-        run: |
-          # On a pull_request this is the merge commit actions/checkout produced, which is
-          # what today's pipeline benchmarks too (`asv run … HEAD^!`).
-          printf 'commit=%s\n' "$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-
       # `arctic-winds plan` appends `matrix=<compact json>` to $GITHUB_OUTPUT itself.
       - name: plan the matrix
         id: plan
@@ -140,8 +196,14 @@ jobs:
           ALL_TAGS: ${{ inputs.run_all_benchmarks }}
           SUITE_OVERWRITE: ${{ inputs.suite_overwrite }}
           COMMIT: ${{ steps.commit.outputs.commit }}
+          STORAGE: ${{ steps.storage.outputs.storage }}
         run: |
-          args=(--config python/benchmarks/workers.toml --repo .)
+          # `--storage REAL` drops the workers marked `real = false` in workers.toml —
+          # the six with no AMAZON-parameterized benchmarks, which on real storage would
+          # rent an instance each to re-measure their LMDB numbers (gha 28/31). LMDB and
+          # ALL keep all twelve. An unrecognised storage is a plan error, not a full
+          # matrix, so a typo in the step above cannot quietly cost twelve instances.
+          args=(--config python/benchmarks/workers.toml --repo . --storage "$STORAGE")
           if [ "$ALL_TAGS" = "true" ]; then
             args+=(--all-tags)
           else
@@ -194,6 +256,10 @@ jobs:
             echo
             echo "- head commit: \`$COMMIT\`"
             echo "- storage: \`$STORAGE\`"
+            if [ "$STORAGE" = REAL ]; then
+              # The one line that explains a six-row table where a reader expects twelve.
+              echo "- the workers marked \`real = false\` in \`workers.toml\` are skipped: they have no AMAZON-parameterized benchmarks"
+            fi
             echo
             # One row per matrix entry, commit included: `run_all_benchmarks` plans every
             # release tag, and which commit a worker is on is then the first question.
@@ -215,7 +281,10 @@ jobs:
       # before a step that then fails is a bucket nothing ever removes. With nothing after
       # it, the only way to strand one is for `aws s3 mb` to succeed and the very next
       # `printf` to fail. It also means a run rejected by the 256-job check never creates
-      # a bucket in the first place.
+      # a bucket in the first place. For the same reason the CloudWatch metrics
+      # configuration is asked for *after* the bucket name is on `$GITHUB_OUTPUT`, and
+      # cannot fail the step: a missing `s3:PutMetricsConfiguration` grant must cost the
+      # run its request counts, never its cleanup.
       # ---------------------------------------------------------------------------
       - name: create the throwaway test bucket
         id: bucket
@@ -237,6 +306,27 @@ jobs:
           # without `collect` and the bucket has to be swept by hand.
           echo "- throwaway bucket: \`$bucket_name\` (deleted by \`collect\`)" \
             >> "$GITHUB_STEP_SUMMARY"
+
+          # S3 request metrics, so CloudWatch counts this run's AllRequests /
+          # PutRequests / GetRequests / ListRequests (gha 28's open question: request
+          # charges are ~60 % of a REAL run's bill and carry its only wide error bar,
+          # $0.85–2.75 on an estimate). No `Filter` means the whole bucket — a filter
+          # would scope the metrics to a prefix, and the point is the run's total.
+          # The configuration is a sub-resource of the bucket, so `aws s3 rb` in
+          # `collect` takes it with the bucket: nothing to clean up. Metrics already
+          # published stay in CloudWatch and are billed like a custom metric, ~$0.30
+          # per metric-month prorated — four metrics for the hours a run lasts.
+          if aws s3api put-bucket-metrics-configuration \
+              --endpoint-url "http://${ARCTICDB_REAL_S3_ENDPOINT}" \
+              --region "${ARCTICDB_REAL_S3_REGION}" \
+              --bucket "${bucket_name}" \
+              --id winds \
+              --metrics-configuration '{"Id":"winds"}'; then
+            echo "- S3 request metrics: CloudWatch \`AWS/S3\` request metrics, filter id \`winds\` (~15 min lag)" \
+              >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::warning::Could not enable S3 request metrics on ${bucket_name} (s3:PutMetricsConfiguration?); the run is unaffected but there will be no CloudWatch request counts."
+          fi
 
   # ~6 s job; resolves ghcr.io/man-group/arcticdb_manylinux:<ver>-<hash> the same way
   # `build.yml:122-128` does, so the benchmark wheel uses the identical manylinux image.
