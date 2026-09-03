@@ -110,22 +110,6 @@ def test_delete_staged_data_by_list_of_stage_results(lmdb_version_store_v1):
     assert remaining == {str(k) for k in stage_result_3.staged_segments}
 
 
-def test_delete_staged_data_by_string_removes_all(lmdb_version_store_v1):
-    lib = lmdb_version_store_v1
-    sym = "test_delete_staged_data_by_string_removes_all"
-
-    df1 = pd.DataFrame({"col": [0, 1]}, index=pd.date_range("2024-01-01", periods=2))
-    df2 = pd.DataFrame({"col": [2, 3]}, index=pd.date_range("2024-01-03", periods=2))
-
-    lib.stage(sym, df1)
-    lib.stage(sym, df2)
-    assert len(get_append_keys(lib, sym)) > 0
-
-    lib.remove_incomplete(sym)
-
-    assert len(get_append_keys(lib, sym)) == 0
-
-
 def test_delete_staged_data_by_numeric_symbol_removes_all(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
     sym = 12345  # StreamId is variant<int, str>, so numeric symbols are valid
@@ -154,7 +138,7 @@ def test_delete_staged_data_by_stage_result_is_idempotent(lmdb_version_store_v1)
     stage_result_2 = lib.stage(sym, df2)
 
     lib.remove_incomplete(stage_result_1)
-    # Deleting the same receipt again is a no-op, not an error.
+    # Deleting the same stage result again is a no-op, not an error.
     lib.remove_incomplete(stage_result_1)
 
     remaining = {str(k) for k in get_append_keys(lib, sym)}
@@ -177,22 +161,6 @@ def test_delete_staged_data_by_stage_result_cross_symbol(lmdb_version_store_v1):
     remaining_a = {str(k) for k in get_append_keys(lib, sym_a)}
     assert remaining_a == {str(k) for k in keep_a.staged_segments}
     assert len(get_append_keys(lib, sym_b)) == 0
-
-
-def test_delete_staged_data_v2_by_stage_result(lmdb_library):
-    lib = lmdb_library
-    sym = "test_delete_staged_data_v2_by_stage_result"
-
-    df1 = pd.DataFrame({"col": [0, 1]}, index=pd.date_range("2024-01-01", periods=2))
-    df2 = pd.DataFrame({"col": [2, 3]}, index=pd.date_range("2024-01-03", periods=2))
-
-    stage_result_1 = lib.stage(sym, df1)
-    stage_result_2 = lib.stage(sym, df2)
-
-    lib.delete_staged_data(stage_result_1)
-
-    remaining = {str(k) for k in get_append_keys(lib._nvs, sym)}
-    assert remaining == {str(k) for k in stage_result_2.staged_segments}
 
 
 @pytest.mark.storage

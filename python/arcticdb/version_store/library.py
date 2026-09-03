@@ -1757,14 +1757,14 @@ class Library:
         write
             Documentation on the ``staged`` parameter explains the concept of staged data in more detail.
         stage
-            Returns the ``StageResult`` receipts accepted by this method.
+            Returns the ``StageResult`` objects accepted by this method.
 
         Examples
         --------
-        >>> receipt_1 = lib.stage("symbol", df1)
-        >>> receipt_2 = lib.stage("symbol", df2)
-        >>> lib.delete_staged_data(receipt_1)  # delete only the first batch's staged keys
-        >>> lib.delete_staged_data("symbol")   # delete all remaining staged data for the symbol
+        >>> stage_result_1 = lib.stage("symbol", df1)
+        >>> stage_result_2 = lib.stage("symbol", df2)
+        >>> lib.delete_staged_data(stage_result_1)  # delete only the first batch's staged keys
+        >>> lib.delete_staged_data("symbol")        # delete all remaining staged data for the symbol
         """
         self._nvs.remove_incomplete(symbol)
 

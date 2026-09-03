@@ -2325,7 +2325,6 @@ DeleteIncompleteKeysOnExit::~DeleteIncompleteKeysOnExit() {
         return;
 
     try {
-        storage::RemoveOpts opts{.ignores_missing_key_ = true};
         if (context_->incompletes_after_) {
             delete_incomplete_keys(*context_, *store_);
         } else {
@@ -2334,6 +2333,7 @@ DeleteIncompleteKeysOnExit::~DeleteIncompleteKeysOnExit() {
             if (stage_results_) {
                 delete_incomplete_keys_for_stage_results(store_, *stage_results_);
             } else {
+                storage::RemoveOpts opts{.ignores_missing_key_ = true};
                 auto keys_to_delete = read_incomplete_keys_for_symbol(store_, context_->stream_id_, via_iteration_);
                 store_->remove_keys(keys_to_delete, opts).get();
             }
