@@ -1059,7 +1059,7 @@ def test_filter_on_index_column(
         q = QueryBuilder()
         q = q[build_query(q[queried_name])]
         received = lib.read(symbol, query_builder=q).data
-        assert_frame_equal(df[expected_mask], received), description
+        assert_frame_equal(df[expected_mask], received, obj=description)
 
 
 @pytest.mark.parametrize("sortedness", SORTEDNESS)
