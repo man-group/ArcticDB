@@ -394,19 +394,19 @@ def test_staged_data(arctic_library, finalize_method):
     expected = pd.concat([df_0, df_1, df_2])
 
     if finalize_method == StagedDataFinalizeMethod.APPEND:
-        lib.write(sym_with_metadata, df_0, staged=False)
-        lib.write(sym_without_metadata, df_0, staged=False)
+        lib.write(sym_with_metadata, df_0)
+        lib.write(sym_without_metadata, df_0)
     else:
-        lib.write(sym_with_metadata, df_0, staged=True)
-        lib.write(sym_without_metadata, df_0, staged=True)
-        lib.write(sym_unfinalized, df_0, staged=True)
+        lib.stage(sym_with_metadata, df_0)
+        lib.stage(sym_without_metadata, df_0)
+        lib.stage(sym_unfinalized, df_0)
 
-    lib.write(sym_with_metadata, df_1, staged=True)
-    lib.write(sym_with_metadata, df_2, staged=True)
-    lib.write(sym_without_metadata, df_1, staged=True)
-    lib.write(sym_without_metadata, df_2, staged=True)
-    lib.write(sym_unfinalized, df_1, staged=True)
-    lib.write(sym_unfinalized, df_2, staged=True)
+    lib.stage(sym_with_metadata, df_1)
+    lib.stage(sym_with_metadata, df_2)
+    lib.stage(sym_without_metadata, df_1)
+    lib.stage(sym_without_metadata, df_2)
+    lib.stage(sym_unfinalized, df_1)
+    lib.stage(sym_unfinalized, df_2)
 
     metadata = {"hello": "world"}
     finalize_result_meta = lib.finalize_staged_data(sym_with_metadata, finalize_method, metadata=metadata)
@@ -439,8 +439,8 @@ def test_parallel_writes_and_appends_index_validation(arctic_library, finalize_m
         lib.write(sym, df_0)
     df_1 = pd.DataFrame({"col": [3, 4]}, index=[pd.Timestamp("2024-01-03"), pd.Timestamp("2024-01-04")])
     df_2 = pd.DataFrame({"col": [5, 6]}, index=[pd.Timestamp("2024-01-03T12"), pd.Timestamp("2024-01-05")])
-    lib.write(sym, df_2, staged=True)
-    lib.write(sym, df_1, staged=True)
+    lib.stage(sym, df_2)
+    lib.stage(sym, df_1)
     if validate_index is None:
         # Test default behaviour when arg isn't provided
         with pytest.raises(UnsortedDataException):
@@ -477,7 +477,7 @@ class TestAppendStagedData:
         )
         lib.write("sym", initial_df)
         df1 = pd.DataFrame({"col": [2]}, index=pd.DatetimeIndex([np.datetime64("2023-01-02")], dtype="datetime64[ns]"))
-        lib.write("sym", df1, staged=True)
+        lib.stage("sym", df1)
         with pytest.raises(UnsortedDataException) as exception_info:
             lib.finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
         assert "append" in str(exception_info.value)
@@ -501,7 +501,7 @@ class TestAppendStagedData:
                 dtype="datetime64[ns]",
             ),
         )
-        lib.write("sym", df_to_append, staged=True)
+        lib.stage("sym", df_to_append)
         lib.finalize_staged_data("sym", mode=mode)
         res = lib.read("sym").data
         expected_df = pd.concat([df, df_to_append])

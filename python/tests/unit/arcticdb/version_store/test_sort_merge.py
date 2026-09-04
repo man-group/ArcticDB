@@ -46,8 +46,8 @@ def test_merge_single_column(lmdb_library_static_dynamic):
     df2 = pd.DataFrame(data2, index=dates2)
 
     sym1 = "symbol_1"
-    lib.write(sym1, df1, staged=True)
-    lib.write(sym1, df2, staged=True)
+    lib.stage(sym1, df1)
+    lib.stage(sym1, df2)
     metadata = {"meta": ["data"]}
     sort_and_finalize_res = lib.sort_and_finalize_staged_data(sym1, metadata=metadata)
 
@@ -84,8 +84,8 @@ def test_merge_two_column(lmdb_library_static_dynamic):
     df2 = pd.DataFrame(data2, index=dates2)
 
     sym1 = "symbol_1"
-    lib.write(sym1, df1, staged=True)
-    lib.write(sym1, df2, staged=True)
+    lib.stage(sym1, df1)
+    lib.stage(sym1, df2)
     lib.sort_and_finalize_staged_data(sym1)
 
     expected_dates = [
@@ -115,8 +115,8 @@ def test_merge_dynamic(lmdb_library_dynamic_schema):
     df2 = pd.DataFrame(data2, index=dates2)
 
     sym1 = "symbol_1"
-    lib.write(sym1, df1, staged=True)
-    lib.write(sym1, df2, staged=True)
+    lib.stage(sym1, df1)
+    lib.stage(sym1, df2)
     lib.sort_and_finalize_staged_data(sym1)
 
     expected_dates = [
@@ -146,8 +146,8 @@ def test_merge_strings(lmdb_library_static_dynamic):
     df2 = pd.DataFrame(data2, index=dates2)
 
     sym1 = "symbol_1"
-    lib.write(sym1, df1, staged=True)
-    lib.write(sym1, df2, staged=True)
+    lib.stage(sym1, df1)
+    lib.stage(sym1, df2)
     lib.sort_and_finalize_staged_data(sym1)
 
     expected_dates = [
@@ -177,8 +177,8 @@ def test_merge_strings_dynamic(lmdb_library_dynamic_schema):
     df2 = pd.DataFrame(data2, index=dates2)
 
     sym1 = "symbol_1"
-    lib.write(sym1, df1, staged=True)
-    lib.write(sym1, df2, staged=True)
+    lib.stage(sym1, df1)
+    lib.stage(sym1, df2)
     lib.sort_and_finalize_staged_data(sym1)
 
     expected_dates = [
@@ -199,7 +199,7 @@ def test_unordered_segment(lmdb_library_static_dynamic):
     lib = lmdb_library_static_dynamic
     dates = [np.datetime64("2023-01-03"), np.datetime64("2023-01-01"), np.datetime64("2023-01-05")]
     df = pd.DataFrame({"col": [2, 1, 3]}, index=dates)
-    lib.write("sym", df, staged=True, validate_index=False)
+    lib.stage("sym", df, validate_index=False)
     lib.sort_and_finalize_staged_data("sym")
     assert_frame_equal(
         lib.read("sym").data,
@@ -215,8 +215,8 @@ def test_repeating_index_values(lmdb_library_static_dynamic):
     dates = [np.datetime64("2023-01-01"), np.datetime64("2023-01-03"), np.datetime64("2023-01-05")]
     df1 = pd.DataFrame({"col": [1, 2, 3]}, index=dates)
     df2 = pd.DataFrame({"col": [4, 5, 6]}, index=dates)
-    lib.write("sym", df1, staged=True)
-    lib.write("sym", df2, staged=True)
+    lib.stage("sym", df1)
+    lib.stage("sym", df2)
     lib.sort_and_finalize_staged_data("sym")
     data = lib.read("sym").data
     expected = pd.concat([df1, df2]).sort_index()
@@ -251,8 +251,8 @@ class TestMergeSortAppend:
             {"col": [5, 6]},
             index=pd.DatetimeIndex([np.datetime64("2023-01-06"), np.datetime64("2023-01-08")], dtype="datetime64[ns]"),
         )
-        lib.write("sym", df1, staged=True)
-        lib.write("sym", df2, staged=True)
+        lib.stage("sym", df1)
+        lib.stage("sym", df2)
         lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
         expected_index = pd.DatetimeIndex(
             [
@@ -279,7 +279,7 @@ class TestMergeSortAppend:
         )
         lib.write("sym", initial_df)
         df1 = pd.DataFrame({"col": [2]}, index=pd.DatetimeIndex([np.datetime64("2023-01-02")], dtype="datetime64[ns]"))
-        lib.write("sym", df1, staged=True)
+        lib.stage("sym", df1)
         with pytest.raises(UnsortedDataException) as exception_info:
             lib.sort_and_finalize_staged_data(
                 "sym", mode=StagedDataFinalizeMethod.APPEND, delete_staged_data_on_failure=delete_staged_data_on_failure
@@ -306,7 +306,7 @@ class TestMergeSortAppend:
                 dtype="datetime64[ns]",
             ),
         )
-        lib.write("sym", df_to_append, staged=True)
+        lib.stage("sym", df_to_append)
         lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
         res = lib.read("sym").data
         expected_df = pd.concat([df, df_to_append])
@@ -319,7 +319,7 @@ def test_prune_previous(lmdb_library_static_dynamic):
     df = pd.DataFrame({"col": [1, 3]}, index=idx)
     lib.write("sym", df)
     lib.write("sym", df)
-    lib.write("sym", df, staged=True)
+    lib.stage("sym", df)
     lib.sort_and_finalize_staged_data("sym", prune_previous_versions=True)
     assert_frame_equal(df, lib.read("sym").data)
     assert len(lib.list_versions("sym")) == 1
@@ -329,8 +329,8 @@ def test_prune_previous(lmdb_library_static_dynamic):
 class TestEmptySegments:
     def test_staged_segment_is_only_empty_dfs(self, lmdb_library_static_dynamic, mode):
         lib = lmdb_library_static_dynamic
-        lib.write("sym", pd.DataFrame([]), staged=True)
-        lib.write("sym", pd.DataFrame([]), staged=True)
+        lib.stage("sym", pd.DataFrame([]))
+        lib.stage("sym", pd.DataFrame([]))
         lib.sort_and_finalize_staged_data("sym", mode=mode)
         assert_frame_equal(lib.read("sym").data, pd.DataFrame([], index=pd.DatetimeIndex([])))
 
@@ -340,16 +340,16 @@ class TestEmptySegments:
         df1 = pd.DataFrame({"col": [1, 2, 3]}, index=index)
         df2 = pd.DataFrame({})
         df3 = pd.DataFrame({"col": [5]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 2)]))
-        lib.write("sym", df1, staged=True)
-        lib.write("sym", df2, staged=True)
-        lib.write("sym", df3, staged=True)
+        lib.stage("sym", df1)
+        lib.stage("sym", df2)
+        lib.stage("sym", df3)
         lib.sort_and_finalize_staged_data("sym", mode=mode)
         assert_frame_equal(lib.read("sym").data, pd.concat([df1, df2, df3]).sort_index())
 
     def test_df_without_rows(self, lmdb_library_static_dynamic, mode):
         lib = lmdb_library_static_dynamic
         df = pd.DataFrame({"col": []}, index=pd.DatetimeIndex([]))
-        lib.write("sym", df, staged=True)
+        lib.stage("sym", df)
         lib.sort_and_finalize_staged_data("sym", mode=mode)
         assert_frame_equal(lib.read("sym").data, df)
 
@@ -368,8 +368,8 @@ class TestEmptySegments:
             {"b": np.array([], dtype="float"), "c": np.array([], dtype="int64"), "d": np.array([], dtype="object")},
             index=pd.DatetimeIndex([]),
         )
-        lib.write("sym", df, staged=True)
-        lib.write("sym", df2, staged=True)
+        lib.stage("sym", df)
+        lib.stage("sym", df2)
         lib.sort_and_finalize_staged_data("sym", mode=mode)
         if IS_PANDAS_TWO:
             expected = pd.DataFrame(
@@ -400,7 +400,7 @@ class TestEmptySegments:
 def test_append_to_missing_symbol(lmdb_library):
     lib = lmdb_library
     df = pd.DataFrame({"col": [1]}, index=pd.DatetimeIndex([np.datetime64("2023-01-01")], dtype="datetime64[ns]"))
-    lib.write("sym", df, staged=True)
+    lib.stage("sym", df)
     lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
     assert_frame_equal(lib.read("sym").data, df)
 
@@ -409,7 +409,7 @@ def test_pre_epoch(lmdb_library):
     lib = lmdb_library
 
     df = pd.DataFrame({"col": [1]}, pd.DatetimeIndex([pd.Timestamp(1969, 12, 31)]))
-    lib.write("sym", df, staged=True)
+    lib.stage("sym", df)
     lib.sort_and_finalize_staged_data("sym")
 
     assert_frame_equal(lib.read("sym").data, df)
@@ -421,10 +421,10 @@ class TestDescriptorMismatchBetweenStagedSegments:
         lib = lmdb_library
 
         initial_df = pd.DataFrame({"col_0": [1]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1)]))
-        lib.write("sym", initial_df, staged=True)
+        lib.stage("sym", initial_df)
 
         appended_df = pd.DataFrame({"col_1": [1]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 2)]))
-        lib.write("sym", appended_df, staged=True)
+        lib.stage("sym", appended_df)
 
         with pytest.raises(SchemaException) as exception_info:
             lib.sort_and_finalize_staged_data(
@@ -443,10 +443,10 @@ class TestDescriptorMismatchBetweenStagedSegments:
             {"col_0": np.array([1.1], dtype="float"), "col_1": np.array([2], dtype="int64")},
             index=pd.DatetimeIndex([pd.Timestamp("2024-01-01")]),
         )
-        lib.write("sym", df1, staged=True)
+        lib.stage("sym", df1)
 
         df2 = pd.DataFrame({"col_1": [1]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-02")]))
-        lib.write("sym", df2, staged=True)
+        lib.stage("sym", df2)
 
         with pytest.raises(SchemaException) as exception_info:
             lib.sort_and_finalize_staged_data(
@@ -465,12 +465,12 @@ class TestDescriptorMismatchBetweenStagedSegments:
         df1 = pd.DataFrame(
             {"col_0": [1], "col_1": ["test"], "col_2": [1.2]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1)])
         )
-        lib.write("sym", df1, staged=True)
+        lib.stage("sym", df1)
 
         df2 = pd.DataFrame(
             {"col_1": ["asd"], "col_2": [2.5], "col_0": [2]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 2)])
         )
-        lib.write("sym", df2, staged=True)
+        lib.stage("sym", df2)
 
         with pytest.raises(SchemaException) as exception_info:
             lib.sort_and_finalize_staged_data(
@@ -488,10 +488,10 @@ class TestDescriptorMismatchBetweenStagedSegments:
         lib = lmdb_library
 
         df1 = pd.DataFrame({"col_0": np.array([1], dtype="int64")}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1)]))
-        lib.write("sym", df1, staged=True)
+        lib.stage("sym", df1)
 
         df2 = pd.DataFrame({"col_0": ["asd"]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 2)]))
-        lib.write("sym", df2, staged=True)
+        lib.stage("sym", df2)
 
         with pytest.raises(SchemaException) as exception_info:
             lib.sort_and_finalize_staged_data(
@@ -511,10 +511,10 @@ class TestDescriptorMismatchBetweenStagedSegments:
         df1 = pd.DataFrame(
             {"col_0": np.array([1], dtype="float")}, index=pd.DatetimeIndex([np.datetime64("2023-01-01")])
         )
-        lib.write("sym", df1, staged=True)
+        lib.stage("sym", df1)
 
         df2 = pd.DataFrame({"col_0": np.array([1], dtype="int")}, index=pd.DatetimeIndex([np.datetime64("2023-01-02")]))
-        lib.write("sym", df2, staged=True)
+        lib.stage("sym", df2)
 
         with pytest.raises(SchemaException) as exception_info:
             lib.sort_and_finalize_staged_data(
@@ -535,10 +535,10 @@ class TestDescriptorMismatchBetweenStagedSegments:
         lib = lmdb_library
 
         df1 = pd.DataFrame({"col": np.array([1], dtype="int64")}, index=pd.DatetimeIndex([np.datetime64("2023-01-01")]))
-        lib.write("sym", df1, staged=True)
+        lib.stage("sym", df1)
 
         df2 = pd.DataFrame({"col": ["test"]}, index=pd.DatetimeIndex([np.datetime64("2023-01-02")]))
-        lib.write("sym", df2, staged=True)
+        lib.stage("sym", df2)
 
         with pytest.raises(SchemaException) as exception_info:
             lib.sort_and_finalize_staged_data(
@@ -558,12 +558,12 @@ class TestDescriptorMismatchBetweenStagedSegments:
         df1 = pd.DataFrame(
             {"col_0": [1], "col_1": ["test"], "col_2": [1.2]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1)])
         )
-        lib.write("sym", df1, staged=True)
+        lib.stage("sym", df1)
 
         df2 = pd.DataFrame(
             {"col_1": ["asd"], "col_2": [2.5], "col_0": [2]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 2)])
         )
-        lib.write("sym", df2, staged=True)
+        lib.stage("sym", df2)
 
         with pytest.raises(SchemaException) as exception_info:
             lib.sort_and_finalize_staged_data(
@@ -595,7 +595,7 @@ class TestStreamDescriptorMismatchOnFinalizeAppend:
         self.init_symbol(lib, "sym")
 
         df = pd.DataFrame({"col_0": np.array([1], dtype="int32")}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1)]))
-        lib.write("sym", df, staged=True)
+        lib.stage("sym", df)
         with pytest.raises(SchemaException) as exception_info:
             lib.sort_and_finalize_staged_data(
                 "sym", mode=StagedDataFinalizeMethod.APPEND, delete_staged_data_on_failure=delete_staged_data_on_failure
@@ -619,7 +619,7 @@ class TestStreamDescriptorMismatchOnFinalizeAppend:
             },
             index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1)]),
         )
-        lib.write("sym", df, staged=True)
+        lib.stage("sym", df)
         with pytest.raises(SchemaException) as exception_info:
             lib.sort_and_finalize_staged_data(
                 "sym", mode=StagedDataFinalizeMethod.APPEND, delete_staged_data_on_failure=delete_staged_data_on_failure
@@ -644,7 +644,7 @@ class TestStreamDescriptorMismatchOnFinalizeAppend:
             },
             index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1)]),
         )
-        lib.write("sym", df, staged=True)
+        lib.stage("sym", df)
         with pytest.raises(SchemaException) as exception_info:
             lib.sort_and_finalize_staged_data(
                 "sym", mode=StagedDataFinalizeMethod.APPEND, delete_staged_data_on_failure=delete_staged_data_on_failure
@@ -669,7 +669,7 @@ class TestStreamDescriptorMismatchOnFinalizeAppend:
             },
             index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1)]),
         )
-        lib.write("sym", df, staged=True)
+        lib.stage("sym", df)
         with pytest.raises(SchemaException) as exception_info:
             lib.sort_and_finalize_staged_data(
                 "sym", mode=StagedDataFinalizeMethod.APPEND, delete_staged_data_on_failure=delete_staged_data_on_failure
@@ -695,7 +695,7 @@ class TestStreamDescriptorMismatchOnFinalizeAppend:
             },
             index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1)]),
         )
-        lib.write("sym", df, staged=True)
+        lib.stage("sym", df)
         with pytest.raises(SchemaException) as exception_info:
             lib.sort_and_finalize_staged_data(
                 "sym", mode=StagedDataFinalizeMethod.APPEND, delete_staged_data_on_failure=delete_staged_data_on_failure
@@ -722,7 +722,7 @@ class TestNatInIndexNotAllowed:
         lib = lmdb_library_static_dynamic
 
         df1 = pd.DataFrame({"a": [1, 2]}, index=pd.DatetimeIndex([pd.NaT, pd.NaT]))
-        lib.write("sym", df1, staged=True, validate_index=False)
+        lib.stage("sym", df1, validate_index=False)
         self.assert_nat_not_allowed(lib, "sym", mode, delete_staged_data_on_failure)
         expected_key_count = 0 if delete_staged_data_on_failure else 1
         assert len(get_append_keys(lib, "sym")) == expected_key_count
@@ -733,14 +733,14 @@ class TestNatInIndexNotAllowed:
         lib = lmdb_library_static_dynamic
 
         df1 = pd.DataFrame({"a": [1, 2]}, index=pd.DatetimeIndex([pd.NaT, pd.Timestamp(2024, 1, 1)]))
-        lib.write("sym", df1, staged=True, validate_index=False)
+        lib.stage("sym", df1, validate_index=False)
         self.assert_nat_not_allowed(lib, "sym", mode, delete_staged_data_on_failure)
         expected_key_count = 0 if delete_staged_data_on_failure else 1
         assert len(get_append_keys(lib, "sym")) == expected_key_count
         assert_delete_staged_data_clears_append_keys(lib, "sym")
 
         df1 = pd.DataFrame({"a": [1, 2]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1), pd.NaT]))
-        lib.write("sym", df1, staged=True, validate_index=False)
+        lib.stage("sym", df1, validate_index=False)
         self.assert_nat_not_allowed(lib, "sym", mode, delete_staged_data_on_failure)
         expected_key_count = 0 if delete_staged_data_on_failure else 1
         assert len(get_append_keys(lib, "sym")) == expected_key_count
@@ -754,8 +754,8 @@ class TestSortMergeDynamicSchema:
 
         lib.write("sym", pd.DataFrame({"a": [1], "b": [1.2]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1)])))
 
-        lib.write("sym", pd.DataFrame({"a": [2]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 2)])), staged=True)
-        lib.write("sym", pd.DataFrame({"b": [5.3]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 3)])), staged=True)
+        lib.stage("sym", pd.DataFrame({"a": [2]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 2)])))
+        lib.stage("sym", pd.DataFrame({"b": [5.3]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 3)])))
         lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
 
         expected = pd.DataFrame(
@@ -770,8 +770,8 @@ class TestSortMergeDynamicSchema:
 
         lib.write("sym", pd.DataFrame({"a": [1]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1)])))
 
-        lib.write("sym", pd.DataFrame({"b": [1.5]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 2)])), staged=True)
-        lib.write("sym", pd.DataFrame({"c": ["c"]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 3)])), staged=True)
+        lib.stage("sym", pd.DataFrame({"b": [1.5]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 2)])))
+        lib.stage("sym", pd.DataFrame({"c": ["c"]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 3)])))
         lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
 
         expected = pd.DataFrame(
@@ -792,7 +792,7 @@ class TestSortMergeDynamicSchema:
             },
             index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1)]),
         )
-        lib.write("sym", df1, staged=True)
+        lib.stage("sym", df1)
 
         df2 = pd.DataFrame(
             {
@@ -802,7 +802,7 @@ class TestSortMergeDynamicSchema:
             },
             index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 2)]),
         )
-        lib.write("sym", df2, staged=True)
+        lib.stage("sym", df2)
 
         lib.sort_and_finalize_staged_data("sym")
 
@@ -836,7 +836,7 @@ class TestSortMergeDynamicSchema:
             },
             index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 2)]),
         )
-        lib.write("sym", df2, staged=True)
+        lib.stage("sym", df2)
 
         lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
 
@@ -859,25 +859,25 @@ def test_update_symbol_list(lmdb_library):
     df = pd.DataFrame({"col": [1]}, index=pd.DatetimeIndex([np.datetime64("2023-01-01")], dtype="datetime64[ns]"))
 
     # We always add to the symbol list on write
-    lib.write(sym, df, staged=True)
+    lib.stage(sym, df)
     lib.sort_and_finalize_staged_data(sym, mode=StagedDataFinalizeMethod.WRITE)
     assert lib_tool.count_keys(KeyType.SYMBOL_LIST) == 1
     assert lib.list_symbols() == [sym]
 
     # We don't add to the symbol on append when there is an existing version
-    lib.write(sym, df, staged=True)
+    lib.stage(sym, df)
     lib.sort_and_finalize_staged_data(sym, mode=StagedDataFinalizeMethod.APPEND)
     assert lib_tool.count_keys(KeyType.SYMBOL_LIST) == 1
     assert lib.list_symbols() == [sym]
 
     # We always add to the symbol list on write, even when there is an existing version
-    lib.write(sym, df, staged=True)
+    lib.stage(sym, df)
     lib.sort_and_finalize_staged_data(sym, mode=StagedDataFinalizeMethod.WRITE)
     assert lib_tool.count_keys(KeyType.SYMBOL_LIST) == 2
     assert lib.list_symbols() == [sym]
 
     # We add to the symbol list on append when there is no previous version
-    lib.write(sym_2, df, staged=True)
+    lib.stage(sym_2, df)
     lib.sort_and_finalize_staged_data(sym_2, mode=StagedDataFinalizeMethod.APPEND)
     assert lib_tool.count_keys(KeyType.SYMBOL_LIST) == 3
     assert set(lib.list_symbols()) == {sym, sym_2}
@@ -887,8 +887,8 @@ def test_delete_staged_data(lmdb_library):
     lib = lmdb_library
     start_date = pd.Timestamp(2024, 1, 1)
     for i in range(0, 10):
-        lmdb_library.write(
-            "sym", pd.DataFrame({"col": [i]}, index=pd.DatetimeIndex([start_date + pd.Timedelta(days=1)])), staged=True
+        lmdb_library.stage(
+            "sym", pd.DataFrame({"col": [i]}, index=pd.DatetimeIndex([start_date + pd.Timedelta(days=1)]))
         )
     assert len(get_append_keys(lib, "sym")) == 10
     assert_delete_staged_data_clears_append_keys(lib, "sym")
@@ -900,7 +900,7 @@ def test_get_staged_symbols(lmdb_library, mode):
     df = pd.DataFrame({"col": [1]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1)]))
 
     for i in range(0, 3):
-        lib.write(f"sym_{i}", df, staged=True)
+        lib.stage(f"sym_{i}", df)
 
     assert set(lib.get_staged_symbols()) == set([f"sym_{i}" for i in range(0, 3)])
 
@@ -910,9 +910,7 @@ def test_get_staged_symbols(lmdb_library, mode):
     lib.delete_staged_data("sym_1")
     assert lib.get_staged_symbols() == ["sym_2"]
 
-    lib.write(
-        "sym_2", pd.DataFrame({"not_matching": [2]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 2)])), staged=True
-    )
+    lib.stage("sym_2", pd.DataFrame({"not_matching": [2]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 2)])))
     with pytest.raises(SchemaException):
         lib.sort_and_finalize_staged_data("sym_2", delete_staged_data_on_failure=True)
     assert lib.get_staged_symbols() == []
@@ -927,7 +925,7 @@ class TestSlicing:
 
             index = pd.date_range("2024-01-05", "2024-01-15")
             df_1 = pd.DataFrame({"col_0": range(0, len(index))}, index=index)
-            lib.write("sym", df_1, staged=True)
+            lib.stage("sym", df_1)
             lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
 
             assert_frame_equal(lib.read("sym").data, pd.concat([df_0, df_1]))
@@ -937,7 +935,7 @@ class TestSlicing:
             lib = lmdb_library
             index = pd.date_range("2024-01-05", "2024-01-15")
             df = pd.DataFrame({"col_0": range(0, len(index))}, index=index)
-            lib.write("sym", df, staged=True)
+            lib.stage("sym", df)
             lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.WRITE)
             assert_frame_equal(lib.read("sym").data, df)
 
@@ -948,7 +946,7 @@ class TestSlicing:
             staged_values = range(0, len(combined_staged_index))
             for value, date in zip(staged_values, combined_staged_index):
                 df = pd.DataFrame({"a": [value]}, index=pd.DatetimeIndex([date]))
-                lib.write("sym", df, staged=True)
+                lib.stage("sym", df)
             lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.WRITE)
             expected = pd.DataFrame({"a": staged_values}, index=combined_staged_index)
             assert_frame_equal(lib.read("sym").data, expected)
@@ -964,7 +962,7 @@ class TestSlicing:
             staged_values = range(0, len(combined_staged_index))
             for value, date in zip(staged_values, combined_staged_index):
                 df = pd.DataFrame({"a": [value]}, index=pd.DatetimeIndex([date]))
-                lib.write("sym", df, staged=True)
+                lib.stage("sym", df)
             lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
             expected = pd.concat([df_0, pd.DataFrame({"a": staged_values}, index=combined_staged_index)])
             assert_frame_equal(lib.read("sym").data, expected)
@@ -981,7 +979,7 @@ class TestSlicing:
             {f"col_{i}": [i] for i in range(0, dataframe_columns)}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1)])
         )
         # Initial staged write of wide dataframe is allowed
-        lib.write("sym", df_0, staged=True)
+        lib.stage("sym", df_0)
         lib.sort_and_finalize_staged_data("sym", mode=mode)
         assert_frame_equal(lib.read("sym").data, df_0)
 
@@ -993,13 +991,12 @@ class TestSlicing:
         assert_frame_equal(lib.read("sym").data, pd.concat([df_0, df_1]))
         # Cannot perform another sort and finalize append when column sliced data has been written even though the first
         # write is done using sort and finalize
-        lib.write(
+        lib.stage(
             "sym",
             pd.DataFrame(
                 {f"col_{i}": [i] for i in range(0, dataframe_columns)},
                 index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 3)]),
             ),
-            staged=True,
         )
         with pytest.raises(UserInputException) as exception_info:
             lib.sort_and_finalize_staged_data(
@@ -1024,7 +1021,7 @@ class TestSlicing:
             index=pd.DatetimeIndex(pd.date_range(pd.Timestamp(2024, 1, 1), pd.Timestamp(2024, 1, 3))),
         )
         # Initial staged write of wide dataframe is allowed
-        lib.write("sym", df_0, staged=True)
+        lib.stage("sym", df_0)
         lib.sort_and_finalize_staged_data("sym", mode=mode)
         assert_frame_equal(lib.read("sym").data, df_0)
 
@@ -1046,7 +1043,7 @@ class TestSlicing:
         )
         # Cannot append via sort and finalize because slicing has occurred
         with pytest.raises(UserInputException) as exception_info:
-            lib.write("sym", df_1, staged=True)
+            lib.stage("sym", df_1)
             lib.sort_and_finalize_staged_data(
                 "sym", mode=StagedDataFinalizeMethod.APPEND, delete_staged_data_on_failure=delete_staged_data_on_failure
             )
@@ -1077,7 +1074,7 @@ class TestSlicing:
         lib.write("sym", df_0)
 
         df_1 = pd.DataFrame({f"col_{i}": [i] for i in range(0, 10)}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 2)]))
-        lib.write("sym", df_1, staged=True)
+        lib.stage("sym", df_1)
 
         with pytest.raises(UserInputException) as exception_info:
             lib.sort_and_finalize_staged_data(
@@ -1098,7 +1095,7 @@ class TestSlicing:
         lib.write("sym", df_0)
 
         df_1 = pd.DataFrame({f"col_{i}": [i] for i in range(0, 10)}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 2)]))
-        lib.write("sym", df_1, staged=True)
+        lib.stage("sym", df_1)
 
         lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.WRITE)
 
@@ -1118,8 +1115,8 @@ def test_sort_and_finalize_staged_data_dynamic_schema_named_index(
     if mode == StagedDataFinalizeMethod.APPEND:
         lib.write(sym, df_0)
     else:
-        lib.write(sym, df_0, staged=True)
-    lib.write(sym, df_1, staged=True)
+        lib.stage(sym, df_0)
+    lib.stage(sym, df_1)
 
     with pytest.raises(SchemaException) as exception_info:
         lib.sort_and_finalize_staged_data(
@@ -1151,7 +1148,7 @@ class TestEmptyDataFrames:
         symbol = "symbol"
         lib.write(symbol, pd.DataFrame({"a": np.array([], np.int64)}, index=pd.DatetimeIndex([])))
         df = pd.DataFrame({"a": [1]}, index=pd.DatetimeIndex([pd.Timestamp(0)]))
-        lib.write(symbol, df, staged=True)
+        lib.stage(symbol, df)
         lib.sort_and_finalize_staged_data(symbol, mode=StagedDataFinalizeMethod.APPEND)
         assert_frame_equal(lib.read(symbol).data, df)
 
@@ -1161,7 +1158,7 @@ class TestEmptyDataFrames:
         empty = pd.DataFrame({"a": np.array([], np.int64)}, index=pd.DatetimeIndex([], name="my_initial_index"))
         lib.write(symbol, empty)
         df = pd.DataFrame({"a": [1]}, index=pd.DatetimeIndex([pd.Timestamp(0)], name="my_new_index"))
-        lib.write(symbol, df, staged=True)
+        lib.stage(symbol, df)
         with pytest.raises(SchemaException) as exception_info:
             lib.sort_and_finalize_staged_data(symbol, mode=StagedDataFinalizeMethod.APPEND)
         assert "index" in str(exception_info.value)
@@ -1180,7 +1177,7 @@ class TestEmptyDataFrames:
         symbol = "symbol"
         empty = pd.DataFrame({"a": np.array([], np.int64)}, index=pd.DatetimeIndex([]))
         lib.write(symbol, empty)
-        lib.write(symbol, to_append, staged=True)
+        lib.stage(symbol, to_append)
         with pytest.raises(SchemaException, match="wrong_col"):
             lib.sort_and_finalize_staged_data(symbol, mode=StagedDataFinalizeMethod.APPEND)
 
@@ -1193,7 +1190,7 @@ class TestSegmentsWithNaNAndNone:
         df = pd.DataFrame(
             {"a": 3 * [value]}, index=pd.DatetimeIndex([pd.Timestamp(1), pd.Timestamp(2), pd.Timestamp(3)])
         )
-        lib.write(symbol, df, staged=True)
+        lib.stage(symbol, df)
         lib.sort_and_finalize_staged_data(symbol)
         if _use_pyarrow_strings_in_pandas() and df["a"].dtype == object:
             # The all-None object column reads back as the arrow-backed str dtype.
@@ -1207,7 +1204,7 @@ class TestSegmentsWithNaNAndNone:
             {"a": np.array(3 * [np.nan], dtype=np.float32)},
             index=pd.DatetimeIndex([pd.Timestamp(1), pd.Timestamp(2), pd.Timestamp(3)]),
         )
-        lib.write(symbol, df, staged=True)
+        lib.stage(symbol, df)
         lib.sort_and_finalize_staged_data(symbol)
         assert_frame_equal(lib.read(symbol).data, df)
 
@@ -1219,11 +1216,11 @@ class TestSegmentsWithNaNAndNone:
         df1 = pd.DataFrame(
             {"a": [None, np.nan, np.nan]}, index=pd.DatetimeIndex([pd.Timestamp(1), pd.Timestamp(3), pd.Timestamp(5)])
         )
-        lib.write(symbol, df1, staged=True)
+        lib.stage(symbol, df1)
         df2 = pd.DataFrame(
             {"a": [None, np.nan, None]}, index=pd.DatetimeIndex([pd.Timestamp(2), pd.Timestamp(4), pd.Timestamp(6)])
         )
-        lib.write(symbol, df2, staged=True)
+        lib.stage(symbol, df2)
         lib.sort_and_finalize_staged_data(symbol)
         expected = pd.DataFrame(
             {"a": [None, None, np.nan, np.nan, np.nan, None]},
@@ -1243,11 +1240,11 @@ class TestSegmentsWithNaNAndNone:
         df1 = pd.DataFrame(
             {"a": [None, "a", None]}, index=pd.DatetimeIndex([pd.Timestamp(1), pd.Timestamp(3), pd.Timestamp(5)])
         )
-        lib.write(symbol, df1, staged=True)
+        lib.stage(symbol, df1)
         df2 = pd.DataFrame(
             {"a": [None, None, "b"]}, index=pd.DatetimeIndex([pd.Timestamp(2), pd.Timestamp(4), pd.Timestamp(6)])
         )
-        lib.write(symbol, df2, staged=True)
+        lib.stage(symbol, df2)
         lib.sort_and_finalize_staged_data(symbol)
         expected = pd.DataFrame(
             {"a": [None, None, "a", None, None, "b"]}, index=pd.DatetimeIndex([pd.Timestamp(i) for i in range(1, 7)])
