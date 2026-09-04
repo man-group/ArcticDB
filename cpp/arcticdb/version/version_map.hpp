@@ -530,6 +530,9 @@ class VersionMapImpl {
         auto old_entry = *entry;
         if (!index_keys.empty()) {
             entry->keys_.assign(std::begin(index_keys), std::end(index_keys));
+            // Assigning keys_ directly bypasses the tombstone bookkeeping a normal load performs;
+            // without a rebuild, a latest-undeleted query would report a tombstoned version as live.
+            entry->rebuild_tombstones_from_keys();
             auto new_version_id = index_keys[0].version_id();
             entry->head_ = write_entry_to_storage(store, stream_id, new_version_id, entry);
             if (validate_)
