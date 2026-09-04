@@ -15,7 +15,7 @@ def test_two_columns_with_different_dtypes(lmdb_library_dynamic_schema):
 
     df2 = pd.DataFrame({"b": b}, index=idx)
 
-    lib.write("sym", df1, staged=True, validate_index=False)
-    lib.write("sym", df2, staged=True, validate_index=False)
+    lib.stage("sym", df1, validate_index=False)
+    lib.stage("sym", df2, validate_index=False)
     lib.sort_and_finalize_staged_data("sym")
     lib.read("sym")

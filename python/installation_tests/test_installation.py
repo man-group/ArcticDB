@@ -36,6 +36,7 @@ from client_utils import delete_library
 PRE_4_X_X = False if "dev" in arcticdb.__version__ else version.parse(arcticdb.__version__) < version.Version("4.0.0")
 PRE_5_X_X = False if "dev" in arcticdb.__version__ else version.parse(arcticdb.__version__) < version.Version("5.0.0")
 PRE_5_2_X = False if "dev" in arcticdb.__version__ else version.parse(arcticdb.__version__) < version.Version("5.2.0")
+PRE_7_X_X = False if "dev" in arcticdb.__version__ else version.parse(arcticdb.__version__) < version.Version("7.0.0")
 
 
 def generate_dataframe(columns, dt, num_days, num_rows_per_day):
@@ -47,6 +48,17 @@ def generate_dataframe(columns, dt, num_days, num_rows_per_day):
         dataframes.append(new_df)
         dt = dt + timedelta(days=1)
     return pd.concat(dataframes)
+
+
+def stage_compat(lib, symbol, df, validate_index=True):
+    """
+    Stages `df` under `symbol`, using `write(staged=True)` on wheels older than 7.0.0 (which is when
+    `staged`/`parallel` were removed from `write`) and `stage()` on current wheels.
+    """
+    if PRE_7_X_X:
+        lib.write(symbol, df, staged=True, validate_index=validate_index)
+    else:
+        lib.stage(symbol, df, validate_index=validate_index)
 
 
 def test_write_batch_dedup(ac_library_factory):
@@ -177,8 +189,8 @@ def test_parallel_writes_and_appends_index_validation(ac_library, finalize_metho
         lib.write(sym, df_0)
     df_1 = pd.DataFrame({"col": [3, 4]}, index=[pd.Timestamp("2024-01-03"), pd.Timestamp("2024-01-04")])
     df_2 = pd.DataFrame({"col": [5, 6]}, index=[pd.Timestamp("2024-01-03T12"), pd.Timestamp("2024-01-05")])
-    lib.write(sym, df_2, staged=True)
-    lib.write(sym, df_1, staged=True)
+    stage_compat(lib, sym, df_2)
+    stage_compat(lib, sym, df_1)
     if validate_index is None:
         # Test default behaviour when arg isn't provided
         with pytest.raises(UnsortedDataException):
@@ -479,9 +491,42 @@ def test_finalize_staged_data_mode_append(ac_library, mode):
     df_initial = sample_dataframe("2020-1-1", [1, 2, 3], [4, 5, 6])
     df_staged = sample_dataframe("2020-1-4", [7, 8, 9], [10, 11, 12])
     lib.write(symbol, df_initial)
-    lib.write(symbol, df_staged, staged=True)
+    stage_compat(lib, symbol, df_staged)
     assert_frame_equal(lib.read(symbol).data, df_initial)
 
     lib.finalize_staged_data(symbol="symbol", mode=mode)
     expected = pd.concat([df_initial, df_staged])
     assert_frame_equal(lib.read(symbol).data, expected)
+
+
+class _StagingCallRecorder:
+    def __init__(self):
+        self.calls = []
+        self.last_df = None
+
+    def write(self, symbol, df, staged=False, validate_index=True):
+        self.calls.append(("write", symbol, staged, validate_index))
+        self.last_df = df
+
+    def stage(self, symbol, df, validate_index=True):
+        self.calls.append(("stage", symbol, validate_index))
+        self.last_df = df
+
+
+@pytest.mark.parametrize(
+    "pre_7_x_x, validate_index, expected_call",
+    [
+        (True, True, ("write", "sym", True, True)),
+        (True, False, ("write", "sym", True, False)),
+        (False, True, ("stage", "sym", True)),
+        (False, False, ("stage", "sym", False)),
+    ],
+    ids=["old_wheel_default", "old_wheel_no_validate", "new_wheel_default", "new_wheel_no_validate"],
+)
+def test_stage_compat_dispatch(pre_7_x_x, validate_index, expected_call, monkeypatch):
+    monkeypatch.setitem(globals(), "PRE_7_X_X", pre_7_x_x)
+    recorder = _StagingCallRecorder()
+    df = pd.DataFrame({"col": [1]})
+    stage_compat(recorder, "sym", df, validate_index=validate_index)
+    assert recorder.calls == [expected_call]
+    assert recorder.last_df is df

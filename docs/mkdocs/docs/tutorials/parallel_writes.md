@@ -24,7 +24,7 @@ def _load(work):
     df.index = df.index.to_datetime()
 
     # When staged, the written data is not available to read until finalized.
-    library.write(symbol, df, staged=True)
+    library.stage(symbol, df)
 
 symbol = "my_data"
 library = "my_library"
