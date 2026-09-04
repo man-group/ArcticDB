@@ -99,7 +99,7 @@ from arcticdb.flattener import Flattener
 from arcticdb.log import version as log
 from arcticdb.version_store._custom_normalizers import get_custom_normalizer, CompositeCustomNormalizer
 from arcticdb.version_store._string_dtype import (
-    _is_arrow_string_column,
+    _is_arrow_column,
     _use_pyarrow_strings_in_pandas,
 )
 from arcticdb.version_store._normalization import (
@@ -2706,13 +2706,14 @@ class NativeVersionStore:
                 data = []
                 for c in read_result.frame_data.data:
                     # Arrow string columns are a list of RecordBatchData already truncated in C++ so only numpy columns are trimmed here.
-                    data.append(c if _is_arrow_string_column(c) else c[start_idx:end_idx])
+                    data.append(c if _is_arrow_column(c) else c[start_idx:end_idx])
                 read_result.frame_data = FrameData(
                     data,
                     read_result.frame_data.names,
                     read_result.frame_data.index_columns,
                     row_count,
                     read_result.frame_data.offset,
+                    read_result.frame_data.column_types,
                 )
 
         vitem = self._adapt_read_res(read_result, output_format)

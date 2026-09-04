@@ -29,10 +29,8 @@ from abc import ABCMeta, abstractmethod
 from arcticdb.dependencies import _PYARROW_AVAILABLE, _POLARS_AVAILABLE, pyarrow as pa, polars as pl
 from arcticdb.version_store._string_dtype import (
     _use_pyarrow_strings_in_pandas,
-    _is_arrow_string_column,
-    _arrow_string_arrays_to_pd_array,
-    _adopt_arrow_strings,
     _pandas_str_column_to_record_batches,
+    _adapt_string_column,
 )
 from arcticdb.preconditions import check
 from arcticdb_ext import get_config_string
@@ -49,6 +47,7 @@ from arcticdb.exceptions import (
 from arcticdb.supported_types import DateRangeInput, time_types as supported_time_types
 from arcticdb.util._versions import IS_PANDAS_TWO, IS_PANDAS_ZERO
 from arcticdb_ext.version_store import PandasData, RecordBatchData, SortedValue as _SortedValue
+from arcticdb_ext.types import TypeDescriptor
 from pandas.core.internals import make_block
 
 from pandas import DataFrame, MultiIndex, Series, DatetimeIndex, Index, RangeIndex
@@ -127,19 +126,14 @@ def get_pickled_metadata_loglevel():
     return _PICKLED_METADATA_LOGLEVEL
 
 
-# To simplify unit testing of serialization logic. This maps the cpp _FrameData exposed object
-class FrameData(
-    NamedTuple(
-        "FrameData",
-        [
-            ("data", List[np.ndarray]),
-            ("names", List[str]),
-            ("index_columns", List[str]),
-            ("row_count", int),
-            ("offset", int),
-        ],
-    )
-):
+class FrameData(NamedTuple):
+    data: List[Union[np.ndarray, List[RecordBatchData]]]
+    names: List[str]
+    index_columns: List[str]
+    row_count: int
+    offset: int
+    column_types: List[TypeDescriptor]
+
     @staticmethod
     def from_pandas_data(df):
         # type: (PandasData)->FrameData
@@ -149,6 +143,7 @@ class FrameData(
             index_columns=df.index_names,
             row_count=len(df.columns_values[0]),
             offset=0,
+            column_types=[],
         )
 
 
@@ -248,12 +243,10 @@ def _to_primitive(
             raise ArcticDbNotYetImplemented(
                 f"Failed to normalize column '{arr_name}' with dtype '{arr.dtype}': pd.NA dtype not supported"
             )
-        if arr.dtype.storage != "pyarrow":
-            raise ArcticDbNotYetImplemented(
-                f"Failed to normalize column '{arr_name}' with dtype '{arr.dtype}': only pyarrow-backed storage is "
-                "supported"
-            )
-        return _pandas_str_column_to_record_batches(arr._pa_array, arr_name)
+        if arr.dtype.storage == "pyarrow":
+            return _pandas_str_column_to_record_batches(arr._pa_array, arr_name)
+        # No arrow buffer to hand over, so fall through to the object-string path below.
+        arr = arr._ndarray
     # This check has to come after the categorical check above, as Categoricals are a Pandas concept, not numpy, which
     # causes issubdtype to throw if arr.dtype == CategoricalDtype
     if np.issubdtype(arr.dtype, np.timedelta64):
@@ -475,7 +468,7 @@ def _denormalize_single_index(item, norm_meta):
 
     if len(item.index_columns) == 1:
         name = int(item.index_columns[0]) if norm_meta.index.is_int else item.index_columns[0]
-        index_data = _adopt_arrow_strings(item.data[0]) if len(item.data) > 0 else []
+        index_data = _adapt_string_column(item, 0) if len(item.data) > 0 else []
         rtn = Index(index_data, name=name)
 
         tz = get_timezone_from_metadata(norm_meta)
@@ -1114,13 +1107,13 @@ class DataFrameNormalizer(_PandasNormalizer):
         def df_from_arrays(arrays, cols, ind, n_ind):
             def gen_blocks():
                 _len = len(index)
-                infer_string = _use_pyarrow_strings_in_pandas()
                 column_placement_in_block = 0
                 for idx, a in enumerate(arrays):
                     if idx < n_ind:
                         continue
-                    if _is_arrow_string_column(a):
-                        yield make_block(_arrow_string_arrays_to_pd_array(a), placement=(column_placement_in_block,))
+                    pandas_column = _adapt_string_column(item, idx)
+                    if pandas_column is not a:
+                        yield make_block(pandas_column, placement=(column_placement_in_block,))
                         column_placement_in_block += 1
                         continue
                     # In Pandas 1 the dtype param of make_block is ignored for empty blocks and the dtype is always object
@@ -1183,7 +1176,8 @@ class DataFrameNormalizer(_PandasNormalizer):
 
         if not self._skip_df_consolidation:
             if data is not None:
-                data = {name: _adopt_arrow_strings(value) for name, value in data.items()}
+                for idx, name in enumerate(columns):
+                    data[name] = _adapt_string_column(item, idx + n_indexes)
             df = DataFrame(data, index=index, columns=columns)
             # Setting the columns' dtype manually, since pandas might just convert the dtype of some
             # (empty) columns to another one and since the `dtype` keyword for `pd.DataFrame` constructor
