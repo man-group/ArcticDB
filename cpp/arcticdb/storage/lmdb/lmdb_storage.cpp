@@ -414,6 +414,25 @@ void LmdbStorage::cleanup() {
         std::unique_lock<std::shared_mutex> lock{*instance_mutex_};
         instance = std::move(lmdb_instance_);
     }
+    // Diagnostic only, and deliberately not used for control flow: use_count() is a snapshot another thread can
+    // invalidate before it is even read, so it is a lower bound on a moving number rather than an answer. A count
+    // above one means somebody was still inside a storage call, or still held a segment whose buffer points into this
+    // mapping, at the moment the library was deleted. That is survivable - the environment closes later instead of
+    // now - but it is the shape of a caller bug, and it is otherwise invisible: nothing is logged and no exception is
+    // raised, so the consequences surface later as a failed delete on Windows or as an unexplained retention of the
+    // files. Logging it here is what turns "some unrelated operation misbehaved" into a named cause.
+    if (instance) {
+        if (const auto holders = instance.use_count(); holders > 1) {
+            log::storage().warn(
+                    "LMDB library at {} deleted while at least {} other reference(s) to its environment are still "
+                    "live; it will stay open until they are released. A storage call or an unreleased read segment "
+                    "overlapped the deletion.",
+                    lib_dir_.string(),
+                    holders - 1
+            );
+        }
+    }
+
     // Released outside the lock: this is where the environment is actually closed, if nobody else is still using it.
     instance.reset();
     remove_db_files(lib_dir_);
