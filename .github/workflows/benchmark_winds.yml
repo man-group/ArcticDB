@@ -43,6 +43,15 @@ on:
         description: Regular expression to run instead of the workers.toml split
         type: string
         default: ''
+      # Ticket 48's manual escape hatch. The profile pass normally decides for itself
+      # — a benchmark new to a lane, or one that crossed the same 1.15 gate the pull
+      # request check uses — and this is how a human overrules it: every Linux lane
+      # profiles what matches, verdict or no verdict, still inside its ~10-minute
+      # budget. Empty on every run nobody typed it on, which is all of them.
+      profile:
+        description: Regular expression of benchmarks to profile regardless of verdicts
+        type: string
+        default: ''
 
   # Push to master, LMDB only, so PR runs have recent master results to compare against.
   push:
@@ -100,6 +109,14 @@ jobs:
       reference_suite: ${{ steps.suites.outputs.reference_suite }}
       storage: ${{ steps.storage.outputs.storage }}
       bucket: ${{ steps.bucket.outputs.bucket }}
+      # The profile pass (ticket 48). `profile` is the dispatch regex, passed
+      # through so every worker gets the same one; `reference_commit` is the master
+      # run whose numbers this run's are divided by, and is empty when the store had
+      # none to give — which is a run that profiles only what is new and what was
+      # asked for, and never a failed plan. The values themselves are too big for a
+      # job output and ride as the `benchmark-reference` artifact instead.
+      profile: ${{ steps.plan.outputs.profile }}
+      reference_commit: ${{ steps.plan.outputs.reference_commit }}
     steps:
       # `fetch-depth: 0`: `plan --all-tags` walks the release tags with `git rev-list`.
       - name: check out ArcticDB
@@ -206,6 +223,21 @@ jobs:
           printf 'storage=%s\n' "$storage" >> "$GITHUB_OUTPUT"
 
       # `arctic-winds plan` appends `matrix=<compact json>` to $GITHUB_OUTPUT itself.
+      #
+      # It also fetches the **reference values** for ticket 48's profile pass and
+      # writes them to `--reference-out`: the newest master run `compare-values`
+      # would judge this commit against, reduced to `{worker: {benchmark: [values]}}`
+      # (~90 KB for ArcticDB's ~350 benchmarks, hence an artifact rather than a job
+      # output, which GitHub caps at 1 MB). Reading it is the one thing this job
+      # needs the results store for, and it is deliberately unable to fail the plan:
+      # no fresh master run, an S3 hiccup, a library that does not exist yet — each
+      # writes an empty document with a note and lets the run go on, profiling only
+      # what is new to a lane and whatever `profile` asked for.
+      #
+      # `--reference-lib asv_results` is CI's own master library, matching what
+      # `collect`'s `compare-values` step compares against while the shadow is
+      # young; move both to `winds_asv_results` together, or the profile pass and
+      # the pull request gate will be judging against two different runs.
       - name: plan the matrix
         id: plan
         env:
@@ -213,6 +245,11 @@ jobs:
           SUITE_OVERWRITE: ${{ inputs.suite_overwrite }}
           COMMIT: ${{ steps.commit.outputs.commit }}
           STORAGE: ${{ steps.storage.outputs.storage }}
+          PROFILE: ${{ inputs.profile }}
+          RESULTS: "s3://s3.eu-west-1.amazonaws.com:arcticdb-ci-benchmark-results?aws_auth=true&region=eu-west-1&path_prefix=asv_results"
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_S3_ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_S3_SECRET_KEY }}
+          AWS_DEFAULT_REGION: eu-west-1
         run: |
           # `--storage REAL` drops the workers marked `real = false` in workers.toml —
           # the six with no AMAZON-parameterized benchmarks, which on real storage would
@@ -228,7 +265,25 @@ jobs:
           if [ -n "$SUITE_OVERWRITE" ]; then
             args+=(--suite-overwrite "$SUITE_OVERWRITE")
           fi
+          args+=(--profile "$PROFILE"
+                 --reference-out reference-values.json
+                 --results "$RESULTS"
+                 --reference-lib asv_results)
           arctic-winds plan "${args[@]}"
+
+      # One artifact for the whole run: every lane downloads the same document and
+      # reads its own slice out of it. `if-no-files-found: error` because `plan`
+      # writes the file whatever the store said — an empty document is a valid
+      # answer and a *missing* one is a bug in the step above, not a quiet run
+      # without profiling.
+      - name: publish the reference values
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-reference
+          path: reference-values.json
+          if-no-files-found: error
+          retention-days: 7   # only ever needed inside this run
+          overwrite: true
 
       # GitHub caps a matrix at 256 jobs and silently truncates past it, which would look
       # like a run where some workers simply never reported. Fail here instead. 13 workers
@@ -391,7 +446,13 @@ jobs:
       VCPKG_MAN_NUGET_TOKEN: ${{ secrets.VCPKG_MAN_NUGET_TOKEN }}
       CMAKE_C_COMPILER_LAUNCHER: sccache
       CMAKE_CXX_COMPILER_LAUNCHER: sccache
-      ARCTIC_CMAKE_PRESET: linux-release   # benchmarks must never run a debug build
+      # `linux-release` plus the two cache variables that keep the C++ symbol table in
+      # the extension (gha 49). The preset does not exist in ArcticDB's
+      # `cpp/CMakePresets.json`; the `keep the C++ symbols` step below writes it into
+      # the `CMakeUserPresets.json` beside it, and that comment explains the mechanism.
+      # It still inherits `linux-release`, so this is still RelWithDebInfo at -O3:
+      # benchmarks must never run a debug build.
+      ARCTIC_CMAKE_PRESET: linux-release-symbols
       ARCTICDB_BUILD_DIR: /tmp/cpp_build
       CIBW_BUILD: cp311-manylinux_x86_64   # the whole point: exactly one wheel
       CIBW_ENVIRONMENT_PASS_LINUX: SCCACHE_GHA_VERSION ACTIONS_CACHE_URL ACTIONS_RUNTIME_TOKEN
@@ -451,6 +512,73 @@ jobs:
         with:
           python-version: '3.14'   # host interpreter that runs cibuildwheel
 
+      # ---- the symbols the profile pass needs (gha 49) --------------------------
+      # py-spy --native names a C++ frame from the extension's own ELF symbol table:
+      # its ladder is DWARF -> `.symtab` -> `.dynsym`. ArcticDB's shipped Linux wheel
+      # has no DWARF and no `.symtab`, and it is built `-fvisibility=hidden`, so
+      # `.dynsym` holds almost nothing — which is why profiling a stock wheel returns a
+      # wall of `0x… (?)` and not one `arcticdb_ext` frame (gha 47).
+      #
+      # The loss is neither cibuildwheel's nor auditwheel's (auditwheel does not strip
+      # unless asked). It is `cpp/arcticdb/CMakeLists.txt`: the `install_arcticdb_ext`
+      # target — the only target setup.py builds — installs `strip --strip-unneeded`
+      # output in place of the linked file whenever the build is Linux + RelWithDebInfo
+      # and `ARCTICDB_KEEP_DEBUG_SYMBOLS` is off, which is its default. That option is
+      # the whole lever, and `--strip-unneeded` deletes exactly `.symtab`.
+      #
+      # This pipeline cannot patch ArcticDB, and setup.py forwards no extra `-D` to
+      # CMake — but it does take the preset name from `ARCTIC_CMAKE_PRESET`, and CMake
+      # reads `CMakeUserPresets.json` beside `CMakePresets.json`, which is the file
+      # that exists for exactly this and which ArcticDB's `.gitignore` already lists,
+      # so writing it leaves the checkout clean. cibuildwheel copies the project into
+      # the container, so the file travels with it.
+      #
+      # Two cache variables, and no third:
+      #   ARCTICDB_KEEP_DEBUG_SYMBOLS=ON  takes the strip out of the install target.
+      #   CMAKE_MODULE_LINKER_FLAGS=-Wl,--strip-debug  drops the DWARF at link time and
+      #     keeps `.symtab` (measured on a toy pybind11-shaped module: `--strip-debug`
+      #     keeps `.symtab`/`.strtab`/`.eh_frame` and removes every `.debug_*`, while
+      #     `--strip-unneeded` removes `.symtab` too). py-spy only needs names, and
+      #     names are in `.symtab`; DWARF would add file/line at a cost measured in
+      #     hundreds of megabytes on a library whose stripped form is already 65 MB.
+      #     Delete this one line if a profile ever needs source lines. `.eh_frame` —
+      #     what libunwind actually walks — survives either way.
+      #
+      # `binaryDir` is pinned to the inherited preset's directory deliberately. The
+      # default is `out/${presetName}-build`, and a new directory would move the
+      # compiler's working directory, which sccache folds into its hash whenever debug
+      # info is on (measured: same source, same flags, different cwd = a miss). That
+      # would cold-build every benchmark run instead of riding the `build.yml` entries
+      # already in `arcticdb-ci-sccache-bucket` — ArcticDB's own Linux build uses this
+      # same preset and this same `/tmp/cpp_build` — and no cold ArcticDB build fits
+      # this job's timeout. Nothing about the *compile* changes here: only the link
+      # (one flag) and the install (no strip) do.
+      #
+      # setup.py then globs `cpp/out/<preset>-build` and asserts exactly one match, so
+      # the pinned directory needs a second name under the preset it was asked for.
+      # That is the symlink. (`prep_cpp_build.sh` re-points `cpp/out` at
+      # `$ARCTICDB_BUILD_DIR` inside the container and leaves its contents alone.)
+      - name: keep the C++ symbols in the extension
+        run: |
+          cat > cpp/CMakeUserPresets.json <<'JSON'
+          {
+            "version": 3,
+            "configurePresets": [
+              {
+                "name": "linux-release-symbols",
+                "inherits": "linux-release",
+                "binaryDir": "${sourceDir}/out/linux-release-build",
+                "cacheVariables": {
+                  "ARCTICDB_KEEP_DEBUG_SYMBOLS": "ON",
+                  "CMAKE_MODULE_LINKER_FLAGS": "-Wl,--strip-debug"
+                }
+              }
+            ]
+          }
+          JSON
+          mkdir -p "$ARCTICDB_BUILD_DIR/linux-release-build"
+          ln -sfn linux-release-build "$ARCTICDB_BUILD_DIR/linux-release-symbols-build"
+
       - name: build the wheel
         env:
           CIBW_MANYLINUX_X86_64_IMAGE: ${{ needs.cibw_docker_image.outputs.tag }}
@@ -458,6 +586,55 @@ jobs:
         run: |
           python -m pip install pipx --retries 3 --timeout 180
           python -m pipx run "cibuildwheel==$CIBW_VERSION"
+
+      # The step above is a lever pulled from outside ArcticDB's build, so it can be
+      # taken away from outside too — a preset key renamed upstream, a `.gitignore`
+      # entry dropped, an `install_arcticdb_ext` rewrite — and none of that fails a
+      # build. It would surface a whole run later, as a profile of nothing but
+      # addresses. So no wheel leaves this job unless its extension still carries the
+      # table py-spy reads, and the sizes go into the summary because this is the run
+      # that measures what the symbols cost.
+      - name: assert the extension carries C++ symbols
+        run: |
+          rm -rf /tmp/wheel-check && mkdir -p /tmp/wheel-check
+          wheel=$(ls wheelhouse/*.whl)
+          python -m zipfile -e "$wheel" /tmp/wheel-check
+          so=$(find /tmp/wheel-check -name 'arcticdb_ext*.so' | head -1)
+          if [ -z "$so" ]; then
+            echo "::error::no arcticdb_ext*.so inside $(basename "$wheel")"
+            exit 1
+          fi
+          # `grep -oE` finds nothing on a wheel built some other way, and the job runs
+          # under `-o pipefail`, hence the `|| true` on both pipelines.
+          sections=$(readelf -SW "$so" | grep -oE '\.(symtab|dynsym|debug_info|eh_frame)\b' | sort -u | tr '\n' ' ' || true)
+          named=$(readelf -sW "$so" | grep -c arcticdb || true)
+          {
+            echo "### wheel symbols"
+            echo '```'
+            echo "wheel        $(stat -c%s "$wheel") bytes"
+            echo "arcticdb_ext $(stat -c%s "$so") bytes"
+            echo "sections     $sections"
+            echo "arcticdb symbols $named"
+            echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+          case "$sections" in
+            *.symtab*) ;;
+            *) echo "::error::$(basename "$so") has no .symtab: py-spy --native cannot name its C++ frames"; exit 1 ;;
+          esac
+          case "$sections" in
+            *.eh_frame*) ;;
+            *) echo "::error::$(basename "$so") has no .eh_frame: libunwind cannot walk it"; exit 1 ;;
+          esac
+          # A `.symtab` holding only the module init symbol would pass the check above;
+          # a real one holds ArcticDB's own mangled names in their tens of thousands.
+          if [ "$named" -lt 1000 ]; then
+            echo "::error::only $named arcticdb symbols in the extension: the symbol table is not this build's own"
+            exit 1
+          fi
+          case "$sections" in
+            *.debug_info*)
+              echo "::notice::DWARF is still in the extension, so -Wl,--strip-debug did not take and this wheel is far larger than it needs to be" ;;
+          esac
 
       - name: store the wheel
         uses: actions/upload-artifact@v4
@@ -669,6 +846,14 @@ jobs:
       # build jobs are gated on are this same list, from this same plan.
       wheel_artifact: wheel-cp311-${{ matrix.wheel_platform }}
       bucket: ${{ needs.plan.outputs.bucket }}
+      # Ticket 48. The lane decides for itself whether it profiles at all — a
+      # `runs_on` label or a non-Linux `uname` skips the pass entirely, in
+      # `arctic-winds bench`, not here — so both of these ride out to every lane
+      # and the managed ones simply ignore them. `profile` is the dispatch regex;
+      # `reference_commit` is only for the job's log, since the values themselves
+      # arrive as the `benchmark-reference` artifact the worker downloads.
+      profile: ${{ needs.plan.outputs.profile }}
+      reference_commit: ${{ needs.plan.outputs.reference_commit }}
 
   # Every worker's artifact back into one symbol in the S3 results store, the reports on
   # the job summary, and — on a PR — the regression check against master.
@@ -750,7 +935,10 @@ jobs:
           for dir in all-artifacts/*/; do
             name=$(basename "$dir")
             case "$name" in
-              wheel-*|compare-report) continue ;;
+              # `benchmark-reference` is the plan's own artifact (ticket 48), not a
+              # worker's, and a directory of that name holding one JSON would
+              # otherwise collect as a worker with somebody else's numbers in it.
+              wheel-*|compare-report|benchmark-reference) continue ;;
             esac
             mv "$dir" "artifacts/$name"
           done
@@ -783,6 +971,14 @@ jobs:
           # `--measure-only` is still expected of, and reported for, every lane it names;
           # it only stops a managed lane's silence or failures from turning the job red
           # (gha 26 Q4). The summary says which lanes those were.
+          #
+          # No `--profiles-library`: ticket 48's default is the results library plus
+          # `_profiles`, so the shadow's flame graphs land in
+          # `winds_asv_results_profiles` and a pull request's in
+          # `<ref>_winds_asv_results_profiles`, following the same branch rule the
+          # numbers do. A run that profiled nothing never opens that library at all,
+          # and a profile that cannot be stored is a line on this job's summary
+          # rather than a red run — the measurements are already written by then.
           arctic-winds collect \
             --artifacts artifacts \
             --results "$RESULTS" \

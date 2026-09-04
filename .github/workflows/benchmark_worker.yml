@@ -38,6 +38,12 @@ on:
       # Two inputs beyond the ticket's list, both with defaults so callers may ignore them:
       wheel_artifact:  {required: false, type: string, default: wheel-cp311-manylinux_x86_64, description: "name of the wheel artifact this lane installs: one of the run's per-platform build jobs (gha 41). Defaults to the manylinux one, which is what every EC2 lane wants"}
       bucket:          {required: false, type: string, default: '', description: "throwaway S3 bucket for REAL/ALL storage, created once per run by the plan job (ticket 11)"}
+      # Ticket 48's profile pass. Both are harmless on a lane that does not profile:
+      # `arctic-winds bench` refuses the pass outright on a managed lane and on any
+      # box whose `uname -s` is not Linux, which is where py-spy's `--native` — the
+      # whole reason for the pass — exists at all.
+      profile:         {required: false, type: string, default: '', description: "regex of benchmarks to profile regardless of verdicts; the run's `profile` dispatch input"}
+      reference_commit: {required: false, type: string, default: '', description: "the master commit whose values this run is compared against, for the log; empty when the plan found none"}
 
 jobs:
   # `benchmark_commits.yml:8-12` calls the shared `ec2_runner_jobs.yml` rather than inlining
@@ -179,6 +185,22 @@ jobs:
           name: ${{ inputs.wheel_artifact }}
           path: wheel
 
+      # The reference values for the profile pass (ticket 48), published once by
+      # `plan` for the whole run; this lane reads its own slice out of them. Only
+      # on a lane that will actually profile, because a managed one has no use for
+      # them, and `continue-on-error` because the pass is a bonus: a download that
+      # 404s (a re-run whose artifacts expired, a plan step that never got there)
+      # costs this worker its regression-triggered profiling and nothing else —
+      # `arctic-winds bench` takes the missing file as an empty reference and says
+      # so in its log.
+      - name: download the run's reference values
+        if: inputs.runs_on == ''
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          name: benchmark-reference
+          path: reference
+
       # arctic-winds is a private repo today, so it is checked out with a read-only deploy
       # key (`ARCTIC_WINDS_DEPLOY_KEY`, see the README) rather than pip-installed from a
       # URL. It lands *inside* the ArcticDB checkout, which is harmless: `asv run
@@ -282,6 +304,9 @@ jobs:
           PYTHON: ${{ inputs.python }}
           INSTANCE_TYPE: ${{ inputs.instance_type }}
           AMI_ID: ${{ steps.runner.outputs.ami }}
+          RUNS_ON: ${{ inputs.runs_on }}
+          PROFILE: ${{ inputs.profile }}
+          REFERENCE_COMMIT: ${{ inputs.reference_commit }}
         run: |
           # One artifact, one wheel in it, and the filename carries no SHA (every
           # non-tag build is `0.0.0.dev0`), so the glob is the only way to name it.
@@ -291,6 +316,25 @@ jobs:
             exit 1
           fi
           echo "wheel: $wheel"
+
+          # Ticket 48. `--runs-on` is what tells `bench` this is a managed lane, and
+          # it is passed even when empty because the empty string is the answer that
+          # means "ours, profile it". `--reference` is only added when the file is
+          # actually there — an absent option and an unreadable file mean the same
+          # thing to `bench`, but only the option's absence is honest about a
+          # download that never happened. With neither a reference nor a regex the
+          # job takes no profile pass at all, which is what a managed lane gets.
+          profile=(--runs-on "$RUNS_ON")
+          if [ -f reference/reference-values.json ]; then
+            echo "reference values: reference/reference-values.json (${REFERENCE_COMMIT:-none})"
+            profile+=(--reference reference/reference-values.json)
+          elif [ -z "$RUNS_ON" ]; then
+            echo "::notice::No reference values reached ${WORKER}; nothing will be profiled for a regression this run."
+          fi
+          if [ -n "$PROFILE" ]; then
+            profile+=(--profile "$PROFILE")
+          fi
+
           arctic-winds bench \
             --worker "$WORKER" \
             --suite "$SUITE" \
@@ -301,12 +345,17 @@ jobs:
             --python "$PYTHON" \
             --storage "$STORAGE" \
             --instance-type "$INSTANCE_TYPE" \
-            --runner-image "$AMI_ID"
+            --runner-image "$AMI_ID" \
+            "${profile[@]}"
 
       # Artifact name = `<worker>-<sha8>`, and exactly one *result* JSON inside it: that is
       # the contract `collect` reads the worker off, suffix stripped (tickets 07 and 18).
       # The `<worker>-<sha8>.meta.json` sidecar goes up beside it — `collect` takes it as
-      # this worker's metadata, never as a second result (ticket 13). The monitor's
+      # this worker's metadata, never as a second result (ticket 13). So do the profile
+      # pass's `<worker>-<sha8>.<benchmark>.speedscope.json` flame graphs, which `collect`
+      # tells apart by that suffix and files under the benchmark the sidecar says each one
+      # is of (ticket 48); the glob matches nothing on a lane that profiled nothing, which
+      # is what `if-no-files-found: warn` is already tolerant of. The monitor's
       # `<worker>.log` and `status.json` land in the same directory, so name the files
       # explicitly rather than uploading `artifacts/`. This must happen before `stop`
       # terminates the machine.
@@ -323,6 +372,7 @@ jobs:
           path: |
             artifacts/${{ steps.artifact.outputs.name }}.json
             artifacts/${{ steps.artifact.outputs.name }}.meta.json
+            artifacts/${{ steps.artifact.outputs.name }}.*.speedscope.json
           if-no-files-found: warn
 
   # `if: always()`, not `!cancelled()`: a cancelled run is exactly when a forgotten
