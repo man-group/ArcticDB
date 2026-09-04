@@ -465,6 +465,23 @@ struct VersionMapEntry {
             tombstone_all_ = key;
     }
 
+    // Recompute the tombstone bookkeeping from keys_. Callers that assign keys_ wholesale,
+    // rather than pushing keys through a load, must call this: otherwise the entry keeps
+    // describing the tombstone state of the chain it held before the assignment.
+    void rebuild_tombstones_from_keys() {
+        tombstones_.clear();
+        tombstone_all_.reset();
+        for (const auto& packed_key : keys_) {
+            if (!is_tombstone_key_type(packed_key.type()))
+                continue;
+            const auto key = packed_key.to_atom_key(stream_id_);
+            if (packed_key.type() == KeyType::TOMBSTONE_ALL)
+                try_set_tombstone_all(key);
+            else
+                try_set_tombstone(key);
+        }
+    }
+
     void validate() const {
         if (!head_ && keys_.empty())
             return;
