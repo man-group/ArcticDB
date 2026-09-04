@@ -2742,11 +2742,19 @@ std::variant<VersionedItem, CompactionError> compact_incomplete_impl(
     if (compaction_parameters.validate_index_) {
         check_incompletes_index_ranges_dont_overlap(pipeline_context, initial_index_sorted_status, append_to_existing);
     }
-    const auto& first_seg = pipeline_context->slice_and_keys_.begin()->segment(store);
 
     std::vector<FrameSlice> slices;
     bool dynamic_schema = write_options.dynamic_schema;
-    const auto index = index_type_from_descriptor(first_seg.descriptor());
+    const auto index = index_type_from_descriptor(pipeline_context->on_disk_descriptor());
+
+    auto pipeline_read_query = std::make_shared<ReadQuery>();
+    pipeline_read_query->clauses_.emplace_back(std::make_shared<Clause>(
+            RemoveColumnPartitioningClause{pipeline_context->incompletes_after()}
+    ));
+    ReadOptions pipeline_read_options;
+    pipeline_read_options.set_dynamic_schema(dynamic_schema);
+    auto segments = read_process_and_collect(store, pipeline_context, pipeline_read_query, pipeline_read_options).get();
+
     auto policies = std::make_tuple(
             index,
             dynamic_schema ? VariantSchema{DynamicSchema::default_schema(index, stream_id)}
@@ -2768,8 +2776,8 @@ std::variant<VersionedItem, CompactionError> compact_incomplete_impl(
                 };
                 CompactionResult compaction_result =
                         do_compact<IndexType, SchemaType, RowCountSegmentPolicy, ColumnPolicyType>(
-                                pipeline_context->incompletes_begin(),
-                                pipeline_context->end(),
+                                segments.begin(),
+                                segments.end(),
                                 pipeline_context,
                                 slices,
                                 store,

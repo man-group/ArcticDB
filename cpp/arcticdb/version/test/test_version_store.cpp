@@ -11,6 +11,7 @@
 #include <arcticdb/version/version_store_api.hpp>
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/storage/memory/memory_storage.hpp>
+#include <arcticdb/storage/test/in_memory_store.hpp>
 #include <arcticdb/stream/test/stream_test_common.hpp>
 #include <arcticdb/util/test/generators.hpp>
 #include <arcticdb/util/allocator.hpp>
@@ -292,6 +293,530 @@ TEST_F(VersionStoreTest, CompactIncompleteDynamicSchema) {
             ASSERT_EQ(v4.value(), expected);
             ++count;
         }
+    }
+}
+
+namespace {
+
+using namespace arcticdb;
+using namespace arcticdb::entity;
+using namespace arcticdb::storage;
+using namespace arcticdb::stream;
+using namespace arcticdb::pipelines;
+
+class ConcurrencyTrackingStore : public InMemoryStore {
+  public:
+    std::shared_ptr<arcticdb::Store> delegate_;
+    std::atomic<size_t> current_in_flight_{0};
+    std::atomic<size_t> max_observed_in_flight_{0};
+    std::atomic<size_t> total_reads_{0};
+
+    std::function<folly::Future<std::pair<entity::VariantKey, SegmentInMemory>>(
+            const entity::VariantKey&, storage::ReadKeyOpts,
+            std::function<folly::Future<std::pair<entity::VariantKey, SegmentInMemory>>()>)
+    > read_hook_;
+
+    ConcurrencyTrackingStore(const std::shared_ptr<arcticdb::Store>& delegate)
+        : delegate_(delegate), current_in_flight_(0), max_observed_in_flight_(0), total_reads_(0), read_hook_() {}
+
+    ConcurrencyTrackingStore(std::shared_ptr<arcticdb::Store>&& delegate)
+        : delegate_(std::move(delegate)), current_in_flight_(0), max_observed_in_flight_(0), total_reads_(0), read_hook_() {}
+
+    ConcurrencyTrackingStore(const ConcurrencyTrackingStore&) = delete;
+    ConcurrencyTrackingStore& operator=(const ConcurrencyTrackingStore&) = delete;
+
+    size_t max_observed_in_flight() const { return max_observed_in_flight_.load(); }
+    void reset_metrics() {
+        current_in_flight_.store(0);
+        max_observed_in_flight_.store(0);
+        total_reads_.store(0);
+    }
+
+    folly::Future<std::pair<entity::VariantKey, SegmentInMemory>>
+    read(const entity::VariantKey& key, storage::ReadKeyOpts opts = storage::ReadKeyOpts{}) override {
+        size_t inflight = ++current_in_flight_;
+        ++total_reads_;
+        size_t prev = max_observed_in_flight_.load();
+        while (inflight > prev && !max_observed_in_flight_.compare_exchange_weak(prev, inflight)) {}
+
+        auto read_impl = [this, key, opts]() {
+            if (delegate_) {
+                return delegate_->read(key, opts);
+            }
+            return InMemoryStore::read(key, opts);
+        };
+
+        auto fut = read_hook_ ? read_hook_(key, opts, read_impl) : read_impl();
+
+        return std::move(fut).ensure([this]() {
+            --current_in_flight_;
+        });
+    }
+
+    std::pair<entity::VariantKey, SegmentInMemory>
+    read_sync(const entity::VariantKey& key, storage::ReadKeyOpts opts = storage::ReadKeyOpts{}) override {
+        return delegate_ ? delegate_->read_sync(key, opts) : InMemoryStore::read_sync(key, opts);
+    }
+
+    folly::Future<storage::KeySegmentPair>
+    read_compressed(const entity::VariantKey& key, storage::ReadKeyOpts opts = storage::ReadKeyOpts{}) override {
+        return delegate_ ? delegate_->read_compressed(key, opts) : InMemoryStore::read_compressed(key, opts);
+    }
+
+    storage::KeySegmentPair
+    read_compressed_sync(const entity::VariantKey& key, storage::ReadKeyOpts opts = storage::ReadKeyOpts{}) override {
+        return delegate_ ? delegate_->read_compressed_sync(key, opts) : InMemoryStore::read_compressed_sync(key, opts);
+    }
+
+    void iterate_type(
+            KeyType type, const entity::IterateTypeVisitor& func, const std::string& prefix = std::string{}
+    ) override {
+        if (delegate_) delegate_->iterate_type(type, func, prefix);
+        else InMemoryStore::iterate_type(type, func, prefix);
+    }
+
+    folly::Future<std::shared_ptr<storage::ObjectSizes>>
+    get_object_sizes(KeyType type, const std::optional<StreamId>& stream_id) override {
+        return delegate_ ? delegate_->get_object_sizes(type, stream_id) : InMemoryStore::get_object_sizes(type, stream_id);
+    }
+
+    folly::Future<folly::Unit>
+    visit_object_sizes(KeyType type, const std::optional<StreamId>& stream_id_opt, storage::ObjectSizesVisitor visitor)
+            override {
+        return delegate_ ? delegate_->visit_object_sizes(type, stream_id_opt, std::move(visitor))
+                         : InMemoryStore::visit_object_sizes(type, stream_id_opt, std::move(visitor));
+    }
+
+    bool scan_for_matching_key(KeyType key_type, const IterateTypePredicate& predicate) override {
+        return delegate_ ? delegate_->scan_for_matching_key(key_type, predicate) : InMemoryStore::scan_for_matching_key(key_type, predicate);
+    }
+
+    folly::Future<bool> key_exists(const entity::VariantKey& key) override {
+        return delegate_ ? delegate_->key_exists(key) : InMemoryStore::key_exists(key);
+    }
+
+    bool key_exists_sync(const entity::VariantKey& key) override {
+        return delegate_ ? delegate_->key_exists_sync(key) : InMemoryStore::key_exists_sync(key);
+    }
+
+    bool supports_prefix_matching() const override {
+        return delegate_ ? delegate_->supports_prefix_matching() : InMemoryStore::supports_prefix_matching();
+    }
+
+    bool fast_delete() override {
+        return delegate_ ? delegate_->fast_delete() : InMemoryStore::fast_delete();
+    }
+
+    std::vector<folly::Future<VariantKey>>
+    batch_read_compressed(std::vector<std::pair<entity::VariantKey, ReadContinuation>>&& ks, const BatchReadArgs& args)
+            override {
+        return delegate_ ? delegate_->batch_read_compressed(std::move(ks), args) : InMemoryStore::batch_read_compressed(std::move(ks), args);
+    }
+
+    std::vector<folly::Future<bool>> batch_key_exists(const std::vector<entity::VariantKey>& keys) override {
+        return delegate_ ? delegate_->batch_key_exists(keys) : InMemoryStore::batch_key_exists(keys);
+    }
+
+    std::function<folly::Future<pipelines::SegmentAndSlice>(pipelines::RangesAndKey&&)>
+    make_uncompressed_reader(std::shared_ptr<std::unordered_set<std::string>> columns_to_decode) override {
+        if (delegate_) {
+            auto inner_reader = delegate_->make_uncompressed_reader(std::move(columns_to_decode));
+            return [this, inner_reader = std::move(inner_reader)](pipelines::RangesAndKey&& rk) {
+                size_t inflight = ++current_in_flight_;
+                ++total_reads_;
+                size_t prev = max_observed_in_flight_.load();
+                while (inflight > prev && !max_observed_in_flight_.compare_exchange_weak(prev, inflight)) {}
+
+                auto fut = inner_reader(std::move(rk));
+                return std::move(fut).ensure([this]() {
+                    --current_in_flight_;
+                });
+            };
+        }
+        return InMemoryStore::make_uncompressed_reader(std::move(columns_to_decode));
+    }
+
+    folly::Future<std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>>>
+    read_metadata(const entity::VariantKey& key, storage::ReadKeyOpts opts = storage::ReadKeyOpts{}) override {
+        return delegate_ ? delegate_->read_metadata(key, opts) : InMemoryStore::read_metadata(key, opts);
+    }
+
+    folly::Future<std::tuple<VariantKey, std::optional<google::protobuf::Any>, StreamDescriptor>>
+    read_metadata_and_descriptor(const entity::VariantKey& key, storage::ReadKeyOpts opts = storage::ReadKeyOpts{})
+            override {
+        return delegate_ ? delegate_->read_metadata_and_descriptor(key, opts) : InMemoryStore::read_metadata_and_descriptor(key, opts);
+    }
+
+    folly::Future<std::pair<VariantKey, TimeseriesDescriptor>>
+    read_timeseries_descriptor(const entity::VariantKey& key, storage::ReadKeyOpts opts = storage::ReadKeyOpts{})
+            override {
+        return delegate_ ? delegate_->read_timeseries_descriptor(key, opts) : InMemoryStore::read_timeseries_descriptor(key, opts);
+    }
+
+    std::pair<VariantKey, TimeseriesDescriptor>
+    read_timeseries_descriptor_sync(const entity::VariantKey& key, storage::ReadKeyOpts opts = storage::ReadKeyOpts{})
+            override {
+        return delegate_ ? delegate_->read_timeseries_descriptor_sync(key, opts) : InMemoryStore::read_timeseries_descriptor_sync(key, opts);
+    }
+
+    void set_failure_sim(const arcticdb::proto::storage::VersionStoreConfig::StorageFailureSimulator& cfg) override {
+        if (delegate_) delegate_->set_failure_sim(cfg);
+        else InMemoryStore::set_failure_sim(cfg);
+    }
+
+    void move_storage(KeyType key_type, timestamp horizon, size_t storage_index) override {
+        if (delegate_) delegate_->move_storage(key_type, horizon, storage_index);
+        else InMemoryStore::move_storage(key_type, horizon, storage_index);
+    }
+
+    folly::Future<VariantKey> copy(
+            KeyType key_type, const StreamId& stream_id, VersionId version_id, const VariantKey& source_key
+    ) override {
+        return delegate_ ? delegate_->copy(key_type, stream_id, version_id, source_key) : InMemoryStore::copy(key_type, stream_id, version_id, source_key);
+    }
+
+    VariantKey copy_sync(
+            KeyType key_type, const StreamId& stream_id, VersionId version_id, const VariantKey& source_key
+    ) override {
+        return delegate_ ? delegate_->copy_sync(key_type, stream_id, version_id, source_key) : InMemoryStore::copy_sync(key_type, stream_id, version_id, source_key);
+    }
+
+    std::string name() const override { return delegate_ ? delegate_->name() : InMemoryStore::name(); }
+
+    storage::OpenMode open_mode() const override { return delegate_ ? delegate_->open_mode() : InMemoryStore::open_mode(); }
+
+    folly::Future<entity::VariantKey> write(
+            KeyType key_type, VersionId version_id, const StreamId& stream_id, IndexValue start_index,
+            IndexValue end_index, SegmentInMemory&& segment
+    ) override {
+        return delegate_ ? delegate_->write(key_type, version_id, stream_id, start_index, end_index, std::move(segment))
+                         : InMemoryStore::write(key_type, version_id, stream_id, start_index, end_index, std::move(segment));
+    }
+
+    folly::Future<entity::VariantKey> write(
+            stream::KeyType key_type, VersionId version_id, const StreamId& stream_id, timestamp creation_ts,
+            IndexValue start_index, IndexValue end_index, SegmentInMemory&& segment
+    ) override {
+        return delegate_ ? delegate_->write(key_type, version_id, stream_id, creation_ts, start_index, end_index, std::move(segment))
+                         : InMemoryStore::write(key_type, version_id, stream_id, creation_ts, start_index, end_index, std::move(segment));
+    }
+
+    folly::Future<entity::VariantKey> write(
+            KeyType key_type, const StreamId& stream_id, SegmentInMemory&& segment
+    ) override {
+        return delegate_ ? delegate_->write(key_type, stream_id, std::move(segment))
+                         : InMemoryStore::write(key_type, stream_id, std::move(segment));
+    }
+
+    entity::VariantKey write_sync(
+            stream::KeyType key_type, VersionId version_id, const StreamId& stream_id, IndexValue start_index,
+            IndexValue end_index, SegmentInMemory&& segment
+    ) override {
+        return delegate_ ? delegate_->write_sync(key_type, version_id, stream_id, start_index, end_index, std::move(segment))
+                         : InMemoryStore::write_sync(key_type, version_id, stream_id, start_index, end_index, std::move(segment));
+    }
+
+    folly::Future<entity::VariantKey> update(
+            const VariantKey& key, SegmentInMemory&& segment, storage::UpdateOpts opts = storage::UpdateOpts{}
+    ) override {
+        return delegate_ ? delegate_->update(key, std::move(segment), opts)
+                         : InMemoryStore::update(key, std::move(segment), opts);
+    }
+
+    entity::VariantKey update_sync(
+            const VariantKey& key, SegmentInMemory&& segment, storage::UpdateOpts opts = storage::UpdateOpts{}
+    ) override {
+        return delegate_ ? delegate_->update_sync(key, std::move(segment), opts)
+                         : InMemoryStore::update_sync(key, std::move(segment), opts);
+    }
+
+    folly::Future<entity::VariantKey> write(PartialKey pk, SegmentInMemory&& segment) override {
+        return delegate_ ? delegate_->write(pk, std::move(segment))
+                         : InMemoryStore::write(pk, std::move(segment));
+    }
+
+    folly::Future<entity::VariantKey> write_maybe_blocking(
+            PartialKey pk, SegmentInMemory&& segment, std::shared_ptr<folly::NativeSemaphore> semaphore
+    ) override {
+        if (delegate_) {
+            return delegate_->write_maybe_blocking(pk, std::move(segment), std::move(semaphore));
+        }
+        return InMemoryStore::write_maybe_blocking(pk, std::move(segment), std::move(semaphore));
+    }
+
+    entity::VariantKey write_sync(PartialKey pk, SegmentInMemory&& segment) override {
+        return delegate_ ? delegate_->write_sync(pk, std::move(segment))
+                         : InMemoryStore::write_sync(pk, std::move(segment));
+    }
+
+    entity::VariantKey write_sync(KeyType key_type, const StreamId& stream_id, SegmentInMemory&& segment) override {
+        return delegate_ ? delegate_->write_sync(key_type, stream_id, std::move(segment))
+                         : InMemoryStore::write_sync(key_type, stream_id, std::move(segment));
+    }
+
+    bool supports_atomic_writes() const override { return delegate_ ? delegate_->supports_atomic_writes() : InMemoryStore::supports_atomic_writes(); }
+
+    entity::VariantKey write_if_none_sync(
+            KeyType key_type, const StreamId& stream_id, SegmentInMemory&& segment
+    ) override {
+        return delegate_ ? delegate_->write_if_none_sync(key_type, stream_id, std::move(segment))
+                         : InMemoryStore::write_if_none_sync(key_type, stream_id, std::move(segment));
+    }
+
+    folly::Future<folly::Unit> write_compressed(storage::KeySegmentPair ks) override {
+        return delegate_ ? delegate_->write_compressed(std::move(ks))
+                         : InMemoryStore::write_compressed(std::move(ks));
+    }
+
+    void write_compressed_sync(storage::KeySegmentPair ks) override {
+        if (delegate_) delegate_->write_compressed_sync(std::move(ks));
+        else InMemoryStore::write_compressed_sync(std::move(ks));
+    }
+
+    void update_compressed_sync(storage::KeySegmentPair ks, storage::UpdateOpts opts) override {
+        if (delegate_) delegate_->update_compressed_sync(std::move(ks), opts);
+        else InMemoryStore::update_compressed_sync(std::move(ks), opts);
+    }
+
+    folly::Future<pipelines::SliceAndKey> async_write(
+            folly::Future<std::tuple<stream::PartialKey, SegmentInMemory, pipelines::FrameSlice>>&& input_fut,
+            const std::shared_ptr<DeDupMap>& de_dup_map
+    ) override {
+        return delegate_ ? delegate_->async_write(std::move(input_fut), de_dup_map)
+                         : InMemoryStore::async_write(std::move(input_fut), de_dup_map);
+    }
+
+    folly::Future<pipelines::SliceAndKey> compress_and_schedule_async_write(
+            std::tuple<stream::PartialKey, SegmentInMemory, pipelines::FrameSlice>&& input,
+            const std::shared_ptr<DeDupMap>& de_dup_map
+    ) override {
+        return delegate_ ? delegate_->compress_and_schedule_async_write(std::move(input), de_dup_map)
+                         : InMemoryStore::compress_and_schedule_async_write(std::move(input), de_dup_map);
+    }
+
+    const std::set<char>& unsupported_symbol_chars() const override {
+        return delegate_ ? delegate_->unsupported_symbol_chars() : InMemoryStore::unsupported_symbol_chars();
+    }
+
+    const std::set<char>& unsupported_library_chars() const override {
+        return delegate_ ? delegate_->unsupported_library_chars() : InMemoryStore::unsupported_library_chars();
+    }
+
+    std::optional<char> verify_library_suffix(std::string_view path) const override {
+        return delegate_ ? delegate_->verify_library_suffix(path) : InMemoryStore::verify_library_suffix(path);
+    }
+
+    folly::Future<folly::Unit> batch_write_compressed(std::vector<storage::KeySegmentPair> kvs) override {
+        return delegate_ ? delegate_->batch_write_compressed(std::move(kvs))
+                         : InMemoryStore::batch_write_compressed(std::move(kvs));
+    }
+
+    folly::Future<folly::Unit> remove_key(
+            const entity::VariantKey& key, storage::RemoveOpts opts = storage::RemoveOpts{}
+    ) override {
+        return delegate_ ? delegate_->remove_key(key, opts) : InMemoryStore::remove_key(key, opts);
+    }
+
+    void remove_key_sync(const entity::VariantKey& key, storage::RemoveOpts opts = storage::RemoveOpts{}) override {
+        if (delegate_) delegate_->remove_key_sync(key, opts);
+        else InMemoryStore::remove_key_sync(key, opts);
+    }
+
+    folly::Future<folly::Unit> remove_keys(
+            const std::vector<entity::VariantKey>& keys, storage::RemoveOpts opts = storage::RemoveOpts{}
+    ) override {
+        return delegate_ ? delegate_->remove_keys(keys, opts) : InMemoryStore::remove_keys(keys, opts);
+    }
+
+    folly::Future<folly::Unit> remove_keys(
+            std::vector<entity::VariantKey>&& keys, storage::RemoveOpts opts = storage::RemoveOpts{}
+    ) override {
+        return delegate_ ? delegate_->remove_keys(std::move(keys), opts) : InMemoryStore::remove_keys(std::move(keys), opts);
+    }
+
+    void remove_keys_sync(
+            const std::vector<entity::VariantKey>& keys, storage::RemoveOpts opts = storage::RemoveOpts{}
+    ) override {
+        if (delegate_) delegate_->remove_keys_sync(keys, opts);
+        else InMemoryStore::remove_keys_sync(keys, opts);
+    }
+
+    void remove_keys_sync(
+            std::vector<entity::VariantKey>&& keys, storage::RemoveOpts opts = storage::RemoveOpts{}
+    ) override {
+        if (delegate_) delegate_->remove_keys_sync(std::move(keys), opts);
+        else InMemoryStore::remove_keys_sync(std::move(keys), opts);
+    }
+
+    std::optional<size_t> max_delete_batch_size() const override {
+        return delegate_ ? delegate_->max_delete_batch_size() : InMemoryStore::max_delete_batch_size();
+    }
+
+    timestamp current_timestamp() override {
+        return delegate_ ? delegate_->current_timestamp() : InMemoryStore::current_timestamp();
+    }
+};
+
+} // namespace
+
+TEST_F(VersionStoreTest, CompactIncompletePipelineConcurrency) {
+    using namespace arcticdb;
+    using namespace arcticdb::storage;
+    using namespace arcticdb::stream;
+    using namespace arcticdb::pipelines;
+
+    for (const int64_t concurrency : {1, 2, 4, 8}) {
+        ScopedConfig pipeline_concurrency{"Processing.SegmentReadWindow", concurrency};
+        ScopedConfig compact_concurrency{"VersionStore.NumSegmentsLiveDuringCompaction", concurrency};
+        StreamId symbol{fmt::format("compact_concurrency_{}", concurrency)};
+
+        auto original_store = test_store_->_test_get_store();
+        auto tracking_store = std::shared_ptr<ConcurrencyTrackingStore>(new ConcurrencyTrackingStore(original_store));
+        test_store_->_test_set_store(tracking_store);
+
+        // For concurrency > 1, install a barrier hook to prove that reads overlap concurrently
+        std::atomic<bool> barrier_released{false};
+        std::atomic<size_t> waiting_reads{0};
+        const size_t target_overlap = std::min<size_t>(static_cast<size_t>(concurrency), 4);
+
+        if (concurrency > 1) {
+            tracking_store->read_hook_ = [&](const entity::VariantKey&, storage::ReadKeyOpts,
+                                             std::function<folly::Future<std::pair<entity::VariantKey, SegmentInMemory>>()> read_impl) {
+                size_t entered = ++waiting_reads;
+                if (entered >= target_overlap) {
+                    barrier_released.store(true);
+                }
+                return read_impl().thenValue([&barrier_released](auto&& res) {
+                    while (!barrier_released.load()) {
+                        std::this_thread::yield();
+                    }
+                    return std::move(res);
+                });
+            };
+        }
+
+        size_t count = 0;
+        for (size_t i = 0; i < 6; ++i) {
+            auto wrapper = SinkWrapper(
+                    symbol, {scalar_field(DataType::UINT64, "col1"), scalar_field(DataType::FLOAT64, "col2")}
+            );
+            for (size_t j = 0; j < 10; ++j) {
+                wrapper.aggregator_.start_row(timestamp(count++))([&](auto&& rb) {
+                    rb.set_scalar(1, static_cast<uint64_t>(count));
+                    rb.set_scalar(2, static_cast<double>(count) * 1.5);
+                });
+            }
+            wrapper.aggregator_.commit();
+            auto frame = SegmentToInputFrameAdapter{std::move(wrapper.segment())};
+            test_store_->write_parallel_frame(symbol, std::move(frame.input_frame_), true, false, std::nullopt);
+        }
+
+        auto vit = test_store_->compact_incomplete(symbol, false, false, true, false);
+
+        // Strict deterministic concurrency validation
+        size_t observed_max = tracking_store->max_observed_in_flight();
+        if (concurrency == 1) {
+            ASSERT_EQ(observed_max, 1);
+        } else if (concurrency == 2) {
+            ASSERT_GT(observed_max, 1);
+            ASSERT_LE(observed_max, 2);
+            ASSERT_EQ(observed_max, 2);
+        } else if (concurrency == 4) {
+            ASSERT_GT(observed_max, 1);
+            ASSERT_LE(observed_max, 4);
+            ASSERT_EQ(observed_max, 4);
+        } else if (concurrency == 8) {
+            ASSERT_GT(observed_max, 1);
+            ASSERT_LE(observed_max, 8);
+        }
+
+        // Restore original store for validation read
+        test_store_->_test_set_store(original_store);
+
+        auto read_query = std::make_shared<ReadQuery>();
+        register_native_handler_data_factory();
+        auto handler_data =
+                std::make_shared<std::any>(TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE));
+        auto read_result =
+                test_store_->read_dataframe_version(symbol, VersionQuery{}, read_query, ReadOptions{}, handler_data);
+        const auto& seg = std::get<PandasOutputFrame>(read_result.frame_data).frame();
+        ASSERT_EQ(seg.row_count(), 60);
+
+        for (size_t row = 0; row < 60; ++row) {
+            ASSERT_EQ(seg.scalar_at<uint64_t>(row, 0).value(), row);
+            ASSERT_EQ(seg.scalar_at<uint64_t>(row, 1).value(), row + 1);
+            ASSERT_DOUBLE_EQ(seg.scalar_at<double>(row, 2).value(), static_cast<double>(row + 1) * 1.5);
+        }
+    }
+}
+
+TEST_F(VersionStoreTest, CompactIncompleteOutOfOrderCompletionFIFO) {
+    using namespace arcticdb;
+    using namespace arcticdb::storage;
+    using namespace arcticdb::stream;
+    using namespace arcticdb::pipelines;
+
+    ScopedConfig compact_concurrency{"VersionStore.NumSegmentsLiveDuringCompaction", 4};
+    StreamId symbol{"compact_out_of_order_fifo"};
+
+    auto original_store = test_store_->_test_get_store();
+    auto tracking_store = std::shared_ptr<ConcurrencyTrackingStore>(new ConcurrencyTrackingStore(original_store));
+    test_store_->_test_set_store(tracking_store);
+
+    std::atomic<size_t> read_index{0};
+    folly::Promise<std::pair<entity::VariantKey, SegmentInMemory>> seg0_promise;
+    auto seg0_future = seg0_promise.getFuture();
+
+    // Hook: segment 0 is held while segment 1 completes immediately (storage completes out-of-order)
+    tracking_store->read_hook_ = [&](const entity::VariantKey&, storage::ReadKeyOpts,
+                                     std::function<folly::Future<std::pair<entity::VariantKey, SegmentInMemory>>()> read_impl) {
+        size_t idx = read_index++;
+        if (idx == 0) {
+            // Asynchronously read segment 0 in background, fulfill seg0_promise after a brief deferral
+            read_impl().thenValue([&seg0_promise](auto&& res) mutable {
+                // Fulfill promise
+                seg0_promise.setValue(std::move(res));
+            });
+            return std::move(seg0_future);
+        }
+        // Other segments (idx >= 1) complete immediately
+        return read_impl();
+    };
+
+    size_t count = 0;
+    for (size_t i = 0; i < 4; ++i) {
+        auto wrapper = SinkWrapper(
+                symbol, {scalar_field(DataType::UINT64, "col1"), scalar_field(DataType::FLOAT64, "col2")}
+        );
+        for (size_t j = 0; j < 10; ++j) {
+            wrapper.aggregator_.start_row(timestamp(count++))([&](auto&& rb) {
+                rb.set_scalar(1, static_cast<uint64_t>(count));
+                rb.set_scalar(2, static_cast<double>(count) * 1.5);
+            });
+        }
+        wrapper.aggregator_.commit();
+        auto frame = SegmentToInputFrameAdapter{std::move(wrapper.segment())};
+        test_store_->write_parallel_frame(symbol, std::move(frame.input_frame_), true, false, std::nullopt);
+    }
+
+    auto vit = test_store_->compact_incomplete(symbol, false, false, true, false);
+
+    test_store_->_test_set_store(original_store);
+
+    auto read_query = std::make_shared<ReadQuery>();
+    register_native_handler_data_factory();
+    auto handler_data =
+            std::make_shared<std::any>(TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE));
+    auto read_result =
+            test_store_->read_dataframe_version(symbol, VersionQuery{}, read_query, ReadOptions{}, handler_data);
+    const auto& seg = std::get<PandasOutputFrame>(read_result.frame_data).frame();
+    ASSERT_EQ(seg.row_count(), 40);
+
+    // Verify exact sequential FIFO ordering despite out-of-order completion
+    for (size_t row = 0; row < 40; ++row) {
+        ASSERT_EQ(seg.scalar_at<uint64_t>(row, 0).value(), row);
+        ASSERT_EQ(seg.scalar_at<uint64_t>(row, 1).value(), row + 1);
+        ASSERT_DOUBLE_EQ(seg.scalar_at<double>(row, 2).value(), static_cast<double>(row + 1) * 1.5);
     }
 }
 
