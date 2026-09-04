@@ -14,6 +14,7 @@ from arcticdb_ext.exceptions import (
     DuplicateKeyException,
     PermissionException,
     StreamDescriptorMismatch,
+    _ArcticLegacyCompatibilityException,
 )
 from arcticdb_ext.storage import NoDataFoundException
 from arcticdb_ext.storage import UnknownLibraryOption, UnsupportedLibraryOptionValue

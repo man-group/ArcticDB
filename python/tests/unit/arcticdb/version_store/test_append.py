@@ -12,7 +12,7 @@ from pandas._libs.tslibs.offsets import BDay
 import arcticdb
 import arcticdb.exceptions
 from arcticdb.version_store import NativeVersionStore
-from arcticdb_ext.exceptions import InternalException, NormalizationException, UnsortedDataException, SchemaException
+from arcticdb.exceptions import InternalException, NormalizationException, UnsortedDataException, SchemaException
 from arcticdb_ext.storage import KeyType
 from arcticdb_ext import set_config_int
 from arcticdb.util.test import random_integers, assert_frame_equal, assert_series_equal

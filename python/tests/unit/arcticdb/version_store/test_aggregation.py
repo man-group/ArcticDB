@@ -12,7 +12,7 @@ import pandas as pd
 from pandas import DataFrame
 
 from arcticdb.version_store.processing import QueryBuilder
-from arcticdb_ext.exceptions import InternalException, SchemaException
+from arcticdb.exceptions import InternalException, SchemaException
 from arcticdb.util.test import (
     assert_frame_equal,
     generic_aggregation_test,

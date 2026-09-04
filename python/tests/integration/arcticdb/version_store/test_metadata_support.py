@@ -21,8 +21,7 @@ from pandas import DataFrame, Timestamp
 import pytest
 
 from arcticdb.version_store import NativeVersionStore, VersionedItem
-from arcticdb.exceptions import ArcticDbNotYetImplemented
-from arcticdb_ext.storage import NoDataFoundException
+from arcticdb.exceptions import ArcticDbNotYetImplemented, NoDataFoundException
 from arcticdb.util.test import assert_frame_equal, distinct_timestamps
 
 from tests.util.mark import ZONE_INFO_MARK

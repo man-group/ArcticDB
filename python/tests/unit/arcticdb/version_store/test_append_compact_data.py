@@ -14,8 +14,7 @@ from polars.testing import assert_frame_equal as assert_frame_equal_pl
 import pyarrow as pa
 import pytest
 
-from arcticdb_ext.exceptions import InternalException
-from arcticdb_ext.version_store import NoSuchVersionException
+from arcticdb.exceptions import InternalException, NoSuchVersionException
 import arcticdb.toolbox.query_stats as qs
 from arcticdb.util.hypothesis import (
     use_of_function_scoped_fixtures_in_hypothesis_checked,

@@ -15,7 +15,7 @@ import pytest
 from packaging.version import Version
 from arcticdb.util._versions import PANDAS_VERSION
 from arcticdb.version_store._string_dtype import _use_pyarrow_strings_in_pandas
-from arcticdb_ext.exceptions import NormalizationException
+from arcticdb.exceptions import NormalizationException
 
 pyarrow_strings_empty_string_skip = pytest.mark.skipif(
     _use_pyarrow_strings_in_pandas(),
