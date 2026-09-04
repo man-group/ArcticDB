@@ -52,28 +52,39 @@ class AlmostAListNormalizer(CustomNormalizer):
         return AlmostAList(item)
 
 
-@pytest.mark.parametrize("staged", (True, False, None))
 @pytest.mark.parametrize("lib_option", (True, False, None))
 @pytest.mark.parametrize("recursive_normalizers", (True, False, None))
-def test_v2_api(arctic_client_lmdb_v1_only, sym, recursive_normalizers, lib_name, lib_option, staged):
+def test_v2_api(arctic_client_lmdb_v1_only, sym, recursive_normalizers, lib_name, lib_option):
     if lib_option is None:
         lib = arctic_client_lmdb_v1_only.create_library(lib_name)
     else:
         lib = arctic_client_lmdb_v1_only.create_library(lib_name, LibraryOptions(recursive_normalizers=lib_option))
     lt = lib._nvs.library_tool()
     data = {"a": np.arange(5), "b": pd.DataFrame({"col": [1, 2, 3]})}
-    if staged is not True and (
-        (lib_option is True and recursive_normalizers is not False) or recursive_normalizers is True
-    ):
-        lib.write(sym, data, recursive_normalizers=recursive_normalizers, staged=staged)
+    if (lib_option is True and recursive_normalizers is not False) or recursive_normalizers is True:
+        lib.write(sym, data, recursive_normalizers=recursive_normalizers)
         assert len(lt.find_keys(KeyType.MULTI_KEY)) > 0
     else:
         with pytest.raises(ArcticUnsupportedDataTypeException) as e:
-            lib.write(sym, data, recursive_normalizers=recursive_normalizers, staged=staged)
+            lib.write(sym, data, recursive_normalizers=recursive_normalizers)
+
+    # Library.stage is the only V2 staging entry point now. It rejects recursively-normalizable
+    # containers unconditionally, regardless of the recursive-normalizer setting, via its own
+    # (differently-worded) ArcticUnsupportedDataTypeException message.
+    with pytest.raises(ArcticUnsupportedDataTypeException):
+        lib.stage(sym, data)
 
     if lib_option is not True:
         arctic_client_lmdb_v1_only.modify_library_option(lib, ModifiableLibraryOption.RECURSIVE_NORMALIZERS, True)
         lib.write(sym, data)
+
+
+def test_v2_api_write_normalizable_data(arctic_library_lmdb_v1_only, sym):
+    """Normalizable data must reach the store with no exception, regardless of the input-type guard."""
+    lib = arctic_library_lmdb_v1_only
+    df = pd.DataFrame({"col": [1, 2, 3]})
+    lib.write(sym, df)
+    assert_frame_equal(lib.read(sym).data, df)
 
 
 partial_pickle_required_data = {
@@ -965,3 +976,30 @@ def test_write_recursive_norm_bool_named_index(lmdb_version_store, idx, all_recu
 
     assert lmdb_version_store.list_symbols() == []
     assert lmdb_version_store.has_symbol(symbol) is False
+
+
+def test_v2_api_unnormalizable_write_error_message(arctic_library_lmdb_v1_only, sym):
+    lib = arctic_library_lmdb_v1_only
+    data = {"a": np.arange(5), "b": pd.DataFrame({"col": [1, 2, 3]})}
+    with pytest.raises(ArcticUnsupportedDataTypeException) as exc_info:
+        lib.write(sym, data)
+    assert (
+        str(exc_info.value)
+        == "Data is of a type that cannot be normalized. Consider using write_pickle instead. type(data)=[<class 'dict'>]"
+    )
+
+
+def test_v2_api_normalizable_write_skips_recursive_normalizers_resolve(arctic_library_lmdb_v1_only, sym, monkeypatch):
+    lib = arctic_library_lmdb_v1_only
+    calls = []
+    original = lib._nvs._is_recursive_normalizers_enabled
+
+    def counting(**kwargs):
+        calls.append(kwargs)
+        return original(**kwargs)
+
+    monkeypatch.setattr(lib._nvs, "_is_recursive_normalizers_enabled", counting)
+    df = pd.DataFrame({"col": [1, 2, 3]})
+    lib.write(sym, df)
+    assert len(calls) == 1
+    assert_frame_equal(lib.read(sym).data, df)

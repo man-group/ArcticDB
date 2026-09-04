@@ -6,15 +6,17 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 
+import inspect
 import time
 
+import pandas as pd
 from pandas import Timestamp
 from unittest.mock import MagicMock
 import pytest
 
 from arcticdb.exceptions import NoSuchVersionException, NoDataFoundException
 from arcticdb.util.test import distinct_timestamps
-from arcticdb.version_store.library import StagedDataFinalizeMethod, ArcticInvalidApiUsageException
+from arcticdb.version_store.library import StagedDataFinalizeMethod, ArcticInvalidApiUsageException, Library
 
 
 def test_read_descriptor(lmdb_version_store, one_col_df):
@@ -128,3 +130,44 @@ def test_finalize_staged_data_incorrect_args(arctic_library_lmdb, input_mode):
     arctic_library_lmdb._nvs = MagicMock()
     with pytest.raises(ArcticInvalidApiUsageException):
         arctic_library_lmdb.finalize_staged_data(symbol, input_mode)
+
+
+@pytest.mark.parametrize("staged", (True, False))
+def test_write_rejects_staged_kwarg(arctic_library_lmdb, staged):
+    df = pd.DataFrame({"col": [1, 2, 3]})
+    with pytest.raises(TypeError, match="got an unexpected keyword argument 'staged'"):
+        arctic_library_lmdb.write("sym", df, staged=staged)
+
+
+@pytest.mark.parametrize("staged", (True, False))
+def test_write_pickle_rejects_staged_kwarg(arctic_library_lmdb, staged):
+    df = pd.DataFrame({"col": [1, 2, 3]})
+    with pytest.raises(TypeError, match="got an unexpected keyword argument 'staged'"):
+        arctic_library_lmdb.write_pickle("sym", df, staged=staged)
+
+
+@pytest.mark.parametrize(
+    "method, expected_params",
+    [
+        (
+            Library.write,
+            [
+                "self",
+                "symbol",
+                "data",
+                "metadata",
+                "prune_previous_versions",
+                "validate_index",
+                "index_column",
+                "recursive_normalizers",
+            ],
+        ),
+        (
+            Library.write_pickle,
+            ["self", "symbol", "data", "metadata", "prune_previous_versions", "recursive_normalizers"],
+        ),
+    ],
+    ids=["write", "write_pickle"],
+)
+def test_write_methods_signature_order(method, expected_params):
+    assert list(inspect.signature(method).parameters) == expected_params

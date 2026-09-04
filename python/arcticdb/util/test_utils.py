@@ -497,7 +497,7 @@ def stage_chunks(
             df = cachedDF.generate_dataframe_timestamp_indexed(chunk_size, chunk_start_index, cachedDF.TIME_UNIT)
         else:
             df = cachedDF.generate_dataframe_timestamp_indexed(chunk_size, total, cachedDF.TIME_UNIT)
-        lib.write(symbol, data=df, validate_index=True, staged=True)
+        lib.stage(symbol, df, validate_index=True)
         if verbose:
             print()
             print(f"Staging iteration {iter} / {size}")
