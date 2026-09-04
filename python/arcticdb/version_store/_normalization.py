@@ -248,12 +248,10 @@ def _to_primitive(
             raise ArcticDbNotYetImplemented(
                 f"Failed to normalize column '{arr_name}' with dtype '{arr.dtype}': pd.NA dtype not supported"
             )
-        if arr.dtype.storage != "pyarrow":
-            raise ArcticDbNotYetImplemented(
-                f"Failed to normalize column '{arr_name}' with dtype '{arr.dtype}': only pyarrow-backed storage is "
-                "supported"
-            )
-        return _pandas_str_column_to_record_batches(arr._pa_array, arr_name)
+        if arr.dtype.storage == "pyarrow":
+            return _pandas_str_column_to_record_batches(arr._pa_array, arr_name)
+        # No arrow buffer to hand over, so fall through to the object-string path below.
+        arr = arr.to_numpy(dtype=object, na_value=None)
     # This check has to come after the categorical check above, as Categoricals are a Pandas concept, not numpy, which
     # causes issubdtype to throw if arr.dtype == CategoricalDtype
     if np.issubdtype(arr.dtype, np.timedelta64):
