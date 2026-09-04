@@ -6,9 +6,13 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 
+import datetime
+
+import pandas as pd
 import pytest
 
 import arcticdb.toolbox.query_stats as qs
+from arcticdb.util._versions import IS_PANDAS_TWO
 from arcticdb.util.test import config_context, query_stats_operation_count
 from arcticdb_ext.exceptions import InternalException, KeyNotFoundException
 from arcticdb_ext.storage import KeyType, NoDataFoundException
@@ -500,3 +504,34 @@ def test_list_versions_with_snapshot_deleted_always_false(lmdb_version_store_v1,
 
     res = lib.list_versions(snapshot="snap")
     assert res[0]["deleted"] == False
+
+
+def test_list_versions_date_is_utc_nanosecond_timestamp(lmdb_version_store_v1):
+    """The `date` field is dropped by assert_versions_equal, so pin its type, precision and timezone here."""
+    lib = lmdb_version_store_v1
+    lib.write("sym", 1)
+    lib.write("sym", 2)
+    lib.write("other", 3)
+    lib.snapshot("snap")
+
+    def assert_dates_ok(versions):
+        for version in versions:
+            date = version["date"]
+            assert isinstance(date, pd.Timestamp)
+            if IS_PANDAS_TWO:
+                assert date.unit == "ns"
+            assert date.tz is not None
+            assert date.utcoffset() == datetime.timedelta(0)
+
+    all_versions = lib.list_versions()
+    assert len(all_versions) == 3
+    assert_dates_ok(all_versions)
+
+    # Timestamps must be per-version, not all collapsed on to one value
+    assert len({version["date"] for version in all_versions}) == 3
+
+    # Single row, filtered, and empty results go down the same path
+    assert_dates_ok(lib.list_versions("other"))
+    assert_dates_ok(lib.list_versions(latest_only=True))
+    assert_dates_ok(lib.list_versions(snapshot="snap"))
+    assert lib.list_versions("non_existent_sym") == []
