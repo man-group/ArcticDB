@@ -44,8 +44,9 @@ on:
         type: string
         default: ''
       # Ticket 48's manual escape hatch. The profile pass normally decides for itself
-      # — a benchmark new to a lane, or one that crossed the same 1.15 gate the pull
-      # request check uses — and this is how a human overrules it: every Linux lane
+      # — a benchmark new to a lane, or one that crossed the same gate the pull
+      # request check uses (1.20 since gha 38) — and this is how a human overrules it:
+      # every Linux lane
       # profiles what matches, verdict or no verdict, still inside its ~10-minute
       # budget. Empty on every run nobody typed it on, which is all of them.
       profile:
@@ -340,10 +341,13 @@ jobs:
             # release tag, and which commit a worker is on is then the first question.
             # `runs on` is the label the job queues against — `ec2` for the lanes whose
             # label only exists once an instance has been started for them — and `gates`
-            # is whether that lane's numbers may fail a pull request (gha 26 Q4).
+            # is *which* of that lane's numbers may fail a pull request (gha 26 Q4, and
+            # gha 38 for the per-metric-kind answer): `yes` for every kind, `measure-only`
+            # for none, and a list like `peakmem+track` for a lane that judges its
+            # counters and its memory while its timings are still noise.
             echo "| commit | worker | suite | instance | runs on | gates |"
             echo "| --- | --- | --- | --- | --- | --- |"
-            jq -r '.[] | "| \(.commit[0:8]) | \(.worker) | `\(.suite)` | \(.instance_type) | \(if .runs_on == "" then "ec2" else .runs_on end) | \(if .gating then "yes" else "measure-only" end) |"' <<<"$MATRIX"
+            jq -r '.[] | "| \(.commit[0:8]) | \(.worker) | `\(.suite)` | \(.instance_type) | \(if .runs_on == "" then "ec2" else .runs_on end) | \(if .gating == "all" then "yes" elif .gating == "" then "measure-only" else .gating end) |"' <<<"$MATRIX"
           } >> "$GITHUB_STEP_SUMMARY"
 
       # ---------------------------------------------------------------------------
@@ -991,6 +995,13 @@ jobs:
       # could not be made (no fresh master reference) — both fail the job, as the `|| exit 1`
       # chain does today.
       #
+      # The factor is no longer 1.15 and is not spelled here at all: gha 38 measured
+      # `-f 1.15` over this fleet producing 3.25 *false* regressions per comparison of a
+      # commit with itself, and `arctic-winds compare-values` now defaults to the 1.20
+      # that measurement settled on, together with a sixteen-name never-gate list. Both
+      # live in `compare_values.py`, beside the evidence; `--threshold` still overrides
+      # the factor for a caller who wants to see what a different one would say.
+      #
       # `--reference-lib asv_results` compares against **CI's own** master results, which
       # are the only ones that exist while the shadow is young; the numbers come from one
       # machine rather than eight, so treat early verdicts as directional. Switch this to
@@ -1004,9 +1015,16 @@ jobs:
         run: |
           # `--measure-only` drops the managed lanes' rows from *both* commits before asv
           # sees them. Two reasons, and the second is the sharp one: a GitHub-hosted
-          # runner's ≈2.66 % CV would make the 1.15 threshold mostly false alarms, and an
-          # OS-portable subset runs the *same benchmark names* as an EC2 lane — so without
-          # this the pull request would be judged on whichever machine sorted last.
+          # runner's CV would make the threshold mostly false alarms, and an OS-portable
+          # subset runs the *same benchmark names* as an EC2 lane — so without this the
+          # pull request would be judged on whichever machine sorted last.
+          #
+          # Since gha 38 an entry may carry the kinds that lane *does* judge —
+          # `windows_pilot:peakmem+track`, because that lane's counters came back
+          # byte-identical to Linux over eight runs and its memory within 3.18 %, while
+          # its timings sat at 11.36 %. The string is the plan's and nothing here reads
+          # it: `compare-values` compares such a lane a second time, under its own
+          # machine, precisely because of the name collision above.
           arctic-winds compare-values \
             --commit "$COMMIT" \
             --tree . \

@@ -163,7 +163,7 @@ jobs:
             echo
             echo "| release | commit | worker | runs on | gates |"
             echo "| --- | --- | --- | --- | --- |"
-            jq -r '.[] | "| \(.version) | `\(.commit[0:8])` | \(.worker) | \(.runs_on) | \(if .gating then "yes" else "measure-only" end) |"' <<<"$MATRIX"
+            jq -r '.[] | "| \(.version) | `\(.commit[0:8])` | \(.worker) | \(.runs_on) | \(if .gating == "all" then "yes" elif .gating == "" then "measure-only" else .gating end) |"' <<<"$MATRIX"
           } >> "$GITHUB_STEP_SUMMARY"
 
   bench:
@@ -378,9 +378,14 @@ jobs:
       # groups them by the commit each result was measured at and writes ten symbols —
       # the same thing an `--all-tags` run does (ticket 18).
       #
-      # `--measure-only` from the plan, not spelled here: `gating = false` on the pilot
-      # lane is what makes this whole run incapable of a verdict, and the plan is the one
-      # thing that read it. `--no-profiles`: nothing here profiles anything.
+      # `--measure-only` from the plan, not spelled here: the pilot lane's `gating` is
+      # what says which of its numbers may fail anything, and the plan is the one thing
+      # that read it. Since gha 38 that is a list of metric kinds rather than a boolean,
+      # so an entry can read `windows_pilot:peakmem+track`; nothing in this workflow
+      # parses it, which is the point of passing the plan's own string through.
+      # A backfill compares nothing anyway (there is no `compare-values` step here), so
+      # the only thing the list decides is which of a failed benchmark's kinds redden
+      # this job. `--no-profiles`: nothing here profiles anything.
       - name: collect the run
         env:
           LIBRARY: ${{ steps.library.outputs.library }}
