@@ -7,41 +7,36 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 
 import ast
+import functools
+import importlib
 import os
 
-import arcticdb.exceptions as arcticdb_exceptions
+from arcticdb.exceptions import ArcticException
 
-# The one canonical place tests are allowed to import exceptions from.
+# The one canonical place tests are allowed to import ArcticDB exceptions from.
 CANONICAL_MODULE = "arcticdb.exceptions"
 
-# Native submodules the exceptions are also (still) reachable from. Used to catch
-# fully-qualified attribute access such as ``arcticdb_ext.exceptions.UserInputException``.
-NATIVE_EXCEPTION_MODULES = {
-    "arcticdb_ext.exceptions",
-    "arcticdb_ext.storage",
-    "arcticdb_ext.version_store",
-}
+
+@functools.lru_cache(maxsize=None)
+def _load_module(module):
+    try:
+        return importlib.import_module(module)
+    except Exception:
+        return None
 
 
-def canonical_exception_names():
-    """Every exception re-exported from ``arcticdb.exceptions``.
-
-    A name qualifies if it resolves to a subclass of ``BaseException``. This is name-agnostic
-    (so it catches exceptions like ``StreamDescriptorMismatch`` or ``UnknownLibraryOption`` that
-    do not end in ``Exception``/``Error``) and excludes error-metadata enums such as
-    ``ErrorCode``/``ErrorCategory`` and non-exception data containers such as ``DataError``.
-    Names that are *not* re-exported from ``arcticdb.exceptions`` are out of scope and never
-    flagged.
-    """
-    names = set()
-    for name in dir(arcticdb_exceptions):
-        obj = getattr(arcticdb_exceptions, name)
-        if isinstance(obj, type) and issubclass(obj, BaseException):
-            names.add(name)
-    return names
+@functools.lru_cache(maxsize=None)
+def _is_arctic_exception(module, name):
+    if not module or not module.startswith("arcticdb"):
+        return False
+    resolved = _load_module(module)
+    if resolved is None:
+        return False
+    obj = getattr(resolved, name, None)
+    return isinstance(obj, type) and issubclass(obj, ArcticException)
 
 
-def dotted_name(node):
+def _dotted_name(node):
     """Return the dotted source of an attribute chain, e.g. ``a.b.C`` -> "a.b.C"."""
     parts = []
     while isinstance(node, ast.Attribute):
@@ -50,6 +45,24 @@ def dotted_name(node):
     if isinstance(node, ast.Name):
         parts.append(node.id)
     return ".".join(reversed(parts))
+
+
+def find_exception_import_violations(source, filename="<source>"):
+    tree = ast.parse(source, filename=filename)
+    violations = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            if node.module is None or node.module == CANONICAL_MODULE:
+                continue
+            for alias in node.names:
+                if _is_arctic_exception(node.module, alias.name):
+                    violations.append((node.lineno, alias.name, node.module))
+        elif isinstance(node, ast.Attribute):
+            dotted = _dotted_name(node)
+            module, _, name = dotted.rpartition(".")
+            if module and module != CANONICAL_MODULE and _is_arctic_exception(module, name):
+                violations.append((node.lineno, dotted, module))
+    return violations
 
 
 def find_tests_root():
@@ -71,13 +84,12 @@ def iter_test_python_files(tests_root):
 
 
 def test_exceptions_only_imported_from_arcticdb_exceptions():
-    """Every exception used in the test suite must be imported from ``arcticdb.exceptions``.
+    """Every ArcticDB exception used in the test suite must come from ``arcticdb.exceptions``.
 
     We don't stop the exceptions being importable from their original locations (that would
     break backwards compatibility), but the tests themselves should use the single canonical
     module so there is one obvious place to find them.
     """
-    exception_names = canonical_exception_names()
     tests_root = find_tests_root()
     this_file = os.path.abspath(__file__)
 
@@ -86,23 +98,15 @@ def test_exceptions_only_imported_from_arcticdb_exceptions():
         if os.path.abspath(path) == this_file:
             continue
         with open(path, encoding="utf-8") as file:
-            tree = ast.parse(file.read(), filename=path)
+            source = file.read()
         relative_path = os.path.relpath(path, tests_root)
-        for node in ast.walk(tree):
-            if isinstance(node, ast.ImportFrom):
-                if node.module == CANONICAL_MODULE:
-                    continue
-                for imported in node.names:
-                    if imported.name in exception_names:
-                        violations.append(
-                            f"tests/{relative_path}:{node.lineno}: '{imported.name}' from '{node.module}'"
-                        )
-            elif isinstance(node, ast.Attribute) and node.attr in exception_names:
-                dotted = dotted_name(node)
-                module = dotted[: -(len(node.attr) + 1)]
-                if module in NATIVE_EXCEPTION_MODULES:
-                    violations.append(f"tests/{relative_path}:{node.lineno}: '{dotted}' (use '{CANONICAL_MODULE}')")
+        for lineno, reference, module in find_exception_import_violations(source, filename=path):
+            violations.append(
+                f"tests/{relative_path}:{lineno}: '{reference}' from '{module}' (use '{CANONICAL_MODULE}')"
+            )
 
-    assert not violations, f"{len(violations)} exception import(s) must come from '{CANONICAL_MODULE}':\n" + "\n".join(
+    assert (
+        not violations
+    ), f"{len(violations)} exception reference(s) must come from '{CANONICAL_MODULE}':\n" + "\n".join(
         sorted(violations)
     )

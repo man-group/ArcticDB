@@ -27,6 +27,8 @@ from arcticdb.exceptions import (
     NormalizationException,
     SchemaException,
     StreamDescriptorMismatch,
+    ArcticDuplicateSymbolsInBatchException,
+    ArcticUnsupportedDataTypeException,
 )
 from tests.util.date import DateRange
 from pandas import MultiIndex
@@ -847,7 +849,7 @@ class TestBatchUpdate:
     def test_repeating_symbol_in_payload_list_throws(self, lmdb_library):
         lib = lmdb_library
         lib.write("symbol_1", pd.DataFrame({"a": [1]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-01")])))
-        with pytest.raises(arcticdb.version_store.library.ArcticDuplicateSymbolsInBatchException):
+        with pytest.raises(ArcticDuplicateSymbolsInBatchException):
             lib.update_batch(
                 [
                     UpdatePayload(
@@ -865,7 +867,7 @@ class TestBatchUpdate:
         lib = lmdb_library
         lib.write("symbol_1", pd.DataFrame({"a": [1]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-01")])))
         lib.write("symbol_2", pd.DataFrame({"a": [1]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-01")])))
-        with pytest.raises(arcticdb.version_store.library.ArcticUnsupportedDataTypeException) as ex_info:
+        with pytest.raises(ArcticUnsupportedDataTypeException) as ex_info:
             lib.update_batch(
                 [
                     UpdatePayload(symbol="symbol_1", data={1, 2, 3}),
