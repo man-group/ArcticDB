@@ -1083,37 +1083,38 @@ TEST_F(SymbolListSuite, NoCompactionLoadMatchesCompactionPath) {
         version_map_->write_version(store_, key, std::nullopt);
     }
 
-    ConfigsMap::instance()->set_int("SymbolList.MaxDelta", 0);
-    SymbolList sl{version_map_};
-    sl.load<std::set<StreamId>>(version_map_, store_, false);
+    {
+        ScopedConfig max_delta("SymbolList.MaxDelta", 0);
+        SymbolList sl{version_map_};
+        sl.load<std::set<StreamId>>(version_map_, store_, false);
 
-    // Journal entries on top of the compaction key, split by scenario:
+        // Journal entries on top of the compaction key, split by scenario:
 
-    // sym_40..49 already exist at version 0 (from the setup above); write a genuine second
-    // version for them, so the reference_id on the new ADD entry is 1 (the version just written).
-    for (int i = 40; i < 50; ++i) {
-        auto symbol = fmt::format("sym_{}", i);
-        auto key = atom_key_builder().version_id(1).build(symbol, KeyType::TABLE_INDEX);
-        version_map_->write_version(store_, key, std::nullopt);
-        SymbolList::add_symbol(store_, StreamId{symbol}, 1);
+        // sym_40..49 already exist at version 0 (from the setup above); write a genuine second
+        // version for them, so the reference_id on the new ADD entry is 1 (the version just written).
+        for (int i = 40; i < 50; ++i) {
+            auto symbol = fmt::format("sym_{}", i);
+            auto key = atom_key_builder().version_id(1).build(symbol, KeyType::TABLE_INDEX);
+            version_map_->write_version(store_, key, std::nullopt);
+            SymbolList::add_symbol(store_, StreamId{symbol}, 1);
+        }
+        // sym_50..59 are brand new symbols; their first version is 0, so the reference_id matches that.
+        for (int i = 50; i < 60; ++i) {
+            auto symbol = fmt::format("sym_{}", i);
+            auto key = atom_key_builder().version_id(0).build(symbol, KeyType::TABLE_INDEX);
+            version_map_->write_version(store_, key, std::nullopt);
+            SymbolList::add_symbol(store_, StreamId{symbol}, 0);
+        }
+        // sym_0..9 are removed, but their only version (0) is left live in the version map below -
+        // the reference_id on the DELETE entry must match that still-live version, not a version that
+        // was never written.
+        for (int i = 0; i < 10; ++i) {
+            auto symbol = fmt::format("sym_{}", i);
+            SymbolList::remove_symbol(store_, StreamId{symbol}, 0);
+        }
     }
-    // sym_50..59 are brand new symbols; their first version is 0, so the reference_id matches that.
-    for (int i = 50; i < 60; ++i) {
-        auto symbol = fmt::format("sym_{}", i);
-        auto key = atom_key_builder().version_id(0).build(symbol, KeyType::TABLE_INDEX);
-        version_map_->write_version(store_, key, std::nullopt);
-        SymbolList::add_symbol(store_, StreamId{symbol}, 0);
-    }
-    // sym_0..9 are removed, but their only version (0) is left live in the version map below -
-    // the reference_id on the DELETE entry must match that still-live version, not a version that
-    // was never written.
-    for (int i = 0; i < 10; ++i) {
-        auto symbol = fmt::format("sym_{}", i);
-        SymbolList::remove_symbol(store_, StreamId{symbol}, 0);
-    }
 
-    ConfigsMap::instance()->unset_int("SymbolList.MaxDelta");
-
+    ScopedConfig::unset_int("SymbolList.MaxDelta");
     // Load via compaction-eligible path (will not actually compact since threshold is default)
     SymbolList sl1{version_map_};
     auto compaction_result = sl1.load<std::set<StreamId>>(version_map_, store_, false);
@@ -1143,28 +1144,29 @@ TEST_F(SymbolListSuite, NoCompactionLoadMatchesCompactionPathWithTrueDeletes) {
         version_map_->write_version(store_, key, std::nullopt);
     }
 
-    ConfigsMap::instance()->set_int("SymbolList.MaxDelta", 0);
-    SymbolList sl{version_map_};
-    sl.load<std::set<StreamId>>(version_map_, store_, false);
+    {
+        ScopedConfig max_delta("SymbolList.MaxDelta", 0);
+        SymbolList sl{version_map_};
+        sl.load<std::set<StreamId>>(version_map_, store_, false);
 
-    // Add new symbols; their first version is 0, so the reference_id matches that.
-    for (int i = 50; i < 60; ++i) {
-        auto symbol = fmt::format("sym_{}", i);
-        auto key = atom_key_builder().version_id(0).build(symbol, KeyType::TABLE_INDEX);
-        version_map_->write_version(store_, key, std::nullopt);
-        SymbolList::add_symbol(store_, StreamId{symbol}, 0);
+        // Add new symbols; their first version is 0, so the reference_id matches that.
+        for (int i = 50; i < 60; ++i) {
+            auto symbol = fmt::format("sym_{}", i);
+            auto key = atom_key_builder().version_id(0).build(symbol, KeyType::TABLE_INDEX);
+            version_map_->write_version(store_, key, std::nullopt);
+            SymbolList::add_symbol(store_, StreamId{symbol}, 0);
+        }
+
+        // Delete symbols 0-9 via both the symbol list journal AND the version map. Their only version
+        // is 0, so that's the version being tombstoned and the reference_id the DELETE entry must carry.
+        for (int i = 0; i < 10; ++i) {
+            auto symbol = fmt::format("sym_{}", i);
+            SymbolList::remove_symbol(store_, StreamId{symbol}, 0);
+            version_map_->tombstone_from_key_or_all(store_, StreamId{symbol});
+        }
     }
 
-    // Delete symbols 0-9 via both the symbol list journal AND the version map. Their only version
-    // is 0, so that's the version being tombstoned and the reference_id the DELETE entry must carry.
-    for (int i = 0; i < 10; ++i) {
-        auto symbol = fmt::format("sym_{}", i);
-        SymbolList::remove_symbol(store_, StreamId{symbol}, 0);
-        version_map_->tombstone_from_key_or_all(store_, StreamId{symbol});
-    }
-
-    ConfigsMap::instance()->unset_int("SymbolList.MaxDelta");
-
+    ScopedConfig::unset_int("SymbolList.MaxDelta");
     SymbolList sl1{version_map_};
     auto compaction_result = sl1.load<std::set<StreamId>>(version_map_, store_, false);
 

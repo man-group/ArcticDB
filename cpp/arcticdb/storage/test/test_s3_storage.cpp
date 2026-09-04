@@ -16,14 +16,19 @@
 #include <arcticdb/entity/variant_key.hpp>
 #include <arcticdb/storage/test/common.hpp>
 #include <arcticdb/util/test/gtest_utils.hpp>
+#include <arcticdb/util/configs_map.hpp>
 
 #include <arcticdb/log/log.hpp>
 
 #include <aws/core/Aws.h>
 #include <aws/core/utils/memory/stl/AWSStringStream.h>
+#ifndef WIN32
+#include <aws/core/http/HttpClientFactory.h>
+#endif
 
 #include <spdlog/sinks/ostream_sink.h>
 
+#include <set>
 #include <sstream>
 
 struct EnvFunctionShim : ::testing::Test {
@@ -499,3 +504,54 @@ TEST(S3LogSystem, RoutesToSpdlogWithLevelAndTag) {
     ASSERT_NE(out.find("trace|[TraceTag] msg-TraceTag"), std::string::npos);
     ASSERT_NE(out.find("error|[FmtTag] value=42"), std::string::npos);
 }
+
+#ifndef WIN32
+TEST(TestS3Storage, curl_http_client_factory_is_registered) {
+    arcticdb::storage::s3::S3ApiInstance::instance();
+    Aws::Client::ClientConfiguration client_configuration;
+    auto http_client = Aws::Http::CreateHttpClient(client_configuration);
+    ASSERT_NE(dynamic_cast<arcticdb::storage::s3::ArcticCurlHttpClient*>(http_client.get()), nullptr);
+}
+
+TEST(TestS3Storage, dns_shuffle_addresses_enabled_by_default) {
+    using namespace arcticdb::storage::s3;
+    ScopedConfig::unset_int("S3Storage.DnsShuffleAddresses");
+    ASSERT_TRUE(dns_shuffle_addresses_enabled());
+}
+
+TEST(TestS3Storage, dns_shuffle_addresses_can_be_disabled_via_config) {
+    using namespace arcticdb::storage::s3;
+    ScopedConfig scoped_config("S3Storage.DnsShuffleAddresses", 0);
+    ASSERT_FALSE(dns_shuffle_addresses_enabled());
+}
+
+TEST(TestS3Storage, curl_http_client_captures_dns_shuffle_config_at_construction) {
+    using namespace arcticdb::storage::s3;
+    S3ApiInstance::instance();
+
+    Aws::Client::ClientConfiguration client_configuration;
+    client_configuration.endpointOverride = "s3.us-east-1.amazonaws.com";
+
+    {
+        ScopedConfig scoped_config("S3Storage.DnsShuffleAddresses", 1);
+        auto http_client = Aws::Http::CreateHttpClient(client_configuration);
+        auto* arctic_curl_http_client = dynamic_cast<ArcticCurlHttpClient*>(http_client.get());
+        ASSERT_NE(arctic_curl_http_client, nullptr);
+
+        // Flipping the config after construction must not affect a client that already exists, since the value
+        // is captured once in the constructor rather than read live on every request.
+        ConfigsMap::instance()->set_int("S3Storage.DnsShuffleAddresses", 0);
+        ASSERT_TRUE(arctic_curl_http_client->should_shuffle_dns_addresses());
+    }
+
+    {
+        ScopedConfig scoped_config("S3Storage.DnsShuffleAddresses", 0);
+        auto http_client = Aws::Http::CreateHttpClient(client_configuration);
+        auto* arctic_curl_http_client = dynamic_cast<ArcticCurlHttpClient*>(http_client.get());
+        ASSERT_NE(arctic_curl_http_client, nullptr);
+
+        ConfigsMap::instance()->set_int("S3Storage.DnsShuffleAddresses", 1);
+        ASSERT_FALSE(arctic_curl_http_client->should_shuffle_dns_addresses());
+    }
+}
+#endif // WIN32

@@ -302,15 +302,16 @@ TEST(ProcessingUnitAdmissionHandlerTest, ReadWindowLimitsInFlightReads) {
 }
 
 namespace {
-struct TinyThreadPool {
-    TinyThreadPool() {
-        ConfigsMap::instance()->set_int("VersionStore.NumIOThreads", 1);
-        ConfigsMap::instance()->set_int("VersionStore.NumCPUThreads", 1);
-        async::TaskScheduler::reattach_instance();
-    }
-    ~TinyThreadPool() {
-        ConfigsMap::instance()->unset_int("VersionStore.NumIOThreads");
-        ConfigsMap::instance()->unset_int("VersionStore.NumCPUThreads");
+struct ReattachTaskSchedulerOnScopeExit {
+    ~ReattachTaskSchedulerOnScopeExit() { async::TaskScheduler::reattach_instance(); }
+};
+
+struct ScopedThreadCounts {
+    ReattachTaskSchedulerOnScopeExit reattach_guard;
+    ScopedConfig config;
+
+    explicit ScopedThreadCounts(int64_t cpu = 1, int64_t io = 1) :
+        config({{"VersionStore.NumCPUThreads", cpu}, {"VersionStore.NumIOThreads", io}}) {
         async::TaskScheduler::reattach_instance();
     }
 };
@@ -321,7 +322,7 @@ struct TinyThreadPool {
 // Reaching .get() shows that the admit -> process -> advance loop does not deadlock.
 TEST(ProcessingUnitAdmissionHandlerTest, OverlappingUnitsAdvanceWithCeilingOne) {
     using namespace arcticdb::pipelines;
-    TinyThreadPool tiny_pool;
+    ScopedThreadCounts tiny_pool;
 
     const std::vector<std::vector<size_t>> units{{0, 1}, {1, 2}}; // segment 1 shared between the two units
     const size_t num_segments = 3;
@@ -387,7 +388,7 @@ TEST(ProcessingUnitAdmissionHandlerTest, OverlappingUnitsAdvanceWithCeilingOne) 
 
 TEST(ProcessingUnitAdmissionHandlerTest, AdvancesWithReadWindowOfOne) {
     using namespace arcticdb::pipelines;
-    TinyThreadPool tiny_pool;
+    ScopedThreadCounts tiny_pool;
 
     const size_t num_units = 3;
     const size_t unit_size = 2;
@@ -503,14 +504,14 @@ std::vector<folly::Try<folly::Unit>> run_synchronous_read_throw_case(size_t thro
 // window of 1 the whole pipeline stops. Unit 1 completing shows that the window recovered, because with a
 // ceiling of 1 it is only admitted once unit 0 has finished.
 TEST(ProcessingUnitAdmissionHandlerTest, SynchronousReadThrowDoesNotHang) {
-    TinyThreadPool tiny_pool;
+    ScopedThreadCounts tiny_pool;
     const auto results = run_synchronous_read_throw_case(/*throwing_segment=*/1); // second segment of unit 0
     EXPECT_TRUE(results.at(0).hasException());
     EXPECT_TRUE(results.at(1).hasValue());
 }
 
 TEST(ProcessingUnitAdmissionHandlerTest, SynchronousReadThrowOnFirstSegmentOfUnitDoesNotHang) {
-    TinyThreadPool tiny_pool;
+    ScopedThreadCounts tiny_pool;
     const auto results = run_synchronous_read_throw_case(/*throwing_segment=*/0); // first segment of unit 0
     EXPECT_TRUE(results.at(0).hasException());
     EXPECT_TRUE(results.at(1).hasValue());
@@ -680,21 +681,6 @@ TEST(ColumnStatsMixedColSlicing, ResidencyBoundedWithUnevenUnitsWiderFirst) {
     };
     EXPECT_EQ(info.to_map(), expected);
 }
-
-namespace {
-struct ScopedThreadCounts {
-    ScopedThreadCounts(int64_t cpu, int64_t io) {
-        ConfigsMap::instance()->set_int("VersionStore.NumCPUThreads", cpu);
-        ConfigsMap::instance()->set_int("VersionStore.NumIOThreads", io);
-        async::TaskScheduler::reattach_instance();
-    }
-    ~ScopedThreadCounts() {
-        ConfigsMap::instance()->unset_int("VersionStore.NumCPUThreads");
-        ConfigsMap::instance()->unset_int("VersionStore.NumIOThreads");
-        async::TaskScheduler::reattach_instance();
-    }
-};
-} // namespace
 
 // Dividing the window by a wide unit size rounds down to almost nothing, so the per-CPU-thread term is what keeps
 // enough units admitted to occupy the CPU pool.
