@@ -17,10 +17,6 @@
 #include <numeric>
 #include <span>
 
-#include <pybind11/numpy.h>
-
-namespace py = pybind11;
-
 namespace arcticdb::entity {
 
 inline ssize_t calc_elements(const shape_t* shape, ssize_t ndim) {
@@ -337,10 +333,6 @@ struct TypedTensor : public NativeTensor {
         }
     }
 };
-template<typename T>
-py::array to_py_array(const TypedTensor<T>& tensor) {
-    return py::array({tensor.shape(), tensor.shape() + tensor.ndim()}, reinterpret_cast<const T*>(tensor.data()));
-}
 
 template<typename T>
 using TensorType = TypedTensor<T>;

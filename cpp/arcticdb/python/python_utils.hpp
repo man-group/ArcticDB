@@ -17,11 +17,12 @@
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/util/variant.hpp>
 #include <arcticdb/python/python_handler_data.hpp>
+#include <arcticdb/python/tensor_to_py_array.hpp>
 #include <arcticdb/column_store/row_ref.hpp>
 
-namespace py = pybind11;
-
 namespace arcticdb::python_util {
+
+namespace py = pybind11;
 
 class ARCTICDB_VISIBILITY_HIDDEN PyRowRef : public py::tuple {
     PYBIND11_OBJECT_DEFAULT(PyRowRef, py::tuple, PyTuple_Check)

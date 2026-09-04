@@ -10,6 +10,7 @@
 
 #include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/column_store/string_pool.hpp>
+#include <arcticdb/python/tensor_to_py_array.hpp>
 #include <fmt/format.h>
 
 #include <pybind11/numpy.h>
