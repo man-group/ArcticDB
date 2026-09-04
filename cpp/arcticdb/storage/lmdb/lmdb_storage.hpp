@@ -72,9 +72,8 @@ class LmdbStorage final : public Storage {
 
     std::optional<char> do_verify_library_suffix(std::string_view path) const final;
 
-    // Returns a strong reference to the instance, which the caller must hold for as long as it touches the LMDB
-    // environment or any dbi. cleanup() can run concurrently on another thread and drop the storage's own reference;
-    // holding one here is what stops the MDB_env being closed (and lock.mdb unmapped) mid-transaction.
+    // Returns a strong reference the caller must hold while it touches the environment or any dbi: cleanup() can
+    // drop the storage's own reference concurrently.
     std::shared_ptr<LmdbInstance> instance() const;
 
     static ::lmdb::dbi& get_dbi(const LmdbInstance& instance, const std::string& db_name);
@@ -95,10 +94,8 @@ class LmdbStorage final : public Storage {
     );
     std::unique_ptr<std::mutex> write_mutex_;
 
-    // Guards lmdb_instance_ itself, not the environment it points at. Only ever held for the length of a shared_ptr
-    // copy or reset. Shared because instance() is on the path of every storage call, including the reads the IO pool
-    // runs in parallel - an exclusive mutex there serialises them and costs more than the bug being fixed. The pointer
-    // is written exactly twice, when the constructor publishes it and when cleanup() drops it.
+    // Guards lmdb_instance_ itself, not the environment it points at. Shared because instance() is on the path of
+    // every storage call, including the reads the IO pool runs in parallel.
     std::unique_ptr<std::shared_mutex> instance_mutex_;
     std::shared_ptr<LmdbInstance> lmdb_instance_;
 

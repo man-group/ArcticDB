@@ -403,24 +403,16 @@ void remove_db_files(const fs::path& lib_path) {
 }
 
 void LmdbStorage::cleanup() {
-    // Dropping the storage's reference does not necessarily close the environment: any call already in flight on
-    // another thread holds its own reference (see LmdbStorage::instance) and the environment stays open until the last
-    // one goes away. On POSIX, unlinking the files underneath a live mapping is safe, whereas unmapping them
-    // underneath one is not - so remove_db_files() below can run while a writer still holds the environment.
-    // Windows refuses to delete a mapped file, so there remove_db_files() raises instead of racing: a cleanup()
-    // concurrent with an in-flight write reports an error rather than corrupting memory.
+    // Dropping the storage's reference does not necessarily close the environment: a call in flight on another
+    // thread holds its own. On POSIX unlinking a mapped file is safe, so remove_db_files() below can run regardless;
+    // Windows refuses to delete one, so it raises there rather than racing.
     std::shared_ptr<LmdbInstance> instance;
     {
         std::unique_lock<std::shared_mutex> lock{*instance_mutex_};
         instance = std::move(lmdb_instance_);
     }
-    // Diagnostic only, and deliberately not used for control flow: use_count() is a snapshot another thread can
-    // invalidate before it is even read, so it is a lower bound on a moving number rather than an answer. A count
-    // above one means somebody was still inside a storage call, or still held a segment whose buffer points into this
-    // mapping, at the moment the library was deleted. That is survivable - the environment closes later instead of
-    // now - but it is the shape of a caller bug, and it is otherwise invisible: nothing is logged and no exception is
-    // raised, so the consequences surface later as a failed delete on Windows or as an unexplained retention of the
-    // files. Logging it here is what turns "some unrelated operation misbehaved" into a named cause.
+    // Diagnostic only, never control flow: use_count() is a snapshot another thread can invalidate, hence "at
+    // least". A count above one means a storage call or an unreleased read segment overlapped the deletion.
     if (instance) {
         if (const auto holders = instance.use_count(); holders > 1) {
             log::storage().warn(
@@ -458,8 +450,7 @@ LmdbStorage::LmdbStorage(const LibraryPath& library_path, OpenMode mode, const C
 
     write_mutex_ = std::make_unique<std::mutex>();
     instance_mutex_ = std::make_unique<std::shared_mutex>();
-    // Built locally and only published to lmdb_instance_ once it is fully open, so no other thread can ever observe a
-    // half-constructed environment.
+    // Published only once fully open, so no other thread can observe a half-constructed environment.
     auto instance = std::make_shared<LmdbInstance>(LmdbInstance{::lmdb::env::create(conf.flags()), {}});
 
     warn_if_lmdb_already_open();
@@ -528,8 +519,7 @@ LmdbStorage::LmdbStorage(const LibraryPath& library_path, OpenMode mode, const C
 void LmdbStorage::warn_if_lmdb_already_open() const {
     const std::string warn_setting =
             util::to_lower(ConfigsMap::instance()->get_string("LMDBStorage.WarnIfOpened", "config"));
-    // Taken by value under the lock rather than as a reference into the map: another thread constructing a storage
-    // over a different path can rehash it, which would invalidate the reference.
+    // By value, not a reference into the map: another thread's construction can rehash it.
     uint64_t count_for_pid;
     {
         std::lock_guard<std::mutex> lock{times_path_opened_mutex};

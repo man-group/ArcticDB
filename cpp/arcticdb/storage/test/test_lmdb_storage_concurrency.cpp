@@ -28,9 +28,8 @@ namespace {
 
 const fs::path CONCURRENCY_TEST_PATH = "./test_databases_concurrency";
 
-// Returns the storage by its base type on purpose. cleanup() is public on Storage but overridden privately by
-// LmdbStorage, so it is only reachable through a Storage handle - which is also how production gets there, via
-// Library::cleanup() -> Storages::cleanup() -> primary().cleanup().
+// Returned as the base type on purpose: cleanup() is private on LmdbStorage and reachable only through a Storage
+// handle, which is also how production reaches it (Library::cleanup() -> Storages::cleanup()).
 std::unique_ptr<Storage> make_lmdb_storage(const std::string& lib_name) {
     arcticdb::proto::lmdb_storage::Config cfg;
     cfg.set_path(CONCURRENCY_TEST_PATH.generic_string());
@@ -73,11 +72,8 @@ class LmdbStorageConcurrencyTest : public ::testing::Test {
  */
 TEST_F(LmdbStorageConcurrencyTest, WriteDuringCleanup) {
 #if defined(_WIN32)
-    // cleanup() removes lock.mdb and data.mdb immediately after dropping the storage's reference to the environment.
-    // Once the environment is kept alive for the duration of each call, a writer can still be holding it open at that
-    // moment - and Windows refuses to delete a mapped file, so cleanup() raises E_UNEXPECTED_LMDB_ERROR rather than
-    // racing. Both the defect this test targets and the POSIX unlink-while-mapped semantics the fix leans on are
-    // therefore unreproducible here.
+    // Windows refuses to delete a mapped file, so cleanup() raises rather than racing. Both the defect and the POSIX
+    // unlink-while-mapped semantics the fix relies on are unreproducible here.
     GTEST_SKIP() << "relies on POSIX unlink-while-mapped semantics";
 #else
     constexpr int num_rounds = 20;
@@ -91,9 +87,8 @@ TEST_F(LmdbStorageConcurrencyTest, WriteDuringCleanup) {
         std::vector<std::thread> writers;
         writers.reserve(num_writers);
 
-        // Stops and joins the writers however this scope is left. cleanup() can throw, and destroying a joinable
-        // std::thread calls std::terminate - which takes down the whole test binary with no report at all. Declared
-        // after the threads it owns so it runs before they are destroyed, and before storage is.
+        // cleanup() can throw, and destroying a joinable std::thread calls std::terminate. Declared after the
+        // threads so it runs before they are destroyed.
         struct StopWriters {
             std::atomic<bool>& stop;
             std::vector<std::thread>& writers;
@@ -114,8 +109,7 @@ TEST_F(LmdbStorageConcurrencyTest, WriteDuringCleanup) {
                         write_in_store(*storage, fmt::format("sym_{}_{}", t, n));
                         writes_started.fetch_add(1, std::memory_order_relaxed);
                     } catch (const std::exception&) {
-                        // Expected once cleanup() has removed the environment; an escaping exception would
-                        // std::terminate the test rather than report anything useful.
+                        // Expected once cleanup() has removed the environment; escaping would std::terminate.
                     }
                 }
             });
@@ -161,8 +155,7 @@ TEST_F(LmdbStorageConcurrencyTest, ConcurrentOpenAndClose) {
     for (int t = 0; t < num_threads; ++t) {
         threads.emplace_back([t, &failures]() {
             for (int i = 0; i < num_iterations; ++i) {
-                // An exception escaping a std::thread callable calls std::terminate, which kills the binary with no
-                // report. Record it and let the test body assert on it instead.
+                // Escaping a std::thread callable calls std::terminate; record and assert in the test body instead.
                 try {
                     auto storage = make_lmdb_storage(fmt::format("open_close_{}_{}", t, i));
                     write_in_store(*storage, "sym");
