@@ -17,6 +17,7 @@ from arcticdb.version_store._string_dtype import _use_pyarrow_strings_in_pandas
 from arcticdb_ext.exceptions import StreamDescriptorMismatch
 from arcticdb_ext.storage import KeyType
 from arcticdb.util.test import assert_frame_equal
+from arcticdb.version_store._string_dtype import _use_pyarrow_strings_in_pandas
 from arcticdb_ext.types import DataType
 
 from tests.util.mark import ARM64, WINDOWS

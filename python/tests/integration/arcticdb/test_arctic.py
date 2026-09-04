@@ -975,6 +975,15 @@ def test_append_prune_previous_versions(arctic_library):
 
 
 @pytest.mark.storage
+def test_append_missing_symbol_creates(arctic_library):
+    lib = arctic_library
+    df = pd.DataFrame({"a": [1, 2]}, index=pd.date_range("2024-01-01", periods=2))
+    lib.append("new_symbol", df)
+    assert "new_symbol" in lib.list_symbols()
+    assert_frame_equal(lib.read("new_symbol").data, df)
+
+
+@pytest.mark.storage
 def test_update_documented_example(arctic_library):
     """Test the example given on the `update` docstring."""
     lib = arctic_library
@@ -1153,8 +1162,9 @@ def test_update_with_daterange_restrictive(arctic_library):
 @pytest.mark.storage
 def test_update_with_upsert(arctic_library):
     lib = arctic_library
-    with pytest.raises(Exception):
+    with pytest.raises(NoSuchVersionException) as ex_info:
         lib.update("symbol", pd.DataFrame())
+    assert all(s in str(ex_info.value) for s in ["upsert", "Cannot update", "symbol"])
     assert not lib.list_symbols()
     lib.update("symbol", pd.DataFrame(), upsert=True)
     assert "symbol" in lib.list_symbols()
