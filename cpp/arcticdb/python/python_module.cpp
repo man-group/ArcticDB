@@ -14,6 +14,7 @@
 #include <arcticdb/stream/python_bindings.hpp>
 #include <arcticdb/toolbox/python_bindings.hpp>
 #include <arcticdb/version/python_bindings.hpp>
+#include <arcticdb/version/schema_checks.hpp>
 #include <arcticdb/util/python_bindings.hpp>
 #include <arcticdb/log/log.hpp>
 #include <arcticdb/util/preconditions.hpp>
@@ -183,7 +184,8 @@ void register_error_code_ecosystem(py::module& m, py::exception<arcticdb::Arctic
     py::register_local_exception<storage::KeyNotFoundException>(m, "KeyNotFoundException", storage_exception.ptr());
     py::register_local_exception<PermissionException>(m, "PermissionException", storage_exception.ptr());
 
-    py::register_local_exception<SchemaException>(m, "SchemaException", compat_exception.ptr());
+    auto schema_exception = py::register_local_exception<SchemaException>(m, "SchemaException", compat_exception.ptr());
+    py::register_local_exception<StreamDescriptorMismatch>(m, "StreamDescriptorMismatch", schema_exception.ptr());
     py::register_local_exception<NormalizationException>(m, "NormalizationException", compat_exception.ptr());
     py::register_local_exception<MissingDataException>(m, "MissingDataException", compat_exception.ptr());
 

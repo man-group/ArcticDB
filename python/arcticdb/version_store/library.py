@@ -1298,7 +1298,6 @@ class Library:
         >>> items[0].symbol, items[1].symbol
         ('symbol_1', 'symbol_2')
         """
-        self._nvs._raise_if_duplicate_symbols_in_batch(payloads)
         self._raise_if_unsupported_type_in_write_batch(payloads)
 
         throw_on_error = False
@@ -1347,7 +1346,6 @@ class Library:
         write: For more detailed documentation.
         write_pickle: For information on the implications of providing data that needs to be pickled.
         """
-        self._nvs._raise_if_duplicate_symbols_in_batch(payloads)
 
         return self._nvs._batch_write_internal(
             [p.symbol for p in payloads],
@@ -1519,7 +1517,6 @@ class Library:
             If data that is not of NormalizableType appears in any of the payloads.
         """
 
-        self._nvs._raise_if_duplicate_symbols_in_batch(append_payloads)
         self._raise_if_unsupported_type_in_write_batch(append_payloads)
         throw_on_error = False
 
@@ -1727,7 +1724,6 @@ class Library:
         2024-01-02        11
         """
 
-        self._nvs._raise_if_duplicate_symbols_in_batch(update_payloads)
         self._raise_if_unsupported_type_in_write_batch(update_payloads)
 
         batch_update_result = self._nvs._batch_update_internal(
@@ -2653,7 +2649,6 @@ class Library:
         {'the': 'metadata_2'}
         """
 
-        self._nvs._raise_if_duplicate_symbols_in_batch(write_metadata_payloads)
         throw_on_error = False
         return self._nvs._batch_write_metadata_to_versioned_items(
             [p.symbol for p in write_metadata_payloads],
