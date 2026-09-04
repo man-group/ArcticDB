@@ -12,6 +12,7 @@ import pytest
 from arcticdb import QueryBuilder
 from arcticdb.supported_types import float_types
 from arcticdb.version_store.library import Library
+from arcticdb.version_store._string_dtype import _use_pyarrow_strings_in_pandas
 
 from arcticdb_ext.exceptions import StreamDescriptorMismatch
 from arcticdb_ext.storage import KeyType
