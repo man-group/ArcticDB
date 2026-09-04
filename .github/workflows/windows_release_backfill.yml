@@ -1,0 +1,383 @@
+# The Windows lane's history, measured once from PyPI. Install as
+# `.github/workflows/windows_release_backfill.yml` on the shadow branch.
+#
+#   plan ─► bench (matrix: ten releases, one at a time) ─► collect
+#
+# WHY THIS EXISTS (gha 39). The `windows_pilot` lane starts with zero points: the day it
+# goes green the site has one dot and nothing to compare it against. Every one of
+# ArcticDB's last ten releases already has a `cp311-win_amd64` wheel on PyPI, and the
+# benchmark suite the pilot runs exists at every one of their tags, so ten jobs on the
+# same label give the lane a history the day it opens rather than in ten weeks' time.
+#
+# WHAT MAKES IT DIFFERENT FROM `benchmark_worker.yml`, and it is one thing: the build
+# under benchmark is a *release*, so there is no wheel to build and no artifact to
+# download — `uv pip install arcticdb==6.24.0` on the worker is the whole install. That
+# is why this file has no `build`/`build_windows` job, no `download-artifact` step and no
+# `wheel_artifact` input. Everything else about the lane — its suite, its label, its
+# identity, its measure-only status — comes out of `python/benchmarks/workers.toml`
+# through `arctic-winds plan`, from the same `[[worker]]` table the pilot's forward runs
+# read, so the ten backfilled points land on the same series as the eleventh.
+#
+# WHY IT IS ONE DISPATCH AND NOT A SCHEDULE. A backfill is a thing you do once. Ten
+# `windows-latest` jobs on a public repo are free and take about as long as one nightly,
+# and running them again would only add noise to the series — unless that is the point,
+# which is gha 38's variance experiment: the same ten releases on the same label a second
+# time is exactly the repeated-same-machine data it needs, and the artifact naming below
+# is what makes the two runs comparable.
+#
+# ONE EPOCH, BY CONSTRUCTION. A worker epoch is a stretch of runs over which the machine
+# stayed the same, keyed on `instance_type` — which for a managed lane *is* the label
+# (gha 26). All ten jobs carry `windows-latest`, so all ten points are in one epoch and
+# the compare has no boundary to price. What that cannot promise is that GitHub did not
+# re-hardware the label between job 1 and job 10; each job records `ImageOS`/`ImageVersion`
+# in `runner_image`, which is where such a move would show up afterwards.
+name: Windows release backfill (arctic-winds)
+
+on:
+  # The only trigger. A backfill never fires by itself:
+  #
+  #   gh workflow run windows_release_backfill.yml -R man-group/ArcticDB \
+  #     --ref benchmark-winds-shadow
+  #
+  workflow_dispatch:
+    inputs:
+      # THE PIN, and the reason this input has a default at all: the run has to be
+      # repeatable, and "the last ten releases" is a moving answer. These are the ten
+      # newest ArcticDB versions carrying a `cp311-win_amd64` wheel on PyPI as of
+      # 2026-09-04, oldest first, which is the order the jobs run in.
+      #
+      # Read off PyPI and not off `git tag --list`, because they disagree: the clone
+      # carries `v6.25.0` and `v6.26.0+man0` tags PyPI has never published, and a list
+      # taken from git would spend a Windows job discovering that. `arctic-winds wheel
+      # --release` re-checks each one against PyPI in the job anyway, so a pin that has
+      # gone stale is a named refusal rather than a `uv pip install` failure.
+      releases:
+        description: Releases to benchmark, oldest first, comma separated
+        type: string
+        default: "6.18.4,6.18.5,6.18.6,6.18.7,6.19.0,6.20.0,6.21.0,6.22.0,6.23.0,6.24.0"
+      # The lane, by name rather than by a second copy of its `[[worker]]` table: the
+      # backfilled points only land on the pilot's series if they share its worker name,
+      # its suite and its label, and one table is the only way to be sure they do.
+      worker:
+        description: The workers.toml lane to run the backfill on
+        type: string
+        default: windows_pilot
+
+# `actions: read` for `download-artifact` in `collect`: naming any permission drops
+# every default, which is the 403 the enterprise lane spent a ticket on.
+permissions:
+  contents: read
+  actions: read
+
+env:
+  # The one field of the project this run moves, and it is load-bearing. `PyPIWheelSource`
+  # asks PyPI whether a release published a wheel *this project's workers can install*,
+  # and the default answer is manylinux/x86_64 — which every one of these releases has,
+  # so the check would pass while the Windows worker found nothing. Every other field is
+  # left at ArcticDB's own default on purpose: the package is still `arcticdb`, the
+  # library family is still ArcticDB's, and only the platform is Windows.
+  ARCTIC_WINDS_WHEEL_PLATFORM_TAGS: '["win_amd64"]'
+
+  RESULTS: "s3://s3.eu-west-1.amazonaws.com:arcticdb-ci-benchmark-results?aws_auth=true&region=eu-west-1&path_prefix=asv_results"
+
+jobs:
+  plan:
+    name: plan the backfill
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+      measure_only: ${{ steps.plan.outputs.measure_only }}
+      workers: ${{ steps.lane.outputs.workers }}
+    steps:
+      # `fetch-depth: 0`: the plan turns each pinned version into the commit its `v<version>`
+      # tag points at, which needs the tags and the objects behind them. Same reason
+      # `benchmark_winds.yml`'s plan job does it for `--all-tags`.
+      #
+      # This checkout is the *shadow branch*, not a release: it is where
+      # `python/benchmarks/workers.toml` lives. The benchmark trees are checked out per
+      # release in the bench job below.
+      - name: check out ArcticDB with its tags
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"   # arctic-winds requires >=3.11,<3.12
+
+      - name: check out arctic-winds
+        uses: actions/checkout@v4
+        with:
+          repository: G-D-Petrov/arctic-winds
+          ref: main
+          path: arctic-winds
+          ssh-key: ${{ secrets.ARCTIC_WINDS_DEPLOY_KEY }}
+
+      - name: install arctic-winds
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install ./arctic-winds
+
+      # One entry per release, in the order the pin lists them, each carrying the version
+      # as well as the commit — the version is what the job installs, the commit is what
+      # the point is stored at. `--worker` narrows the twelve-lane config to the one lane
+      # this backfill is of; without it this would be 120 jobs.
+      - name: plan the releases
+        id: plan
+        env:
+          RELEASES: ${{ inputs.releases }}
+          WORKER: ${{ inputs.worker }}
+        run: |
+          arctic-winds plan \
+            --config python/benchmarks/workers.toml \
+            --repo . \
+            --releases "$RELEASES" \
+            --worker "$WORKER"
+
+      - name: name the lanes collect should expect
+        id: lane
+        env:
+          MATRIX: ${{ steps.plan.outputs.matrix }}
+        run: |
+          printf 'workers=%s\n' "$(jq -r '[.[].worker] | unique | join(",")' <<<"$MATRIX")" \
+            >> "$GITHUB_OUTPUT"
+
+      - name: report the plan
+        env:
+          MATRIX: ${{ steps.plan.outputs.matrix }}
+        run: |
+          {
+            echo "### 🌬️ Windows release backfill"
+            echo
+            echo "| release | commit | worker | runs on | gates |"
+            echo "| --- | --- | --- | --- | --- |"
+            jq -r '.[] | "| \(.version) | `\(.commit[0:8])` | \(.worker) | \(.runs_on) | \(if .gating then "yes" else "measure-only" end) |"' <<<"$MATRIX"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  bench:
+    needs: [plan]
+    if: ${{ needs.plan.result == 'success' }}
+    strategy:
+      # One at a time, and that is the measurement rather than a courtesy: ten releases
+      # measured back to back on the same label are ten points of one series, where ten
+      # concurrent hosted VMs would be ten machines and every ratio between them part
+      # hardware. It also keeps the run inside a single stretch of GitHub's image, which
+      # is what makes the ten a single epoch.
+      max-parallel: 1
+      # A release that will not install or will not benchmark must not take the other
+      # nine with it: nine points is a shorter history, no points is no ticket.
+      fail-fast: false
+      matrix:
+        include: ${{ fromJson(needs.plan.outputs.matrix) }}
+    name: bench ${{ matrix.worker }} ${{ matrix.version }}
+    # The label the plan resolved, from the lane's own `runs_on`. Nothing is started and
+    # nothing is stopped: a managed lane is somebody else's machine (gha 26).
+    runs-on: ${{ matrix.runs_on }}
+    # The pilot's suite is two storage-blind modules and the first shadow runs put it well
+    # under an hour; 90 leaves room for a cold `uv` install of a release wheel on a Windows
+    # VM without leaving a job hanging for the rest of the queue behind it.
+    timeout-minutes: 90
+    # `pwsh` is the default shell on `windows-latest` and would break every `$VAR`,
+    # `mkdir -p` and `[ -n … ]` below (gha 42's handoff).
+    defaults:
+      run: {shell: bash}
+    steps:
+      # The *release's* tree, by the full SHA the plan resolved the tag to — never the
+      # tag name, because `actions/checkout` reads anything shorter than 40 characters as
+      # a ref and the plan already did that resolution once (gha 18). asv discovers the
+      # benchmarks from this tree, so each release is measured by its own suite, which is
+      # the only honest way to run a benchmark against a build from three months ago.
+      #
+      # LFS as `benchmark_worker.yml` fetches it, so the backfill's environment is the
+      # pilot's environment: a difference here would be a difference in the numbers.
+      - name: check out ArcticDB at the release
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.commit }}
+          fetch-depth: 1
+          lfs: 'true'
+          token: ${{ secrets.ARCTICDB_TEST_PAT }}
+
+      - name: mark the checkout safe for git
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      # `windows-latest` ships several interpreters and defaults to whichever is on PATH,
+      # which is not the 3.11 arctic-winds requires.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: check out arctic-winds
+        uses: actions/checkout@v4
+        with:
+          repository: G-D-Petrov/arctic-winds
+          ref: main
+          path: arctic-winds
+          ssh-key: ${{ secrets.ARCTIC_WINDS_DEPLOY_KEY }}
+
+      - name: install arctic-winds
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install ./arctic-winds
+
+      # The step that replaces `benchmark_worker.yml`'s `download-artifact`. Nothing is
+      # downloaded — the worker's own `uv pip install` fetches the wheel from PyPI — so
+      # what this does is *ask first*: does that release publish a `cp311 win_amd64`
+      # wheel? The platform comes from `ARCTIC_WINDS_WHEEL_PLATFORM_TAGS` above, so this
+      # is the one place the Windows-ness of the lane meets the release list, and a pin
+      # that has gone stale fails here in ten seconds instead of inside uv after the
+      # checkout, the venv and the asv install.
+      #
+      # It prints the requirement and nothing else, so `$(…)` takes it whole — the same
+      # contract `wheel --commit` has with `bench --wheel`.
+      - name: resolve the release's wheel
+        id: wheel
+        env:
+          VERSION: ${{ matrix.version }}
+        run: |
+          requirement=$(arctic-winds wheel --release "$VERSION")
+          echo "requirement: $requirement"
+          printf 'requirement=%s\n' "$requirement" >> "$GITHUB_OUTPUT"
+
+      # `<worker>-<sha8>` and nothing else: that is the contract `collect` reads the
+      # worker off (tickets 07 and 18), and it is what gha 38 needs from this run. Ten
+      # releases are ten distinct commits, so the ten names are distinct within the run;
+      # a *second* backfill run names its artifacts identically, in its own artifact
+      # namespace, which is what makes the two runs comparable point for point. Nothing
+      # about the run — no id, no attempt, no timestamp — goes in the name.
+      - name: name this release's artifact
+        id: artifact
+        env:
+          WORKER: ${{ matrix.worker }}
+          COMMIT: ${{ matrix.commit }}
+        run: printf 'name=%s\n' "$WORKER-${COMMIT:0:8}" >> "$GITHUB_OUTPUT"
+
+      # `--requirement` rather than `--wheel`: the one difference between a release job
+      # and a commit job, and the reason this workflow needs no build.
+      #
+      # `--instance-type` is the label, because a box with no IMDS to ask has no other
+      # name; `--runner-image` is GitHub's own answer to which image and whose runner,
+      # and it is where a re-hardwared label would show up after the fact.
+      # `--runs-on` tells `bench` this is somebody else's machine: no profile pass, which
+      # is why no reference values are fetched for this run at all. Memory telemetry needs
+      # no flag — `bench` samples it from the Windows source gha 36 added.
+      - name: benchmark
+        env:
+          WORKER: ${{ matrix.worker }}
+          SUITE: ${{ matrix.suite }}
+          COMMIT: ${{ matrix.commit }}
+          VERSION: ${{ matrix.version }}
+          ARTIFACT: ${{ steps.artifact.outputs.name }}
+          REQUIREMENT: ${{ steps.wheel.outputs.requirement }}
+          INSTANCE_TYPE: ${{ matrix.instance_type }}
+          RUNS_ON: ${{ matrix.runs_on }}
+        run: |
+          image="${RUNNER_ENVIRONMENT:-unknown}:${ImageOS:-unknown}/${ImageVersion:-unknown}"
+          echo "release $VERSION on $RUNS_ON image=$image arch=$RUNNER_ARCH" \
+            | tee -a "$GITHUB_STEP_SUMMARY"
+          arctic-winds bench \
+            --worker "$WORKER" \
+            --suite "$SUITE" \
+            --commit "$COMMIT" \
+            --tree . \
+            --requirement "$REQUIREMENT" \
+            --output "artifacts/$ARTIFACT.json" \
+            --python 3.11 \
+            --storage LMDB \
+            --instance-type "$INSTANCE_TYPE" \
+            --runner-image "$image" \
+            --runs-on "$RUNS_ON"
+
+      # The result JSON and the sidecar beside it. No `*.speedscope.json` glob: a managed
+      # lane profiles nothing.
+      - name: upload this release's results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ${{ steps.artifact.outputs.name }}
+          path: |
+            artifacts/${{ steps.artifact.outputs.name }}.json
+            artifacts/${{ steps.artifact.outputs.name }}.meta.json
+          if-no-files-found: warn
+
+  collect:
+    name: collect the backfill
+    needs: [plan, bench]
+    # `always()` so a release that died still leaves the other nine stored and a report
+    # saying which one is missing; the plan is the one thing that must have worked.
+    if: always() && needs.plan.result == 'success'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_S3_ACCESS_KEY }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_S3_SECRET_KEY }}
+      AWS_DEFAULT_REGION: eu-west-1
+      WORKERS: ${{ needs.plan.outputs.workers }}
+      MEASURE_ONLY: ${{ needs.plan.outputs.measure_only }}
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: check out arctic-winds
+        uses: actions/checkout@v4
+        with:
+          repository: G-D-Petrov/arctic-winds
+          ref: main
+          path: arctic-winds
+          ssh-key: ${{ secrets.ARCTIC_WINDS_DEPLOY_KEY }}
+
+      - name: install arctic-winds
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install ./arctic-winds
+
+      - name: download every artifact
+        uses: actions/download-artifact@v8
+        with:
+          path: artifacts
+          merge-multiple: false
+
+      - name: list what arrived
+        run: find artifacts -type f | sort
+
+      # THE ONE LIBRARY, and it is the shadow's own — the same one the pilot's forward
+      # runs write, so the ten backfilled points and every point after them are one
+      # series the site exports in one go. Derived from the *branch this was dispatched
+      # on* and not from each release tag: ten tag-named libraries would be ten
+      # one-point libraries and the site reads one library at a time. The release is
+      # what each point *is* — its commit — not where the points live.
+      #
+      # `library_for()`'s rule with a different base, which `collect --ref-name` cannot
+      # express (it hardcodes `asv_results`), so it is spelled here exactly as
+      # `benchmark_winds.yml` spells it.
+      - name: name the results library
+        id: library
+        run: |
+          if [ "$GITHUB_REF_NAME" = master ]; then
+            library=winds_asv_results
+          else
+            library="$(printf '%s' "$GITHUB_REF_NAME" | tr '/' '_')_winds_asv_results"
+          fi
+          echo "library: $library"
+          printf 'library=%s\n' "$library" >> "$GITHUB_OUTPUT"
+
+      # No `--commit`: the download holds one artifact per (worker, commit), so `collect`
+      # groups them by the commit each result was measured at and writes ten symbols —
+      # the same thing an `--all-tags` run does (ticket 18).
+      #
+      # `--measure-only` from the plan, not spelled here: `gating = false` on the pilot
+      # lane is what makes this whole run incapable of a verdict, and the plan is the one
+      # thing that read it. `--no-profiles`: nothing here profiles anything.
+      - name: collect the run
+        env:
+          LIBRARY: ${{ steps.library.outputs.library }}
+        run: |
+          arctic-winds collect \
+            --artifacts artifacts \
+            --results "$RESULTS" \
+            --library "$LIBRARY" \
+            --expect "$WORKERS" \
+            --measure-only "$MEASURE_ONLY" \
+            --no-profiles
