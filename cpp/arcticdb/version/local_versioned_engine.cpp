@@ -1200,8 +1200,15 @@ folly::Future<DeleteTreesStats> delete_trees_responsibly(
             .thenValueInline([stats](folly::Unit) { return stats; });
 }
 
-void LocalVersionedEngine::remove_incomplete(const StreamId& stream_id) {
-    remove_incomplete_segments(store_, stream_id);
+void LocalVersionedEngine::remove_incomplete(const std::variant<StreamId, std::vector<StageResult>>& id_or_stage_results
+) {
+    util::variant_match(
+            id_or_stage_results,
+            [this](const StreamId& stream_id) { remove_incomplete_segments(store_, stream_id); },
+            [this](const std::vector<StageResult>& stage_results) {
+                delete_incomplete_keys_for_stage_results(store_, stage_results);
+            }
+    );
 }
 
 void LocalVersionedEngine::remove_incompletes(

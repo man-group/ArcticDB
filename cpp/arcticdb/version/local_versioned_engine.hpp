@@ -141,7 +141,7 @@ class LocalVersionedEngine : public VersionedEngine {
             const StreamId& stream_id, const std::shared_ptr<InputFrame>& frame, bool validate_index
     ) const override;
 
-    void remove_incomplete(const StreamId& stream_id) override;
+    void remove_incomplete(const std::variant<StreamId, std::vector<StageResult>>& id_or_stage_results) override;
 
     void remove_incompletes(const std::unordered_set<StreamId>& sids, const std::string& common_prefix);
 

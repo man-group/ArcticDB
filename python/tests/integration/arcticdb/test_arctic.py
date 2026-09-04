@@ -379,6 +379,23 @@ def test_staged_data_bad_mode(arctic_library, sort):
         fn("sym", mode="bad_mode")
 
 
+def test_delete_staged_data_by_stage_result(lmdb_library):
+    lib = lmdb_library
+    sym = "test_delete_staged_data_by_stage_result"
+
+    df1 = pd.DataFrame({"col": [0, 1]}, index=pd.date_range("2024-01-01", periods=2))
+    df2 = pd.DataFrame({"col": [2, 3]}, index=pd.date_range("2024-01-03", periods=2))
+
+    stage_result_1 = lib.stage(sym, df1)
+    stage_result_2 = lib.stage(sym, df2)
+
+    lib.delete_staged_data(stage_result_1)
+
+    lib_tool = lib._nvs.library_tool()
+    remaining = {str(k) for k in lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, sym)}
+    assert remaining == {str(k) for k in stage_result_2.staged_segments}
+
+
 @pytest.mark.parametrize(
     "finalize_method", (StagedDataFinalizeMethod.WRITE, StagedDataFinalizeMethod.APPEND, "write", "wRite")
 )
