@@ -131,7 +131,7 @@ StatsComparison stats_comparator(const ColumnStatsValues& stats_lhs, const Value
     if (stats_lhs.column_absent) {
         return StatsComparison::NONE_MATCH;
     }
-    if (stats_lhs.only_nulls()) {
+    if (stats_lhs.all_isnull()) {
         // Every row is null: `!=` matches all of them, every other comparison matches none.
         return std::is_same_v<std::remove_cvref_t<Func>, NotEqualsOperator> ? StatsComparison::ALL_MATCH
                                                                             : StatsComparison::NONE_MATCH;
@@ -179,7 +179,7 @@ StatsComparison stats_comparator(const ColumnStatsValues& stats_lhs, const Value
             return StatsComparison::UNKNOWN;
         });
     });
-    return adjust_for_missing<Func>(result, stats_lhs.nan_count + stats_lhs.null_count);
+    return adjust_for_missing<Func>(result, stats_lhs.isnull_count);
 }
 
 template<typename Func>
@@ -230,9 +230,7 @@ StatsComparison stats_comparator(const ColumnStatsValues& stats_lhs, const Colum
             return StatsComparison::UNKNOWN;
         });
     });
-    return adjust_for_missing<Func>(
-            result, stats_lhs.nan_count + stats_lhs.null_count + stats_rhs.nan_count + stats_rhs.null_count
-    );
+    return adjust_for_missing<Func>(result, stats_lhs.isnull_count + stats_rhs.isnull_count);
 }
 
 template<typename Func>

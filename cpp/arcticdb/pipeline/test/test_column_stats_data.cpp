@@ -359,9 +359,9 @@ TEST(ColumnStatsDataTest, SparseColumnAbsentMarkedCorrectly) {
     ASSERT_TRUE(v1.column_absent);
 }
 
-// A wholly-null row-slice has NAN_COUNT/NULL_COUNT entries but no MIN/MAX (no real value to
-// min/max over). values_for_column must propagate the counts and leave column_absent false, so
-// downstream comparators fall through to UNKNOWN rather than pruning the slice
+// A wholly-null row-slice has an ISNULL_COUNT entry but no MIN/MAX (no real value to min/max
+// over). values_for_column must propagate the count and leave column_absent false, so downstream
+// comparators fall through to UNKNOWN rather than pruning the slice
 TEST(ColumnStatsDataTest, AllNullSliceKeepsCountsAndNotAbsent) {
     using namespace arcticc::pb2::column_stats_pb2;
 
@@ -370,34 +370,30 @@ TEST(ColumnStatsDataTest, AllNullSliceKeepsCountsAndNotAbsent) {
     //   col 1: end_row
     //   col 2: v1_MIN(price)
     //   col 3: v1_MAX(price)
-    //   col 4: v1_NAN_COUNT(price)
-    //   col 5: v1_NULL_COUNT(price)
+    //   col 4: v1_ISNULL_COUNT(price)
     //
     // Row 0: price=[10,20]            (real values)
-    // Row 1: price all null           (no MIN/MAX, null_count=3)
+    // Row 1: price all null           (no MIN/MAX, isnull_count=3)
 
     auto start_col = std::make_shared<Column>(make_scalar_type(DataType::UINT64), Sparsity::PERMITTED);
     auto end_col = std::make_shared<Column>(make_scalar_type(DataType::UINT64), Sparsity::PERMITTED);
     auto min_price_col = std::make_shared<Column>(make_scalar_type(DataType::INT64), Sparsity::PERMITTED);
     auto max_price_col = std::make_shared<Column>(make_scalar_type(DataType::INT64), Sparsity::PERMITTED);
-    auto nan_count_col = std::make_shared<Column>(make_scalar_type(DataType::UINT64), Sparsity::PERMITTED);
-    auto null_count_col = std::make_shared<Column>(make_scalar_type(DataType::UINT64), Sparsity::PERMITTED);
+    auto isnull_count_col = std::make_shared<Column>(make_scalar_type(DataType::UINT64), Sparsity::PERMITTED);
 
     // Row 0: real values present, no nulls
     start_col->push_back<uint64_t>(100);
     end_col->push_back<uint64_t>(200);
     min_price_col->push_back<int64_t>(10);
     max_price_col->push_back<int64_t>(20);
-    nan_count_col->push_back<uint64_t>(0);
-    null_count_col->push_back<uint64_t>(0);
+    isnull_count_col->push_back<uint64_t>(0);
 
-    // Row 1: all null - min/max absent, counts present
+    // Row 1: all null - min/max absent, count present
     start_col->push_back<uint64_t>(300);
     end_col->push_back<uint64_t>(400);
     min_price_col->mark_absent_rows(1);
     max_price_col->mark_absent_rows(1);
-    nan_count_col->push_back<uint64_t>(0);
-    null_count_col->push_back<uint64_t>(3);
+    isnull_count_col->push_back<uint64_t>(3);
 
     ssize_t last_row = 1;
     SegmentInMemory seg;
@@ -406,8 +402,7 @@ TEST(ColumnStatsDataTest, AllNullSliceKeepsCountsAndNotAbsent) {
     seg.add_column(scalar_field(DataType::UINT64, end_row_column_name), end_col);
     seg.add_column(scalar_field(DataType::INT64, "v1_MIN(price)"), min_price_col);
     seg.add_column(scalar_field(DataType::INT64, "v1_MAX(price)"), max_price_col);
-    seg.add_column(scalar_field(DataType::UINT64, "v1_NAN_COUNT(price)"), nan_count_col);
-    seg.add_column(scalar_field(DataType::UINT64, "v1_NULL_COUNT(price)"), null_count_col);
+    seg.add_column(scalar_field(DataType::UINT64, "v1_ISNULL_COUNT(price)"), isnull_count_col);
     seg.set_row_data(last_row);
 
     ColumnStatsHeader header;
@@ -419,12 +414,9 @@ TEST(ColumnStatsDataTest, AllNullSliceKeepsCountsAndNotAbsent) {
     auto* p_max = price_entries.add_entries();
     p_max->set_stats_seg_offset(3);
     p_max->set_type(MAX_V1);
-    auto* p_nan = price_entries.add_entries();
-    p_nan->set_stats_seg_offset(4);
-    p_nan->set_type(NAN_COUNT_V1);
-    auto* p_null = price_entries.add_entries();
-    p_null->set_stats_seg_offset(5);
-    p_null->set_type(NULL_COUNT_V1);
+    auto* p_isnull = price_entries.add_entries();
+    p_isnull->set_stats_seg_offset(4);
+    p_isnull->set_type(ISNULL_COUNT_V1);
 
     google::protobuf::Any any;
     any.PackFrom(header);
@@ -448,7 +440,6 @@ TEST(ColumnStatsDataTest, AllNullSliceKeepsCountsAndNotAbsent) {
     ASSERT_FALSE(v1.min.has_value());
     ASSERT_FALSE(v1.max.has_value());
     ASSERT_FALSE(v1.column_absent); // present-but-all-null, not absent
-    ASSERT_EQ(v1.nan_count, 0u);
-    ASSERT_EQ(v1.null_count, 3u);
+    ASSERT_EQ(v1.isnull_count, 3u);
 }
 } // namespace arcticdb

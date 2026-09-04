@@ -25,8 +25,7 @@ class MinMaxAggregatorData {
   private:
     std::optional<Value> min_;
     std::optional<Value> max_;
-    uint64_t nan_count_{0};
-    uint64_t null_count_{0};
+    uint64_t isnull_count_{0};
     size_t data_col_offset_;
 };
 

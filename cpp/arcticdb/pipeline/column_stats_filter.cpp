@@ -141,8 +141,7 @@ std::vector<StatsMetadataForColumn> calculate_stats_metadata(
             const auto entry_type = entry.type();
             const bool is_min_max = entry_type == arcticc::pb2::column_stats_pb2::MIN_V1 ||
                                     entry_type == arcticc::pb2::column_stats_pb2::MAX_V1;
-            const bool is_count = entry_type == arcticc::pb2::column_stats_pb2::NAN_COUNT_V1 ||
-                                  entry_type == arcticc::pb2::column_stats_pb2::NULL_COUNT_V1;
+            const bool is_count = entry_type == arcticc::pb2::column_stats_pb2::ISNULL_COUNT_V1;
             if (!is_min_max && !is_count) {
                 log::version().warn(
                         "Unknown column stats type {} for column {}, skipping",
@@ -157,7 +156,7 @@ std::vector<StatsMetadataForColumn> calculate_stats_metadata(
                 // Column was filtered out at decode time, or never present in this segment.
                 continue;
             }
-            // NAN_COUNT/NULL_COUNT are always UINT64 and tracked separately; only MIN/MAX define the
+            // ISNULL_COUNT is always UINT64 and tracked separately; only MIN/MAX define the
             // column's value data type.
             if (is_min_max) {
                 const auto entry_data_type = fields.at(*col_index).type().data_type();
@@ -190,11 +189,10 @@ std::unordered_map<std::string, StatsForColumn> load_stats_by_column(
         StatsForColumn stats_for_column;
         stats_for_column.mins.resize(num_rows);
         stats_for_column.maxes.resize(num_rows);
-        stats_for_column.nan_counts.resize(num_rows, 0);
-        stats_for_column.null_counts.resize(num_rows, 0);
+        stats_for_column.isnull_counts.resize(num_rows, 0);
 
         // data_type stays UNKNOWN when every row-slice this column's stats were computed over was
-        // entirely null, leaving only NAN_COUNT/NULL_COUNT
+        // entirely null, leaving only ISNULL_COUNT
         // entries below - nothing to decode here, mins/maxes stay all-absent.
         if (stats_metadata_for_column.data_type != DataType::UNKNOWN) {
             details::visit_type(stats_metadata_for_column.data_type, [&]<typename T>(T) {
@@ -222,18 +220,17 @@ std::unordered_map<std::string, StatsForColumn> load_stats_by_column(
             });
         }
 
-        // NaN/NaT and null (sparse-gap) counts are stored inline with min/max as dense UINT64 columns.
+        // The isnull count is stored inline with min/max as a dense UINT64 column.
         using CountTDT = ScalarTagType<DataTypeTag<DataType::UINT64>>;
         for (const auto& entry : stats_metadata_for_column.entries) {
-            if (entry.stat_type != NAN_COUNT_V1 && entry.stat_type != NULL_COUNT_V1) {
+            if (entry.stat_type != ISNULL_COUNT_V1) {
                 continue;
             }
-            auto& dest = entry.stat_type == NAN_COUNT_V1 ? stats_for_column.nan_counts : stats_for_column.null_counts;
             const auto& column = segment.column(static_cast<position_t>(entry.segment_col_idx));
             for_each_enumerated<CountTDT>(column, [&](const ColumnData::Enumeration<uint64_t>& enumerating_it) {
                 auto idx = static_cast<size_t>(enumerating_it.idx());
                 if (idx >= first_kept && idx < last_kept_excl) {
-                    dest.at(idx - first_kept) = enumerating_it.value();
+                    stats_for_column.isnull_counts.at(idx - first_kept) = enumerating_it.value();
                 }
             });
         }
@@ -367,11 +364,9 @@ std::vector<ColumnStatsValues> ColumnStatsData::values_for_column(
         if (min_set) {
             result_entry.min = stats.mins.at(r);
             result_entry.max = stats.maxes.at(r);
-            result_entry.nan_count = stats.nan_counts.at(r);
-            result_entry.null_count = stats.null_counts.at(r);
-        } else if (stats.nan_counts.at(r) > 0 || stats.null_counts.at(r) > 0) {
-            result_entry.nan_count = stats.nan_counts.at(r);
-            result_entry.null_count = stats.null_counts.at(r);
+            result_entry.isnull_count = stats.isnull_counts.at(r);
+        } else if (stats.isnull_counts.at(r) > 0) {
+            result_entry.isnull_count = stats.isnull_counts.at(r);
         } else {
             result_entry.column_absent = true;
         }

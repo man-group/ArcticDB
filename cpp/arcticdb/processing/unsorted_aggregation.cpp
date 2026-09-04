@@ -25,12 +25,10 @@ void MinMaxAggregatorData::aggregate(const ColumnWithStrings& input_column) {
         using type_info = ScalarTypeInfo<decltype(col_tag)>;
         using RawType = typename type_info::RawType;
         if constexpr (!is_sequence_type(type_info::data_type)) {
-            // null_count_ tracks rows that are genuinely absent (sparse-map gaps from Arrow
-            // validity bitmaps). nan_count_ tracks in-band sentinel values found while iterating
-            // the dense values (NaN for floats, NaT for time types) - see the for_each below.
+            // isnull_count_ counts every row for which ArcticDB's ISNULL is true
             if (input_column.column_->is_sparse()) {
                 const auto sparse_gap_count = input_column.column_->last_row() + 1 - input_column.column_->row_count();
-                null_count_ += static_cast<uint64_t>(sparse_gap_count);
+                isnull_count_ += static_cast<uint64_t>(sparse_gap_count);
             }
             auto is_nat_or_nan = []([[maybe_unused]] RawType v) {
                 if constexpr (is_floating_point_type(type_info::data_type)) {
@@ -56,7 +54,7 @@ void MinMaxAggregatorData::aggregate(const ColumnWithStrings& input_column) {
                 // min/max update so those reflect only real values.
                 if constexpr (is_floating_point_type(type_info::data_type) || is_time_type(type_info::data_type)) {
                     if (is_nat_or_nan(value)) {
-                        ++nan_count_;
+                        ++isnull_count_;
                         any_nan = true;
                         return;
                     }
@@ -87,18 +85,15 @@ void MinMaxAggregatorData::aggregate(const ColumnWithStrings& input_column) {
 std::vector<ColumnStatValue> MinMaxAggregatorData::finalize() const {
     std::vector<ColumnStatValue> res;
     if (min_.has_value()) {
-        res.reserve(4);
+        res.reserve(3);
         res.emplace_back(ColumnStatValue{ColumnStatTypeInternal::MIN_V1, data_col_offset_, *min_});
         res.emplace_back(ColumnStatValue{ColumnStatTypeInternal::MAX_V1, data_col_offset_, *max_});
-    } else if (null_count_ == 0) {
+    } else if (isnull_count_ == 0) {
         // The column is absent from this slice entirely, so there is nothing to record
         return res;
     }
-    res.emplace_back(
-            ColumnStatValue{ColumnStatTypeInternal::NAN_COUNT_V1, data_col_offset_, Value{nan_count_, DataType::UINT64}}
-    );
     res.emplace_back(ColumnStatValue{
-            ColumnStatTypeInternal::NULL_COUNT_V1, data_col_offset_, Value{null_count_, DataType::UINT64}
+            ColumnStatTypeInternal::ISNULL_COUNT_V1, data_col_offset_, Value{isnull_count_, DataType::UINT64}
     });
     return res;
 }
