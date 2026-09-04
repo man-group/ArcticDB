@@ -9,13 +9,16 @@
 #pragma once
 
 #include <arcticdb/storage/storage.hpp>
-#include <arcticdb/storage/storage_options.hpp>
 #include <arcticdb/storage/storage_exceptions.hpp>
 #include <arcticdb/async/batch_read_args.hpp>
-#include <arcticdb/processing/clause.hpp>
 
 #include <folly/futures/Future.h>
 #include <folly/Function.h>
+
+namespace arcticdb::pipelines {
+struct RangesAndKey;
+struct SegmentAndSlice;
+}
 
 namespace arcticdb::stream {
 
