@@ -39,6 +39,17 @@ on:
   #   gh workflow run windows_release_backfill.yml -R man-group/ArcticDB \
   #     --ref benchmark-winds-shadow
   #
+  # TEMPORARY until either this file reaches the default branch or the shadow
+  # phase ends: GitHub only registers a workflow once one of its trigger events
+  # can fire, and an unregistered workflow rejects workflow_dispatch too. A
+  # push touching this file is the one event a branch can produce. The
+  # push-triggered run exits in the plan job (empty releases input) and costs
+  # seconds; the dispatch above is the real path. Delete with the other
+  # temporary shadow push triggers at cut-over.
+  push:
+    branches: [benchmark-winds-shadow]
+    paths: ['.github/workflows/windows_release_backfill.yml']
+
   workflow_dispatch:
     inputs:
       # THE PIN, and the reason this input has a default at all: the run has to be
