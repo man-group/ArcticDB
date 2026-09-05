@@ -11,6 +11,7 @@
 #include <arcticdb/version/version_map.hpp>
 #include <arcticdb/version/symbol_list.hpp>
 #include <arcticdb/storage/common.hpp>
+#include <arcticdb/entity/data_error.hpp>
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/entity/stage_result.hpp>
 #include <arcticdb/pipeline/write_options.hpp>

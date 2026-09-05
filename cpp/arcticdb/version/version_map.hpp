@@ -13,31 +13,22 @@
  */
 #pragma once
 
-#include <shared_mutex>
-#include <unordered_set>
 #include <map>
 #include <deque>
 #include <gtest/gtest_prod.h>
 
-#include <arcticdb/entity/types.hpp>
 #include <arcticdb/entity/atom_key.hpp>
+#include <arcticdb/entity/key.hpp>
+#include <arcticdb/entity/types.hpp>
 #include <arcticdb/stream/index.hpp>
-#include <arcticdb/stream/stream_sink.hpp>
-#include <arcticdb/stream/stream_writer.hpp>
-#include <arcticdb/stream/stream_source.hpp>
-#include <arcticdb/stream/stream_reader.hpp>
-#include <arcticdb/python/python_utils.hpp>
-#include <arcticdb/util/configs_map.hpp>
 #include <arcticdb/storage/store.hpp>
-#include <arcticdb/storage/storage.hpp>
-#include <arcticdb/storage/storage_utils.hpp>
+#include <arcticdb/util/configs_map.hpp>
 #include <arcticdb/util/constants.hpp>
 #include <arcticdb/util/key_utils.hpp>
+#include <arcticdb/util/lock_table.hpp>
 #include <arcticdb/version/version_map_entry.hpp>
-#include <arcticdb/async/batch_read_args.hpp>
 #include <arcticdb/version/version_log.hpp>
 #include <arcticdb/version/version_utils.hpp>
-#include <arcticdb/util/lock_table.hpp>
 
 namespace arcticdb {
 
