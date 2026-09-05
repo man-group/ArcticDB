@@ -23,6 +23,10 @@ from asv_runner.benchmarks.mark import skip_for_params
 
 class Resample:
     number = 5
+    # setup_cache takes right around asv's 60s default timeout on a shared
+    # windows-latest box, so it flakes on the slower draws; 600 matches the
+    # timeout the other heavy suites in this directory already declare.
+    timeout = 600
 
     LIB_NAME = "resample"
     CONNECTION_STRING = "lmdb://resample"
