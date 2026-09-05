@@ -8,7 +8,12 @@
 
 #pragma once
 
+#include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/entity/types.hpp>
+
+#include <pybind11/buffer_info.h>
+
+namespace py = pybind11;
 
 namespace arcticdb {
 

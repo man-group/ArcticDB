@@ -253,12 +253,6 @@ class Aggregator {
         segment_.set_array(pos, val);
     }
 
-    template<typename T>
-    requires std::integral<T> || std::floating_point<T>
-    void set_array(position_t pos, py::array_t<T>& val) {
-        segment_.set_array(pos, val);
-    }
-
     void set_string_array(position_t pos, size_t string_size, size_t num_strings, char* data) {
         segment_.set_string_array(pos, string_size, num_strings, data);
     }

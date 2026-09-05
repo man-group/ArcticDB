@@ -20,11 +20,15 @@
 #include <memory>
 #include <optional>
 
+namespace pybind11 {
+class object;
+}
+
 namespace arcticdb {
 
 VariantKey write_multi_index_entry(
         std::shared_ptr<StreamSink> store, std::vector<AtomKey>& keys, const StreamId& stream_id,
-        const py::object& metastruct, const py::object& user_meta, VersionId version_id
+        const pybind11::object& metastruct, const pybind11::object& user_meta, VersionId version_id
 );
 
 inline std::optional<AtomKey> read_segment_with_keys(

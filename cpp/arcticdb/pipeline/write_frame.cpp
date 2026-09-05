@@ -6,7 +6,6 @@
  * will be governed by the Apache License, version 2.0.
  */
 
-#include "codec/segment.hpp"
 #include "column_store/memory_segment.hpp"
 #include <arcticdb/pipeline/input_frame.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>

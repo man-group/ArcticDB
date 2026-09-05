@@ -13,6 +13,8 @@
 #include <arcticdb/column_store/column_algorithms.hpp>
 #include <ankerl/unordered_dense.h>
 
+#include <pybind11/buffer_info.h>
+
 namespace arcticdb {
 
 /*****************

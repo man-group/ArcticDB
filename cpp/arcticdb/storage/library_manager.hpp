@@ -15,6 +15,10 @@
 #include <arcticdb/util/lru_cache.hpp>
 #include <arcticdb/entity/protobufs.hpp>
 
+#include <pybind11/pybind11.h>
+
+namespace py = pybind11;
+
 namespace arcticdb::storage {
 enum class ModifiableLibraryOption {
     DEDUP = 1,

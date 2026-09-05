@@ -11,6 +11,7 @@
 
 #include <aws/s3/S3Client.h>
 
+#include <arcticdb/async/task_scheduler.hpp>
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/log/log.hpp>
 

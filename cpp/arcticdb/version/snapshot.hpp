@@ -16,11 +16,15 @@
 #include <arcticdb/storage/key_segment_pair.hpp>
 #include <arcticdb/storage/store.hpp>
 
+namespace pybind11 {
+class object;
+}
+
 namespace arcticdb {
 
 void write_snapshot_entry(
         std::shared_ptr<stream::StreamSink> store, std::vector<AtomKey>& keys, const SnapshotId& snapshot_id,
-        const py::object& user_meta, bool log_changes, KeyType key_type = KeyType::SNAPSHOT_REF
+        const pybind11::object& user_meta, bool log_changes, KeyType key_type = KeyType::SNAPSHOT_REF
 );
 
 void tombstone_snapshot(

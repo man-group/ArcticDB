@@ -74,7 +74,7 @@ class TickReader {
 
                         res.append(output);
                     } else
-                        res.append(to_py_array(segment_.tensor_at<RawType>(row, col).value()));
+                        res.append(python_util::to_py_array(segment_.tensor_at<RawType>(row, col).value()));
                 }
             });
         }

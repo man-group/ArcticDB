@@ -8,10 +8,8 @@
 
 #pragma once
 
-#include <arcticdb/entity/atom_key.hpp>
 #include <arcticdb/stream/stream_utils.hpp>
 #include <arcticdb/stream/stream_source.hpp>
-#include <arcticdb/entity/atom_key.hpp>
 #include <arcticdb/entity/index_range.hpp>
 #include <arcticdb/util/timeouts.hpp>
 #include <arcticdb/column_store/row_ref.hpp>
@@ -19,9 +17,9 @@
 
 #include <folly/gen/Base.h>
 
-#include <chrono>
-
 namespace arcticdb::stream {
+
+struct StreamSource;
 
 template<class SegmentIt, class RowType>
 class RowsFromSegIterator : public IndexRangeFilter {

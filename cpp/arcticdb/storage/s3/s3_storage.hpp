@@ -9,6 +9,7 @@
 #pragma once
 
 #include <aws/sts/STSClient.h>
+#include <arcticdb/async/task_scheduler.hpp>
 #include <arcticdb/storage/storage.hpp>
 #include <arcticdb/log/log.hpp>
 #include <arcticdb/storage/s3/s3_api.hpp>

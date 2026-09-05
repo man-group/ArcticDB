@@ -22,6 +22,7 @@
 #include <arcticdb/async/base_task.hpp>
 #include <arcticdb/async/bit_rate_stats.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
+#include <arcticdb/processing/clause.hpp>
 #include <arcticdb/util/constructors.hpp>
 #include <arcticdb/codec/codec.hpp>
 #include <arcticdb/util/test/random_throw.hpp>

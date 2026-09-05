@@ -11,6 +11,7 @@
 #include "column_store/memory_segment.hpp"
 #include <arcticdb/entity/index_range.hpp>
 
+#include <arcticdb/async/task_scheduler.hpp>
 #include <arcticdb/pipeline/input_frame.hpp>
 #include <arcticdb/stream/index.hpp>
 #include <folly/futures/Future.h>

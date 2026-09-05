@@ -9,11 +9,6 @@
 #pragma once
 
 #include <arcticdb/entity/types.hpp>
-#include <arcticdb/util/preconditions.hpp>
-
-#include <pybind11/numpy.h>
-
-namespace py = pybind11;
 
 namespace arcticdb::util {
 
@@ -21,15 +16,6 @@ using namespace arcticdb::entity;
 
 template<class T, template<class> class Tensor>
 bool has_funky_strides(Tensor<T>& a) {
-    for (ssize_t i = 0; i < a.ndim(); ++i) {
-        if (a.strides(i) < 0 || a.strides(i) % a.itemsize() != 0)
-            return true;
-    }
-    return false;
-}
-
-template<class T>
-bool has_funky_strides(py::array_t<T>& a) {
     for (ssize_t i = 0; i < a.ndim(); ++i) {
         if (a.strides(i) < 0 || a.strides(i) % a.itemsize() != 0)
             return true;
@@ -58,14 +44,6 @@ struct stride_advance_optimistic {
 
 template<class T, template<class> class Tensor>
 auto shape_and_strides(Tensor<T>& array, ssize_t dim) {
-    auto total_dim = array.ndim();
-    shape_t sh = array.shape(total_dim - size_t(dim));
-    stride_t sd = array.strides(total_dim - size_t(dim));
-    return std::make_pair(sh, sd);
-}
-
-template<class T>
-auto shape_and_strides(py::array_t<T>& array, ssize_t dim) {
     auto total_dim = array.ndim();
     shape_t sh = array.shape(total_dim - size_t(dim));
     stride_t sd = array.strides(total_dim - size_t(dim));
