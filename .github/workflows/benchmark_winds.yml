@@ -1002,6 +1002,16 @@ jobs:
       # live in `compare_values.py`, beside the evidence; `--threshold` still overrides
       # the factor for a caller who wants to see what a different one would say.
       #
+      # `--normalize` divides each lane's own run offset — what the whole machine did
+      # that morning — out of the run side before asv judges it (gha 58, adopted
+      # 2026-09-05). Measured over gha 38's same-code runs it takes the fleet's false
+      # regressions at this factor from 0.18 to 0.12 per comparison; the factor itself
+      # stays at the default until a few weeks of normalized nightlies confirm the
+      # measured rates (normalized 1.15 scored 0.16, better than raw 1.20 — the next
+      # candidate, not the first step). The verdict discloses itself: each normalized
+      # lane's offset size lands in the summary, the report JSON and the PR page, so
+      # a normalized green is never mistakable for a raw one.
+      #
       # `--reference-lib asv_results` compares against **CI's own** master results, which
       # are the only ones that exist while the shadow is young; the numbers come from one
       # machine rather than eight, so treat early verdicts as directional. Switch this to
@@ -1033,6 +1043,7 @@ jobs:
             --reference-lib asv_results \
             --repo . \
             --measure-only "$MEASURE_ONLY" \
+            --normalize \
             --report "$GITHUB_WORKSPACE/compare-report.json"
 
       # The verdict, handed to `publish_pr_page`. The comparison must not be run twice
