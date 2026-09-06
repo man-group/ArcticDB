@@ -1,12 +1,9 @@
 #pragma once
 
 #include <arcticdb/entity/stream_descriptor.hpp>
-#include <arcticdb/processing/clause.hpp>
 #include <arcticdb/pipeline/column_stats_types.hpp>
-#include <arcticdb/pipeline/index_fields.hpp>
+#include <arcticdb/processing/clause.hpp>
 #include <column_stats.pb.h>
-#include <ankerl/unordered_dense.h>
-#include <map>
 #include <set>
 #include <string>
 #include <string_view>

@@ -16,6 +16,7 @@
 #include <arcticdb/stream/aggregator.hpp>
 #include <arcticdb/entity/protobuf_mappings.hpp>
 #include <arcticdb/entity/types_proto.hpp>
+#include <arcticdb/util/name_validation.hpp>
 
 namespace py = pybind11;
 

@@ -8,15 +8,12 @@
 
 #pragma once
 
+#include <arcticdb/entity/output_format.hpp>
 #include <arcticdb/entity/read_result.hpp>
 #include <arcticdb/pipeline/pipeline_context.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/pipeline/read_frame.hpp>
 #include <arcticdb/pipeline/read_options.hpp>
-#include <arcticdb/pipeline/read_pipeline.hpp>
-#include <arcticdb/pipeline/column_mapping.hpp>
-#include <arcticdb/util/type_handler.hpp>
-#include <arcticdb/python/python_handler_data.hpp>
 
 namespace arcticdb::pipelines {
 

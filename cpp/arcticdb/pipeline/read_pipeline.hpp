@@ -13,8 +13,10 @@
 #include <arcticdb/util/bitset.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/pipeline/query.hpp>
+#include <arcticdb/pipeline/read_query.hpp>
 #include <arcticdb/pipeline/index_segment_reader.hpp>
 #include <arcticdb/pipeline/pipeline_context.hpp>
+#include <arcticdb/processing/clause.hpp>
 
 namespace arcticdb::pipelines {
 

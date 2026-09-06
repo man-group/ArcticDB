@@ -12,13 +12,17 @@
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/entity/atom_key.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
+#include <arcticdb/pipeline/query_range.hpp>
 #include <arcticdb/stream/stream_source.hpp>
 #include <arcticdb/storage/store.hpp>
 #include <arcticdb/pipeline/input_frame.hpp>
 #include <arcticdb/pipeline/write_options.hpp>
-#include <arcticdb/pipeline/pipeline_context.hpp>
-#include <arcticdb/pipeline/read_query.hpp>
 #include <string>
+
+namespace arcticdb::pipelines {
+struct ReadQuery;
+struct PipelineContext;
+} // namespace arcticdb::pipelines
 
 namespace arcticdb {
 
@@ -170,10 +174,10 @@ void delete_incomplete_keys_for_stage_results(
  * Throws if any of the stage results refer to segments that no longer exist (for example, because they have already
  * been finalised).
  */
-std::variant<std::vector<SliceAndKey>, CompactionError> get_incomplete_segments_using_stage_results(
-        const std::shared_ptr<Store>& store, const std::shared_ptr<PipelineContext>& pipeline_context,
-        const std::vector<StageResult>& stage_results, const ReadQuery& read_query, const ReadIncompletesFlags& flags,
-        bool load_data
+std::variant<std::vector<pipelines::SliceAndKey>, CompactionError> get_incomplete_segments_using_stage_results(
+        const std::shared_ptr<Store>& store, const std::shared_ptr<pipelines::PipelineContext>& pipeline_context,
+        const std::vector<StageResult>& stage_results, const pipelines::ReadQuery& read_query,
+        const ReadIncompletesFlags& flags, bool load_data
 );
 
 } // namespace arcticdb

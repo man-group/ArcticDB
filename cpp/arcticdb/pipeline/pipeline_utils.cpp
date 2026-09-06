@@ -6,6 +6,7 @@
  * will be governed by the Apache License, version 2.0.
  */
 
+#include <arcticdb/pipeline/column_mapping.hpp>
 #include <arcticdb/pipeline/pipeline_utils.hpp>
 #include <arcticdb/util/decode_path_data.hpp>
 

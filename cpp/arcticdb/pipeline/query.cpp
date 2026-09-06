@@ -6,9 +6,11 @@
  * will be governed by the Apache License, version 2.0.
  */
 
+#include <arcticdb/codec/segment.hpp>
 #include <arcticdb/pipeline/query.hpp>
-#include <arcticdb/pipeline/index_utils.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
+#include <arcticdb/pipeline/index_segment_reader.hpp>
+#include <arcticdb/pipeline/index_utils.hpp>
 #include <arcticdb/pipeline/test/test_container.hpp>
 
 namespace arcticdb::pipelines {

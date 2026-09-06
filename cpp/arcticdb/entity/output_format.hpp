@@ -8,6 +8,8 @@
 
 #pragma once
 
+#include <cstdint>
+
 namespace arcticdb {
 enum class OutputFormat : uint8_t { NATIVE, PANDAS, ARROW, PARQUET, COUNT };
 

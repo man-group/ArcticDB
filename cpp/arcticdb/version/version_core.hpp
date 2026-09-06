@@ -12,6 +12,7 @@
 #include <arcticdb/entity/versioned_item.hpp>
 #include <arcticdb/pipeline/column_stats.hpp>
 #include <arcticdb/pipeline/query.hpp>
+#include <arcticdb/pipeline/query_builders.hpp>
 #include <arcticdb/pipeline/write_options.hpp>
 #include <arcticdb/stream/incompletes.hpp>
 #include <arcticdb/pipeline/pipeline_context.hpp>

@@ -6,6 +6,7 @@
 #include <arcticdb/column_store/column_algorithms.hpp>
 #include <arcticdb/util/preconditions.hpp>
 
+#include <ankerl/unordered_dense.h>
 #include <algorithm>
 #include <tuple>
 #include <unordered_set>

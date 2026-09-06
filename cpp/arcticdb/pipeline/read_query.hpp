@@ -1,20 +1,11 @@
 #pragma once
 
 #include <arcticdb/entity/index_range.hpp>
-#include <arcticdb/pipeline/frame_slice.hpp>
+#include <arcticdb/pipeline/query_range.hpp>
 #include <arcticdb/processing/clause.hpp>
-#include <cstdint>
 #include <optional>
-#include <variant>
 
 namespace arcticdb::pipelines {
-using FilterRange = std::variant<std::monostate, entity::IndexRange, pipelines::RowRange>;
-
-struct SignedRowRange {
-    std::optional<int64_t> start_;
-    std::optional<int64_t> end_;
-};
-
 struct ReadQuery {
     // std::nullopt -> all columns
     // empty vector -> only the index
