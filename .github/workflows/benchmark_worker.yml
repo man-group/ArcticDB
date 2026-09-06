@@ -374,6 +374,14 @@ jobs:
             artifacts/${{ steps.artifact.outputs.name }}.meta.json
             artifacts/${{ steps.artifact.outputs.name }}.*.speedscope.json
           if-no-files-found: warn
+          # What makes a failed worker retryable from the run page. `if: always()`
+          # means the first attempt usually *did* upload — a lane that goes red on one
+          # failed benchmark still has its result JSON — and v4 refuses a name that
+          # already exists rather than replacing it, so without this the retried lane
+          # re-measures everything and then dies at the very last step. When the retry
+          # itself produced no files, `warn` uploads nothing and the first attempt's
+          # artifact survives untouched, which is the right worst case.
+          overwrite: true
 
   # `if: always()`, not `!cancelled()`: a cancelled run is exactly when a forgotten
   # instance costs money (§Q3-Q4). The window this cannot cover is a cancel *during*

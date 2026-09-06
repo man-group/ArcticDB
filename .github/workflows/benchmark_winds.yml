@@ -385,8 +385,10 @@ jobs:
           echo "Created bucket s3://${bucket_name}"
           printf 'bucket=%s\n' "$bucket_name" >> "$GITHUB_OUTPUT"
           # On the summary because it is the one name a human needs if a run ends
-          # without `collect` and the bucket has to be swept by hand.
-          echo "- throwaway bucket: \`$bucket_name\` (deleted by \`collect\`)" \
+          # without `collect` — or ends red and is abandoned, since `collect` keeps
+          # the bucket on a red attempt for "Re-run failed jobs" — and the bucket
+          # has to be swept by hand.
+          echo "- throwaway bucket: \`$bucket_name\` (deleted by \`collect\` once every worker reports; kept while the run is red so a re-run can use it)" \
             >> "$GITHUB_STEP_SUMMARY"
 
           # S3 request metrics, so CloudWatch counts this run's AllRequests /
@@ -969,6 +971,7 @@ jobs:
       # and puts a report per commit on this job's summary (ticket 18). A
       # `run_all_benchmarks` run stores every tag it benchmarked, not just the first.
       - name: collect the run
+        id: collect
         env:
           LIBRARY: ${{ steps.library.outputs.library }}
         run: |
@@ -1075,6 +1078,21 @@ jobs:
       # `plan`, with `benchmark_commits.yml:176-187`'s name guard so a bug in the
       # workflow can never delete a real bucket. Inert on LMDB runs.
       # ---------------------------------------------------------------------------
+      # Deleted only on the attempt where every expected worker delivered. "Re-run
+      # failed jobs" re-runs the failed workers but never `plan`, so a retried worker
+      # arrives holding this same bucket name — deleting it on a red attempt is what
+      # made a REAL run unretryable from the run page. The cost is a leak when a red
+      # REAL run is simply abandoned; the warning below and the plan summary's bucket
+      # line are what a human sweeps from, and the name guard still means a workflow
+      # bug can never delete anything that is not a throwaway.
+      #
+      # `steps.collect.outcome` rather than a job-level fact: a lane the plan marked
+      # measure-only can fail without turning `collect` red, and that green is exactly
+      # when its retry no longer needs the bucket. A step that never ran (a failure
+      # above) reads as not-success, which keeps the bucket — the safe direction, since
+      # a re-run is what follows. `head-bucket` tolerates the one green-after-green
+      # shape: a managed lane retried on an ALL run finds the first attempt already
+      # cleaned up, and that is a done job, not an error.
       - name: delete the throwaway test bucket
         if: always() && needs.plan.outputs.bucket != ''
         env:
@@ -1083,16 +1101,26 @@ jobs:
           ARCTICDB_REAL_S3_REGION: eu-west-1
           ARCTICDB_REAL_S3_ENDPOINT: s3.eu-west-1.amazonaws.com
           BUCKET: ${{ needs.plan.outputs.bucket }}
+          COLLECT_OUTCOME: ${{ steps.collect.outcome }}
         run: |
-          if [[ $BUCKET == arcticdb-asv-data* ]]; then
-            echo "Removing ${BUCKET}"
-            aws s3 rb --force --endpoint-url "http://${ARCTICDB_REAL_S3_ENDPOINT}" \
-              --region "${ARCTICDB_REAL_S3_REGION}" "s3://${BUCKET}"
-          else
+          if [[ $BUCKET != arcticdb-asv-data* ]]; then
             echo "Unexpected bucket to clean up! ${BUCKET}"
             echo "This indicates a bug in the workflow. Not deleting anything and exiting..."
             exit 1
           fi
+          if [ "$COLLECT_OUTCOME" != success ]; then
+            echo "::warning::Keeping s3://${BUCKET} so 'Re-run failed jobs' can reuse it; the attempt where every worker reports deletes it. If this run is abandoned instead, remove the bucket by hand."
+            exit 0
+          fi
+          if ! aws s3api head-bucket --bucket "$BUCKET" \
+              --endpoint-url "http://${ARCTICDB_REAL_S3_ENDPOINT}" \
+              --region "${ARCTICDB_REAL_S3_REGION}" 2>/dev/null; then
+            echo "Bucket ${BUCKET} is already gone: a previous attempt cleaned up."
+            exit 0
+          fi
+          echo "Removing ${BUCKET}"
+          aws s3 rb --force --endpoint-url "http://${ARCTICDB_REAL_S3_ENDPOINT}" \
+            --region "${ARCTICDB_REAL_S3_REGION}" "s3://${BUCKET}"
 
   # The pull request's page on the benchmark site: this run's numbers, the values
   # already published for the master commit it was judged against, and asv's verdict,

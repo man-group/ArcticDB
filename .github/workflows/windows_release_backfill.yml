@@ -311,6 +311,10 @@ jobs:
             artifacts/${{ steps.artifact.outputs.name }}.json
             artifacts/${{ steps.artifact.outputs.name }}.meta.json
           if-no-files-found: warn
+          # Same reason as `benchmark_worker.yml`: the first attempt's `if: always()`
+          # upload already claimed this name, and v4 refuses duplicates, so a re-run
+          # of a failed release from the run page must be allowed to replace it.
+          overwrite: true
 
   collect:
     name: collect the backfill
