@@ -383,6 +383,37 @@ jobs:
           # artifact survives untouched, which is the right worst case.
           overwrite: true
 
+  # The provisioning failure's honest red. `ec2_runner_jobs.yml:22` puts
+  # `continue-on-error: true` on the start job, so no spot capacity or a runner that
+  # never registered arrives here as a *green* start with an empty label; `bench` is
+  # then skipped, `stop` stops nothing, and the leg would show green while `collect`
+  # goes red on the missing worker. "Re-run failed jobs" reads job conclusions, so it
+  # would offer only `collect` — which fails identically, because nothing
+  # re-provisions the machine. This job is what makes the lane itself the failed
+  # thing: seconds of ubuntu, only on a lane we provision, only when no runner
+  # arrived, and it fails so the run page offers the retry that re-runs `start`.
+  #
+  # `!cancelled()` rather than `always()`: a cancelled start needs no red marker —
+  # the run is cancelled either way, and GitHub offers re-running a cancelled run
+  # regardless.
+  no_runner:
+    name: no runner for ${{ inputs.worker }}
+    needs: [start]
+    if: >-
+      !cancelled() && inputs.runs_on == ''
+      && (needs.start.result != 'success' || needs.start.outputs.label == '')
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - name: fail the lane so it can be retried
+        env:
+          WORKER: ${{ inputs.worker }}
+          START_RESULT: ${{ needs.start.result }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          echo "::error::No EC2 runner arrived for ${WORKER} (start: ${START_RESULT}). Spot capacity or runner registration failed; 'Re-run failed jobs' on the run page provisions a fresh instance. A start that died after launch can orphan an instance — check EC2 for one tagged RunId=${RUN_ID}."
+          exit 1
+
   # `if: always()`, not `!cancelled()`: a cancelled run is exactly when a forgotten
   # instance costs money (§Q3-Q4). The window this cannot cover is a cancel *during*
   # start — sweepable by the `RunId` tag `ec2_runner_jobs.yml` already sets.
