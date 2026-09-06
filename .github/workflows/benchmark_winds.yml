@@ -1,0 +1,1214 @@
+# The arctic-winds benchmark pipeline — the benchmark CI since the 2026-09 cut-over,
+# when it replaced `analysis_workflow.yml`'s benchmark jobs. It was proven in a shadow
+# phase (branch `benchmark-winds-shadow`, writing to its own `winds_asv_results`
+# library) before taking over the live `asv_results` series.
+#
+#   plan ──┬─► cibw_docker_image ─► build ─────────┐
+#          ├──────────────────────► build_windows ─┤   (only when a lane needs it)
+#          └───────────────────────────────────────┴─► worker (matrix) ─► collect
+#                                                                            └─► publish_pr_page
+#
+# The site those pages belong to is rebuilt by `publish_winds_site.yml`, which reads the
+# results store and needs nothing from a benchmark run.
+#
+# The job graph is the mock proven in arctic-winds itself (docs/gha-mock.md, run
+# 33402171097), with the two substitutions that ticket documented: EC2 start/stop around
+# each worker (in `benchmark_worker.yml`) and a lean cibuildwheel `build` job feeding
+# `bench --wheel` instead of a PyPI requirement.
+#
+# Triggers are the ones `analysis_workflow.yml`'s benchmark jobs answered to before
+# the cut-over: push-to-master, nightly schedule, pull requests, and dispatch.
+name: Benchmarks (arctic-winds)
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_all_benchmarks:
+        description: Run all benchmarks (every release tag from v5.3.0 up)
+        type: boolean
+        default: false
+      storage:
+        # NIGHTLY is not a storage: it asks for whatever the cron would have picked
+        # tonight (REAL, or ALL when this commit has no push run), and exists so the
+        # nightly's choice can be exercised on demand.
+        description: Storage to run benchmarks against (NIGHTLY = what the cron would pick)
+        type: choice
+        options:
+          - 'LMDB'
+          - 'REAL'
+          - 'ALL'
+          - 'NIGHTLY'
+        default: 'LMDB'
+      suite_overwrite:
+        description: Regular expression to run instead of the workers.toml split
+        type: string
+        default: ''
+      # Ticket 48's manual escape hatch. The profile pass normally decides for itself
+      # — a benchmark new to a lane, or one that crossed the same gate the pull
+      # request check uses (1.20 since gha 38) — and this is how a human overrules it:
+      # every Linux lane
+      # profiles what matches, verdict or no verdict, still inside its ~10-minute
+      # budget. Empty on every run nobody typed it on, which is all of them.
+      profile:
+        description: Regular expression of benchmarks to profile regardless of verdicts
+        type: string
+        default: ''
+
+  # Push to master, LMDB only, so PR runs have recent master results to compare against.
+  push:
+    branches:
+      - master
+
+  # Nightly REAL storage — the half the push trigger never measures — falling back to
+  # ALL when the head commit has no push run of its own (see `resolve the storage`).
+  schedule:
+    - cron: '0 0 * * *'
+
+  pull_request:
+    paths-ignore:
+      - "**/*.md"
+
+# No workflow-level `concurrency:` block, deliberately. `analysis_workflow.yml` has none
+# either, and `cancel-in-progress` is actively dangerous here: cancelling a run *during* an
+# EC2 start orphans the instance (docs/research/gha-ec2-runner-matrix.md §Q4). The one
+# concurrency group in this file is on `publish_pr_page`, which holds no runner but does
+# write to a shared branch; the comment there says why it is keyed per pull request.
+
+jobs:
+  # What gets benchmarked, by whom, on what storage. Also the run's only guard against
+  # GitHub's 256-job matrix cap.
+  plan:
+    name: plan
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    # `actions: read` is what `resolve the storage` needs to ask the Actions API whether
+    # this commit already has a push run. Naming one permission drops every default, so
+    # `contents: read` — the checkout — has to be named alongside it.
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+      commit: ${{ steps.commit.outputs.commit }}
+      workers: ${{ steps.suites.outputs.workers }}
+      # The lanes gha 26 Q4 says may never produce a verdict — `gating = false` in
+      # workers.toml. `arctic-winds plan` writes this beside the matrix, because the plan
+      # is the one thing that read the config; `collect` and `compare-values` both take it.
+      measure_only: ${{ steps.plan.outputs.measure_only }}
+      # The wheels this run's lanes can install, derived from their `runs_on` labels
+      # (gha 41) — `manylinux_x86_64` always, plus `win_amd64` when a Windows lane is
+      # planned. The per-platform build jobs below are gated on it, so a run without
+      # such a lane never starts a Windows build.
+      wheel_platforms: ${{ steps.plan.outputs.wheel_platforms }}
+      reference_suite: ${{ steps.suites.outputs.reference_suite }}
+      storage: ${{ steps.storage.outputs.storage }}
+      bucket: ${{ steps.bucket.outputs.bucket }}
+      # The profile pass (ticket 48). `profile` is the dispatch regex, passed
+      # through so every worker gets the same one; `reference_commit` is the master
+      # run whose numbers this run's are divided by, and is empty when the store had
+      # none to give — which is a run that profiles only what is new and what was
+      # asked for, and never a failed plan. The values themselves are too big for a
+      # job output and ride as the `benchmark-reference` artifact instead.
+      profile: ${{ steps.plan.outputs.profile }}
+      reference_commit: ${{ steps.plan.outputs.reference_commit }}
+    steps:
+      # `fetch-depth: 0`: `plan --all-tags` walks the release tags with `git rev-list`.
+      - name: check out ArcticDB
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"   # arctic-winds requires >=3.11,<3.12
+
+      # arctic-winds is a private repo today, so it is checked out with a read-only deploy
+      # key (`ARCTIC_WINDS_DEPLOY_KEY`; see docs/arcticdb/README.md) instead of being
+      # pip-installed from a URL. A public repo — or a move into man-group — makes the key
+      # unnecessary and this can become `pip install git+https://…`.
+      - name: check out arctic-winds
+        uses: actions/checkout@v4
+        with:
+          repository: G-D-Petrov/arctic-winds
+          ref: main
+          path: arctic-winds
+          ssh-key: ${{ secrets.ARCTIC_WINDS_DEPLOY_KEY }}
+
+      - name: install arctic-winds
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install ./arctic-winds
+
+      - name: resolve the commit
+        id: commit
+        run: |
+          # On a pull_request this is the merge commit actions/checkout produced, which is
+          # what today's pipeline benchmarks too (`asv run … HEAD^!`). Resolved before the
+          # storage, which asks the Actions API about this exact SHA.
+          printf 'commit=%s\n' "$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      # LMDB on push and PRs, REAL on the nightly, whatever the dispatch asked for
+      # otherwise. The old pipeline keyed ALL off `github.ref_name == 'master'`; this
+      # one keys the nightly off the schedule so master pushes stay cheap.
+      #
+      # Why the nightly is REAL and not ALL (gha 28, gha 31): the push trigger already
+      # measured LMDB for every master commit, so an ALL nightly re-measures a point that
+      # exists. The exception is a commit no push run ever benchmarked — a quiet day, a
+      # push whose run was cancelled — and for that commit the nightly is the only
+      # chance at an LMDB point, so it runs ALL.
+      #
+      # "Has an LMDB point" is asked of the Actions API, not of the results store, on
+      # purpose. The store is the ground truth, but reading it here would mean giving this
+      # job the AWS credentials it deliberately does without until the very last step,
+      # duplicating `collect`'s library-name derivation, and failing the nightly
+      # outright on a transient S3 error. The API answers the question the fallback is
+      # actually about — *did a push run happen for this commit* — from a token the job
+      # already has, and can fail open to ALL.
+      - name: resolve the storage
+        id: storage
+        env:
+          REQUESTED: ${{ inputs.storage }}
+          COMMIT: ${{ steps.commit.outputs.commit }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # This file's own name: `/actions/workflows/<file>/runs` scopes the query to
+          # this workflow, so `analysis_workflow.yml`'s runs never answer for it.
+          WORKFLOW_FILE: benchmark_winds.yml
+        run: |
+          # REAL unless this commit has no push run of its own, in which case ALL.
+          # `success` and `failure` both count: those are the two terminal conclusions
+          # where `collect` ran (`if: always() && needs.plan.result == 'success'`) and
+          # stored whatever the workers reported. A run that failed so early it stored
+          # nothing would fail identically tonight, so ALL would not have rescued it.
+          # Anything else — cancelled, timed out, still running, no run at all — means
+          # no dependable LMDB point, and ALL is the safe direction.
+          nightly_storage() {
+            if ! completed=$(gh api \
+                  "repos/${GITHUB_REPOSITORY}/actions/workflows/${WORKFLOW_FILE}/runs?event=push&status=completed&head_sha=${COMMIT}&per_page=100" \
+                  --jq '[.workflow_runs[] | select(.conclusion == "success" or .conclusion == "failure")] | length' \
+                  2>/dev/null); then
+              echo "::warning::Could not ask the Actions API whether ${COMMIT:0:8} has a push run; running ALL." >&2
+              echo ALL
+            elif [ "${completed:-0}" -gt 0 ] 2>/dev/null; then
+              echo "${COMMIT:0:8} already has ${completed} completed push run(s): the LMDB half is stored." >&2
+              echo REAL
+            else
+              echo "${COMMIT:0:8} has no completed push run, so nothing measured its LMDB half yet." >&2
+              echo ALL
+            fi
+          }
+
+          if [ "$GITHUB_EVENT_NAME" = schedule ] || [ "$REQUESTED" = NIGHTLY ]; then
+            storage=$(nightly_storage)
+          elif [ -n "$REQUESTED" ]; then
+            storage="$REQUESTED"
+          else
+            storage=LMDB
+          fi
+          echo "storage: $storage"
+          printf 'storage=%s\n' "$storage" >> "$GITHUB_OUTPUT"
+
+      # `arctic-winds plan` appends `matrix=<compact json>` to $GITHUB_OUTPUT itself.
+      #
+      # It also fetches the **reference values** for ticket 48's profile pass and
+      # writes them to `--reference-out`: the newest master run `compare-values`
+      # would judge this commit against, reduced to `{worker: {benchmark: [values]}}`
+      # (~90 KB for ArcticDB's ~350 benchmarks, hence an artifact rather than a job
+      # output, which GitHub caps at 1 MB). Reading it is the one thing this job
+      # needs the results store for, and it is deliberately unable to fail the plan:
+      # no fresh master run, an S3 hiccup, a library that does not exist yet — each
+      # writes an empty document with a note and lets the run go on, profiling only
+      # what is new to a lane and whatever `profile` asked for.
+      #
+      # `--reference-lib asv_results` is the master library this pipeline itself
+      # writes to (see `name the results library` in `collect`), and the same one
+      # `collect`'s `compare-values` step compares against. If the naming rule ever
+      # changes, move both together, or the profile pass and the pull request gate
+      # will be judging against two different runs.
+      - name: plan the matrix
+        id: plan
+        env:
+          ALL_TAGS: ${{ inputs.run_all_benchmarks }}
+          SUITE_OVERWRITE: ${{ inputs.suite_overwrite }}
+          COMMIT: ${{ steps.commit.outputs.commit }}
+          STORAGE: ${{ steps.storage.outputs.storage }}
+          PROFILE: ${{ inputs.profile }}
+          RESULTS: "s3://s3.eu-west-1.amazonaws.com:arcticdb-ci-benchmark-results?aws_auth=true&region=eu-west-1&path_prefix=asv_results"
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_S3_ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_S3_SECRET_KEY }}
+          AWS_DEFAULT_REGION: eu-west-1
+        run: |
+          # `--storage REAL` drops the workers marked `real = false` in workers.toml —
+          # the six with no AMAZON-parameterized benchmarks, which on real storage would
+          # rent an instance each to re-measure their LMDB numbers (gha 28/31). LMDB and
+          # ALL keep all twelve. An unrecognised storage is a plan error, not a full
+          # matrix, so a typo in the step above cannot quietly cost twelve instances.
+          args=(--config python/benchmarks/workers.toml --repo . --storage "$STORAGE")
+          if [ "$ALL_TAGS" = "true" ]; then
+            args+=(--all-tags)
+          else
+            args+=(--commit "$COMMIT")
+          fi
+          if [ -n "$SUITE_OVERWRITE" ]; then
+            args+=(--suite-overwrite "$SUITE_OVERWRITE")
+          fi
+          args+=(--profile "$PROFILE"
+                 --reference-out reference-values.json
+                 --results "$RESULTS"
+                 --reference-lib asv_results)
+          arctic-winds plan "${args[@]}"
+
+      # One artifact for the whole run: every lane downloads the same document and
+      # reads its own slice out of it. `if-no-files-found: error` because `plan`
+      # writes the file whatever the store said — an empty document is a valid
+      # answer and a *missing* one is a bug in the step above, not a quiet run
+      # without profiling.
+      - name: publish the reference values
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-reference
+          path: reference-values.json
+          if-no-files-found: error
+          retention-days: 7   # only ever needed inside this run
+          overwrite: true
+
+      # GitHub caps a matrix at 256 jobs and silently truncates past it, which would look
+      # like a run where some workers simply never reported. Fail here instead. 13 workers
+      # x 69 release tags = 897, so `run_all_benchmarks` needs a tag subset or a narrower
+      # split (see the README's open decisions). The job count is the only guard left: a
+      # multi-commit run is otherwise fine now that artifacts are named per commit and
+      # `collect` writes a symbol for each (ticket 18).
+      - name: check the matrix against GitHub's 256-job cap
+        env:
+          MATRIX: ${{ steps.plan.outputs.matrix }}
+        run: |
+          count=$(jq 'length' <<<"$MATRIX")
+          commits=$(jq '[.[].commit] | unique | length' <<<"$MATRIX")
+          echo "planned jobs: $count over $commits commit(s)"
+          if [ "$count" -gt 256 ]; then
+            echo "::error::planned $count matrix jobs, over GitHub's 256-job cap. Reduce the workers in python/benchmarks/workers.toml or benchmark fewer tags; a truncated matrix would silently drop workers."
+            exit 1
+          fi
+
+      # Two things the matrix implies that later jobs need as plain strings: who must have
+      # uploaded (`collect --expect`) and the single regex a reference run would use.
+      # Derived from the matrix, so a `suite_overwrite` dispatch stays consistent.
+      - name: derive the worker list and the combined suite
+        id: suites
+        env:
+          MATRIX: ${{ steps.plan.outputs.matrix }}
+        run: |
+          printf 'workers=%s\n' "$(jq -r '[.[].worker] | unique | join(",")' <<<"$MATRIX")" \
+            >> "$GITHUB_OUTPUT"
+          printf 'reference_suite=%s\n' "$(python -c "import json, os; from arctic_winds.orchestrator import combined_suite; print(combined_suite({e['worker']: e['suite'] for e in json.loads(os.environ['MATRIX'])}))")" \
+            >> "$GITHUB_OUTPUT"
+
+      - name: report the plan
+        env:
+          MATRIX: ${{ steps.plan.outputs.matrix }}
+          STORAGE: ${{ steps.storage.outputs.storage }}
+          COMMIT: ${{ steps.commit.outputs.commit }}
+          WHEEL_PLATFORMS: ${{ steps.plan.outputs.wheel_platforms }}
+        run: |
+          {
+            echo "### 🌬️ arctic-winds plan"
+            echo
+            echo "- head commit: \`$COMMIT\`"
+            echo "- storage: \`$STORAGE\`"
+            # The one line that says why a run has two build jobs and the last one had
+            # one: a platform is here because some lane's label asked for it.
+            echo "- wheels: \`$WHEEL_PLATFORMS\`"
+            if [ "$STORAGE" = REAL ]; then
+              # The one line that explains a six-row table where a reader expects twelve.
+              echo "- the workers marked \`real = false\` in \`workers.toml\` are skipped: they have no AMAZON-parameterized benchmarks"
+            fi
+            echo
+            # One row per matrix entry, commit included: `run_all_benchmarks` plans every
+            # release tag, and which commit a worker is on is then the first question.
+            # `runs on` is the label the job queues against — `ec2` for the lanes whose
+            # label only exists once an instance has been started for them — and `gates`
+            # is *which* of that lane's numbers may fail a pull request (gha 26 Q4, and
+            # gha 38 for the per-metric-kind answer): `yes` for every kind, `measure-only`
+            # for none, and a list like `peakmem+track` for a lane that judges its
+            # counters and its memory while its timings are still noise.
+            echo "| commit | worker | suite | instance | runs on | gates |"
+            echo "| --- | --- | --- | --- | --- | --- |"
+            jq -r '.[] | "| \(.commit[0:8]) | \(.worker) | `\(.suite)` | \(.instance_type) | \(if .runs_on == "" then "ec2" else .runs_on end) | \(if .gating == "all" then "yes" elif .gating == "" then "measure-only" else .gating end) |"' <<<"$MATRIX"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # ---------------------------------------------------------------------------
+      # TICKET 11 (REAL storage) — everything below is that ticket's scope, and inert
+      # unless the storage input asks for it. A per-run throwaway bucket, created once
+      # and shared by every worker, instead of `benchmark_commits.yml:77-85`'s
+      # per-commit-job bucket; each worker writes under its own `path_prefix` inside it
+      # (`benchmark_worker.yml`'s `ARCTICDB_REAL_S3_BUCKET` comment). Deleted in
+      # `collect`.
+      #
+      # Deliberately the *last* step of this job. `collect` — the only thing that deletes
+      # the bucket — will not run at all unless `plan` succeeded, so a bucket created
+      # before a step that then fails is a bucket nothing ever removes. With nothing after
+      # it, the only way to strand one is for `aws s3 mb` to succeed and the very next
+      # `printf` to fail. It also means a run rejected by the 256-job check never creates
+      # a bucket in the first place. For the same reason the CloudWatch metrics
+      # configuration is asked for *after* the bucket name is on `$GITHUB_OUTPUT`, and
+      # cannot fail the step: a missing `s3:PutMetricsConfiguration` grant must cost the
+      # run its request counts, never its cleanup.
+      # ---------------------------------------------------------------------------
+      - name: create the throwaway test bucket
+        id: bucket
+        if: steps.storage.outputs.storage != 'LMDB'
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_S3_ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_S3_SECRET_KEY }}
+          ARCTICDB_REAL_S3_REGION: eu-west-1
+          ARCTICDB_REAL_S3_ENDPOINT: s3.eu-west-1.amazonaws.com
+        run: |
+          random_id=$(openssl rand -hex 4)
+          timestamp=$(date +%s)
+          bucket_name="arcticdb-asv-data-${timestamp}-${random_id}"
+          aws s3 mb --endpoint-url "http://${ARCTICDB_REAL_S3_ENDPOINT}" \
+            --region "${ARCTICDB_REAL_S3_REGION}" "s3://${bucket_name}"
+          echo "Created bucket s3://${bucket_name}"
+          printf 'bucket=%s\n' "$bucket_name" >> "$GITHUB_OUTPUT"
+          # On the summary because it is the one name a human needs if a run ends
+          # without `collect` and the bucket has to be swept by hand.
+          echo "- throwaway bucket: \`$bucket_name\` (deleted by \`collect\`)" \
+            >> "$GITHUB_STEP_SUMMARY"
+
+          # S3 request metrics, so CloudWatch counts this run's AllRequests /
+          # PutRequests / GetRequests / ListRequests (gha 28's open question: request
+          # charges are ~60 % of a REAL run's bill and carry its only wide error bar,
+          # $0.85–2.75 on an estimate). No `Filter` means the whole bucket — a filter
+          # would scope the metrics to a prefix, and the point is the run's total.
+          # The configuration is a sub-resource of the bucket, so `aws s3 rb` in
+          # `collect` takes it with the bucket: nothing to clean up. Metrics already
+          # published stay in CloudWatch and are billed like a custom metric, ~$0.30
+          # per metric-month prorated — four metrics for the hours a run lasts.
+          if aws s3api put-bucket-metrics-configuration \
+              --endpoint-url "http://${ARCTICDB_REAL_S3_ENDPOINT}" \
+              --region "${ARCTICDB_REAL_S3_REGION}" \
+              --bucket "${bucket_name}" \
+              --id winds \
+              --metrics-configuration '{"Id":"winds"}'; then
+            echo "- S3 request metrics: CloudWatch \`AWS/S3\` request metrics, filter id \`winds\` (~15 min lag)" \
+              >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::warning::Could not enable S3 request metrics on ${bucket_name} (s3:PutMetricsConfiguration?); the run is unaffected but there will be no CloudWatch request counts."
+          fi
+
+  # ~6 s job; resolves ghcr.io/man-group/arcticdb_manylinux:<ver>-<hash> the same way
+  # `build.yml:122-128` does, so the benchmark wheel uses the identical manylinux image.
+  cibw_docker_image:
+    name: cibuildwheel image
+    uses: ./.github/workflows/cibw_docker_image.yml
+    permissions: {packages: write}
+    with:
+      cibuildwheel_ver: "3.1.4"   # keep in sync with build.yml:128
+      force_update: false
+
+  # One cp311 manylinux wheel per run, for every worker to install. Measured ~7 min, ~2 %
+  # of a benchmark run and cheaper than the 11 min source build the pipeline does today;
+  # calling `build_steps.yml` instead would drag its 38-job, 49-minute cp311 test matrix
+  # along. See docs/research/gha-wheel-build-job.md, which this job is copied from.
+  #
+  # Unconditional, unlike `build_windows` below: every plan has at least one Linux lane —
+  # the twelve EC2 workers are Linux and so is any unrecognised label — so gating this
+  # would be a condition that is never false with a cost of its own to read.
+  build:
+    name: build cp311 wheel
+    needs: [cibw_docker_image]
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    defaults:
+      run: {shell: bash}
+    env:
+      # ---- copied from build_steps.yml:46-79; keep the two in sync ----
+      SCCACHE_GHA_VERSION: ${{ secrets.AWS_S3_ACCESS_KEY == null }}
+      SCCACHE_BUCKET: arcticdb-ci-sccache-bucket
+      SCCACHE_ENDPOINT: http://s3.eu-west-1.amazonaws.com
+      SCCACHE_REGION: eu-west-1
+      SCCACHE_S3_USE_SSL: false
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_S3_ACCESS_KEY }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_S3_SECRET_KEY }}
+      VCPKG_NUGET_USER: ${{ secrets.VCPKG_NUGET_USER || github.repository_owner }}
+      VCPKG_NUGET_TOKEN: ${{ secrets.VCPKG_NUGET_TOKEN || secrets.GITHUB_TOKEN }}
+      VCPKG_MAN_NUGET_USER: ${{ secrets.VCPKG_MAN_NUGET_USER }}
+      VCPKG_MAN_NUGET_TOKEN: ${{ secrets.VCPKG_MAN_NUGET_TOKEN }}
+      CMAKE_C_COMPILER_LAUNCHER: sccache
+      CMAKE_CXX_COMPILER_LAUNCHER: sccache
+      # `linux-release` plus the two cache variables that keep the C++ symbol table in
+      # the extension (gha 49). The preset does not exist in ArcticDB's
+      # `cpp/CMakePresets.json`; the `keep the C++ symbols` step below writes it into
+      # the `CMakeUserPresets.json` beside it, and that comment explains the mechanism.
+      # It still inherits `linux-release`, so this is still RelWithDebInfo at -O3:
+      # benchmarks must never run a debug build.
+      ARCTIC_CMAKE_PRESET: linux-release-symbols
+      ARCTICDB_BUILD_DIR: /tmp/cpp_build
+      CIBW_BUILD: cp311-manylinux_x86_64   # the whole point: exactly one wheel
+      CIBW_ENVIRONMENT_PASS_LINUX: SCCACHE_GHA_VERSION ACTIONS_CACHE_URL ACTIONS_RUNTIME_TOKEN
+        VCPKG_INSTALLATION_ROOT VCPKG_BINARY_SOURCES VCPKG_NUGET_USER VCPKG_NUGET_TOKEN
+        VCPKG_MAN_NUGET_USER VCPKG_MAN_NUGET_TOKEN CMAKE_C_COMPILER_LAUNCHER
+        CMAKE_CXX_COMPILER_LAUNCHER CMAKE_BUILD_PARALLEL_LEVEL ARCTIC_CMAKE_PRESET
+        ARCTICDB_BUILD_DIR X_VCPKG_ASSET_SOURCES
+        SCCACHE_BUCKET SCCACHE_ENDPOINT AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY
+        SCCACHE_REGION SCCACHE_S3_USE_SSL
+      CIBW_ENVIRONMENT_LINUX: COPY_VCPKG_DOWNLOADS_TO_HOST=1
+      ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
+    steps:
+      # The run's own commit is the one that gets benchmarked, so no `ref:` here.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: init submodules
+        run: |
+          git submodule update --init --recursive
+          git -C cpp/vcpkg submodule update --init --recursive
+
+      - uses: mozilla-actions/sccache-action@v0.0.9
+        with:
+          disable_annotations: 'true'
+
+      - name: free disk space
+        uses: jlumbroso/free-disk-space@v1.3.1
+        with:
+          tool-cache: false
+          large-packages: false
+          docker-images: false
+
+      - uses: jwlawson/actions-setup-cmake@v2
+        with:
+          cmake-version: '3.31.6'   # same pin as build_steps.yml
+
+      - name: extra envs
+        env:
+          CMAKE_BUILD_PARALLEL_LEVEL: ${{ vars.CMAKE_BUILD_PARALLEL_LEVEL }}
+        run: |
+          HOME=~ . build_tooling/vcpkg_caching.sh
+          echo -e "VCPKG_BINARY_SOURCES=$VCPKG_BINARY_SOURCES
+          VCPKG_ROOT=$PLATFORM_VCPKG_ROOT
+          ${X_VCPKG_ASSET_SOURCES:+X_VCPKG_ASSET_SOURCES=$X_VCPKG_ASSET_SOURCES}" | tee -a "$GITHUB_ENV"
+          cmake -P cpp/CMake/CpuCount.cmake | sed 's/^-- //' | tee -a "$GITHUB_ENV"
+
+      - name: pull the cibuildwheel manylinux image
+        env:
+          IMAGE: ${{ needs.cibw_docker_image.outputs.tag }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          docker login ghcr.io -u token -p "$GHCR_TOKEN"
+          docker pull "$IMAGE"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'   # host interpreter that runs cibuildwheel
+
+      # ---- the symbols the profile pass needs (gha 49) --------------------------
+      # py-spy --native names a C++ frame from the extension's own ELF symbol table:
+      # its ladder is DWARF -> `.symtab` -> `.dynsym`. ArcticDB's shipped Linux wheel
+      # has no DWARF and no `.symtab`, and it is built `-fvisibility=hidden`, so
+      # `.dynsym` holds almost nothing — which is why profiling a stock wheel returns a
+      # wall of `0x… (?)` and not one `arcticdb_ext` frame (gha 47).
+      #
+      # The loss is neither cibuildwheel's nor auditwheel's (auditwheel does not strip
+      # unless asked). It is `cpp/arcticdb/CMakeLists.txt`: the `install_arcticdb_ext`
+      # target — the only target setup.py builds — installs `strip --strip-unneeded`
+      # output in place of the linked file whenever the build is Linux + RelWithDebInfo
+      # and `ARCTICDB_KEEP_DEBUG_SYMBOLS` is off, which is its default. That option is
+      # the whole lever, and `--strip-unneeded` deletes exactly `.symtab`.
+      #
+      # This pipeline cannot patch ArcticDB, and setup.py forwards no extra `-D` to
+      # CMake — but it does take the preset name from `ARCTIC_CMAKE_PRESET`, and CMake
+      # reads `CMakeUserPresets.json` beside `CMakePresets.json`, which is the file
+      # that exists for exactly this and which ArcticDB's `.gitignore` already lists,
+      # so writing it leaves the checkout clean. cibuildwheel copies the project into
+      # the container, so the file travels with it.
+      #
+      # Two cache variables, and no third:
+      #   ARCTICDB_KEEP_DEBUG_SYMBOLS=ON  takes the strip out of the install target.
+      #   CMAKE_MODULE_LINKER_FLAGS=-Wl,--strip-debug  drops the DWARF at link time and
+      #     keeps `.symtab` (measured on a toy pybind11-shaped module: `--strip-debug`
+      #     keeps `.symtab`/`.strtab`/`.eh_frame` and removes every `.debug_*`, while
+      #     `--strip-unneeded` removes `.symtab` too). py-spy only needs names, and
+      #     names are in `.symtab`; DWARF would add file/line at a cost measured in
+      #     hundreds of megabytes on a library whose stripped form is already 65 MB.
+      #     Delete this one line if a profile ever needs source lines. `.eh_frame` —
+      #     what libunwind actually walks — survives either way.
+      #
+      # `binaryDir` is pinned to the inherited preset's directory deliberately. The
+      # default is `out/${presetName}-build`, and a new directory would move the
+      # compiler's working directory, which sccache folds into its hash whenever debug
+      # info is on (measured: same source, same flags, different cwd = a miss). That
+      # would cold-build every benchmark run instead of riding the `build.yml` entries
+      # already in `arcticdb-ci-sccache-bucket` — ArcticDB's own Linux build uses this
+      # same preset and this same `/tmp/cpp_build` — and no cold ArcticDB build fits
+      # this job's timeout. Nothing about the *compile* changes here: only the link
+      # (one flag) and the install (no strip) do.
+      #
+      # setup.py then globs `cpp/out/<preset>-build` and asserts exactly one match, so
+      # the pinned directory needs a second name under the preset it was asked for.
+      # That is the symlink. (`prep_cpp_build.sh` re-points `cpp/out` at
+      # `$ARCTICDB_BUILD_DIR` inside the container and leaves its contents alone.)
+      - name: keep the C++ symbols in the extension
+        run: |
+          cat > cpp/CMakeUserPresets.json <<'JSON'
+          {
+            "version": 3,
+            "configurePresets": [
+              {
+                "name": "linux-release-symbols",
+                "inherits": "linux-release",
+                "binaryDir": "${sourceDir}/out/linux-release-build",
+                "cacheVariables": {
+                  "ARCTICDB_KEEP_DEBUG_SYMBOLS": "ON",
+                  "CMAKE_MODULE_LINKER_FLAGS": "-Wl,--strip-debug"
+                }
+              }
+            ]
+          }
+          JSON
+          mkdir -p "$ARCTICDB_BUILD_DIR/linux-release-build"
+          ln -sfn linux-release-build "$ARCTICDB_BUILD_DIR/linux-release-symbols-build"
+
+      - name: build the wheel
+        env:
+          CIBW_MANYLINUX_X86_64_IMAGE: ${{ needs.cibw_docker_image.outputs.tag }}
+          CIBW_VERSION: ${{ needs.cibw_docker_image.outputs.cibuildwheel_ver }}
+        run: |
+          python -m pip install pipx --retries 3 --timeout 180
+          python -m pipx run "cibuildwheel==$CIBW_VERSION"
+
+      # The step above is a lever pulled from outside ArcticDB's build, so it can be
+      # taken away from outside too — a preset key renamed upstream, a `.gitignore`
+      # entry dropped, an `install_arcticdb_ext` rewrite — and none of that fails a
+      # build. It would surface a whole run later, as a profile of nothing but
+      # addresses. So no wheel leaves this job unless its extension still carries the
+      # table py-spy reads, and the sizes go into the summary because this is the run
+      # that measures what the symbols cost.
+      - name: assert the extension carries C++ symbols
+        run: |
+          rm -rf /tmp/wheel-check && mkdir -p /tmp/wheel-check
+          wheel=$(ls wheelhouse/*.whl)
+          python -m zipfile -e "$wheel" /tmp/wheel-check
+          so=$(find /tmp/wheel-check -name 'arcticdb_ext*.so' | head -1)
+          if [ -z "$so" ]; then
+            echo "::error::no arcticdb_ext*.so inside $(basename "$wheel")"
+            exit 1
+          fi
+          # `grep -oE` finds nothing on a wheel built some other way, and the job runs
+          # under `-o pipefail`, hence the `|| true` on both pipelines.
+          sections=$(readelf -SW "$so" | grep -oE '\.(symtab|dynsym|debug_info|eh_frame)\b' | sort -u | tr '\n' ' ' || true)
+          named=$(readelf -sW "$so" | grep -c arcticdb || true)
+          {
+            echo "### wheel symbols"
+            echo '```'
+            echo "wheel        $(stat -c%s "$wheel") bytes"
+            echo "arcticdb_ext $(stat -c%s "$so") bytes"
+            echo "sections     $sections"
+            echo "arcticdb symbols $named"
+            echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+          case "$sections" in
+            *.symtab*) ;;
+            *) echo "::error::$(basename "$so") has no .symtab: py-spy --native cannot name its C++ frames"; exit 1 ;;
+          esac
+          case "$sections" in
+            *.eh_frame*) ;;
+            *) echo "::error::$(basename "$so") has no .eh_frame: libunwind cannot walk it"; exit 1 ;;
+          esac
+          # A `.symtab` holding only the module init symbol would pass the check above;
+          # a real one holds ArcticDB's own mangled names in their tens of thousands.
+          if [ "$named" -lt 1000 ]; then
+            echo "::error::only $named arcticdb symbols in the extension: the symbol table is not this build's own"
+            exit 1
+          fi
+          case "$sections" in
+            *.debug_info*)
+              echo "::notice::DWARF is still in the extension, so -Wl,--strip-debug did not take and this wheel is far larger than it needs to be" ;;
+          esac
+
+      - name: store the wheel
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheel-cp311-manylinux_x86_64
+          path: wheelhouse/*.whl
+          if-no-files-found: error
+          retention-days: 7   # only ever needed inside this run
+
+  # The same job for `cp311-win_amd64`, and the reason ticket 41 exists: a lane on
+  # `windows-latest` cannot install a manylinux wheel, so `uv pip install` refuses it and
+  # the pilot lane can never go green (gha 37). The Windows half of `build_steps.yml` is
+  # what this is copied from — `build.yml:170-179`'s `windows_matrix` (preset
+  # `windows-cl`, build dir `C:/cpp_build`, vcpkg packages on `C:/`) plus the four
+  # Windows-only steps `build_steps.yml` guards on `matrix.os == 'windows'`.
+  #
+  # `if:` is the whole cost story. The plan derives each lane's wheel platform from its
+  # `runs_on` label and publishes the distinct set, so this job exists only on a run that
+  # planned a Windows lane — today that is `workers.toml`'s `windows_pilot`. A
+  # `storage=REAL` run skips it, because the pilot is `real = false` and REAL drops it
+  # from the matrix.
+  # When it does run it is one hosted Windows runner for the length of a cibuildwheel
+  # build — free on a public repository, and concurrent with the manylinux build rather
+  # than after it.
+  #
+  # Not gated on `cibw_docker_image`'s *image* — that is the manylinux container and
+  # means nothing here — but it does `needs:` that job for the one thing it publishes
+  # that both builds must agree on: the cibuildwheel version.
+  build_windows:
+    name: build cp311 win_amd64 wheel
+    needs: [plan, cibw_docker_image]
+    if: contains(needs.plan.outputs.wheel_platforms, 'win_amd64')
+    # `windows-2022`, matching `build.yml:172`, and not for the toolchain (the pinned
+    # MSVC below is installed by the job either way): vcpkg builds its ports with the
+    # highest-versioned CMake it can find, and `windows-latest`'s image CMake (>=4.4)
+    # outranks the 3.31.6 this job pins — 4.4 rejects the `benchmark` port's
+    # `-Werror=old-style-cast` and the configure dies (proven on run 33791851057;
+    # the same PATH-ordering trap `build_steps.yml` documents for macOS). On the
+    # 2022 image the pinned CMake is the newest one vcpkg sees. Revisit when the
+    # port is fixed upstream and build_steps.yml drops its pin.
+    runs-on: windows-2022
+    # Longer than the manylinux 45: Windows has no warm S3 sccache of its own to lean on
+    # for a first build, and the MSVC install alone is minutes.
+    timeout-minutes: 90
+    defaults:
+      run: {shell: bash}
+    env:
+      # ---- copied from build_steps.yml:46-79, Windows column; keep the two in sync ----
+      SCCACHE_GHA_VERSION: ${{ secrets.AWS_S3_ACCESS_KEY == null }}
+      SCCACHE_BUCKET: arcticdb-ci-sccache-bucket
+      SCCACHE_ENDPOINT: http://s3.eu-west-1.amazonaws.com
+      SCCACHE_REGION: eu-west-1
+      SCCACHE_S3_USE_SSL: false
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_S3_ACCESS_KEY }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_S3_SECRET_KEY }}
+      VCPKG_NUGET_USER: ${{ secrets.VCPKG_NUGET_USER || github.repository_owner }}
+      VCPKG_NUGET_TOKEN: ${{ secrets.VCPKG_NUGET_TOKEN || secrets.GITHUB_TOKEN }}
+      VCPKG_MAN_NUGET_USER: ${{ secrets.VCPKG_MAN_NUGET_USER }}
+      VCPKG_MAN_NUGET_TOKEN: ${{ secrets.VCPKG_MAN_NUGET_TOKEN }}
+      CMAKE_C_COMPILER_LAUNCHER: sccache
+      CMAKE_CXX_COMPILER_LAUNCHER: sccache
+      ARCTIC_CMAKE_PRESET: windows-cl-release   # benchmarks must never run a debug build
+      # Both on C: because the checkout is on D: and the build does not fit beside it —
+      # `build.yml:174-175`'s answer, and the reason its archive step templates its
+      # exclusions with a drive letter.
+      ARCTICDB_BUILD_DIR: C:/cpp_build
+      ARCTICDB_VCPKG_PACKAGES_DIR: C:/vcpkg_packages
+      CIBW_BUILD: cp311-win_amd64   # the whole point: exactly one wheel
+      ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
+    steps:
+      # The run's own commit is the one that gets benchmarked, so no `ref:` here.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: init submodules
+        run: |
+          git submodule update --init --recursive
+          git -C cpp/vcpkg submodule update --init --recursive
+
+      - uses: mozilla-actions/sccache-action@v0.0.9
+        with:
+          disable_annotations: 'true'
+
+      # `build_steps.yml:113-120`. The linker runs out of memory on the default pagefile;
+      # `continue-on-error` because the action fails on images that will not resize, and
+      # a build that then succeeds anyway must not be lost to it.
+      - name: enlarge the pagefile
+        uses: al-cheb/configure-pagefile-action@v1.3
+        continue-on-error: true
+        with:
+          minimum-size: 2GB
+          maximum-size: 6GB
+          disk-root: "D:"   # also the checkout drive; 12GB in total
+
+      # ArcticDB PR #945: a ccache on PATH hijacks the compiler launcher sccache is set
+      # to, and the build fails inside vcpkg where it is hardest to read.
+      - name: remove ccache
+        run: rm "$(which ccache)" || true
+
+      # `build_steps.yml:151-158`. A GitHub image update moves MSVC under us, and a new
+      # MSVC has broken both ArcticDB and its vcpkg dependencies before; the version and
+      # the toolset are pinned to what `custom-triplets/x64-windows-static-msvc.cmake`
+      # expects. Keep all three in sync with `build_steps.yml`.
+      - name: install the pinned MSVC
+        run: |
+          choco install -y -f visualstudio2022buildtools --version=117.11.4 \
+            --params "--add Microsoft.VisualStudio.Component.VC.Tools.x86.x64 --installChannelUri https://aka.ms/vs/17/release/390666095_1317821361/channel"
+          choco install -y ninja
+
+      - name: enable the Windows compiler commands
+        uses: TheMrMilchmann/setup-msvc-dev@v3
+        with:
+          arch: x64
+          toolset: 14.41
+          vs-path: 'C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools'
+
+      - uses: jwlawson/actions-setup-cmake@v2
+        with:
+          cmake-version: '3.31.6'   # same pin as build_steps.yml
+
+      # Must come after setup-msvc-dev, which sets a VCPKG_ROOT of its own that this
+      # overwrites (`build_steps.yml:122-123`).
+      - name: extra envs
+        env:
+          CMAKE_BUILD_PARALLEL_LEVEL: ${{ vars.CMAKE_BUILD_PARALLEL_LEVEL }}
+        run: |
+          HOME=~ . build_tooling/vcpkg_caching.sh
+          echo -e "VCPKG_BINARY_SOURCES=$VCPKG_BINARY_SOURCES
+          VCPKG_ROOT=$PLATFORM_VCPKG_ROOT
+          ${X_VCPKG_ASSET_SOURCES:+X_VCPKG_ASSET_SOURCES=$X_VCPKG_ASSET_SOURCES}" | tee -a "$GITHUB_ENV"
+          cmake -P cpp/CMake/CpuCount.cmake | sed 's/^-- //' | tee -a "$GITHUB_ENV"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'   # host interpreter that runs cibuildwheel
+
+      # No `CIBW_ENVIRONMENT_PASS_*` and no image: cibuildwheel builds Windows wheels in
+      # this job's own environment, so the sccache and vcpkg variables above are already
+      # in scope for the compiler. The cibuildwheel version comes from the same job the
+      # manylinux build takes it from, so the two wheels are built by one version.
+      - name: build the wheel
+        env:
+          CIBW_VERSION: ${{ needs.cibw_docker_image.outputs.cibuildwheel_ver }}
+        run: |
+          python -m pip install pipx --retries 3 --timeout 180
+          python -m pipx run "cibuildwheel==$CIBW_VERSION"
+
+      - name: store the wheel
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheel-cp311-win_amd64
+          path: wheelhouse/*.whl
+          if-no-files-found: error
+          retention-days: 7   # only ever needed inside this run
+
+  # The fan-out. One matrix entry = one call of the reusable worker workflow. For a lane
+  # with an `ec2` table (or the bare `instance_type` the twelve ArcticDB workers use) that
+  # is one EC2 instance, started and stopped inside the call; for a lane with a `runs_on`
+  # label it is a job that queues against that label and rents nothing (see
+  # benchmark_worker.yml).
+  worker:
+    needs: [plan, build, build_windows]
+    # `build_windows` is skipped on every run with no Windows lane, and a skipped `need`
+    # takes its dependents with it unless the job says otherwise — the same trap
+    # `benchmark_worker.yml`'s bench job steps around for a skipped `start`. So the
+    # guard names what actually has to have happened: the plan and the manylinux wheel
+    # succeeded, and the Windows wheel is anything but failed (success, or skipped
+    # because nobody asked for it). `!cancelled()` rather than `always()`, because a
+    # cancelled run must not go on to rent twelve instances.
+    if: >-
+      !cancelled() && needs.plan.result == 'success'
+      && needs.build.result == 'success'
+      && needs.build_windows.result != 'failure'
+    strategy:
+      fail-fast: false   # one worker dying must not cancel the other seven
+      matrix:
+        include: ${{ fromJson(needs.plan.outputs.matrix) }}
+    name: worker ${{ matrix.worker }}
+    uses: ./.github/workflows/benchmark_worker.yml
+    # Carries AWS_S3_*, ARCTICDB_TEST_PAT and ARCTIC_WINDS_DEPLOY_KEY into the call.
+    secrets: inherit
+    with:
+      worker: ${{ matrix.worker }}
+      suite: ${{ matrix.suite }}
+      # The matrix's own commit, in full: `plan` emits 40-char SHAs because
+      # `actions/checkout` treats anything shorter as a branch or tag name (the first
+      # shadow run failed on `refs/heads/44a66493*`). One entry per (commit, worker), so
+      # a `run_all_benchmarks` run sends each worker the tag it is benchmarking rather
+      # than the plan's single HEAD (ticket 18).
+      commit: ${{ matrix.commit }}
+      storage: ${{ needs.plan.outputs.storage }}
+      instance_type: ${{ matrix.instance_type }}
+      # gha 26's provider seam. Empty means "start us an EC2 instance"; a label means the
+      # lane runs on a runner somebody else owns, and `benchmark_worker.yml` skips its
+      # start and stop jobs entirely. `market_type` is spot for the EC2 lanes and empty
+      # for everything else, which is also how the action spells on-demand.
+      runs_on: ${{ matrix.runs_on }}
+      market_type: ${{ matrix.market_type }}
+      python: "3.11"
+      # Which of the run's wheels this lane installs (gha 41). `plan` derived the
+      # platform from the lane's own label — `windows-*` is `win_amd64`, `macos-*` is
+      # `macosx_arm64`, everything else (an EC2 lane included) is `manylinux_x86_64` —
+      # and the build jobs above name their artifacts to the same shape, which is
+      # `build_steps.yml:500`'s `wheel-${CIBW_BUILD}`. A lane whose wheel was never
+      # built would fail on `download-artifact`, but it cannot arise: the platforms the
+      # build jobs are gated on are this same list, from this same plan.
+      wheel_artifact: wheel-cp311-${{ matrix.wheel_platform }}
+      bucket: ${{ needs.plan.outputs.bucket }}
+      # Ticket 48. The lane decides for itself whether it profiles at all — a
+      # `runs_on` label or a non-Linux `uname` skips the pass entirely, in
+      # `arctic-winds bench`, not here — so both of these ride out to every lane
+      # and the managed ones simply ignore them. `profile` is the dispatch regex;
+      # `reference_commit` is only for the job's log, since the values themselves
+      # arrive as the `benchmark-reference` artifact the worker downloads.
+      profile: ${{ needs.plan.outputs.profile }}
+      reference_commit: ${{ needs.plan.outputs.reference_commit }}
+
+  # Every worker's artifact back into one symbol in the S3 results store, the reports on
+  # the job summary, and — on a PR — the regression check against master.
+  collect:
+    name: collect
+    needs: [plan, worker]
+    # `always()` so a run where one worker died still stores what the others measured and
+    # still reports the missing worker (collect exits 1, and the job goes red).
+    if: always() && needs.plan.result == 'success'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    # `actions: read` is what `download-artifact` needs once a job names its
+    # permissions at all — naming one drops every default. Nothing here writes to the
+    # repository any more: the pull request's page moved to `publish_pr_page` below,
+    # which is the job that holds `contents: write`.
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      library: ${{ steps.library.outputs.library }}
+    env:
+      # The bucket and prefix `transform_asv_results.py` writes to today. `aws_auth=true`
+      # means arcticdb takes the credentials from the standard AWS environment below.
+      RESULTS: "s3://s3.eu-west-1.amazonaws.com:arcticdb-ci-benchmark-results?aws_auth=true&region=eu-west-1&path_prefix=asv_results"
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_S3_ACCESS_KEY }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_S3_SECRET_KEY }}
+      AWS_DEFAULT_REGION: eu-west-1
+      COMMIT: ${{ needs.plan.outputs.commit }}
+      WORKERS: ${{ needs.plan.outputs.workers }}
+      MEASURE_ONLY: ${{ needs.plan.outputs.measure_only }}
+    steps:
+      # `fetch-depth: 0`: `compare-values` walks up to 50 `origin/master~N` commits looking
+      # for the newest one with stored results (it runs `git fetch origin master` first,
+      # which cannot deepen a shallow clone usefully).
+      - name: check out ArcticDB
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: check out arctic-winds
+        uses: actions/checkout@v4
+        with:
+          repository: G-D-Petrov/arctic-winds
+          ref: main
+          path: arctic-winds
+          ssh-key: ${{ secrets.ARCTIC_WINDS_DEPLOY_KEY }}
+
+      - name: install arctic-winds and asv
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install ./arctic-winds
+          # `compare-values` shells out to `asv compare`; asv is not an arctic-winds
+          # dependency. Same requirement `arctic_winds/env.py` provisions on a worker.
+          python -m pip install "asv @ git+https://github.com/airspeed-velocity/asv"
+
+      - name: download every artifact
+        uses: actions/download-artifact@v8
+        with:
+          path: all-artifacts
+          merge-multiple: false
+
+      # `download-artifact` gives each artifact its own subdirectory, and the directory
+      # name is how `collect` learns the worker's name. The run's wheels are artifacts too
+      # and are not workers, so they are moved aside before collect sees the directory.
+      # The `wheel-*` glob covers every platform the plan can name — the artifacts are
+      # `wheel-cp311-manylinux_x86_64` and `wheel-cp311-win_amd64` — so a second wheel
+      # changes nothing here, which is what `tests/test_workflow_lanes.py` pins.
+      # So is `compare-report`, which this job uploads for `publish_pr_page` — on a
+      # *re-run* of this job the previous attempt's copy is already there to download,
+      # and an artifact called `compare-report` would otherwise become a worker of that
+      # name with no results in it.
+      - name: separate the worker artifacts from the wheel
+        run: |
+          mkdir -p artifacts
+          for dir in all-artifacts/*/; do
+            name=$(basename "$dir")
+            case "$name" in
+              # `benchmark-reference` is the plan's own artifact (ticket 48), not a
+              # worker's, and a directory of that name holding one JSON would
+              # otherwise collect as a worker with somebody else's numbers in it.
+              wheel-*|compare-report|benchmark-reference) continue ;;
+            esac
+            mv "$dir" "artifacts/$name"
+          done
+          find artifacts -type f | sort
+
+      # `library_for()`'s rule: master writes CI's live `asv_results`, any other ref its
+      # own `<ref>_asv_results`, so a pull request can never touch the master series.
+      # (The shadow phase ran this same rule with base `winds_asv_results`.)
+      - name: name the results library
+        id: library
+        run: |
+          if [ "$GITHUB_REF_NAME" = master ]; then
+            library=asv_results
+          else
+            library="$(printf '%s' "$GITHUB_REF_NAME" | tr '/' '_')_asv_results"
+          fi
+          echo "library: $library"
+          printf 'library=%s\n' "$library" >> "$GITHUB_OUTPUT"
+
+      # Exit 1 = a benchmark failed or a worker never uploaded; the job is meant to go red,
+      # and the results that did arrive are stored either way. Exit 2 = nothing was stored.
+      # No `--commit`: the download holds one artifact per (worker, commit), so `collect`
+      # groups them by the commit each result was measured at, writes a symbol for each,
+      # and puts a report per commit on this job's summary (ticket 18). A
+      # `run_all_benchmarks` run stores every tag it benchmarked, not just the first.
+      - name: collect the run
+        env:
+          LIBRARY: ${{ steps.library.outputs.library }}
+        run: |
+          # `--measure-only` is still expected of, and reported for, every lane it names;
+          # it only stops a managed lane's silence or failures from turning the job red
+          # (gha 26 Q4). The summary says which lanes those were.
+          #
+          # No `--profiles-library`: ticket 48's default is the results library plus
+          # `_profiles`, so master's flame graphs land in `asv_results_profiles` and
+          # a pull request's in `<ref>_asv_results_profiles`, following the same
+          # branch rule the numbers do. A run that profiled nothing never opens that library at all,
+          # and a profile that cannot be stored is a line on this job's summary
+          # rather than a red run — the measurements are already written by then.
+          arctic-winds collect \
+            --artifacts artifacts \
+            --results "$RESULTS" \
+            --library "$LIBRARY" \
+            --expect "$WORKERS" \
+            --measure-only "$MEASURE_ONLY"
+
+      # The PR regression check, replacing `asv compare -s -f 1.15 <master> HEAD` from
+      # `benchmark_commits.yml:150-166`. Exit 1 = something got worse; exit 2 = the check
+      # could not be made (no fresh master reference) — both fail the job, as the `|| exit 1`
+      # chain does today.
+      #
+      # The factor is no longer 1.15 and is not spelled here at all: gha 38 measured
+      # `-f 1.15` over this fleet producing 3.25 *false* regressions per comparison of a
+      # commit with itself, and `arctic-winds compare-values` now defaults to the 1.20
+      # that measurement settled on, together with a sixteen-name never-gate list. Both
+      # live in `compare_values.py`, beside the evidence; `--threshold` still overrides
+      # the factor for a caller who wants to see what a different one would say.
+      #
+      # `--normalize` divides each lane's own run offset — what the whole machine did
+      # that morning — out of the run side before asv judges it (gha 58, adopted
+      # 2026-09-05). Measured over gha 38's same-code runs it takes the fleet's false
+      # regressions at this factor from 0.18 to 0.12 per comparison; the factor itself
+      # stays at the default until a few weeks of normalized nightlies confirm the
+      # measured rates (normalized 1.15 scored 0.16, better than raw 1.20 — the next
+      # candidate, not the first step). The verdict discloses itself: each normalized
+      # lane's offset size lands in the summary, the report JSON and the PR page, so
+      # a normalized green is never mistakable for a raw one.
+      #
+      # `--reference-lib asv_results` compares against the master series this pipeline
+      # writes. Until this pipeline's own nightlies dominate that library, the newest
+      # reference points may still be the old pipeline's single-machine numbers — treat
+      # verdicts that cross that boundary as directional.
+      # `--report` writes the same verdict as JSON, which the PR page below is built
+      # from: asv must not be run a second time to say what this step already knows.
+      - name: compare against master
+        if: github.event_name == 'pull_request'
+        env:
+          LIBRARY: ${{ steps.library.outputs.library }}
+        run: |
+          # `--measure-only` drops the managed lanes' rows from *both* commits before asv
+          # sees them. Two reasons, and the second is the sharp one: a GitHub-hosted
+          # runner's CV would make the threshold mostly false alarms, and an OS-portable
+          # subset runs the *same benchmark names* as an EC2 lane — so without this the
+          # pull request would be judged on whichever machine sorted last.
+          #
+          # Since gha 38 an entry may carry the kinds that lane *does* judge —
+          # `windows_pilot:peakmem+track`, because that lane's counters came back
+          # byte-identical to Linux over eight runs and its memory within 3.18 %, while
+          # its timings sat at 11.36 %. The string is the plan's and nothing here reads
+          # it: `compare-values` compares such a lane a second time, under its own
+          # machine, precisely because of the name collision above.
+          arctic-winds compare-values \
+            --commit "$COMMIT" \
+            --tree . \
+            --results "$RESULTS" \
+            --library "$LIBRARY" \
+            --reference-lib asv_results \
+            --repo . \
+            --measure-only "$MEASURE_ONLY" \
+            --normalize \
+            --report "$GITHUB_WORKSPACE/compare-report.json"
+
+      # The verdict, handed to `publish_pr_page`. The comparison must not be run twice
+      # — asv would have to re-read both commits to say what this job already knows —
+      # and a job boundary is the only way to move a file across one.
+      #
+      # `always()`: a regression makes the step above exit 1, and that is precisely the
+      # run whose page is worth having.
+      - name: keep the comparison for the page
+        if: always() && github.event_name == 'pull_request' && hashFiles('compare-report.json') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: compare-report
+          path: compare-report.json
+          retention-days: 1
+          # A re-run of this job uploads it a second time, and v4 refuses a name that
+          # already exists rather than replacing it.
+          overwrite: true
+
+      # A fork's `GITHUB_TOKEN` is read-only, so nothing can be pushed to gh-pages from
+      # one. The comparison itself still ran and is on this job's summary.
+      - name: note the fork's missing page
+        if: always() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository
+        run: |
+          echo "::notice::No benchmark page for a pull request from a fork: a fork's GITHUB_TOKEN cannot write to gh-pages. The value comparison is in this job's summary."
+
+      # ---------------------------------------------------------------------------
+      # TICKET 11 (REAL storage) — the other half of the throwaway bucket created in
+      # `plan`, with `benchmark_commits.yml:176-187`'s name guard so a bug in the
+      # workflow can never delete a real bucket. Inert on LMDB runs.
+      # ---------------------------------------------------------------------------
+      - name: delete the throwaway test bucket
+        if: always() && needs.plan.outputs.bucket != ''
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_S3_ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_S3_SECRET_KEY }}
+          ARCTICDB_REAL_S3_REGION: eu-west-1
+          ARCTICDB_REAL_S3_ENDPOINT: s3.eu-west-1.amazonaws.com
+          BUCKET: ${{ needs.plan.outputs.bucket }}
+        run: |
+          if [[ $BUCKET == arcticdb-asv-data* ]]; then
+            echo "Removing ${BUCKET}"
+            aws s3 rb --force --endpoint-url "http://${ARCTICDB_REAL_S3_ENDPOINT}" \
+              --region "${ARCTICDB_REAL_S3_REGION}" "s3://${BUCKET}"
+          else
+            echo "Unexpected bucket to clean up! ${BUCKET}"
+            echo "This indicates a bug in the workflow. Not deleting anything and exiting..."
+            exit 1
+          fi
+
+  # The pull request's page on the benchmark site: this run's numbers, the values
+  # already published for the master commit it was judged against, and asv's verdict,
+  # written to `winds/data/pr/<number>.json` on the gh-pages branch and linked from
+  # this job's summary. Kept 90 days; `publish_winds_site.yml`'s nightly rebuild
+  # prunes the expired ones and relists the rest.
+  #
+  # Its own job, not a step of `collect`, for one reason: `concurrency` is a property
+  # of jobs, and the branch is the thing that needs serialising. Putting the group on
+  # `collect` would queue the whole 30-minute job behind another run's, and — worse —
+  # GitHub cancels a *pending* member of a group when a third arrives, so a busy
+  # afternoon would silently drop a run's results before it ever stored them.
+  #
+  # The group is therefore per pull request. Two publishes of the *same* PR are two
+  # attempts at one page, and cancelling the older pending one loses nothing, because
+  # the newer run supersedes it. Two publishes of *different* PRs must both land, so
+  # they are not in one group and are not queued behind each other at all — the race
+  # between them is settled by the retry in the publish step, which rebuilds against
+  # whatever the branch tip turns out to be instead of replaying a commit onto it.
+  # Nothing in this job holds an EC2 runner: the workers are stopped by the time
+  # `collect` finishes, and no `cancel-in-progress` appears anywhere near one.
+  publish_pr_page:
+    name: publish the pull request's page
+    needs: [plan, collect]
+    if: |
+      always() && needs.plan.result == 'success'
+      && github.event_name == 'pull_request'
+      && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    concurrency:
+      group: winds-gh-pages-pr-${{ github.event.pull_request.number }}
+      cancel-in-progress: false
+    # The push to gh-pages, and `download-artifact`'s `actions: read`.
+    permissions:
+      contents: write
+      actions: read
+    env:
+      RESULTS: "s3://s3.eu-west-1.amazonaws.com:arcticdb-ci-benchmark-results?aws_auth=true&region=eu-west-1&path_prefix=asv_results"
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_S3_ACCESS_KEY }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_S3_SECRET_KEY }}
+      AWS_DEFAULT_REGION: eu-west-1
+      COMMIT: ${{ needs.plan.outputs.commit }}
+      LIBRARY: ${{ needs.collect.outputs.library }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      SITE_PREFIX: winds
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: check out arctic-winds
+        uses: actions/checkout@v4
+        with:
+          repository: G-D-Petrov/arctic-winds
+          ref: main
+          path: arctic-winds
+          ssh-key: ${{ secrets.ARCTIC_WINDS_DEPLOY_KEY }}
+
+      - name: install arctic-winds
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install ./arctic-winds
+
+      # Absent when the comparison could not be made (no fresh master reference, or asv
+      # itself failed). The page is still written; every combination is then `new`.
+      - name: fetch the comparison
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          name: compare-report
+
+      - name: publish the pull request's page
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          # The site lives on gh-pages under `winds/` until the cut-over; before that
+          # branch exists there is nothing to publish into, and saying so is not a
+          # reason to fail the run.
+          if ! git clone --depth 1 --branch gh-pages \
+              "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
+              gh-pages; then
+            echo "::notice::No gh-pages branch yet, so the benchmark site has nowhere to put this pull request's page. Dispatch publish_winds_site.yml to build it."
+            exit 0
+          fi
+          git -C gh-pages config user.name "github-actions[bot]"
+          git -C gh-pages config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # Everything the page depends on, done against whatever the branch tip is
+          # *now*. The old shape was `push || (pull --rebase && push)`, which replays
+          # this run's commit onto the winner's — and fails, because `index.json` is
+          # one compact line that both sides rewrite whole, so the rebase conflicts
+          # textually and the loser's page waits for a human to re-run the job. Writing
+          # the page again on the new base has nothing to conflict with: `viz pr`
+          # rebuilds `index.json`'s `prs` listing from the files on disk, so the
+          # winner's page is in the listing this run publishes.
+          attempt() {
+            git -C gh-pages fetch --depth 1 origin gh-pages
+            git -C gh-pages reset --hard FETCH_HEAD
+
+            args=(--results "$RESULTS" --library "$LIBRARY" --commit "$COMMIT"
+                  --pr "$PR_NUMBER" --site-dir "gh-pages/${SITE_PREFIX}/data")
+            if [ -f compare-report.json ]; then
+              args+=(--compare-report compare-report.json)
+            fi
+            arctic-winds viz pr "${args[@]}"
+
+            git -C gh-pages add "${SITE_PREFIX}/data"
+            if git -C gh-pages diff --cached --quiet; then
+              echo "The page is unchanged; nothing to push."
+              return 0
+            fi
+            git -C gh-pages commit --quiet -m "benchmarks: pull request #${PR_NUMBER} (${COMMIT:0:8})"
+            git -C gh-pages push origin HEAD:gh-pages
+          }
+
+          published=no
+          for try in 1 2 3; do
+            if attempt; then
+              published=yes
+              break
+            fi
+            echo "::notice::Publish raced with another run (attempt ${try}); rewriting the page onto the new tip."
+          done
+          if [ "$published" != yes ]; then
+            echo "::error::Could not publish this pull request's page after three attempts."
+            exit 1
+          fi
+
+          page="https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}/${SITE_PREFIX}/pr/${PR_NUMBER}"
+          echo "::notice::Benchmark page for this pull request: ${page}"
+          {
+            echo "### 🌬️ Benchmark page"
+            echo
+            echo "[Pull request #${PR_NUMBER}](${page}) — every benchmark, this run against master, with links into each history."
+          } >> "$GITHUB_STEP_SUMMARY"
