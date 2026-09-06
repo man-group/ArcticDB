@@ -6,7 +6,6 @@
  * will be governed by the Apache License, version 2.0.
  */
 
-#include <arcticdb/storage/library.hpp>
 #include <arcticdb/storage/s3/s3_storage_tool.hpp>
 #include <arcticdb/version/symbol_list.hpp>
 #include <arcticdb/util/memory_tracing.hpp>
@@ -17,7 +16,7 @@
 #include <arcticdb/toolbox/query_stats.hpp>
 #include <arcticdb/toolbox/storage_mover.hpp>
 #include <arcticdb/python/python_utils.hpp>
-#include <arcticdb/entity/protobufs.hpp>
+//#include <arcticdb/entity/protobufs.hpp>
 
 namespace arcticdb::toolbox::apy {
 

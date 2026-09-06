@@ -1,32 +1,23 @@
 #pragma once
 
-#include <arcticdb/version/version_store_api.hpp>
-
-#include "codec/default_codecs.hpp"
-#include "column_store/column_utils.hpp"
-
-#include "stream/test/stream_test_common.hpp"
-#include "util/variant.hpp"
-#include "fmt/format.h"
-#include <pybind11/pybind11.h>
-#include "async/async_store.hpp"
-#include "version/version_map.hpp"
-#include <util/timer.hpp>
-#include <storage/storage.hpp>
-
-#include <pipeline/query.hpp>
-
-#include <Python.h>
-#include <pipeline/index_writer.hpp>
-#include <util/format_bytes.hpp>
-#include <numeric>
-
-#include <arcticdb/stream/stream_source.hpp>
+#include <arcticdb/async/async_store.hpp>
+#include <arcticdb/codec/default_codecs.hpp>
 #include <arcticdb/entity/metrics.hpp>
-#include <ranges>
-#include <functional>
+#include <arcticdb/stream/stream_source.hpp>
+#include <arcticdb/storage/storage_utils.hpp>
+#include <arcticdb/version/snapshot.hpp>
+#include <arcticdb/version/version_functions.hpp>
+#include <arcticdb/version/symbol_list.hpp>
+#include <arcticdb/version/version_map.hpp>
+#include <arcticdb/util/format_bytes.hpp>
+#include <arcticdb/util/timer.hpp>
+#include <arcticdb/util/variant.hpp>
 
-#include "version/version_functions.hpp"
+#include <functional>
+#include <numeric>
+#include <ranges>
+#include <fmt/format.h>
+#include <pybind11/pybind11.h>
 
 namespace rng = std::ranges;
 
