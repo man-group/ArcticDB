@@ -1277,6 +1277,8 @@ std::shared_ptr<std::vector<folly::Future<std::vector<EntityId>>>> schedule_firs
     // which skips the add is ordered after the one that did it, and the flags are uint8_t rather than bool
     // because std::vector<bool> is bit-packed, so neighbouring positions share a word and their
     // read-modify-writes under different mutexes lose each other. See #3381.
+    // Both properties are pinned by version/test/test_slice_added_guard.cpp, which reproduces the guard
+    // below verbatim because it is not a reusable utility. If you change it here, change it there too.
     auto slice_added_mtx = std::make_shared<std::vector<std::mutex>>(num_segments);
     auto slice_added = std::make_shared<std::vector<uint8_t>>(num_segments, 0);
     auto futures = std::make_shared<std::vector<folly::Future<std::vector<EntityId>>>>();
