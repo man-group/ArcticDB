@@ -2966,6 +2966,8 @@ class NativeVersionStore:
                 and not norm.WhichOneof("input_type") == "msg_pack_frame"
             ):
                 data = pl.from_arrow(data, rechunk=False)
+                if isinstance(data, pl.Series) and norm.WhichOneof("input_type") == "experimental_arrow":
+                    data = data.rename(norm.experimental_arrow.polars_series_name)
                 data = self._apply_polars_sorted_flag_to_index(data, sort_order, norm)
         else:
             data = self._normalizer.denormalize(frame_data, norm)
@@ -2981,11 +2983,16 @@ class NativeVersionStore:
         # safely tell Polars the column is sorted.
         if sort_order not in (SortedValue.ASCENDING, SortedValue.DESCENDING):
             return data
-        if not _has_physically_stored_index(norm) or len(data.columns) == 0:
+        if not _has_physically_stored_index(norm):
             return data
-        # The index column is always the first column.
-        index_col = data.columns[0]
-        return data.with_columns(pl.col(index_col).set_sorted(descending=(sort_order == SortedValue.DESCENDING)))
+        if isinstance(data, pl.DataFrame):
+            if len(data.columns) == 0:
+                return data
+            # The index column is always the first column.
+            index_col = data.columns[0]
+            return data.with_columns(pl.col(index_col).set_sorted(descending=(sort_order == SortedValue.DESCENDING)))
+        else:  # Series
+            return data.set_sorted(descending=(sort_order == SortedValue.DESCENDING))
 
     def _adapt_read_res(self, read_result: ReadResult, output_format: OutputFormat) -> VersionedItem:
         data = self._adapt_frame_data(read_result.frame_data, read_result.norm, output_format, read_result.sort_order)
@@ -3885,6 +3892,10 @@ class NativeVersionStore:
                 columns = pd.RangeIndex(0, len(columns))
         elif input_type == "experimental_arrow":
             arrow_meta = timeseries_descriptor.normalization.experimental_arrow
+            if arrow_meta.one_dimensional:
+                # This correctly gives an empty string for Array/ChunkedArray written data as well as Series with empty
+                # names
+                columns[0] = arrow_meta.polars_series_name
             if arrow_meta.has_index:
                 index = [columns.pop(0)]
                 index_dtype = [dtypes.pop(0)]
@@ -3919,8 +3930,16 @@ class NativeVersionStore:
         read_query = self._get_read_query(date_range=None, row_range=None, columns=columns, query_builder=query_builder)
         record_batch, norm = _modify_schema(preloaded_index, read_query, read_options)
         record_batch = pa.RecordBatch._import_from_c(record_batch.array(), record_batch.schema())
-        data = self._normalizer.denormalize(pa.Table.from_batches([record_batch]), norm)
-        return pl.Schema(data.schema)
+        data = pl.from_arrow(self._normalizer.denormalize(pa.Table.from_batches([record_batch]), norm))
+        if isinstance(data, pl.DataFrame):
+            return data.schema
+        else:  # Series
+            name = (
+                norm.experimental_arrow.polars_series_name
+                if norm.WhichOneof("input_type") == "experimental_arrow"
+                else ""
+            )
+            return pl.Schema({name: data.dtype})
 
     def _get_info(self, symbol: str, version: Optional[VersionQueryInput] = None, **kwargs):
         version_query = self._get_version_query(version, **kwargs)

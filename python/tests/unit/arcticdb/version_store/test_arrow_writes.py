@@ -13,10 +13,13 @@ import hypothesis.strategies as st
 import numpy as np
 import pandas as pd
 import pyarrow as pa
+import pyarrow.compute as pc
 import polars as pl
+from polars.testing import assert_series_equal as polars_assert_series_equal
 import pytest
 from arcticdb import DataError
 from arcticdb.exceptions import (
+    NormalizationException,
     SchemaException,
     StreamDescriptorMismatch,
     UserInputException,
@@ -36,6 +39,7 @@ from arcticdb_ext.storage import KeyType
 from tests.util.arrow import (
     arrow_output_string_format_to_pa_type,
     assert_arrow_equal,
+    create_1d_arrow_structure,
     deep_copy,
     to_format,
     undictionarify_table,
@@ -50,6 +54,299 @@ def assert_inputs_not_modified(*inputs):
     yield
     for inp, original in zip(inputs, originals):
         assert_arrow_equal(original, inp)
+
+
+# A RecordBatch is converted to a Table with 1 row-slice early on during normalization, and follows the exact same code
+# path as reading Table/DataFrame on read, so minimal testing is required for this
+@pytest.mark.parametrize("index_column", [False, True])
+@pytest.mark.parametrize("num_rows", [0, 2, 4])  # Empty/unsliced/sliced on disk
+def test_roundtrip_record_batch(in_memory_version_store_tiny_segment_arrow, index_column, num_rows):
+    lib = in_memory_version_store_tiny_segment_arrow
+    sym = "test_roundtrip_record_batch"
+    rb = pa.record_batch(
+        {
+            "ts": pa.Array.from_pandas(pd.date_range("2026-01-01", periods=num_rows), type=pa.timestamp("ns")),
+            "col": pa.array(np.arange(num_rows), type=pa.int64()),
+        }
+    )
+    lib.write(sym, rb, index_column=index_column)
+    assert not lib.is_symbol_pickled(sym)
+    assert lib.get_info(sym)["col_names"]["index"] == (["ts"] if index_column else [])
+    received = lib.read(sym).data
+    expected = pa.Table.from_batches([rb])
+    assert received.equals(expected)
+
+
+@pytest.mark.parametrize("input_type", ["Array", "ChunkedArray", "UnnamedSeries", "NamedSeries"])
+@pytest.mark.parametrize("input_rows", [0, 2, 10])
+def test_roundtrip_1d_arrow_structures(in_memory_version_store_tiny_segment_arrow, input_type, input_rows):
+    lib = in_memory_version_store_tiny_segment_arrow
+    sym = "test_roundtrip_1d_arrow_structures"
+    data = pa.array(np.arange(input_rows), pa.int64())
+    input = create_1d_arrow_structure(input_type, data)
+    lib.write(sym, input)
+    assert not lib.is_symbol_pickled(sym)
+
+    received_pa = lib.read(sym).data
+    assert isinstance(received_pa, pa.ChunkedArray)
+    assert received_pa.num_chunks == (1 if input_rows == 0 else input_rows // 2)
+    expected_pa = create_1d_arrow_structure("ChunkedArray", data)
+    assert received_pa.equals(expected_pa)
+
+    received_pl = lib.read(sym, output_format="polars").data
+    assert isinstance(received_pl, pl.Series)
+    assert received_pl.n_chunks() == (1 if input_rows == 0 else input_rows // 2)
+    expected_pl = create_1d_arrow_structure("NamedSeries" if input_type == "NamedSeries" else "UnnamedSeries", data)
+    polars_assert_series_equal(received_pl, expected_pl)
+
+
+def test_write_chunked_series(in_memory_version_store_arrow):
+    lib = in_memory_version_store_arrow
+    sym = "test_write_chunked_series"
+    series = pl.concat([pl.Series(values=[0]), pl.Series(values=[1])], rechunk=False)
+    assert series.n_chunks() == 2
+    lib.write(sym, series)
+    assert not lib.is_symbol_pickled(sym)
+    received = lib.read(sym, output_format="polars").data
+    assert received.n_chunks() == 1
+    polars_assert_series_equal(received, series)
+
+
+@pytest.mark.parametrize("input_type", ["Array", "ChunkedArray", "UnnamedSeries", "NamedSeries"])
+@pytest.mark.parametrize(
+    "data",
+    [
+        pa.array(np.arange(4), pa.int64()),
+        pa.Array.from_pandas(pd.date_range("2026-01-01", periods=4), type=pa.timestamp("ns")),
+    ],
+)
+def test_1d_arrow_structures_index_column(in_memory_version_store_tiny_segment_arrow, input_type, data):
+    lib = in_memory_version_store_tiny_segment_arrow
+    sym = "test_roundtrip_1d_arrow_structures"
+    input = create_1d_arrow_structure(input_type, data)
+    if data.type == pa.int64():
+        with pytest.raises(UserInputException):
+            lib.write(sym, input, index_column=True)
+    else:  # Time-type, writing just an index is allowed
+        # Validate index sets the sort order on the output
+        lib.write(sym, input, validate_index=True, index_column=True)
+        assert not lib.is_symbol_pickled(sym)
+        # Read as Polars as this preserves the series name if it was present
+        received = lib.read(sym, output_format="polars").data
+        expected = create_1d_arrow_structure("NamedSeries" if input_type == "NamedSeries" else "UnnamedSeries", data)
+        polars_assert_series_equal(received, expected)
+        assert received.flags["SORTED_ASC"]
+
+
+@pytest.mark.parametrize("dynamic_schema", [False, True])
+@pytest.mark.parametrize("input_type", ["Array", "ChunkedArray", "UnnamedSeries", "NamedSeries"])
+@pytest.mark.parametrize("index_column", [False, True])
+def test_1d_arrow_structures_timezones(in_memory_store_factory, dynamic_schema, input_type, index_column):
+    lib = in_memory_store_factory(dynamic_schema=dynamic_schema)
+    lib._set_allow_arrow_input()
+    # Read as Polars as this preserves the series name if it was present
+    lib.set_output_format("polars")
+    sym = "test_1d_arrow_structures_column_metadata"
+    write_date_range = pd.date_range("2026-01-01", periods=4, tz="America/New_York")
+    write_data = pa.Array.from_pandas(write_date_range, type=pa.timestamp("ns", tz="America/New_York"))
+    write_input = create_1d_arrow_structure(input_type, write_data)
+    lib.write(sym, write_input, index_column=index_column)
+    assert not lib.is_symbol_pickled(sym)
+    received = lib.read(sym).data
+    expected = create_1d_arrow_structure("NamedSeries" if input_type == "NamedSeries" else "UnnamedSeries", write_data)
+    polars_assert_series_equal(received, expected)
+    assert received.dtype.time_zone == "America/New_York"
+
+    append_date_range = pd.date_range("2026-01-05", periods=4, tz="Europe/Brussels")
+    append_data = pa.Array.from_pandas(append_date_range, type=pa.timestamp("ns", tz="Europe/Brussels"))
+    append_input = create_1d_arrow_structure(input_type, append_data)
+    if dynamic_schema:
+        lib.append(sym, append_input, index_column=index_column)
+        received = lib.read(sym).data
+        expected_date_range = write_date_range.tz_convert(None).append(append_date_range.tz_convert(None))
+        expected_data = pa.Array.from_pandas(expected_date_range, type=pa.timestamp("ns"))
+        expected = create_1d_arrow_structure(
+            "NamedSeries" if input_type == "NamedSeries" else "UnnamedSeries", expected_data
+        )
+        polars_assert_series_equal(received, expected)
+        assert received.dtype.time_zone is None
+    else:
+        with pytest.raises(StreamDescriptorMismatch):
+            lib.append(sym, append_input, index_column=index_column)
+
+
+@pytest.mark.parametrize("input_type", ["Array", "ChunkedArray", "UnnamedSeries", "NamedSeries"])
+def test_1d_arrow_structures_string_format(in_memory_version_store_arrow, input_type):
+    lib = in_memory_version_store_arrow
+    sym = "test_1d_arrow_structures_string_format"
+    # Read as Polars as this preserves the series name if it was present
+    lib.set_output_format("polars")
+    write_data = pc.dictionary_encode(pa.array(["hi", "hello", "gday", "ciao"], type=pa.large_string()))
+    write_input = create_1d_arrow_structure(input_type, write_data)
+    lib.write(sym, write_input)
+    assert not lib.is_symbol_pickled(sym)
+    received = lib.read(sym).data
+    expected = create_1d_arrow_structure("NamedSeries" if input_type == "NamedSeries" else "UnnamedSeries", write_data)
+    polars_assert_series_equal(received, expected)
+    assert received.dtype == pl.Categorical
+
+    append_data = pa.array(["hi", "hello", "gday", "ciao"], type=pa.string())
+    append_input = create_1d_arrow_structure(input_type, append_data)
+    lib.append(sym, append_input)
+    received = lib.read(sym).data
+    expected_data = pa.array(["hi", "hello", "gday", "ciao", "hi", "hello", "gday", "ciao"], type=pa.large_string())
+    expected = create_1d_arrow_structure(
+        "NamedSeries" if input_type == "NamedSeries" else "UnnamedSeries", expected_data
+    )
+    polars_assert_series_equal(received, expected)
+    assert received.dtype == pl.String
+
+
+@pytest.mark.parametrize("method", ["append", "update"])
+@pytest.mark.parametrize("first_type", ["Array", "ChunkedArray", "UnnamedSeries", "NamedSeries"])
+@pytest.mark.parametrize("second_type", ["Array", "ChunkedArray", "UnnamedSeries", "NamedSeries"])
+def test_1d_arrow_structures_append_update(in_memory_version_store_arrow, method, first_type, second_type):
+    lib = in_memory_version_store_arrow
+    sym = "test_1d_arrow_structures_append"
+    # Read as Polars as this preserves the series name if it was present
+    lib.set_output_format("polars")
+    data = (
+        pa.array(np.arange(8), pa.int64())
+        if method == "append"
+        else pa.Array.from_pandas(pd.date_range("2026-01-01", periods=8), type=pa.timestamp("ns"))
+    )
+    first_input = create_1d_arrow_structure(first_type, data[:4])
+    second_input = create_1d_arrow_structure(second_type, data[4:])
+    lib.write(sym, first_input, index_column=method == "update")
+    assert not lib.is_symbol_pickled(sym)
+
+    # All combinations are permissible except named series with everything else
+    if (first_type == "NamedSeries" and second_type != "NamedSeries") or (
+        first_type != "NamedSeries" and second_type == "NamedSeries"
+    ):
+        with pytest.raises(StreamDescriptorMismatch):
+            getattr(lib, method)(sym, second_input, index_column=method == "update")
+    else:
+        getattr(lib, method)(sym, second_input, index_column=method == "update")
+        received = lib.read(sym).data
+        expected = create_1d_arrow_structure("NamedSeries" if first_type == "NamedSeries" else "UnnamedSeries", data)
+        polars_assert_series_equal(received, expected)
+
+
+@pytest.mark.parametrize("dynamic_schema", [False, True])
+@pytest.mark.parametrize("first_type", ["Array", "ChunkedArray", "UnnamedSeries", "NamedSeries"])
+@pytest.mark.parametrize("second_type", ["Array", "ChunkedArray", "UnnamedSeries", "NamedSeries"])
+def test_1d_arrow_structures_append_type_promotion(in_memory_store_factory, dynamic_schema, first_type, second_type):
+    lib = in_memory_store_factory(dynamic_schema=dynamic_schema)
+    lib._set_allow_arrow_input()
+    # Read as Polars as this preserves the series name if it was present
+    lib.set_output_format("polars")
+    sym = "test_1d_arrow_structures_append_type_promotion"
+    data = pa.array(np.arange(8), pa.int8())
+    first_input = create_1d_arrow_structure(first_type, data[:4])
+    # Change the type
+    data = data.cast(pa.int16())
+    second_input = create_1d_arrow_structure(second_type, data[4:])
+    lib.write(sym, first_input)
+    assert not lib.is_symbol_pickled(sym)
+
+    # All combinations are permissible with dynamic schema except named series with everything else
+    if (
+        not dynamic_schema
+        or (first_type == "NamedSeries" and second_type != "NamedSeries")
+        or (first_type != "NamedSeries" and second_type == "NamedSeries")
+    ):
+        with pytest.raises(StreamDescriptorMismatch):
+            lib.append(sym, second_input)
+    else:
+        lib.append(sym, second_input)
+        received = lib.read(sym).data
+        expected = create_1d_arrow_structure("NamedSeries" if first_type == "NamedSeries" else "UnnamedSeries", data)
+        polars_assert_series_equal(received, expected)
+
+
+@pytest.mark.parametrize("join", ["inner", "outer"])
+@pytest.mark.parametrize("first_type", ["Array", "ChunkedArray", "UnnamedSeries", "NamedSeries"])
+@pytest.mark.parametrize("second_type", ["Array", "ChunkedArray", "UnnamedSeries", "NamedSeries"])
+def test_1d_arrow_structures_concat(in_memory_version_store_arrow, join, first_type, second_type):
+    lib = in_memory_version_store_arrow
+    first_sym = "test_1d_arrow_structures_append_0"
+    second_sym = "test_1d_arrow_structures_append_1"
+    # Read as Polars as this preserves the series name if it was present
+    lib.set_output_format("polars")
+    data = pa.array(np.arange(8), pa.int64())
+    first_input = create_1d_arrow_structure(first_type, data[:4])
+    second_input = create_1d_arrow_structure(second_type, data[4:])
+    lib.write(first_sym, first_input)
+    lib.write(second_sym, second_input)
+    assert not lib.is_symbol_pickled(first_sym)
+    assert not lib.is_symbol_pickled(second_sym)
+
+    # All combinations are permissible with concat. Named/unnamed combinations become unnamed
+    received = lib.batch_read_and_join([first_sym, second_sym], QueryBuilder().concat(join)).data
+    expected = create_1d_arrow_structure(
+        "NamedSeries" if first_type == "NamedSeries" and second_type == "NamedSeries" else "UnnamedSeries", data
+    )
+    polars_assert_series_equal(received, expected)
+
+
+# Use __array__ as the column name in the 2D structures as this is the placeholder we use for 1D structures, and so is
+# the most likely to accidentally be allowed
+@pytest.mark.parametrize("type_1d", ["Array", "ChunkedArray", "UnnamedSeries", "NamedSeries"])
+@pytest.mark.parametrize(
+    "data_2d",
+    [
+        pa.table({"__array__": pa.array([2], type=pa.int64())}),
+        pl.DataFrame({"__array__": pl.Series(values=[2], dtype=pl.Int64)}),
+        pa.record_batch({"__array__": pa.array([2], type=pa.int64())}),
+    ],
+)
+@pytest.mark.parametrize("first_1d", [False, True])
+def test_combine_1d_arrow_structures_with_multi_column(in_memory_version_store_arrow, type_1d, data_2d, first_1d):
+    lib = in_memory_version_store_arrow
+    first_sym = "test_combine_1d_arrow_structures_with_multi_column_0"
+    second_sym = "test_combine_1d_arrow_structures_with_multi_column_1"
+    data_1d = pa.array([0, 1], type=pa.int64())
+    data_1d = create_1d_arrow_structure(type_1d, data_1d)
+    first_data = data_1d if first_1d else data_2d
+    second_data = data_2d if first_1d else data_1d
+    lib.write(first_sym, first_data)
+    assert not lib.is_symbol_pickled(first_sym)
+    with pytest.raises(NormalizationException):
+        lib.append(first_sym, second_data)
+    lib.write(second_sym, second_data)
+    with pytest.raises(NormalizationException):
+        lib.batch_read_and_join([first_sym, second_sym], QueryBuilder().concat("inner"))
+    with pytest.raises(NormalizationException):
+        lib.batch_read_and_join([first_sym, second_sym], QueryBuilder().concat("outer"))
+
+
+@pytest.mark.parametrize("dynamic_schema", [False, True])
+@pytest.mark.parametrize("first_name", [None, "name_1", "name_2"])
+@pytest.mark.parametrize("second_name", [None, "name_1", "name_2"])
+def test_combine_polars_named_series(in_memory_store_factory, dynamic_schema, first_name, second_name):
+    lib = in_memory_store_factory(dynamic_schema=dynamic_schema)
+    lib.set_output_format("polars")
+    lib._set_allow_arrow_input()
+    first_sym = "test_combine_polars_named_series_0"
+    second_sym = "test_combine_polars_named_series_1"
+    first_df = pl.Series(first_name, [0], dtype=pl.Int64)
+    second_df = pl.Series(second_name, [1], dtype=pl.Int64)
+    lib.write(first_sym, first_df)
+    assert not lib.is_symbol_pickled(first_sym)
+    lib.write(second_sym, second_df)
+    assert not lib.is_symbol_pickled(second_sym)
+    # All combinations are permissible with concat. Mismatched names become an empty string
+    received = lib.batch_read_and_join([first_sym, second_sym], QueryBuilder().concat()).data
+    expected = pl.Series(first_name if first_name == second_name else "", [0, 1], pl.Int64)
+    polars_assert_series_equal(received, expected)
+    if first_name == second_name:
+        lib.append(first_sym, second_df)
+        received = lib.read(first_sym).data
+        polars_assert_series_equal(received, pl.concat([first_df, second_df]))
+    else:
+        with pytest.raises(StreamDescriptorMismatch):
+            lib.append(first_sym, second_df)
 
 
 def test_record_batches_roundtrip():
@@ -207,6 +504,19 @@ def test_write_with_index(in_memory_version_store_arrow, arrow_output_format):
     assert_arrow_equal(table, received)
 
 
+def test_write_with_only_index(in_memory_version_store_arrow, arrow_output_format):
+    lib = in_memory_version_store_arrow
+    sym = "test_write_with_only_index"
+    table = pa.table(
+        {
+            "ts": pa.Array.from_pandas(pd.date_range("2025-01-01", periods=2), type=pa.timestamp("ns")),
+        }
+    )
+    lib.write(sym, to_format(table, arrow_output_format), index_column=True)
+    received = lib.read(sym, output_format=arrow_output_format).data
+    assert_arrow_equal(table, received)
+
+
 def test_write_multiple_record_batches_indexed(in_memory_version_store_arrow):
     lib = in_memory_version_store_arrow
     sym = "test_write_multiple_record_batches_indexed"
@@ -337,7 +647,7 @@ def test_many_record_batches_many_slices(in_memory_store_factory, rows_per_slice
                     "bool": pa.array(rng.choice([True, False], length), pa.bool_()),
                     "string": pa.array([f"{i}" for i in range(length)], pa.string()),
                     # Few distinct values so the dictionary genuinely encodes repeats
-                    "categorical": pa.compute.dictionary_encode(
+                    "categorical": pc.dictionary_encode(
                         pa.array([f"{i % 3}" for i in range(length)], pa.large_string())
                     ),
                 }
@@ -720,7 +1030,7 @@ def test_write_categorical_strings(in_memory_version_store_arrow, format, sparse
     )
     if format == "pyarrow":
         # pyarrow's dictionary_encode produces int32 keys
-        data = pa.table({"col": pa.compute.dictionary_encode(pa.array(values, pa.large_string()))})
+        data = pa.table({"col": pc.dictionary_encode(pa.array(values, pa.large_string()))})
         assert pa.types.is_dictionary(data.column(0).type)
     else:
         # polars' Categorical produces uint32 keys
@@ -938,6 +1248,36 @@ def test_update_with_date_range_wider_than_data(in_memory_version_store_arrow, d
     assert_frame_equal(expected, received)
 
 
+@pytest.mark.parametrize("input_type", ["Array", "ChunkedArray", "UnnamedSeries", "NamedSeries"])
+def test_update_with_date_range_wider_than_data_1d(in_memory_version_store_arrow, input_type):
+    lib = in_memory_version_store_arrow
+    sym = "test_update_with_date_range_wider_than_data_1d"
+    write_date_range = pd.date_range("2025-01-01", periods=6)
+    write_array = pa.Array.from_pandas(write_date_range, type=pa.timestamp("ns"))
+    write_data = create_1d_arrow_structure(input_type, write_array)
+    lib.write(sym, write_data, index_column=True)
+
+    # Use an offset date range, otherwise the result will be indistinguishable from the update not occurring
+    update_date_range = pd.date_range("2025-01-03 12:00:00", periods=1)
+    update_array = pa.Array.from_pandas(update_date_range, type=pa.timestamp("ns"))
+    update_data = create_1d_arrow_structure(input_type, update_array)
+
+    date_range = (pd.Timestamp("2025-01-03"), pd.Timestamp("2025-01-04"))
+    lib.update(sym, update_data, date_range=date_range, index_column=True)
+    received = lib.read(sym).data
+    expected = pa.Array.from_pandas(
+        [
+            pd.Timestamp("2025-01-01"),
+            pd.Timestamp("2025-01-02"),
+            pd.Timestamp("2025-01-03 12:00:00"),
+            pd.Timestamp("2025-01-05"),
+            pd.Timestamp("2025-01-06"),
+        ],
+        type=pa.timestamp("ns"),
+    )
+    assert received.equals(pa.chunked_array([expected]))
+
+
 @pytest.mark.parametrize(
     "date_range",
     [
@@ -959,22 +1299,7 @@ def test_update_with_date_range_wider_than_data(in_memory_version_store_arrow, d
         ),
     ],
 )
-@pytest.mark.parametrize(
-    "index_tz",
-    [
-        pytest.param(None, id="naive"),
-        pytest.param(
-            "UTC",
-            id="UTC",
-            marks=pytest.mark.xfail(reason="Tz-aware arrow writes not yet supported (monday ref: 9929831600)"),
-        ),
-        pytest.param(
-            "US/Eastern",
-            id="US_Eastern",
-            marks=pytest.mark.xfail(reason="Tz-aware arrow writes not yet supported (monday ref: 9929831600)"),
-        ),
-    ],
-)
+@pytest.mark.parametrize("index_tz", [None, "UTC", "US/Eastern"])
 def test_update_with_date_range_narrower_than_data(
     in_memory_version_store_arrow, date_range, index_tz, arrow_output_format
 ):
@@ -1005,6 +1330,37 @@ def test_update_with_date_range_narrower_than_data(
     expected = lib.read(reference_sym, output_format="pandas").data
     received = lib.read(sym).data.to_pandas().set_index("ts")
     assert_frame_equal(expected, received)
+
+
+@pytest.mark.parametrize("input_type", ["Array", "ChunkedArray", "UnnamedSeries", "NamedSeries"])
+def test_update_with_date_range_narrower_than_data_1d(in_memory_version_store_arrow, input_type):
+    lib = in_memory_version_store_arrow
+    sym = "test_update_with_date_range_narrower_than_data_1d"
+    write_date_range = pd.date_range("2025-01-01", periods=6)
+    write_array = pa.Array.from_pandas(write_date_range, type=pa.timestamp("ns"))
+    write_data = create_1d_arrow_structure(input_type, write_array)
+    lib.write(sym, write_data, index_column=True)
+
+    # Use an offset date range, otherwise the result will be indistinguishable from the update not occurring
+    update_date_range = pd.date_range("2025-01-01 12:00:00", periods=6)
+    update_array = pa.Array.from_pandas(update_date_range, type=pa.timestamp("ns"))
+    update_data = create_1d_arrow_structure(input_type, update_array)
+
+    # Picks out only 2025-01-03 12:00:00 from update_data, and drops index values 2025-01-03 and 2025-01-04
+    date_range = (pd.Timestamp("2025-01-03"), pd.Timestamp("2025-01-04"))
+    lib.update(sym, update_data, date_range=date_range, index_column=True)
+    received = lib.read(sym).data
+    expected = pa.Array.from_pandas(
+        [
+            pd.Timestamp("2025-01-01"),
+            pd.Timestamp("2025-01-02"),
+            pd.Timestamp("2025-01-03 12:00:00"),
+            pd.Timestamp("2025-01-05"),
+            pd.Timestamp("2025-01-06"),
+        ],
+        type=pa.timestamp("ns"),
+    )
+    assert received.equals(pa.chunked_array([expected]))
 
 
 @pytest.mark.parametrize("method", ["write_parallel", "write_incomplete", "append", "stage"])
@@ -1761,7 +2117,7 @@ class TestStringFormatRoundtrip:
         data = {
             "small_string": pa.array(values, pa.string()),
             "large_string": pa.array(values, pa.large_string()),
-            "dict_encoded": pa.compute.dictionary_encode(pa.array(values, pa.large_string())),
+            "dict_encoded": pc.dictionary_encode(pa.array(values, pa.large_string())),
         }
         table = pa.table(data)
         lib.write(sym, table)
@@ -1808,7 +2164,7 @@ class TestStringFormatRoundtrip:
         data = {
             "small_string": pa.array(values, pa.string()),
             "large_string": pa.array(values, pa.large_string()),
-            "dict_encoded": pa.compute.dictionary_encode(pa.array(values, pa.large_string())),
+            "dict_encoded": pc.dictionary_encode(pa.array(values, pa.large_string())),
         }
         table = pa.table(data)
         lib.write(sym, table)
@@ -1826,7 +2182,7 @@ class TestStringFormatRoundtrip:
             "ts": pa.Array.from_pandas(pd.date_range("2026-01-01", periods=len(values)), type=pa.timestamp("ns")),
             "small_string": pa.array(values, pa.string()),
             "large_string": pa.array(values, pa.large_string()),
-            "dict_encoded": pa.compute.dictionary_encode(pa.array(values, pa.large_string())),
+            "dict_encoded": pc.dictionary_encode(pa.array(values, pa.large_string())),
         }
         table = pa.table(data)
         lib.write(sym, table, index_column=True)
@@ -1856,9 +2212,9 @@ class TestStringFormatRoundtrip:
             "large_to_small": pa.array(write_values, pa.large_string()),
             "large_to_large": pa.array(write_values, pa.large_string()),
             "large_to_dict": pa.array(write_values, pa.large_string()),
-            "dict_to_small": pa.compute.dictionary_encode(pa.array(write_values, pa.large_string())),
-            "dict_to_large": pa.compute.dictionary_encode(pa.array(write_values, pa.large_string())),
-            "dict_to_dict": pa.compute.dictionary_encode(pa.array(write_values, pa.large_string())),
+            "dict_to_small": pc.dictionary_encode(pa.array(write_values, pa.large_string())),
+            "dict_to_large": pc.dictionary_encode(pa.array(write_values, pa.large_string())),
+            "dict_to_dict": pc.dictionary_encode(pa.array(write_values, pa.large_string())),
         }
         write_table = pa.table(write_data)
         lib.write(sym, write_table, index_column=True)
@@ -1869,13 +2225,13 @@ class TestStringFormatRoundtrip:
             ),
             "small_to_small": pa.array(modify_values, pa.string()),
             "small_to_large": pa.array(modify_values, pa.large_string()),
-            "small_to_dict": pa.compute.dictionary_encode(pa.array(modify_values, pa.large_string())),
+            "small_to_dict": pc.dictionary_encode(pa.array(modify_values, pa.large_string())),
             "large_to_small": pa.array(modify_values, pa.string()),
             "large_to_large": pa.array(modify_values, pa.large_string()),
-            "large_to_dict": pa.compute.dictionary_encode(pa.array(modify_values, pa.large_string())),
+            "large_to_dict": pc.dictionary_encode(pa.array(modify_values, pa.large_string())),
             "dict_to_small": pa.array(modify_values, pa.string()),
             "dict_to_large": pa.array(modify_values, pa.large_string()),
-            "dict_to_dict": pa.compute.dictionary_encode(pa.array(modify_values, pa.large_string())),
+            "dict_to_dict": pc.dictionary_encode(pa.array(modify_values, pa.large_string())),
         }
         modify_table = pa.table(modify_data)
         getattr(lib, method)(sym, modify_table, index_column=True)
@@ -1904,7 +2260,7 @@ class TestStringFormatRoundtrip:
             "large_to_dict": pa.array(expected_values, pa.large_string()),
             "dict_to_small": pa.array(expected_values, pa.large_string()),
             "dict_to_large": pa.array(expected_values, pa.large_string()),
-            "dict_to_dict": pa.compute.dictionary_encode(pa.array(expected_values, pa.large_string())),
+            "dict_to_dict": pc.dictionary_encode(pa.array(expected_values, pa.large_string())),
         }
         # assert_arrow_equal requires the exact dict-encoding to match. We have already checked the schema was correct on
         # read above, so just check the values here
@@ -1924,7 +2280,7 @@ class TestStringFormatRoundtrip:
         data = {
             "small_string": pa.array(values, pa.string()),
             "large_string": pa.array(values, pa.large_string()),
-            "dict_encoded": pa.compute.dictionary_encode(pa.array(values, pa.large_string())),
+            "dict_encoded": pc.dictionary_encode(pa.array(values, pa.large_string())),
         }
         table = pa.table(data)
         lib.write(sym, table)
@@ -1949,7 +2305,7 @@ class TestStringFormatRoundtrip:
         data = {
             "small_string": pa.array(values, pa.string()),
             "large_string": pa.array(values, pa.large_string()),
-            "dict_encoded": pa.compute.dictionary_encode(pa.array(values, pa.large_string())),
+            "dict_encoded": pc.dictionary_encode(pa.array(values, pa.large_string())),
             "not_overridden": pa.array(values, pa.string()),
         }
         table = pa.table(data)
@@ -1982,7 +2338,7 @@ class TestStringFormatRoundtrip:
         data = {
             "small_string": pa.array(values, pa.string()),
             "large_string": pa.array(values, pa.large_string()),
-            "dict_encoded": pa.compute.dictionary_encode(pa.array(values, pa.large_string())),
+            "dict_encoded": pc.dictionary_encode(pa.array(values, pa.large_string())),
             "overridden_by_read_level_default": pa.array(values, pa.string()),
             "explicitly_set_to_stored_type": pa.array(values, pa.string()),
         }
@@ -2082,7 +2438,7 @@ class TestStringFormatRoundtrip:
         data = {
             "small_string": pa.array(values, pa.string()),
             "large_string": pa.array(values, pa.large_string()),
-            "dict_encoded": pa.compute.dictionary_encode(pa.array(values, pa.large_string())),
+            "dict_encoded": pc.dictionary_encode(pa.array(values, pa.large_string())),
         }
         table = pa.table(data)
         lib.write(sym, table)
@@ -2102,7 +2458,7 @@ class TestStringFormatRoundtrip:
         data = {
             "small_string": pa.array(values, pa.string()),
             "large_string": pa.array(values, pa.large_string()),
-            "dict_encoded": pa.compute.dictionary_encode(pa.array(values, pa.large_string())),
+            "dict_encoded": pc.dictionary_encode(pa.array(values, pa.large_string())),
         }
         table = pa.table(data)
         lib.write(sym, table)
@@ -2122,9 +2478,7 @@ class TestStringFormatRoundtrip:
         assert received.schema.field(1).type == pa.dictionary(pa.int32(), pa.large_string())
         assert received.schema.field(2).type == pa.string()
         assert received.schema.field(3).type == pa.dictionary(pa.int32(), pa.large_string())
-        table = table.add_column(
-            3, "new", pa.compute.dictionary_encode(pa.array(len(values) * ["value"], pa.large_string()))
-        )
+        table = table.add_column(3, "new", pc.dictionary_encode(pa.array(len(values) * ["value"], pa.large_string())))
         table = table.set_column(0, "small_string", table.column(0).cast(pa.large_string()))
         table = table.set_column(1, "large_string", table.column(1).cast(pa.dictionary(pa.int32(), pa.large_string())))
         table = table.set_column(2, "dict_encoded", table.column(2).cast(pa.string()))
@@ -2145,12 +2499,12 @@ class TestStringFormatRoundtrip:
             "large_to_small": pa.array(write_values, pa.large_string()),
             "large_to_large": pa.array(write_values, pa.large_string()),
             "large_to_dict": pa.array(write_values, pa.large_string()),
-            "dict_to_small": pa.compute.dictionary_encode(pa.array(write_values, pa.large_string())),
-            "dict_to_large": pa.compute.dictionary_encode(pa.array(write_values, pa.large_string())),
-            "dict_to_dict": pa.compute.dictionary_encode(pa.array(write_values, pa.large_string())),
+            "dict_to_small": pc.dictionary_encode(pa.array(write_values, pa.large_string())),
+            "dict_to_large": pc.dictionary_encode(pa.array(write_values, pa.large_string())),
+            "dict_to_dict": pc.dictionary_encode(pa.array(write_values, pa.large_string())),
             "small_first_only": pa.array(write_values, pa.string()),
             "large_first_only": pa.array(write_values, pa.large_string()),
-            "dict_first_only": pa.compute.dictionary_encode(pa.array(write_values, pa.large_string())),
+            "dict_first_only": pc.dictionary_encode(pa.array(write_values, pa.large_string())),
         }
         write_table = pa.table(write_data)
         lib.write(sym, write_table)
@@ -2159,12 +2513,12 @@ class TestStringFormatRoundtrip:
             "small_second_only": pa.array(modify_values, pa.string()),
             "dict_to_large": pa.array(modify_values, pa.large_string()),
             "large_second_only": pa.array(modify_values, pa.large_string()),
-            "dict_second_only": pa.compute.dictionary_encode(pa.array(modify_values, pa.large_string())),
-            "dict_to_dict": pa.compute.dictionary_encode(pa.array(modify_values, pa.large_string())),
+            "dict_second_only": pc.dictionary_encode(pa.array(modify_values, pa.large_string())),
+            "dict_to_dict": pc.dictionary_encode(pa.array(modify_values, pa.large_string())),
             "small_to_large": pa.array(modify_values, pa.large_string()),
-            "small_to_dict": pa.compute.dictionary_encode(pa.array(modify_values, pa.large_string())),
+            "small_to_dict": pc.dictionary_encode(pa.array(modify_values, pa.large_string())),
             "large_to_large": pa.array(modify_values, pa.large_string()),
-            "large_to_dict": pa.compute.dictionary_encode(pa.array(modify_values, pa.large_string())),
+            "large_to_dict": pc.dictionary_encode(pa.array(modify_values, pa.large_string())),
             "dict_to_small": pa.array(modify_values, pa.string()),
             "large_to_small": pa.array(modify_values, pa.string()),
             "small_to_small": pa.array(modify_values, pa.string()),
@@ -2199,10 +2553,10 @@ def test_roundtrip_string_types_batch(in_memory_version_store_arrow):
     data_0 = {
         "col_0": pa.array(values_0, pa.string()),
         "col_1": pa.array(values_0, pa.large_string()),
-        "col_2": pa.compute.dictionary_encode(pa.array(values_0, pa.large_string())),
+        "col_2": pc.dictionary_encode(pa.array(values_0, pa.large_string())),
     }
     data_1 = {
-        "col_1": pa.compute.dictionary_encode(pa.array(values_1, pa.large_string())),
+        "col_1": pc.dictionary_encode(pa.array(values_1, pa.large_string())),
         "col_2": pa.array(values_1, pa.large_string()),
         "col_3": pa.array(values_1, pa.string()),
     }
@@ -2267,12 +2621,12 @@ def test_symbol_concat_arrow_string_types(in_memory_version_store_arrow):
         "large_to_small": pa.array(values_0, pa.large_string()),
         "large_to_large": pa.array(values_0, pa.large_string()),
         "large_to_dict": pa.array(values_0, pa.large_string()),
-        "dict_to_small": pa.compute.dictionary_encode(pa.array(values_0, pa.large_string())),
-        "dict_to_large": pa.compute.dictionary_encode(pa.array(values_0, pa.large_string())),
-        "dict_to_dict": pa.compute.dictionary_encode(pa.array(values_0, pa.large_string())),
+        "dict_to_small": pc.dictionary_encode(pa.array(values_0, pa.large_string())),
+        "dict_to_large": pc.dictionary_encode(pa.array(values_0, pa.large_string())),
+        "dict_to_dict": pc.dictionary_encode(pa.array(values_0, pa.large_string())),
         "small_first_only": pa.array(values_0, pa.string()),
         "large_first_only": pa.array(values_0, pa.large_string()),
-        "dict_first_only": pa.compute.dictionary_encode(pa.array(values_0, pa.large_string())),
+        "dict_first_only": pc.dictionary_encode(pa.array(values_0, pa.large_string())),
     }
     table_0 = pa.table(data_0)
     lib.write(sym_0, table_0)
@@ -2281,12 +2635,12 @@ def test_symbol_concat_arrow_string_types(in_memory_version_store_arrow):
         "small_second_only": pa.array(values_1, pa.string()),
         "dict_to_large": pa.array(values_1, pa.large_string()),
         "large_second_only": pa.array(values_1, pa.large_string()),
-        "dict_second_only": pa.compute.dictionary_encode(pa.array(values_1, pa.large_string())),
-        "dict_to_dict": pa.compute.dictionary_encode(pa.array(values_1, pa.large_string())),
+        "dict_second_only": pc.dictionary_encode(pa.array(values_1, pa.large_string())),
+        "dict_to_dict": pc.dictionary_encode(pa.array(values_1, pa.large_string())),
         "small_to_large": pa.array(values_1, pa.large_string()),
-        "small_to_dict": pa.compute.dictionary_encode(pa.array(values_1, pa.large_string())),
+        "small_to_dict": pc.dictionary_encode(pa.array(values_1, pa.large_string())),
         "large_to_large": pa.array(values_1, pa.large_string()),
-        "large_to_dict": pa.compute.dictionary_encode(pa.array(values_1, pa.large_string())),
+        "large_to_dict": pc.dictionary_encode(pa.array(values_1, pa.large_string())),
         "dict_to_small": pa.array(values_1, pa.string()),
         "large_to_small": pa.array(values_1, pa.string()),
         "small_to_small": pa.array(values_1, pa.string()),

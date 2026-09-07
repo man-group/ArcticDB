@@ -25,7 +25,7 @@ from arcticdb.util.test import get_sample_dataframe, make_dynamic
 from arcticdb.util._versions import IS_PANDAS_ONE
 from arcticdb_ext.storage import KeyType
 from tests.util.mark import WINDOWS
-from tests.util.arrow import arrow_output_string_format_to_pa_type
+from tests.util.arrow import arrow_output_string_format_to_pa_type, create_1d_arrow_structure
 
 
 def test_basic(lmdb_version_store_arrow):
@@ -1413,3 +1413,36 @@ def test_arrow_written_data_get_info_timeseries(in_memory_version_store_arrow, t
         assert info["sorted"] == "ASCENDING"
     else:
         assert info["sorted"] == "UNKNOWN"
+
+
+# See test with the same name in test_arrow_api.py for V2 API equivalent
+@pytest.mark.parametrize("timeseries", [False, True])
+@pytest.mark.parametrize("input_type", ["Array", "ChunkedArray", "UnnamedSeries", "NamedSeries"])
+def test_arrow_written_1d_data_get_info(in_memory_version_store_arrow, timeseries, input_type):
+    lib = in_memory_version_store_arrow
+    sym = "test_arrow_written_1d_data_get_info"
+    data = (
+        pa.Array.from_pandas(pd.date_range("2026-01-01", periods=10), type=pa.timestamp("ns"))
+        if timeseries
+        else pa.array(np.arange(10), pa.int64())
+    )
+    input = create_1d_arrow_structure(input_type, data)
+    lib.write(sym, input, validate_index=True, index_column=timeseries)
+    info = lib.get_info(sym)
+    assert info["col_names"]["columns"] == (
+        [] if timeseries else ["series_name" if input_type == "NamedSeries" else ""]
+    )
+    assert len(info["dtype"]) == (0 if timeseries else 1)
+    if not timeseries:
+        assert "INT64" in str(info["dtype"][0])
+    assert len(info["col_names"]["index"]) == (1 if timeseries else 0)
+    assert len(info["col_names"]["index_dtype"]) == (1 if timeseries else 0)
+    assert info["rows"] == 10
+    assert info["input_type"] == "experimental_arrow"
+    assert info["index_type"] == "NA"
+    assert info["type"] == "arrow"
+    if timeseries:
+        assert info["date_range"] == (data.to_pandas()[0], data.to_pandas()[9])
+    else:
+        assert np.isnat(info["date_range"][0]) and np.isnat(info["date_range"][1])
+    assert info["sorted"] == ("ASCENDING" if timeseries else "UNKNOWN")
