@@ -26,7 +26,7 @@ import difflib
 from datetime import datetime
 
 from numpy import datetime64
-from pandas import Timestamp, to_datetime, Timedelta
+from pandas import Timestamp, Timedelta
 from typing import Any, Optional, Union, List, Sequence, Tuple, Dict, Set, NamedTuple
 from contextlib import contextmanager
 import time
@@ -3100,15 +3100,23 @@ class NativeVersionStore:
             NativeVersionStore._warned_about_list_version_latest_only_and_snapshot = True
 
         result = self.version_store.list_versions(symbol, snapshot, latest_only, skip_snapshots)
+        # Scalar pd.to_datetime builds a throwaway one-element DatetimeIndex per call, so convert the whole
+        # column of epoch-nanosecond creation timestamps in one go instead of once per version.
+        dates = pd.DatetimeIndex(
+            np.fromiter((version_result[2] for version_result in result), dtype=np.int64, count=len(result)).view(
+                "M8[ns]"
+            ),
+            tz="UTC",
+        )
         return [
             {
                 "symbol": version_result[0],
                 "version": version_result[1],
-                "date": to_datetime(version_result[2], unit="ns", utc=True),
+                "date": date,
                 "deleted": version_result[4],
                 "snapshots": version_result[3],
             }
-            for version_result in result
+            for version_result, date in zip(result, dates)
         ]
 
     def list_symbols(
