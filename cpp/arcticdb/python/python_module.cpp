@@ -142,17 +142,21 @@ void register_error_code_ecosystem(py::module& m, py::exception<arcticdb::Arctic
     );
 
     PYBIND11_CONSTINIT static py::gil_safe_call_once_and_store<py::object> internal_exception;
-        internal_exception.call_once_and_store_result(
-            [&]() { return py::exception<InternalException>(m, "InternalException", compat_exception.ptr()); });
+    internal_exception.call_once_and_store_result([&]() {
+        return py::exception<InternalException>(m, "InternalException", compat_exception.ptr());
+    });
     PYBIND11_CONSTINIT static py::gil_safe_call_once_and_store<py::object> storage_exception;
-        storage_exception.call_once_and_store_result(
-            [&]() { return py::exception<StorageException>(m, "StorageException", compat_exception.ptr()); });
+    storage_exception.call_once_and_store_result([&]() {
+        return py::exception<StorageException>(m, "StorageException", compat_exception.ptr());
+    });
     PYBIND11_CONSTINIT static py::gil_safe_call_once_and_store<py::object> lmdb_map_full_exception;
-        lmdb_map_full_exception.call_once_and_store_result(
-            [&]() { return py::exception<LMDBMapFullException>(m, "LmdbMapFullError", storage_exception.get_stored().ptr()); });
+    lmdb_map_full_exception.call_once_and_store_result([&]() {
+        return py::exception<LMDBMapFullException>(m, "LmdbMapFullError", storage_exception.get_stored().ptr());
+    });
     PYBIND11_CONSTINIT static py::gil_safe_call_once_and_store<py::object> user_input_exception;
-        storage_exception.call_once_and_store_result(
-            [&]() { return py::exception<UserInputException>(m, "UserInputException", compat_exception.ptr()); });
+    storage_exception.call_once_and_store_result([&]() {
+        return py::exception<UserInputException>(m, "UserInputException", compat_exception.ptr());
+    });
 
     // This has to be local. When it was global, it could cause import-order related exceptions, such as #2181
     py::register_local_exception_translator([](std::exception_ptr p) {
@@ -187,8 +191,12 @@ void register_error_code_ecosystem(py::module& m, py::exception<arcticdb::Arctic
         }
     });
 
-    py::register_local_exception<storage::DuplicateKeyException>(m, "DuplicateKeyException", storage_exception.get_stored().ptr());
-    py::register_local_exception<storage::KeyNotFoundException>(m, "KeyNotFoundException", storage_exception.get_stored().ptr());
+    py::register_local_exception<storage::DuplicateKeyException>(
+            m, "DuplicateKeyException", storage_exception.get_stored().ptr()
+    );
+    py::register_local_exception<storage::KeyNotFoundException>(
+            m, "KeyNotFoundException", storage_exception.get_stored().ptr()
+    );
     py::register_local_exception<PermissionException>(m, "PermissionException", storage_exception.get_stored().ptr());
 
     py::register_local_exception<SchemaException>(m, "SchemaException", compat_exception.ptr());
