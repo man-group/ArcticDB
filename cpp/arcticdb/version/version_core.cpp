@@ -38,7 +38,6 @@
 #include <arcticdb/version/version_utils.hpp>
 #include <arcticdb/entity/merge_descriptors.hpp>
 #include <arcticdb/processing/component_manager.hpp>
-#include <arcticdb/util/once_flags.hpp>
 #include <arcticdb/util/collection_utils.hpp>
 #include <arcticdb/util/format_date.hpp>
 #include <atomic>
@@ -1273,8 +1272,13 @@ std::shared_ptr<std::vector<folly::Future<std::vector<EntityId>>>> schedule_firs
             static_cast<bool>(admission), "schedule_first_iteration requires an admission handler"
     );
     // Used to make sure each entity is only added into the component manager once, and that a unit
-    // sharing an entity does not proceed to process it until it has been added
-    auto slice_added = std::make_shared<util::OnceFlags>(num_segments);
+    // sharing an entity does not proceed to process it until it has been added. Both halves matter: the
+    // mutex is held across add_slice_to_component_manager rather than just around the flag, so that a unit
+    // which skips the add is ordered after the one that did it, and the flags are uint8_t rather than bool
+    // because std::vector<bool> is bit-packed, so neighbouring positions share a word and their
+    // read-modify-writes under different mutexes lose each other. See #3381.
+    auto slice_added_mtx = std::make_shared<std::vector<std::mutex>>(num_segments);
+    auto slice_added = std::make_shared<std::vector<uint8_t>>(num_segments, 0);
     auto futures = std::make_shared<std::vector<folly::Future<std::vector<EntityId>>>>();
 
     for (auto& entity_ids : entities_by_work_unit) {
@@ -1314,6 +1318,7 @@ std::shared_ptr<std::vector<folly::Future<std::vector<EntityId>>>> schedule_firs
                         .thenValueInline([component_manager,
                                           segment_fetch_counts,
                                           id_to_pos,
+                                          slice_added_mtx,
                                           slice_added,
                                           clauses,
                                           entity_ids = std::move(entity_ids
@@ -1321,7 +1326,8 @@ std::shared_ptr<std::vector<folly::Future<std::vector<EntityId>>>> schedule_firs
                             for (auto&& [idx, segment_and_slice] : folly::enumerate(segment_and_slices)) {
                                 auto entity_id = entity_ids[idx];
                                 auto pos = id_to_pos->at(entity_id);
-                                slice_added->call_once(pos, [&]() {
+                                std::lock_guard lock{slice_added_mtx->at(pos)};
+                                if (!(*slice_added)[pos]) {
                                     ARCTICDB_DEBUG(log::version(), "Adding entity {}", entity_id);
                                     add_slice_to_component_manager(
                                             entity_id,
@@ -1329,7 +1335,8 @@ std::shared_ptr<std::vector<folly::Future<std::vector<EntityId>>>> schedule_firs
                                             component_manager,
                                             segment_fetch_counts->at(pos)
                                     );
-                                });
+                                    (*slice_added)[pos] = 1;
+                                }
                             }
                             return async::MemSegmentProcessingTask(*clauses, std::move(entity_ids))();
                         });
