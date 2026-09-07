@@ -282,7 +282,8 @@ static folly::Future<std::vector<AtomKey>> write_empty_incomplete_frame(
                                 seg.descriptor().set_sorted(SortedValue::ASCENDING);
                             }
                             const auto local_index_start = IdxType::start_value_for_segment(seg);
-                            const auto local_index_end = IdxType::end_value_for_segment(seg);
+                            const auto local_index_end =
+                                    pipelines::end_index_generator(IdxType::end_value_for_segment(seg));
                             const PartialKey pk{KeyType::APPEND_DATA, 0, stream_id, local_index_start, local_index_end};
                             return store->write(pk, std::move(seg)).thenValueInline([](VariantKey&& res) {
                                 return to_atom(std::move(res));
