@@ -61,8 +61,10 @@ TEST(ComponentManager, Simple) {
             EntityFetchCount>({ids[1]});
 }
 
+#ifdef DEBUG_BUILD
 // Regression test for #3381: adding a component an entity already has used to trip a plain assert()
-// inside EnTT, aborting the process instead of raising something the caller can handle.
+// inside EnTT, aborting the process instead of raising something the caller can handle. The check is
+// debug only, so this test is too.
 TEST(ComponentManager, AddSameComponentTwiceRaises) {
     ComponentManager component_manager;
     auto ids = component_manager.get_new_entity_ids(1);
@@ -70,3 +72,4 @@ TEST(ComponentManager, AddSameComponentTwiceRaises) {
     component_manager.add_components(ids[0], segment, EntityFetchCount{1});
     EXPECT_THROW(component_manager.add_components(ids[0], segment), InternalException);
 }
+#endif

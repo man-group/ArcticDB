@@ -278,12 +278,15 @@ blocked, so any budget >= 1 and window >= 1 makes progress regardless of unit sh
 
 Because two units can complete their reads of a shared segment at the same time, the components for a
 segment must be added to the `ComponentManager` exactly once, and the unit that does not add them must
-not start processing the entity until they are there. `schedule_first_iteration` uses a `util::OnceFlags`
-(`cpp/arcticdb/util/once_flags.hpp`), one mutex and one `uint8_t` flag per segment: the first caller runs
-the add while holding the position's mutex, and a later caller returns from `call_once` only once that
-add has finished. Both properties are load-bearing — the loser goes straight on to
-`MemSegmentProcessingTask`, which gathers those components. A second add of a component an entity
-already has now raises an `InternalException` from `ComponentManager::add_components`.
+not start processing the entity until they are there. `schedule_first_iteration` keeps one `std::mutex`
+and one `uint8_t` flag per segment: the first unit to arrive at a position runs the add while holding
+that position's mutex, so a later unit blocks until the add has finished and then sees the flag set.
+Both properties are load-bearing — the unit that skips the add goes straight on to
+`MemSegmentProcessingTask`, which gathers those components. The flags are `uint8_t` and not `bool`
+because `std::vector<bool>` is bit-packed, so neighbouring positions share a word and their
+read-modify-writes under different mutexes lose each other; that was the bug in #3381. In debug builds
+a second add of a component an entity already has raises an `InternalException` from
+`ComponentManager::add_components` instead of aborting inside EnTT.
 
 ### Test instrumentation
 

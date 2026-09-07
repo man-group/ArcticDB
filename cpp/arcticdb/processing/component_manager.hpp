@@ -68,9 +68,12 @@ class ComponentManager {
         std::unique_lock lock(mtx_);
         (
                 [&] {
-                    // Without this the double add trips a plain assert() deep inside EnTT, which aborts the
-                    // process rather than raising something a caller can catch. See #3381.
-                    internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+                    // A double add trips a plain assert() deep inside EnTT, which aborts the process rather
+                    // than raising something a caller can catch. Debug only: this is a caller precondition,
+                    // and the lookup would otherwise run for every component of every entity added. EnTT's
+                    // own assert is compiled out in release builds anyway. See #3381.
+                    ARCTICDB_DEBUG_CHECK(
+                            ErrorCode::E_ASSERTION_FAILURE,
                             !registry_.all_of<Args>(id),
                             "ComponentManager::add_components: entity {} already has this component",
                             static_cast<uint64_t>(id)
