@@ -465,10 +465,11 @@ struct VersionMapEntry {
             tombstone_all_ = key;
     }
 
-    // Recompute the tombstone bookkeeping from keys_. Callers that assign keys_ wholesale,
-    // rather than pushing keys through a load, must call this: otherwise the entry keeps
-    // describing the tombstone state of the chain it held before the assignment.
-    void rebuild_tombstones_from_keys() {
+    // Recompute the tombstone bookkeeping and load progress from keys_. Callers that assign
+    // keys_ wholesale, rather than pushing keys through a load, must call this: otherwise the
+    // entry keeps describing the chain it held before the assignment. keys_ is taken to be the
+    // whole chain, so the earliest version counts as loaded.
+    void rebuild_bookkeeping_from_keys() {
         tombstones_.clear();
         tombstone_all_.reset();
         for (const auto& packed_key : keys_) {
@@ -480,6 +481,24 @@ struct VersionMapEntry {
             else
                 try_set_tombstone(key);
         }
+
+        // Same quantities read_segment_with_keys accumulates on a normal load.
+        load_progress_ = LoadProgress{};
+        for (const auto& key : keys_) {
+            if (!is_index_key_type(key.type()))
+                continue;
+            load_progress_.oldest_loaded_index_version_ =
+                    std::min(load_progress_.oldest_loaded_index_version_, key.version_id());
+            load_progress_.earliest_loaded_timestamp_ =
+                    std::min(load_progress_.earliest_loaded_timestamp_, key.creation_ts());
+            if (!is_tombstoned(key)) {
+                load_progress_.oldest_loaded_undeleted_index_version_ =
+                        std::min(load_progress_.oldest_loaded_undeleted_index_version_, key.version_id());
+                load_progress_.earliest_loaded_undeleted_timestamp_ =
+                        std::min(load_progress_.earliest_loaded_undeleted_timestamp_, key.creation_ts());
+            }
+        }
+        load_progress_.is_earliest_version_loaded = true;
     }
 
     void validate() const {
