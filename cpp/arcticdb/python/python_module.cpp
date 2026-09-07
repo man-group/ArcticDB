@@ -154,7 +154,7 @@ void register_error_code_ecosystem(py::module& m, py::exception<arcticdb::Arctic
         return py::exception<LMDBMapFullException>(m, "LmdbMapFullError", storage_exception.get_stored().ptr());
     });
     PYBIND11_CONSTINIT static py::gil_safe_call_once_and_store<py::object> user_input_exception;
-    storage_exception.call_once_and_store_result([&]() {
+    user_input_exception.call_once_and_store_result([&]() {
         return py::exception<UserInputException>(m, "UserInputException", compat_exception.ptr());
     });
 
