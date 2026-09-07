@@ -141,10 +141,22 @@ void register_error_code_ecosystem(py::module& m, py::exception<arcticdb::Arctic
             m, "_ArcticLegacyCompatibilityException", base_exception
     );
 
-    static py::exception<InternalException> internal_exception(m, "InternalException", compat_exception.ptr());
-    static py::exception<StorageException> storage_exception(m, "StorageException", compat_exception.ptr());
-    static py::exception<LMDBMapFullException> lmdb_map_full_exception(m, "LmdbMapFullError", storage_exception.ptr());
-    static py::exception<UserInputException> user_input_exception(m, "UserInputException", compat_exception.ptr());
+    PYBIND11_CONSTINIT static py::gil_safe_call_once_and_store<py::object> internal_exception;
+    internal_exception.call_once_and_store_result([&]() {
+        return py::exception<InternalException>(m, "InternalException", compat_exception.ptr());
+    });
+    PYBIND11_CONSTINIT static py::gil_safe_call_once_and_store<py::object> storage_exception;
+    storage_exception.call_once_and_store_result([&]() {
+        return py::exception<StorageException>(m, "StorageException", compat_exception.ptr());
+    });
+    PYBIND11_CONSTINIT static py::gil_safe_call_once_and_store<py::object> lmdb_map_full_exception;
+    lmdb_map_full_exception.call_once_and_store_result([&]() {
+        return py::exception<LMDBMapFullException>(m, "LmdbMapFullError", storage_exception.get_stored().ptr());
+    });
+    PYBIND11_CONSTINIT static py::gil_safe_call_once_and_store<py::object> user_input_exception;
+    user_input_exception.call_once_and_store_result([&]() {
+        return py::exception<UserInputException>(m, "UserInputException", compat_exception.ptr());
+    });
 
     // This has to be local. When it was global, it could cause import-order related exceptions, such as #2181
     py::register_local_exception_translator([](std::exception_ptr p) {
@@ -152,11 +164,11 @@ void register_error_code_ecosystem(py::module& m, py::exception<arcticdb::Arctic
             if (p)
                 std::rethrow_exception(p);
         } catch (const mongocxx::v_noabi::logic_error& e) {
-            py::set_error(user_input_exception, e.what());
+            py::set_error(user_input_exception.get_stored(), e.what());
         } catch (const UserInputException& e) {
-            py::set_error(user_input_exception, e.what());
+            py::set_error(user_input_exception.get_stored(), e.what());
         } catch (const arcticdb::InternalException& e) {
-            py::set_error(internal_exception, e.what());
+            py::set_error(internal_exception.get_stored(), e.what());
         } catch (const LMDBMapFullException& e) {
             std::string msg = fmt::format(
                     "E5003: LMDB map is full. Close and reopen your LMDB backed Arctic instance with a "
@@ -167,21 +179,25 @@ void register_error_code_ecosystem(py::module& m, py::exception<arcticdb::Arctic
                     "LMDB info: message=[{}]",
                     e.what()
             );
-            py::set_error(lmdb_map_full_exception, msg.c_str());
+            py::set_error(lmdb_map_full_exception.get_stored(), msg.c_str());
         } catch (const StorageException& e) {
-            py::set_error(storage_exception, e.what());
+            py::set_error(storage_exception.get_stored(), e.what());
         } catch (const py::stop_iteration& e) {
             // let stop iteration bubble up, since this is how python implements iteration termination
             std::rethrow_exception(p);
         } catch (const std::exception& e) {
             std::string msg = fmt::format("{}({})", arcticdb::get_type_name(typeid(e)), e.what());
-            py::set_error(internal_exception, msg.c_str());
+            py::set_error(internal_exception.get_stored(), msg.c_str());
         }
     });
 
-    py::register_local_exception<storage::DuplicateKeyException>(m, "DuplicateKeyException", storage_exception.ptr());
-    py::register_local_exception<storage::KeyNotFoundException>(m, "KeyNotFoundException", storage_exception.ptr());
-    py::register_local_exception<PermissionException>(m, "PermissionException", storage_exception.ptr());
+    py::register_local_exception<storage::DuplicateKeyException>(
+            m, "DuplicateKeyException", storage_exception.get_stored().ptr()
+    );
+    py::register_local_exception<storage::KeyNotFoundException>(
+            m, "KeyNotFoundException", storage_exception.get_stored().ptr()
+    );
+    py::register_local_exception<PermissionException>(m, "PermissionException", storage_exception.get_stored().ptr());
 
     py::register_local_exception<SchemaException>(m, "SchemaException", compat_exception.ptr());
     py::register_local_exception<NormalizationException>(m, "NormalizationException", compat_exception.ptr());
