@@ -8,7 +8,6 @@
 
 #pragma once
 
-#include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/util/constructors.hpp>
 #include <arcticdb/storage/memory_layout.hpp>

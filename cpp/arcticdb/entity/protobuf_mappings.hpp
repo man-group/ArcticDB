@@ -9,6 +9,7 @@
 #pragma once
 
 #include <arcticdb/entity/atom_key.hpp>
+#include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/entity/types.hpp>
 
 namespace arcticdb {

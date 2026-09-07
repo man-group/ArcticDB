@@ -9,7 +9,7 @@
 #pragma once
 
 #include <arcticdb/entity/field_collection.hpp>
-#include <descriptors.pb.h>
+#include <arcticdb/entity/protobufs.hpp>
 
 namespace arcticdb {
 
