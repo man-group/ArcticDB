@@ -1274,7 +1274,6 @@ std::shared_ptr<std::vector<folly::Future<std::vector<EntityId>>>> schedule_firs
     // Adds each entity to the component manager exactly once. uint8_t not bool: std::vector<bool> is
     // bit-packed, so adjacent flags share a word and updates under different position mutexes are lost
     // (#3381). The lock is held across the add so a unit that skips it still sees the components.
-    // Both pinned by version/test/test_slice_added_guard.cpp; change it alongside this.
     auto slice_added_mtx = std::make_shared<std::vector<std::mutex>>(num_segments);
     auto slice_added = std::make_shared<std::vector<uint8_t>>(num_segments, 0);
     auto futures = std::make_shared<std::vector<folly::Future<std::vector<EntityId>>>>();
