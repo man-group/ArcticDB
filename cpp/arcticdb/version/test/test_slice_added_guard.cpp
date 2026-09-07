@@ -15,19 +15,12 @@
 #include <thread>
 #include <vector>
 
-// Tests for the slice_added guard in schedule_first_iteration (cpp/arcticdb/version/version_core.cpp),
-// which makes sure each entity is added to the ComponentManager exactly once and that a unit which skips
-// the add does not process the entity before it is there. Regression tests for #3381.
-//
-// The guard is a few lines inline in schedule_first_iteration rather than a reusable utility, so these
-// tests cannot call it directly. Be honest about what that means: what is tested below is the *pattern*,
-// reproduced verbatim in call_guard, not the code that ships. If you change the guard in
-// schedule_first_iteration, change call_guard to match -- there is a comment there pointing back here.
+// Regression tests for #3381. The slice_added guard is inline in schedule_first_iteration
+// (version_core.cpp) rather than a reusable utility, so call_guard below reproduces the pattern and these
+// tests pin its properties, not the shipping code. Change the two together.
 
 namespace {
 
-// Copied verbatim from the slice_added guard in schedule_first_iteration. Both storage types are the
-// point of the exercise: std::mutex per position, and a uint8_t (NOT bool) flag per position.
 using SliceAddedMutexes = std::vector<std::mutex>;
 using SliceAddedFlags = std::vector<uint8_t>;
 
@@ -40,7 +33,6 @@ void call_guard(SliceAddedMutexes& slice_added_mtx, SliceAddedFlags& slice_added
     }
 }
 
-// Spin rather than sleep, so the thread inside the guard holds it for a while without yielding the core.
 void busy_wait(std::chrono::microseconds duration) {
     const auto deadline = std::chrono::steady_clock::now() + duration;
     while (std::chrono::steady_clock::now() < deadline) {
@@ -49,16 +41,8 @@ void busy_wait(std::chrono::microseconds duration) {
 
 } // namespace
 
-// Half one of #3381: neighbouring positions must be independent. The flags were std::vector<bool>, which
-// is bit-packed, so adjacent positions shared a word and the read-modify-writes of threads holding
-// *different* position mutexes lost each other. A lost flag runs the work twice, which is what made two
-// read workers add the same segment to the ComponentManager and abort inside EnTT.
-//
-// Written so that it fails if the flags are changed back to bool: threads stride by the thread count, so
-// adjacent positions are always worked by different threads, and every thread then sweeps every position,
-// so a flag lost during the strided pass is run a second time and shows up in the count. A flag lost
-// during the sweep itself leaves that flag clear and is caught by the single-threaded pass at the end,
-// so neither failure mode relies on only one of the two assertions.
+// Neighbouring positions are independent: with a bit-packed std::vector<bool> adjacent flags share a word,
+// so an update under one position's mutex is lost and the work runs twice.
 TEST(SliceAddedGuard, NeighbouringPositions) {
     constexpr size_t num_positions = 1024;
     constexpr size_t num_threads = 8;
@@ -103,14 +87,8 @@ TEST(SliceAddedGuard, NeighbouringPositions) {
     }
 }
 
-// Half two of #3381: a caller that finds the flag already set must see everything the caller that set it
-// published beforehand. This is why the mutex is held across add_slice_to_component_manager rather than
-// just around the flag -- in the pipeline the unit that skips the add goes straight on to
-// MemSegmentProcessingTask, which gathers those components, so being released early means reading
-// components that do not exist yet.
-//
-// A claim-first implementation (an atomic_flag test_and_set before doing the work) fails this: it sets
-// the flag before the payload is published, so a later caller returns while the payload is still 0.
+// A caller that finds the flag already set sees what the caller that set it published first, which is why
+// the lock is held across the work rather than just the flag.
 TEST(SliceAddedGuard, LaterCallersWait) {
     constexpr size_t num_positions = 64;
     constexpr size_t num_threads = 8;
@@ -135,7 +113,7 @@ TEST(SliceAddedGuard, LaterCallersWait) {
             }
             for (size_t pos = 0; pos < num_positions; ++pos) {
                 call_guard(slice_added_mtx, slice_added, pos, [&]() {
-                    // Stands in for add_slice_to_component_manager: work done before the flag is set.
+                    // Stands in for add_slice_to_component_manager.
                     busy_wait(std::chrono::microseconds(200));
                     payloads[pos].store(payload_value);
                 });

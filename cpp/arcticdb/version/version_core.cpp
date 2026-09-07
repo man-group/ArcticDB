@@ -1271,14 +1271,10 @@ std::shared_ptr<std::vector<folly::Future<std::vector<EntityId>>>> schedule_firs
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(
             static_cast<bool>(admission), "schedule_first_iteration requires an admission handler"
     );
-    // Used to make sure each entity is only added into the component manager once, and that a unit
-    // sharing an entity does not proceed to process it until it has been added. Both halves matter: the
-    // mutex is held across add_slice_to_component_manager rather than just around the flag, so that a unit
-    // which skips the add is ordered after the one that did it, and the flags are uint8_t rather than bool
-    // because std::vector<bool> is bit-packed, so neighbouring positions share a word and their
-    // read-modify-writes under different mutexes lose each other. See #3381.
-    // Both properties are pinned by version/test/test_slice_added_guard.cpp, which reproduces the guard
-    // below verbatim because it is not a reusable utility. If you change it here, change it there too.
+    // Adds each entity to the component manager exactly once. uint8_t not bool: std::vector<bool> is
+    // bit-packed, so adjacent flags share a word and updates under different position mutexes are lost
+    // (#3381). The lock is held across the add so a unit that skips it still sees the components.
+    // Both pinned by version/test/test_slice_added_guard.cpp; change it alongside this.
     auto slice_added_mtx = std::make_shared<std::vector<std::mutex>>(num_segments);
     auto slice_added = std::make_shared<std::vector<uint8_t>>(num_segments, 0);
     auto futures = std::make_shared<std::vector<folly::Future<std::vector<EntityId>>>>();
