@@ -292,7 +292,7 @@ class PythonVersionStore : public LocalVersionedEngine {
     VersionedItem merge(
             const StreamId& stream_id, const std::shared_ptr<convert::PandasData>& source, const py::object& norm,
             const py::object& user_meta, const bool prune_previous_versions, const bool upsert,
-            const py::tuple& py_strategy, std::vector<std::string> on
+            const py::tuple& py_strategy, std::vector<std::string> on, const bool match_na
     );
 
     CompactDataInfo compact_data_explain_plan(const StreamId& stream_id, std::optional<uint64_t> rows_per_segment);

@@ -58,13 +58,13 @@ protoc: ## Generate protobuf stubs
 	$(_ENV) $(PROXY_CMD) $(_VENV_PYTHON) setup.py protoc --build-lib python
 
 # ── venv ─────────────────────────────────────────────────────────────────────
-venv: ## Create a dev venv (NAME=<name> required, CLEAN=1 to replace existing)
+venv: ## Create a dev venv (VENV_NAME=<name> required, CLEAN=1 to replace existing)
 ifdef CLEAN
 	rm -rf $(VENV_DIR)/$(VENV_NAME)
 endif
 	./build_tooling/create_venv.sh $(if $(PROXY_CMD),--proxy-cmd $(PROXY_CMD)) $(VENV_DIR)/$(VENV_NAME)
 
-activate: ## Print venv activate path (NAME=<name> required). Use: source $$(make activate NAME=x)
+activate: ## Print venv activate path (VENV_NAME=<name> required). Use: source $$(make activate VENV_NAME=x)
 	@echo $(VENV_DIR)/$(VENV_NAME)/bin/activate
 
 # ── setup ────────────────────────────────────────────────────────────────────

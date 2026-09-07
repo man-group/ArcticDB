@@ -3531,6 +3531,7 @@ class Library:
         metadata: Any = None,
         prune_previous_versions: Optional[bool] = None,
         upsert: bool = False,
+        match_na: bool = False,
     ):
         """
         Merge new data into an existing symbol's DataFrame according to a specified strategy.
@@ -3565,9 +3566,14 @@ class Library:
             IMPORTANT: For date-time indexed data, the index is always included in matching and cannot be excluded.
 
             Note on equality semantics:
+                By default (`match_na=False`), missing values (float NaN, string None/NaN, or NaT in a datetime64
+                column) in an `on` column match nothing. Non-missing values are compared by plain equality.
+
+                Set `match_na=True` for missing values to match each other instead:
                 - In float columns, NaN is considered equal to NaN.
                 - In string columns, None and NaN are indistinguishable. NaN == None, NaN == NaN, None == None,
                   and None == NaN all evaluate to True.
+                - In datetime64 `on` columns, NaT is considered equal to NaT.
 
             If a column name appears more than once in the source or the target it must not be added in the on
             parameter.
@@ -3583,6 +3589,9 @@ class Library:
             If True and the symbol does not exist, create it by writing `source` to the store. Requires a strategy
             with `not_matched_by_target="insert"`; combining it with an update-only strategy raises
             `UserInputException` as the newly created symbol would be empty.
+        match_na : bool, default False
+            Controls whether a missing value (float NaN, string None/NaN, or NaT in a datetime64 `on`
+            column) can match another missing value in the `on` columns. See "Note on equality semantics" above.
 
         Returns
         -------
@@ -3621,6 +3630,7 @@ class Library:
             metadata=metadata,
             prune_previous_versions=prune_previous_versions,
             upsert=upsert,
+            match_na=match_na,
         )
 
     @property

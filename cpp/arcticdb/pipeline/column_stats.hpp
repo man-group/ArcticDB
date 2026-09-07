@@ -1,7 +1,6 @@
 #pragma once
 
 #include <arcticdb/entity/stream_descriptor.hpp>
-#include <arcticdb/pipeline/column_name_resolution.hpp>
 #include <arcticdb/processing/clause.hpp>
 #include <arcticdb/pipeline/column_stats_types.hpp>
 #include <arcticdb/pipeline/index_fields.hpp>

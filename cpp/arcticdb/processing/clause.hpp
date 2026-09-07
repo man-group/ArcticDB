@@ -899,7 +899,7 @@ struct MergeUpdateClause {
         void add_match(size_t source_row, size_t target_row_slice, std::span<size_t> target_rows);
         void filter_matching_rows(
                 std::string_view column_name, DataType source_type, DataType target_type, size_t source_offset,
-                std::span<const std::byte> source_data_bytes
+                std::span<const std::byte> source_data_bytes, bool match_na
         );
         void clone_source_match(size_t source_row_src, size_t source_row_dst, size_t row_slice);
         void validate_rows_to_update(const MergeStrategy& strategy) const;
@@ -946,8 +946,6 @@ struct MergeUpdateClause {
     ) const;
 
     size_t field_index_for_matching_on_column(std::string_view name, const StreamDescriptor& descriptor) const;
-
-    bool is_update_only() const;
 
     /// For each processing group, identified by its row range, stores the first and last row in the source that
     /// overlaps with it. The interval is closed in the start and open in the end: [start, end). The key is the row

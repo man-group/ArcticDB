@@ -30,12 +30,7 @@
 namespace {
 using namespace arcticdb;
 bool is_valid_merge_strategy(const arcticdb::MergeStrategy& strategy) {
-    constexpr static std::array valid_strategies = {
-            MergeStrategy{.matched = MergeAction::UPDATE, .not_matched_by_target = MergeAction::DO_NOTHING},
-            MergeStrategy{.matched = MergeAction::UPDATE, .not_matched_by_target = MergeAction::INSERT},
-            MergeStrategy{.matched = MergeAction::DO_NOTHING, .not_matched_by_target = MergeAction::INSERT}
-    };
-    return std::ranges::find(valid_strategies, strategy) != std::ranges::end(valid_strategies);
+    return strategy.update_only() || strategy.update_and_insert() || strategy.insert_only();
 }
 
 void check_for_duplicated_symbols(const std::vector<StreamId>& stream_ids, std::string_view method) {

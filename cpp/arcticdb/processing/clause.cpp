@@ -17,7 +17,6 @@
 
 #include <arcticdb/processing/clause.hpp>
 
-#include <arcticdb/pipeline/column_name_resolution.hpp>
 #include <arcticdb/pipeline/column_stats.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/pipeline/query.hpp>

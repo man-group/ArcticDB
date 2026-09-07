@@ -114,21 +114,21 @@ static void BM_symbol_list_load(benchmark::State& state) {
         SymbolList::add_symbol(store, StreamId{fmt::format("symbol_{:06d}", i)}, 0);
     }
 
-    // Force compaction on first load to create the compacted segment
-    ConfigsMap::instance()->set_int("SymbolList.MaxDelta", 0);
     {
-        SymbolList sl{version_map};
-        sl.load<std::set<StreamId>>(version_map, store, false);
-    }
+        // Force compaction on first load to create the compacted segment
+        ScopedConfig max_delta("SymbolList.MaxDelta", 0);
+        {
+            SymbolList sl{version_map};
+            sl.load<std::set<StreamId>>(version_map, store, false);
+        }
 
-    // Add a few journal entries to exercise the merge path
-    for (int64_t i = 0; i < 100; ++i) {
-        SymbolList::add_symbol(store, StreamId{fmt::format("symbol_{:06d}", i)}, 1);
-    }
+        // Add a few journal entries to exercise the merge path
+        for (int64_t i = 0; i < 100; ++i) {
+            SymbolList::add_symbol(store, StreamId{fmt::format("symbol_{:06d}", i)}, 1);
+        }
+    } // Compaction disabled again for the benchmark iterations below
 
-    // Disable compaction during the benchmark iterations
-    ConfigsMap::instance()->unset_int("SymbolList.MaxDelta");
-
+    ScopedConfig::unset_int("SymbolList.MaxDelta");
     for (auto _ : state) {
         PeakHeapTracker tracker;
         tracker.start();
@@ -168,22 +168,23 @@ static void BM_symbol_list_load_many_entries(benchmark::State& state) {
         }
     }
 
-    // Force compaction to create the compacted segment
-    ConfigsMap::instance()->set_int("SymbolList.MaxDelta", 0);
     {
-        SymbolList sl{version_map};
-        sl.load<std::set<StreamId>>(version_map, store, false);
-    }
+        // Force compaction to create the compacted segment
+        ScopedConfig max_delta("SymbolList.MaxDelta", 0);
+        {
+            SymbolList sl{version_map};
+            sl.load<std::set<StreamId>>(version_map, store, false);
+        }
 
-    // Write more journal entries (uncompacted)
-    for (int64_t i = 0; i < num_symbols; ++i) {
-        for (int64_t v = 0; v < entries_per_symbol; ++v) {
-            SymbolList::add_symbol(store, StreamId{fmt::format("symbol_{:06d}", i)}, entries_per_symbol + v);
+        // Write more journal entries (uncompacted)
+        for (int64_t i = 0; i < num_symbols; ++i) {
+            for (int64_t v = 0; v < entries_per_symbol; ++v) {
+                SymbolList::add_symbol(store, StreamId{fmt::format("symbol_{:06d}", i)}, entries_per_symbol + v);
+            }
         }
     }
 
-    ConfigsMap::instance()->unset_int("SymbolList.MaxDelta");
-
+    ScopedConfig::unset_int("SymbolList.MaxDelta");
     for (auto _ : state) {
         PeakHeapTracker tracker;
         tracker.start();
@@ -227,7 +228,7 @@ static void BM_symbol_list_compaction(benchmark::State& state) {
         }
     }
 
-    ConfigsMap::instance()->set_int("SymbolList.MaxDelta", 0);
+    ScopedConfig max_delta("SymbolList.MaxDelta", 0);
 
     for (auto _ : state) {
         PeakHeapTracker tracker;
@@ -244,8 +245,6 @@ static void BM_symbol_list_compaction(benchmark::State& state) {
 
         benchmark::DoNotOptimize(result);
     }
-
-    ConfigsMap::instance()->unset_int("SymbolList.MaxDelta");
 }
 
 BENCHMARK(BM_symbol_list_compaction)
@@ -275,18 +274,19 @@ static void BM_symbol_list_load_s3(benchmark::State& state) {
         SymbolList::add_symbol(store, StreamId{fmt::format("symbol_{:06d}", i)}, 0);
     }
 
-    ConfigsMap::instance()->set_int("SymbolList.MaxDelta", 0);
     {
-        SymbolList sl{version_map};
-        sl.load<std::set<StreamId>>(version_map, store, false);
+        ScopedConfig max_delta("SymbolList.MaxDelta", 0);
+        {
+            SymbolList sl{version_map};
+            sl.load<std::set<StreamId>>(version_map, store, false);
+        }
+
+        for (int64_t i = 0; i < 100; ++i) {
+            SymbolList::add_symbol(store, StreamId{fmt::format("symbol_{:06d}", i)}, 1);
+        }
     }
 
-    for (int64_t i = 0; i < 100; ++i) {
-        SymbolList::add_symbol(store, StreamId{fmt::format("symbol_{:06d}", i)}, 1);
-    }
-
-    ConfigsMap::instance()->unset_int("SymbolList.MaxDelta");
-
+    ScopedConfig::unset_int("SymbolList.MaxDelta");
     for (auto _ : state) {
         PeakHeapTracker tracker;
         tracker.start();
@@ -317,7 +317,7 @@ BENCHMARK(BM_symbol_list_load_s3)->Arg(10'000)->Unit(benchmark::kMillisecond)->I
         }
     }
 
-    ConfigsMap::instance()->set_int("SymbolList.MaxDelta", 0);
+    ScopedConfig max_delta("SymbolList.MaxDelta", 0);
 
     for (auto _ : state) {
         PeakHeapTracker tracker;
@@ -334,8 +334,6 @@ BENCHMARK(BM_symbol_list_load_s3)->Arg(10'000)->Unit(benchmark::kMillisecond)->I
 
         benchmark::DoNotOptimize(result);
     }
-
-    ConfigsMap::instance()->unset_int("SymbolList.MaxDelta");
 }
 
 BENCHMARK(BM_symbol_list_compaction_s3)->Args({1'000, 100})->Unit(benchmark::kMillisecond)->Iterations(1);

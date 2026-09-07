@@ -14,6 +14,10 @@ enum class MergeAction : uint8_t { DO_NOTHING, UPDATE, INSERT };
 struct MergeStrategy {
     MergeAction matched = MergeAction::DO_NOTHING;
     MergeAction not_matched_by_target = MergeAction::DO_NOTHING;
+    /// When false (the default), a missing value (float NaN, string None/NaN, or NaT in a non-index datetime64 on
+    /// column) never matches anything, on either side. When true, NaN matches NaN, string None and NaN are
+    /// indistinguishable, and NaT matches NaT.
+    bool match_na = false;
     bool operator==(const MergeStrategy&) const = default;
     [[nodiscard]] bool update_only() const;
     [[nodiscard]] bool insert_only() const;
