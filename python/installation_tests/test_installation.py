@@ -20,7 +20,7 @@ from arcticdb.util.test import random_floats, random_strings_of_length
 from arcticdb.version_store import VersionedItem as PythonVersionedItem
 from arcticdb.toolbox.library_tool import KeyType
 from arcticdb.version_store.library import ReadRequest, StagedDataFinalizeMethod, WritePayload
-from arcticdb_ext.exceptions import UnsortedDataException
+from arcticdb.exceptions import UnsortedDataException
 from arcticdb_ext.version_store import AtomKey, RefKey
 from packaging import version
 

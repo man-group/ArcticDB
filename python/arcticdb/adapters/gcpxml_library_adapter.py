@@ -18,7 +18,7 @@ from arcticdb.adapters.s3_library_adapter import USE_AWS_CRED_PROVIDERS_TOKEN
 from arcticdb.util.utils import strtobool
 from arcticdb.encoding_version import EncodingVersion
 from arcticdb.version_store import NativeVersionStore
-from arcticdb_ext.exceptions import UserInputException
+from arcticdb.exceptions import UserInputException
 from arcticdb_ext.storage import (
     StorageOverride,
     GCPXMLOverride,
