@@ -97,11 +97,11 @@ def iter_python_files(root):
 
 
 def test_exceptions_only_imported_from_arcticdb_exceptions():
-    this_file_path = os.path.realpath(__file__)
-    allowed_exceptions_file_path = os.path.realpath(_import_module(ALLOWED_EXCEPTIONS_MODULE).__file__)
-    files_to_skip = {this_file_path, allowed_exceptions_file_path}
-
     python_root = find_python_root()
+    this_file_path = os.path.realpath(__file__)
+    allowed_exceptions_file_path = os.path.join(python_root, *ALLOWED_EXCEPTIONS_MODULE.split(".")) + ".py"
+    assert os.path.isfile(allowed_exceptions_file_path), f"Expected '{allowed_exceptions_file_path}' to exist"
+    files_to_skip = {this_file_path, allowed_exceptions_file_path}
 
     violations = []
     for path in iter_python_files(python_root):
