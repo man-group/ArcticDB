@@ -16,6 +16,8 @@ using namespace arcticdb;
 using namespace std::ranges;
 
 namespace {
+constexpr size_t rows_per_segment = 100'000;
+
 constexpr MergeStrategy update_only_strategy{.matched = MergeAction::UPDATE};
 constexpr MergeStrategy update_and_insert_strategy{
         .matched = MergeAction::UPDATE,
@@ -104,9 +106,13 @@ void sort_by_rowslice(std::span<RowRange> rows, std::span<ColRange> cols, Other&
 
 MergeUpdateClause create_clause(
         const MergeStrategy strategy, std::shared_ptr<ComponentManager> component_manager, InputFrame&& input_frame,
-        std::vector<std::string> on = {}
+        std::vector<std::string> on = {}, bool match_na = false
 ) {
-    MergeUpdateClause clause(std::move(on), strategy, std::make_shared<InputFrame>(std::move(input_frame)));
+    auto strat = strategy;
+    strat.match_na = match_na;
+    MergeUpdateClause clause(
+            std::move(on), strat, std::make_shared<InputFrame>(std::move(input_frame)), rows_per_segment
+    );
     clause.set_component_manager(std::move(component_manager));
     return clause;
 }
@@ -1375,7 +1381,8 @@ TEST_F(MergeUpdateClauseUpdateStrategyRowRange, MatchNaN) {
             std::array{std::numeric_limits<float>::quiet_NaN()},
             std::array<timestamp, 1>{2000}
     );
-    MergeUpdateClause clause = create_clause(std::move(input_frame), {"float32"});
+    MergeUpdateClause clause =
+            ::create_clause(strategy_, component_manager_, std::move(input_frame), {"float32"}, true);
     const std::vector<std::vector<size_t>> structure_indices = clause.structure_for_processing(ranges_and_keys_);
     const size_t row_slices_to_process = structure_indices.size();
     ASSERT_EQ(row_slices_to_process, 3);
@@ -2523,7 +2530,7 @@ TEST(MergeUpdateInsertIndexSpansMultipleSegments, TwoGroupsOfSegmentsWithMatchin
         ASSERT_TRUE(std::ranges::equal(structure_indices[0], std::array{0, 1, 2, 3, 4, 5}));
         ASSERT_EQ(structured_entities[0].size(), 6);
         ASSERT_TRUE(std::ranges::equal(
-                std::get<0>(component_manager->get_entities<EntityFetchCount>(structured_entities[0])),
+                std::get<0>(component_manager->get_components<EntityFetchCount>(structured_entities[0])),
                 std::array{1, 1, 1, 1, 2, 2}
         ));
         ASSERT_TRUE(std::ranges::equal(
@@ -2581,7 +2588,7 @@ TEST(MergeUpdateInsertIndexSpansMultipleSegments, TwoGroupsOfSegmentsWithMatchin
         ASSERT_TRUE(std::ranges::equal(structure_indices[1], std::array{4, 5, 6, 7}));
         ASSERT_EQ(structured_entities[1].size(), 4);
         ASSERT_TRUE(std::ranges::equal(
-                std::get<0>(component_manager->get_entities<EntityFetchCount>(structured_entities[1])),
+                std::get<0>(component_manager->get_components<EntityFetchCount>(structured_entities[1])),
                 std::array{2, 2, 2, 2}
         ));
         ASSERT_TRUE(std::ranges::equal(
@@ -2622,7 +2629,8 @@ TEST(MergeUpdateInsertIndexSpansMultipleSegments, TwoGroupsOfSegmentsWithMatchin
         ASSERT_TRUE(std::ranges::equal(structure_indices[2], std::array{6, 7}));
         ASSERT_EQ(structured_entities[2].size(), 2);
         ASSERT_TRUE(std::ranges::equal(
-                std::get<0>(component_manager->get_entities<EntityFetchCount>(structured_entities[2])), std::array{2, 2}
+                std::get<0>(component_manager->get_components<EntityFetchCount>(structured_entities[2])),
+                std::array{2, 2}
         ));
         ASSERT_TRUE(std::ranges::equal(
                 structure_indices[2] |
@@ -2662,7 +2670,8 @@ TEST(MergeUpdateInsertIndexSpansMultipleSegments, TwoGroupsOfSegmentsWithMatchin
         ASSERT_TRUE(std::ranges::equal(structure_indices[3], std::array{8, 9}));
         ASSERT_EQ(structured_entities[3].size(), 2);
         ASSERT_TRUE(std::ranges::equal(
-                std::get<0>(component_manager->get_entities<EntityFetchCount>(structured_entities[3])), std::array{1, 1}
+                std::get<0>(component_manager->get_components<EntityFetchCount>(structured_entities[3])),
+                std::array{1, 1}
         ));
         ASSERT_TRUE(std::ranges::equal(
                 structure_indices[3] |
@@ -2777,7 +2786,7 @@ TEST_F(MergeUpdateInsertIndexSpansMultipleSegmentsChain, SourceInRowSlice0) {
     ASSERT_EQ(structured_entities.size(), 1);
     ASSERT_EQ(structured_entities[0].size(), 2);
     ASSERT_TRUE(std::ranges::equal(
-            std::get<0>(component_manager->get_entities<EntityFetchCount>(structured_entities[0])), std::array{1, 1}
+            std::get<0>(component_manager->get_components<EntityFetchCount>(structured_entities[0])), std::array{1, 1}
     ));
     auto [expected_segments, _r, _c] = slice_data_into_segments<TimeseriesIndex>(
             desc,
@@ -2825,7 +2834,7 @@ TEST_F(MergeUpdateInsertIndexSpansMultipleSegmentsChain, SourceInRowSlice1ValueI
     ASSERT_EQ(structured_entities.size(), 1);
     ASSERT_EQ(structured_entities[0].size(), 6);
     ASSERT_TRUE(std::ranges::equal(
-            std::get<0>(component_manager->get_entities<EntityFetchCount>(structured_entities[0])),
+            std::get<0>(component_manager->get_components<EntityFetchCount>(structured_entities[0])),
             std::array{1, 1, 1, 1, 1, 1}
     ));
     auto [expected_segments, _r, _c] = slice_data_into_segments<TimeseriesIndex>(
@@ -2893,7 +2902,7 @@ TEST_F(MergeUpdateInsertIndexSpansMultipleSegmentsChain, SourceInRowSlice1ValueI
     {
         ASSERT_EQ(structured_entities[0].size(), 6);
         ASSERT_TRUE(std::ranges::equal(
-                std::get<0>(component_manager->get_entities<EntityFetchCount>(structured_entities[0])),
+                std::get<0>(component_manager->get_components<EntityFetchCount>(structured_entities[0])),
                 std::array{1, 1, 1, 1, 2, 2}
         ));
         auto [expected_segments, _r, _c] = slice_data_into_segments<TimeseriesIndex>(
@@ -2910,7 +2919,7 @@ TEST_F(MergeUpdateInsertIndexSpansMultipleSegmentsChain, SourceInRowSlice1ValueI
     {
         ASSERT_EQ(structured_entities[1].size(), 4);
         ASSERT_TRUE(std::ranges::equal(
-                std::get<0>(component_manager->get_entities<EntityFetchCount>(structured_entities[1])),
+                std::get<0>(component_manager->get_components<EntityFetchCount>(structured_entities[1])),
                 std::array{2, 2, 1, 1}
         ));
         auto [expected_segments, _r, _c] = slice_data_into_segments<TimeseriesIndex>(
@@ -2986,7 +2995,7 @@ TEST_F(MergeUpdateInsertIndexSpansMultipleSegmentsChain, SourceInRowSlice3) {
     {
         ASSERT_EQ(structured_entities[0].size(), 6);
         ASSERT_TRUE(std::ranges::equal(
-                std::get<0>(component_manager->get_entities<EntityFetchCount>(structured_entities[0])),
+                std::get<0>(component_manager->get_components<EntityFetchCount>(structured_entities[0])),
                 std::array{1, 1, 1, 1, 2, 2}
         ));
         auto [expected_segments, _r, _c] = slice_data_into_segments<TimeseriesIndex>(
@@ -3003,7 +3012,7 @@ TEST_F(MergeUpdateInsertIndexSpansMultipleSegmentsChain, SourceInRowSlice3) {
     {
         ASSERT_EQ(structured_entities[1].size(), 4);
         ASSERT_TRUE(std::ranges::equal(
-                std::get<0>(component_manager->get_entities<EntityFetchCount>(structured_entities[1])),
+                std::get<0>(component_manager->get_components<EntityFetchCount>(structured_entities[1])),
                 std::array{2, 2, 2, 2}
         ));
         auto [expected_segments, _r, _c] = slice_data_into_segments<TimeseriesIndex>(
@@ -3020,7 +3029,7 @@ TEST_F(MergeUpdateInsertIndexSpansMultipleSegmentsChain, SourceInRowSlice3) {
     {
         ASSERT_EQ(structured_entities[2].size(), 4);
         ASSERT_TRUE(std::ranges::equal(
-                std::get<0>(component_manager->get_entities<EntityFetchCount>(structured_entities[2])),
+                std::get<0>(component_manager->get_components<EntityFetchCount>(structured_entities[2])),
                 std::array{2, 2, 1, 1}
         ));
         auto [expected_segments, _r, _c] = slice_data_into_segments<TimeseriesIndex>(
@@ -3086,7 +3095,7 @@ TEST_F(MergeUpdateInsertIndexSpansMultipleSegmentsChain, SourceInRowSlice5) {
     {
         ASSERT_EQ(structured_entities[0].size(), 4);
         ASSERT_TRUE(std::ranges::equal(
-                std::get<0>(component_manager->get_entities<EntityFetchCount>(structured_entities[0])),
+                std::get<0>(component_manager->get_components<EntityFetchCount>(structured_entities[0])),
                 std::array{1, 1, 2, 2}
         ));
         auto [expected_segments, _r, _c] = slice_data_into_segments<TimeseriesIndex>(
@@ -3103,7 +3112,7 @@ TEST_F(MergeUpdateInsertIndexSpansMultipleSegmentsChain, SourceInRowSlice5) {
     {
         ASSERT_EQ(structured_entities[1].size(), 4);
         ASSERT_TRUE(std::ranges::equal(
-                std::get<0>(component_manager->get_entities<EntityFetchCount>(structured_entities[1])),
+                std::get<0>(component_manager->get_components<EntityFetchCount>(structured_entities[1])),
                 std::array{2, 2, 2, 2}
         ));
         auto [expected_segments, _r, _c] = slice_data_into_segments<TimeseriesIndex>(
@@ -3120,7 +3129,7 @@ TEST_F(MergeUpdateInsertIndexSpansMultipleSegmentsChain, SourceInRowSlice5) {
     {
         ASSERT_EQ(structured_entities[2].size(), 4);
         ASSERT_TRUE(std::ranges::equal(
-                std::get<0>(component_manager->get_entities<EntityFetchCount>(structured_entities[2])),
+                std::get<0>(component_manager->get_components<EntityFetchCount>(structured_entities[2])),
                 std::array{2, 2, 1, 1}
         ));
         auto [expected_segments, _r, _c] = slice_data_into_segments<TimeseriesIndex>(
@@ -3165,7 +3174,7 @@ TEST_F(MergeUpdateInsertIndexSpansMultipleSegmentsChain,
     ASSERT_EQ(structured_entities.size(), 1);
     ASSERT_EQ(structured_entities[0].size(), 2);
     ASSERT_TRUE(std::ranges::equal(
-            std::get<0>(component_manager->get_entities<EntityFetchCount>(structured_entities[0])), std::array{1, 1}
+            std::get<0>(component_manager->get_components<EntityFetchCount>(structured_entities[0])), std::array{1, 1}
     ));
     auto [expected_segments, _r, _c] = slice_data_into_segments<TimeseriesIndex>(
             desc,
@@ -3289,7 +3298,7 @@ TEST(MergeUpdateInsertOnlySharedSlice, InsertsIntoChainWithSharedBoundaries) {
     ASSERT_EQ(structured.size(), 2);
     {
         ASSERT_TRUE(std::ranges::equal(
-                std::get<0>(component_manager->get_entities<EntityFetchCount>(structured[0])), std::array{1, 2}
+                std::get<0>(component_manager->get_components<EntityFetchCount>(structured[0])), std::array{1, 2}
         ));
         auto [expected_segments, _r, _c] = slice_data_into_segments<TimeseriesIndex>(
                 desc, 100'000, 1, std::array<timestamp, 3>{10, 20, 20}, std::array<int64_t, 3>{0, 1, 2}
@@ -3308,7 +3317,7 @@ TEST(MergeUpdateInsertOnlySharedSlice, InsertsIntoChainWithSharedBoundaries) {
     }
     {
         ASSERT_TRUE(std::ranges::equal(
-                std::get<0>(component_manager->get_entities<EntityFetchCount>(structured[1])), std::array{2, 1}
+                std::get<0>(component_manager->get_components<EntityFetchCount>(structured[1])), std::array{2, 1}
         ));
         auto [expected_segments, _r, _c] = slice_data_into_segments<TimeseriesIndex>(
                 desc, 100'000, 1, std::array<timestamp, 4>{25, 30, 30, 40}, std::array<int64_t, 4>{1000, 3, 4, 5}

@@ -38,6 +38,13 @@ if TYPE_CHECKING:
     from azure.storage.blob import ContainerClient
 
 
+def new_container_name() -> str:
+    # uuid4 in full, not a truncated uuid1: the first 8 characters of a uuid1 are its time_low field, and
+    # xdist workers are separate processes with no shared uniqueness counter, so two of them creating a fixture
+    # within one clock tick (~15.6ms on Windows) get the same name and the second create_container() gets a 409.
+    return f"container{uuid.uuid4().hex}"
+
+
 class AzureContainer(StorageFixture):
     _FIELD_REGEX = {
         ArcticUriFields.HOST: re.compile("[/;](BlobEndpoint=https?://)([^;:/]+)"),
@@ -86,7 +93,7 @@ class AzureContainer(StorageFixture):
             self.arctic_uri = self.factory.get_arctic_uri()
             self.client = ContainerClient.from_connection_string(self.arctic_uri, self.container, **self._get_policy())
         else:
-            self.container = f"container{str(uuid.uuid1())[:8]}"
+            self.container = new_container_name()
             self._set_uri_and_client_azurite(f"AccountName={factory.account_name};AccountKey={factory.account_key}")
             # __exit__() assumes this object owns the container, so always create and bail if exists:
             self.client.create_container()

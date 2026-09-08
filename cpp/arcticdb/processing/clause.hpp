@@ -861,7 +861,10 @@ struct MergeUpdateClause {
     MergeStrategy strategy_;
     std::shared_ptr<InputFrame> source_;
     bool fake_index_name_ = false;
-    MergeUpdateClause(std::vector<std::string>&& on, MergeStrategy strategy, std::shared_ptr<InputFrame> source);
+    MergeUpdateClause(
+            std::vector<std::string>&& on, MergeStrategy strategy, std::shared_ptr<InputFrame> source,
+            size_t rows_per_segment
+    );
     ARCTICDB_MOVE_COPY_DEFAULT(MergeUpdateClause)
 
     /// Row range indexes require full table scan
@@ -896,7 +899,7 @@ struct MergeUpdateClause {
         void add_match(size_t source_row, size_t target_row_slice, std::span<size_t> target_rows);
         void filter_matching_rows(
                 std::string_view column_name, DataType source_type, DataType target_type, size_t source_offset,
-                std::span<const std::byte> source_data_bytes
+                std::span<const std::byte> source_data_bytes, bool match_na
         );
         void clone_source_match(size_t source_row_src, size_t source_row_dst, size_t row_slice);
         void validate_rows_to_update(const MergeStrategy& strategy) const;
@@ -944,8 +947,6 @@ struct MergeUpdateClause {
 
     size_t field_index_for_matching_on_column(std::string_view name, const StreamDescriptor& descriptor) const;
 
-    bool is_update_only() const;
-
     /// For each processing group, identified by its row range, stores the first and last row in the source that
     /// overlaps with it. The interval is closed in the start and open in the end: [start, end). The key is the row
     /// range rather than the timestamp range because overlapping-window groups can share a timestamp range when
@@ -958,6 +959,8 @@ struct MergeUpdateClause {
     std::span<const timestamp> get_source_index(std::pair<size_t, size_t> source_start_end) const;
 
     std::span<const std::byte> get_source_data_bytes(size_t field_index, std::pair<size_t, size_t> range) const;
+
+    size_t rows_per_segment_;
 };
 
 struct CompactDataClause {

@@ -75,7 +75,7 @@ class VersionedEngine {
 
     virtual void append_incomplete_segment(const StreamId& stream_id, SegmentInMemory&& seg) = 0;
 
-    virtual void remove_incomplete(const StreamId& stream_id) = 0;
+    virtual void remove_incomplete(const std::variant<StreamId, std::vector<StageResult>>& id_or_stage_results) = 0;
 
     virtual StageResult write_parallel_frame(
             const StreamId& stream_id, const std::shared_ptr<InputFrame>& frame, bool validate_index,

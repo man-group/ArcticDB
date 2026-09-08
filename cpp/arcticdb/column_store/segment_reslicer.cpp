@@ -41,7 +41,7 @@ std::vector<SegmentInMemory> SegmentReslicer::reslice_segments(std::vector<Segme
             }
         }
     }
-    std::vector<SegmentInMemory> res(reslicing_info.num_segments);
+    std::vector<SegmentInMemory> res(reslicing_info.num_segments());
     const auto& desc = segments.front().descriptor();
     for (auto& segment : res) {
         // add_column also adds to the FieldCollection, so start with an empty one
@@ -63,7 +63,7 @@ std::vector<SegmentInMemory> SegmentReslicer::reslice_segments(std::vector<Segme
     // This ensures that the refcount of the column shared pointers is 1 when they are reset after having their data
     // copied into the result column, and so the memory is freed as early as possible
     segments.clear();
-    std::vector<StringPool> string_pools(reslicing_info.num_segments);
+    std::vector<StringPool> string_pools(reslicing_info.num_segments());
     // We can use string_view keys here as they point to the keys in column_map, which are still live while this
     // variable is in use
     ankerl::unordered_dense::map<std::string_view, std::vector<Column>, util::TransparentStringHash, std::equal_to<>>
@@ -81,16 +81,16 @@ std::vector<SegmentInMemory> SegmentReslicer::reslice_segments(std::vector<Segme
     for (const auto& col_name : col_names_in_order) {
         auto& sliced_cols = resliced_column_map.at(col_name);
         util::check(
-                sliced_cols.size() == reslicing_info.num_segments,
+                sliced_cols.size() == reslicing_info.num_segments(),
                 "Mismatched sliced column size {} != {}",
                 sliced_cols.size(),
-                reslicing_info.num_segments
+                reslicing_info.num_segments()
         );
-        for (size_t idx = 0; idx < reslicing_info.num_segments; ++idx) {
+        for (size_t idx = 0; idx < reslicing_info.num_segments(); ++idx) {
             res.at(idx).add_column(col_name, std::make_shared<Column>(std::move(sliced_cols.at(idx))));
         }
     }
-    for (size_t idx = 0; idx < reslicing_info.num_segments; ++idx) {
+    for (size_t idx = 0; idx < reslicing_info.num_segments(); ++idx) {
         res.at(idx).set_row_id(reslicing_info.rows_in_slice(idx) - 1);
         res.at(idx).set_string_pool(std::make_shared<StringPool>(std::move(string_pools.at(idx))));
     }

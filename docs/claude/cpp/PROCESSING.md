@@ -216,7 +216,7 @@ Key methods: `set_segments()`, `set_row_ranges()`, `set_col_ranges()`, `set_atom
 Key methods:
 - `get_new_entity_ids(count)` - Allocate new entity IDs
 - `add_entity(id, args...)` / `add_entities(ids, tuples)` - Add entities with components
-- `get_entities_and_decrement_refcount(ids)` - Get entities (removed when fetch count reaches 0)
+- `get_components_and_decrement_refcount(ids)` - Get entities (removed when fetch count reaches 0)
 - `get<T>(id)` - Get a single component for an entity
 
 ## Read Admission Control
@@ -275,6 +275,18 @@ A segment shared by two units (resample bucket boundaries, for example) is enque
 `i_th_segment_enqueued_`, and consumed by both units via `folly::splitFuture`. Because window slots are
 freed on read completion rather than unit completion, a unit never waits on a segment it has itself
 blocked, so any budget >= 1 and window >= 1 makes progress regardless of unit shape.
+
+Because two units can complete their reads of a shared segment at the same time, the components for a
+segment must be added to the `ComponentManager` exactly once, and the unit that does not add them must
+not start processing the entity until they are there. `schedule_first_iteration` keeps one `std::mutex`
+and one `uint8_t` flag per segment: the first unit to arrive at a position runs the add while holding
+that position's mutex, so a later unit blocks until the add has finished and then sees the flag set.
+Both properties are load-bearing — the unit that skips the add goes straight on to
+`MemSegmentProcessingTask`, which gathers those components. The flags are `uint8_t` and not `bool`
+because `std::vector<bool>` is bit-packed, so neighbouring positions share a word and their
+read-modify-writes under different mutexes lose each other; that was the bug in #3381. In debug builds
+a second add of a component an entity already has raises an `InternalException` from
+`ComponentManager::add_components` instead of aborting inside EnTT.
 
 ### Test instrumentation
 

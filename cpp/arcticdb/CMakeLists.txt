@@ -281,7 +281,6 @@ set(arcticdb_srcs
         log/console_sink.hpp
         log/trace.hpp
         pipeline/column_mapping.hpp
-        pipeline/column_name_resolution.hpp
         pipeline/column_stats_types.hpp
         pipeline/column_stats.hpp
         pipeline/column_stats_filter.hpp
@@ -516,7 +515,6 @@ set(arcticdb_srcs
         log/log.cpp
         log/console_sink.cpp
         pipeline/column_mapping.cpp
-        pipeline/column_name_resolution.cpp
         pipeline/column_stats.cpp
         pipeline/column_stats_filter.cpp
         pipeline/column_stats_dispatch.cpp

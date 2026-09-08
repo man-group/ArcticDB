@@ -146,7 +146,7 @@ std::vector<EntityId> register_segments(
         const auto rows = seg->row_count();
         auto rr = std::make_shared<RowRange>(row_offset, row_offset + rows);
         auto cr = std::make_shared<ColRange>(1, num_value_cols + 1);
-        component_manager.add_entity(ids[i], seg, rr, cr, EntityFetchCount{1});
+        component_manager.add_components(ids[i], seg, rr, cr, EntityFetchCount{1});
         row_offset += rows;
     }
     return ids;

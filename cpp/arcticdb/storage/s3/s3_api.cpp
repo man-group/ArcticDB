@@ -14,6 +14,11 @@
 #include <arcticdb/storage/s3/ec2_utils.hpp>
 #include <cstdarg>
 #include <vector>
+#ifndef WIN32
+#include <aws/core/http/standard/StandardHttpRequest.h>
+#include <aws/core/http/URI.h>
+#include <signal.h>
+#endif
 
 namespace arcticdb::storage::s3 {
 
@@ -68,6 +73,67 @@ void SpdlogLogSystem::LogStream(
 
 void SpdlogLogSystem::Flush() { log::s3().flush(); }
 
+#ifndef WIN32
+namespace {
+constexpr const char* ARCTIC_CURL_ALLOCATION_TAG = "ArcticCurlHttpClient";
+} // namespace
+
+bool dns_shuffle_addresses_enabled() {
+    return ConfigsMap::instance()->get_int("S3Storage.DnsShuffleAddresses", 1) != 0;
+}
+
+ArcticCurlHttpClient::ArcticCurlHttpClient(const Aws::Client::ClientConfiguration& client_configuration) :
+    Aws::Http::CurlHttpClient(client_configuration),
+    dns_shuffle_addresses_enabled_(dns_shuffle_addresses_enabled()) {}
+
+bool ArcticCurlHttpClient::should_shuffle_dns_addresses() const { return dns_shuffle_addresses_enabled_; }
+
+void ArcticCurlHttpClient::OverrideOptionsOnConnectionHandle(CURL* connection_handle) const {
+    if (should_shuffle_dns_addresses()) {
+        curl_easy_setopt(connection_handle, CURLOPT_DNS_SHUFFLE_ADDRESSES, 1L);
+    }
+}
+
+ArcticCurlHttpClientFactory::ArcticCurlHttpClientFactory(bool init_and_cleanup_curl, bool install_sigpipe_handler) :
+    init_and_cleanup_curl_(init_and_cleanup_curl),
+    install_sigpipe_handler_(install_sigpipe_handler) {}
+
+std::shared_ptr<Aws::Http::HttpClient> ArcticCurlHttpClientFactory::CreateHttpClient(
+        const Aws::Client::ClientConfiguration& client_configuration
+) const {
+    return Aws::MakeShared<ArcticCurlHttpClient>(ARCTIC_CURL_ALLOCATION_TAG, client_configuration);
+}
+
+std::shared_ptr<Aws::Http::HttpRequest> ArcticCurlHttpClientFactory::CreateHttpRequest(
+        const Aws::String& uri, Aws::Http::HttpMethod method, const Aws::IOStreamFactory& stream_factory
+) const {
+    return CreateHttpRequest(Aws::Http::URI(uri), method, stream_factory);
+}
+
+std::shared_ptr<Aws::Http::HttpRequest> ArcticCurlHttpClientFactory::CreateHttpRequest(
+        const Aws::Http::URI& uri, Aws::Http::HttpMethod method, const Aws::IOStreamFactory& stream_factory
+) const {
+    auto request = Aws::MakeShared<Aws::Http::Standard::StandardHttpRequest>(ARCTIC_CURL_ALLOCATION_TAG, uri, method);
+    request->SetResponseStreamFactory(stream_factory);
+    return request;
+}
+
+void ArcticCurlHttpClientFactory::InitStaticState() {
+    if (init_and_cleanup_curl_) {
+        Aws::Http::CurlHttpClient::InitGlobalState();
+    }
+    if (install_sigpipe_handler_) {
+        ::signal(SIGPIPE, [](int) {});
+    }
+}
+
+void ArcticCurlHttpClientFactory::CleanupStaticState() {
+    if (init_and_cleanup_curl_) {
+        Aws::Http::CurlHttpClient::CleanupGlobalState();
+    }
+}
+#endif // WIN32
+
 S3ApiInstance::S3ApiInstance(Aws::Utils::Logging::LogLevel log_level, bool log_to_file) :
     log_level_(log_level),
     options_() {
@@ -84,6 +150,17 @@ S3ApiInstance::S3ApiInstance(Aws::Utils::Logging::LogLevel log_level, bool log_t
             Aws::Utils::Logging::InitializeAWSLogging(Aws::MakeShared<SpdlogLogSystem>("v", log_level));
         }
     }
+#ifndef WIN32
+    {
+        const bool init_and_cleanup_curl = options_.httpOptions.initAndCleanupCurl;
+        const bool install_sigpipe_handler = options_.httpOptions.installSigPipeHandler;
+        options_.httpOptions.httpClientFactory_create_fn = [init_and_cleanup_curl, install_sigpipe_handler] {
+            return Aws::MakeShared<ArcticCurlHttpClientFactory>(
+                    ARCTIC_CURL_ALLOCATION_TAG, init_and_cleanup_curl, install_sigpipe_handler
+            );
+        };
+    }
+#endif
     ARCTICDB_RUNTIME_DEBUG(log::storage(), "Begin initializing AWS API");
     Aws::InitAPI(options_);
     // A workaround for https://github.com/aws/aws-sdk-cpp/issues/1410.

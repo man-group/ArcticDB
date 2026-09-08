@@ -26,7 +26,7 @@ import difflib
 from datetime import datetime
 
 from numpy import datetime64
-from pandas import Timestamp, to_datetime, Timedelta
+from pandas import Timestamp, Timedelta
 from typing import Any, Optional, Union, List, Sequence, Tuple, Dict, Set, NamedTuple
 from contextlib import contextmanager
 import time
@@ -1328,9 +1328,8 @@ class NativeVersionStore:
         statistics will be used by `QueryBuilder` filtering operations to reduce the number of data segments read out
         of storage.
 
-        MINMAX stats are built for every data column and every inner multiindex index level whose dtype is numeric
-        (uint/int/float/bool) or a UTC nanosecond timestamp. The outer/primary index is excluded, as it is already
-        pruned by the index mechanism.
+        MINMAX stats are built for every column whose dtype is numeric (uint/int/float/bool) or a UTC nanosecond
+        timestamp. This covers data columns, the primary index and every inner multiindex index level.
 
         Stats for row slices that fall entirely outside `date_range`/`row_range` are preserved. Every row slice the
         range intersects is recomputed. Omitting both `date_range` and `row_range` recomputes stats for the whole symbol.
@@ -2839,16 +2838,20 @@ class NativeVersionStore:
         """
         return list(self.version_store.get_incomplete_symbols())
 
-    def remove_incomplete(self, symbol: str):
+    def remove_incomplete(self, symbol: Union[str, StageResult, List[StageResult]]) -> None:
         """
         Remove previously written un-indexed chunks of data, produced by a tick collector or parallel
         writes/appends.
 
         Parameters
         ----------
-        symbol : `str`
-            Symbol name.
+        symbol : `str`, `StageResult`, or `List[StageResult]`
+            If a symbol name (`str`), removes all incomplete segments for that symbol.
+            If a `StageResult` or list of them, removes only the APPEND_DATA keys named by
+            those stage result(s). Missing keys are ignored.
         """
+        if isinstance(symbol, StageResult):
+            symbol = [symbol]
         self.version_store.remove_incomplete(symbol)
 
     def compact_incomplete(
@@ -3101,15 +3104,23 @@ class NativeVersionStore:
             NativeVersionStore._warned_about_list_version_latest_only_and_snapshot = True
 
         result = self.version_store.list_versions(symbol, snapshot, latest_only, skip_snapshots)
+        # Scalar pd.to_datetime builds a throwaway one-element DatetimeIndex per call, so convert the whole
+        # column of epoch-nanosecond creation timestamps in one go instead of once per version.
+        dates = pd.DatetimeIndex(
+            np.fromiter((version_result[2] for version_result in result), dtype=np.int64, count=len(result)).view(
+                "M8[ns]"
+            ),
+            tz="UTC",
+        )
         return [
             {
                 "symbol": version_result[0],
                 "version": version_result[1],
-                "date": to_datetime(version_result[2], unit="ns", utc=True),
+                "date": date,
                 "deleted": version_result[4],
                 "snapshots": version_result[3],
             }
-            for version_result in result
+            for version_result, date in zip(result, dates)
         ]
 
     def list_symbols(
@@ -4435,6 +4446,7 @@ class NativeVersionStore:
         metadata: Any = None,
         prune_previous_versions: Optional[bool] = None,
         upsert: bool = False,
+        match_na: bool = False,
     ):
         """
         Merge new data into an existing symbol's DataFrame according to a specified strategy.
@@ -4469,9 +4481,14 @@ class NativeVersionStore:
             IMPORTANT: For date-time indexed data, the index is always included in matching and cannot be excluded.
 
             Note on equality semantics:
+                By default (`match_na=False`), missing values (float NaN, string None/NaN, or NaT in a datetime64
+                column) in an `on` column match nothing. Non-missing values are compared by plain equality.
+
+                Set `match_na=True` for missing values to match each other instead:
                 - In float columns, NaN is considered equal to NaN.
                 - In string columns, None and NaN are indistinguishable. NaN == None, NaN == NaN, None == None,
                   and None == NaN all evaluate to True.
+                - In datetime64 `on` columns, NaT is considered equal to NaT.
 
             If a column name appears more than once in the source or the target it must not be added in the on
             parameter.
@@ -4486,6 +4503,9 @@ class NativeVersionStore:
             If True and the symbol does not exist, create it by writing `source` to the store. Requires a strategy
             with `not_matched_by_target="insert"`; combining it with an update-only strategy raises
             `UserInputException` as the newly created symbol would be empty.
+        match_na : bool, default False
+            Controls whether a missing value (float NaN, string None/NaN, or NaT in a datetime64 `on`
+            column) can match another missing value in the `on` columns. See "Note on equality semantics" above.
 
         Returns
         -------
@@ -4534,7 +4554,9 @@ class NativeVersionStore:
             global_default=False,
             existing_value=prune_previous_versions,
         )
-        vit = self.version_store.merge(symbol, item, norm_meta, udm, prune_previous_versions, upsert, strategy, on)
+        vit = self.version_store.merge(
+            symbol, item, norm_meta, udm, prune_previous_versions, upsert, strategy, on, match_na
+        )
         return self._convert_thin_cxx_item_to_python(vit, metadata)
 
 

@@ -10,6 +10,10 @@
 
 #include <aws/core/Aws.h>
 #include <aws/core/utils/logging/LogSystemInterface.h>
+#ifndef WIN32
+#include <aws/core/http/HttpClientFactory.h>
+#include <aws/core/http/curl/CurlHttpClient.h>
+#endif
 #include <atomic>
 #include <memory>
 #include <mutex>
@@ -34,6 +38,46 @@ class SpdlogLogSystem : public Aws::Utils::Logging::LogSystemInterface {
   private:
     std::atomic<Aws::Utils::Logging::LogLevel> log_level_;
 };
+
+#ifndef WIN32
+// Whether to set CURLOPT_DNS_SHUFFLE_ADDRESSES.
+bool dns_shuffle_addresses_enabled();
+
+// Custom client that allows setting specific cUrl options.
+class ArcticCurlHttpClient : public Aws::Http::CurlHttpClient {
+  public:
+    explicit ArcticCurlHttpClient(const Aws::Client::ClientConfiguration& client_configuration);
+
+    bool should_shuffle_dns_addresses() const;
+
+  protected:
+    void OverrideOptionsOnConnectionHandle(CURL* connection_handle) const override;
+
+  private:
+    const bool dns_shuffle_addresses_enabled_;
+};
+
+class ArcticCurlHttpClientFactory : public Aws::Http::HttpClientFactory {
+  public:
+    // Defaults mirror Aws::HttpOptions
+    explicit ArcticCurlHttpClientFactory(bool init_and_cleanup_curl = true, bool install_sigpipe_handler = false);
+
+    std::shared_ptr<Aws::Http::HttpClient> CreateHttpClient(const Aws::Client::ClientConfiguration& client_configuration
+    ) const override;
+    std::shared_ptr<Aws::Http::HttpRequest> CreateHttpRequest(
+            const Aws::String& uri, Aws::Http::HttpMethod method, const Aws::IOStreamFactory& stream_factory
+    ) const override;
+    std::shared_ptr<Aws::Http::HttpRequest> CreateHttpRequest(
+            const Aws::Http::URI& uri, Aws::Http::HttpMethod method, const Aws::IOStreamFactory& stream_factory
+    ) const override;
+    void InitStaticState() override;
+    void CleanupStaticState() override;
+
+  private:
+    bool init_and_cleanup_curl_;
+    bool install_sigpipe_handler_;
+};
+#endif // WIN32
 
 class S3ApiInstance {
   public:
