@@ -26,6 +26,7 @@
 #include <arcticdb/version/merge_options.hpp>
 #include <arcticdb/entity/read_result.hpp>
 #include <arcticdb/util/constructors.hpp>
+#include <arcticdb/util/exception_as_error.hpp>
 #include <arcticdb/version/version_tasks.hpp>
 #include <arcticdb/version/admission_handler.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>

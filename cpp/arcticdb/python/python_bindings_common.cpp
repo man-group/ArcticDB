@@ -12,6 +12,7 @@
 #include <arcticdb/entity/metrics.hpp>
 #include <arcticdb/log/log.hpp>
 #include <arcticdb/util/preconditions.hpp>
+#include <spdlog/common.h>
 #include <logger.pb.h>
 
 namespace py = pybind11;
@@ -86,7 +87,7 @@ void register_log(py::module&& log, arcticdb::BindingScope scope) {
             .value("S3", LoggerId::S3)
             .export_values();
 
-    auto choose_logger = [](LoggerId log_id) -> spdlog::logger& {
+    auto choose_logger = [](LoggerId log_id) -> arcticdb::log::SpdlogWrapper {
         switch (log_id) {
         case LoggerId::STORAGE:
             return arcticdb::log::storage();
@@ -119,7 +120,7 @@ void register_log(py::module&& log, arcticdb::BindingScope scope) {
 
     log.def("log", [choose_logger](LoggerId log_id, spdlog::level::level_enum level, const std::string& msg) {
         py::gil_scoped_release gil_release;
-        auto& logger = choose_logger(log_id);
+        auto logger = choose_logger(log_id);
         switch (level) {
         case spdlog::level::level_enum::debug:
             logger.debug(msg);

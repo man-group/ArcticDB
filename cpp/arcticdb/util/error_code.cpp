@@ -7,6 +7,7 @@
  */
 
 #include <arcticdb/util/error_code.hpp>
+#include <arcticdb/util/exception_as_error.hpp>
 #include <semimap/semimap.h>
 
 namespace arcticdb {

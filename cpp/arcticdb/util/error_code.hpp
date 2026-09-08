@@ -8,12 +8,10 @@
 
 #pragma once
 
-#include <folly/Function.h>
 #include <cstdint>
 #include <stdexcept>
-#include <vector>
-#include <unordered_map>
-#include <variant>
+#include <string_view>
+#include <fmt/base.h>
 
 namespace arcticdb {
 
@@ -35,21 +33,6 @@ enum class ErrorCategory : detail::BaseType {
     CODEC = 9
     // NEW CATEGORIES MUST ALSO BE ADDED TO python_module.cpp:register_error_code_ecosystem
 };
-
-// FUTURE(GCC9): use magic_enum
-inline std::unordered_map<ErrorCategory, const char*> get_error_category_names() {
-    return {
-            {ErrorCategory::INTERNAL, "INTERNAL"},
-            {ErrorCategory::NORMALIZATION, "NORMALIZATION"},
-            {ErrorCategory::MISSING_DATA, "MISSING_DATA"},
-            {ErrorCategory::SCHEMA, "SCHEMA"},
-            {ErrorCategory::STORAGE, "STORAGE"},
-            {ErrorCategory::SORTING, "SORTING"},
-            {ErrorCategory::USER_INPUT, "USER_INPUT"},
-            {ErrorCategory::COMPATIBILITY, "COMPATIBILITY"},
-            {ErrorCategory::CODEC, "CODEC"},
-    };
-}
 
 // A macro that will be expanded in different ways by redefining ERROR_CODE():
 // FUTURE(GCC9): use magic_enum
@@ -136,15 +119,6 @@ inline constexpr ErrorCodeData error_code_data{};
 ARCTIC_ERROR_CODES
 #undef ERROR_CODE
 
-inline std::vector<ErrorCode> get_error_codes() {
-    static std::vector<ErrorCode> error_codes{
-#define ERROR_CODE(code, Name) ErrorCode::Name,
-            ARCTIC_ERROR_CODES
-#undef ERROR_CODE
-    };
-    return error_codes;
-}
-
 ErrorCodeData get_error_code_data(ErrorCode code);
 
 constexpr ErrorCategory get_error_category(ErrorCode code) {
@@ -169,18 +143,6 @@ struct ArcticSpecificException : public ArcticCategorizedException<get_error_cat
         static_assert(get_error_category(specific_code) == category);
     }
 };
-
-// Utility to treat exceptions as data
-struct Error {
-
-    explicit Error(folly::Function<void(std::string)> raiser, std::string msg);
-    void throw_error();
-
-    folly::Function<void(std::string)> raiser_;
-    std::string msg_;
-};
-
-using CheckOutcome = std::variant<Error, std::monostate>;
 
 using InternalException = ArcticCategorizedException<ErrorCategory::INTERNAL>;
 using SchemaException = ArcticCategorizedException<ErrorCategory::SCHEMA>;

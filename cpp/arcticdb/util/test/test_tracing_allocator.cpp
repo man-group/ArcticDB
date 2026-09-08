@@ -11,6 +11,8 @@
 #include <arcticdb/util/magic_num.hpp>
 #include <arcticdb/util/memory_tracing.hpp>
 
+#include <spdlog/common.h>
+
 TEST(Allocator, Tracing) {
     using AllocType = arcticdb::AllocatorImpl<arcticdb::InMemoryTracingPolicy>;
     AllocType::clear();

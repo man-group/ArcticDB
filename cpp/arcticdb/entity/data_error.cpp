@@ -7,6 +7,7 @@
  */
 
 #include <arcticdb/entity/data_error.hpp>
+#include <arcticdb/util/error_code_categories.hpp>
 
 namespace arcticdb::entity {
 

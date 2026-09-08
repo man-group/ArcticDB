@@ -12,8 +12,7 @@
 #include <arcticdb/util/error_code.hpp>
 #include <arcticdb/util/preprocess.hpp>
 
-#include <fmt/compile.h>
-#include <fmt/std.h>
+#include <fmt/format.h>
 
 namespace arcticdb {
 
@@ -27,9 +26,9 @@ struct Raise {
     [[noreturn]] void operator()(fmt::format_string<Args...> format, Args&&... args) const {
         std::string msg;
         if constexpr (sizeof...(args) == 0) {
-            msg = fmt::format(FMT_COMPILE("{} {}"), error_code_data<code>.name_, format);
+            msg = fmt::format("{} {}", error_code_data<code>.name_, format);
         } else {
-            std::string combo_format = fmt::format(FMT_COMPILE("{} {}"), error_code_data<code>.name_, format);
+            std::string combo_format = fmt::format("{} {}", error_code_data<code>.name_, format);
             msg = fmt::format(fmt::runtime(combo_format), std::forward<Args>(args)...);
         }
         if constexpr (error_category == ErrorCategory::INTERNAL)
@@ -41,9 +40,9 @@ struct Raise {
     [[noreturn]] void operator()(FormatString format, Args&&... args) const {
         std::string msg;
         if constexpr (sizeof...(args) == 0) {
-            msg = fmt::format(FMT_COMPILE("{} {}"), error_code_data<code>.name_, format);
+            msg = fmt::format("{} {}", error_code_data<code>.name_, format);
         } else {
-            std::string combo_format = fmt::format(FMT_COMPILE("{} {}"), error_code_data<code>.name_, format);
+            std::string combo_format = fmt::format("{} {}", error_code_data<code>.name_, format);
             msg = fmt::format(fmt::runtime(combo_format), std::forward<Args>(args)...);
         }
         if constexpr (error_category == ErrorCategory::INTERNAL)

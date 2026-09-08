@@ -11,6 +11,8 @@
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/util/format_date.hpp>
 
+#include <optional>
+
 namespace arcticdb {
 
 using namespace arcticdb::entity;

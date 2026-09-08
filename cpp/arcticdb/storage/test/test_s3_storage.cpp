@@ -26,6 +26,7 @@
 #include <aws/core/http/HttpClientFactory.h>
 #endif
 
+#include <spdlog/logger.h>
 #include <spdlog/sinks/ostream_sink.h>
 
 #include <set>
@@ -467,7 +468,7 @@ TEST(S3LogSystem, RoutesToSpdlogWithLevelAndTag) {
     using namespace arcticdb::storage::s3;
     using Aws::Utils::Logging::LogLevel;
 
-    auto& logger = arcticdb::log::s3();
+    auto& logger = arcticdb::log::s3().get();
     const auto saved_level = logger.level();
 
     std::ostringstream captured;

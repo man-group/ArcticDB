@@ -20,6 +20,8 @@
 #include <arcticdb/util/cursored_buffer.hpp>
 #include <arcticdb/util/string_utils.hpp>
 
+#include <fmt/compile.h>
+
 namespace arcticdb::entity {
 
 enum class OldKeyField {

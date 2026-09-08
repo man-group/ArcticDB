@@ -27,7 +27,7 @@ struct MagicNum {
             std::string_view expected(reinterpret_cast<const char*>(&Magic), 4);
             std::string message(fmt::format("Magic number failure, expected {}({}) got {}", Magic, expected, magic_));
             if (log_only) {
-                log::version().warn(message);
+                // log::version().warn(message);
             } else {
                 util::raise_rte(message);
             }

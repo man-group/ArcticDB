@@ -55,70 +55,88 @@ std::shared_ptr<spdlog::sinks::sink> make_console_sink(bool std_err, bool color)
 #endif
 }
 
+struct SpdlogWrapperImpl {
+    std::unique_ptr<spdlog::logger> logger_;
+};
+
+SpdlogWrapper::SpdlogWrapper(SpdlogWrapperImpl& impl) : impl_(impl) {}
+void SpdlogWrapper::trace(const std::string& msg) { impl_.logger_->trace(msg); }
+void SpdlogWrapper::debug(const std::string& msg) { impl_.logger_->debug(msg); }
+void SpdlogWrapper::info(const std::string& msg) { impl_.logger_->info(msg); }
+void SpdlogWrapper::warn(const std::string& msg) { impl_.logger_->warn(msg); }
+void SpdlogWrapper::error(const std::string& msg) { impl_.logger_->error(msg); }
+void SpdlogWrapper::critical(const std::string& msg) { impl_.logger_->critical(msg); }
+bool SpdlogWrapper::should_log(spdlog::level::level_enum level) { return impl_.logger_->should_log(level); }
+void SpdlogWrapper::set_level(spdlog::level::level_enum level) { impl_.logger_->set_level(level); };
+spdlog::level::level_enum SpdlogWrapper::level() { return impl_.logger_->level(); }
+void SpdlogWrapper::flush() { return impl_.logger_->flush(); }
+spdlog::logger& SpdlogWrapper::get() const noexcept { return *impl_.logger_; }
+
 struct Loggers::Impl {
     std::mutex config_mutex_;
     std::unordered_map<std::string, spdlog::sink_ptr> sink_by_id_;
-    std::unique_ptr<spdlog::logger> unconfigured_ =
-            std::make_unique<spdlog::logger>("arcticdb", make_console_sink(true, false));
-    std::unique_ptr<spdlog::logger> root_;
-    std::unique_ptr<spdlog::logger> storage_;
-    std::unique_ptr<spdlog::logger> inmem_;
-    std::unique_ptr<spdlog::logger> memory_;
-    std::unique_ptr<spdlog::logger> codec_;
-    std::unique_ptr<spdlog::logger> version_;
-    std::unique_ptr<spdlog::logger> timings_;
-    std::unique_ptr<spdlog::logger> lock_;
-    std::unique_ptr<spdlog::logger> schedule_;
-    std::unique_ptr<spdlog::logger> message_;
-    std::unique_ptr<spdlog::logger> symbol_;
-    std::unique_ptr<spdlog::logger> snapshot_;
-    std::unique_ptr<spdlog::logger> s3_;
+    SpdlogWrapperImpl unconfigured_ = SpdlogWrapperImpl(
+                                                        std::make_unique<spdlog::logger>("arcticdb", make_console_sink(true, false))
+    );
+    SpdlogWrapperImpl root_;
+    SpdlogWrapperImpl storage_;
+    SpdlogWrapperImpl inmem_;
+    SpdlogWrapperImpl memory_;
+    SpdlogWrapperImpl codec_;
+    SpdlogWrapperImpl version_;
+    SpdlogWrapperImpl timings_;
+    SpdlogWrapperImpl lock_;
+    SpdlogWrapperImpl schedule_;
+    SpdlogWrapperImpl message_;
+    SpdlogWrapperImpl symbol_;
+    SpdlogWrapperImpl snapshot_;
+    SpdlogWrapperImpl s3_;
+
     std::shared_ptr<spdlog::details::thread_pool> thread_pool_;
     std::optional<spdlog::details::periodic_worker> periodic_worker_;
 
     void configure_logger(
-            const arcticdb::proto::logger::LoggerConfig& conf, const std::string& name,
-            std::unique_ptr<spdlog::logger>& logger
+            const arcticdb::proto::logger::LoggerConfig& conf, const std::string& name, SpdlogWrapperImpl& logger
     );
 
-    spdlog::logger& logger_ref(std::unique_ptr<spdlog::logger>& src);
+    SpdlogWrapperImpl& logger_ref(SpdlogWrapperImpl& src);
 };
 
 constexpr auto get_default_log_level() { return spdlog::level::info; }
 
-spdlog::logger& storage() { return Loggers::instance().storage(); }
+SpdlogWrapper storage() { return Loggers::instance().storage(); }
 
-spdlog::logger& inmem() { return Loggers::instance().inmem(); }
+SpdlogWrapper inmem() { return Loggers::instance().inmem(); }
 
-spdlog::logger& codec() { return Loggers::instance().codec(); }
+SpdlogWrapper codec() { return Loggers::instance().codec(); }
 
-spdlog::logger& root() { return Loggers::instance().root(); }
+SpdlogWrapper root() { return Loggers::instance().root(); }
 
-spdlog::logger& memory() { return Loggers::instance().memory(); }
+SpdlogWrapper memory() { return Loggers::instance().memory(); }
 
-spdlog::logger& version() { return Loggers::instance().version(); }
+SpdlogWrapper version() { return Loggers::instance().version(); }
 
-spdlog::logger& timings() { return Loggers::instance().timings(); }
+SpdlogWrapper timings() { return Loggers::instance().timings(); }
 
-spdlog::logger& lock() { return Loggers::instance().lock(); }
+SpdlogWrapper lock() { return Loggers::instance().lock(); }
 
-spdlog::logger& schedule() { return Loggers::instance().schedule(); }
+SpdlogWrapper schedule() { return Loggers::instance().schedule(); }
 
-spdlog::logger& message() { return Loggers::instance().message(); }
+SpdlogWrapper message() { return Loggers::instance().message(); }
 
-spdlog::logger& symbol() { return Loggers::instance().symbol(); }
+SpdlogWrapper symbol() { return Loggers::instance().symbol(); }
 
-spdlog::logger& snapshot() { return Loggers::instance().snapshot(); }
+SpdlogWrapper snapshot() { return Loggers::instance().snapshot(); }
 
-spdlog::logger& s3() { return Loggers::instance().s3(); }
+SpdlogWrapper s3() { return Loggers::instance().s3(); }
 
 namespace fs = std::filesystem;
 
 using SinkConf = arcticdb::proto::logger::SinkConfig;
 
 Loggers::Loggers() : impl_(std::make_unique<Impl>()) {
-    impl_->unconfigured_->set_level(get_default_log_level());
-    impl_->unconfigured_->set_pattern(DefaultLogPattern);
+    impl_->unconfigured_.logger_->set_level(get_default_log_level());
+    impl_->unconfigured_.logger_->set_pattern(DefaultLogPattern);
 }
 
 Loggers::~Loggers() = default;
@@ -128,46 +146,46 @@ Loggers& Loggers::instance() {
     return *loggers_instance_;
 }
 
-spdlog::logger& Loggers::storage() { return impl_->logger_ref(impl_->storage_); }
+SpdlogWrapper Loggers::storage() { return impl_->logger_ref(impl_->storage_); }
 
-spdlog::logger& Loggers::inmem() { return impl_->logger_ref(impl_->inmem_); }
+SpdlogWrapper Loggers::inmem() { return impl_->logger_ref(impl_->inmem_); }
 
-spdlog::logger& Loggers::codec() { return impl_->logger_ref(impl_->codec_); }
+SpdlogWrapper Loggers::codec() { return impl_->logger_ref(impl_->codec_); }
 
-spdlog::logger& Loggers::version() { return impl_->logger_ref(impl_->version_); }
+SpdlogWrapper Loggers::version() { return impl_->logger_ref(impl_->version_); }
 
-spdlog::logger& Loggers::memory() { return impl_->logger_ref(impl_->memory_); }
+SpdlogWrapper Loggers::memory() { return impl_->logger_ref(impl_->memory_); }
 
-spdlog::logger& Loggers::timings() { return impl_->logger_ref(impl_->timings_); }
+SpdlogWrapper Loggers::timings() { return impl_->logger_ref(impl_->timings_); }
 
-spdlog::logger& Loggers::lock() { return impl_->logger_ref(impl_->lock_); }
+SpdlogWrapper Loggers::lock() { return impl_->logger_ref(impl_->lock_); }
 
-spdlog::logger& Loggers::schedule() { return impl_->logger_ref(impl_->schedule_); }
+SpdlogWrapper Loggers::schedule() { return impl_->logger_ref(impl_->schedule_); }
 
-spdlog::logger& Loggers::message() { return impl_->logger_ref(impl_->message_); }
+SpdlogWrapper Loggers::message() { return impl_->logger_ref(impl_->message_); }
 
-spdlog::logger& Loggers::symbol() { return impl_->logger_ref(impl_->symbol_); }
+SpdlogWrapper Loggers::symbol() { return impl_->logger_ref(impl_->symbol_); }
 
-spdlog::logger& Loggers::snapshot() { return impl_->logger_ref(impl_->snapshot_); }
+SpdlogWrapper Loggers::snapshot() { return impl_->logger_ref(impl_->snapshot_); }
 
-spdlog::logger& Loggers::s3() { return impl_->logger_ref(impl_->s3_); }
+SpdlogWrapper Loggers::s3() { return impl_->logger_ref(impl_->s3_); }
 
-spdlog::logger& Loggers::root() { return impl_->logger_ref(impl_->root_); }
+SpdlogWrapper Loggers::root() { return impl_->logger_ref(impl_->root_); }
 
 void Loggers::flush_all() {
-    root().flush();
-    storage().flush();
-    inmem().flush();
-    codec().flush();
-    version().flush();
-    memory().flush();
-    timings().flush();
-    lock().flush();
-    schedule().flush();
-    message().flush();
-    symbol().flush();
-    snapshot().flush();
-    s3().flush();
+    root().impl_.logger_->flush();
+    storage().impl_.logger_->flush();
+    inmem().impl_.logger_->flush();
+    codec().impl_.logger_->flush();
+    version().impl_.logger_->flush();
+    memory().impl_.logger_->flush();
+    timings().impl_.logger_->flush();
+    lock().impl_.logger_->flush();
+    schedule().impl_.logger_->flush();
+    message().impl_.logger_->flush();
+    symbol().impl_.logger_->flush();
+    snapshot().impl_.logger_->flush();
+    s3().impl_.logger_->flush();
 }
 
 void Loggers::destroy_instance() { loggers_instance_.reset(); }
@@ -189,16 +207,16 @@ std::string make_parent_dir(const std::string& p_str, std::string_view def_p_str
 }
 } // namespace
 
-spdlog::logger& Loggers::Impl::logger_ref(std::unique_ptr<spdlog::logger>& src) {
-    if (ARCTICDB_LIKELY(bool(src)))
-        return *src;
+SpdlogWrapperImpl& Loggers::Impl::logger_ref(SpdlogWrapperImpl& src) {
+    if (ARCTICDB_LIKELY(bool(src.logger_)))
+        return src;
 
-    return *unconfigured_;
+    return unconfigured_;
 }
 
 bool Loggers::configure(const arcticdb::proto::logger::LoggersConfig& conf, bool force) {
     auto lock = std::scoped_lock(impl_->config_mutex_);
-    if (!force && impl_->root_)
+    if (!force && impl_->root_.logger_)
         return false;
 
     // Configure async behavior
@@ -290,8 +308,7 @@ bool Loggers::configure(const arcticdb::proto::logger::LoggersConfig& conf, bool
 }
 
 void Loggers::Impl::configure_logger(
-        const arcticdb::proto::logger::LoggerConfig& conf, const std::string& name,
-        std::unique_ptr<spdlog::logger>& logger
+        const arcticdb::proto::logger::LoggerConfig& conf, const std::string& name, SpdlogWrapperImpl& logger
 ) {
     std::vector<spdlog::sink_ptr> sink_ptrs;
     for (const auto& sink_id : conf.sink_ids()) {
@@ -304,22 +321,22 @@ void Loggers::Impl::configure_logger(
     auto fq_name = fmt::format("arcticdb.{}", name);
     if (thread_pool_) {
         // async logger
-        logger = std::make_unique<spdlog::async_logger>(
+        logger.logger_ = make_unique<spdlog::async_logger>(
                 fq_name, sink_ptrs.begin(), sink_ptrs.end(), thread_pool_, spdlog::async_overflow_policy::block
         );
     } else {
-        logger = std::make_unique<spdlog::logger>(fq_name, sink_ptrs.begin(), sink_ptrs.end());
+        logger.logger_ = std::make_unique<spdlog::logger>(fq_name, sink_ptrs.begin(), sink_ptrs.end());
     }
 
     if (!conf.pattern().empty())
-        logger->set_pattern(conf.pattern());
+        logger.logger_->set_pattern(conf.pattern());
     else
-        logger->set_pattern(DefaultLogPattern);
+        logger.logger_->set_pattern(DefaultLogPattern);
 
     if (conf.level() != 0)
-        logger->set_level(static_cast<spdlog::level::level_enum>(conf.level() - 1));
+        logger.logger_->set_level(static_cast<spdlog::level::level_enum>(conf.level() - 1));
     else
-        logger->set_level(get_default_log_level());
+        logger.logger_->set_level(get_default_log_level());
 }
 
 } // namespace arcticdb::log

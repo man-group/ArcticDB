@@ -35,6 +35,7 @@
 #include <arcticdb/util/configs_map.hpp>
 #include <arcticdb/util/key_utils.hpp>
 #include <aws/core/Aws.h>
+#include <spdlog/logger.h>
 
 using namespace arcticdb;
 namespace aa = arcticdb::async;
@@ -88,7 +89,6 @@ TEST(Async, DeDupTest) {
     as::EnvironmentName environment_name{"research"};
     as::StorageName storage_name("lmdb_local");
     as::LibraryPath library_path{"a", "b"};
-    namespace ap = arcticdb::pipelines;
 
     auto env_config = arcticdb::get_test_environment_config(library_path, storage_name, environment_name);
     auto config_resolver = as::create_in_memory_resolver(env_config);
@@ -439,7 +439,6 @@ TEST(Async, CopyCompressedInterStore) {
     as::EnvironmentName environment_name{"research"};
     as::StorageName storage_name("storage_name");
     as::LibraryPath library_path{"a", "b"};
-    namespace ap = arcticdb::pipelines;
 
     auto config = proto::nfs_backed_storage::Config();
     config.set_use_mock_storage_for_testing(true);
@@ -494,7 +493,6 @@ TEST(Async, CopyCompressedInterStoreNoSuchKeyOnWrite) {
     as::EnvironmentName environment_name{"research"};
     as::StorageName storage_name("storage_name");
     as::LibraryPath library_path{"a", "b"};
-    namespace ap = arcticdb::pipelines;
 
     auto config = proto::nfs_backed_storage::Config();
     config.set_use_mock_storage_for_testing(true);
@@ -567,7 +565,6 @@ TEST(Async, CopyCompressedInterStoreKeyExistsCheckFailure) {
     as::EnvironmentName environment_name{"research"};
     as::StorageName storage_name("storage_name");
     as::LibraryPath library_path{"a", "b"};
-    namespace ap = arcticdb::pipelines;
 
     auto config = proto::nfs_backed_storage::Config();
     config.set_use_mock_storage_for_testing(true);
@@ -884,7 +881,7 @@ struct SleepTask : arcticdb::async::BaseTask {
 TEST(Async, TaskStatsLoggingObserverLogsBothPools) {
     using namespace task_observer_test;
 
-    auto& logger = arcticdb::log::schedule();
+    auto& logger = arcticdb::log::schedule().get();
     auto sink = std::make_shared<CapturingSink>();
     const auto saved_level = logger.level();
     logger.sinks().push_back(sink);

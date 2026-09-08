@@ -122,13 +122,16 @@ KeySegmentPair MongoStorage::do_read(VariantKey&& variant_key, ReadKeyOpts opts)
     } catch (const mongocxx::operation_exception& ex) {
         std::string object_name = std::string(variant_key_view(variant_key));
         raise_if_unexpected_error(ex, object_name);
-        log::storage().log(
-                opts.dont_warn_about_missing_key ? spdlog::level::debug : spdlog::level::warn,
+        std::string msg = fmt::format(
                 "Failed to find segment for key '{}' {}: {}",
                 variant_key_view(variant_key),
                 ex.code().value(),
                 ex.what()
         );
+        if (opts.dont_warn_about_missing_key)
+            log::storage().debug(msg);
+        else
+            log::storage().warn(msg);
 
         throw KeyNotFoundException(keys_not_found);
     }

@@ -10,9 +10,10 @@
 
 #include <arcticdb/entity/types.hpp>
 
+#include <atomic>
+#include <chrono>
 #include <cstdint>
 #if defined(_WIN32)
-#include <chrono>
 #elif defined(__linux__)
 #include <time.h>
 #elif defined(__APPLE__)

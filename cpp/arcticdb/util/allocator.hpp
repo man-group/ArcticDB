@@ -11,6 +11,7 @@
 #include <arcticdb/util/clock.hpp>
 #include <arcticdb/util/thread_cached_int.hpp>
 #include <memory>
+#include <mutex>
 
 #if USE_SLAB_ALLOCATOR
 #include <arcticdb/util/slab_allocator.hpp>

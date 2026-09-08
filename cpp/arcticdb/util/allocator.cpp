@@ -70,8 +70,8 @@ void TracingData::track_alloc(AddrIdentifier addr_ts, size_t size) {
             addr_ts.first,
             addr_ts.second,
             util::MemBytes{impl_->total_allocs_},
-            impl_->total_irregular_allocs_,
-            impl_->total_allocs_calls_
+            impl_->total_irregular_allocs_.load(),
+            impl_->total_allocs_calls_.load()
     );
 }
 
@@ -131,7 +131,7 @@ bool InMemoryTracingPolicy::deallocated() {
     auto& get_data = data();
     bool all_freed = get_data.all_freed();
     if (!all_freed) {
-        log::memory().warn("Allocator has not freed all data, {} bytes counted", get_data.impl_->total_allocs_);
+        log::memory().warn("Allocator has not freed all data, {} bytes counted", get_data.impl_->total_allocs_.load());
 
         for (auto alloc : get_data.impl_->allocs_)
             log::memory().warn("Unfreed allocation: {}", uintptr_t(alloc.first.first));

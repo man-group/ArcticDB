@@ -25,11 +25,13 @@
 #include <arcticdb/util/global_lifetimes.hpp>
 #include <arcticdb/util/configs_map.hpp>
 #include <arcticdb/util/error_code.hpp>
+#include <arcticdb/util/error_code_categories.hpp>
 #include <arcticdb/util/type_handler.hpp>
 #include <arcticdb/python/python_handlers_common.hpp>
 #include <arcticdb/python/python_bindings_common.hpp>
 #include <arcticdb/util/pybind_mutex.hpp>
 
+#include <fmt/std.h>
 #include <pybind11/pybind11.h>
 #include <mongocxx/exception/logic_error.hpp>
 
@@ -114,6 +116,15 @@ void register_termination_handler() {
             std::abort();
         }
     });
+}
+
+inline std::vector<arcticdb::ErrorCode> get_error_codes() {
+    static std::vector<arcticdb::ErrorCode> error_codes{
+#define ERROR_CODE(code, Name) arcticdb::ErrorCode::Name,
+            ARCTIC_ERROR_CODES
+#undef ERROR_CODE
+    };
+    return error_codes;
 }
 
 void register_error_code_ecosystem(py::module& m, py::exception<arcticdb::ArcticException>& base_exception) {

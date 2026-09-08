@@ -14,6 +14,8 @@
 #include <arcticdb/util/test/gtest_utils.hpp>
 #include <arcticdb/entity/protobufs.hpp>
 
+#include <spdlog/common.h>
+
 using namespace arcticdb;
 using namespace folly;
 

@@ -27,22 +27,22 @@ namespace arcticdb::storage::s3 {
 namespace {
 constexpr const char* EventLoopAllocationTag = "ArcticDBS3EventLoop";
 
-spdlog::level::level_enum to_spdlog_level(Aws::Utils::Logging::LogLevel log_level) {
+void log_with_spdlog(Aws::Utils::Logging::LogLevel log_level, const std::string& msg) {
     switch (log_level) {
     case Aws::Utils::Logging::LogLevel::Fatal:
-        return spdlog::level::critical;
+        log::s3().critical(msg);
     case Aws::Utils::Logging::LogLevel::Error:
-        return spdlog::level::err;
+        log::s3().error(msg);
     case Aws::Utils::Logging::LogLevel::Warn:
-        return spdlog::level::warn;
+        log::s3().warn(msg);
     case Aws::Utils::Logging::LogLevel::Info:
-        return spdlog::level::info;
+        log::s3().info(msg);
     case Aws::Utils::Logging::LogLevel::Debug:
-        return spdlog::level::debug;
+        log::s3().debug(msg);
     case Aws::Utils::Logging::LogLevel::Trace:
-        return spdlog::level::trace;
+        log::s3().trace(msg);
     default:
-        return spdlog::level::off;
+        break;
     }
 }
 } // namespace
@@ -66,13 +66,15 @@ void SpdlogLogSystem::vaLog(
     }
     std::vector<char> buffer(static_cast<size_t>(length) + 1);
     std::vsnprintf(buffer.data(), buffer.size(), format_str, args);
-    log::s3().log(to_spdlog_level(log_level), "[{}] {}", tag, buffer.data());
+    std::string msg = fmt::format("[{}] {}", tag, buffer.data());
+    log_with_spdlog(log_level, msg);
 }
 
 void SpdlogLogSystem::LogStream(
         Aws::Utils::Logging::LogLevel log_level, const char* tag, const Aws::OStringStream& message_stream
 ) {
-    log::s3().log(to_spdlog_level(log_level), "[{}] {}", tag, message_stream.str());
+    std::string msg = fmt::format("[{}] {}", tag, message_stream.str());
+    log_with_spdlog(log_level, msg);
 }
 
 void SpdlogLogSystem::Flush() { log::s3().flush(); }

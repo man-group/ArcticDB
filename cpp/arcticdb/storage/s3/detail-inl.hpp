@@ -202,13 +202,16 @@ KeySegmentPair do_read_impl(
         auto& error = get_object_result.get_error();
         raise_if_unexpected_error(error, s3_object_name);
 
-        log::storage().log(
-                opts.dont_warn_about_missing_key ? spdlog::level::debug : spdlog::level::warn,
+        std::string msg = fmt::format(
                 "Failed to find segment for key '{}' {}: {}",
                 variant_key_view(unencoded_key),
                 error.GetExceptionName().c_str(),
                 error.GetMessage().c_str()
         );
+        if (opts.dont_warn_about_missing_key)
+            log::storage().debug(msg);
+        else
+            log::storage().warn(msg);
 
         throw KeyNotFoundException(unencoded_key);
     }

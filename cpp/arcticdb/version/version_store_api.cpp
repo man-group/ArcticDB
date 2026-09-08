@@ -24,10 +24,11 @@
 #include <arcticdb/storage/file/file_store.hpp>
 #include <arcticdb/version/version_functions.hpp>
 
+#include <spdlog/common.h>
+
 namespace arcticdb::version_store {
 
 using namespace arcticdb::entity;
-namespace as = arcticdb::stream;
 using namespace arcticdb::storage;
 
 namespace {
@@ -589,7 +590,7 @@ void PythonVersionStore::snapshot(
 
     // Explicitly set logging to error prior to testing if snapshot already exists as otherwise we're guaranteed to
     // see a warning message for all new snapshots (as the key doesn't exist!)
-    spdlog::logger& logger = log::storage();
+    log::SpdlogWrapper logger = log::storage();
     auto current_level = logger.level();
     logger.set_level(spdlog::level::err);
     auto val = get_snapshot_key(store(), snap_name).has_value();

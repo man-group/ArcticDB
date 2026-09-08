@@ -1,6 +1,8 @@
 #pragma once
 #include <arcticdb/entity/types.hpp>
 
+#include <atomic>
+
 namespace arcticdb {
 
 struct PilotedClock {

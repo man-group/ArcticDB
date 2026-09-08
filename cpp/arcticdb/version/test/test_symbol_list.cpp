@@ -15,10 +15,9 @@
 #include <arcticdb/util/test/generators.hpp>
 #include <arcticdb/version/test/symbol_list_backwards_compat.hpp>
 
-#include <shared_mutex>
-
 #include <folly/executors/FutureExecutor.h>
 #include <folly/executors/CPUThreadPoolExecutor.h>
+#include <spdlog/logger.h>
 
 #include <arcticdb/async/task_scheduler.hpp>
 
@@ -32,9 +31,6 @@ MAKE_GTEST_FMT(FailureType, "{}")
 
 static const StorageFailureSimulator::ParamActionSequence RAISE_ONCE = {fault(), no_op};
 static const StorageFailureSimulator::ParamActionSequence RAISE_ON_2ND_CALL = {no_op, fault(), no_op};
-
-namespace aa = arcticdb::async;
-namespace as = arcticdb::storage;
 
 /* === Tests overview ===
  * Test each below for both the symbol list source and the version map source:
@@ -811,7 +807,7 @@ struct TestSymbolListTask {
 
 TEST_F(SymbolListSuite, MultiThreadStress) {
     ScopedConfig max_delta("SymbolList.MaxDelta", 10);
-    log::version().set_pattern("%Y%m%d %H:%M:%S.%f %t %L %n | %v");
+    log::version().get().set_pattern("%Y%m%d %H:%M:%S.%f %t %L %n | %v");
     std::vector<Future<Unit>> futures;
     auto state = std::make_shared<SymbolListState>(store_, version_map_);
     folly::FutureExecutor<folly::CPUThreadPoolExecutor> exec{20};
@@ -981,7 +977,7 @@ struct CheckSymbolsTask {
 };
 
 TEST_F(SymbolListSuite, AddAndCompact) {
-    log::version().set_pattern("%Y%m%d %H:%M:%S.%f %t %L %n | %v");
+    log::version().get().set_pattern("%Y%m%d %H:%M:%S.%f %t %L %n | %v");
     std::vector<Future<Unit>> futures;
     for (auto x = 0; x < 1000; ++x) {
         auto symbol = fmt::format("symbol_{}", x);

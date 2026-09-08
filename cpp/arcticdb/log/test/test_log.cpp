@@ -12,6 +12,7 @@
 
 #include <gtest/gtest.h>
 #include <google/protobuf/text_format.h>
+#include <spdlog/logger.h>
 #include <arcticdb/util/format_bytes.hpp>
 
 TEST(TestLog, SmokeTest) { arcticdb::log::root().info("Some msg"); }

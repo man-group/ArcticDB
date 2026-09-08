@@ -30,32 +30,32 @@ class logger final : public mongocxx::logger {
             level = mongocxx::log_level::k_debug;
         }
 
-        spdlog::level::level_enum spdlog_level;
+        const std::string msg = fmt::format("MONGO [{}@{}] {}", mongocxx::to_string(level), domain, message);
+        auto logger = log::storage();
         switch (level) {
         case mongocxx::log_level::k_error:
-            spdlog_level = spdlog::level::err;
+            logger.error(msg);
             break;
         case mongocxx::log_level::k_critical:
-            spdlog_level = spdlog::level::critical;
+            logger.critical(msg);
             break;
         case mongocxx::log_level::k_warning:
-            spdlog_level = spdlog::level::warn;
+            logger.warn(msg);
             break;
         case mongocxx::log_level::k_message:
         case mongocxx::log_level::k_info:
-            spdlog_level = spdlog::level::info;
+            logger.info(msg);
             break;
         case mongocxx::log_level::k_debug:
-            spdlog_level = spdlog::level::debug;
+            logger.debug(msg);
             break;
         case mongocxx::log_level::k_trace:
-            spdlog_level = spdlog::level::trace;
+            logger.trace(msg);
             break;
         default:
-            spdlog_level = spdlog::level::info;
+            logger.info(msg);
             break;
         }
-        log::storage().log(spdlog_level, "MONGO [{}@{}] {}", mongocxx::to_string(level), domain, message);
     }
 };
 

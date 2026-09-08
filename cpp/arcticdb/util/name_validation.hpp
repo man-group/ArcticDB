@@ -9,6 +9,7 @@
 #pragma once
 
 #include <arcticdb/entity/types.hpp>
+#include <arcticdb/util/exception_as_error.hpp>
 #include <memory>
 #include <string>
 

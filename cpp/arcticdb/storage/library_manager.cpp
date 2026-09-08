@@ -9,6 +9,8 @@
 #include <arcticdb/async/async_store.hpp>
 #include <arcticdb/codec/default_codecs.hpp>
 
+#include <fmt/std.h>
+
 namespace arcticdb::storage {
 
 namespace {
