@@ -227,11 +227,6 @@ inline auto generate_segments_from_keys(
                    if (opts.ignores_missing_key_) {
                        return std::optional<std::pair<entity::VariantKey, SegmentInMemory>>();
                    }
-                   // Object storage raises a NoSuchKey that names no key at all, so there is nothing to rebuild
-                   // the exception from - let the original one through.
-                   if (!e.has_keys()) {
-                       throw;
-                   }
                    throw storage::KeyNotFoundException(std::move(e.keys()));
                }
            }) |
