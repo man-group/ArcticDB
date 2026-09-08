@@ -75,8 +75,8 @@ def find_exception_import_violations(file_content, file_path="<source>"):
     return violations
 
 
-def find_python_files_root():
-    directory = os.path.dirname(os.path.abspath(__file__))
+def find_python_root():
+    directory = os.path.dirname(os.path.realpath(__file__))
 
     while True:
         if os.path.basename(directory) == "python":
@@ -97,14 +97,15 @@ def iter_python_files(root):
 
 
 def test_exceptions_only_imported_from_arcticdb_exceptions():
-    python_root = find_python_files_root()
-    this_file_path = os.path.abspath(__file__)
-    allowed_exceptions_file_path = os.path.abspath(_import_module(ALLOWED_EXCEPTIONS_MODULE).__file__)
+    this_file_path = os.path.realpath(__file__)
+    allowed_exceptions_file_path = os.path.realpath(_import_module(ALLOWED_EXCEPTIONS_MODULE).__file__)
     files_to_skip = {this_file_path, allowed_exceptions_file_path}
+
+    python_root = find_python_root()
 
     violations = []
     for path in iter_python_files(python_root):
-        if os.path.abspath(path) in files_to_skip:
+        if os.path.realpath(path) in files_to_skip:
             continue
 
         with open(path, encoding="utf-8") as file:
