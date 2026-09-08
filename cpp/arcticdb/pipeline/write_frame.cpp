@@ -571,7 +571,7 @@ folly::Future<SliceAndKey> async_rewrite_partial_segment(
                         const IndexValue start_ts = TimeseriesIndex::start_value_for_segment(output);
                         // +1 as in the key we store one nanosecond greater than the last index value in the segment
                         const IndexValue end_ts =
-                                std::get<NumericIndex>(TimeseriesIndex::end_value_for_segment(output)) + 1;
+                                pipelines::end_index_generator(TimeseriesIndex::end_value_for_segment(output));
                         FrameSlice new_slice{
                                 std::make_shared<StreamDescriptor>(output.descriptor()),
                                 existing.slice_.col_range,
