@@ -86,12 +86,19 @@ class KeyNotFoundException : public ArcticSpecificException<ErrorCode::E_KEY_NOT
 
     // The message-only constructor leaves the key list unset, and object storage takes that path: an S3 read
     // that comes back NoSuchKey is raised as a message-only KeyNotFoundException by raise_s3_exception(). Anything
-    // that inspects keys() must check this first - keys() dereferences the unset list otherwise.
+    // that acts on the named keys must check this first; keys() itself raises rather than dereferencing the unset
+    // list, as NoDataFoundException::key() above does for its own optional.
     [[nodiscard]] bool has_keys() const { return keys_ && !keys_->empty(); }
 
-    std::vector<VariantKey>& keys() { return *keys_; }
+    std::vector<VariantKey>& keys() {
+        util::check(static_cast<bool>(keys_), "KeyNotFoundException names no key: {}", what());
+        return *keys_;
+    }
 
-    const std::vector<VariantKey>& keys() const { return *keys_; }
+    const std::vector<VariantKey>& keys() const {
+        util::check(static_cast<bool>(keys_), "KeyNotFoundException names no key: {}", what());
+        return *keys_;
+    }
 
   private:
     std::shared_ptr<std::vector<VariantKey>> keys_;
