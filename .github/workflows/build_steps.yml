@@ -500,6 +500,15 @@ jobs:
           name: wheel-${{env.CIBW_BUILD}}
           path: wheelhouse/*.whl
 
+      - name: sccache stats
+        # disable_annotations on the sccache action also returns before its post-job
+        # --show-stats call, so without this step no job reports whether the cache
+        # is hitting at all. Linux wheels compile inside the cibuildwheel container
+        # against the container's own sccache server, so this prints zero requests
+        # there; every other lane compiles against this server.
+        if: always()
+        run: ${SCCACHE_PATH:-sccache} --show-stats || true
+
       - name: Discover test directory names
         if: inputs.job_type == 'build-python-wheels'
         # We only run the compat tests on for newer python versions.
