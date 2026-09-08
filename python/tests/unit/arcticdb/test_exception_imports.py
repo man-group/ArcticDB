@@ -38,9 +38,9 @@ def _is_arctic_exception(module_name, exception_name):
 
 def _get_dotted_name(node):
     """Return the dotted string of an attribute chain:
-     The module a.b.C becomes the string "a.b.C"
-     'c' and 'b' are attributes, 'a' is id.
-     The iteration is in reverse order: 'c' -> 'b' -> 'a' """
+    The module a.b.C becomes the string "a.b.C"
+    'c' and 'b' are attributes, 'a' is id.
+    The iteration is in reverse order: 'c' -> 'b' -> 'a'"""
 
     parts = []
     while isinstance(node, ast.Attribute):
@@ -67,9 +67,9 @@ def find_exception_import_violations(file_content, file_path="<source>"):
             dotted_name = _get_dotted_name(node)
             module_name, _, exception_name = dotted_name.rpartition(".")
             if (
-                    module_name
-                    and module_name != ALLOWED_EXCEPTIONS_MODULE
-                    and _is_arctic_exception(module_name, exception_name)
+                module_name
+                and module_name != ALLOWED_EXCEPTIONS_MODULE
+                and _is_arctic_exception(module_name, exception_name)
             ):
                 violations.append((node.lineno, dotted_name, module_name))
     return violations
@@ -98,11 +98,13 @@ def iter_python_files(root):
 
 def test_exceptions_only_imported_from_arcticdb_exceptions():
     python_root = find_python_files_root()
-    this_file = os.path.abspath(__file__)
+    this_file_path = os.path.abspath(__file__)
+    allowed_exceptions_file_path = os.path.abspath(_import_module(ALLOWED_EXCEPTIONS_MODULE).__file__)
+    files_to_skip = {this_file_path, allowed_exceptions_file_path}
 
     violations = []
     for path in iter_python_files(python_root):
-        if os.path.abspath(path) == this_file:
+        if os.path.abspath(path) in files_to_skip:
             continue
 
         with open(path, encoding="utf-8") as file:
