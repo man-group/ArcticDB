@@ -24,6 +24,7 @@
 #include <arcticdb/pipeline/write_frame.hpp>
 #include <arcticdb/pipeline/read_query.hpp>
 #include <iterator>
+#include <ranges>
 
 namespace arcticdb {
 
@@ -622,6 +623,14 @@ std::vector<VariantKey> read_incomplete_keys_for_symbol(
             [](const AppendMapEntry& entry) { return entry.slice_and_key_.key(); }
     );
     return slice_and_key;
+}
+
+void delete_incomplete_keys_for_stage_results(
+        const std::shared_ptr<Store>& store, const std::vector<StageResult>& stage_results
+) {
+    auto keys_to_delete_view = stage_results | std::views::transform(&StageResult::staged_segments) | std::views::join;
+    std::vector<VariantKey> keys_to_delete(keys_to_delete_view.begin(), keys_to_delete_view.end());
+    store->remove_keys(keys_to_delete, storage::RemoveOpts{.ignores_missing_key_ = true}).get();
 }
 
 std::optional<int64_t> latest_incomplete_timestamp(const std::shared_ptr<Store>& store, const StreamId& stream_id) {
