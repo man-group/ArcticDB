@@ -1271,9 +1271,11 @@ std::shared_ptr<std::vector<folly::Future<std::vector<EntityId>>>> schedule_firs
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(
             static_cast<bool>(admission), "schedule_first_iteration requires an admission handler"
     );
-    // Used to make sure each entity is only added into the component manager once
+    // Adds each entity to the component manager exactly once. uint8_t not bool: std::vector<bool> is
+    // bit-packed, so adjacent flags share a word and updates under different position mutexes are lost
+    // (#3381). The lock is held across the add so a unit that skips it still sees the components.
     auto slice_added_mtx = std::make_shared<std::vector<std::mutex>>(num_segments);
-    auto slice_added = std::make_shared<std::vector<bool>>(num_segments, false);
+    auto slice_added = std::make_shared<std::vector<uint8_t>>(num_segments, 0);
     auto futures = std::make_shared<std::vector<folly::Future<std::vector<EntityId>>>>();
 
     for (auto& entity_ids : entities_by_work_unit) {
@@ -1330,7 +1332,7 @@ std::shared_ptr<std::vector<folly::Future<std::vector<EntityId>>>> schedule_firs
                                             component_manager,
                                             segment_fetch_counts->at(pos)
                                     );
-                                    (*slice_added)[pos] = true;
+                                    (*slice_added)[pos] = 1;
                                 }
                             }
                             return async::MemSegmentProcessingTask(*clauses, std::move(entity_ids))();
