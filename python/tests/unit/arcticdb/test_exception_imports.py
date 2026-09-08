@@ -13,31 +13,35 @@ import os
 
 from arcticdb.exceptions import ArcticException
 
-# The one canonical place tests are allowed to import ArcticDB exceptions from.
-CANONICAL_MODULE = "arcticdb.exceptions"
+# The only module ArcticDB exceptions are allowed to be imported from.
+ALLOWED_EXCEPTIONS_MODULE = "arcticdb.exceptions"
 
 
 @functools.lru_cache(maxsize=None)
-def _load_module(module):
+def _import_module(module_name):
     try:
-        return importlib.import_module(module)
+        return importlib.import_module(module_name)
     except Exception:
         return None
 
 
 @functools.lru_cache(maxsize=None)
-def _is_arctic_exception(module, name):
-    if not module or not module.startswith("arcticdb"):
+def _is_arctic_exception(module_name, exception_name):
+    if not module_name or not module_name.startswith("arcticdb"):
         return False
-    resolved = _load_module(module)
-    if resolved is None:
+    module = _import_module(module_name)
+    if module is None:
         return False
-    obj = getattr(resolved, name, None)
-    return isinstance(obj, type) and issubclass(obj, ArcticException)
+    exception = getattr(module, exception_name, None)
+    return isinstance(exception, type) and issubclass(exception, ArcticException)
 
 
-def _dotted_name(node):
-    """Return the dotted source of an attribute chain, e.g. ``a.b.C`` -> "a.b.C"."""
+def _get_dotted_name(node):
+    """Return the dotted string of an attribute chain:
+     The module a.b.C becomes the string "a.b.C"
+     'c' and 'b' are attributes, 'a' is id.
+     The iteration is in reverse order: 'c' -> 'b' -> 'a' """
+
     parts = []
     while isinstance(node, ast.Attribute):
         parts.append(node.attr)
@@ -47,66 +51,72 @@ def _dotted_name(node):
     return ".".join(reversed(parts))
 
 
-def find_exception_import_violations(source, filename="<source>"):
-    tree = ast.parse(source, filename=filename)
+def find_exception_import_violations(file_content, file_path="<source>"):
+    tree = ast.parse(file_content, filename=file_path)
     violations = []
+
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom):
-            if node.module is None or node.module == CANONICAL_MODULE:
+            if node.module is None or node.module == ALLOWED_EXCEPTIONS_MODULE:
                 continue
             for alias in node.names:
                 if _is_arctic_exception(node.module, alias.name):
+                    # Arctic exception but it is imported from NOT ALLOWED module -> violation
                     violations.append((node.lineno, alias.name, node.module))
         elif isinstance(node, ast.Attribute):
-            dotted = _dotted_name(node)
-            module, _, name = dotted.rpartition(".")
-            if module and module != CANONICAL_MODULE and _is_arctic_exception(module, name):
-                violations.append((node.lineno, dotted, module))
+            dotted_name = _get_dotted_name(node)
+            module_name, _, exception_name = dotted_name.rpartition(".")
+            if (
+                    module_name
+                    and module_name != ALLOWED_EXCEPTIONS_MODULE
+                    and _is_arctic_exception(module_name, exception_name)
+            ):
+                violations.append((node.lineno, dotted_name, module_name))
     return violations
 
 
-def find_tests_root():
-    path = os.path.dirname(os.path.abspath(__file__))
-    while os.path.basename(path) != "tests":
-        parent = os.path.dirname(path)
-        assert parent != path, "Could not locate the 'tests' root directory"
-        path = parent
-    return path
+def find_python_files_root():
+    directory = os.path.dirname(os.path.abspath(__file__))
+
+    while True:
+        if os.path.basename(directory) == "python":
+            return directory
+        parent_directory = os.path.dirname(directory)
+        assert parent_directory != directory, "Could not locate the 'python' root directory"
+        directory = parent_directory
 
 
-def iter_test_python_files(tests_root):
-    for dirpath, _, filenames in os.walk(tests_root):
-        if "__pycache__" in dirpath:
+def iter_python_files(root):
+    for directory_path, _, filenames_in_directory in os.walk(root):
+        if "__pycache__" in directory_path:
             continue
-        for filename in filenames:
-            if filename.endswith(".py"):
-                yield os.path.join(dirpath, filename)
+
+        for file_name in filenames_in_directory:
+            if file_name.endswith(".py"):
+                yield os.path.join(directory_path, file_name)
 
 
 def test_exceptions_only_imported_from_arcticdb_exceptions():
-    """Every ArcticDB exception used in the test suite must come from ``arcticdb.exceptions``.
-
-    We don't stop the exceptions being importable from their original locations (that would
-    break backwards compatibility), but the tests themselves should use the single canonical
-    module so there is one obvious place to find them.
-    """
-    tests_root = find_tests_root()
+    python_root = find_python_files_root()
     this_file = os.path.abspath(__file__)
 
     violations = []
-    for path in iter_test_python_files(tests_root):
+    for path in iter_python_files(python_root):
         if os.path.abspath(path) == this_file:
             continue
+
         with open(path, encoding="utf-8") as file:
-            source = file.read()
-        relative_path = os.path.relpath(path, tests_root)
-        for lineno, reference, module in find_exception_import_violations(source, filename=path):
+            file_content = file.read()
+
+        relative_path = os.path.relpath(path, python_root)
+
+        for lineno, exception_name, module_name in find_exception_import_violations(file_content, file_path=path):
             violations.append(
-                f"tests/{relative_path}:{lineno}: '{reference}' from '{module}' (use '{CANONICAL_MODULE}')"
+                f"{relative_path}:{lineno}: '{exception_name}' from '{module_name}' (use '{ALLOWED_EXCEPTIONS_MODULE}')"
             )
 
     assert (
         not violations
-    ), f"{len(violations)} exception reference(s) must come from '{CANONICAL_MODULE}':\n" + "\n".join(
+    ), f"{len(violations)} exception reference(s) must come from '{ALLOWED_EXCEPTIONS_MODULE}':\n" + "\n".join(
         sorted(violations)
     )
