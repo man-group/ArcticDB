@@ -44,7 +44,7 @@ class TestQueryBuilderSparse:
         # Use parallel write to generate 2 segments as append does not have the sparsify_floats kwarg
         lib.write(self.sym, df_0, parallel=True, sparsify_floats=True)
         lib.write(self.sym, df_1, parallel=True, sparsify_floats=True)
-        lib.compact_incomplete(self.sym, False, False, sparsify=True)
+        lib.compact_incomplete(self.sym, False, False)
         self.df = pd.concat([df_0, df_1])
 
     def test_filter_isnull(self, lmdb_version_store):
@@ -167,7 +167,7 @@ def test_query_builder_sparse_dynamic_schema_type_change(lmdb_version_store_dyna
     )
     lib.write(sym, df_0, parallel=True, sparsify_floats=True)
     lib.write(sym, df_1, parallel=True, sparsify_floats=True)
-    lib.compact_incomplete(sym, False, False, sparsify=True)
+    lib.compact_incomplete(sym, False, False)
 
     expected = pd.concat([df_0, df_1])
     expected = expected[expected["sparse1"].isnull()]
