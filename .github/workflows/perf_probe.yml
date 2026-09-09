@@ -230,9 +230,14 @@ jobs:
             /tmp/docker run --rm "$@" ghcr.io/man-group/arcticdb-dev:latest \
               bash -c "echo $b64 | base64 -d | python3" 2>&1 | tail -1
           }
+          host_paranoid() { /tmp/docker run --rm --privileged ghcr.io/man-group/arcticdb-dev:latest \
+            bash -c "echo $1 > /proc/sys/kernel/perf_event_paranoid" >/dev/null 2>&1 || true; }
+          was=$(cat /proc/sys/kernel/perf_event_paranoid)
           {
             echo "### which container options let perf_event_open through"
             echo '```'
+            echo "host kernel.perf_event_paranoid = $was"
+            echo
             run_one '(none) — what benchmark_worker.yml has today'
             run_one '--cap-add PERFMON' --cap-add PERFMON
             run_one '--security-opt seccomp=unconfined' --security-opt seccomp=unconfined
@@ -241,6 +246,21 @@ jobs:
             run_one '--cap-add PERFMON + apparmor + seccomp unconfined' --cap-add PERFMON --security-opt apparmor=unconfined --security-opt seccomp=unconfined
             run_one '--cap-add PERFMON --cap-add SYS_ADMIN' --cap-add PERFMON --cap-add SYS_ADMIN
             run_one '--privileged (control, not a proposal)' --privileged
+            echo
+            # What the AMI would have to change, priced. Debian/Ubuntu carry a
+            # perf_event_paranoid level 3 that mainline does not, and their patch predates
+            # CAP_PERFMON — it asks for CAP_SYS_ADMIN by name, which is why the cap the
+            # seccomp profile wants is not the cap the kernel wants. Lowering the host to
+            # mainline's most restrictive level says whether --cap-add PERFMON would then
+            # be enough. Done on a throwaway spot instance and put back immediately; this
+            # measures the ask, it does not make it.
+            echo "--- with the host lowered to kernel.perf_event_paranoid=2 (restored below) ---"
+            host_paranoid 2
+            echo "host kernel.perf_event_paranoid = $(cat /proc/sys/kernel/perf_event_paranoid)"
+            run_one '(none) @ paranoid=2'
+            run_one '--cap-add PERFMON @ paranoid=2' --cap-add PERFMON
+            host_paranoid "$was"
+            echo "host kernel.perf_event_paranoid restored to $(cat /proc/sys/kernel/perf_event_paranoid)"
             echo '```'
           } | tee -a "$GITHUB_STEP_SUMMARY"
 
@@ -521,21 +541,27 @@ jobs:
           print("\`\`\`")
           PY
 
-      - name: upload the recording
+      # Ticket 75 has a `perf script` -> speedscope converter to write, and writing it
+      # against a real recording beats writing it against a guess, so the raw perf.data
+      # leaves this run too.
+      - name: collect the recording
         if: always()
-        run: gzip -9 -c /tmp/perf.data > /tmp/perf.data.gz 2>/dev/null || true
+        run: |
+          out="$GITHUB_WORKSPACE/perf-probe"
+          mkdir -p "$out"
+          gzip -9 -c /tmp/perf.data > "$out/perf.data.gz" 2>/dev/null || true
+          gzip -9 -c /tmp/perf.script > "$out/perf.script.gz" 2>/dev/null || true
+          for f in perf_record.log perf_script.err workload.log; do
+            cp "/tmp/$f" "$out/" 2>/dev/null || true
+          done
+          ls -l "$out"
 
       - name: store the artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: perf-probe
-          path: |
-            /tmp/perf.data.gz
-            /tmp/perf.script
-            /tmp/perf_record.log
-            /tmp/perf_script.err
-            /tmp/workload.log
+          path: perf-probe
           if-no-files-found: warn
           overwrite: true
           retention-days: 7
