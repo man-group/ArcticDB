@@ -290,7 +290,7 @@ class ArrowStrings:
         taken = pool.take(indices)
         # take() tags its result with an all-valid null bitmap, which converting the values directly
         # does not produce. Drop it so the array is buffer for buffer the one this replaced.
-        return pa.Array.from_buffers(taken.type, len(taken), [None] + taken.buffers()[1:])
+        return pa.Array.from_buffers(taken.type, len(taken), [None] + taken.buffers()[1:], offset=taken.offset)
 
     def _string_array(self, strings, indices, arrow_string_format):
         # Taking the values out of an array of the unique strings gives the same array as converting
