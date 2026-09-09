@@ -143,38 +143,79 @@ jobs:
           } | tee -a "$GITHUB_STEP_SUMMARY"
           printf 'route=%s\n' "$route" >> "$GITHUB_OUTPUT"
 
-      # THE question. A 300 ms software-event record of `sleep` is the whole seccomp
-      # test: if `perf_event_open` is blocked this fails here, in one second, and the
-      # rest of the job is pointless.
+      # `perf`'s own error text cannot tell a seccomp refusal from the kernel's paranoid
+      # check — it prints the same paragraph for EPERM and EACCES alike. The raw syscall
+      # can: Docker's default profile answers a filtered syscall with EPERM, while the
+      # kernel's `perf_event_paranoid` gate answers EACCES. Ask it directly, with the
+      # exact attributes the real recording will use (software event, exclude_kernel),
+      # and print the Docker version the profile came from while we are here.
+      - name: what exactly refuses perf_event_open
+        run: |
+          echo "--- docker version (socket is mounted into this container) ---"
+          curl -s --unix-socket /var/run/docker.sock http://localhost/version || echo "(no docker socket)"
+          echo
+          echo "--- seccomp state of this process ---"
+          grep -E '^(Seccomp|Seccomp_filters|NoNewPrivs)' /proc/self/status || true
+          echo "--- raw perf_event_open(PERF_TYPE_SOFTWARE, cpu-clock, exclude_kernel) ---"
+          python3 - <<'PY'
+          import ctypes, os, struct
+          libc = ctypes.CDLL(None, use_errno=True)
+          libc.syscall.restype = ctypes.c_int
+          SIZE = 128                       # perf_event_attr, PERF_ATTR_SIZE_VER7
+          buf = bytearray(SIZE)
+          # type=PERF_TYPE_SOFTWARE(1), size, config=PERF_COUNT_SW_CPU_CLOCK(0),
+          # sample_period, sample_type, read_format, then the bitfield: disabled|exclude_kernel|exclude_hv
+          struct.pack_into("<IIQQQQQ", buf, 0, 1, SIZE, 0, 1000000, 0, 0, (1 << 0) | (1 << 5) | (1 << 6))
+          attr = (ctypes.c_char * SIZE).from_buffer(buf)
+          for label, pid, cpu in (("own pid, any cpu", os.getpid(), -1), ("any pid, cpu 0", -1, 0)):
+              ctypes.set_errno(0)
+              fd = libc.syscall(ctypes.c_long(298), ctypes.byref(attr),
+                                ctypes.c_int(pid), ctypes.c_int(cpu),
+                                ctypes.c_int(-1), ctypes.c_ulong(0))
+              err = ctypes.get_errno()
+              if fd >= 0:
+                  os.close(fd)
+                  print(f"{label:<18} -> fd {fd} (allowed)")
+              else:
+                  name = {1: "EPERM (a seccomp filter, or the Ubuntu paranoid>2 patch)",
+                          13: "EACCES (the kernel's perf_event_paranoid gate)",
+                          38: "ENOSYS (syscall filtered away entirely)"}.get(err, "")
+                  print(f"{label:<18} -> -1 errno {err} {os.strerror(err)} {name}")
+          PY
+
+      # THE question. Three rungs, cheapest first, all reported before anything fails:
+      # counting without sampling, a software event sampled user-space-only (what the
+      # real recording uses), and the default hardware event — which a virtualised EC2
+      # instance has no PMU for, a different failure from a blocked syscall and one
+      # ticket 75 needs told apart.
       - name: can perf_event_open succeed in this container at all
         id: gate
         run: |
-          verdict=blocked
-          echo "--- perf record -e cpu-clock (software event) ---"
-          if perf record -e cpu-clock -F 99 -o /tmp/smoke.data -- sleep 0.3 2>&1 | tee /tmp/smoke.log; then
-            verdict=software
-          fi
-          echo "--- perf record (default event, hardware PMU) ---"
-          # EC2's virtualised instance types expose no PMU, so `cycles` is expected to
-          # fail here even when seccomp is out of the way. Ticket 75 needs to know which
-          # of the two it is, so ask both and report both.
-          hw=no
-          if perf record -F 99 -o /tmp/smoke_hw.data -- sleep 0.3 2>&1 | tee /tmp/smoke_hw.log; then
-            hw=yes
-          fi
+          rung() {
+            local name=$1; shift
+            echo "--- $name: $* ---"
+            if "$@" > "/tmp/$name.log" 2>&1; then
+              echo "$name: OK"; cat "/tmp/$name.log"; return 0
+            fi
+            echo "$name: REFUSED"; cat "/tmp/$name.log"; return 1
+          }
+          stat=no; sw=no; hw=no
+          rung stat perf stat -e task-clock:u -- true && stat=yes
+          rung sw perf record -e cpu-clock:u -F 99 -o /tmp/smoke.data -- sleep 0.3 && sw=yes
+          rung hw perf record -F 99 --all-user -o /tmp/smoke_hw.data -- sleep 0.3 && hw=yes
           {
             echo "### perf_event_open gate"
             echo '```'
-            echo "container options : ${{ inputs.container_options }}"
-            echo "software event (cpu-clock): $verdict"
-            echo "hardware event (cycles)   : $hw"
+            echo "container options         : ${{ inputs.container_options }}"
+            echo "perf stat  task-clock:u   : $stat"
+            echo "perf record cpu-clock:u   : $sw"
+            echo "perf record cycles:u (PMU): $hw"
             echo '```'
-            echo '<details><summary>cpu-clock smoke log</summary>'
-            echo; echo '```'; cat /tmp/smoke.log; echo '```'; echo '</details>'
-            echo '<details><summary>cycles smoke log</summary>'
-            echo; echo '```'; cat /tmp/smoke_hw.log; echo '```'; echo '</details>'
+            for r in stat sw hw; do
+              echo "<details><summary>$r</summary>"; echo; echo '```'; cat "/tmp/$r.log"; echo '```'; echo '</details>'
+            done
           } | tee -a "$GITHUB_STEP_SUMMARY"
-          if [ "$verdict" = blocked ]; then
+          if [ "$sw" = no ]; then
             echo "::error::perf_event_open is refused with options '${{ inputs.container_options }}'. Re-dispatch adding --security-opt seccomp=unconfined."
             exit 1
           fi
