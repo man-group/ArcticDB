@@ -25,7 +25,30 @@ random.seed(42)
 rng = np.random.default_rng(42)
 
 
-class CompactDataBase:
+class CompactDataLmdbBase:
+    # asv applies this to setup_cache as well, which has been measured at 36s on the nightly runners, too close to the
+    # 60s default to survive a slow disk day without NaN-ing the whole class
+    timeout = 600
+
+    def _setup_lmdb_dir(self, lib_name):
+        # Drop both references before recreating the directory. self.lib keeps the previous iteration's LMDB
+        # environment open on this path, LMDB does not support opening it twice, and reclaiming the old 400GiB
+        # mapping would otherwise land inside the next timed call
+        self.lib = None
+        self.ac = None
+        # ignore_errors, so a directory left behind by a killed process does not cascade FileExistsError through every
+        # remaining parameter combination of the class
+        shutil.rmtree(self.LMDB_DIR, ignore_errors=True)
+        os.mkdir(self.LMDB_DIR)
+        # Copy the config database and the relevant library database for these benchmark parameters to the actual
+        # LMDB directory where compaction will happen
+        shutil.copytree(os.path.join(self.LMDB_BASE_DIR, "_arctic_cfg"), os.path.join(self.LMDB_DIR, "_arctic_cfg"))
+        shutil.copytree(os.path.join(self.LMDB_BASE_DIR, lib_name), os.path.join(self.LMDB_DIR, lib_name))
+        self.ac = Arctic(self.CONNECTION_STRING)
+        self.lib = self.ac.get_library(lib_name)
+
+
+class CompactDataBase(CompactDataLmdbBase):
     def __init__(self):
         self.logger = get_logger()
         self.SYM = "sym"
@@ -37,9 +60,6 @@ class CompactDataBase:
         self.warmup_time = 0
         # Each derived benchmark class takes less than 2 minutes total locally on an SSD
         self.repeat = 15
-        # The same timeout also bounds setup_cache, which has been measured at 36s on the nightly runners, too close to
-        # the 60s asv default to survive a slow disk day without NaN-ing the whole class
-        self.timeout = 600
         self.ac = None
         self.lib = None
         self.base_param_names = [
@@ -69,21 +89,7 @@ class CompactDataBase:
             lib.append(self.SYM, df)
 
     def _setup(self, lib_name, target_rows_per_segment):
-        # Drop both references first, otherwise we keep holding the previous iteration's .mdb files and its LMDB
-        # environment is still open on this path when the next Arctic instance opens it. LMDB does not support that,
-        # and reclaiming the old 400GiB mapping then lands inside the next timed call
-        self.lib = None
-        self.ac = None
-        # A directory left behind by a killed process would otherwise cascade FileExistsError through every remaining
-        # parameter combination of this class
-        shutil.rmtree(self.LMDB_DIR, ignore_errors=True)
-        os.mkdir(self.LMDB_DIR)
-        # Copy the config database and the relevant library database for these benchmark parameters to the actual
-        # LMDB directory where compaction will happen
-        shutil.copytree(os.path.join(self.LMDB_BASE_DIR, "_arctic_cfg"), os.path.join(self.LMDB_DIR, "_arctic_cfg"))
-        shutil.copytree(os.path.join(self.LMDB_BASE_DIR, lib_name), os.path.join(self.LMDB_DIR, lib_name))
-        self.ac = Arctic(self.CONNECTION_STRING)
-        self.lib = self.ac.get_library(lib_name)
+        self._setup_lmdb_dir(lib_name)
         # Check the compaction will actually do something!
         assert self.lib.compact_data_explain_plan(self.SYM, rows_per_segment=target_rows_per_segment).will_do_work
         # read the symbol to warm up the cache
@@ -263,7 +269,7 @@ class CompactDataNumericDynamicSchema(CompactDataBase):
         self.compact_data(row_params[2])
 
 
-class AppendCompactDataBase:
+class AppendCompactDataBase(CompactDataLmdbBase):
     def __init__(self):
         self.logger = get_logger()
         # Do not interleave benchmarks as they are using the same LMDB directory for actually running the benchmarks
@@ -274,9 +280,6 @@ class AppendCompactDataBase:
         self.warmup_time = 0
         # Total runtime of the 3 derived benchmark classes is ~10m locally on an SSD
         self.repeat = 7
-        # The same timeout also bounds setup_cache, which has been measured at 36s on the nightly runners, too close to
-        # the 60s asv default to survive a slow disk day without NaN-ing the whole class
-        self.timeout = 600
         self.ac = None
         self.lib = None
         self.base_param_names = ["num_symbols", "existing_data_fragmented", "append_rows"]
@@ -296,21 +299,7 @@ class AppendCompactDataBase:
             lib.append_batch([WritePayload(sym, df) for sym in self.SYMS])
 
     def _setup(self, lib_name):
-        # Drop both references first, otherwise we keep holding the previous iteration's .mdb files and its LMDB
-        # environment is still open on this path when the next Arctic instance opens it. LMDB does not support that,
-        # and reclaiming the old 400GiB mapping then lands inside the next timed call
-        self.lib = None
-        self.ac = None
-        # A directory left behind by a killed process would otherwise cascade FileExistsError through every remaining
-        # parameter combination of this class
-        shutil.rmtree(self.LMDB_DIR, ignore_errors=True)
-        os.mkdir(self.LMDB_DIR)
-        # Copy the config database and the relevant library database for these benchmark parameters to the actual
-        # LMDB directory where compaction will happen
-        shutil.copytree(os.path.join(self.LMDB_BASE_DIR, "_arctic_cfg"), os.path.join(self.LMDB_DIR, "_arctic_cfg"))
-        shutil.copytree(os.path.join(self.LMDB_BASE_DIR, lib_name), os.path.join(self.LMDB_DIR, lib_name))
-        self.ac = Arctic(self.CONNECTION_STRING)
-        self.lib = self.ac.get_library(lib_name)
+        self._setup_lmdb_dir(lib_name)
         # Read one symbol to warm up the cache. All of the symbols hold identical data written in a single batch, and
         # reading all of them here would dominate the setup time of the slowest classes in this file
         self.lib.read(self.SYMS[0])
