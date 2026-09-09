@@ -57,6 +57,10 @@ namespace arcticdb::version_store {
 
 namespace ranges = std::ranges;
 
+void check_can_perform_processing(
+        const std::shared_ptr<PipelineContext>& pipeline_context, const ReadQuery& read_query
+);
+
 std::tuple<IndexPartialKey, SlicingPolicy> get_partial_key_and_slicing_policy(
         const std::shared_ptr<Store>& store, const WriteOptions& options, const InputFrame& frame, VersionId version_id,
         bool validate_index
@@ -780,6 +784,8 @@ folly::Future<std::vector<EntityId>> read_modify_write_data_keys(
         std::shared_ptr<ComponentManager> component_manager,
         std::shared_ptr<DeDupMap> de_dup_map = std::make_shared<DeDupMap>()
 ) {
+    check_can_perform_processing(pipeline_context, *read_query);
+
     const auto write_clause_processing_structure =
             read_query->clauses_.empty() ? ProcessingStructure::ROW_SLICE
                                          : read_query->clauses_.back()->clause_info().output_structure_;
@@ -1594,7 +1600,6 @@ static void read_indexed_keys_to_pipeline(
     // tsd_ carries the existing version's normalization and user metadata (and, for the compact path, its descriptor,
     // total rows and sorted state). The normalization metadata is read back via pipeline_context->normalization().
     pipeline_context->set_tsd(std::move(index_segment_reader.mutable_tsd()));
-    check_can_perform_processing(pipeline_context, read_query);
     ARCTICDB_DEBUG(
             log::version(),
             "read_indexed_keys_to_pipeline: Symbol {} found {} keys with {} total rows",
@@ -2261,6 +2266,8 @@ void create_column_stats_impl(
     pipeline_context->stream_id_ = versioned_item.key_.id();
     read_query->add_clauses(std::vector{std::make_shared<Clause>(std::move(*clause))});
     read_indexed_keys_to_pipeline(pipeline_context, *read_query, read_options, index_info);
+
+    check_can_perform_processing(pipeline_context, *read_query);
 
     // Now pipeline_context->slice_and_keys_ contains all the slices that have any intersection with the requested range
     // and we're about to recalculate them. So drop them from old_column_stats_rows. Our end result will be the union of
@@ -3103,10 +3110,10 @@ folly::Future<ReadVersionOutput> read_frame_for_version(
                             read_options,
                             res_versioned_item = std::move(res_versioned_item),
                             handler_data](auto&& pipeline_context) mutable {
+                    if (read_query) {
+                        check_can_perform_processing(pipeline_context, *read_query);
+                    }
                     if (pipeline_context->multi_key_) {
-                        if (read_query) {
-                            check_can_perform_processing(pipeline_context, *read_query);
-                        }
                         return read_multi_key(
                                 store,
                                 read_options,
@@ -3230,6 +3237,9 @@ folly::Future<AtomKey> merge_update_impl(
     }
     std::shared_ptr<PipelineContext> pipeline_context =
             setup_pipeline_context(store, std::move(resolved), *read_query, read_options);
+
+    check_can_perform_processing(pipeline_context, *read_query);
+
     // The target is empty.
     if (pipeline_context->rows_ == 0) {
         if (strategy.insert()) {
@@ -3675,6 +3685,8 @@ folly::Future<SymbolProcessingResult> read_and_process(
                         auto res_versioned_item = generate_result_versioned_item(resolved_version);
                         auto pipeline_context =
                                 setup_pipeline_context(store, std::move(resolved_version), *read_query, read_options);
+
+                        check_can_perform_processing(pipeline_context, *read_query);
 
                         schema::check<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_RECURSIVE_NORMALIZED_DATA>(
                                 !pipeline_context->multi_key_,
