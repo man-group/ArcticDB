@@ -132,10 +132,10 @@ void declare_resample_clause(py::module& version) {
                              ResampleBoundary label_boundary,
                              timestamp offset,
                              ResampleOrigin origin) {
-                // rule_ns is the rule parsed into nanoseconds by pandas.tseries.frequencies.to_offset in Python. It is
-                // passed in rather than parsed here so that bucket generation, which runs on a scheduler thread on the
-                // critical path of every read, never needs to acquire the GIL. A non-positive value would make the
-                // bucket boundary loop in generate_buckets non-terminating.
+                // rule_ns is the rule pre-parsed to nanoseconds in Python, so that bucket generation never acquires
+                // the GIL on the scheduler thread that runs it per read. This check runs once, at clause construction:
+                // QueryBuilder.resample validates already, but a non-positive value from a direct constructor call
+                // would make the boundary loop in generate_buckets non-terminating.
                 user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
                         rule_ns > 0,
                         "Resampling rule must be a positive fixed frequency, but '{}' is {}ns",

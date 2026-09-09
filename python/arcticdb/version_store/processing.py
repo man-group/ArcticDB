@@ -429,7 +429,7 @@ class PythonRowRangeClause(NamedTuple):
 @dataclass
 class PythonResampleClause:
     rule: str
-    # rule parsed into nanoseconds, so that the C++ layer never has to call back into pandas to interpret it
+    # rule parsed to nanoseconds, so the C++ layer never calls back into pandas to interpret it
     rule_ns: int
     closed: _ResampleBoundary
     label: _ResampleBoundary
@@ -943,11 +943,9 @@ class QueryBuilder:
             2024-01-01 01:50:00     119      90    3135
         """
         rule = rule.freqstr if isinstance(rule, pd.DateOffset) else rule
-        # The C++ layer generates the bucket boundaries by repeatedly adding the rule to the first boundary, so it only
-        # works with well-defined intervals that are multiples of whole ns/us/ms/s/min/h/D. Parse the rule into
-        # nanoseconds here and pass that down, so that bucket generation never has to call back into Python (and hence
-        # acquire the GIL) on the critical path of a read. A non-positive number of nanoseconds would make the C++
-        # boundary loop non-terminating, so reject those here as well.
+        # Parse the rule to nanoseconds here and pass it down, so bucket generation never calls back into Python
+        # (and takes the GIL) on the read path. Only fixed intervals (multiples of whole ns/us/ms/s/min/h/D) are
+        # supported, and a non-positive interval would make the C++ boundary loop non-terminating.
         try:
             rule_ns = to_offset(rule).nanos
             if rule_ns <= 0:
