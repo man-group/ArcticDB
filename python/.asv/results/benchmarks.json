@@ -2433,7 +2433,7 @@
                 "1000"
             ]
         ],
-        "setup_cache_key": "compact_data:427",
+        "setup_cache_key": "compact_data:436",
         "timeout": 600,
         "type": "peakmemory",
         "unit": "bytes",
@@ -2466,7 +2466,7 @@
         "repeat": 7,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "compact_data:427",
+        "setup_cache_key": "compact_data:436",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
@@ -2496,7 +2496,7 @@
                 "1000000"
             ]
         ],
-        "setup_cache_key": "compact_data:329",
+        "setup_cache_key": "compact_data:338",
         "timeout": 600,
         "type": "peakmemory",
         "unit": "bytes",
@@ -2530,7 +2530,7 @@
         "repeat": 7,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "compact_data:329",
+        "setup_cache_key": "compact_data:338",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
@@ -2560,7 +2560,7 @@
                 "1000000"
             ]
         ],
-        "setup_cache_key": "compact_data:378",
+        "setup_cache_key": "compact_data:387",
         "timeout": 600,
         "type": "peakmemory",
         "unit": "bytes",
@@ -2594,7 +2594,7 @@
         "repeat": 7,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "compact_data:378",
+        "setup_cache_key": "compact_data:387",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
@@ -2618,7 +2618,7 @@
                 "10000"
             ]
         ],
-        "setup_cache_key": "compact_data:219",
+        "setup_cache_key": "compact_data:233",
         "timeout": 600,
         "type": "peakmemory",
         "unit": "bytes",
@@ -2646,7 +2646,7 @@
         "repeat": 15,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "compact_data:219",
+        "setup_cache_key": "compact_data:233",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
@@ -2676,7 +2676,7 @@
                 "True"
             ]
         ],
-        "setup_cache_key": "compact_data:109",
+        "setup_cache_key": "compact_data:123",
         "timeout": 600,
         "type": "peakmemory",
         "unit": "bytes",
@@ -2710,7 +2710,7 @@
         "repeat": 15,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "compact_data:109",
+        "setup_cache_key": "compact_data:123",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
@@ -2745,7 +2745,7 @@
                 "100000"
             ]
         ],
-        "setup_cache_key": "compact_data:165",
+        "setup_cache_key": "compact_data:179",
         "timeout": 600,
         "type": "peakmemory",
         "unit": "bytes",
@@ -2784,7 +2784,7 @@
         "repeat": 15,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "compact_data:165",
+        "setup_cache_key": "compact_data:179",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
