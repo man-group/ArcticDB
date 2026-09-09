@@ -12,8 +12,7 @@ import pyarrow as pa
 import polars as pl
 import pytest
 
-from arcticdb_ext.exceptions import KeyNotFoundException
-from arcticdb.exceptions import SchemaException
+from arcticdb.exceptions import SchemaException, KeyNotFoundException
 from arcticdb.options import ArrowOutputStringFormat, OutputFormat
 import arcticdb.toolbox.query_stats as qs
 from arcticdb.util.test import assert_frame_equal_with_arrow, config_context, query_stats_operation_count
