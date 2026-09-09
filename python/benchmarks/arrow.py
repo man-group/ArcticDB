@@ -117,7 +117,7 @@ class ArrowSparseNumeric:
         columns = {}
         for i in range(self.num_cols):
             vals = np.arange(i * num_rows, (i + 1) * num_rows, dtype=np.int64)
-            columns[f"col{i}"] = pa.array(np.where(mask, None, vals), pa_type)
+            columns[f"col{i}"] = pa.array(vals, pa_type, mask=mask)
         return pa.table(columns)
 
     def setup_cache(self):
@@ -201,7 +201,7 @@ class ArrowBools:
         vals = rng.random(num_rows) < 0.5
         if sparsity > 0.0:
             null_mask = rng.random(num_rows) < sparsity
-            columns = {f"col{i}": pa.array(np.where(null_mask, None, vals), pa.bool_()) for i in range(self.num_cols)}
+            columns = {f"col{i}": pa.array(vals, pa.bool_(), mask=null_mask) for i in range(self.num_cols)}
         else:
             columns = {f"col{i}": pa.array(vals, pa.bool_()) for i in range(self.num_cols)}
         return pa.table(columns)
