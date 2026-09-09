@@ -441,10 +441,14 @@ jobs:
           a0=$(date +%s.%N); sleep "$WINDOW"; a1=$(date +%s.%N)
           printf 'a0=%s\na1=%s\n' "$a0" "$a1" >> "$GITHUB_OUTPUT"
 
-      # `--all-user` (`:u` on every event) is deliberate: no kernel frames are wanted, so
-      # nothing here needs `perf_event_paranoid` lowered or the AMI touched. `dwarf` because
-      # the wheel is built without frame pointers but keeps `.eh_frame`; 16 KB of stack per
-      # sample because ArcticDB's folly stacks are deep enough to truncate at the 8 KB default.
+      # `--all-user` (`:u` on every event) is deliberate: no kernel frames are wanted.
+      # `dwarf` because the wheel is built without frame pointers but keeps `.eh_frame`.
+      #
+      # No `-m`: the ring buffer is mlocked, `perf_event_mlock_kb` is 4096 on this AMI and
+      # the container does not hold CAP_IPC_LOCK, so anything above the default is
+      # "Permission error mapping pages" — a third privilege gate, and one ticket 75 hits
+      # the moment it reaches for a bigger buffer. The default holds; `perf record`'s own
+      # "lost chunks" line is what says otherwise, so it is echoed either way.
       - name: window B — perf record of the same loop
         id: window_b
         run: |
@@ -455,9 +459,10 @@ jobs:
             # rather than relying on perf's fallback, which not every version does.
             event=(-e cpu-clock)
           fi
+          echo "perf_event_mlock_kb: $(cat /proc/sys/kernel/perf_event_mlock_kb)"
           b0=$(date +%s.%N)
           set +e
-          perf record "${event[@]}" -F 99 --call-graph dwarf,16384 --all-user -m 16M \
+          perf record "${event[@]}" -F 99 --call-graph dwarf --all-user \
             -p "$PID" -o /tmp/perf.data -- sleep "$WINDOW" 2>&1 | tee /tmp/perf_record.log
           rc=${PIPESTATUS[0]}
           set -e
