@@ -3133,7 +3133,7 @@
                 "1"
             ]
         ],
-        "setup_cache_key": "merge_functions:551",
+        "setup_cache_key": "merge_functions:533",
         "timeout": 600,
         "type": "peakmemory",
         "unit": "bytes",
@@ -3171,7 +3171,7 @@
         "repeat": 10,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "merge_functions:551",
+        "setup_cache_key": "merge_functions:533",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
@@ -3201,7 +3201,7 @@
                 "1000000"
             ]
         ],
-        "setup_cache_key": "merge_functions:650",
+        "setup_cache_key": "merge_functions:626",
         "timeout": 600,
         "type": "peakmemory",
         "unit": "bytes",
@@ -3235,7 +3235,7 @@
         "repeat": 10,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "merge_functions:650",
+        "setup_cache_key": "merge_functions:626",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
@@ -3274,7 +3274,7 @@
                 "100000"
             ]
         ],
-        "setup_cache_key": "merge_functions:592",
+        "setup_cache_key": "merge_functions:571",
         "timeout": 600,
         "type": "peakmemory",
         "unit": "bytes",
@@ -3317,7 +3317,7 @@
         "repeat": 10,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "merge_functions:592",
+        "setup_cache_key": "merge_functions:571",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
@@ -3352,7 +3352,7 @@
                 "100000"
             ]
         ],
-        "setup_cache_key": "merge_functions:695",
+        "setup_cache_key": "merge_functions:668",
         "timeout": 600,
         "type": "peakmemory",
         "unit": "bytes",
@@ -3391,7 +3391,7 @@
         "repeat": 10,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "merge_functions:695",
+        "setup_cache_key": "merge_functions:668",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
@@ -3504,7 +3504,7 @@
                 "500000"
             ]
         ],
-        "setup_cache_key": "merge_functions:315",
+        "setup_cache_key": "merge_functions:312",
         "timeout": 600,
         "type": "peakmemory",
         "unit": "bytes",
@@ -3541,7 +3541,7 @@
         "repeat": 10,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "merge_functions:315",
+        "setup_cache_key": "merge_functions:312",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
@@ -3584,7 +3584,7 @@
                 "100000"
             ]
         ],
-        "setup_cache_key": "merge_functions:356",
+        "setup_cache_key": "merge_functions:350",
         "timeout": 600,
         "type": "peakmemory",
         "unit": "bytes",
@@ -3631,7 +3631,7 @@
         "repeat": 10,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "merge_functions:356",
+        "setup_cache_key": "merge_functions:350",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
@@ -3669,7 +3669,7 @@
                 "100000"
             ]
         ],
-        "setup_cache_key": "merge_functions:412",
+        "setup_cache_key": "merge_functions:403",
         "timeout": 600,
         "type": "peakmemory",
         "unit": "bytes",
@@ -3711,7 +3711,7 @@
         "repeat": 10,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "merge_functions:412",
+        "setup_cache_key": "merge_functions:403",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
@@ -3744,7 +3744,7 @@
                 "100"
             ]
         ],
-        "setup_cache_key": "merge_functions:467",
+        "setup_cache_key": "merge_functions:455",
         "timeout": 600,
         "type": "peakmemory",
         "unit": "bytes",
@@ -3781,7 +3781,7 @@
         "repeat": 5,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "merge_functions:467",
+        "setup_cache_key": "merge_functions:455",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
@@ -3814,7 +3814,7 @@
                 "100"
             ]
         ],
-        "setup_cache_key": "merge_functions:507",
+        "setup_cache_key": "merge_functions:492",
         "timeout": 600,
         "type": "peakmemory",
         "unit": "bytes",
@@ -3851,7 +3851,7 @@
         "repeat": 5,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "merge_functions:507",
+        "setup_cache_key": "merge_functions:492",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",

@@ -285,9 +285,6 @@ class MergeThinDatetime(MergeBase):
     def setup(self, scenario, strategy, on_count, source_size, matched_slices):
         self._prepare_merge(lib_name(*scenario, self.INDEX_KIND), on_count, source_size, matched_slices)
 
-    def teardown(self, scenario, strategy, on_count, source_size, matched_slices):
-        self.seaweed.delete_bucket(WORK_BUCKET)
-
     def time_merge(self, scenario, strategy, on_count, source_size, matched_slices):
         self.merge(strategy)
 
@@ -324,9 +321,6 @@ class MergeThinRowRange(MergeBase):
 
     def setup(self, scenario, strategy, on_count, source_size):
         self._prepare_merge(lib_name(*scenario, self.INDEX_KIND), on_count, source_size)
-
-    def teardown(self, scenario, strategy, on_count, source_size):
-        self.seaweed.delete_bucket(WORK_BUCKET)
 
     def time_merge(self, scenario, strategy, on_count, source_size):
         self.merge(strategy)
@@ -379,9 +373,6 @@ class MergeThinStringDatetime(MergeBase):
         self.target_prefix = f"target_{num_unique_strings}"
         self.source_prefix = f"source_{num_unique_strings}"
         self._prepare_merge(lib_name(*scenario, self.INDEX_KIND), on_count, source_size, matched_slices)
-
-    def teardown(self, scenario, strategy, on_count, source_size, matched_slices, num_unique_strings):
-        self.seaweed.delete_bucket(WORK_BUCKET)
 
     def time_merge(self, scenario, strategy, on_count, source_size, matched_slices, num_unique_strings):
         self.merge(strategy)
@@ -436,9 +427,6 @@ class MergeThinStringRowRange(MergeBase):
         self.source_prefix = f"source_{num_unique_strings}"
         self._prepare_merge(lib_name(*scenario, self.INDEX_KIND), on_count, source_size)
 
-    def teardown(self, scenario, strategy, on_count, source_size, num_unique_strings):
-        self.seaweed.delete_bucket(WORK_BUCKET)
-
     def time_merge(self, scenario, strategy, on_count, source_size, num_unique_strings):
         self.merge(strategy)
 
@@ -477,9 +465,6 @@ class MergeWideDatetime(MergeBase):
     def setup(self, scenario, strategy, on_count, source_size):
         self._prepare_merge(lib_name(*scenario, self.INDEX_KIND), on_count, source_size)
 
-    def teardown(self, scenario, strategy, on_count, source_size):
-        self.seaweed.delete_bucket(WORK_BUCKET)
-
     def time_merge(self, scenario, strategy, on_count, source_size):
         self.merge(strategy)
 
@@ -516,9 +501,6 @@ class MergeWideRowRange(MergeBase):
 
     def setup(self, scenario, strategy, on_count, source_size):
         self._prepare_merge(lib_name(*scenario, self.INDEX_KIND), on_count, source_size)
-
-    def teardown(self, scenario, strategy, on_count, source_size):
-        self.seaweed.delete_bucket(WORK_BUCKET)
 
     def time_merge(self, scenario, strategy, on_count, source_size):
         self.merge(strategy)
@@ -560,9 +542,6 @@ class MergeSplitSegmentsThinDatetime(MergeBase):
 
     def setup(self, scenario, strategy, on_count, source_size, matched_slices):
         self._prepare_merge(lib_name(*scenario, self.INDEX_KIND), on_count, source_size, matched_slices)
-
-    def teardown(self, scenario, strategy, on_count, source_size, matched_slices):
-        self.seaweed.delete_bucket(WORK_BUCKET)
 
     def time_merge(self, scenario, strategy, on_count, source_size, matched_slices):
         self.merge(strategy)
@@ -615,9 +594,6 @@ class MergeSplitSegmentsThinStringDatetime(MergeBase):
         self.source_prefix = f"source_{num_unique_strings}"
         self._prepare_merge(lib_name(*scenario, self.INDEX_KIND), on_count, source_size, matched_slices)
 
-    def teardown(self, scenario, strategy, on_count, source_size, matched_slices, num_unique_strings):
-        self.seaweed.delete_bucket(WORK_BUCKET)
-
     def time_merge(self, scenario, strategy, on_count, source_size, matched_slices, num_unique_strings):
         self.merge(strategy)
 
@@ -659,9 +635,6 @@ class MergeSplitSegmentsThinRowRange(MergeBase):
 
     def setup(self, scenario, strategy, on_count, source_size):
         self._prepare_merge(lib_name(*scenario, self.INDEX_KIND), on_count, source_size)
-
-    def teardown(self, scenario, strategy, on_count, source_size):
-        self.seaweed.delete_bucket(WORK_BUCKET)
 
     def time_merge(self, scenario, strategy, on_count, source_size):
         self.merge(strategy)
@@ -717,9 +690,6 @@ class MergeSplitSegmentsThinStringRowRange(MergeBase):
         self.target_prefix = f"target_{num_unique_strings}"
         self.source_prefix = f"source_{num_unique_strings}"
         self._prepare_merge(lib_name(*scenario, self.INDEX_KIND), on_count, source_size)
-
-    def teardown(self, scenario, strategy, on_count, source_size, num_unique_strings):
-        self.seaweed.delete_bucket(WORK_BUCKET)
 
     def time_merge(self, scenario, strategy, on_count, source_size, num_unique_strings):
         self.merge(strategy)
