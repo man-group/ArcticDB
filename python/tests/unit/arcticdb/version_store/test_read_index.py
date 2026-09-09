@@ -14,7 +14,7 @@ from functools import reduce
 from packaging.version import Version
 from arcticdb.encoding_version import EncodingVersion
 from arcticdb.util._versions import PANDAS_VERSION
-from arcticdb_ext.exceptions import UserInputException
+from arcticdb.exceptions import UserInputException
 from arcticdb.options import LibraryOptions
 from arcticdb import ReadRequest
 from arcticdb.util.test import assert_frame_equal

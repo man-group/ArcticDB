@@ -12,7 +12,7 @@ import numpy as np
 from pandas import DataFrame
 import pytest
 
-from arcticdb_ext.exceptions import InternalException
+from arcticdb.exceptions import InternalException
 
 pytestmark = pytest.mark.pipeline
 

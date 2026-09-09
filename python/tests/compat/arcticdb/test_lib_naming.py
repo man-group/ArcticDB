@@ -1,7 +1,7 @@
 import pytest
 import sys
 from arcticdb.util.logger import get_logger
-from arcticdb_ext.exceptions import UserInputException
+from arcticdb.exceptions import UserInputException
 from arcticdb.util.test import sample_dataframe
 from tests.util.mark import SLOW_TESTS_MARK, xfail_azure_chars
 
