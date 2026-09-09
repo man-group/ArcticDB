@@ -16,8 +16,12 @@ import pyarrow as pa
 import polars as pl
 import pytest
 from arcticdb import DataError
-from arcticdb.exceptions import SchemaException, StreamDescriptorMismatch, UserInputException
-from arcticdb_ext.exceptions import UnsortedDataException
+from arcticdb.exceptions import (
+    SchemaException,
+    StreamDescriptorMismatch,
+    UserInputException,
+    UnsortedDataException,
+)
 from arcticdb.options import ArrowOutputStringFormat
 from arcticdb.util.arrow import cast_string_columns
 from arcticdb.util.test import (

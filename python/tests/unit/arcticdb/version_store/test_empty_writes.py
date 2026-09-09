@@ -11,7 +11,7 @@ import pandas as pd
 import numpy as np
 
 from arcticdb import QueryBuilder
-from arcticdb_ext.exceptions import NormalizationException
+from arcticdb.exceptions import NormalizationException
 from arcticdb.version_store._common import TimeFrame
 from arcticdb.util.test import assert_frame_equal, assert_series_equal
 from arcticdb.version_store._string_dtype import _use_pyarrow_strings_in_pandas

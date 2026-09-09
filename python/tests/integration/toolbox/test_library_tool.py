@@ -12,7 +12,7 @@ from arcticdb.util.test import sample_dataframe, populate_db, assert_frame_equal
 from arcticdb.version_store._normalization import denormalize_dataframe
 from arcticdb_ext.storage import KeyType
 from arcticdb_ext.types import DataType, IndexKind
-from arcticdb_ext.exceptions import SchemaException, InternalException, StorageException
+from arcticdb.exceptions import SchemaException, InternalException, StorageException
 from arcticdb_ext.version_store import Slicing
 from arcticdb_ext.stream import SegmentInMemory
 from tests.util.mark import MONGO_TESTS_MARK

@@ -15,7 +15,12 @@ from arcticdb.version_store._custom_normalizers import (
     clear_registered_normalizers,
 )
 from arcticc.pb2.descriptors_pb2 import NormalizationMetadata  # Importing from arcticdb dynamically loads arcticc.pb2
-from arcticdb.exceptions import ArcticDbNotYetImplemented
+from arcticdb.exceptions import (
+    ArcticDbNotYetImplemented,
+    ArcticUnsupportedDataTypeException,
+    NoSuchVersionException,
+    UserInputException,
+)
 
 from arcticdb.util.test import (
     assert_frame_equal,
@@ -30,10 +35,7 @@ from arcticdb.exceptions import (
     UnsupportedKeyInDictionary,
     ArcticException as ArcticNativeException,
 )
-from arcticdb.version_store.library import ArcticUnsupportedDataTypeException
 from arcticdb_ext.storage import KeyType, ModifiableLibraryOption
-from arcticdb_ext.version_store import NoSuchVersionException
-import arcticdb_ext
 
 
 class AlmostAList(list):
@@ -457,7 +459,7 @@ def test_unsupported_characters_in_keys(s3_version_store_v1, key, all_recursive_
     data = {key: df}
 
     # When & Then
-    with pytest.raises(arcticdb_ext.exceptions.UserInputException):
+    with pytest.raises(UserInputException):
         lib.write("sym", data, recursive_normalizers=True)
 
     with pytest.raises(NoSuchVersionException):
@@ -477,7 +479,7 @@ def test_unsupported_characters_in_keys_nested(s3_version_store_v1, key, all_rec
     data = {"blah": {key: df}}
 
     # When
-    with pytest.raises(arcticdb_ext.exceptions.UserInputException):
+    with pytest.raises(UserInputException):
         lib.write("sym", data, recursive_normalizers=True)
 
     with pytest.raises(NoSuchVersionException):
@@ -566,7 +568,7 @@ def test_dictionaries_with_custom_keys_that_cannot_roundtrip(
     df = pd.DataFrame({"d": [1, 2, 3]})
     data = {CustomClassSeparatorInStr(1): df}
 
-    with pytest.raises(arcticdb_ext.exceptions.UserInputException):
+    with pytest.raises(UserInputException):
         lib.write("sym", data, recursive_normalizers=True)
 
     assert not lib.has_symbol("sym")
