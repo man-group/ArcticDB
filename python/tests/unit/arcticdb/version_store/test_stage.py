@@ -14,18 +14,16 @@ import pandas as pd
 import pytest
 
 from arcticdb import LibraryOptions
-from arcticdb_ext.exceptions import UserInputException, UnsortedDataException
 from arcticdb_ext.storage import KeyType
-from arcticdb_ext.version_store import (
-    StageResult,
-    NoSuchVersionException,
-    KeyNotFoundInStageResultInfo,
-    AtomKey,
-    RefKey,
-)
+from arcticdb_ext.version_store import StageResult, KeyNotFoundInStageResultInfo, AtomKey, RefKey
 from arcticdb.version_store.library import Library
 from arcticdb.util.test import assert_frame_equal, config_context
-from arcticdb.exceptions import MissingKeysInStageResultsError
+from arcticdb.exceptions import (
+    MissingKeysInStageResultsError,
+    UserInputException,
+    UnsortedDataException,
+    NoSuchVersionException,
+)
 
 
 @pytest.fixture

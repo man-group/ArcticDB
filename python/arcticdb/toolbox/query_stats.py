@@ -13,7 +13,7 @@ Notes
 from contextlib import contextmanager
 from typing import Dict, Any, Iterator
 import arcticdb_ext.tools.query_stats as qs
-from arcticdb_ext.exceptions import UserInputException
+from arcticdb.exceptions import UserInputException
 
 
 @contextmanager
