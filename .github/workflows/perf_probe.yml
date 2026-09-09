@@ -183,6 +183,67 @@ jobs:
                   print(f"{label:<18} -> -1 errno {err} {os.strerror(err)} {name}")
           PY
 
+      # One job can only ever be one set of container options, and each answer costs a
+      # dispatch and an instance. But the runner mounts its own Docker socket into this
+      # container, so every combination can be asked at once: launch the same image as a
+      # sibling container under each option set and have it make the bare syscall. The
+      # last rung is `--privileged`, which is NOT a proposal — it is the control that says
+      # whether this AMI can host perf at all, or whether the answer is a host change.
+      - name: which container options let perf_event_open through
+        continue-on-error: true
+        run: |
+          curl -fsSL https://download.docker.com/linux/static/stable/x86_64/docker-24.0.7.tgz \
+            | tar xz -C /tmp --strip-components=1 docker/docker
+          cat > /tmp/capprobe.py <<'PY'
+          import ctypes, os, struct
+          libc = ctypes.CDLL(None, use_errno=True)
+          libc.syscall.restype = ctypes.c_int
+          SIZE = 128
+          buf = bytearray(SIZE)
+          struct.pack_into("<IIQQQQQ", buf, 0, 1, SIZE, 0, 1000000, 0, 0, (1 << 0) | (1 << 5) | (1 << 6))
+          attr = (ctypes.c_char * SIZE).from_buffer(buf)
+          ctypes.set_errno(0)
+          fd = libc.syscall(ctypes.c_long(298), ctypes.byref(attr), ctypes.c_int(os.getpid()),
+                            ctypes.c_int(-1), ctypes.c_int(-1), ctypes.c_ulong(0))
+          err = ctypes.get_errno()
+          status = dict(
+              l.split(":", 1) for l in open("/proc/self/status") if ":" in l
+          )
+          perfmon = int(status["CapEff"].strip(), 16) >> 38 & 1
+          try:
+              aa = open("/proc/self/attr/current").read().strip("\x00\n")
+          except OSError:
+              aa = "(none)"
+          print(
+              f"perf_event_open={'ALLOWED' if fd >= 0 else 'errno ' + str(err) + ' ' + os.strerror(err)}"
+              f" | CAP_PERFMON={'y' if perfmon else 'n'}"
+              f" | seccomp={status.get('Seccomp', '?').strip()}"
+              f" | apparmor={aa}"
+          )
+          if fd >= 0:
+              os.close(fd)
+          PY
+          b64=$(base64 -w0 /tmp/capprobe.py)
+          run_one() {
+            local label="$1"; shift
+            printf '%-62s ' "$label"
+            /tmp/docker run --rm "$@" ghcr.io/man-group/arcticdb-dev:latest \
+              bash -c "echo $b64 | base64 -d | python3" 2>&1 | tail -1
+          }
+          {
+            echo "### which container options let perf_event_open through"
+            echo '```'
+            run_one '(none) — what benchmark_worker.yml has today'
+            run_one '--cap-add PERFMON' --cap-add PERFMON
+            run_one '--security-opt seccomp=unconfined' --security-opt seccomp=unconfined
+            run_one '--cap-add PERFMON --security-opt seccomp=unconfined' --cap-add PERFMON --security-opt seccomp=unconfined
+            run_one '--cap-add PERFMON --security-opt apparmor=unconfined' --cap-add PERFMON --security-opt apparmor=unconfined
+            run_one '--cap-add PERFMON + apparmor + seccomp unconfined' --cap-add PERFMON --security-opt apparmor=unconfined --security-opt seccomp=unconfined
+            run_one '--cap-add PERFMON --cap-add SYS_ADMIN' --cap-add PERFMON --cap-add SYS_ADMIN
+            run_one '--privileged (control, not a proposal)' --privileged
+            echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
       # THE question. Three rungs, cheapest first, all reported before anything fails:
       # counting without sampling, a software event sampled user-space-only (what the
       # real recording uses), and the default hardware event — which a virtualised EC2
