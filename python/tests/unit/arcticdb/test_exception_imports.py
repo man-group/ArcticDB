@@ -21,7 +21,7 @@ ALLOWED_EXCEPTIONS_MODULE = "arcticdb.exceptions"
 def _import_module(module_name):
     try:
         return importlib.import_module(module_name)
-    except Exception:
+    except ImportError:
         return None
 
 
