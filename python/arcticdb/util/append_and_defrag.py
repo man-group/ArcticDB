@@ -9,11 +9,10 @@ from typing import List, Optional, Tuple
 import pandas as pd
 
 from arcticdb import ReadRequest, UpdatePayload, VersionedItem
-from arcticdb.exceptions import ArcticNativeException, NoSuchVersionException
+from arcticdb.exceptions import ArcticNativeException, NoSuchVersionException, NoDataFoundException
 from arcticdb.preconditions import check
 from arcticdb.version_store.library import Library
 from arcticdb.version_store._store import NativeVersionStore
-from arcticdb_ext.storage import NoDataFoundException
 
 
 def _generate_levels(target_rows_per_slice: int, factor: int) -> List[int]:

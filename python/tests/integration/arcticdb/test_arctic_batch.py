@@ -13,7 +13,12 @@ from arcticdb_ext.storage import KeyType
 from arcticdb_ext.version_store import VersionRequestType
 
 from arcticdb.options import LibraryOptions
-from arcticdb import QueryBuilder, DataError, VersionedItem
+from arcticdb import QueryBuilder, VersionedItem, DataError
+from arcticdb.exceptions import (
+    ArcticDuplicateSymbolsInBatchException,
+    ArcticUnsupportedDataTypeException,
+    ArcticInvalidApiUsageException,
+)
 from arcticdb_ext.version_store import AtomKey, RefKey
 from arcticdb.toolbox.library_tool import LibraryTool
 
@@ -35,11 +40,8 @@ import random
 from arcticdb.version_store.library import (
     WritePayload,
     WriteMetadataPayload,
-    ArcticDuplicateSymbolsInBatchException,
-    ArcticUnsupportedDataTypeException,
     ReadRequest,
     ReadInfoRequest,
-    ArcticInvalidApiUsageException,
     DeleteRequest,
     UpdatePayload,
 )

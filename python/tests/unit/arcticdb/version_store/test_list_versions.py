@@ -10,8 +10,8 @@ import pytest
 
 import arcticdb.toolbox.query_stats as qs
 from arcticdb.util.test import config_context, query_stats_operation_count
-from arcticdb_ext.exceptions import InternalException, KeyNotFoundException
-from arcticdb_ext.storage import KeyType, NoDataFoundException
+from arcticdb.exceptions import InternalException, KeyNotFoundException, NoDataFoundException
+from arcticdb_ext.storage import KeyType
 
 
 def populate_library(lib):

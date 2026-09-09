@@ -16,6 +16,7 @@ from typing import Optional, Any, Tuple, Dict, Union, List, Iterable, NamedTuple
 
 from arcticdb.dependencies import _PYARROW_AVAILABLE, _POLARS_AVAILABLE, pyarrow as pa, polars as pl
 from arcticdb.exceptions import (
+    ArcticException,
     ArcticNativeException,
     ArcticDbNotYetImplemented,
     MissingKeysInStageResultsError,
@@ -40,7 +41,6 @@ from arcticdb.version_store._store import (
     MergeStrategy,
     MergeAction,
 )
-from arcticdb_ext.exceptions import ArcticException
 from arcticdb_ext.version_store import (
     CompactDataInfo,
     DataError,

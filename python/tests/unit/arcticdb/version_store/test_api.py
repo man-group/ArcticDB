@@ -12,9 +12,9 @@ from pandas import Timestamp
 from unittest.mock import MagicMock
 import pytest
 
-from arcticdb.exceptions import NoSuchVersionException, NoDataFoundException
+from arcticdb.exceptions import NoSuchVersionException, NoDataFoundException, ArcticInvalidApiUsageException
 from arcticdb.util.test import distinct_timestamps
-from arcticdb.version_store.library import StagedDataFinalizeMethod, ArcticInvalidApiUsageException
+from arcticdb.version_store.library import StagedDataFinalizeMethod
 
 
 def test_read_descriptor(lmdb_version_store, one_col_df):
