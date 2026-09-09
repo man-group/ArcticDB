@@ -114,7 +114,11 @@ name = "query"
 suite = "^(?:query_builder|compact_data|nonreg_random_read)\\."
 # run 4 telemetry: peak 7.5 GiB would fit xlarge, but 24 min is the long pole — keep 8 vCPU
 # run 6 experiment: run 5 showed 4 vCPU costs these suites 0–25 % time (resample 16→20 min): try xlarge; 7.8 GiB peak
-instance_type = "m6i.xlarge"
+# rev-2096 triage (2026-09-09): the downsize was a drift event over 78 of the lane's 192
+# series — the QueryBuilder filters are thread-pool work, and regex_match paid 1.7–1.9x
+# (0.031→0.054 s at 1M rows, 0.339→0.649 s at 10M), not the 0–25 % the wall predicted.
+# Same verdict as merge's run-8 triage: vCPUs are the constraint here, not memory — back to 8.
+instance_type = "m6i.2xlarge"
 
 [[worker]]
 # ~8 min, tiny data.
