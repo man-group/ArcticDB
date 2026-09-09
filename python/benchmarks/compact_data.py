@@ -300,9 +300,10 @@ class AppendCompactDataBase(CompactDataLmdbBase):
 
     def _setup(self, lib_name):
         self._setup_lmdb_dir(lib_name)
-        # Read one symbol to warm up the cache. All of the symbols hold identical data written in a single batch, and
-        # reading all of them here would dominate the setup time of the slowest classes in this file
-        self.lib.read(self.SYMS[0])
+        # Warm up the cache, but read a single row rather than the whole symbol. peakmem_* is a process high-water
+        # mark, so a full read here would become the reported peak for the parameter combinations whose append
+        # allocates less than the symbol. One row still pays the cold cost, which is the version and index keys
+        self.lib.read(self.SYMS[0], row_range=(0, 1))
 
     def _teardown(self):
         shutil.rmtree(self.LMDB_DIR)
