@@ -482,13 +482,13 @@ class LocalVersionedEngine : public VersionedEngine {
 
     folly::Future<VersionedItem> async_append_internal(
             const StreamId& stream_id, UpdateInfo&& update_info, const std::shared_ptr<pipelines::InputFrame>& frame,
-            const AppendOptions& append_options, const bool batch
+            const AppendOptions& append_options
     );
 
     folly::Future<VersionedItem> async_update_internal(
             const StreamId& stream_id, UpdateInfo&& update_info, const UpdateQuery& query,
             const std::shared_ptr<pipelines::InputFrame>& frame, bool upsert, bool dynamic_schema,
-            bool prune_previous_versions, const bool batch
+            bool prune_previous_versions
     );
 
     folly::Future<VersionedItem> async_write_versioned_metadata_internal(
