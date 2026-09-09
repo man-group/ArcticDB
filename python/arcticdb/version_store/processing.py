@@ -429,6 +429,8 @@ class PythonRowRangeClause(NamedTuple):
 @dataclass
 class PythonResampleClause:
     rule: str
+    # rule parsed into nanoseconds, so that the C++ layer never has to call back into pandas to interpret it
+    rule_ns: int
     closed: _ResampleBoundary
     label: _ResampleBoundary
     aggregations: Dict[str, Union[str, Tuple[str, str]]] = None
@@ -941,11 +943,15 @@ class QueryBuilder:
             2024-01-01 01:50:00     119      90    3135
         """
         rule = rule.freqstr if isinstance(rule, pd.DateOffset) else rule
-        # We use floor and ceiling later to round user-provided date ranges and or start/end index values of the symbol
-        # before calling pandas.date_range to generate the bucket boundaries, but floor and ceiling only work with
-        # well-defined intervals that are multiples of whole ns/us/ms/s/min/h/D
+        # The C++ layer generates the bucket boundaries by repeatedly adding the rule to the first boundary, so it only
+        # works with well-defined intervals that are multiples of whole ns/us/ms/s/min/h/D. Parse the rule into
+        # nanoseconds here and pass that down, so that bucket generation never has to call back into Python (and hence
+        # acquire the GIL) on the critical path of a read. A non-positive number of nanoseconds would make the C++
+        # boundary loop non-terminating, so reject those here as well.
         try:
-            pd.Timestamp(0).floor(rule)
+            rule_ns = to_offset(rule).nanos
+            if rule_ns <= 0:
+                raise ValueError(f"Frequency string '{rule}' does not describe a positive interval")
         except ValueError:
             raise ArcticDbNotYetImplemented(
                 f"Frequency string '{rule}' not yet supported. Valid frequency strings "
@@ -989,12 +995,21 @@ class QueryBuilder:
             f"label kwarg to resample must be `left`, 'right', or None, but received '{closed}'",
         )
         if boundary_map[closed] == _ResampleBoundary.LEFT:
-            self.clauses = self.clauses + [_ResampleClauseLeftClosed(rule, boundary_map[label], offset_ns, origin)]
+            self.clauses = self.clauses + [
+                _ResampleClauseLeftClosed(rule, rule_ns, boundary_map[label], offset_ns, origin)
+            ]
         else:
-            self.clauses = self.clauses + [_ResampleClauseRightClosed(rule, boundary_map[label], offset_ns, origin)]
+            self.clauses = self.clauses + [
+                _ResampleClauseRightClosed(rule, rule_ns, boundary_map[label], offset_ns, origin)
+            ]
         self._python_clauses = self._python_clauses + [
             PythonResampleClause(
-                rule=rule, closed=boundary_map[closed], label=boundary_map[label], offset=offset_ns, origin=origin
+                rule=rule,
+                rule_ns=rule_ns,
+                closed=boundary_map[closed],
+                label=boundary_map[label],
+                offset=offset_ns,
+                origin=origin,
             )
         ]
         return self
@@ -1262,13 +1277,21 @@ class QueryBuilder:
                 if python_clause.closed == _ResampleBoundary.LEFT:
                     self.clauses = self.clauses + [
                         _ResampleClauseLeftClosed(
-                            python_clause.rule, python_clause.label, python_clause.offset, python_clause.origin
+                            python_clause.rule,
+                            python_clause.rule_ns,
+                            python_clause.label,
+                            python_clause.offset,
+                            python_clause.origin,
                         )
                     ]
                 else:
                     self.clauses = self.clauses + [
                         _ResampleClauseRightClosed(
-                            python_clause.rule, python_clause.label, python_clause.offset, python_clause.origin
+                            python_clause.rule,
+                            python_clause.rule_ns,
+                            python_clause.label,
+                            python_clause.offset,
+                            python_clause.origin,
                         )
                     ]
                 if python_clause.aggregations is not None:
