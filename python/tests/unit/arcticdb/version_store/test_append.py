@@ -13,6 +13,7 @@ import arcticdb
 import arcticdb.exceptions
 from arcticdb.version_store import NativeVersionStore
 from arcticdb_ext.exceptions import InternalException, NormalizationException, UnsortedDataException, SchemaException
+from arcticdb.exceptions import NoSuchVersionException
 from arcticdb_ext.storage import KeyType
 from arcticdb_ext import set_config_int
 from arcticdb.util.test import random_integers, assert_frame_equal, assert_series_equal
@@ -212,6 +213,33 @@ def test_defragment_no_work_to_do(sym, lmdb_version_store):
 
 @pytest.mark.parametrize("compact_data", [True, False])
 class TestAppend:
+    @pytest.mark.parametrize("write_if_missing", [True, False])
+    @pytest.mark.parametrize("batch", [True, False])
+    def test_write_if_missing(self, in_memory_store_factory, write_if_missing, batch, compact_data):
+        lib = in_memory_store_factory(segment_row_size=10)
+        sym = "test_write_if_missing"
+        df = pd.DataFrame({"col": np.arange(15)})
+        if write_if_missing:
+            (
+                lib.batch_append([sym], [df], compact_data=compact_data, write_if_missing=write_if_missing)
+                if batch
+                else lib.append(sym, df, compact_data=compact_data, write_if_missing=write_if_missing)
+            )
+            assert_frame_equal(df, lib.read(sym).data)
+            index = lib.read_index(sym)
+            row_counts = (index["end_row"] - index["start_row"]).to_list()
+            # See comment in LocalVersionedEngine::append_internal as to why this isn't [8, 7] when compact_data is
+            # True
+            assert row_counts == [10, 5]
+        else:
+            with pytest.raises(NoSuchVersionException) as ex_info:
+                (
+                    lib.batch_append([sym], [df], compact_data=compact_data, write_if_missing=write_if_missing)
+                    if batch
+                    else lib.append(sym, df, compact_data=compact_data, write_if_missing=write_if_missing)
+                )
+            assert all(s in str(ex_info.value) for s in ["write_if_missing", "Cannot append", sym])
+
     def test_append_simple(self, lmdb_version_store, compact_data):
         symbol = "test_append_simple"
         df1 = pd.DataFrame({"x": np.arange(1, 10, dtype=np.int64)})
