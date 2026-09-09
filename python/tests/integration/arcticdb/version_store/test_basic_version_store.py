@@ -30,19 +30,19 @@ from arcticdb.exceptions import (
     SchemaException,
     UserInputException,
     ArcticException,
+    KeyNotFoundException,
+    StorageException,
+    NoDataFoundException,
+    NoSuchVersionException,
+    StreamDescriptorMismatch,
 )
 from arcticdb import QueryBuilder
 from arcticdb.flattener import Flattener
 from arcticdb.util.test_utils import generate_random_numpy_array, generate_random_series
 from arcticdb.version_store import NativeVersionStore
 from arcticdb.version_store._store import VersionedItem
-from arcticdb_ext.exceptions import KeyNotFoundException, StorageException, StreamDescriptorMismatch
-from arcticdb_ext.storage import KeyType, NoDataFoundException
-from arcticdb_ext.version_store import (
-    NoSuchVersionException,
-    ManualClockVersionStore,
-    DataError,
-)
+from arcticdb_ext.storage import KeyType
+from arcticdb_ext.version_store import ManualClockVersionStore, DataError
 from arcticdb.util.test import (
     sample_dataframe,
     sample_dataframe_only_strings,

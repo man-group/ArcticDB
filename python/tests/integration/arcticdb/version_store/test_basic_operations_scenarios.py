@@ -21,18 +21,18 @@ from arcticdb.version_store._string_dtype import _use_pyarrow_strings_in_pandas
 from arcticdb.version_store._store import NativeVersionStore, VersionedItem
 from datetime import timedelta, timezone
 
-from arcticdb.exceptions import ArcticNativeException, UnsortedDataException
-from arcticdb.version_store.processing import QueryBuilder
-from arcticdb_ext.exceptions import StreamDescriptorMismatch
-from arcticdb_ext.version_store import NoSuchVersionException
-
-from arcticdb_ext.exceptions import (
+from arcticdb.exceptions import (
+    ArcticNativeException,
+    UnsortedDataException,
+    NoSuchVersionException,
     InternalException,
     NormalizationException,
     UserInputException,
     MissingDataException,
     SchemaException,
+    StreamDescriptorMismatch,
 )
+from arcticdb.version_store.processing import QueryBuilder
 
 
 from tests.util.mark import LINUX, SLOW_TESTS_MARK, WINDOWS

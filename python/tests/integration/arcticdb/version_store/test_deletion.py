@@ -12,8 +12,8 @@ import pandas as pd
 import pytest
 import random
 
-from arcticdb_ext.exceptions import UserInputException
-from arcticdb_ext.storage import KeyType, NoDataFoundException
+from arcticdb.exceptions import UserInputException, NoDataFoundException
+from arcticdb_ext.storage import KeyType
 from arcticdb.util.test import config_context, random_string, assert_frame_equal, distinct_timestamps
 
 
