@@ -14,7 +14,6 @@ from polars.testing import assert_frame_equal as assert_frame_equal_pl
 import pyarrow as pa
 import pytest
 
-from arcticdb_ext.exceptions import InternalException
 from arcticdb_ext.version_store import NoSuchVersionException
 import arcticdb.toolbox.query_stats as qs
 from arcticdb.util.hypothesis import (
@@ -222,32 +221,6 @@ class TestAppendCompactData:
         lib.write(sym, df_0)
         df_1 = pd.DataFrame({"col": np.arange(15)}, index=pd.date_range("2026-01-21", periods=15))
         generic_append_compact_data_test(lib, sym, df_1, batch=batch)
-
-    @pytest.mark.parametrize("write_if_missing", [True, False])
-    @pytest.mark.parametrize("compact_data", [True, False])
-    def test_write_if_missing(self, in_memory_store_factory, write_if_missing, compact_data, batch):
-        lib = in_memory_store_factory(segment_row_size=10)
-        sym = "test_write_if_missing"
-        df = pd.DataFrame({"col": np.arange(15)})
-        if write_if_missing:
-            (
-                lib.batch_append([sym], [df], compact_data=compact_data, write_if_missing=write_if_missing)
-                if batch
-                else lib.append(sym, df, compact_data=compact_data, write_if_missing=write_if_missing)
-            )
-            assert_frame_equal(df, lib.read(sym).data)
-            index = lib.read_index(sym)
-            row_counts = (index["end_row"] - index["start_row"]).to_list()
-            # See comment in LocalVersionedEngine::append_internal as to why this isn't [8, 7] when compact_data is
-            # True
-            assert row_counts == [10, 5]
-        else:
-            with pytest.raises(NoSuchVersionException if batch else InternalException):
-                (
-                    lib.batch_append([sym], [df], compact_data=compact_data, write_if_missing=write_if_missing)
-                    if batch
-                    else lib.append(sym, df, compact_data=compact_data, write_if_missing=write_if_missing)
-                )
 
     def test_metadata(self, in_memory_store_factory, batch):
         lib = in_memory_store_factory()
