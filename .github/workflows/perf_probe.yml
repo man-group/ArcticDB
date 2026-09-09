@@ -493,15 +493,19 @@ jobs:
           arctic=$(grep -c 'arcticdb::' /tmp/perf.script || true)
           folly=$(grep -c 'folly::' /tmp/perf.script || true)
           unknown=$(grep -cE '^\s+[0-9a-f]+ \(\?\)|\[unknown\]' /tmp/perf.script || true)
-          threads=$(awk 'NF && $1 !~ /^#/ {print $1}' /tmp/perf.script | sort -u | tr '\n' ' ')
+          # Only the sample *header* lines name a thread; the frames beneath them are
+          # indented, and counting those as threads buries the answer in addresses.
+          threads=$(awk '/^[^ \t]/ {print $1}' /tmp/perf.script | sort | uniq -c | sort -rn | awk '{printf "%s(%s) ", $2, $1}')
+          event=$(awk '/^[^ \t]/ {print $NF; exit}' /tmp/perf.script)
           {
             echo "### perf script"
             echo '```'
+            echo "event recorded         $event"
             echo "sample lines           $samples"
             echo "arcticdb:: frames      $arctic"
             echo "folly:: frames         $folly"
             echo "unresolved frames      $unknown"
-            echo "thread names           $threads"
+            echo "threads sampled        $threads"
             echo '```'
           } | tee -a "$GITHUB_STEP_SUMMARY"
           echo "===== first 200 lines of perf script ====="
