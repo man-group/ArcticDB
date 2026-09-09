@@ -60,6 +60,9 @@ def find_exception_import_violations(file_content, file_path="<source>"):
             if node.module is None or node.module == ALLOWED_EXCEPTIONS_MODULE:
                 continue
             for alias in node.names:
+                # A star import gives alias.name == "*", which never resolves to an exception, so
+                # `from arcticdb.x import *` goes undetected. Catching it would mean importing the
+                # module and scanning its namespace - not worth the complexity for now.
                 if _is_arctic_exception(node.module, alias.name):
                     # Arctic exception but it is imported from NOT ALLOWED module -> violation
                     violations.append((node.lineno, alias.name, node.module))
