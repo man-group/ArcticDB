@@ -525,9 +525,10 @@ jobs:
         run: |
           # The stress suite has caught nothing in 90 days: 1 failure in 2465 jobs across 176 master runs, and that
           # one was "the runner has received a shutdown signal". It is the second most expensive type in the run, so
-          # pull requests skip it and master, the nightly and manual dispatches still run it in full.
+          # pull requests run it on Linux only (the cheapest lane, and races are not OS-specific); master, the
+          # nightly and manual dispatches still run it on every OS.
           drop_stress=''
-          if [ "${{github.event_name}}" = 'pull_request' ]; then drop_stress='s/"stress",// ; s/,"stress"//'; fi
+          if [ "${{github.event_name}}" = 'pull_request' ] && [ "${{matrix.os}}" != 'linux' ]; then drop_stress='s/"stress",// ; s/,"stress"//'; fi
           if [ ${{inputs.python3}} -gt 8 ]
           then
             find python/tests/* -maxdepth 0 -type d -not \( -name "__pycache__" -o -name "util" -o -name "nonreg" -o -name "scripts" -o -name "sanitizers" -o -name "enduser" \) -exec basename {} \; | tr '\n' ',' |
