@@ -107,7 +107,33 @@ jobs:
     # (`windows-latest` certainly is not), and the whole reason for the container is an
     # AMI whose userland we cannot read — a GitHub-hosted image is documented and has
     # python, git and a compiler already. An empty string here is "run on the host".
-    container: ${{ inputs.runs_on == '' && 'ghcr.io/man-group/arcticdb-dev:latest' || '' }}
+    container:
+      image: ${{ inputs.runs_on == '' && 'ghcr.io/man-group/arcticdb-dev:latest' || '' }}
+      # What the profile pass's native recorder needs, and nothing more (gha 74,
+      # proven on the real runner by `perf_probe.yml`, run 34356607182).
+      #
+      # perf's `perf_event_open` is stopped by two independent gates here, and
+      # each capability answers one. Docker's default seccomp filter blocks the
+      # syscall outright, and CAP_PERFMON is what its profile admits it under —
+      # that alone turns EPERM into EACCES and no further. The kernel gate is the
+      # AMI's `perf_event_paranoid = 4`: the Debian/Ubuntu patch that defines
+      # levels 3+ predates CAP_PERFMON and asks for CAP_SYS_ADMIN by name, so
+      # sampling *our own processes* needs it until somebody sets
+      # `perf_event_paranoid=2` on the AMI — at which point CAP_PERFMON alone
+      # suffices and this line loses its second half.
+      #
+      # NOT `--privileged`, and not `--security-opt seccomp=unconfined`: seccomp
+      # and AppArmor stay enforcing, and these two capabilities are the whole of
+      # what is added. A lane that gets neither still profiles — `profiling`
+      # probes once, refuses, and publishes the py-spy flame graphs it always did
+      # (`PERF_REFUSED`).
+      #
+      # The mapping form keeps the same "empty image means run on the host"
+      # normalisation the scalar form relied on, which is what a managed lane
+      # (`runs_on` set) gets — and `options` is empty there too, since there is
+      # no container for it to be options *of*. Worth watching on the first
+      # managed-lane run after this lands.
+      options: ${{ inputs.runs_on == '' && '--cap-add PERFMON --cap-add SYS_ADMIN' || '' }}
     env:
       # Credentials and endpoints copied from `benchmark_commits.yml:36-40`. The benchmarks
       # read ARCTICDB_REAL_S3_* through the process environment; `bench` passes it through.
@@ -200,6 +226,24 @@ jobs:
         with:
           name: benchmark-reference
           path: reference
+
+      # The profile pass's native recorder (gha 73/Q6a, gha 75), installed here and not by
+      # the pass: `perf` is a system package outside the bench venv, where `py-spy` is a
+      # wheel the pass can `uv pip install` for itself, and a package manager must never be
+      # able to fail a benchmark job. `continue-on-error` because that is exactly what this
+      # is — a lane whose install fails probes, refuses in one line and publishes the
+      # py-spy flame graphs it always did (`profiling.PERF_ABSENT`).
+      #
+      # AlmaLinux 8 userland, so `dnf` and not `apt-get`. gha 74 measured what this gets
+      # you: perf 4.18 against a 6.2 kernel, which is harmless for user-space sampling and
+      # costs one line of "Couldn't synthesize bpf events" noise per recording. Only on the
+      # EC2 lane — a managed lane is somebody else's machine and does not profile at all
+      # (`why_not_profiled`).
+      - name: install perf
+        if: inputs.runs_on == ''
+        continue-on-error: true
+        shell: bash
+        run: dnf install -y perf
 
       # arctic-winds is a private repo today, so it is checked out with a read-only deploy
       # key (`ARCTIC_WINDS_DEPLOY_KEY`, see the README) rather than pip-installed from a
@@ -355,7 +399,13 @@ jobs:
       # pass's `<worker>-<sha8>.<benchmark>.speedscope.json` flame graphs, which `collect`
       # tells apart by that suffix and files under the benchmark the sidecar says each one
       # is of (ticket 48); the glob matches nothing on a lane that profiled nothing, which
-      # is what `if-no-files-found: warn` is already tolerant of. The monitor's
+      # is what `if-no-files-found: warn` is already tolerant of. Since gha 75 a native
+      # recording rides beside each of them as `<worker>-<sha8>.<benchmark>.
+      # perf-speedscope.json` — note the hyphen: that name deliberately does *not* end in
+      # `.speedscope.json`, because `collect` classifies by suffix and would otherwise
+      # store it as a second payload for a (worker, benchmark) it keeps one of. It is
+      # uploaded so a human can open it and stored nowhere until gha 76. Both globs need
+      # naming separately: the first does not match the second. The monitor's
       # `<worker>.log` and `status.json` land in the same directory, so name the files
       # explicitly rather than uploading `artifacts/`. This must happen before `stop`
       # terminates the machine.
@@ -373,6 +423,7 @@ jobs:
             artifacts/${{ steps.artifact.outputs.name }}.json
             artifacts/${{ steps.artifact.outputs.name }}.meta.json
             artifacts/${{ steps.artifact.outputs.name }}.*.speedscope.json
+            artifacts/${{ steps.artifact.outputs.name }}.*.perf-speedscope.json
           if-no-files-found: warn
           # What makes a failed worker retryable from the run page. `if: always()`
           # means the first attempt usually *did* upload — a lane that goes red on one
