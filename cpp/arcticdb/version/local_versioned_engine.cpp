@@ -761,14 +761,7 @@ VersionedItem LocalVersionedEngine::update_internal(
     py::gil_scoped_release release_gil;
     auto update_info = get_next_version_id_and_optionally_latest_undeleted_version(store(), version_map(), stream_id);
     return async_update_internal(
-                   stream_id,
-                   std::move(update_info),
-                   query,
-                   frame,
-                   upsert,
-                   dynamic_schema,
-                   prune_previous_versions,
-                   false
+                   stream_id, std::move(update_info), query, frame, upsert, dynamic_schema, prune_previous_versions
     )
             .get();
 }
@@ -790,6 +783,7 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
         std::vector<arcticdb::proto::descriptors::UserDefinedMetadata>&& user_meta_protos
 ) {
     py::gil_scoped_release release_gil;
+    check_for_duplicated_symbols(stream_ids, "write_metadata");
     auto stream_update_info_futures =
             batch_get_next_version_id_and_optionally_latest_undeleted_version_async(store(), version_map(), stream_ids);
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(
@@ -1333,7 +1327,7 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
 ) {
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: batch_compact_data");
     py::gil_scoped_release release_gil;
-    check_for_duplicated_symbols(stream_ids, "batch_compact_data");
+    check_for_duplicated_symbols(stream_ids, "compact_data");
     auto update_info_futs =
             batch_get_next_version_id_and_optionally_latest_undeleted_version_async(store(), version_map(), stream_ids);
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(
@@ -1567,6 +1561,7 @@ MultiSymbolReadOutput LocalVersionedEngine::batch_read_and_join_internal(
                              ) {
                 auto [input_schemas, entity_ids, res_versioned_items, res_metadatas] =
                         unpack_symbol_processing_results(std::move(symbol_processing_results));
+                drop_rowless_symbols(input_schemas, entity_ids, *component_manager);
                 auto pipeline_context = setup_join_pipeline_context(std::move(input_schemas), *clauses_ptr);
                 auto modified_read_options =
                         modify_read_options_from_norm_meta(pipeline_context->output_normalization(), read_options);
@@ -1749,7 +1744,7 @@ folly::Future<VersionedItem> LocalVersionedEngine::async_write_versioned_datafra
 
 folly::Future<VersionedItem> LocalVersionedEngine::async_append_internal(
         const StreamId& stream_id, UpdateInfo&& update_info, const std::shared_ptr<InputFrame>& frame,
-        const AppendOptions& append_options, const bool batch
+        const AppendOptions& append_options
 ) {
     const bool add_new_symbol_list_entry = !update_info.previous_index_key_.has_value() && cfg().symbol_list();
     auto index_key_fut = folly::Future<AtomKey>::makeEmpty();
@@ -1759,9 +1754,7 @@ folly::Future<VersionedItem> LocalVersionedEngine::async_append_internal(
     // ReslicingInfo
     if (update_info.previous_index_key_.has_value()) {
         if (append_options.compact_data) {
-            auto compact_data_frame = std::make_optional<CompactDataFrame>(
-                    frame, append_options.validate_index, write_options_.empty_types
-            );
+            auto compact_data_frame = std::make_optional<CompactDataFrame>(frame, append_options.validate_index);
             index_key_fut =
                     async_compact_data_impl(
                             store(), update_info, write_options_, write_options_.segment_row_size, compact_data_frame
@@ -1777,33 +1770,16 @@ folly::Future<VersionedItem> LocalVersionedEngine::async_append_internal(
             index_key_fut = frame->empty()
                                     ? async_write_metadata_impl(store(), update_info, std::move(frame->user_meta))
                                     : async_append_impl(
-                                              store(),
-                                              update_info,
-                                              frame,
-                                              write_options_,
-                                              append_options.validate_index,
-                                              write_options_.empty_types
+                                              store(), update_info, frame, write_options_, append_options.validate_index
                                       );
         }
     } else {
-        if (!append_options.upsert) {
-            auto error_msg = fmt::format(
-                    "Cannot append to non-existent symbol {}. Using \"write_if_missing=True\" will create the symbol"
-                    "instead of throwing this exception.",
-                    stream_id
-            );
-            if (batch) {
-                missing_data::raise<ErrorCode::E_NO_SUCH_VERSION>(error_msg);
-            } else {
-                util::raise_rte(error_msg);
-            }
-        }
-        // Replace above with this as part of Monday ticket 12551552848 for 7.0.0
-        //        missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(
-        //                append_options.upsert,
-        //                "Cannot append to non-existent symbol {}. Using \"write_if_missing=True\" will create the
-        //                symbol" "instead of throwing this exception.", stream_id
-        //        );
+        missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(
+                append_options.upsert,
+                "Cannot append to non-existent symbol {}. Using \"write_if_missing=True\" will create the symbol "
+                "instead of throwing this exception.",
+                stream_id
+        );
         index_key_fut = async_write_dataframe_impl(
                 store(),
                 update_info.next_version_id_,
@@ -1831,41 +1807,21 @@ folly::Future<VersionedItem> LocalVersionedEngine::async_append_internal(
 
 folly::Future<VersionedItem> LocalVersionedEngine::async_update_internal(
         const StreamId& stream_id, UpdateInfo&& update_info, const UpdateQuery& query,
-        const std::shared_ptr<InputFrame>& frame, bool upsert, bool dynamic_schema, bool prune_previous_versions,
-        const bool batch
+        const std::shared_ptr<InputFrame>& frame, bool upsert, bool dynamic_schema, bool prune_previous_versions
 ) {
     const bool add_new_symbol_list_entry = !update_info.previous_index_key_.has_value() && cfg().symbol_list();
     auto index_key_fut = folly::Future<AtomKey>::makeEmpty();
     if (update_info.previous_index_key_.has_value()) {
-        index_key_fut = frame->empty() ? async_write_metadata_impl(store(), update_info, std::move(frame->user_meta))
-                                       : async_update_impl(
-                                                 store(),
-                                                 update_info,
-                                                 query,
-                                                 frame,
-                                                 write_options_,
-                                                 dynamic_schema,
-                                                 write_options_.empty_types
-                                         );
+        index_key_fut = frame->empty()
+                                ? async_write_metadata_impl(store(), update_info, std::move(frame->user_meta))
+                                : async_update_impl(store(), update_info, query, frame, write_options_, dynamic_schema);
     } else {
-        if (!upsert) {
-            auto error_msg = fmt::format(
-                    "Cannot update non-existent symbol {}. Using \"upsert=True\" will create the symbol instead of "
-                    "throwing this exception.",
-                    stream_id
-            );
-            if (batch) {
-                missing_data::raise<ErrorCode::E_NO_SUCH_VERSION>(error_msg);
-            } else {
-                util::raise_rte(error_msg);
-            }
-        }
-        // Replace above with this as part of Monday ticket 12551552848 for 7.0.0
-        //        missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(
-        //                upsert,
-        //                "Cannot update non-existent symbol {}. Using \"upsert=True\" will create the symbol instead of
-        //                " "throwing this exception.", stream_id
-        //        );
+        missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(
+                upsert,
+                "Cannot update non-existent symbol {}. Using \"upsert=True\" will create the symbol instead of "
+                "throwing this exception.",
+                stream_id
+        );
         // Make a copy as we're possibly changing a flag here. dynamic_schema as an explicit argument to modification
         // methods are on the way out, remove when this is done
         auto write_options = write_options_;
@@ -1945,6 +1901,7 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
         bool prune_previous_versions, bool validate_index, bool throw_on_error
 ) {
     py::gil_scoped_release release_gil;
+    check_for_duplicated_symbols(stream_ids, "write");
 
     auto update_info_futs = batch_get_next_version_id_and_optionally_latest_undeleted_version_async(
             store(), version_map(), stream_ids, write_options_.de_duplication
@@ -2033,7 +1990,7 @@ VersionedItem LocalVersionedEngine::append_internal(
 ) {
     py::gil_scoped_release release_gil;
     auto update_info = get_next_version_id_and_optionally_latest_undeleted_version(store(), version_map(), stream_id);
-    return async_append_internal(stream_id, std::move(update_info), frame, append_options, false).get();
+    return async_append_internal(stream_id, std::move(update_info), frame, append_options).get();
 }
 
 std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_append_internal(
@@ -2041,6 +1998,7 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
         const AppendOptions& append_options, bool throw_on_error
 ) {
     py::gil_scoped_release release_gil;
+    check_for_duplicated_symbols(stream_ids, "append");
 
     auto stream_update_info_futures =
             batch_get_next_version_id_and_optionally_latest_undeleted_version_async(store(), version_map(), stream_ids);
@@ -2056,9 +2014,7 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
                         .thenValue([this, frame = std::move(frames[idx]), append_options, &stream_id = stream_ids[idx]](
                                            UpdateInfo&& update_info
                                    ) {
-                            return async_append_internal(
-                                    stream_id, std::move(update_info), frame, append_options, true
-                            );
+                            return async_append_internal(stream_id, std::move(update_info), frame, append_options);
                         })
         );
     }
@@ -2077,6 +2033,7 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
         const std::vector<UpdateQuery>& update_queries, bool prune_previous_versions, bool upsert
 ) {
     py::gil_scoped_release release_gil;
+    check_for_duplicated_symbols(stream_ids, "update");
 
     auto stream_update_info_futures =
             batch_get_next_version_id_and_optionally_latest_undeleted_version_async(store(), version_map(), stream_ids);
@@ -2101,8 +2058,7 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
                                                            frame,
                                                            upsert,
                                                            write_options_.dynamic_schema,
-                                                           prune_previous_versions,
-                                                           true
+                                                           prune_previous_versions
                                                    );
                                                }));
     }

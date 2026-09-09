@@ -70,9 +70,13 @@ folly::Future<entity::AtomKey> write_frame(
         bool allow_sparse = false
 );
 
+// merged_tsd is the metadata the new index key will carry, as established by prepare_append. It is passed in rather
+// than derived here because producing it is also the compatibility check, which has to have run before this point -
+// it must not be possible to write data keys and only then discover the schemas do not combine.
 folly::Future<entity::AtomKey> append_frame(
         IndexPartialKey&& key, const std::shared_ptr<InputFrame>& frame, const SlicingPolicy& slicing,
-        index::IndexSegmentReader& index_segment_reader, const std::shared_ptr<Store>& store, bool dynamic_schema
+        index::IndexSegmentReader& index_segment_reader, const std::shared_ptr<Store>& store,
+        TimeseriesDescriptor&& merged_tsd
 );
 
 enum class AffectedSegmentPart { START, END };

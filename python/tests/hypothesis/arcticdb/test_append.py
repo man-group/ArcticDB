@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 from arcticdb.version_store import NativeVersionStore
 from arcticdb_ext.exceptions import InternalException, NormalizationException, ArcticException as ArcticNativeException
-from arcticdb_ext.version_store import StreamDescriptorMismatch
+from arcticdb_ext.exceptions import StreamDescriptorMismatch
 from arcticdb_ext import set_config_int
 from hypothesis import given, assume, settings, strategies as st
 from itertools import chain, product, combinations
