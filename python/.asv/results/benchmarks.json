@@ -2434,6 +2434,7 @@
             ]
         ],
         "setup_cache_key": "compact_data:427",
+        "timeout": 600,
         "type": "peakmemory",
         "unit": "bytes",
         "version": "ba4165befb708b8f7f58643cda9872d9cb793aad070c02999d2cc7114fa42ec9"
@@ -2466,6 +2467,7 @@
         "rounds": 1,
         "sample_time": 0.01,
         "setup_cache_key": "compact_data:427",
+        "timeout": 600,
         "type": "time",
         "unit": "seconds",
         "version": "213d83968732a37caeb4a6199db291b7ff4720e1ba81da9b8f9d335bf863e675",
@@ -2495,6 +2497,7 @@
             ]
         ],
         "setup_cache_key": "compact_data:329",
+        "timeout": 600,
         "type": "peakmemory",
         "unit": "bytes",
         "version": "1581bf5cf4f523b1dba5029cd77944e091eb35ea35bb67e679bda577d5e5ace3"
@@ -2528,6 +2531,7 @@
         "rounds": 1,
         "sample_time": 0.01,
         "setup_cache_key": "compact_data:329",
+        "timeout": 600,
         "type": "time",
         "unit": "seconds",
         "version": "fec1a6b2e52e6380a99b1666c49b3461b4fb24f28221b495f60e1be274bb9023",
@@ -2557,6 +2561,7 @@
             ]
         ],
         "setup_cache_key": "compact_data:378",
+        "timeout": 600,
         "type": "peakmemory",
         "unit": "bytes",
         "version": "7a58c10ef4b2a352df474a8f1904d021f721652d3837e10680d47d47c3d275b6"
@@ -2590,6 +2595,7 @@
         "rounds": 1,
         "sample_time": 0.01,
         "setup_cache_key": "compact_data:378",
+        "timeout": 600,
         "type": "time",
         "unit": "seconds",
         "version": "8665815997d55eb8deeb5b37f5eafc228bc6aed867aee9a5f0e5171296cbbd26",
@@ -2613,6 +2619,7 @@
             ]
         ],
         "setup_cache_key": "compact_data:219",
+        "timeout": 600,
         "type": "peakmemory",
         "unit": "bytes",
         "version": "c15da0bab109a8a3ef408294394b0b4492de87510ce03ef817a72ddba0572700"
@@ -2640,6 +2647,7 @@
         "rounds": 1,
         "sample_time": 0.01,
         "setup_cache_key": "compact_data:219",
+        "timeout": 600,
         "type": "time",
         "unit": "seconds",
         "version": "1a7929bda8b3b10dd3e652f070e4ccc125a28aae4caf0e7ebe539f86bc24f897",
@@ -2669,6 +2677,7 @@
             ]
         ],
         "setup_cache_key": "compact_data:109",
+        "timeout": 600,
         "type": "peakmemory",
         "unit": "bytes",
         "version": "37d8aadd1f1639c8702ca70ab8299d2d64e6b9e634862531b424ebde718e1275"
@@ -2702,6 +2711,7 @@
         "rounds": 1,
         "sample_time": 0.01,
         "setup_cache_key": "compact_data:109",
+        "timeout": 600,
         "type": "time",
         "unit": "seconds",
         "version": "1adb81796aa15ebb66f2b9cfa6d803ffb9687ea074115073d9e0ff49fd342d73",
@@ -2736,6 +2746,7 @@
             ]
         ],
         "setup_cache_key": "compact_data:165",
+        "timeout": 600,
         "type": "peakmemory",
         "unit": "bytes",
         "version": "c0318b30706b143ac685ec9a5c549702a5d82b8f0bbe7e4587e0ceb96620e91d"
@@ -2774,6 +2785,7 @@
         "rounds": 1,
         "sample_time": 0.01,
         "setup_cache_key": "compact_data:165",
+        "timeout": 600,
         "type": "time",
         "unit": "seconds",
         "version": "dd1b297e52b126a9abb2023c06bfd999045e847f37e7ab00a34e7e842b39a305",
