@@ -1,0 +1,440 @@
+# Can `perf` sample an ArcticDB benchmark process inside the worker container?
+#
+# Proof of life for gha 74, not pipeline integration. `benchmark_worker.yml`'s `bench`
+# job runs in `ghcr.io/man-group/arcticdb-dev:latest` with no container `options:`, and
+# Docker's default seccomp profile refuses `perf_event_open` unless the container holds
+# CAP_PERFMON — so the native recorder ticket 73 chose cannot record a single sample
+# there today. This workflow is the smallest thing that answers whether `--cap-add
+# PERFMON` is enough (and if not, whether `--security-opt seccomp=unconfined` is), on
+# the real EC2 runner, against a real ArcticDB read.
+#
+#   start ─► probe (container, cheap spot box) ─► stop
+#
+# The start/stop pair is `benchmark_worker.yml`'s, minus the managed-lane branch: one
+# `machulav/ec2-github-runner` start inside this workflow, and a `stop` job with
+# `if: always()` because a run cancelled between the two leaves an instance running and
+# billing (docs/research/gha-ec2-runner-matrix.md §Q3-Q4).
+#
+# Dispatch-only, and it stays that way: nothing here belongs on a push.
+name: perf probe (arctic-winds)
+
+on:
+  workflow_dispatch:
+    inputs:
+      container_options:
+        description: >-
+          Docker options for the probe container. `--cap-add PERFMON` is the answer we
+          hope for; add `--security-opt seccomp=unconfined` only if that alone fails.
+          Never `--privileged`.
+        type: string
+        default: '--cap-add PERFMON'
+      instance_type:
+        description: EC2 instance type; the probe needs a pip install and one read, not a benchmark box
+        type: string
+        default: c6i.2xlarge
+      market_type:
+        description: "'spot' or '' for on-demand"
+        type: string
+        default: spot
+      rows:
+        description: Rows in the float dataframe the probe writes and re-reads
+        type: string
+        default: '10000000'
+      window_seconds:
+        description: Length of each measurement window (one without perf, one with)
+        type: string
+        default: '15'
+
+permissions:
+  contents: read
+  # The wheel comes from another run's artifact, fetched through the Actions API.
+  actions: read
+
+jobs:
+  start:
+    name: start perf probe runner
+    uses: ./.github/workflows/ec2_runner_jobs.yml
+    secrets: inherit
+    with:
+      job_type: start
+      instance-type: ${{ inputs.instance_type }}
+      market-type: ${{ inputs.market_type }}
+
+  probe:
+    name: perf probe
+    needs: [start]
+    # `ec2_runner_jobs.yml:23` is `continue-on-error: true`, so a start that never
+    # provisioned arrives here green with an empty label; without this guard the job
+    # queues against a label no runner claims until the timeout.
+    if: needs.start.result == 'success' && needs.start.outputs.label != ''
+    runs-on: ${{ needs.start.outputs.label }}
+    timeout-minutes: 60
+    container:
+      # The image the profiling pass actually runs in — the whole point is to answer the
+      # question about *this* container, not a friendlier one.
+      image: ghcr.io/man-group/arcticdb-dev:latest
+      options: ${{ inputs.container_options }}
+    env:
+      ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      PROBE_ROWS: ${{ inputs.rows }}
+      WINDOW: ${{ inputs.window_seconds }}
+    defaults:
+      run: {shell: bash}
+    steps:
+      - name: what box and what container are we in
+        run: |
+          {
+            echo "### probe environment"
+            echo '```'
+            echo "container options : ${{ inputs.container_options }}"
+            echo "kernel            : $(uname -r)"
+            echo "distro            : $(. /etc/os-release && echo "$PRETTY_NAME")"
+            echo "nproc             : $(nproc)"
+            echo "perf_event_paranoid: $(cat /proc/sys/kernel/perf_event_paranoid 2>&1)"
+            echo "CapEff            : $(grep -m1 CapEff /proc/self/status)"
+            echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+          # CAP_PERFMON is capability 38, i.e. bit 38 of the effective set.
+          caps=$(grep -m1 CapEff /proc/self/status | awk '{print $2}')
+          python3 - "$caps" <<'PY'
+          import sys
+          eff = int(sys.argv[1], 16)
+          for bit, name in ((21, "CAP_SYS_ADMIN"), (38, "CAP_PERFMON"), (19, "CAP_SYS_PTRACE")):
+              print(f"{name:<15} {'held' if eff >> bit & 1 else 'NOT held'}")
+          PY
+
+      - name: install perf
+        id: perf_install
+        run: |
+          route=''
+          if command -v perf >/dev/null 2>&1; then
+            route='already in the image'
+          elif dnf install -y perf; then
+            route='dnf install -y perf'
+          elif dnf install -y --enablerepo='*' perf; then
+            route="dnf install -y --enablerepo='*' perf"
+          elif yum install -y perf; then
+            route='yum install -y perf'
+          else
+            echo "::error::no perf package on this image's repos"
+            exit 1
+          fi
+          # RHEL-family `perf` is versioned to the *distro's* kernel (4.18 on AlmaLinux 8),
+          # not to whatever the AMI boots. For user-space sampling of our own process that
+          # mismatch is normally harmless; if it is not, this is the line that says so.
+          ver=$(perf --version 2>&1 || true)
+          {
+            echo "perf install route: $route"
+            echo "perf version      : $ver"
+            echo "host kernel       : $(uname -r)"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+          printf 'route=%s\n' "$route" >> "$GITHUB_OUTPUT"
+
+      # THE question. A 300 ms software-event record of `sleep` is the whole seccomp
+      # test: if `perf_event_open` is blocked this fails here, in one second, and the
+      # rest of the job is pointless.
+      - name: can perf_event_open succeed in this container at all
+        id: gate
+        run: |
+          verdict=blocked
+          echo "--- perf record -e cpu-clock (software event) ---"
+          if perf record -e cpu-clock -F 99 -o /tmp/smoke.data -- sleep 0.3 2>&1 | tee /tmp/smoke.log; then
+            verdict=software
+          fi
+          echo "--- perf record (default event, hardware PMU) ---"
+          # EC2's virtualised instance types expose no PMU, so `cycles` is expected to
+          # fail here even when seccomp is out of the way. Ticket 75 needs to know which
+          # of the two it is, so ask both and report both.
+          hw=no
+          if perf record -F 99 -o /tmp/smoke_hw.data -- sleep 0.3 2>&1 | tee /tmp/smoke_hw.log; then
+            hw=yes
+          fi
+          {
+            echo "### perf_event_open gate"
+            echo '```'
+            echo "container options : ${{ inputs.container_options }}"
+            echo "software event (cpu-clock): $verdict"
+            echo "hardware event (cycles)   : $hw"
+            echo '```'
+            echo '<details><summary>cpu-clock smoke log</summary>'
+            echo; echo '```'; cat /tmp/smoke.log; echo '```'; echo '</details>'
+            echo '<details><summary>cycles smoke log</summary>'
+            echo; echo '```'; cat /tmp/smoke_hw.log; echo '```'; echo '</details>'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+          if [ "$verdict" = blocked ]; then
+            echo "::error::perf_event_open is refused with options '${{ inputs.container_options }}'. Re-dispatch adding --security-opt seccomp=unconfined."
+            exit 1
+          fi
+          printf 'hardware=%s\n' "$hw" >> "$GITHUB_OUTPUT"
+
+      # The stock PyPI wheel is stripped and profiles as a wall of `0x… (?)`; the
+      # symbols-kept wheel is built once per benchmark run by `benchmark_winds.yml`'s
+      # `build` job (ARCTICDB_KEEP_DEBUG_SYMBOLS=ON, `-Wl,--strip-debug`). Rather than
+      # spend 40 minutes rebuilding it here, take the newest one a successful shadow run
+      # left behind. Artifacts are kept 7 days, so a probe run in a quiet fortnight has
+      # to fall back to building — noted, not solved, because this is a proof of life.
+      - name: fetch the symbols-kept wheel from a recent shadow run
+        id: wheel
+        run: |
+          api() { curl -fsSL -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" "$@"; }
+          api "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/artifacts?name=wheel-cp311-manylinux_x86_64&per_page=100" > /tmp/artifacts.json
+          python3 - <<'PY' > /tmp/pick.env
+          import json, os
+          arts = json.load(open("/tmp/artifacts.json"))["artifacts"]
+          want = [
+              a for a in arts
+              if not a["expired"]
+              and (a.get("workflow_run") or {}).get("head_branch") == "benchmark-winds-shadow"
+          ]
+          if not want:
+              raise SystemExit("no unexpired wheel-cp311-manylinux_x86_64 artifact on benchmark-winds-shadow")
+          a = max(want, key=lambda a: a["created_at"])
+          print(f"ID={a['id']}")
+          print(f"RUN={(a.get('workflow_run') or {}).get('id')}")
+          print(f"CREATED={a['created_at']}")
+          print(f"SIZE={a['size_in_bytes']}")
+          PY
+          cat /tmp/pick.env
+          . /tmp/pick.env
+          api -o /tmp/wheel.zip "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/artifacts/$ID/zip"
+          rm -rf wheel && mkdir wheel
+          python3 -m zipfile -e /tmp/wheel.zip wheel/
+          whl=$(find wheel -name '*.whl' | head -1)
+          echo "wheel: $whl ($SIZE bytes, from run $RUN, $CREATED)" | tee -a "$GITHUB_STEP_SUMMARY"
+          printf 'path=%s\nrun=%s\n' "$whl" "$RUN" >> "$GITHUB_OUTPUT"
+
+      # `benchmark_winds.yml`'s own assertions, re-run on what actually got installed.
+      # A `0x… (?)` frame downstream then means the wrong process was sampled, never a
+      # wheel that quietly lost its symbol table.
+      - name: assert the extension carries C++ symbols
+        run: |
+          rm -rf /tmp/wheel-check && mkdir -p /tmp/wheel-check
+          python3 -m zipfile -e "${{ steps.wheel.outputs.path }}" /tmp/wheel-check
+          so=$(find /tmp/wheel-check -name 'arcticdb_ext*.so' | head -1)
+          [ -n "$so" ] || { echo "::error::no arcticdb_ext*.so in the wheel"; exit 1; }
+          sections=$(readelf -SW "$so" | grep -oE '\.(symtab|dynsym|debug_info|eh_frame)\b' | sort -u | tr '\n' ' ' || true)
+          named=$(readelf -sW "$so" | grep -c arcticdb || true)
+          {
+            echo "### wheel symbols"
+            echo '```'
+            echo "arcticdb_ext $(stat -c%s "$so") bytes"
+            echo "sections     $sections"
+            echo "arcticdb symbols $named"
+            echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+          case "$sections" in *.symtab*) ;; *) echo "::error::no .symtab"; exit 1 ;; esac
+          case "$sections" in *.eh_frame*) ;; *) echo "::error::no .eh_frame: perf cannot DWARF-unwind it"; exit 1 ;; esac
+          [ "$named" -ge 1000 ] || { echo "::error::only $named arcticdb symbols"; exit 1; }
+
+      # No venv: the image's `python` is already the cp311 the wheel is built for, this
+      # container is thrown away with the instance, and one less indirection is one less
+      # thing for perf to resolve through /proc/<pid>/maps.
+      - name: install ArcticDB
+        run: |
+          python -V
+          python -m pip install --upgrade pip -q
+          python -m pip install -q "${{ steps.wheel.outputs.path }}"
+          python -c "import arcticdb; print(arcticdb.__version__, arcticdb.__file__)"
+
+      # A write of a wide float frame, then an unbounded read loop. The read is the lane
+      # ticket 73 proved py-spy is blind to: the folly workers decode segments without
+      # ever taking the GIL, so a py-spy flame graph of this is a main thread parked in
+      # `futexWaitImpl`. Every iteration prints its own start and end epoch, which is how
+      # the two measurement windows below are scored without the loop knowing they exist.
+      - name: write the workload
+        run: |
+          cat > /tmp/workload.py <<'PY'
+          import os, sys, time
+          import numpy as np, pandas as pd
+          from arcticdb import Arctic
+
+          path, stop_file = sys.argv[1], sys.argv[2]
+          rows = int(os.environ.get("PROBE_ROWS", "10000000"))
+          cols = int(os.environ.get("PROBE_COLS", "5"))
+
+          ac = Arctic(f"lmdb://{path}?map_size=40GB")
+          lib = ac.get_library("perfprobe", create_if_missing=True)
+          rng = np.random.default_rng(7)
+          df = pd.DataFrame(
+              {f"c{i}": rng.random(rows) for i in range(cols)},
+              index=pd.date_range("2020-01-01", periods=rows, freq="s"),
+          )
+          t0 = time.time()
+          lib.write("sym", df)
+          del df
+          print(f"WROTE {rows}x{cols} in {time.time() - t0:.2f}s", flush=True)
+          print(f"PID {os.getpid()}", flush=True)
+          print("READY", flush=True)
+
+          i = 0
+          while not os.path.exists(stop_file):
+              i += 1
+              a = time.time()
+              out = lib.read("sym").data
+              b = time.time()
+              print(f"ITER {i} {a:.4f} {b:.4f} {b - a:.4f} rows={len(out)}", flush=True)
+              del out
+          print("STOPPED", flush=True)
+          PY
+
+      - name: start the workload and let it warm up
+        id: workload
+        run: |
+          mkdir -p "$RUNNER_TEMP/lmdb"
+          rm -f "$RUNNER_TEMP/STOP"
+          python /tmp/workload.py "$RUNNER_TEMP/lmdb" "$RUNNER_TEMP/STOP" > /tmp/workload.log 2>&1 &
+          echo "shell job pid $!"
+          for _ in $(seq 1 600); do
+            grep -q READY /tmp/workload.log && break
+            if ! kill -0 $! 2>/dev/null; then break; fi
+            sleep 1
+          done
+          if ! grep -q READY /tmp/workload.log; then
+            echo "::error::the workload never reached READY"; cat /tmp/workload.log; exit 1
+          fi
+          pid=$(awk '/^PID /{print $2; exit}' /tmp/workload.log)
+          echo "workload pid $pid"
+          head -5 /tmp/workload.log
+          printf 'pid=%s\n' "$pid" >> "$GITHUB_OUTPUT"
+          # One free iteration before anything is measured, so page cache and the folly
+          # pool are warm in both windows alike.
+          for _ in $(seq 1 120); do grep -q '^ITER 1 ' /tmp/workload.log && break; sleep 1; done
+
+      - name: window A — no perf attached
+        id: window_a
+        run: |
+          a0=$(date +%s.%N); sleep "$WINDOW"; a1=$(date +%s.%N)
+          printf 'a0=%s\na1=%s\n' "$a0" "$a1" >> "$GITHUB_OUTPUT"
+
+      # `--all-user` (`:u` on every event) is deliberate: no kernel frames are wanted, so
+      # nothing here needs `perf_event_paranoid` lowered or the AMI touched. `dwarf` because
+      # the wheel is built without frame pointers but keeps `.eh_frame`; 16 KB of stack per
+      # sample because ArcticDB's folly stacks are deep enough to truncate at the 8 KB default.
+      - name: window B — perf record of the same loop
+        id: window_b
+        run: |
+          PID=${{ steps.workload.outputs.pid }}
+          event=()
+          if [ "${{ steps.gate.outputs.hardware }}" != yes ]; then
+            # No PMU on a virtualised EC2 instance: name the software event explicitly
+            # rather than relying on perf's fallback, which not every version does.
+            event=(-e cpu-clock)
+          fi
+          b0=$(date +%s.%N)
+          set +e
+          perf record "${event[@]}" -F 99 --call-graph dwarf,16384 --all-user -m 16M \
+            -p "$PID" -o /tmp/perf.data -- sleep "$WINDOW" 2>&1 | tee /tmp/perf_record.log
+          rc=${PIPESTATUS[0]}
+          set -e
+          b1=$(date +%s.%N)
+          echo "perf record rc=$rc"
+          if [ "$rc" -ne 0 ] || [ ! -s /tmp/perf.data ]; then
+            echo "::error::perf record failed (rc=$rc)"; exit 1
+          fi
+          ls -l /tmp/perf.data
+          printf 'b0=%s\nb1=%s\n' "$b0" "$b1" >> "$GITHUB_OUTPUT"
+
+      - name: stop the workload
+        if: always()
+        run: |
+          touch "$RUNNER_TEMP/STOP" || true
+          for _ in $(seq 1 120); do grep -q STOPPED /tmp/workload.log && break; sleep 1; done
+          tail -5 /tmp/workload.log || true
+
+      # The proof. Symbolized `arcticdb::` frames from threads that are not the main
+      # thread are exactly what py-spy cannot see, and what ticket 75's converter will
+      # have to turn into speedscope.
+      - name: perf script — the symbols
+        run: |
+          perf script -i /tmp/perf.data > /tmp/perf.script 2>/tmp/perf_script.err || {
+            echo "--- perf script stderr ---"; cat /tmp/perf_script.err; exit 1; }
+          echo "--- perf script stderr (warnings) ---"; cat /tmp/perf_script.err || true
+          samples=$(grep -c 'cycles\|cpu-clock' /tmp/perf.script || true)
+          arctic=$(grep -c 'arcticdb::' /tmp/perf.script || true)
+          folly=$(grep -c 'folly::' /tmp/perf.script || true)
+          unknown=$(grep -cE '^\s+[0-9a-f]+ \(\?\)|\[unknown\]' /tmp/perf.script || true)
+          threads=$(awk 'NF && $1 !~ /^#/ {print $1}' /tmp/perf.script | sort -u | tr '\n' ' ')
+          {
+            echo "### perf script"
+            echo '```'
+            echo "sample lines           $samples"
+            echo "arcticdb:: frames      $arctic"
+            echo "folly:: frames         $folly"
+            echo "unresolved frames      $unknown"
+            echo "thread names           $threads"
+            echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "===== first 200 lines of perf script ====="
+          head -200 /tmp/perf.script
+          echo "===== a stack containing arcticdb:: ====="
+          awk '/arcticdb::/{found=1} {buf=buf $0 "\n"} /^$/{if (found && ++n<=3) printf "%s", buf; buf=""; found=0}' /tmp/perf.script | head -120
+          echo "===== top symbols ====="
+          perf report -i /tmp/perf.data --stdio --no-children -g none 2>/dev/null | head -40 || true
+          if [ "$arctic" -eq 0 ]; then
+            echo "::error::no symbolized arcticdb:: frames in the recording"
+            exit 1
+          fi
+
+      # What ticket 75 has to budget. Iterations are scored only if they lie wholly
+      # inside a window, so neither number is contaminated by perf attaching or detaching
+      # mid-read.
+      - name: overhead — with and without perf
+        run: |
+          python3 - <<PY | tee -a "$GITHUB_STEP_SUMMARY"
+          import re
+          A = (${{ steps.window_a.outputs.a0 }}, ${{ steps.window_a.outputs.a1 }})
+          B = (${{ steps.window_b.outputs.b0 }}, ${{ steps.window_b.outputs.b1 }})
+          iters = []
+          for line in open("/tmp/workload.log"):
+              m = re.match(r"ITER (\d+) ([\d.]+) ([\d.]+) ([\d.]+)", line)
+              if m:
+                  iters.append((int(m.group(1)), float(m.group(2)), float(m.group(3)), float(m.group(4))))
+          def score(w, label):
+              inside = [d for _, a, b, d in iters if a >= w[0] and b <= w[1]]
+              if not inside:
+                  print(f"{label}: no iteration fell wholly inside the {w[1]-w[0]:.1f}s window")
+                  return None
+              mean = sum(inside) / len(inside)
+              print(f"{label}: n={len(inside)} mean={mean:.3f}s min={min(inside):.3f}s max={max(inside):.3f}s")
+              return mean
+          print("### read overhead under perf")
+          print("\`\`\`")
+          a = score(A, "without perf")
+          b = score(B, "with perf   ")
+          if a and b:
+              print(f"overhead: {b/a:.2f}x  (+{(b/a - 1) * 100:.0f}%)")
+          print("\`\`\`")
+          PY
+
+      - name: upload the recording
+        if: always()
+        run: gzip -9 -c /tmp/perf.data > /tmp/perf.data.gz 2>/dev/null || true
+
+      - name: store the artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf-probe
+          path: |
+            /tmp/perf.data.gz
+            /tmp/perf.script
+            /tmp/perf_record.log
+            /tmp/perf_script.err
+            /tmp/workload.log
+          if-no-files-found: warn
+          overwrite: true
+          retention-days: 7
+
+  # `if: always()`, not `!cancelled()`: a cancelled run is exactly when a forgotten
+  # instance costs money.
+  stop:
+    name: stop perf probe runner
+    needs: [start, probe]
+    if: always()
+    uses: ./.github/workflows/ec2_runner_jobs.yml
+    secrets: inherit
+    with:
+      job_type: stop
+      label: ${{ needs.start.outputs.label }}
+      ec2-instance-id: ${{ needs.start.outputs.ec2-instance-id }}
