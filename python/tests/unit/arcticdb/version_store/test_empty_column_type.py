@@ -726,7 +726,7 @@ class TestAppendAndUpdateWithEmptyToColumnOnlyIncrementsVersionNumber:
             df, lmdb_version_store_static_and_dynamic, empty_dataframe
         )
 
-    def test_empty_df_does_not_create_new_columns_in_dynamic_schema(self, lmdb_version_store_dynamic_schema, index):
+    def test_empty_df_creates_new_columns_in_dynamic_schema(self, lmdb_version_store_dynamic_schema, index):
         df = pd.DataFrame({"col": [1, 2, 3]}, dtype="int32", index=index)
         lmdb_version_store_dynamic_schema.write("sym", df)
         to_append = pd.DataFrame(
@@ -739,8 +739,9 @@ class TestAppendAndUpdateWithEmptyToColumnOnlyIncrementsVersionNumber:
         )
         lmdb_version_store_dynamic_schema.append("sym", to_append)
         read_result = lmdb_version_store_dynamic_schema.read("sym")
-        assert_frame_equal(read_result.data, df)
         assert read_result.version == 1
+        assert list(read_result.data.columns) == ["col", "col_1", "col_2", "col_3", "col_4"]
+        assert_frame_equal(read_result.data[["col"]], df)
 
 
 class TestCanUpdateEmptyColumn:
@@ -861,14 +862,20 @@ class TestIndexTypeWithEmptyTypeDisabledPands2AndLater(DisabledEmptyIndexBase):
         result = self.roundtrip(pd.DataFrame([]), lmdb_version_store_static_and_dynamic)
         assert result.index.equals(pd.DatetimeIndex([]))
 
-    def test_has_a_column(self, lmdb_version_store_static_and_dynamic):
+    # The DatetimeIndex an empty frame is stored with is pandas rewriting the index, not the index its user wrote.
+    @pytest.mark.parametrize(
+        "to_append",
+        [
+            pd.DataFrame({"a": [1.0]}, index=pd.DatetimeIndex(["01/01/2024"])),
+            pd.DataFrame({"a": [1.0]}, index=pd.RangeIndex(0, 1)),
+        ],
+        ids=["datetime_index", "row_range_index"],
+    )
+    def test_has_a_column(self, lmdb_version_store_static_and_dynamic, to_append):
         result = self.roundtrip(pd.DataFrame({"a": []}), lmdb_version_store_static_and_dynamic)
         assert result.index.equals(pd.DatetimeIndex([]))
-        with pytest.raises(NormalizationException):
-            lmdb_version_store_static_and_dynamic.append(self.sym(), pd.DataFrame({"a": [1.0]}))
-        to_append_successfuly = pd.DataFrame({"a": [1.0]}, index=pd.DatetimeIndex(["01/01/2024"]))
-        lmdb_version_store_static_and_dynamic.append(self.sym(), to_append_successfuly)
-        assert_frame_equal(lmdb_version_store_static_and_dynamic.read(self.sym()).data, to_append_successfuly)
+        lmdb_version_store_static_and_dynamic.append(self.sym(), to_append)
+        assert_frame_equal(lmdb_version_store_static_and_dynamic.read(self.sym()).data, to_append)
 
     def test_explicit_row_range_no_columns(self, lmdb_version_store_static_and_dynamic):
         result = self.roundtrip(
@@ -876,19 +883,23 @@ class TestIndexTypeWithEmptyTypeDisabledPands2AndLater(DisabledEmptyIndexBase):
         )
         assert result.index.equals(pd.DatetimeIndex([]))
 
-    def test_explicit_row_range_with_columns(self, lmdb_version_store_static_and_dynamic):
+    # As above; pandas 2 discarded the RangeIndex start and step along with the index itself.
+    @pytest.mark.parametrize(
+        "to_append",
+        [
+            pd.DataFrame({"a": [1.0]}, index=pd.DatetimeIndex(["01/01/2024"])),
+            pd.DataFrame({"a": [1.0]}, index=pd.RangeIndex(0, 1)),
+        ],
+        ids=["datetime_index", "row_range_index"],
+    )
+    def test_explicit_row_range_with_columns(self, lmdb_version_store_static_and_dynamic, to_append):
         result = self.roundtrip(
             pd.DataFrame({"a": []}, index=pd.RangeIndex(start=5, stop=5, step=100)),
             lmdb_version_store_static_and_dynamic,
         )
         assert result.index.equals(pd.DatetimeIndex([]))
-        with pytest.raises(Exception):
-            lmdb_version_store_static_and_dynamic.append(
-                self.sym(), pd.DataFrame({"a": [1.0]}, pd.RangeIndex(start=0, stop=1, step=1))
-            )
-        to_append_successfuly = pd.DataFrame({"a": [1.0]}, index=pd.DatetimeIndex(["01/01/2024"]))
-        lmdb_version_store_static_and_dynamic.append(self.sym(), to_append_successfuly)
-        assert_frame_equal(lmdb_version_store_static_and_dynamic.read(self.sym()).data, to_append_successfuly)
+        lmdb_version_store_static_and_dynamic.append(self.sym(), to_append)
+        assert_frame_equal(lmdb_version_store_static_and_dynamic.read(self.sym()).data, to_append)
 
     def test_explicit_rowrange_default_step(self, lmdb_version_store_static_and_dynamic):
         result = self.roundtrip(
@@ -943,16 +954,20 @@ class TestIndexTypeWithEmptyTypeDisabledPands0AndPands1(DisabledEmptyIndexBase):
         result = self.roundtrip(pd.DataFrame([]), lmdb_version_store_static_and_dynamic)
         assert result.index.equals(pd.DatetimeIndex([]))
 
-    def test_has_a_column(self, lmdb_version_store_static_and_dynamic):
+    # The RangeIndex an empty frame is stored with is the one pandas 1 leaves on it, not the index its user wrote.
+    @pytest.mark.parametrize(
+        "to_append",
+        [
+            pd.DataFrame({"a": ["a"]}, index=pd.DatetimeIndex(["01/01/2024"])),
+            pd.DataFrame({"a": ["a"]}),
+        ],
+        ids=["datetime_index", "row_range_index"],
+    )
+    def test_has_a_column(self, lmdb_version_store_static_and_dynamic, to_append):
         result = self.roundtrip(pd.DataFrame({"a": []}), lmdb_version_store_static_and_dynamic)
         assert result.index.equals(pd.RangeIndex(start=0, stop=0, step=1))
-        with pytest.raises(NormalizationException):
-            lmdb_version_store_static_and_dynamic.append(
-                self.sym(), pd.DataFrame({"a": ["a"]}, index=pd.DatetimeIndex(["01/01/2024"]))
-            )
-        to_append_successfuly = pd.DataFrame({"a": ["a"]})
-        lmdb_version_store_static_and_dynamic.append(self.sym(), to_append_successfuly)
-        assert_frame_equal(lmdb_version_store_static_and_dynamic.read(self.sym()).data, to_append_successfuly)
+        lmdb_version_store_static_and_dynamic.append(self.sym(), to_append)
+        assert_frame_equal(lmdb_version_store_static_and_dynamic.read(self.sym()).data, to_append)
 
     def test_explicit_row_range_no_columns(self, lmdb_version_store_static_and_dynamic):
         result = self.roundtrip(
@@ -960,33 +975,26 @@ class TestIndexTypeWithEmptyTypeDisabledPands0AndPands1(DisabledEmptyIndexBase):
         )
         assert result.index.equals(pd.RangeIndex(start=0, stop=0, step=1))
 
-    def test_explicit_row_range_with_columns(self, lmdb_version_store_static_and_dynamic):
+    # The start and the step an empty frame was stored with are no more of a constraint than its index type: a frame with
+    # no rows in it says nothing about its index, whichever of the two pandas kept.
+    @pytest.mark.parametrize(
+        "to_append",
+        [
+            pd.DataFrame({"a": ["a"]}, index=pd.RangeIndex(start=5, stop=105, step=100)),
+            pd.DataFrame({"a": ["a"]}, index=pd.RangeIndex(start=9, stop=109, step=100)),
+            pd.DataFrame({"a": ["a"]}, index=pd.RangeIndex(start=5, stop=6, step=1)),
+            pd.DataFrame({"a": ["a"]}, index=pd.DatetimeIndex(["01/01/2024"])),
+        ],
+        ids=["contiguous", "differing_start", "differing_step", "datetime_index"],
+    )
+    def test_explicit_row_range_with_columns(self, lmdb_version_store_static_and_dynamic, to_append):
         result = self.roundtrip(
             pd.DataFrame({"a": []}, index=pd.RangeIndex(start=5, stop=5, step=100)),
             lmdb_version_store_static_and_dynamic,
         )
         assert result.index.equals(pd.RangeIndex(start=5, stop=5, step=100))
-        # Cannot append datetime indexed df to empty rowrange index
-        with pytest.raises(NormalizationException):
-            lmdb_version_store_static_and_dynamic.append(
-                self.sym(), pd.DataFrame({"a": ["a"]}, index=pd.DatetimeIndex(["01/01/2024"]))
-            )
-        # Cannot append rowrange indexed df if the start of the appended is not matching the stop of the empty
-        with pytest.raises(NormalizationException):
-            lmdb_version_store_static_and_dynamic.append(
-                self.sym(), pd.DataFrame({"a": ["a"]}, index=pd.RangeIndex(start=9, stop=109, step=100))
-            )
-            lmdb_version_store_static_and_dynamic.append(
-                self.sym(), pd.DataFrame({"a": ["a"]}, index=pd.RangeIndex(start=10, stop=110, step=100))
-            )
-        # Cannot append rowrange indexed df if the step is different
-        with pytest.raises(NormalizationException):
-            lmdb_version_store_static_and_dynamic.append(
-                self.sym(), pd.DataFrame({"a": ["a"]}, index=pd.RangeIndex(start=5, stop=6, step=1))
-            )
-        to_append_successfuly = pd.DataFrame({"a": ["a"]}, index=pd.RangeIndex(start=5, stop=105, step=100))
-        lmdb_version_store_static_and_dynamic.append(self.sym(), to_append_successfuly)
-        assert_frame_equal(lmdb_version_store_static_and_dynamic.read(self.sym()).data, to_append_successfuly)
+        lmdb_version_store_static_and_dynamic.append(self.sym(), to_append)
+        assert_frame_equal(lmdb_version_store_static_and_dynamic.read(self.sym()).data, to_append)
 
     def test_explicit_rowrange_default_step(self, lmdb_version_store_static_and_dynamic):
         result = self.roundtrip(

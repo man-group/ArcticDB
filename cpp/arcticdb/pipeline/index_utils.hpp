@@ -141,21 +141,29 @@ struct RequiredFieldInfo {
         return num_physical_indices + (has_series_value_column ? 1 : 0);
     }
 
-    // How many of a single frame's leading fields are required ones. An empty index occupies no descriptor field, so
-    // a frame carrying one contributes none of the index levels and every one of its fields is a data column.
-    [[nodiscard]] size_t num_required_columns_for(IndexDescriptorImpl::Type index_type) const {
-        const size_t indices = index_type == IndexDescriptorImpl::Type::EMPTY ? 0 : num_physical_indices;
-        return indices + (has_series_value_column ? 1 : 0);
+    // Whether the combined index metadata is itself inferred from empty frames only.
+    bool has_empty_pandas_index{false};
+
+    // Range [first, last) of a schema's descriptor fields to treat as required fields. The fields before first are its
+    // index fields, skipped when the schema's own index can't be trusted but the combined one can.
+    [[nodiscard]] std::pair<size_t, size_t> required_columns_range_for(const OutputSchema& schema) const {
+        const size_t series_value_column = has_series_value_column ? 1 : 0;
+        if (schema.has_empty_pandas_index() && !has_empty_pandas_index) {
+            const auto index_fields = schema.stream_descriptor().index().field_count();
+            return {index_fields, index_fields + series_value_column};
+        }
+        return {0, num_physical_indices + series_value_column};
     }
 };
 
-RequiredFieldInfo required_fields_info(const proto::descriptors::NormalizationMetadata& norm_meta);
+RequiredFieldInfo required_fields_info(
+        const proto::descriptors::NormalizationMetadata& norm_meta, bool has_empty_pandas_index = false
+);
 
-// For metadata that says nothing about the index - absent, or an input type with no index of its own such as an
-// ndarray or a pickled object - the descriptor's own index field count is the answer.
 RequiredFieldInfo required_fields_info(
         const StreamDescriptor& stream_desc,
-        const std::optional<proto::descriptors::NormalizationMetadata>& norm_meta = std::nullopt
+        const std::optional<proto::descriptors::NormalizationMetadata>& norm_meta = std::nullopt,
+        bool has_empty_pandas_index = false
 );
 
 } // namespace arcticdb::pipelines::index

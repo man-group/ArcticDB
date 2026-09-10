@@ -749,7 +749,11 @@ def test_append_batch_empty_dataframe_increases_version(lmdb_library, compact_da
     assert len(lib_tool.find_keys(KeyType.SYMBOL_LIST)) == 2
 
     append_result = lib.append_batch(
-        [WritePayload("sym1", pd.DataFrame({"a": [5, 6, 7]})), WritePayload("sym2", pd.DataFrame({"b": []}))],
+        [
+            WritePayload("sym1", pd.DataFrame({"a": [5, 6, 7]})),
+            # An empty column's dtype counts as much as any other's, and a bare [] is a float one.
+            WritePayload("sym2", pd.DataFrame({"b": np.array([], dtype=np.int64)})),
+        ],
         compact_data=compact_data,
     )
     assert append_result[0].version == 1
