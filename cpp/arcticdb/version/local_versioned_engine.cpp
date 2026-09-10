@@ -179,6 +179,10 @@ std::vector<std::variant<ResultValueType, DataError>> transform_batch_items_or_t
                     data_error.set_error_code(ErrorCode::E_KEY_NOT_FOUND);
                 } else if (exception.template is_compatible_with<RecursivelyNormalizedDataException>()) {
                     data_error.set_error_code(ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_RECURSIVE_NORMALIZED_DATA);
+                } else if (exception.template is_compatible_with<PickledDataException>()) {
+                    data_error.set_error_code(ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_PICKLED_DATA);
+                } else if (exception.template is_compatible_with<NumpyArrayDataException>()) {
+                    data_error.set_error_code(ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_NUMPY_ARRAY);
                 }
                 result.emplace_back(std::move(data_error));
             }

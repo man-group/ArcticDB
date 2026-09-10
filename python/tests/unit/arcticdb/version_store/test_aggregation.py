@@ -12,7 +12,7 @@ import pandas as pd
 from pandas import DataFrame
 
 from arcticdb.version_store.processing import QueryBuilder
-from arcticdb.exceptions import InternalException, SchemaException
+from arcticdb.exceptions import ErrorCode, SchemaException
 from arcticdb.util.test import (
     assert_frame_equal,
     generic_aggregation_test,
@@ -20,6 +20,7 @@ from arcticdb.util.test import (
     common_sum_aggregation_dtype,
     valid_common_type,
 )
+from tests.util.unprocessable_data import expect_refusal, groupby_agg_query, write_unprocessable
 
 pytestmark = pytest.mark.pipeline
 
@@ -278,7 +279,7 @@ def test_group_pickled_symbol(lmdb_version_store_v1, any_output_format):
     lib.write(symbol, np.arange(100).tolist())
     assert lib.is_symbol_pickled(symbol)
     q = QueryBuilder().groupby("grouping_column").agg({"to_mean": "mean"})
-    with pytest.raises(InternalException):
+    with pytest.raises(SchemaException, match=ErrorCode.E_OPERATION_NOT_SUPPORTED_WITH_PICKLED_DATA.name):
         _ = lib.read(symbol, query_builder=q)
 
 
@@ -538,7 +539,7 @@ def test_group_pickled_symbol_dynamic(lmdb_version_store_dynamic_schema_v1, any_
     lib.write(symbol, np.arange(100).tolist())
     assert lib.is_symbol_pickled(symbol)
     q = QueryBuilder().groupby("grouping_column").agg({"to_mean": "mean"})
-    with pytest.raises(InternalException):
+    with pytest.raises(SchemaException, match=ErrorCode.E_OPERATION_NOT_SUPPORTED_WITH_PICKLED_DATA.name):
         lib.read(symbol, query_builder=q)
 
 
@@ -721,3 +722,12 @@ def test_timestamp_aggregations_with_missing_aggregation_column(
     expected = expected.reindex(columns=sorted(expected.columns)).sort_index()
 
     assert_frame_equal(received, expected, check_dtype=False)
+
+
+# The pickled case is covered by test_group_pickled_symbol and test_group_pickled_symbol_dynamic above.
+@pytest.mark.parametrize("kind", ["numpy", "recursive"])
+def test_group_unprocessable_data(lmdb_version_store_v1, kind):
+    lib = lmdb_version_store_v1
+    sym = write_unprocessable(lib, kind, "test_group_unprocessable_data")
+    with expect_refusal(kind):
+        lib.read(sym, query_builder=groupby_agg_query())

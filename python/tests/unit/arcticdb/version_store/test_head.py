@@ -12,7 +12,7 @@ import numpy as np
 from pandas import DataFrame
 import pytest
 
-from arcticdb.exceptions import InternalException
+from tests.util.unprocessable_data import expect_refusal, write_unprocessable
 
 pytestmark = pytest.mark.pipeline
 
@@ -112,7 +112,7 @@ def test_head_pickled_symbol(lmdb_version_store, any_output_format):
     symbol = "test_head_pickled_symbol"
     lmdb_version_store.write(symbol, np.arange(100).tolist())
     assert lmdb_version_store.is_symbol_pickled(symbol)
-    with pytest.raises(InternalException):
+    with expect_refusal("pickled"):
         _ = lmdb_version_store.head(symbol)
 
 
@@ -125,3 +125,9 @@ def test_dynamic_schema_head(lmdb_version_store_dynamic_schema, n, any_output_fo
     result = lib.head("sym", n=n).data
     assert len(result) == min(n, 4)
     assert set(result.columns) == {"a", "b"}
+
+
+def test_head_recursively_normalized_symbol(lmdb_version_store):
+    sym = write_unprocessable(lmdb_version_store, "recursive", "test_head_recursively_normalized_symbol")
+    with expect_refusal("recursive"):
+        _ = lmdb_version_store.head(sym, n=2)

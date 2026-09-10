@@ -31,6 +31,7 @@ from arcticdb import QueryBuilder
 from arcticdb.exceptions import ArcticNativeException
 from arcticdb.util.hypothesis import use_of_function_scoped_fixtures_in_hypothesis_checked
 from arcticdb.util.test import config_context
+from tests.util.unprocessable_data import expect_refusal, write_unprocessable
 
 pytestmark = pytest.mark.pipeline
 
@@ -1776,3 +1777,11 @@ def test_column_stats_create_date_range_unsorted_raises(in_memory_store_factory,
 
     with pytest.raises(SortingException):
         lib.create_column_stats_experimental(sym, date_range=(pd.Timestamp("2000-01-01"), pd.Timestamp("2000-01-03")))
+
+
+@pytest.mark.parametrize("kind", ["numpy", "recursive"])
+def test_column_stats_unprocessable_data(in_memory_store_factory, lib_name, kind):
+    lib = in_memory_store_factory(name=f"{lib_name}_{kind}")
+    sym = write_unprocessable(lib, kind, "test_column_stats_unprocessable_data")
+    with expect_refusal(kind):
+        lib.create_column_stats_experimental(sym)
