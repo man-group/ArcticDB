@@ -768,12 +768,12 @@ class TestCanUpdateEmptyColumn:
         lmdb_version_store_static_and_dynamic.update("sym", df)
         assert_frame_equal(lmdb_version_store_static_and_dynamic.read("sym").data, df)
 
-    def test_bool(self, lmdb_version_store_static_and_dynamic, boolean_dtype):
+    def test_bool_values(self, lmdb_version_store_static_and_dynamic, boolean_dtype):
         df = pd.DataFrame({"col": [True, False, None]}, index=self.update_index(), dtype=boolean_dtype)
         lmdb_version_store_static_and_dynamic.update("sym", df)
         assert_frame_equal(lmdb_version_store_static_and_dynamic.read("sym").data, df)
 
-    def test_bool(self, lmdb_version_store_static_and_dynamic):
+    def test_all_none_values(self, lmdb_version_store_static_and_dynamic):
         df = pd.DataFrame({"col": [None, None, None]}, index=self.update_index())
         lmdb_version_store_static_and_dynamic.update("sym", df)
         assert_frame_equal(lmdb_version_store_static_and_dynamic.read("sym").data, df)
