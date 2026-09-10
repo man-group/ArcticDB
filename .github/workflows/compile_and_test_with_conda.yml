@@ -39,11 +39,20 @@ jobs:
       - name: Initialise lmdb and lmdbxx submodules
         run: git -c core.autocrlf=false submodule update --init cpp/third_party/lmdb cpp/third_party/lmdbxx
 
+      # The release download 5xxs from time to time and the action's own retries are
+      # short (see #3261). Without sccache ARCTICDB_COMPILER_CACHE=AUTO finds no cache
+      # and the build just runs uncached, so degrade to a slow green build, not a red one.
       - name: Configure sccache
+        id: sccache
+        continue-on-error: true
         uses: mozilla-actions/sccache-action@v0.0.9
         with:
           version: v0.12.0
           disable_annotations: 'true'
+
+      - name: Warn if sccache is unavailable
+        if: steps.sccache.outcome == 'failure'
+        run: echo "::warning title=sccache unavailable::Could not install sccache; building without a compiler cache."
 
       - name: Get number of CPU cores
         uses: SimenB/github-actions-cpu-cores@v2.0.0
@@ -84,6 +93,7 @@ jobs:
           CMAKE_BUILD_PARALLEL_LEVEL: ${{contains(inputs.platform, 'aarch64') && '3' || ''}}
 
       - name: Show sccache stats
+        if: steps.sccache.outcome == 'success'
         run: ${SCCACHE_PATH} --show-stats || sccache --show-stats
 
       - name: Archive build artifacts
@@ -118,11 +128,18 @@ jobs:
       - name: Initialise lmdb and lmdbxx submodules
         run: git -c core.autocrlf=false submodule update --init cpp/third_party/lmdb cpp/third_party/lmdbxx
 
+      # See the note on the compile job: a failed sccache download must not fail the job.
       - name: Configure sccache
+        id: sccache
+        continue-on-error: true
         uses: mozilla-actions/sccache-action@v0.0.9
         with:
           version: v0.12.0
           disable_annotations: 'true'
+
+      - name: Warn if sccache is unavailable
+        if: steps.sccache.outcome == 'failure'
+        run: echo "::warning title=sccache unavailable::Could not install sccache; building without a compiler cache."
 
       - name: Free Disk Space
         if: inputs.free_disk_space
@@ -174,6 +191,7 @@ jobs:
           ARCTICDB_USING_CONDA: 1
 
       - name: Show sccache stats
+        if: steps.sccache.outcome == 'success'
         run: ${SCCACHE_PATH} --show-stats || sccache --show-stats
 
       - name: Run C++ Tests
@@ -195,8 +213,6 @@ jobs:
     env:
       ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
       ACTIONS_ALLOW_UNSECURE_COMMANDS: true
-      SCCACHE_GHA_VERSION: ${{vars.SCCACHE_GHA_VERSION || 1}}
-      SCCACHE_GHA_ENABLED: "true"
     defaults:
       run:
         shell: bash -l {0}
@@ -214,11 +230,9 @@ jobs:
       - name: Initialise lmdb and lmdbxx submodules
         run: git -c core.autocrlf=false submodule update --init cpp/third_party/lmdb cpp/third_party/lmdbxx
 
-      - name: Configure sccache
-        uses: mozilla-actions/sccache-action@v0.0.9
-        with:
-          version: v0.12.0
-          disable_annotations: 'true'
+      # No sccache here on purpose: this job installs the artifacts built by `compile`
+      # and never invokes a compiler, so downloading sccache only added a network hop
+      # that could (and did) fail the job.
 
       - name: Download build artifacts
         uses: actions/download-artifact@v8
