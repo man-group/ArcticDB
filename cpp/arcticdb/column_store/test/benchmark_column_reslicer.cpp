@@ -41,8 +41,9 @@ static void BM_column_reslicer_combine_dense_numeric_same_type(benchmark::State&
         for (auto& column : columns) {
             reslicer.push_back(column, string_pool);
         }
+        std::vector<StringOffsetRemap> remaps(static_cast<size_t>(num_input_columns));
         state.ResumeTiming();
-        reslicer.reslice_columns(string_pools);
+        reslicer.reslice_columns(string_pools, remaps);
     }
 }
 
@@ -77,8 +78,9 @@ static void BM_column_reslicer_combine_dense_numeric_same_type_small_appends(ben
         for (auto& column : columns) {
             reslicer.push_back(column, string_pool);
         }
+        std::vector<StringOffsetRemap> remaps(static_cast<size_t>(num_input_columns));
         state.ResumeTiming();
-        reslicer.reslice_columns(string_pools);
+        reslicer.reslice_columns(string_pools, remaps);
     }
 }
 
@@ -112,8 +114,9 @@ static void BM_column_reslicer_combine_dense_numeric_type_promotion(benchmark::S
         for (auto& column : columns) {
             reslicer.push_back(column, string_pool);
         }
+        std::vector<StringOffsetRemap> remaps(static_cast<size_t>(num_input_columns));
         state.ResumeTiming();
-        reslicer.reslice_columns(string_pools);
+        reslicer.reslice_columns(string_pools, remaps);
     }
 }
 
@@ -136,8 +139,9 @@ static void BM_column_reslicer_split_dense_numeric_same_type(benchmark::State& s
         state.PauseTiming();
         ColumnReslicer reslicer(1, ReslicingInfo{num_input_rows, num_input_rows / num_output_columns});
         reslicer.push_back(column, string_pool);
+        std::vector<StringOffsetRemap> remaps(1);
         state.ResumeTiming();
-        reslicer.reslice_columns(string_pools);
+        reslicer.reslice_columns(string_pools, remaps);
     }
 }
 
@@ -179,8 +183,9 @@ static void BM_column_reslicer_combine_dense_strings(benchmark::State& state) {
             reslicer.push_back(columns.at(idx), input_string_pools.at(idx));
         }
         std::vector<StringPool> output_string_pools(1);
+        std::vector<StringOffsetRemap> remaps(static_cast<size_t>(num_input_columns));
         state.ResumeTiming();
-        reslicer.reslice_columns(output_string_pools);
+        reslicer.reslice_columns(output_string_pools, remaps);
     }
 }
 
@@ -209,8 +214,9 @@ static void BM_column_reslicer_split_dense_strings(benchmark::State& state) {
         ColumnReslicer reslicer(1, ReslicingInfo{num_input_rows, num_input_rows / num_output_columns});
         reslicer.push_back(column, input_string_pool);
         std::vector<StringPool> output_string_pools(10);
+        std::vector<StringOffsetRemap> remaps(1);
         state.ResumeTiming();
-        reslicer.reslice_columns(output_string_pools);
+        reslicer.reslice_columns(output_string_pools, remaps);
     }
 }
 

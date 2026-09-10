@@ -9,6 +9,7 @@
 #include <gtest/gtest.h>
 #include <arcticdb/column_store/column_reslicer.hpp>
 #include <arcticdb/column_store/string_pool.hpp>
+#include <arcticdb/util/offset_string.hpp>
 #include <arcticdb/util/string_utils.hpp>
 
 using namespace arcticdb;
@@ -43,7 +44,8 @@ TYPED_TEST(ColumnReslicerDenseNumericSameTypeFixture, CombineIntoOneStatic) {
         }
     }
     std::vector<StringPool> string_pools; // Unused with numeric data
-    auto res = reslicer.reslice_columns(string_pools);
+    std::vector<StringOffsetRemap> remaps(3);
+    auto res = reslicer.reslice_columns(string_pools, remaps);
     ASSERT_EQ(res.size(), 1);
     auto& col = res.front();
     ASSERT_EQ(col.row_count(), total_rows);
@@ -103,7 +105,8 @@ TYPED_TEST(ColumnReslicerDenseNumericSameTypeFixture, CombineIntoOneDynamicMissi
         reslicer.push_back(std::make_shared<Column>(std::move(col)), std::shared_ptr<StringPool>{});
     }
     std::vector<StringPool> string_pools; // Unused with numeric data
-    auto res = reslicer.reslice_columns(string_pools);
+    std::vector<StringOffsetRemap> remaps(3);
+    auto res = reslicer.reslice_columns(string_pools, remaps);
     ASSERT_EQ(res.size(), 1);
     auto& col = res.front();
     ASSERT_EQ(col.row_count(), value_count);
@@ -176,7 +179,8 @@ TYPED_TEST(ColumnReslicerDenseNumericSameTypeFixture, CombineIntoOneDynamicMissi
         reslicer.push_back(std::make_shared<Column>(std::move(col)), std::shared_ptr<StringPool>{});
     }
     std::vector<StringPool> string_pools; // Unused with numeric data
-    auto res = reslicer.reslice_columns(string_pools);
+    std::vector<StringOffsetRemap> remaps(3);
+    auto res = reslicer.reslice_columns(string_pools, remaps);
     ASSERT_EQ(res.size(), 1);
     auto& col = res.front();
     ASSERT_EQ(col.row_count(), value_count);
@@ -240,7 +244,8 @@ TYPED_TEST(ColumnReslicerDenseNumericSameTypeFixture, CombineIntoOneDynamicMissi
         reslicer.push_back(std::make_shared<Column>(std::move(col)), std::shared_ptr<StringPool>{});
     }
     std::vector<StringPool> string_pools; // Unused with numeric data
-    auto res = reslicer.reslice_columns(string_pools);
+    std::vector<StringOffsetRemap> remaps(4);
+    auto res = reslicer.reslice_columns(string_pools, remaps);
     ASSERT_EQ(res.size(), 1);
     auto& col = res.front();
     ASSERT_EQ(col.row_count(), value_count);
@@ -328,7 +333,8 @@ TYPED_TEST(ColumnReslicerDenseNumericSameTypeFixture, CombineIntoOneDynamicMissi
         reslicer.push_back(5);
     }
     std::vector<StringPool> string_pools; // Unused with numeric data
-    auto res = reslicer.reslice_columns(string_pools);
+    std::vector<StringOffsetRemap> remaps(3);
+    auto res = reslicer.reslice_columns(string_pools, remaps);
     ASSERT_EQ(res.size(), 1);
     auto& col = res.front();
     ASSERT_EQ(col.row_count(), value_count);
@@ -384,7 +390,8 @@ TYPED_TEST(ColumnReslicerDenseNumericSameTypeFixture, SplitInTwoStatic) {
     }
     reslicer.push_back(std::make_shared<Column>(std::move(input_col)), std::shared_ptr<StringPool>{});
     std::vector<StringPool> string_pools; // Unused with numeric data
-    auto res = reslicer.reslice_columns(string_pools);
+    std::vector<StringOffsetRemap> remaps(1);
+    auto res = reslicer.reslice_columns(string_pools, remaps);
 
     uint64_t rows_in_first_slice{total_rows - max_rows_per_slice};
     ASSERT_EQ(res.size(), 2);
@@ -447,7 +454,8 @@ TYPED_TEST(ColumnReslicerDenseNumericSameTypeFixture, CombineThreeIntoTwoStatic)
         }
     }
     std::vector<StringPool> string_pools; // Unused with numeric data
-    auto res = reslicer.reslice_columns(string_pools);
+    std::vector<StringOffsetRemap> remaps(3);
+    auto res = reslicer.reslice_columns(string_pools, remaps);
 
     ASSERT_EQ(res.size(), 2);
     auto& col_0 = res.front();
@@ -509,7 +517,8 @@ TEST(ColumnReslicerDenseNumericStaticSchema, MultiBlockColumns) {
     reslicer.push_back(std::make_shared<Column>(std::move(input_columns.at(1))), std::shared_ptr<StringPool>{});
     reslicer.push_back(std::make_shared<Column>(std::move(input_columns.at(2))), std::shared_ptr<StringPool>{});
     std::vector<StringPool> string_pools; // Unused with numeric data
-    auto res = reslicer.reslice_columns(string_pools);
+    std::vector<StringOffsetRemap> remaps(3);
+    auto res = reslicer.reslice_columns(string_pools, remaps);
 
     ASSERT_EQ(res.size(), 2);
     auto& col_0 = res.front();
@@ -576,7 +585,8 @@ TYPED_TEST(ColumnReslicerSparseNumericSameTypeFixture, CombineIntoOneStatic) {
         }
     }
     std::vector<StringPool> string_pools; // Unused with numeric data
-    auto res = reslicer.reslice_columns(string_pools);
+    std::vector<StringOffsetRemap> remaps(3);
+    auto res = reslicer.reslice_columns(string_pools, remaps);
     ASSERT_EQ(res.size(), 1);
     auto& col = res.front();
     ASSERT_EQ(col.row_count(), total_values);
@@ -663,7 +673,8 @@ TYPED_TEST(ColumnReslicerSparseNumericSameTypeFixture, SplitInThreeStatic) {
     col.set_row_data(total_rows - 1);
     reslicer.push_back(std::make_shared<Column>(std::move(col)), std::shared_ptr<StringPool>{});
     std::vector<StringPool> string_pools; // Unused with numeric data
-    auto res = reslicer.reslice_columns(string_pools);
+    std::vector<StringOffsetRemap> remaps(1);
+    auto res = reslicer.reslice_columns(string_pools, remaps);
     ASSERT_EQ(res.size(), 3);
     auto& col_0 = res.front();
     auto& col_1 = res.at(1);
@@ -759,7 +770,8 @@ TEST_F(ColumnReslicerDenseStringStaticSchema, CombineIntoOne) {
     input_columns.clear(); // In debug builds there are checks that the reslicer has the last reference to input columns
 
     std::vector<StringPool> string_pools(1);
-    auto res = reslicer.reslice_columns(string_pools);
+    std::vector<StringOffsetRemap> remaps(4);
+    auto res = reslicer.reslice_columns(string_pools, remaps);
     ASSERT_EQ(res.size(), 1);
     auto& col = res.front();
     ASSERT_EQ(col.type(), utf8_td);
@@ -822,7 +834,8 @@ TEST_P(ColumnReslicerDenseStringStaticSchemaSplit, SplitInTwoTest) {
     col_with_strings.reset();
 
     std::vector<StringPool> string_pools(2);
-    auto res = reslicer.reslice_columns(string_pools);
+    std::vector<StringOffsetRemap> remaps(1);
+    auto res = reslicer.reslice_columns(string_pools, remaps);
     ASSERT_EQ(res.size(), 2);
     auto& col_0 = res.front();
     auto& col_1 = res.back();
@@ -861,3 +874,90 @@ INSTANTIATE_TEST_SUITE_P(
                 DataType::ASCII_FIXED64, DataType::ASCII_DYNAMIC64, DataType::UTF_FIXED64, DataType::UTF_DYNAMIC64
         )
 );
+
+// Two columns of the same input segment share that segment's string pool, and so share a remap. A string that both
+// columns use should be interned into the output pool exactly once, and both should reference it at the same offset.
+TEST_F(ColumnReslicerDenseStringStaticSchema, RemapSharedBetweenColumnsOfOneSegment) {
+    using RawType = StringPool::offset_t;
+    auto input_string_pool = std::make_shared<StringPool>();
+    auto column_over_shared_pool = [&](const std::vector<std::string>& strings) {
+        Column col{utf8_td, Sparsity::NOT_PERMITTED};
+        for (const auto& str : strings) {
+            col.push_back(input_string_pool->get(str).offset());
+        }
+        return std::make_shared<Column>(std::move(col));
+    };
+    // "shared" is in both columns, the others in only one of them
+    const std::vector<std::string> left_strings{"shared", "left", "shared"};
+    const std::vector<std::string> right_strings{"right", "shared", "right"};
+    ReslicingInfo reslicing_info{left_strings.size(), left_strings.size()};
+
+    ColumnReslicer left_reslicer{1, reslicing_info};
+    left_reslicer.push_back(column_over_shared_pool(left_strings), input_string_pool);
+    ColumnReslicer right_reslicer{1, reslicing_info};
+    right_reslicer.push_back(column_over_shared_pool(right_strings), input_string_pool);
+
+    std::vector<StringPool> string_pools(1);
+    std::vector<StringOffsetRemap> remaps(1);
+    auto left_res = left_reslicer.reslice_columns(string_pools, remaps);
+    auto right_res = right_reslicer.reslice_columns(string_pools, remaps);
+    ASSERT_EQ(left_res.size(), 1);
+    ASSERT_EQ(right_res.size(), 1);
+    const auto& string_pool = string_pools.front();
+
+    for (size_t idx = 0; idx < left_strings.size(); ++idx) {
+        auto left_val = left_res.front().scalar_at<RawType>(idx);
+        auto right_val = right_res.front().scalar_at<RawType>(idx);
+        ASSERT_TRUE(left_val.has_value());
+        ASSERT_TRUE(right_val.has_value());
+        ASSERT_EQ(string_pool.get_const_view(*left_val), left_strings.at(idx));
+        ASSERT_EQ(string_pool.get_const_view(*right_val), right_strings.at(idx));
+    }
+    // "shared" is at the same offset in both output columns, and the pool holds it once
+    ASSERT_EQ(*left_res.front().scalar_at<RawType>(0), *right_res.front().scalar_at<RawType>(1));
+    std::unordered_set<RawType> distinct_offsets;
+    for (size_t idx = 0; idx < left_strings.size(); ++idx) {
+        distinct_offsets.insert(*left_res.front().scalar_at<RawType>(idx));
+        distinct_offsets.insert(*right_res.front().scalar_at<RawType>(idx));
+    }
+    ASSERT_EQ(distinct_offsets.size(), 3);
+}
+
+// None and NaN are represented by offsets outside the range of any string pool, so they must miss the remap and be
+// copied through untouched
+TEST_F(ColumnReslicerDenseStringStaticSchema, NoneAndNanPassThroughRemap) {
+    using RawType = StringPool::offset_t;
+    auto input_string_pool = std::make_shared<StringPool>();
+    Column col{utf8_td, Sparsity::NOT_PERMITTED};
+    const auto hello = input_string_pool->get(std::string_view("hello")).offset();
+    const auto world = input_string_pool->get(std::string_view("world")).offset();
+    const std::vector<RawType> input_offsets{
+            hello, not_a_string(), world, nan_placeholder(), hello, not_a_string(), world
+    };
+    for (const auto offset : input_offsets) {
+        col.push_back(offset);
+    }
+    uint64_t total_rows{input_offsets.size()};
+    // Two output slices, so the remap is also cleared part way through
+    ReslicingInfo reslicing_info{total_rows, 4};
+    ColumnReslicer reslicer{1, reslicing_info};
+    reslicer.push_back(std::make_shared<Column>(std::move(col)), input_string_pool);
+
+    std::vector<StringPool> string_pools(2);
+    std::vector<StringOffsetRemap> remaps(1);
+    auto res = reslicer.reslice_columns(string_pools, remaps);
+    ASSERT_EQ(res.size(), 2);
+    const auto rows_in_first_slice = static_cast<size_t>(res.front().row_count());
+    for (size_t idx = 0; idx < total_rows; ++idx) {
+        const bool in_first = idx < rows_in_first_slice;
+        auto opt_val = in_first ? res.front().scalar_at<RawType>(idx)
+                                : res.back().scalar_at<RawType>(idx - rows_in_first_slice);
+        ASSERT_TRUE(opt_val.has_value());
+        const auto& pool = in_first ? string_pools.front() : string_pools.back();
+        if (is_a_string(input_offsets.at(idx))) {
+            ASSERT_EQ(pool.get_const_view(*opt_val), input_string_pool->get_const_view(input_offsets.at(idx)));
+        } else {
+            ASSERT_EQ(*opt_val, input_offsets.at(idx));
+        }
+    }
+}

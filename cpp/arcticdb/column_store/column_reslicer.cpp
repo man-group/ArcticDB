@@ -76,13 +76,15 @@ void ColumnReslicer::push_back(size_t row_count) {
     sparse_ = true;
 }
 
-std::vector<Column> ColumnReslicer::reslice_columns(std::vector<StringPool>& string_pools) {
+std::vector<Column> ColumnReslicer::reslice_columns(
+        std::vector<StringPool>& string_pools, std::vector<StringOffsetRemap>& remaps
+) {
     util::check(type_.has_value(), "ColumnReslicer::reslice_columns called without any calls to push_back");
-    auto res = [this, &string_pools]() {
+    auto res = [this, &string_pools, &remaps]() {
         if (!is_sequence_type(type_->data_type()) && numeric_types_all_same_) {
             return reslice_by_memcpy();
         } else {
-            return reslice_by_iteration(string_pools);
+            return reslice_by_iteration(string_pools, remaps);
         }
     }();
     for (auto&& [idx, col] : folly::enumerate(res)) {
@@ -162,7 +164,9 @@ std::vector<Column> ColumnReslicer::reslice_by_memcpy() {
     return output_columns;
 }
 
-std::vector<Column> ColumnReslicer::reslice_by_iteration(std::vector<StringPool>& string_pools) {
+std::vector<Column> ColumnReslicer::reslice_by_iteration(
+        std::vector<StringPool>& string_pools, std::vector<StringOffsetRemap>& remaps
+) {
     auto output_columns = initialise_output_columns();
     util::check(
             output_columns.size() == string_pools.size(),
@@ -170,6 +174,12 @@ std::vector<Column> ColumnReslicer::reslice_by_iteration(std::vector<StringPool>
             "{} != {}",
             output_columns.size(),
             string_pools.size()
+    );
+    util::check(
+            cols_or_row_counts_.size() == remaps.size(),
+            "ColumnReslicer::reslice_by_iteration number of input slices does not match number of remaps {} != {}",
+            cols_or_row_counts_.size(),
+            remaps.size()
     );
     auto output_col = output_columns.begin();
     auto string_pool = string_pools.begin();
@@ -190,13 +200,32 @@ std::vector<Column> ColumnReslicer::reslice_by_iteration(std::vector<StringPool>
         using output_type_info = ScalarTypeInfo<decltype(output_tag)>;
         auto output_it = output_data.begin<typename output_type_info::TDT>();
         auto output_end_it = output_data.end<typename output_type_info::TDT>();
-        for (auto& col_or_row_count : cols_or_row_counts_) {
+        // An index loop rather than folly::enumerate: the nested generic lambdas below
+        // refer to the loop variables, and a structured binding referred to from a
+        // generic lambda makes GCC treat everything derived from it as dependent,
+        // rejecting the member-template calls this file compiles with today.
+        for (size_t input_idx = 0; input_idx < cols_or_row_counts_.size(); ++input_idx) {
+            auto& col_or_row_count = cols_or_row_counts_[input_idx];
             if (auto* col_with_strings = std::get_if<ColumnWithStrings>(&col_or_row_count)) {
                 details::visit_type(col_with_strings->column_->type().data_type(), [&](auto input_tag) {
                     // Maps offsets in the input string pool to offsets in the output string pool
                     // Provides a small speed boost for low cardinality string columns
                     ankerl::unordered_dense::map<StringPool::offset_t, StringPool::offset_t> offsets_map;
                     using input_type_info = ScalarTypeInfo<decltype(input_tag)>;
+                    // Fixed-width strings are transformed before being interned, so the offsets in the input pool do
+                    // not identify the strings that end up in the output pool, and the remap shared with the other
+                    // columns of this input segment cannot be used
+                    StringOffsetRemap* remap = nullptr;
+                    if constexpr (is_sequence_type(output_type_info::data_type) &&
+                                  !is_fixed_string_type(input_type_info::data_type)) {
+                        if (col_with_strings->string_pool_) {
+                            remap = &remaps[input_idx];
+                            remap->set_output_pool(
+                                    static_cast<size_t>(std::distance(output_columns.begin(), output_col)),
+                                    col_with_strings->string_pool_->size()
+                            );
+                        }
+                    }
                     auto input_data = col_with_strings->column_->data();
                     auto input_end_it = input_data.cend<typename input_type_info::TDT>();
                     for (auto input_it = input_data.cbegin<typename input_type_info::TDT>(); input_it != input_end_it;
@@ -210,9 +239,37 @@ std::vector<Column> ColumnReslicer::reslice_by_iteration(std::vector<StringPool>
                                 output_data = output_col->data();
                                 output_it = output_data.begin<typename output_type_info::TDT>();
                                 output_end_it = output_data.end<typename output_type_info::TDT>();
+                                if (remap != nullptr) {
+                                    remap->set_output_pool(
+                                            static_cast<size_t>(std::distance(output_columns.begin(), output_col)),
+                                            col_with_strings->string_pool_->size()
+                                    );
+                                }
                             }
                         }
                         if constexpr (is_sequence_type(output_type_info::data_type)) {
+                            if (remap != nullptr) {
+                                if (const auto mapped = remap->lookup(*input_it);
+                                    mapped != StringOffsetRemap::unmapped) {
+                                    *output_it = mapped;
+                                } else if (auto opt_str = col_with_strings->string_at_offset(*input_it);
+                                           opt_str.has_value()) {
+                                    *output_it = string_pool->get(*opt_str).offset();
+                                    remap->insert(*input_it, *output_it);
+                                } else {
+                                    // This is only possible if the input column has a dynamic string type, and so
+                                    // *input_it will represent either None or NaN. Those offsets are out of range of
+                                    // the remap, so they are never given an entry in it
+                                    ARCTICDB_DEBUG_CHECK(
+                                            ErrorCode::E_ASSERTION_FAILURE,
+                                            !is_a_string(*input_it),
+                                            "Invalid non-string offset {}",
+                                            *input_it
+                                    );
+                                    *output_it = *input_it;
+                                }
+                                continue;
+                            }
                             if (auto offsets_map_it = offsets_map.find(*input_it);
                                 offsets_map_it != offsets_map.end()) {
                                 *output_it = offsets_map_it->second;

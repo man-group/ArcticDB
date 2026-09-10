@@ -80,6 +80,43 @@ class ReslicingInfo {
     uint64_t num_exact_segments;
 };
 
+// Maps offsets in one input segment's string pool to offsets in an output segment's string pool, so
+// that reslicing a string column costs a table lookup per row rather than a string pool insertion.
+// Shared by every column of that input segment and populated on demand, so a string used by several
+// columns is only interned into the output pool once.
+// Offsets are byte offsets, and no string occupies fewer than StringPool::min_string_bytes() bytes,
+// so dividing by that gives a dense index without collisions.
+class StringOffsetRemap {
+  public:
+    static constexpr StringPool::offset_t unmapped = -1;
+
+    // Discards any offsets mapped into a different output string pool
+    void set_output_pool(size_t output_idx, size_t input_pool_bytes) {
+        const auto required = input_pool_bytes / StringPool::min_string_bytes() + 1;
+        if (offsets_.size() != required) {
+            offsets_.assign(required, unmapped);
+        } else if (output_idx_ != output_idx) {
+            std::fill(offsets_.begin(), offsets_.end(), unmapped);
+        }
+        output_idx_ = output_idx;
+    }
+
+    // Returns unmapped for offsets not yet seen, and for the None and NaN sentinels, which are out of
+    // range of any string pool
+    [[nodiscard]] StringPool::offset_t lookup(StringPool::offset_t input_offset) const {
+        const auto idx = static_cast<size_t>(input_offset) / StringPool::min_string_bytes();
+        return idx < offsets_.size() ? offsets_[idx] : unmapped;
+    }
+
+    void insert(StringPool::offset_t input_offset, StringPool::offset_t output_offset) {
+        offsets_[static_cast<size_t>(input_offset) / StringPool::min_string_bytes()] = output_offset;
+    }
+
+  private:
+    std::vector<StringPool::offset_t> offsets_;
+    size_t output_idx_{0};
+};
+
 // Given a maximum number of rows per slice, reslices a set of columns into a new shape, with at most
 // max_rows_per_slice_ rows in each one.
 // This is used in SegmentReslicer to simultaneously combine and split data segments into appropriate sizes with the
@@ -99,8 +136,10 @@ class ColumnReslicer {
     void push_back(std::shared_ptr<Column> column, std::shared_ptr<StringPool> string_pool);
     void push_back(size_t row_count);
     // There should be as many provided string pools as there will be output columns as these are for the output
-    // segments
-    std::vector<Column> reslice_columns(std::vector<StringPool>& string_pools);
+    // segments, and as many remaps as there are input slices, one per input segment's string pool. Callers reslicing
+    // more than one column of the same input segments should pass the same remaps to each of them, so that a string
+    // used by several of those columns is only interned into the output pool once.
+    std::vector<Column> reslice_columns(std::vector<StringPool>& string_pools, std::vector<StringOffsetRemap>& remaps);
     // Public only for benchmarking
     std::vector<Column> initialise_output_columns() const;
 
@@ -109,7 +148,9 @@ class ColumnReslicer {
     // Once the output buffers have been allocated, dense and sparse inputs and outputs work in the same way, as every
     // value from the input must be copied to an element of the output.
     std::vector<Column> reslice_by_memcpy();
-    std::vector<Column> reslice_by_iteration(std::vector<StringPool>& string_pools);
+    std::vector<Column> reslice_by_iteration(
+            std::vector<StringPool>& string_pools, std::vector<StringOffsetRemap>& remaps
+    );
 
     ReslicingInfo reslicing_info_;
     // Holds either a column along with its string pool, or the number of skipped rows if a row-slice was missing with

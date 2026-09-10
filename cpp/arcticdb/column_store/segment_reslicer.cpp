@@ -34,12 +34,23 @@ std::vector<SegmentInMemory> SegmentReslicer::reslice_segments(std::vector<Segme
             [](uint64_t n, const SegmentInMemory& segment) { return n + segment.row_count(); }
     );
     ReslicingInfo reslicing_info{total_rows, max_rows_per_segment_};
+    const auto num_input_slices = segments.size();
+    // Used to size the output string pools. There can be no more strings in an output pool than there are in all of
+    // the input pools, or than there are string values in the output row-slice.
+    uint64_t total_string_pool_bytes{0};
+    uint64_t max_string_columns{0};
     for (const auto& segment : segments) {
+        if (segment.has_string_pool()) {
+            total_string_pool_bytes += segment.string_pool_ptr()->size();
+        }
+        uint64_t string_columns{0};
         for (const auto& field : segment.descriptor().fields()) {
+            string_columns += is_sequence_type(field.type().data_type()) ? 1 : 0;
             if (column_map.emplace(field.name(), ColumnReslicer(segments.size(), reslicing_info)).second) {
                 col_names_in_order.emplace_back(field.name());
             }
         }
+        max_string_columns = std::max(max_string_columns, string_columns);
     }
     std::vector<SegmentInMemory> res(reslicing_info.num_segments());
     const auto& desc = segments.front().descriptor();
@@ -64,19 +75,19 @@ std::vector<SegmentInMemory> SegmentReslicer::reslice_segments(std::vector<Segme
     // copied into the result column, and so the memory is freed as early as possible
     segments.clear();
     std::vector<StringPool> string_pools(reslicing_info.num_segments());
+    const auto max_input_strings = total_string_pool_bytes / StringPool::min_string_bytes();
+    for (size_t idx = 0; idx < reslicing_info.num_segments(); ++idx) {
+        string_pools[idx].reserve(std::min(max_input_strings, reslicing_info.rows_in_slice(idx) * max_string_columns));
+    }
+    // One per input segment, shared by all of that segment's columns so that a string used by more than one of them is
+    // only interned into the output pool once
+    std::vector<StringOffsetRemap> remaps(num_input_slices);
     // We can use string_view keys here as they point to the keys in column_map, which are still live while this
     // variable is in use
     ankerl::unordered_dense::map<std::string_view, std::vector<Column>, util::TransparentStringHash, std::equal_to<>>
             resliced_column_map;
-    // There is a possible optimisation here in the fairly common case where we are merging all of the input segments
-    // into a single output segment. Namely, to pre-populate the output stringpool with the union of the input string
-    // pools, as we know a priori that is how it will end up. While doing this, we could generate one map for each
-    // input segment from their stringpool offsets to the stringpool offsets in the output string pool, and pass these
-    // maps into the reslice_columns call instead of the string pools. It is not clear that this would provide much
-    // benefit though, as the introduction of the offsets_map in ColumnReslicer::reslice_by_iteration only had a small
-    // impact even with extremely low cardinality string columns.
     for (auto&& [col_name, column_reslicer] : column_map) {
-        resliced_column_map.emplace(col_name, column_reslicer.reslice_columns(string_pools));
+        resliced_column_map.emplace(col_name, column_reslicer.reslice_columns(string_pools, remaps));
     }
     for (const auto& col_name : col_names_in_order) {
         auto& sliced_cols = resliced_column_map.at(col_name);

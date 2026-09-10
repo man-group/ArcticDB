@@ -101,6 +101,10 @@ class StringBlock {
 
     [[nodiscard]] size_t num_blocks() { return data_.buffer().num_blocks(); }
 
+    // The fewest bytes any string occupies in the block, so consecutive strings are at least this far
+    // apart and offset / min_entry_bytes() is a dense injective index over them
+    static constexpr size_t min_entry_bytes() { return sizeof(StringHead); }
+
     StringHead* head_at(position_t pos) {
         auto data = data_.buffer().ptr_cast<uint8_t>(pos, sizeof(StringHead));
         return reinterpret_cast<StringHead*>(data);
@@ -153,6 +157,12 @@ class StringPool {
 
     OffsetString get(std::string_view s, bool deduplicate = true);
     OffsetString get(const char* data, size_t size, bool deduplicate = true);
+
+    // Hint that at least num_strings distinct strings will be added, so that they can be inserted
+    // without repeated rehashing
+    void reserve(size_t num_strings);
+
+    static constexpr size_t min_string_bytes() { return StringBlock::min_entry_bytes(); }
 
     const ChunkedBuffer& data() const;
 
