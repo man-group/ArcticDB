@@ -25,6 +25,11 @@ namespace {
 // A descriptor field as the tests describe one: its name and its type.
 using ColumnSpec = std::pair<std::string, DataType>;
 
+OutputSchema written_empty(OutputSchema schema) {
+    schema.set_inferred_from_empty_frame(true);
+    return schema;
+}
+
 OutputSchema timeseries_df(
         const std::string& index_name, const std::vector<ColumnSpec>& columns, const std::string& tz = ""
 ) {
@@ -110,7 +115,8 @@ OutputSchema empty_index_df(const std::vector<ColumnSpec>& columns) {
     }
     NormalizationMetadata norm;
     norm.mutable_df()->mutable_common()->mutable_index()->set_is_physically_stored(false);
-    return {std::move(desc), std::move(norm)};
+    // An empty index is only ever written by an empty frame.
+    return written_empty({std::move(desc), std::move(norm)});
 }
 
 OutputSchema rowcount_df(const std::vector<ColumnSpec>& columns, const std::string& index_name = "") {
@@ -125,6 +131,17 @@ OutputSchema rowcount_df(const std::vector<ColumnSpec>& columns, const std::stri
     // A real RangeIndex always has a non-zero step; a step of zero is how an empty index is recognised.
     index->set_step(1);
     return {std::move(desc), std::move(norm)};
+}
+
+// The shape pandas 2 gives a zero-row frame: the descriptor is rewritten to a DatetimeIndex whatever index the user
+// had, while the normalization metadata still says the index is not physically stored. Neither claim is worth anything,
+// which is why such a schema needs handling of its own.
+OutputSchema written_empty_df(const std::vector<ColumnSpec>& columns, const std::string& index_name = "index") {
+    auto schema = timeseries_df(index_name, columns);
+    auto* index = schema.norm_metadata_.mutable_df()->mutable_common()->mutable_index();
+    index->set_is_physically_stored(false);
+    index->set_fake_name(index_name == "index");
+    return written_empty(std::move(schema));
 }
 
 // Helper to take an `std::vector` so we can pass in an initializer_list like `combine({a, b}, options)`
@@ -595,4 +612,171 @@ TEST(CombineSchema, ThreeSchemasKeepFirstSeenColumnOrder) {
             ColumnSpec{"d", DataType::FLOAT64}
     };
     ASSERT_THAT(columns_of(combined), ElementsAreArray(expected));
+}
+
+TEST(CombineSchema, EmptyFrameSchemaImposesNoIndexConstraint) {
+    const std::vector<ColumnSpec> columns{{"a", DataType::FLOAT64}};
+    auto empty = written_empty_df(columns);
+    auto rowcount = rowcount_df(columns);
+    auto timeseries = timeseries_df("ts", columns);
+
+    // The same pairs raise when the empty side has rows - see IncompatibleIndexTypesRaise.
+    for (const auto& options : {append_options(true), append_options(false), concat_options(JoinType::OUTER)}) {
+        ASSERT_EQ(
+                combine({empty, rowcount}, options).stream_descriptor().index().type(), IndexDescriptor::Type::ROWCOUNT
+        );
+        ASSERT_EQ(
+                combine({rowcount, empty}, options).stream_descriptor().index().type(), IndexDescriptor::Type::ROWCOUNT
+        );
+        ASSERT_EQ(
+                combine({empty, timeseries}, options).stream_descriptor().index().type(),
+                IndexDescriptor::Type::TIMESTAMP
+        );
+        ASSERT_EQ(
+                combine({timeseries, empty}, options).stream_descriptor().index().type(),
+                IndexDescriptor::Type::TIMESTAMP
+        );
+    }
+}
+
+// An empty frame's index name is not the name its user gave it, so it takes no part in the reconciliation.
+TEST(CombineSchema, EmptyFrameSchemaImposesNoIndexName) {
+    auto empty = written_empty_df({{"a", DataType::FLOAT64}}, "differing_index_name");
+    auto timeseries = timeseries_df("ts", {{"a", DataType::FLOAT64}});
+    const std::array expected{ColumnSpec{"ts", DataType::NANOSECONDS_UTC64}, ColumnSpec{"a", DataType::FLOAT64}};
+    for (const auto& options : {append_options(true), concat_options(JoinType::OUTER)}) {
+        auto combined = combine({empty, timeseries}, options);
+        ASSERT_THAT(columns_of(combined), ElementsAreArray(expected));
+        ASSERT_FALSE(combined.norm_metadata_.df().common().index().fake_name());
+    }
+}
+
+// Declaring a column is deliberate with or without rows to put in it, so every policy treats an empty frame's columns
+// as it would any other schema's.
+TEST(CombineSchema, EmptyFrameSchemaContributesItsColumnsUnderEveryPolicy) {
+    auto empty = written_empty_df({{"a", DataType::FLOAT64}, {"only_in_empty", DataType::FLOAT64}});
+    auto timeseries = timeseries_df("ts", {{"a", DataType::FLOAT64}, {"only_in_rows", DataType::FLOAT64}});
+    const ColumnSpec index{"ts", DataType::NANOSECONDS_UTC64};
+    const ColumnSpec a{"a", DataType::FLOAT64};
+    const ColumnSpec only_in_empty{"only_in_empty", DataType::FLOAT64};
+    const ColumnSpec only_in_rows{"only_in_rows", DataType::FLOAT64};
+
+    const std::array united{index, a, only_in_empty, only_in_rows};
+    ASSERT_THAT(columns_of(combine({empty, timeseries}, concat_options(JoinType::OUTER))), ElementsAreArray(united));
+    const std::array united_other_way{index, a, only_in_rows, only_in_empty};
+    ASSERT_THAT(
+            columns_of(combine({timeseries, empty}, concat_options(JoinType::OUTER))),
+            ElementsAreArray(united_other_way)
+    );
+
+    // An intersection drops the column the empty frame does not have, as it would for any other schema.
+    const std::array intersected{index, a};
+    ASSERT_THAT(
+            columns_of(combine({empty, timeseries}, concat_options(JoinType::INNER))), ElementsAreArray(intersected)
+    );
+
+    // And a strict policy rejects the pair outright.
+    ASSERT_THROW(combine({empty, timeseries}, append_options(false)), SchemaException);
+    ASSERT_THROW(combine({timeseries, empty}, append_options(false)), SchemaException);
+}
+
+TEST(CombineSchema, EmptyFrameSchemaCombineDifferentSizedIndices) {
+    const std::vector<ColumnSpec> columns{{"a", DataType::FLOAT64}};
+    const std::vector<ColumnSpec> levels{{"dt", DataType::NANOSECONDS_UTC64}, {"lvl", DataType::INT64}};
+    auto multi_index = multiindex_df(levels, columns);
+    auto empty_datetime = written_empty_df(columns);           // one index field, which the metadata denies
+    auto empty_rowcount = written_empty(rowcount_df(columns)); // none at all
+    const std::array expected{
+            ColumnSpec{"dt", DataType::NANOSECONDS_UTC64},
+            ColumnSpec{"lvl", DataType::INT64},
+            ColumnSpec{"a", DataType::FLOAT64}
+    };
+    ASSERT_THAT(
+            columns_of(combine({multi_index, empty_datetime, empty_rowcount}, append_options(true))),
+            ElementsAreArray(expected)
+    );
+    ASSERT_THAT(
+            columns_of(combine({empty_rowcount, empty_datetime, multi_index}, append_options(true))),
+            ElementsAreArray(expected)
+    );
+}
+
+// An empty frame says nothing about its index, but it does say what kind of object it is.
+TEST(CombineSchema, EmptyFrameSchemaStillDecidesSeriesOrDataFrame) {
+    auto empty_series = written_empty(timeseries_series("ts", "s", DataType::FLOAT64));
+    auto empty_frame = written_empty_df({{"a", DataType::FLOAT64}});
+    auto series = timeseries_series("ts", "s", DataType::FLOAT64);
+    auto frame = timeseries_df("ts", {{"a", DataType::FLOAT64}});
+
+    ASSERT_TRUE(combine({empty_series, series}, append_options(true)).norm_metadata_.has_series());
+    ASSERT_TRUE(combine({empty_frame, frame}, append_options(true)).norm_metadata_.has_df());
+    ASSERT_THROW(combine({empty_series, frame}, append_options(true)), NormalizationException);
+    ASSERT_THROW(combine({empty_frame, series}, append_options(true)), NormalizationException);
+}
+
+// A rowcount Series' value column is a required field, so it is combined even though its index is not.
+TEST(CombineSchema, EmptyFrameSchemaContributesItsSeriesValueColumn) {
+    auto empty = written_empty(rowcount_series("index", "s", DataType::FLOAT64));
+    auto series = timeseries_series("ts", "s", DataType::FLOAT64);
+    const std::array expected{ColumnSpec{"ts", DataType::NANOSECONDS_UTC64}, ColumnSpec{"s", DataType::FLOAT64}};
+    ASSERT_THAT(columns_of(combine({empty, series}, append_options(true))), ElementsAreArray(expected));
+    ASSERT_THAT(columns_of(combine({series, empty}, append_options(true))), ElementsAreArray(expected));
+}
+
+// An empty frame can have more index fields than the result has required fields altogether, so the two ranges are lined
+// up by their ends and the offset between them goes negative.
+TEST(CombineSchema, EmptyFrameSchemaWithMoreIndexFieldsThanTheResult) {
+    StreamDescriptor desc{StreamId{}, IndexDescriptorImpl{IndexDescriptor::Type::TIMESTAMP, 2}};
+    desc.add_scalar_field(DataType::NANOSECONDS_UTC64, "dt");
+    desc.add_scalar_field(DataType::INT64, "lvl");
+    desc.add_scalar_field(DataType::FLOAT64, "s");
+    NormalizationMetadata norm;
+    auto* common = norm.mutable_series()->mutable_common();
+    common->mutable_multi_index()->set_field_count(1);
+    common->set_name("s");
+    common->set_has_name(true);
+    auto empty_multi_index_series = written_empty(OutputSchema{std::move(desc), std::move(norm)});
+    auto series = rowcount_series("index", "s", DataType::FLOAT64);
+
+    const std::array expected{ColumnSpec{"s", DataType::FLOAT64}};
+    ASSERT_THAT(
+            columns_of(combine({empty_multi_index_series, series}, append_options(true))), ElementsAreArray(expected)
+    );
+    ASSERT_THAT(
+            columns_of(combine({series, empty_multi_index_series}, append_options(true))), ElementsAreArray(expected)
+    );
+}
+
+TEST(CombineSchema, CombinedSchemaIsInferredOnlyIfEveryInputIs) {
+    const std::vector<ColumnSpec> columns{{"a", DataType::FLOAT64}};
+    auto empty = written_empty_df(columns);
+    auto timeseries = timeseries_df("ts", columns);
+    ASSERT_FALSE(combine({empty, timeseries}, append_options(true)).inferred_from_empty_frame());
+    ASSERT_FALSE(combine({timeseries, timeseries}, append_options(true)).inferred_from_empty_frame());
+    ASSERT_TRUE(combine({empty, empty}, append_options(true)).inferred_from_empty_frame());
+}
+
+// Only the arrow side knows whether there is an index, so its answer is written into the pandas metadata the result is
+// denormalized from, and nothing the empty frame recorded about its own index survives.
+TEST(CombineSchema, ArrowWithEmptyPandasDescribesTheIndexArrowHas) {
+    auto empty = written_empty_df({{"a", DataType::FLOAT64}}, "index_name_from_the_empty_frame");
+    empty.norm_metadata_.mutable_df()->mutable_common()->mutable_index()->set_tz("America/New_York");
+
+    for (const bool arrow_has_index : {true, false}) {
+        auto arrow = arrow_has_index ? timeseries_df("ts", {{"a", DataType::FLOAT64}})
+                                     : rowcount_df({{"a", DataType::FLOAT64}});
+        arrow.norm_metadata_.mutable_experimental_arrow()->set_has_index(arrow_has_index);
+
+        for (auto schemas : {std::vector<OutputSchema>{empty, arrow}, std::vector<OutputSchema>{arrow, empty}}) {
+            auto combined = combine(schemas, append_options(true));
+            const auto& index = combined.norm_metadata_.df().common().index();
+            ASSERT_EQ(index.is_physically_stored(), arrow_has_index);
+            ASSERT_EQ(index.name(), "");
+            ASSERT_EQ(index.tz(), "");
+            if (!arrow_has_index) {
+                // A RangeIndex needs a step for the read to rebuild it with.
+                ASSERT_EQ(index.step(), 1);
+            }
+        }
+    }
 }

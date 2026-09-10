@@ -9,7 +9,6 @@ from packaging import version
 import pandas as pd
 import numpy as np
 from arcticdb import QueryBuilder, LibraryOptions
-from arcticdb.exceptions import NormalizationException
 from arcticdb.util.test import assert_frame_equal, assert_frame_equal_with_arrow, merge, config_context
 from arcticdb.version_store._string_dtype import _use_pyarrow_strings_in_pandas
 from arcticdb.version_store.library import MergeStrategy, MergeAction
@@ -606,11 +605,6 @@ def test_compat_append_to_rowless_symbol(pandas_v1_venv, s3_ssl_disabled_storage
                 ("new_rowrange", rowrange_df),
                 ("new_datetime", datetime_df),
             ]:
-                if sym == "new_rowrange":
-                    # Rejected over an index type the symbol only appears to have.
-                    with pytest.raises(NormalizationException):
-                        curr.lib.append(sym, to_append)
-                    continue
                 curr.lib.append(sym, to_append)
                 assert_frame_equal(curr.lib.read(sym).data, to_append)
                 # The appended frame decides the index, so the descriptor and the metadata now agree.

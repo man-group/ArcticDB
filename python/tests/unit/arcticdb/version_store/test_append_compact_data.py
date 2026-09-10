@@ -393,9 +393,9 @@ class TestAppendCompactData:
         sym = "test_append_empty_frame_compacts_existing_data"
         lib.write(sym, pd.DataFrame({"col": np.arange(5)}))
         lib.append(sym, pd.DataFrame({"col": np.arange(5, 10)}))
-        # Schema checks happen after empty input frame checks, so we don't need the same column set
+        empty = pd.DataFrame({"col": np.array([], dtype=np.int64)})
         with qs.query_stats():
-            lib.append(sym, pd.DataFrame())
+            lib.append(sym, empty)
             stats = qs.get_query_stats()
         qs.reset_stats()
         assert lib.read(sym).version == 2
@@ -404,9 +404,9 @@ class TestAppendCompactData:
         assert query_stats_operation_count(stats, "Memory_PutObject", "TABLE_INDEX") == 1
         with qs.query_stats():
             (
-                lib.batch_append([sym], [pd.DataFrame()], compact_data=True)
+                lib.batch_append([sym], [empty], compact_data=True)
                 if batch
-                else lib.append(sym, pd.DataFrame(), compact_data=True)
+                else lib.append(sym, empty, compact_data=True)
             )
             stats = qs.get_query_stats()
         qs.reset_stats()

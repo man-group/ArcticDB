@@ -1559,7 +1559,6 @@ MultiSymbolReadOutput LocalVersionedEngine::batch_read_and_join_internal(
                              ) {
                 auto [input_schemas, entity_ids, res_versioned_items, res_metadatas] =
                         unpack_symbol_processing_results(std::move(symbol_processing_results));
-                drop_rowless_symbols(input_schemas, entity_ids, *component_manager);
                 auto pipeline_context = setup_join_pipeline_context(std::move(input_schemas), *clauses_ptr);
                 auto modified_read_options =
                         modify_read_options_from_norm_meta(pipeline_context->output_normalization(), read_options);
@@ -1765,11 +1764,8 @@ folly::Future<VersionedItem> LocalVersionedEngine::async_append_internal(
                                 return *opt_index_key;
                             });
         } else {
-            index_key_fut = frame->empty()
-                                    ? async_write_metadata_impl(store(), update_info, std::move(frame->user_meta))
-                                    : async_append_impl(
-                                              store(), update_info, frame, write_options_, append_options.validate_index
-                                      );
+            index_key_fut =
+                    async_append_impl(store(), update_info, frame, write_options_, append_options.validate_index);
         }
     } else {
         missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(
@@ -1810,6 +1806,8 @@ folly::Future<VersionedItem> LocalVersionedEngine::async_update_internal(
     const bool add_new_symbol_list_entry = !update_info.previous_index_key_.has_value() && cfg().symbol_list();
     auto index_key_fut = folly::Future<AtomKey>::makeEmpty();
     if (update_info.previous_index_key_.has_value()) {
+        // TODO: an update with no rows and an explicit date range should delete that range, which this ternary stands
+        // in the way of. Resolved in the following commit.
         index_key_fut = frame->empty()
                                 ? async_write_metadata_impl(store(), update_info, std::move(frame->user_meta))
                                 : async_update_impl(store(), update_info, query, frame, write_options_, dynamic_schema);

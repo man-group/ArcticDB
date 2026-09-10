@@ -93,6 +93,11 @@ folly::Future<entity::AtomKey> async_write_dataframe_impl(
 }
 
 void sorted_data_check_append(const InputFrame& frame, const TimeseriesDescriptor& existing_tsd) {
+    if (frame.empty()) {
+        // Nothing to be out of order, and the index it was normalized with is not the one it was given, so neither
+        // side's sortedness has anything to say about it.
+        return;
+    }
     if (!index_is_not_timeseries_or_is_sorted_ascending(frame)) {
         sorting::raise<ErrorCode::E_UNSORTED_DATA>(
                 "When calling append with validate_index enabled, input data must be sorted"
@@ -662,7 +667,16 @@ OutputSchema create_initial_output_schema(PipelineContext& pipeline_context) {
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(
             pipeline_context.has_normalization(), "Normalization metadata should not be missing during read_and_process"
     );
-    return OutputSchema{generate_initial_output_schema_descriptor(pipeline_context), pipeline_context.normalization()};
+    // The normalization metadata comes from the index key, so it was inferred rather than stated if the version it
+    // belongs to was written with no rows in it. Staged segments carry their own, which was not.
+    const bool inferred_from_empty_frame =
+            (pipeline_context.tsd().total_rows() == 0 && !pipeline_context.incompletes_after_.has_value()) ||
+            pipeline_context.tsd().index().type() == IndexDescriptor::Type::EMPTY;
+    return OutputSchema{
+            generate_initial_output_schema_descriptor(pipeline_context),
+            pipeline_context.normalization(),
+            inferred_from_empty_frame
+    };
 }
 
 OutputSchema generate_output_schema(PipelineContext& pipeline_context, const ReadQuery& read_query) {
@@ -3531,12 +3545,6 @@ static std::shared_ptr<TimeseriesDescriptor> compact_data_tsd(
         ));
     }
     auto& frame = compact_data_frame->frame_;
-    if (frame->num_rows == 0) {
-        set_frame_offset_and_bucketize_dynamic(*frame, existing_tsd);
-        auto merged_tsd = std::make_shared<TimeseriesDescriptor>(existing_tsd);
-        *merged_tsd->mutable_proto().mutable_user_meta() = std::move(frame->user_meta);
-        return merged_tsd;
-    }
     return std::make_shared<TimeseriesDescriptor>(prepare_append(
             *frame,
             existing_tsd,

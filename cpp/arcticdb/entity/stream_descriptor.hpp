@@ -200,11 +200,33 @@ struct OutputSchema {
 
     OutputSchema() = default;
 
-    OutputSchema(StreamDescriptor stream_descriptor, proto::descriptors::NormalizationMetadata norm_metadata) :
+    OutputSchema(
+            StreamDescriptor stream_descriptor, proto::descriptors::NormalizationMetadata norm_metadata,
+            bool inferred_from_empty_frame = false
+    ) :
         norm_metadata_(std::move(norm_metadata)),
-        stream_descriptor_(std::move(stream_descriptor)) {};
+        stream_descriptor_(std::move(stream_descriptor)),
+        inferred_from_empty_frame_(inferred_from_empty_frame) {};
 
     const StreamDescriptor& stream_descriptor() const { return stream_descriptor_; }
+
+    // Whether this schema came from a frame that had no rows in it when it was normalized, in which case pandas
+    // index normalization metadata depends on pandas version. For example:
+    // - pandas 2 normalizes an empty default range index into a DatetimeIndex
+    // If `inferred_from_empty_frame` is True, pandas index metadata should be ignored.
+    [[nodiscard]] bool inferred_from_empty_frame() const { return inferred_from_empty_frame_; }
+
+    // Whether the pandas index metadata was inferred from an empty frame and so must not be trusted. Only pandas
+    // normalization infers an index; arrow states it regardless of the row count.
+    [[nodiscard]] bool has_empty_pandas_index() const {
+        const bool pandas_normalized =
+                norm_metadata_.has_df() || norm_metadata_.has_series() || norm_metadata_.has_ts();
+        return inferred_from_empty_frame_ && pandas_normalized;
+    }
+
+    void set_inferred_from_empty_frame(bool inferred_from_empty_frame) {
+        inferred_from_empty_frame_ = inferred_from_empty_frame;
+    }
 
     void set_stream_descriptor(StreamDescriptor&& stream_descriptor) {
         stream_descriptor_ = std::move(stream_descriptor);
@@ -244,6 +266,7 @@ struct OutputSchema {
     StreamDescriptor stream_descriptor_;
     std::optional<ankerl::unordered_dense::map<std::string, DataType>> column_types_;
     ankerl::unordered_dense::map<std::string, Value> default_values_;
+    bool inferred_from_empty_frame_{false};
 };
 
 template<class IndexType>
