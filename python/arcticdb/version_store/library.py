@@ -30,6 +30,7 @@ from arcticdb.options import LibraryOptions, EnterpriseLibraryOptions, OutputFor
 from arcticc.pb2.descriptors_pb2 import TypeDescriptor
 from arcticdb.preconditions import check
 from arcticdb.supported_types import Timestamp
+from arcticdb.util.arrow import NORMALIZABLE_PYARROW_TYPES, NORMALIZABLE_POLARS_TYPES
 from arcticdb.util._versions import IS_PANDAS_TWO
 
 from arcticdb.version_store.processing import ExpressionNode, QueryBuilder
@@ -924,9 +925,9 @@ class Library:
         if isinstance(data, NORMALIZABLE_TYPES):
             return True
         if self._nvs._allow_arrow_input:
-            if _PYARROW_AVAILABLE and isinstance(data, pa.Table):
+            if isinstance(data, NORMALIZABLE_PYARROW_TYPES):
                 return True
-            if _POLARS_AVAILABLE and isinstance(data, pl.DataFrame):
+            if isinstance(data, NORMALIZABLE_POLARS_TYPES):
                 return True
         return False
 

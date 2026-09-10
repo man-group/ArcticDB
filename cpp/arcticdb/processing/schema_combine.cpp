@@ -707,10 +707,30 @@ NormalizationMetadata accumulate_arrow_and_arrow_norm(
             "Cannot {}: cannot combine indexed arrow data with unindexed arrow data",
             options.name()
     );
+    normalization::check<ErrorCode::E_INCOMPATIBLE_OBJECTS>(
+            accumulated.experimental_arrow().one_dimensional() == other.experimental_arrow().one_dimensional(),
+            "Cannot {}: cannot combine single-array arrow data with multi-array arrow data",
+            options.name()
+    );
+    auto res = accumulated;
+    // This correctly allows an unnamed Polars Series to be combined with [Chunked]Array as well as other unnamed Polars
+    // Series for append/update
+    if (res.experimental_arrow().polars_series_name() != other.experimental_arrow().polars_series_name() &&
+        options.name_mismatch == RequiredNameMismatchPolicy::RECONCILE_TO_UNNAMED) {
+        res.mutable_experimental_arrow()->clear_polars_series_name();
+    } else {
+        schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
+                res.experimental_arrow().polars_series_name() == other.experimental_arrow().polars_series_name(),
+                "Cannot {}: cannot combine single-array arrow data with mismatching names {}",
+                options.name(),
+                names_differ(
+                        res.experimental_arrow().polars_series_name(), other.experimental_arrow().polars_series_name()
+                )
+        );
+    }
     // Per-column metadata is merged rather than taking only the base schema's, so that a column only a later
     // schema has keeps what that schema says about it. Presence is checked per column rather than by comparing
     // map sizes, so that a metadata field a future client adds does not make existing data un-appendable.
-    auto res = accumulated;
     auto& res_columns = *res.mutable_experimental_arrow()->mutable_columns();
     util::for_each_key_union(
             accumulated.experimental_arrow().columns(),

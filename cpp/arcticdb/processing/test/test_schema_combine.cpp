@@ -127,6 +127,22 @@ OutputSchema rowcount_df(const std::vector<ColumnSpec>& columns, const std::stri
     return {std::move(desc), std::move(norm)};
 }
 
+OutputSchema arrow_1d_array(
+        DataType data_type, bool has_index = false, const std::optional<std::string>& opt_series_name = std::nullopt
+) {
+    auto index_desc = has_index ? IndexDescriptorImpl{IndexDescriptor::Type::TIMESTAMP, 1}
+                                : IndexDescriptorImpl{IndexDescriptor::Type::ROWCOUNT, 0};
+    StreamDescriptor desc{StreamId{}, index_desc};
+    // __array__ is hard-coded as the name of the singular column in 1D Arrow structures in _normalization.py
+    desc.add_scalar_field(data_type, "__array__");
+    NormalizationMetadata norm;
+    norm.mutable_experimental_arrow()->set_one_dimensional(true);
+    if (opt_series_name.has_value()) {
+        norm.mutable_experimental_arrow()->set_polars_series_name(*opt_series_name);
+    }
+    return {std::move(desc), std::move(norm)};
+}
+
 // Helper to take an `std::vector` so we can pass in an initializer_list like `combine({a, b}, options)`
 OutputSchema combine(std::vector<OutputSchema> schemas, const SchemaCombineOptions& options) {
     return combine_schema(schemas, options);
@@ -595,4 +611,117 @@ TEST(CombineSchema, ThreeSchemasKeepFirstSeenColumnOrder) {
             ColumnSpec{"d", DataType::FLOAT64}
     };
     ASSERT_THAT(columns_of(combined), ElementsAreArray(expected));
+}
+
+TEST(CombineSchema1dArrow, IndexMismatch) {
+    auto array_with_index = arrow_1d_array(DataType::NANOSECONDS_UTC64, true);
+    auto array_without_index = arrow_1d_array(DataType::NANOSECONDS_UTC64, false);
+    for (auto index_first : std::vector<bool>{true, false}) {
+        for (const auto& options : std::vector<SchemaCombineOptions>{
+                     append_options(true),
+                     append_options(false),
+                     update_options(true),
+                     update_options(false),
+                     concat_options(JoinType::OUTER),
+                     concat_options(JoinType::INNER)
+             }) {
+            ASSERT_THROW(
+                    combine({index_first ? array_with_index : array_without_index,
+                             index_first ? array_without_index : array_with_index},
+                            options),
+                    NormalizationException
+            );
+        }
+    }
+}
+
+TEST(CombineSchema1dArrow, UnnamedSeries) {
+    auto array_without_name = arrow_1d_array(DataType::INT64);
+    auto array_with_empty_name = arrow_1d_array(DataType::INT64, false, "");
+    for (auto empty_name_first : std::vector<bool>{true, false}) {
+        for (const auto& options : std::vector<SchemaCombineOptions>{
+                     append_options(true),
+                     append_options(false),
+                     update_options(true),
+                     update_options(false),
+                     concat_options(JoinType::OUTER),
+                     concat_options(JoinType::INNER)
+             }) {
+            auto combined =
+                    combine({empty_name_first ? array_with_empty_name : array_without_name,
+                             empty_name_first ? array_without_name : array_with_empty_name},
+                            options);
+            const std::array expected{ColumnSpec{"__array__", DataType::INT64}};
+            ASSERT_THAT(columns_of(combined), ElementsAreArray(expected));
+            ASSERT_TRUE(combined.norm_metadata_.has_experimental_arrow());
+            ASSERT_TRUE(combined.norm_metadata_.experimental_arrow().one_dimensional());
+            // Can either be from the optional not being populated, or being populated with an empty string. Both are
+            // handled the same
+            ASSERT_EQ(combined.norm_metadata_.experimental_arrow().polars_series_name(), "");
+        }
+    }
+}
+
+TEST(CombineSchema1dArrow, SeriesNameMismatchAppendUpdate) {
+    auto array_without_name = arrow_1d_array(DataType::INT64);
+    auto array_with_empty_name = arrow_1d_array(DataType::INT64, false, "");
+    auto array_with_name_1 = arrow_1d_array(DataType::INT64, false, "name_1");
+    auto array_with_name_2 = arrow_1d_array(DataType::INT64, false, "name_2");
+    for (auto schemas : std::vector<std::vector<OutputSchema>>{
+                 {array_without_name, array_with_name_1},
+                 {array_with_name_1, array_without_name},
+                 {array_with_empty_name, array_with_name_1},
+                 {array_with_name_1, array_with_empty_name},
+                 {array_with_name_1, array_with_name_2}
+         }) {
+        for (const auto& options : std::vector<SchemaCombineOptions>{
+                     append_options(true), append_options(false), update_options(true), update_options(false)
+             }) {
+            ASSERT_THROW(combine(schemas, options), SchemaException);
+        }
+    }
+}
+
+TEST(CombineSchema1dArrow, SeriesNameMismatchConcat) {
+    auto array_without_name = arrow_1d_array(DataType::INT64);
+    auto array_with_empty_name = arrow_1d_array(DataType::INT64, false, "");
+    auto array_with_name_1 = arrow_1d_array(DataType::INT64, false, "name_1");
+    auto array_with_name_2 = arrow_1d_array(DataType::INT64, false, "name_2");
+    std::vector<OutputSchema> schemas{array_without_name, array_with_empty_name, array_with_name_1, array_with_name_2};
+    for (const auto& first_schema : schemas) {
+        for (const auto& second_schema : schemas) {
+            for (const auto& options :
+                 std::vector<SchemaCombineOptions>{concat_options(JoinType::OUTER), concat_options(JoinType::INNER)}) {
+                auto combined = combine({first_schema, second_schema}, options);
+                if (&first_schema == &schemas[2] && &second_schema == &schemas[2]) {
+                    ASSERT_EQ(combined.norm_metadata_.experimental_arrow().polars_series_name(), "name_1");
+                } else if (&first_schema == &schemas[3] && &second_schema == &schemas[3]) {
+                    ASSERT_EQ(combined.norm_metadata_.experimental_arrow().polars_series_name(), "name_2");
+                } else {
+                    ASSERT_EQ(combined.norm_metadata_.experimental_arrow().polars_series_name(), "");
+                }
+            }
+        }
+    }
+}
+
+TEST(CombineSchema1dArrow, CombineWithTable) {
+    auto array_1d = arrow_1d_array(DataType::INT64);
+    auto table = arrow_1d_array(DataType::INT64);
+    table.norm_metadata_.mutable_experimental_arrow()->set_one_dimensional(false);
+    for (auto table_first : std::vector<bool>{true, false}) {
+        for (const auto& options : std::vector<SchemaCombineOptions>{
+                     append_options(true),
+                     append_options(false),
+                     update_options(true),
+                     update_options(false),
+                     concat_options(JoinType::OUTER),
+                     concat_options(JoinType::INNER)
+             }) {
+            ASSERT_THROW(
+                    combine({table_first ? table : array_1d, table_first ? array_1d : table}, options),
+                    NormalizationException
+            );
+        }
+    }
 }
