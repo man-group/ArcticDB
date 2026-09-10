@@ -9,15 +9,17 @@
 #pragma once
 
 #include <memory>
+#include <numeric>
 #include <ranges>
 #include <vector>
+#include <arcticdb/util/preconditions.hpp>
 
 namespace arcticdb {
 
 namespace util {
 
 template<typename T>
-inline std::vector<T> flatten_vectors(std::vector<std::vector<T>>&& vec_of_vecs) {
+std::vector<T> flatten_vectors(std::vector<std::vector<T>>&& vec_of_vecs) {
     size_t res_size = std::accumulate(
             vec_of_vecs.cbegin(),
             vec_of_vecs.cend(),

@@ -940,8 +940,8 @@ static void validate_stage_results(
 
 std::variant<VersionedItem, CompactionError> PythonVersionStore::compact_incomplete(
         const StreamId& stream_id, bool append, bool convert_int_to_float, bool via_iteration /*= true */,
-        bool sparsify /*= false */, const std::optional<py::object>& user_meta /* = std::nullopt */,
-        bool prune_previous_versions, bool validate_index, bool delete_staged_data_on_failure,
+        const std::optional<py::object>& user_meta /* = std::nullopt */, bool prune_previous_versions,
+        bool validate_index, bool delete_staged_data_on_failure,
         const std::optional<std::vector<StageResult>>& stage_results
 ) {
     std::optional<arcticdb::proto::descriptors::UserDefinedMetadata> meta;
@@ -957,7 +957,7 @@ std::variant<VersionedItem, CompactionError> PythonVersionStore::compact_incompl
             .append_ = append,
             .convert_int_to_float_ = convert_int_to_float,
             .via_iteration_ = via_iteration,
-            .sparsify_ = sparsify,
+            .sparsify_ = false,
             .validate_index_ = validate_index,
             .delete_staged_data_on_failure_ = delete_staged_data_on_failure,
             .stage_results = stage_results
@@ -967,9 +967,8 @@ std::variant<VersionedItem, CompactionError> PythonVersionStore::compact_incompl
 }
 
 std::variant<VersionedItem, CompactionError> PythonVersionStore::sort_merge(
-        const StreamId& stream_id, const py::object& user_meta, bool append, bool convert_int_to_float,
-        bool via_iteration, bool sparsify, bool prune_previous_versions, bool delete_staged_data_on_failure,
-        const std::optional<std::vector<StageResult>>& stage_results
+        const StreamId& stream_id, const py::object& user_meta, bool append, bool prune_previous_versions,
+        bool delete_staged_data_on_failure, const std::optional<std::vector<StageResult>>& stage_results
 ) {
     std::optional<arcticdb::proto::descriptors::UserDefinedMetadata> meta;
     if (!user_meta.is_none()) {
@@ -982,9 +981,9 @@ std::variant<VersionedItem, CompactionError> PythonVersionStore::sort_merge(
     CompactIncompleteParameters params{
             .prune_previous_versions_ = prune_previous_versions,
             .append_ = append,
-            .convert_int_to_float_ = convert_int_to_float,
-            .via_iteration_ = via_iteration,
-            .sparsify_ = sparsify,
+            .convert_int_to_float_ = false,
+            .via_iteration_ = true,
+            .sparsify_ = false,
             .delete_staged_data_on_failure_ = delete_staged_data_on_failure,
             .stage_results = stage_results
     };
@@ -1555,10 +1554,12 @@ void PythonVersionStore::force_delete_symbol(const StreamId& stream_id) {
 VersionedItem PythonVersionStore::merge(
         const StreamId& stream_id, const std::shared_ptr<convert::PandasData>& source, const py::object& norm,
         const py::object& user_meta, const bool prune_previous_versions, const bool upsert,
-        const py::tuple& py_strategy, std::vector<std::string> on
+        const py::tuple& py_strategy, std::vector<std::string> on, const bool match_na
 ) {
     const MergeStrategy strategy{
-            .matched = py_strategy[0].cast<MergeAction>(), .not_matched_by_target = py_strategy[1].cast<MergeAction>()
+            .matched = py_strategy[0].cast<MergeAction>(),
+            .not_matched_by_target = py_strategy[1].cast<MergeAction>(),
+            .match_na = match_na
     };
     return merge_internal(
             stream_id,

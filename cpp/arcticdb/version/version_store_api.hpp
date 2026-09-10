@@ -92,9 +92,8 @@ class PythonVersionStore : public LocalVersionedEngine {
 
     std::variant<VersionedItem, CompactionError> compact_incomplete(
             const StreamId& stream_id, bool append, bool convert_int_to_float, bool via_iteration = true,
-            bool sparsify = false, const std::optional<py::object>& user_meta = std::nullopt,
-            bool prune_previous_versions = false, bool validate_index = false,
-            bool delete_staged_data_on_failure = false,
+            const std::optional<py::object>& user_meta = std::nullopt, bool prune_previous_versions = false,
+            bool validate_index = false, bool delete_staged_data_on_failure = false,
             const std::optional<std::vector<StageResult>>& stage_results = std::nullopt
     );
 
@@ -129,8 +128,8 @@ class PythonVersionStore : public LocalVersionedEngine {
     );
 
     std::variant<VersionedItem, CompactionError> sort_merge(
-            const StreamId& stream_id, const py::object& user_meta, bool append, bool convert_int_to_float,
-            bool via_iteration, bool sparsify, bool prune_previous_versions, bool delete_staged_data_on_failure,
+            const StreamId& stream_id, const py::object& user_meta, bool append, bool prune_previous_versions,
+            bool delete_staged_data_on_failure,
             const std::optional<std::vector<StageResult>>& stage_results = std::nullopt
     );
 
@@ -292,7 +291,7 @@ class PythonVersionStore : public LocalVersionedEngine {
     VersionedItem merge(
             const StreamId& stream_id, const std::shared_ptr<convert::PandasData>& source, const py::object& norm,
             const py::object& user_meta, const bool prune_previous_versions, const bool upsert,
-            const py::tuple& py_strategy, std::vector<std::string> on
+            const py::tuple& py_strategy, std::vector<std::string> on, const bool match_na
     );
 
     CompactDataInfo compact_data_explain_plan(const StreamId& stream_id, std::optional<uint64_t> rows_per_segment);

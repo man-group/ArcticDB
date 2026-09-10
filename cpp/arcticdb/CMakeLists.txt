@@ -165,6 +165,21 @@ ENDIF()
 
 set(CMAKE_INSTALL_RPATH "\\$ORIGIN/lib")
 
+# conda-forge's compiler activation puts -Wl,-rpath,$PREFIX/lib in LDFLAGS; building in-tree does not go
+# through it, so arcticdb_ext and the test binaries would resolve libstdc++, libssl and libcrypto through the
+# system paths rather than the environment they were compiled against. Skipped under conda-build, which has the
+# activation and where CONDA_PREFIX is the build-tools prefix - relocation only rewrites RPATHs inside $PREFIX,
+# so that path would ship as a dangling absolute RPATH.
+if(ARCTICDB_USING_CONDA AND CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT DEFINED ENV{CONDA_BUILD})
+    if(NOT DEFINED ENV{CONDA_PREFIX})
+        message(FATAL_ERROR "ARCTICDB_USING_CONDA is set but no conda environment is active. Activate the "
+                "environment before configuring, or the built objects will load the host's libstdc++ and "
+                "OpenSSL and fail at import with missing GLIBCXX/OPENSSL symbol versions.")
+    endif()
+    list(APPEND CMAKE_BUILD_RPATH "$ENV{CONDA_PREFIX}/lib")
+    list(APPEND CMAKE_INSTALL_RPATH "$ENV{CONDA_PREFIX}/lib")
+endif()
+
 if (NOT MSVC)
     if(NOT ${ARCTICDB_USING_CONDA})
         # Compilers on conda-forge are relatively strict.
@@ -265,7 +280,6 @@ set(arcticdb_srcs
         log/log.hpp
         log/trace.hpp
         pipeline/column_mapping.hpp
-        pipeline/column_name_resolution.hpp
         pipeline/column_stats_types.hpp
         pipeline/column_stats.hpp
         pipeline/column_stats_filter.hpp
@@ -499,7 +513,6 @@ set(arcticdb_srcs
         entity/types_proto.cpp
         log/log.cpp
         pipeline/column_mapping.cpp
-        pipeline/column_name_resolution.cpp
         pipeline/column_stats.cpp
         pipeline/column_stats_filter.cpp
         pipeline/column_stats_dispatch.cpp

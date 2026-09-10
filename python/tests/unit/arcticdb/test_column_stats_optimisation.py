@@ -1,6 +1,8 @@
 from datetime import datetime
 
 import numpy as np
+import polars as pl
+import pyarrow as pa
 import pytest
 from arcticdb_ext.storage import KeyType
 
@@ -9,7 +11,7 @@ from arcticdb.version_store.processing import QueryBuilder
 import arcticdb.toolbox.query_stats as qs
 import pandas as pd
 
-from arcticdb_ext.exceptions import UserInputException
+from arcticdb_ext.exceptions import SchemaException, UserInputException
 
 
 def get_table_data_read_count():
@@ -211,6 +213,52 @@ def test_column_stats_query_optimisation_column_not_in_stats(
     q = q[q["col_1"] > 2]
     result = lib.read(sym, query_builder=q).data
     assert_frame_equal(df1, result)
+
+
+def test_column_stats_query_optimisation_duplicate_column_names(
+    in_memory_store_factory, encoding_version, clear_query_stats, column_stats_filtering_enabled
+):
+    lib = in_memory_store_factory(encoding_version=int(encoding_version))
+
+    df0 = pd.DataFrame([[1, 2], [3, 4]], columns=["col_1", "col_1"], index=pd.date_range("2000-01-01", periods=2))
+    df1 = pd.DataFrame([[5, 6], [7, 8]], columns=["col_1", "col_1"], index=pd.date_range("2000-01-03", periods=2))
+
+    lib.write(sym, df0)
+    lib.append(sym, df1)
+    lib.create_column_stats_experimental(sym)
+    assert lib.get_column_stats_info_experimental(sym) == {
+        "index": {"MINMAX"},
+        "__col_col_1__0": {"MINMAX"},
+        "__col_col_1__1": {"MINMAX"},
+    }
+
+    qs.enable()
+    q = QueryBuilder()
+    q = q[q["__col_col_1__1"] > 5]
+    qs.reset_stats()
+    result = lib.read(sym, query_builder=q).data
+    table_data_reads = get_table_data_read_count()
+
+    assert_frame_equal(df1, result)
+    assert table_data_reads == 1, f"Expected 1 TABLE_DATA read, got {table_data_reads}"
+
+
+def test_column_stats_query_optimisation_ambiguous_duplicate_column_name_raises(
+    in_memory_version_store, column_stats_filtering_enabled_and_disabled
+):
+    lib = in_memory_version_store
+
+    df0 = pd.DataFrame([[1, 2], [3, 4]], columns=["col_1", "col_1"], index=pd.date_range("2000-01-01", periods=2))
+    df1 = pd.DataFrame([[5, 6], [7, 8]], columns=["col_1", "col_1"], index=pd.date_range("2000-01-03", periods=2))
+    lib.write(sym, df0)
+    lib.append(sym, df1)
+
+    lib.create_column_stats_experimental(sym)
+
+    q = QueryBuilder()
+    q = q[q["col_1"] > 5]
+    with pytest.raises(SchemaException, match="E_COLUMN_DOESNT_EXIST"):
+        lib.read(sym, query_builder=q)
 
 
 def test_column_stats_query_optimisation_empty_segment(
@@ -682,10 +730,47 @@ def test_column_stats_all_null_slice_pruning(
     assert table_data_reads == expected_reads, f"Expected {expected_reads} TABLE_DATA reads but got {table_data_reads}"
 
 
-@pytest.mark.xfail(reason="Creating column stats on multi-indexed symbols is not supported yet")
-def test_column_stats_multiindex_index_col(in_memory_version_store):
-    """Test column stats creation and usage with a multi-index DataFrame, with column stats created
-    on part of the multi-index."""
+@pytest.mark.parametrize("arrow_type", [pa.int64(), pa.float64()], ids=["int64", "float64"])
+def test_column_stats_column_null_in_every_slice_prunes(
+    in_memory_store_factory, clear_query_stats, column_stats_filtering_enabled_and_disabled, arrow_type
+):
+    lib = in_memory_store_factory(segment_row_size=2)
+    lib._set_allow_arrow_input()
+    table = pa.table({"f": pa.array([None] * 8, arrow_type), "g": pa.array([float(i) for i in range(8)], pa.float64())})
+    lib.write(sym, table)
+    lib.create_column_stats_experimental(sym)
+
+    stats = lib.read_column_stats_experimental(sym)
+    assert "v1_MIN(f)" not in stats.column_names
+    assert stats.column("v1_NULL_COUNT(f)").to_pylist() == [2, 2, 2, 2]
+
+    qs.enable()
+    q = QueryBuilder()
+    q = q[q["f"] > 0]
+    qs.reset_stats()
+    result = lib.read(sym, query_builder=q).data
+
+    assert len(result) == 0
+    if column_stats_filtering_enabled_and_disabled:
+        assert get_table_data_read_count() == 0, "Every slice is null, so nothing can satisfy `> 0`"
+    else:
+        assert get_table_data_read_count() == 4, "Filtering is disabled, so all 4 slices should be read"
+
+    # A null does not satisfy `> 0` in pandas or polars either - the zero-row result above is the
+    # correct answer to the query, not an artifact of over-pruning.
+    pandas_result = table.to_pandas()
+    pandas_result = pandas_result[pandas_result["f"] > 0]
+    assert len(pandas_result) == 0
+
+    polars_result = pl.from_arrow(table).filter(pl.col("f") > 0)
+    assert len(polars_result) == 0
+
+
+def test_column_stats_multiindex_index_col(
+    in_memory_version_store, clear_query_stats, column_stats_filtering_enabled_and_disabled
+):
+    """Column stats on a multi-index DataFrame. The primary level gets stats under its own name; the
+    string inner level is ineligible, so a filter on it cannot prune."""
     lib = in_memory_version_store
 
     index0 = pd.MultiIndex.from_tuples(
@@ -701,8 +786,23 @@ def test_column_stats_multiindex_index_col(in_memory_version_store):
     lib.write(sym, df0)
     lib.append(sym, df1)
 
-    column_stats_dict = {"category": {"MINMAX"}}
     lib.create_column_stats_experimental(sym)
+    assert lib.get_column_stats_info_experimental(sym) == {
+        "date": {"MINMAX"},
+        "col_1": {"MINMAX"},
+        "col_2": {"MINMAX"},
+    }
+
+    qs.enable()
+    qs.reset_stats()
+    q = QueryBuilder()
+    q = q[q["date"] > pd.Timestamp("2000-01-01")]
+    result = lib.read(sym, query_builder=q).data
+    assert_frame_equal(df1, result)
+    if column_stats_filtering_enabled_and_disabled:
+        assert get_table_data_read_count() == 1, "Only the second segment holds dates after 2000-01-01"
+    else:
+        assert get_table_data_read_count() == 2, "Filtering is disabled, so both segments should be read"
 
 
 ROWCOUNT_INDEXES = [
@@ -2390,3 +2490,132 @@ def test_column_stats_date_range_clause_still_prunes(
     expected = pd.DataFrame({"col_1": [5, 6]}, index=pd.date_range("2000-01-05", periods=2))
     assert_frame_equal(expected, result)
     assert get_table_data_read_count() == 1
+
+
+UNSORTED_INDEX = pd.DatetimeIndex(
+    [
+        pd.Timestamp("2000-01-10"),
+        pd.Timestamp("2000-01-11"),
+        pd.Timestamp("2000-01-01"),
+        pd.Timestamp("2000-01-02"),
+        pd.Timestamp("2000-01-03"),
+        pd.Timestamp("2000-01-04"),
+    ]
+)
+
+
+def test_column_stats_unsorted_index_column_prunes(
+    in_memory_store_factory, clear_query_stats, column_stats_filtering_enabled_and_disabled
+):
+    lib = in_memory_store_factory(segment_row_size=2)
+    df = pd.DataFrame({"col_1": np.arange(6, dtype=np.int64)}, index=UNSORTED_INDEX)
+    lib.write(sym, df, validate_index=False)
+    lib.create_column_stats_experimental(sym)
+
+    q = QueryBuilder()
+    q = q[q["index"] > pd.Timestamp("2000-01-05")]
+
+    qs.enable()
+    qs.reset_stats()
+    result = lib.read(sym, query_builder=q).data
+
+    assert_frame_equal(df.iloc[:2], result)
+    if column_stats_filtering_enabled_and_disabled:
+        assert get_table_data_read_count() == 1, "Only row slice 0 holds timestamps after 2000-01-05"
+    else:
+        assert get_table_data_read_count() == 3, "Filtering is disabled, so all 3 slices should be read"
+
+
+def test_column_stats_sorted_index_column_prunes(
+    in_memory_store_factory, clear_query_stats, column_stats_filtering_enabled_and_disabled
+):
+    lib = in_memory_store_factory(segment_row_size=2)
+    df = pd.DataFrame({"col_1": np.arange(6, dtype=np.int64)}, index=pd.date_range("2000-01-01", periods=6))
+    lib.write(sym, df)
+    lib.create_column_stats_experimental(sym)
+
+    q = QueryBuilder()
+    q = q[q["index"] > pd.Timestamp("2000-01-04")]
+
+    qs.enable()
+    qs.reset_stats()
+    result = lib.read(sym, query_builder=q).data
+
+    assert_frame_equal(df.iloc[4:], result)
+    if column_stats_filtering_enabled_and_disabled:
+        assert get_table_data_read_count() == 1, "Only row slice 2 holds timestamps after 2000-01-04"
+    else:
+        assert get_table_data_read_count() == 3, "Filtering is disabled, so all 3 slices should be read"
+
+
+def test_column_stats_index_column_prunes_with_column_selection(
+    in_memory_store_factory, clear_query_stats, column_stats_filtering_enabled_and_disabled
+):
+    lib = in_memory_store_factory(segment_row_size=2)
+    df = pd.DataFrame(
+        {"col_1": np.arange(6, dtype=np.int64), "col_2": np.arange(10, 16, dtype=np.int64)},
+        index=UNSORTED_INDEX,
+    )
+    lib.write(sym, df, validate_index=False)
+    lib.create_column_stats_experimental(sym)
+
+    q = QueryBuilder()
+    q = q[q["index"] > pd.Timestamp("2000-01-05")]
+
+    qs.enable()
+    qs.reset_stats()
+    result = lib.read(sym, query_builder=q, columns=["col_1"]).data
+
+    assert_frame_equal(df[["col_1"]].iloc[:2], result)
+    if column_stats_filtering_enabled_and_disabled:
+        assert get_table_data_read_count() == 1, "Only row slice 0 holds timestamps after 2000-01-05"
+    else:
+        assert get_table_data_read_count() == 3, "Filtering is disabled, so all 3 slices should be read"
+
+
+def test_column_stats_row_slices_without_index_stats_are_not_pruned(
+    in_memory_store_factory, clear_query_stats, column_stats_filtering_enabled_and_disabled
+):
+    lib = in_memory_store_factory(segment_row_size=2)
+    df = pd.DataFrame({"col_1": np.arange(6, dtype=np.int64)}, index=pd.date_range("2000-01-01", periods=6))
+    lib.write(sym, df)
+    lib.create_column_stats_experimental(sym, row_range=(0, 4))
+
+    q = QueryBuilder()
+    q = q[q["index"] < pd.Timestamp("2000-01-03")]
+
+    qs.enable()
+    qs.reset_stats()
+    result = lib.read(sym, query_builder=q).data
+
+    assert_frame_equal(df.iloc[:2], result)
+    if column_stats_filtering_enabled_and_disabled:
+        # Row slice 0 matches, row slice 1 is pruned by its stats, and row slice 2 has no stats so it
+        # cannot be pruned.
+        assert get_table_data_read_count() == 2
+    else:
+        assert get_table_data_read_count() == 3, "Filtering is disabled, so all 3 slices should be read"
+
+
+def test_column_stats_index_is_only_stat_column(
+    in_memory_store_factory, clear_query_stats, column_stats_filtering_enabled_and_disabled
+):
+    lib = in_memory_store_factory(segment_row_size=2)
+    df = pd.DataFrame({"col_1": ["a", "b", "c", "d", "e", "f"]}, index=UNSORTED_INDEX)
+    lib.write(sym, df, validate_index=False)
+    lib.create_column_stats_experimental(sym)
+
+    assert lib.get_column_stats_info_experimental(sym) == {"index": {"MINMAX"}}
+
+    q = QueryBuilder()
+    q = q[q["index"] > pd.Timestamp("2000-01-05")]
+
+    qs.enable()
+    qs.reset_stats()
+    result = lib.read(sym, query_builder=q).data
+
+    assert_frame_equal(df.iloc[:2], result)
+    if column_stats_filtering_enabled_and_disabled:
+        assert get_table_data_read_count() == 1, "Only row slice 0 holds timestamps after 2000-01-05"
+    else:
+        assert get_table_data_read_count() == 3, "Filtering is disabled, so all 3 slices should be read"

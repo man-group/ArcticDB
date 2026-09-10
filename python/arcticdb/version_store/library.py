@@ -1741,19 +1741,30 @@ class Library:
         )
         return batch_update_result
 
-    def delete_staged_data(self, symbol: str) -> None:
+    def delete_staged_data(self, symbol: Union[str, StageResult, List[StageResult]]) -> None:
         """
         Removes staged data.
 
         Parameters
         ----------
-        symbol : `str`
-            Symbol to remove staged data for.
+        symbol : `str`, `StageResult`, or `List[StageResult]`
+            If a symbol name (`str`), removes all staged data for that symbol.
+            If a `StageResult` or list of them (as returned by ``stage``), removes only the staged
+            segments named by those stage result(s). Missing keys are ignored.
 
         See Also
         --------
         write
             Documentation on the ``staged`` parameter explains the concept of staged data in more detail.
+        stage
+            Returns the ``StageResult`` objects accepted by this method.
+
+        Examples
+        --------
+        >>> stage_result_1 = lib.stage("symbol", df1)
+        >>> stage_result_2 = lib.stage("symbol", df2)
+        >>> lib.delete_staged_data(stage_result_1)  # delete only the first batch's staged keys
+        >>> lib.delete_staged_data("symbol")        # delete all remaining staged data for the symbol
         """
         self._nvs.remove_incomplete(symbol)
 
@@ -3531,6 +3542,7 @@ class Library:
         metadata: Any = None,
         prune_previous_versions: Optional[bool] = None,
         upsert: bool = False,
+        match_na: bool = False,
     ):
         """
         Merge new data into an existing symbol's DataFrame according to a specified strategy.
@@ -3565,9 +3577,14 @@ class Library:
             IMPORTANT: For date-time indexed data, the index is always included in matching and cannot be excluded.
 
             Note on equality semantics:
+                By default (`match_na=False`), missing values (float NaN, string None/NaN, or NaT in a datetime64
+                column) in an `on` column match nothing. Non-missing values are compared by plain equality.
+
+                Set `match_na=True` for missing values to match each other instead:
                 - In float columns, NaN is considered equal to NaN.
                 - In string columns, None and NaN are indistinguishable. NaN == None, NaN == NaN, None == None,
                   and None == NaN all evaluate to True.
+                - In datetime64 `on` columns, NaT is considered equal to NaT.
 
             If a column name appears more than once in the source or the target it must not be added in the on
             parameter.
@@ -3583,6 +3600,9 @@ class Library:
             If True and the symbol does not exist, create it by writing `source` to the store. Requires a strategy
             with `not_matched_by_target="insert"`; combining it with an update-only strategy raises
             `UserInputException` as the newly created symbol would be empty.
+        match_na : bool, default False
+            Controls whether a missing value (float NaN, string None/NaN, or NaT in a datetime64 `on`
+            column) can match another missing value in the `on` columns. See "Note on equality semantics" above.
 
         Returns
         -------
@@ -3621,6 +3641,7 @@ class Library:
             metadata=metadata,
             prune_previous_versions=prune_previous_versions,
             upsert=upsert,
+            match_na=match_na,
         )
 
     @property

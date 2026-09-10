@@ -269,7 +269,6 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
             .def("set_allow_sparse", &ReadOptions::set_allow_sparse)
             .def("set_incompletes", &ReadOptions::set_incompletes)
             .def("set_set_tz", &ReadOptions::set_set_tz)
-            .def("set_optimise_string_memory", &ReadOptions::set_optimise_string_memory)
             .def("set_output_config", &ReadOptions::set_output_config)
             .def_property_readonly("incompletes", &ReadOptions::get_incompletes)
             .def_property_readonly("output_format", &ReadOptions::output_format_for_frame);
@@ -763,7 +762,7 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
             .def("remove_incomplete",
                  &PythonVersionStore::remove_incomplete,
                  py::call_guard<SingleThreadMutexHolder>(),
-                 "Delete incomplete segments")
+                 "Delete incomplete segments for a symbol, or the APPEND_DATA keys named by the given stage results")
             .def(
                     "remove_incompletes",
                     [&](PythonVersionStore& v,
@@ -778,7 +777,6 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                  py::arg("append"),
                  py::arg("convert_int_to_float"),
                  py::arg("via_iteration") = true,
-                 py::arg("sparsify") = false,
                  py::arg("user_meta") = std::nullopt,
                  py::arg("prune_previous_versions") = false,
                  py::arg("validate_index") = false,
@@ -792,9 +790,6 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                  py::arg("stream_id"),
                  py::arg("user_meta") = std::nullopt,
                  py::arg("append") = false,
-                 py::arg("convert_int_to_float") = false,
-                 py::arg("via_iteration") = true,
-                 py::arg("sparsify") = false,
                  py::arg("prune_previous_versions") = false,
                  py::arg("delete_staged_data_on_failure") = false,
                  py::kw_only(),
