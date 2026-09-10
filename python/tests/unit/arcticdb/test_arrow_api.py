@@ -11,7 +11,7 @@ from arcticdb.exceptions import ArcticNativeException, ArcticUnsupportedDataType
 from arcticdb.options import OutputFormat, ArrowOutputStringFormat, LibraryOptions
 from arcticdb.util.test import assert_frame_equal_with_arrow, sample_dataframe
 
-from arcticdb.version_store.library import ArcticUnsupportedDataTypeException, WritePayload, UpdatePayload, ReadRequest
+from arcticdb.version_store.library import WritePayload, UpdatePayload, ReadRequest
 from tests.util.arrow import create_1d_arrow_structure
 
 all_output_format_args = [

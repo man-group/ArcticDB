@@ -1292,14 +1292,14 @@ def test_update_with_date_range_wider_than_data_1d(in_memory_version_store_arrow
         pytest.param((pd.Timestamp("2025-01-04"), pd.Timestamp("2025-01-03")), id="start_gt_end"),
         pytest.param(
             (
-                pd.Timestamp("2025-01-03 12:00:00", tz="US/Eastern"),
-                pd.Timestamp("2025-01-04 12:00:00", tz="US/Eastern"),
+                pd.Timestamp("2025-01-03 12:00:00", tz="America/New_York"),
+                pd.Timestamp("2025-01-04 12:00:00", tz="America/New_York"),
             ),
             id="tz_aware_date_range",
         ),
     ],
 )
-@pytest.mark.parametrize("index_tz", [None, "UTC", "US/Eastern"])
+@pytest.mark.parametrize("index_tz", [None, "UTC", "America/New_York"])
 def test_update_with_date_range_narrower_than_data(
     in_memory_version_store_arrow, date_range, index_tz, arrow_output_format
 ):
