@@ -15,6 +15,7 @@ import pytest
 from arcticdb import col, LazyDataFrame, LazyDataFrameCollection, QueryBuilder, ReadRequest, where
 import arcticdb.toolbox.query_stats as qs
 from arcticdb.util.test import assert_frame_equal, config_context, query_stats_operation_count
+from tests.util.unprocessable_data import all_data_kinds, expect_refusal, write_unprocessable
 
 pytestmark = pytest.mark.pipeline
 
@@ -675,3 +676,13 @@ def test_lazy_batch_pickling(lmdb_library, any_output_format):
     received_roundtripped = roundtripped.collect()
     for vit in received_roundtripped:
         assert_frame_equal(expected, vit.data)
+
+
+@all_data_kinds
+def test_lazy_read_then_collect_unprocessable_data(lmdb_library, kind):
+    lib = lmdb_library
+    sym = write_unprocessable(lib._nvs, kind)
+    lazy_df = lib.read(sym, lazy=True)
+    lazy_df = lazy_df[lazy_df["a"] == 0]
+    with expect_refusal(kind):
+        lazy_df.collect()
