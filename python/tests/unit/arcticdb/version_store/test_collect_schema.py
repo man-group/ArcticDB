@@ -16,6 +16,7 @@ from arcticdb.exceptions import SchemaException, KeyNotFoundException
 from arcticdb.options import ArrowOutputStringFormat, OutputFormat
 import arcticdb.toolbox.query_stats as qs
 from arcticdb.util.test import assert_frame_equal_with_arrow, config_context, query_stats_operation_count
+from tests.util.arrow import create_1d_arrow_structure
 
 
 @pytest.mark.parametrize("num_rows", [0, 1])
@@ -416,3 +417,16 @@ def test_collect_schema_pickled_symbol(lmdb_library):
     lib.write_pickle(sym, "blah")
     with pytest.raises(SchemaException):
         lib.read(sym, lazy=True)._collect_schema()
+
+
+@pytest.mark.parametrize("input_type", ["Array", "ChunkedArray", "UnnamedSeries", "NamedSeries"])
+def test_collect_schema_1d(mem_library, input_type):
+    lib = mem_library
+    sym = "test_collect_schema_1d"
+    lib._nvs._set_allow_arrow_input()
+    data = pa.array([0], pa.int64())
+    input = create_1d_arrow_structure(input_type, data)
+    lib.write(sym, input)
+    schema = lib.read(sym, lazy=True)._collect_schema()
+    expected_name = "series_name" if input_type == "NamedSeries" else ""
+    assert schema == pl.Schema({expected_name: pl.Int64})

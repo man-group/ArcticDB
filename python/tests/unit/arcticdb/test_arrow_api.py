@@ -3,6 +3,7 @@ import pandas as pd
 import pyarrow as pa
 import pyarrow.compute as pc
 import polars as pl
+from polars.testing import assert_series_equal as polars_assert_series_equal
 import pytest
 
 from arcticdb import LazyDataFrame, DataError, concat
@@ -11,6 +12,7 @@ from arcticdb.options import OutputFormat, ArrowOutputStringFormat, LibraryOptio
 from arcticdb.util.test import assert_frame_equal_with_arrow, sample_dataframe
 
 from arcticdb.version_store.library import WritePayload, UpdatePayload, ReadRequest
+from tests.util.arrow import create_1d_arrow_structure
 
 all_output_format_args = [
     None,
@@ -486,3 +488,63 @@ def test_arrow_written_data_get_info_timeseries(mem_library, table, tz, has_inde
         assert desc.sorted == "ASCENDING"
     else:
         assert desc.sorted == "UNKNOWN"
+
+
+# See test with the same name in test_arrow_read.py for V1 API equivalent
+@pytest.mark.parametrize("timeseries", [False, True])
+@pytest.mark.parametrize("input_type", ["Array", "ChunkedArray", "UnnamedSeries", "NamedSeries"])
+def test_arrow_written_1d_data_get_info(mem_library, timeseries, input_type):
+    lib = mem_library
+    sym = "test_arrow_written_1d_data_get_info"
+    lib._nvs._set_allow_arrow_input()
+    data = (
+        pa.Array.from_pandas(pd.date_range("2026-01-01", periods=10), type=pa.timestamp("ns"))
+        if timeseries
+        else pa.array(np.arange(10), pa.int64())
+    )
+    input = create_1d_arrow_structure(input_type, data)
+    lib.write(sym, input, index_column=timeseries)
+    desc = lib.get_description(sym)
+    assert len(desc.columns) == (0 if timeseries else 1)
+    if not timeseries:
+        assert desc.columns[0].name == ("series_name" if input_type == "NamedSeries" else "")
+    assert len(desc.index) == (1 if timeseries else 0)
+    if timeseries:
+        assert desc.index[0].name == ("series_name" if input_type == "NamedSeries" else "")
+    if timeseries:
+        assert "NANOSECONDS_UTC64" in str(desc.index[0].dtype)
+    else:
+        assert "INT64" in str(desc.columns[0].dtype)
+    if timeseries:
+        assert desc.date_range == (data.to_pandas()[0], data.to_pandas()[9])
+    else:
+        assert np.isnat(desc.date_range[0]) and np.isnat(desc.date_range[1])
+    assert desc.index_type == "NA"
+    assert desc.row_count == 10
+    assert desc.sorted == ("ASCENDING" if timeseries else "UNKNOWN")
+
+
+# Main tests for this are in test_arrow_writes.py, this is mainly to test that the additional type validation present in
+# the V2 API allows these structures through
+@pytest.mark.parametrize(
+    "input_output",
+    [
+        (pa.array([0], pa.int64()), pa.chunked_array([[0]], pa.int64())),
+        (pa.chunked_array([[0], [1]], pa.int64()), pa.chunked_array([[0, 1]], pa.int64())),
+        (pa.record_batch({"col": pa.array([0], pa.int64())}), pa.table({"col": pa.array([0], pa.int64())})),
+        (pl.Series(values=[0], dtype=pl.Int64), pl.Series(values=[0], dtype=pl.Int64)),
+    ],
+)
+def test_roundtrip_lower_level_arrow_primitives(mem_library, input_output):
+    input, output = input_output
+    lib = mem_library
+    sym = "test_roundtrip_lower_level_arrow_primitives"
+    lib._nvs._set_allow_arrow_input()
+    lib.write(sym, input)
+    assert not lib._nvs.is_symbol_pickled(sym)
+    if isinstance(input, pl.Series):
+        received = lib.read(sym, output_format="polars").data
+        polars_assert_series_equal(received, output)
+    else:
+        received = lib.read(sym, output_format="pyarrow").data
+        assert received.equals(output)
