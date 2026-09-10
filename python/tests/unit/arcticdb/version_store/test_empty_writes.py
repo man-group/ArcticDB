@@ -205,6 +205,68 @@ def test_append_empty_dataframe_does_not_add_its_columns(in_memory_version_store
     assert_frame_equal(rows, lib.read("empty_first").data)
 
 
+def test_append_empty_dataframe_does_not_add_its_columns_static_schema(in_memory_version_store, sym):
+    lib = in_memory_version_store
+    rows = pd.DataFrame({"col1": np.arange(2, dtype=np.int64)}, index=pd.date_range("2025-01-01", periods=2))
+    lib.write(sym, rows)
+    lib.append(
+        sym,
+        pd.DataFrame(
+            {"col1": np.array([], dtype=np.int64), "col2": np.array([], dtype=np.int64)},
+            index=pd.DatetimeIndex([]),
+        ),
+    )
+    assert_frame_equal(rows, lib.read(sym).data)
+
+
+def test_append_to_rowless_symbol_with_differing_columns_static_schema(in_memory_version_store, sym):
+    # The other direction: the symbol has no columns to be rejected against.
+    lib = in_memory_version_store
+    lib.write(sym, pd.DataFrame({"col1": np.array([], dtype=np.int64)}, index=pd.DatetimeIndex([])))
+    rows = pd.DataFrame({"col2": np.arange(2, dtype=np.int64)}, index=pd.date_range("2025-01-01", periods=2))
+    lib.append(sym, rows)
+    assert_frame_equal(rows, lib.read(sym).data)
+
+
+def test_append_empty_dataframe_does_not_change_column_type_dynamic_schema(in_memory_version_store_dynamic_schema, sym):
+    # The dtype pandas gave the empty column does not promote the stored one.
+    lib = in_memory_version_store_dynamic_schema
+    rows = pd.DataFrame({"col": np.arange(2, dtype=np.int64)}, index=pd.date_range("2025-01-01", periods=2))
+    lib.write(sym, rows)
+    lib.append(sym, pd.DataFrame({"col": np.array([], dtype=np.float64)}, index=pd.DatetimeIndex([])))
+    assert_frame_equal(rows, lib.read(sym).data)
+
+
+@pytest.mark.parametrize("dtype", ["float64", "datetime64[ns]"])
+def test_append_empty_dataframe_with_clashing_column_type_is_accepted_static_schema(
+    in_memory_version_store, sym, dtype
+):
+    # Neither of these types could be combined with int64 if the frame had rows.
+    lib = in_memory_version_store
+    rows = pd.DataFrame({"col": np.arange(2, dtype=np.int64)}, index=pd.date_range("2025-01-01", periods=2))
+    lib.write(sym, rows)
+    lib.append(sym, pd.DataFrame({"col": np.array([], dtype=dtype)}, index=pd.DatetimeIndex([])))
+    assert_frame_equal(rows, lib.read(sym).data)
+
+
+def test_append_empty_dataframe_with_unpromotable_column_type_is_accepted_dynamic_schema(
+    in_memory_version_store_dynamic_schema, sym
+):
+    lib = in_memory_version_store_dynamic_schema
+    rows = pd.DataFrame({"col": np.arange(2, dtype=np.int64)}, index=pd.date_range("2025-01-01", periods=2))
+    lib.write(sym, rows)
+    lib.append(sym, pd.DataFrame({"col": np.array([], dtype="datetime64[ns]")}, index=pd.DatetimeIndex([])))
+    assert_frame_equal(rows, lib.read(sym).data)
+
+
+def test_append_rowcount_dataframe_to_rowless_timeseries(in_memory_version_store, sym):
+    # The index an empty frame is stored with is not the one its user had, but it is enforced anyway.
+    lib = in_memory_version_store
+    lib.write(sym, pd.DataFrame({"col": np.array([], dtype=np.int64)}, index=pd.DatetimeIndex([])))
+    with pytest.raises(NormalizationException):
+        lib.append(sym, pd.DataFrame({"col": np.arange(2, dtype=np.int64)}))
+
+
 @pytest.mark.parametrize("timeseries_first", [True, False])
 def test_append_rowcount_with_timeseries_non_empty_series(
     in_memory_version_store_dynamic_schema, sym, timeseries_first

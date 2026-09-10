@@ -1054,6 +1054,31 @@ def test_update_new_data_contains_old(version_store_factory):
     assert len(lib_tool.read_index("sym")) == 30
 
 
+def test_update_with_empty_dataframe_no_date_range(lmdb_version_store_v1, sym):
+    lib = lmdb_version_store_v1
+    df = pd.DataFrame({"col": np.arange(4, dtype=np.int64)}, index=pd.date_range("2025-01-01", periods=4))
+    lib.write(sym, df)
+    lib.update(sym, pd.DataFrame({"col": np.array([], dtype=np.int64)}, index=pd.DatetimeIndex([])))
+    vit = lib.read(sym)
+    assert vit.version == 1
+    assert_frame_equal(df, vit.data)
+
+
+def test_update_with_empty_dataframe_and_date_range(lmdb_version_store_v1, sym):
+    # The date range the update was given is left alone rather than replaced with the nothing it was given.
+    lib = lmdb_version_store_v1
+    df = pd.DataFrame({"col": np.arange(4, dtype=np.int64)}, index=pd.date_range("2025-01-01", periods=4))
+    lib.write(sym, df)
+    lib.update(
+        sym,
+        pd.DataFrame({"col": np.array([], dtype=np.int64)}, index=pd.DatetimeIndex([])),
+        date_range=(pd.Timestamp("2025-01-02"), pd.Timestamp("2025-01-03")),
+    )
+    vit = lib.read(sym)
+    assert vit.version == 1
+    assert_frame_equal(df, vit.data)
+
+
 @pytest.mark.parametrize("data_class", ["dataframe", "series"])
 @pytest.mark.parametrize("batch", [True, False])
 @pytest.mark.parametrize("metadata_v1", ["v1", None])
