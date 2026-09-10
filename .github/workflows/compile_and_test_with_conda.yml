@@ -53,9 +53,10 @@ jobs:
           path: ${{runner.tool_cache}}/sccache
           key: sccache-tool-${{runner.os}}-${{runner.arch}}-${{env.SCCACHE_VERSION}}
 
-      # And if the tool cache misses and the download fails anyway: without sccache
-      # ARCTICDB_COMPILER_CACHE=AUTO finds no cache and the build just runs uncached,
-      # so degrade to a slow green build rather than a red one.
+      # And if the tool cache misses and the download fails anyway, don't fail the job.
+      # The conda presets pin ARCTICDB_COMPILER_CACHE=sccache (cpp/CMakePresets.json,
+      # common_conda) and environment-dev.yml ships an sccache, so the build still gets
+      # a compiler cache - but only a local one, see the unset below.
       - name: Configure sccache
         id: sccache
         continue-on-error: true
@@ -66,7 +67,7 @@ jobs:
 
       - name: Warn if sccache is unavailable
         if: steps.sccache.outcome == 'failure'
-        run: echo "::warning title=sccache unavailable::Could not install sccache; building without a compiler cache."
+        run: echo "::warning title=sccache unavailable::Could not install sccache; building with a local disk cache only."
 
       - name: Get number of CPU cores
         uses: SimenB/github-actions-cpu-cores@v2.0.0
@@ -100,6 +101,17 @@ jobs:
 
       - name: Build ArcticDB with conda
         run: |
+          # If `Configure sccache` failed we have no GHA cache credentials
+          # (ACTIONS_RESULTS_URL/ACTIONS_RUNTIME_TOKEN are exported by that action and
+          # nothing else), and sccache treats a configured-but-unusable GHA backend as
+          # fatal: storage_from_config returns early on the GHA arm and server.rs aborts
+          # startup, so every compiler invocation fails. Both variables have to be unset
+          # rather than set to false - SCCACHE_GHA_VERSION alone enables the backend, and
+          # sccache checks it first (src/config.rs, "======= GHA =======").
+          # With them gone the conda sccache falls back to its local disk cache.
+          if [[ "${{steps.sccache.outcome}}" != "success" ]]; then
+            unset SCCACHE_GHA_VERSION SCCACHE_GHA_ENABLED
+          fi
           python -m pip install --no-build-isolation --no-deps --retries 3 --timeout 400 -v -e .
         env:
           ARCTICDB_USING_CONDA: 1
@@ -143,7 +155,7 @@ jobs:
         run: git -c core.autocrlf=false submodule update --init cpp/third_party/lmdb cpp/third_party/lmdbxx
 
       # See the notes on the compile job: seed the tool cache to avoid the release CDN,
-      # and treat a failed download as "build uncached" rather than as a job failure.
+      # and on a failed download fall back to a local disk cache rather than failing.
       - name: Restore sccache binary
         uses: actions/cache@v4
         with:
@@ -160,7 +172,7 @@ jobs:
 
       - name: Warn if sccache is unavailable
         if: steps.sccache.outcome == 'failure'
-        run: echo "::warning title=sccache unavailable::Could not install sccache; building without a compiler cache."
+        run: echo "::warning title=sccache unavailable::Could not install sccache; building with a local disk cache only."
 
       - name: Free Disk Space
         if: inputs.free_disk_space
@@ -193,6 +205,12 @@ jobs:
 
       - name: Configure C++ Tests
         run: |
+          # See the compile job: without the action's credentials a configured GHA
+          # backend stops the sccache server from starting at all, and SCCACHE_GHA_VERSION
+          # enables it on its own, so drop both and use the local disk cache.
+          if [[ "${{steps.sccache.outcome}}" != "success" ]]; then
+            unset SCCACHE_GHA_VERSION SCCACHE_GHA_ENABLED
+          fi
           cd cpp
           if [ -f out/${{inputs.preset}}-build/CMakeCache.txt ] && grep -q "TEST:BOOL=ON" out/${{inputs.preset}}-build/CMakeCache.txt; then
             echo "CMake cache already has TEST=ON, skipping reconfiguration"
@@ -204,6 +222,9 @@ jobs:
 
       - name: Build C++ Tests
         run: |
+          if [[ "${{steps.sccache.outcome}}" != "success" ]]; then
+            unset SCCACHE_GHA_VERSION SCCACHE_GHA_ENABLED
+          fi
           cd cpp
           CMAKE_JOBS=${{contains(inputs.platform, 'linux') && '3' || steps.cpu-cores.outputs.count}}
           cmake --build --preset ${{inputs.preset}} --target arcticdb_rapidcheck_tests -j $CMAKE_JOBS
