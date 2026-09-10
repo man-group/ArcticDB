@@ -18,12 +18,9 @@
 #include <pybind11/pybind11.h>
 
 #include <algorithm>
-#include <atomic>
-#include <chrono>
 #include <functional>
 #include <string>
 #include <string_view>
-#include <thread>
 #include <utility>
 #include <vector>
 
@@ -72,9 +69,9 @@ class ReadFailureStore : public InMemoryStore {
 /**
  * Store that runs a caller-supplied hook before listing a chosen key type.
  *
- * list_snapshot_keys() lists SNAPSHOT_REF on the calling thread and the legacy SNAPSHOT type on the IO executor,
- * so either listing can fail on its own - real storages fail per prefix, e.g. a bucket policy that denies one of
- * them, or a listing that times out. Throwing from the hook fails that listing; blocking in it holds it up.
+ * list_snapshot_keys() lists SNAPSHOT_REF and then the legacy SNAPSHOT type, so either listing can fail on its
+ * own - real storages fail per prefix, e.g. a bucket policy that denies one of them, or a listing that times out.
+ * Throwing from the hook fails that listing; counting calls to it records whether it was attempted at all.
  */
 class ListingStore : public InMemoryStore {
   public:
@@ -129,13 +126,11 @@ folly::Try<folly::Unit> failure(Args&&... args) {
 
 } // namespace
 
-// === list_snapshot_keys(), the two concurrent listings ===
+// === list_snapshot_keys(), the two listings ===
 //
-// The legacy SNAPSHOT listing runs on the IO executor and appends into a vector owned by list_snapshot_keys()'
-// own frame, so it has to be joined before that frame unwinds however the function leaves it. A regression that
-// let a listing failure escape ahead of the join would be a use-after-scope on real storage rather than a wrong
-// answer, and a listing failure that went unreported would silently shorten the snapshot list - which on the
-// delete paths means index keys losing their snapshot protection.
+// Enumerating snapshots needs both the SNAPSHOT_REF listing and the legacy SNAPSHOT one, and a library holds
+// snapshots under either. A listing failure that went unreported would silently shorten the snapshot list - which
+// on the delete paths means index keys losing their snapshot protection - so neither listing may fail quietly.
 
 namespace {
 std::shared_ptr<ListingStore> store_with_two_snapshots() {
@@ -170,36 +165,25 @@ TEST(ListSnapshotKeys, PropagatesAFailureOfTheLegacyListing) {
     EXPECT_THROW(list_snapshot_keys(store), UnexpectedS3ErrorException);
 }
 
-TEST(ListSnapshotKeys, ReportsTheRefFailureWhenBothListingsFail) {
+TEST(ListSnapshotKeys, ARefListingFailureShortCircuitsTheLegacyListing) {
+    bool legacy_listing_attempted = false;
     auto store = store_with_two_snapshots();
     store->on_listing(KeyType::SNAPSHOT_REF, []() { throw UnexpectedS3ErrorException("ref listing failed"); });
-    store->on_listing(KeyType::SNAPSHOT, []() { throw UnexpectedS3ErrorException("legacy listing failed"); });
+    store->on_listing(KeyType::SNAPSHOT, [&legacy_listing_attempted]() {
+        legacy_listing_attempted = true;
+        throw UnexpectedS3ErrorException("legacy listing failed");
+    });
 
     try {
         list_snapshot_keys(store);
         FAIL() << "Expected list_snapshot_keys() to throw";
     } catch (const UnexpectedS3ErrorException& e) {
-        // Either failure is fatal, so which one is reported is a choice rather than a requirement - but it has
-        // to be a deterministic one, not whichever listing happened to finish first.
+        // Either failure is fatal, so which one is reported has to be deterministic. The listings run in order,
+        // so the ref failure propagates as-is and the legacy listing is never issued at all.
         EXPECT_TRUE(mentions(e.what(), "ref listing failed")) << e.what();
     }
-}
 
-TEST(ListSnapshotKeys, JoinsTheLegacyListingBeforeARefFailureEscapes) {
-    std::atomic<bool> legacy_listing_running{false};
-    auto store = store_with_two_snapshots();
-    store->on_listing(KeyType::SNAPSHOT, [&legacy_listing_running]() {
-        legacy_listing_running = true;
-        std::this_thread::sleep_for(std::chrono::milliseconds(200));
-        legacy_listing_running = false;
-    });
-    store->on_listing(KeyType::SNAPSHOT_REF, []() { throw UnexpectedS3ErrorException("ref listing failed"); });
-
-    EXPECT_THROW(list_snapshot_keys(store), UnexpectedS3ErrorException);
-
-    // The legacy listing is still writing into list_snapshot_keys()' locals until it returns, so it must be
-    // joined before the ref failure unwinds them.
-    EXPECT_FALSE(legacy_listing_running.load());
+    EXPECT_FALSE(legacy_listing_attempted);
 }
 
 // === check_only_deleted_snapshots_failed(), the filter itself ===

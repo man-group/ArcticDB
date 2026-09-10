@@ -92,40 +92,29 @@ void tombstone_snapshot(
 std::vector<VariantKey> list_snapshot_keys(const std::shared_ptr<Store>& store) {
     // SNAPSHOT_REF and the legacy SNAPSHOT key type live under different storage prefixes, so enumerating them
     // requires two independent listing operations. Both must happen - libraries written by older versions can still
-    // hold SNAPSHOT keys - but they do not depend on each other, so run them concurrently instead of back to back.
-    // Against object storage each listing costs a full round trip (~11ms on S3) that is otherwise paid twice by
-    // every list_snapshots()/list_versions() call, even in a library with no snapshots at all.
-    std::vector<AtomKey> legacy_keys;
-    auto legacy_listing = folly::via(&async::io_executor(), [&store, &legacy_keys]() {
-        store->iterate_type(KeyType::SNAPSHOT, [&legacy_keys](VariantKey&& vk) {
-            legacy_keys.emplace_back(to_atom(std::move(vk)));
-        });
+    // hold SNAPSHOT keys - and both run here, back to back, on the calling thread.
+    //
+    // These two listings do not depend on each other, so overlapping them would hide one of the two storage round
+    // trips (~11ms each on S3). That is not worth what it costs everywhere else: handing one listing to the IO
+    // executor and joining it adds a fixed ~18us to every list_snapshots()/list_versions() call, which is pure loss
+    // against local storage, where a listing is itself only a few microseconds. The metadata reads in
+    // list_snapshots() and get_master_snapshots_map_with_stats() are still issued concurrently - there the
+    // concurrency scales with the number of snapshots rather than saving a single round trip, so it pays for the
+    // hop many times over.
+    std::vector<RefKey> ref_keys;
+    store->iterate_type(KeyType::SNAPSHOT_REF, [&ref_keys](VariantKey&& vk) {
+        util::check(
+                std::holds_alternative<RefKey>(vk),
+                "Expected snapshot ref to be reference type, got {}",
+                variant_key_view(vk)
+        );
+        ref_keys.emplace_back(std::get<RefKey>(std::move(vk)));
     });
 
-    std::vector<RefKey> ref_keys;
-    std::exception_ptr ref_listing_exception;
-    try {
-        store->iterate_type(KeyType::SNAPSHOT_REF, [&ref_keys](VariantKey&& vk) {
-            util::check(
-                    std::holds_alternative<RefKey>(vk),
-                    "Expected snapshot ref to be reference type, got {}",
-                    variant_key_view(vk)
-            );
-            ref_keys.emplace_back(std::get<RefKey>(std::move(vk)));
-        });
-    } catch (...) {
-        ref_listing_exception = std::current_exception();
-    }
-
-    // getTry() does not throw, so the background listing is always joined before its captured state goes out of
-    // scope, whichever of the two listings failed.
-    auto legacy_listing_result = std::move(legacy_listing).getTry();
-    if (ref_listing_exception) {
-        std::rethrow_exception(ref_listing_exception);
-    }
-    if (legacy_listing_result.hasException()) {
-        legacy_listing_result.exception().throw_exception();
-    }
+    std::vector<AtomKey> legacy_keys;
+    store->iterate_type(KeyType::SNAPSHOT, [&legacy_keys](VariantKey&& vk) {
+        legacy_keys.emplace_back(to_atom(std::move(vk)));
+    });
 
     std::vector<VariantKey> snap_variant_keys;
     snap_variant_keys.reserve(ref_keys.size() + legacy_keys.size());
