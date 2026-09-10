@@ -226,19 +226,26 @@ jobs:
       # `arctic-winds plan` appends `matrix=<compact json>` to $GITHUB_OUTPUT itself.
       #
       # It also fetches the **reference values** for ticket 48's profile pass and
-      # writes them to `--reference-out`: the newest master run `compare-values`
-      # would judge this commit against, reduced to `{worker: {benchmark: [values]}}`
-      # (~90 KB for ArcticDB's ~350 benchmarks, hence an artifact rather than a job
-      # output, which GitHub caps at 1 MB). Reading it is the one thing this job
-      # needs the results store for, and it is deliberately unable to fail the plan:
-      # no fresh master run, an S3 hiccup, a library that does not exist yet — each
-      # writes an empty document with a note and lets the run go on, profiling only
-      # what is new to a lane and whatever `profile` asked for.
+      # writes them to `--reference-out`: the newest run of this series before this
+      # one, reduced to `{worker: {benchmark: [values]}}` (~90 KB for ArcticDB's
+      # ~350 benchmarks, hence an artifact rather than a job output, which GitHub
+      # caps at 1 MB). Reading it is the one thing this job needs the results store
+      # for, and it is deliberately unable to fail the plan: no fresh run, an S3
+      # hiccup, a library that does not exist yet — each writes an empty document
+      # with a note and lets the run go on, profiling only what is new to a lane
+      # and whatever `profile` asked for. An absent reference costs ratios, never
+      # a run: what it cannot divide is `new`, and `new` has no ratio to be wrong.
       #
-      # `--reference-lib asv_results` is CI's own master library, matching what
-      # `collect`'s `compare-values` step compares against while the shadow is
-      # young; move both to `winds_asv_results` together, or the profile pass and
-      # the pull request gate will be judging against two different runs.
+      # `--reference-lib`/`--reference-ref` are derived in the step, not spelled
+      # here, because the honest reference is same-fleet and same-lane (gha 80).
+      # They are NOT the pair `compare-values` uses below and are not meant to be:
+      # that step answers "is this pull request slower than the branch it lands
+      # on", which is master's library by definition, while this one answers "did
+      # THIS series move", and a branch keeping a series of its own — this one —
+      # has its runs filed under its own commits in its own library. Judging its
+      # m6i.xlarge lanes against the old single-machine m6i.4xlarge library is what
+      # run 34471836836 did: whole lanes flagged at 1.4x-3.6x with the series flat,
+      # and the 600 s profile budget spent recording benchmarks that never moved.
       - name: plan the matrix
         id: plan
         env:
@@ -266,10 +273,40 @@ jobs:
           if [ -n "$SUITE_OVERWRITE" ]; then
             args+=(--suite-overwrite "$SUITE_OVERWRITE")
           fi
+
+          # Which library holds the series this run continues, and which line of
+          # commits that library's rows are filed under. `library_for()`'s rule,
+          # the same one `name the results library` in `collect` applies — a push
+          # reads back the library it is about to write to — with a pull request
+          # as the one exception: its own `<ref>_asv_results` holds nothing but
+          # this run, so it reads the master series it is a candidate for.
+          #
+          # The ref matters as much as the library. `origin/master~N` is a walk
+          # over master's commits, and a branch with a library of its own has
+          # never been given a row for one of them, so that walk comes back with
+          # nothing there. `HEAD~N` descends the checkout's own first parents,
+          # which on such a branch are its own earlier runs — a reference from the
+          # same fleet, the same lanes and the same storage. `plan` excludes the
+          # commit it is planning, so a re-run is not its own reference either.
+          #
+          # (This shadow copy runs the rule with base `winds_asv_results`, exactly
+          # as `collect`'s library step does; the mirror on master uses
+          # `asv_results`.)
+          base=winds_asv_results
+          if [ "$GITHUB_EVENT_NAME" = pull_request ] || [ "$GITHUB_REF_NAME" = master ]; then
+            reference_lib="$base"
+            reference_ref=origin/master
+          else
+            reference_lib="$(printf '%s' "$GITHUB_REF_NAME" | tr '/' '_')_${base}"
+            reference_ref=HEAD
+          fi
+          echo "reference: the newest run of $reference_ref stored in $reference_lib"
+
           args+=(--profile "$PROFILE"
                  --reference-out reference-values.json
                  --results "$RESULTS"
-                 --reference-lib asv_results)
+                 --reference-lib "$reference_lib"
+                 --reference-ref "$reference_ref")
           arctic-winds plan "${args[@]}"
 
       # One artifact for the whole run: every lane downloads the same document and
@@ -1018,7 +1055,10 @@ jobs:
       # `--reference-lib asv_results` compares against **CI's own** master results, which
       # are the only ones that exist while the shadow is young; the numbers come from one
       # machine rather than eight, so treat early verdicts as directional. Switch this to
-      # `winds_asv_results` once nightly/master shadow runs have populated it.
+      # `winds_asv_results` once nightly/master shadow runs have populated it. The
+      # hazard is this step's alone since gha 80: the profile pass no longer reads this
+      # library — a cross-fleet ratio can still colour a pull request's tables here, but
+      # can no longer decide which benchmarks are worth a flame graph.
       # `--report` writes the same verdict as JSON, which the PR page below is built
       # from: asv must not be run a second time to say what this step already knows.
       - name: compare against master
