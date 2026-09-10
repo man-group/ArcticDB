@@ -395,8 +395,8 @@ def test_symbol_concat_empty_column_intersection(
 def test_symbol_concat_with_empty_dataframe(in_memory_library, empty_first, join):
     # A zero-row symbol contributes no rows, so the result is the non-empty symbol, as in pandas.
     lib = in_memory_library
-    df_empty = pd.DataFrame({"col1": np.array([], dtype=np.float64)}, index=pd.DatetimeIndex([]))
-    df_rows = pd.DataFrame({"col1": np.arange(2, dtype=np.float64)}, index=pd.date_range("2025-01-01", periods=2))
+    df_empty = pd.DataFrame({"col1": np.array([], dtype=np.int64)}, index=pd.DatetimeIndex([]))
+    df_rows = pd.DataFrame({"col1": np.arange(2, dtype=np.int64)}, index=pd.date_range("2025-01-01", periods=2))
     lib.write("sym_empty", df_empty)
     lib.write("sym_rows", df_rows)
 
@@ -406,41 +406,45 @@ def test_symbol_concat_with_empty_dataframe(in_memory_library, empty_first, join
 
 
 @pytest.mark.parametrize("join", ["inner", "outer"])
-def test_symbol_concat_empty_dataframe_does_not_contribute_its_columns(in_memory_library_dynamic, join):
-    # A zero-row symbol is skipped entirely, so a column only it has is dropped even by an outer join. Pandas
-    # would keep it backfilled; matching append matters more here. See
-    # test_empty_writes.py::test_append_empty_dataframe_does_not_add_its_columns. Monday 12781487305.
+def test_symbol_concat_empty_dataframe_contributes_its_columns(in_memory_library_dynamic, join):
+    # A zero-row symbol declares its columns as any other does, so an outer join keeps them, backfilled, and an inner
+    # join keeps only what both symbols have. Monday 12781487305.
     lib = in_memory_library_dynamic
     df_empty = pd.DataFrame(
-        {"col1": np.array([], dtype=np.float64), "col2": np.array([], dtype=np.float64)}, index=pd.DatetimeIndex([])
+        {"col1": np.array([], dtype=np.int64), "col2": np.array([], dtype=np.int64)}, index=pd.DatetimeIndex([])
     )
-    df_rows = pd.DataFrame({"col1": np.arange(2, dtype=np.float64)}, index=pd.date_range("2025-01-01", periods=2))
+    df_rows = pd.DataFrame(
+        {"col1": np.arange(2, dtype=np.int64), "col3": np.arange(2, dtype=np.int64)},
+        index=pd.date_range("2025-01-01", periods=2),
+    )
     lib.write("sym_empty", df_empty)
     lib.write("sym_rows", df_rows)
 
     received = concat(lib.read_batch(["sym_empty", "sym_rows"], lazy=True), join).collect().data
-    assert list(received.columns) == ["col1"]
-    assert_frame_equal(df_rows, received)
+    if join == "outer":
+        expected = df_rows.assign(col2=np.zeros(2, dtype=np.int64))[["col1", "col2", "col3"]]
+    else:
+        expected = df_rows[["col1"]]
+    assert_frame_equal(expected, received)
 
 
 @pytest.mark.parametrize("join", ["inner", "outer"])
 def test_symbol_concat_of_only_empty_dataframes(in_memory_library, join):
-    # The companion to the two tests above. Concating empty only dataframes preserves only the first schema.
-    # This is to make it consistent with append.
     lib = in_memory_library
     df_0 = pd.DataFrame({"col1": np.array([], dtype=np.float64)}, index=pd.DatetimeIndex([]))
     df_1 = pd.DataFrame({"col2": np.array([], dtype=np.float64)}, index=pd.DatetimeIndex([]))
     lib.write("sym0", df_0)
     lib.write("sym1", df_1)
+    expected_columns = ["col1", "col2"] if join == "outer" else []
 
     received = concat(lib.read_batch(["sym0", "sym1"], lazy=True), join).collect().data
     assert not len(received)
-    assert list(received.columns) == ["col1"]
+    assert list(received.columns) == expected_columns
 
     # And symmetrically, the other way round.
     received = concat(lib.read_batch(["sym1", "sym0"], lazy=True), join).collect().data
     assert not len(received)
-    assert list(received.columns) == ["col2"]
+    assert list(received.columns) == expected_columns[::-1]
 
 
 @pytest.mark.parametrize("dynamic_schema", [True, False])

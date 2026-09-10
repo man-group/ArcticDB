@@ -925,19 +925,19 @@ class TestBatchUpdate:
         # Updating already existing symbols (i.e. non-upsert path) does not add a symbol list key
         assert len(lib_tool.find_keys(KeyType.SYMBOL_LIST)) == 2
 
-    def test_empty_dataframe_with_daterange_does_not_delete_data(self, lmdb_library):
+    def test_empty_dataframe_with_daterange_deletes_the_range(self, lmdb_library):
         sym = "symbol_1"
         input_df = pd.DataFrame({"a": [1, 2]}, index=pd.date_range(start=pd.Timestamp("2024-01-02"), periods=2))
         lmdb_library.write(sym, input_df)
         payload = UpdatePayload(
             sym,
-            pd.DataFrame({"a": []}, index=pd.DatetimeIndex([])),
+            pd.DataFrame({"a": np.array([], dtype=np.int64)}, index=pd.DatetimeIndex([])),
             date_range=(pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-04")),
         )
         lmdb_library.update_batch([payload])
         vit = lmdb_library.read(sym)
         assert vit.version == 1
-        assert_frame_equal(vit.data, input_df)
+        assert len(vit.data) == 0
 
 
 def test_regular_update_dynamic_schema_named_index(
@@ -1052,6 +1052,32 @@ def test_update_new_data_contains_old(version_store_factory):
     lib_tool = lib.library_tool()
     assert len(lib_tool.find_keys_for_symbol(KeyType.TABLE_DATA, "sym")) == 55
     assert len(lib_tool.read_index("sym")) == 30
+
+
+def test_update_with_empty_dataframe_no_date_range(lmdb_version_store_v1, sym):
+    # With no date range there is no range to replace, so the version is bumped and the data left alone.
+    lib = lmdb_version_store_v1
+    df = pd.DataFrame({"col": np.arange(4, dtype=np.int64)}, index=pd.date_range("2025-01-01", periods=4))
+    lib.write(sym, df)
+    lib.update(sym, pd.DataFrame({"col": np.array([], dtype=np.int64)}, index=pd.DatetimeIndex([])))
+    vit = lib.read(sym)
+    assert vit.version == 1
+    assert_frame_equal(df, vit.data)
+
+
+def test_update_with_empty_dataframe_and_date_range(lmdb_version_store_v1, sym):
+    # An update replaces the date range it was given with what it was given, and it was given nothing.
+    lib = lmdb_version_store_v1
+    df = pd.DataFrame({"col": np.arange(4, dtype=np.int64)}, index=pd.date_range("2025-01-01", periods=4))
+    lib.write(sym, df)
+    lib.update(
+        sym,
+        pd.DataFrame({"col": np.array([], dtype=np.int64)}, index=pd.DatetimeIndex([])),
+        date_range=(pd.Timestamp("2025-01-02"), pd.Timestamp("2025-01-03")),
+    )
+    vit = lib.read(sym)
+    assert vit.version == 1
+    assert_frame_equal(df.drop(df.index[1:3]), vit.data)
 
 
 @pytest.mark.parametrize("data_class", ["dataframe", "series"])
