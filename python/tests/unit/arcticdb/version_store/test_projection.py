@@ -13,6 +13,7 @@ import pytest
 from arcticdb.exceptions import ArcticNativeException, SchemaException, UserInputException
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb.util.test import assert_frame_equal, make_dynamic, regularize_dataframe
+from tests.util.unprocessable_data import all_data_kinds, expect_refusal, projection_query, write_unprocessable
 
 pytestmark = pytest.mark.pipeline
 
@@ -455,3 +456,11 @@ def test_projection_repeated_subexpression(lmdb_version_store_v1):
     expected["x"] = (df["a"] + df["b"]) * (df["a"] + df["b"])
     received = lib.read(sym, query_builder=q).data
     assert_frame_equal(expected, received)
+
+
+@all_data_kinds
+def test_project_unprocessable_data(lmdb_version_store_v1, kind):
+    lib = lmdb_version_store_v1
+    sym = write_unprocessable(lib, kind, "test_project_unprocessable_data")
+    with expect_refusal(kind):
+        lib.read(sym, query_builder=projection_query())

@@ -33,6 +33,13 @@ from arcticdb.exceptions import (
 from arcticdb.version_store.library import MergeAction, MergeStrategy
 from arcticdb.version_store._store import normalize_merge_action
 from arcticdb_ext.version_store import MergeAction
+from tests.util.unprocessable_data import (
+    MERGE_SOURCE,
+    RECURSIVE_DATA,
+    all_data_kinds,
+    expect_refusal,
+    write_unprocessable,
+)
 
 pytestmark = [
     pytest.mark.merge_update,
@@ -4801,3 +4808,22 @@ class TestMergeMultiindexInsert:
         sym = f"nonexistent_{is_datetime}"
         lib.merge_experimental(sym, source, strategy=strategy, upsert=True, on=on)
         assert_frame_equal(lib.read(sym).data, source)
+
+
+@all_data_kinds
+def test_merge_unprocessable_data(lmdb_library, kind):
+    lib = lmdb_library
+    sym = write_unprocessable(lib._nvs, kind)
+    with expect_refusal(kind):
+        lib.merge_experimental(sym, MERGE_SOURCE)
+
+
+def test_merge_on_recursive_data_leaves_symbol_untouched(lmdb_library):
+    lib = lmdb_library
+    sym = write_unprocessable(lib._nvs, "recursive")
+    with expect_refusal("recursive"):
+        lib.merge_experimental(sym, MERGE_SOURCE)
+    after = lib._nvs.read(sym).data
+    assert set(after) == set(RECURSIVE_DATA)
+    for column, expected in RECURSIVE_DATA.items():
+        assert np.array_equal(after[column], expected)

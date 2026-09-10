@@ -25,6 +25,7 @@ from arcticdb.util.test import (
 )
 from packaging.version import Version
 from arcticdb.util._versions import IS_PANDAS_TWO, PANDAS_VERSION
+from tests.util.unprocessable_data import all_data_kinds, expect_refusal, resample_query, write_unprocessable
 import itertools
 
 pytestmark = pytest.mark.pipeline
@@ -1529,3 +1530,11 @@ class TestResampleDynamicSchema:
             label="left",
             expected_types=expected_types,
         )
+
+
+@all_data_kinds
+def test_resample_unprocessable_data(lmdb_version_store_v1, kind):
+    lib = lmdb_version_store_v1
+    sym = write_unprocessable(lib, kind, "test_resample_unprocessable_data")
+    with expect_refusal(kind):
+        lib.read(sym, query_builder=resample_query())

@@ -47,6 +47,13 @@ from arcticdb.version_store.library import (
 )
 from tests.conftest import Marks
 from tests.util.marking import marks
+from tests.util.unprocessable_data import (
+    ERROR_CODE_FOR,
+    PROCESSING_KINDS,
+    all_data_kinds,
+    all_processing_kinds,
+    write_unprocessable,
+)
 
 
 @pytest.fixture
@@ -1190,6 +1197,17 @@ def test_read_batch_query_builder_missing_keys(arctic_library):
     assert batch[2].version_request_data == 0
     assert batch[2].error_code == ErrorCode.E_KEY_NOT_FOUND
     assert batch[2].error_category == ErrorCategory.STORAGE
+
+
+@all_data_kinds
+@all_processing_kinds
+def test_read_batch_unprocessable_data(arctic_library, kind, processing):
+    lib = arctic_library
+    sym = write_unprocessable(lib._nvs, kind)
+    result = lib.read_batch([ReadRequest(sym, query_builder=PROCESSING_KINDS[processing]())])[0]
+    assert isinstance(result, DataError)
+    assert result.error_code == ERROR_CODE_FOR[kind]
+    assert result.error_category == ErrorCategory.SCHEMA
 
 
 @pytest.mark.storage
