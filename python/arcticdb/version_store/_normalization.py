@@ -763,9 +763,9 @@ class ArrowTableNormalizer(Normalizer):
 
     def normalize(self, arrow_structure, **kwargs):
         norm_metadata = NormalizationMetadata()
-        norm_metadata.experimental_arrow.one_dimensional = isinstance(
-            arrow_structure, (pa.ChunkedArray, pa.Array, pl.Series)
-        )
+        norm_metadata.experimental_arrow.one_dimensional = (
+            _PYARROW_AVAILABLE and isinstance(arrow_structure, (pa.ChunkedArray, pa.Array))
+        ) or (_POLARS_AVAILABLE and isinstance(arrow_structure, pl.Series))
         if _POLARS_AVAILABLE and isinstance(arrow_structure, pl.Series):
             norm_metadata.experimental_arrow.polars_series_name = arrow_structure.name
         arrow_structure = to_pyarrow_table(arrow_structure)
