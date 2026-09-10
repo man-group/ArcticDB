@@ -1299,7 +1299,7 @@ def test_update_with_date_range_wider_than_data_1d(in_memory_version_store_arrow
         ),
     ],
 )
-@pytest.mark.parametrize("index_tz", [None, "UTC", "America/New_York"])
+@pytest.mark.parametrize("index_tz", [None, "Etc/UTC", "America/New_York"])
 def test_update_with_date_range_narrower_than_data(
     in_memory_version_store_arrow, date_range, index_tz, arrow_output_format
 ):
