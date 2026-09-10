@@ -766,7 +766,7 @@ class ArrowTableNormalizer(Normalizer):
         norm_metadata.experimental_arrow.one_dimensional = isinstance(
             arrow_structure, (pa.ChunkedArray, pa.Array, pl.Series)
         )
-        if isinstance(arrow_structure, pl.Series):
+        if _POLARS_AVAILABLE and isinstance(arrow_structure, pl.Series):
             norm_metadata.experimental_arrow.polars_series_name = arrow_structure.name
         arrow_structure = to_pyarrow_table(arrow_structure)
         if arrow_structure.num_rows == 0:
@@ -1916,7 +1916,7 @@ def restrict_data_to_date_range_only(data: T, *, start: Timestamp, end: Timestam
     elif isinstance(data, NORMALIZABLE_PYARROW_TYPES + NORMALIZABLE_POLARS_TYPES):
         check(index_column, "Cannot update with pyarrow Table without specifying index_column=True")
         original_type = type(data)
-        original_name = data.name if original_type == pl.Series else None
+        original_name = data.name if _POLARS_AVAILABLE and original_type == pl.Series else None
         # PyArrow binary search + slice is benchmarked faster than polars native filtering
         # (filter/is_between with set_sorted), which materializes a boolean mask over the
         # entire column. The result is a zero-copy pa.Table view.

@@ -49,8 +49,8 @@ def convert_arrow_to_pandas_for_tests(table):
 
 
 def to_pyarrow_table(
-    arrow_structure: Union[pa.Table, pa.RecordBatch, pa.ChunkedArray, pa.Array, pl.DataFrame, pl.Series],
-) -> pa.Table:
+    arrow_structure: "Union[pa.Table, pa.RecordBatch, pa.ChunkedArray, pa.Array, pl.DataFrame, pl.Series]",
+) -> "pa.Table":
     if isinstance(arrow_structure, NORMALIZABLE_POLARS_TYPES):
         if not _PYARROW_AVAILABLE:
             raise ModuleNotFoundError(
