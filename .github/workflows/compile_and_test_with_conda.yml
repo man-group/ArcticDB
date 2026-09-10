@@ -20,6 +20,10 @@ on:
       run_commandline:           {required: false, type: string,  default: '',    description: Custom commandline to run before tests}
       run_custom_pytest_command: {required: false, type: string,  default: '',    description: Custom pytest command or additional arguments}
 
+env:
+  # Single source of truth: feeds both the sccache-action input and the tool cache key.
+  SCCACHE_VERSION: v0.12.0
+
 jobs:
   # ==================== JOB 1: COMPILE ====================
   compile:
@@ -39,15 +43,25 @@ jobs:
       - name: Initialise lmdb and lmdbxx submodules
         run: git -c core.autocrlf=false submodule update --init cpp/third_party/lmdb cpp/third_party/lmdbxx
 
-      # The release download 5xxs from time to time and the action's own retries are
-      # short (see #3261). Without sccache ARCTICDB_COMPILER_CACHE=AUTO finds no cache
-      # and the build just runs uncached, so degrade to a slow green build, not a red one.
+      # sccache-action looks in the runner tool cache before it downloads, so seeding
+      # the tool cache keeps the GitHub release CDN - which 5xxs from time to time,
+      # see #3261 - off the critical path. The action still runs on a hit, so it still
+      # exports SCCACHE_PATH and the GHA cache backend credentials.
+      - name: Restore sccache binary
+        uses: actions/cache@v4
+        with:
+          path: ${{runner.tool_cache}}/sccache
+          key: sccache-tool-${{runner.os}}-${{runner.arch}}-${{env.SCCACHE_VERSION}}
+
+      # And if the tool cache misses and the download fails anyway: without sccache
+      # ARCTICDB_COMPILER_CACHE=AUTO finds no cache and the build just runs uncached,
+      # so degrade to a slow green build rather than a red one.
       - name: Configure sccache
         id: sccache
         continue-on-error: true
         uses: mozilla-actions/sccache-action@v0.0.9
         with:
-          version: v0.12.0
+          version: ${{env.SCCACHE_VERSION}}
           disable_annotations: 'true'
 
       - name: Warn if sccache is unavailable
@@ -128,13 +142,20 @@ jobs:
       - name: Initialise lmdb and lmdbxx submodules
         run: git -c core.autocrlf=false submodule update --init cpp/third_party/lmdb cpp/third_party/lmdbxx
 
-      # See the note on the compile job: a failed sccache download must not fail the job.
+      # See the notes on the compile job: seed the tool cache to avoid the release CDN,
+      # and treat a failed download as "build uncached" rather than as a job failure.
+      - name: Restore sccache binary
+        uses: actions/cache@v4
+        with:
+          path: ${{runner.tool_cache}}/sccache
+          key: sccache-tool-${{runner.os}}-${{runner.arch}}-${{env.SCCACHE_VERSION}}
+
       - name: Configure sccache
         id: sccache
         continue-on-error: true
         uses: mozilla-actions/sccache-action@v0.0.9
         with:
-          version: v0.12.0
+          version: ${{env.SCCACHE_VERSION}}
           disable_annotations: 'true'
 
       - name: Warn if sccache is unavailable
