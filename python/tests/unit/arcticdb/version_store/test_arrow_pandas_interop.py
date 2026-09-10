@@ -601,9 +601,6 @@ def test_write_arrow_chunked_array_read_pandas(in_memory_version_store_arrow):
     assert_series_equal(pd.Series(np.arange(1, 4, dtype=np.int64)), received)
 
 
-@pytest.mark.xfail(
-    reason="pyarrow RecordBatch input should read back as a pandas DataFrame, not be pickled", strict=True
-)
 def test_write_arrow_record_batch_read_pandas(in_memory_version_store_arrow):
     lib = in_memory_version_store_arrow
     sym = "test_write_arrow_record_batch_read_pandas"

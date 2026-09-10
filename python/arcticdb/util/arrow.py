@@ -1,4 +1,10 @@
-from arcticdb.dependencies import pyarrow as pa
+from typing import Union
+
+from arcticdb.dependencies import _PYARROW_AVAILABLE, _POLARS_AVAILABLE, pyarrow as pa, polars as pl
+from arcticdb.exceptions import ArcticUnsupportedDataTypeException
+
+NORMALIZABLE_PYARROW_TYPES = (pa.Table, pa.RecordBatch, pa.ChunkedArray, pa.Array) if _PYARROW_AVAILABLE else tuple()
+NORMALIZABLE_POLARS_TYPES = (pl.DataFrame, pl.Series) if _POLARS_AVAILABLE else tuple()
 
 
 def cast_string_columns(table, string_type=None):
@@ -40,3 +46,27 @@ def convert_arrow_to_pandas_for_tests(table):
             new_col = new_table.column(i).fill_null(False)
             new_table = new_table.set_column(i, name, new_col)
     return new_table.to_pandas()
+
+
+def to_pyarrow_table(
+    arrow_structure: "Union[pa.Table, pa.RecordBatch, pa.ChunkedArray, pa.Array, pl.DataFrame, pl.Series]",
+) -> "pa.Table":
+    if isinstance(arrow_structure, NORMALIZABLE_POLARS_TYPES):
+        if not _PYARROW_AVAILABLE:
+            raise ModuleNotFoundError(
+                "ArcticDB's pyarrow optional dependency is missing and is required for working with polars DataFrames."
+            )
+        if isinstance(arrow_structure, pl.Series):
+            # For some reason to_arrow() on a pl.DataFrame maintains the chunking and so is zero-copy, but on a
+            # pl.Series it copies into a pa.Array if the Series was chunked
+            arrow_structure = arrow_structure.to_frame().to_arrow().column(0)
+        else:  # pl.DataFrame
+            arrow_structure = arrow_structure.to_arrow()
+    if isinstance(arrow_structure, (pa.ChunkedArray, pa.Array)):
+        arrow_structure = pa.Table.from_arrays([arrow_structure], names=["__array__"])
+    elif isinstance(arrow_structure, pa.RecordBatch):
+        arrow_structure = pa.Table.from_batches([arrow_structure])
+    elif not isinstance(arrow_structure, pa.Table):
+        # Should be unreachable due to checks in get_normalizer_for_type
+        raise ArcticUnsupportedDataTypeException(f"Unsupported Arrow type: {type(arrow_structure)}")
+    return arrow_structure
