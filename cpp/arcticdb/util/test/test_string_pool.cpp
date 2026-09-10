@@ -8,6 +8,7 @@
 
 #include <gtest/gtest.h> // googletest header file
 #include <unordered_map>
+#include <fmt/format.h>
 
 #include <arcticdb/column_store/string_pool.hpp>
 #include <arcticdb/util/offset_string.hpp>
@@ -45,6 +46,65 @@ TEST(StringPool, MultipleReadWrite) {
         StringPool::StringType fs(view.data(), view.size());
         ASSERT_EQ(fs, comp_fs);
     }
+}
+
+// The pool stores its keys as views. They must be rebound to the copies it owns, or a later lookup
+// reads freed memory. Enough strings to span several blocks and force many rehashes.
+TEST(StringPool, KeysDoNotAliasCallerBuffers) {
+    StringPool pool;
+
+    const size_t num_strings = 20000;
+    std::vector<position_t> offsets;
+    offsets.reserve(num_strings);
+    for (size_t idx = 0; idx < num_strings; ++idx) {
+        const std::string transient = fmt::format("string_number_{}", idx);
+        offsets.emplace_back(pool.get(std::string_view(transient)).offset());
+    }
+    ASSERT_GT(pool.num_blocks(), 1);
+
+    for (size_t idx = 0; idx < num_strings; ++idx) {
+        const std::string expected = fmt::format("string_number_{}", idx);
+        ASSERT_EQ(pool.get_view(offsets[idx]), expected);
+        ASSERT_EQ(pool.get(std::string_view(expected)).offset(), offsets[idx]);
+        ASSERT_EQ(pool.get(expected.data(), expected.size()).offset(), offsets[idx]);
+    }
+}
+
+TEST(StringPool, DeduplicationEdgeCases) {
+    StringPool pool;
+
+    const auto empty = pool.get(std::string_view(""));
+    ASSERT_EQ(pool.get(std::string_view("")).offset(), empty.offset());
+    ASSERT_EQ(pool.get_view(empty.offset()), "");
+
+    // Longer than the inline StringHead, and a prefix of it, so neither can be confused for the other
+    const std::string long_string(1000, 'x');
+    const auto long_offset = pool.get(std::string_view(long_string)).offset();
+    const auto prefix_offset = pool.get(std::string_view(long_string).substr(0, 999)).offset();
+    ASSERT_NE(long_offset, prefix_offset);
+    ASSERT_EQ(pool.get_view(long_offset).size(), 1000);
+    ASSERT_EQ(pool.get_view(prefix_offset).size(), 999);
+
+    // Embedded nulls are part of the string
+    const std::string_view with_null("a\0b", 3);
+    const auto null_offset = pool.get(with_null).offset();
+    ASSERT_NE(null_offset, pool.get(std::string_view("a")).offset());
+    ASSERT_EQ(pool.get_view(null_offset), with_null);
+}
+
+TEST(StringPool, WithoutDeduplication) {
+    StringPool pool;
+
+    const auto first = pool.get(std::string_view("abc"), false);
+    const auto second = pool.get(std::string_view("abc"), false);
+    ASSERT_NE(first.offset(), second.offset());
+    ASSERT_EQ(pool.get_view(first.offset()), "abc");
+    ASSERT_EQ(pool.get_view(second.offset()), "abc");
+
+    // Deduplicated inserts of the same string are still stable with one another
+    const auto deduplicated = pool.get(std::string_view("abc"));
+    ASSERT_EQ(pool.get(std::string_view("abc")).offset(), deduplicated.offset());
+    ASSERT_EQ(pool.get_view(deduplicated.offset()), "abc");
 }
 
 TEST(StringPool, StressTest) {
