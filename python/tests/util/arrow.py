@@ -59,3 +59,17 @@ def arrow_output_string_format_to_pa_type(arrow_output_string_format):
         ArrowOutputStringFormat.DICTIONARY_ENCODED,
     ]:
         return pa.dictionary(pa.int32(), pa.large_string())
+
+
+def create_1d_arrow_structure(input_type: str, data: pa.Array) -> Union[pa.Array, pa.ChunkedArray, pl.Series]:
+    if input_type == "Array":
+        input = data
+    elif input_type == "ChunkedArray":
+        input = pa.chunked_array([pa.array(data[: len(data) // 2]), pa.array(data[len(data) // 2 :])])
+    elif input_type in ["UnnamedSeries", "NamedSeries"]:
+        input = pl.Series(values=data)
+        if input_type == "NamedSeries":
+            input = input.rename("series_name")
+    else:
+        assert False, f"Unexpected input_type '{input_type}' in create_1d_arrow_structure"
+    return input
