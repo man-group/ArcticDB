@@ -1806,9 +1806,11 @@ folly::Future<VersionedItem> LocalVersionedEngine::async_update_internal(
     const bool add_new_symbol_list_entry = !update_info.previous_index_key_.has_value() && cfg().symbol_list();
     auto index_key_fut = folly::Future<AtomKey>::makeEmpty();
     if (update_info.previous_index_key_.has_value()) {
-        // TODO: an update with no rows and an explicit date range should delete that range, which this ternary stands
-        // in the way of. Resolved in the following commit.
-        index_key_fut = frame->empty()
+        // An update replaces a range of the symbol with what it was given.
+        // With no rows and no date range there is no range to replace. We use async_write_metadata_impl to avoid
+        // deleting the placeholder timestamp==0.
+        const bool replaces_nothing = frame->empty() && std::holds_alternative<std::monostate>(query.row_filter);
+        index_key_fut = replaces_nothing
                                 ? async_write_metadata_impl(store(), update_info, std::move(frame->user_meta))
                                 : async_update_impl(store(), update_info, query, frame, write_options_, dynamic_schema);
     } else {
