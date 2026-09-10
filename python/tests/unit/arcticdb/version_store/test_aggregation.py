@@ -12,7 +12,7 @@ import pandas as pd
 from pandas import DataFrame
 
 from arcticdb.version_store.processing import QueryBuilder
-from arcticdb.exceptions import InternalException, SchemaException
+from arcticdb.exceptions import ErrorCode, SchemaException
 from arcticdb.util.test import (
     assert_frame_equal,
     generic_aggregation_test,
@@ -278,7 +278,7 @@ def test_group_pickled_symbol(lmdb_version_store_v1, any_output_format):
     lib.write(symbol, np.arange(100).tolist())
     assert lib.is_symbol_pickled(symbol)
     q = QueryBuilder().groupby("grouping_column").agg({"to_mean": "mean"})
-    with pytest.raises(InternalException):
+    with pytest.raises(SchemaException, match=ErrorCode.E_OPERATION_NOT_SUPPORTED_WITH_PICKLED_DATA.name):
         _ = lib.read(symbol, query_builder=q)
 
 
@@ -538,7 +538,7 @@ def test_group_pickled_symbol_dynamic(lmdb_version_store_dynamic_schema_v1, any_
     lib.write(symbol, np.arange(100).tolist())
     assert lib.is_symbol_pickled(symbol)
     q = QueryBuilder().groupby("grouping_column").agg({"to_mean": "mean"})
-    with pytest.raises(InternalException):
+    with pytest.raises(SchemaException, match=ErrorCode.E_OPERATION_NOT_SUPPORTED_WITH_PICKLED_DATA.name):
         lib.read(symbol, query_builder=q)
 
 
