@@ -104,32 +104,32 @@ void StringPool::set_allow_sparse(Sparsity) {
 
 size_t StringPool::num_blocks() const { return block_.num_blocks(); }
 
+// try_emplace hashes and probes once for both the lookup and the insertion, where find followed by
+// insert hashes the same string twice on the miss path. The key it stores is the caller's view, which
+// need not outlive this pool, so it is rebound to the block-backed copy. The two compare equal, so the
+// bucket the key was placed in remains the right one.
+// Invariant: a key is only left in the map once the block holds a copy of it, hence the erase if the
+// block insert throws.
 OffsetString StringPool::get(std::string_view s, bool deduplicate) {
-    if (deduplicate) {
-        if (auto it = map_.find(s); it != map_.end())
-            return OffsetString(it->second, this);
+    if (!deduplicate)
+        return OffsetString(block_.insert(s.data(), s.size()), this);
+
+    auto [it, inserted] = map_.try_emplace(s, offset_t{0});
+    if (inserted) {
+        try {
+            const auto offset = block_.insert(s.data(), s.size());
+            it->first = block_.at(offset);
+            it->second = offset;
+        } catch (...) {
+            map_.erase(it);
+            throw;
+        }
     }
-
-    OffsetString str(block_.insert(s.data(), s.size()), this);
-
-    if (deduplicate)
-        map_.insert(std::make_pair(block_.at(str.offset()), str.offset()));
-
-    return str;
+    return OffsetString(it->second, this);
 }
 
 OffsetString StringPool::get(const char* data, size_t size, bool deduplicate) {
-    StringType s(data, size);
-    if (deduplicate) {
-        if (auto it = map_.find(s); it != map_.end())
-            return OffsetString(it->second, this);
-    }
-
-    OffsetString str(block_.insert(s.data(), s.size()), this);
-    if (deduplicate)
-        map_.insert(std::make_pair(StringType(str), str.offset()));
-
-    return str;
+    return get(StringType(data, size), deduplicate);
 }
 
 const ChunkedBuffer& StringPool::data() const { return block_.buffer(); }
