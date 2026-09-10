@@ -16,6 +16,13 @@ from arcticdb.exceptions import NormalizationException, NoSuchVersionException, 
 from arcticdb.options import LibraryOptions
 from arcticdb.util.test import assert_frame_equal, assert_series_equal
 from tests.util.mark import WINDOWS
+from tests.util.unprocessable_data import (
+    PROCESSING_KINDS,
+    all_data_kinds,
+    all_processing_kinds,
+    expect_refusal,
+    write_unprocessable,
+)
 
 pytestmark = pytest.mark.pipeline
 
@@ -1009,8 +1016,27 @@ def test_symbol_concat_pickled_data(lmdb_library, any_output_format):
     lib.write("sym0", df)
     lib.write_pickle("sym1", pickled_data)
 
-    with pytest.raises(SchemaException):
+    with expect_refusal("pickled"):
         concat(lib.read_batch(["sym0", "sym1"], lazy=True)).collect()
+
+
+@all_data_kinds
+@all_processing_kinds
+def test_symbol_concat_unprocessable_per_symbol_processing(lmdb_library, kind, processing):
+    lib = lmdb_library
+    sym = write_unprocessable(lib._nvs, kind)
+    with expect_refusal(kind):
+        lib.read_batch_and_join(
+            [ReadRequest(sym, query_builder=PROCESSING_KINDS[processing]())], QueryBuilder().concat()
+        )
+
+
+def test_symbol_concat_numpy_arrays(lmdb_library):
+    lib = lmdb_library
+    lib._nvs.write("np1", np.arange(4))
+    lib._nvs.write("np2", np.arange(4, 8))
+    result = lib.read_batch_and_join([ReadRequest("np1"), ReadRequest("np2")], QueryBuilder().concat())
+    assert np.array_equal(result.data, np.arange(8))
 
 
 def test_symbol_concat_docstring_example(lmdb_library, any_output_format):

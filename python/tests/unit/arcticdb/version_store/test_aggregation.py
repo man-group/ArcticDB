@@ -20,6 +20,7 @@ from arcticdb.util.test import (
     common_sum_aggregation_dtype,
     valid_common_type,
 )
+from tests.util.unprocessable_data import expect_refusal, groupby_agg_query, write_unprocessable
 
 pytestmark = pytest.mark.pipeline
 
@@ -721,3 +722,12 @@ def test_timestamp_aggregations_with_missing_aggregation_column(
     expected = expected.reindex(columns=sorted(expected.columns)).sort_index()
 
     assert_frame_equal(received, expected, check_dtype=False)
+
+
+# The pickled case is covered by test_group_pickled_symbol and test_group_pickled_symbol_dynamic above.
+@pytest.mark.parametrize("kind", ["numpy", "recursive"])
+def test_group_unprocessable_data(lmdb_version_store_v1, kind):
+    lib = lmdb_version_store_v1
+    sym = write_unprocessable(lib, kind, "test_group_unprocessable_data")
+    with expect_refusal(kind):
+        lib.read(sym, query_builder=groupby_agg_query())

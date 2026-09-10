@@ -19,6 +19,13 @@ from arcticdb import OutputFormat
 from arcticdb.exceptions import SchemaException
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb.util.test import assert_frame_equal, query_stats_operation_count
+from tests.util.unprocessable_data import (
+    PROCESSING_KINDS,
+    all_data_kinds,
+    all_processing_kinds,
+    expect_refusal,
+    write_unprocessable,
+)
 import arcticdb.toolbox.query_stats as qs
 
 pytestmark = pytest.mark.pipeline
@@ -1398,3 +1405,12 @@ def test_filter_synthetic_column_and_select_on_disk_column(
         # filter and then read the second column slice to return the requested column
         data_keys_count = 2
     assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_DATA") == data_keys_count
+
+
+@all_data_kinds
+@all_processing_kinds
+def test_read_modify_write_unprocessable_data(lmdb_version_store_v1, kind, processing):
+    lib = lmdb_version_store_v1
+    sym = write_unprocessable(lib, kind, "test_read_modify_write_unprocessable_data")
+    with expect_refusal(kind):
+        lib._read_modify_write(sym, PROCESSING_KINDS[processing](), target_symbol="out")
