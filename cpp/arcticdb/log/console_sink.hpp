@@ -47,8 +47,8 @@ class ConsoleSink final : public spdlog::sinks::base_sink<Mutex> {
 
 using ConsoleSinkMt = ConsoleSink<std::mutex>;
 
-/// Console sink for stdout/stderr. Colour output is only honoured off Windows, where spdlog's ANSI colour sink also
-/// writes via fwrite; the Windows colour sink has the same cached-HANDLE problem as the plain one.
+/// Console sink for stdout/stderr: ConsoleSink on Windows, spdlog's own stdout/stderr sinks everywhere else, where
+/// they already write through the FILE* and so already follow a dup2 of fd 1/2.
 std::shared_ptr<spdlog::sinks::sink> make_console_sink(bool std_err, bool color);
 
 } // namespace arcticdb::log
