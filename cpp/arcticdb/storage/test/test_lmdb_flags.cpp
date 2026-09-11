@@ -110,6 +110,12 @@ TEST(LmdbDiagnostics, FileMetaPagesAgreeWithEnvInfo) {
     std::filesystem::remove_all(db_path);
 }
 
+TEST(LmdbDiagnostics, DisabledByDefault) {
+    ASSERT_FALSE(as::lmdb::lmdb_diagnostics_enabled());
+    ac::ScopedConfig on("LMDBStorage.Diagnostics", 1);
+    ASSERT_TRUE(as::lmdb::lmdb_diagnostics_enabled());
+}
+
 TEST(LmdbDiagnostics, CorruptionErrorCodes) {
     ASSERT_TRUE(as::lmdb::is_lmdb_corruption_error(MDB_MAP_RESIZED));
     ASSERT_TRUE(as::lmdb::is_lmdb_corruption_error(MDB_PAGE_NOTFOUND));

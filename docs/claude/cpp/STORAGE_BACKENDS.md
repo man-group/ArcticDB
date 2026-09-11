@@ -170,6 +170,9 @@ lib = ac.create_library("mylib", library_options=LibraryOptions(
   flakes seen with `MDB_NOSYNC` (and rarely on master) were log lines being written into `data.mdb` on Windows
   (static CRT fd table vs pytest's `dup2` through Python's CRT); see
   `cpp/arcticdb/log/console_sink.hpp`.
+- `LMDBStorage.Diagnostics` (env `ARCTICDB_LMDBStorage_Diagnostics_int`, default 0): attach `LmdbEnvDiagnostics`
+  (`lmdb_error_handling.cpp`) to corruption-type errors. Off by default because it decodes `MDB_meta` at fixed byte
+  offsets; CI sets it to 1.
 - `LMDBStorage.WarnIfOpened`: see `warn_if_lmdb_already_open()`.
 
 ### Azure runtime configuration

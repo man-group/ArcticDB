@@ -13,6 +13,7 @@
 #include <arcticdb/log/log.hpp>
 #include <arcticdb/storage/key_segment_pair.hpp> // brings entity::VariantKey into arcticdb::storage for the below
 #include <arcticdb/storage/storage_exceptions.hpp>
+#include <arcticdb/util/configs_map.hpp>
 #include <arcticdb/util/error_code.hpp>
 #include <arcticdb/util/preconditions.hpp>
 
@@ -96,6 +97,8 @@ std::vector<uint8_t> read_file_bytes(mdb_filehandle_t fd, size_t count) {
 
 } // namespace
 
+bool lmdb_diagnostics_enabled() { return ConfigsMap::instance()->get_int("LMDBStorage.Diagnostics", 0) != 0; }
+
 LmdbEnvDiagnostics lmdb_env_diagnostics(::lmdb::env& env) {
     LmdbEnvDiagnostics out;
     MDB_envinfo info{};
@@ -132,7 +135,7 @@ void raise_lmdb_exception(const ::lmdb::error& e, const std::string& object_name
     auto error_code = e.code();
 
     auto error_message_suffix = fmt::format("LMDBError#{}: {} for object {}", error_code, e.what(), object_name);
-    if (env != nullptr && is_lmdb_corruption_error(error_code)) {
+    if (env != nullptr && is_lmdb_corruption_error(error_code) && lmdb_diagnostics_enabled()) {
         std::string diagnostics;
         try {
             diagnostics = fmt::format("{}", lmdb_env_diagnostics(*env));

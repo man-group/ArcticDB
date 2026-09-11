@@ -46,10 +46,16 @@ struct LmdbEnvDiagnostics {
 /// True for LMDB error codes that indicate the env contents are not what LMDB expects
 bool is_lmdb_corruption_error(int error_code);
 
+/// Whether corruption-type errors carry LmdbEnvDiagnostics, from LMDBStorage.Diagnostics in ConfigsMap
+/// (env var ARCTICDB_LMDBStorage_Diagnostics_int). Off by default: collecting them parses data.mdb's meta pages by
+/// byte offset, which is tied to LMDB's on-disk layout rather than to any public API, and nothing user-facing
+/// depends on the result. ArcticDB's own CI turns it on.
+bool lmdb_diagnostics_enabled();
+
 LmdbEnvDiagnostics lmdb_env_diagnostics(::lmdb::env& env);
 
 /// Translates an LMDB error into the matching ArcticDB exception, appending env diagnostics (and logging them) when
-/// the code is a corruption-type one and an env is available.
+/// the code is a corruption-type one, an env is available and lmdb_diagnostics_enabled().
 [[noreturn]] void raise_lmdb_exception(
         const ::lmdb::error& e, const std::string& object_name, ::lmdb::env* env = nullptr
 );

@@ -128,6 +128,18 @@ the file lazily there), and with `MDB_NOSYNC` a full disk is not reported and pa
 
 Default: 0 (no extra flags).
 
+### LMDBStorage.Diagnostics
+
+Whether `MDB_CORRUPTED`, `MDB_PAGE_NOTFOUND`, `MDB_PANIC`, `MDB_INVALID`, `MDB_MAP_RESIZED` and `MDB_BAD_TXN` carry a
+dump of the environment state — `mdb_env_info`/`mdb_stat` next to the two meta pages read straight from `data.mdb`,
+bypassing the memory map — in the raised message and the storage log. That comparison is what distinguishes "the map
+and the file disagree" from "both are garbage".
+
+Reading the meta pages means decoding `MDB_meta` at fixed byte offsets, which is tied to LMDB's on-disk layout rather
+than to any API it promises to keep, so it is off unless you ask for it. ArcticDB's own CI turns it on.
+
+Default: 0 (off).
+
 ### AzureStorage.HttpKeepAlive
 
 Whether the Azure client reuses pooled HTTP connections (`1`, the default) or opens a new connection per request
