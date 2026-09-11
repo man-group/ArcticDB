@@ -351,6 +351,7 @@ set(arcticdb_srcs
         storage/lmdb/lmdb_client_interface.hpp
         storage/mock/lmdb_mock_client.hpp
         storage/lmdb/lmdb_client_impl.hpp
+        storage/lmdb/lmdb_error_handling.hpp
         storage/lmdb/lmdb_storage.hpp
         storage/memory/memory_storage.hpp
         storage/memory/memory_storage.cpp
@@ -574,6 +575,7 @@ set(arcticdb_srcs
         storage/mock/azure_mock_client.cpp
         storage/mock/lmdb_mock_client.cpp
         storage/lmdb/lmdb_client_impl.cpp
+        storage/lmdb/lmdb_error_handling.cpp
         storage/lmdb/lmdb_storage.cpp
         storage/file/mapped_file_storage.cpp
         storage/mongo/mongo_client.cpp
