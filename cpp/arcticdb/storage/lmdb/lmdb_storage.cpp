@@ -8,6 +8,7 @@
 
 #include <arcticdb/storage/lmdb/lmdb_storage.hpp>
 #include <arcticdb/storage/lmdb/lmdb_client_impl.hpp>
+#include <arcticdb/storage/lmdb/lmdb_error_handling.hpp>
 #include <arcticdb/storage/mock/lmdb_mock_client.hpp>
 
 #include <filesystem>
@@ -35,26 +36,6 @@ struct LmdbKeepalive {
         instance_(std::move(instance)),
         transaction_(std::move(transaction)) {}
 };
-
-static void raise_lmdb_exception(const ::lmdb::error& e, const std::string& object_name) {
-    auto error_code = e.code();
-
-    auto error_message_suffix = fmt::format("LMDBError#{}: {} for object {}", error_code, e.what(), object_name);
-
-    if (error_code == MDB_NOTFOUND) {
-        throw KeyNotFoundException(fmt::format("Key Not Found Error: {}", error_message_suffix));
-    }
-
-    if (error_code == MDB_KEYEXIST) {
-        throw DuplicateKeyException(fmt::format("Duplicate Key Error: {}", error_message_suffix));
-    }
-
-    if (error_code == MDB_MAP_FULL) {
-        throw LMDBMapFullException(fmt::format("Map Full Error: {}", error_message_suffix));
-    }
-
-    raise<ErrorCode::E_UNEXPECTED_LMDB_ERROR>(fmt::format("Unexpected LMDB Error: {}", error_message_suffix));
-}
 
 ::lmdb::env& LmdbStorage::env() {
     storage::check<ErrorCode::E_UNEXPECTED_LMDB_ERROR>(
@@ -90,7 +71,7 @@ void LmdbStorage::do_write_internal(KeySegmentPair& key_seg, ::lmdb::txn& txn) {
     } catch (const ::lmdb::key_exist_error& e) {
         throw DuplicateKeyException(fmt::format("Key already exists: {}: {}", key_seg.variant_key(), e.what()));
     } catch (const ::lmdb::error& ex) {
-        raise_lmdb_exception(ex, k);
+        raise_lmdb_exception(ex, k, env_ptr());
     }
 }
 
@@ -160,7 +141,7 @@ KeySegmentPair LmdbStorage::do_read(VariantKey&& variant_key, ReadKeyOpts) {
         ARCTICDB_DEBUG(log::storage(), "Failed to find segment for key {}", variant_key_view(variant_key));
         throw KeyNotFoundException(variant_key);
     } catch (const ::lmdb::error& ex) {
-        raise_lmdb_exception(ex, stored_key);
+        raise_lmdb_exception(ex, stored_key, env_ptr());
     }
     return KeySegmentPair{};
 }
@@ -196,7 +177,7 @@ void LmdbStorage::do_read(VariantKey&& key, const ReadVisitor& visitor, storage:
         ARCTICDB_DEBUG(log::storage(), "Failed to find segment for key {}", variant_key_view(key));
         failed_read.emplace(key);
     } catch (const ::lmdb::error& ex) {
-        raise_lmdb_exception(ex, stored_key);
+        raise_lmdb_exception(ex, stored_key, env_ptr());
     }
 
     if (failed_read)
@@ -217,7 +198,7 @@ bool LmdbStorage::do_key_exists(const VariantKey& key) {
     } catch ([[maybe_unused]] const ::lmdb::not_found_error& ex) {
         ARCTICDB_DEBUG(log::storage(), "Caught lmdb not found error: {}", ex.what());
     } catch (const ::lmdb::error& ex) {
-        raise_lmdb_exception(ex, stored_key);
+        raise_lmdb_exception(ex, stored_key, env_ptr());
     }
     return false;
 }
@@ -250,10 +231,10 @@ boost::container::small_vector<VariantKey, 1> LmdbStorage::do_remove_internal(
                     failed_deletes.emplace_back(key);
                 }
             } catch (const ::lmdb::error& ex) {
-                raise_lmdb_exception(ex, stored_key);
+                raise_lmdb_exception(ex, stored_key, env_ptr());
             }
         } catch (const ::lmdb::error& ex) {
-            raise_lmdb_exception(ex, db_name);
+            raise_lmdb_exception(ex, db_name, env_ptr());
         }
     }
     return failed_deletes;
@@ -303,7 +284,7 @@ bool LmdbStorage::do_fast_delete() {
         try {
             ::lmdb::dbi_drop(dtxn, dbi);
         } catch (const ::lmdb::error& ex) {
-            raise_lmdb_exception(ex, db_name);
+            raise_lmdb_exception(ex, db_name, env_ptr());
         }
     });
 
@@ -328,7 +309,7 @@ bool LmdbStorage::do_iterate_type_until_match(
             }
         }
     } catch (const ::lmdb::error& ex) {
-        raise_lmdb_exception(ex, type_db);
+        raise_lmdb_exception(ex, type_db, env_ptr());
     }
     return false;
 }
@@ -405,6 +386,10 @@ T or_else(T val, T or_else_val, T def = T()) {
 }
 } // namespace
 
+unsigned int lmdb_extra_env_flags() {
+    return static_cast<unsigned int>(ConfigsMap::instance()->get_int("LMDBStorage.ExtraFlags", 0));
+}
+
 LmdbStorage::LmdbStorage(const LibraryPath& library_path, OpenMode mode, const Config& conf) :
     Storage(library_path, mode) {
     if (conf.use_mock_storage_for_testing()) {
@@ -456,7 +441,7 @@ LmdbStorage::LmdbStorage(const LibraryPath& library_path, OpenMode mode, const C
     env().set_mapsize(mapsize);
     env().set_max_dbs(or_else(static_cast<unsigned int>(conf.max_dbs()), 1024U));
     env().set_max_readers(or_else(conf.max_readers(), 1024U));
-    env().open(lib_dir_.generic_string().c_str(), MDB_NOTLS);
+    env().open(lib_dir_.generic_string().c_str(), MDB_NOTLS | lmdb_extra_env_flags());
 
     auto txn = ::lmdb::txn::begin(env());
 
@@ -467,7 +452,7 @@ LmdbStorage::LmdbStorage(const LibraryPath& library_path, OpenMode mode, const C
             lmdb_instance_->dbi_by_key_type_.emplace(std::move(db_name), std::make_unique<::lmdb::dbi>(std::move(dbi)));
         });
     } catch (const ::lmdb::error& ex) {
-        raise_lmdb_exception(ex, "dbi creation");
+        raise_lmdb_exception(ex, "dbi creation", env_ptr());
     }
 
     txn.commit();

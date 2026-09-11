@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, Optional, Union
 from tempfile import mkdtemp
 
 from arcticdb.util.logger import get_logger
+from arcticdb_ext import get_config_int, set_config_int, unset_config_int
 from arcticdb_ext.storage import NativeVariantStorage
 from azure.core.exceptions import ResourceNotFoundError
 
@@ -173,7 +174,9 @@ class AzureContainer(StorageFixture):
 
 
 class AzuriteStorageFixtureFactory(StorageFixtureFactory):
-    host = "localhost"
+    # An IPv4 literal, not "localhost": azurite binds IPv4 only and on Windows "localhost" resolves to ::1 first,
+    # so every connection wastes ~2s failing over.
+    host = "127.0.0.1"
 
     # Per https://learn.microsoft.com/en-us/azure/storage/common/storage-configure-connection-string#configure-a-connection-string-for-azurite
     account_name = "devstoreaccount1"
@@ -185,6 +188,8 @@ class AzuriteStorageFixtureFactory(StorageFixtureFactory):
     clean_bucket_on_fixture_exit: bool = True
 
     default_prefix: str = None
+
+    _prev_keep_alive: Optional[int] = None
 
     def __init__(
         self, port=None, working_dir: Optional[str] = None, use_ssl: bool = True, ssl_test_support: bool = True
@@ -200,6 +205,12 @@ class AzuriteStorageFixtureFactory(StorageFixtureFactory):
         return f"AzuriteStorageFixtureFactory[port={self.port},dir={self.working_dir}]"
 
     def _safe_enter(self):
+        # The Azure C++ SDK pools connections. Azurite is node, which closes an idle connection after 5s, and
+        # reusing one it has already closed blocks the next request for seconds - ~2 minutes with several in
+        # flight. Turn keep-alive off for the process while an azurite is up, rather than only in CI, so a local
+        # test run is not slower than the CI one. Real Azure is unaffected: it holds connections open for minutes.
+        self._prev_keep_alive = get_config_int("AzureStorage.HttpKeepAlive")
+        set_config_int("AzureStorage.HttpKeepAlive", 0)
         args = f"{shutil.which('azurite')} --blobPort {self.port} --blobHost {self.host} --queuePort 0 --tablePort 0 --skipApiVersionCheck --silent"
         if self.ssl_test_support:
             self.client_cert_dir = self.working_dir
@@ -242,6 +253,10 @@ class AzuriteStorageFixtureFactory(StorageFixtureFactory):
             return False
 
     def __exit__(self, exc_type, exc_value, traceback):
+        if self._prev_keep_alive is None:
+            unset_config_int("AzureStorage.HttpKeepAlive")
+        else:
+            set_config_int("AzureStorage.HttpKeepAlive", self._prev_keep_alive)
         with handle_cleanup_exception(self, "process", consequence="Subsequent file deletion may also fail. "):
             GracefulProcessUtils.terminate(self._p)
         safer_rmtree(self, self.working_dir)
