@@ -17,10 +17,22 @@
 #include <arcticdb/util/error_code.hpp>
 #include <arcticdb/util/preconditions.hpp>
 
+#include <cerrno>
 #include <cstring>
 #include <stdexcept>
 #include <vector>
-#ifndef _WIN32
+// read_file_bytes below reads the data file through its handle: ReadFile/OVERLAPPED on Windows, pread elsewhere.
+// lmdb.h declares mdb_filehandle_t on Windows without pulling in windows.h, and while this code lived in
+// lmdb_storage.cpp it borrowed the declarations from another header in that translation unit.
+#ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#else
 #include <unistd.h>
 #endif
 
