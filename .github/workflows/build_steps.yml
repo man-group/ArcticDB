@@ -355,11 +355,13 @@ jobs:
 
       - name: Run C++ Benchmarks
         if: inputs.job_type == 'cpp-tests' && env.ARCTICDB_USE_SANITIZER == ''
-        # Nothing consumes the timings, this only checks the benchmarks still run, so one iteration is enough on
-        # pull requests. 20 iterations took ~5.5 min of the C++ test job; the full count still runs on master and
-        # on the nightly schedule. (Running until a time limit is reached is much slower for benchmarks that pause
-        # the timer, hence a fixed iteration count rather than a duration.)
-        run: cpp/out/${ARCTIC_CMAKE_PRESET}-build/arcticdb/benchmarks --benchmark_time_unit=ms --benchmark_min_time=${{ github.event_name == 'pull_request' && '1x' || '20x' }}
+        # Nothing consumes the timings, this only checks the benchmarks still run, so pull requests use two
+        # iterations rather than 20. Two and not one: a benchmark that reuses data by accident passes the first
+        # pass and fails or crashes on the second, which is exactly what this step is here to catch. 20 iterations
+        # took ~5.5 min of the C++ test job; the full count still runs on master and on the nightly schedule.
+        # (Running until a time limit is reached is much slower for benchmarks that pause the timer, hence a fixed
+        # iteration count rather than a duration.)
+        run: cpp/out/${ARCTIC_CMAKE_PRESET}-build/arcticdb/benchmarks --benchmark_time_unit=ms --benchmark_min_time=${{ github.event_name == 'pull_request' && '2x' || '20x' }}
 
       - name: Clean up benchmark binaries only
         if: inputs.job_type == 'cpp-tests'
