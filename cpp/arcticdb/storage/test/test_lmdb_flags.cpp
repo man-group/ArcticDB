@@ -103,8 +103,9 @@ TEST(LmdbDiagnostics, FileMetaPagesAgreeWithEnvInfo) {
         ASSERT_EQ(newest.last_pg, d.last_pgno);
         ASSERT_GT(d.last_txnid, 0U);
 
-        const auto text = d.to_string();
+        const auto text = fmt::format("{}", d);
         ASSERT_NE(text.find("last_txnid="), std::string::npos) << text;
+        ASSERT_NE(text.find("meta0={magic="), std::string::npos) << text;
     }
     std::filesystem::remove_all(db_path);
 }

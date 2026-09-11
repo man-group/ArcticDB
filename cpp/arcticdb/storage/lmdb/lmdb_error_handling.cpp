@@ -128,38 +128,6 @@ LmdbEnvDiagnostics lmdb_env_diagnostics(::lmdb::env& env) {
     return out;
 }
 
-std::string LmdbEnvDiagnostics::to_string() const {
-    auto meta_str = [](const Meta& m) {
-        return fmt::format(
-                "{{magic={:#x} version={} mapsize={} psize={} free_root={} main_root={} last_pg={} txnid={}}}",
-                m.magic,
-                m.version,
-                m.mapsize,
-                m.psize,
-                static_cast<int64_t>(m.free_root),
-                static_cast<int64_t>(m.main_root),
-                m.last_pg,
-                m.txnid
-        );
-    };
-    return fmt::format(
-            "lmdb env: flags={:#x} mapsize={} maxpg={} last_pgno={} last_txnid={} psize={} readers={}/{}; file "
-            "meta0={} "
-            "meta1={}{}",
-            flags,
-            mapsize,
-            psize ? mapsize / psize : 0,
-            last_pgno,
-            last_txnid,
-            psize,
-            num_readers,
-            max_readers,
-            meta_str(file_metas[0]),
-            meta_str(file_metas[1]),
-            file_read_error.empty() ? "" : fmt::format(" (file read error: {})", file_read_error)
-    );
-}
-
 void raise_lmdb_exception(const ::lmdb::error& e, const std::string& object_name, ::lmdb::env* env) {
     auto error_code = e.code();
 
@@ -167,7 +135,7 @@ void raise_lmdb_exception(const ::lmdb::error& e, const std::string& object_name
     if (env != nullptr && is_lmdb_corruption_error(error_code)) {
         std::string diagnostics;
         try {
-            diagnostics = lmdb_env_diagnostics(*env).to_string();
+            diagnostics = fmt::format("{}", lmdb_env_diagnostics(*env));
         } catch (const std::exception& diag_ex) {
             diagnostics = fmt::format("diagnostics unavailable: {}", diag_ex.what());
         }

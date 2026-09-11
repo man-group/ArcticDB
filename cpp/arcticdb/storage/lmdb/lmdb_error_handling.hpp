@@ -10,6 +10,8 @@
 
 #include <arcticdb/storage/lmdb/lmdb.hpp>
 
+#include <fmt/format.h>
+
 #include <array>
 #include <cstdint>
 #include <string>
@@ -39,8 +41,6 @@ struct LmdbEnvDiagnostics {
     unsigned int num_readers = 0;
     std::array<Meta, 2> file_metas{};
     std::string file_read_error;
-
-    std::string to_string() const;
 };
 
 /// True for LMDB error codes that indicate the env contents are not what LMDB expects
@@ -55,3 +55,55 @@ LmdbEnvDiagnostics lmdb_env_diagnostics(::lmdb::env& env);
 );
 
 } // namespace arcticdb::storage::lmdb
+
+template<>
+struct fmt::formatter<arcticdb::storage::lmdb::LmdbEnvDiagnostics::Meta> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext& ctx) {
+        return ctx.begin();
+    }
+
+    template<typename FormatContext>
+    auto format(const arcticdb::storage::lmdb::LmdbEnvDiagnostics::Meta& m, FormatContext& ctx) const {
+        return fmt::format_to(
+                ctx.out(),
+                "{{magic={:#x} version={} mapsize={} psize={} free_root={} main_root={} last_pg={} txnid={}}}",
+                m.magic,
+                m.version,
+                m.mapsize,
+                m.psize,
+                static_cast<int64_t>(m.free_root),
+                static_cast<int64_t>(m.main_root),
+                m.last_pg,
+                m.txnid
+        );
+    }
+};
+
+template<>
+struct fmt::formatter<arcticdb::storage::lmdb::LmdbEnvDiagnostics> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext& ctx) {
+        return ctx.begin();
+    }
+
+    template<typename FormatContext>
+    auto format(const arcticdb::storage::lmdb::LmdbEnvDiagnostics& d, FormatContext& ctx) const {
+        return fmt::format_to(
+                ctx.out(),
+                "lmdb env: flags={:#x} mapsize={} maxpg={} last_pgno={} last_txnid={} psize={} readers={}/{}; file "
+                "meta0={} meta1={}{}",
+                d.flags,
+                d.mapsize,
+                d.psize ? d.mapsize / d.psize : 0,
+                d.last_pgno,
+                d.last_txnid,
+                d.psize,
+                d.num_readers,
+                d.max_readers,
+                d.file_metas[0],
+                d.file_metas[1],
+                d.file_read_error.empty() ? "" : fmt::format(" (file read error: {})", d.file_read_error)
+        );
+    }
+};
