@@ -147,8 +147,8 @@ Whether the Azure client reuses pooled HTTP connections (`1`, the default) or op
 
 The Azure SDK blocks for several seconds when it reuses a pooled connection the server has already closed, so set
 this to `0` against servers that close idle connections quickly — notably Azurite, which closes them after 5
-seconds. Leave it at the default against real Azure Blob Storage, where connection reuse avoids a TLS handshake per
-request.
+seconds, and ArcticDB's own Azurite test fixture sets it to `0` for that reason. Leave it at the default against real
+Azure Blob Storage, where connection reuse avoids a TLS handshake per request.
 
 ### VersionStore.NumCPUThreads and VersionStore.NumIOThreads
 
