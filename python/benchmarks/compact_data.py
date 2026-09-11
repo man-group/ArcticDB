@@ -25,7 +25,30 @@ random.seed(42)
 rng = np.random.default_rng(42)
 
 
-class CompactDataBase:
+class CompactDataLmdbBase:
+    # asv applies this to setup_cache as well, which has been measured at 36s on the nightly runners, too close to the
+    # 60s default to survive a slow disk day without NaN-ing the whole class
+    timeout = 600
+
+    def _setup_lmdb_dir(self, lib_name):
+        # Drop both references before recreating the directory. self.lib keeps the previous iteration's LMDB
+        # environment open on this path, LMDB does not support opening it twice, and reclaiming the old 400GiB
+        # mapping would otherwise land inside the next timed call
+        self.lib = None
+        self.ac = None
+        # ignore_errors, so a directory left behind by a killed process does not cascade FileExistsError through every
+        # remaining parameter combination of the class
+        shutil.rmtree(self.LMDB_DIR, ignore_errors=True)
+        os.mkdir(self.LMDB_DIR)
+        # Copy the config database and the relevant library database for these benchmark parameters to the actual
+        # LMDB directory where compaction will happen
+        shutil.copytree(os.path.join(self.LMDB_BASE_DIR, "_arctic_cfg"), os.path.join(self.LMDB_DIR, "_arctic_cfg"))
+        shutil.copytree(os.path.join(self.LMDB_BASE_DIR, lib_name), os.path.join(self.LMDB_DIR, lib_name))
+        self.ac = Arctic(self.CONNECTION_STRING)
+        self.lib = self.ac.get_library(lib_name)
+
+
+class CompactDataBase(CompactDataLmdbBase):
     def __init__(self):
         self.logger = get_logger()
         self.SYM = "sym"
@@ -66,16 +89,7 @@ class CompactDataBase:
             lib.append(self.SYM, df)
 
     def _setup(self, lib_name, target_rows_per_segment):
-        os.mkdir(self.LMDB_DIR)
-        # Copy the config database and the relevant library database for these benchmark parameters to the actual
-        # LMDB directory where compaction will happen
-        shutil.copytree(os.path.join(self.LMDB_BASE_DIR, "_arctic_cfg"), os.path.join(self.LMDB_DIR, "_arctic_cfg"))
-        shutil.copytree(os.path.join(self.LMDB_BASE_DIR, lib_name), os.path.join(self.LMDB_DIR, lib_name))
-        # Create a new Arctic instance, otherwise we will be holding a reference to the previous iteration's .mdb files
-        # and the deletion and recreation won't be noticed by Arctic
-        del self.ac
-        self.ac = Arctic(self.CONNECTION_STRING)
-        self.lib = self.ac.get_library(lib_name)
+        self._setup_lmdb_dir(lib_name)
         # Check the compaction will actually do something!
         assert self.lib.compact_data_explain_plan(self.SYM, rows_per_segment=target_rows_per_segment).will_do_work
         # read the symbol to warm up the cache
@@ -255,7 +269,7 @@ class CompactDataNumericDynamicSchema(CompactDataBase):
         self.compact_data(row_params[2])
 
 
-class AppendCompactDataBase:
+class AppendCompactDataBase(CompactDataLmdbBase):
     def __init__(self):
         self.logger = get_logger()
         # Do not interleave benchmarks as they are using the same LMDB directory for actually running the benchmarks
@@ -285,16 +299,11 @@ class AppendCompactDataBase:
             lib.append_batch([WritePayload(sym, df) for sym in self.SYMS])
 
     def _setup(self, lib_name):
-        os.mkdir(self.LMDB_DIR)
-        # Copy the config database and the relevant library database for these benchmark parameters to the actual
-        # LMDB directory where compaction will happen
-        shutil.copytree(os.path.join(self.LMDB_BASE_DIR, "_arctic_cfg"), os.path.join(self.LMDB_DIR, "_arctic_cfg"))
-        shutil.copytree(os.path.join(self.LMDB_BASE_DIR, lib_name), os.path.join(self.LMDB_DIR, lib_name))
-        # Create a new Arctic instance, otherwise we will be holding a reference to the previous iteration's .mdb files
-        # and the deletion and recreation won't be noticed by Arctic
-        del self.ac
-        self.ac = Arctic(self.CONNECTION_STRING)
-        self.lib = self.ac.get_library(lib_name)
+        self._setup_lmdb_dir(lib_name)
+        # Warm up the cache, but read a single row rather than the whole symbol. peakmem_* is a process high-water
+        # mark, so a full read here would become the reported peak for the parameter combinations whose append
+        # allocates less than the symbol. One row still pays the cold cost, which is the version and index keys
+        self.lib.read(self.SYMS[0], row_range=(0, 1))
 
     def _teardown(self):
         shutil.rmtree(self.LMDB_DIR)
