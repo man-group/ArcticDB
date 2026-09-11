@@ -9,12 +9,12 @@ As of the Change Date specified in that file, in accordance with the Business So
 from arcticdb_ext.log import log, LogLevel, LoggerId
 
 
-def test_cpp_log_lines_follow_fd_capture(capfd):
+def test_cpp_log_lines_follow_fd_capture(get_stderr):
     # pytest's capfd dup2()s a temp file over fd 2 through Python's CRT. On Windows arcticdb_ext has its own static
     # CRT, so its fd 2 still pointed at the original stderr handle, which Python's CRT had closed and Windows had reused
     # for the next opened file (LMDB's data.mdb) - log lines were written into the database. The log line must land
     # in the capture.
     marker = "arcticdb-log-capture-marker-7e1c"
     log(LoggerId.ROOT, LogLevel.ERROR, marker)
-    err = capfd.readouterr().err
-    assert marker in err
+    # get_stderr flushes the loggers before reading, as the other stderr-asserting tests do
+    assert marker in get_stderr()
