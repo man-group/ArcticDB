@@ -1,0 +1,279 @@
+# ===========================================================================
+# EXPERIMENT — NOT PART OF THE PIPELINE. Delete this file and the branch it
+# lives on (`benchmark-winds-seaweed-io`) when the experiment is over.
+# ===========================================================================
+#
+# arctic-winds ticket gha 95: does widening the IO pool buy anything once every
+# storage operation carries a real network round trip?
+#
+# It is the intersection of two experiments that already exist on this repo:
+#
+#   * the TREATMENT is gha 93's, unchanged — `VersionStore.NumIOThreads` at four
+#     times the lane's own core count, `NumCPUThreads` never exported, control
+#     and treatment as lanes of ONE dispatch (`benchmark_pool_ab.yml` on
+#     `benchmark-winds-pool-ab`, configuration `d::x4`);
+#   * the REGIME is gha 94's — the five `ARCTICDB_REAL_S3_*` lines of
+#     `benchmark_worker_seaweed.yml`, which point the suite's S3 code path at the
+#     SeaweedFS each worker already starts for `merge_functions`.
+#
+# gha 93 measured the treatment on LMDB — a memory-mapped local file — and found
+# nothing in wall time anywhere, which is the expected answer when the pool being
+# widened was never the constraint. gha 94 built a latency-bound regime for $0 and
+# proved it ORDERS treatments the way real S3 does (Spearman 0.841 series / 0.929
+# family) while reproducing only ~1/7 of its magnitude. Ordering is exactly what an
+# A/B needs. So: the same treatment, in the regime where IO width has something to
+# hide.
+#
+#   wheel ─┐
+#   plan ──┴─► worker (matrix: <lane>_a, <lane>_d) on benchmark_worker_seaweed.yml
+#
+# `storage: REAL` and not `ALL`. gha 94 ran `ALL` because its question was
+# "LMDB against SeaweedFS for one benchmark in one process"; this ticket's
+# question is "control against treatment on the S3 path", and the LMDB half is
+# both already answered (gha 93) and the half that cost gha 94 its `modification`
+# lane twice — `ModificationFunctions.setup_cache` populates once per enabled
+# storage and 32 GB did not survive two.
+#
+# Like `benchmark_pool_ab.yml` and `benchmark_engine_ab.yml`, this deliberately
+# does NOT collect. Results leave as GitHub artifacts and nothing is written to any
+# results library at all — not even this branch's own — so no series anywhere can
+# be moved by an experiment that deliberately mis-sizes a thread pool.
+#
+# The one change this experiment makes outside this file is the `cpu_threads` /
+# `io_threads` / `spans` trio on `benchmark_worker_seaweed.yml`, on this branch
+# only, all three defaulted to the empty string, which means "do nothing".
+name: EXPERIMENT IO threads on SeaweedFS (arctic-winds gha 95)
+
+on:
+  # The registration push, as `benchmark_pool_ab.yml` and `perf_probe.yml` spell
+  # it: GitHub registers a workflow only once one of its trigger events can fire,
+  # and an unregistered workflow rejects `workflow_dispatch` too — so a
+  # dispatch-only file on a non-default branch could never be dispatched at all.
+  # (That is the 404 `benchmark_winds_seaweed.yml` hit on the parent branch, which
+  # is why the gha 94 caller had to overwrite an already-registered filename. A
+  # push trigger is the other way out of it, and the one gha 90 and 93 used.)
+  # Scoped to this branch and this one file; every job below is guarded on
+  # `workflow_dispatch`, so the registration run rents nothing and finishes in
+  # seconds. No other workflow in this repository triggers on a push to this branch.
+  push:
+    branches: [benchmark-winds-seaweed-io]
+    paths: ['.github/workflows/benchmark_seaweed_io_ab.yml']
+
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: Full sha of the ArcticDB commit every lane benchmarks
+        type: string
+        required: true
+      wheel_run_id:
+        description: >-
+          Run id of a `Benchmarks (arctic-winds)` run whose
+          wheel-cp311-manylinux_x86_64 artifact every lane installs. One wheel
+          for the whole experiment, so no lane can differ by its binary.
+        type: string
+        required: true
+      replicate:
+        description: A label for this replicate, e.g. r1 — it only appears in the summary
+        type: string
+        required: true
+      workers:
+        description: >-
+          Which of this branch's `workers.toml` lanes run. Every lane here is
+          `real = true` upstream, which gha 94 established is exactly the set of
+          benchmarks that take storage as a parameter.
+        type: string
+        default: 'basic_functions,list_versions,column_stats,query,listing'
+      configurations:
+        description: >-
+          Semicolon-separated `<name>:<cpu>:<io>` triples. An empty cpu and io
+          — `a::` — is the control: nothing is exported and ArcticDB sizes its
+          pools off the box. `x<N>` is N times the lane's own `nproc`, resolved
+          on the box.
+        type: string
+        default: 'a::;d::x4'
+      spans:
+        description: >-
+          Non-empty runs a SHORT extra task-span workload on every lane after the
+          measured benchmarks, under ArcticDB's own `TaskScheduler.LogTaskStats`
+          (gha 91). PILOT ONLY — the observer costs +14 % on a millisecond read
+          (gha 83), which on a paid replicate would be a second treatment.
+        type: string
+        default: ''
+
+jobs:
+  # Every lane installs the same bytes. The wheel is not rebuilt per replicate —
+  # a rebuilt wheel is a second variable, and this experiment has exactly one —
+  # so it is fetched once from the run that built it and re-uploaded under the
+  # name `benchmark_worker_seaweed.yml` already downloads.
+  wheel:
+    name: re-publish the wheel every lane installs
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: wheel-cp311-manylinux_x86_64
+          path: wheel
+          run-id: ${{ inputs.wheel_run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheel-cp311-manylinux_x86_64
+          path: wheel/*.whl
+          if-no-files-found: error
+          retention-days: 7
+          overwrite: true
+
+  # One matrix entry per (worker, configuration) — `<worker>_a`, `<worker>_d` —
+  # so a replicate is one run and both sides are drawn from the fleet at the same
+  # moment, on identical instance types. The suite and the instance type come from
+  # `workers.toml`, so a lane in the experiment is the same lane the pipeline runs
+  # and not a copy of it.
+  plan:
+    name: plan the replicate
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+      bucket: ${{ steps.bucket.outputs.bucket }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"   # `tomllib` is 3.11's
+
+      # gha 94's rule, kept: this step only *names* a bucket and makes no AWS call.
+      # Each worker creates this name on its own SeaweedFS and drops it again, so
+      # there is nothing central to create, nothing to strand and nothing to bill.
+      # The AWS spelling (lowercase, hyphens) is kept because the name becomes a path
+      # segment in the Arctic URI.
+      - name: name the per-run bucket
+        id: bucket
+        run: |
+          bucket_name="arcticdb-asv-seaweed-$(date +%s)-$(openssl rand -hex 4)"
+          echo "Each worker will create s3://${bucket_name} on its own SeaweedFS"
+          printf 'bucket=%s\n' "$bucket_name" >> "$GITHUB_OUTPUT"
+
+      - name: build the matrix
+        id: plan
+        env:
+          WORKERS: ${{ inputs.workers }}
+          CONFIGURATIONS: ${{ inputs.configurations }}
+        run: |
+          python - >> "$GITHUB_OUTPUT" <<'PY'
+          import json, os, tomllib
+
+          config = tomllib.load(open("python/benchmarks/workers.toml", "rb"))
+          by_name = {worker["name"]: worker for worker in config["worker"]}
+          wanted = [name.strip() for name in os.environ["WORKERS"].split(",") if name.strip()]
+          missing = [name for name in wanted if name not in by_name]
+          if missing:
+              raise SystemExit(f"not in workers.toml: {', '.join(missing)}")
+
+          configurations = []
+          for spec in os.environ["CONFIGURATIONS"].split(";"):
+              spec = spec.strip()
+              if not spec:
+                  continue
+              parts = spec.split(":")
+              if len(parts) != 3:
+                  raise SystemExit(f"configuration {spec!r} is not <name>:<cpu>:<io>")
+              name, cpu, io = (part.strip() for part in parts)
+              if not name:
+                  raise SystemExit(f"configuration {spec!r} has no name")
+              for value, label in ((cpu, "cpu"), (io, "io")):
+                  # `x<N>` is N times the lane's own core count, resolved on the
+                  # box against `nproc` (gha 93): the only spelling that means the
+                  # same thing on a 4-core and an 8-core lane, so one dispatch can
+                  # carry both.
+                  if value and not (value.isdigit() or (value.startswith("x") and value[1:].isdigit())):
+                      raise SystemExit(f"configuration {spec!r}: {label} is not a number or x<N>")
+              configurations.append((name, cpu, io))
+          if not configurations:
+              raise SystemExit("no configurations")
+
+          entries = []
+          for name in wanted:
+              worker = by_name[name]
+              if worker.get("runs_on"):
+                  # A managed lane is somebody else's machine and its noise is a
+                  # host lottery (gha 38); an A/B on one would measure the lottery.
+                  # It also has no SeaweedFS, so there would be no S3 path to test.
+                  raise SystemExit(f"{name} is a managed lane; this experiment is EC2-only")
+              ec2 = worker.get("ec2", {})
+              instance = ec2.get("instance_type") or worker.get("instance_type")
+              if not instance:
+                  raise SystemExit(f"{name} names no instance type")
+              for side, cpu, io in configurations:
+                  entries.append({
+                      "lane": f"{name}_{side}",
+                      "worker": name,
+                      "side": side,
+                      "cpu_threads": cpu,
+                      "io_threads": io,
+                      "suite": worker["suite"],
+                      "instance_type": instance,
+                  })
+          print("matrix=" + json.dumps(entries, separators=(",", ":")))
+          PY
+
+      - name: report the replicate
+        env:
+          MATRIX: ${{ steps.plan.outputs.matrix }}
+          COMMIT: ${{ inputs.commit }}
+          REPLICATE: ${{ inputs.replicate }}
+          WHEEL_RUN: ${{ inputs.wheel_run_id }}
+          BUCKET: ${{ steps.bucket.outputs.bucket }}
+          SPANS: ${{ inputs.spans }}
+        run: |
+          {
+            echo "### 🧵🌊 IO threads on SeaweedFS — replicate \`$REPLICATE\`"
+            echo
+            echo "- commit: \`$COMMIT\`"
+            echo "- wheel: from run \`$WHEEL_RUN\`"
+            echo "- bucket (per worker, on its own SeaweedFS): \`$BUCKET\`"
+            echo "- storage: \`REAL\` — the S3 code path, rerouted to \`http://127.0.0.1:8333\`"
+            echo "- task spans: \`${SPANS:-off}\`"
+            echo
+            echo "| lane | configuration | NumCPUThreads | NumIOThreads | suite | instance |"
+            echo "| --- | --- | --- | --- | --- | --- |"
+            jq -r '.[] | "| \(.lane) | \(.side) | \(if .cpu_threads == "" then "box default" else .cpu_threads end) | \(if .io_threads == "" then "1.5x cpu" else .io_threads end) | `\(.suite)` | \(.instance_type) |"' <<<"$MATRIX"
+            echo
+            echo "An \`x<N>\` cell is N times that lane's own \`nproc\`, resolved on the box; the pool probe in each lane prints what it actually came out as."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  worker:
+    needs: [plan, wheel]
+    if: github.event_name == 'workflow_dispatch'
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJson(needs.plan.outputs.matrix) }}
+    name: ${{ matrix.lane }}
+    uses: ./.github/workflows/benchmark_worker_seaweed.yml
+    secrets: inherit
+    with:
+      worker: ${{ matrix.lane }}
+      suite: ${{ matrix.suite }}
+      commit: ${{ inputs.commit }}
+      storage: REAL
+      bucket: ${{ needs.plan.outputs.bucket }}
+      instance_type: ${{ matrix.instance_type }}
+      runs_on: ''
+      market_type: spot
+      python: "3.11"
+      wheel_artifact: wheel-cp311-manylinux_x86_64
+      # No `profile` and no `reference_commit`: a profile pass re-runs benchmarks
+      # through asv into the same results directory, which would be a difference
+      # between the lanes that is not the one under test. The worker on this branch
+      # disables the pass outright anyway (gha 94).
+      cpu_threads: ${{ matrix.cpu_threads }}
+      io_threads: ${{ matrix.io_threads }}
+      spans: ${{ inputs.spans }}
