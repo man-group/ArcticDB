@@ -242,8 +242,29 @@ jobs:
       # costs this worker its regression-triggered profiling and nothing else —
       # `arctic-winds bench` takes the missing file as an empty reference and says
       # so in its log.
+      # GHA 94: DISABLED on this branch, by `if: false` rather than deletion so the
+      # difference from `benchmark_worker.yml` stays one readable line.
+      #
+      # Not downloading the reference is how the profile pass is turned off: `bench`
+      # takes neither a `--reference` nor a `--profile` regex and then profiles nothing
+      # at all. Two reasons to want that here.
+      #
+      # Cost. The pass profiles a benchmark that is *new to the lane*, and this branch
+      # writes to its own fresh results library, so on its first run **every** benchmark
+      # is new. Six lanes would each spend their whole ~10-minute profile budget, for
+      # about 60 lane-minutes of EC2 — on flame graphs of a storage change, which is not
+      # what this experiment is measuring.
+      #
+      # Noise. The pilot (run 34685944023) showed the other half: the pass re-runs a
+      # body to harvest a second metric, and `list_symbols.ListSymbolsWithoutCache`
+      # asserts its body runs at most once per `setup` (`_check_test_counter`). Every
+      # AMAZON combination of `time_list_symbols` came back `status: failed,
+      # AssertionError` from the harness while asv's own measurement of it was `ok`.
+      # That is a known engine/suite interaction and nothing to do with the storage —
+      # but on a run whose entire purpose is reading which benchmarks broke, it is
+      # exactly the kind of red herring worth not generating.
       - name: download the run's reference values
-        if: inputs.runs_on == ''
+        if: false
         continue-on-error: true
         uses: actions/download-artifact@v8
         with:
@@ -513,8 +534,14 @@ jobs:
       #
       # `continue-on-error`, and every reading is `|| true`: this step is evidence, not a
       # gate. A worker whose benchmarks all passed must not go red because a diagnostic
-      # curl did. The readings land on the step summary so they can be read off the run
-      # page without opening a log.
+      # curl did.
+      #
+      # The readings go through `tee` to BOTH the step summary and stdout, and the pilot
+      # is why. Writing only to `$GITHUB_STEP_SUMMARY` puts them on the run page, which
+      # is where a human wants them — but the summary is not served by the REST API, so
+      # `gh run view --log` showed the step's own script and none of its output, and the
+      # evidence could not be read back without a browser. Evidence nobody can fetch is
+      # not evidence.
       # ---------------------------------------------------------------------------
       - name: prove the benchmarks hit SeaweedFS
         if: always() && inputs.runs_on == '' && inputs.storage != 'LMDB'
@@ -555,7 +582,7 @@ jobs:
             find "$HOME/.asv" "$PWD" -name '*.mdb' -size +1k 2>/dev/null | head -20 || true
             echo "(end of .mdb list)"
             echo '```'
-          } >> "$GITHUB_STEP_SUMMARY" 2>&1 || true
+          } 2>&1 | tee -a "$GITHUB_STEP_SUMMARY" || true
 
       # The bucket's whole collection, dropped in one call. This is the cleanup question
       # the ticket asks about between combinations, and the answer is that there are two
