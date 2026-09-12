@@ -1,0 +1,234 @@
+# ===========================================================================
+# EXPERIMENT — NOT PART OF THE PIPELINE. Delete this file and the branch it
+# lives on (`benchmark-winds-pool-ab`) when the experiment is over.
+# ===========================================================================
+#
+# arctic-winds ticket gha 90: is an epoch shift the hardware, or just the pool
+# sizing that followed it?
+#
+# When the fleet was resized after shadow run 4, two variables moved together:
+# the machine, and ArcticDB's thread pools, which are sized *from* the machine's
+# core count (`VersionStore.NumCPUThreads` defaults to `hardware_concurrency()`,
+# `VersionStore.NumIOThreads` to 1.5x that — `cpp/arcticdb/async/task_scheduler.hpp:195-224`).
+# This dispatch runs one lane three times on the *same* box, at the same moment,
+# off the same wheel, differing only in the two environment variables that pin
+# those pools:
+#
+#   a  box default          nothing exported — what the lane measures today
+#   b  the old 4xlarge      16 CPU / 24 IO — what an m6i.4xlarge would have sized
+#   c  deliberately small   2 CPU / 3 IO — the direction of the dial
+#
+# `b` against `a` is the pool half of the run 4 -> 5/6 boundary with the machine
+# held fixed, which is the whole decomposition: whatever of the recorded epoch
+# shift `b/a` reproduces is sizing, and the remainder is the machine.
+#
+#   wheel ─┐
+#   plan ──┴─► worker (matrix: <lane>_a, <lane>_b, <lane>_c)
+#
+# Like `benchmark_engine_ab.yml`, it deliberately does NOT collect: results
+# leave as GitHub artifacts and nothing is written to the results store, so no
+# series — the shadow's least of all — can be moved by an experiment that
+# deliberately mis-sizes the thread pools.
+#
+# It lives on its own branch rather than on `benchmark-winds-shadow` because a
+# push to the shadow branch starts a full thirteen-lane benchmark run. A trio is
+# dispatched:
+# `gh workflow run benchmark_pool_ab.yml --ref benchmark-winds-pool-ab -f …`.
+# The push trigger below exists only to make that dispatch possible at all and
+# rents nothing.
+#
+# The one change this experiment makes outside this file is the `cpu_threads` /
+# `io_threads` pair on `benchmark_worker.yml`, on this branch only, both
+# defaulted to the empty string, which means "export nothing".
+name: EXPERIMENT pool sizing A/B/C (arctic-winds gha 90)
+
+on:
+  # The registration push, exactly as `benchmark_engine_ab.yml` and
+  # `perf_probe.yml` spell it: GitHub registers a workflow only once one of its
+  # trigger events can fire, and an unregistered workflow rejects
+  # `workflow_dispatch` too — so a dispatch-only file on a non-default branch
+  # could never be dispatched. Scoped to this branch and this one file; every
+  # job below is guarded on `workflow_dispatch`, so the registration run rents
+  # nothing and finishes in seconds. No other workflow in this repository
+  # triggers on a push to this branch.
+  push:
+    branches: [benchmark-winds-pool-ab]
+    paths: ['.github/workflows/benchmark_pool_ab.yml']
+
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: Full sha of the ArcticDB commit every lane benchmarks
+        type: string
+        required: true
+      wheel_run_id:
+        description: >-
+          Run id of a `Benchmarks (arctic-winds)` run whose
+          wheel-cp311-manylinux_x86_64 artifact every lane installs. One wheel
+          for the whole experiment, so no lane can differ by its binary.
+        type: string
+        required: true
+      replicate:
+        description: A label for this replicate, e.g. r1 — it only appears in the summary
+        type: string
+        required: true
+      workers:
+        description: Which of `workers.toml`'s EC2 lanes this experiment runs
+        type: string
+        default: 'query,listing,basic_functions,version_chain'
+      configurations:
+        description: >-
+          Semicolon-separated `<name>:<cpu>:<io>` triples. An empty cpu and io
+          — `a::` — is the control: nothing is exported and ArcticDB sizes its
+          pools off the box.
+        type: string
+        default: 'a::;b:16:24;c:2:3'
+
+jobs:
+  # Every lane installs the same bytes. The wheel is not rebuilt per replicate —
+  # a rebuilt wheel is a second variable, and this experiment has exactly one —
+  # so it is fetched once from the run that built it and re-uploaded under the
+  # name `benchmark_worker.yml` already downloads.
+  wheel:
+    name: re-publish the wheel every lane installs
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: wheel-cp311-manylinux_x86_64
+          path: wheel
+          run-id: ${{ inputs.wheel_run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheel-cp311-manylinux_x86_64
+          path: wheel/*.whl
+          if-no-files-found: error
+          retention-days: 7
+          overwrite: true
+
+  # One matrix entry per (worker, configuration) — `<worker>_a`, `<worker>_b`,
+  # `<worker>_c` — so a replicate is one run and the three sides are drawn from
+  # the fleet at the same moment, on identical instance types. The suite and the
+  # instance type come from `workers.toml`, so a lane in the experiment is the
+  # same lane the pipeline runs and not a copy of it.
+  plan:
+    name: plan the replicate
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"   # `tomllib` is 3.11's
+      - name: build the matrix
+        id: plan
+        env:
+          WORKERS: ${{ inputs.workers }}
+          CONFIGURATIONS: ${{ inputs.configurations }}
+        run: |
+          python - >> "$GITHUB_OUTPUT" <<'PY'
+          import json, os, tomllib
+
+          config = tomllib.load(open("python/benchmarks/workers.toml", "rb"))
+          by_name = {worker["name"]: worker for worker in config["worker"]}
+          wanted = [name.strip() for name in os.environ["WORKERS"].split(",") if name.strip()]
+          missing = [name for name in wanted if name not in by_name]
+          if missing:
+              raise SystemExit(f"not in workers.toml: {', '.join(missing)}")
+
+          configurations = []
+          for spec in os.environ["CONFIGURATIONS"].split(";"):
+              spec = spec.strip()
+              if not spec:
+                  continue
+              parts = spec.split(":")
+              if len(parts) != 3:
+                  raise SystemExit(f"configuration {spec!r} is not <name>:<cpu>:<io>")
+              name, cpu, io = (part.strip() for part in parts)
+              if not name:
+                  raise SystemExit(f"configuration {spec!r} has no name")
+              for value, label in ((cpu, "cpu"), (io, "io")):
+                  if value and not value.isdigit():
+                      raise SystemExit(f"configuration {spec!r}: {label} is not a number")
+              configurations.append((name, cpu, io))
+          if not configurations:
+              raise SystemExit("no configurations")
+
+          entries = []
+          for name in wanted:
+              worker = by_name[name]
+              if worker.get("runs_on"):
+                  # A managed lane is somebody else's machine and its noise is a
+                  # host lottery (gha 38); an A/B on one would measure the lottery.
+                  raise SystemExit(f"{name} is a managed lane; this experiment is EC2-only")
+              ec2 = worker.get("ec2", {})
+              instance = ec2.get("instance_type") or worker.get("instance_type")
+              if not instance:
+                  raise SystemExit(f"{name} names no instance type")
+              for side, cpu, io in configurations:
+                  entries.append({
+                      "lane": f"{name}_{side}",
+                      "worker": name,
+                      "side": side,
+                      "cpu_threads": cpu,
+                      "io_threads": io,
+                      "suite": worker["suite"],
+                      "instance_type": instance,
+                  })
+          print("matrix=" + json.dumps(entries, separators=(",", ":")))
+          PY
+
+      - name: report the replicate
+        env:
+          MATRIX: ${{ steps.plan.outputs.matrix }}
+          COMMIT: ${{ inputs.commit }}
+          REPLICATE: ${{ inputs.replicate }}
+          WHEEL_RUN: ${{ inputs.wheel_run_id }}
+        run: |
+          {
+            echo "### 🧵 pool sizing A/B/C — replicate \`$REPLICATE\`"
+            echo
+            echo "- commit: \`$COMMIT\`"
+            echo "- wheel: from run \`$WHEEL_RUN\`"
+            echo
+            echo "| lane | configuration | NumCPUThreads | NumIOThreads | suite | instance |"
+            echo "| --- | --- | --- | --- | --- | --- |"
+            jq -r '.[] | "| \(.lane) | \(.side) | \(if .cpu_threads == "" then "box default" else .cpu_threads end) | \(if .io_threads == "" then "1.5x cpu" else .io_threads end) | `\(.suite)` | \(.instance_type) |"' <<<"$MATRIX"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  worker:
+    needs: [plan, wheel]
+    if: github.event_name == 'workflow_dispatch'
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJson(needs.plan.outputs.matrix) }}
+    name: ${{ matrix.lane }}
+    uses: ./.github/workflows/benchmark_worker.yml
+    secrets: inherit
+    with:
+      worker: ${{ matrix.lane }}
+      suite: ${{ matrix.suite }}
+      commit: ${{ inputs.commit }}
+      storage: LMDB
+      instance_type: ${{ matrix.instance_type }}
+      runs_on: ''
+      market_type: spot
+      python: "3.11"
+      wheel_artifact: wheel-cp311-manylinux_x86_64
+      # No `profile` and no `reference_commit`: a profile pass re-runs benchmarks
+      # through asv into the same results directory, which would be a difference
+      # between the lanes that is not the one under test.
+      cpu_threads: ${{ matrix.cpu_threads }}
+      io_threads: ${{ matrix.io_threads }}
