@@ -753,7 +753,7 @@ jobs:
           import os, sys, time
           import numpy as np
           import pandas as pd
-          from arcticdb import Arctic
+          from arcticdb import Arctic, LibraryOptions
           import arcticdb_ext.cpp_async as a
 
           uri = os.environ["SPAN_URI"]
@@ -763,13 +763,21 @@ jobs:
               ac.delete_library("spans")
           except Exception:
               pass
-          lib = ac.create_library("spans")
-          rows, cols, symbols = 50_000, 10, 20
+          # SEGMENTS, not rows, are what the IO pool parallelises: one storage
+          # operation per segment. A default library turns a 50k-row frame into a
+          # single segment, and the first capture measured exactly that — 341 IO
+          # tasks at a peak concurrency of 2, on a pool of 6 and a pool of 16
+          # alike, because there was never more than one segment in flight. A
+          # small `rows_per_segment` is the cheapest way to make one call fan out
+          # wide enough for a pool's width to be able to matter at all.
+          rows, cols, symbols, per_segment = 1_000_000, 5, 5, 10_000
+          lib = ac.create_library("spans", LibraryOptions(rows_per_segment=per_segment))
           frame = pd.DataFrame(
               np.random.rand(rows, cols),
               columns=[f"c{i}" for i in range(cols)],
               index=pd.date_range("2020-01-01", periods=rows, freq="s"),
           )
+          print(f"segments per symbol = {rows // per_segment}", file=sys.stdout)
           marks = {}
           t = time.time()
           for i in range(symbols):
@@ -780,9 +788,12 @@ jobs:
               lib.read(f"s{i}")
           marks["read"] = time.time() - t
           t = time.time()
+          lib.read_batch([f"s{i}" for i in range(symbols)])
+          marks["read_batch"] = time.time() - t
+          t = time.time()
           for _ in range(5):
               lib.list_symbols()
-              for i in range(0, symbols, 5):
+              for i in range(symbols):
                   lib.list_versions(f"s{i}")
           marks["listing"] = time.time() - t
           print("SPANLOAD " + " ".join(f"{k}={v:.3f}s" for k, v in marks.items()))

@@ -91,6 +91,14 @@ on:
           on the box.
         type: string
         default: 'a::;d::x4'
+      suite_overwrite:
+        description: >-
+          Replaces every lane's `workers.toml` suite regex with this one. Empty
+          means each lane runs its own suite, which is what a replicate wants. A
+          spans-only dispatch narrows it to one cheap benchmark, so the run pays
+          for the task-span capture and almost nothing else.
+        type: string
+        default: ''
       spans:
         description: >-
           Non-empty runs a SHORT extra task-span workload on every lane after the
@@ -166,6 +174,7 @@ jobs:
         env:
           WORKERS: ${{ inputs.workers }}
           CONFIGURATIONS: ${{ inputs.configurations }}
+          SUITE_OVERWRITE: ${{ inputs.suite_overwrite }}
         run: |
           python - >> "$GITHUB_OUTPUT" <<'PY'
           import json, os, tomllib
@@ -218,7 +227,7 @@ jobs:
                       "side": side,
                       "cpu_threads": cpu,
                       "io_threads": io,
-                      "suite": worker["suite"],
+                      "suite": os.environ.get("SUITE_OVERWRITE") or worker["suite"],
                       "instance_type": instance,
                   })
           print("matrix=" + json.dumps(entries, separators=(",", ":")))
