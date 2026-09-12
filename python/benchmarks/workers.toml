@@ -41,6 +41,28 @@
 # about its counters and its memory while its timings are still noise, and the boolean
 # had no way to say so. The kinds are asv's own prefixes: time, peakmem, mem, track.
 
+# ---------------------------------------------------------------------------------
+# GHA 94 (experiment branch only). The six lanes marked `real = false` upstream are
+# deleted here rather than skipped, and the reason is the storage this branch runs on.
+#
+# On the real pipeline `real = false` is a REAL-run filter: those lanes have no
+# AMAZON-parameterised benchmarks, so a REAL run would spend an instance re-measuring
+# their LMDB numbers (gha 31, from gha 28's measurement). `ALL` keeps them, because on
+# the real pipeline `ALL` is how a commit with no push run gets its LMDB half.
+#
+# This experiment runs `ALL` for a different reason: it is the only way to get the LMDB
+# and the SeaweedFS number for one benchmark out of *one process on one box in one run*,
+# which removes machine and run-to-run variance from the comparison entirely — and that
+# comparison is the whole ticket. But `ALL`'s usual argument for keeping the storage-blind
+# lanes does not apply, because nothing here needs their LMDB half: the shadow already
+# measures it nightly. Six instances re-measuring lanes whose storage cannot move is the
+# 21 % of EC2 gha 28 objected to, spent on a question this branch is not asking.
+#
+# Nothing about the benchmark code changes. This file is arctic-winds' own, read only by
+# `arctic-winds plan`; the modules themselves are untouched and the lanes that remain
+# carry exactly the suites, boxes and gating they carry upstream.
+# ---------------------------------------------------------------------------------
+
 [[worker]]
 # 10M-row frames; RAM need unmeasured on the new pipeline, so the full box for now.
 name = "basic_functions"
@@ -54,34 +76,6 @@ name = "list_versions"
 suite = "^list_versions\\."
 # run 4 telemetry: peak 1.8 GiB on m6i.4xlarge — tiny
 instance_type = "m6i.xlarge"
-
-[[worker]]
-# ArrowStrings was 31 of the arrow worker's 56 minutes: split read from write. Each half
-# repeats the class's setup_cache (a few minutes).
-name = "arrow_strings_read"
-suite = "^arrow\\.ArrowStrings\\.(time|peakmem)_read"
-# run 4 telemetry: peak 4.8 GiB; 18 min on 8 vCPU — watch the time on 4
-instance_type = "m6i.xlarge"
-# `arrow` hard-wires an lmdb:// connection string; no AMAZON combos, no bucket objects.
-real = false
-
-[[worker]]
-name = "arrow_strings_write"
-suite = "^arrow\\.ArrowStrings\\.(time|peakmem)_write"
-# run 4 telemetry: peak 4.5 GiB; 16 min on 8 vCPU — watch the time on 4
-instance_type = "m6i.xlarge"
-# Same class as arrow_strings_read: lmdb:// only.
-real = false
-
-[[worker]]
-# ArrowSparseNumeric 9.4 min + ArrowBools 7.9 + ArrowNumeric 1.2.
-name = "arrow_numeric"
-suite = "^arrow\\.(ArrowSparseNumeric|ArrowBools|ArrowNumeric)\\."
-# run 4 telemetry: peak 8.4 GiB; 21 min — keep 8 vCPU for now
-# run 6 experiment: run 5: 4 vCPU nearly free elsewhere; 7.9 GiB peak
-instance_type = "m6i.xlarge"
-# Same `arrow` module: lmdb:// only, and run 33636917369 matched its LMDB wall to 1 %.
-real = false
 
 [[worker]]
 # Under 3 minutes of benchmarks, but its setup_cache builds 10M-row frames (>9 GiB locally).
@@ -98,15 +92,6 @@ suite = "^(?:modification_functions|finalize_staged_data)\\."
 # run 4 telemetry: peak 28.7 of 30.8 GiB on m6i.2xlarge (93%) — needs 64 GB; r6i keeps 8 vCPU for its 23 min at $0.564/h
 # run 8: run 7 anon/file split: anon 4.8 GiB, the other 54 GiB was LMDB page cache; 32 GB ran it in the same 23 min in run 4
 instance_type = "m6i.2xlarge"
-
-[[worker]]
-# 15 min; resample.Resample.time_resample is the longest single benchmark (7.85 min).
-name = "resample"
-suite = "^(?:resample|recursive_normalizer)\\."
-# run 4 telemetry: peak 4.5 GiB; 16 min on 8 vCPU — watch the time on 4
-instance_type = "m6i.xlarge"
-# `resample` hard-wires lmdb://; no AMAZON combos, no bucket objects, wall within ±3 %.
-real = false
 
 [[worker]]
 # 23 min of many small benchmarks.
@@ -126,83 +111,3 @@ name = "listing"
 suite = "^(?:list_symbols|list_snapshots)\\."
 instance_type = "m6i.xlarge"
 
-[[worker]]
-# ~19 of the listing worker's 27 minutes in shadow run 3; needs the worker's SeaweedFS.
-# RAM unmeasured until the telemetry run, hence the middle size.
-name = "merge"
-suite = "^merge_functions\\."
-# run 4 telemetry: peak 6.7 GiB; 19 min — keep 8 vCPU for now
-# run 6 experiment: run 5: 4 vCPU nearly free elsewhere; 6.4 GiB peak
-# run 8 triage (2026-09-02): the 4 vCPU downsize cost merge 1.67x and made it
-# the noisiest lane; memory was never the constraint here, vCPUs are — back to 8.
-instance_type = "m6i.2xlarge"
-# `merge_functions` talks to its own SeaweedFS, never the run's bucket: nothing REAL here.
-real = false
-
-[[worker]]
-# 2 min of track_* counters.
-name = "version_chain"
-suite = "^version_chain\\."
-instance_type = "m6i.xlarge"
-# track_* counters over an in-memory version chain; no storage parameterisation at all.
-real = false
-
-# ---------------------------------------------------------------------------
-# The thirteenth worker is not one of ours (gha 37, the pilot for gha 26's seam).
-#
-# A native GitHub Windows runner, free on a public repo, proving the label-resolved
-# provider path end to end on real CI: `runs_on` and no `ec2` table, so
-# `benchmark_worker.yml` skips the start and stop jobs entirely and the bench job
-# queues against `windows-latest` directly. Nothing about it is Windows-specific in
-# our code — the same two lines would put a lane on `macos-14` or on a Blacksmith
-# label, which is the whole point of not having a provider enum.
-#
-# Suite: three modules that between them ask nothing of the platform. `version_chain`
-# is track_* counters over an in-memory version chain (2 min on EC2), `resample` is
-# real LMDB work at ~4.5 GiB (16 min on 8 vCPU, so budget 25-40 on a hosted 4-core
-# VM), and `list_symbols` is gha 38's addition — see below. Neither touches
-# `merge_functions`' SeaweedFS, which the managed lane does not start.
-#
-# `real = false` keeps this lane out of `storage=REAL` runs. For the first two modules
-# that is the same storage-blind claim the EC2 lanes above make; `list_symbols` does
-# carry AMAZON combinations, and they are simply never enabled here — a measure-only
-# Windows lane re-measuring the run's throwaway S3 bucket would buy a number nobody
-# judges, over the network, on the noisiest lane in the fleet. On an LMDB run the
-# AMAZON combinations skip themselves (`environment_setup.is_storage_enabled`).
-#
-# `gating = ["peakmem", "track"]` is gha 38's graduation, and it is measured rather
-# than hoped for. Over eight repetitions of one commit this lane's `track_*` counters
-# came back **byte-identical to Linux** (CV exactly 0.00 %) and its `peakmem_*` sat at
-# a CV of ≤3.18 % — both well inside the fleet's 1.20 factor. Its `time_*` sat at a
-# median CV of 11.36 %, four times the published GitHub-hosted reference, and would
-# need a factor near 1.48 to be honest; worse, the noise is a per-run *host lottery*
-# (run offsets -20.8 %..+8.1 %), so no factor makes one morning's box comparable with
-# another's. Timings here stay measure-only at any factor.
-#
-# The lane still runs the *same benchmark names* as the EC2 `resample`,
-# `version_chain` and `listing` workers, and one asv result file keyed by test name
-# cannot hold two lanes' numbers — so what it gates is compared separately, under its
-# own machine, by `compare-values` (see `compare_values._with_lane`). Nothing here
-# needs to know that; it is why the gating list is a *lane* property and not a suite
-# split.
-#
-# gha 38 §4 also found that this lane has no *sequential* time_* at all — `resample`
-# and the arrow/merge benchmarks are all thread-pool work — so "sequential is safe on
-# a managed runner" was untestable. `list_symbols` is the cheapest possible test of
-# it: `ListSymbolsWithoutCache` writes 100 and 1000 one-row symbols and then times a
-# single `list_symbols()` call. On EC2 that call takes ~1.0 s with a CV of 0.01 % and
-# 0.04 % over eight runs — the steadiest time_* in the whole fleet, and a 1.00
-# worst-case same-commit ratio. If a sequential second holds on `windows-latest` too,
-# `time_` graduates here next; if it does not, the lane's noise is the machine and not
-# the thread pool, and that is worth knowing either way. Pure Python and arcticdb, an
-# `lmdb://tmp/<n>` relative path, no POSIX in the module: portable as it stands.
-#
-# Memory telemetry comes from gha 36's Windows source (`cim.memory`) once that is in
-# the arctic-winds `main` this pipeline installs. Before it, the lane's memory columns
-# are simply null — the sidecar schema allows that, so nothing else is affected.
-[[worker]]
-name = "windows_pilot"
-suite = "^(?:version_chain|resample|list_symbols)\\."
-runs_on = "windows-latest"
-real = false
-gating = ["peakmem", "track"]
