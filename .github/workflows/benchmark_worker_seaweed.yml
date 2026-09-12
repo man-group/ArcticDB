@@ -44,7 +44,18 @@ on:
       # whole reason for the pass — exists at all.
       profile:         {required: false, type: string, default: '', description: "regex of benchmarks to profile regardless of verdicts; the run's `profile` dispatch input"}
       reference_commit: {required: false, type: string, default: '', description: "the master commit whose values this run is compared against, for the log; empty when the plan found none"}
-
+      # EXPERIMENT (arctic-winds gha 93, ported here for gha 95). Both default to the
+      # empty string, which means "do not set the variable at all" — so every caller
+      # that does not name them gets the job it always got, with ArcticDB sizing its
+      # pools off the box exactly as it does in production.
+      # `benchmark_seaweed_io_ab.yml` is the only caller that names them.
+      #
+      # They become `ARCTICDB_VersionStore_NumCPUThreads_int` and
+      # `ARCTICDB_VersionStore_NumIOThreads_int`, which `arcticdb/__init__.py:37` reads
+      # into the ConfigsMap on import, before the TaskScheduler is ever constructed (it
+      # is `call_once`-lazy, `async/task_scheduler.cpp:13-15`).
+      cpu_threads:     {required: false, type: string, default: '', description: "EXPERIMENT: pin VersionStore.NumCPUThreads; empty leaves ArcticDB's own hardware_concurrency default"}
+      io_threads:      {required: false, type: string, default: '', description: "EXPERIMENT: pin VersionStore.NumIOThreads; empty leaves the 1.5x-CPU default"}
 jobs:
   # `benchmark_commits.yml:8-12` calls the shared `ec2_runner_jobs.yml` rather than inlining
   # `machulav/ec2-github-runner`; do the same, so the AMI, subnet, security group and
@@ -429,6 +440,49 @@ jobs:
           COMMIT: ${{ inputs.commit }}
         run: printf 'name=%s\n' "$WORKER-${COMMIT:0:8}" >> "$GITHUB_OUTPUT"
 
+      # EXPERIMENT (arctic-winds gha 93, ported for gha 95). The pinning has to be
+      # *observed*, not assumed: this asks the very wheel the benchmarks are about to
+      # run what size its pools came out, in a throwaway venv, with the same two
+      # variables exported that the benchmark step exports. `cpu_thread_count()` and
+      # `io_thread_count()` are the live TaskScheduler's own fields
+      # (`async/python_bindings.cpp:30-31`); `get_default_cpu_count()` and
+      # `get_default_io_count()` are what the ConfigsMap resolved (`:32-33`). Printing
+      # all four distinguishes "the env was read" from "the pool was built that way",
+      # which is the whole claim.
+      #
+      # `continue-on-error`: this is evidence, never a gate. A lane whose probe fails
+      # still measures; it just cannot prove its own pinning, and the run log says so.
+      - name: observe the pool sizes this lane will run with
+        continue-on-error: true
+        env:
+          CPU_THREADS: ${{ inputs.cpu_threads }}
+          IO_THREADS: ${{ inputs.io_threads }}
+        run: |
+          # `x<N>` means N times this box's own core count, resolved here rather than
+          # in the plan, because `nproc` on the runner is the number ArcticDB's own
+          # default is a function of — see the benchmark step.
+          resolve() { case "$1" in x*) echo $(( $(nproc) * ${1#x} )) ;; *) echo "$1" ;; esac; }
+          if [ -n "$CPU_THREADS" ]; then export ARCTICDB_VersionStore_NumCPUThreads_int="$(resolve "$CPU_THREADS")"; fi
+          if [ -n "$IO_THREADS" ]; then export ARCTICDB_VersionStore_NumIOThreads_int="$(resolve "$IO_THREADS")"; fi
+          cat > /tmp/poolprobe.py <<'PY'
+          import arcticdb  # its import is what reads the env into the ConfigsMap
+          import arcticdb_ext.cpp_async as a
+          print(f"resolved default cpu/io           = {a.get_default_cpu_count()} / {a.get_default_io_count()}")
+          print(f"TaskScheduler cpu/io thread_count = {a.cpu_thread_count()} / {a.io_thread_count()}")
+          PY
+          wheel=$(find wheel -name '*.whl' | head -1)
+          python -m venv /tmp/poolprobe
+          /tmp/poolprobe/bin/python -m pip -q install "$wheel"
+          echo "### 🧵 pool probe — \`${{ inputs.worker }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "nproc                                   = $(nproc)"
+            echo "ARCTICDB_VersionStore_NumCPUThreads_int = ${ARCTICDB_VersionStore_NumCPUThreads_int:-<unset>}"
+            echo "ARCTICDB_VersionStore_NumIOThreads_int  = ${ARCTICDB_VersionStore_NumIOThreads_int:-<unset>}"
+            /tmp/poolprobe/bin/python /tmp/poolprobe.py
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
       # `--instance-type` is the one fact this job cannot read off its own box — an EC2
       # runner's metadata is not the plan's word — so it is passed down from the input the
       # matrix filled, and `bench` records it in the sidecar (ticket 13). `--runner-image`
@@ -436,6 +490,8 @@ jobs:
       # which AMI it booted from, so the IMDS step above read it and hands it over here.
       - name: benchmark
         env:
+          CPU_THREADS: ${{ inputs.cpu_threads }}
+          IO_THREADS: ${{ inputs.io_threads }}
           WORKER: ${{ inputs.worker }}
           SUITE: ${{ inputs.suite }}
           COMMIT: ${{ inputs.commit }}
@@ -448,6 +504,39 @@ jobs:
           PROFILE: ${{ inputs.profile }}
           REFERENCE_COMMIT: ${{ inputs.reference_commit }}
         run: |
+          # EXPERIMENT (arctic-winds gha 93, ported for gha 95). Exported rather than
+          # put in this step's `env:` block, because the empty string is not the same
+          # answer as "unset": `set_config_from_env_vars` would take `""` for an int,
+          # log an error and leave the key unset — noise that reads like a failure.
+          # Exporting only what was asked for keeps an unpinned lane's environment
+          # byte-identical to production's.
+          #
+          # The variables reach the benchmarks by plain inheritance: `bench` runs asv
+          # with `{**os.environ, **run_env}` (`arctic_winds/local.py:34`), asv spawns
+          # the benchmark process, and `arcticdb/__init__.py:37` reads the environment
+          # into the ConfigsMap on import — before anything asks for the TaskScheduler,
+          # which is built lazily on first use. No benchmark module in
+          # `python/benchmarks/` sets either key, so nothing overrides this.
+          #
+          # `x<N>` means N times this box's own core count, resolved here, on the box,
+          # against `nproc`, because `nproc` is the same number ArcticDB's own default
+          # is a function of (`hardware_concurrency()`, task_scheduler.hpp:196) — so
+          # the multiplier is against the pool size the lane would otherwise have had,
+          # not against a guess made from the instance type's name. It is also the only
+          # spelling that can express one configuration across lanes on different
+          # instance types: "4x the lane's CPU count" is 16 on an m6i.xlarge and 32 on
+          # an m6i.2xlarge, and a single dispatch has to carry both. The probe step
+          # above resolves it identically and prints the live pool.
+          resolve() { case "$1" in x*) echo $(( $(nproc) * ${1#x} )) ;; *) echo "$1" ;; esac; }
+          if [ -n "$CPU_THREADS" ]; then
+            export ARCTICDB_VersionStore_NumCPUThreads_int="$(resolve "$CPU_THREADS")"
+            echo "::notice::EXPERIMENT: ${WORKER} pins VersionStore.NumCPUThreads=$ARCTICDB_VersionStore_NumCPUThreads_int"
+          fi
+          if [ -n "$IO_THREADS" ]; then
+            export ARCTICDB_VersionStore_NumIOThreads_int="$(resolve "$IO_THREADS")"
+            echo "::notice::EXPERIMENT: ${WORKER} pins VersionStore.NumIOThreads=$ARCTICDB_VersionStore_NumIOThreads_int"
+          fi
+
           # One artifact, one wheel in it, and the filename carries no SHA (every
           # non-tag build is `0.0.0.dev0`), so the glob is the only way to name it.
           wheel=$(find wheel -name '*.whl' | head -1)
