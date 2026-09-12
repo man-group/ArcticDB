@@ -10,6 +10,7 @@ import time
 import numpy as np
 from arcticdb.version_store.processing import QueryBuilder
 from asv_runner.benchmarks.mark import SkipNotImplemented
+from arctic_winds.suite import benchmark, Time, PeakMem
 
 from .common import *
 from arcticdb.util.logger import get_logger
@@ -133,89 +134,65 @@ class QueryBuilderFunctions:
         result = self.lib.read(self.symbol, columns=["new_col"], query_builder=q)
         assert not result.data.empty
 
-    def time_groupby_count(self, *args):
+    @benchmark(metrics=[Time, PeakMem])
+    def groupby_count(self, *args):
         self._groupby_read("id1", {"v1": "count"})
 
-    def peakmem_groupby_count(self, *args):
-        self._groupby_read("id1", {"v1": "count"})
-
-    def time_filtering_string_equality(self, lib_for_storage, num_rows, storage):
-        if num_rows == 1_000_000:
+    @benchmark(metrics=[Time, PeakMem])
+    def filtering_string_equality(self, lib_for_storage, num_rows, storage):
+        if self.metric == "time" and num_rows == 1_000_000:
             raise SkipNotImplemented("Too variable at 1M rows")
         self._filtering_string_equality(self.symbol)
 
-    def peakmem_filtering_string_equality(self, *args):
-        self._filtering_string_equality(self.symbol)
-
-    def time_filtering_string_isin_with_nulls(self, lib_for_storage, num_rows, storage):
+    @benchmark(metrics=[Time, PeakMem])
+    def filtering_string_isin_with_nulls(self, lib_for_storage, num_rows, storage):
         self._filtering_string_isin(num_rows, self.null_symbol)
 
-    def peakmem_filtering_string_isin_with_nulls(self, lib_for_storage, num_rows, storage):
-        self._filtering_string_isin(num_rows, self.null_symbol)
-
-    def time_filtering_string_equality_with_nulls(self, lib_for_storage, num_rows, storage):
-        if num_rows == 1_000_000:
+    @benchmark(metrics=[Time, PeakMem])
+    def filtering_string_equality_with_nulls(self, lib_for_storage, num_rows, storage):
+        if self.metric == "time" and num_rows == 1_000_000:
             raise SkipNotImplemented("Too variable at 1M rows")
         self._filtering_string_equality(self.null_symbol)
 
-    def peakmem_filtering_string_equality_with_nulls(self, *args):
-        self._filtering_string_equality(self.null_symbol)
-
-    def time_filtering_numeric(self, *args):
+    @benchmark(metrics=[Time, PeakMem])
+    def filtering_numeric(self, *args):
         self._filtering_numeric()
 
-    def peakmem_filtering_numeric(self, *args):
-        self._filtering_numeric()
-
-    def time_filtering_chained(self, *args):
+    @benchmark(metrics=[Time, PeakMem])
+    def filtering_chained(self, *args):
         self._filtering_chained()
 
-    def peakmem_filtering_chained(self, *args):
-        self._filtering_chained()
-
-    def time_filtering_string_isin(self, lib_for_storage, num_rows, storage):
+    @benchmark(metrics=[Time, PeakMem])
+    def filtering_string_isin(self, lib_for_storage, num_rows, storage):
         # Selects about 1% of the rows
         self._filtering_string_isin(num_rows, self.symbol)
 
-    def peakmem_filtering_string_isin(self, lib_for_storage, num_rows, storage):
-        # Selects about 1% of the rows
-        self._filtering_string_isin(num_rows, self.symbol)
-
-    def time_filtering_string_regex_match(self, *args):
+    @benchmark(metrics=[Time])
+    def filtering_string_regex_match(self, *args):
         pattern = r"^id\d\d\d$"
         q = QueryBuilder()
         q = q[q["id1"].regex_match(pattern)]
         result = self.lib.read(self.symbol, columns=["v3"], query_builder=q)
         assert not result.data.empty
 
-    def time_projection(self, *args):
-        self._projection()
-
-    def peakmem_projection(self, *args):
+    @benchmark(metrics=[Time, PeakMem])
+    def projection(self, *args):
         self._projection()
 
     # The names are based on the queries used here: https://duckdblabs.github.io/db-benchmark/
     # Don't rename to distinguish from other query tests as renaming makes it a new benchmark, losing historic results
-    def time_query_1(self, *args):
+    @benchmark(metrics=[Time, PeakMem])
+    def query_1(self, *args):
         self._groupby_read("id1", {"v1": "sum"})
 
-    def peakmem_query_1(self, *args):
-        self._groupby_read("id1", {"v1": "sum"})
-
-    def time_query_3(self, *args):
+    @benchmark(metrics=[Time, PeakMem])
+    def query_3(self, *args):
         self._groupby_read("id3", {"v1": "sum", "v3": "sum"})
 
-    def peakmem_query_3(self, *args):
-        self._groupby_read("id3", {"v1": "sum", "v3": "sum"})
-
-    def time_query_4(self, *args):
+    @benchmark(metrics=[Time, PeakMem])
+    def query_4(self, *args):
         self._groupby_read("id6", {"v1": "sum", "v2": "sum"})
 
-    def peakmem_query_4(self, *args):
-        self._groupby_read("id6", {"v1": "sum", "v2": "sum"})
-
-    def time_query_adv_query_2(self, *args):
-        self._groupby_read("id3", {"v1": "max", "v2": "min"})
-
-    def peakmem_query_adv_query_2(self, *args):
+    @benchmark(metrics=[Time, PeakMem])
+    def query_adv_query_2(self, *args):
         self._groupby_read("id3", {"v1": "max", "v2": "min"})
