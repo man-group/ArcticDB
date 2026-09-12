@@ -56,6 +56,13 @@ on:
       # is `call_once`-lazy, `async/task_scheduler.cpp:13-15`).
       cpu_threads:     {required: false, type: string, default: '', description: "EXPERIMENT: pin VersionStore.NumCPUThreads; empty leaves ArcticDB's own hardware_concurrency default"}
       io_threads:      {required: false, type: string, default: '', description: "EXPERIMENT: pin VersionStore.NumIOThreads; empty leaves the 1.5x-CPU default"}
+      # EXPERIMENT (arctic-winds gha 95, folding in gha 91). Non-empty runs a short
+      # task-span capture AFTER the measured benchmarks and after the endpoint proof,
+      # against this same SeaweedFS, under `SPANS_ENV`. It is deliberately NOT the
+      # measured workload: `TaskScheduler.LogTaskStats` costs +14 % on a millisecond
+      # read (gha 83), which on a paid replicate would be a second treatment. Pilot only.
+      spans:           {required: false, type: string, default: '', description: "EXPERIMENT: non-empty captures ArcticDB task_stats from a short extra S3 workload; never set on a measured replicate"}
+
 jobs:
   # `benchmark_commits.yml:8-12` calls the shared `ec2_runner_jobs.yml` rather than inlining
   # `machulav/ec2-github-runner`; do the same, so the AMI, subnet, security group and
@@ -600,7 +607,9 @@ jobs:
       # already tolerant of. The monitor's
       # `<worker>.log` and `status.json` land in the same directory, so name the files
       # explicitly rather than uploading `artifacts/`. This must happen before `stop`
-      # terminates the machine.
+      # terminates the machine. gha 95 adds one more glob, `.spanload.task-stats` —
+      # the raw capture the pilot's converted `-spans.json` was built from, which
+      # matches nothing on any lane that did not ask for spans.
       # ---------------------------------------------------------------------------
       # GHA 94 — THE PROOF. The whole experiment is worthless if the benchmarks quietly
       # kept writing to LMDB, and a suite that "ran green" proves nothing either way:
@@ -696,6 +705,118 @@ jobs:
       # the drop buys nothing today. It is here because the moment this lane is ever run
       # twice on one box — a re-run, a persistent runner, a local reproduction — a
       # leftover bucket is exactly the silent corruption the ticket warns about.
+      # ---------------------------------------------------------------------------
+      # EXPERIMENT (arctic-winds gha 95, folding in gha 91). Mechanism evidence, and
+      # the first live-fleet exercise of the task-span path.
+      #
+      # This is a SEPARATE, SHORT workload, run after the measured benchmarks and after
+      # the endpoint proof has been read. It is not the measurement and must never be:
+      # `TaskScheduler.LogTaskStats` costs +14 % on a millisecond read (gha 83), which
+      # on a paid replicate would be a second treatment on one of the two arms. Hence
+      # `inputs.spans`, set on the pilot only.
+      #
+      # It runs after the proof so the request counters that settle "did the reroute
+      # take" count only what the benchmarks issued, and under its own `path_prefix` so
+      # nothing it writes lands where the benchmarks wrote. The same two pool variables
+      # are exported, so the capture is of the very pool the lane benchmarked with.
+      #
+      # `SPANS_ENV` is `ARCTICDB_TaskScheduler_LogTaskStats_int=1` +
+      # `ARCTICDB_schedule_loglevel=DEBUG` (gha 83, measured): a stock wheel from
+      # v6.24.0 registers `TaskStatsLoggingObserver` on both pools and writes one
+      # `task_stats pool= thread= task_id= enqueue_ns= wait_ns= run_ns=` line per
+      # completed task to stderr. The capture is redirected whole; there is no window
+      # protocol here because the process runs one workload and nothing else, which is
+      # `window=0` in `arctic_winds.task_spans`.
+      #
+      # Both documents are uploaded: the raw capture, because it is the evidence, and
+      # the converted Trace Event document, because converting it here is what actually
+      # exercises gha 91's converter on a real fleet box for the first time.
+      # ---------------------------------------------------------------------------
+      # No `shell: bash -el {0}` unlike the SeaweedFS steps around it: this one imports
+      # `arctic_winds`, which `install arctic-winds` put on the job's default `python`.
+      - name: capture task spans from a short extra workload
+        if: always() && inputs.spans != '' && inputs.runs_on == '' && inputs.storage != 'LMDB'
+        continue-on-error: true
+        env:
+          CPU_THREADS: ${{ inputs.cpu_threads }}
+          IO_THREADS: ${{ inputs.io_threads }}
+          BUCKET: ${{ inputs.bucket }}
+          WORKER: ${{ inputs.worker }}
+          ARTIFACT: ${{ steps.artifact.outputs.name }}
+        run: |
+          resolve() { case "$1" in x*) echo $(( $(nproc) * ${1#x} )) ;; *) echo "$1" ;; esac; }
+          if [ -n "$CPU_THREADS" ]; then export ARCTICDB_VersionStore_NumCPUThreads_int="$(resolve "$CPU_THREADS")"; fi
+          if [ -n "$IO_THREADS" ]; then export ARCTICDB_VersionStore_NumIOThreads_int="$(resolve "$IO_THREADS")"; fi
+          export ARCTICDB_TaskScheduler_LogTaskStats_int=1
+          export ARCTICDB_schedule_loglevel=DEBUG
+          cat > /tmp/spanload.py <<'PY'
+          import os, sys, time
+          import numpy as np
+          import pandas as pd
+          from arcticdb import Arctic
+          import arcticdb_ext.cpp_async as a
+
+          uri = os.environ["SPAN_URI"]
+          ac = Arctic(uri)
+          print(f"pools cpu/io = {a.cpu_thread_count()} / {a.io_thread_count()}", file=sys.stdout)
+          try:
+              ac.delete_library("spans")
+          except Exception:
+              pass
+          lib = ac.create_library("spans")
+          rows, cols, symbols = 50_000, 10, 20
+          frame = pd.DataFrame(
+              np.random.rand(rows, cols),
+              columns=[f"c{i}" for i in range(cols)],
+              index=pd.date_range("2020-01-01", periods=rows, freq="s"),
+          )
+          marks = {}
+          t = time.time()
+          for i in range(symbols):
+              lib.write(f"s{i}", frame)
+          marks["write"] = time.time() - t
+          t = time.time()
+          for i in range(symbols):
+              lib.read(f"s{i}")
+          marks["read"] = time.time() - t
+          t = time.time()
+          for _ in range(5):
+              lib.list_symbols()
+              for i in range(0, symbols, 5):
+                  lib.list_versions(f"s{i}")
+          marks["listing"] = time.time() - t
+          print("SPANLOAD " + " ".join(f"{k}={v:.3f}s" for k, v in marks.items()))
+          PY
+          export SPAN_URI="s3://127.0.0.1:${BUCKET}?access=seaweed&secret=seaweed&port=8333&path_prefix=spans-${WORKER}"
+          /tmp/poolprobe/bin/python -m pip -q install pandas numpy
+          mkdir -p artifacts
+          : > "artifacts/${ARTIFACT}.spanload.task-stats"
+          /tmp/poolprobe/bin/python /tmp/spanload.py 2>> "artifacts/${ARTIFACT}.spanload.task-stats" || echo "::warning::span workload failed on ${WORKER}"
+          records=$(grep -c 'task_stats pool=' "artifacts/${ARTIFACT}.spanload.task-stats" || true)
+          echo "task_stats records captured: $records"
+          # gha 91's own converter, run here rather than offline: a Trace Event document
+          # that writes on a fleet box is the thing the ticket wants to know works.
+          python - <<'PY' || echo "::warning::span conversion failed"
+          import os
+          from pathlib import Path
+          from arctic_winds.task_spans import convert_file
+          artifact = os.environ["ARTIFACT"]
+          out = convert_file(
+              Path(f"artifacts/{artifact}.spanload.task-stats"),
+              Path(f"artifacts/{artifact}.spanload-spans.json"),
+              name=f"{artifact} span workload",
+          )
+          print(f"converted={out.converted} note={out.note!r} tasks={out.tasks} threads={out.threads} "
+                f"seconds={out.seconds} run_seconds={out.run_seconds} lanes={out.queue_lanes} {out.queue_note!r}")
+          PY
+          {
+            echo "### ⏱ task spans — \`$WORKER\`"
+            echo '```'
+            echo "records: $records"
+            tail -5 "artifacts/${ARTIFACT}.spanload.task-stats" | head -5
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: drop the SeaweedFS bucket
         if: always() && inputs.runs_on == '' && inputs.storage != 'LMDB'
         continue-on-error: true
@@ -722,6 +843,7 @@ jobs:
             artifacts/${{ steps.artifact.outputs.name }}.*.speedscope.json
             artifacts/${{ steps.artifact.outputs.name }}.*.perf-speedscope.json
             artifacts/${{ steps.artifact.outputs.name }}.*-spans.json
+            artifacts/${{ steps.artifact.outputs.name }}.spanload.task-stats
           if-no-files-found: warn
           # What makes a failed worker retryable from the run page. `if: always()`
           # means the first attempt usually *did* upload — a lane that goes red on one
