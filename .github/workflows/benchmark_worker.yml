@@ -404,8 +404,15 @@ jobs:
       # perf-speedscope.json` — note the hyphen: that name deliberately does *not* end in
       # `.speedscope.json`, because `collect` classifies by suffix and would otherwise
       # store it as a second payload for a (worker, benchmark) it keeps one of. It is
-      # uploaded so a human can open it and stored nowhere until gha 76. Both globs need
-      # naming separately: the first does not match the second. The monitor's
+      # uploaded so a human can open it and stored nowhere until gha 76. Since gha 91 a
+      # third document rides beside them as `<worker>-<sha8>.<benchmark>-spans.json`: the
+      # task-span timeline of the same window, built on the worker from what ArcticDB
+      # itself logged about its task queues (`TaskScheduler.LogTaskStats`, stock from
+      # v6.24.0) — Chrome Trace Event JSON rather than speedscope, and the hyphen is there
+      # for the same reason the native document's is. All three globs need naming
+      # separately: none of them matches another. A lane whose wheel predates the observer
+      # uploads no such file and loses nothing, which is what `if-no-files-found: warn` is
+      # already tolerant of. The monitor's
       # `<worker>.log` and `status.json` land in the same directory, so name the files
       # explicitly rather than uploading `artifacts/`. This must happen before `stop`
       # terminates the machine.
@@ -424,6 +431,7 @@ jobs:
             artifacts/${{ steps.artifact.outputs.name }}.meta.json
             artifacts/${{ steps.artifact.outputs.name }}.*.speedscope.json
             artifacts/${{ steps.artifact.outputs.name }}.*.perf-speedscope.json
+            artifacts/${{ steps.artifact.outputs.name }}.*-spans.json
           if-no-files-found: warn
           # What makes a failed worker retryable from the run page. `if: always()`
           # means the first attempt usually *did* upload — a lane that goes red on one
