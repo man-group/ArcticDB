@@ -22,6 +22,14 @@
 # held fixed, which is the whole decomposition: whatever of the recorded epoch
 # shift `b/a` reproduces is sizing, and the remainder is the machine.
 #
+# arctic-winds ticket gha 93 reuses this file unchanged but for one spelling: it
+# moves ONLY the IO pool, leaving the CPU pool at the box default, which is the
+# configuration `d::x4` — empty cpu (export nothing), io four times the lane's
+# own core count. That is 16 IO threads on an m6i.xlarge and 32 on an
+# m6i.2xlarge, against the 6 and 12 the box would have sized, with `nproc`
+# CPU threads on both sides. `a::` runs beside it in the same dispatch, so 93's
+# control is drawn from the same fleet at the same moment as its treatment.
+#
 #   wheel ─┐
 #   plan ──┴─► worker (matrix: <lane>_a, <lane>_b, <lane>_c)
 #
@@ -159,8 +167,12 @@ jobs:
               if not name:
                   raise SystemExit(f"configuration {spec!r} has no name")
               for value, label in ((cpu, "cpu"), (io, "io")):
-                  if value and not value.isdigit():
-                      raise SystemExit(f"configuration {spec!r}: {label} is not a number")
+                  # `x<N>` is N times the lane's own core count, resolved on the
+                  # box against `nproc` (arctic-winds gha 93): the only spelling
+                  # that means the same thing on a 4-core and an 8-core lane, so
+                  # one dispatch can carry both.
+                  if value and not (value.isdigit() or (value.startswith("x") and value[1:].isdigit())):
+                      raise SystemExit(f"configuration {spec!r}: {label} is not a number or x<N>")
               configurations.append((name, cpu, io))
           if not configurations:
               raise SystemExit("no configurations")
@@ -205,6 +217,8 @@ jobs:
             echo "| lane | configuration | NumCPUThreads | NumIOThreads | suite | instance |"
             echo "| --- | --- | --- | --- | --- | --- |"
             jq -r '.[] | "| \(.lane) | \(.side) | \(if .cpu_threads == "" then "box default" else .cpu_threads end) | \(if .io_threads == "" then "1.5x cpu" else .io_threads end) | `\(.suite)` | \(.instance_type) |"' <<<"$MATRIX"
+            echo
+            echo "An \`x<N>\` cell is N times that lane's own \`nproc\`, resolved on the box; the pool probe in each lane prints what it actually came out as."
           } >> "$GITHUB_STEP_SUMMARY"
 
   worker:

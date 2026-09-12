@@ -366,8 +366,12 @@ jobs:
           CPU_THREADS: ${{ inputs.cpu_threads }}
           IO_THREADS: ${{ inputs.io_threads }}
         run: |
-          if [ -n "$CPU_THREADS" ]; then export ARCTICDB_VersionStore_NumCPUThreads_int="$CPU_THREADS"; fi
-          if [ -n "$IO_THREADS" ]; then export ARCTICDB_VersionStore_NumIOThreads_int="$IO_THREADS"; fi
+          # `x<N>` means N times this box's own core count, resolved here rather
+          # than in the plan, because `nproc` on the runner is the number
+          # ArcticDB's own default is a function of — see the benchmark step.
+          resolve() { case "$1" in x*) echo $(( $(nproc) * ${1#x} )) ;; *) echo "$1" ;; esac; }
+          if [ -n "$CPU_THREADS" ]; then export ARCTICDB_VersionStore_NumCPUThreads_int="$(resolve "$CPU_THREADS")"; fi
+          if [ -n "$IO_THREADS" ]; then export ARCTICDB_VersionStore_NumIOThreads_int="$(resolve "$IO_THREADS")"; fi
           cat > /tmp/poolprobe.py <<'PY'
           import arcticdb  # its import is what reads the env into the ConfigsMap
           import arcticdb_ext.cpp_async as a
@@ -422,13 +426,26 @@ jobs:
           # the TaskScheduler, which is built lazily on first use. No benchmark
           # module in `python/benchmarks/` sets either key, so nothing overrides
           # this. Delete this block with `benchmark_pool_ab.yml`.
+          #
+          # `x<N>` (arctic-winds gha 93) means N times this box's own core count,
+          # which is the only spelling that can express one configuration across
+          # lanes on different instance types — "4x the lane's CPU count" is
+          # 16 on an m6i.xlarge and 32 on an m6i.2xlarge, and a single dispatch
+          # has to carry both. It is resolved here, on the box, against `nproc`,
+          # because `nproc` is the same number ArcticDB's own default is a
+          # function of (`hardware_concurrency()`, task_scheduler.hpp:196) — so
+          # the multiplier is against the pool size the lane would otherwise
+          # have had, not against a guess made from the instance type's name.
+          # The probe step above resolves it identically and prints both the
+          # variable and the live pool, which is what makes it observed.
+          resolve() { case "$1" in x*) echo $(( $(nproc) * ${1#x} )) ;; *) echo "$1" ;; esac; }
           if [ -n "$CPU_THREADS" ]; then
-            export ARCTICDB_VersionStore_NumCPUThreads_int="$CPU_THREADS"
-            echo "::notice::EXPERIMENT: ${WORKER} pins VersionStore.NumCPUThreads=$CPU_THREADS"
+            export ARCTICDB_VersionStore_NumCPUThreads_int="$(resolve "$CPU_THREADS")"
+            echo "::notice::EXPERIMENT: ${WORKER} pins VersionStore.NumCPUThreads=$ARCTICDB_VersionStore_NumCPUThreads_int"
           fi
           if [ -n "$IO_THREADS" ]; then
-            export ARCTICDB_VersionStore_NumIOThreads_int="$IO_THREADS"
-            echo "::notice::EXPERIMENT: ${WORKER} pins VersionStore.NumIOThreads=$IO_THREADS"
+            export ARCTICDB_VersionStore_NumIOThreads_int="$(resolve "$IO_THREADS")"
+            echo "::notice::EXPERIMENT: ${WORKER} pins VersionStore.NumIOThreads=$ARCTICDB_VersionStore_NumIOThreads_int"
           fi
 
           # One artifact, one wheel in it, and the filename carries no SHA (every
