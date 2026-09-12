@@ -16,8 +16,36 @@
 # each worker (in `benchmark_worker.yml`) and a lean cibuildwheel `build` job feeding
 # `bench --wheel` instead of a PyPI requirement.
 #
-# Triggers mirror `analysis_workflow.yml` exactly, so the shadow sees the same events.
-name: Benchmarks (arctic-winds)
+# ---------------------------------------------------------------------------------
+# GHA 94 — EXPERIMENT COPY. This is the shadow's `benchmark_winds.yml` with two
+# differences and one deletion, and this version of the file lives only on
+# `benchmark-winds-seaweed`:
+#
+# It keeps the filename rather than becoming `benchmark_winds_seaweed.yml`, and that is
+# forced: GitHub registers a `workflow_dispatch` workflow only from the **default
+# branch**, so a file that exists only here has no id and `gh workflow run` answers 404.
+# Dispatching `benchmark_winds.yml --ref benchmark-winds-seaweed` runs *this* branch's
+# version of it, which is exactly the shadow's own trick. The called worker has no such
+# constraint — a `workflow_call` file is resolved by path from the caller — so that half
+# of the experiment does get its own name.
+#
+#
+#   * it calls `benchmark_worker_seaweed.yml`, whose `ARCTICDB_REAL_S3_*` point at the
+#     SeaweedFS the worker already starts, instead of at eu-west-1;
+#   * `create the throwaway test bucket` makes no AWS call — the bucket it names is
+#     created on each worker's own SeaweedFS, by the worker;
+#   * every trigger but `workflow_dispatch` is gone.
+#
+# That last one is not tidiness. This file would otherwise fire on push, on every pull
+# request and nightly on cron, and each firing is a full EC2 matrix. An experiment
+# branch is dispatched by hand or it does not run.
+#
+# Isolation needs no change and gets none: `collect`'s `name the results library` step
+# already sends any ref that is not `master` to `<ref>_winds_asv_results`, so this
+# branch writes `benchmark-winds-seaweed_winds_asv_results` and cannot touch the shadow
+# series.
+# ---------------------------------------------------------------------------------
+name: Benchmarks (arctic-winds, SeaweedFS experiment)
 
 on:
   workflow_dispatch:
@@ -54,26 +82,10 @@ on:
         type: string
         default: ''
 
-  # Push to master, LMDB only, so PR runs have recent master results to compare against.
-  push:
-    branches:
-      - master
-      # TEMPORARY: lets the shadow branch trigger itself on push. (The Actions web
-      # UI cannot list a workflow absent from the default branch, but
-      # `gh workflow run --ref benchmark-winds-shadow` dispatches it fine —
-      # verified 2026-09-02.) Remove at cut-over.
-      - benchmark-winds-shadow
-
-  # Nightly REAL storage — the half the push trigger never measures — falling back to
-  # ALL when the head commit has no push run of its own (see `resolve the storage`).
-  # Same cron as `analysis_workflow.yml`; while both pipelines run, this adds to the
-  # nightly EC2 spend — offset or drop it if that matters.
-  schedule:
-    - cron: '0 0 * * *'
-
-  pull_request:
-    paths-ignore:
-      - "**/*.md"
+  # gha 94: no `push`, no `schedule`, no `pull_request`. Deliberately — see the header.
+  # `gh workflow run --ref benchmark-winds-seaweed` is how this is started, which works
+  # even though the Actions web UI cannot list a workflow absent from the default
+  # branch (verified for the shadow copy, 2026-09-02).
 
 # No workflow-level `concurrency:` block, deliberately. `analysis_workflow.yml` has none
 # either, and `cancel-in-progress` is actively dangerous here: cancelling a run *during* an
@@ -405,21 +417,23 @@ jobs:
       # cannot fail the step: a missing `s3:PutMetricsConfiguration` grant must cost the
       # run its request counts, never its cleanup.
       # ---------------------------------------------------------------------------
-      - name: create the throwaway test bucket
+      # GHA 94: this step now only *names* a bucket. It creates nothing, because there
+      # is nothing central to create: each worker has its own SeaweedFS and makes this
+      # bucket on it (`benchmark_worker_seaweed.yml`, "create this worker's SeaweedFS
+      # bucket"). No AWS call, no AWS secret, and therefore nothing that can be stranded
+      # and billed — which is also why the `delete the throwaway test bucket` step in
+      # `collect` is inert below.
+      #
+      # The name still follows the AWS spelling (lowercase, hyphens, no underscores),
+      # because it becomes the SeaweedFS bucket name and from there a path segment in
+      # the Arctic URI. Every worker in the run uses the same name on its own server;
+      # they cannot collide, since no two share a server.
+      - name: name the per-run bucket
         id: bucket
         if: steps.storage.outputs.storage != 'LMDB'
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_S3_ACCESS_KEY }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_S3_SECRET_KEY }}
-          ARCTICDB_REAL_S3_REGION: eu-west-1
-          ARCTICDB_REAL_S3_ENDPOINT: s3.eu-west-1.amazonaws.com
         run: |
-          random_id=$(openssl rand -hex 4)
-          timestamp=$(date +%s)
-          bucket_name="arcticdb-asv-data-${timestamp}-${random_id}"
-          aws s3 mb --endpoint-url "http://${ARCTICDB_REAL_S3_ENDPOINT}" \
-            --region "${ARCTICDB_REAL_S3_REGION}" "s3://${bucket_name}"
-          echo "Created bucket s3://${bucket_name}"
+          bucket_name="arcticdb-asv-seaweed-$(date +%s)-$(openssl rand -hex 4)"
+          echo "Each worker will create s3://${bucket_name} on its own SeaweedFS"
           printf 'bucket=%s\n' "$bucket_name" >> "$GITHUB_OUTPUT"
           # On the summary because it is the one name a human needs if a run ends
           # without `collect` — or ends red and is abandoned, since `collect` keeps
@@ -859,7 +873,8 @@ jobs:
       matrix:
         include: ${{ fromJson(needs.plan.outputs.matrix) }}
     name: worker ${{ matrix.worker }}
-    uses: ./.github/workflows/benchmark_worker.yml
+    # gha 94: the one substitution that reroutes the storage. Same inputs, same jobs.
+    uses: ./.github/workflows/benchmark_worker_seaweed.yml
     # Carries AWS_S3_*, ARCTICDB_TEST_PAT and ARCTIC_WINDS_DEPLOY_KEY into the call.
     secrets: inherit
     with:
@@ -1133,34 +1148,17 @@ jobs:
       # a re-run is what follows. `head-bucket` tolerates the one green-after-green
       # shape: a managed lane retried on an ALL run finds the first attempt already
       # cleaned up, and that is a done job, not an error.
-      - name: delete the throwaway test bucket
+      # GHA 94: nothing to delete from here. There is no central bucket on this branch —
+      # the name `plan` chose was created on, and dropped by, each worker's own
+      # SeaweedFS, on a box that is terminated immediately afterwards. Kept as a step,
+      # rather than deleted, so that the difference from `benchmark_winds.yml` is one
+      # visible line in a run's log rather than a silently absent job.
+      - name: note that there is no bucket to delete
         if: always() && needs.plan.outputs.bucket != ''
         env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_S3_ACCESS_KEY }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_S3_SECRET_KEY }}
-          ARCTICDB_REAL_S3_REGION: eu-west-1
-          ARCTICDB_REAL_S3_ENDPOINT: s3.eu-west-1.amazonaws.com
           BUCKET: ${{ needs.plan.outputs.bucket }}
-          COLLECT_OUTCOME: ${{ steps.collect.outcome }}
         run: |
-          if [[ $BUCKET != arcticdb-asv-data* ]]; then
-            echo "Unexpected bucket to clean up! ${BUCKET}"
-            echo "This indicates a bug in the workflow. Not deleting anything and exiting..."
-            exit 1
-          fi
-          if [ "$COLLECT_OUTCOME" != success ]; then
-            echo "::warning::Keeping s3://${BUCKET} so 'Re-run failed jobs' can reuse it; the attempt where every worker reports deletes it. If this run is abandoned instead, remove the bucket by hand."
-            exit 0
-          fi
-          if ! aws s3api head-bucket --bucket "$BUCKET" \
-              --endpoint-url "http://${ARCTICDB_REAL_S3_ENDPOINT}" \
-              --region "${ARCTICDB_REAL_S3_REGION}" 2>/dev/null; then
-            echo "Bucket ${BUCKET} is already gone: a previous attempt cleaned up."
-            exit 0
-          fi
-          echo "Removing ${BUCKET}"
-          aws s3 rb --force --endpoint-url "http://${ARCTICDB_REAL_S3_ENDPOINT}" \
-            --region "${ARCTICDB_REAL_S3_REGION}" "s3://${BUCKET}"
+          echo "No AWS bucket was ever created: ${BUCKET} lived on each worker's own SeaweedFS and went with the instance."
 
   # The pull request's page on the benchmark site: this run's numbers, the values
   # already published for the master commit it was judged against, and asv's verdict,
