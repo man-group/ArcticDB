@@ -24,6 +24,12 @@ SEAWEED_FILER_PORT="${SEAWEED_FILER_PORT:-8888}"
 SEAWEED_S3_PORT="${SEAWEED_S3_PORT:-8333}"
 SEAWEED_VOLUME_SIZE_LIMIT_MB="${SEAWEED_VOLUME_SIZE_LIMIT_MB:-2048}"
 SEAWEED_MAX_VOLUMES="${SEAWEED_MAX_VOLUMES:-1000}"
+# Unset by default, so a caller that does not ask for metrics gets byte-identical
+# behaviour to before. Set it and `weed` exposes Prometheus counters — including
+# SeaweedFS_s3_request_total, the per-operation count of what actually reached the S3
+# gateway — on that port. gha 94 uses it to prove benchmarks hit this server rather
+# than inferring it from a wall time.
+SEAWEED_METRICS_PORT="${SEAWEED_METRICS_PORT:-}"
 
 PID_FILE="$SEAWEED_DATA_DIR/weed.pid"
 LOG_FILE="$SEAWEED_DATA_DIR/weed.log"
@@ -95,6 +101,7 @@ start() {
         -s3 \
         -s3.port="$SEAWEED_S3_PORT" \
         -s3.port.iceberg=0 \
+        ${SEAWEED_METRICS_PORT:+-metricsPort="$SEAWEED_METRICS_PORT"} \
         >"$LOG_FILE" 2>&1 &
     echo $! >"$PID_FILE"
 
