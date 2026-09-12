@@ -1,0 +1,187 @@
+# ===========================================================================
+# EXPERIMENT — NOT PART OF THE PIPELINE. Delete this file and the branch it
+# lives on (`benchmark-winds-pilot`) when the experiment is over.
+# ===========================================================================
+#
+# The pilot migration (arctic-winds ticket 08). `python/benchmarks/query_builder.py`
+# on this branch is migrated onto `arctic_winds.suite`: twenty-five `time_`/
+# `peakmem_` methods are thirteen declared bodies, and the twenty-five benchmark
+# NAMES are unchanged, because a declaration is not one series — it is one per
+# metric, named `time_<stem>` and `peakmem_<stem>`.
+#
+# This dispatch runs those lanes with the arctic-winds engine, which is the only
+# program that can run them: asv's discovery knows nothing about a declaration
+# and would find no `query_builder` benchmarks at all. That asymmetry is why
+# there is no `aa` mode here as there was in `benchmark_engine_ab.yml` — the
+# control for this run is ticket 07's own asv-lane `query` artifacts, taken at
+# the same commit, from the same wheel, on the same instance type, over a
+# `python/benchmarks/` tree that is byte-identical to this one except for the
+# migrated module.
+#
+# Like its predecessor it deliberately does NOT collect. Results leave as GitHub
+# artifacts and nothing reaches the results store, so no series — the shadow's
+# least of all — can be touched by a run whose whole question is whether the
+# numbers came out the same.
+#
+# It lives on its own branch rather than on `benchmark-winds-shadow` because a
+# push to the shadow branch starts a full thirteen-lane benchmark run, and
+# thirteen instances is a high price for adding a file. Dispatch with:
+# `gh workflow run benchmark_engine_pilot.yml --ref benchmark-winds-pilot -f …`.
+#
+# The one change this experiment makes outside this file is the `engine` input
+# on `benchmark_worker.yml`, on this branch only, guarded and defaulted off.
+name: EXPERIMENT pilot migration (arctic-winds ticket 08)
+
+on:
+  # The registration push, exactly as `perf_probe.yml` and
+  # `benchmark_engine_ab.yml` spell it: GitHub registers a workflow only once
+  # one of its trigger events can fire, and an unregistered workflow rejects
+  # `workflow_dispatch` too — so a dispatch-only file on a non-default branch
+  # could never be dispatched. Scoped to this branch and this one file; every
+  # job below is guarded on `workflow_dispatch`, so the registration run rents
+  # nothing and finishes in seconds.
+  push:
+    branches: [benchmark-winds-pilot]
+    paths: ['.github/workflows/benchmark_engine_pilot.yml']
+
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: Full sha of the ArcticDB commit every lane benchmarks
+        type: string
+        required: true
+      wheel_run_id:
+        description: >-
+          Run id of a `Benchmarks (arctic-winds)` run whose
+          wheel-cp311-manylinux_x86_64 artifact every lane installs. The same
+          wheel ticket 07's pairs used, so the comparison is of two programs
+          measuring one binary.
+        type: string
+        required: true
+      workers:
+        description: Which of `workers.toml`'s EC2 lanes this experiment runs
+        type: string
+        default: 'query'
+
+jobs:
+  # The wheel is not rebuilt — a rebuilt wheel is a second variable — so it is
+  # fetched once from the run that built it and re-uploaded under the name
+  # `benchmark_worker.yml` already downloads.
+  wheel:
+    name: re-publish the wheel every lane installs
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: wheel-cp311-manylinux_x86_64
+          path: wheel
+          run-id: ${{ inputs.wheel_run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheel-cp311-manylinux_x86_64
+          path: wheel/*.whl
+          if-no-files-found: error
+          retention-days: 7
+          overwrite: true
+
+  # One matrix entry per worker, measured by the engine. The suite and the
+  # instance type come from `workers.toml`, so a lane in the experiment is the
+  # same lane the pipeline runs and not a copy of it — which is what makes
+  # ticket 07's artifacts for that lane a control rather than a coincidence.
+  plan:
+    name: plan the pilot
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"   # `tomllib` is 3.11's
+      - name: build the matrix
+        id: plan
+        env:
+          WORKERS: ${{ inputs.workers }}
+        run: |
+          python - >> "$GITHUB_OUTPUT" <<'PY'
+          import json, os, tomllib
+
+          config = tomllib.load(open("python/benchmarks/workers.toml", "rb"))
+          by_name = {worker["name"]: worker for worker in config["worker"]}
+          wanted = [name.strip() for name in os.environ["WORKERS"].split(",") if name.strip()]
+          missing = [name for name in wanted if name not in by_name]
+          if missing:
+              raise SystemExit(f"not in workers.toml: {', '.join(missing)}")
+
+          entries = []
+          for name in wanted:
+              worker = by_name[name]
+              if worker.get("runs_on"):
+                  # A managed lane is somebody else's machine and its noise is a
+                  # host lottery (gha 38); a comparison on one would measure the lottery.
+                  raise SystemExit(f"{name} is a managed lane; this experiment is EC2-only")
+              ec2 = worker.get("ec2", {})
+              instance = ec2.get("instance_type") or worker.get("instance_type")
+              if not instance:
+                  raise SystemExit(f"{name} names no instance type")
+              entries.append({
+                  "lane": f"{name}_pilot",
+                  "worker": name,
+                  "suite": worker["suite"],
+                  "instance_type": instance,
+              })
+          print("matrix=" + json.dumps(entries, separators=(",", ":")))
+          PY
+
+      - name: report the pilot
+        env:
+          MATRIX: ${{ steps.plan.outputs.matrix }}
+          COMMIT: ${{ inputs.commit }}
+          WHEEL_RUN: ${{ inputs.wheel_run_id }}
+        run: |
+          {
+            echo "### 🧪 pilot migration — \`query_builder.py\` on \`arctic_winds.suite\`"
+            echo
+            echo "- commit: \`$COMMIT\`"
+            echo "- wheel: from run \`$WHEEL_RUN\`"
+            echo "- control: ticket 07's asv-lane \`query\` artifacts at the same commit"
+            echo
+            echo "| lane | measured by | suite | instance |"
+            echo "| --- | --- | --- | --- |"
+            jq -r '.[] | "| \(.lane) | engine | `\(.suite)` | \(.instance_type) |"' <<<"$MATRIX"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  worker:
+    needs: [plan, wheel]
+    if: github.event_name == 'workflow_dispatch'
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJson(needs.plan.outputs.matrix) }}
+    name: ${{ matrix.lane }}
+    uses: ./.github/workflows/benchmark_worker.yml
+    secrets: inherit
+    with:
+      worker: ${{ matrix.lane }}
+      suite: ${{ matrix.suite }}
+      commit: ${{ inputs.commit }}
+      storage: LMDB
+      instance_type: ${{ matrix.instance_type }}
+      runs_on: ''
+      market_type: spot
+      python: "3.11"
+      wheel_artifact: wheel-cp311-manylinux_x86_64
+      # No `profile` and no `reference_commit`: the profile pass re-runs
+      # benchmarks through asv, which an engine lane refuses outright. The pass
+      # over a migrated module is proved locally instead (ticket 08 part C).
+      engine: true

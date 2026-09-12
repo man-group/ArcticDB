@@ -44,6 +44,11 @@ on:
       # whole reason for the pass — exists at all.
       profile:         {required: false, type: string, default: '', description: "regex of benchmarks to profile regardless of verdicts; the run's `profile` dispatch input"}
       reference_commit: {required: false, type: string, default: '', description: "the master commit whose values this run is compared against, for the log; empty when the plan found none"}
+      # EXPERIMENT (arctic-winds ticket 08, branch `benchmark-winds-pilot`).
+      # Default false, so every caller that does not name it gets exactly the
+      # job it got before. `benchmark_engine_pilot.yml` is the only caller that
+      # names it; delete this input and the one block below it with that file.
+      engine:          {required: false, type: boolean, default: false, description: "EXPERIMENT: measure with the arctic-winds engine instead of asv"}
 
 jobs:
   # `benchmark_commits.yml:8-12` calls the shared `ec2_runner_jobs.yml` rather than inlining
@@ -351,6 +356,7 @@ jobs:
           RUNS_ON: ${{ inputs.runs_on }}
           PROFILE: ${{ inputs.profile }}
           REFERENCE_COMMIT: ${{ inputs.reference_commit }}
+          ENGINE: ${{ inputs.engine }}
         run: |
           # One artifact, one wheel in it, and the filename carries no SHA (every
           # non-tag build is `0.0.0.dev0`), so the glob is the only way to name it.
@@ -379,6 +385,21 @@ jobs:
             profile+=(--profile "$PROFILE")
           fi
 
+          # EXPERIMENT (arctic-winds ticket 08). Measure with the arctic-winds
+          # engine instead of asv; everything else about this job — the venv,
+          # the wheel, the environment, the machine facts, the result file and
+          # the sidecar — is unchanged, which is the point. The engine lane is
+          # the only one that can run `query_builder.py` on this branch at all:
+          # the module is migrated onto `arctic_winds.suite`, which asv's
+          # discovery knows nothing about. Delete this block with
+          # `benchmark_engine_pilot.yml`.
+          engine=()
+          if [ "$ENGINE" = "true" ]; then
+            echo "::notice::EXPERIMENT: ${WORKER} is measured by the arctic-winds engine, not asv."
+            engine=(--engine)
+            profile=(--runs-on "$RUNS_ON")   # the engine lane takes no profile pass
+          fi
+
           arctic-winds bench \
             --worker "$WORKER" \
             --suite "$SUITE" \
@@ -390,7 +411,7 @@ jobs:
             --storage "$STORAGE" \
             --instance-type "$INSTANCE_TYPE" \
             --runner-image "$AMI_ID" \
-            "${profile[@]}"
+            "${profile[@]}" "${engine[@]}"
 
       # Artifact name = `<worker>-<sha8>`, and exactly one *result* JSON inside it: that is
       # the contract `collect` reads the worker off, suffix stripped (tickets 07 and 18).
