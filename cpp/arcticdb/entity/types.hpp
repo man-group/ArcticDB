@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include <arcticdb/entity/primitive_types.hpp>
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/util/constructors.hpp>
 #include <arcticdb/storage/memory_layout.hpp>
@@ -17,17 +18,8 @@
 #include <type_traits>
 #include <variant>
 
-#ifdef _WIN32
-// `ssize_t` is defined in `sys/types.h` but it is not ISO C (it simply is POSIX), hence its is not defined natively by
-// MSVC. See: https://learn.microsoft.com/en-us/windows/win32/winprog/windows-data-types
-#include <BaseTsd.h>
-using ssize_t = SSIZE_T;
-#endif
-
 namespace arcticdb {
 
-using NumericId = int64_t;
-using UnsignedId = uint64_t;
 using StringId = std::string;
 using VariantId = std::variant<NumericId, StringId, UnsignedId>;
 using StreamId = VariantId;
@@ -35,13 +27,6 @@ using StreamId = VariantId;
 namespace entity {
 
 using SnapshotId = VariantId;
-using VersionId = uint64_t;
-using SignedVersionId = int64_t;
-using GenerationId = VersionId;
-using timestamp = int64_t;
-using shape_t = int64_t;
-using stride_t = int64_t;
-using position_t = int64_t;
 
 /** The VariantId holds int64 (NumericId) but is also used to store sizes up to uint64, so needs safe conversion */
 inline NumericId safe_convert_to_numeric_id(uint64_t input) {

@@ -6,6 +6,7 @@
  * will be governed by the Apache License, version 2.0.
  */
 #include <arcticdb/codec/codec.hpp>
+#include <arcticdb/column_store/chunked_buffer_hash.hpp>
 #include <arcticdb/column_store/string_pool.hpp>
 #include <arcticdb/stream/protobuf_mappings.hpp>
 #include <arcticdb/entity/performance_tracing.hpp>

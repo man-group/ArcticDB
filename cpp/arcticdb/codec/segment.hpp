@@ -12,6 +12,7 @@
 #include <arcticdb/codec/segment_header.hpp>
 #include <arcticdb/entity/stream_descriptor.hpp>
 #include <arcticdb/util/variant.hpp>
+#include <arcticdb/util/variant_buffer.hpp>
 #include <google/protobuf/arena.h>
 #include <variant>
 #include <any>

@@ -8,8 +8,8 @@
 
 #pragma once
 
+#include <arcticdb/entity/primitive_types.hpp>
 #include <arcticdb/util/preconditions.hpp>
-#include <entity/types.hpp>
 
 #include <cstdint>
 

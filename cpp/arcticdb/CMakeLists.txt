@@ -619,6 +619,7 @@ set(arcticdb_srcs
         util/allocation_tracing.cpp
         util/bitset.cpp
         util/buffer_pool.cpp
+        util/clock.cpp
         util/decimal.cpp
         util/error_code.cpp
         util/global_lifetimes.cpp

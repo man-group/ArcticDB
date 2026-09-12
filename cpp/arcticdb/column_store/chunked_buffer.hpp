@@ -10,12 +10,11 @@
 
 #pragma once
 
+#include <arcticdb/column_store/block.hpp>
+#include <arcticdb/entity/types.hpp>
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/util/allocator.hpp>
 #include <arcticdb/util/constructors.hpp>
-#include <arcticdb/util/bitset.hpp>
-#include <arcticdb/column_store/block.hpp>
-#include <arcticdb/util/hash.hpp>
 #include <arcticdb/util/variant.hpp>
 
 #ifndef DEBUG_BUILD
@@ -23,8 +22,11 @@
 #endif
 
 #include <algorithm>
+#include <vector>
 
 namespace arcticdb {
+
+constexpr size_t bitset_packed_size_bytes2(size_t num_bits) { return (num_bits + 7) / 8; }
 
 /*
  * ChunkedBuffer is an untyped buffer that is composed of blocks of data that can be either regularly or
@@ -733,7 +735,7 @@ class ChunkedBufferImpl {
                     return create_external_block<ExternalMemBlock>(data, capacity, offset, true, regular.extra_bytes);
                 },
                 [&](const entity::detachable_block_config::Packed&) -> BlockType* {
-                    auto* data = allocate_detachable_memory(bitset_packed_size_bytes(capacity));
+                    auto* data = allocate_detachable_memory(bitset_packed_size_bytes2(capacity));
                     return create_external_block<ExternalPackedMemBlock>(data, capacity, offset, size_t{0}, true);
                 }
         );
@@ -811,9 +813,4 @@ std::vector<ChunkedBufferImpl<BlockSize>> split(const ChunkedBufferImpl<BlockSiz
 template<size_t BlockSize>
 ChunkedBufferImpl<BlockSize> truncate(const ChunkedBufferImpl<BlockSize>& input, size_t start_byte, size_t end_byte);
 
-inline void hash_buffer(const ChunkedBuffer& buffer, HashAccum& accum) {
-    for (const auto& block : buffer.blocks()) {
-        accum(block->data(), block->physical_bytes());
-    }
-}
 } // namespace arcticdb

@@ -8,7 +8,6 @@
 
 #pragma once
 
-#include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/log/log.hpp>
 #include <arcticdb/util/timer.hpp>
 
@@ -33,6 +32,11 @@
 #ifdef USE_REMOTERY
 
 #include <Remotery.h>
+#include <utils.pb.h>
+
+namespace arcticdb::proto {
+namespace utils = arcticc::pb2::utils_pb2;
+}
 
 class RemoteryInstance {
   public:

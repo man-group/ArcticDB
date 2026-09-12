@@ -8,10 +8,9 @@
 
 #pragma once
 
-#include <arcticdb/entity/types.hpp>
+#include <arcticdb/entity/primitive_types.hpp>
 
 #include <atomic>
-#include <chrono>
 #include <cstdint>
 #if defined(_WIN32)
 #elif defined(__linux__)
@@ -24,11 +23,7 @@ namespace arcticdb::util {
 
 class SysClock {
   public:
-    static entity::timestamp nanos_since_epoch() {
-        auto now = std::chrono::system_clock::now();
-        auto now_ns = std::chrono::time_point_cast<std::chrono::nanoseconds>(now);
-        return now_ns.time_since_epoch().count();
-    }
+    static entity::timestamp nanos_since_epoch();
     static entity::timestamp coarse_nanos_since_epoch() {
 #if defined(__linux__)
         timespec ts;
