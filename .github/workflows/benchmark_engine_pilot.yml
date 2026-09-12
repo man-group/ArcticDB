@@ -47,7 +47,15 @@ on:
   workflow_dispatch:
     inputs:
       commit:
-        description: Full sha of the ArcticDB commit every lane benchmarks
+        description: >-
+          Full sha of the ArcticDB commit every lane benchmarks. **This is the
+          commit whose `python/benchmarks` is checked out**, not just a label:
+          `benchmark_worker.yml` does `actions/checkout` with `ref: <commit>`,
+          so to measure the MIGRATED module this must be a commit on
+          `benchmark-winds-pilot`. Passing the shadow commit measures the
+          unmigrated module with the engine — a useful control, and not the
+          pilot. The wheel is independent of it (see `wheel_run_id`), so the
+          binary is the same either way.
         type: string
         required: true
       wheel_run_id:
