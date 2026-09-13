@@ -1,0 +1,452 @@
+# ===========================================================================
+# EXPERIMENT — NOT PART OF THE PIPELINE. Delete this file and the branch it
+# lives on (`benchmark-winds-real-ab`) when the experiment is over.
+# ===========================================================================
+#
+# arctic-winds ticket gha 99: the one measurement the 90 → 97 thread cannot make
+# locally. `NumIOThreads` at ArcticDB's own default against `NumIOThreads` at 48,
+# on REAL AWS S3, with real latency and a real service that can say no.
+#
+# It is the intersection of three experiments that already exist on this repo:
+#
+#   * the TREATMENT is gha 93's, in gha 95's `x<N>`/absolute spelling — pin
+#     `VersionStore.NumIOThreads`, never export `NumCPUThreads`, control and
+#     treatment as lanes of ONE dispatch, pinning OBSERVED live per lane;
+#   * the REGIME is the REAL nightly's own — `benchmark_worker_realab.yml` is a
+#     copy of `benchmark_worker.yml`, so the credentials, the endpoint, the
+#     per-run throwaway bucket and the per-lane `path_prefix` isolation are the
+#     pipeline's machinery and not a reimplementation of it;
+#   * the INSTRUMENT is gha 98's `arctic-winds critical-path`, fed by a windowed
+#     span capture that a `spans` dispatch takes on its own lanes.
+#
+#   wheel ─┐
+#   plan ──┴─► worker (matrix: <lane>_a, <lane>_d) ─► teardown
+#
+# WHAT THIS COSTS, and why the lane list is shorter than the fleet's. gha 95
+# counted every S3 operation its twelve seaweed lanes issued, and the two arms
+# issued byte-identical PUT counts, so the bill of the same suite on AWS is
+# known before it is spent (eu-west-1: $0.0054/1k PUT-COPY-POST-LIST,
+# $0.00043/1k GET):
+#
+#   | lane            | PUT+LIST | GET     | $/lane | $/pair |
+#   |-----------------|---------:|--------:|-------:|-------:|
+#   | query           |      253 |  78,664 |  0.035 |  0.070 |
+#   | column_stats    |    5,696 |  55,989 |  0.055 |  0.110 |
+#   | list_versions   |   17,513 | 150,274 |  0.159 |  0.318 |
+#   | basic_functions |   78,473 |  82,473 |  0.459 |  0.918 |
+#   | listing         |   95,482 | 118,497 |  0.567 |  1.133 |
+#   | modification    |  203,445 | 202,211 |  1.186 |  2.371 |
+#
+# All six pairs are $4.92 of requests alone, against a $5 budget that also has
+# to buy EC2, a pilot and a spans pass. `modification` is 48 % of that bill on
+# its own, for the family whose IO-width prediction is the weakest on record
+# (gha 95 measured 0.989 on seaweed and showed the write-side effect is
+# storage-INdependent), so the default lane list drops it. That is a budget
+# decision and it is written down here rather than inferred from the default.
+#
+# Like `benchmark_pool_ab.yml`, `benchmark_engine_ab.yml` and
+# `benchmark_seaweed_io_ab.yml`, this deliberately does NOT collect. Results
+# leave as GitHub artifacts and nothing is written to any results library at
+# all — not even this branch's own — so no series anywhere can be moved by an
+# experiment that deliberately mis-sizes a thread pool.
+name: EXPERIMENT IO threads on real S3 (arctic-winds gha 99)
+
+on:
+  # The registration push, as `benchmark_pool_ab.yml` and
+  # `benchmark_seaweed_io_ab.yml` spell it: GitHub registers a workflow only
+  # once one of its trigger events can fire, and an unregistered workflow
+  # rejects `workflow_dispatch` too. Scoped to this branch and this one file;
+  # every job below is guarded on `workflow_dispatch`, so the registration run
+  # rents nothing, creates no bucket and finishes in seconds.
+  push:
+    branches: [benchmark-winds-real-ab]
+    paths: ['.github/workflows/benchmark_real_io_ab.yml']
+
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: Full sha of the ArcticDB commit every lane benchmarks
+        type: string
+        required: true
+      wheel_run_id:
+        description: >-
+          Run id of a run whose wheel-cp311-manylinux_x86_64 artifact every lane
+          installs. One wheel for the whole experiment, so no lane can differ by
+          its binary.
+        type: string
+        required: true
+      replicate:
+        description: A label for this replicate, e.g. pilot / r1 / spans — it only appears in the summary
+        type: string
+        required: true
+      workers:
+        description: >-
+          Which of this branch's `workers.toml` lanes run. `modification` is
+          omitted from the default on cost grounds; see the header table.
+        type: string
+        default: 'basic_functions,list_versions,column_stats,query,listing'
+      configurations:
+        description: >-
+          Semicolon-separated `<name>:<cpu>:<io>` triples. An empty cpu and io —
+          `a::` — is the control: nothing is exported and ArcticDB sizes its
+          pools off the box (`cpu x 1.5`). A bare integer is an absolute width;
+          `x<N>` is N times the lane's own `nproc`, resolved on the box.
+        type: string
+        default: 'a::;d::48'
+      suite_overwrite:
+        description: >-
+          Replaces every lane's `workers.toml` suite regex with this one. Empty
+          means each lane runs its own suite, which is what a replicate wants.
+        type: string
+        default: ''
+      run_benchmarks:
+        description: >-
+          `false` skips the asv pass entirely. A spans dispatch sets this, so it
+          pays for the windowed capture and nothing else.
+        type: boolean
+        default: true
+      spans:
+        description: >-
+          Non-empty runs the WINDOWED task-span workload
+          (`build_tooling/winds_span_workload.py`) on every lane, under
+          ArcticDB's own `TaskScheduler.LogTaskStats` (gha 91). NEVER set this on
+          a dispatch whose timings are compared — the observer costs +14 % on a
+          millisecond read (gha 83), which on one arm is a second treatment.
+        type: string
+        default: ''
+      report_bucket:
+        description: >-
+          Report-only mode. Name a bucket from an earlier dispatch and this run
+          does nothing but read that bucket's CloudWatch request metrics and
+          print them — the request counts lag ~15 minutes, so the honest way to
+          get a run's full bill is to ask for it afterwards. Rents nothing.
+        type: string
+        default: ''
+
+jobs:
+  # Every lane installs the same bytes. The wheel is not rebuilt per replicate —
+  # a rebuilt wheel is a second variable, and this experiment has exactly one.
+  wheel:
+    name: re-publish the wheel every lane installs
+    if: github.event_name == 'workflow_dispatch' && inputs.report_bucket == ''
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: wheel-cp311-manylinux_x86_64
+          path: wheel
+          run-id: ${{ inputs.wheel_run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheel-cp311-manylinux_x86_64
+          path: wheel/*.whl
+          if-no-files-found: error
+          retention-days: 7
+          overwrite: true
+
+  plan:
+    name: plan the replicate
+    if: github.event_name == 'workflow_dispatch' && inputs.report_bucket == ''
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+      bucket: ${{ steps.bucket.outputs.bucket }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"   # `tomllib` is 3.11's
+
+      - name: build the matrix
+        id: plan
+        env:
+          WORKERS: ${{ inputs.workers }}
+          CONFIGURATIONS: ${{ inputs.configurations }}
+          SUITE_OVERWRITE: ${{ inputs.suite_overwrite }}
+        run: |
+          python - >> "$GITHUB_OUTPUT" <<'PY'
+          import json, os, tomllib
+
+          config = tomllib.load(open("python/benchmarks/workers.toml", "rb"))
+          by_name = {worker["name"]: worker for worker in config["worker"]}
+          wanted = [name.strip() for name in os.environ["WORKERS"].split(",") if name.strip()]
+          missing = [name for name in wanted if name not in by_name]
+          if missing:
+              raise SystemExit(f"not in workers.toml: {', '.join(missing)}")
+
+          configurations = []
+          for spec in os.environ["CONFIGURATIONS"].split(";"):
+              spec = spec.strip()
+              if not spec:
+                  continue
+              parts = spec.split(":")
+              if len(parts) != 3:
+                  raise SystemExit(f"configuration {spec!r} is not <name>:<cpu>:<io>")
+              name, cpu, io = (part.strip() for part in parts)
+              if not name:
+                  raise SystemExit(f"configuration {spec!r} has no name")
+              for value, label in ((cpu, "cpu"), (io, "io")):
+                  # A bare integer is an absolute width — which is what gha 99's
+                  # treatment wants, because gha 97's knee is a property of a
+                  # read's SEGMENT COUNT and not of the box's core count. `x<N>`
+                  # is N times the lane's own `nproc`, resolved on the box, and
+                  # is how gha 93/95 expressed a treatment that had to mean the
+                  # same thing on a 4-core and an 8-core lane.
+                  if value and not (value.isdigit() or (value.startswith("x") and value[1:].isdigit())):
+                      raise SystemExit(f"configuration {spec!r}: {label} is not a number or x<N>")
+              configurations.append((name, cpu, io))
+          if not configurations:
+              raise SystemExit("no configurations")
+
+          entries = []
+          for name in wanted:
+              worker = by_name[name]
+              if worker.get("runs_on"):
+                  # A managed lane is somebody else's machine and its noise is a
+                  # host lottery (gha 38); an A/B on one would measure the lottery.
+                  raise SystemExit(f"{name} is a managed lane; this experiment is EC2-only")
+              ec2 = worker.get("ec2", {})
+              instance = ec2.get("instance_type") or worker.get("instance_type")
+              if not instance:
+                  raise SystemExit(f"{name} names no instance type")
+              for side, cpu, io in configurations:
+                  entries.append({
+                      "lane": f"{name}_{side}",
+                      "worker": name,
+                      "side": side,
+                      "cpu_threads": cpu,
+                      "io_threads": io,
+                      "suite": os.environ.get("SUITE_OVERWRITE") or worker["suite"],
+                      "instance_type": instance,
+                  })
+          print("matrix=" + json.dumps(entries, separators=(",", ":")))
+          PY
+
+      # Deliberately the LAST step of this job, exactly as `benchmark_winds.yml`
+      # has it: `teardown` — the only thing that deletes the bucket — will not
+      # run unless `plan` reached this point, so a bucket created before a step
+      # that then fails is a bucket nothing removes. With nothing after it, the
+      # only way to strand one is for `aws s3 mb` to succeed and the very next
+      # `printf` to fail.
+      #
+      # The name carries the branch, so an orphan is attributable at a glance,
+      # and everything the experiment writes lives under it: cleanup is one
+      # `aws s3 rb --force`, and the per-lane `path_prefix` `bench` sets
+      # (`<lane>-<sha8>/`) keeps control and treatment countable apart inside it.
+      - name: create the throwaway test bucket
+        id: bucket
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_S3_ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_S3_SECRET_KEY }}
+          ARCTICDB_REAL_S3_REGION: eu-west-1
+          ARCTICDB_REAL_S3_ENDPOINT: s3.eu-west-1.amazonaws.com
+        run: |
+          bucket_name="arcticdb-asv-realab-$(date +%s)-$(openssl rand -hex 4)"
+          aws s3 mb --endpoint-url "http://${ARCTICDB_REAL_S3_ENDPOINT}" \
+            --region "${ARCTICDB_REAL_S3_REGION}" "s3://${bucket_name}"
+          echo "Created bucket s3://${bucket_name}"
+          printf 'bucket=%s\n' "$bucket_name" >> "$GITHUB_OUTPUT"
+          echo "- throwaway bucket: \`$bucket_name\` (deleted by \`teardown\`, whatever the lanes did)" \
+            >> "$GITHUB_STEP_SUMMARY"
+          # CloudWatch request metrics, so the run's PUT/GET/LIST counts are the
+          # service's own number and not a model. ~15 minutes of lag, which is
+          # why `report_bucket` exists: dispatch this workflow again afterwards
+          # with the bucket name and it prints the finished counts.
+          if aws s3api put-bucket-metrics-configuration \
+              --endpoint-url "http://${ARCTICDB_REAL_S3_ENDPOINT}" \
+              --region "${ARCTICDB_REAL_S3_REGION}" \
+              --bucket "${bucket_name}" \
+              --id winds \
+              --metrics-configuration '{"Id":"winds"}'; then
+            echo "- S3 request metrics: CloudWatch \`AWS/S3\`, filter id \`winds\` (~15 min lag)" \
+              >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::warning::Could not enable S3 request metrics on ${bucket_name}; the run is unaffected but there will be no CloudWatch request counts."
+          fi
+
+      - name: report the replicate
+        env:
+          MATRIX: ${{ steps.plan.outputs.matrix }}
+          COMMIT: ${{ inputs.commit }}
+          REPLICATE: ${{ inputs.replicate }}
+          WHEEL_RUN: ${{ inputs.wheel_run_id }}
+          BUCKET: ${{ steps.bucket.outputs.bucket }}
+          SPANS: ${{ inputs.spans }}
+          BENCH: ${{ inputs.run_benchmarks }}
+        run: |
+          {
+            echo "### 🧵🪣 IO threads on REAL AWS S3 — \`$REPLICATE\`"
+            echo
+            echo "- commit: \`$COMMIT\`"
+            echo "- wheel: from run \`$WHEEL_RUN\`"
+            echo "- bucket: \`$BUCKET\` (eu-west-1, throwaway, deleted by \`teardown\`)"
+            echo "- storage: \`REAL\` — real AWS S3, the nightly's own credentials and endpoint"
+            echo "- asv pass: \`$BENCH\`   task spans: \`${SPANS:-off}\`"
+            echo
+            echo "| lane | configuration | NumCPUThreads | NumIOThreads | suite | instance |"
+            echo "| --- | --- | --- | --- | --- | --- |"
+            jq -r '.[] | "| \(.lane) | \(.side) | \(if .cpu_threads == "" then "box default" else .cpu_threads end) | \(if .io_threads == "" then "1.5x cpu (default)" else .io_threads end) | `\(.suite)` | \(.instance_type) |"' <<<"$MATRIX"
+            echo
+            echo "An \`x<N>\` cell is N times that lane's own \`nproc\`; a bare integer is absolute. The pool probe in each lane prints what it actually came out as."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  worker:
+    needs: [plan, wheel]
+    if: github.event_name == 'workflow_dispatch' && inputs.report_bucket == ''
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJson(needs.plan.outputs.matrix) }}
+    name: ${{ matrix.lane }}
+    uses: ./.github/workflows/benchmark_worker_realab.yml
+    secrets: inherit
+    with:
+      worker: ${{ matrix.lane }}
+      suite: ${{ matrix.suite }}
+      commit: ${{ inputs.commit }}
+      storage: REAL
+      bucket: ${{ needs.plan.outputs.bucket }}
+      instance_type: ${{ matrix.instance_type }}
+      runs_on: ''
+      market_type: spot
+      python: "3.11"
+      wheel_artifact: wheel-cp311-manylinux_x86_64
+      cpu_threads: ${{ matrix.cpu_threads }}
+      io_threads: ${{ matrix.io_threads }}
+      spans: ${{ inputs.spans }}
+      run_benchmarks: ${{ inputs.run_benchmarks }}
+
+  # The other half of the bucket `plan` created. `always()` and unconditional on
+  # the lanes' verdicts, because unlike the nightly this experiment has no
+  # "re-run failed jobs" story worth keeping a bucket for: a lane is re-run by
+  # re-dispatching (gha 94's pipeline trap — the runner instance is gone and a
+  # retried job queues 180 minutes against a dead label), and a re-dispatch makes
+  # its own bucket. A bucket that survives a red run is a bucket that gets
+  # forgotten and billed.
+  #
+  # It counts before it deletes, per lane prefix, because the object count IS the
+  # PUT floor of the bill and the per-lane split is the endpoint proof's
+  # arithmetic in one place.
+  teardown:
+    name: count and delete the throwaway bucket
+    needs: [plan, worker]
+    if: always() && github.event_name == 'workflow_dispatch' && needs.plan.outputs.bucket != ''
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    steps:
+      - name: count every lane's keys, then drop the bucket
+        env:
+          BUCKET: ${{ needs.plan.outputs.bucket }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_S3_ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_S3_SECRET_KEY }}
+          AWS_DEFAULT_REGION: eu-west-1
+        run: |
+          python3 -m pip install --quiet boto3
+          python3 - <<'PY' | tee /tmp/ledger.md
+          import os
+          import boto3
+
+          bucket = os.environ["BUCKET"]
+          s3 = boto3.client("s3", region_name="eu-west-1")
+          per_prefix, total, size = {}, 0, 0
+          token = None
+          while True:
+              kwargs = {"Bucket": bucket, "MaxKeys": 1000}
+              if token:
+                  kwargs["ContinuationToken"] = token
+              page = s3.list_objects_v2(**kwargs)
+              for item in page.get("Contents", []):
+                  head = item["Key"].split("/", 1)[0]
+                  counts = per_prefix.setdefault(head, [0, 0])
+                  counts[0] += 1
+                  counts[1] += item["Size"]
+                  total += 1
+                  size += item["Size"]
+              token = page.get("NextContinuationToken")
+              if not page.get("IsTruncated"):
+                  break
+          print(f"### 🧾 objects left in `{bucket}` before deletion\n")
+          print("| prefix (lane) | objects | MB |")
+          print("| --- | ---: | ---: |")
+          for head in sorted(per_prefix):
+              objects, octets = per_prefix[head]
+              print(f"| `{head}` | {objects:,} | {octets / 1e6:,.1f} |")
+          print(f"| **total** | **{total:,}** | **{size / 1e6:,.1f}** |")
+          print()
+          print(f"PUT floor at eu-west-1 $0.0054/1k: **${total * 0.0054 / 1000:,.3f}**")
+          PY
+          cat /tmp/ledger.md >> "$GITHUB_STEP_SUMMARY"
+          echo "--- deleting ---"
+          aws s3 rb "s3://${BUCKET}" --force
+          echo "deleted s3://${BUCKET}"
+          echo "- bucket \`$BUCKET\` deleted (prefix delete of the whole experiment)" >> "$GITHUB_STEP_SUMMARY"
+
+  # Report-only mode: no bucket, no instance, no benchmark. CloudWatch keeps the
+  # request metrics for 15 months whether or not the bucket still exists, so the
+  # run's real bill can be read back long after `teardown` swept it.
+  report:
+    name: read a past bucket's CloudWatch request counts
+    if: github.event_name == 'workflow_dispatch' && inputs.report_bucket != ''
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - name: request metrics
+        env:
+          BUCKET: ${{ inputs.report_bucket }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_S3_ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_S3_SECRET_KEY }}
+          AWS_DEFAULT_REGION: eu-west-1
+        run: |
+          python3 -m pip install --quiet boto3
+          python3 - <<'PY' | tee -a "$GITHUB_STEP_SUMMARY"
+          import datetime as dt
+          import os
+          import boto3
+
+          bucket = os.environ["BUCKET"]
+          cw = boto3.client("cloudwatch", region_name="eu-west-1")
+          end = dt.datetime.now(dt.timezone.utc)
+          start = end - dt.timedelta(hours=24)
+          names = [
+              "AllRequests", "GetRequests", "PutRequests", "ListRequests",
+              "DeleteRequests", "HeadRequests", "PostRequests",
+              "4xxErrors", "5xxErrors",
+          ]
+          print(f"### 🧮 CloudWatch request metrics for `{bucket}` (last 24 h)\n")
+          print("| metric | sum |")
+          print("| --- | ---: |")
+          totals = {}
+          for name in names:
+              try:
+                  points = cw.get_metric_statistics(
+                      Namespace="AWS/S3",
+                      MetricName=name,
+                      Dimensions=[
+                          {"Name": "BucketName", "Value": bucket},
+                          {"Name": "FilterId", "Value": "winds"},
+                      ],
+                      StartTime=start, EndTime=end, Period=300, Statistics=["Sum"],
+                  )["Datapoints"]
+                  total = sum(p["Sum"] for p in points)
+              except Exception as exc:  # noqa: BLE001
+                  print(f"| `{name}` | error: {exc!r} |")
+                  continue
+              totals[name] = total
+              print(f"| `{name}` | {total:,.0f} |")
+          write = sum(totals.get(k, 0) for k in ("PutRequests", "ListRequests", "PostRequests"))
+          read = sum(totals.get(k, 0) for k in ("GetRequests", "HeadRequests"))
+          print()
+          print(f"eu-west-1: write-class {write:,.0f} x $0.0054/1k = **${write * 0.0054 / 1000:,.3f}**, "
+                f"read-class {read:,.0f} x $0.00043/1k = **${read * 0.00043 / 1000:,.3f}**, "
+                f"total **${write * 0.0054 / 1000 + read * 0.00043 / 1000:,.3f}**")
+          print()
+          print("`5xxErrors` is S3 pushing back — throttles and internal errors that the client retried.")
+          PY
