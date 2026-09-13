@@ -1,0 +1,851 @@
+# ===========================================================================
+# EXPERIMENT — NOT PART OF THE PIPELINE. Delete this file and the branch it
+# lives on (`benchmark-winds-real-ab`) when the experiment is over.
+# ===========================================================================
+#
+# arctic-winds ticket gha 99. A copy of `benchmark_worker.yml` — so the AWS
+# credentials, the endpoint, the shared throwaway bucket and the `path_prefix`
+# isolation are the REAL nightly's own machinery rather than a
+# reimplementation — with four additions and one subtraction:
+#
+#   + `cpu_threads` / `io_threads`, gha 93's pinning inputs, ported unchanged
+#     from `benchmark_worker_seaweed.yml` (gha 95). Both default to the empty
+#     string, which means "export nothing".
+#   + a pool probe that asks the live `TaskScheduler` what its pools actually
+#     came out as, in the very wheel the benchmarks then run.
+#   + an endpoint proof that reads the REAL bucket back, plus the AWS SDK's own
+#     count of every retry and every 503 it saw. A `storage=REAL` run whose
+#     credentials or bucket are wrong is a fast, green, EMPTY run, because a
+#     disabled storage is a *skip* (gha 94).
+#   + `spans`: a short extra workload under `TaskScheduler.LogTaskStats`, with
+#     gha 91's positional window markers, so ticket 98's `critical-path` has a
+#     per-family window to walk. NEVER on a lane whose timings are compared.
+#   - the reference download, hence the profile pass (gha 94's reasoning: on a
+#     branch with no results library every benchmark is "new", so every lane
+#     would spend its whole profile budget, and the pass re-runs bodies, which
+#     would be a second difference between the arms).
+#
+# It does NOT drop the bucket. On the seaweed branch each worker owned its own
+# server; here every lane shares one AWS bucket, so cleanup is the caller's
+# `teardown` job and nothing else.
+#
+# One benchmark worker, cradle to grave: start an EC2 runner, run one suite on it, upload
+# the result, stop the runner. Install as `.github/workflows/benchmark_worker.yml`.
+#
+# …unless the worker named a `runs_on` label, in which case there is no runner to start
+# and none to stop, and `bench` simply queues against the label. That is gha 26's
+# provider seam, and it has no provider enum: `runs_on` carries a native GitHub label
+# (`windows-latest`), a Blacksmith label, or anything else drop-in, and the only thing
+# this workflow does differently is skip the two jobs it has no business running. Every
+# `inputs.runs_on == ''` guard below is that one distinction and nothing more.
+#
+# Called once per matrix entry by `benchmark_winds.yml`'s `worker` job. The start/stop pair
+# has to live *inside* the matrix job, exactly as `benchmark_commits.yml` does it today:
+# one `machulav/ec2-github-runner` start is one instance with one label, and a matrix's job
+# outputs collapse into a single map, so a shared `start` job cannot hand worker[i] its own
+# label (docs/research/gha-ec2-runner-matrix.md §Q1-Q2). For the same reason results leave
+# this workflow as an **artifact**, never as a workflow output: a reusable workflow run
+# under a matrix keeps only the last output that was set (§Q8).
+#
+# Shadow mode: this runs alongside `analysis_workflow.yml`, which is untouched.
+name: __benchmark_worker
+
+on:
+  workflow_call:
+    inputs:
+      worker:          {required: true,  type: string, description: "worker name from workers.toml; with the commit's sha8 it names the artifact, and alone it is asv's --machine and the results' worker column"}
+      suite:           {required: true,  type: string, description: "the asv --bench regex this worker runs"}
+      commit:          {required: true,  type: string, description: "full sha of the ArcticDB commit under benchmark"}
+      storage:         {required: false, type: string, default: LMDB, description: "LMDB, REAL or ALL"}
+      # `instance_type` is the machine's *identity*, recorded in the sidecar and keyed on
+      # by the epoch machinery. On an EC2 lane it is what `start` rents; on a managed lane
+      # it is the `runs_on` label itself, which is the only name that hardware has (gha 26).
+      instance_type:   {required: false, type: string, default: m6i.4xlarge, description: "EC2 instance type, or the runs-on label on a managed lane"}
+      # Empty = provision an EC2 runner. Non-empty = a label somebody else already answers,
+      # so `start` and `stop` are skipped and `bench` queues against it directly.
+      runs_on:         {required: false, type: string, default: '', description: "a runs-on label to use instead of starting an EC2 runner"}
+      market_type:     {required: false, type: string, default: spot, description: "'spot' or '' for on-demand; ignored on a managed lane"}
+      python:          {required: false, type: string, default: '3.11', description: "interpreter the benchmark venv is built on"}
+      # Two inputs beyond the ticket's list, both with defaults so callers may ignore them:
+      wheel_artifact:  {required: false, type: string, default: wheel-cp311-manylinux_x86_64, description: "name of the wheel artifact this lane installs: one of the run's per-platform build jobs (gha 41). Defaults to the manylinux one, which is what every EC2 lane wants"}
+      bucket:          {required: false, type: string, default: '', description: "throwaway S3 bucket for REAL/ALL storage, created once per run by the plan job (ticket 11)"}
+      # Ticket 48's profile pass. Both are harmless on a lane that does not profile:
+      # `arctic-winds bench` refuses the pass outright on a managed lane and on any
+      # box whose `uname -s` is not Linux, which is where py-spy's `--native` — the
+      # whole reason for the pass — exists at all.
+      profile:         {required: false, type: string, default: '', description: "regex of benchmarks to profile regardless of verdicts; the run's `profile` dispatch input"}
+      reference_commit: {required: false, type: string, default: '', description: "the master commit whose values this run is compared against, for the log; empty when the plan found none"}
+      # EXPERIMENT (arctic-winds gha 93 → 95 → 99). Both default to the empty string,
+      # which means "do not set the variable at all", so a caller that does not name
+      # them gets the job it always got with ArcticDB sizing its pools off the box.
+      # They become `ARCTICDB_VersionStore_NumCPUThreads_int` and
+      # `ARCTICDB_VersionStore_NumIOThreads_int`, which `arcticdb/__init__.py:37` reads
+      # into the ConfigsMap on import, before the TaskScheduler is ever constructed (it
+      # is `call_once`-lazy, `async/task_scheduler.cpp:13-15`).
+      cpu_threads:     {required: false, type: string, default: '', description: "EXPERIMENT: pin VersionStore.NumCPUThreads; empty leaves ArcticDB's own hardware_concurrency default"}
+      io_threads:      {required: false, type: string, default: '', description: "EXPERIMENT: pin VersionStore.NumIOThreads; empty leaves the 1.5x-CPU default"}
+      # EXPERIMENT (arctic-winds gha 99, folding in gha 91). Non-empty runs a short
+      # windowed task-span capture AFTER the measured benchmarks and after the endpoint
+      # proof. It is deliberately NOT the measured workload: `TaskScheduler.LogTaskStats`
+      # costs +14 % on a millisecond read (gha 83), which on a lane whose timings are
+      # compared would be a second treatment. Spans lanes are their own dispatch.
+      spans:           {required: false, type: string, default: '', description: "EXPERIMENT: non-empty captures ArcticDB task_stats from a short extra windowed S3 workload; never set on a lane whose timings are compared"}
+      run_benchmarks:  {required: false, type: boolean, default: true, description: "EXPERIMENT: false skips the asv pass entirely, for a spans-only lane that must not pay for benchmarks it will not compare"}
+
+jobs:
+  # `benchmark_commits.yml:8-12` calls the shared `ec2_runner_jobs.yml` rather than inlining
+  # `machulav/ec2-github-runner`; do the same, so the AMI, subnet, security group and
+  # resource tags stay defined in exactly one place. `instance-type` is the one default we
+  # override, from the `instance_type` `plan` already emits per worker.
+  start:
+    name: start ${{ inputs.worker }} runner
+    # A managed lane has nothing to start: the label already answers. Skipping the job
+    # rather than making it a no-op keeps the run's graph honest about what it rented.
+    if: inputs.runs_on == ''
+    uses: ./.github/workflows/ec2_runner_jobs.yml
+    secrets: inherit
+    with:
+      job_type: start
+      instance-type: ${{ inputs.instance_type }}
+      # Spot: ~42 % cheaper at recent eu-west-1 prices, same instance type hence
+      # comparable numbers; an interruption fails this worker (collect reports it
+      # missing) and costs nothing in the first hour. Research: gha-spot-and-generations.
+      market-type: ${{ inputs.market_type }}
+
+  bench:
+    name: bench ${{ inputs.worker }}
+    needs: [start]
+    # `always()` because on a managed lane `start` is *skipped*, and a skipped need would
+    # otherwise take this job with it. Then the two cases: a label we were given runs
+    # unconditionally, and an EC2 label has to have actually arrived —
+    # `ec2_runner_jobs.yml:22` sets `continue-on-error: true` on the start job, so a
+    # failed start arrives here as a *successful* job with an empty label, and without
+    # that guard the bench job would queue against a label no runner ever claims until
+    # the timeout.
+    if: >-
+      always() && (
+      inputs.runs_on != '' ||
+      (needs.start.result == 'success' && needs.start.outputs.label != '')
+      )
+    runs-on: ${{ inputs.runs_on != '' && inputs.runs_on || needs.start.outputs.label }}
+    # ~31 min expected at N=8 (docs/research/gha-ec2-runner-matrix.md §Q6); today's
+    # `timeout-minutes: 1200` is a $17-per-worker blank cheque. 180 leaves room for the
+    # nightly ALL-storage run without leaving an instance up for a day.
+    #
+    # Sizing the ALL headroom (ticket 11): CI's own ALL run on one box is 230 wall minutes
+    # (run 5b480c5a, 2026-08-29). Summing its per-benchmark durations into this repo's
+    # twelve suites and dividing by the same suites in shadow run f5ea0c14 (LMDB, 12
+    # workers) gives the ALL/LMDB cost ratio per worker: 1.0 for the suites with no
+    # storage parameter at all (arrow, resample, merge), 1.4 query, 2.8 basic_functions,
+    # 3.5 list_versions, 4.5 modification, 5.1 listing, 5.7 column_stats. Applied to each
+    # worker's LMDB wall the worst lane is `modification` at ~55 min, then list_versions
+    # ~35 and column_stats ~32. 180 is >3x the worst estimate, which is the margin S3
+    # throughput on a smaller instance could plausibly eat. Revisit after the first ALL
+    # run measures it rather than infers it.
+    timeout-minutes: 180
+    # The AMI's userland is undocumented — CI logs prove only Docker and the .NET runner's
+    # glibc, never git/python/uv on the host (§Q7). So keep a container, and keep the one
+    # that is known to work on this AMI. No source build happens here any more, so a thin
+    # image (or the bare AMI plus `pre-runner-script`) is a follow-up once someone has read
+    # the AMI. This image also gives `provision_env` the `git` and `c++` it checks for —
+    # its fallback installs them with `apt-get`, which would fail on this RHEL-family image.
+    #
+    # A managed lane gets no container: the image is Linux/amd64 and the label may not be
+    # (`windows-latest` certainly is not), and the whole reason for the container is an
+    # AMI whose userland we cannot read — a GitHub-hosted image is documented and has
+    # python, git and a compiler already. An empty string here is "run on the host".
+    container:
+      image: ${{ inputs.runs_on == '' && 'ghcr.io/man-group/arcticdb-dev:latest' || '' }}
+      # What the profile pass's native recorder needs, and nothing more (gha 74,
+      # proven on the real runner by `perf_probe.yml`, run 34356607182).
+      #
+      # perf's `perf_event_open` is stopped by two independent gates here, and
+      # each capability answers one. Docker's default seccomp filter blocks the
+      # syscall outright, and CAP_PERFMON is what its profile admits it under —
+      # that alone turns EPERM into EACCES and no further. The kernel gate is the
+      # AMI's `perf_event_paranoid = 4`: the Debian/Ubuntu patch that defines
+      # levels 3+ predates CAP_PERFMON and asks for CAP_SYS_ADMIN by name, so
+      # sampling *our own processes* needs it until somebody sets
+      # `perf_event_paranoid=2` on the AMI — at which point CAP_PERFMON alone
+      # suffices and this line loses its second half.
+      #
+      # NOT `--privileged`, and not `--security-opt seccomp=unconfined`: seccomp
+      # and AppArmor stay enforcing, and these two capabilities are the whole of
+      # what is added. A lane that gets neither still profiles — `profiling`
+      # probes once, refuses, and publishes the py-spy flame graphs it always did
+      # (`PERF_REFUSED`).
+      #
+      # The mapping form keeps the same "empty image means run on the host"
+      # normalisation the scalar form relied on, which is what a managed lane
+      # (`runs_on` set) gets — and `options` is empty there too, since there is
+      # no container for it to be options *of*. Worth watching on the first
+      # managed-lane run after this lands.
+      options: ${{ inputs.runs_on == '' && '--cap-add PERFMON --cap-add SYS_ADMIN' || '' }}
+    env:
+      # Credentials and endpoints copied from `benchmark_commits.yml:36-40`. The benchmarks
+      # read ARCTICDB_REAL_S3_* through the process environment; `bench` passes it through.
+      ARCTICDB_REAL_S3_ACCESS_KEY: ${{ secrets.AWS_S3_ACCESS_KEY }}
+      ARCTICDB_REAL_S3_SECRET_KEY: ${{ secrets.AWS_S3_SECRET_KEY }}
+      ARCTICDB_REAL_S3_REGION: eu-west-1
+      ARCTICDB_REAL_S3_ENDPOINT: s3.eu-west-1.amazonaws.com
+      # Empty on LMDB runs; the per-run throwaway bucket otherwise (ticket 11).
+      # Every worker in the run shares this one bucket, where `benchmark_commits.yml:77-85`
+      # gives each of its jobs a bucket to itself. What keeps them apart is
+      # `ARCTICDB_PERSISTENT_STORAGE_SHARED_PATH_PREFIX`, and it is deliberately *not* set
+      # here: `arctic-winds bench` sets it from this job's own `worker` and `commit`
+      # (`bench.py:storage_prefix`, `<worker>-<sha8>`), because that is the one process
+      # that knows both and would override anything set here anyway. ArcticDB reads it in
+      # `real_s3_from_environment_variables(shared_path=True)` and turns it into the
+      # `path_prefix=` of the Arctic URI, which moves both the config library and every
+      # data library under it. Without it twelve workers share one `_arctic_cfg` and one
+      # set of deterministic library names that `create_libraries` deletes on setup.
+      #
+      # `ARCTICDB_REAL_S3_CLEAR` is deliberately absent, as it is in `benchmark_commits.yml`.
+      # Setting it makes the fixture clear the bucket on exit and then assert the *whole
+      # bucket* is empty (`storage_fixtures/s3.py:342-348`, then `S3Bucket.check_bucket`), which
+      # with eleven other workers still writing is both wrong and a guaranteed failure.
+      # Dropping the bucket in `collect` is what cleans up here.
+      ARCTICDB_REAL_S3_BUCKET: ${{ inputs.bucket }}
+      # ---------------------------------------------------------------------------
+      # EXPERIMENT (gha 99) — "did S3 push back at 48 concurrent GETs?" measured from
+      # inside the process that made the requests, not inferred from a wall time.
+      #
+      # `ARCTICDB_s3_loglevel=WARN` is the non-deprecated spelling
+      # (`python/arcticdb/tools.py:96-119`): it sets ArcticDB's own `s3` spdlog stream
+      # to WARN *and* resolves to `AWS.LogLevel = 3`
+      # (`Aws::Utils::Logging::LogLevel::Warn`), which `S3ApiInstance::init` reads and
+      # hands to the AWS C++ SDK's own logger (`cpp/arcticdb/storage/s3/s3_api.cpp:186-189`).
+      # At Warn the SDK writes one line per HTTP error response — carrying the response
+      # code and the S3 exception name, so `SlowDown`, `ServiceUnavailable`,
+      # `RequestTimeout` and `InternalError` are all countable — and one line per retry
+      # sleep. It writes nothing at all when nothing fails, which is what makes it safe
+      # to leave on: an unthrottled lane pays for a file handle.
+      #
+      # `AWS.LogToFile` = 1 sends those lines to `aws_sdk_<date>.log` beside the process
+      # (`Aws::Utils::Logging::DefaultLogSystem`, same call site) rather than through
+      # spdlog to stderr, where asv would swallow them on a green benchmark and where a
+      # throttling storm would flood the run log.
+      #
+      # Set here, in the job `env:`, so it applies IDENTICALLY to both arms — it is a
+      # constant of the experiment, not a treatment. It is a deviation from the REAL
+      # nightly, which runs with the SDK logger off, and it is declared as one.
+      ARCTICDB_s3_loglevel: WARN
+      ARCTICDB_AWS_LogToFile_int: "1"
+      # `benchmark_commits.yml:129-130`: quieten two noisy warnings during the run.
+      ARCTICDB_WARN_ON_WRITING_EMPTY_DATAFRAME: "0"
+      ARCTICDB_LMDBSTORAGE_WARNIFOPENED_STR: all
+      # node20 actions inside this container, as `build_steps.yml:585` does.
+      ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
+    defaults:
+      run: {shell: bash}
+    steps:
+      # `fetch-depth: 1` with an explicit `ref` is enough, and it is what the mock proved
+      # (docs/gha-mock.md). `bench` runs `asv run --python=same <sha>^!`, which does no
+      # checkout and no build; all it asks of git is `git rev-list --first-parent <sha>^! --`
+      # (docs/research/asv-python-same.md §Q1), i.e. that the commit *object* is present.
+      # In a depth-1 clone the commit is the shallow boundary and has no recorded parents,
+      # so `<sha>^!` expands to the commit alone and resolves. `fetch-depth: 0` would drag
+      # ArcticDB's whole history onto every worker for nothing.
+      - name: check out ArcticDB at the commit under benchmark
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit }}
+          fetch-depth: 1
+          # `benchmark_commits.yml:53-57` fetches LFS and uses the PAT; kept for fidelity.
+          # LFS can be dropped once no benchmark module reads an LFS asset.
+          lfs: 'true'
+          token: ${{ secrets.ARCTICDB_TEST_PAT }}
+
+      - name: mark the checkout safe for git
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      # Same run, same repo: no run-id and no token needed. `download-artifact@v8` is the
+      # version ArcticDB pins, and it is proven inside this container on a self-hosted
+      # runner (`build_steps.yml:616-620`).
+      #
+      # `wheel_artifact` is this lane's own platform (gha 41): the caller derived it from
+      # the same `runs_on` label that decided everything else on this job, so a Windows
+      # lane downloads `wheel-cp311-win_amd64` and every EC2 lane the manylinux wheel.
+      # There is no fallback and no guess here on purpose — the plan that named this
+      # artifact is the plan the build jobs were gated on, so if this download 404s the
+      # answer is a routing bug upstream, not a wheel to build on the worker.
+      #
+      # `path:` is workspace-relative rather than `${{ runner.temp }}/wheel`, and that is
+      # not cosmetic: on `windows-latest` `$RUNNER_TEMP` is `D:\a\_temp`, and the
+      # backslashes are escapes to every MSYS tool the `bash` shell below runs — `find`
+      # would look for `D:a_tempwheel`. A relative path is the one spelling that reads
+      # the same on both platforms. The directory lands inside the ArcticDB checkout,
+      # which is as harmless as the arctic-winds checkout already there: `asv run
+      # --python=same` does no checkout and never looks outside python/benchmarks.
+      - name: download the run's wheel
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ inputs.wheel_artifact }}
+          path: wheel
+
+      # The reference values for the profile pass (ticket 48), published once by
+      # `plan` for the whole run; this lane reads its own slice out of them. Only
+      # on a lane that will actually profile, because a managed one has no use for
+      # them, and `continue-on-error` because the pass is a bonus: a download that
+      # 404s (a re-run whose artifacts expired, a plan step that never got there)
+      # costs this worker its regression-triggered profiling and nothing else —
+      # `arctic-winds bench` takes the missing file as an empty reference and says
+      # so in its log.
+      # GHA 99: DISABLED, by `if: false` rather than deletion so the difference from
+      # `benchmark_worker.yml` stays one readable line. Not downloading the reference is
+      # how the profile pass is turned off — `bench` then takes neither a `--reference`
+      # nor a `--profile` regex and profiles nothing. Three reasons on this branch:
+      #
+      #   * **Cost, in billed S3 requests.** The pass re-runs a benchmark body, and every
+      #     re-run pays its `setup_cache`, which deletes and recreates the deterministic
+      #     libraries. On real S3 that is a second seeding, billed.
+      #   * **The arms would differ by more than the pool.** The pass is budget-driven
+      #     (600 s) and coverage-first, so the faster arm profiles *more* benchmarks —
+      #     a difference between the lanes that is not the one under test.
+      #   * **The references are storage-blind** — the results library is named per
+      #     branch, not per storage — so on a REAL lane the regression trigger would
+      #     divide REAL numbers by LMDB ones and flag nearly everything.
+      #
+      # The per-benchmark spans the pass would have produced are bought differently
+      # here: a dedicated spans dispatch, one lane per configuration, running a windowed
+      # workload under `SPANS_ENV` (the step at the bottom of this job).
+      - name: download the run's reference values
+        if: false
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          name: benchmark-reference
+          path: reference
+
+      # The profile pass's native recorder (gha 73/Q6a, gha 75), installed here and not by
+      # the pass: `perf` is a system package outside the bench venv, where `py-spy` is a
+      # wheel the pass can `uv pip install` for itself, and a package manager must never be
+      # able to fail a benchmark job. `continue-on-error` because that is exactly what this
+      # is — a lane whose install fails probes, refuses in one line and publishes the
+      # py-spy flame graphs it always did (`profiling.PERF_ABSENT`).
+      #
+      # AlmaLinux 8 userland, so `dnf` and not `apt-get`. gha 74 measured what this gets
+      # you: perf 4.18 against a 6.2 kernel, which is harmless for user-space sampling and
+      # costs one line of "Couldn't synthesize bpf events" noise per recording. Only on the
+      # EC2 lane — a managed lane is somebody else's machine and does not profile at all
+      # (`why_not_profiled`).
+      - name: install perf
+        if: inputs.runs_on == ''
+        continue-on-error: true
+        shell: bash
+        run: dnf install -y perf
+
+      # arctic-winds is a private repo today, so it is checked out with a read-only deploy
+      # key (`ARCTIC_WINDS_DEPLOY_KEY`, see the README) rather than pip-installed from a
+      # URL. It lands *inside* the ArcticDB checkout, which is harmless: `asv run
+      # --python=same <sha>^!` does no checkout and never looks outside python/benchmarks.
+      # A public repo — or a move into man-group — makes the key unnecessary.
+      # `ssh-key` needs an `ssh` binary in the container; if the dev image turns out not
+      # to have one, `dnf install -y openssh-clients` in a step above fixes it.
+      - name: check out arctic-winds
+        uses: actions/checkout@v4
+        with:
+          repository: G-D-Petrov/arctic-winds
+          ref: main
+          path: arctic-winds
+          ssh-key: ${{ secrets.ARCTIC_WINDS_DEPLOY_KEY }}
+
+      # Only on a managed lane. The EC2 lane's container ships the interpreter this needs;
+      # a GitHub-hosted image ships several and defaults to whichever is on PATH, which on
+      # `windows-latest` is not the 3.11 arctic-winds requires (>=3.11,<3.12).
+      - name: set up python
+        if: inputs.runs_on != ''
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: install arctic-winds
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install ./arctic-winds
+
+      # Exit 1 = benchmarks failed but the result JSON exists: the job must go red *and*
+      # the artifact must still be uploaded. Exit 2 = nothing to upload (ticket 05).
+      # No `--home`: unlike a GitHub-hosted runner, this container's own $HOME is usable
+      # and holds the uv cache, the venv and `~/.asv-machine.json`.
+      # One SeaweedFS per worker, as `benchmark_commits.yml:110-114` runs one per commit
+      # job: `merge_functions` (and any future module using `seaweed_utils`) talks to
+      # 127.0.0.1:8333 and fails its setup_cache without it (first shadow run, 2026-09-01).
+      # The action's market-type validation is dead code, so ask the instance what it is.
+      # The AMI id is the one line of this that outlives the log: `bench` records it in
+      # the sidecar, so a whole run moving at once can afterwards be read as a runner
+      # image change rather than a regression (ticket 22). IMDS saying nothing is
+      # `unknown`, and an empty `--runner-image` is how the sidecar spells that.
+      #
+      # A managed lane has no IMDS to ask, so gha 26's answer is the environment GitHub
+      # sets on every hosted runner: `ImageOS`/`ImageVersion` are the image (the machine's
+      # AMI equivalent, and the thing GitHub rolls forward under a fixed label), and
+      # `RUNNER_ENVIRONMENT` says `github-hosted` or `self-hosted` — which is the
+      # difference between a shared VM and somebody's own box under the same label. Both
+      # ride in `--runner-image`, so no schema changed to carry them. The rest of the
+      # machine's identity — CPU model, core count, RAM — is probed by `bench` itself and
+      # already lands in the results (portably, from gha 36 onward); together with the
+      # label as `instance_type` that is the full identity gha 26 asked for, which matters
+      # because the same label is 4c/16GB on a public repo and 2c/8GB on a private one.
+      - name: record the runner's image and lifecycle
+        id: runner
+        run: |
+          if [ -n "${{ inputs.runs_on }}" ]; then
+            image="${RUNNER_ENVIRONMENT:-unknown}:${ImageOS:-unknown}/${ImageVersion:-unknown}"
+            echo "runner: ${{ inputs.runs_on }} image=$image arch=$RUNNER_ARCH" | tee -a "$GITHUB_STEP_SUMMARY"
+            printf 'ami=%s\n' "$image" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          token=$(curl -sS -m 2 -X PUT http://169.254.169.254/latest/api/token -H 'X-aws-ec2-metadata-token-ttl-seconds: 60' || true)
+          meta() { curl -sS -m 2 -H "X-aws-ec2-metadata-token: $token" "http://169.254.169.254/latest/meta-data/$1" 2>/dev/null || echo unknown; }
+          ami=$(meta ami-id)
+          echo "runner: $(meta instance-id) $(meta instance-type) ami=$ami lifecycle=$(meta instance-life-cycle) az=$(meta placement/availability-zone)" | tee -a "$GITHUB_STEP_SUMMARY"
+          if [ "$ami" = unknown ]; then ami=''; fi
+          printf 'ami=%s\n' "$ami" >> "$GITHUB_OUTPUT"
+
+      # `start_seaweed.sh` is a bash script that fetches a Linux binary, and only
+      # `merge_functions` needs what it serves — which no managed lane runs, because the
+      # suite subset those lanes get is chosen to ask nothing of the platform.
+      - name: start SeaweedFS
+        if: inputs.runs_on == ''
+        shell: bash -el {0}
+        run: build_tooling/start_seaweed.sh start
+
+      # `<worker>-<sha8>`: one artifact per (worker, commit), because `run_all_benchmarks`
+      # fans out over every release tag and two commits' `version_chain` jobs would
+      # otherwise upload the same artifact name (ticket 18). The commit arrives in full —
+      # `actions/checkout` above needs all 40 characters — so the short form is derived
+      # here, and `collect` strips the suffix back off to name the worker.
+      - name: name this worker's artifact
+        id: artifact
+        env:
+          WORKER: ${{ inputs.worker }}
+          COMMIT: ${{ inputs.commit }}
+        run: printf 'name=%s\n' "$WORKER-${COMMIT:0:8}" >> "$GITHUB_OUTPUT"
+
+      # EXPERIMENT (arctic-winds gha 93 → 95 → 99). The pinning has to be *observed*,
+      # not assumed: this asks the very wheel the benchmarks are about to run what size
+      # its pools came out, in a throwaway venv, with the same two variables exported
+      # that the benchmark step exports. `cpu_thread_count()` and `io_thread_count()`
+      # are the live TaskScheduler's own fields (`async/python_bindings.cpp:30-31`);
+      # `get_default_cpu_count()` and `get_default_io_count()` are what the ConfigsMap
+      # resolved (`:32-33`). Printing all four distinguishes "the env was read" from
+      # "the pool was built that way", which is the whole claim.
+      #
+      # The venv it builds is reused by the endpoint-proof and spans steps below, which
+      # need an `arcticdb` and a `boto3` that are not asv's.
+      #
+      # `continue-on-error`: this is evidence, never a gate. A lane whose probe fails
+      # still measures; it just cannot prove its own pinning, and the run log says so.
+      - name: observe the pool sizes this lane will run with
+        continue-on-error: true
+        env:
+          CPU_THREADS: ${{ inputs.cpu_threads }}
+          IO_THREADS: ${{ inputs.io_threads }}
+        run: |
+          # `x<N>` means N times this box's own core count, resolved here rather than
+          # in the plan, because `nproc` on the runner is the number ArcticDB's own
+          # default is a function of — see the benchmark step.
+          resolve() { case "$1" in x*) echo $(( $(nproc) * ${1#x} )) ;; *) echo "$1" ;; esac; }
+          if [ -n "$CPU_THREADS" ]; then export ARCTICDB_VersionStore_NumCPUThreads_int="$(resolve "$CPU_THREADS")"; fi
+          if [ -n "$IO_THREADS" ]; then export ARCTICDB_VersionStore_NumIOThreads_int="$(resolve "$IO_THREADS")"; fi
+          cat > /tmp/poolprobe.py <<'PY'
+          import arcticdb  # its import is what reads the env into the ConfigsMap
+          import arcticdb_ext.cpp_async as a
+          print(f"resolved default cpu/io           = {a.get_default_cpu_count()} / {a.get_default_io_count()}")
+          print(f"TaskScheduler cpu/io thread_count = {a.cpu_thread_count()} / {a.io_thread_count()}")
+          PY
+          wheel=$(find wheel -name '*.whl' | head -1)
+          python -m venv /tmp/poolprobe
+          /tmp/poolprobe/bin/python -m pip -q install "$wheel"
+          echo "### 🧵 pool probe — \`${{ inputs.worker }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "nproc                                   = $(nproc)"
+            echo "ARCTICDB_VersionStore_NumCPUThreads_int = ${ARCTICDB_VersionStore_NumCPUThreads_int:-<unset>}"
+            echo "ARCTICDB_VersionStore_NumIOThreads_int  = ${ARCTICDB_VersionStore_NumIOThreads_int:-<unset>}"
+            /tmp/poolprobe/bin/python /tmp/poolprobe.py
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      # `--instance-type` is the one fact this job cannot read off its own box — an EC2
+      # runner's metadata is not the plan's word — so it is passed down from the input the
+      # matrix filled, and `bench` records it in the sidecar (ticket 13). `--runner-image`
+      # is the other half of that record and travels the other way: only the box knows
+      # which AMI it booted from, so the IMDS step above read it and hands it over here.
+      - name: benchmark
+        # GHA 99: a spans dispatch sets `run_benchmarks: false` and buys nothing timed.
+        # Skipping the pass outright rather than narrowing it to one cheap regex is what
+        # keeps a spans lane's S3 bill down to the windowed workload's own requests.
+        if: inputs.run_benchmarks
+        env:
+          CPU_THREADS: ${{ inputs.cpu_threads }}
+          IO_THREADS: ${{ inputs.io_threads }}
+          WORKER: ${{ inputs.worker }}
+          SUITE: ${{ inputs.suite }}
+          COMMIT: ${{ inputs.commit }}
+          ARTIFACT: ${{ steps.artifact.outputs.name }}
+          STORAGE: ${{ inputs.storage }}
+          PYTHON: ${{ inputs.python }}
+          INSTANCE_TYPE: ${{ inputs.instance_type }}
+          AMI_ID: ${{ steps.runner.outputs.ami }}
+          RUNS_ON: ${{ inputs.runs_on }}
+          PROFILE: ${{ inputs.profile }}
+          REFERENCE_COMMIT: ${{ inputs.reference_commit }}
+        run: |
+          # EXPERIMENT (arctic-winds gha 93 → 95 → 99). Exported rather than put in this
+          # step's `env:` block, because the empty string is not the same answer as
+          # "unset": `set_config_from_env_vars` would take `""` for an int, log an error
+          # and leave the key unset — noise that reads like a failure. Exporting only
+          # what was asked for keeps an unpinned lane's environment byte-identical to
+          # production's.
+          #
+          # The variables reach the benchmarks by plain inheritance: `bench` runs asv
+          # with `{**os.environ, **run_env}` (`arctic_winds/local.py:34`), asv spawns the
+          # benchmark process, and `arcticdb/__init__.py:37` reads the environment into
+          # the ConfigsMap on import — before anything asks for the TaskScheduler, which
+          # is built lazily on first use. No benchmark module in `python/benchmarks/`
+          # sets either key, so nothing overrides this.
+          #
+          # `x<N>` means N times this box's own core count, resolved here, on the box,
+          # against `nproc`, because `nproc` is the same number ArcticDB's own default is
+          # a function of (`hardware_concurrency()`, task_scheduler.hpp:196). A bare
+          # integer is an absolute width, which is what gha 99's treatment wants: gha
+          # 97's knee is a property of the READ's segment count, not of the core count,
+          # so "48" has to mean 48 on a 4-core lane as well as on an 8-core one.
+          resolve() { case "$1" in x*) echo $(( $(nproc) * ${1#x} )) ;; *) echo "$1" ;; esac; }
+          if [ -n "$CPU_THREADS" ]; then
+            export ARCTICDB_VersionStore_NumCPUThreads_int="$(resolve "$CPU_THREADS")"
+            echo "::notice::EXPERIMENT: ${WORKER} pins VersionStore.NumCPUThreads=$ARCTICDB_VersionStore_NumCPUThreads_int"
+          fi
+          if [ -n "$IO_THREADS" ]; then
+            export ARCTICDB_VersionStore_NumIOThreads_int="$(resolve "$IO_THREADS")"
+            echo "::notice::EXPERIMENT: ${WORKER} pins VersionStore.NumIOThreads=$ARCTICDB_VersionStore_NumIOThreads_int"
+          fi
+
+          # One artifact, one wheel in it, and the filename carries no SHA (every
+          # non-tag build is `0.0.0.dev0`), so the glob is the only way to name it.
+          wheel=$(find wheel -name '*.whl' | head -1)
+          if [ -z "$wheel" ]; then
+            echo "::error::No wheel in the ${{ inputs.wheel_artifact }} artifact."
+            exit 1
+          fi
+          echo "wheel: $wheel"
+
+          # Ticket 48. `--runs-on` is what tells `bench` this is a managed lane, and
+          # it is passed even when empty because the empty string is the answer that
+          # means "ours, profile it". `--reference` is only added when the file is
+          # actually there — an absent option and an unreadable file mean the same
+          # thing to `bench`, but only the option's absence is honest about a
+          # download that never happened. With neither a reference nor a regex the
+          # job takes no profile pass at all, which is what a managed lane gets.
+          profile=(--runs-on "$RUNS_ON")
+          if [ -f reference/reference-values.json ]; then
+            echo "reference values: reference/reference-values.json (${REFERENCE_COMMIT:-none})"
+            profile+=(--reference reference/reference-values.json)
+          elif [ -z "$RUNS_ON" ]; then
+            echo "::notice::No reference values reached ${WORKER}; nothing will be profiled for a regression this run."
+          fi
+          if [ -n "$PROFILE" ]; then
+            profile+=(--profile "$PROFILE")
+          fi
+
+          arctic-winds bench \
+            --worker "$WORKER" \
+            --suite "$SUITE" \
+            --commit "$COMMIT" \
+            --tree . \
+            --wheel "$wheel" \
+            --output "artifacts/$ARTIFACT.json" \
+            --python "$PYTHON" \
+            --storage "$STORAGE" \
+            --instance-type "$INSTANCE_TYPE" \
+            --runner-image "$AMI_ID" \
+            "${profile[@]}"
+
+      # Artifact name = `<worker>-<sha8>`, and exactly one *result* JSON inside it: that is
+      # the contract `collect` reads the worker off, suffix stripped (tickets 07 and 18).
+      # The `<worker>-<sha8>.meta.json` sidecar goes up beside it — `collect` takes it as
+      # this worker's metadata, never as a second result (ticket 13). So do the profile
+      # pass's `<worker>-<sha8>.<benchmark>.speedscope.json` flame graphs, which `collect`
+      # tells apart by that suffix and files under the benchmark the sidecar says each one
+      # is of (ticket 48); the glob matches nothing on a lane that profiled nothing, which
+      # is what `if-no-files-found: warn` is already tolerant of. Since gha 75 a native
+      # recording rides beside each of them as `<worker>-<sha8>.<benchmark>.
+      # perf-speedscope.json` — note the hyphen: that name deliberately does *not* end in
+      # `.speedscope.json`, because `collect` classifies by suffix and would otherwise
+      # store it as a second payload for a (worker, benchmark) it keeps one of. It is
+      # uploaded so a human can open it and stored nowhere until gha 76. Since gha 91 a
+      # third document rides beside them as `<worker>-<sha8>.<benchmark>-spans.json`: the
+      # task-span timeline of the same window, built on the worker from what ArcticDB
+      # itself logged about its task queues (`TaskScheduler.LogTaskStats`, stock from
+      # v6.24.0) — Chrome Trace Event JSON rather than speedscope, and the hyphen is there
+      # for the same reason the native document's is. All three globs need naming
+      # separately: none of them matches another. A lane whose wheel predates the observer
+      # uploads no such file and loses nothing, which is what `if-no-files-found: warn` is
+      # already tolerant of. The monitor's
+      # `<worker>.log` and `status.json` land in the same directory, so name the files
+      # explicitly rather than uploading `artifacts/`. This must happen before `stop`
+      # terminates the machine.
+      # ---------------------------------------------------------------------------
+      # GHA 99 — THE PROOF, and the S3-pushback reading, in one step.
+      #
+      # The proof half is gha 94's rule carried onto real AWS. A `storage=REAL` run
+      # whose bucket or credentials are wrong does not go red: every
+      # storage-parameterised class turns a disabled storage into a *skip*
+      # (`is_storage_enabled` → `create_libraries` returns `None`s → `SkipNotImplemented`),
+      # so it looks exactly like a fast, green, EMPTY run. Three readings:
+      #
+      #  1. **The bucket, under this lane's own prefix.** `bench` puts every key under
+      #     `<worker>-<sha8>/` (`bench.py:storage_prefix`), and the lane name carries the
+      #     configuration, so control and treatment write to disjoint prefixes of one
+      #     bucket and each can be counted alone. Object count and byte total are the
+      #     PUT floor this run is billed on, and the key layout (`{prefix}/_arctic_cfg`,
+      #     `{prefix}/{lib}{nanos}`) is the S3 one, not an LMDB directory.
+      #  2. **The AWS SDK's own error log.** Every `aws_sdk_*.log` the benchmark
+      #     processes wrote, grepped for HTTP response codes, S3 exception names and
+      #     retry sleeps. This is "did S3 push back at 48 concurrent GETs" measured from
+      #     inside the client, per lane, with no CloudWatch lag and no per-bucket
+      #     aggregation to unmix. An empty count is a real answer: S3 did not push back.
+      #  3. **The LMDB path, which must be empty.** A silent fallback leaves `.mdb`
+      #     files; a real S3 run leaves none.
+      #
+      # `continue-on-error` and `|| true` throughout: evidence, never a gate.
+      # ---------------------------------------------------------------------------
+      - name: prove the benchmarks hit the real bucket, and count S3 pushback
+        if: always() && inputs.storage != 'LMDB'
+        continue-on-error: true
+        env:
+          BUCKET: ${{ inputs.bucket }}
+          WORKER: ${{ inputs.worker }}
+          ARTIFACT: ${{ steps.artifact.outputs.name }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_S3_ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_S3_SECRET_KEY }}
+          AWS_DEFAULT_REGION: eu-west-1
+        run: |
+          mkdir -p artifacts
+          /tmp/poolprobe/bin/python -m pip -q install boto3 || python -m pip -q install boto3
+          cat > /tmp/proof.py <<'PY'
+          import json, os, re, sys
+          from pathlib import Path
+
+          bucket, prefix = os.environ["BUCKET"], os.environ["ARTIFACT"]
+          out = {"bucket": bucket, "prefix": prefix}
+
+          # ---- 1. the bucket, under this lane's prefix -----------------------------
+          try:
+              import boto3
+              s3 = boto3.client("s3", region_name=os.environ.get("AWS_DEFAULT_REGION", "eu-west-1"))
+              objects, total, sample = 0, 0, []
+              token = None
+              while True:
+                  kwargs = {"Bucket": bucket, "Prefix": f"{prefix}/", "MaxKeys": 1000}
+                  if token:
+                      kwargs["ContinuationToken"] = token
+                  page = s3.list_objects_v2(**kwargs)
+                  for item in page.get("Contents", []):
+                      objects += 1
+                      total += item["Size"]
+                      if len(sample) < 15:
+                          sample.append(item["Key"])
+                  token = page.get("NextContinuationToken")
+                  if not page.get("IsTruncated"):
+                      break
+              out["objects"] = objects
+              out["bytes"] = total
+              out["sample_keys"] = sample
+          except Exception as exc:  # noqa: BLE001 — evidence, never a gate
+              out["bucket_error"] = repr(exc)
+
+          # ---- 2. what the AWS SDK logged --------------------------------------------
+          # At `LogLevel::Warn` the SDK writes one line per HTTP error response, carrying
+          # the response code and the S3 exception name, and one line per retry sleep.
+          # Nothing is written when nothing fails.
+          codes, exceptions, retries, lines, files = {}, {}, 0, 0, []
+          for root in {Path.home(), Path.cwd(), Path("/tmp")}:
+              for log in root.rglob("aws_sdk_*.log"):
+                  files.append(str(log))
+                  try:
+                      text = log.read_text(errors="replace")
+                  except OSError:
+                      continue
+                  for line in text.splitlines():
+                      lines += 1
+                      code = re.search(r"HTTP response code:\s*(\d+)", line)
+                      if code:
+                          codes[code.group(1)] = codes.get(code.group(1), 0) + 1
+                      name = re.search(r"Exception name:\s*([A-Za-z]*)", line)
+                      if name and name.group(1):
+                          exceptions[name.group(1)] = exceptions.get(name.group(1), 0) + 1
+                      if "now waiting" in line and "before attempting again" in line:
+                          retries += 1
+          out["aws_sdk_log_files"] = len(files)
+          out["aws_sdk_log_lines"] = lines
+          out["http_response_codes"] = codes
+          out["s3_exception_names"] = exceptions
+          out["retry_sleeps"] = retries
+
+          # ---- 3. the LMDB path, which must be empty ---------------------------------
+          mdb = []
+          for root in {Path.home() / ".asv", Path.cwd()}:
+              try:
+                  mdb += [str(p) for p in root.rglob("*.mdb") if p.stat().st_size > 1024]
+              except OSError:
+                  pass
+          out["mdb_files_over_1k"] = mdb[:20]
+          out["mdb_count"] = len(mdb)
+
+          Path(f"artifacts/{prefix}.s3-proof.json").write_text(json.dumps(out, indent=2))
+          print(json.dumps(out, indent=2)[:6000])
+          PY
+          {
+            echo "### 🪣 real-S3 endpoint proof and pushback — \`$WORKER\`"
+            echo '```json'
+            /tmp/poolprobe/bin/python /tmp/proof.py || python /tmp/proof.py || echo '{"proof":"failed"}'
+            echo '```'
+          } 2>&1 | tee -a "$GITHUB_STEP_SUMMARY" || true
+
+      # ---------------------------------------------------------------------------
+      # GHA 99 — the windowed span capture, for ticket 98's `critical-path`.
+      #
+      # A SEPARATE workload, on its own `path_prefix`, run only on a spans dispatch and
+      # never beside timings that are compared: `TaskScheduler.LogTaskStats` costs +14 %
+      # on a millisecond read (gha 83), which on one arm of an A/B is a second treatment.
+      #
+      # `SPANS_ENV` is `ARCTICDB_TaskScheduler_LogTaskStats_int=1` +
+      # `ARCTICDB_schedule_loglevel=DEBUG` (`arctic_winds/profiling.py:1019-1024`): a
+      # stock wheel from v6.24.0 registers `TaskStatsLoggingObserver` on both pools and
+      # writes one `task_stats pool= thread= task_id= enqueue_ns= wait_ns= run_ns=` line
+      # per completed task to **stderr**.
+      #
+      # The windows are gha 91's positional protocol, `arctic-winds-span-window <name>
+      # begin` / `… end` (`arctic_winds/task_spans.py:105`, `:286-311`). On the fleet's
+      # profile pass a shell `echo` writes them around a py-spy attach and they are
+      # numbered; here the workload writes them ITSELF with `os.write(2, …)` — the same
+      # file descriptor spdlog writes the records to, so ordering is guaranteed without a
+      # clock, which is the whole point of a positional protocol (`task_spans.py:112-119`)
+      # — and NAMES them, which `critical_path.window_labels` already supports
+      # (`critical_path.py:513-521`) and nothing in the fleet had yet used.
+      #
+      # One window per benchmark FAMILY at one representative combination, which is the
+      # coverage this ticket can afford: the profile pass would give per-benchmark
+      # windows, but it re-runs bodies (billed S3 seeding) and spends a coverage-first
+      # budget that the faster arm would spend differently — two differences between the
+      # arms that are not the pool.
+      # ---------------------------------------------------------------------------
+      - name: capture windowed task spans
+        if: always() && inputs.spans != '' && inputs.storage != 'LMDB'
+        continue-on-error: true
+        env:
+          CPU_THREADS: ${{ inputs.cpu_threads }}
+          IO_THREADS: ${{ inputs.io_threads }}
+          BUCKET: ${{ inputs.bucket }}
+          WORKER: ${{ inputs.worker }}
+          ARTIFACT: ${{ steps.artifact.outputs.name }}
+          ARCTICDB_REAL_S3_BUCKET: ${{ inputs.bucket }}
+        run: |
+          resolve() { case "$1" in x*) echo $(( $(nproc) * ${1#x} )) ;; *) echo "$1" ;; esac; }
+          if [ -n "$CPU_THREADS" ]; then export ARCTICDB_VersionStore_NumCPUThreads_int="$(resolve "$CPU_THREADS")"; fi
+          if [ -n "$IO_THREADS" ]; then export ARCTICDB_VersionStore_NumIOThreads_int="$(resolve "$IO_THREADS")"; fi
+          export ARCTICDB_TaskScheduler_LogTaskStats_int=1
+          export ARCTICDB_schedule_loglevel=DEBUG
+          /tmp/poolprobe/bin/python -m pip -q install pandas numpy
+          mkdir -p artifacts
+          # The workload builds the same URI the suite's own
+          # `real_s3_from_environment_variables(shared_path=True)` would, and reads the
+          # prefix out of this variable exactly as the fixture does
+          # (`storage_fixtures/s3.py:403`). A prefix of its own, so the capture's traffic
+          # can never be mistaken for the benchmarks'.
+          export ARCTICDB_PERSISTENT_STORAGE_SHARED_PATH_PREFIX="spans-${WORKER}"
+          : > "artifacts/${ARTIFACT}.spanload.task-stats"
+          /tmp/poolprobe/bin/python "$GITHUB_WORKSPACE/build_tooling/winds_span_workload.py" \
+            2>> "artifacts/${ARTIFACT}.spanload.task-stats" \
+            | tee "artifacts/${ARTIFACT}.spanload.out" \
+            || echo "::warning::span workload failed on ${WORKER}"
+          records=$(grep -c 'task_stats pool=' "artifacts/${ARTIFACT}.spanload.task-stats" || true)
+          windows=$(grep -c 'arctic-winds-span-window' "artifacts/${ARTIFACT}.spanload.task-stats" || true)
+          echo "task_stats records captured: $records over $windows window markers"
+          {
+            echo "### ⏱ windowed task spans — \`$WORKER\`"
+            echo '```'
+            echo "records: $records   window markers: $windows"
+            grep 'arctic-winds-span-window' "artifacts/${ARTIFACT}.spanload.task-stats" | head -40 || true
+            cat "artifacts/${ARTIFACT}.spanload.out" || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: stop SeaweedFS
+        if: always() && inputs.runs_on == ''
+        shell: bash -el {0}
+        run: build_tooling/start_seaweed.sh stop
+
+      - name: upload this worker's results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ${{ steps.artifact.outputs.name }}
+          path: |
+            artifacts/${{ steps.artifact.outputs.name }}.json
+            artifacts/${{ steps.artifact.outputs.name }}.meta.json
+            artifacts/${{ steps.artifact.outputs.name }}.*.speedscope.json
+            artifacts/${{ steps.artifact.outputs.name }}.*.perf-speedscope.json
+            artifacts/${{ steps.artifact.outputs.name }}.*-spans.json
+            artifacts/${{ steps.artifact.outputs.name }}.s3-proof.json
+            artifacts/${{ steps.artifact.outputs.name }}.spanload.task-stats
+            artifacts/${{ steps.artifact.outputs.name }}.spanload.out
+          if-no-files-found: warn
+          # What makes a failed worker retryable from the run page. `if: always()`
+          # means the first attempt usually *did* upload — a lane that goes red on one
+          # failed benchmark still has its result JSON — and v4 refuses a name that
+          # already exists rather than replacing it, so without this the retried lane
+          # re-measures everything and then dies at the very last step. When the retry
+          # itself produced no files, `warn` uploads nothing and the first attempt's
+          # artifact survives untouched, which is the right worst case.
+          overwrite: true
+
+  # The provisioning failure's honest red. `ec2_runner_jobs.yml:22` puts
+  # `continue-on-error: true` on the start job, so no spot capacity or a runner that
+  # never registered arrives here as a *green* start with an empty label; `bench` is
+  # then skipped, `stop` stops nothing, and the leg would show green while `collect`
+  # goes red on the missing worker. "Re-run failed jobs" reads job conclusions, so it
+  # would offer only `collect` — which fails identically, because nothing
+  # re-provisions the machine. This job is what makes the lane itself the failed
+  # thing: seconds of ubuntu, only on a lane we provision, only when no runner
+  # arrived, and it fails so the run page offers the retry that re-runs `start`.
+  #
+  # `!cancelled()` rather than `always()`: a cancelled start needs no red marker —
+  # the run is cancelled either way, and GitHub offers re-running a cancelled run
+  # regardless.
+  no_runner:
+    name: no runner for ${{ inputs.worker }}
+    needs: [start]
+    if: >-
+      !cancelled() && inputs.runs_on == ''
+      && (needs.start.result != 'success' || needs.start.outputs.label == '')
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - name: fail the lane so it can be retried
+        env:
+          WORKER: ${{ inputs.worker }}
+          START_RESULT: ${{ needs.start.result }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          echo "::error::No EC2 runner arrived for ${WORKER} (start: ${START_RESULT}). Spot capacity or runner registration failed; 'Re-run failed jobs' on the run page provisions a fresh instance. A start that died after launch can orphan an instance — check EC2 for one tagged RunId=${RUN_ID}."
+          exit 1
+
+  # `if: always()`, not `!cancelled()`: a cancelled run is exactly when a forgotten
+  # instance costs money (§Q3-Q4). The window this cannot cover is a cancel *during*
+  # start — sweepable by the `RunId` tag `ec2_runner_jobs.yml` already sets.
+  stop:
+    name: stop ${{ inputs.worker }} runner
+    needs: [start, bench]
+    # A managed lane started nothing, so there is nothing to terminate and no
+    # `start` outputs to terminate it with.
+    if: always() && inputs.runs_on == ''
+    uses: ./.github/workflows/ec2_runner_jobs.yml
+    secrets: inherit
+    with:
+      job_type: stop
+      label: ${{ needs.start.outputs.label }}
+      ec2-instance-id: ${{ needs.start.outputs.ec2-instance-id }}
