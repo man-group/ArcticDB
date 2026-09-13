@@ -649,7 +649,23 @@ jobs:
           # can never be mistaken for the benchmarks'.
           export ARCTICDB_PERSISTENT_STORAGE_SHARED_PATH_PREFIX="spans-${WORKER}"
           : > "artifacts/${ARTIFACT}.spanload.task-stats"
-          /tmp/poolprobe/bin/python "$GITHUB_WORKSPACE/build_tooling/winds_span_workload.py" \
+          # GHA 114: the workload's own peak RSS, which a spans lane never had — the
+          # `peakmem_` numbers in gha 99's A/B come from the asv pass, and a spans
+          # dispatch deliberately does not run one. A four-line parent that execs the
+          # workload unchanged and reads `RUSAGE_CHILDREN.ru_maxrss` (KiB on Linux)
+          # afterwards, rather than `/usr/bin/time -v`, which the dev image is not
+          # guaranteed to carry. The workload FILE stays byte-identical to gha 99's;
+          # the child's stdout and stderr are inherited, so the capture and the window
+          # markers are the same stream they always were, and the one extra line lands
+          # on stdout after the last window has closed.
+          cat > /tmp/rsswrap.py <<'PY'
+          import resource, subprocess, sys
+          code = subprocess.call([sys.executable, sys.argv[1]])
+          print(f"PEAK_RSS_KB {resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss}", flush=True)
+          sys.exit(code)
+          PY
+          /tmp/poolprobe/bin/python /tmp/rsswrap.py \
+            "$GITHUB_WORKSPACE/build_tooling/winds_span_workload.py" \
             2>> "artifacts/${ARTIFACT}.spanload.task-stats" \
             | tee "artifacts/${ARTIFACT}.spanload.out" \
             || echo "::warning::span workload failed on ${WORKER}"

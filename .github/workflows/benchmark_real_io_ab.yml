@@ -367,6 +367,16 @@ jobs:
     # same threaded batch delete rather than the CLI's serial walk.
     timeout-minutes: 350
     steps:
+      # GHA 114: `3b52495` pointed this job at `build_tooling/winds_sweep_bucket.py`
+      # and never gave it a checkout to find the file in — the sweep it wrote was
+      # only ever exercised through the `sweep` job below, which has one. So the
+      # teardown counted the bucket, printed its ledger, and then died on
+      # `python3: can't open file ... winds_sweep_bucket.py`, leaving exactly the
+      # stranded bucket `3b52495` existed to prevent. One step, and the same
+      # `fetch-depth: 1` every other job here uses.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
       - name: count every lane's keys, then drop the bucket
         env:
           BUCKET: ${{ needs.plan.outputs.bucket }}
