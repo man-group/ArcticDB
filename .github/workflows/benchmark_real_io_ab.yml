@@ -121,6 +121,11 @@ on:
           ArcticDB's own `TaskScheduler.LogTaskStats` (gha 91). NEVER set this on
           a dispatch whose timings are compared — the observer costs +14 % on a
           millisecond read (gha 83), which on one arm is a second treatment.
+          gha 121: the exact value `strings` runs the OTHER windowed workload
+          instead, `build_tooling/winds_string_workload.py` — the string-decode
+          cardinality ladder (100 / 10k / 1M distinct) with two numeric controls
+          at the same 100-segment shape. Any other non-empty value is gha 99's
+          workload, whose file is byte-identical to the one it captured.
         type: string
         default: ''
       sweep_bucket:

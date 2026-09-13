@@ -681,6 +681,7 @@ jobs:
           WORKER: ${{ inputs.worker }}
           ARTIFACT: ${{ steps.artifact.outputs.name }}
           ARCTICDB_REAL_S3_BUCKET: ${{ inputs.bucket }}
+          SPANS: ${{ inputs.spans }}
         run: |
           resolve() { case "$1" in x*) echo $(( $(nproc) * ${1#x} )) ;; *) echo "$1" ;; esac; }
           if [ -n "$CPU_THREADS" ]; then export ARCTICDB_VersionStore_NumCPUThreads_int="$(resolve "$CPU_THREADS")"; fi
@@ -692,6 +693,19 @@ jobs:
           export ARCTICDB_TaskScheduler_LogTaskStats_int=1
           export ARCTICDB_schedule_loglevel=DEBUG
           /tmp/poolprobe/bin/python -m pip -q install pandas numpy
+          # EXPERIMENT (arctic-winds gha 121). `spans: strings` selects the SECOND
+          # windowed workload — the string-decode cardinality ladder — and every other
+          # value keeps gha 99's, whose file stays byte-identical because gha 99's
+          # numeric anchors and gha 114's replicates are read against it. One extra
+          # dependency, installed only on the lane that needs it: the string workload
+          # reads its own arms' stored byte volumes back off the bucket (gha 113's wire
+          # gate needs them, and string columns do not compress like floats).
+          case "$SPANS" in
+            strings) WORKLOAD=winds_string_workload.py ;;
+            *)       WORKLOAD=winds_span_workload.py ;;
+          esac
+          if [ "$SPANS" = "strings" ]; then /tmp/poolprobe/bin/python -m pip -q install boto3; fi
+          echo "span workload: $WORKLOAD"
           mkdir -p artifacts
           # The workload builds the same URI the suite's own
           # `real_s3_from_environment_variables(shared_path=True)` would, and reads the
@@ -716,7 +730,7 @@ jobs:
           sys.exit(code)
           PY
           /tmp/poolprobe/bin/python /tmp/rsswrap.py \
-            "$GITHUB_WORKSPACE/build_tooling/winds_span_workload.py" \
+            "$GITHUB_WORKSPACE/build_tooling/$WORKLOAD" \
             2>> "artifacts/${ARTIFACT}.spanload.task-stats" \
             | tee "artifacts/${ARTIFACT}.spanload.out" \
             || echo "::warning::span workload failed on ${WORKER}"
