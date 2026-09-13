@@ -207,30 +207,32 @@ jobs:
       # Dropping the bucket in `collect` is what cleans up here.
       ARCTICDB_REAL_S3_BUCKET: ${{ inputs.bucket }}
       # ---------------------------------------------------------------------------
-      # EXPERIMENT (gha 99) — "did S3 push back at 48 concurrent GETs?" measured from
-      # inside the process that made the requests, not inferred from a wall time.
+      # GHA 99 — WHERE THE S3-PUSHBACK READING IS NOT, and why.
       #
-      # `ARCTICDB_s3_loglevel=WARN` is the non-deprecated spelling
-      # (`python/arcticdb/tools.py:96-119`): it sets ArcticDB's own `s3` spdlog stream
-      # to WARN *and* resolves to `AWS.LogLevel = 3`
-      # (`Aws::Utils::Logging::LogLevel::Warn`), which `S3ApiInstance::init` reads and
-      # hands to the AWS C++ SDK's own logger (`cpp/arcticdb/storage/s3/s3_api.cpp:186-189`).
-      # At Warn the SDK writes one line per HTTP error response — carrying the response
-      # code and the S3 exception name, so `SlowDown`, `ServiceUnavailable`,
-      # `RequestTimeout` and `InternalError` are all countable — and one line per retry
-      # sleep. It writes nothing at all when nothing fails, which is what makes it safe
-      # to leave on: an unthrottled lane pays for a file handle.
+      # r1 (run 34753085076) tried to take it from inside the client:
+      # `ARCTICDB_s3_loglevel=WARN` + `ARCTICDB_AWS_LogToFile_int=1`, which resolve to
+      # `AWS.LogLevel = 3` and send the AWS C++ SDK's own error and retry lines to
+      # `aws_sdk_<date>.log` (`python/arcticdb/tools.py:96-119`, then
+      # `S3ApiInstance::init`, `cpp/arcticdb/storage/s3/s3_api.cpp:186-189`). Every line
+      # it would have written is exactly the wanted reading — response code, S3
+      # exception name, retry sleep.
       #
-      # `AWS.LogToFile` = 1 sends those lines to `aws_sdk_<date>.log` beside the process
-      # (`Aws::Utils::Logging::DefaultLogSystem`, same call site) rather than through
-      # spdlog to stderr, where asv would swallow them on a green benchmark and where a
-      # throttling storm would flood the run log.
+      # It cost r1 most of its benchmarks. `S3ApiInstance`'s constructor calls
+      # `InitializeAWSLogging(DefaultLogSystem)` and its destructor calls
+      # `ShutdownAWSLogging()` while `Aws::ShutdownAPI` is deliberately never called
+      # ("This causes a crash on shutdown in `Aws::CleanupMonitoring`", `s3_api.cpp:180`),
+      # and asv's fresh-process-per-benchmark model exercises that teardown hundreds of
+      # times per lane. r1's setup_cache processes finished their work, printed their own
+      # "setup_cache time:" line, and then exited on **signal 11**; asv read the crash as
+      # `setup_cache failed (exit status -11)` and skipped every benchmark that depended
+      # on the cache. gha 95's seaweed run of the same suite, with these two variables
+      # unset, has zero `exit status -11` in its logs.
       #
-      # Set here, in the job `env:`, so it applies IDENTICALLY to both arms — it is a
-      # constant of the experiment, not a treatment. It is a deviation from the REAL
-      # nightly, which runs with the SDK logger off, and it is declared as one.
-      ARCTICDB_s3_loglevel: WARN
-      ARCTICDB_AWS_LogToFile_int: "1"
+      # So the reading is bought from CloudWatch instead — `5xxErrors` and `4xxErrors` on
+      # the run's own bucket, which the caller's `plan` enables and its `report_bucket`
+      # mode reads back once the ~15-minute publication lag has passed. Per-bucket rather
+      # than per-lane, and that is the price of not perturbing the measurement.
+      # ---------------------------------------------------------------------------
       # `benchmark_commits.yml:129-130`: quieten two noisy warnings during the run.
       ARCTICDB_WARN_ON_WRITING_EMPTY_DATAFRAME: "0"
       ARCTICDB_LMDBSTORAGE_WARNIFOPENED_STR: all
@@ -671,11 +673,14 @@ jobs:
       #     bucket and each can be counted alone. Object count and byte total are the
       #     PUT floor this run is billed on, and the key layout (`{prefix}/_arctic_cfg`,
       #     `{prefix}/{lib}{nanos}`) is the S3 one, not an LMDB directory.
-      #  2. **The AWS SDK's own error log.** Every `aws_sdk_*.log` the benchmark
-      #     processes wrote, grepped for HTTP response codes, S3 exception names and
-      #     retry sleeps. This is "did S3 push back at 48 concurrent GETs" measured from
-      #     inside the client, per lane, with no CloudWatch lag and no per-bucket
-      #     aggregation to unmix. An empty count is a real answer: S3 did not push back.
+      #  2. **The AWS SDK's own error log, if there is one.** Every `aws_sdk_*.log`
+      #     on the box, grepped for HTTP response codes, S3 exception names and retry
+      #     sleeps. Since r1 this lane runs with the SDK logger OFF (see the `env:`
+      #     block — turning it on segfaults asv's per-benchmark processes at exit), so
+      #     the expected reading is zero files. It is kept because a zero that is
+      #     *measured* is worth more than a paragraph saying the file was not written,
+      #     and because it costs nothing. The pushback reading proper is the bucket's
+      #     CloudWatch `5xxErrors`, read by the caller's `report_bucket` mode.
       #  3. **The LMDB path, which must be empty.** A silent fallback leaves `.mdb`
       #     files; a real S3 run leaves none. One known exception, from gha 95:
       #     `compact_data` hard-wires `lmdb://` and `shutil.copytree`, so the `query`
