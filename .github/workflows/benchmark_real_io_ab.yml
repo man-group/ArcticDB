@@ -114,6 +114,14 @@ on:
           millisecond read (gha 83), which on one arm is a second treatment.
         type: string
         default: ''
+      sweep_bucket:
+        description: >-
+          Sweep-only mode. Name a bucket and this run does nothing but empty and
+          delete it. It exists because a `teardown` that runs out of job time
+          leaves a half-emptied bucket behind, which is the one failure mode this
+          experiment must never leave lying around. Rents nothing.
+        type: string
+        default: ''
       report_bucket:
         description: >-
           Report-only mode. Name a bucket from an earlier dispatch and this run
@@ -128,7 +136,7 @@ jobs:
   # a rebuilt wheel is a second variable, and this experiment has exactly one.
   wheel:
     name: re-publish the wheel every lane installs
-    if: github.event_name == 'workflow_dispatch' && inputs.report_bucket == ''
+    if: github.event_name == 'workflow_dispatch' && inputs.report_bucket == '' && inputs.sweep_bucket == ''
     runs-on: ubuntu-22.04
     timeout-minutes: 15
     permissions:
@@ -151,7 +159,7 @@ jobs:
 
   plan:
     name: plan the replicate
-    if: github.event_name == 'workflow_dispatch' && inputs.report_bucket == ''
+    if: github.event_name == 'workflow_dispatch' && inputs.report_bucket == '' && inputs.sweep_bucket == ''
     runs-on: ubuntu-22.04
     timeout-minutes: 10
     outputs:
@@ -300,7 +308,7 @@ jobs:
 
   worker:
     needs: [plan, wheel]
-    if: github.event_name == 'workflow_dispatch' && inputs.report_bucket == ''
+    if: github.event_name == 'workflow_dispatch' && inputs.report_bucket == '' && inputs.sweep_bucket == ''
     strategy:
       fail-fast: false
       matrix:
@@ -338,9 +346,14 @@ jobs:
   teardown:
     name: count and delete the throwaway bucket
     needs: [plan, worker]
-    if: always() && github.event_name == 'workflow_dispatch' && needs.plan.outputs.bucket != ''
+    if: always() && github.event_name == 'workflow_dispatch' && inputs.sweep_bucket == '' && needs.plan.outputs.bucket != ''
     runs-on: ubuntu-22.04
-    timeout-minutes: 30
+    # 350, not 30. r2's teardown was CANCELLED at exactly 30 minutes with the bucket
+    # half-emptied: `aws s3 rb --force` walks 136,517 objects one page at a time and does
+    # not finish inside half an hour, so the job's own timeout became a bucket-stranding
+    # bug. The sweep job below is what cleaned up after it, and the delete here is now the
+    # same threaded batch delete rather than the CLI's serial walk.
+    timeout-minutes: 350
     steps:
       - name: count every lane's keys, then drop the bucket
         env:
@@ -385,9 +398,30 @@ jobs:
           PY
           cat /tmp/ledger.md >> "$GITHUB_STEP_SUMMARY"
           echo "--- deleting ---"
-          aws s3 rb "s3://${BUCKET}" --force
-          echo "deleted s3://${BUCKET}"
+          python3 "$GITHUB_WORKSPACE/build_tooling/winds_sweep_bucket.py" "$BUCKET"
           echo "- bucket \`$BUCKET\` deleted (prefix delete of the whole experiment)" >> "$GITHUB_STEP_SUMMARY"
+
+  # Sweep-only mode: no instance, no benchmark, no bucket created — just the delete
+  # that a timed-out `teardown` did not finish. Deliberately generous on time, and
+  # batched 1,000 keys at a time over 16 threads rather than the CLI's serial page walk.
+  sweep:
+    name: empty and delete a named bucket
+    if: github.event_name == 'workflow_dispatch' && inputs.sweep_bucket != ''
+    runs-on: ubuntu-22.04
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - name: sweep
+        env:
+          BUCKET: ${{ inputs.sweep_bucket }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_S3_ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_S3_SECRET_KEY }}
+          AWS_DEFAULT_REGION: eu-west-1
+        run: |
+          python3 -m pip install --quiet boto3
+          python3 build_tooling/winds_sweep_bucket.py "$BUCKET" | tee -a "$GITHUB_STEP_SUMMARY"
 
   # Report-only mode: no bucket, no instance, no benchmark. CloudWatch keeps the
   # request metrics for 15 months whether or not the bucket still exists, so the
