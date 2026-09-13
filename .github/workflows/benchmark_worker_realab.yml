@@ -84,6 +84,16 @@ on:
       # is `call_once`-lazy, `async/task_scheduler.cpp:13-15`).
       cpu_threads:     {required: false, type: string, default: '', description: "EXPERIMENT: pin VersionStore.NumCPUThreads; empty leaves ArcticDB's own hardware_concurrency default"}
       io_threads:      {required: false, type: string, default: '', description: "EXPERIMENT: pin VersionStore.NumIOThreads; empty leaves the 1.5x-CPU default"}
+      # EXPERIMENT (arctic-winds gha 114). The write path's admission window,
+      # `VersionStore.BatchWriteWindow` (`pipeline/write_frame.cpp:442-446`), whose
+      # DEFAULT is `2 * io_thread_count` — so a knob named for IO threads also sets the
+      # admission depth of the CPU-pool encode stage (`async_store.hpp:486-504` runs the
+      # encode inline in the admitted slot's continuation), and pinning it is what
+      # separates the two. Same env route as the two above:
+      # `set_config_from_env_vars` upper-cases the key (`python/arcticdb/tools.py`) and
+      # `ConfigsMap` upper-cases both set and get (`util/configs_map.hpp:31-36`), so this
+      # mixed-case spelling and the C++ lookup meet at `VERSIONSTORE.BATCHWRITEWINDOW`.
+      write_window:    {required: false, type: string, default: '', description: "EXPERIMENT: pin VersionStore.BatchWriteWindow; empty leaves the 2x-NumIOThreads default"}
       # EXPERIMENT (arctic-winds gha 99, folding in gha 91). Non-empty runs a short
       # windowed task-span capture AFTER the measured benchmarks and after the endpoint
       # proof. It is deliberately NOT the measured workload: `TaskScheduler.LogTaskStats`
@@ -444,6 +454,7 @@ jobs:
         env:
           CPU_THREADS: ${{ inputs.cpu_threads }}
           IO_THREADS: ${{ inputs.io_threads }}
+          WRITE_WINDOW: ${{ inputs.write_window }}
         run: |
           # `x<N>` means N times this box's own core count, resolved here rather than
           # in the plan, because `nproc` on the runner is the number ArcticDB's own
@@ -451,11 +462,20 @@ jobs:
           resolve() { case "$1" in x*) echo $(( $(nproc) * ${1#x} )) ;; *) echo "$1" ;; esac; }
           if [ -n "$CPU_THREADS" ]; then export ARCTICDB_VersionStore_NumCPUThreads_int="$(resolve "$CPU_THREADS")"; fi
           if [ -n "$IO_THREADS" ]; then export ARCTICDB_VersionStore_NumIOThreads_int="$(resolve "$IO_THREADS")"; fi
+          if [ -n "$WRITE_WINDOW" ]; then export ARCTICDB_VersionStore_BatchWriteWindow_int="$(resolve "$WRITE_WINDOW")"; fi
           cat > /tmp/poolprobe.py <<'PY'
           import arcticdb  # its import is what reads the env into the ConfigsMap
+          import arcticdb_ext as ext
           import arcticdb_ext.cpp_async as a
           print(f"resolved default cpu/io           = {a.get_default_cpu_count()} / {a.get_default_io_count()}")
           print(f"TaskScheduler cpu/io thread_count = {a.cpu_thread_count()} / {a.io_thread_count()}")
+          # GHA 114: the knob read back out of the very ConfigsMap `write_window_size()`
+          # queries (`pipeline/write_frame.cpp:442-446`), through the binding
+          # `register_configs_map_api` exposes (`python/python_module.cpp:46-54`). `None`
+          # means unset, and unset is what makes the window `2 * io_thread_count`.
+          window = ext.get_config_int("VersionStore.BatchWriteWindow")
+          effective = window if window is not None else 2 * a.io_thread_count()
+          print(f"ConfigsMap VersionStore.BatchWriteWindow = {window}  (effective {effective})")
           PY
           wheel=$(find wheel -name '*.whl' | head -1)
           python -m venv /tmp/poolprobe
@@ -466,6 +486,7 @@ jobs:
             echo "nproc                                   = $(nproc)"
             echo "ARCTICDB_VersionStore_NumCPUThreads_int = ${ARCTICDB_VersionStore_NumCPUThreads_int:-<unset>}"
             echo "ARCTICDB_VersionStore_NumIOThreads_int  = ${ARCTICDB_VersionStore_NumIOThreads_int:-<unset>}"
+            echo "ARCTICDB_VersionStore_BatchWriteWindow_int = ${ARCTICDB_VersionStore_BatchWriteWindow_int:-<unset>}"
             /tmp/poolprobe/bin/python /tmp/poolprobe.py
           } | tee -a "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
@@ -483,6 +504,7 @@ jobs:
         env:
           CPU_THREADS: ${{ inputs.cpu_threads }}
           IO_THREADS: ${{ inputs.io_threads }}
+          WRITE_WINDOW: ${{ inputs.write_window }}
           WORKER: ${{ inputs.worker }}
           SUITE: ${{ inputs.suite }}
           COMMIT: ${{ inputs.commit }}
@@ -523,6 +545,10 @@ jobs:
           if [ -n "$IO_THREADS" ]; then
             export ARCTICDB_VersionStore_NumIOThreads_int="$(resolve "$IO_THREADS")"
             echo "::notice::EXPERIMENT: ${WORKER} pins VersionStore.NumIOThreads=$ARCTICDB_VersionStore_NumIOThreads_int"
+          fi
+          if [ -n "$WRITE_WINDOW" ]; then
+            export ARCTICDB_VersionStore_BatchWriteWindow_int="$(resolve "$WRITE_WINDOW")"
+            echo "::notice::EXPERIMENT: ${WORKER} pins VersionStore.BatchWriteWindow=$ARCTICDB_VersionStore_BatchWriteWindow_int"
           fi
 
           # One artifact, one wheel in it, and the filename carries no SHA (every
@@ -599,6 +625,7 @@ jobs:
         env:
           CPU_THREADS: ${{ inputs.cpu_threads }}
           IO_THREADS: ${{ inputs.io_threads }}
+          WRITE_WINDOW: ${{ inputs.write_window }}
           BUCKET: ${{ inputs.bucket }}
           WORKER: ${{ inputs.worker }}
           ARTIFACT: ${{ steps.artifact.outputs.name }}
@@ -607,6 +634,10 @@ jobs:
           resolve() { case "$1" in x*) echo $(( $(nproc) * ${1#x} )) ;; *) echo "$1" ;; esac; }
           if [ -n "$CPU_THREADS" ]; then export ARCTICDB_VersionStore_NumCPUThreads_int="$(resolve "$CPU_THREADS")"; fi
           if [ -n "$IO_THREADS" ]; then export ARCTICDB_VersionStore_NumIOThreads_int="$(resolve "$IO_THREADS")"; fi
+          # GHA 114. The workload file itself is untouched — byte-identical to the one
+          # gha 99 captured — so the only difference between this arm and that one is
+          # this variable.
+          if [ -n "$WRITE_WINDOW" ]; then export ARCTICDB_VersionStore_BatchWriteWindow_int="$(resolve "$WRITE_WINDOW")"; fi
           export ARCTICDB_TaskScheduler_LogTaskStats_int=1
           export ARCTICDB_schedule_loglevel=DEBUG
           /tmp/poolprobe/bin/python -m pip -q install pandas numpy
@@ -629,6 +660,7 @@ jobs:
             echo "### ⏱ windowed task spans — \`$WORKER\`"
             echo '```'
             echo "records: $records   window markers: $windows"
+            echo "ARCTICDB_VersionStore_BatchWriteWindow_int = ${ARCTICDB_VersionStore_BatchWriteWindow_int:-<unset>}"
             grep 'arctic-winds-span-window' "artifacts/${ARTIFACT}.spanload.task-stats" | head -40 || true
             cat "artifacts/${ARTIFACT}.spanload.out" || true
             echo '```'

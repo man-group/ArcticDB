@@ -87,10 +87,15 @@ on:
         default: 'basic_functions,list_versions,column_stats,query,listing'
       configurations:
         description: >-
-          Semicolon-separated `<name>:<cpu>:<io>` triples. An empty cpu and io —
-          `a::` — is the control: nothing is exported and ArcticDB sizes its
-          pools off the box (`cpu x 1.5`). A bare integer is an absolute width;
-          `x<N>` is N times the lane's own `nproc`, resolved on the box.
+          Semicolon-separated `<name>:<cpu>:<io>[:<window>]` specs. An empty cpu
+          and io — `a::` — is the control: nothing is exported and ArcticDB sizes
+          its pools off the box (`cpu x 1.5`). A bare integer is an absolute
+          width; `x<N>` is N times the lane's own `nproc`, resolved on the box.
+          The optional fourth field is gha 114's:
+          `VersionStore.BatchWriteWindow`, the write path's admission window
+          (`pipeline/write_frame.cpp:442-446`), whose DEFAULT is `2 x io` — so
+          `w24::48:24` is io=48 running at io=12's encode admission depth, and
+          `w96::48:` is the same lane with the derived default left alone.
         type: string
         default: 'a::;d::48'
       suite_overwrite:
@@ -196,12 +201,17 @@ jobs:
               if not spec:
                   continue
               parts = spec.split(":")
-              if len(parts) != 3:
-                  raise SystemExit(f"configuration {spec!r} is not <name>:<cpu>:<io>")
-              name, cpu, io = (part.strip() for part in parts)
+              # GHA 114 adds an optional FOURTH field, `write_window`. Optional
+              # rather than required so every `<name>:<cpu>:<io>` triple gha 99
+              # dispatched still parses to the same matrix it always did.
+              if len(parts) == 3:
+                  parts = parts + [""]
+              if len(parts) != 4:
+                  raise SystemExit(f"configuration {spec!r} is not <name>:<cpu>:<io>[:<window>]")
+              name, cpu, io, window = (part.strip() for part in parts)
               if not name:
                   raise SystemExit(f"configuration {spec!r} has no name")
-              for value, label in ((cpu, "cpu"), (io, "io")):
+              for value, label in ((cpu, "cpu"), (io, "io"), (window, "window")):
                   # A bare integer is an absolute width — which is what gha 99's
                   # treatment wants, because gha 97's knee is a property of a
                   # read's SEGMENT COUNT and not of the box's core count. `x<N>`
@@ -210,7 +220,7 @@ jobs:
                   # same thing on a 4-core and an 8-core lane.
                   if value and not (value.isdigit() or (value.startswith("x") and value[1:].isdigit())):
                       raise SystemExit(f"configuration {spec!r}: {label} is not a number or x<N>")
-              configurations.append((name, cpu, io))
+              configurations.append((name, cpu, io, window))
           if not configurations:
               raise SystemExit("no configurations")
 
@@ -225,13 +235,14 @@ jobs:
               instance = ec2.get("instance_type") or worker.get("instance_type")
               if not instance:
                   raise SystemExit(f"{name} names no instance type")
-              for side, cpu, io in configurations:
+              for side, cpu, io, window in configurations:
                   entries.append({
                       "lane": f"{name}_{side}",
                       "worker": name,
                       "side": side,
                       "cpu_threads": cpu,
                       "io_threads": io,
+                      "write_window": window,
                       "suite": os.environ.get("SUITE_OVERWRITE") or worker["suite"],
                       "instance_type": instance,
                   })
@@ -299,9 +310,9 @@ jobs:
             echo "- storage: \`REAL\` — real AWS S3, the nightly's own credentials and endpoint"
             echo "- asv pass: \`$BENCH\`   task spans: \`${SPANS:-off}\`"
             echo
-            echo "| lane | configuration | NumCPUThreads | NumIOThreads | suite | instance |"
-            echo "| --- | --- | --- | --- | --- | --- |"
-            jq -r '.[] | "| \(.lane) | \(.side) | \(if .cpu_threads == "" then "box default" else .cpu_threads end) | \(if .io_threads == "" then "1.5x cpu (default)" else .io_threads end) | `\(.suite)` | \(.instance_type) |"' <<<"$MATRIX"
+            echo "| lane | configuration | NumCPUThreads | NumIOThreads | BatchWriteWindow | suite | instance |"
+            echo "| --- | --- | --- | --- | --- | --- | --- |"
+            jq -r '.[] | "| \(.lane) | \(.side) | \(if .cpu_threads == "" then "box default" else .cpu_threads end) | \(if .io_threads == "" then "1.5x cpu (default)" else .io_threads end) | \(if .write_window == "" then "2x io (default)" else .write_window end) | `\(.suite)` | \(.instance_type) |"' <<<"$MATRIX"
             echo
             echo "An \`x<N>\` cell is N times that lane's own \`nproc\`; a bare integer is absolute. The pool probe in each lane prints what it actually came out as."
           } >> "$GITHUB_STEP_SUMMARY"
@@ -329,6 +340,7 @@ jobs:
       wheel_artifact: wheel-cp311-manylinux_x86_64
       cpu_threads: ${{ matrix.cpu_threads }}
       io_threads: ${{ matrix.io_threads }}
+      write_window: ${{ matrix.write_window }}
       spans: ${{ inputs.spans }}
       run_benchmarks: ${{ inputs.run_benchmarks }}
 
