@@ -8,6 +8,37 @@ on:
       image-id:           {default: ami-0936679d3002e5be3, type: string, description: ID of the Amazon Image that should be used as a base for the runner}
       instance-type:      {default: m6i.4xlarge, type: string, description: Instace type that will be used to create the runner VM}
       market-type:        {default: '', type: string, description: "'spot' to launch a one-time spot instance; empty keeps on-demand (the default for every existing caller)"}
+      # EXPERIMENT (arctic-winds gha 120). '1' brings the instance up with ONE
+      # thread per physical core; empty leaves the box exactly as every existing
+      # caller gets it, and the input is then inert (`pre-runner-script` is the
+      # empty string, which the action treats identically to not passing it).
+      #
+      # WHY NOT EC2 `CpuOptions`, which is what the ticket asked for.
+      # `machulav/ec2-github-runner` does not pass one: its `action.yml` has no
+      # cpu-options input at v2.6.1 — nor on `main`, and v2.6.1 is the latest tag
+      # — and `RunInstances` only accepts `CpuOptions` at launch, so there is no
+      # after-the-fact `modify-instance-attribute` either. The alternatives were
+      # to reimplement runner registration around our own `aws ec2 run-instances`
+      # (the failure mode of which is an instance that never registers and is
+      # never stopped — the one thing this experiment must not do), or to take
+      # the same physical condition from the kernel. This takes it from the
+      # kernel: the action's `pre-runner-script` runs as root in cloud-init
+      # BEFORE the runner registers, so every process on the box — the container,
+      # the wheel, folly's `hardware_concurrency` — sees the reduced topology
+      # from the first instant.
+      #
+      # What this IS: each physical core's second hyperthread offlined, so the
+      # box has 4 online CPUs on 4 physical cores and no two software threads can
+      # share a core's front end. That is the condition the experiment is buying.
+      # What it is NOT: a change to what AWS bills or to what the hypervisor
+      # exposes. `lscpu` on the box is the proof, and the lane prints it.
+      #
+      # It cannot fail the lane. `/opt/runner-setup.sh` runs `set -e` and
+      # `source`s this script, so a single non-zero command here would abort
+      # runner registration and strand a running instance; every line therefore
+      # sits inside a `{ ... } || true` group, which `set -e` exempts, and the
+      # script's last statement is `true`.
+      threads-per-core:   {default: '', type: string, description: "EXPERIMENT (arctic-winds gha 120): '1' offlines every SMT sibling before the runner registers; empty leaves the box alone"}
       subnet-id:          {default: subnet-04ee7771eea5d61d9, type: string, description: VPC Subnet to be used when creating the runner}
       security-group-id:  {default: sg-08bd5ce9b15ba4f4b, type: string, description: Security Group to be used when creating the runner}
     outputs:
@@ -31,11 +62,54 @@ jobs:
           aws-access-key-id: "${{ secrets.AWS_S3_ACCESS_KEY }}"
           aws-secret-access-key: "${{ secrets.AWS_S3_SECRET_KEY }}"
           aws-region: "eu-west-1"
+      # EXPERIMENT (arctic-winds gha 120). Composed here rather than written
+      # inline in the `with:` block below because a GitHub expression string is
+      # single-line — there is no escape for a newline in one — and this is a
+      # shell script. A step output written with a heredoc delimiter is the
+      # spelling that carries newlines. The step is SKIPPED unless the caller
+      # asked for it, so `steps.pre.outputs.script` is then the empty string and
+      # the action takes the path it takes for every existing caller.
+      - name: compose the pre-runner script
+        id: pre
+        if: inputs.threads-per-core == '1'
+        run: |
+          echo 'script<<PRE_RUNNER_EOF' >> "$GITHUB_OUTPUT"
+          cat >> "$GITHUB_OUTPUT" <<'SCRIPT'
+          #!/bin/bash
+          # arctic-winds gha 120: one thread per physical core, in place before the
+          # runner registers, so the container, the wheel and folly's
+          # hardware_concurrency all see it. Every command is inside a group that
+          # `set -e` cannot trip over: /opt/runner-setup.sh SOURCES this file, and a
+          # non-zero here would abort registration and strand a running instance.
+          {
+            echo "[SMT] before: $(nproc) online CPUs"
+            if [ -e /sys/devices/system/cpu/smt/control ]; then
+              echo off > /sys/devices/system/cpu/smt/control
+            fi
+            for path in /sys/devices/system/cpu/cpu[0-9]*; do
+              id="${path##*/cpu}"
+              list="$(cat "$path/topology/thread_siblings_list" 2>/dev/null)"
+              first="${list%%,*}"
+              first="${first%%-*}"
+              if [ -n "$first" ] && [ "$first" != "$id" ] && [ -f "$path/online" ]; then
+                echo 0 > "$path/online"
+              fi
+            done
+            echo "[SMT] after: $(nproc) online CPUs"
+            lscpu
+          } > /var/log/winds-smt.log 2>&1 || true
+          true
+          SCRIPT
+          echo 'PRE_RUNNER_EOF' >> "$GITHUB_OUTPUT"
+
       - name: Start EC2 runner
         id: start-ec2-runner
         uses: machulav/ec2-github-runner@v2.6.1
         with:
           mode: start
+          # EXPERIMENT (arctic-winds gha 120): empty for every caller that does
+          # not ask for a topology, which is what the action gets today.
+          pre-runner-script: ${{ steps.pre.outputs.script }}
           github-token: ${{ secrets.ARCTICDB_TEST_PAT }}
           ec2-image-id: ${{ inputs.image-id }}
           ec2-instance-type: ${{ inputs.instance-type }}

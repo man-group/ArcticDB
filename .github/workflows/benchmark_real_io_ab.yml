@@ -96,6 +96,10 @@ on:
           (`pipeline/write_frame.cpp:442-446`), whose DEFAULT is `2 x io` — so
           `w24::48:24` is io=48 running at io=12's encode admission depth, and
           `w96::48:` is the same lane with the derived default left alone.
+          The optional FIFTH field is gha 120's: `1` brings that lane's box up
+          with one thread per physical core (SMT off, 4 online CPUs on the same
+          4 Ice Lake cores), so `smtoff:4:48:96:1` and `smton:8:48:96:` are two
+          lanes of one dispatch differing in nothing but hyperthreading.
         type: string
         default: 'a::;d::48'
       suite_overwrite:
@@ -201,16 +205,24 @@ jobs:
               if not spec:
                   continue
               parts = spec.split(":")
-              # GHA 114 adds an optional FOURTH field, `write_window`. Optional
-              # rather than required so every `<name>:<cpu>:<io>` triple gha 99
-              # dispatched still parses to the same matrix it always did.
-              if len(parts) == 3:
+              # GHA 114 adds an optional FOURTH field, `write_window`; GHA 120 an
+              # optional FIFTH, `threads_per_core`. Optional rather than required
+              # so every `<name>:<cpu>:<io>` triple gha 99 dispatched, and every
+              # four-field spec gha 114 dispatched, still parses to the same
+              # matrix it always did.
+              while len(parts) < 5:
                   parts = parts + [""]
-              if len(parts) != 4:
-                  raise SystemExit(f"configuration {spec!r} is not <name>:<cpu>:<io>[:<window>]")
-              name, cpu, io, window = (part.strip() for part in parts)
+              if len(parts) != 5:
+                  raise SystemExit(
+                      f"configuration {spec!r} is not <name>:<cpu>:<io>[:<window>[:<threads_per_core>]]"
+                  )
+              name, cpu, io, window, threads_per_core = (part.strip() for part in parts)
               if not name:
                   raise SystemExit(f"configuration {spec!r} has no name")
+              if threads_per_core not in ("", "1"):
+                  # Only 1 is implementable: the box is brought up with its SMT
+                  # siblings offlined, and there is no "3 threads per core".
+                  raise SystemExit(f"configuration {spec!r}: threads_per_core must be empty or 1")
               for value, label in ((cpu, "cpu"), (io, "io"), (window, "window")):
                   # A bare integer is an absolute width — which is what gha 99's
                   # treatment wants, because gha 97's knee is a property of a
@@ -220,7 +232,7 @@ jobs:
                   # same thing on a 4-core and an 8-core lane.
                   if value and not (value.isdigit() or (value.startswith("x") and value[1:].isdigit())):
                       raise SystemExit(f"configuration {spec!r}: {label} is not a number or x<N>")
-              configurations.append((name, cpu, io, window))
+              configurations.append((name, cpu, io, window, threads_per_core))
           if not configurations:
               raise SystemExit("no configurations")
 
@@ -235,7 +247,7 @@ jobs:
               instance = ec2.get("instance_type") or worker.get("instance_type")
               if not instance:
                   raise SystemExit(f"{name} names no instance type")
-              for side, cpu, io, window in configurations:
+              for side, cpu, io, window, threads_per_core in configurations:
                   entries.append({
                       "lane": f"{name}_{side}",
                       "worker": name,
@@ -243,6 +255,7 @@ jobs:
                       "cpu_threads": cpu,
                       "io_threads": io,
                       "write_window": window,
+                      "threads_per_core": threads_per_core,
                       "suite": os.environ.get("SUITE_OVERWRITE") or worker["suite"],
                       "instance_type": instance,
                   })
@@ -310,9 +323,9 @@ jobs:
             echo "- storage: \`REAL\` — real AWS S3, the nightly's own credentials and endpoint"
             echo "- asv pass: \`$BENCH\`   task spans: \`${SPANS:-off}\`"
             echo
-            echo "| lane | configuration | NumCPUThreads | NumIOThreads | BatchWriteWindow | suite | instance |"
-            echo "| --- | --- | --- | --- | --- | --- | --- |"
-            jq -r '.[] | "| \(.lane) | \(.side) | \(if .cpu_threads == "" then "box default" else .cpu_threads end) | \(if .io_threads == "" then "1.5x cpu (default)" else .io_threads end) | \(if .write_window == "" then "2x io (default)" else .write_window end) | `\(.suite)` | \(.instance_type) |"' <<<"$MATRIX"
+            echo "| lane | configuration | NumCPUThreads | NumIOThreads | BatchWriteWindow | threads/core | suite | instance |"
+            echo "| --- | --- | --- | --- | --- | --- | --- | --- |"
+            jq -r '.[] | "| \(.lane) | \(.side) | \(if .cpu_threads == "" then "box default" else .cpu_threads end) | \(if .io_threads == "" then "1.5x cpu (default)" else .io_threads end) | \(if .write_window == "" then "2x io (default)" else .write_window end) | \(if .threads_per_core == "" then "2 (stock SMT)" else .threads_per_core end) | `\(.suite)` | \(.instance_type) |"' <<<"$MATRIX"
             echo
             echo "An \`x<N>\` cell is N times that lane's own \`nproc\`; a bare integer is absolute. The pool probe in each lane prints what it actually came out as."
           } >> "$GITHUB_STEP_SUMMARY"
@@ -341,6 +354,7 @@ jobs:
       cpu_threads: ${{ matrix.cpu_threads }}
       io_threads: ${{ matrix.io_threads }}
       write_window: ${{ matrix.write_window }}
+      threads_per_core: ${{ matrix.threads_per_core }}
       spans: ${{ inputs.spans }}
       run_benchmarks: ${{ inputs.run_benchmarks }}
 
@@ -506,3 +520,34 @@ jobs:
           print()
           print("`5xxErrors` is S3 pushing back — throttles and internal errors that the client retried.")
           PY
+
+      # EXPERIMENT (arctic-winds gha 120). The leaked-instance check, taken
+      # IN-BAND. Every ticket on this branch has had to end with "no EC2 leaked",
+      # and until now the evidence has been the Start/Stop job conclusions — good
+      # evidence, but not the same thing as asking EC2. The laptop cannot ask (its
+      # AWS session is expired, deliberately: the credentials live in the
+      # repository, not on a developer's machine), so the job that already holds
+      # them asks. Same filter the runner action tags with
+      # (`ec2_runner_jobs.yml:48-56`), every non-terminated state, and it rents
+      # nothing: this is the `report_bucket` job, one `ubuntu-22.04` minute.
+      - name: any EC2 runner instances still alive
+        continue-on-error: true
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_S3_ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_S3_SECRET_KEY }}
+          AWS_DEFAULT_REGION: eu-west-1
+        run: |
+          {
+            echo
+            echo "### 🖥 EC2 instances tagged \`arcticdb-ci-runner\`, not terminated"
+            echo
+            echo '```'
+            aws ec2 describe-instances \
+              --filters 'Name=tag:Name,Values=arcticdb-ci-runner' \
+                        'Name=instance-state-name,Values=pending,running,shutting-down,stopping,stopped' \
+              --query 'Reservations[].Instances[].[InstanceId,InstanceType,State.Name,LaunchTime,Tags[?Key==`RunId`].Value|[0],Tags[?Key==`Workflow`].Value|[0]]' \
+              --output text || echo "describe-instances failed"
+            echo '```'
+            echo
+            echo "An empty block is the answer this experiment wants: nothing of ours is still up."
+          } | tee -a "$GITHUB_STEP_SUMMARY"

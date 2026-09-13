@@ -94,6 +94,15 @@ on:
       # `ConfigsMap` upper-cases both set and get (`util/configs_map.hpp:31-36`), so this
       # mixed-case spelling and the C++ lookup meet at `VERSIONSTORE.BATCHWRITEWINDOW`.
       write_window:    {required: false, type: string, default: '', description: "EXPERIMENT: pin VersionStore.BatchWriteWindow; empty leaves the 2x-NumIOThreads default"}
+      # EXPERIMENT (arctic-winds gha 120). The one property of the fleet's box that
+      # gha 117 could not reproduce on a laptop and gha 114 could not see from
+      # inside the instance: `m6i.2xlarge` is 4 PHYSICAL cores x 2 hyperthreads, so
+      # 114's "7.99 concurrent encodes on 8 vCPUs" was eight LZ4 streams on four
+      # cores — which predicts ~2x per-task WALL all by itself. '1' brings the lane
+      # up with one thread per core (see `ec2_runner_jobs.yml` for how, and for why
+      # it is not EC2 `CpuOptions`); empty is the stock 8-vCPU box every other lane
+      # on this branch has ever run on.
+      threads_per_core: {required: false, type: string, default: '', description: "EXPERIMENT: '1' runs this lane with SMT off (4 physical cores, 4 online CPUs); empty is the stock box"}
       # EXPERIMENT (arctic-winds gha 99, folding in gha 91). Non-empty runs a short
       # windowed task-span capture AFTER the measured benchmarks and after the endpoint
       # proof. It is deliberately NOT the measured workload: `TaskScheduler.LogTaskStats`
@@ -121,6 +130,9 @@ jobs:
       # comparable numbers; an interruption fails this worker (collect reports it
       # missing) and costs nothing in the first hour. Research: gha-spot-and-generations.
       market-type: ${{ inputs.market_type }}
+      # EXPERIMENT (arctic-winds gha 120): the SMT-off lane. Same instance type,
+      # same silicon, same bill — one thread per physical core instead of two.
+      threads-per-core: ${{ inputs.threads_per_core }}
 
   bench:
     name: bench ${{ inputs.worker }}
@@ -435,6 +447,45 @@ jobs:
           COMMIT: ${{ inputs.commit }}
         run: printf 'name=%s\n' "$WORKER-${COMMIT:0:8}" >> "$GITHUB_OUTPUT"
 
+      # EXPERIMENT (arctic-winds gha 120). The topology has to be PROVED, not
+      # requested: `threads_per_core: 1` is a best-effort thing done in cloud-init
+      # on a box whose AMI nobody here has read, and a lane that silently came up
+      # with eight vCPUs would be a second control wearing the treatment's name.
+      # So the box is asked, from inside the container the workload runs in,
+      # through the same `/proc` and `/sys` the kernel answers `nproc` and
+      # `hardware_concurrency()` from:
+      #
+      #   * `nproc` — what folly sizes the CPU pool off (`task_scheduler.hpp:196`);
+      #   * `/sys/devices/system/cpu/online` and `.../smt/control`;
+      #   * the count of DISTINCT (physical id, core id) pairs in `/proc/cpuinfo`,
+      #     which is the physical core count whatever the vCPU count says;
+      #   * every online CPU's `thread_siblings_list`: one entry per line means no
+      #     CPU shares a core with another.
+      #
+      # `continue-on-error`, like every other probe here: evidence, never a gate.
+      - name: prove this lane's CPU topology
+        continue-on-error: true
+        run: |
+          logical=$(grep -c '^processor' /proc/cpuinfo || echo 0)
+          physical=$(awk -F': ' '/^physical id/{p=$2} /^core id/{print p"-"$2}' /proc/cpuinfo | sort -u | wc -l | tr -d ' ')
+          {
+            echo "nproc                     = $(nproc)"
+            echo "logical CPUs (/proc)      = $logical"
+            echo "physical cores (/proc)    = $physical"
+            echo "cpu/online                = $(cat /sys/devices/system/cpu/online 2>/dev/null || echo '?')"
+            echo "cpu/smt/control           = $(cat /sys/devices/system/cpu/smt/control 2>/dev/null || echo '<absent>')"
+            echo "cpu/smt/active            = $(cat /sys/devices/system/cpu/smt/active 2>/dev/null || echo '<absent>')"
+            for path in /sys/devices/system/cpu/cpu[0-9]*/topology/thread_siblings_list; do
+              echo "  $path = $(cat "$path" 2>/dev/null)"
+            done
+            lscpu 2>/dev/null | grep -E '^(Architecture|CPU\(s\)|On-line|Thread|Core|Socket|Model name|NUMA node\(s\))' || true
+            grep -E 'MemTotal' /proc/meminfo || true
+          } > /tmp/topology.txt 2>&1 || true
+          echo "### 🧮 CPU topology — \`${{ inputs.worker }}\` (threads_per_core: '${{ inputs.threads_per_core }}')" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          tee -a "$GITHUB_STEP_SUMMARY" < /tmp/topology.txt
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
       # EXPERIMENT (arctic-winds gha 93 → 95 → 99). The pinning has to be *observed*,
       # not assumed: this asks the very wheel the benchmarks are about to run what size
       # its pools came out, in a throwaway venv, with the same two variables exported
@@ -682,6 +733,43 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
+      # ---------------------------------------------------------------------------
+      # EXPERIMENT (arctic-winds gha 120) — the same curve, in BOTH clocks.
+      #
+      # The span capture above measures `run_ns`: task-body WALL, which includes
+      # every microsecond a task spent runnable-but-descheduled. gha 117's refutation
+      # measured thread CPU. That difference is one of the two suspects this ticket
+      # is buying a lane to separate, and no amount of re-reading the capture can
+      # separate them, because the capture only has the one clock in it.
+      #
+      # So the box measures both, on its own silicon, right after the workload and
+      # with nothing else running: K worker processes encoding private corpora
+      # (LZ4 + XXH64 over the same bytes, the segment shape of
+      # `winds_span_workload.py`), each reporting its own wall AND its own
+      # `rusage` CPU. Wall inflating while CPU stays flat is descheduling; both
+      # inflating together is a shared core. Costs no S3 requests and about ten
+      # seconds of a lane that is already rented.
+      # ---------------------------------------------------------------------------
+      - name: measure the encode kernel in wall and CPU (gha 120)
+        if: always() && inputs.spans != ''
+        continue-on-error: true
+        env:
+          ARTIFACT: ${{ steps.artifact.outputs.name }}
+          WORKER: ${{ inputs.worker }}
+        run: |
+          mkdir -p artifacts
+          cp /tmp/topology.txt "artifacts/${ARTIFACT}.topology.txt" 2>/dev/null || true
+          /tmp/poolprobe/bin/python -m pip -q install lz4 xxhash || true
+          /tmp/poolprobe/bin/python "$GITHUB_WORKSPACE/build_tooling/winds_smt_kernel.py" \
+            > "artifacts/${ARTIFACT}.smt-kernel.txt" 2>&1 \
+            || echo "::warning::smt kernel probe failed on ${WORKER}"
+          {
+            echo "### 🔬 encode kernel, wall vs CPU — \`$WORKER\`"
+            echo '```'
+            cat "artifacts/${ARTIFACT}.smt-kernel.txt" || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
       # Artifact name = `<worker>-<sha8>`, and exactly one *result* JSON inside it: that is
       # the contract `collect` reads the worker off, suffix stripped (tickets 07 and 18).
       # The `<worker>-<sha8>.meta.json` sidecar goes up beside it — `collect` takes it as
@@ -855,6 +943,8 @@ jobs:
             artifacts/${{ steps.artifact.outputs.name }}.s3-proof.json
             artifacts/${{ steps.artifact.outputs.name }}.spanload.task-stats
             artifacts/${{ steps.artifact.outputs.name }}.spanload.out
+            artifacts/${{ steps.artifact.outputs.name }}.smt-kernel.txt
+            artifacts/${{ steps.artifact.outputs.name }}.topology.txt
           if-no-files-found: warn
           # What makes a failed worker retryable from the run page. `if: always()`
           # means the first attempt usually *did* upload — a lane that goes red on one
