@@ -700,11 +700,22 @@ jobs:
           # dependency, installed only on the lane that needs it: the string workload
           # reads its own arms' stored byte volumes back off the bucket (gha 113's wire
           # gate needs them, and string columns do not compress like floats).
+          # EXPERIMENT (arctic-winds gha 123). `spans: arrow` selects the THIRD
+          # windowed workload — gha 121's ladder read as pandas AND as arrow — and
+          # needs `pyarrow`, which is an OPTIONAL dependency of ArcticDB
+          # (`python/arcticdb/dependencies.py`) and absent from this venv, so the
+          # arrow output format would raise `ModuleNotFoundError` without it
+          # (`options.py:219-227`). Installed only on the lane that asks for it, so
+          # no other dispatch's venv changes.
           case "$SPANS" in
             strings) WORKLOAD=winds_string_workload.py ;;
+            arrow)   WORKLOAD=winds_arrow_workload.py ;;
             *)       WORKLOAD=winds_span_workload.py ;;
           esac
-          if [ "$SPANS" = "strings" ]; then /tmp/poolprobe/bin/python -m pip -q install boto3; fi
+          case "$SPANS" in
+            strings) /tmp/poolprobe/bin/python -m pip -q install boto3 ;;
+            arrow)   /tmp/poolprobe/bin/python -m pip -q install boto3 pyarrow ;;
+          esac
           echo "span workload: $WORKLOAD"
           mkdir -p artifacts
           # The workload builds the same URI the suite's own

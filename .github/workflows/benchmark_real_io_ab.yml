@@ -124,8 +124,12 @@ on:
           gha 121: the exact value `strings` runs the OTHER windowed workload
           instead, `build_tooling/winds_string_workload.py` — the string-decode
           cardinality ladder (100 / 10k / 1M distinct) with two numeric controls
-          at the same 100-segment shape. Any other non-empty value is gha 99's
-          workload, whose file is byte-identical to the one it captured.
+          at the same 100-segment shape. gha 123: the exact value `arrow` runs a
+          THIRD, `build_tooling/winds_arrow_workload.py` — gha 121's ladder on the
+          same symbols and the same seed, read as pandas AND as
+          `output_format=PYARROW` (and as `CATEGORICAL` on the string arms), which
+          is the claim gha 121's answer left un-measured. Any other non-empty value
+          is gha 99's workload, whose file is byte-identical to the one it captured.
         type: string
         default: ''
       sweep_bucket:
