@@ -563,148 +563,6 @@ jobs:
             --runner-image "$AMI_ID" \
             "${profile[@]}"
 
-      # Artifact name = `<worker>-<sha8>`, and exactly one *result* JSON inside it: that is
-      # the contract `collect` reads the worker off, suffix stripped (tickets 07 and 18).
-      # The `<worker>-<sha8>.meta.json` sidecar goes up beside it — `collect` takes it as
-      # this worker's metadata, never as a second result (ticket 13). So do the profile
-      # pass's `<worker>-<sha8>.<benchmark>.speedscope.json` flame graphs, which `collect`
-      # tells apart by that suffix and files under the benchmark the sidecar says each one
-      # is of (ticket 48); the glob matches nothing on a lane that profiled nothing, which
-      # is what `if-no-files-found: warn` is already tolerant of. Since gha 75 a native
-      # recording rides beside each of them as `<worker>-<sha8>.<benchmark>.
-      # perf-speedscope.json` — note the hyphen: that name deliberately does *not* end in
-      # `.speedscope.json`, because `collect` classifies by suffix and would otherwise
-      # store it as a second payload for a (worker, benchmark) it keeps one of. It is
-      # uploaded so a human can open it and stored nowhere until gha 76. Since gha 91 a
-      # third document rides beside them as `<worker>-<sha8>.<benchmark>-spans.json`: the
-      # task-span timeline of the same window, built on the worker from what ArcticDB
-      # itself logged about its task queues (`TaskScheduler.LogTaskStats`, stock from
-      # v6.24.0) — Chrome Trace Event JSON rather than speedscope, and the hyphen is there
-      # for the same reason the native document's is. All three globs need naming
-      # separately: none of them matches another. A lane whose wheel predates the observer
-      # uploads no such file and loses nothing, which is what `if-no-files-found: warn` is
-      # already tolerant of. The monitor's
-      # `<worker>.log` and `status.json` land in the same directory, so name the files
-      # explicitly rather than uploading `artifacts/`. This must happen before `stop`
-      # terminates the machine.
-      # ---------------------------------------------------------------------------
-      # GHA 99 — THE PROOF, and the S3-pushback reading, in one step.
-      #
-      # The proof half is gha 94's rule carried onto real AWS. A `storage=REAL` run
-      # whose bucket or credentials are wrong does not go red: every
-      # storage-parameterised class turns a disabled storage into a *skip*
-      # (`is_storage_enabled` → `create_libraries` returns `None`s → `SkipNotImplemented`),
-      # so it looks exactly like a fast, green, EMPTY run. Three readings:
-      #
-      #  1. **The bucket, under this lane's own prefix.** `bench` puts every key under
-      #     `<worker>-<sha8>/` (`bench.py:storage_prefix`), and the lane name carries the
-      #     configuration, so control and treatment write to disjoint prefixes of one
-      #     bucket and each can be counted alone. Object count and byte total are the
-      #     PUT floor this run is billed on, and the key layout (`{prefix}/_arctic_cfg`,
-      #     `{prefix}/{lib}{nanos}`) is the S3 one, not an LMDB directory.
-      #  2. **The AWS SDK's own error log.** Every `aws_sdk_*.log` the benchmark
-      #     processes wrote, grepped for HTTP response codes, S3 exception names and
-      #     retry sleeps. This is "did S3 push back at 48 concurrent GETs" measured from
-      #     inside the client, per lane, with no CloudWatch lag and no per-bucket
-      #     aggregation to unmix. An empty count is a real answer: S3 did not push back.
-      #  3. **The LMDB path, which must be empty.** A silent fallback leaves `.mdb`
-      #     files; a real S3 run leaves none.
-      #
-      # `continue-on-error` and `|| true` throughout: evidence, never a gate.
-      # ---------------------------------------------------------------------------
-      - name: prove the benchmarks hit the real bucket, and count S3 pushback
-        if: always() && inputs.storage != 'LMDB'
-        continue-on-error: true
-        env:
-          BUCKET: ${{ inputs.bucket }}
-          WORKER: ${{ inputs.worker }}
-          ARTIFACT: ${{ steps.artifact.outputs.name }}
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_S3_ACCESS_KEY }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_S3_SECRET_KEY }}
-          AWS_DEFAULT_REGION: eu-west-1
-        run: |
-          mkdir -p artifacts
-          /tmp/poolprobe/bin/python -m pip -q install boto3 || python -m pip -q install boto3
-          cat > /tmp/proof.py <<'PY'
-          import json, os, re, sys
-          from pathlib import Path
-
-          bucket, prefix = os.environ["BUCKET"], os.environ["ARTIFACT"]
-          out = {"bucket": bucket, "prefix": prefix}
-
-          # ---- 1. the bucket, under this lane's prefix -----------------------------
-          try:
-              import boto3
-              s3 = boto3.client("s3", region_name=os.environ.get("AWS_DEFAULT_REGION", "eu-west-1"))
-              objects, total, sample = 0, 0, []
-              token = None
-              while True:
-                  kwargs = {"Bucket": bucket, "Prefix": f"{prefix}/", "MaxKeys": 1000}
-                  if token:
-                      kwargs["ContinuationToken"] = token
-                  page = s3.list_objects_v2(**kwargs)
-                  for item in page.get("Contents", []):
-                      objects += 1
-                      total += item["Size"]
-                      if len(sample) < 15:
-                          sample.append(item["Key"])
-                  token = page.get("NextContinuationToken")
-                  if not page.get("IsTruncated"):
-                      break
-              out["objects"] = objects
-              out["bytes"] = total
-              out["sample_keys"] = sample
-          except Exception as exc:  # noqa: BLE001 — evidence, never a gate
-              out["bucket_error"] = repr(exc)
-
-          # ---- 2. what the AWS SDK logged --------------------------------------------
-          # At `LogLevel::Warn` the SDK writes one line per HTTP error response, carrying
-          # the response code and the S3 exception name, and one line per retry sleep.
-          # Nothing is written when nothing fails.
-          codes, exceptions, retries, lines, files = {}, {}, 0, 0, []
-          for root in {Path.home(), Path.cwd(), Path("/tmp")}:
-              for log in root.rglob("aws_sdk_*.log"):
-                  files.append(str(log))
-                  try:
-                      text = log.read_text(errors="replace")
-                  except OSError:
-                      continue
-                  for line in text.splitlines():
-                      lines += 1
-                      code = re.search(r"HTTP response code:\s*(\d+)", line)
-                      if code:
-                          codes[code.group(1)] = codes.get(code.group(1), 0) + 1
-                      name = re.search(r"Exception name:\s*([A-Za-z]*)", line)
-                      if name and name.group(1):
-                          exceptions[name.group(1)] = exceptions.get(name.group(1), 0) + 1
-                      if "now waiting" in line and "before attempting again" in line:
-                          retries += 1
-          out["aws_sdk_log_files"] = len(files)
-          out["aws_sdk_log_lines"] = lines
-          out["http_response_codes"] = codes
-          out["s3_exception_names"] = exceptions
-          out["retry_sleeps"] = retries
-
-          # ---- 3. the LMDB path, which must be empty ---------------------------------
-          mdb = []
-          for root in {Path.home() / ".asv", Path.cwd()}:
-              try:
-                  mdb += [str(p) for p in root.rglob("*.mdb") if p.stat().st_size > 1024]
-              except OSError:
-                  pass
-          out["mdb_files_over_1k"] = mdb[:20]
-          out["mdb_count"] = len(mdb)
-
-          Path(f"artifacts/{prefix}.s3-proof.json").write_text(json.dumps(out, indent=2))
-          print(json.dumps(out, indent=2)[:6000])
-          PY
-          {
-            echo "### 🪣 real-S3 endpoint proof and pushback — \`$WORKER\`"
-            echo '```json'
-            /tmp/poolprobe/bin/python /tmp/proof.py || python /tmp/proof.py || echo '{"proof":"failed"}'
-            echo '```'
-          } 2>&1 | tee -a "$GITHUB_STEP_SUMMARY" || true
-
       # ---------------------------------------------------------------------------
       # GHA 99 — the windowed span capture, for ticket 98's `critical-path`.
       #
@@ -773,6 +631,157 @@ jobs:
             cat "artifacts/${ARTIFACT}.spanload.out" || true
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+
+      # Artifact name = `<worker>-<sha8>`, and exactly one *result* JSON inside it: that is
+      # the contract `collect` reads the worker off, suffix stripped (tickets 07 and 18).
+      # The `<worker>-<sha8>.meta.json` sidecar goes up beside it — `collect` takes it as
+      # this worker's metadata, never as a second result (ticket 13). So do the profile
+      # pass's `<worker>-<sha8>.<benchmark>.speedscope.json` flame graphs, which `collect`
+      # tells apart by that suffix and files under the benchmark the sidecar says each one
+      # is of (ticket 48); the glob matches nothing on a lane that profiled nothing, which
+      # is what `if-no-files-found: warn` is already tolerant of. Since gha 75 a native
+      # recording rides beside each of them as `<worker>-<sha8>.<benchmark>.
+      # perf-speedscope.json` — note the hyphen: that name deliberately does *not* end in
+      # `.speedscope.json`, because `collect` classifies by suffix and would otherwise
+      # store it as a second payload for a (worker, benchmark) it keeps one of. It is
+      # uploaded so a human can open it and stored nowhere until gha 76. Since gha 91 a
+      # third document rides beside them as `<worker>-<sha8>.<benchmark>-spans.json`: the
+      # task-span timeline of the same window, built on the worker from what ArcticDB
+      # itself logged about its task queues (`TaskScheduler.LogTaskStats`, stock from
+      # v6.24.0) — Chrome Trace Event JSON rather than speedscope, and the hyphen is there
+      # for the same reason the native document's is. All three globs need naming
+      # separately: none of them matches another. A lane whose wheel predates the observer
+      # uploads no such file and loses nothing, which is what `if-no-files-found: warn` is
+      # already tolerant of. The monitor's
+      # `<worker>.log` and `status.json` land in the same directory, so name the files
+      # explicitly rather than uploading `artifacts/`. This must happen before `stop`
+      # terminates the machine.
+      # ---------------------------------------------------------------------------
+      # GHA 99 — THE PROOF, and the S3-pushback reading, in one step.
+      #
+      # The proof half is gha 94's rule carried onto real AWS. A `storage=REAL` run
+      # whose bucket or credentials are wrong does not go red: every
+      # storage-parameterised class turns a disabled storage into a *skip*
+      # (`is_storage_enabled` → `create_libraries` returns `None`s → `SkipNotImplemented`),
+      # so it looks exactly like a fast, green, EMPTY run. Three readings:
+      #
+      #  1. **The bucket, under this lane's own prefix.** `bench` puts every key under
+      #     `<worker>-<sha8>/` (`bench.py:storage_prefix`), and the lane name carries the
+      #     configuration, so control and treatment write to disjoint prefixes of one
+      #     bucket and each can be counted alone. Object count and byte total are the
+      #     PUT floor this run is billed on, and the key layout (`{prefix}/_arctic_cfg`,
+      #     `{prefix}/{lib}{nanos}`) is the S3 one, not an LMDB directory.
+      #  2. **The AWS SDK's own error log.** Every `aws_sdk_*.log` the benchmark
+      #     processes wrote, grepped for HTTP response codes, S3 exception names and
+      #     retry sleeps. This is "did S3 push back at 48 concurrent GETs" measured from
+      #     inside the client, per lane, with no CloudWatch lag and no per-bucket
+      #     aggregation to unmix. An empty count is a real answer: S3 did not push back.
+      #  3. **The LMDB path, which must be empty.** A silent fallback leaves `.mdb`
+      #     files; a real S3 run leaves none. One known exception, from gha 95:
+      #     `compact_data` hard-wires `lmdb://` and `shutil.copytree`, so the `query`
+      #     lane legitimately leaves `.mdb` files behind inside a `storage=REAL` run.
+      #
+      # It runs LAST, after the span capture, so the AWS SDK log scan sees every
+      # request this lane made. The two prefixes are counted separately, so span
+      # traffic can never be read as benchmark traffic.
+      #
+      # `continue-on-error` and `|| true` throughout: evidence, never a gate.
+      # ---------------------------------------------------------------------------
+      - name: prove the benchmarks hit the real bucket, and count S3 pushback
+        if: always() && inputs.storage != 'LMDB'
+        continue-on-error: true
+        env:
+          BUCKET: ${{ inputs.bucket }}
+          WORKER: ${{ inputs.worker }}
+          ARTIFACT: ${{ steps.artifact.outputs.name }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_S3_ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_S3_SECRET_KEY }}
+          AWS_DEFAULT_REGION: eu-west-1
+        run: |
+          mkdir -p artifacts
+          /tmp/poolprobe/bin/python -m pip -q install boto3 || python -m pip -q install boto3
+          cat > /tmp/proof.py <<'PY'
+          import json, os, re, sys
+          from pathlib import Path
+
+          bucket, prefix = os.environ["BUCKET"], os.environ["ARTIFACT"]
+          out = {"bucket": bucket, "prefix": prefix}
+
+          # ---- 1. the bucket, under this lane's two prefixes -----------------------
+          # `<lane>-<sha8>/` is what `bench` wrote; `spans-<lane>/` is what the span
+          # workload wrote. Counted apart so neither can be read as the other.
+          try:
+              import boto3
+              s3 = boto3.client("s3", region_name=os.environ.get("AWS_DEFAULT_REGION", "eu-west-1"))
+              for label, head in (("", prefix), ("spans_", f"spans-{os.environ['WORKER']}")):
+                  objects, total, sample = 0, 0, []
+                  token = None
+                  while True:
+                      kwargs = {"Bucket": bucket, "Prefix": f"{head}/", "MaxKeys": 1000}
+                      if token:
+                          kwargs["ContinuationToken"] = token
+                      page = s3.list_objects_v2(**kwargs)
+                      for item in page.get("Contents", []):
+                          objects += 1
+                          total += item["Size"]
+                          if len(sample) < 15:
+                              sample.append(item["Key"])
+                      token = page.get("NextContinuationToken")
+                      if not page.get("IsTruncated"):
+                          break
+                  out[f"{label}objects"] = objects
+                  out[f"{label}bytes"] = total
+                  out[f"{label}sample_keys"] = sample
+          except Exception as exc:  # noqa: BLE001 — evidence, never a gate
+              out["bucket_error"] = repr(exc)
+
+          # ---- 2. what the AWS SDK logged --------------------------------------------
+          # At `LogLevel::Warn` the SDK writes one line per HTTP error response, carrying
+          # the response code and the S3 exception name, and one line per retry sleep.
+          # Nothing is written when nothing fails.
+          codes, exceptions, retries, lines, files = {}, {}, 0, 0, []
+          for root in {Path.home(), Path.cwd(), Path("/tmp")}:
+              for log in root.rglob("aws_sdk_*.log"):
+                  files.append(str(log))
+                  try:
+                      text = log.read_text(errors="replace")
+                  except OSError:
+                      continue
+                  for line in text.splitlines():
+                      lines += 1
+                      code = re.search(r"HTTP response code:\s*(\d+)", line)
+                      if code:
+                          codes[code.group(1)] = codes.get(code.group(1), 0) + 1
+                      name = re.search(r"Exception name:\s*([A-Za-z]*)", line)
+                      if name and name.group(1):
+                          exceptions[name.group(1)] = exceptions.get(name.group(1), 0) + 1
+                      if "now waiting" in line and "before attempting again" in line:
+                          retries += 1
+          out["aws_sdk_log_files"] = len(files)
+          out["aws_sdk_log_lines"] = lines
+          out["http_response_codes"] = codes
+          out["s3_exception_names"] = exceptions
+          out["retry_sleeps"] = retries
+
+          # ---- 3. the LMDB path, which must be empty ---------------------------------
+          mdb = []
+          for root in {Path.home() / ".asv", Path.cwd()}:
+              try:
+                  mdb += [str(p) for p in root.rglob("*.mdb") if p.stat().st_size > 1024]
+              except OSError:
+                  pass
+          out["mdb_files_over_1k"] = mdb[:20]
+          out["mdb_count"] = len(mdb)
+
+          Path(f"artifacts/{prefix}.s3-proof.json").write_text(json.dumps(out, indent=2))
+          print(json.dumps(out, indent=2)[:6000])
+          PY
+          {
+            echo "### 🪣 real-S3 endpoint proof and pushback — \`$WORKER\`"
+            echo '```json'
+            /tmp/poolprobe/bin/python /tmp/proof.py || python /tmp/proof.py || echo '{"proof":"failed"}'
+            echo '```'
+          } 2>&1 | tee -a "$GITHUB_STEP_SUMMARY" || true
 
       - name: stop SeaweedFS
         if: always() && inputs.runs_on == ''
