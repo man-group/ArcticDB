@@ -11,7 +11,7 @@ import pandas as pd
 import numpy as np
 
 from arcticdb import QueryBuilder
-from arcticdb.exceptions import SchemaException, NormalizationException
+from arcticdb.exceptions import NormalizationException
 from arcticdb.util._versions import IS_PANDAS_TWO
 from arcticdb.version_store._common import TimeFrame
 from arcticdb.util.test import assert_frame_equal, assert_series_equal
@@ -199,38 +199,33 @@ def test_append_empty_series(lmdb_version_store_dynamic_schema, sym, dtype, seri
     )
 
 
-def test_append_dtypeless_empty_series_raises(lmdb_version_store_dynamic_schema, sym):
-    # A Series with no dtype is empty of information as well as of rows, so pandas types it as an object column and
-    # ArcticDB stores a string one. Its value column is a required field, so a numeric append is a type clash like any
-    # other: pass a dtype.
+def test_append_to_dtypeless_empty_series(lmdb_version_store_dynamic_schema, sym):
+    # pandas types a dtypeless Series as object and ArcticDB stores a string column, which the int64 append overrides.
     lib = lmdb_version_store_dynamic_schema
     lib.write(sym, pd.Series([]))
-    with pytest.raises(SchemaException):
-        lib.append(sym, pd.Series([1, 2, 3], dtype="int64"))
+    appended = pd.Series([1, 2, 3], dtype="int64")
+    lib.append(sym, appended)
+    assert_series_equal(lib.read(sym).data, appended, check_index_type=False)
 
 
-def test_append_empty_dataframe_adds_its_columns_dynamic_schema(in_memory_version_store_dynamic_schema):
+def test_append_empty_dataframe_does_not_add_its_columns_dynamic_schema(in_memory_version_store_dynamic_schema):
     lib = in_memory_version_store_dynamic_schema
     rows = pd.DataFrame({"col1": np.arange(2, dtype=np.int64)}, index=pd.date_range("2025-01-01", periods=2))
     empty_with_extra_column = pd.DataFrame(
         {"col1": np.array([], dtype=np.int64), "col2": np.array([], dtype=np.int64)}, index=pd.DatetimeIndex([])
     )
-    # Nothing was written for col2, so it reads back backfilled.
-    expected = rows.assign(col2=np.zeros(2, dtype=np.int64))
 
     lib.write("rows_first", rows)
     lib.append("rows_first", empty_with_extra_column)
-    assert_frame_equal(expected, lib.read("rows_first").data)
+    assert_frame_equal(rows, lib.read("rows_first").data)
 
     lib.write("empty_first", empty_with_extra_column)
     lib.append("empty_first", rows)
-    assert_frame_equal(expected, lib.read("empty_first").data)
+    assert_frame_equal(rows, lib.read("empty_first").data)
 
 
 @pytest.mark.parametrize("empty_first", [True, False])
-def test_append_empty_dataframe_with_differing_columns_static_schema_raises(in_memory_version_store, empty_first):
-    # A static schema has nowhere to put a column only one side has, and an empty frame declares its columns as
-    # deliberately as any other.
+def test_append_empty_dataframe_with_differing_columns_static_schema(in_memory_version_store, empty_first):
     lib = in_memory_version_store
     rows = pd.DataFrame({"col1": np.arange(2, dtype=np.float64)}, index=pd.date_range("2025-01-01", periods=2))
     empty_with_extra_column = pd.DataFrame(
@@ -238,38 +233,21 @@ def test_append_empty_dataframe_with_differing_columns_static_schema_raises(in_m
     )
     first, second = (empty_with_extra_column, rows) if empty_first else (rows, empty_with_extra_column)
     lib.write("sym", first)
-    with pytest.raises(SchemaException):
-        lib.append("sym", second)
+    lib.append("sym", second)
+    assert_frame_equal(rows, lib.read("sym").data)
 
 
-@pytest.mark.skipif(
-    not IS_PANDAS_TWO, reason="Pandas 1 normalizes an empty float column to a string one, leaving no float to promote"
-)
-def test_append_empty_dataframe_promotes_column_type_dynamic_schema(in_memory_version_store_dynamic_schema, sym):
-    # The type of an empty column is as much a statement as the column itself, so it promotes the stored one.
-    lib = in_memory_version_store_dynamic_schema
+# float64 under pandas 2, object under pandas 1, and a user reading from a vendor cannot always choose - so neither
+# displaces the stored type, promotable or not.
+@pytest.mark.parametrize("dtype", ["float64", "datetime64[ns]"])
+# TODO: parametrize over dynamic_schema [True, False] and use in_memory version store factory
+@pytest.mark.parametrize("lib_type", ["in_memory_version_store", "in_memory_version_store_dynamic_schema"])
+def test_append_empty_dataframe_does_not_change_column_type(request, sym, dtype, lib_type):
+    lib = request.getfixturevalue(lib_type)
     rows = pd.DataFrame({"col": np.arange(2, dtype=np.int64)}, index=pd.date_range("2025-01-01", periods=2))
     lib.write(sym, rows)
-    lib.append(sym, pd.DataFrame({"col": np.array([], dtype=np.float64)}, index=pd.DatetimeIndex([])))
-    assert_frame_equal(rows.astype(np.float64), lib.read(sym).data)
-
-
-@pytest.mark.parametrize("dtype", ["float64", "datetime64[ns]"])
-def test_append_empty_dataframe_with_clashing_column_type_static_schema_raises(in_memory_version_store, sym, dtype):
-    # A static schema needs the stored type back, and neither of these is an int64 - promotable or not.
-    lib = in_memory_version_store
-    lib.write(sym, pd.DataFrame({"col": np.arange(2, dtype=np.int64)}, index=pd.date_range("2025-01-01", periods=2)))
-    with pytest.raises(SchemaException):
-        lib.append(sym, pd.DataFrame({"col": np.array([], dtype=dtype)}, index=pd.DatetimeIndex([])))
-
-
-def test_append_empty_dataframe_with_unpromotable_column_type_dynamic_schema_raises(
-    in_memory_version_store_dynamic_schema, sym
-):
-    lib = in_memory_version_store_dynamic_schema
-    lib.write(sym, pd.DataFrame({"col": np.arange(2, dtype=np.int64)}, index=pd.date_range("2025-01-01", periods=2)))
-    with pytest.raises(SchemaException):
-        lib.append(sym, pd.DataFrame({"col": np.array([], dtype="datetime64[ns]")}, index=pd.DatetimeIndex([])))
+    lib.append(sym, pd.DataFrame({"col": np.array([], dtype=dtype)}, index=pd.DatetimeIndex([])))
+    assert_frame_equal(rows, lib.read(sym).data)
 
 
 def test_append_rowcount_dataframe_to_rowless_timeseries(in_memory_version_store, sym):

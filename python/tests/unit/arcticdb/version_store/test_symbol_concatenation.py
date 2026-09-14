@@ -406,9 +406,7 @@ def test_symbol_concat_with_empty_dataframe(in_memory_library, empty_first, join
 
 
 @pytest.mark.parametrize("join", ["inner", "outer"])
-def test_symbol_concat_empty_dataframe_contributes_its_columns(in_memory_library_dynamic, join):
-    # A zero-row symbol declares its columns as any other does, so an outer join keeps them, backfilled, and an inner
-    # join keeps only what both symbols have. Monday 12781487305.
+def test_symbol_concat_empty_dataframe_contributes_no_columns(in_memory_library_dynamic, join):
     lib = in_memory_library_dynamic
     df_empty = pd.DataFrame(
         {"col1": np.array([], dtype=np.int64), "col2": np.array([], dtype=np.int64)}, index=pd.DatetimeIndex([])
@@ -421,30 +419,26 @@ def test_symbol_concat_empty_dataframe_contributes_its_columns(in_memory_library
     lib.write("sym_rows", df_rows)
 
     received = concat(lib.read_batch(["sym_empty", "sym_rows"], lazy=True), join).collect().data
-    if join == "outer":
-        expected = df_rows.assign(col2=np.zeros(2, dtype=np.int64))[["col1", "col2", "col3"]]
-    else:
-        expected = df_rows[["col1"]]
-    assert_frame_equal(expected, received)
+    assert_frame_equal(df_rows, received)
 
 
 @pytest.mark.parametrize("join", ["inner", "outer"])
 def test_symbol_concat_of_only_empty_dataframes(in_memory_library, join):
+    # No symbol has rows, so there is nothing to apply the join to and the first symbol's schema is kept as it stands.
     lib = in_memory_library
     df_0 = pd.DataFrame({"col1": np.array([], dtype=np.float64)}, index=pd.DatetimeIndex([]))
     df_1 = pd.DataFrame({"col2": np.array([], dtype=np.float64)}, index=pd.DatetimeIndex([]))
     lib.write("sym0", df_0)
     lib.write("sym1", df_1)
-    expected_columns = ["col1", "col2"] if join == "outer" else []
 
     received = concat(lib.read_batch(["sym0", "sym1"], lazy=True), join).collect().data
     assert not len(received)
-    assert list(received.columns) == expected_columns
+    assert list(received.columns) == ["col1"]
 
     # And symmetrically, the other way round.
     received = concat(lib.read_batch(["sym1", "sym0"], lazy=True), join).collect().data
     assert not len(received)
-    assert list(received.columns) == expected_columns[::-1]
+    assert list(received.columns) == ["col2"]
 
 
 @pytest.mark.parametrize("dynamic_schema", [True, False])

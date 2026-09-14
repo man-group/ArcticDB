@@ -77,11 +77,8 @@ bool is_timeseries_or_empty_index(const IndexDescriptorImpl& index_desc) {
     return index_desc.type() == IndexDescriptor::Type::TIMESTAMP || index_desc.type() == IndexDescriptor::Type::EMPTY;
 }
 
-RequiredFieldInfo required_fields_info(
-        const proto::descriptors::NormalizationMetadata& norm_meta, bool has_empty_pandas_index
-) {
+RequiredFieldInfo required_fields_info(const proto::descriptors::NormalizationMetadata& norm_meta) {
     RequiredFieldInfo info;
-    info.has_empty_pandas_index = has_empty_pandas_index && pandas_common(norm_meta) != nullptr;
     info.has_series_value_column = norm_meta.has_series();
     if (const auto* common = pandas_common(norm_meta); common != nullptr) {
         info.has_multi_index = common->has_multi_index();
@@ -97,13 +94,12 @@ RequiredFieldInfo required_fields_info(
 }
 
 RequiredFieldInfo required_fields_info(
-        const StreamDescriptor& stream_desc, const std::optional<proto::descriptors::NormalizationMetadata>& norm_meta,
-        bool has_empty_pandas_index
+        const StreamDescriptor& stream_desc, const std::optional<proto::descriptors::NormalizationMetadata>& norm_meta
 ) {
     if (!norm_meta.has_value()) {
         return {.num_physical_indices = stream_desc.index().field_count()};
     }
-    auto info = required_fields_info(*norm_meta, has_empty_pandas_index);
+    auto info = required_fields_info(*norm_meta);
     if (pandas_common(*norm_meta) == nullptr && !norm_meta->has_experimental_arrow()) {
         info.num_physical_indices = stream_desc.index().field_count();
     }

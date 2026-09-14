@@ -15,7 +15,6 @@ import pytest
 from packaging.version import Version
 from arcticdb.util._versions import PANDAS_VERSION
 from arcticdb.version_store._string_dtype import _use_pyarrow_strings_in_pandas
-from arcticdb.exceptions import NormalizationException
 
 pyarrow_strings_empty_string_skip = pytest.mark.skipif(
     _use_pyarrow_strings_in_pandas(),
@@ -726,7 +725,8 @@ class TestAppendAndUpdateWithEmptyToColumnOnlyIncrementsVersionNumber:
             df, lmdb_version_store_static_and_dynamic, empty_dataframe
         )
 
-    def test_empty_df_creates_new_columns_in_dynamic_schema(self, lmdb_version_store_dynamic_schema, index):
+    def test_empty_df_creates_no_new_columns_in_dynamic_schema(self, lmdb_version_store_dynamic_schema, index):
+        # These dtypes are a property of the pandas version, not the user's intent, so none of the columns is added.
         df = pd.DataFrame({"col": [1, 2, 3]}, dtype="int32", index=index)
         lmdb_version_store_dynamic_schema.write("sym", df)
         to_append = pd.DataFrame(
@@ -740,8 +740,8 @@ class TestAppendAndUpdateWithEmptyToColumnOnlyIncrementsVersionNumber:
         lmdb_version_store_dynamic_schema.append("sym", to_append)
         read_result = lmdb_version_store_dynamic_schema.read("sym")
         assert read_result.version == 1
-        assert list(read_result.data.columns) == ["col", "col_1", "col_2", "col_3", "col_4"]
-        assert_frame_equal(read_result.data[["col"]], df)
+        assert list(read_result.data.columns) == ["col"]
+        assert_frame_equal(read_result.data, df)
 
 
 class TestCanUpdateEmptyColumn:

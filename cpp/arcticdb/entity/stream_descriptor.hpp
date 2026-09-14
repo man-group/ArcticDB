@@ -216,13 +216,9 @@ struct OutputSchema {
     // If `inferred_from_empty_frame` is True, pandas index metadata should be ignored.
     [[nodiscard]] bool inferred_from_empty_frame() const { return inferred_from_empty_frame_; }
 
-    // Whether the pandas index metadata was inferred from an empty frame and so must not be trusted. Only pandas
-    // normalization infers an index; arrow states it regardless of the row count.
-    [[nodiscard]] bool has_empty_pandas_index() const {
-        const bool pandas_normalized =
-                norm_metadata_.has_df() || norm_metadata_.has_series() || norm_metadata_.has_ts();
-        return inferred_from_empty_frame_ && pandas_normalized;
-    }
+    // Index metadata and column dtypes can be incorrect when inferred from an empty pandas dataframe. Out of line
+    // because pandas_common()'s header includes this one.
+    [[nodiscard]] bool is_inferred_from_empty_pandas() const;
 
     void set_inferred_from_empty_frame(bool inferred_from_empty_frame) {
         inferred_from_empty_frame_ = inferred_from_empty_frame;
