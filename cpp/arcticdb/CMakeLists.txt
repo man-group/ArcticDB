@@ -325,6 +325,7 @@ set(arcticdb_srcs
         processing/bucketizer.hpp
         processing/clause.hpp
         processing/clause_utils.hpp
+        processing/schema_combine.hpp
         processing/expression_context.hpp
         processing/expression_node.hpp
         processing/query_planner.hpp
@@ -543,6 +544,7 @@ set(arcticdb_srcs
         processing/clause_merge_update.cpp
         processing/clause_resample.cpp
         processing/clause_utils.cpp
+        processing/schema_combine.cpp
         processing/component_manager.cpp
         processing/expression_node.cpp
         processing/operation_dispatch.cpp
@@ -1124,7 +1126,7 @@ if(${TEST})
             processing/test/test_component_manager.cpp
             processing/test/test_expression.cpp
             processing/test/test_filter_and_project_sparse.cpp
-            processing/test/test_join_schemas.cpp
+            processing/test/test_schema_combine.cpp
             processing/test/test_type_promotion.cpp
             processing/test/test_operation_dispatch.cpp
             processing/test/test_output_schema_aggregator_types.cpp

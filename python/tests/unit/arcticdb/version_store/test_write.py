@@ -9,7 +9,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 import numpy as np
 import pandas as pd
 import pytest
-from arcticdb_ext.exceptions import UnsortedDataException, ArcticException as ArcticNativeException
+from arcticdb.exceptions import UnsortedDataException, ArcticException as ArcticNativeException
 from arcticdb.util._versions import IS_PANDAS_TWO
 from arcticdb.util.test import assert_frame_equal
 from arcticdb.version_store._string_dtype import _use_pyarrow_strings_in_pandas

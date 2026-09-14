@@ -13,7 +13,7 @@ import pytest
 import sys
 
 from arcticdb import QueryBuilder
-from arcticdb.exceptions import UserInputException
+from arcticdb.exceptions import UserInputException, SchemaException
 import arcticdb.toolbox.query_stats as qs
 from arcticdb.util.test import assert_frame_equal, assert_series_equal, config_context
 from arcticdb.version_store._string_dtype import _use_pyarrow_strings_in_pandas
@@ -21,7 +21,6 @@ from arcticdb.version_store.library import Library
 from arcticdb_ext import set_config_int
 import arcticdb_ext.cpp_async as adb_async
 from arcticdb_ext.storage import KeyType
-from arcticdb_ext.exceptions import SchemaException
 from arcticc.pb2.descriptors_pb2 import TypeDescriptor
 from tests.conftest import Marks
 from tests.util.date import DateRange

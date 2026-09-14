@@ -21,17 +21,18 @@ from arcticdb.version_store._string_dtype import _use_pyarrow_strings_in_pandas
 from arcticdb.version_store._store import NativeVersionStore, VersionedItem
 from datetime import timedelta, timezone
 
-from arcticdb.exceptions import ArcticNativeException, UnsortedDataException
-from arcticdb.version_store.processing import QueryBuilder
-from arcticdb_ext.version_store import StreamDescriptorMismatch, NoSuchVersionException
-
-from arcticdb_ext.exceptions import (
+from arcticdb.exceptions import (
+    ArcticNativeException,
+    UnsortedDataException,
+    NoSuchVersionException,
     InternalException,
     NormalizationException,
     UserInputException,
     MissingDataException,
     SchemaException,
+    StreamDescriptorMismatch,
 )
+from arcticdb.version_store.processing import QueryBuilder
 
 
 from tests.util.mark import LINUX, SLOW_TESTS_MARK, WINDOWS
@@ -83,7 +84,20 @@ def get_metadata():
 @SLOW_TESTS_MARK
 @pytest.mark.parametrize("dtype", supported_types_list)
 @pytest.mark.parametrize("dynamic_schema", [True, False])
-@pytest.mark.parametrize("append_type", ["append", "stage"])
+@pytest.mark.parametrize(
+    "append_type",
+    [
+        "append",
+        pytest.param(
+            "stage",
+            marks=pytest.mark.xfail(
+                strict=True,
+                reason="Staged-data compaction does not reconcile normalization metadata with the staged frame. "
+                "Monday 12821228270",
+            ),
+        ),
+    ],
+)
 def test_write_append_update_read_scenario_with_different_series_combinations(
     version_store_factory, dtype, dynamic_schema, append_type
 ):

@@ -16,6 +16,7 @@ from typing import Optional, Any, Tuple, Dict, Union, List, Iterable, NamedTuple
 
 from arcticdb.dependencies import _PYARROW_AVAILABLE, _POLARS_AVAILABLE, pyarrow as pa, polars as pl
 from arcticdb.exceptions import (
+    ArcticException,
     ArcticNativeException,
     ArcticDbNotYetImplemented,
     MissingKeysInStageResultsError,
@@ -29,6 +30,7 @@ from arcticdb.options import LibraryOptions, EnterpriseLibraryOptions, OutputFor
 from arcticc.pb2.descriptors_pb2 import TypeDescriptor
 from arcticdb.preconditions import check
 from arcticdb.supported_types import Timestamp
+from arcticdb.util.arrow import NORMALIZABLE_PYARROW_TYPES, NORMALIZABLE_POLARS_TYPES
 from arcticdb.util._versions import IS_PANDAS_TWO
 
 from arcticdb.version_store.processing import ExpressionNode, QueryBuilder
@@ -40,7 +42,6 @@ from arcticdb.version_store._store import (
     MergeStrategy,
     MergeAction,
 )
-from arcticdb_ext.exceptions import ArcticException
 from arcticdb_ext.version_store import (
     CompactDataInfo,
     DataError,
@@ -924,9 +925,9 @@ class Library:
         if isinstance(data, NORMALIZABLE_TYPES):
             return True
         if self._nvs._allow_arrow_input:
-            if _PYARROW_AVAILABLE and isinstance(data, pa.Table):
+            if isinstance(data, NORMALIZABLE_PYARROW_TYPES):
                 return True
-            if _POLARS_AVAILABLE and isinstance(data, pl.DataFrame):
+            if isinstance(data, NORMALIZABLE_POLARS_TYPES):
                 return True
         return False
 
@@ -1298,7 +1299,6 @@ class Library:
         >>> items[0].symbol, items[1].symbol
         ('symbol_1', 'symbol_2')
         """
-        self._nvs._raise_if_duplicate_symbols_in_batch(payloads)
         self._raise_if_unsupported_type_in_write_batch(payloads)
 
         throw_on_error = False
@@ -1347,7 +1347,6 @@ class Library:
         write: For more detailed documentation.
         write_pickle: For information on the implications of providing data that needs to be pickled.
         """
-        self._nvs._raise_if_duplicate_symbols_in_batch(payloads)
 
         return self._nvs._batch_write_internal(
             [p.symbol for p in payloads],
@@ -1519,7 +1518,6 @@ class Library:
             If data that is not of NormalizableType appears in any of the payloads.
         """
 
-        self._nvs._raise_if_duplicate_symbols_in_batch(append_payloads)
         self._raise_if_unsupported_type_in_write_batch(append_payloads)
         throw_on_error = False
 
@@ -1727,7 +1725,6 @@ class Library:
         2024-01-02        11
         """
 
-        self._nvs._raise_if_duplicate_symbols_in_batch(update_payloads)
         self._raise_if_unsupported_type_in_write_batch(update_payloads)
 
         batch_update_result = self._nvs._batch_update_internal(
@@ -2664,7 +2661,6 @@ class Library:
         {'the': 'metadata_2'}
         """
 
-        self._nvs._raise_if_duplicate_symbols_in_batch(write_metadata_payloads)
         throw_on_error = False
         return self._nvs._batch_write_metadata_to_versioned_items(
             [p.symbol for p in write_metadata_payloads],
@@ -3533,7 +3529,7 @@ class Library:
         """
         return self._nvs.defragment_symbol_data(symbol, segment_size, prune_previous_versions)
 
-    def merge_experimental(
+    def merge(
         self,
         symbol: str,
         source: NormalizableType,
@@ -3550,10 +3546,7 @@ class Library:
         See [Merge Notebook](../notebooks/ArcticDB_merge.ipynb) for usage examples.
 
         !!! warning
-            This API is under development and is subject to change. The API is not subject to semver and can change in
-            minor or patch releases.
-
-            Dynamic schema is not supported.
+            Dynamic schema is not supported. Sparse data is not supported. Fortran styled data is not supported.
 
         Parameters
         ----------
@@ -3626,14 +3619,14 @@ class Library:
         --------
 
         >>> lib.write("symbol", pd.DataFrame({'a': [1, 2, 3]}, index=pd.DatetimeIndex([pd.Timestamp(1), pd.Timestamp(2), pd.Timestamp(3)])))
-        >>> lib.merge_experimental("symbol", pd.DataFrame({"a": [100, 200]}, index=pd.DatetimeIndex([pd.Timestamp(2), pd.Timestamp(4)])), strategy=MergeStrategy(matched="update", not_matched_by_target="do_nothing"))))
+        >>> lib.merge("symbol", pd.DataFrame({"a": [100, 200]}, index=pd.DatetimeIndex([pd.Timestamp(2), pd.Timestamp(4)])), strategy=MergeStrategy(matched="update", not_matched_by_target="do_nothing"))))
         >>> lib.read("symbol").data
                                        a
         1970-01-01 00:00:00.000000001  1
         1970-01-01 00:00:00.000000002  100
         1970-01-01 00:00:00.000000003  3
         """
-        return self._nvs.merge_experimental(
+        return self._nvs.merge(
             symbol=symbol,
             source=source,
             strategy=strategy,

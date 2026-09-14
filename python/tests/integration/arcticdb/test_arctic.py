@@ -23,9 +23,18 @@ from enum import Enum
 import multiprocessing
 
 from arcticdb_ext import get_config_int, set_config_int
-from arcticdb_ext.exceptions import InternalException, StorageException, UnsortedDataException, UserInputException
-from arcticdb_ext.storage import NoDataFoundException, KeyType, AWSAuthMethod
-from arcticdb.exceptions import ArcticDbNotYetImplemented, NoSuchVersionException
+from arcticdb_ext.storage import KeyType, AWSAuthMethod
+from arcticdb.exceptions import (
+    ArcticDbNotYetImplemented,
+    NoSuchVersionException,
+    InternalException,
+    StorageException,
+    UnsortedDataException,
+    UserInputException,
+    NoDataFoundException,
+    ArcticUnsupportedDataTypeException,
+    ArcticInvalidApiUsageException,
+)
 from arcticdb.adapters.mongo_library_adapter import MongoLibraryAdapter
 from arcticdb.arctic import Arctic
 import arcticdb.toolbox.query_stats as qs
@@ -37,16 +46,9 @@ from arcticdb.storage_fixtures.utils import GracefulProcessUtils
 from arcticdb.util.test import assert_frame_equal, sample_dataframe, config_context, config_context_string
 from arcticdb.storage_fixtures.s3 import S3Bucket
 from arcticdb.config import Defaults
-from arcticdb.version_store.library import (
-    WritePayload,
-    ArcticUnsupportedDataTypeException,
-    ReadRequest,
-    StagedDataFinalizeMethod,
-    DeleteRequest,
-)
+from arcticdb.version_store.library import WritePayload, ReadRequest, StagedDataFinalizeMethod, DeleteRequest
 from arcticdb.authorization.permissions import OpenMode
 from arcticdb.version_store._store import NativeVersionStore
-from arcticdb.version_store.library import ArcticInvalidApiUsageException
 from tests.conftest import Marks
 from tests.util.marking import marks
 from tests.util.storage_test import get_s3_storage_config
@@ -992,6 +994,15 @@ def test_append_prune_previous_versions(arctic_library):
 
 
 @pytest.mark.storage
+def test_append_missing_symbol_creates(arctic_library):
+    lib = arctic_library
+    df = pd.DataFrame({"a": [1, 2]}, index=pd.date_range("2024-01-01", periods=2))
+    lib.append("new_symbol", df)
+    assert "new_symbol" in lib.list_symbols()
+    assert_frame_equal(lib.read("new_symbol").data, df)
+
+
+@pytest.mark.storage
 def test_update_documented_example(arctic_library):
     """Test the example given on the `update` docstring."""
     lib = arctic_library
@@ -1170,8 +1181,9 @@ def test_update_with_daterange_restrictive(arctic_library):
 @pytest.mark.storage
 def test_update_with_upsert(arctic_library):
     lib = arctic_library
-    with pytest.raises(Exception):
+    with pytest.raises(NoSuchVersionException) as ex_info:
         lib.update("symbol", pd.DataFrame())
+    assert all(s in str(ex_info.value) for s in ["upsert", "Cannot update", "symbol"])
     assert not lib.list_symbols()
     lib.update("symbol", pd.DataFrame(), upsert=True)
     assert "symbol" in lib.list_symbols()

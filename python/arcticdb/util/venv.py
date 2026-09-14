@@ -12,7 +12,7 @@ from retrying import retry
 
 from typing import Dict, List, Optional, Union
 
-from arcticdb_ext.exceptions import StorageException
+from arcticdb.exceptions import StorageException
 from packaging.version import Version
 from arcticdb_ext import set_config_int, unset_config_int
 from arcticdb.arctic import Arctic

@@ -667,11 +667,13 @@ def test_update_series_and_dataframe_incompatible(request, lib_fixture, series_f
 @pytest.mark.parametrize("lib_fixture", ["in_memory_library", "in_memory_library_dynamic"], ids=["static", "dynamic"])
 @pytest.mark.parametrize("series_first", [True, False], ids=["series-first", "df-first"])
 def test_concat_series_and_dataframe_incompatible(request, lib_fixture, series_first):
-    """concat (multi-symbol join) cannot join a Series to a DataFrame (E_DESCRIPTOR_MISMATCH)."""
+    """concat (multi-symbol join) cannot join a Series to a DataFrame. The kind of object is a normalization
+    concern, so this is reported as one, the same way append and update report it."""
     lib = request.getfixturevalue(lib_fixture)
     first = _series([0, 1]) if series_first else _one_col_frame([0, 1])
     second = _one_col_frame([2, 3], "2025-01-03") if series_first else _series([2, 3], "2025-01-03")
     lib.write("s0", first)
     lib.write("s1", second)
-    with pytest.raises(SchemaException):
+    with pytest.raises(NormalizationException) as e:
         concat(lib.read_batch(["s0", "s1"], lazy=True)).collect()
+    assert "Cannot concat: a Series cannot be combined with a DataFrame" in str(e.value)
