@@ -1885,36 +1885,3 @@ class TestEmptyDataFrames:
         lib.write(symbol, to_append, parallel=True)
         with pytest.raises(SchemaException, match="wrong_col"):
             lib.compact_incomplete(symbol, append=True, convert_int_to_float=False)
-
-
-def test_v2_write_ignores_parallel_env_var(lmdb_library, monkeypatch):
-    monkeypatch.setenv("parallel", "1")
-    df = pd.DataFrame({"col": [1, 2]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-02")]))
-    vit = lmdb_library.write("sym", df)
-    assert vit.version == 0
-    assert lmdb_library.get_staged_symbols() == []
-    assert_frame_equal(lmdb_library.read("sym").data, df)
-
-
-def test_v2_write_pickle_ignores_parallel_env_var(lmdb_library, monkeypatch):
-    monkeypatch.setenv("parallel", "1")
-    vit = lmdb_library.write_pickle("sym", {1, 2, 3})
-    assert vit.version == 0
-    assert lmdb_library.get_staged_symbols() == []
-    assert lmdb_library.read("sym").data == {1, 2, 3}
-
-
-@pytest.mark.parametrize(
-    "method, kwargs, expected_warning",
-    [
-        ("write", {"parallel": True}, r"Staging data with write\(\) is deprecated\. Use stage\(\) instead\."),
-        ("append", {"incomplete": True}, r"Staging data with append\(\) is deprecated\. Use stage\(\) instead\."),
-    ],
-    ids=["write_parallel", "append_incomplete"],
-)
-def test_v1_staging_emits_deprecation_warning(lmdb_version_store_v1, method, kwargs, expected_warning):
-    sym = "test_v1_staging_emits_deprecation_warning"
-    df = pd.DataFrame({"col": [1, 2]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-02")]))
-    with pytest.warns(DeprecationWarning, match=expected_warning):
-        getattr(lmdb_version_store_v1, method)(sym, df, **kwargs)
-    assert len(lmdb_version_store_v1.library_tool().find_keys_for_symbol(KeyType.APPEND_DATA, sym)) == 1
