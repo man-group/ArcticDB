@@ -32,7 +32,7 @@ jobs:
           aws-region: "eu-west-1"
       - name: Start EC2 runner
         id: start-ec2-runner
-        uses: machulav/ec2-github-runner@v2.3.3
+        uses: machulav/ec2-github-runner@v2.6.1
         with:
           mode: start
           github-token: ${{ secrets.ARCTICDB_TEST_PAT }}
@@ -63,7 +63,7 @@ jobs:
           aws-secret-access-key: "${{ secrets.AWS_S3_SECRET_KEY }}"
           aws-region: "eu-west-1"
       - name: Stop EC2 runner
-        uses: machulav/ec2-github-runner@v2.3.3
+        uses: machulav/ec2-github-runner@v2.6.1
         with:
           mode: stop
           github-token: ${{ secrets.ARCTICDB_TEST_PAT }}
