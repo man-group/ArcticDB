@@ -4431,7 +4431,7 @@ class NativeVersionStore:
     def library_tool(self) -> LibraryTool:
         return LibraryTool(self._library, self)
 
-    def merge_experimental(
+    def merge(
         self,
         symbol: str,
         source: Any,
@@ -4448,10 +4448,7 @@ class NativeVersionStore:
         See [Merge Notebook](../notebooks/ArcticDB_merge.ipynb) for usage examples.
 
         !!! warning
-            This API is under development and is subject to change. The API is not subject to semver and can change in
-            minor or patch releases.
-
-            Dynamic schema is not supported.
+            Dynamic schema is not supported. Sparse data is not supported. Fortran styled data is not supported.
 
         Parameters
         ----------
@@ -4523,7 +4520,7 @@ class NativeVersionStore:
         --------
 
         >>> lib.write("symbol", pd.DataFrame({'a': [1, 2, 3]}, index=pd.DatetimeIndex([pd.Timestamp(1), pd.Timestamp(2), pd.Timestamp(3)])))
-        >>> lib.merge_experimental("symbol", pd.DataFrame({"a": [100, 200]}, index=pd.DatetimeIndex([pd.Timestamp(2), pd.Timestamp(4)])), strategy=MergeStrategy(matched="update", not_matched_by_target="do_nothing"))))
+        >>> lib.merge("symbol", pd.DataFrame({"a": [100, 200]}, index=pd.DatetimeIndex([pd.Timestamp(2), pd.Timestamp(4)])), strategy=MergeStrategy(matched="update", not_matched_by_target="do_nothing"))))
         >>> lib.read("symbol").data
                                        a
         1970-01-01 00:00:00.000000001  1
