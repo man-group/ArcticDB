@@ -567,6 +567,14 @@ def test_resampling_pickled_query_builder(lmdb_version_store_v1, any_output_form
     received = lib.read(sym, query_builder=pickle.loads(pickle.dumps(q))).data
     assert_frame_equal(expected, received)
 
+    # A QueryBuilder pickled by an older version carries no rule_ns on its resample clause: the rule string must be
+    # enough to rebuild the native clause on load
+    del q._python_clauses[0].rule_ns
+    old_pickle = pickle.loads(pickle.dumps(q))
+    assert old_pickle._python_clauses[0].rule_ns == pd.Timedelta("1h30min").value
+    received = lib.read(sym, query_builder=old_pickle).data
+    assert_frame_equal(expected, received)
+
 
 def test_resampling_unsupported_aggregation_type_combos(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1

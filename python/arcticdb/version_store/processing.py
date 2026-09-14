@@ -1272,11 +1272,17 @@ class QueryBuilder:
                     _AggregationClause(self.clauses[-1].grouping_column, python_clause.aggregations)
                 ]
             elif isinstance(python_clause, PythonResampleClause):
+                # A QueryBuilder pickled by a version without rule_ns carries only the rule string; parse it here so
+                # queries shipped from an older client (e.g. to a distributed worker) still load
+                rule_ns = getattr(python_clause, "rule_ns", None)
+                if rule_ns is None:
+                    rule_ns = to_offset(python_clause.rule).nanos
+                    python_clause.rule_ns = rule_ns
                 if python_clause.closed == _ResampleBoundary.LEFT:
                     self.clauses = self.clauses + [
                         _ResampleClauseLeftClosed(
                             python_clause.rule,
-                            python_clause.rule_ns,
+                            rule_ns,
                             python_clause.label,
                             python_clause.offset,
                             python_clause.origin,
@@ -1286,7 +1292,7 @@ class QueryBuilder:
                     self.clauses = self.clauses + [
                         _ResampleClauseRightClosed(
                             python_clause.rule,
-                            python_clause.rule_ns,
+                            rule_ns,
                             python_clause.label,
                             python_clause.offset,
                             python_clause.origin,
