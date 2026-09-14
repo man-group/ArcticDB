@@ -11,7 +11,7 @@ from arcticdb.version_store.processing import QueryBuilder
 import arcticdb.toolbox.query_stats as qs
 import pandas as pd
 
-from arcticdb.exceptions import UserInputException
+from arcticdb.exceptions import SchemaException, UserInputException
 
 
 def get_table_data_read_count():
