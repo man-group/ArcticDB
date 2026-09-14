@@ -9,7 +9,13 @@ from packaging import version
 import pandas as pd
 import numpy as np
 from arcticdb import QueryBuilder, LibraryOptions
-from arcticdb.util.test import assert_frame_equal, assert_frame_equal_with_arrow, merge, config_context
+from arcticdb.util.test import (
+    assert_frame_equal,
+    assert_frame_equal_with_arrow,
+    assert_pandas_equal,
+    merge,
+    config_context,
+)
 from arcticdb.version_store._string_dtype import _use_pyarrow_strings_in_pandas
 from arcticdb.version_store.library import MergeStrategy, MergeAction
 from arcticdb.options import ModifiableEnterpriseLibraryOption, OutputFormat
@@ -17,6 +23,10 @@ from arcticdb.toolbox.library_tool import LibraryTool
 from tests.util.mark import ARCTICDB_USING_CONDA, MACOS_WHEEL_BUILD, ZONE_INFO_MARK
 from arcticdb_ext.tools import StorageMover
 from arcticdb_ext.types import IndexKind
+from tests.unit.arcticdb.version_store.test_arrow_col_rename import (
+    make_df_or_series,
+    generic_rename_columns_arrow_compat_test,
+)
 
 from arcticdb.util.venv import CompatLibrary
 
@@ -772,3 +782,47 @@ def test_norm_meta_column_and_index_names_write_new_read_old(old_venv_and_arctic
                 "assert actual_col_names == ['col_one', 'col_two'], f'Actual col names were {actual_col_names}'",
             ]
         )
+
+
+# See test_arrow_col_rename.py::test_multi_index_auto_rename_clashes for most of these tests. Top-level int indexes have
+# not been set since July 2026
+@pytest.mark.parametrize("object_type", ["DataFrame", "Series"])
+@pytest.mark.parametrize(
+    "col_name,input_names,output_names,output_col_name",
+    [
+        pytest.param(
+            "col",
+            [10, "level1"],
+            ["10", "level1"],
+            "col",
+            id="int_no_clash",
+        ),
+        pytest.param(
+            "10",
+            [10, "level1"],
+            ["10", "level1"],
+            "_10_",
+            id="int_one_clash",
+        ),
+    ],
+)
+def test_arrow_col_rename_multi_index_auto_rename_clashes(
+    old_venv_and_arctic_uri, lib_name, object_type, col_name, input_names, output_names, output_col_name
+):
+    old_venv, arctic_uri = old_venv_and_arctic_uri
+    sym = "test_arrow_col_rename_multi_index_auto_rename_clashes"
+    with CompatLibrary(old_venv, arctic_uri, lib_name) as compat:
+        compat.old_lib.execute(
+            [
+                f"index = pd.MultiIndex.from_arrays([[0], [1]], names={input_names})",
+                f"input = make_df_or_series({object_type}, {col_name}, [0], index=index)",
+                f"lib.write({sym}, input)",
+            ]
+        )
+        with compat.current_version() as curr:
+            lib = curr.lib
+            generic_rename_columns_arrow_compat_test(lib, sym)
+            received = lib.read(sym).data
+            expected_index = pd.MultiIndex.from_arrays([[0], [1]], names=output_names)
+            expected = make_df_or_series(object_type, output_col_name, [0], index=expected_index)
+            assert_pandas_equal(received, expected)

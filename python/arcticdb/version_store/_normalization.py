@@ -790,6 +790,11 @@ class ArrowTableNormalizer(Normalizer):
 
     def denormalize(self, item, norm_meta):
         # type: (pa.Table, NormalizationMetadata) -> pa.Table
+        # A lot of this logic also has a C++ implementation for the rename_columns_arrow_compat method. The main
+        # differences are that the C++ implementation allows users to specify index column names, whereas here it is
+        # always automatic, and that the Python implementation builds up the necessary metadata for pa.Table.to_pandas()
+        # to restore the original index/column names. Combining them is therefore painful, and would also involve
+        # round-tripping the protobuf back through the C++ layer.
         def num_pandas_index_cols(pandas_meta):
             index_type = pandas_meta.WhichOneof("index_type")
             if index_type == "index":
@@ -821,7 +826,9 @@ class ArrowTableNormalizer(Normalizer):
 
             # Non-index columns
             for col in item.column_names[pandas_indexes:]:
-                if col in pandas_meta.col_names:
+                if unnamed_series:
+                    res.add("")
+                elif col in pandas_meta.col_names:
                     col_data = pandas_meta.col_names[col]
                     if col_data.original_name != col:
                         res.add(col_data.original_name)
@@ -831,12 +838,16 @@ class ArrowTableNormalizer(Normalizer):
                     res.add(col)
             return res
 
+        unnamed_series = False
         input_type = norm_meta.WhichOneof("input_type")
         if input_type == "df":
             pandas_meta = norm_meta.df.common
         elif input_type == "series":
             # For pandas series we always return a dataframe (to not lose the index information).
             pandas_meta = norm_meta.series.common
+            # An unnamed pandas Series is stored under a synthetic positional column name. Arrow has no concept of an
+            # unnamed column, so follow the polars convention of naming it "" instead
+            unnamed_series = not pandas_meta.has_name and not pandas_meta.name
         elif input_type == "experimental_arrow":
             if norm_meta.experimental_arrow.one_dimensional:
                 check(
@@ -881,8 +892,11 @@ class ArrowTableNormalizer(Normalizer):
                     taken_col_names.add(new_name)
                     renames_for_table[0] = new_name
                 else:
-                    renames_for_table[0] = index_meta.name
-                    taken_col_names.add(index_meta.name)
+                    # Primary index empty string names are stored down as "" rather than "__empty__n"
+                    final_name = "__empty__" if index_meta.name == "" else index_meta.name
+                    renames_for_pandas_metadata[0] = index_meta.name
+                    renames_for_table[0] = final_name
+                    taken_col_names.add(final_name)
             else:
                 index_name = index_meta.name if index_meta.name else None
                 range_index = {
@@ -910,10 +924,15 @@ class ArrowTableNormalizer(Normalizer):
                     taken_col_names.add(new_name)
                     renames_for_table[index_col_idx] = new_name
                 elif index_col_idx == 0:
-                    renames_for_table[0] = multi_index_meta.name
-                    taken_col_names.add(multi_index_meta.name)
+                    # Primary index empty string names are stored down as "" rather than "__empty__n"
+                    final_name = "__empty__" if multi_index_meta.name == "" else multi_index_meta.name
+                    renames_for_pandas_metadata[0] = multi_index_meta.name
+                    renames_for_table[0] = final_name
+                    taken_col_names.add(final_name)
                 else:
                     new_name = item.column_names[index_col_idx][_IDX_PREFIX_LEN:]
+                    if new_name == "":
+                        new_name = "__empty__"
                     while new_name in taken_col_names:
                         new_name = f"_{new_name}_"
                     taken_col_names.add(new_name)
@@ -922,14 +941,18 @@ class ArrowTableNormalizer(Normalizer):
 
         for i, col in enumerate(item.column_names[pandas_indexes:]):
             i += pandas_indexes
-            if col in pandas_meta.col_names:
-                col_data = pandas_meta.col_names[col]
-                if col_data.is_none:
+            if unnamed_series or col in pandas_meta.col_names:
+                # Protobuf map subscripting inserts a default entry for missing keys, so only look up when present
+                col_data = pandas_meta.col_names[col] if not unnamed_series else None
+                if unnamed_series:
+                    renames_for_pandas_metadata[i] = None
+                    new_name = "None"
+                elif col_data.is_none:
                     renames_for_pandas_metadata[i] = None
                     new_name = "None"
                 elif col_data.is_empty:
                     renames_for_pandas_metadata[i] = ""
-                    new_name = ""
+                    new_name = "__empty__"
                 elif col_data.is_int:
                     renames_for_pandas_metadata[i] = int(col_data.original_name)
                     new_name = col_data.original_name

@@ -24,15 +24,25 @@ void ComponentManager::decrement_entity_fetch_count(EntityId id) {
         // This entity will never be accessed again
         // Ideally would call registry_.destroy(id), or at least registry_.erase<std::shared_ptr<SegmentInMemory>>(id)
         // at this point. However, they are both slower than this, and would require taking a unique_lock on the
-        // shared_mutex, so just decrement the ref count of the only sizeable component, so that when the shared pointer
-        // goes out of scope in the calling function, the memory is freed
-        registry_.get<std::shared_ptr<SegmentInMemory>>(id).reset();
+        // shared_mutex, so just decrement the ref count of the only sizeable components, so that when the shared
+        // pointer goes out of scope in the calling function, the memory is freed
+        if (auto seg = registry_.try_get<std::shared_ptr<SegmentInMemory>>(id)) {
+            seg->reset();
+            ARCTICDB_DEBUG_CHECK(
+                    ErrorCode::E_ASSERTION_FAILURE,
+                    !registry_.get<std::shared_ptr<SegmentInMemory>>(id),
+                    "SegmentInMemory memory retained in ComponentManager"
+            );
+        }
+        if (auto seg = registry_.try_get<std::shared_ptr<Segment>>(id)) {
+            seg->reset();
+            ARCTICDB_DEBUG_CHECK(
+                    ErrorCode::E_ASSERTION_FAILURE,
+                    !registry_.get<std::shared_ptr<Segment>>(id),
+                    "Segment memory retained in ComponentManager"
+            );
+        }
         ARCTICDB_DEBUG(log::memory(), "Releasing entity {}", id);
-        ARCTICDB_DEBUG_CHECK(
-                ErrorCode::E_ASSERTION_FAILURE,
-                !registry_.get<std::shared_ptr<SegmentInMemory>>(id),
-                "SegmentInMemory memory retained in ComponentManager"
-        );
     }
 }
 

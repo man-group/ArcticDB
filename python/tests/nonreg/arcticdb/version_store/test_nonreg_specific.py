@@ -470,6 +470,29 @@ def test_prune_previous_append_compact_data(version_store_factory, monkeypatch, 
     assert len(lt.find_keys(KeyType.TABLE_INDEX)) == (1 if should_be_pruned else 2)
 
 
+@pytest.mark.parametrize("lib_config", (True, False))
+@pytest.mark.parametrize("env_var", (True, False))
+@pytest.mark.parametrize("arg", (True, False, None))
+def test_prune_previous_rename_columns_arrow_compat(version_store_factory, monkeypatch, lib_config, env_var, arg):
+    lib = version_store_factory(prune_previous_version=lib_config, use_tombstones=True)
+    should_be_pruned = lib_config
+    if env_var:
+        monkeypatch.setenv("PRUNE_PREVIOUS_VERSION", "true")
+        should_be_pruned = True
+    if arg is not None:
+        should_be_pruned = arg
+
+    lt = lib.library_tool()
+    sym = "test_prune_previous_rename_columns_arrow_compat"
+    # Use a dataframe with non-Arrow compatible schema (unnamed index) so that a new version is written
+    df_0 = pd.DataFrame({"col": np.arange(10)}, index=pd.date_range("2024-01-01", periods=10))
+    lib.write(sym, df_0)
+
+    lib.rename_columns_arrow_compat(sym, prune_previous_version=arg)
+
+    assert len(lt.find_keys(KeyType.TABLE_INDEX)) == (1 if should_be_pruned else 2)
+
+
 @pytest.mark.parametrize("index_start", range(9))
 def test_update_index_overlap_corner_cases(lmdb_version_store_tiny_segment, index_start):
     lib = lmdb_version_store_tiny_segment

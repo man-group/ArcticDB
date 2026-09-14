@@ -1094,11 +1094,12 @@ std::string ConcatClause::to_string() const { return "CONCAT"; }
 
 WriteClause::WriteClause(
         const IndexPartialKey& index_partial_key, std::shared_ptr<DeDupMap> dedup_map, std::shared_ptr<Store> store,
-        ProcessingStructure input_processing_structure
+        ProcessingStructure input_processing_structure, const bool encode
 ) :
     index_partial_key_(index_partial_key),
     dedup_map_(std::move(dedup_map)),
-    store_(std::move(store)) {
+    store_(std::move(store)),
+    encode_(encode) {
     clause_info_.input_structure_ = input_processing_structure;
     clause_info_.output_structure_ = clause_info_.input_structure_;
     clause_info_.can_combine_with_column_selection_ = false;
@@ -1116,11 +1117,15 @@ std::vector<EntityId> WriteClause::process(std::vector<EntityId>&& entity_ids) c
     if (entity_ids.empty()) {
         return {};
     }
+    encode_ ? process_uncompressed(entity_ids) : process_compressed(entity_ids);
+    return entity_ids;
+}
+
+void WriteClause::process_uncompressed(const std::vector<EntityId>& entity_ids) const {
     const auto proc =
             gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(
                     *component_manager_, entity_ids
             );
-
     for (size_t i = 0; i < proc.segments_->size(); ++i) {
         const SegmentInMemory& segment = *(*proc.segments_)[i];
         const RowRange& row_range = *(*proc.row_ranges_)[i];
@@ -1133,7 +1138,35 @@ std::vector<EntityId> WriteClause::process(std::vector<EntityId>&& entity_ids) c
                 ))
         );
     }
-    return entity_ids;
+}
+
+void WriteClause::process_compressed(const std::vector<EntityId>& entity_ids) const {
+    auto [segments, row_ranges, col_ranges, atom_keys] = component_manager_->get_components_and_decrement_refcount<
+            std::shared_ptr<Segment>,
+            std::shared_ptr<RowRange>,
+            std::shared_ptr<ColRange>,
+            std::shared_ptr<AtomKey>>(entity_ids);
+    for (size_t i = 0; i < segments.size(); ++i) {
+        // AtomKey expected to have correct start/end index, content hash, and type
+        // Stream id, version id, and creation ts set from index_partial_key_ and store clock
+        const auto& original_key = *atom_keys.at(i);
+        auto modified_key = AtomKeyBuilder()
+                                    .version_id(index_partial_key_.version_id)
+                                    .creation_ts(store_->current_timestamp())
+                                    .start_index(original_key.start_index())
+                                    .end_index(original_key.end_index())
+                                    .content_hash(original_key.content_hash())
+                                    .build(index_partial_key_.id, original_key.type());
+        storage::KeySegmentPair ks{modified_key, std::move(*segments.at(i))};
+        component_manager_->add_components(
+                entity_ids[i],
+                std::make_shared<folly::Future<SliceAndKey>>(store_->write_compressed(ks).thenValueInline(
+                        [row_range = row_ranges.at(i), col_range = col_ranges.at(i), modified_key](auto&&) {
+                            return SliceAndKey{FrameSlice{*col_range, *row_range}, modified_key};
+                        }
+                ))
+        );
+    }
 }
 
 stream::PartialKey WriteClause::create_partial_key(const SegmentInMemory& segment, const RowRange& row_range) const {
