@@ -14,6 +14,7 @@
 #include <arcticdb/stream/stream_sink.hpp>
 #include <arcticdb/stream/index_aggregator.hpp>
 #include <arcticdb/version/version_map_entry.hpp>
+#include <arcticdb/util/caller_spans.hpp>
 #include <arcticdb/version/version_store_objects.hpp>
 #include <arcticdb/entity/frame_and_descriptor.hpp>
 #include <utility>
@@ -153,6 +154,7 @@ inline void check_is_version(const AtomKey& key) {
 inline void read_symbol_ref(
         const std::shared_ptr<StreamSource>& store, const StreamId& stream_id, VersionMapEntry& entry
 ) {
+    ARCTICDB_CALLER_SPAN("symbol_ref_read")
     std::pair<entity::VariantKey, SegmentInMemory> key_seg_pair;
     // Trying to read a missing ref key is expected e.g. when writing a previously missing symbol.
     // If the ref key is missing we keep the entry empty and should not raise warnings.

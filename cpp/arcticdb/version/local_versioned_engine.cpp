@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <arcticdb/version/local_versioned_engine.hpp>
+#include <arcticdb/util/caller_spans.hpp>
 #include <arcticdb/async/async_store.hpp>
 #include <arcticdb/codec/default_codecs.hpp>
 #include <arcticdb/version/version_core.hpp>
@@ -419,6 +420,10 @@ std::optional<VersionedItem> LocalVersionedEngine::get_version_from_snapshot(
 std::optional<VersionedItem> LocalVersionedEngine::get_version_to_read(
         const StreamId& stream_id, const VersionQuery& version_query
 ) {
+    // The single-symbol version walk. gha 124: the batch path submits this as a
+    // task; this path does it on whatever thread called in, with the version
+    // chain's serial round trips underneath it.
+    ARCTICDB_CALLER_SPAN("version_walk")
     return util::variant_match(
             version_query.content_,
             [&stream_id, &version_query, this](const SpecificVersionQuery& specific) {
@@ -470,6 +475,7 @@ ReadVersionWithNodesOutput LocalVersionedEngine::read_dataframe_version_internal
         const StreamId& stream_id, const VersionQuery& version_query, const std::shared_ptr<ReadQuery>& read_query,
         const ReadOptions& read_options, std::shared_ptr<std::any> handler_data
 ) {
+    ARCTICDB_CALLER_SPAN("read_internal")
     py::gil_scoped_release release_gil;
     const auto identifier = util::variant_match(
             version_query.content_,
@@ -491,7 +497,13 @@ ReadVersionWithNodesOutput LocalVersionedEngine::read_dataframe_version_internal
             }
     );
 
-    auto root_result = read_frame_for_version(store(), identifier, read_query, read_options, handler_data).get();
+    auto root_result = [&] {
+        // The barrier: the calling thread is blocked here while the pools fetch
+        // and decode. It is on the path by construction and it is the stretch a
+        // reader most needs named.
+        ARCTICDB_CALLER_SPAN("await_fetches")
+        return read_frame_for_version(store(), identifier, read_query, read_options, handler_data).get();
+    }();
     auto& keys = root_result.frame_and_descriptor_.keys_;
     if (keys.empty()) {
         return {std::move(root_result), {}};
@@ -501,6 +513,7 @@ ReadVersionWithNodesOutput LocalVersionedEngine::read_dataframe_version_internal
         for (const auto& key : keys) {
             node_futures.emplace_back(read_frame_for_version(store(), key, read_query, read_options, handler_data));
         }
+        ARCTICDB_CALLER_SPAN("await_node_fetches")
         auto node_trys = folly::collectAll(node_futures).get();
         std::vector<ReadVersionOutput> node_results;
         node_results.reserve(node_trys.size());
@@ -824,14 +837,21 @@ VersionedItem LocalVersionedEngine::write_versioned_dataframe_internal(
         const StreamId& stream_id, const std::shared_ptr<InputFrame>& frame, bool prune_previous_versions,
         bool allow_sparse, bool validate_index
 ) {
+    ARCTICDB_CALLER_SPAN("write_internal")
     ARCTICDB_SAMPLE(WriteVersionedDataFrame, 0)
     py::gil_scoped_release release_gil;
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: write_versioned_dataframe");
     // We don't need to load the latest live version unless dedup is enabled. If dedup is disabled, we only care about
     // the next version ID, which can save some IO traversing the version chain
-    auto update_info = get_next_version_id_and_optionally_latest_undeleted_version(
-            store(), version_map(), stream_id, write_options_.de_duplication
-    );
+    auto update_info = [&] {
+        // The write side's version walk: the next version id, and with dedup on
+        // the latest undeleted version too. Serial round trips, on this thread.
+        ARCTICDB_CALLER_SPAN("write_version_walk")
+        return get_next_version_id_and_optionally_latest_undeleted_version(
+                store(), version_map(), stream_id, write_options_.de_duplication
+        );
+    }();
+    ARCTICDB_CALLER_SPAN("await_write")
     return async_write_versioned_dataframe_internal(
                    stream_id, std::move(update_info), frame, prune_previous_versions, allow_sparse, validate_index
     )

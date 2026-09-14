@@ -7,6 +7,7 @@
  */
 
 #include <arcticdb/version/version_store_api.hpp>
+#include <arcticdb/util/caller_spans.hpp>
 #include <arcticdb/python/python_utils.hpp>
 #include <arcticdb/version/version_map.hpp>
 #include <arcticdb/storage/storage_utils.hpp>
@@ -361,6 +362,7 @@ VersionResultVector PythonVersionStore::list_versions(
         const std::optional<StreamId>& stream_id, const std::optional<SnapshotId>& snap_name, bool latest_only,
         bool skip_snapshots
 ) {
+    ARCTICDB_CALLER_SPAN("list_versions")
     ARCTICDB_SAMPLE(ListVersions, 0)
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: list_versions");
 
@@ -791,10 +793,21 @@ VersionedItem PythonVersionStore::write_versioned_dataframe(
         const StreamId& stream_id, const convert::InputItem& item, const py::object& norm, const py::object& user_meta,
         bool prune_previous_versions, bool sparsify_floats, bool validate_index
 ) {
+    ARCTICDB_CALLER_SPAN("write_versioned_dataframe")
     ARCTICDB_SAMPLE(WriteVersionedDataframe, 0)
-    auto frame = convert::py_input_item_to_frame(
-            stream_id, item, norm, user_meta, cfg().write_options().empty_types(), sortedness_scan_for(validate_index)
-    );
+    auto frame = [&] {
+        // pybind marshalling: the numpy buffers become an InputFrame on the
+        // calling thread, with the GIL held, before anything is submitted.
+        ARCTICDB_CALLER_SPAN("py_input_to_frame")
+        return convert::py_input_item_to_frame(
+                stream_id,
+                item,
+                norm,
+                user_meta,
+                cfg().write_options().empty_types(),
+                sortedness_scan_for(validate_index)
+        );
+    }();
     auto versioned_item = write_versioned_dataframe_internal(
             stream_id, frame, prune_previous_versions, sparsify_floats, validate_index
     );
@@ -1116,8 +1129,13 @@ ReadResult PythonVersionStore::read_dataframe_version(
         const ReadOptions& read_options, std::shared_ptr<std::any> handler_data
 ) {
 
+    ARCTICDB_CALLER_SPAN("read_dataframe_version")
     auto opt_version_and_frame =
             read_dataframe_version_internal(stream_id, version_query, read_query, read_options, handler_data);
+    // Frame to Python object, on the calling thread with the GIL retaken: the
+    // normalisation metadata, the arrow/pandas construction and the object
+    // columns. Nothing here is a task and nothing here is a storage call.
+    ARCTICDB_CALLER_SPAN("python_read_result")
     return create_python_read_result(
             opt_version_and_frame.root_.versioned_item_,
             read_options.output_format_for_frame(),

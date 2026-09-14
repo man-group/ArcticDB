@@ -34,6 +34,7 @@
 #include <arcticdb/util/constants.hpp>
 #include <arcticdb/util/key_utils.hpp>
 #include <arcticdb/version/version_map_entry.hpp>
+#include <arcticdb/util/caller_spans.hpp>
 #include <arcticdb/async/batch_read_args.hpp>
 #include <arcticdb/version/version_log.hpp>
 #include <arcticdb/version/version_utils.hpp>
@@ -136,6 +137,9 @@ class VersionMapImpl {
             const std::shared_ptr<Store>& store, const VersionMapEntry& ref_entry,
             const std::shared_ptr<VersionMapEntry>& entry, const LoadStrategy& load_strategy
     ) const {
+        // Hop n+1's address lives inside hop n's body, so this loop cannot be
+        // prefetched and its length is the version depth (gha 128).
+        ARCTICDB_CALLER_SPAN("version_chain")
         util::check(
                 ref_entry.stream_id_ == entry->stream_id_,
                 "follow_version_chain called with mismatching stream ids {} != {}",
