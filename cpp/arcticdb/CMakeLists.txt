@@ -444,6 +444,7 @@ set(arcticdb_srcs
         util/string_utils.hpp
         util/thread_cached_int.hpp
         util/timeouts.hpp
+        util/caller_spans.hpp
         util/timer.hpp
         util/trace.hpp
         util/lazy.hpp
@@ -602,6 +603,7 @@ set(arcticdb_srcs
         util/allocation_tracing.cpp
         util/bitset.cpp
         util/buffer_pool.cpp
+        util/caller_spans.cpp
         util/decimal.cpp
         util/error_code.cpp
         util/global_lifetimes.cpp

@@ -15,6 +15,7 @@
 #include <arcticdb/stream/test/stream_test_common.hpp>
 #include <arcticdb/util/test/config_common.hpp>
 #include <arcticdb/toolbox/query_stats.hpp>
+#include <arcticdb/util/caller_spans.hpp>
 
 #include <folly/executors/ThreadPoolExecutor.h>
 #include <folly/system/ThreadName.h>
@@ -948,4 +949,105 @@ TEST(Async, FormatTaskStatsLine) {
             "task_stats pool=IO thread=IOPool7 task_id=42 enqueue_ns=1000 wait_ns=250 run_ns=9000 expired=false "
             "priority=3"
     );
+}
+
+// --- caller-thread spans (gha 131) ------------------------------------------
+//
+// The third record in the capture, beside task_stats and sync_storage: one line
+// per named stretch of work on whichever thread ran it. These tests pin the
+// format, the clock and the switch, which are the three things a reader of a
+// capture has to be able to take on trust.
+
+TEST(CallerSpans, FormatCallerSpanLine) {
+    ASSERT_EQ(
+            arcticdb::caller_spans::format_caller_span_line("MainThread", "version_walk", 2, 649680563340291, 20412000),
+            "caller_span thread=MainThread name=version_walk depth=2 start_ns=649680563340291 dur_ns=20412000"
+    );
+}
+
+TEST(CallerSpans, SpanClockIsTheTaskStatsClock) {
+    // The whole reason the three records need no anchor between them. If either
+    // side ever changes clock this stops compiling rather than quietly putting
+    // two axes on one timeline.
+    static_assert(
+            std::is_same_v<
+                    decltype(std::declval<folly::ThreadPoolExecutor::ProcessedTaskInfo>().enqueueTime),
+                    std::chrono::steady_clock::time_point>,
+            "folly stamps enqueueTime with steady_clock"
+    );
+    static_assert(
+            std::chrono::steady_clock::period::num == 1 && std::chrono::steady_clock::period::den == 1000000000,
+            "steady_clock ticks nanoseconds, so start_ns and enqueue_ns are the same unit"
+    );
+}
+
+TEST(CallerSpans, SpansFollowTheTaskStatsSwitch) {
+    using namespace task_observer_test;
+
+    auto& logger = arcticdb::log::schedule();
+    auto sink = std::make_shared<CapturingSink>();
+    const auto saved_level = logger.level();
+    logger.sinks().push_back(sink);
+    logger.set_level(spdlog::level::debug);
+
+    auto lines = [&] {
+        std::vector<std::string> found;
+        for (const auto& m : sink->snapshot()) {
+            if (m.rfind("caller_span ", 0) == 0) {
+                found.push_back(m);
+            }
+        }
+        return found;
+    };
+
+    arcticdb::caller_spans::set_enabled(false);
+    {
+        ARCTICDB_CALLER_SPAN("off")
+    }
+    EXPECT_TRUE(lines().empty()) << "a span was logged with the switch off";
+
+    arcticdb::caller_spans::set_enabled(true);
+    {
+        ARCTICDB_CALLER_SPAN("outer")
+        EXPECT_EQ(arcticdb::caller_spans::current_depth(), 1u);
+        {
+            ARCTICDB_CALLER_SPAN("inner")
+            EXPECT_EQ(arcticdb::caller_spans::current_depth(), 2u);
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
+        EXPECT_EQ(arcticdb::caller_spans::current_depth(), 1u);
+    }
+    EXPECT_EQ(arcticdb::caller_spans::current_depth(), 0u) << "depth did not unwind";
+
+    const auto emitted = lines();
+    ASSERT_EQ(emitted.size(), 2u);
+    // Completion order, so the inner span is logged first and carries the
+    // deeper depth: that is the whole of how a reader rebuilds the tree.
+    EXPECT_NE(emitted[0].find("name=inner depth=1"), std::string::npos) << emitted[0];
+    EXPECT_NE(emitted[1].find("name=outer depth=0"), std::string::npos) << emitted[1];
+
+    const auto pos = emitted[0].find("dur_ns=");
+    ASSERT_NE(pos, std::string::npos);
+    EXPECT_GE(std::stoll(emitted[0].substr(pos + 7)), 2000000);
+
+    arcticdb::caller_spans::set_enabled(false);
+    logger.set_level(saved_level);
+    auto& sinks = logger.sinks();
+    sinks.erase(std::remove(sinks.begin(), sinks.end(), sink), sinks.end());
+}
+
+TEST(CallerSpans, SpansAreSilentWhenTheSinkIs) {
+    // The trap gha 83 measured on the shipped observer: a formatted string built
+    // and then dropped by spdlog. A span checks the level before it reads a
+    // clock, so an enabled switch with a quiet sink costs one branch.
+    auto& logger = arcticdb::log::schedule();
+    const auto saved_level = logger.level();
+    logger.set_level(spdlog::level::info);
+    arcticdb::caller_spans::set_enabled(true);
+    {
+        ARCTICDB_CALLER_SPAN("quiet")
+        EXPECT_EQ(arcticdb::caller_spans::current_depth(), 0u) << "a disarmed span must not nest";
+    }
+    arcticdb::caller_spans::set_enabled(false);
+    logger.set_level(saved_level);
 }
