@@ -493,7 +493,6 @@ size_t SegmentInMemoryImpl::on_descriptor_change(
 }
 
 std::optional<std::size_t> SegmentInMemoryImpl::column_index(std::string_view name) const {
-    util::check(!name.empty(), "Cannot get index of empty column name");
     util::check(static_cast<bool>(column_map_), "Uninitialized column map");
     return column_map_->column_index(name);
 }

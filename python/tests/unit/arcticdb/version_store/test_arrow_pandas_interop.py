@@ -261,10 +261,11 @@ def test_write_pandas_duplicate_and_special_col_names(in_memory_version_store_ar
     lib = in_memory_version_store_arrow
     sym = "test_write_pandas_duplicate_and_special_col_names"
     columns = [col_name, "y"]
-    expected_columns = [f"{col_name}", "y"]
+    final_col_name = "__empty__" if col_name == "" else f"{col_name}"
+    expected_columns = [final_col_name, "y"]
     if duplicate:
         columns.append(col_name)
-        expected_columns.append(f"_{col_name}_")
+        expected_columns.append(f"_{final_col_name}_")
     df = pd.DataFrame(np.zeros((1, len(columns))), columns=columns)
     lib.write(sym, df)
 
@@ -336,7 +337,8 @@ def test_write_pandas_named_index_clashes_with_special_col_names(in_memory_versi
     columns = [col_name, col_name]
     df = pd.DataFrame(np.zeros((1, len(columns))), columns=columns, index=[pd.Timestamp(0)])
     df.index.name = index_name
-    expected_columns = [index_name, f"_{columns[0]}_", f"__{columns[1]}__"]
+    final_col_name = "__empty__" if index_name == "" else index_name
+    expected_columns = [final_col_name, f"_{final_col_name}_", f"__{final_col_name}__"]
     lib.write(sym, df)
 
     received = lib.read(sym).data
@@ -477,7 +479,13 @@ def test_write_pandas_multiindex_level_clashes_with_special_col_names(
         columns=[col_name],
         index=pd.MultiIndex.from_product([[pd.Timestamp(0)], ["id"]], names=index_names),
     )
-    expected_columns = index_names + [f"_{col_name}_"]
+    if col_name == "":
+        final_col_name = "__empty__"
+        index_names = ["level 1", "level 2"]
+        index_names[clash_level] = final_col_name
+    else:
+        final_col_name = str(col_name)
+    expected_columns = index_names + [f"_{final_col_name}_"]
     lib.write(sym, df)
 
     received = lib.read(sym).data

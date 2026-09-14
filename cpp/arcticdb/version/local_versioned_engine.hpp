@@ -427,6 +427,11 @@ class LocalVersionedEngine : public VersionedEngine {
             const bool upsert, const MergeStrategy& strategy, std::vector<std::string>&& on
     ) override;
 
+    VersionedItem rename_columns_arrow_compat_internal(
+            const StreamId& stream_id, const std::optional<std::vector<std::string>>& index_columns,
+            const bool prune_previous_versions
+    ) override;
+
   protected:
     template<class ClockType = util::SysClock>
     explicit LocalVersionedEngine(const std::shared_ptr<Store>& store, const ClockType& = ClockType{});
@@ -498,6 +503,11 @@ class LocalVersionedEngine : public VersionedEngine {
 
     folly::Future<VersionedItem> async_compact_data_internal(
             UpdateInfo&& update_info, uint64_t rows_per_segment, bool prune_previous_versions
+    );
+
+    folly::Future<VersionedItem> async_rename_columns_arrow_compat_internal(
+            UpdateInfo&& update_info, const std::optional<std::vector<std::string>>& index_columns,
+            const bool prune_previous_versions
     );
 
     std::shared_ptr<Store> store_;
