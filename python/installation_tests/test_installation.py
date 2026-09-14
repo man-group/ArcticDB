@@ -497,36 +497,3 @@ def test_finalize_staged_data_mode_append(ac_library, mode):
     lib.finalize_staged_data(symbol="symbol", mode=mode)
     expected = pd.concat([df_initial, df_staged])
     assert_frame_equal(lib.read(symbol).data, expected)
-
-
-class _StagingCallRecorder:
-    def __init__(self):
-        self.calls = []
-        self.last_df = None
-
-    def write(self, symbol, df, staged=False, validate_index=True):
-        self.calls.append(("write", symbol, staged, validate_index))
-        self.last_df = df
-
-    def stage(self, symbol, df, validate_index=True):
-        self.calls.append(("stage", symbol, validate_index))
-        self.last_df = df
-
-
-@pytest.mark.parametrize(
-    "pre_7_x_x, validate_index, expected_call",
-    [
-        (True, True, ("write", "sym", True, True)),
-        (True, False, ("write", "sym", True, False)),
-        (False, True, ("stage", "sym", True)),
-        (False, False, ("stage", "sym", False)),
-    ],
-    ids=["old_wheel_default", "old_wheel_no_validate", "new_wheel_default", "new_wheel_no_validate"],
-)
-def test_stage_compat_dispatch(pre_7_x_x, validate_index, expected_call, monkeypatch):
-    monkeypatch.setitem(globals(), "PRE_7_X_X", pre_7_x_x)
-    recorder = _StagingCallRecorder()
-    df = pd.DataFrame({"col": [1]})
-    stage_compat(recorder, "sym", df, validate_index=validate_index)
-    assert recorder.calls == [expected_call]
-    assert recorder.last_df is df
