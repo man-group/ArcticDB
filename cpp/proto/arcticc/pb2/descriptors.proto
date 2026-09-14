@@ -149,7 +149,7 @@ message NormalizationMetadata {
         string name = 4; // First level name; empty when unnamed, see fake_field_pos.
         string tz = 5; // First level (level 0) timezone.
         repeated uint32 fake_field_pos = 6; // Positions of unnamed levels (0 == first level).
-        bool is_int = 7; // The first level index name was an integer (as of July 2026 - never populated)
+        bool is_int = 7; // The first level index name was an integer (has always been false 13/10/26)
     }
 
     // MultiIndex columns. Not implemented
