@@ -91,6 +91,8 @@ from arcticdb.exceptions import (
     ArcticNativeException,
     MissingKeysInStageResultsError,
     ArcticDuplicateSymbolsInBatchException,
+    SchemaException,
+    UserInputException,
 )
 from arcticdb.flattener import Flattener
 from arcticdb.log import version as log
@@ -2543,6 +2545,67 @@ class NativeVersionStore:
 
         read_result = self._read_dataframe(symbol, version_query, read_query, read_options)
         return self._post_process_dataframe(read_result, read_query, read_options, output_format, implement_read_index)
+
+    # TODO: Consider returning a structure that states what changed?
+    # TODO: Add prune_previous argument and test it, including reading old version has original index/column names
+    def rename_columns_arrow_compat(self, symbol: str, method_arg: Optional[Union[str, List[str]]] = None) -> None:
+        explicit_index_names = None
+        if isinstance(method_arg, str):
+            explicit_index_names = [method_arg]
+        elif isinstance(method_arg, list) and len(method_arg) > 0 and all(isinstance(elem, str) for elem in method_arg):
+            explicit_index_names = method_arg
+        elif method_arg is not None:
+            raise UserInputException(f"method_arg must be a non-empty str or list of str, received {method_arg!r}")
+
+        tsd = self.version_store.read_descriptor(symbol, self._get_version_query(None)).timeseries_descriptor
+        norm_meta = tsd.normalization
+        input_type = norm_meta.WhichOneof("input_type")
+        if input_type == "experimental_arrow":
+            log.info("Data was written as Arrow, no compat renaming required")
+            return
+        elif input_type not in ["df", "series"]:
+            raise UserInputException(
+                f"rename_columns_arrow_compat only operates on Pandas-like data, called on {input_type}"
+            )
+        else:
+            common = getattr(norm_meta, input_type).common
+        if common.WhichOneof("index_type") == "index":
+            # Empty DatetimeIndex frames are not marked as physically stored, but do have an index column, and are
+            # distinguishable from RangeIndex frames by having step == 0. This mirrors ArrowTableNormalizer.denormalize
+            num_index_columns = 1 if common.index.is_physically_stored or not common.index.step else 0
+        else:
+            num_index_columns = common.multi_index.field_count + 1
+
+        if explicit_index_names is not None and len(explicit_index_names) != num_index_columns:
+            raise UserInputException(
+                f"Symbol {symbol} has {num_index_columns} index levels, but {len(explicit_index_names)} index "
+                f"names were provided"
+            )
+
+        arrow_column_names = self.head(symbol, n=0, output_format=OutputFormat.PYARROW).data.column_names
+        auto_index_names = arrow_column_names[:num_index_columns]
+        data_column_names = arrow_column_names[num_index_columns:]
+        index_names = explicit_index_names if explicit_index_names is not None else auto_index_names
+
+        if explicit_index_names is not None:
+            all_names = list(index_names) + list(data_column_names)
+            if len(set(all_names)) != len(all_names):
+                raise SchemaException(
+                    f"Requested index name(s) {index_names} clash with data column names {data_column_names}"
+                )
+
+        before = self.read(symbol, output_format=OutputFormat.PANDAS)
+        data = before.data
+        if isinstance(data, pd.Series):
+            data.name = data_column_names[0]
+        else:
+            data.columns = data_column_names
+        if num_index_columns == 1:
+            data.index.name = index_names[0]
+        elif num_index_columns > 1:
+            data.index = data.index.set_names(index_names)
+
+        self.write(symbol, data, metadata=before.metadata)
 
     def head(
         self,
