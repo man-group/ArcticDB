@@ -6,6 +6,7 @@
  * will be governed by the Apache License, version 2.0.
  */
 
+#include <arcticdb/arrow/arrow_schema_utils.hpp>
 #include <arcticdb/version/version_core.hpp>
 #include <arcticdb/column_store/column_algorithms.hpp>
 #include <arcticdb/column_store/column_reslicer.hpp>
@@ -3656,6 +3657,91 @@ folly::Future<std::optional<AtomKey>> async_compact_data_impl(
                                 }
                         );
             });
+}
+
+folly::Future<std::optional<AtomKey>> async_rename_columns_arrow_compat_impl(
+        const std::shared_ptr<Store>& store, const UpdateInfo& update_info,
+        const std::optional<std::vector<std::string>>& index_columns
+) {
+    // Once column stats are fully supported, the rename will also need to be applied to the column stats key
+    // TODO: Add a ticket to the column stats epic and link to it here
+    return read_index_key_without_column_stats(store, *update_info.previous_index_key_)
+            .via(&async::cpu_executor())
+            .thenValue(
+                    [store, update_info, index_columns](auto&& index_information
+                    ) -> folly::Future<std::optional<AtomKey>> {
+                        const auto& original_tsd = index_information.index_.second.index_descriptor();
+                        schema::check<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_RECURSIVE_NORMALIZED_DATA>(
+                                variant_key_type(index_information.index_.first) == KeyType::TABLE_INDEX,
+                                "rename_columns_arrow_compat not supported with recursively normalized data"
+                        );
+                        schema::check<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_PICKLED_DATA>(
+                                !original_tsd.normalization().has_msg_pack_frame(),
+                                "rename_columns_arrow_compat not supported with pickled data"
+                        );
+                        schema::check<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_NUMPY_ARRAY>(
+                                !original_tsd.normalization().has_np(),
+                                "rename_columns_arrow_compat not supported with numpy arrays"
+                        );
+                        if (original_tsd.normalization().has_experimental_arrow()) {
+                            return std::nullopt;
+                        }
+                        OutputSchema original_schema{original_tsd.as_stream_descriptor(), original_tsd.normalization()};
+                        auto arrow_transformed_schema = make_schema_arrow_compatible(original_schema, index_columns);
+                        if (!arrow_transformed_schema.changed_) {
+                            return std::nullopt;
+                        }
+                        auto tsd = make_timeseries_descriptor(
+                                original_tsd.total_rows(),
+                                arrow_transformed_schema.schema_.stream_descriptor(),
+                                arrow_transformed_schema.schema_.norm_metadata_,
+                                original_tsd.user_metadata(),
+                                std::nullopt,
+                                false
+                        ); // Set this and ReadOptions from WriteOptions
+                        VersionIdentifier resolved = std::make_shared<IndexInformation>(std::move(index_information));
+                        auto read_query = std::make_shared<ReadQuery>();
+                        read_query->clauses_.push_back(std::make_shared<Clause>(
+                                RenameColumnsClause(std::move(arrow_transformed_schema.column_renames_))
+                        ));
+                        auto pipeline_context = setup_pipeline_context(store, std::move(resolved), *read_query, {});
+                        const auto& stream_id = update_info.previous_index_key_->id();
+                        IndexPartialKey target_partial_index_key{stream_id, update_info.next_version_id_};
+                        auto component_manager = std::make_shared<ComponentManager>();
+                        // Read options only used to set dynamic_schema in ProcessingConfig, which is ignored by
+                        // RenameColumnsClause. If needed in the future, pass WriteOptions into this function as in
+                        // async_compact_data_impl
+                        return read_modify_write_data_keys(
+                                       store,
+                                       read_query,
+                                       ReadOptions{},
+                                       target_partial_index_key,
+                                       pipeline_context,
+                                       component_manager
+                        )
+                                .thenValue([pipeline_context = std::move(pipeline_context),
+                                            store,
+                                            target_partial_index_key,
+                                            read_query,
+                                            component_manager,
+                                            tsd = std::move(tsd)](std::vector<EntityId>&& entities) {
+                                    // TODO: Are these slices in the right order? Could solve this via
+                                    //  RenameColumnsClause::structure_for_processing or here
+                                    std::vector<SliceAndKey> slices_and_keys =
+                                            std::get<0>(component_manager->get_components<SliceAndKey>(entities));
+                                    return index::write_index(
+                                                   index_type_from_descriptor(pipeline_context->output_descriptor()),
+                                                   tsd,
+                                                   std::move(slices_and_keys),
+                                                   target_partial_index_key,
+                                                   store
+                                    )
+                                            .thenValueInline([](AtomKey&& index_key) {
+                                                return std::make_optional(std::move(index_key));
+                                            });
+                                });
+                    }
+            );
 }
 
 folly::Future<SymbolProcessingResult> read_and_process(

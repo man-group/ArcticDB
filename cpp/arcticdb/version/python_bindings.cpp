@@ -1217,6 +1217,10 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                     py::call_guard<SingleThreadMutexHolder>(),
                     "Call trim on the native store's underlining memory allocator"
             )
+            .def("_rename_columns_arrow_compat",
+                 &PythonVersionStore::rename_columns_arrow_compat,
+                 py::call_guard<SingleThreadMutexHolder>(),
+                 "Rename indexes and columns for compatability with valid Arrow schema")
             .def_static("reuse_storage_for_testing", [](PythonVersionStore& from, PythonVersionStore& to) {
                 to._test_set_store(from._test_get_store());
             });

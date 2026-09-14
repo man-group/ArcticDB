@@ -1597,4 +1597,11 @@ std::vector<std::variant<VersionedItem, DataError>> PythonVersionStore::batch_co
     return batch_compact_data_internal(stream_ids, rows_per_segment, prune_previous_versions, throw_on_error);
 }
 
+VersionedItem PythonVersionStore::rename_columns_arrow_compat(
+        const StreamId& stream_id, const std::optional<std::vector<std::string>>& index_columns,
+        const bool prune_previous_versions
+) {
+    return rename_columns_arrow_compat_internal(stream_id, index_columns, prune_previous_versions);
+}
+
 } // namespace arcticdb::version_store

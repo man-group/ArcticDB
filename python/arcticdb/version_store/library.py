@@ -3656,3 +3656,11 @@ class Library:
             raise ArcticInvalidApiUsageException(
                 "mode must be one of StagedDataFinalizeMethod.WRITE, StagedDataFinalizeMethod.APPEND, 'write', 'append'"
             )
+
+    def rename_columns_arrow_compat(
+        self,
+        symbol: str,
+        index_columns: Optional[Union[str, List[str]]] = None,
+        prune_previous_versions: Optional[bool] = None,
+    ) -> None:
+        return self._nvs.rename_columns_arrow_compat(symbol, index_columns, prune_previous_versions)
