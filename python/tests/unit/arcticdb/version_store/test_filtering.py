@@ -18,7 +18,13 @@ import random
 import string
 
 from arcticdb import OutputFormat
-from arcticdb.exceptions import ArcticNativeException, InternalException, UserInputException, SchemaException
+from arcticdb.exceptions import (
+    ArcticNativeException,
+    ErrorCode,
+    InternalException,
+    UserInputException,
+    SchemaException,
+)
 from arcticdb_ext.storage import KeyType
 from arcticdb.version_store.processing import QueryBuilder
 import arcticdb.toolbox.query_stats as qs
@@ -95,7 +101,7 @@ def test_filter_date_range_row_indexed(lmdb_version_store_tiny_segment, any_outp
     symbol = "test_filter_date_range_row_indexed"
     df = pd.DataFrame({"a": np.arange(3)}, index=np.arange(3))
     lib.write(symbol, df)
-    with pytest.raises(InternalException):
+    with pytest.raises(SchemaException, match=ErrorCode.E_UNSUPPORTED_INDEX_TYPE.name):
         lib.read(symbol, date_range=(pd.Timestamp("2000-01-01"), pd.Timestamp("2000-01-02")))
 
 
