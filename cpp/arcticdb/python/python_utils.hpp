@@ -340,17 +340,6 @@ inline std::vector<NamedAggregator> named_aggregators_from_dict(
     return named_aggregators;
 }
 
-inline auto pd_to_offset(std::string_view rule) {
-    PYBIND11_CONSTINIT static py::gil_safe_call_once_and_store<py::object> storage;
-    auto& imported_obj =
-            storage // Do NOT make this `static`!
-                    .call_once_and_store_result([]() {
-                        return py::module_::import("pandas").attr("tseries").attr("frequencies").attr("to_offset");
-                    })
-                    .get_stored();
-    return imported_obj(rule).attr("nanos").cast<timestamp>();
-}
-
 py::tuple extract_pandas_columns(PandasOutputFrame& pandas_output_frame);
 
 } // namespace arcticdb::python_util
