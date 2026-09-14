@@ -9,7 +9,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 import pandas as pd
 import numpy as np
 import pytest
-from arcticdb.exceptions import UnsortedDataException, InternalException
+from arcticdb.exceptions import ErrorCode, SchemaException, UnsortedDataException
 from arcticdb.version_store import _store as store
 
 try:
@@ -104,10 +104,10 @@ def test_read_date_range_not_date_time_dataframe(lmdb_version_store):
     df = pd.DataFrame({"c": np.arange(0, num_initial_rows, dtype=np.int64)}, index=dtidx)
 
     lmdb_version_store.write(symbol, df)
-    with pytest.raises(InternalException) as e_info:
-        data = lmdb_version_store.read(
+    with pytest.raises(SchemaException, match=ErrorCode.E_UNSUPPORTED_INDEX_TYPE.name):
+        lmdb_version_store.read(
             symbol, date_range=(DateRange(pd.Timestamp("2019-01-03"), pd.Timestamp("2019-01-06")))
-        ).data
+        )
 
 
 def test_read_unsorted_date_range_dataframe_multi_index(lmdb_version_store):
