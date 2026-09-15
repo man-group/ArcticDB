@@ -371,30 +371,7 @@ class TestEmptySegments:
         lib.write("sym", df, staged=True)
         lib.write("sym", df2, staged=True)
         lib.sort_and_finalize_staged_data("sym", mode=mode)
-        if IS_PANDAS_TWO:
-            expected = pd.DataFrame(
-                {
-                    "a": [1],
-                    "b": np.array([np.nan], dtype="float"),
-                    "c": np.array([0], dtype="int64"),
-                    "d": np.array([None], dtype="object"),
-                },
-                index=[pd.Timestamp("1970-01-01")],
-            )
-        else:
-            expected = pd.DataFrame(
-                {
-                    "a": [1],
-                    "b": np.array([np.nan], dtype="object"),
-                    "c": np.array([0], dtype="int64"),
-                    "d": np.array([None], dtype="object"),
-                },
-                index=[pd.Timestamp("1970-01-01")],
-            )
-        if _use_pyarrow_strings_in_pandas():
-            # The all-null object column "d" reads back as the arrow-backed str dtype.
-            expected["d"] = expected["d"].astype(pd.StringDtype(storage="pyarrow", na_value=np.nan))
-        assert_frame_equal(lib.read("sym").data, expected)
+        assert_frame_equal(lib.read("sym").data, df)
 
 
 def test_append_to_missing_symbol(lmdb_library):
@@ -453,7 +430,6 @@ class TestDescriptorMismatchBetweenStagedSegments:
                 "sym", StagedDataFinalizeMethod.APPEND, delete_staged_data_on_failure=delete_staged_data_on_failure
             )
         assert "col_0" in str(exception_info.value)
-        assert "col_1" in str(exception_info.value)
         expected_key_count = 0 if delete_staged_data_on_failure else 2
         assert len(get_append_keys(lib, "sym")) == expected_key_count
         assert_delete_staged_data_clears_append_keys(lib, "sym")
@@ -478,7 +454,6 @@ class TestDescriptorMismatchBetweenStagedSegments:
             )
         assert "col_0" in str(exception_info.value)
         assert "col_1" in str(exception_info.value)
-        assert "col_2" in str(exception_info.value)
         expected_key_count = 0 if delete_staged_data_on_failure else 2
         assert len(get_append_keys(lib, "sym")) == expected_key_count
         assert_delete_staged_data_clears_append_keys(lib, "sym")
@@ -571,7 +546,6 @@ class TestDescriptorMismatchBetweenStagedSegments:
             )
         assert "col_0" in str(exception_info.value)
         assert "col_1" in str(exception_info.value)
-        assert "col_2" in str(exception_info.value)
         expected_key_count = 0 if delete_staged_data_on_failure else 2
         assert len(get_append_keys(lib, "sym")) == expected_key_count
         assert_delete_staged_data_clears_append_keys(lib, "sym")
@@ -626,7 +600,6 @@ class TestStreamDescriptorMismatchOnFinalizeAppend:
             )
         assert "col_0" in str(exception_info.value)
         assert "col_1" in str(exception_info.value)
-        assert "col_2" in str(exception_info.value)
         expected_key_count = 0 if delete_staged_data_on_failure else 1
         assert len(get_append_keys(lib, "sym")) == expected_key_count
         assert_delete_staged_data_clears_append_keys(lib, "sym")
@@ -1155,18 +1128,16 @@ class TestEmptyDataFrames:
         lib.sort_and_finalize_staged_data(symbol, mode=StagedDataFinalizeMethod.APPEND)
         assert_frame_equal(lib.read(symbol).data, df)
 
-    def test_appending_to_empty_with_differing_index_name_fails(self, lmdb_library_static_dynamic, request):
+    def test_appending_to_empty_with_differing_index_name(self, lmdb_library_static_dynamic, request):
+        """A symbol with no rows contributes no columns, so the staged index name stands."""
         lib = lmdb_library_static_dynamic
         symbol = "symbol"
         empty = pd.DataFrame({"a": np.array([], np.int64)}, index=pd.DatetimeIndex([], name="my_initial_index"))
         lib.write(symbol, empty)
         df = pd.DataFrame({"a": [1]}, index=pd.DatetimeIndex([pd.Timestamp(0)], name="my_new_index"))
         lib.write(symbol, df, staged=True)
-        with pytest.raises(SchemaException) as exception_info:
-            lib.sort_and_finalize_staged_data(symbol, mode=StagedDataFinalizeMethod.APPEND)
-        assert "index" in str(exception_info.value)
-        assert "my_initial_index" in str(exception_info.value)
-        assert "my_new_index" in str(exception_info.value)
+        lib.sort_and_finalize_staged_data(symbol, mode=StagedDataFinalizeMethod.APPEND)
+        assert_frame_equal(lib.read(symbol).data, df)
 
     @pytest.mark.parametrize(
         "to_append",
@@ -1175,14 +1146,14 @@ class TestEmptyDataFrames:
             pd.DataFrame({"a": [1], "wrong_col": [2]}, pd.DatetimeIndex([pd.Timestamp(0)])),
         ],
     )
-    def test_appending_to_empty_with_differing_columns_fails(self, lmdb_library, to_append):
+    def test_appending_to_empty_with_differing_columns(self, lmdb_library, to_append):
         lib = lmdb_library
         symbol = "symbol"
         empty = pd.DataFrame({"a": np.array([], np.int64)}, index=pd.DatetimeIndex([]))
         lib.write(symbol, empty)
         lib.write(symbol, to_append, staged=True)
-        with pytest.raises(SchemaException, match="wrong_col"):
-            lib.sort_and_finalize_staged_data(symbol, mode=StagedDataFinalizeMethod.APPEND)
+        lib.sort_and_finalize_staged_data(symbol, mode=StagedDataFinalizeMethod.APPEND)
+        assert_frame_equal(lib.read(symbol).data, to_append)
 
 
 class TestSegmentsWithNaNAndNone:

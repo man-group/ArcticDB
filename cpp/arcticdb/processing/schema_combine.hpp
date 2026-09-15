@@ -46,6 +46,8 @@ enum class RequiredNameMismatchPolicy { RAISE, RECONCILE_TO_UNNAMED };
 enum NormalizationOperation : uint8_t {
     APPEND,
     UPDATE,
+    MERGE_UPDATE,
+    INCOMPLETE,
     CONCAT,
 };
 
@@ -56,6 +58,10 @@ constexpr std::string_view operation_name(NormalizationOperation operation) {
         return "append";
     case UPDATE:
         return "update";
+    case MERGE_UPDATE:
+        return "merge_update";
+    case INCOMPLETE:
+        return "combine staged data";
     case CONCAT:
         return "concat";
     }
@@ -73,7 +79,9 @@ struct SchemaCombineOptions {
     [[nodiscard]] std::string name() const;
 };
 
-SchemaCombineOptions append_or_update_options(
+// The options for combining schemas that all belong to one symbol: appending to it, updating it, or finalizing data
+// staged against it. Concatenation across symbols uses concat_options instead.
+SchemaCombineOptions within_symbol_combine_options(
         bool dynamic_schema, NormalizationOperation operation, std::optional<StreamId> stream_id = std::nullopt
 );
 

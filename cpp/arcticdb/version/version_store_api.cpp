@@ -7,6 +7,7 @@
  */
 
 #include <arcticdb/version/version_store_api.hpp>
+#include <arcticdb/util/collection_utils.hpp>
 #include <arcticdb/python/python_utils.hpp>
 #include <arcticdb/version/version_map.hpp>
 #include <arcticdb/storage/storage_utils.hpp>
@@ -1485,7 +1486,12 @@ void PythonVersionStore::compact_library(size_t batch_size) {
 }
 
 std::vector<SliceAndKey> PythonVersionStore::list_incompletes(const StreamId& stream_id) {
-    return get_incomplete(store(), stream_id, unspecified_range(), 0u, true, false);
+    auto entries = get_incomplete(store(), stream_id, unspecified_range(), 0u, true, false);
+    auto output = util::reserve_vector<SliceAndKey>(entries.size());
+    for (auto& entry : entries) {
+        output.emplace_back(std::move(entry.slice_and_key_));
+    }
+    return output;
 }
 
 void PythonVersionStore::clear(const bool continue_on_error) {

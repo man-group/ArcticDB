@@ -107,6 +107,11 @@ def assert_staged_columns_are_incompatible(lib, symbol, mode):
     assert len(get_append_keys(lib, symbol)) == 0
 
 
+def staged_segments_that_contribute(df_list):
+    """Empty pandas frames contribute no schema: their index and column dtypes are inferred, not stated."""
+    return [segment for segment in df_list if len(segment) > 0]
+
+
 def has_nat_in_index(segment_list):
     return any(pd.NaT in segment.index for segment in segment_list)
 
@@ -162,7 +167,11 @@ def test_sort_merge_static_schema_write(lmdb_library, df_list):
     if len(df_list) == 0:
         assert_cannot_finalize_without_staged_data(lib, sym, StagedDataFinalizeMethod.WRITE)
         return
-    if not all(df_list[0].dtypes.equals(segment.dtypes) for segment in df_list):
+    contributing = staged_segments_that_contribute(df_list)
+    if not contributing:
+        # All staged segments empty is covered by test_finalize_only_empty
+        return
+    if not all(contributing[0].dtypes.equals(segment.dtypes) for segment in contributing):
         assert_staged_columns_are_incompatible(lib, sym, StagedDataFinalizeMethod.WRITE)
         return
     if has_nat_in_index(df_list):
@@ -170,7 +179,7 @@ def test_sort_merge_static_schema_write(lmdb_library, df_list):
         return
     lib.sort_and_finalize_staged_data(sym, mode=StagedDataFinalizeMethod.WRITE)
     assert len(get_append_keys(lib, sym)) == 0
-    expected = merge_and_sort_segment_list(df_list)
+    expected = merge_and_sort_segment_list(contributing)
     data = lib.read(sym).data
     assert_equal(expected, data)
 
@@ -192,13 +201,14 @@ def test_sort_merge_static_schema_append(lmdb_library, df_list, initial_df):
     if len(df_list) == 0:
         assert_cannot_finalize_without_staged_data(lib, sym, StagedDataFinalizeMethod.APPEND)
         return
-    if not all(initial_df.dtypes.equals(segment.dtypes) for segment in df_list):
+    contributing = staged_segments_that_contribute(df_list)
+    if not all(initial_df.dtypes.equals(segment.dtypes) for segment in contributing):
         assert_staged_columns_are_incompatible(lib, sym, StagedDataFinalizeMethod.APPEND)
         return
     if has_nat_in_index(df_list):
         assert_nat_is_not_supported(lib, sym, StagedDataFinalizeMethod.APPEND)
         return
-    merged_staging = merge_and_sort_segment_list(df_list)
+    merged_staging = merge_and_sort_segment_list(contributing) if contributing else initial_df.iloc[:0]
     if len(merged_staging) > 0 and initial_df.index[-1] > merged_staging.index[0]:
         assert_appended_data_does_not_overlap_with_storage(lib, sym)
         return
@@ -221,7 +231,11 @@ def test_sort_merge_dynamic_schema_write(lmdb_library_dynamic_schema, df_list):
     if len(df_list) == 0:
         assert_cannot_finalize_without_staged_data(lib, sym, StagedDataFinalizeMethod.WRITE)
         return
-    if not segments_have_compatible_schema(df_list):
+    contributing = staged_segments_that_contribute(df_list)
+    if not contributing:
+        # All staged segments empty is covered by test_finalize_only_empty
+        return
+    if not segments_have_compatible_schema(contributing):
         assert_staged_columns_are_incompatible(lib, sym, StagedDataFinalizeMethod.WRITE)
         return
     if has_nat_in_index(df_list):
@@ -231,7 +245,7 @@ def test_sort_merge_dynamic_schema_write(lmdb_library_dynamic_schema, df_list):
     assert len(get_append_keys(lib, sym)) == 0
     data = lib.read(sym).data
     int_columns_in_df = [col_name for col_name in data if is_integer_dtype(data.dtypes[col_name])]
-    expected = merge_and_sort_segment_list(df_list, int_columns_in_df=int_columns_in_df)
+    expected = merge_and_sort_segment_list(contributing, int_columns_in_df=int_columns_in_df)
     assert_equal(expected, data)
 
 
@@ -252,13 +266,14 @@ def test_sort_merge_dynamic_schema_append(lmdb_library_dynamic_schema, df_list, 
     if len(df_list) == 0:
         assert_cannot_finalize_without_staged_data(lib, sym, StagedDataFinalizeMethod.APPEND)
         return
-    if not segments_have_compatible_schema([initial_df, *df_list]):
+    contributing = staged_segments_that_contribute(df_list)
+    if not segments_have_compatible_schema([initial_df, *contributing]):
         assert_staged_columns_are_incompatible(lib, sym, StagedDataFinalizeMethod.APPEND)
         return
     if has_nat_in_index(df_list):
         assert_nat_is_not_supported(lib, sym, StagedDataFinalizeMethod.APPEND)
         return
-    merged_staging = merge_and_sort_segment_list(df_list)
+    merged_staging = merge_and_sort_segment_list(contributing) if contributing else initial_df.iloc[:0]
     if len(merged_staging) > 0 and initial_df.index[-1] > merged_staging.index[0]:
         assert_appended_data_does_not_overlap_with_storage(lib, sym)
         return
