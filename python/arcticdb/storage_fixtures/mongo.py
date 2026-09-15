@@ -123,9 +123,10 @@ class ManagedMongoDBServer(StorageFixtureFactory):
 
     def _safe_enter(self):
         cmd = [self._executable, "--port", str(self._port), "--dbpath", self._data_dir]
-        self.mongo_uri = f"mongodb://localhost:{self._port}"
+        # IPv4 literal, not "localhost": on Windows the name resolves to ::1 first and mongod binds IPv4 only
+        self.mongo_uri = f"mongodb://127.0.0.1:{self._port}"
         self._p = GracefulProcessUtils.start_with_retry(
-            url=f"http://localhost:{self._port}",
+            url=f"http://127.0.0.1:{self._port}",
             service_name="mongod",
             num_retries=2,
             timeout=240,
@@ -135,7 +136,8 @@ class ManagedMongoDBServer(StorageFixtureFactory):
         self._client = get_mongo_client(self.mongo_uri)
 
     def __exit__(self, exc_type, exc_value, traceback):
-        if self._client:
+        # Skip the shutdown command if the test already killed the server: pymongo would wait for server selection
+        if self._client and self._p.poll() is None:
             with handle_cleanup_exception(self):
                 self._client["admin"].command({"shutdown": 1, "force": True, "timeoutSecs": 1})
 

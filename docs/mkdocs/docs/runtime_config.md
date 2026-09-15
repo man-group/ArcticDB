@@ -114,6 +114,42 @@ Values:
 * 0: Use WinHTTP
 * 1: Use WinINet
 
+### LMDBStorage.ExtraFlags
+
+Extra LMDB environment flags (a bitwise OR of `MDB_*` values from `lmdb.h`) passed to `mdb_env_open` for every LMDB
+library opened by the process, on top of the flags in the library's storage config.
+
+Intended for throwaway data, e.g. `MDB_NOSYNC | MDB_NOMETASYNC` (`0x50000`, i.e. `327680`) skips the fsync on every
+commit. Do not use those flags for data you need to survive a crash or power loss.
+
+On Windows, `MDB_WRITEMAP` makes the OS allocate the whole `map_size` of every library on disk (LMDB otherwise extends
+the file lazily there), and with `MDB_NOSYNC` a full disk is not reported and pages are lost silently, so avoid
+`MDB_WRITEMAP` there. ArcticDB's own CI uses `MDB_NOSYNC | MDB_NOMETASYNC` on its Windows test jobs.
+
+Default: 0 (no extra flags).
+
+### LMDBStorage.Diagnostics
+
+Whether `MDB_CORRUPTED`, `MDB_PAGE_NOTFOUND`, `MDB_PANIC`, `MDB_INVALID`, `MDB_MAP_RESIZED` and `MDB_BAD_TXN` carry a
+dump of the environment state — `mdb_env_info`/`mdb_stat` next to the two meta pages read straight from `data.mdb`,
+bypassing the memory map — in the raised message and the storage log. That comparison is what distinguishes "the map
+and the file disagree" from "both are garbage".
+
+Reading the meta pages means decoding `MDB_meta` at fixed byte offsets, which is tied to LMDB's on-disk layout rather
+than to any API it promises to keep, so it is off unless you ask for it. ArcticDB's own CI turns it on.
+
+Default: 0 (off).
+
+### AzureStorage.HttpKeepAlive
+
+Whether the Azure client reuses pooled HTTP connections (`1`, the default) or opens a new connection per request
+(`0`). Only applies to the libcurl transport, i.e. Linux and macOS.
+
+The Azure SDK blocks for several seconds when it reuses a pooled connection the server has already closed, so set
+this to `0` against servers that close idle connections quickly — notably Azurite, which closes them after 5
+seconds, and ArcticDB's own Azurite test fixture sets it to `0` for that reason. Leave it at the default against real
+Azure Blob Storage, where connection reuse avoids a TLS handshake per request.
+
 ### VersionStore.NumCPUThreads and VersionStore.NumIOThreads
 
 ArcticDB uses two threadpools in order to manage computational resources:

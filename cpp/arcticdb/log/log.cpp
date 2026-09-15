@@ -7,6 +7,7 @@
  */
 
 #include <arcticdb/log/log.hpp>
+#include <arcticdb/log/console_sink.hpp>
 #include <arcticdb/util/preprocess.hpp>
 #include <arcticdb/util/pb_util.hpp>
 #include <spdlog/sinks/stdout_sinks.h>
@@ -32,11 +33,31 @@ std::shared_ptr<Loggers> loggers_instance_;
 std::once_flag loggers_init_flag_;
 } // namespace
 
+// The cached-HANDLE bug this works around is Windows-only, so only Windows gets the replacement sink; elsewhere
+// spdlog's own sinks are kept, unchanged. They already fwrite() to the FILE*, so they already follow a dup2 of
+// fd 1/2 - there was nothing to fix off Windows.
+std::shared_ptr<spdlog::sinks::sink> make_console_sink(bool std_err, bool color) {
+#ifdef _WIN32
+    // Not the colour sink either: spdlog's Windows colour sink caches the same HANDLE
+    (void)color;
+    return std::make_shared<ConsoleSinkMt>(std_err ? stderr : stdout);
+#else
+    if (color) {
+        if (std_err)
+            return std::make_shared<spdlog::sinks::stderr_color_sink_mt>();
+        return std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
+    }
+    if (std_err)
+        return std::make_shared<spdlog::sinks::stderr_sink_mt>();
+    return std::make_shared<spdlog::sinks::stdout_sink_mt>();
+#endif
+}
+
 struct Loggers::Impl {
     std::mutex config_mutex_;
     std::unordered_map<std::string, spdlog::sink_ptr> sink_by_id_;
     std::unique_ptr<spdlog::logger> unconfigured_ =
-            std::make_unique<spdlog::logger>("arcticdb", std::make_shared<spdlog::sinks::stderr_sink_mt>());
+            std::make_unique<spdlog::logger>("arcticdb", make_console_sink(true, false));
     std::unique_ptr<spdlog::logger> root_;
     std::unique_ptr<spdlog::logger> storage_;
     std::unique_ptr<spdlog::logger> inmem_;
@@ -190,19 +211,9 @@ bool Loggers::configure(const arcticdb::proto::logger::LoggersConfig& conf, bool
     for (auto&& [sink_id, sink_conf] : conf.sink_by_id()) {
         switch (sink_conf.sink_case()) {
         case SinkConf::kConsole:
-            if (sink_conf.console().has_color()) {
-                if (sink_conf.console().std_err()) {
-                    impl_->sink_by_id_.try_emplace(sink_id, std::make_shared<spdlog::sinks::stderr_color_sink_mt>());
-                } else {
-                    impl_->sink_by_id_.try_emplace(sink_id, std::make_shared<spdlog::sinks::stdout_color_sink_mt>());
-                }
-            } else {
-                if (sink_conf.console().std_err()) {
-                    impl_->sink_by_id_.try_emplace(sink_id, std::make_shared<spdlog::sinks::stderr_sink_mt>());
-                } else {
-                    impl_->sink_by_id_.try_emplace(sink_id, std::make_shared<spdlog::sinks::stdout_sink_mt>());
-                }
-            }
+            impl_->sink_by_id_.try_emplace(
+                    sink_id, make_console_sink(sink_conf.console().std_err(), sink_conf.console().has_color())
+            );
             break;
         case SinkConf::kFile:
             impl_->sink_by_id_.try_emplace(

@@ -173,7 +173,8 @@ def get_ca_cert_for_testing(working_dir):
     cert_file = os.path.join(working_dir, "cert.pem")
     client_cert_file = os.path.join(working_dir, "client.pem")
     ca = trustme.CA()
-    server_cert = ca.issue_cert("localhost")
+    # 127.0.0.1 as well as the name: fixtures connect by IPv4 literal to avoid the ~2s ::1 fallback on Windows
+    server_cert = ca.issue_cert("localhost", "127.0.0.1")
     server_cert.private_key_pem.write_to_path(key_file)
     server_cert.cert_chain_pems[0].write_to_path(cert_file)
     ca.cert_pem.write_to_path(client_cert_file)

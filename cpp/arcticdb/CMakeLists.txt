@@ -278,6 +278,7 @@ set(arcticdb_srcs
         entity/field_collection_proto.hpp
         entity/python_bindings_common.hpp
         log/log.hpp
+        log/console_sink.hpp
         log/trace.hpp
         pipeline/column_mapping.hpp
         pipeline/column_stats_types.hpp
@@ -350,6 +351,7 @@ set(arcticdb_srcs
         storage/lmdb/lmdb_client_interface.hpp
         storage/mock/lmdb_mock_client.hpp
         storage/lmdb/lmdb_client_impl.hpp
+        storage/lmdb/lmdb_error_handling.hpp
         storage/lmdb/lmdb_storage.hpp
         storage/memory/memory_storage.hpp
         storage/memory/memory_storage.cpp
@@ -512,6 +514,7 @@ set(arcticdb_srcs
         entity/type_utils.cpp
         entity/types_proto.cpp
         log/log.cpp
+        log/console_sink.cpp
         pipeline/column_mapping.cpp
         pipeline/column_stats.cpp
         pipeline/column_stats_filter.cpp
@@ -572,6 +575,7 @@ set(arcticdb_srcs
         storage/mock/azure_mock_client.cpp
         storage/mock/lmdb_mock_client.cpp
         storage/lmdb/lmdb_client_impl.cpp
+        storage/lmdb/lmdb_error_handling.cpp
         storage/lmdb/lmdb_storage.cpp
         storage/file/mapped_file_storage.cpp
         storage/mongo/mongo_client.cpp
@@ -1139,6 +1143,7 @@ if(${TEST})
             processing/test/test_unsorted_aggregation.cpp
             processing/test/test_merge_update.cpp
             storage/test/test_lmdb_cve.cpp
+            storage/test/test_lmdb_flags.cpp
             processing/test/test_structure_by_time_slice.cpp
             storage/test/test_local_storages.cpp
             storage/test/test_memory_storage.cpp
