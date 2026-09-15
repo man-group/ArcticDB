@@ -225,3 +225,26 @@ TEST(TotalRowsUpToTest, TotalRowsUpTo) {
     ASSERT_TRUE(last_loaded_opt_all.has_value());
     ASSERT_EQ(last_loaded_opt_all, entries[0].key());
 }
+
+TEST(Append, TickCollectorDescriptorComesFromSegmentHeader) {
+    using namespace arcticdb;
+    using namespace arcticdb::pipelines;
+
+    // append_incomplete_segment packs a fieldless RowCountIndex placeholder as the timeseries descriptor, which
+    // decode_timeseries_descriptor_for_incompletes then substitutes for the segment header's descriptor (PR #1647).
+    // Pinned here because callers rely on an entry's descriptor and column range being the real schema.
+    auto store = std::make_shared<InMemoryStore>();
+    StreamId stream_id{"test_tick_descriptor"};
+    auto wrapper = get_test_timeseries_frame(stream_id, 10, 0);
+    const auto expected_field_count = wrapper.segment_.descriptor().fields().size();
+    append_incomplete_segment(store, stream_id, wrapper.segment_.clone());
+
+    auto entries = load_via_list(store, stream_id, false);
+    ASSERT_EQ(entries.size(), 1);
+    const auto& desc = entries[0].descriptor();
+    ASSERT_EQ(desc.index().type(), IndexDescriptorImpl::Type::TIMESTAMP);
+    ASSERT_EQ(desc.index().field_count(), 1u);
+    ASSERT_EQ(desc.fields().size(), expected_field_count);
+    ASSERT_EQ(entries[0].slice().columns().first, 1u);
+    ASSERT_EQ(entries[0].slice().columns().second, expected_field_count);
+}

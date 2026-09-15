@@ -32,6 +32,7 @@ from arcticdb.exceptions import (
 )
 from arcticdb.version_store.library import MergeAction, MergeStrategy
 from arcticdb.version_store._store import normalize_merge_action
+from tests.util.mark import WINDOWS
 from arcticdb_ext.version_store import MergeAction
 
 pytestmark = [
@@ -4916,3 +4917,55 @@ def test_unmatched_nan_source_rows_inserted_default(lmdb_library, target, source
     lib.write("sym", target)
     lib.merge("sym", source, strategy=strategy, on=["a"])
     assert_frame_equal(lib.read("sym").data, expected)
+
+
+class TestMergeUpdateSchemaCombine:
+    """What MergeUpdateClause::modify_schema accepts and rejects."""
+
+    def setup_method(self):
+        self.strategy = MergeStrategy(MergeAction.UPDATE, MergeAction.DO_NOTHING)
+
+    def test_index_name_mismatch(self, mem_library):
+        lib = mem_library
+        target = pd.DataFrame({"a": [1, 2, 3]}, index=pd.date_range("2024-01-01", periods=3, name="date"))
+        lib.write("sym", target)
+        source = pd.DataFrame({"a": [10]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-02")], name="other"))
+        with pytest.raises(SchemaException):
+            lib.merge("sym", source, strategy=self.strategy)
+
+    def test_index_type_mismatch(self, mem_library):
+        lib = mem_library
+        target = pd.DataFrame({"a": [1, 2, 3]}, index=pd.date_range("2024-01-01", periods=3))
+        lib.write("sym", target)
+        source = pd.DataFrame({"a": [10]})
+        with pytest.raises(SchemaException):
+            lib.merge("sym", source, strategy=self.strategy, on=["a"])
+
+    def test_index_timezone_mismatch(self, mem_library):
+        lib = mem_library
+        target = pd.DataFrame({"a": [1, 2, 3]}, index=pd.date_range("2024-01-01", periods=3, tz="Europe/London"))
+        lib.write("sym", target)
+        source = pd.DataFrame(
+            {"a": [10]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-02")]).tz_localize("America/New_York")
+        )
+        lib.merge("sym", source, strategy=self.strategy)
+        assert str(lib.read("sym").data.index.tz) == "Europe/London"
+
+    def test_series_source_onto_dataframe_target(self, mem_library):
+        lib = mem_library
+        target = pd.DataFrame({"a": [1, 2, 3]}, index=pd.date_range("2024-01-01", periods=3))
+        lib.write("sym", target)
+        source = pd.Series([10], name="a", index=pd.DatetimeIndex([pd.Timestamp("2024-01-02")]))
+        lib.merge("sym", source, strategy=self.strategy)
+        expected = pd.DataFrame({"a": [1, 10, 3]}, index=pd.date_range("2024-01-01", periods=3))
+        assert_frame_equal(lib.read("sym").data, expected)
+
+    @pytest.mark.skipif(WINDOWS, reason="We do not support fixed-width strings on Windows")
+    def test_fixed_width_string_target_is_rejected(self, in_memory_store_factory):
+        """Refused during processing, whatever the schema check decides, so no schema check can widen a fixed-width
+        string column to a dynamic one in practice."""
+        lib = in_memory_store_factory(dynamic_strings=False)
+        index = pd.date_range("2024-01-01", periods=3)
+        lib.write("sym", pd.DataFrame({"a": ["x", "y", "z"]}, index=index))
+        with pytest.raises(UserInputException, match="Fixed string sequences are not supported for merge update"):
+            lib.merge("sym", pd.DataFrame({"a": ["q"]}, index=index[1:2]), strategy=self.strategy)
