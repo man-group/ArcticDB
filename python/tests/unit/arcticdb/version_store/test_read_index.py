@@ -16,8 +16,10 @@ from arcticdb.encoding_version import EncodingVersion
 from arcticdb.util._versions import PANDAS_VERSION
 from arcticdb.exceptions import UserInputException
 from arcticdb.options import LibraryOptions
+from arcticdb.version_store.processing import QueryBuilder
 from arcticdb import ReadRequest
 from arcticdb.util.test import assert_frame_equal
+from tests.util.unprocessable_data import TS, expect_refusal, write_unprocessable
 
 
 @pytest.fixture(
@@ -288,6 +290,45 @@ class TestWithNormalizers:
         with pytest.raises(UserInputException) as exception_info:
             lib.read("sym_recursive", columns=[])
         assert "normalizers" in str(exception_info.value)
+
+    def test_recursive_filter_throws(
+        self, in_memory_library_tiny_segment_static_dynamic, all_recursive_metastructure_versions
+    ):
+        data = {"a": np.arange(5), "b": np.arange(8)}
+        lib = in_memory_library_tiny_segment_static_dynamic
+        lib._nvs.write("sym_recursive", data, recursive_normalizers=True)
+        q = QueryBuilder()
+        q = q[q["a"] == 0]
+        with expect_refusal("recursive"):
+            lib.read("sym_recursive", query_builder=q)
+
+    def test_numpy_array_head_throws(self, in_memory_library_tiny_segment_static_dynamic):
+        lib = in_memory_library_tiny_segment_static_dynamic
+        lib._nvs.write("sym_np", np.arange(8))
+        with expect_refusal("numpy"):
+            lib.head("sym_np", n=5)
+
+    def test_numpy_array_filter_throws(self, in_memory_library_tiny_segment_static_dynamic):
+        lib = in_memory_library_tiny_segment_static_dynamic
+        lib._nvs.write("sym_np", np.arange(8))
+        q = QueryBuilder()
+        q = q[q["a"] == 0]
+        with expect_refusal("numpy"):
+            lib.read("sym_np", query_builder=q)
+
+    @pytest.mark.parametrize("kind", ["numpy", "recursive"])
+    def test_columns_unprocessable_throws(self, in_memory_library_tiny_segment_static_dynamic, kind):
+        lib = in_memory_library_tiny_segment_static_dynamic
+        sym = write_unprocessable(lib._nvs, kind)
+        with expect_refusal(kind):
+            lib.read(sym, columns=["a"])
+
+    @pytest.mark.parametrize("kind", ["numpy", "recursive"])
+    def test_date_range_unprocessable_throws(self, in_memory_library_tiny_segment_static_dynamic, kind):
+        lib = in_memory_library_tiny_segment_static_dynamic
+        sym = write_unprocessable(lib._nvs, kind)
+        with expect_refusal(kind):
+            lib.read(sym, date_range=(TS[0], TS[-1]))
 
     @pytest.mark.parametrize("dynamic_schema", [False, True])
     def test_custom_throws(self, lmdb_storage, lib_name, dynamic_schema, custom_thing_with_registered_normalizer):

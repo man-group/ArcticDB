@@ -18,7 +18,13 @@ import random
 import string
 
 from arcticdb import OutputFormat
-from arcticdb.exceptions import ArcticNativeException, InternalException, UserInputException, SchemaException
+from arcticdb.exceptions import (
+    ArcticNativeException,
+    ErrorCode,
+    InternalException,
+    UserInputException,
+    SchemaException,
+)
 from arcticdb_ext.storage import KeyType
 from arcticdb.version_store.processing import QueryBuilder
 import arcticdb.toolbox.query_stats as qs
@@ -95,7 +101,7 @@ def test_filter_date_range_row_indexed(lmdb_version_store_tiny_segment, any_outp
     symbol = "test_filter_date_range_row_indexed"
     df = pd.DataFrame({"a": np.arange(3)}, index=np.arange(3))
     lib.write(symbol, df)
-    with pytest.raises(InternalException):
+    with pytest.raises(SchemaException, match=ErrorCode.E_UNSUPPORTED_INDEX_TYPE.name):
         lib.read(symbol, date_range=(pd.Timestamp("2000-01-01"), pd.Timestamp("2000-01-02")))
 
 
@@ -1710,7 +1716,7 @@ def test_filter_pickled_symbol(request, lib_type, any_output_format):
     assert lib.is_symbol_pickled(symbol)
     q = QueryBuilder()
     q = q[q.a == 0]
-    with pytest.raises(InternalException):
+    with pytest.raises(SchemaException):
         _ = lib.read(symbol, query_builder=q)
 
 
@@ -1723,7 +1729,7 @@ def test_filter_date_range_pickled_symbol(request, lib_type, any_output_format):
     df = pd.DataFrame({"a": [[1, 2], [3, 4], [5, 6], [7, 8]]}, index=idx)
     lib.write(symbol, df, pickle_on_failure=True)
     assert lib.is_symbol_pickled(symbol)
-    with pytest.raises(InternalException):
+    with pytest.raises(SchemaException):
         lib.read(symbol, date_range=(idx[1], idx[2]))
 
 

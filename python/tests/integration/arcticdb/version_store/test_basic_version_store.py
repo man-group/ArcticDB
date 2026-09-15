@@ -26,6 +26,7 @@ from pytz import timezone
 from arcticdb.exceptions import (
     ArcticDbNotYetImplemented,
     ArcticDuplicateSymbolsInBatchException,
+    ErrorCode,
     InternalException,
     SchemaException,
     UserInputException,
@@ -1332,10 +1333,10 @@ def test_partial_read_pickled_df(basic_store):
     basic_store.write("blah", will_be_pickled)
     assert basic_store.read("blah").data == will_be_pickled
 
-    with pytest.raises(InternalException):
+    with pytest.raises(SchemaException, match=ErrorCode.E_OPERATION_NOT_SUPPORTED_WITH_PICKLED_DATA.name):
         basic_store.read("blah", columns=["does_not_matter"])
 
-    with pytest.raises(InternalException):
+    with pytest.raises(SchemaException, match=ErrorCode.E_OPERATION_NOT_SUPPORTED_WITH_PICKLED_DATA.name):
         basic_store.read("blah", date_range=(DateRange(pd.Timestamp("1970-01-01"), pd.Timestamp("2027-12-31"))))
 
 

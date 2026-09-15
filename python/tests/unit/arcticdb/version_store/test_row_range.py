@@ -11,9 +11,10 @@ import pandas as pd
 import pytest
 
 from arcticdb.version_store.processing import QueryBuilder
-from arcticdb.exceptions import InternalException
+from arcticdb.exceptions import SchemaException
 
 from arcticdb.util.test import assert_frame_equal
+from tests.util.unprocessable_data import expect_refusal, write_unprocessable
 
 pytestmark = pytest.mark.pipeline
 
@@ -99,7 +100,7 @@ def test_row_range_pickled_symbol(lmdb_version_store, any_output_format):
     symbol = "test_row_range_pickled_symbol"
     lmdb_version_store.write(symbol, np.arange(100).tolist())
     assert lmdb_version_store.is_symbol_pickled(symbol)
-    with pytest.raises(InternalException):
+    with expect_refusal("pickled"):
         _ = lmdb_version_store.read(symbol, row_range=(1, 2))
 
 
@@ -133,3 +134,10 @@ def test_row_range_open_ended(lmdb_version_store_v1, api, row_range, expected, a
         received = lmdb_version_store_v1.batch_read([symbol], row_ranges=[row_range])[symbol].data
 
     assert_frame_equal(received, expected, check_dtype=False)
+
+
+@pytest.mark.parametrize("kind", ["numpy", "recursive"])
+def test_row_range_unprocessable_data(lmdb_version_store_v1, kind):
+    sym = write_unprocessable(lmdb_version_store_v1, kind, "test_row_range_unprocessable_data")
+    with expect_refusal(kind):
+        lmdb_version_store_v1.read(sym, row_range=(0, 2))
