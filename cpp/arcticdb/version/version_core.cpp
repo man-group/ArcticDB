@@ -36,7 +36,6 @@
 #include <arcticdb/pipeline/index_utils.hpp>
 #include <arcticdb/version/schema_checks.hpp>
 #include <arcticdb/version/version_utils.hpp>
-#include <arcticdb/entity/merge_descriptors.hpp>
 #include <arcticdb/processing/component_manager.hpp>
 #include <arcticdb/util/collection_utils.hpp>
 #include <arcticdb/util/format_date.hpp>
@@ -756,22 +755,7 @@ folly::Future<std::vector<EntityId>> read_and_schedule_processing(
     const size_t max_processing_units_in_flight = max_resident_processing_units(processing_unit_indexes);
     const size_t read_window = segment_read_window();
 
-    auto base_reader = store->make_uncompressed_reader(columns_to_decode(pipeline_context));
-    SegmentReader reader = [base_reader = std::move(base_reader),
-                            pipeline_desc = pipeline_context->on_disk_descriptor(),
-                            processing_config](pipelines::RangesAndKey&& rk) {
-        const bool is_incomplete = rk.is_incomplete();
-        return base_reader(std::move(rk))
-                .thenValueInline([pipeline_desc, processing_config, is_incomplete](pipelines::SegmentAndSlice&& r) {
-                    if (is_incomplete && !processing_config.dynamic_schema_) {
-                        auto check = check_schema_matches_incomplete(r.segment_in_memory_.descriptor(), pipeline_desc);
-                        if (std::holds_alternative<Error>(check)) {
-                            std::get<Error>(check).throw_error();
-                        }
-                    }
-                    return std::move(r);
-                });
-    };
+    auto reader = store->make_uncompressed_reader(columns_to_decode(pipeline_context));
 
     auto admission = std::make_shared<ProcessingUnitAdmissionHandler>(
             std::move(reader),
@@ -1460,9 +1444,9 @@ folly::Future<std::vector<SliceAndKey>> read_process_and_collect(
             });
 }
 
-void add_index_columns_to_query(const ReadQuery& read_query, const TimeseriesDescriptor& desc) {
+void add_index_columns_to_query(const ReadQuery& read_query, const OutputSchema& schema) {
     if (read_query.columns.has_value()) {
-        auto index_columns = stream::get_index_columns_from_descriptor(desc);
+        auto index_columns = stream::get_index_columns_from_descriptor(schema);
         if (index_columns.empty())
             return;
 
@@ -1475,6 +1459,10 @@ void add_index_columns_to_query(const ReadQuery& read_query, const TimeseriesDes
                 std::begin(*read_query.columns), std::begin(index_columns_to_add), std::end(index_columns_to_add)
         );
     }
+}
+
+void add_index_columns_to_query(const ReadQuery& read_query, const TimeseriesDescriptor& desc) {
+    return add_index_columns_to_query(read_query, schema_from_tsd(desc));
 }
 
 FrameAndDescriptor read_segment_impl(const std::shared_ptr<Store>& store, const VariantKey& key) {
@@ -1630,7 +1618,7 @@ static std::variant<bool, CompactionError> read_incompletes_to_pipeline(
         const ReadOptions& read_options, const ReadIncompletesFlags& flags
 ) {
 
-    std::vector<SliceAndKey> incomplete_segments;
+    std::vector<AppendMapEntry> incompletes;
     bool load_data{false};
     if (stage_results) {
         auto res = get_incomplete_segments_using_stage_results(
@@ -1639,10 +1627,10 @@ static std::variant<bool, CompactionError> read_incompletes_to_pipeline(
         if (std::holds_alternative<CompactionError>(res)) {
             return std::get<CompactionError>(res);
         } else {
-            incomplete_segments = std::get<std::vector<SliceAndKey>>(res);
+            incompletes = std::move(std::get<std::vector<AppendMapEntry>>(res));
         }
     } else {
-        incomplete_segments = get_incomplete(
+        incompletes = get_incomplete(
                 store,
                 pipeline_context->stream_id_,
                 read_query.row_filter,
@@ -1653,116 +1641,54 @@ static std::variant<bool, CompactionError> read_incompletes_to_pipeline(
     }
 
     ARCTICDB_DEBUG(
-            log::version(),
-            "Symbol {}: Found {} incomplete segments",
-            pipeline_context->stream_id_,
-            incomplete_segments.size()
+            log::version(), "Symbol {}: Found {} incomplete segments", pipeline_context->stream_id_, incompletes.size()
     );
-    if (incomplete_segments.empty()) {
+    if (incompletes.empty()) {
         return false;
     }
 
-    // In order to have the right normalization metadata and descriptor we need to find the first non-empty segment.
-    // Picking an empty segment when there are non-empty ones will impact the index type and column namings.
-    // If all segments are empty we will proceed as if were appending/writing and empty dataframe.
-    ARCTICDB_DEBUG_CHECK(
-            ErrorCode::E_ASSERTION_FAILURE, !incomplete_segments.empty(), "Incomplete segments must be non-empty"
+    std::optional<OutputSchema> existing;
+    if (pipeline_context->has_on_disk_descriptor()) {
+        arcticdb::proto::descriptors::NormalizationMetadata norm_meta;
+        if (pipeline_context->has_normalization()) {
+            norm_meta.CopyFrom(pipeline_context->normalization());
+        }
+        ensure_timeseries_norm_meta(norm_meta, pipeline_context->stream_id_);
+        if (flags.sparsify) {
+            // Reaching a timezone decision through the sparsify flag is a bug. Monday ref 11198274752.
+            label_index_utc_if_unlabelled(norm_meta);
+        }
+        existing.emplace(pipeline_context->on_disk_descriptor(), std::move(norm_meta), pipeline_context->rows_ == 0);
+    }
+
+    // Compaction needs both schemas the combine produces:
+    // - `staged_`: the incomplete segments combined with each other. Describes the new data keys.
+    // - `combined_`: `staged_` combined with what is on disk. Describes the index key's timeseries descriptor.
+    auto schemas = combine_incomplete_schemas(
+            existing, pipeline_context->rows_, incompletes, flags, pipeline_context->stream_id_
     );
-    const auto first_non_empty_seg = ranges::find_if(incomplete_segments, [&](auto& slice) {
-        auto res = slice.segment(store).row_count() > 0;
-        ARCTICDB_DEBUG(log::version(), "Testing for non-empty seg {} res={}", slice.key(), res);
-        return res;
-    });
-    const auto& seg = first_non_empty_seg != incomplete_segments.end() ? first_non_empty_seg->segment(store)
-                                                                       : incomplete_segments.begin()->segment(store);
-    ARCTICDB_DEBUG(
-            log::version(),
-            "Symbol {}: First segment has rows {} columns {} uncompressed bytes {} descriptor {}",
-            pipeline_context->stream_id_,
-            seg.row_count(),
-            seg.columns().size(),
-            seg.descriptor().uncompressed_bytes(),
-            seg.index_descriptor()
-    );
+    auto combined_norm = schemas.combined_.norm_metadata_;
+    pipeline_context->set_normalization(std::move(combined_norm));
+    pipeline_context->staged_descriptor_ = schemas.staged_.stream_descriptor();
+    pipeline_context->set_on_disk_descriptor(schemas.combined_.stream_descriptor());
+
     // Mark the start point of the incompletes, so we know that there is no column slicing after this point
     pipeline_context->incompletes_after_ = pipeline_context->slice_and_keys_.size();
 
     if (!flags.has_active_version) {
         // If there are only incompletes we need to do the following (typically done when reading the index key):
         // - add the index columns to query
-        // - in case of static schema: populate the descriptor and column_bitset
-        add_index_columns_to_query(read_query, seg.index_descriptor());
+        // - in case of static schema: populate the column bitset
+        add_index_columns_to_query(read_query, schemas.combined_);
         if (!flags.dynamic_schema) {
-            pipeline_context->set_on_disk_descriptor(seg.descriptor());
             get_column_bitset_in_context(read_query, pipeline_context);
         }
     }
-    ranges::copy(incomplete_segments, std::back_inserter(pipeline_context->slice_and_keys_));
-
-    if (!pipeline_context->has_normalization()) {
-        arcticdb::proto::descriptors::NormalizationMetadata norm_meta;
-        norm_meta.CopyFrom(seg.index_descriptor().proto().normalization());
-        ensure_timeseries_norm_meta(norm_meta, pipeline_context->stream_id_, flags.sparsify);
-        pipeline_context->set_normalization(std::move(norm_meta));
-    }
-
-    const StreamDescriptor& staged_desc = incomplete_segments[0].segment(store).descriptor();
-
-    // We need to check that the index names match regardless of the dynamic schema setting
-    // A more detailed check is done later in the do_compact function
-    if (pipeline_context->has_on_disk_descriptor()) {
-        schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
-                index_names_match(staged_desc, pipeline_context->on_disk_descriptor()),
-                "The index names in the staged stream descriptor {} are not identical to that of the stream descriptor "
-                "on storage {}",
-                staged_desc,
-                pipeline_context->on_disk_descriptor()
-        );
-    }
-
-    if (flags.dynamic_schema) {
-        ARCTICDB_DEBUG(log::version(), "read_incompletes_to_pipeline: Dynamic schema");
-        pipeline_context->staged_descriptor_ = merge_descriptors(
-                seg.descriptor(), incomplete_segments, read_query.columns, std::nullopt, flags.convert_int_to_float
-        );
-        if (pipeline_context->has_on_disk_descriptor()) {
-            const std::array staged_fields_ptr = {pipeline_context->staged_descriptor_->fields_ptr()};
-            pipeline_context->set_on_disk_descriptor(
-                    merge_descriptors(pipeline_context->on_disk_descriptor(), staged_fields_ptr, read_query.columns)
-            );
-        } else {
-            pipeline_context->set_on_disk_descriptor(*pipeline_context->staged_descriptor_);
-        }
-    } else {
-        ARCTICDB_DEBUG(log::version(), "read_incompletes_to_pipeline: Static schema");
-        [[maybe_unused]] auto& first_incomplete_seg = incomplete_segments[0].segment(store);
-        ARCTICDB_DEBUG(
-                log::version(),
-                "Symbol {}: First incomplete segment has rows {} columns {} uncompressed bytes {} descriptor {}",
-                pipeline_context->stream_id_,
-                first_incomplete_seg.row_count(),
-                first_incomplete_seg.columns().size(),
-                first_incomplete_seg.descriptor().uncompressed_bytes(),
-                first_incomplete_seg.index_descriptor()
-        );
-        if (pipeline_context->has_on_disk_descriptor()) {
-            schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
-                    columns_match(pipeline_context->on_disk_descriptor(), staged_desc, flags.convert_int_to_float),
-                    "When static schema is used the staged stream descriptor {} must equal the stream descriptor on "
-                    "storage {}",
-                    staged_desc,
-                    pipeline_context->on_disk_descriptor()
-            );
-        }
-        pipeline_context->staged_descriptor_ = staged_desc;
-        pipeline_context->set_on_disk_descriptor(staged_desc);
+    for (auto& entry : incompletes) {
+        pipeline_context->slice_and_keys_.emplace_back(std::move(entry.slice_and_key_));
     }
 
     pipeline_context->generate_string_coerced_descriptor(read_options);
-    if (flags.convert_int_to_float) {
-        convert_descriptor_types(*pipeline_context->staged_descriptor_);
-    }
-
     pipeline_context->generate_filtered_field_descriptors(read_query.columns);
     pipeline_context->total_rows_ = pipeline_context->calc_rows();
     return true;
@@ -1782,7 +1708,9 @@ static void check_incompletes_index_ranges_dont_overlap(
      */
     if (pipeline_context->on_disk_descriptor().index().type() == IndexDescriptorImpl::Type::TIMESTAMP) {
         std::optional<timestamp> last_existing_index_value;
-        if (append_to_existing) {
+        // A version with no rows has no data keys, so there is no indexed slice to precede the incompletes and no
+        // index value for them to be compared against.
+        if (append_to_existing && pipeline_context->incompletes_after() > 0) {
             internal::check<ErrorCode::E_ASSERTION_FAILURE>(
                     previous_sorted_value.has_value(),
                     "When staged data is appended to existing data the descriptor should hold the \"sorted\" status of "
@@ -2737,11 +2665,11 @@ std::variant<VersionedItem, CompactionError> compact_incomplete_impl(
     if (compaction_parameters.validate_index_) {
         check_incompletes_index_ranges_dont_overlap(pipeline_context, initial_index_sorted_status, append_to_existing);
     }
-    const auto& first_seg = pipeline_context->slice_and_keys_.begin()->segment(store);
-
     std::vector<FrameSlice> slices;
     bool dynamic_schema = write_options.dynamic_schema;
-    const auto index = index_type_from_descriptor(first_seg.descriptor());
+    // The pipeline descriptor rather than the first segment's: an empty staged segment sorts first but has no index
+    // for the aggregator to use.
+    const auto index = index_type_from_descriptor(pipeline_context->on_disk_descriptor());
     auto policies = std::make_tuple(
             index,
             dynamic_schema ? VariantSchema{DynamicSchema::default_schema(index, stream_id)}
@@ -2757,8 +2685,7 @@ std::variant<VersionedItem, CompactionError> compact_incomplete_impl(
                 constexpr bool validate_index_sorted = IndexType::type() == IndexDescriptorImpl::Type::TIMESTAMP;
                 const CompactionOptions compaction_options{
                         .convert_int_to_float = compaction_parameters.convert_int_to_float_,
-                        .validate_index = validate_index_sorted,
-                        .perform_schema_checks = true
+                        .validate_index = validate_index_sorted
                 };
                 CompactionResult compaction_result =
                         do_compact<IndexType, SchemaType, RowCountSegmentPolicy, ColumnPolicyType>(
@@ -2903,7 +2830,7 @@ VersionedItem defragment_symbol_data_impl(
                 using IndexType = std::remove_reference_t<decltype(idx)>;
                 using SchemaType = std::remove_reference_t<decltype(schema)>;
                 static constexpr CompactionOptions compaction_options = {
-                        .convert_int_to_float = false, .validate_index = false, .perform_schema_checks = false
+                        .convert_int_to_float = false, .validate_index = false
                 };
 
                 return do_compact<IndexType, SchemaType, RowCountSegmentPolicy, DenseColumnPolicy>(
@@ -3733,38 +3660,6 @@ void remove_written_keys(Store* const store, CompactionWrittenKeys&& written_key
 bool is_segment_unsorted(const SegmentInMemory& segment) {
     return segment.descriptor().sorted() == SortedValue::DESCENDING ||
            segment.descriptor().sorted() == SortedValue::UNSORTED;
-}
-
-CheckOutcome check_schema_matches_incomplete(
-        const StreamDescriptor& stream_descriptor_incomplete, const StreamDescriptor& pipeline_desc,
-        const bool convert_int_to_float
-) {
-    // We need to check that the index names match regardless of the dynamic schema setting
-    if (!index_names_match(stream_descriptor_incomplete, pipeline_desc)) {
-        return Error{
-                throw_error<ErrorCode::E_DESCRIPTOR_MISMATCH>,
-                fmt::format(
-                        "{} All staged segments must have the same index names."
-                        "{} is different than {}",
-                        error_code_data<ErrorCode::E_DESCRIPTOR_MISMATCH>.name_,
-                        stream_descriptor_incomplete,
-                        pipeline_desc
-                )
-        };
-    }
-    if (!columns_match(pipeline_desc, stream_descriptor_incomplete, convert_int_to_float)) {
-        return Error{
-                throw_error<ErrorCode::E_DESCRIPTOR_MISMATCH>,
-                fmt::format(
-                        "{} When static schema is used all staged segments must have the same column and column types."
-                        "{} is different than {}",
-                        error_code_data<ErrorCode::E_DESCRIPTOR_MISMATCH>.name_,
-                        stream_descriptor_incomplete,
-                        pipeline_desc
-                )
-        };
-    }
-    return std::monostate{};
 }
 
 size_t n_segments_live_during_compaction() {

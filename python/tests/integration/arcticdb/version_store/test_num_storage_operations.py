@@ -539,13 +539,8 @@ def test_compact_incomplete_reads_each_staged_key_twice(in_memory_version_store,
 
 @MEM_TESTS_MARK
 def test_sort_and_finalize_staged_data_reads_each_staged_key_twice(in_memory_version_store, clear_query_stats):
-    """As above for the sorting variant, plus one read more, because of how the scan for the first non-empty staged
-    segment is paid for:
-
-    - `read_incompletes_to_pipeline` loads segments until one has rows, caching that segment on its `SliceAndKey`.
-    - `do_compact` reads through those `SliceAndKey`s and reuses the cached one, so `compact_incomplete` is exactly 2x.
-    - `sort_merge` goes through `read_and_schedule_processing`, which fetches by key and cannot use that cache.
-    """
+    """As above, for the sorting variant: it reaches the segments through `read_and_schedule_processing`, not
+    `do_compact`."""
     lib = in_memory_version_store
     sym = "sym"
     num_staged = 4
@@ -557,4 +552,4 @@ def test_sort_and_finalize_staged_data_reads_each_staged_key_twice(in_memory_ver
     stats = qs.get_query_stats()
     qs.reset_stats()
 
-    assert query_stats_operation_count(stats, "Memory_GetObject", "APPEND_DATA") == 2 * num_staged + 1, pformat(stats)
+    assert query_stats_operation_count(stats, "Memory_GetObject", "APPEND_DATA") == 2 * num_staged, pformat(stats)

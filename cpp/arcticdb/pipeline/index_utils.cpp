@@ -100,10 +100,18 @@ RequiredFieldInfo required_fields_info(
         return {.num_physical_indices = stream_desc.index().field_count()};
     }
     auto info = required_fields_info(*norm_meta);
-    if (pandas_common(*norm_meta) == nullptr && !norm_meta->has_experimental_arrow()) {
+    if (info.num_physical_indices == 0) {
+        // The index field count may be different to the num physical indices when:
+        // - norm_metadata doesn't have arrow or pandas
+        // - norm_metadata has an empty pandas datetime index
+        // In these cases we should trust the index field count
         info.num_physical_indices = stream_desc.index().field_count();
     }
     return info;
+}
+
+RequiredFieldInfo required_fields_info(const OutputSchema& schema) {
+    return required_fields_info(schema.stream_descriptor(), schema.norm_metadata_);
 }
 
 } // namespace arcticdb::pipelines::index

@@ -504,7 +504,6 @@ set(arcticdb_srcs
         entity/field_collection.cpp
         entity/field_collection_proto.cpp
         entity/key.cpp
-        entity/merge_descriptors.cpp
         entity/metrics.cpp
         entity/performance_tracing.cpp
         entity/protobuf_mappings.cpp

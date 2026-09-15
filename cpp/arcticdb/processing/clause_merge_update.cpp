@@ -1436,14 +1436,13 @@ void MergeUpdateClause::set_component_manager(std::shared_ptr<ComponentManager> 
 }
 
 OutputSchema MergeUpdateClause::modify_schema(OutputSchema&& output_schema) const {
-    schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
-            columns_match(output_schema.stream_descriptor(), source_->desc()),
-            "Cannot perform merge update when the source and target schema are not the same.\nSource schema: "
-            "{}\nTarget schema: {}",
-            source_->desc(),
-            output_schema.stream_descriptor()
+    const std::array schemas{output_schema, schema_from_input_frame(*source_)};
+    return combine_schema(
+            schemas,
+            within_symbol_combine_options(
+                    false, NormalizationOperation::MERGE_UPDATE, output_schema.stream_descriptor().id()
+            )
     );
-    return output_schema;
 }
 
 OutputSchema MergeUpdateClause::join_schemas(std::vector<OutputSchema>&&) const {
