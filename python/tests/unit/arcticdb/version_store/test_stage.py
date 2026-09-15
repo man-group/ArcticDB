@@ -713,3 +713,34 @@ def test_delete_staged_data_on_failure_with_tokens_out_of_order_append(
     res = lib.read(sym)
     assert_frame_equal(res.data, df_3)
     assert res.version == 1
+
+
+def empty_int_frame(column):
+    return pd.DataFrame({column: np.array([], dtype=np.int64)}, index=pd.DatetimeIndex([]))
+
+
+@pytest.mark.parametrize("dynamic_schema", [True, False], ids=["dynamic_schema", "static_schema"])
+@pytest.mark.parametrize("follow_up", ["append", "finalize"])
+def test_finalize_only_empty_segments(lmdb_library_factory, arctic_api, dynamic_schema, follow_up):
+    """The schema of the first stage_result stands, and binds nothing afterwards.
+
+    Empty frames state nothing about their columns, so:
+    1. Combining them leaves no schema to prefer. The order the caller passed decides, so the first one wins.
+    2. Whatever is written next is free to disagree with it, under either schema mode.
+    """
+    lib = lmdb_library_factory(LibraryOptions(dynamic_schema=dynamic_schema))
+    sym = "sym"
+    stage_results = [lib.stage(sym, empty_int_frame(column)) for column in ("b", "c", "d")]
+    finalize(arctic_api, lib, sym, mode="write", stage_results=stage_results)
+
+    data = lib.read(sym).data
+    assert len(data) == 0
+    assert list(data.columns) == ["b"]
+
+    unrelated = pd.DataFrame({"unrelated": [1.5]}, index=pd.DatetimeIndex([pd.Timestamp("2025-01-01")]))
+    if follow_up == "append":
+        lib.append(sym, unrelated)
+    else:
+        stage_result = lib.stage(sym, unrelated)
+        finalize(arctic_api, lib, sym, mode="append", stage_results=[stage_result])
+    assert_frame_equal(lib.read(sym).data, unrelated)
