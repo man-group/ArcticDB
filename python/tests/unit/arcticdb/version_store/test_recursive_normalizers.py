@@ -75,6 +75,15 @@ def test_v2_api(arctic_client_lmdb_v1_only, sym, recursive_normalizers, lib_name
         lib.write(sym, data)
 
 
+def test_stage_rejects_recursive_normalizers(arctic_client_lmdb_v1_only, sym, lib_name):
+    # stage() never recursively normalizes, even when the library enables recursive normalizers,
+    # so non-normalizable data must be rejected rather than staged.
+    lib = arctic_client_lmdb_v1_only.create_library(lib_name, LibraryOptions(recursive_normalizers=True))
+    data = {"a": np.arange(5), "b": pd.DataFrame({"col": [1, 2, 3]})}
+    with pytest.raises(ArcticUnsupportedDataTypeException):
+        lib.stage(sym, data)
+
+
 partial_pickle_required_data = {
     "a": [1, 2, 3],
     "b": {"c": np.arange(24)},
