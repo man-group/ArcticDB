@@ -243,7 +243,7 @@ def test_remove_incompletes(arctic_library_v1, batch_size):
         df = pd.DataFrame({"col": np.arange(10)}, index=pd.date_range("2000-01-01", periods=num_chunks))
         for s in syms + other_syms:
             for idx in range(num_chunks):
-                lib.write(s, df.iloc[idx : idx + 1, :], staged=True)
+                lib.stage(s, df.iloc[idx : idx + 1, :])
 
         assert len(lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, "sym_0")) == num_chunks
         assert sorted(lib.get_staged_symbols()) == sorted(syms + other_syms)
@@ -273,9 +273,9 @@ def test_remove_incompletes_no_common_prefix(basic_store):
 
     df = pd.DataFrame({"a": [1]})
     df.index = [pd.Timestamp(0)]
-    lib.write("sym", df, staged=True)
-    lib.write("tzm", df, staged=True)
-    lib.write("uan", df, staged=True)
+    lib.stage("sym", df)
+    lib.stage("tzm", df)
+    lib.stage("uan", df)
 
     assert len(lib_tool.find_keys(KeyType.APPEND_DATA)) == 3
     assert sorted(lib.get_staged_symbols()) == ["sym", "tzm", "uan"]
@@ -524,7 +524,7 @@ def test_parallel_write_sort_merge(
         random.shuffle(dataframes)
         lib.write(symbol, dataframes[0])
         for d in dataframes:
-            lib.write(symbol, d, staged=True)
+            lib.stage(symbol, d)
         lib.sort_and_finalize_staged_data(symbol, prune_previous_versions=prune_previous_versions)
         vit = lib.read(symbol)
         df.sort_index(axis=1, inplace=True)
@@ -1540,7 +1540,7 @@ def test_chunks_overlap(lmdb_storage, lib_name):
     ]
 
     data = pd.DataFrame({"a": len(idx)}, index=idx)
-    lib.write("test", data, staged=True)
+    lib.stage("test", data)
 
     lt = lib._nvs.library_tool()
     append_keys = lt.find_keys_for_id(KeyType.APPEND_DATA, "test")
@@ -1567,11 +1567,11 @@ def test_chunks_overlap_1ns(lmdb_storage, lib_name):
 
     idx = [pd.Timestamp(0), pd.Timestamp(1), pd.Timestamp(2)]
     first = pd.DataFrame({"a": len(idx)}, index=idx)
-    lib.write("test", first, staged=True)
+    lib.stage("test", first)
 
     idx = [pd.Timestamp(1), pd.Timestamp(3)]
     second = pd.DataFrame({"a": len(idx)}, index=idx)
-    lib.write("test", second, staged=True)
+    lib.stage("test", second)
 
     with pytest.raises(UnsortedDataException):
         lib.finalize_staged_data("test")
@@ -1590,11 +1590,11 @@ def test_chunks_match_at_ends(lmdb_storage, lib_name):
 
     first_idx = [pd.Timestamp(0), pd.Timestamp(1), pd.Timestamp(2)]
     first = pd.DataFrame({"a": np.arange(3)}, index=first_idx)
-    lib.write("test", first, staged=True)
+    lib.stage("test", first)
 
     second_idx = [pd.Timestamp(2), pd.Timestamp(2), pd.Timestamp(2), pd.Timestamp(3)]
     second = pd.DataFrame({"a": np.arange(3, 7)}, index=second_idx)
-    lib.write("test", second, staged=True)
+    lib.stage("test", second)
 
     lib.finalize_staged_data("test")
 
@@ -1635,7 +1635,7 @@ def test_chunks_the_same(lmdb_storage, lib_name, n_runs):
     ]
 
     data = pd.DataFrame({"a": np.arange(len(idx))}, index=idx, dtype=np.int64)
-    lib.write("test", data, staged=True)
+    lib.stage("test", data)
 
     lt = lib._nvs.library_tool()
     append_keys = lt.find_keys_for_id(KeyType.APPEND_DATA, "test")
@@ -1661,7 +1661,7 @@ def test_staging_in_chunks_default_settings(lmdb_storage, lib_name):
     idx = pd.date_range(pd.Timestamp(0), periods=int(31e5), freq="us")
 
     data = pd.DataFrame({"a": len(idx)}, index=idx)
-    lib.write("test", data, staged=True)
+    lib.stage("test", data)
 
     lt = lib._nvs.library_tool()
     append_keys = lt.find_keys_for_id(KeyType.APPEND_DATA, "test")
