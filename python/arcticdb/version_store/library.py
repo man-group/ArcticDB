@@ -1579,7 +1579,8 @@ class Library:
             If a range is specified, it will delete the stored value within the range and overwrite it with the data in
             ``data``. This allows the user to update with data that might only be a subset of the stored value. Leaving
             any part of the tuple as None leaves that part of the range open ended. Only data with date_range will be
-            modified, even if ``data`` covers a wider date range.
+            modified, even if ``data`` covers a wider date range. Either both ``date_range`` and ``data`` must be both
+            timezone aware or both must be timezone naive.
         prune_previous_versions: Optional[bool], default=None
             Removes previous (non-snapshotted) versions from the database. If None, the value is taken from the
             library configuration (defaults to False).
