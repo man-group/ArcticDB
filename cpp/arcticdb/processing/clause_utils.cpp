@@ -276,37 +276,4 @@ void check_is_timeseries(const StreamDescriptor& stream_descriptor, std::string_
     );
 }
 
-void drop_rowless_symbols(
-        std::vector<OutputSchema>& input_schemas, std::vector<std::vector<EntityId>>& entity_ids,
-        ComponentManager& component_manager
-) {
-    const auto has_rows = [&component_manager](const std::vector<EntityId>& ids) {
-        auto [row_ranges] = component_manager.get_components<std::shared_ptr<RowRange>>(ids);
-        return std::ranges::any_of(row_ranges, [](const auto& row_range) { return row_range->diff() > 0; });
-    };
-    std::vector<size_t> to_keep;
-    for (size_t idx = 0; idx < entity_ids.size(); ++idx) {
-        if (has_rows(entity_ids[idx])) {
-            to_keep.emplace_back(idx);
-        }
-    }
-    if (to_keep.size() == entity_ids.size()) {
-        return;
-    }
-    if (to_keep.empty()) {
-        // Nothing has rows, so there is nothing to drop down to. Keep only the first symbol, rather than every
-        // symbol, so that the result's columns do not depend on whether some unrelated symbol happened to have
-        // rows, and so that every schema reaching combine_schema agrees about the index type.
-        to_keep.emplace_back(0);
-    }
-    auto kept_schemas = util::reserve_vector<OutputSchema>(to_keep.size());
-    auto kept_entity_ids = util::reserve_vector<std::vector<EntityId>>(to_keep.size());
-    for (const auto idx : to_keep) {
-        kept_schemas.emplace_back(std::move(input_schemas[idx]));
-        kept_entity_ids.emplace_back(std::move(entity_ids[idx]));
-    }
-    input_schemas = std::move(kept_schemas);
-    entity_ids = std::move(kept_entity_ids);
-}
-
 } // namespace arcticdb

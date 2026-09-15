@@ -565,6 +565,22 @@ class TestAppend:
         with pytest.raises(UnsortedDataException):
             lmdb_version_store.append(symbol, df2, validate_index=True, compact_data=compact_data)
 
+    @pytest.mark.parametrize("stored_sorted", (True, False))
+    def test_append_empty_frame_skips_index_validation(self, lmdb_version_store, compact_data, stored_sorted):
+        # Nothing to be out of order, and the index it normalized to is not the one it was given, so neither side's
+        # sortedness bears on it. A user who cares about the stored order passes validate_index to the write.
+        symbol = "empty_append_validate_index"
+        dtidx = pd.date_range(pd.Timestamp("2019-01-01"), periods=20)
+        if not stored_sorted:
+            dtidx = np.roll(dtidx, 3)
+        df = pd.DataFrame({"c": np.arange(0, 20, dtype=np.int64)}, index=dtidx)
+        lmdb_version_store.write(symbol, df)
+        assert lmdb_version_store.get_info(symbol)["sorted"] == ("ASCENDING" if stored_sorted else "UNSORTED")
+
+        empty = pd.DataFrame({"c": np.array([], dtype=np.int64)})
+        lmdb_version_store.append(symbol, empty, validate_index=True, compact_data=compact_data)
+        assert_frame_equal(df, lmdb_version_store.read(symbol).data)
+
     def test_append_not_sorted_non_validate_index(self, lmdb_version_store, compact_data):
         symbol = "bad_append"
 

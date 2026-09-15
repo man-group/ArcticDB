@@ -143,4 +143,12 @@ void update_rowrange_norm_for_append(
     }
 }
 
+namespace entity {
+
+bool OutputSchema::is_inferred_from_empty_pandas() const {
+    return inferred_from_empty_frame_ && pandas_common(norm_metadata_) != nullptr;
+}
+
+} // namespace entity
+
 } // namespace arcticdb
