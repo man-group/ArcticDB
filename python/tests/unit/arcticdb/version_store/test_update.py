@@ -8,6 +8,8 @@ As of the Change Date specified in that file, in accordance with the Business So
 
 import pandas as pd
 import numpy as np
+import pyarrow as pa
+import polars as pl
 import pytest
 from itertools import product
 import datetime
@@ -22,7 +24,7 @@ from arcticdb.util.test import (
 )
 from arcticdb import DataError
 from arcticdb.exceptions import (
-    InternalException,
+    UserInputException,
     UnsortedDataException,
     NormalizationException,
     SchemaException,
@@ -336,23 +338,146 @@ def generate_dataframe(columns, dt, num_days, num_rows_per_day):
     return pd.concat(dataframes)
 
 
-def test_update_with_daterange(lmdb_version_store):
-    lib = lmdb_version_store
+INDEXED_STRUCTURE_KINDS = (
+    "PandasSeries",
+    "PandasDataFrame",
+    "Table",
+    "RecordBatch",
+    "ChunkedArray",
+    "Array",
+    "PolarsDataFrame",
+    "PolarsSeries",
+)
 
-    def get_frame_for_date_range(start, end):
-        df = pd.DataFrame(index=pd.date_range(start, end, freq="D"))
-        df["value"] = df.index.day
-        return df
 
-    df1 = get_frame_for_date_range("2020-01-01", "2021-01-01")
-    lib.write("test", df1)
+def make_indexed_structure(kind, index):
+    """Build a structure indexed by `index`, covering both pandas and NORMALIZABLE_PYARROW_TYPES/
+    NORMALIZABLE_POLARS_TYPES. For the pandas kinds, `index` is the DatetimeIndex; for the rest, `index`
+    is the sole column, since these types carry no separate index/data distinction."""
+    if kind == "PandasSeries":
+        return pd.Series(data=range(len(index)), index=index, name="a")
+    if kind == "PandasDataFrame":
+        return pd.DataFrame({"a": range(len(index))}, index=index)
+    ts = pa.Array.from_pandas(index)
+    if kind == "Table":
+        return pa.table({"index": ts})
+    if kind == "RecordBatch":
+        return pa.RecordBatch.from_arrays([ts], names=["index"])
+    if kind == "ChunkedArray":
+        return pa.chunked_array([ts])
+    if kind == "Array":
+        return ts
+    if kind == "PolarsDataFrame":
+        return pl.from_arrow(pa.table({"index": ts}))
+    if kind == "PolarsSeries":
+        return pl.from_arrow(ts)
+    assert False, f"Unexpected kind: {kind}"
 
-    df2 = get_frame_for_date_range("2020-06-01", "2021-06-01")
-    date_range = DateRange("2020-01-01", "2022-01-01")
-    lib.update("test", df2, date_range=date_range)
-    stored_df = lib.read("test").data
-    assert stored_df.index.min() == df2.index.min()
-    assert stored_df.index.max() == df2.index.max()
+
+class TestUpdateWithDateRange:
+    def test_update_with_daterange(self, lmdb_version_store):
+        lib = lmdb_version_store
+
+        def get_frame_for_date_range(start, end):
+            df = pd.DataFrame(index=pd.date_range(start, end, freq="D"))
+            df["value"] = df.index.day
+            return df
+
+        df1 = get_frame_for_date_range("2020-01-01", "2021-01-01")
+        lib.write("test", df1)
+
+        df2 = get_frame_for_date_range("2020-06-01", "2021-06-01")
+        date_range = DateRange("2020-01-01", "2022-01-01")
+        lib.update("test", df2, date_range=date_range)
+        stored_df = lib.read("test").data
+        assert stored_df.index.min() == df2.index.min()
+        assert stored_df.index.max() == df2.index.max()
+
+    @pytest.mark.parametrize(
+        "start, end",
+        [
+            (pd.Timestamp("2020-01-01 05:00:00", tz="Europe/Sofia"), None),
+            (None, pd.Timestamp("2020-01-01 05:00:00", tz="Europe/Sofia")),
+        ],
+    )
+    def test_open_ended_date_range_intervals(self, in_memory_version_store, start, end):
+        lib = in_memory_version_store
+        lib.write("test", pd.DataFrame({"a": range(24)}, index=pd.date_range("2020-01-01", periods=24, freq="h")))
+        date_range = DateRange(start, end)
+        with pytest.raises(NormalizationException):
+            lib.update(
+                "test",
+                pd.DataFrame({"a": [10]}, index=pd.DatetimeIndex(["2020-01-01 07:00:00"])),
+                date_range=date_range,
+            )
+
+    def test_date_bounds_have_no_tzinfo_attribute_with_tz_aware_data_throws(self, in_memory_version_store):
+        # start/end are datetime.date, which has no tzinfo attribute at all, not just tzinfo=None
+        lib = in_memory_version_store
+        tz = "Europe/Sofia"
+        lib.write(
+            "test", pd.DataFrame({"a": range(24)}, index=pd.date_range("2020-01-01", periods=24, freq="h", tz=tz))
+        )
+        date_range = DateRange(datetime.date(2020, 1, 1), datetime.date(2020, 1, 2))
+        with pytest.raises(NormalizationException):
+            lib.update(
+                "test",
+                pd.DataFrame({"a": [10]}, index=pd.DatetimeIndex(["2020-01-01 07:00:00"], tz=tz)),
+                date_range=date_range,
+            )
+
+    @pytest.mark.parametrize(
+        "start, end",
+        [
+            (datetime.datetime(2020, 1, 1, 5, 0, 0), pd.Timestamp("2020-01-01 12:00:00", tz="Europe/Sofia")),
+            (pd.Timestamp("2020-01-01 05:00:00", tz="Europe/Sofia"), datetime.datetime(2020, 1, 1, 12, 0, 0)),
+        ],
+    )
+    def test_mixed_naive_datetime_and_tz_aware_timestamp_bounds_throws(self, in_memory_version_store, start, end):
+        lib = in_memory_version_store
+        lib.write("test", pd.DataFrame({"a": range(24)}, index=pd.date_range("2020-01-01", periods=24, freq="h")))
+        # DateRange itself compares start > end, which raises when mixing naive/aware, so use a plain tuple
+        date_range = (start, end)
+        with pytest.raises(NormalizationException):
+            lib.update(
+                "test",
+                pd.DataFrame({"a": [10]}, index=pd.DatetimeIndex(["2020-01-01 07:00:00"])),
+                date_range=date_range,
+            )
+
+    @pytest.mark.parametrize("kind", INDEXED_STRUCTURE_KINDS)
+    def test_date_range_tz_aware_with_naive_data_throws(self, in_memory_version_store_arrow, kind):
+        lib = in_memory_version_store_arrow
+        lib.write(
+            "test", make_indexed_structure(kind, pd.date_range("2020-01-01", periods=24, freq="h")), index_column=True
+        )
+        tz = "Europe/Sofia"
+        date_range = DateRange(pd.Timestamp("2020-01-01 05:00:00", tz=tz), pd.Timestamp("2020-01-01 12:00:00", tz=tz))
+        with pytest.raises(NormalizationException):
+            lib.update(
+                "test",
+                make_indexed_structure(kind, pd.DatetimeIndex(["2020-01-01 07:00:00"])),
+                date_range=date_range,
+                index_column=True,
+            )
+
+    @pytest.mark.parametrize("kind", INDEXED_STRUCTURE_KINDS)
+    def test_date_range_naive_with_tz_aware_data_throws(self, in_memory_version_store_arrow, kind):
+        lib = in_memory_version_store_arrow
+        tz = "Europe/Sofia"
+        lib.write(
+            "test",
+            make_indexed_structure(kind, pd.date_range("2020-01-01", periods=24, freq="h", tz=tz)),
+            index_column=True,
+        )
+        date_range = DateRange(pd.Timestamp("2020-01-01 05:00:00"), pd.Timestamp("2020-01-01 12:00:00"))
+        with pytest.raises(NormalizationException):
+            lib.update(
+                "test",
+                make_indexed_structure(kind, pd.DatetimeIndex(["2020-01-01 07:00:00"], tz=tz)),
+                date_range=date_range,
+                index_column=True,
+            )
 
 
 def test_update_schema_change(lmdb_version_store_dynamic_schema):
