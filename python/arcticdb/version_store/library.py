@@ -29,7 +29,7 @@ from numpy import datetime64
 from arcticdb.options import LibraryOptions, EnterpriseLibraryOptions, OutputFormat, ArrowOutputStringFormat
 from arcticc.pb2.descriptors_pb2 import TypeDescriptor
 from arcticdb.preconditions import check
-from arcticdb.supported_types import Timestamp
+from arcticdb.supported_types import Timestamp, DateRangeInput
 from arcticdb.util.arrow import NORMALIZABLE_PYARROW_TYPES, NORMALIZABLE_POLARS_TYPES
 from arcticdb.util._versions import IS_PANDAS_TWO
 
@@ -399,7 +399,7 @@ class UpdatePayload:
         symbol: str,
         data: NormalizableType,
         metadata: Any = None,
-        date_range: Optional[Tuple[Optional[Timestamp], Optional[Timestamp]]] = None,
+        date_range: Optional[Union[DateRangeInput, Tuple[Optional[Timestamp], Optional[Timestamp]]]] = None,
         index_column: bool = False,
     ):
         """
@@ -415,8 +415,11 @@ class UpdatePayload:
         metadata : Any, default=None
             Optional metadata to persist along with the new symbol version.
         date_range : Optional[Tuple[Optional[Timestamp], Optional[Timestamp]]], default=None
-            Restricts the update to the specified range in the stored data. Leaving either bound as ``None`` leaves that
-            side of the range open-ended.
+            If a range is specified, the existing data within that range is cleared and overwritten by data. This allows
+            the user to update a subset of the original data. Note that date_range is end-inclusive, and if either the
+            start or end is None, the range becomes open-ended on that side. Both date_range and data must be either
+            timezone-aware or timezone-naive. Only data with date_range will be modified, even if data covers a wider
+            date range.
         index_column: bool, default=False
             Only applicable when data is a PyArrow Table or Polars DataFrame. If True, the first column
             is treated as the timeseries index.
@@ -1576,10 +1579,11 @@ class Library:
         upsert: bool, default=False
             If True, will write the data even if the symbol does not exist.
         date_range: `Tuple[Optional[Timestamp], Optional[Timestamp]]`, default=None
-            If a range is specified, it will delete the stored value within the range and overwrite it with the data in
-            ``data``. This allows the user to update with data that might only be a subset of the stored value. Leaving
-            any part of the tuple as None leaves that part of the range open ended. Only data with date_range will be
-            modified, even if ``data`` covers a wider date range.
+            If a range is specified, the existing data within that range is cleared and overwritten by data. This allows
+            the user to update a subset of the original data. Note that date_range is end-inclusive, and if either the
+            start or end is None, the range becomes open-ended on that side. Both date_range and data must be either
+            timezone-aware or timezone-naive. Only data with date_range will be modified, even if data covers a wider
+            date range.
         prune_previous_versions: Optional[bool], default=None
             Removes previous (non-snapshotted) versions from the database. If None, the value is taken from the
             library configuration (defaults to False).
