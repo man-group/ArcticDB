@@ -156,7 +156,7 @@ To reiterate, ArcticDB supports concurrent writers to multiple symbols, even wit
 
 !!! note
 
-    ArcticDB does support staging multiple single-symbol concurrent writes. See the documentation for `staged`. 
+    ArcticDB does support staging multiple single-symbol concurrent writes. See the documentation for `stage`.
 
 ### *Does ArcticDB cache any data locally?*
 
