@@ -89,8 +89,4 @@ class ConsoleSink final : public spdlog::sinks::sink {
 
 using ConsoleSinkMt = ConsoleSink<spdlog::details::console_mutex>;
 
-/// Console sink for stdout/stderr: ConsoleSink on Windows, spdlog's own stdout/stderr sinks everywhere else, where
-/// they already write through the FILE* and so already follow a dup2 of fd 1/2.
-std::shared_ptr<spdlog::sinks::sink> make_console_sink(bool std_err, bool color);
-
 } // namespace arcticdb::log

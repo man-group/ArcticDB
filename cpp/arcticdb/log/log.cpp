@@ -7,7 +7,9 @@
  */
 
 #include <arcticdb/log/log.hpp>
+#ifdef _WIN32
 #include <arcticdb/log/console_sink.hpp>
+#endif
 #include <arcticdb/util/preprocess.hpp>
 #include <arcticdb/util/pb_util.hpp>
 #include <spdlog/sinks/stdout_sinks.h>

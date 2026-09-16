@@ -514,7 +514,6 @@ set(arcticdb_srcs
         entity/type_utils.cpp
         entity/types_proto.cpp
         log/log.cpp
-        log/console_sink.cpp
         pipeline/column_mapping.cpp
         pipeline/column_stats.cpp
         pipeline/column_stats_filter.cpp
@@ -636,6 +635,9 @@ set(arcticdb_srcs
         version/python_bindings_common.cpp
         storage/s3/ec2_utils.cpp
 )
+if (WIN32)
+    list(APPEND arcticdb_srcs log/console_sink.cpp)
+endif()
 strip_fd_from_compile_object()
 set_pdb_name_per_translation_unit(${arcticdb_srcs})
 

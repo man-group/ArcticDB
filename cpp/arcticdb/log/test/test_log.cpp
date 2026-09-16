@@ -46,7 +46,9 @@ TEST(TestLog, TestFormatBytes) {
     ASSERT_EQ(s, "12.35MB");
 }
 
+#ifdef _WIN32
 #include <arcticdb/log/console_sink.hpp>
+#endif
 
 #include <cerrno>
 #include <filesystem>
