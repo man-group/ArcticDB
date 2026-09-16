@@ -1020,7 +1020,6 @@ class Library:
         data: NormalizableType,
         metadata: Any = None,
         prune_previous_versions: Optional[bool] = None,
-        staged=False,
         validate_index=True,
         index_column: bool = False,
         recursive_normalizers: bool = None,
@@ -1063,10 +1062,6 @@ class Library:
         prune_previous_versions : Optional[bool], default=None
             Removes previous (non-snapshotted) versions from the database. If None, the value is taken from the
             library configuration (defaults to False).
-        staged: bool, default=False
-            Deprecated. Use stage() instead.
-            Whether to write to a staging area rather than immediately to the library.
-            See documentation on `finalize_staged_data` for more information.
         validate_index: bool, default=True
             If True, verify that the index of `data` supports date range searches and update operations.
             This tests that the data is sorted in ascending order, using Pandas DataFrame.index.is_monotonic_increasing.
@@ -1119,24 +1114,10 @@ class Library:
 
         WritePayload objects can be unpacked and used as parameters:
         >>> w = adb.WritePayload("symbol", df, metadata={'the': 'metadata'})
-        >>> lib.write(*w, staged=True)
+        >>> lib.write(*w)
         """
-        if staged:
-            warnings.warn(
-                "The `staged` parameter will be removed in v7.0.0. Use stage() instead.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-        is_recursive_normalizers_enabled = self._nvs._is_recursive_normalizers_enabled(
-            **{"recursive_normalizers": recursive_normalizers}
-        )
         if not self._allowed_input_type(data):
-            if is_recursive_normalizers_enabled:
-                if staged:
-                    raise ArcticUnsupportedDataTypeException(
-                        "Staged data cannot be natively normalized. The recursive normalizer is enabled but is not allowed to work on staged data."
-                    )
-            else:
+            if not self._nvs._is_recursive_normalizers_enabled(**{"recursive_normalizers": recursive_normalizers}):
                 raise ArcticUnsupportedDataTypeException(
                     "Data is of a type that cannot be normalized. Consider using "
                     f"write_pickle instead. type(data)=[{type(data)}]"
@@ -1148,7 +1129,7 @@ class Library:
             metadata=metadata,
             prune_previous_version=prune_previous_versions,
             pickle_on_failure=False,
-            parallel=staged,
+            parallel=False,
             validate_index=validate_index,
             index_column=index_column,
             norm_failure_options_msg="Using write_pickle will allow the object to be written. However, many operations "
@@ -1163,7 +1144,6 @@ class Library:
         data: Any,
         metadata: Any = None,
         prune_previous_versions: Optional[bool] = None,
-        staged=False,
         recursive_normalizers: bool = None,
     ) -> VersionedItem:
         """
@@ -1184,8 +1164,6 @@ class Library:
         metadata
             See documentation on `write`.
         prune_previous_versions
-            See documentation on `write`.
-        staged
             See documentation on `write`.
         recursive_normalizers: bool, default None
             See documentation on `write`.
@@ -1229,7 +1207,7 @@ class Library:
             metadata=metadata,
             prune_previous_version=prune_previous_versions,
             pickle_on_failure=True,
-            parallel=staged,
+            parallel=False,
             recursive_normalizers=recursive_normalizers,
             recursive_normalize_msgpack_no_pickle_fallback=False,
         )
@@ -1764,10 +1742,9 @@ class Library:
 
         See Also
         --------
-        write
-            Documentation on the ``staged`` parameter explains the concept of staged data in more detail.
         stage
-            Returns the ``StageResult`` objects accepted by this method.
+            Documentation on the ``stage`` method explains the concept of staged data in more detail. The ``stage``
+            method returns the ``StageResult`` objects accepted by this method
 
         Examples
         --------
@@ -2010,13 +1987,13 @@ class Library:
 
         See Also
         --------
-        write
-            Documentation on the ``staged`` parameter explains the concept of staged data in more detail.
+        stage
+            Documentation on the ``stage`` method explains the concept of staged data in more detail.
 
         Examples
         --------
-        >>> lib.write("sym", pd.DataFrame({"col": [2, 4]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 2), pd.Timestamp(2024, 1, 4)])), staged=True)
-        >>> lib.write("sym", pd.DataFrame({"col": [3, 1]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 3), pd.Timestamp(2024, 1, 1)])), staged=True)
+        >>> lib.stage("sym", pd.DataFrame({"col": [2, 4]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 2), pd.Timestamp(2024, 1, 4)])), validate_index=False)
+        >>> lib.stage("sym", pd.DataFrame({"col": [3, 1]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 3), pd.Timestamp(2024, 1, 1)])), validate_index=False)
         >>> lib.sort_and_finalize_staged_data("sym")
         >>> lib.read("sym").data
                     col
@@ -2068,8 +2045,8 @@ class Library:
 
         See Also
         --------
-        write
-            Documentation on the ``staged`` parameter explains the concept of staged data in more detail.
+        stage
+            Documentation on the ``stage`` method explains the concept of staged data in more detail.
         """
         return self._nvs.list_symbols_with_incomplete_data()
 
