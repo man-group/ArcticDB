@@ -2,7 +2,7 @@
 
 #include <arcticdb/pipeline/input_frame.hpp>
 #include <arcticdb/processing/schema_combine.hpp>
-#include <arcticdb/python/normalization_utils.hpp>
+#include <arcticdb/entity/normalization_utils.hpp>
 #include <arcticdb/entity/timeseries_descriptor.hpp>
 
 namespace arcticdb {
