@@ -16,6 +16,7 @@ from arcticdb.options import ModifiableEnterpriseLibraryOption, OutputFormat
 from arcticdb.toolbox.library_tool import LibraryTool
 from tests.util.mark import ARCTICDB_USING_CONDA, MACOS_WHEEL_BUILD, ZONE_INFO_MARK
 from arcticdb_ext.tools import StorageMover
+from arcticdb_ext.types import IndexKind
 
 from arcticdb.util.venv import CompatLibrary
 
@@ -563,6 +564,54 @@ def test_compat_merge_old_updated_data(pandas_v1_venv, s3_ssl_disabled_storage, 
 
             result = curr.lib.read(sym).data
             assert_frame_equal(result, expected)
+
+
+def _stored_index_state(lib, sym):
+    """What a symbol's index key says about its index: the descriptor's index type and field count, and the
+    normalization metadata's is_physically_stored and RangeIndex step."""
+    nvs = lib._nvs
+    tsd = nvs.version_store.read_descriptor(sym, nvs._get_version_query(None)).timeseries_descriptor
+    descriptor_index = tsd.as_stream_descriptor.index
+    norm_index = tsd.normalization.df.common.index
+    return (descriptor_index.kind(), descriptor_index.field_count(), norm_index.is_physically_stored, norm_index.step)
+
+
+def test_compat_append_to_rowless_symbol(pandas_v1_venv, s3_ssl_disabled_storage, lib_name):
+    # Which index an empty DataFrame is stored with depends on the client that wrote it, so none of these says anything
+    # about the index its user had. Every one has to accept the non-empty frame that user meant to write.
+    arctic_uri = s3_ssl_disabled_storage.arctic_uri
+    rowrange_df = pd.DataFrame({"col": [1.0]})
+    datetime_df = pd.DataFrame({"col": [1.0]}, index=pd.DatetimeIndex([pd.Timestamp("2025-01-01")]))
+    with CompatLibrary(pandas_v1_venv, arctic_uri, lib_name) as compat:
+        compat.old_lib.execute(
+            [
+                "lib.write('old_rowrange', pd.DataFrame({'col': []}))",
+                "lib.write('old_datetime', pd.DataFrame({'col': []}, index=pd.DatetimeIndex([])))",
+            ]
+        )
+        with compat.current_version() as curr:
+            curr.lib.write("new_rowrange", pd.DataFrame({"col": []}))
+            curr.lib.write("new_datetime", pd.DataFrame({"col": []}, index=pd.DatetimeIndex([])))
+
+            # Only the old client stored an empty frame's own index.
+            assert _stored_index_state(curr.lib, "old_rowrange") == (IndexKind.ROWCOUNT, 0, False, 1)
+            assert _stored_index_state(curr.lib, "old_datetime") == (IndexKind.TIMESTAMP, 1, True, 0)
+            assert _stored_index_state(curr.lib, "new_rowrange") == (IndexKind.TIMESTAMP, 1, False, 0)
+            assert _stored_index_state(curr.lib, "new_datetime") == (IndexKind.TIMESTAMP, 1, False, 0)
+
+            for sym, to_append in [
+                ("old_rowrange", rowrange_df),
+                ("old_datetime", datetime_df),
+                ("new_rowrange", rowrange_df),
+                ("new_datetime", datetime_df),
+            ]:
+                curr.lib.append(sym, to_append)
+                assert_frame_equal(curr.lib.read(sym).data, to_append)
+                # The appended frame decides the index, so the descriptor and the metadata now agree.
+                expected = (
+                    (IndexKind.ROWCOUNT, 0, False, 1) if to_append is rowrange_df else (IndexKind.TIMESTAMP, 1, True, 0)
+                )
+                assert _stored_index_state(curr.lib, sym) == expected, sym
 
 
 @pytest.mark.skipif(

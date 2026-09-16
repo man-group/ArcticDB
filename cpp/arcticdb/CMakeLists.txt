@@ -258,6 +258,7 @@ set(arcticdb_srcs
         entity/data_error.hpp
         entity/descriptors.hpp
         entity/native_tensor.hpp
+        entity/normalization_utils.hpp
         entity/output_format.hpp
         entity/performance_tracing.hpp
         entity/protobuf_mappings.hpp
@@ -305,7 +306,6 @@ set(arcticdb_srcs
         pipeline/value_set.hpp
         pipeline/write_frame.hpp
         pipeline/write_options.hpp
-        python/normalization_utils.hpp
         python/numpy_buffer_holder.hpp
         python/python_strings.hpp
         python/python_handler_data.hpp
@@ -508,6 +508,7 @@ set(arcticdb_srcs
         entity/key.cpp
         entity/merge_descriptors.cpp
         entity/metrics.cpp
+        entity/normalization_utils.cpp
         entity/performance_tracing.cpp
         entity/protobuf_mappings.cpp
         entity/python_bindings_common.cpp
@@ -535,7 +536,6 @@ set(arcticdb_srcs
         pipeline/value_set.cpp
         pipeline/write_frame.cpp
         python/python_bindings_common.cpp
-        python/normalization_utils.cpp
         python/python_strings.cpp
         python/python_utils.cpp
         python/numpy_buffer_holder.cpp

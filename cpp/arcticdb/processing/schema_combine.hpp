@@ -91,12 +91,6 @@ SchemaCombineOptions concat_options(JoinType join_type);
 // base: its column order leads the output, and for append/update it is the existing symbol's schema.
 entity::OutputSchema combine_schema(std::span<const entity::OutputSchema> schemas, const SchemaCombineOptions& options);
 
-// Raises unless two index types can combine.
-void check_index_types_combinable(
-        entity::IndexDescriptorImpl::Type accumulated, entity::IndexDescriptorImpl::Type other,
-        const SchemaCombineOptions& options
-);
-
 SortedValue deduce_sorted(SortedValue existing_frame, SortedValue input_frame);
 
 // Extracting a schema out of an existing tsd or an input frame.

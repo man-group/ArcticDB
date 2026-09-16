@@ -140,19 +140,10 @@ struct RequiredFieldInfo {
     [[nodiscard]] size_t num_physical_required_columns() const {
         return num_physical_indices + (has_series_value_column ? 1 : 0);
     }
-
-    // How many of a single frame's leading fields are required ones. An empty index occupies no descriptor field, so
-    // a frame carrying one contributes none of the index levels and every one of its fields is a data column.
-    [[nodiscard]] size_t num_required_columns_for(IndexDescriptorImpl::Type index_type) const {
-        const size_t indices = index_type == IndexDescriptorImpl::Type::EMPTY ? 0 : num_physical_indices;
-        return indices + (has_series_value_column ? 1 : 0);
-    }
 };
 
 RequiredFieldInfo required_fields_info(const proto::descriptors::NormalizationMetadata& norm_meta);
 
-// For metadata that says nothing about the index - absent, or an input type with no index of its own such as an
-// ndarray or a pickled object - the descriptor's own index field count is the answer.
 RequiredFieldInfo required_fields_info(
         const StreamDescriptor& stream_desc,
         const std::optional<proto::descriptors::NormalizationMetadata>& norm_meta = std::nullopt
