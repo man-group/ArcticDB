@@ -7,11 +7,11 @@
  */
 
 #include <arcticdb/entity/type_utils.hpp>
+#include <arcticdb/entity/normalization_utils.hpp>
 #include <arcticdb/pipeline/index_utils.hpp>
 #include <arcticdb/processing/clause_utils.hpp>
 #include <arcticdb/stream/index.hpp>
 #include <arcticdb/util/collection_utils.hpp>
-#include <arcticdb/python/normalization_utils.hpp>
 
 namespace arcticdb {
 namespace ranges = std::ranges;

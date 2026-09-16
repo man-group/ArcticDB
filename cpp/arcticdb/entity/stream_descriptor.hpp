@@ -13,6 +13,7 @@
 #include <arcticdb/entity/field_collection_proto.hpp>
 #include <arcticdb/entity/types_proto.hpp>
 #include <arcticdb/pipeline/value.hpp>
+#include <arcticdb/entity/normalization_utils.hpp>
 
 #include <ankerl/unordered_dense.h>
 
@@ -216,9 +217,10 @@ struct OutputSchema {
     // If `inferred_from_empty_frame` is True, pandas index metadata should be ignored.
     [[nodiscard]] bool inferred_from_empty_frame() const { return inferred_from_empty_frame_; }
 
-    // Index metadata and column dtypes can be incorrect when inferred from an empty pandas dataframe. Out of line
-    // because pandas_common()'s header includes this one.
-    [[nodiscard]] bool is_inferred_from_empty_pandas() const;
+    // Index metadata and column dtypes can be incorrect when inferred from an empty pandas dataframe
+    [[nodiscard]] bool is_inferred_from_empty_pandas() const {
+        return inferred_from_empty_frame_ && pandas_common(norm_metadata_) != nullptr;
+    }
 
     void set_inferred_from_empty_frame(bool inferred_from_empty_frame) {
         inferred_from_empty_frame_ = inferred_from_empty_frame;

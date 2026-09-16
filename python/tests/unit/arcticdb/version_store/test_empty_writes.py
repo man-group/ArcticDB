@@ -240,7 +240,6 @@ def test_append_empty_dataframe_with_differing_columns_static_schema(in_memory_v
 # float64 under pandas 2, object under pandas 1, and a user reading from a vendor cannot always choose - so neither
 # displaces the stored type, promotable or not.
 @pytest.mark.parametrize("dtype", ["float64", "datetime64[ns]"])
-# TODO: parametrize over dynamic_schema [True, False] and use in_memory version store factory
 @pytest.mark.parametrize("lib_type", ["in_memory_version_store", "in_memory_version_store_dynamic_schema"])
 def test_append_empty_dataframe_does_not_change_column_type(request, sym, dtype, lib_type):
     lib = request.getfixturevalue(lib_type)

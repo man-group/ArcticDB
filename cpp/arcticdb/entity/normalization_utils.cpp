@@ -8,12 +8,10 @@
 
 #include <google/protobuf/util/message_differencer.h>
 
-#include <arcticdb/python/normalization_utils.hpp>
+#include <arcticdb/entity/normalization_utils.hpp>
 #include <arcticdb/log/log.hpp>
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/util/pb_util.hpp>
-#include <arcticdb/pipeline/input_frame.hpp>
-#include <arcticdb/pipeline/index_segment_reader.hpp>
 #undef GetMessage // defined as GetMessageA on Windows
 
 namespace arcticdb {
@@ -142,13 +140,5 @@ void update_rowrange_norm_for_append(
         }
     }
 }
-
-namespace entity {
-
-bool OutputSchema::is_inferred_from_empty_pandas() const {
-    return inferred_from_empty_frame_ && pandas_common(norm_metadata_) != nullptr;
-}
-
-} // namespace entity
 
 } // namespace arcticdb

@@ -11,10 +11,10 @@
 #include <arcticdb/entity/type_utils.hpp>
 #include <arcticdb/entity/types_proto.hpp>
 #include <arcticdb/entity/timeseries_descriptor.hpp>
+#include <arcticdb/entity/normalization_utils.hpp>
 #include <arcticdb/log/log.hpp>
 #include <arcticdb/pipeline/frame_utils.hpp>
 #include <arcticdb/pipeline/index_utils.hpp>
-#include <arcticdb/python/normalization_utils.hpp>
 #include <arcticdb/pipeline/input_frame.hpp>
 #include <arcticdb/util/collection_utils.hpp>
 #include <arcticdb/util/preconditions.hpp>
