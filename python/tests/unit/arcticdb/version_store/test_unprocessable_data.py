@@ -203,7 +203,7 @@ def test_merge(in_memory_library, kind):
     lib = in_memory_library
     sym = write_unprocessable(lib._nvs, kind)
     with expect_refusal(kind):
-        lib.merge_experimental(sym, MERGE_SOURCE)
+        lib.merge(sym, MERGE_SOURCE)
 
 
 def test_merge_on_recursive_data_leaves_symbol_untouched(in_memory_library):
@@ -213,7 +213,7 @@ def test_merge_on_recursive_data_leaves_symbol_untouched(in_memory_library):
     lib = in_memory_library
     sym = write_unprocessable(lib._nvs, "recursive")
     with expect_refusal("recursive"):
-        lib.merge_experimental(sym, MERGE_SOURCE)
+        lib.merge(sym, MERGE_SOURCE)
     after = lib._nvs.read(sym).data
     assert set(after) == set(RECURSIVE_DATA)
     for column, expected in RECURSIVE_DATA.items():
