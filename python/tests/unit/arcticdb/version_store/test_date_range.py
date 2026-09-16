@@ -105,9 +105,7 @@ def test_read_date_range_not_date_time_dataframe(lmdb_version_store):
 
     lmdb_version_store.write(symbol, df)
     with pytest.raises(SchemaException, match=ErrorCode.E_UNSUPPORTED_INDEX_TYPE.name):
-        lmdb_version_store.read(
-            symbol, date_range=(DateRange(pd.Timestamp("2019-01-03"), pd.Timestamp("2019-01-06")))
-        )
+        lmdb_version_store.read(symbol, date_range=(DateRange(pd.Timestamp("2019-01-03"), pd.Timestamp("2019-01-06"))))
 
 
 def test_read_unsorted_date_range_dataframe_multi_index(lmdb_version_store):

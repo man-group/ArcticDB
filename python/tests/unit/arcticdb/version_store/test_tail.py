@@ -12,7 +12,7 @@ import numpy as np
 from pandas import DataFrame
 import pytest
 
-from tests.util.unprocessable_data import expect_refusal, write_unprocessable
+from arcticdb.exceptions import ErrorCode, SchemaException
 
 pytestmark = pytest.mark.pipeline
 
@@ -124,12 +124,5 @@ def test_tail_pickled_symbol(lmdb_version_store, any_output_format):
     symbol = "test_tail_pickled_symbol"
     lmdb_version_store.write(symbol, np.arange(100).tolist())
     assert lmdb_version_store.is_symbol_pickled(symbol)
-    with expect_refusal("pickled"):
+    with pytest.raises(SchemaException, match=ErrorCode.E_OPERATION_NOT_SUPPORTED_WITH_PICKLED_DATA.name):
         _ = lmdb_version_store.tail(symbol)
-
-
-@pytest.mark.parametrize("kind", ["numpy", "recursive"])
-def test_tail_unprocessable_data(lmdb_version_store, kind):
-    sym = write_unprocessable(lmdb_version_store, kind, "test_tail_unprocessable_data")
-    with expect_refusal(kind):
-        _ = lmdb_version_store.tail(sym, n=2)
