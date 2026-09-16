@@ -8,7 +8,7 @@
 
 #include <arcticdb/pipeline/index_utils.hpp>
 
-#include <arcticdb/python/normalization_utils.hpp>
+#include <arcticdb/entity/normalization_utils.hpp>
 
 #include <arcticdb/storage/store.hpp>
 #include <arcticdb/pipeline/index_writer.hpp>
