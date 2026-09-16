@@ -8,20 +8,9 @@
 
 #pragma once
 
-#include <vector>
-#include <unordered_set>
 #include <arcticdb/entity/descriptors.hpp>
-#include <arcticdb/entity/timeseries_descriptor.hpp>
 
 namespace arcticdb {
-
-namespace entity {
-struct OutputSchema;
-}
-
-namespace pipelines {
-struct InputFrame;
-} // namespace pipelines
 
 /// DataFrames, Series and TimeFrames all describe their index through the same Pandas submessage; every other input
 /// type - an ndarray, a pickled object, an Arrow table - has none, and returns nullptr. An input type this build does

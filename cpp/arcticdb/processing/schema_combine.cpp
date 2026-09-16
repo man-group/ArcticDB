@@ -11,10 +11,10 @@
 #include <arcticdb/entity/type_utils.hpp>
 #include <arcticdb/entity/types_proto.hpp>
 #include <arcticdb/entity/timeseries_descriptor.hpp>
+#include <arcticdb/entity/normalization_utils.hpp>
 #include <arcticdb/log/log.hpp>
 #include <arcticdb/pipeline/frame_utils.hpp>
 #include <arcticdb/pipeline/index_utils.hpp>
-#include <arcticdb/python/normalization_utils.hpp>
 #include <arcticdb/pipeline/input_frame.hpp>
 #include <arcticdb/util/collection_utils.hpp>
 #include <arcticdb/util/preconditions.hpp>
@@ -75,12 +75,6 @@ SchemaCombineOptions concat_options(JoinType join_type) {
 }
 
 namespace {
-// Whether a schema carries the empty index a zero-row write produces with empty_types enabled. Taken from the
-// descriptor rather than the normalization metadata, which cannot distinguish it from a pre-Nov-2020 RangeIndex - both
-// have no step.
-bool has_empty_index(const OutputSchema& schema) {
-    return schema.stream_descriptor().index().type() == IndexDescriptorImpl::Type::EMPTY;
-}
 
 using pipelines::index::required_fields_info;
 using pipelines::index::RequiredFieldInfo;
@@ -249,24 +243,30 @@ TypeDescriptor combine_field_type(
 // Stream descriptor
 // ---------------------------------------------------------------------------------------------------------------------
 
-// The index type and field count must match across every schema (except empty index)
+// Raises unless two index types can combine.
+void check_index_types_combinable(
+        IndexDescriptorImpl::Type accumulated, IndexDescriptorImpl::Type other, const SchemaCombineOptions& options
+) {
+    if (accumulated == IndexDescriptorImpl::Type::EMPTY || other == IndexDescriptorImpl::Type::EMPTY) {
+        return;
+    }
+    normalization::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
+            accumulated == other,
+            "Cannot {}: cannot combine a {} index with a {} index",
+            options.name(),
+            index_type_to_str(other),
+            index_type_to_str(accumulated)
+    );
+}
+
+// The index type and field count must match across every schema.
 IndexDescriptorImpl combine_index_descriptors(
         std::span<const OutputSchema> schemas, const SchemaCombineOptions& options
 ) {
-    const auto is_empty = [](const IndexDescriptorImpl& index) {
-        return index.type() == IndexDescriptorImpl::Type::EMPTY;
-    };
     auto result = schemas.front().stream_descriptor().index();
     for (const auto& schema : schemas.subspan(1)) {
         const auto& other = schema.stream_descriptor().index();
         check_index_types_combinable(result.type(), other.type(), options);
-        if (is_empty(result)) {
-            result = other;
-            continue;
-        }
-        if (is_empty(other)) {
-            continue;
-        }
         normalization::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
                 result.field_count() == other.field_count(),
                 "Cannot {}: mismatching index field count, {} and {}",
@@ -280,7 +280,6 @@ IndexDescriptorImpl combine_index_descriptors(
 
 // Merge the required fields - the index levels, plus the value column for a Series - which are always the
 // leading fields of the descriptor.
-// Works with IndexType::EMPTY as well (num_required_columns_for(EMPTY) will skip the missing index columns)
 void add_required_fields(
         StreamDescriptor& out, std::span<const OutputSchema> schemas, const RequiredFieldInfo& info,
         RequiredNameMismatches& mismatches, const SchemaCombineOptions& options
@@ -298,26 +297,24 @@ void add_required_fields(
     std::vector<std::optional<FieldRef>> fields(required_fields);
     for (const auto& schema : schemas) {
         const auto& desc = schema.stream_descriptor();
-        const auto required_for_schema = info.num_required_columns_for(desc.index().type());
-        const auto skipped_levels = required_fields - required_for_schema;
         normalization::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
-                desc.field_count() >= required_for_schema,
+                desc.field_count() >= required_fields,
                 "Cannot {}: expected at least {} required fields, but received {}",
                 options.name(),
-                required_for_schema,
+                required_fields,
                 desc.field_count()
         );
-        for (size_t idx = 0; idx < required_for_schema; ++idx) {
+        for (size_t idx = 0; idx < required_fields; ++idx) {
             const auto& field = desc.field(idx);
-            auto& combined = fields[idx + skipped_levels];
+            auto& combined = fields[idx];
             if (!combined.has_value()) {
                 combined = field.ref();
                 continue;
             }
             if (combined->name() != field.name()) {
                 const auto detail = names_differ(combined->name(), field.name());
-                if (idx + skipped_levels < info.num_physical_indices) {
-                    mismatches.add_index(idx + skipped_levels, info.has_multi_index, detail);
+                if (idx < info.num_physical_indices) {
+                    mismatches.add_index(idx, info.has_multi_index, detail);
                 } else {
                     mismatches.add_series_name(detail);
                 }
@@ -327,7 +324,7 @@ void add_required_fields(
     }
     for (size_t idx = 0; idx < required_fields; ++idx) {
         internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-                fields[idx].has_value(), "No schema described required field {} of {}", idx, required_fields
+                fields[idx].has_value(), "No schema described required field {} of {}", idx, fields.size()
         );
         const auto& field = *fields[idx];
         const bool is_index_level = idx < info.num_physical_indices;
@@ -346,20 +343,20 @@ void add_required_fields(
 }
 
 // The non-index columns of a schema, in descriptor order. A view rather than a copy.
-auto data_columns(const StreamDescriptor& desc, const RequiredFieldInfo& info) {
-    return desc.fields() | std::views::drop(info.num_required_columns_for(desc.index().type()));
+auto data_columns(const OutputSchema& schema, const RequiredFieldInfo& info) {
+    return schema.stream_descriptor().fields() | std::views::drop(info.num_physical_required_columns());
 }
 
-size_t data_column_count(const StreamDescriptor& desc, const RequiredFieldInfo& info) {
-    return desc.field_count() - info.num_required_columns_for(desc.index().type());
+size_t data_column_count(const OutputSchema& schema, const RequiredFieldInfo& info) {
+    return schema.stream_descriptor().field_count() - info.num_physical_required_columns();
 }
 
 // The non-index columns as an associative list, so that a union of two of them stays in descriptor order.
 using DataColumns = std::vector<std::pair<std::string_view, TypeDescriptor>>;
 
-DataColumns data_columns_of(const StreamDescriptor& desc, const RequiredFieldInfo& info) {
-    auto columns = util::reserve_vector<DataColumns::value_type>(data_column_count(desc, info));
-    for (const auto& field : data_columns(desc, info)) {
+DataColumns data_columns_of(const OutputSchema& schema, const RequiredFieldInfo& info) {
+    auto columns = util::reserve_vector<DataColumns::value_type>(data_column_count(schema, info));
+    for (const auto& field : data_columns(schema, info)) {
         columns.emplace_back(field.name(), field.type());
     }
     return columns;
@@ -368,13 +365,13 @@ DataColumns data_columns_of(const StreamDescriptor& desc, const RequiredFieldInf
 // More detailed error message in case static schema recieves different number of columns.
 // Lists the missing or new unexpected columns.
 std::string data_column_differences(
-        const StreamDescriptor& base, const StreamDescriptor& other, const RequiredFieldInfo& info
+        const OutputSchema& base, const OutputSchema& other, const RequiredFieldInfo& info
 ) {
     // A wide symbol can disagree about hundreds of columns, and a message that long is unreadable and unloggable.
     constexpr size_t max_listed = 5;
-    const auto names_of = [&info](const StreamDescriptor& desc) {
+    const auto names_of = [&info](const OutputSchema& schema) {
         std::set<std::string_view> names;
-        for (const auto& field : data_columns(desc, info)) {
+        for (const auto& field : data_columns(schema, info)) {
             names.emplace(field.name());
         }
         return names;
@@ -404,28 +401,26 @@ void add_data_columns_static(
         StreamDescriptor& out, std::span<const OutputSchema> schemas, const RequiredFieldInfo& info,
         const SchemaCombineOptions& options
 ) {
-    const auto& base = schemas.front().stream_descriptor();
+    const auto& base = schemas.front();
     const auto column_count = data_column_count(base, info);
-    const auto num_required_for_base = info.num_required_columns_for(base.index().type());
+    const auto num_required_fields = info.num_physical_required_columns();
     auto types = util::reserve_vector<TypeDescriptor>(column_count);
     for (const auto& field : data_columns(base, info)) {
         types.emplace_back(field.type());
     }
     for (const auto& schema : schemas.subspan(1)) {
-        const auto& desc = schema.stream_descriptor();
-        if (data_column_count(desc, info) != column_count) {
+        if (data_column_count(schema, info) != column_count) {
             schema::raise<ErrorCode::E_DESCRIPTOR_MISMATCH>(
                     "Cannot {}: mismatching column count, {} against {}: {}",
                     options.name(),
                     column_count,
-                    data_column_count(desc, info),
-                    data_column_differences(base, desc, info)
+                    data_column_count(schema, info),
+                    data_column_differences(base, schema, info)
             );
         }
-        const auto num_required_for_schema = info.num_required_columns_for(desc.index().type());
         for (size_t idx = 0; idx < column_count; ++idx) {
-            const auto name = base.field(idx + num_required_for_base).name();
-            const auto& field = desc.field(idx + num_required_for_schema);
+            const auto name = base.stream_descriptor().field(idx + num_required_fields).name();
+            const auto& field = schema.stream_descriptor().field(idx + num_required_fields);
             schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
                     name == field.name(),
                     "Cannot {}: mismatching column name at position {}, {}",
@@ -437,7 +432,7 @@ void add_data_columns_static(
         }
     }
     for (size_t idx = 0; idx < column_count; ++idx) {
-        out.add_scalar_field(types[idx].data_type(), base.field(idx + num_required_for_base).name());
+        out.add_scalar_field(types[idx].data_type(), base.stream_descriptor().field(idx + num_required_fields).name());
     }
 }
 
@@ -446,7 +441,7 @@ void add_data_columns_intersection(
         StreamDescriptor& out, std::span<const OutputSchema> schemas, const RequiredFieldInfo& info,
         const SchemaCombineOptions& options
 ) {
-    const auto& base = schemas.front().stream_descriptor();
+    const auto& base = schemas.front();
     // What every schema seen so far says about a column: the combined type, why the schemas disagreed about it, or
     // monostate once a schema turns up that does not have it at all. A column dropped for being absent stays dropped
     // even if the schemas disagreed about its type, because a type clash on a column not in the output is irrelevant.
@@ -457,7 +452,7 @@ void add_data_columns_intersection(
     }
     for (const auto& schema : schemas.subspan(1)) {
         util::for_each_key_union(
-                data_columns_of(schema.stream_descriptor(), info),
+                data_columns_of(schema, info),
                 columns_to_keep,
                 [&](std::string_view name, const TypeDescriptor* current, Combined* to_keep) {
                     // An intersection only ever shrinks, so a column the accumulated set never had is not of interest.
@@ -506,7 +501,7 @@ void add_data_columns_union(
     // Maintain the order in which the columns first appeared across the schemas.
     std::vector<std::string_view> column_names_to_keep;
     for (const auto& schema : schemas) {
-        for (const auto& field : data_columns(schema.stream_descriptor(), info)) {
+        for (const auto& field : data_columns(schema, info)) {
             if (const auto [it, inserted] = columns_to_keep.try_emplace(field.name(), field.type()); inserted) {
                 column_names_to_keep.emplace_back(field.name());
             } else {
@@ -780,21 +775,20 @@ NormalizationMetadata accumulate_arrow_and_arrow_norm(
 // One arrow, one pandas: pandas is preferred as it carries more detail. Compatible when
 // arrow.has_index() == pandas.index().is_physically_stored().
 NormalizationMetadata accumulate_arrow_and_pandas_norm(
-        const NormalizationMetadata& arrow_meta, const NormalizationMetadata& pandas_meta,
-        const SchemaCombineOptions& options
+        const NormalizationMetadata& arrow, const NormalizationMetadata& pandas, const SchemaCombineOptions& options
 ) {
-    const auto& common = *pandas_common(pandas_meta);
+    const auto& common = *pandas_common(pandas);
     normalization::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
             common.has_index(),
             "Cannot {}: cannot combine arrow-written data with multi-indexed pandas data",
             options.name()
     );
     normalization::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
-            arrow_meta.experimental_arrow().has_index() == common.index().is_physically_stored(),
+            arrow.experimental_arrow().has_index() == common.index().is_physically_stored(),
             "Cannot {}: cannot combine unindexed data with indexed data",
             options.name()
     );
-    return pandas_meta;
+    return pandas;
 }
 
 void accumulate_multi_index(
@@ -877,7 +871,8 @@ NormalizationMetadata accumulate_pandas_and_pandas_norm(
     auto res = accumulated;
     auto* res_common = mutable_pandas_common(res);
     const auto& other_common = *pandas_common(other);
-    // First check pandas + pandas shapes are compatible
+
+    // First check the shapes are compatible.
     normalization::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
             res_common->has_multi_index() == other_common.has_multi_index(),
             "Cannot {}: cannot combine multi-indexed data with non-multi-indexed data",
@@ -934,9 +929,9 @@ NormalizationMetadata accumulate_norm_metadata(
     }
 
     if (accumulated.has_experimental_arrow() || other.has_experimental_arrow()) {
-        const auto& arrow_meta = accumulated.has_experimental_arrow() ? accumulated : other;
-        const auto& pandas_meta = accumulated.has_experimental_arrow() ? other : accumulated;
-        return accumulate_arrow_and_pandas_norm(arrow_meta, pandas_meta, options);
+        const auto& arrow = accumulated.has_experimental_arrow() ? accumulated : other;
+        const auto& pandas = accumulated.has_experimental_arrow() ? other : accumulated;
+        return accumulate_arrow_and_pandas_norm(arrow, pandas, options);
     }
 
     return accumulate_pandas_and_pandas_norm(accumulated, other, mismatches, options);
@@ -1002,21 +997,6 @@ SortedValue combine_sorted(std::span<const OutputSchema> schemas) {
 }
 } // namespace
 
-void check_index_types_combinable(
-        IndexDescriptorImpl::Type accumulated, IndexDescriptorImpl::Type other, const SchemaCombineOptions& options
-) {
-    if (accumulated == IndexDescriptorImpl::Type::EMPTY || other == IndexDescriptorImpl::Type::EMPTY) {
-        return;
-    }
-    normalization::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
-            accumulated == other,
-            "Cannot {}: cannot combine a {} index with a {} index",
-            options.name(),
-            index_type_to_str(other),
-            index_type_to_str(accumulated)
-    );
-}
-
 SortedValue deduce_sorted(SortedValue existing_frame, SortedValue input_frame) {
     constexpr auto UNKNOWN = SortedValue::UNKNOWN;
     constexpr auto ASCENDING = SortedValue::ASCENDING;
@@ -1055,20 +1035,29 @@ SortedValue deduce_sorted(SortedValue existing_frame, SortedValue input_frame) {
 
 OutputSchema combine_schema(std::span<const OutputSchema> schemas, const SchemaCombineOptions& options) {
     util::check(!schemas.empty(), "Cannot combine an empty list of schemas");
-    // An empty index must be combinable with any other type of index. All non index related metadata and descriptor
-    // fields should be combined as usual. combine_norm_metadata doesn't handle this currently.
-    // All of append, update, concat filter out empty symbols (hence empty indices), so the logic to merge empty
-    // index with non-empty one is not currently needed.
-    // TODO (monday ref 12911136883): support combining an empty index with a non-empty one.
-    const auto empty_indexes = std::ranges::count_if(schemas, has_empty_index);
-    internal::check<ErrorCode::E_NOT_IMPLEMENTED>(
-            empty_indexes == 0 || empty_indexes == std::ssize(schemas),
-            "Cannot {}: combining an empty index with a non-empty one is not implemented yet, {} of {} schemas have an "
-            "empty index",
-            options.name(),
-            empty_indexes,
-            schemas.size()
-    );
+
+    // Schemas inferred from empty pandas dataframes can have:
+    // - incorrect pandas index (pd.DataFrame({"col": []}) will have either a rowrange or datetime index depending on
+    //   pandas version)
+    // - incorrect column dtypes (pd.DataFrame({"col": []}) will have the "col" dtype be float64 or object depending on
+    //   pandas version)
+    // Thus we should ignore pandas indices and column data types of empty pandas dataframes when combining with other
+    // schemas. If we ever decide to respect column dtypes of empty pandas frames it will involve changes similar to
+    // commit 31c096da4 from PR #3406
+    std::vector<OutputSchema> retained;
+    const bool all_inferred_from_empty_pandas =
+            std::ranges::all_of(schemas, &OutputSchema::is_inferred_from_empty_pandas);
+    if (all_inferred_from_empty_pandas) {
+        // If all schemas are empty pandas we just use the first one's schema.
+        schemas = schemas.subspan(0, 1);
+    } else if (std::ranges::any_of(schemas, &OutputSchema::is_inferred_from_empty_pandas)) {
+        retained = util::reserve_vector<OutputSchema>(schemas.size());
+        std::ranges::copy_if(schemas, std::back_inserter(retained), [](const OutputSchema& schema) {
+            return !schema.is_inferred_from_empty_pandas();
+        });
+        schemas = retained;
+    }
+
     // The normalization metadata goes first because it is what decides which shapes may combine at all
     RequiredNameMismatches mismatches{options};
     auto norm = combine_norm_metadata(schemas, mismatches, options);
@@ -1084,17 +1073,17 @@ OutputSchema combine_schema(std::span<const OutputSchema> schemas, const SchemaC
     // Whatever only the normalization metadata reveals - a RangeIndex name, a Series name - is applied here, in
     // one place, so that the descriptor field names and the metadata cannot end up disagreeing.
     apply_required_name_mismatches(norm, info, mismatches);
-    return OutputSchema{std::move(out), std::move(norm)};
+    return OutputSchema{std::move(out), std::move(norm), all_inferred_from_empty_pandas};
 }
 
 OutputSchema schema_from_tsd(const TimeseriesDescriptor& tsd) {
-    return {tsd.as_stream_descriptor(), tsd.normalization()};
+    return {tsd.as_stream_descriptor(), tsd.normalization(), tsd.total_rows() == 0};
 }
 
 OutputSchema schema_from_input_frame(const pipelines::InputFrame& frame) {
     // compute_desc_for_tsd rather than desc() because the result describes what will be stored, and an Arrow string
     // column holds 32 bit offsets in the frame but always 64 bit on disk.
-    return {frame.compute_desc_for_tsd(), frame.norm_meta};
+    return {frame.compute_desc_for_tsd(), frame.norm_meta, frame.empty()};
 }
 
 TimeseriesDescriptor tsd_from_schema(OutputSchema&& schema, size_t total_rows, pipelines::InputFrame& frame) {
