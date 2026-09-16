@@ -54,28 +54,34 @@ class AlmostAListNormalizer(CustomNormalizer):
         return AlmostAList(item)
 
 
-@pytest.mark.parametrize("staged", (True, False, None))
 @pytest.mark.parametrize("lib_option", (True, False, None))
 @pytest.mark.parametrize("recursive_normalizers", (True, False, None))
-def test_v2_api(arctic_client_lmdb_v1_only, sym, recursive_normalizers, lib_name, lib_option, staged):
+def test_v2_api(arctic_client_lmdb_v1_only, sym, recursive_normalizers, lib_name, lib_option):
     if lib_option is None:
         lib = arctic_client_lmdb_v1_only.create_library(lib_name)
     else:
         lib = arctic_client_lmdb_v1_only.create_library(lib_name, LibraryOptions(recursive_normalizers=lib_option))
     lt = lib._nvs.library_tool()
     data = {"a": np.arange(5), "b": pd.DataFrame({"col": [1, 2, 3]})}
-    if staged is not True and (
-        (lib_option is True and recursive_normalizers is not False) or recursive_normalizers is True
-    ):
-        lib.write(sym, data, recursive_normalizers=recursive_normalizers, staged=staged)
+    if (lib_option is True and recursive_normalizers is not False) or recursive_normalizers is True:
+        lib.write(sym, data, recursive_normalizers=recursive_normalizers)
         assert len(lt.find_keys(KeyType.MULTI_KEY)) > 0
     else:
         with pytest.raises(ArcticUnsupportedDataTypeException) as e:
-            lib.write(sym, data, recursive_normalizers=recursive_normalizers, staged=staged)
+            lib.write(sym, data, recursive_normalizers=recursive_normalizers)
 
     if lib_option is not True:
         arctic_client_lmdb_v1_only.modify_library_option(lib, ModifiableLibraryOption.RECURSIVE_NORMALIZERS, True)
         lib.write(sym, data)
+
+
+def test_stage_rejects_recursive_normalizers(arctic_client_lmdb_v1_only, sym, lib_name):
+    # stage() never recursively normalizes, even when the library enables recursive normalizers,
+    # so non-normalizable data must be rejected rather than staged.
+    lib = arctic_client_lmdb_v1_only.create_library(lib_name, LibraryOptions(recursive_normalizers=True))
+    data = {"a": np.arange(5), "b": pd.DataFrame({"col": [1, 2, 3]})}
+    with pytest.raises(ArcticUnsupportedDataTypeException):
+        lib.stage(sym, data)
 
 
 partial_pickle_required_data = {
