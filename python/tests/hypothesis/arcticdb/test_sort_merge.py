@@ -158,7 +158,7 @@ def test_sort_merge_static_schema_write(lmdb_library, df_list):
     lib._nvs.version_store.clear()
     sym = "test_sort_merge_static_schema_write"
     for df in df_list:
-        lib.write(sym, df, staged=True, validate_index=False)
+        lib.stage(sym, df, validate_index=False)
     if len(df_list) == 0:
         assert_cannot_finalize_without_staged_data(lib, sym, StagedDataFinalizeMethod.WRITE)
         return
@@ -188,7 +188,7 @@ def test_sort_merge_static_schema_append(lmdb_library, df_list, initial_df):
     initial_df.sort_index(inplace=True)
     lib.write(sym, initial_df)
     for df in df_list:
-        lib.write(sym, df, staged=True, validate_index=False)
+        lib.stage(sym, df, validate_index=False)
     if len(df_list) == 0:
         assert_cannot_finalize_without_staged_data(lib, sym, StagedDataFinalizeMethod.APPEND)
         return
@@ -217,7 +217,7 @@ def test_sort_merge_dynamic_schema_write(lmdb_library_dynamic_schema, df_list):
     lib._nvs.version_store.clear()
     sym = "test_sort_merge_dynamic_schema_write"
     for df in df_list:
-        lib.write(sym, df, staged=True, validate_index=False)
+        lib.stage(sym, df, validate_index=False)
     if len(df_list) == 0:
         assert_cannot_finalize_without_staged_data(lib, sym, StagedDataFinalizeMethod.WRITE)
         return
@@ -248,7 +248,7 @@ def test_sort_merge_dynamic_schema_append(lmdb_library_dynamic_schema, df_list, 
     initial_df.sort_index(inplace=True)
     lib.write(sym, initial_df)
     for df in df_list:
-        lib.write(sym, df, staged=True, validate_index=False)
+        lib.stage(sym, df, validate_index=False)
     if len(df_list) == 0:
         assert_cannot_finalize_without_staged_data(lib, sym, StagedDataFinalizeMethod.APPEND)
         return
