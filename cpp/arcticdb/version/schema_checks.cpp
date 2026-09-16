@@ -7,29 +7,14 @@
 namespace {
 using namespace arcticdb;
 
-// A symbol with no rows contributes no columns, so its schema is discarded in favour of the new frame's rather than
-// combined with it. Its index type is still a constraint though: appending a RangeIndexed frame to a symbol written
-// as a zero-row timeseries has never been allowed, and the schema combine never sees the pair to reject it.
-void check_rowless_index_types_combinable(
-        const SchemaCombineOptions& options, const TimeseriesDescriptor& existing_tsd,
-        const pipelines::InputFrame& frame
-) {
-    const IndexDescriptor::Type old_idx_kind = existing_tsd.as_stream_descriptor().index().type();
-    const IndexDescriptor::Type new_idx_kind = frame.desc().index().type();
-    // A Series written empty lands as a timeseries even though pandas gives it a RangeIndex, so appending a Series
-    // to an empty Series has to keep working. See test_empty_writes.py::test_append_empty_series and
-    // _normalization.py, which converts every empty index except categorical and multi-index to a DatetimeIndex.
-    if (frame.norm_meta.has_series() && old_idx_kind == IndexDescriptor::Type::TIMESTAMP &&
-        new_idx_kind == IndexDescriptor::Type::ROWCOUNT) {
-        return;
-    }
-    check_index_types_combinable(old_idx_kind, new_idx_kind, options);
-}
-
 // A RangeIndex has to continue where the existing one stopped, which is the only part of the merge that needs the
 // existing row count and so the only part combine_schema cannot do. Rewrites the new frame's start so that it spans
 // both, and so has to run before the schemas are combined.
 void align_rowrange_norm_for_append(const TimeseriesDescriptor& existing_tsd, const pipelines::InputFrame& new_frame) {
+    if (existing_tsd.total_rows() == 0 || new_frame.empty()) {
+        // A RangeIndex normalized from an empty frame needs no alignment. It will be skipped by `combine_schema`
+        return;
+    }
     if (existing_tsd.index().type() != IndexDescriptor::Type::ROWCOUNT ||
         new_frame.desc().index().type() != IndexDescriptor::Type::ROWCOUNT) {
         return;
@@ -120,10 +105,6 @@ entity::OutputSchema combine_existing_tsd_with_frame(
     const auto options = append_or_update_options(dynamic_schema, operation, new_frame.desc().id());
     if (operation == NormalizationOperation::APPEND) {
         align_rowrange_norm_for_append(existing_tsd, new_frame);
-    }
-    if (existing_tsd.total_rows() == 0) {
-        check_rowless_index_types_combinable(options, existing_tsd, new_frame);
-        return schema_from_input_frame(new_frame);
     }
     const std::array schemas{schema_from_tsd(existing_tsd), schema_from_input_frame(new_frame)};
     return combine_schema(schemas, options);
