@@ -80,6 +80,21 @@ def test_snapshot_metadata(object_version_store):
 
 
 @pytest.mark.storage
+def test_list_snapshots_pairs_metadata_with_its_own_snapshot(object_version_store):
+    # list_snapshots() reads the snapshot segments concurrently and pairs each result back with its snapshot name
+    # by position, so only distinct metadata per snapshot catches a pairing that has drifted. A single snapshot
+    # with metadata, or several sharing the same metadata, reads the same either way.
+    object_version_store.write("meta_sym", [1, 2, 3])
+    expected = {f"pairing_snap_{idx}": {"idx": idx, "name": f"snapshot number {idx}"} for idx in range(5)}
+    for name, metadata in expected.items():
+        object_version_store.snapshot(name, metadata=metadata)
+
+    all_snaps = object_version_store.list_snapshots()
+
+    assert {snap: meta for snap, meta in all_snaps.items() if snap in expected} == expected
+
+
+@pytest.mark.storage
 def test_snapshots_skip_symbol(object_version_store):
     original_data = [1, 2, 3]
     object_version_store.write("f", original_data)
