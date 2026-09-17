@@ -136,7 +136,7 @@ def test_multiindex_recursive_normalizer(lmdb_version_store, all_recursive_metas
     assert_frame_equal(lmdb_version_store.read("df").data["data"], df)
 
 
-@pytest.mark.parametrize("version", ("None", "2"))
+@pytest.mark.parametrize("version", (None, 2))
 def test_meta_structure_defaults_and_explicit_v2(version):
     with config_context_multi({"VersionStore.RecursiveNormalizerMetastructure": version}):
         flattener = Flattener()
