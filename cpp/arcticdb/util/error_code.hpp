@@ -211,6 +211,8 @@ using QuotaExceededException = ArcticSpecificException<ErrorCode::E_QUOTA_EXCEED
 using SymbolNotFoundException = ArcticSpecificException<ErrorCode::E_SYMBOL_NOT_FOUND>;
 using RecursivelyNormalizedDataException =
         ArcticSpecificException<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_RECURSIVE_NORMALIZED_DATA>;
+using PickledDataException = ArcticSpecificException<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_PICKLED_DATA>;
+using NumpyArrayDataException = ArcticSpecificException<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_NUMPY_ARRAY>;
 
 template<ErrorCode error_code>
 [[noreturn]] void throw_error(const std::string& msg) {
@@ -312,6 +314,16 @@ template<>
         const std::string& msg
 ) {
     throw ArcticSpecificException<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_RECURSIVE_NORMALIZED_DATA>(msg);
+}
+
+template<>
+[[noreturn]] inline void throw_error<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_PICKLED_DATA>(const std::string& msg) {
+    throw ArcticSpecificException<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_PICKLED_DATA>(msg);
+}
+
+template<>
+[[noreturn]] inline void throw_error<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_NUMPY_ARRAY>(const std::string& msg) {
+    throw ArcticSpecificException<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_NUMPY_ARRAY>(msg);
 }
 
 } // namespace arcticdb
