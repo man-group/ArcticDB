@@ -2546,16 +2546,30 @@ class NativeVersionStore:
         read_result = self._read_dataframe(symbol, version_query, read_query, read_options)
         return self._post_process_dataframe(read_result, read_query, read_options, output_format, implement_read_index)
 
-    # TODO: Consider returning a structure that states what changed?
-    # TODO: Add prune_previous argument and test it, including reading old version has original index/column names
-    def rename_columns_arrow_compat(self, symbol: str, method_arg: Optional[Union[str, List[str]]] = None) -> None:
+    def rename_columns_arrow_compat(
+        self,
+        symbol: str,
+        index_columns: Optional[Union[str, List[str]]] = None,
+        prune_previous_version: Optional[bool] = None,
+    ) -> None:
         explicit_index_names = None
-        if isinstance(method_arg, str):
-            explicit_index_names = [method_arg]
-        elif isinstance(method_arg, list) and len(method_arg) > 0 and all(isinstance(elem, str) for elem in method_arg):
-            explicit_index_names = method_arg
-        elif method_arg is not None:
-            raise UserInputException(f"method_arg must be a non-empty str or list of str, received {method_arg!r}")
+        if isinstance(index_columns, str):
+            explicit_index_names = [index_columns]
+        elif (
+            isinstance(index_columns, list)
+            and len(index_columns) > 0
+            and all(isinstance(elem, str) for elem in index_columns)
+        ):
+            explicit_index_names = index_columns
+        elif index_columns is not None:
+            raise UserInputException(f"method_arg must be a non-empty str or list of str, received {index_columns!r}")
+
+        prune_previous_version = resolve_defaults(
+            "prune_previous_version",
+            self._lib_cfg.lib_desc.version.write_options,
+            global_default=False,
+            existing_value=prune_previous_version,
+        )
 
         tsd = self.version_store.read_descriptor(symbol, self._get_version_query(None)).timeseries_descriptor
         norm_meta = tsd.normalization
@@ -2605,7 +2619,7 @@ class NativeVersionStore:
         elif num_index_columns > 1:
             data.index = data.index.set_names(index_names)
 
-        self.write(symbol, data, metadata=before.metadata)
+        self.write(symbol, data, metadata=before.metadata, prune_previous_version=prune_previous_version)
 
     def head(
         self,

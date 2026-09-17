@@ -15,6 +15,8 @@ from arcticdb.exceptions import NoSuchVersionException, SchemaException, UserInp
 from arcticdb.options import OutputFormat
 from arcticdb.util.test import assert_pandas_equal
 
+from python.arcticdb.util.test import assert_frame_equal
+
 
 def assert_norm_meta_arrow_compatible(lib, sym):
     tsd = lib.version_store.read_descriptor(sym, lib._get_version_query(None)).timeseries_descriptor
@@ -66,36 +68,38 @@ def assert_norm_meta_arrow_compatible(lib, sym):
             assert col_names[idx].startswith("__idx__")
 
 
-def generic_rename_columns_arrow_compat_test(lib, sym, method_arg=None):
+def generic_rename_columns_arrow_compat_test(lib, sym, index_columns=None):
     before = lib.read(sym, output_format=OutputFormat.PYARROW)
     before_data, before_metadata, before_version = before.data, before.metadata, before.version
-    lib.rename_columns_arrow_compat(sym, method_arg)
+    lib.rename_columns_arrow_compat(sym, index_columns)
     assert_norm_meta_arrow_compatible(lib, sym)
     after = lib.read(sym, output_format=OutputFormat.PYARROW)
     after_data, after_metadata, after_version = after.data, after.metadata, after.version
-    # TODO: Add tests that no new version is created if it would be a no-op
     assert after_version == before_version + 1
     assert before_metadata == after_metadata
-    if isinstance(method_arg, str):
-        before_data = before_data.set_column(0, method_arg, before_data.column(0))
-    elif isinstance(method_arg, list):
-        for idx, index_name in enumerate(method_arg):
+    if isinstance(index_columns, str):
+        before_data = before_data.set_column(0, index_columns, before_data.column(0))
+    elif isinstance(index_columns, list):
+        for idx, index_name in enumerate(index_columns):
             before_data = before_data.set_column(idx, index_name, before_data.column(idx))
     assert before_data.equals(after_data)
     # Idempotent
-    # TODO: Assert this doesn't increment the version number
-    after_pandas = lib.read(sym, output_format=OutputFormat.PANDAS).data
-    lib.rename_columns_arrow_compat(sym, method_arg)
-    after_after_pandas = lib.read(sym, output_format=OutputFormat.PANDAS).data
-    assert_pandas_equal(after_after_pandas, after_pandas)
+    after_pandas = lib.read(sym, output_format=OutputFormat.PANDAS)
+    after_pandas_data, after_pandas_version = after_pandas.data, after_pandas.version
+    lib.rename_columns_arrow_compat(sym, index_columns)
+    after_after_pandas = lib.read(sym, output_format=OutputFormat.PANDAS)
+    after_after_pandas_data, after_after_pandas_version = after_after_pandas.data, after_after_pandas.version
+    assert_pandas_equal(after_after_pandas_data, after_pandas_data)
+    # TODO: Uncomment this once implemented
+    # assert after_pandas_version == after_after_pandas_version
 
 
-@pytest.mark.parametrize("method_arg", [5, [], [5, "hello"]])
-def test_bad_arguments(in_memory_version_store, method_arg):
+@pytest.mark.parametrize("index_columns", [5, [], [5, "hello"]])
+def test_bad_arguments(in_memory_version_store, index_columns):
     lib = in_memory_version_store
     sym = "test_bad_arguments"
     with pytest.raises(UserInputException):
-        lib.rename_columns_arrow_compat(sym, method_arg)
+        lib.rename_columns_arrow_compat(sym, index_columns)
 
 
 # Dynamic schema uses different name-mangling (appends _0 instead of _n where n is the column index) as column index is
@@ -115,6 +119,30 @@ def test_arrow_col_rename_basic(in_memory_store_factory, dynamic_schema, object_
     else:
         expected = pd.Series([0], name="" if col_name is None else str(col_name))
     assert_pandas_equal(received, expected)
+
+
+def test_arrow_col_rename_previous_version_unchanged(in_memory_version_store):
+    lib = in_memory_version_store
+    sym = "test_arrow_col_rename_previous_version_unchanged"
+    df_0 = pd.DataFrame({10: [0]})
+    lib.write(sym, df_0)
+    lib.rename_columns_arrow_compat(sym, prune_previous_version=False)
+    assert len(lib.list_versions(sym)) == 2
+    previous_df = lib.read(sym, as_of=0).data
+    assert_frame_equal(previous_df, df_0)
+    assert previous_df.columns[0] == 10
+
+
+@pytest.mark.xfail(reason="Not yet implemented", strict=True)
+def test_arrow_col_rename_valid_schema_is_noop(in_memory_version_store):
+    lib = in_memory_version_store
+    sym = "test_arrow_col_rename_valid_schema_is_noop"
+    # This dataframe has schema that is already valid with Arrow
+    df = pd.DataFrame({"col": [0]}, index=[pd.Timestamp(0)])
+    df.index.name = "ts"
+    lib.write(sym, df)
+    lib.rename_columns_arrow_compat(sym)
+    assert lib.read_metadata(sym).version == 0
 
 
 def test_arrow_col_rename_duplicates(in_memory_version_store):
@@ -305,9 +333,9 @@ def test_single_index_auto_rename_nameless_multiple_clashes(in_memory_version_st
 @pytest.mark.parametrize("object_type", ["DataFrame", "Series"])
 @pytest.mark.parametrize("input_index_name", [None, "my_index"])
 # Single-element lists allowed for timeseries index
-@pytest.mark.parametrize("method_arg", ["ts", ["ts"]])
+@pytest.mark.parametrize("index_columns", ["ts", ["ts"]])
 def test_single_index_explicit_rename_nameless_no_clash(
-    in_memory_version_store, object_type, input_index_name, method_arg
+    in_memory_version_store, object_type, input_index_name, index_columns
 ):
     lib = in_memory_version_store
     sym = "test_single_index_explicit_rename_nameless_no_clash"
@@ -318,7 +346,7 @@ def test_single_index_explicit_rename_nameless_no_clash(
     )
     input.index.name = input_index_name
     lib.write(sym, input)
-    generic_rename_columns_arrow_compat_test(lib, sym, method_arg)
+    generic_rename_columns_arrow_compat_test(lib, sym, index_columns)
     received = lib.read(sym).data
     expected = input
     expected.index.name = "ts"
@@ -485,8 +513,8 @@ def test_multi_index_explicit_rename_no_clash(in_memory_version_store, object_ty
 
 
 @pytest.mark.parametrize("object_type", ["DataFrame", "Series"])
-@pytest.mark.parametrize("method_arg", [["col", "level1"], ["level0", "col"]])
-def test_multi_index_explicit_rename_clash(in_memory_version_store, object_type, method_arg):
+@pytest.mark.parametrize("index_columns", [["col", "level1"], ["level0", "col"]])
+def test_multi_index_explicit_rename_clash(in_memory_version_store, object_type, index_columns):
     lib = in_memory_version_store
     sym = "test_multi_index_explicit_rename_clash"
     index = pd.MultiIndex.from_arrays([[0], [1]])
@@ -497,12 +525,12 @@ def test_multi_index_explicit_rename_clash(in_memory_version_store, object_type,
     )
     lib.write(sym, input)
     with pytest.raises(SchemaException):
-        lib.rename_columns_arrow_compat(sym, method_arg)
+        lib.rename_columns_arrow_compat(sym, index_columns)
 
 
 @pytest.mark.parametrize("object_type", ["DataFrame", "Series"])
-@pytest.mark.parametrize("method_arg", [["level0"], ["level0", "level1", "level2"]])
-def test_multi_index_incorrect_index_name_count(in_memory_version_store, object_type, method_arg):
+@pytest.mark.parametrize("index_columns", [["level0"], ["level0", "level1", "level2"]])
+def test_multi_index_incorrect_index_name_count(in_memory_version_store, object_type, index_columns):
     lib = in_memory_version_store
     sym = "test_multi_index_incorrect_index_name_count"
     index = pd.MultiIndex.from_arrays([[0], [1]])
@@ -513,7 +541,7 @@ def test_multi_index_incorrect_index_name_count(in_memory_version_store, object_
     )
     lib.write(sym, input)
     with pytest.raises(UserInputException):
-        lib.rename_columns_arrow_compat(sym, method_arg)
+        lib.rename_columns_arrow_compat(sym, index_columns)
 
 
 def test_noop_with_arrow_written_data(in_memory_version_store_arrow):
@@ -548,9 +576,3 @@ def test_exception_with_non_existent_symbol(in_memory_version_store):
     sym = "test_exception_with_numpy_array"
     with pytest.raises(NoSuchVersionException):
         lib.rename_columns_arrow_compat(sym)
-
-
-# TODO: Add tests that the flow read as arrow, rename_columns_arrow_compat, append something with same schema as
-#  original read arrow data should work
-
-# TODO: Add tests that column filtering and query builder operations work as expected after the rename
