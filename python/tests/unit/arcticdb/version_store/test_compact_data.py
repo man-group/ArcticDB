@@ -795,6 +795,9 @@ class TestCompactData:
         lib.write(sym, pd.DataFrame({"col": ["a", "b", "c", "d", "e", None, np.nan, np.nan, None, None]}))
         generic_compact_data_test(lib, sym, 5, batch)
 
+    # CompactDataClause is the one clause exempt from the unprocessable-data checks in
+    # check_can_perform_processing, so this test and test_compact_numpy_arrays below guard that
+    # exemption. Do not relax them into "raises" tests.
     def test_compact_pickled_data(self, in_memory_store_factory, clear_query_stats, batch):
         lib = in_memory_store_factory(segment_row_size=1_000)
         sym = "test_compact_pickled_data"

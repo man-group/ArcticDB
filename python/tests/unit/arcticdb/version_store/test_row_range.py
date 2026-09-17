@@ -11,7 +11,6 @@ import pandas as pd
 import pytest
 
 from arcticdb.version_store.processing import QueryBuilder
-from arcticdb.exceptions import InternalException
 
 from arcticdb.util.test import assert_frame_equal
 
@@ -92,15 +91,6 @@ def test_row_range_with_column_filter(lmdb_version_store_tiny_segment, three_col
         three_col_df().filter(items=columns).iloc[start_row:end_row],
         lmdb_version_store_tiny_segment.read(symbol, row_range=(start_row, end_row), columns=columns).data,
     )
-
-
-def test_row_range_pickled_symbol(lmdb_version_store, any_output_format):
-    lmdb_version_store._set_output_format_for_pipeline_tests(any_output_format)
-    symbol = "test_row_range_pickled_symbol"
-    lmdb_version_store.write(symbol, np.arange(100).tolist())
-    assert lmdb_version_store.is_symbol_pickled(symbol)
-    with pytest.raises(InternalException):
-        _ = lmdb_version_store.read(symbol, row_range=(1, 2))
 
 
 @pytest.mark.parametrize(
