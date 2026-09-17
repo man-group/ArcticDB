@@ -211,6 +211,11 @@ folly::Future<std::optional<AtomKey>> async_compact_data_impl(
         uint64_t rows_per_segment, std::optional<CompactDataFrame> compact_data_frame = std::nullopt
 );
 
+folly::Future<std::optional<AtomKey>> async_rename_columns_arrow_compat_impl(
+        const std::shared_ptr<Store>& store, const UpdateInfo& update_info,
+        const std::optional<std::vector<std::string>>& index_columns
+);
+
 std::shared_ptr<PipelineContext> setup_pipeline_context(
         const std::shared_ptr<Store>& store, VersionIdentifier version_info, ReadQuery& read_query,
         const ReadOptions& read_options

@@ -2571,6 +2571,9 @@ class NativeVersionStore:
             existing_value=prune_previous_version,
         )
 
+        # TODO: Return here instead of carrying on
+        vit = self.version_store._rename_columns_arrow_compat(symbol, explicit_index_names, prune_previous_version)
+
         tsd = self.version_store.read_descriptor(symbol, self._get_version_query(None)).timeseries_descriptor
         norm_meta = tsd.normalization
         input_type = norm_meta.WhichOneof("input_type")

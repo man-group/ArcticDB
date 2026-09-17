@@ -3665,6 +3665,13 @@ folly::Future<std::optional<AtomKey>> async_compact_data_impl(
             });
 }
 
+folly::Future<std::optional<AtomKey>> async_rename_columns_arrow_compat_impl(
+        ARCTICDB_UNUSED const std::shared_ptr<Store>& store, ARCTICDB_UNUSED const UpdateInfo& update_info,
+        ARCTICDB_UNUSED const std::optional<std::vector<std::string>>& index_columns
+) {
+    return folly::makeFuture<std::optional<AtomKey>>(std::optional<AtomKey>{});
+}
+
 folly::Future<SymbolProcessingResult> read_and_process(
         const std::shared_ptr<Store>& store, const VersionIdentifier& version_info,
         const std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options,

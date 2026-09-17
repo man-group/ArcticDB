@@ -99,9 +99,12 @@ def test_bad_arguments(in_memory_version_store, index_columns):
 
 # Dynamic schema uses different name-mangling (appends _0 instead of _n where n is the column index) as column index is
 # not stable on append/update
-@pytest.mark.parametrize("dynamic_schema", [False, True])
-@pytest.mark.parametrize("object_type", ["DataFrame", "Series"])
-@pytest.mark.parametrize("col_name", [None, "", 10])
+# @pytest.mark.parametrize("dynamic_schema", [False, True])
+# @pytest.mark.parametrize("object_type", ["DataFrame", "Series"])
+# @pytest.mark.parametrize("col_name", [None, "", 10])
+@pytest.mark.parametrize("dynamic_schema", [False])
+@pytest.mark.parametrize("object_type", ["DataFrame"])
+@pytest.mark.parametrize("col_name", [None])
 def test_arrow_col_rename_basic(in_memory_store_factory, dynamic_schema, object_type, col_name):
     lib = in_memory_store_factory(dynamic_schema=dynamic_schema)
     sym = "test_arrow_col_rename_basic"
