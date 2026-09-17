@@ -13,9 +13,7 @@ import pytest
 
 from arcticdb.exceptions import NoSuchVersionException, SchemaException, UserInputException
 from arcticdb.options import OutputFormat
-from arcticdb.util.test import assert_pandas_equal
-
-from python.arcticdb.util.test import assert_frame_equal
+from arcticdb.util.test import assert_frame_equal, assert_pandas_equal
 
 
 def assert_norm_meta_arrow_compatible(lib, sym):
@@ -71,27 +69,24 @@ def assert_norm_meta_arrow_compatible(lib, sym):
 def generic_rename_columns_arrow_compat_test(lib, sym, index_columns=None):
     before = lib.read(sym, output_format=OutputFormat.PYARROW)
     before_data, before_metadata, before_version = before.data, before.metadata, before.version
-    lib.rename_columns_arrow_compat(sym, index_columns)
+    vit = lib.rename_columns_arrow_compat(sym, index_columns)
     assert_norm_meta_arrow_compatible(lib, sym)
-    after = lib.read(sym, output_format=OutputFormat.PYARROW)
-    after_data, after_metadata, after_version = after.data, after.metadata, after.version
-    assert after_version == before_version + 1
-    assert before_metadata == after_metadata
+    after = lib.read(sym, output_format=OutputFormat.PYARROW).data
+    assert vit.version == before_version + 1
+    assert before_metadata == vit.metadata
     if isinstance(index_columns, str):
         before_data = before_data.set_column(0, index_columns, before_data.column(0))
     elif isinstance(index_columns, list):
         for idx, index_name in enumerate(index_columns):
             before_data = before_data.set_column(idx, index_name, before_data.column(idx))
-    assert before_data.equals(after_data)
+    assert before_data.equals(after)
     # Idempotent
-    after_pandas = lib.read(sym, output_format=OutputFormat.PANDAS)
-    after_pandas_data, after_pandas_version = after_pandas.data, after_pandas.version
-    lib.rename_columns_arrow_compat(sym, index_columns)
-    after_after_pandas = lib.read(sym, output_format=OutputFormat.PANDAS)
-    after_after_pandas_data, after_after_pandas_version = after_after_pandas.data, after_after_pandas.version
-    assert_pandas_equal(after_after_pandas_data, after_pandas_data)
+    after_pandas = lib.read(sym, output_format=OutputFormat.PANDAS).data
+    vit_idempotent = lib.rename_columns_arrow_compat(sym, index_columns)
     # TODO: Uncomment this once implemented
-    # assert after_pandas_version == after_after_pandas_version
+    # assert vit_idempotent == vit
+    after_after_pandas = lib.read(sym, output_format=OutputFormat.PANDAS).data
+    assert_pandas_equal(after_after_pandas, after_pandas)
 
 
 @pytest.mark.parametrize("index_columns", [5, [], [5, "hello"]])
@@ -141,7 +136,7 @@ def test_arrow_col_rename_valid_schema_is_noop(in_memory_version_store):
     df = pd.DataFrame({"col": [0]}, index=[pd.Timestamp(0)])
     df.index.name = "ts"
     lib.write(sym, df)
-    lib.rename_columns_arrow_compat(sym)
+    assert lib.rename_columns_arrow_compat(sym).version == 0
     assert lib.read_metadata(sym).version == 0
 
 
@@ -549,7 +544,8 @@ def test_noop_with_arrow_written_data(in_memory_version_store_arrow):
     sym = "test_noop_with_arrow_written_data"
     table = pa.table({"col": pa.array([0], pa.int64())})
     lib.write(sym, table)
-    lib.rename_columns_arrow_compat(sym)
+    # TODO: Uncomment when implemented
+    # assert lib.rename_columns_arrow_compat(sym).version == 0
     assert lib.read_metadata(sym).version == 0
 
 

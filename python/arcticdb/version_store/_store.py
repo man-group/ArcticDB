@@ -2551,7 +2551,7 @@ class NativeVersionStore:
         symbol: str,
         index_columns: Optional[Union[str, List[str]]] = None,
         prune_previous_version: Optional[bool] = None,
-    ) -> None:
+    ) -> VersionedItem:
         explicit_index_names = None
         if isinstance(index_columns, str):
             explicit_index_names = [index_columns]
@@ -2619,7 +2619,7 @@ class NativeVersionStore:
         elif num_index_columns > 1:
             data.index = data.index.set_names(index_names)
 
-        self.write(symbol, data, metadata=before.metadata, prune_previous_version=prune_previous_version)
+        return self.write(symbol, data, metadata=before.metadata, prune_previous_version=prune_previous_version)
 
     def head(
         self,
