@@ -17,6 +17,7 @@ from unittest.mock import patch, MagicMock
 import numpy as np
 import pandas as pd
 import dateutil as du
+import pickle
 import pytest
 import pytz
 from arcticdb_ext.types import IndexKind
@@ -551,6 +552,34 @@ def test_serialize_custom_normalizer():
     df, norm_meta = cloned_normalizer.normalize(dt)
     denormed = cloned_normalizer.denormalize(df, norm_meta)
     assert_array_equal(dt.custom_values, denormed.custom_values)
+
+
+def test_pickle_roundtrip_custom_normalizer():
+    # __setstate__ must work on an instance built by object.__new__, which is what pickle does.
+    clear_registered_normalizers()
+    register_normalizer(TestCustomNormalizer())
+    normalizer = get_custom_normalizer(fail_on_missing=True)
+
+    cloned_normalizer = pickle.loads(pickle.dumps(normalizer))
+
+    assert_equal(len(normalizer._normalizers), len(cloned_normalizer._normalizers))
+    assert_equal(normalizer._normalizers[0].__class__, cloned_normalizer._normalizers[0].__class__)
+    assert_equal(normalizer._fail_on_missing_type, cloned_normalizer._fail_on_missing_type)
+
+
+@pytest.mark.parametrize("fail_on_missing", [True, False])
+def test_deserialize_custom_normalizer_missing_type(fail_on_missing):
+    # A worker process that cannot import the normalizer must honour fail_on_missing, otherwise the
+    # custom type silently falls through to being pickled on write.
+    state = {"class_names": ["arcticdb_no_such_module.SomeNormalizer"], "fail_on_missing": fail_on_missing}
+    normalizer = CompositeCustomNormalizer([], False)
+
+    if fail_on_missing:
+        with pytest.raises(ImportError):
+            normalizer.__setstate__(state)
+    else:
+        normalizer.__setstate__(state)
+        assert_equal(normalizer._normalizers, [])
 
 
 def test_force_pickle_on_norm_failure():
