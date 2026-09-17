@@ -12,8 +12,6 @@ import numpy as np
 from pandas import DataFrame
 import pytest
 
-from arcticdb.exceptions import ErrorCode, SchemaException
-
 pytestmark = pytest.mark.pipeline
 
 
@@ -117,12 +115,3 @@ def test_tail_multiple_segments_odd_total_rows(lmdb_version_store_tiny_segment, 
         DataFrame({"x": np.arange(11, dtype=np.int64)}),
         7,
     )
-
-
-def test_tail_pickled_symbol(lmdb_version_store, any_output_format):
-    lmdb_version_store._set_output_format_for_pipeline_tests(any_output_format)
-    symbol = "test_tail_pickled_symbol"
-    lmdb_version_store.write(symbol, np.arange(100).tolist())
-    assert lmdb_version_store.is_symbol_pickled(symbol)
-    with pytest.raises(SchemaException, match=ErrorCode.E_OPERATION_NOT_SUPPORTED_WITH_PICKLED_DATA.name):
-        _ = lmdb_version_store.tail(symbol)

@@ -14,6 +14,7 @@ import pytest
 
 from arcticdb import DataError, ReadRequest
 from arcticdb.exceptions import ErrorCode, SchemaException
+from arcticdb.version_store.library import Library
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb_ext.exceptions import ErrorCategory
 
@@ -46,6 +47,19 @@ def write_unprocessable(nvs, kind, symbol="sym"):
     else:
         raise AssertionError(f"unknown data kind {kind}")
     return symbol
+
+
+def assert_read_back(kind, data):
+    if kind == "pickled":
+        assert data.to_dict() == PICKLED_DATA.to_dict()
+    elif kind == "numpy":
+        assert np.array_equal(data, NUMPY_DATA)
+    elif kind == "recursive":
+        assert set(data) == set(RECURSIVE_DATA)
+        for column, expected in RECURSIVE_DATA.items():
+            assert np.array_equal(data[column], expected)
+    else:
+        raise AssertionError(f"unknown data kind {kind}")
 
 
 def expect_refusal(kind):
@@ -81,61 +95,69 @@ all_data_kinds = pytest.mark.parametrize("kind", list(ERROR_CODE_FOR))
 all_processing_kinds = pytest.mark.parametrize("processing", list(PROCESSING_KINDS))
 
 
+@pytest.fixture
+def lib(in_memory_library_static_dynamic, any_output_format) -> Library:
+    in_memory_library_static_dynamic._nvs._set_output_format_for_pipeline_tests(any_output_format)
+    return in_memory_library_static_dynamic
+
+
 # --- read ---------------------------------------------------------------------------------------
 
 
 @all_data_kinds
 @all_processing_kinds
-def test_read_with_query_builder(in_memory_library, kind, processing):
-    lib = in_memory_library
+def test_read_with_query_builder(lib, kind, processing):
     sym = write_unprocessable(lib._nvs, kind)
     with expect_refusal(kind):
         lib.read(sym, query_builder=PROCESSING_KINDS[processing]())
 
 
+@all_processing_kinds
+def test_read_with_query_builder_all_recursive_metastructure_versions(
+    lib, processing, all_recursive_metastructure_versions
+):
+    sym = write_unprocessable(lib._nvs, "recursive")
+    with expect_refusal("recursive"):
+        lib.read(sym, query_builder=PROCESSING_KINDS[processing]())
+
+
 @all_data_kinds
-def test_read_columns(in_memory_library, kind):
-    lib = in_memory_library
+def test_read_columns(lib, kind):
     sym = write_unprocessable(lib._nvs, kind)
     with expect_refusal(kind):
         lib.read(sym, columns=["a"])
 
 
 @all_data_kinds
-def test_read_date_range(in_memory_library, kind):
-    lib = in_memory_library
+def test_read_date_range(lib, kind):
     sym = write_unprocessable(lib._nvs, kind)
     with expect_refusal(kind):
         lib.read(sym, date_range=(TS[0], TS[-1]))
 
 
 @all_data_kinds
-def test_read_row_range(in_memory_library, kind):
-    lib = in_memory_library
+def test_read_row_range(lib, kind):
     sym = write_unprocessable(lib._nvs, kind)
     with expect_refusal(kind):
         lib.read(sym, row_range=(0, 2))
 
 
 @all_data_kinds
-def test_head(in_memory_library, kind):
-    lib = in_memory_library
+def test_head(lib, kind):
     sym = write_unprocessable(lib._nvs, kind)
     with expect_refusal(kind):
         lib.head(sym, n=2)
 
 
 @all_data_kinds
-def test_tail(in_memory_library, kind):
-    lib = in_memory_library
+def test_tail(lib, kind):
     sym = write_unprocessable(lib._nvs, kind)
     with expect_refusal(kind):
         lib.tail(sym, n=2)
 
 
 @all_data_kinds
-def test_lazy_read_then_collect(in_memory_library, kind):
-    lib = in_memory_library
+def test_lazy_read_then_collect(lib, kind):
     sym = write_unprocessable(lib._nvs, kind)
     lazy_df = lib.read(sym, lazy=True)
     lazy_df = lazy_df[lazy_df["a"] == 0]
@@ -143,15 +165,19 @@ def test_lazy_read_then_collect(in_memory_library, kind):
         lazy_df.collect()
 
 
+@all_data_kinds
+def test_plain_read_still_works(in_memory_library_static_dynamic, kind):
+    lib = in_memory_library_static_dynamic
+    sym = write_unprocessable(lib._nvs, kind)
+    assert_read_back(kind, lib.read(sym).data)
+
+
 # --- batch read ---------------------------------------------------------------------------------
 
 
 @all_data_kinds
 @all_processing_kinds
-def test_read_batch_returns_data_error_with_code(in_memory_library, kind, processing):
-    """read_batch reports per-symbol failures as DataError rather than raising, so the error code has
-    to survive the round trip into DataError.error_code."""
-    lib = in_memory_library
+def test_read_batch_returns_data_error_with_code(lib, kind, processing):
     sym = write_unprocessable(lib._nvs, kind)
     result = lib.read_batch([ReadRequest(sym, query_builder=PROCESSING_KINDS[processing]())])[0]
     assert isinstance(result, DataError)
@@ -164,9 +190,7 @@ def test_read_batch_returns_data_error_with_code(in_memory_library, kind, proces
 
 @all_data_kinds
 @all_processing_kinds
-def test_read_batch_and_join_per_symbol_processing(in_memory_library, kind, processing):
-    """Clauses attached to a ReadRequest run per symbol, before the join."""
-    lib = in_memory_library
+def test_read_batch_and_join_per_symbol_processing(lib, kind, processing):
     sym = write_unprocessable(lib._nvs, kind)
     with expect_refusal(kind):
         lib.read_batch_and_join(
@@ -174,9 +198,8 @@ def test_read_batch_and_join_per_symbol_processing(in_memory_library, kind, proc
         )
 
 
-def test_concat_of_numpy_arrays_still_works(in_memory_library):
-    """Joining numpy arrays with no processing on top is not processing, and must keep working."""
-    lib = in_memory_library
+def test_concat_of_numpy_arrays_still_works(in_memory_library_static_dynamic):
+    lib = in_memory_library_static_dynamic
     lib._nvs.write("np1", np.arange(4))
     lib._nvs.write("np2", np.arange(4, 8))
     result = lib.read_batch_and_join([ReadRequest("np1"), ReadRequest("np2")], QueryBuilder().concat())
@@ -188,8 +211,7 @@ def test_concat_of_numpy_arrays_still_works(in_memory_library):
 
 @all_data_kinds
 @all_processing_kinds
-def test_read_modify_write(in_memory_library, kind, processing):
-    lib = in_memory_library
+def test_read_modify_write(lib, kind, processing):
     sym = write_unprocessable(lib._nvs, kind)
     with expect_refusal(kind):
         lib._nvs._read_modify_write(sym, PROCESSING_KINDS[processing](), target_symbol="out")
@@ -199,38 +221,25 @@ def test_read_modify_write(in_memory_library, kind, processing):
 
 
 @all_data_kinds
-def test_merge(in_memory_library, kind):
-    lib = in_memory_library
+def test_merge(lib, kind):
     sym = write_unprocessable(lib._nvs, kind)
     with expect_refusal(kind):
         lib.merge(sym, MERGE_SOURCE)
 
 
-def test_merge_on_recursive_data_leaves_symbol_untouched(in_memory_library):
-    """Regression: merging into a recursively normalized symbol used to succeed silently and replace
-    the symbol contents, because the pipeline context never loaded the index and so reported 0 rows,
-    which merge_update_impl read as 'the target is empty'."""
-    lib = in_memory_library
+def test_merge_on_recursive_data_leaves_symbol_untouched(in_memory_library_static_dynamic):
+    lib = in_memory_library_static_dynamic
     sym = write_unprocessable(lib._nvs, "recursive")
     with expect_refusal("recursive"):
         lib.merge(sym, MERGE_SOURCE)
-    after = lib._nvs.read(sym).data
-    assert set(after) == set(RECURSIVE_DATA)
-    for column, expected in RECURSIVE_DATA.items():
-        assert np.array_equal(after[column], expected)
+    assert_read_back("recursive", lib._nvs.read(sym).data)
 
 
 # --- column stats ------------------------------------------------------------------------------
 
 
 @all_data_kinds
-def test_create_column_stats(in_memory_library, kind):
-    lib = in_memory_library
+def test_create_column_stats(lib, kind):
     sym = write_unprocessable(lib._nvs, kind)
     with expect_refusal(kind):
         lib._nvs.create_column_stats_experimental(sym)
-
-
-# CompactDataClause is exempt from these checks: compaction of pickled data and numpy arrays must keep
-# working. That exemption is guarded by test_compact_pickled_data and test_compact_numpy_arrays in
-# test_compact_data.py.

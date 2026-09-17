@@ -12,7 +12,7 @@ import pandas as pd
 from pandas import DataFrame
 
 from arcticdb.version_store.processing import QueryBuilder
-from arcticdb.exceptions import ErrorCode, SchemaException
+from arcticdb.exceptions import SchemaException
 from arcticdb.util.test import (
     assert_frame_equal,
     generic_aggregation_test,
@@ -271,17 +271,6 @@ def test_group_empty_dataframe(lmdb_version_store_v1, any_output_format):
     assert "to_count" in received.columns
 
 
-def test_group_pickled_symbol(lmdb_version_store_v1, any_output_format):
-    lib = lmdb_version_store_v1
-    lib._set_output_format_for_pipeline_tests(any_output_format)
-    symbol = "test_group_pickled_symbol"
-    lib.write(symbol, np.arange(100).tolist())
-    assert lib.is_symbol_pickled(symbol)
-    q = QueryBuilder().groupby("grouping_column").agg({"to_mean": "mean"})
-    with pytest.raises(SchemaException, match=ErrorCode.E_OPERATION_NOT_SUPPORTED_WITH_PICKLED_DATA.name):
-        _ = lib.read(symbol, query_builder=q)
-
-
 def test_group_column_not_present(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
     lib._set_output_format_for_pipeline_tests(any_output_format)
@@ -529,17 +518,6 @@ def test_group_empty_dataframe_dynamic(lmdb_version_store_dynamic_schema_v1, any
     assert received.index.name == "grouping_column"
     assert len(received.columns) == 1
     assert "to_count" in received.columns
-
-
-def test_group_pickled_symbol_dynamic(lmdb_version_store_dynamic_schema_v1, any_output_format):
-    lib = lmdb_version_store_dynamic_schema_v1
-    lib._set_output_format_for_pipeline_tests(any_output_format)
-    symbol = "test_group_pickled_symbol_dynamic"
-    lib.write(symbol, np.arange(100).tolist())
-    assert lib.is_symbol_pickled(symbol)
-    q = QueryBuilder().groupby("grouping_column").agg({"to_mean": "mean"})
-    with pytest.raises(SchemaException, match=ErrorCode.E_OPERATION_NOT_SUPPORTED_WITH_PICKLED_DATA.name):
-        lib.read(symbol, query_builder=q)
 
 
 def test_group_column_not_present_dynamic(lmdb_version_store_dynamic_schema_v1, any_output_format):

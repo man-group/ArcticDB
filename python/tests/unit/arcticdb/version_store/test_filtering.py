@@ -1707,32 +1707,6 @@ def test_head_tail_unfilterable_data(lmdb_version_store_v1, head, sym, data, all
 ################################
 
 
-@pytest.mark.parametrize("lib_type", ["lmdb_version_store_v1", "lmdb_version_store_dynamic_schema_v1"])
-def test_filter_pickled_symbol(request, lib_type, any_output_format):
-    lib = request.getfixturevalue(lib_type)
-    lib._set_output_format_for_pipeline_tests(any_output_format)
-    symbol = "test_filter_pickled_symbol"
-    lib.write(symbol, np.arange(100).tolist())
-    assert lib.is_symbol_pickled(symbol)
-    q = QueryBuilder()
-    q = q[q.a == 0]
-    with pytest.raises(SchemaException):
-        _ = lib.read(symbol, query_builder=q)
-
-
-@pytest.mark.parametrize("lib_type", ["lmdb_version_store_v1", "lmdb_version_store_dynamic_schema_v1"])
-def test_filter_date_range_pickled_symbol(request, lib_type, any_output_format):
-    lib = request.getfixturevalue(lib_type)
-    lib._set_output_format_for_pipeline_tests(any_output_format)
-    symbol = "test_filter_date_range_pickled_symbol"
-    idx = pd.date_range("2000-01-01", periods=4)
-    df = pd.DataFrame({"a": [[1, 2], [3, 4], [5, 6], [7, 8]]}, index=idx)
-    lib.write(symbol, df, pickle_on_failure=True)
-    assert lib.is_symbol_pickled(symbol)
-    with pytest.raises(SchemaException):
-        lib.read(symbol, date_range=(idx[1], idx[2]))
-
-
 def test_filter_date_range_none_none(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
     lib._set_output_format_for_pipeline_tests(any_output_format)
