@@ -244,6 +244,7 @@ Please note that if meta structure V2 is read by < v6.7.0, exception KeyError wi
 Values:
 * 1: V1
 * 2: V2 (Default since v7.0.0)
+
 ### Compact.LogProgressPercentage
 
 Controls how frequently progress is logged during `finalize_staged_data` operations. A log line is emitted each time this percentage of segments has been processed.
