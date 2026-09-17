@@ -9,6 +9,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 import copy
 import datetime
 import os
+import warnings
 
 import pytz
 from enum import Enum, auto
@@ -1119,6 +1120,12 @@ class Library:
         >>> w = adb.WritePayload("symbol", df, metadata={'the': 'metadata'})
         >>> lib.write(*w, staged=True)
         """
+        if staged:
+            warnings.warn(
+                "The `staged` parameter will be removed in v7.0.0. Use stage() instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
         is_recursive_normalizers_enabled = self._nvs._is_recursive_normalizers_enabled(
             **{"recursive_normalizers": recursive_normalizers}
         )
@@ -1209,6 +1216,12 @@ class Library:
         --------
         write: For more detailed documentation.
         """
+        if staged:
+            warnings.warn(
+                "The `staged` parameter will be removed in v7.0.0. Use stage() instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
         return self._nvs.write(
             symbol=symbol,
             data=data,
