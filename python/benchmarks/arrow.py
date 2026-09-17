@@ -286,13 +286,21 @@ class ArrowStrings:
         self._setup_cache()
         self.logger.info(f"SETUP_CACHE TIME: {time.time() - start}")
 
-    def _string_array(self, values, arrow_string_format):
+    def _take(self, pool, indices):
+        taken = pool.take(indices)
+        # take() tags its result with an all-valid null bitmap, which converting the values directly
+        # does not produce. Drop it so the array is buffer for buffer the one this replaced.
+        return pa.Array.from_buffers(taken.type, len(taken), [None] + taken.buffers()[1:], offset=taken.offset)
+
+    def _string_array(self, strings, indices, arrow_string_format):
+        # Taking the values out of an array of the unique strings gives the same array as converting
+        # strings[indices] element by element, without boxing a python string for every row.
         if arrow_string_format == ArrowOutputStringFormat.SMALL_STRING:
-            return pa.array(values, pa.string())
+            return self._take(pa.array(strings, pa.string()), indices)
         if arrow_string_format == ArrowOutputStringFormat.LARGE_STRING:
-            return pa.array(values, pa.large_string())
+            return self._take(pa.array(strings, pa.large_string()), indices)
         # CATEGORICAL and DICTIONARY_ENCODED are aliases for dictionary-encoded strings (int32 keys, large_string values)
-        return pa.array(values, pa.large_string()).dictionary_encode()
+        return pa.array(strings[indices], pa.large_string()).dictionary_encode()
 
     def _generate_table(
         self, num_rows, num_cols, unique_string_count, arrow_string_format=ArrowOutputStringFormat.SMALL_STRING
@@ -303,7 +311,9 @@ class ArrowStrings:
         names = ["ts"] + [f"col{idx}" for idx in range(num_cols)]
         index = pd.date_range("1970-01-01", freq="ns", periods=num_rows)
         columns = [index] + [
-            self._string_array(np.random.choice(strings, num_rows), arrow_string_format) for _ in range(num_cols)
+            # np.random.choice(strings, num_rows) draws exactly these indices, so the values are unchanged
+            self._string_array(strings, np.random.randint(0, len(strings), num_rows), arrow_string_format)
+            for _ in range(num_cols)
         ]
         return pa.Table.from_arrays(columns, names=names)
 
@@ -312,7 +322,10 @@ class ArrowStrings:
         random.seed(42)
         strings = np.array(random_strings_of_length(unique_string_count, 10, unique=True, kind="ascii"))
         index = pd.date_range("1970-01-01", freq="ns", periods=num_rows)
-        data = {f"col{idx}": np.random.choice(strings, num_rows) for idx in range(num_cols)}
+        # Indexing an object array draws the same values as np.random.choice(strings, num_rows) but hands
+        # pandas the python strings it stores anyway, instead of a fixed width array it has to unpack.
+        object_strings = np.asarray(strings, dtype=object)
+        data = {f"col{idx}": object_strings[np.random.randint(0, len(strings), num_rows)] for idx in range(num_cols)}
         with pd.option_context("future.infer_string", use_str_dtype):
             return pd.DataFrame(data, index=index)
 
