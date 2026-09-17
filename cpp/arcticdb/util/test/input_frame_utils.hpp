@@ -8,6 +8,7 @@
 
 #pragma once
 #include <arcticdb/pipeline/input_frame.hpp>
+#include <arcticdb/util/collection_utils.hpp>
 namespace arcticdb::pipelines {
 
 template<std::ranges::contiguous_range T>
@@ -54,8 +55,7 @@ auto input_frame_from_tensors(const StreamDescriptor& desc, T&&... input) {
                 "Input data raw type sizes do not match descriptor field raw type sizes"
         );
     }(std::make_index_sequence<sizeof...(T)>{});
-    std::vector<NativeTensor> tensors;
-    tensors.reserve(sizeof...(T));
+    auto tensors = util::reserve_vector<NativeTensor>(sizeof...(T));
     if constexpr (Index::field_count() == 1) {
         tensors.push_back(one_dimensional_tensor(std::get<0>(materialized_input), desc.field(0).type().data_type()));
     }

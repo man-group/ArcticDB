@@ -9,7 +9,8 @@ import pandas as pd
 from pandas.testing import assert_frame_equal
 import pytest
 
-from arcticdb_ext.storage import KeyType, NoDataFoundException
+from arcticdb_ext.storage import KeyType
+from arcticdb.exceptions import NoDataFoundException
 from tests.conftest import Marks
 
 pytestmark = Marks.dedup.mark

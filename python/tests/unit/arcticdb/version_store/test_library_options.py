@@ -144,10 +144,10 @@ OPERATIONS = [
     pytest.param(
         Operation(
             setup=setup_one_write,
-            run=lambda lib, kwargs: lib.merge_experimental(SYM, MERGE_SOURCE, **kwargs),
+            run=lambda lib, kwargs: lib.merge(SYM, MERGE_SOURCE, **kwargs),
             created_versions=(0, 1),
         ),
-        id="merge_experimental",
+        id="merge",
     ),
     pytest.param(
         Operation(

@@ -43,10 +43,12 @@ from collections import Counter
 from arcticdb.exceptions import (
     ArcticNativeException,
     ArcticDbNotYetImplemented,
+    ArcticUnsupportedDataTypeException,
     NormalizationException,
     UnsortedDataException,
 )
 from arcticdb.supported_types import DateRangeInput, time_types as supported_time_types
+from arcticdb.util.arrow import NORMALIZABLE_PYARROW_TYPES, NORMALIZABLE_POLARS_TYPES, to_pyarrow_table
 from arcticdb.util._versions import IS_PANDAS_TWO, IS_PANDAS_ZERO
 from arcticdb_ext.version_store import PandasData, RecordBatchData, SortedValue as _SortedValue
 from pandas.core.internals import make_block
@@ -101,7 +103,6 @@ def _tz_error_context():
 
 
 NormalizedInput = NamedTuple("NormalizedInput", [("item", PandasData), ("metadata", NormalizationMetadata)])
-
 
 _PICKLED_METADATA_LOGLEVEL = None  # set lazily with function below
 
@@ -760,29 +761,30 @@ class ArrowTableNormalizer(Normalizer):
             new_columns, schema=pa.schema(new_fields).with_metadata({b"pandas": json.dumps(pandas_metadata)})
         )
 
-    def normalize(self, table, **kwargs):
-        if _POLARS_AVAILABLE and isinstance(table, pl.DataFrame):
-            if not _PYARROW_AVAILABLE:
-                raise ModuleNotFoundError(
-                    "ArcticDB's pyarrow optional dependency is missing and is required for working with polars DataFrames."
-                )
-            table = table.to_arrow()
-        if table.num_rows == 0:
+    def normalize(self, arrow_structure, **kwargs):
+        norm_metadata = NormalizationMetadata()
+        norm_metadata.experimental_arrow.one_dimensional = (
+            _PYARROW_AVAILABLE and isinstance(arrow_structure, (pa.ChunkedArray, pa.Array))
+        ) or (_POLARS_AVAILABLE and isinstance(arrow_structure, pl.Series))
+        if _POLARS_AVAILABLE and isinstance(arrow_structure, pl.Series):
+            norm_metadata.experimental_arrow.polars_series_name = arrow_structure.name
+        arrow_structure = to_pyarrow_table(arrow_structure)
+        if arrow_structure.num_rows == 0:
             # to_batches has a bug https://github.com/apache/arrow/issues/49309 so that it returns an empty list when
             # the table has zero rows, losing the schema information
             pa_record_batches = [
                 pa.RecordBatch.from_arrays(
-                    [chunked_array.chunk(0) for chunked_array in table.itercolumns()], schema=table.schema
+                    [chunked_array.chunk(0) for chunked_array in arrow_structure.itercolumns()],
+                    schema=arrow_structure.schema,
                 )
             ]
         else:
-            pa_record_batches = table.to_batches()
+            pa_record_batches = arrow_structure.to_batches()
         arcticdb_record_batches = []
         for pa_record_batch in pa_record_batches:
             arcticdb_record_batch = RecordBatchData()
             pa_record_batch._export_to_c(arcticdb_record_batch.array(), arcticdb_record_batch.schema())
             arcticdb_record_batches.append(arcticdb_record_batch)
-        norm_metadata = NormalizationMetadata()
         norm_metadata.experimental_arrow.has_index = kwargs.get("index_column", False)
         return arcticdb_record_batches, norm_metadata
 
@@ -836,7 +838,14 @@ class ArrowTableNormalizer(Normalizer):
             # For pandas series we always return a dataframe (to not lose the index information).
             pandas_meta = norm_meta.series.common
         elif input_type == "experimental_arrow":
-            return item
+            if norm_meta.experimental_arrow.one_dimensional:
+                check(
+                    item.num_columns == 1,
+                    f"Unexpected {item.num_columns} column Arrow table read for single-array output",
+                )
+                return item.column(0)
+            else:
+                return item
         else:
             raise ArcticNativeException(f"Expected dataframe or series input, actual: {input_type}")
 
@@ -1656,9 +1665,9 @@ class CompositeNormalizer(Normalizer):
             return self.np.normalize
 
         if allow_arrow_input:
-            if _PYARROW_AVAILABLE and isinstance(item, pa.Table):
+            if isinstance(item, NORMALIZABLE_PYARROW_TYPES):
                 return self.pa.normalize
-            if _POLARS_AVAILABLE and isinstance(item, pl.DataFrame):
+            if isinstance(item, NORMALIZABLE_POLARS_TYPES):
                 return self.pa.normalize
 
         if self.fallback_normalizer is not None:
@@ -1904,18 +1913,14 @@ def restrict_data_to_date_range_only(data: T, *, start: Timestamp, end: Timestam
             # of duplicating exception messages.
             raise UnsortedDataException("E_UNSORTED_DATA When calling update, the input data must be sorted.")
         data = data.loc[pd.to_datetime(start) : pd.to_datetime(end)]
-    elif _PYARROW_AVAILABLE and isinstance(data, pa.Table) or _POLARS_AVAILABLE and isinstance(data, pl.DataFrame):
-        if _POLARS_AVAILABLE and isinstance(data, pl.DataFrame):
-            if not _PYARROW_AVAILABLE:
-                raise ModuleNotFoundError(
-                    "ArcticDB's pyarrow optional dependency is missing and is required for working with polars DataFrames."
-                )
-            # PyArrow binary search + slice is benchmarked faster than polars native filtering
-            # (filter/is_between with set_sorted), which materializes a boolean mask over the
-            # entire column. The result is a zero-copy pa.Table view which the caller's
-            # normalizer accepts directly, avoiding a needless round-trip back to polars.
-            data = data.to_arrow()
+    elif isinstance(data, NORMALIZABLE_PYARROW_TYPES + NORMALIZABLE_POLARS_TYPES):
         check(index_column, "Cannot update with pyarrow Table without specifying index_column=True")
+        original_type = type(data)
+        original_name = data.name if _POLARS_AVAILABLE and original_type == pl.Series else None
+        # PyArrow binary search + slice is benchmarked faster than polars native filtering
+        # (filter/is_between with set_sorted), which materializes a boolean mask over the
+        # entire column. The result is a zero-copy pa.Table view.
+        data = to_pyarrow_table(data)
         col_name = data.column_names[0]
         if not data.column(col_name).type.tz:
             # Matches pandas behavior to strip the timezone if index column is timezone naive.
@@ -1926,6 +1931,13 @@ def restrict_data_to_date_range_only(data: T, *, start: Timestamp, end: Timestam
         # TODO: Decide on a consistent way to deal with unsorted index column. E.g. a flag `validate_index`
         # which will enable the index sortedness check. (monday ref: 11668250872)
         data = _filter_pyarrow_table_to_date_range(data, col_name, start, end)
+        if issubclass(original_type, NORMALIZABLE_POLARS_TYPES):
+            data = pl.from_arrow(data, rechunk=False)
+            if issubclass(original_type, pl.Series):
+                data = data.to_series(0).rename(original_name)
+        else:  # issubclass(original_type, NORMALIZABLE_PYARROW_TYPES)
+            if issubclass(original_type, (pa.ChunkedArray, pa.Array)):
+                data = data.column(0)
     else:  # non-Pandas, try to slice it anyway
         if not getattr(data, "timezone", None):
             start, end = _strip_tz(start, end)

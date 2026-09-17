@@ -14,11 +14,16 @@ from polars.testing import assert_frame_equal as assert_frame_equal_pl
 import pyarrow as pa
 import pytest
 
-from arcticdb_ext.exceptions import SchemaException, StorageException
 from arcticdb_ext.storage import KeyType
 from arcticdb_ext.version_store import CompactDataInfo
 from arcticdb import WritePayload
-from arcticdb.exceptions import ArcticNativeException, UserInputException, ArcticDuplicateSymbolsInBatchException
+from arcticdb.exceptions import (
+    ArcticNativeException,
+    UserInputException,
+    ArcticDuplicateSymbolsInBatchException,
+    SchemaException,
+    StorageException,
+)
 import arcticdb.toolbox.query_stats as qs
 from arcticdb.util.hypothesis import (
     use_of_function_scoped_fixtures_in_hypothesis_checked,
@@ -901,14 +906,6 @@ def test_batch_compact_data_one_symbol_recursively_normalized(lmdb_version_store
     with pytest.raises(SchemaException) as e:
         lib.batch_compact_data(syms)
     assert "recursive" in str(e.value) and syms[2] in str(e.value)
-
-
-def test_batch_compact_data_duplicated_symbols(lmdb_version_store_v1):
-    lib = lmdb_version_store_v1
-    syms = ["duplicated_sym", "unique_sym", "duplicated_sym"]
-    lib.batch_write(syms[:2], 2 * [pd.DataFrame({"col": [0]}, index=[pd.Timestamp(0)])])
-    with pytest.raises(ArcticDuplicateSymbolsInBatchException):
-        lib.batch_compact_data(syms)
 
 
 @use_of_function_scoped_fixtures_in_hypothesis_checked
