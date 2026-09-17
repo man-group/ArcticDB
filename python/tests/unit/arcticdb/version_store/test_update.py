@@ -8,6 +8,8 @@ As of the Change Date specified in that file, in accordance with the Business So
 
 import pandas as pd
 import numpy as np
+import pyarrow as pa
+import polars as pl
 import pytest
 from itertools import product
 import datetime
@@ -22,7 +24,7 @@ from arcticdb.util.test import (
 )
 from arcticdb import DataError
 from arcticdb.exceptions import (
-    InternalException,
+    UserInputException,
     UnsortedDataException,
     NormalizationException,
     SchemaException,
@@ -336,23 +338,227 @@ def generate_dataframe(columns, dt, num_days, num_rows_per_day):
     return pd.concat(dataframes)
 
 
-def test_update_with_daterange(lmdb_version_store):
-    lib = lmdb_version_store
+INDEXED_STRUCTURE_KINDS = (
+    "PandasSeries",
+    "PandasDataFrame",
+    "Table",
+    "RecordBatch",
+    "ChunkedArray",
+    "Array",
+    "PolarsDataFrame",
+    "PolarsSeries",
+)
 
-    def get_frame_for_date_range(start, end):
-        df = pd.DataFrame(index=pd.date_range(start, end, freq="D"))
-        df["value"] = df.index.day
-        return df
 
-    df1 = get_frame_for_date_range("2020-01-01", "2021-01-01")
-    lib.write("test", df1)
+def make_indexed_structure(kind, index):
+    """Build a structure indexed by `index`, covering both pandas and NORMALIZABLE_PYARROW_TYPES/
+    NORMALIZABLE_POLARS_TYPES. For the pandas kinds, `index` is the DatetimeIndex; for the rest, `index`
+    is the sole column, since these types carry no separate index/data distinction."""
+    if kind == "PandasSeries":
+        return pd.Series(data=range(len(index)), index=index, name="a")
+    if kind == "PandasDataFrame":
+        return pd.DataFrame({"a": range(len(index))}, index=index)
+    ts = pa.Array.from_pandas(index)
+    if kind == "Table":
+        return pa.table({"index": ts})
+    if kind == "RecordBatch":
+        return pa.record_batch({"index": ts})
+    if kind == "ChunkedArray":
+        return pa.chunked_array([ts])
+    if kind == "Array":
+        return ts
+    if kind == "PolarsDataFrame":
+        return pl.from_arrow(pa.table({"index": ts}))
+    if kind == "PolarsSeries":
+        return pl.from_arrow(ts)
+    assert False, f"Unexpected kind: {kind}"
 
-    df2 = get_frame_for_date_range("2020-06-01", "2021-06-01")
-    date_range = DateRange("2020-01-01", "2022-01-01")
-    lib.update("test", df2, date_range=date_range)
-    stored_df = lib.read("test").data
-    assert stored_df.index.min() == df2.index.min()
-    assert stored_df.index.max() == df2.index.max()
+
+@pytest.mark.parametrize("batch", [True, False])
+class TestUpdateWithDateRange:
+
+    @staticmethod
+    def assert_update_throws(lib, payload, batch):
+        with pytest.raises(NormalizationException):
+            if batch:
+                lib.update_batch([payload])
+            else:
+                lib.update(
+                    payload.symbol, payload.data, date_range=payload.date_range, index_column=payload.index_column
+                )
+
+    def test_update_with_daterange(self, lmdb_library, batch):
+        lib = lmdb_library
+
+        def get_frame_for_date_range(start, end):
+            df = pd.DataFrame(index=pd.date_range(start, end, freq="D"))
+            df["value"] = df.index.day
+            return df
+
+        df1 = get_frame_for_date_range("2020-01-01", "2021-01-01")
+        lib.write("test", df1)
+
+        df2 = get_frame_for_date_range("2020-06-01", "2021-06-01")
+        date_range = DateRange("2020-01-01", "2022-01-01")
+        payload = UpdatePayload("test", df2, date_range=date_range)
+        if batch:
+            lib.update_batch([payload])
+        else:
+            lib.update(payload.symbol, payload.data, date_range=payload.date_range)
+        stored_df = lib.read("test").data
+        assert stored_df.index.min() == df2.index.min()
+        assert stored_df.index.max() == df2.index.max()
+
+    @pytest.mark.parametrize(
+        "start, end",
+        [
+            (pd.Timestamp("2020-01-01 05:00:00", tz="Europe/Sofia"), None),
+            (None, pd.Timestamp("2020-01-01 05:00:00", tz="Europe/Sofia")),
+        ],
+    )
+    def test_open_ended_date_range_intervals(self, in_memory_library, start, end, batch):
+        lib = in_memory_library
+        lib.write("test", pd.DataFrame({"a": range(24)}, index=pd.date_range("2020-01-01", periods=24, freq="h")))
+        date_range = (start, end)
+        payload = UpdatePayload(
+            "test", pd.DataFrame({"a": [10]}, index=pd.DatetimeIndex(["2020-01-01 07:00:00"])), date_range=date_range
+        )
+        self.assert_update_throws(lib, payload, batch)
+
+    def test_date_bounds_have_no_tzinfo_attribute_with_tz_aware_data_throws(self, in_memory_library, batch):
+        # start/end are datetime.date, which has no tzinfo attribute at all, not just tzinfo=None
+        lib = in_memory_library
+        tz = "Europe/Sofia"
+        lib.write(
+            "test", pd.DataFrame({"a": range(24)}, index=pd.date_range("2020-01-01", periods=24, freq="h", tz=tz))
+        )
+        date_range = (datetime.date(2020, 1, 1), datetime.date(2020, 1, 2))
+        payload = UpdatePayload(
+            "test",
+            pd.DataFrame({"a": [10]}, index=pd.DatetimeIndex(["2020-01-01 07:00:00"], tz=tz)),
+            date_range=date_range,
+        )
+        self.assert_update_throws(lib, payload, batch)
+
+    @pytest.mark.parametrize(
+        "start, end",
+        [
+            (datetime.datetime(2020, 1, 1, 5, 0, 0), pd.Timestamp("2020-01-01 12:00:00", tz="Europe/Sofia")),
+            (pd.Timestamp("2020-01-01 05:00:00", tz="Europe/Sofia"), datetime.datetime(2020, 1, 1, 12, 0, 0)),
+        ],
+    )
+    def test_mixed_naive_datetime_and_tz_aware_timestamp_bounds_throws(self, in_memory_library, start, end, batch):
+        lib = in_memory_library
+        lib.write("test", pd.DataFrame({"a": range(24)}, index=pd.date_range("2020-01-01", periods=24, freq="h")))
+        # DateRange itself compares start > end, which raises when mixing naive/aware, so use a plain tuple
+        date_range = (start, end)
+        payload = UpdatePayload(
+            "test", pd.DataFrame({"a": [10]}, index=pd.DatetimeIndex(["2020-01-01 07:00:00"])), date_range=date_range
+        )
+        self.assert_update_throws(lib, payload, batch)
+
+    @pytest.mark.parametrize("kind", INDEXED_STRUCTURE_KINDS)
+    def test_date_range_tz_aware_with_naive_data_throws(self, arrow_library, kind, batch):
+        lib = arrow_library
+        lib.write(
+            "test", make_indexed_structure(kind, pd.date_range("2020-01-01", periods=24, freq="h")), index_column=True
+        )
+        tz = "Europe/Sofia"
+        date_range = (pd.Timestamp("2020-01-01 05:00:00", tz=tz), pd.Timestamp("2020-01-01 12:00:00", tz=tz))
+        payload = UpdatePayload(
+            "test",
+            make_indexed_structure(kind, pd.DatetimeIndex(["2020-01-01 07:00:00"])),
+            date_range=date_range,
+            index_column=True,
+        )
+        self.assert_update_throws(lib, payload, batch)
+
+    @pytest.mark.parametrize("kind", INDEXED_STRUCTURE_KINDS)
+    def test_date_range_naive_with_tz_aware_data_throws(self, arrow_library, kind, batch):
+        lib = arrow_library
+        tz = "Europe/Sofia"
+        lib.write(
+            "test",
+            make_indexed_structure(kind, pd.date_range("2020-01-01", periods=24, freq="h", tz=tz)),
+            index_column=True,
+        )
+        date_range = (pd.Timestamp("2020-01-01 05:00:00"), pd.Timestamp("2020-01-01 12:00:00"))
+        payload = UpdatePayload(
+            "test",
+            make_indexed_structure(kind, pd.DatetimeIndex(["2020-01-01 07:00:00"], tz=tz)),
+            date_range=date_range,
+            index_column=True,
+        )
+        self.assert_update_throws(lib, payload, batch)
+
+    @pytest.mark.parametrize("as_arrow", [False, True])
+    def test_date_range_and_data_tz_aware_in_different_zones_succeeds(self, arrow_library, as_arrow, batch):
+        lib = arrow_library
+        index_tz = "Europe/Sofia"
+        date_range_tz = "America/New_York"
+
+        def to_structure(index, values):
+            if as_arrow:
+                return pa.table({"index": pa.Array.from_pandas(index), "a": pa.array(values, pa.int64())})
+            return pd.DataFrame({"a": values}, index=index)
+
+        lib.write(
+            "test",
+            to_structure(pd.date_range("2020-01-01", periods=24, freq="h", tz=index_tz, name="index"), list(range(24))),
+            index_column=as_arrow,
+        )
+
+        date_range = (
+            pd.Timestamp("2020-01-01 05:00:00", tz=index_tz).tz_convert(date_range_tz),
+            pd.Timestamp("2020-01-01 12:00:00", tz=index_tz).tz_convert(date_range_tz),
+        )
+        payload = UpdatePayload(
+            "test",
+            to_structure(pd.DatetimeIndex(["2020-01-01 07:00:00"], tz=index_tz, name="index"), [999]),
+            date_range=date_range,
+            index_column=as_arrow,
+        )
+        if batch:
+            lib.update_batch([payload])
+        else:
+            lib.update(payload.symbol, payload.data, date_range=payload.date_range, index_column=payload.index_column)
+
+        # date_range covers hours [05:00, 12:00] inclusive, so those 8 original rows (values 5-12) are replaced
+        # by the single row (07:00, value 999) in the update data.
+        expected = pd.DataFrame(
+            {"a": [0, 1, 2, 3, 4, 999, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]},
+            index=pd.DatetimeIndex(
+                [
+                    "2020-01-01 00:00:00",
+                    "2020-01-01 01:00:00",
+                    "2020-01-01 02:00:00",
+                    "2020-01-01 03:00:00",
+                    "2020-01-01 04:00:00",
+                    "2020-01-01 07:00:00",
+                    "2020-01-01 13:00:00",
+                    "2020-01-01 14:00:00",
+                    "2020-01-01 15:00:00",
+                    "2020-01-01 16:00:00",
+                    "2020-01-01 17:00:00",
+                    "2020-01-01 18:00:00",
+                    "2020-01-01 19:00:00",
+                    "2020-01-01 20:00:00",
+                    "2020-01-01 21:00:00",
+                    "2020-01-01 22:00:00",
+                    "2020-01-01 23:00:00",
+                ],
+                tz=index_tz,
+                name="index",
+            ),
+        )
+
+        # arrow_library always reads back as an arrow Table regardless of the update input format.
+        # For pandas input to_pandas() restores "index" as the index via the stored pandas metadata;
+        # for arrow input the index arrives as a regular column that must be set explicitly.
+        result = lib.read("test").data.to_pandas()
+        if "index" in result.columns:
+            result = result.set_index("index")
+        assert_frame_equal(expected, result)
 
 
 def test_update_schema_change(lmdb_version_store_dynamic_schema):

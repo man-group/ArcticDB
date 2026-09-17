@@ -1884,7 +1884,7 @@ def _filter_pyarrow_table_to_date_range(data: "pa.Table", index_column: str, sta
     return data.slice(left, right - left)
 
 
-def restrict_data_to_date_range_only(data: T, *, start: Timestamp, end: Timestamp, index_column: bool = False) -> Any:
+def restrict_data_to_date_range_only(data: T, *, start: Timestamp, end: Timestamp) -> Any:
     """Return a copy of `data` filtered so that its contents lie between `start` and `end` (inclusive).
 
     `data` must be time-indexed.
@@ -1914,7 +1914,6 @@ def restrict_data_to_date_range_only(data: T, *, start: Timestamp, end: Timestam
             raise UnsortedDataException("E_UNSORTED_DATA When calling update, the input data must be sorted.")
         data = data.loc[pd.to_datetime(start) : pd.to_datetime(end)]
     elif isinstance(data, NORMALIZABLE_PYARROW_TYPES + NORMALIZABLE_POLARS_TYPES):
-        check(index_column, "Cannot update with pyarrow Table without specifying index_column=True")
         original_type = type(data)
         original_name = data.name if _POLARS_AVAILABLE and original_type == pl.Series else None
         # PyArrow binary search + slice is benchmarked faster than polars native filtering
@@ -1949,6 +1948,15 @@ def restrict_data_to_date_range_only(data: T, *, start: Timestamp, end: Timestam
     return data
 
 
+def daterange_to_tuple(dtr: DateRangeInput):
+    def _get_name_or_pos(name, pos):
+        if hasattr(dtr, name):
+            return getattr(dtr, name)
+        return dtr[pos]
+
+    return _get_name_or_pos("start", 0), _get_name_or_pos("end", -1)
+
+
 def normalize_dt_range_to_ts(dtr: DateRangeInput) -> Tuple[Timestamp, Timestamp]:
     def _to_utc_ts(v: "ExplicitlySupportedDates", bound_name: str) -> Timestamp:
         if not isinstance(v, supported_time_types):
@@ -1971,13 +1979,7 @@ def normalize_dt_range_to_ts(dtr: DateRangeInput) -> Tuple[Timestamp, Timestamp]
     if getattr(dtr, "startopen", False) or getattr(dtr, "endopen", False):
         raise ValueError("Only supports closed/closed date range. Actual:{}".format(dtr))
 
-    def _get_name_or_pos(name, pos):
-        if hasattr(dtr, name):
-            return getattr(dtr, name)
-        return dtr[pos]
-
-    start_val = _get_name_or_pos("start", 0)
-    end_val = _get_name_or_pos("end", -1)
+    start_val, end_val = daterange_to_tuple(dtr)
     s = _to_utc_ts(start_val, "start") if start_val else Timestamp.min.tz_localize("UTC")
     e = _to_utc_ts(end_val, "end") if end_val else Timestamp.max.tz_localize("UTC")
     return s, e
