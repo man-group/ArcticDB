@@ -129,7 +129,7 @@ def test_update_date_range_non_pandas_dataframe(basic_store_custom_norm, with_ti
     version_store.update(
         "sym_1",
         CustomTimeseries(update_df, with_timezone_attr=with_timezone_attr, timezone_=timezone_),
-        date_range=(datetime(2022, 6, 2), datetime(2022, 6, 4)),
+        date_range=(datetime(2022, 6, 2, tzinfo=timezone_), datetime(2022, 6, 4, tzinfo=timezone_)),
     )
     info = version_store.get_info("sym_1")
     assert info["sorted"] == "ASCENDING"
@@ -162,7 +162,7 @@ def test_update_date_range_non_pandas_dataframe(basic_store_custom_norm, with_ti
     version_store.update(
         "sym_1",
         CustomTimeseries(update_df, with_timezone_attr=with_timezone_attr, timezone_=timezone_),
-        date_range=(datetime(2022, 6, 2), datetime(2022, 6, 4)),
+        date_range=(datetime(2022, 6, 2, tzinfo=timezone_), datetime(2022, 6, 4, tzinfo=timezone_)),
     )
     info = version_store.get_info("sym_1")
     assert info["sorted"] == "ASCENDING"

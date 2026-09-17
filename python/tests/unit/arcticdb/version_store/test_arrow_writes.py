@@ -1278,34 +1278,67 @@ def test_update_with_date_range_wider_than_data_1d(in_memory_version_store_arrow
     assert received.equals(pa.chunked_array([expected]))
 
 
-@pytest.mark.parametrize(
-    "date_range",
-    [
-        pytest.param((pd.Timestamp("2025-01-03 12:00:00"), pd.Timestamp("2025-01-03 12:00:00")), id="single_value"),
-        pytest.param((pd.Timestamp("2025-01-03"), pd.Timestamp("2025-01-04") - pd.Timedelta(1, "ns")), id="single_day"),
-        pytest.param((pd.Timestamp("2025-01-03"), pd.Timestamp("2025-01-04 23:00:00")), id="exact_boundaries"),
-        pytest.param((pd.Timestamp("2025-01-03"), pd.Timestamp("2025-01-03 12:00:00")), id="exact_left_boundary"),
-        pytest.param(
-            (pd.Timestamp("2025-01-03 12:00:00"), pd.Timestamp("2025-01-04 23:00:00")), id="exact_right_boundary"
-        ),
-        pytest.param((pd.Timestamp("2025-01-03 06:00:00"), pd.Timestamp("2025-01-03 18:00:00")), id="intraday"),
-        pytest.param((pd.Timestamp("2025-01-04"), pd.Timestamp("2025-01-03")), id="start_gt_end"),
-        pytest.param(
-            (
-                pd.Timestamp("2025-01-03 12:00:00", tz="America/New_York"),
-                pd.Timestamp("2025-01-04 12:00:00", tz="America/New_York"),
-            ),
-            id="tz_aware_date_range",
-        ),
-    ],
-)
+DATE_RANGE_BOUNDS = [
+    pytest.param("2025-01-03 12:00:00", "2025-01-03 12:00:00", id="single_value"),
+    pytest.param("2025-01-03", "2025-01-03 23:59:59.999999999", id="single_day"),
+    pytest.param("2025-01-03", "2025-01-04 23:00:00", id="exact_boundaries"),
+    pytest.param("2025-01-03", "2025-01-03 12:00:00", id="exact_left_boundary"),
+    pytest.param("2025-01-03 12:00:00", "2025-01-04 23:00:00", id="exact_right_boundary"),
+    pytest.param("2025-01-03 06:00:00", "2025-01-03 18:00:00", id="intraday"),
+    pytest.param("2025-01-04", "2025-01-03", id="start_gt_end"),
+]
+
+
+@pytest.mark.parametrize("start, end", DATE_RANGE_BOUNDS)
 @pytest.mark.parametrize("index_tz", [None, "Etc/UTC", "America/New_York"])
 def test_update_with_date_range_narrower_than_data(
-    in_memory_version_store_arrow, date_range, index_tz, arrow_output_format
+    in_memory_version_store_arrow, start, end, index_tz, arrow_output_format
 ):
+    # The bounds take the index's timezone, as update requires date_range and data to have matching awareness.
+    date_range = (pd.Timestamp(start, tz=index_tz), pd.Timestamp(end, tz=index_tz))
     lib = in_memory_version_store_arrow
     sym = "test_update_with_date_range_narrower_than_data"
     reference_sym = "test_update_with_date_range_narrower_than_data_reference"
+    ts_type = pa.timestamp("ns", tz=index_tz)
+    write_dates = pd.date_range("2025-01-01", periods=6, tz=index_tz)
+    write_table = pa.table(
+        {
+            "ts": pa.Array.from_pandas(write_dates, type=ts_type),
+            "col0": pa.array(list(range(6)), pa.int64()),
+            "col1": pa.array([f"v{i}" for i in range(6)], pa.string()),
+        }
+    )
+    lib.write(reference_sym, write_table.to_pandas().set_index("ts"))
+    lib.write(sym, to_format(write_table, arrow_output_format), index_column=True)
+    update_dates = pd.date_range("2025-01-03", periods=48, freq="h", tz=index_tz)
+    update_table = pa.table(
+        {
+            "ts": pa.Array.from_pandas(update_dates, type=ts_type),
+            "col0": pa.array(list(range(100, 148)), pa.int64()),
+            "col1": pa.array([f"u{i}" for i in range(48)], pa.string()),
+        }
+    )
+    lib.update(reference_sym, update_table.to_pandas().set_index("ts"), date_range=date_range)
+    lib.update(sym, to_format(update_table, arrow_output_format), date_range=date_range, index_column=True)
+    expected = lib.read(reference_sym, output_format="pandas").data
+    received = lib.read(sym).data.to_pandas().set_index("ts")
+    assert_frame_equal(expected, received)
+
+
+@pytest.mark.parametrize("start, end", DATE_RANGE_BOUNDS)
+@pytest.mark.parametrize("index_tz, date_range_tz", [("America/New_York", "Etc/UTC"), ("Etc/UTC", "America/New_York")])
+def test_update_with_date_range_in_different_timezone(
+    in_memory_version_store_arrow, start, end, index_tz, date_range_tz, arrow_output_format
+):
+    # Both timezone aware but in different zones, which update allows because the bounds are compared
+    # against the index as absolute instants, so the zone the caller writes them in does not matter.
+    date_range = (
+        pd.Timestamp(start, tz=index_tz).tz_convert(date_range_tz),
+        pd.Timestamp(end, tz=index_tz).tz_convert(date_range_tz),
+    )
+    lib = in_memory_version_store_arrow
+    sym = "test_update_with_date_range_in_different_timezone"
+    reference_sym = "test_update_with_date_range_in_different_timezone_reference"
     ts_type = pa.timestamp("ns", tz=index_tz)
     write_dates = pd.date_range("2025-01-01", periods=6, tz=index_tz)
     write_table = pa.table(
