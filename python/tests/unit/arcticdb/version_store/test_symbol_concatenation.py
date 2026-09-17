@@ -12,7 +12,7 @@ import pyarrow as pa
 import pytest
 
 from arcticdb import col, concat, LazyDataFrame, LazyDataFrameCollection, QueryBuilder, ReadRequest
-from arcticdb.exceptions import NormalizationException, NoSuchVersionException, SchemaException
+from arcticdb.exceptions import ErrorCode, NormalizationException, NoSuchVersionException, SchemaException
 from arcticdb.options import LibraryOptions
 from arcticdb.util.test import assert_frame_equal, assert_series_equal
 from tests.util.mark import WINDOWS
@@ -1007,7 +1007,7 @@ def test_symbol_concat_pickled_data(lmdb_library, any_output_format):
     lib.write("sym0", df)
     lib.write_pickle("sym1", pickled_data)
 
-    with pytest.raises(SchemaException):
+    with pytest.raises(SchemaException, match=ErrorCode.E_OPERATION_NOT_SUPPORTED_WITH_PICKLED_DATA.name):
         concat(lib.read_batch(["sym0", "sym1"], lazy=True)).collect()
 
 

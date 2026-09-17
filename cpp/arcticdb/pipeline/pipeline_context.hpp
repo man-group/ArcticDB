@@ -238,6 +238,12 @@ struct PipelineContext : public std::enable_shared_from_this<PipelineContext> {
                arcticdb::proto::descriptors::NormalizationMetadata::InputTypeCase::kMsgPackFrame;
     }
 
+    bool is_numpy_array() const {
+        util::check(tsd_.has_value(), "No normalization metadata defined");
+        return tsd_->proto().normalization().input_type_case() ==
+               arcticdb::proto::descriptors::NormalizationMetadata::InputTypeCase::kNp;
+    }
+
     void set_tsd(TimeseriesDescriptor&& tsd);
 
     const TimeseriesDescriptor& tsd() const;
