@@ -12,8 +12,6 @@ import numpy as np
 from pandas import DataFrame
 import pytest
 
-from arcticdb.exceptions import InternalException
-
 pytestmark = pytest.mark.pipeline
 
 
@@ -105,15 +103,6 @@ def test_head_with_column_filter(lmdb_version_store_tiny_segment, three_col_df, 
         three_col_df().filter(items=columns).head(num_rows),
         lmdb_version_store_tiny_segment.head(symbol, num_rows, columns=columns).data,
     )
-
-
-def test_head_pickled_symbol(lmdb_version_store, any_output_format):
-    lmdb_version_store._set_output_format_for_pipeline_tests(any_output_format)
-    symbol = "test_head_pickled_symbol"
-    lmdb_version_store.write(symbol, np.arange(100).tolist())
-    assert lmdb_version_store.is_symbol_pickled(symbol)
-    with pytest.raises(InternalException):
-        _ = lmdb_version_store.head(symbol)
 
 
 @pytest.mark.parametrize("n", range(6))

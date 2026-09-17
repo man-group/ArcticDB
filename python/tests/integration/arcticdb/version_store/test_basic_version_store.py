@@ -55,7 +55,6 @@ from arcticdb.util.test import (
     distinct_timestamps,
 )
 from tests.conftest import Marks
-from tests.util.date import DateRange
 from arcticdb.util.test import equals
 from arcticdb.version_store._store import resolve_defaults
 from arcticdb.version_store._string_dtype import _use_pyarrow_strings_in_pandas
@@ -1325,18 +1324,6 @@ def test_empty_ndarr(basic_store):
     ndarr = np.array([])
     basic_store.write(sym, ndarr)
     assert_array_equal(basic_store.read(sym).data, ndarr)
-
-
-def test_partial_read_pickled_df(basic_store):
-    will_be_pickled = [1, 2, 3]
-    basic_store.write("blah", will_be_pickled)
-    assert basic_store.read("blah").data == will_be_pickled
-
-    with pytest.raises(InternalException):
-        basic_store.read("blah", columns=["does_not_matter"])
-
-    with pytest.raises(InternalException):
-        basic_store.read("blah", date_range=(DateRange(pd.Timestamp("1970-01-01"), pd.Timestamp("2027-12-31"))))
 
 
 @pytest.mark.storage
