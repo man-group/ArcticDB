@@ -415,8 +415,13 @@ class UpdatePayload:
         metadata : Any, default=None
             Optional metadata to persist along with the new symbol version.
         date_range : Optional[Tuple[Optional[Timestamp], Optional[Timestamp]]], default=None
-            Restricts the update to the specified range in the stored data. Leaving either bound as ``None`` leaves that
-            side of the range open-ended.
+            If a range is specified, the existing data within that range is cleared and overwritten by data. This allows
+            the user to update a subset of the original data. Note that date_range is end-inclusive, and if either the
+            start or end is None, the range becomes open-ended on that side. If date_range is narrower than data, rows
+            of data outside date_range are ignored. If date_range is wider than data, index entries within date_range
+            not covered by data are removed as well. date_range and data must both be timezone-aware or both
+            timezone-naive; they can use different zones, since the comparison is against the underlying instants
+            rather than local time.
         index_column: bool, default=False
             Only applicable when data is a PyArrow Table or Polars DataFrame. If True, the first column
             is treated as the timeseries index.
@@ -1560,10 +1565,13 @@ class Library:
         upsert: bool, default=False
             If True, will write the data even if the symbol does not exist.
         date_range: `Tuple[Optional[Timestamp], Optional[Timestamp]]`, default=None
-            If a range is specified, it will delete the stored value within the range and overwrite it with the data in
-            ``data``. This allows the user to update with data that might only be a subset of the stored value. Leaving
-            any part of the tuple as None leaves that part of the range open ended. Only data with date_range will be
-            modified, even if ``data`` covers a wider date range.
+            If a range is specified, the existing data within that range is cleared and overwritten by data. This allows
+            the user to update a subset of the original data. Note that date_range is end-inclusive, and if either the
+            start or end is None, the range becomes open-ended on that side. If date_range is narrower than data, rows
+            of data outside date_range are ignored. If date_range is wider than data, index entries within date_range
+            not covered by data are removed as well. date_range and data must both be timezone-aware or both
+            timezone-naive; they can use different zones, since the comparison is against the underlying instants
+            rather than local time.
         prune_previous_versions: Optional[bool], default=None
             Removes previous (non-snapshotted) versions from the database. If None, the value is taken from the
             library configuration (defaults to False).

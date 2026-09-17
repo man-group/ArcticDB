@@ -24,6 +24,8 @@ import attr
 import warnings
 from datetime import datetime
 
+from arcticdb.exceptions import NormalizationException
+
 from numpy import datetime64
 from pandas import Timestamp, Timedelta
 from typing import Any, Optional, Union, List, Sequence, Tuple, Dict, Set, NamedTuple
@@ -114,6 +116,7 @@ from arcticdb.version_store._normalization import (
     restrict_data_to_date_range_only,
     normalize_dt_range_to_ts,
     _denormalize_columns_names,
+    daterange_to_tuple,
 )
 
 TimeSeriesType = Union[pd.DataFrame, pd.Series]
@@ -121,7 +124,11 @@ from arcticdb.util._versions import PANDAS_VERSION
 from packaging.version import Version
 import arcticdb_ext as ae
 
-from arcticdb.util.arrow import convert_arrow_to_pandas_for_tests
+from arcticdb.util.arrow import (
+    convert_arrow_to_pandas_for_tests,
+    NORMALIZABLE_PYARROW_TYPES,
+    NORMALIZABLE_POLARS_TYPES,
+)
 
 IS_WINDOWS = sys.platform == "win32"
 
@@ -1129,10 +1136,13 @@ class NativeVersionStore:
             Optional metadata to persist along with the new symbol version. Note that the metadata is
             not combined in any way with the metadata stored in the previous version.
         date_range: None, or one of the types in DateRangeInput
-            If a range is specified, it will clear/delete the data within the
-            range and overwrite it with the data in `data`. This allows the user
-            to update with data that might only be a subset of the
-            original data. Note date_range is end-inclusive.
+            If a range is specified, the existing data within that range is cleared and overwritten by data. This allows
+            the user to update a subset of the original data. Note that date_range is end-inclusive, and if either the
+            start or end is None, the range becomes open-ended on that side. If date_range is narrower than data, rows
+            of data outside date_range are ignored. If date_range is wider than data, index entries within date_range
+            not covered by data are removed as well. date_range and data must both be timezone-aware or both
+            timezone-naive; they can use different zones, since the comparison is against the underlying instants
+            rather than local time.
         upsert: bool, default=False
             If True, will write the data even if the symbol does not exist.
         prune_previous_version
@@ -1240,9 +1250,32 @@ class NativeVersionStore:
         Data filtered by date_range if date_range is not None or unmodified data otherwise
         """
         if date_range is not None:
-            start, end = normalize_dt_range_to_ts(date_range)
-            update_query.row_filter = _IndexRange(start.value, end.value)
-            return restrict_data_to_date_range_only(data, start=start, end=end, index_column=index_column)
+            if isinstance(data, NORMALIZABLE_PYARROW_TYPES + NORMALIZABLE_POLARS_TYPES) and not index_column:
+                raise NormalizationException(
+                    "Cannot update with pyarrow/polars Table without specifying index_column=True"
+                )
+            is_index_timezone_aware = is_dataframe_index_tz_aware(data)
+            start, end = daterange_to_tuple(date_range)
+            is_date_range_timezone_aware = False
+            if start and getattr(start, "tzinfo", None) is not None:
+                is_date_range_timezone_aware = True
+                if end and getattr(end, "tzinfo", None) is None:
+                    raise NormalizationException(
+                        "Both date_range members must be timezone aware or both must be timezone naive."
+                    )
+            if end and getattr(end, "tzinfo", None) is not None:
+                is_date_range_timezone_aware = True
+                if start and getattr(start, "tzinfo", None) is None:
+                    raise NormalizationException(
+                        "Both date_range members must be timezone aware or both must be timezone naive."
+                    )
+            if (start is not None or end is not None) and is_date_range_timezone_aware != is_index_timezone_aware:
+                raise NormalizationException(
+                    "When passing date_range parameter to update either both the date_range and the index of the data must be timezone aware or both must be timezone naive."
+                )
+            normalized_start, normalized_end = normalize_dt_range_to_ts(date_range)
+            update_query.row_filter = _IndexRange(normalized_start.value, normalized_end.value)
+            return restrict_data_to_date_range_only(data, start=normalized_start, end=normalized_end)
         return data
 
     def _batch_update_internal(
@@ -1258,8 +1291,9 @@ class NativeVersionStore:
         self._raise_if_duplicate_symbols_in_batch(symbols)
         update_queries = [_PythonVersionStoreUpdateQuery() for _ in range(len(symbols))]
         for i in range(len(data_vector)):
+            index_column = index_column_vector[i] if index_column_vector is not None else False
             data_vector[i] = self._apply_date_range_to_update_query(
-                data_vector[i], date_range_vector[i], update_queries[i]
+                data_vector[i], date_range_vector[i], update_queries[i], index_column
             )
         proto_cfg = self._lib_cfg.lib_desc.version.write_options
         prune_previous_version = resolve_defaults(
@@ -4589,3 +4623,30 @@ def _log_warning_on_writing_empty_dataframe(dataframe, symbol):
             empty_column_type,
             current_dtypes,
         )
+
+
+def is_dataframe_index_tz_aware(data):
+    if hasattr(data, "loc"):
+        index = data.index.get_level_values(0)
+        return isinstance(index, pd.DatetimeIndex) and index.tz is not None
+    elif isinstance(data, NORMALIZABLE_POLARS_TYPES):
+        if isinstance(data, pl.Series):
+            dtype = data.dtype
+        elif isinstance(data, pl.DataFrame):
+            dtype = data.dtypes[0]
+        else:
+            raise ValueError(f"Unknown polars data type: {type(data)}")
+        return isinstance(dtype, pl.Datetime) and dtype.time_zone is not None
+    elif isinstance(data, NORMALIZABLE_PYARROW_TYPES):
+        if isinstance(data, (pa.Table, pa.RecordBatch)):
+            dtype = data.columns[0].type
+        elif isinstance(data, (pa.ChunkedArray, pa.Array)):
+            dtype = data.type
+        else:
+            raise ValueError(f"Unknown pyarrow data type: {type(data)}")
+        return pa.types.is_timestamp(dtype) and dtype.tz is not None
+    # This matches the tests in python/tests/integration/arcticdb/version_store/test_update_with_date_range.py which
+    # simulate timeseries classes that are not Pandas/Polars/Pyarrow but are custom and occasionally used inside Man.
+    # Data with no timezone attribute is timezone naive. Truthiness rather than "is not None" so that this agrees with
+    # restrict_data_to_date_range_only, which strips the timezone from the bounds on the same condition.
+    return bool(getattr(data, "timezone", None))
