@@ -1138,9 +1138,11 @@ class NativeVersionStore:
         date_range: None, or one of the types in DateRangeInput
             If a range is specified, the existing data within that range is cleared and overwritten by data. This allows
             the user to update a subset of the original data. Note that date_range is end-inclusive, and if either the
-            start or end is None, the range becomes open-ended on that side. Both date_range and data must be either
-            timezone-aware or timezone-naive. Only data with date_range will be modified, even if data covers a wider
-            date range.
+            start or end is None, the range becomes open-ended on that side. If date_range is narrower than data, rows
+            of data outside date_range are ignored. If date_range is wider than data, index entries within date_range
+            not covered by data are removed as well. date_range and data must both be timezone-aware or both
+            timezone-naive; they can use different zones, since the comparison is against the underlying instants
+            rather than local time.
         upsert: bool, default=False
             If True, will write the data even if the symbol does not exist.
         prune_previous_version
@@ -1248,6 +1250,10 @@ class NativeVersionStore:
         Data filtered by date_range if date_range is not None or unmodified data otherwise
         """
         if date_range is not None:
+            if isinstance(data, NORMALIZABLE_PYARROW_TYPES + NORMALIZABLE_POLARS_TYPES) and not index_column:
+                raise NormalizationException(
+                    "Cannot update with pyarrow/polars Table without specifying index_column=True"
+                )
             is_index_timezone_aware = is_dataframe_index_tz_aware(data)
             start, end = daterange_to_tuple(date_range)
             is_date_range_timezone_aware = False
@@ -1269,9 +1275,7 @@ class NativeVersionStore:
                 )
             normalized_start, normalized_end = normalize_dt_range_to_ts(date_range)
             update_query.row_filter = _IndexRange(normalized_start.value, normalized_end.value)
-            return restrict_data_to_date_range_only(
-                data, start=normalized_start, end=normalized_end, index_column=index_column
-            )
+            return restrict_data_to_date_range_only(data, start=normalized_start, end=normalized_end)
         return data
 
     def _batch_update_internal(

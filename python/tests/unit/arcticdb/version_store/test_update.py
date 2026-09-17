@@ -362,7 +362,7 @@ def make_indexed_structure(kind, index):
     if kind == "Table":
         return pa.table({"index": ts})
     if kind == "RecordBatch":
-        return pa.RecordBatch.from_arrays([ts], names=["index"])
+        return pa.record_batch({"index": ts})
     if kind == "ChunkedArray":
         return pa.chunked_array([ts])
     if kind == "Array":
@@ -490,6 +490,72 @@ class TestUpdateWithDateRange:
             index_column=True,
         )
         self.assert_update_throws(lib, payload, batch)
+
+    @pytest.mark.parametrize("as_arrow", [False, True])
+    def test_date_range_and_data_tz_aware_in_different_zones_succeeds(self, arrow_library, as_arrow, batch):
+        lib = arrow_library
+        index_tz = "Europe/Sofia"
+        date_range_tz = "America/New_York"
+
+        def to_structure(index, values):
+            if as_arrow:
+                return pa.table({"index": pa.Array.from_pandas(index), "a": pa.array(values, pa.int64())})
+            return pd.DataFrame({"a": values}, index=index)
+
+        lib.write(
+            "test",
+            to_structure(pd.date_range("2020-01-01", periods=24, freq="h", tz=index_tz, name="index"), list(range(24))),
+            index_column=as_arrow,
+        )
+
+        date_range = (
+            pd.Timestamp("2020-01-01 05:00:00", tz=index_tz).tz_convert(date_range_tz),
+            pd.Timestamp("2020-01-01 12:00:00", tz=index_tz).tz_convert(date_range_tz),
+        )
+        payload = UpdatePayload(
+            "test",
+            to_structure(pd.DatetimeIndex(["2020-01-01 07:00:00"], tz=index_tz, name="index"), [999]),
+            date_range=date_range,
+            index_column=as_arrow,
+        )
+        if batch:
+            lib.update_batch([payload])
+        else:
+            lib.update(payload.symbol, payload.data, date_range=payload.date_range, index_column=payload.index_column)
+
+        # date_range covers hours [05:00, 12:00] inclusive, so those 8 original rows (values 5-12) are replaced
+        # by the single row (07:00, value 999) in the update data.
+        expected = pd.DataFrame(
+            {"a": [0, 1, 2, 3, 4, 999, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]},
+            index=pd.DatetimeIndex(
+                [
+                    "2020-01-01 00:00:00",
+                    "2020-01-01 01:00:00",
+                    "2020-01-01 02:00:00",
+                    "2020-01-01 03:00:00",
+                    "2020-01-01 04:00:00",
+                    "2020-01-01 07:00:00",
+                    "2020-01-01 13:00:00",
+                    "2020-01-01 14:00:00",
+                    "2020-01-01 15:00:00",
+                    "2020-01-01 16:00:00",
+                    "2020-01-01 17:00:00",
+                    "2020-01-01 18:00:00",
+                    "2020-01-01 19:00:00",
+                    "2020-01-01 20:00:00",
+                    "2020-01-01 21:00:00",
+                    "2020-01-01 22:00:00",
+                    "2020-01-01 23:00:00",
+                ],
+                tz=index_tz,
+                name="index",
+            ),
+        )
+
+        result = lib.read("test").data
+        if as_arrow:
+            result = result.to_pandas().set_index("index")
+        assert_frame_equal(expected, result)
 
 
 def test_update_schema_change(lmdb_version_store_dynamic_schema):
