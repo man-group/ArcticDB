@@ -552,9 +552,12 @@ class TestUpdateWithDateRange:
             ),
         )
 
-        result = lib.read("test").data
-        if as_arrow:
-            result = result.to_pandas().set_index("index")
+        # arrow_library always reads back as an arrow Table regardless of the update input format.
+        # For pandas input to_pandas() restores "index" as the index via the stored pandas metadata;
+        # for arrow input the index arrives as a regular column that must be set explicitly.
+        result = lib.read("test").data.to_pandas()
+        if "index" in result.columns:
+            result = result.set_index("index")
         assert_frame_equal(expected, result)
 
 

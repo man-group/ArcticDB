@@ -1291,8 +1291,9 @@ class NativeVersionStore:
         self._raise_if_duplicate_symbols_in_batch(symbols)
         update_queries = [_PythonVersionStoreUpdateQuery() for _ in range(len(symbols))]
         for i in range(len(data_vector)):
+            index_column = index_column_vector[i] if index_column_vector is not None else False
             data_vector[i] = self._apply_date_range_to_update_query(
-                data_vector[i], date_range_vector[i], update_queries[i]
+                data_vector[i], date_range_vector[i], update_queries[i], index_column
             )
         proto_cfg = self._lib_cfg.lib_desc.version.write_options
         prune_previous_version = resolve_defaults(
