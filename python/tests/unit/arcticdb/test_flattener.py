@@ -15,7 +15,15 @@ from arcticdb.version_store._custom_normalizers import (
 
 import numpy as np
 import pandas as pd
-from arcticdb.util.test import assert_frame_equal, assert_series_equal, CustomDictNormalizer, CustomDict
+import pytest
+from arcticdb.util.test import (
+    assert_frame_equal,
+    assert_series_equal,
+    config_context,
+    config_context_multi,
+    CustomDictNormalizer,
+    CustomDict,
+)
 
 fl = Flattener()
 separator = fl.SEPARATOR
@@ -126,3 +134,24 @@ def test_multiindex_recursive_normalizer(lmdb_version_store, all_recursive_metas
     df = pd.DataFrame(data=np.arange(6), index=pd.MultiIndex.from_product([dtidx, vals], names=["a", "b"]))
     lmdb_version_store.write("df", {"data": df}, recursive_normalizers=True)
     assert_frame_equal(lmdb_version_store.read("df").data["data"], df)
+
+
+@pytest.mark.parametrize("version", ("None", "2"))
+def test_meta_structure_defaults_and_explicit_v2(version):
+    with config_context_multi({"VersionStore.RecursiveNormalizerMetastructure": version}):
+        flattener = Flattener()
+        assert flattener.meta_structure_v2 is True
+
+        metast, _ = flattener.create_meta_structure({"a": np.arange(5)}, base_sym)
+        assert metast["__VER__"] == 2
+        assert "__version__" not in metast
+
+
+def test_meta_structure_v1_requires_explicit_opt_in():
+    with config_context("VersionStore.RecursiveNormalizerMetastructure", 1):
+        flattener = Flattener()
+        assert flattener.meta_structure_v2 is False
+
+        metast, _ = flattener.create_meta_structure({"a": np.arange(5)}, base_sym)
+        assert metast["__version__"] == 1
+        assert "__VER__" not in metast
