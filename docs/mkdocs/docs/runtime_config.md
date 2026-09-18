@@ -217,7 +217,11 @@ Values:
 
 ### VersionStore.RecursiveNormalizerMetastructure
 
-Controls whether the recursive normalizer will use meta structure V2
+Controls whether the recursive normalizer will use meta structure V2.
+
+**The default changed to V2 in v7.0.0.** V2 removes the dependency on pickle for normalizing the
+meta structure, but can only be read by ArcticDB v6.7.0 and later. To keep data readable by
+clients older than v6.7.0, set this option explicitly to `1`.
 
 **Read Compatibility:**
 
@@ -226,24 +230,20 @@ Controls whether the recursive normalizer will use meta structure V2
 | V1 | All existing and future ArcticDB releases |
 | V2 | ArcticDB v6.7.0 and later |
 
+Please note that if meta structure V2 is read by < v6.7.0, exception KeyError will be raised.
+
 **V1 meta structure phase-out plan:**
 
 | Version | Change |
 |---------|--------|
 | >= v6.7.0 | Deprecation warning when writing V1 meta structure; V2 meta structure can be enabled optionally |
-| >= v7.0.0 | V2 meta structure will be enabled by default |
+| >= v7.0.0 | V2 meta structure is enabled by default; V1 must be opted into explicitly |
 
-Values: * 1: V1 (Default) * 2: V2  
 
-### VersionStore.VersionStore.RecursiveNormalizerMetastructureV1DeprecationWarning
-
-Control whether deprecation warning will be given if meta structure V1 for recursive normalizer is still in use
 
 Values:
-* 0: Disable
-* 1: Enable (Default)
-
-Please note that if meta structure V2 is read by < v6.7.0, exception KeyError will be raised
+* 1: V1
+* 2: V2 (Default since v7.0.0)
 
 ### Compact.LogProgressPercentage
 
