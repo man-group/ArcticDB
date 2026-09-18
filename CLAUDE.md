@@ -75,6 +75,8 @@ A root `Makefile` provides shortcuts for common tasks. User-specific overrides (
 | `make activate NAME=x` | Print activate path. Use: `source $(make activate NAME=x)` | `VENV_DIR` |
 | `make lint` | Run formatters in-place | |
 | `make lint-check` | Check formatting without changes | |
+| `make tidy-diff` | clang-tidy on changed lines only | `TIDY_BASE=` base ref, `CLANG_TIDY=` binary |
+| `make tidy` | clang-tidy over all of `cpp/arcticdb` | `CLANG_TIDY=`, `CMAKE_JOBS=` |
 | `make build` / `build-debug` | Configure, build, and symlink `arcticdb_ext` | `RELEASE_PRESET` / `DEBUG_PRESET`, `CMAKE_JOBS` |
 | `make configure` / `configure-debug` | CMake configure only | |
 | `make test-cpp` / `test-cpp-debug` | Build and run C++ unit tests | `FILTER=` for gtest_filter |
@@ -194,6 +196,49 @@ Code style is enforced by `make lint` **Always run `make lint` after making code
 
 Put Python imports at module scope. Do not add function-local ("lazy") imports to defer a cost or to
 tolerate a stale build — including in test helpers.
+
+### Static Analysis (clang-tidy)
+
+`.clang-tidy` at the repo root enables all of `bugprone-*` and `performance-*`, plus
+`modernize-use-ranges` and `modernize-use-constraints`. The rest of `modernize-*` and all
+style checks are left off; formatting is `make lint`'s job.
+
+Everything lives in `clang_tidy.yml`, which declares both `workflow_call` and
+`workflow_dispatch`:
+
+| Trigger | Scope | Artifacts |
+|---|---|---|
+| Called by `analysis_workflow.yml` on a pull request | changed lines only | no |
+| Called by `analysis_workflow.yml` on a master push | all of `cpp/arcticdb` | no |
+| Called by `analysis_workflow.yml` on the nightly cron | all of `cpp/arcticdb` | yes |
+| Dispatched directly | all of `cpp/arcticdb` | yes |
+
+Dispatch it from the Actions tab to run a full sweep on demand; dispatching
+`analysis_workflow.yml` would also start the benchmarks, the ASV checks and the sanitizer
+job. It takes an optional `ref` so you can analyse any branch, tag or commit.
+
+Note that `workflow_dispatch` can deliver a boolean input as the string `"false"`, which is
+truthy in a GitHub expression. The `Resolve mode and changed files` step normalises both
+boolean inputs into string outputs, and every later condition compares those.
+
+The job is not one of master's required status checks, so a failure is visible without
+blocking a merge. Findings are uploaded to GitHub code scanning under the `clang-tidy`
+category and appear as annotations on the lines a PR touches. `clang-tidy-sarif` emits the
+absolute paths it finds in `compile_commands.json`, so `Sarif.Multitool rebaseuri` rebases
+them onto a `SRCROOT` uriBaseId before the upload; code scanning cannot resolve absolute
+paths to blobs. That step pins `dotnet-sdk-8.0` because the tool targets net8.0.
+
+Locally, `make tidy-diff` and `make tidy` need a **clang-configured** debug build. clang-tidy
+uses clang's driver, so a gcc-configured `compile_commands.json` produces spurious errors
+from libstdc++ and vcpkg headers.
+
+Two things to know before reading the raw output:
+
+- clang-tidy re-reports a header diagnostic once per translation unit that includes the
+  header, so raw counts over-count by orders of magnitude on this codebase.
+  `build_tooling/clang_tidy_report.py` deduplicates and owns the pass/fail verdict. The SARIF
+  upload is not deduplicated, so the code scanning alert count is the raw one.
+- Diagnostics go to **stderr**, so any invocation that captures them needs `2>&1`.
 
 ### Git Commits
 

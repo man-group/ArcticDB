@@ -14,6 +14,9 @@ PROTOC_VERS      ?=
 VENV_DIR         ?= ~/venvs
 VENV_NAME		 ?= dev-venv
 TMPDIR_OVERRIDE  ?=
+CLANG_TIDY       ?= clang-tidy
+# Base ref that `make tidy-diff` diffs against
+TIDY_BASE        ?= origin/master
 
 # ── Build directory paths ────────────────────────────────────────────────────
 _RELEASE_BUILD_DIR := cpp/out/$(RELEASE_PRESET)-build
@@ -31,7 +34,7 @@ _VENV_PYTHON := $(_VENV_ROOT)/bin/python
 _VENV_PIP := $(VENV_DIR)/$(VENV_NAME)/bin/pip
 
 # ── Phony targets ────────────────────────────────────────────────────────────
-.PHONY: help setup protoc venv activate lint lint-check \
+.PHONY: help setup protoc venv activate lint lint-check tidy tidy-diff \
         build build-debug configure configure-debug \
         test-cpp test-cpp-debug test-cpp-rapidcheck test-cpp-rapidcheck-debug symlink symlink-debug \
         test-py build-and-test-py build-and-test-py-debug \
@@ -52,6 +55,8 @@ help: ## Show this help
 	@echo "  PROTOC_VERS      $(or $(PROTOC_VERS),(unset))"
 	@echo "  VENV_DIR         $(VENV_DIR)"
 	@echo "  TMPDIR_OVERRIDE  $(or $(TMPDIR_OVERRIDE),(unset))"
+	@echo "  CLANG_TIDY       $(CLANG_TIDY)"
+	@echo "  TIDY_BASE        $(TIDY_BASE)"
 
 # ── protoc ───────────────────────────────────────────────────────────────────
 protoc: ## Generate protobuf stubs
@@ -85,6 +90,27 @@ lint: ## Run formatters (in-place)
 
 lint-check: ## Check formatting (no changes)
 	$(_VENV_PYTHON) build_tooling/format.py --check --type all
+
+# ── clang-tidy ───────────────────────────────────────────────────────────────
+# Both targets read the debug build's compile_commands.json, which must have been
+# produced by clang: clang-tidy uses clang's driver, so a gcc-configured build gives
+# spurious errors from libstdc++ and vcpkg headers. Set CLANG_TIDY= to a specific
+# binary if clang-tidy is not on PATH (CI pins clang-tools-extra-19.1.7).
+_TIDY_HELPERS := /usr/share/clang
+_TIDY_DB := $(_DEBUG_BUILD_DIR)
+
+tidy-diff: ## clang-tidy on changed lines only (TIDY_BASE= base ref, default origin/master)
+	git diff -U0 --no-color $(TIDY_BASE)...HEAD -- '*.cpp' '*.hpp' | \
+		python3 $(_TIDY_HELPERS)/clang-tidy-diff.py -p1 -path $(_TIDY_DB) \
+			-clang-tidy-binary $(CLANG_TIDY) -j $(CMAKE_JOBS) -quiet 2>&1 | \
+		tee clang-tidy.log
+	python3 build_tooling/clang_tidy_report.py clang-tidy.log --mode diff
+
+tidy: ## clang-tidy over all of cpp/arcticdb
+	python3 $(_TIDY_HELPERS)/run-clang-tidy.py -p $(_TIDY_DB) \
+		-clang-tidy-binary $(CLANG_TIDY) -j $(CMAKE_JOBS) -quiet \
+		'$(CURDIR)/cpp/arcticdb/.*' 2>&1 | tee clang-tidy.log
+	python3 build_tooling/clang_tidy_report.py clang-tidy.log --mode full
 
 # ── configure ────────────────────────────────────────────────────────────────
 # Files whose changes should trigger a cmake reconfigure.

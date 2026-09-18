@@ -248,6 +248,22 @@ jobs:
         run: du -m . | sort -n | tail -n 50 || true; df -h
         continue-on-error: true
 
+  # ========================= clang-tidy ========================
+  # Not in the required status checks for master (those are can_merge, check_labels and
+  # "All conda jobs completed", all owned by build.yml), so a failure here is visible on
+  # the PR without blocking the merge.
+  clang-tidy:
+    needs: [detect_changes]
+    if: ${{ !cancelled() && needs.detect_changes.outputs.docs_only != 'true' }}
+    uses: ./.github/workflows/clang_tidy.yml
+    secrets: inherit
+    permissions: {contents: read, security-events: write}
+    with:
+      # Pull requests are analysed on changed lines only; master pushes, the nightly cron
+      # and a dispatch of this workflow analyse everything.
+      full_codebase: ${{ github.event_name != 'pull_request' }}
+      upload_artifacts: ${{ github.event_name == 'schedule' }}
+
   # ========================= Sanitizers ========================
   sanitizer-address-leak-undefined:
     name: Tests with ASan+LSan+UBSan

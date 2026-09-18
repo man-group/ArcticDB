@@ -1,0 +1,17 @@
+---
+# Deliberately narrow: correctness and performance, plus two modernisations that
+# remove a class of mistake rather than restyling code. No formatting checks:
+# that is `make lint`'s job.
+# CI passes -warnings-as-errors='*' so this stays empty and clangd does not
+# report every finding as an error in the editor.
+Checks: >
+  -*,
+  bugprone-*,
+  performance-*,
+  modernize-use-ranges,
+  modernize-use-constraints
+HeaderFilterRegex: 'cpp/arcticdb/.*\.hpp$'
+ExcludeHeaderFilterRegex: '.*(vcpkg_installed|third_party|/proto/|_pb2|\.pb\.h).*'
+WarningsAsErrors: ''
+FormatStyle: file
+...
