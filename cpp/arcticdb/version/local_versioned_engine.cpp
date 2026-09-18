@@ -1892,8 +1892,34 @@ folly::Future<VersionedItem> LocalVersionedEngine::async_compact_data_internal(
                                     false
                             );
                         } else {
-                            // compact_data_impl returns nullopt if the data was already compacted, in which case the
-                            // versioned item we return is for the existing version
+                            // async_compact_data_impl returns nullopt if the data was already compacted, in which case
+                            // the versioned item we return is for the existing version
+                            return {std::move(*update_info.previous_index_key_)};
+                        }
+                    }
+            );
+}
+
+folly::Future<VersionedItem> LocalVersionedEngine::async_rename_columns_arrow_compat_internal(
+        UpdateInfo&& update_info, const std::optional<std::vector<std::string>>& index_columns,
+        const bool prune_previous_versions
+) {
+    return async_rename_columns_arrow_compat_impl(store(), update_info, index_columns)
+            .thenValueInline(
+                    [this, update_info = std::move(update_info), prune_previous_versions](auto&& opt_index_key
+                    ) mutable -> folly::Future<VersionedItem> {
+                        if (opt_index_key.has_value()) {
+                            return write_index_key_to_version_map_async(
+                                    version_map(),
+                                    std::move(*opt_index_key),
+                                    std::move(update_info),
+                                    prune_previous_versions,
+                                    false
+                            );
+                        } else {
+                            // async_rename_columns_arrow_compat_impl returns nullopt if the data already had
+                            // Arrow-compatible schema, in which case the  versioned item we return is for the existing
+                            // version
                             return {std::move(*update_info.previous_index_key_)};
                         }
                     }
@@ -2341,6 +2367,22 @@ std::variant<VersionedItem, CompactionError> LocalVersionedEngine::sort_merge_in
     delete_incomplete_keys(*pipeline_context, *store());
 
     return versioned_item;
+}
+
+VersionedItem LocalVersionedEngine::rename_columns_arrow_compat_internal(
+        const StreamId& stream_id, const std::optional<std::vector<std::string>>& index_columns,
+        const bool prune_previous_versions
+) {
+    ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: rename_columns_arrow_compat");
+    py::gil_scoped_release release_gil;
+    auto update_info = get_next_version_id_and_optionally_latest_undeleted_version(store(), version_map(), stream_id);
+    missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(
+            update_info.previous_index_key_.has_value(),
+            "Cannot rename columns of non-existent symbol \"{}\".",
+            stream_id
+    );
+    return async_rename_columns_arrow_compat_internal(std::move(update_info), index_columns, prune_previous_versions)
+            .get();
 }
 
 StorageLockWrapper LocalVersionedEngine::get_storage_lock(const StreamId& stream_id) {

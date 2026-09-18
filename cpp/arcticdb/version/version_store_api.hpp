@@ -305,6 +305,11 @@ class PythonVersionStore : public LocalVersionedEngine {
             bool prune_previous_versions, bool throw_on_error
     );
 
+    VersionedItem rename_columns_arrow_compat(
+            const StreamId& stream_id, const std::optional<std::vector<std::string>>& index_columns,
+            const bool prune_previous_versions
+    );
+
   private:
     void delete_snapshot_sync(const SnapshotId& snap_name, const VariantKey& snap_key);
 };
