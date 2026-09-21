@@ -441,6 +441,7 @@ set(arcticdb_srcs
         util/storage_lock.hpp
         util/reliable_storage_lock.hpp
         util/reliable_storage_lock-inl.hpp
+        util/string_stat_encoding.hpp
         util/string_utils.hpp
         util/thread_cached_int.hpp
         util/timeouts.hpp
@@ -610,6 +611,7 @@ set(arcticdb_srcs
         util/name_validation.cpp
         util/offset_string.cpp
         util/sparse_utils.cpp
+        util/string_stat_encoding.cpp
         util/string_utils.cpp
         util/trace.cpp
         util/type_handler.cpp
