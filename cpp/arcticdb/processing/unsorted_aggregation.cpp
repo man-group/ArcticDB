@@ -11,6 +11,8 @@
 #include <arcticdb/processing/aggregation_utils.hpp>
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/util/constants.hpp>
+#include <arcticdb/util/offset_string.hpp>
+#include <arcticdb/util/string_stat_encoding.hpp>
 #include <arcticdb/column_store/memory_segment.hpp>
 #include <column_stats.pb.h>
 
@@ -77,9 +79,58 @@ void MinMaxAggregatorData::aggregate(const ColumnWithStrings& input_column) {
                 }
             }
         } else {
-            schema::raise<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
-                    "Minmax column stat generation not supported with string types"
-            );
+            packed_strings_ = true;
+
+            if (input_column.column_->is_sparse()) {
+                const auto sparse_gap_count = input_column.column_->last_row() + 1 - input_column.column_->row_count();
+                null_count_ += static_cast<uint64_t>(sparse_gap_count);
+            }
+
+            auto pack_at_offset = [&input_column](entity::position_t pool_offset) {
+                const auto str = input_column.string_at_offset(pool_offset, true);
+                internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+                        str.has_value(), "Missing string pool entry at offset {} generating column stats", pool_offset
+                );
+                return pack_string_stat(*str, type_info::data_type);
+            };
+
+            [[maybe_unused]] ankerl::unordered_dense::map<RawType, uint64_t> offset_to_packed;
+
+            arcticdb::for_each<typename type_info::TDT>(*input_column.column_, [&](auto offset) {
+                const auto pool_offset = static_cast<entity::position_t>(offset);
+
+                if (!is_a_string(pool_offset)) {
+                    if (pool_offset == nan_placeholder()) {
+                        ++nan_count_;
+                    } else {
+                        ++null_count_;
+                    }
+                    return;
+                }
+
+                uint64_t packed;
+                // UTF_FIXED64 is the only type that transcodes per value, which is expensive enough
+                // to be worth a memo, and offsets repeat heavily in real columns. Packing UTF-8 is
+                // seven shifts, cheaper than the hash lookup would be.
+                if constexpr (type_info::data_type == DataType::UTF_FIXED64) {
+                    if (const auto it = offset_to_packed.find(offset); it != offset_to_packed.end()) {
+                        packed = it->second;
+                    } else {
+                        packed = pack_at_offset(pool_offset);
+                        offset_to_packed.emplace(offset, packed);
+                    }
+                } else {
+                    packed = pack_at_offset(pool_offset);
+                }
+
+                if (ARCTICDB_UNLIKELY(!min_.has_value())) {
+                    min_ = Value{packed, DataType::UINT64};
+                    max_ = Value{packed, DataType::UINT64};
+                } else {
+                    min_->set(std::min(min_->get<uint64_t>(), packed));
+                    max_->set(std::max(max_->get<uint64_t>(), packed));
+                }
+            });
         }
     });
 }
@@ -87,11 +138,14 @@ void MinMaxAggregatorData::aggregate(const ColumnWithStrings& input_column) {
 std::vector<ColumnStatValue> MinMaxAggregatorData::finalize() const {
     std::vector<ColumnStatValue> res;
     if (min_.has_value()) {
+        const auto min_type = packed_strings_ ? ColumnStatTypeInternal::MIN_STR_V1 : ColumnStatTypeInternal::MIN_V1;
+        const auto max_type = packed_strings_ ? ColumnStatTypeInternal::MAX_STR_V1 : ColumnStatTypeInternal::MAX_V1;
         res.reserve(4);
-        res.emplace_back(ColumnStatValue{ColumnStatTypeInternal::MIN_V1, data_col_offset_, *min_});
-        res.emplace_back(ColumnStatValue{ColumnStatTypeInternal::MAX_V1, data_col_offset_, *max_});
-    } else if (null_count_ == 0) {
-        // The column is absent from this slice entirely, so there is nothing to record
+        res.emplace_back(ColumnStatValue{min_type, data_col_offset_, *min_});
+        res.emplace_back(ColumnStatValue{max_type, data_col_offset_, *max_});
+    } else if (null_count_ == 0 && nan_count_ == 0) {
+        // The column is absent from this slice entirely, so there is nothing to record. Both counts
+        // must be checked: a slice of only NaN strings leaves min_ unset but has counts to record.
         return res;
     }
     res.emplace_back(
