@@ -80,10 +80,17 @@ std::string safe_decode(const std::string& value);
 
 // We store fixed-width (i.e. UTF-32 strings) in the string pool alongside UTF-8 strings, and the string pool does not
 // know which strings are which. Therefore methods like get_const_view return a std::string_view regardless. If the
-// string is UTF-32, this converts that view into a UTF-8 string
+// string is UTF-32, this converts that view into a UTF-8 string.
+// Trailing null codepoints are stripped, since a fixed-width pool pads with them. Leading and interior nulls are kept:
+// numpy preserves those through a round trip, so they are data.
 std::string utf32_to_u8(std::string_view strv);
 
 std::u32string utf8_to_u32(std::string_view strv);
+
+// Drops the trailing null bytes an ASCII_FIXED64 pool pads with. Only for fixed-width pool data: a
+// dynamic string column stores no padding, so there a trailing null is data and must not be stripped.
+// Interior and leading nulls are data in both cases and are kept.
+std::string_view strip_ascii_padding(std::string_view raw_ascii_string);
 
 struct TransparentStringHash {
     using is_transparent = void; // enable heterogeneous overloads
