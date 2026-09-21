@@ -58,8 +58,9 @@ std::vector<StatColumn> collect_stat_columns(
                     stat.data_col_offset,
                     descriptor.field_count()
             );
-            const auto resolved_type = is_count_stat(stat.type) ? make_scalar_type(DataType::UINT64)
-                                                                : descriptor.field(stat.data_col_offset).type();
+            const auto stores_uint64 = is_count_stat(stat.type) || is_packed_string_stat(stat.type);
+            const auto resolved_type =
+                    stores_uint64 ? make_scalar_type(DataType::UINT64) : descriptor.field(stat.data_col_offset).type();
             auto name = to_segment_column_name(descriptor.field(stat.data_col_offset).name(), stat.type);
             stat_key_to_index.emplace(stat_key, stat_columns.size());
             stat_columns.emplace_back(StatColumn{std::move(name), stat.type, stat.data_col_offset, resolved_type});
@@ -183,6 +184,10 @@ std::string type_to_operator_string(ColumnStatTypeInternal type) {
         return "v1_MIN";
     case ColumnStatTypeInternal::MAX_V1:
         return "v1_MAX";
+    case ColumnStatTypeInternal::MIN_STR_V1:
+        return "v1_MIN_STR";
+    case ColumnStatTypeInternal::MAX_STR_V1:
+        return "v1_MAX_STR";
     case ColumnStatTypeInternal::NAN_COUNT_V1:
         return "v1_NAN_COUNT";
     case ColumnStatTypeInternal::NULL_COUNT_V1:
@@ -314,6 +319,8 @@ ColumnStats::ColumnStats(
             switch (entry.type()) {
             case MIN_V1:
             case MAX_V1:
+            case MIN_STR_V1:
+            case MAX_STR_V1:
             case NAN_COUNT_V1:
             case NULL_COUNT_V1:
                 external_type = ColumnStatType::MINMAX; // null and nan are calculated inline with minmax
