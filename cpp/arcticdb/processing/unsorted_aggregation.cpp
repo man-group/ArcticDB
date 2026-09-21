@@ -94,13 +94,13 @@ void MinMaxAggregatorData::aggregate(const ColumnWithStrings& input_column) {
                 return pack_string_stat(*str, type_info::data_type);
             };
 
-            [[maybe_unused]] ankerl::unordered_dense::map<RawType, uint64_t> offset_to_packed;
+            ankerl::unordered_dense::set<RawType> seen_offsets_in_pool;
 
             arcticdb::for_each<typename type_info::TDT>(*input_column.column_, [&](auto offset) {
-                const auto pool_offset = static_cast<entity::position_t>(offset);
+                const auto offset_in_pool = static_cast<entity::position_t>(offset);
 
-                if (!is_a_string(pool_offset)) {
-                    if (pool_offset == nan_placeholder()) {
+                if (!is_a_string(offset_in_pool)) {
+                    if (offset_in_pool == nan_placeholder()) {
                         ++nan_count_;
                     } else {
                         ++null_count_;
@@ -108,20 +108,11 @@ void MinMaxAggregatorData::aggregate(const ColumnWithStrings& input_column) {
                     return;
                 }
 
-                uint64_t packed;
-                // UTF_FIXED64 is the only type that transcodes per value, which is expensive enough
-                // to be worth a memo, and offsets repeat heavily in real columns. Packing UTF-8 is
-                // seven shifts, cheaper than the hash lookup would be.
-                if constexpr (type_info::data_type == DataType::UTF_FIXED64) {
-                    if (const auto it = offset_to_packed.find(offset); it != offset_to_packed.end()) {
-                        packed = it->second;
-                    } else {
-                        packed = pack_at_offset(pool_offset);
-                        offset_to_packed.emplace(offset, packed);
-                    }
-                } else {
-                    packed = pack_at_offset(pool_offset);
+                if (!seen_offsets_in_pool.emplace(offset).second) {
+                    return;
                 }
+
+                const auto packed = pack_at_offset(offset_in_pool);
 
                 if (ARCTICDB_UNLIKELY(!min_.has_value())) {
                     min_ = Value{packed, DataType::UINT64};
