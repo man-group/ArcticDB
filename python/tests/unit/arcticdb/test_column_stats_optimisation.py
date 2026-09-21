@@ -6,7 +6,7 @@ import pyarrow as pa
 import pytest
 from arcticdb_ext.storage import KeyType
 
-from arcticdb.util.test import assert_frame_equal, query_stats_operation_count
+from arcticdb.util.test import assert_frame_equal, config_context, query_stats_operation_count
 from arcticdb.version_store.processing import QueryBuilder
 import arcticdb.toolbox.query_stats as qs
 import pandas as pd
@@ -770,7 +770,7 @@ def test_column_stats_multiindex_index_col(
     in_memory_version_store, clear_query_stats, column_stats_filtering_enabled_and_disabled
 ):
     """Column stats on a multi-index DataFrame. The primary level gets stats under its own name; the
-    string inner level is ineligible, so a filter on it cannot prune."""
+    string inner level gets them under its stored name."""
     lib = in_memory_version_store
 
     index0 = pd.MultiIndex.from_tuples(
@@ -789,6 +789,7 @@ def test_column_stats_multiindex_index_col(
     lib.create_column_stats_experimental(sym)
     assert lib.get_column_stats_info_experimental(sym) == {
         "date": {"MINMAX"},
+        "__idx__category": {"MINMAX"},
         "col_1": {"MINMAX"},
         "col_2": {"MINMAX"},
     }
@@ -2597,15 +2598,59 @@ def test_column_stats_row_slices_without_index_stats_are_not_pruned(
         assert get_table_data_read_count() == 3, "Filtering is disabled, so all 3 slices should be read"
 
 
-def test_column_stats_index_is_only_stat_column(
+@pytest.mark.parametrize("dynamic_strings", [True, False], ids=["dynamic_strings", "fixed_strings"])
+def test_column_stats_string_filtering_matches_unfiltered(in_memory_store_factory, dynamic_strings):
+    """The correctness bar for string stats: for every predicate the engine supports on strings, the
+    result with stats enabled must equal the result with them disabled. Both string layouts are
+    covered because a fixed-width slice holds padded UTF-32 in its pool rather than UTF-8, so it
+    reaches the packed stat by a different route than a dynamic one.
+
+    The comparison is made inside a single test rather than via
+    column_stats_filtering_enabled_and_disabled, which parametrizes a test into two independent runs
+    and so cannot compare them."""
+    lib = in_memory_store_factory(segment_row_size=2)
+    # prefixed_one/prefixed_two share their first seven bytes, so they pack to the same stat and a
+    # row slice holding only one of them cannot be pruned for the other. é and Ā differ above the
+    # low byte, where little-endian UTF-32 order disagrees with codepoint order, and 日本語 is nine
+    # bytes so a stat holding it is truncated mid-codepoint.
+    values = ["prefixed_one", "prefixed_two", "apple", "é", "Ā", "日本語", "zzz", "apple"]
+    if dynamic_strings:
+        # Fixed-width columns cannot hold missing values.
+        values += [None, np.nan]
+    df = pd.DataFrame({"col_1": values}, index=pd.date_range("2000-01-01", periods=len(values)))
+    lib.write(sym, df, dynamic_strings=dynamic_strings)
+    lib.create_column_stats_experimental(sym)
+
+    predicates = []
+    for probe in ["prefixed_one", "prefixed_two", "apple", "é", "Ā", "日本語", "zzz", "prefixed", "absent"]:
+        predicates.append((f"col_1 == {probe!r}", lambda q, p=probe: q[q["col_1"] == p]))
+        predicates.append((f"col_1 != {probe!r}", lambda q, p=probe: q[q["col_1"] != p]))
+    for probes in [["apple"], ["é", "Ā"], ["absent"], ["prefixed_one", "日本語"], ["absent", "zzz"]]:
+        predicates.append((f"col_1 isin {probes}", lambda q, p=probes: q[q["col_1"].isin(p)]))
+        predicates.append((f"col_1 isnotin {probes}", lambda q, p=probes: q[q["col_1"].isnotin(p)]))
+
+    for description, apply_predicate in predicates:
+        results = {}
+        for use_for_queries in (0, 1):
+            with config_context("ColumnStats.UseForQueries", use_for_queries):
+                results[use_for_queries] = lib.read(sym, query_builder=apply_predicate(QueryBuilder())).data
+        try:
+            assert_frame_equal(results[0], results[1])
+        except AssertionError as exception:
+            pytest.fail(f"{description} returned different rows once stats were used: {exception}")
+
+
+def test_column_stats_index_is_only_prunable_stat_column(
     in_memory_store_factory, clear_query_stats, column_stats_filtering_enabled_and_disabled
 ):
+    """The only non-index column is a string, whose stats cannot prune anything. Pruning on the index
+    must be unaffected by their presence."""
     lib = in_memory_store_factory(segment_row_size=2)
     df = pd.DataFrame({"col_1": ["a", "b", "c", "d", "e", "f"]}, index=UNSORTED_INDEX)
     lib.write(sym, df, validate_index=False)
     lib.create_column_stats_experimental(sym)
 
-    assert lib.get_column_stats_info_experimental(sym) == {"index": {"MINMAX"}}
+    assert lib.get_column_stats_info_experimental(sym) == {"index": {"MINMAX"}, "col_1": {"MINMAX"}}
 
     q = QueryBuilder()
     q = q[q["index"] > pd.Timestamp("2000-01-05")]
