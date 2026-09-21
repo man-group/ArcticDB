@@ -17,6 +17,7 @@
 #include <arcticdb/log/log.hpp>
 #include <arcticdb/stream/stream_utils.hpp>
 
+#include <algorithm>
 #include <iterator>
 #include <unordered_set>
 
@@ -137,6 +138,13 @@ std::vector<StatsMetadataForColumn> calculate_stats_metadata(
                 tsd.fields().size()
         );
         stats_metadata_for_column.col_name = std::string{tsd.fields().at(data_col_offset).name()};
+        // Pruning on packed string stats is not implemented yet. Skipping only the MIN_STR/MAX_STR
+        // entries would leave the column min-less, which the comparator reads as "prune this slice".
+        if (std::ranges::any_of(entry_list.entries(), [](const auto& entry) {
+                return is_packed_string_stat(entry.type());
+            })) {
+            continue;
+        }
         for (const auto& entry : entry_list.entries()) {
             const auto entry_type = entry.type();
             const bool is_min_max = entry_type == arcticc::pb2::column_stats_pb2::MIN_V1 ||
