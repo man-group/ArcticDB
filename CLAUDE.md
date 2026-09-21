@@ -238,8 +238,10 @@ Two things to know before reading the raw output:
   header, so raw counts over-count by orders of magnitude on this codebase, including the
   code scanning alert count from the (undeduplicated) SARIF upload.
 - Diagnostics go to **stderr**, so any invocation that captures them needs `2>&1`.
-- The pass/fail verdict is clang-tidy's own exit code: the run step uses `set -euo pipefail`,
-  so any finding or crashed translation unit fails the step directly.
+- clang-tidy exits 0 when it only emits warnings, and neither wrapper is passed
+  `-warnings-as-errors` (`.clang-tidy` keeps `WarningsAsErrors` empty so clangd does not flag
+  every finding as an editor error). A separate `Fail on findings` step greps the log for
+  `: warning:` / `: error:` and fails the job, so the findings are in the job log.
 
 ### Git Commits
 

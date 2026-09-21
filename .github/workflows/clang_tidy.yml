@@ -178,6 +178,18 @@ jobs:
             -export-fixes fixes.yml \
             "$GITHUB_WORKSPACE/cpp/arcticdb/.*" 2>&1 | tee clang-tidy.log
 
+      # clang-tidy exits 0 when it only emits warnings, and neither wrapper is given
+      # -warnings-as-errors (.clang-tidy keeps WarningsAsErrors empty so clangd does not flag
+      # every finding as an editor error), so the log is what decides pass/fail.
+      - name: Fail on findings
+        if: steps.changes.outputs.cpp_changed == 'true'
+        run: |
+          set -euo pipefail
+          if grep -E ': (warning|error): ' clang-tidy.log; then
+            echo "clang-tidy reported the findings above; see clang-tidy.log in the job log."
+            exit 1
+          fi
+
       - name: Convert findings to SARIF
         if: always() && steps.changes.outputs.cpp_changed == 'true'
         env:
