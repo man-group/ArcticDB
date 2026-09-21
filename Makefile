@@ -104,13 +104,11 @@ tidy-diff: ## clang-tidy on changed lines only (TIDY_BASE= base ref, default ori
 		python3 $(_TIDY_HELPERS)/clang-tidy-diff.py -p1 -path $(_TIDY_DB) \
 			-clang-tidy-binary $(CLANG_TIDY) -j $(CMAKE_JOBS) -quiet 2>&1 | \
 		tee clang-tidy.log
-	python3 build_tooling/clang_tidy_report.py clang-tidy.log --mode diff
 
 tidy: ## clang-tidy over all of cpp/arcticdb
 	python3 $(_TIDY_HELPERS)/run-clang-tidy.py -p $(_TIDY_DB) \
 		-clang-tidy-binary $(CLANG_TIDY) -j $(CMAKE_JOBS) -quiet \
 		'$(CURDIR)/cpp/arcticdb/.*' 2>&1 | tee clang-tidy.log
-	python3 build_tooling/clang_tidy_report.py clang-tidy.log --mode full
 
 # ── configure ────────────────────────────────────────────────────────────────
 # Files whose changes should trigger a cmake reconfigure.

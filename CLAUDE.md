@@ -235,10 +235,11 @@ from libstdc++ and vcpkg headers.
 Two things to know before reading the raw output:
 
 - clang-tidy re-reports a header diagnostic once per translation unit that includes the
-  header, so raw counts over-count by orders of magnitude on this codebase.
-  `build_tooling/clang_tidy_report.py` deduplicates and owns the pass/fail verdict. The SARIF
-  upload is not deduplicated, so the code scanning alert count is the raw one.
+  header, so raw counts over-count by orders of magnitude on this codebase, including the
+  code scanning alert count from the (undeduplicated) SARIF upload.
 - Diagnostics go to **stderr**, so any invocation that captures them needs `2>&1`.
+- The pass/fail verdict is clang-tidy's own exit code: the run step uses `set -euo pipefail`,
+  so any finding or crashed translation unit fails the step directly.
 
 ### Git Commits
 

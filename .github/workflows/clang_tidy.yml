@@ -159,42 +159,24 @@ jobs:
       # it still parses whole translation units, and it skips any file absent from the
       # compilation database. Diagnostics go to stderr, hence the 2>&1.
       - name: Run clang-tidy (changed lines)
-        id: tidy_diff
         if: steps.changes.outputs.cpp_changed == 'true' && steps.changes.outputs.mode == 'diff'
         run: |
-          set -o pipefail
-          set +e
+          set -euo pipefail
           git diff -U0 --no-color "${{ steps.changes.outputs.base_sha }}...HEAD" -- '*.cpp' '*.hpp' \
             | python3 /usr/share/clang/clang-tidy-diff.py -p1 \
                 -path "cpp/out/$ARCTIC_CMAKE_PRESET-build" \
                 -j "$CMAKE_BUILD_PARALLEL_LEVEL" -quiet \
                 -export-fixes fixes.yml 2>&1 | tee clang-tidy.log
-          echo "tidy_exit=${PIPESTATUS[1]}" >> "$GITHUB_OUTPUT"
 
       - name: Run clang-tidy (whole codebase)
-        id: tidy_full
         if: steps.changes.outputs.cpp_changed == 'true' && steps.changes.outputs.mode == 'full'
         run: |
-          set -o pipefail
-          set +e
+          set -euo pipefail
           python3 /usr/share/clang/run-clang-tidy.py \
             -p "cpp/out/$ARCTIC_CMAKE_PRESET-build" \
             -j "$CMAKE_BUILD_PARALLEL_LEVEL" -quiet \
             -export-fixes fixes.yml \
             "$GITHUB_WORKSPACE/cpp/arcticdb/.*" 2>&1 | tee clang-tidy.log
-          echo "tidy_exit=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
-
-      # Owns the verdict, so the step that goes red tells you which of the three failure
-      # modes happened: findings, a crashed translation unit, or a compilation error meaning
-      # the database does not match the compiler. Also deduplicates, since a header
-      # diagnostic is otherwise re-reported once per including translation unit.
-      - name: Report clang-tidy findings
-        if: steps.changes.outputs.cpp_changed == 'true'
-        run: |
-          python3 build_tooling/clang_tidy_report.py clang-tidy.log \
-            --summary "$GITHUB_STEP_SUMMARY" \
-            --mode "${{ steps.changes.outputs.mode == 'full' && 'whole codebase' || 'changed lines' }}" \
-            --tidy-exit "${{ steps.tidy_diff.outputs.tidy_exit || steps.tidy_full.outputs.tidy_exit || 0 }}"
 
       - name: Convert findings to SARIF
         if: always() && steps.changes.outputs.cpp_changed == 'true'
