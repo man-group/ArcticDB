@@ -132,6 +132,32 @@ TEST(MinMaxAggregatorStrings, MinMaxIsBytewiseNotLengthOrdered) {
     ASSERT_EQ(stat_value(stats, ColumnStatTypeInternal::MAX_STR_V1)->get<uint64_t>(), pack_string_stat("b"));
 }
 
+TEST(MinMaxAggregatorStrings, RepeatedOffsetsAreSkippedWithoutLosingMinMax) {
+    MinMaxAggregatorData aggregator{data_col_offset};
+    // Every value repeats, and both the min and the max are among the repeats. A repeated pool offset
+    // is skipped, so this fails if the skip happens before the value reaches min/max.
+    aggregator.aggregate(build_string_column({"cherry", "apple", "cherry", "apple", "banana", "apple"}));
+    const auto stats = aggregator.finalize();
+
+    ASSERT_EQ(stat_value(stats, ColumnStatTypeInternal::MIN_STR_V1)->get<uint64_t>(), pack_string_stat("apple"));
+    ASSERT_EQ(stat_value(stats, ColumnStatTypeInternal::MAX_STR_V1)->get<uint64_t>(), pack_string_stat("cherry"));
+}
+
+TEST(MinMaxAggregatorStrings, RepeatedSentinelsAreStillCountedPerRow) {
+    MinMaxAggregatorData aggregator{data_col_offset};
+    // Sentinels share one reserved offset, so deduplicating offsets must not reach them: the counts
+    // are per row, unlike min/max.
+    aggregator.aggregate(
+            build_string_column_with_nans({"alpha", std::nullopt, "alpha", std::nullopt, "nan", "nan"}, {4, 5})
+    );
+    const auto stats = aggregator.finalize();
+
+    ASSERT_EQ(count_stat(stats, ColumnStatTypeInternal::NULL_COUNT_V1), 2);
+    ASSERT_EQ(count_stat(stats, ColumnStatTypeInternal::NAN_COUNT_V1), 2);
+    ASSERT_EQ(stat_value(stats, ColumnStatTypeInternal::MIN_STR_V1)->get<uint64_t>(), pack_string_stat("alpha"));
+    ASSERT_EQ(stat_value(stats, ColumnStatTypeInternal::MAX_STR_V1)->get<uint64_t>(), pack_string_stat("alpha"));
+}
+
 TEST(MinMaxAggregatorStrings, NoneSentinelCountsAsNull) {
     MinMaxAggregatorData aggregator{data_col_offset};
     aggregator.aggregate(build_string_column({"beta", std::nullopt, "alpha", std::nullopt}));
@@ -192,6 +218,15 @@ TEST(MinMaxAggregatorStrings, FixedWidthPaddingIsStripped) {
     // Without stripping, the trailing nulls would pack as a seven byte value rather than "ab", and
     // the stat would compare wrongly against a query for "ab".
     ASSERT_EQ(stat_value(stats, ColumnStatTypeInternal::MIN_STR_V1)->get<uint64_t>(), pack_string_stat("ab"));
+}
+
+TEST(MinMaxAggregatorStrings, FixedWidthRepeatedOffsetsAreSkippedWithoutLosingMinMax) {
+    MinMaxAggregatorData aggregator{data_col_offset};
+    aggregator.aggregate(build_string_column({"zz", "aa", "zz", "aa"}, DataType::UTF_FIXED64, /*fixed_width=*/8));
+    const auto stats = aggregator.finalize();
+
+    ASSERT_EQ(stat_value(stats, ColumnStatTypeInternal::MIN_STR_V1)->get<uint64_t>(), pack_string_stat("aa"));
+    ASSERT_EQ(stat_value(stats, ColumnStatTypeInternal::MAX_STR_V1)->get<uint64_t>(), pack_string_stat("zz"));
 }
 
 TEST(MinMaxAggregatorStrings, FixedWidthUtf32PacksLikeUtf8) {
