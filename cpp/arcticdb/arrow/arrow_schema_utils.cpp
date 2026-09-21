@@ -12,11 +12,13 @@
 
 namespace arcticdb {
 
-ArrowTransformedSchema make_schema_arrow_compatible(const OutputSchema& input_schema) {
+ArrowTransformedSchema make_schema_arrow_compatible(
+        const OutputSchema& input_schema, ARCTICDB_UNUSED const std::optional<std::vector<std::string>>& index_columns
+) {
     const auto& desc = input_schema.stream_descriptor();
     const auto& norm = input_schema.norm_metadata_;
     const auto& pandas_common = norm.has_df() ? norm.df().common() : norm.series().common();
-    const bool unnamed_series = norm.has_df() ? false : !pandas_common.has_name() and pandas_common.name().empty();
+    const bool unnamed_series = norm.has_series() && (!pandas_common.has_name() and pandas_common.name().empty());
     const auto pandas_indexes = [&pandas_common]() -> size_t {
         if (pandas_common.has_index()) {
             // TODO: Handle len(item) == 0 case from ArrowTableNormalizer.denormalize
@@ -196,8 +198,8 @@ ArrowTransformedSchema make_schema_arrow_compatible(const OutputSchema& input_sc
             multi_index_meta.set_name(std::string(new_fields.begin()->name()));
         }
     }
-    bool changed = !column_renames.empty() || !google::protobuf::util::MessageDifferencer::Equals(output_norm, norm);
-
+    const bool changed =
+            !column_renames.empty() || !google::protobuf::util::MessageDifferencer::Equals(output_norm, norm);
     return ArrowTransformedSchema{changed, {std::move(output_desc), std::move(output_norm)}, column_renames};
 }
 

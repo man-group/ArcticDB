@@ -21,6 +21,8 @@ struct ArrowTransformedSchema {
     ankerl::unordered_dense::map<std::string, std::string> column_renames_;
 };
 
-ArrowTransformedSchema make_schema_arrow_compatible(const OutputSchema& input_schema);
+ArrowTransformedSchema make_schema_arrow_compatible(
+        const OutputSchema& input_schema, const std::optional<std::vector<std::string>>& index_columns
+);
 
 } // namespace arcticdb

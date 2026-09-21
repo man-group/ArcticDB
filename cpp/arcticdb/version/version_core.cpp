@@ -3692,7 +3692,7 @@ folly::Future<std::optional<AtomKey>> async_rename_columns_arrow_compat_impl(
                     return std::nullopt;
                 }
                 OutputSchema original_schema{original_tsd.as_stream_descriptor(), original_tsd.normalization()};
-                ARCTICDB_UNUSED auto arrow_transformed_schema = make_schema_arrow_compatible(original_schema);
+                auto arrow_transformed_schema = make_schema_arrow_compatible(original_schema, index_columns);
                 if (!arrow_transformed_schema.changed_) {
                     return std::nullopt;
                 }
