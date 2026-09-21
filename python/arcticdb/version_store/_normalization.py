@@ -790,6 +790,7 @@ class ArrowTableNormalizer(Normalizer):
 
     def denormalize(self, item, norm_meta):
         # type: (pa.Table, NormalizationMetadata) -> pa.Table
+        # TODO: A lot of this logic also has a C++ implementation, consider calling that from here to avoid duplication
         def num_pandas_index_cols(pandas_meta):
             index_type = pandas_meta.WhichOneof("index_type")
             if index_type == "index":

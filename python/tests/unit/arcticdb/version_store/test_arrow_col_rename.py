@@ -552,12 +552,20 @@ def test_noop_with_arrow_written_data(in_memory_version_store_arrow):
     assert lib.read_metadata(sym).version == 0
 
 
+def test_exception_with_recursively_normalized_data(in_memory_version_store):
+    lib = in_memory_version_store
+    sym = "test_exception_with_recursively_normalized_data"
+    lib.write(sym, {"a": pd.DataFrame({"col": [0]})}, recursive_normalizers=True)
+    with pytest.raises(SchemaException):
+        lib.rename_columns_arrow_compat(sym)
+
+
 def test_exception_with_pickled_data(in_memory_version_store):
     lib = in_memory_version_store
     sym = "test_exception_with_pickled_data"
     lib.write(sym, "hello")
     assert lib.is_symbol_pickled(sym)
-    with pytest.raises(UserInputException):
+    with pytest.raises(SchemaException):
         lib.rename_columns_arrow_compat(sym)
 
 
@@ -566,7 +574,7 @@ def test_exception_with_numpy_array(in_memory_version_store):
     sym = "test_exception_with_numpy_array"
     lib.write(sym, np.arange(1))
     assert not lib.is_symbol_pickled(sym)
-    with pytest.raises(UserInputException):
+    with pytest.raises(SchemaException):
         lib.rename_columns_arrow_compat(sym)
 
 

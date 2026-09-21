@@ -214,6 +214,7 @@ set(arcticdb_srcs
         # header files
         arrow/arrow_handlers.hpp
         arrow/arrow_c_interface.hpp
+        arrow/arrow_schema_utils.hpp
         arrow/arrow_utils.hpp
         async/async_store.hpp
         async/batch_read_args.hpp
@@ -472,6 +473,7 @@ set(arcticdb_srcs
         # CPP files
         arrow/arrow_handlers.cpp
         arrow/arrow_c_interface.cpp
+        arrow/arrow_schema_utils.cpp
         arrow/arrow_utils.cpp
         async/async_store.cpp
         async/bit_rate_stats.cpp
