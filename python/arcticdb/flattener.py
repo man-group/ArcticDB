@@ -48,10 +48,8 @@ class Flattener:
 
     def __init__(self):
         self.custom_normalizer = get_custom_normalizer(False)
-        self.meta_structure_v2 = get_config_int("VersionStore.RecursiveNormalizerMetastructure") == 2
-        self.meta_structure_v1_deprecation_warning = (
-            get_config_int("VersionStore.RecursiveNormalizerMetastructureV1DeprecationWarning") != 0
-        )
+        # V2 is the default since v7.0.0; V1 must be opted into explicitly for readers < v6.7.0
+        self.meta_structure_v2 = get_config_int("VersionStore.RecursiveNormalizerMetastructure") != 1
 
     @staticmethod
     def is_named_tuple(obj):
