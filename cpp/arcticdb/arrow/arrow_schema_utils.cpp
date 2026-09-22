@@ -72,17 +72,19 @@ ArrowTransformedSchema make_schema_arrow_compatible(
     ankerl::unordered_dense::set<std::string> taken_column_names;
     if (pandas_common.has_index()) {
         const auto& index_meta = pandas_common.index();
-        if (index_meta.fake_name()) {
-            std::string new_name{"__index__"};
-            while (original_column_names.contains(new_name)) {
-                new_name = fmt::format("_{}_", new_name);
+        if (index_meta.is_physically_stored()) {
+            if (index_meta.fake_name()) {
+                std::string new_name{"__index__"};
+                while (original_column_names.contains(new_name)) {
+                    new_name = fmt::format("_{}_", new_name);
+                }
+                taken_column_names.insert(new_name);
+                column_renames[std::string(desc.field(0).name())] = new_name;
+            } else {
+                // Is this really necessary?
+                column_renames[std::string(desc.field(0).name())] = index_meta.name();
+                taken_column_names.insert(index_meta.name());
             }
-            taken_column_names.insert(new_name);
-            column_renames[std::string(desc.field(0).name())] = new_name;
-        } else {
-            // Is this really necessary?
-            column_renames[std::string(desc.field(0).name())] = index_meta.name();
-            taken_column_names.insert(index_meta.name());
         }
     } else { // multiindex
         const auto& multi_index_meta = pandas_common.multi_index();
@@ -117,12 +119,11 @@ ArrowTransformedSchema make_schema_arrow_compatible(
         if (unnamed_series || pandas_common.col_names().contains(field->name())) {
             std::string new_name;
             if (unnamed_series) {
-                new_name = "";
+                new_name = "__empty__";
             } else if (pandas_common.col_names().at(field->name()).is_none()) {
                 new_name = "None";
             } else if (pandas_common.col_names().at(field->name()).is_empty()) {
-                // TODO: Use __empty__ here and in ArrowTableNormalizer.denormalize
-                new_name = "";
+                new_name = "__empty__";
             } else if (pandas_common.col_names().at(field->name()).is_int()) {
                 new_name = pandas_common.col_names().at(field->name()).original_name();
             } else if (pandas_common.col_names().at(field->name()).original_name() != field->name()) {
@@ -170,13 +171,9 @@ ArrowTransformedSchema make_schema_arrow_compatible(
 
     if (output_norm.has_series()) {
         auto& series_meta = *output_norm.mutable_series();
-        if (series_meta.has_synthetic_columns()) {
-            series_meta.set_has_synthetic_columns(false);
-        }
-        if (!common.has_name()) {
-            common.set_has_name(true);
-            common.set_name(std::string(std::prev(new_fields.end())->name()));
-        }
+        series_meta.set_has_synthetic_columns(false);
+        common.set_has_name(true);
+        common.set_name(std::string(new_fields.at(new_fields.size() - 1).name()));
     } else {
         auto& df_meta = *output_norm.mutable_df();
         if (df_meta.has_synthetic_columns()) {

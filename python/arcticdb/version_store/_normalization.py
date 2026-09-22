@@ -933,12 +933,14 @@ class ArrowTableNormalizer(Normalizer):
                 # Protobuf map subscripting inserts a default entry for missing keys, so only look up when present
                 col_data = pandas_meta.col_names[col] if not unnamed_series else None
                 if unnamed_series:
+                    # TODO: Use __empty__ here
                     renames_for_pandas_metadata[i] = None
                     new_name = ""
                 elif col_data.is_none:
                     renames_for_pandas_metadata[i] = None
                     new_name = "None"
                 elif col_data.is_empty:
+                    # TODO: Use __empty__ here
                     renames_for_pandas_metadata[i] = ""
                     new_name = ""
                 elif col_data.is_int:

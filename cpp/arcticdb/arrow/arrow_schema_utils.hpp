@@ -22,7 +22,7 @@ struct ArrowTransformedSchema {
 };
 
 ArrowTransformedSchema make_schema_arrow_compatible(
-        const OutputSchema& input_schema, const std::optional<std::vector<std::string>>& index_columns
+        const OutputSchema& input_schema, const std::optional<std::vector<std::string>>& index_columns = std::nullopt
 );
 
 } // namespace arcticdb
