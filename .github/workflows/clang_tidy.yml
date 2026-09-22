@@ -1,8 +1,8 @@
 name: clang-tidy
 
-# Called by analysis_workflow.yml for pull requests, master pushes and the nightly cron, and
-# dispatchable on its own for a full sweep on demand: dispatching analysis_workflow.yml would
-# also start the benchmarks, the ASV checks and the sanitizer job.
+# Called by analysis_workflow.yml for pull requests and the nightly cron (not on master
+# pushes), and dispatchable on its own for a full sweep on demand: dispatching
+# analysis_workflow.yml would also start the benchmarks, the ASV checks and the sanitizer job.
 on:
   workflow_call:
     inputs:
@@ -62,7 +62,7 @@ jobs:
     defaults:
       run: {shell: bash}
     steps:
-      - uses: actions/checkout@v3.3.0
+      - uses: actions/checkout@v7
         with:
           lfs: 'true'
           # Full history so the pull request base commit is present for the diff
@@ -117,7 +117,7 @@ jobs:
 
       - name: Configure sccache
         if: steps.changes.outputs.cpp_changed == 'true'
-        uses: mozilla-actions/sccache-action@v0.0.9
+        uses: mozilla-actions/sccache-action@v0.0.11
         with:
           version: "v0.10.0"
           disable_annotations: 'true'  # supress noisy report that pollutes the summary page
@@ -226,7 +226,7 @@ jobs:
       # cannot succeed there. Those runs fall back to the step summary and the job log.
       - name: Upload SARIF to code scanning
         if: always() && steps.changes.outputs.cpp_changed == 'true'
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         continue-on-error: true
         with:
           sarif_file: clang-tidy.sarif
@@ -243,7 +243,7 @@ jobs:
 
       - name: Upload clang-tidy artifacts
         if: always() && steps.changes.outputs.artifacts == 'true' && steps.changes.outputs.cpp_changed == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: clang-tidy-report
           path: |

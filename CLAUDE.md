@@ -208,10 +208,12 @@ Everything lives in `clang_tidy.yml`, which declares both `workflow_call` and
 
 | Trigger | Scope | Artifacts |
 |---|---|---|
-| Called by `analysis_workflow.yml` on a pull request | changed lines only | no |
-| Called by `analysis_workflow.yml` on a master push | all of `cpp/arcticdb` | no |
+| Called by `analysis_workflow.yml` on a pull request | changed lines only | yes |
 | Called by `analysis_workflow.yml` on the nightly cron | all of `cpp/arcticdb` | yes |
 | Dispatched directly | all of `cpp/arcticdb` | yes |
+
+It does not run on a master push (a merge): only pull requests, the nightly cron and a
+manual dispatch trigger it.
 
 Dispatch it from the Actions tab to run a full sweep on demand; dispatching
 `analysis_workflow.yml` would also start the benchmarks, the ASV checks and the sanitizer

@@ -254,15 +254,18 @@ jobs:
   # the PR without blocking the merge.
   clang-tidy:
     needs: [detect_changes]
-    if: ${{ !cancelled() && needs.detect_changes.outputs.docs_only != 'true' }}
+    # Skipped on master pushes (merges): clang-tidy only runs when a pull request is opened
+    # or updated, on the nightly cron, and on a manual dispatch.
+    if: ${{ !cancelled() && needs.detect_changes.outputs.docs_only != 'true' && github.event_name != 'push' }}
     uses: ./.github/workflows/clang_tidy.yml
     secrets: inherit
     permissions: {contents: read, security-events: write}
     with:
-      # Pull requests are analysed on changed lines only; master pushes, the nightly cron
-      # and a dispatch of this workflow analyse everything.
+      # Pull requests are analysed on changed lines only; the nightly cron and a dispatch of
+      # this workflow analyse everything.
       full_codebase: ${{ github.event_name != 'pull_request' }}
-      upload_artifacts: ${{ github.event_name == 'schedule' }}
+      # Build and upload the HTML report on pull requests and on the nightly cron.
+      upload_artifacts: ${{ github.event_name == 'pull_request' || github.event_name == 'schedule' }}
 
   # ========================= Sanitizers ========================
   sanitizer-address-leak-undefined:
