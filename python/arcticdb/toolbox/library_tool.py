@@ -13,6 +13,7 @@ from arcticdb_ext.storage import KeyType
 from arcticdb_ext.stream import SegmentInMemory
 from arcticdb_ext.tools import LibraryTool as LibraryToolImpl
 from arcticdb_ext.version_store import AtomKey, RefKey
+from arcticdb.version_store._defaults import resolve_defaults
 from arcticdb.version_store._normalization import (
     denormalize_dataframe,
     normalize_dataframe,
@@ -189,8 +190,6 @@ class LibraryTool(LibraryToolImpl):
 
     def normalize_dataframe_with_nvs_defaults(self, df: pd.DataFrame):
         # TODO: Have a unified place where we resolve all the normalization parameters and use that here.
-
-        from arcticdb.version_store._store import resolve_defaults
 
         # Currently all these parameters are resolved in various places throughout the _store.py. This can result in
         # different defaults for different operations which is not desirable.
