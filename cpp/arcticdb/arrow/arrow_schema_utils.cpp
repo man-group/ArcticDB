@@ -43,10 +43,7 @@ ArrowTransformedSchema make_schema_arrow_compatible(
                 if (index_col_idx == 0) {
                     original_column_names.insert(multi_index_meta.name());
                 } else {
-                    auto raw_field_name = desc.field(index_col_idx).name();
-                    // Strip "__idx__" prefix
-                    std::string stripped_field_name{raw_field_name.substr(7)};
-                    original_column_names.insert(stripped_field_name);
+                    original_column_names.insert(desc.field(index_col_idx).name());
                 }
             }
         }
@@ -103,7 +100,7 @@ ArrowTransformedSchema make_schema_arrow_compatible(
                 column_renames[std::string(desc.field(index_col_idx).name())] = multi_index_meta.name();
                 taken_column_names.insert(multi_index_meta.name());
             } else {
-                std::string new_name{desc.field(index_col_idx).name().substr(7)};
+                std::string new_name{desc.field(index_col_idx).name()};
                 while (taken_column_names.contains(new_name)) {
                     new_name = fmt::format("_{}_", new_name);
                 }
@@ -161,11 +158,13 @@ ArrowTransformedSchema make_schema_arrow_compatible(
             (*common.mutable_col_names())[it->second].set_original_name(it->second);
         } else {
             new_fields.add_field(old_field->type(), old_field->name());
-            auto& col_data = (*common.mutable_col_names())[old_field->name()];
-            col_data.set_is_none(false);
-            col_data.set_is_empty(false);
-            col_data.set_original_name(std::string(old_field->name()));
-            col_data.set_is_int(false);
+            if (common.col_names().contains(old_field->name())) {
+                auto& col_data = (*common.mutable_col_names())[old_field->name()];
+                col_data.set_is_none(false);
+                col_data.set_is_empty(false);
+                col_data.set_original_name(std::string(old_field->name()));
+                col_data.set_is_int(false);
+            }
         }
     }
 

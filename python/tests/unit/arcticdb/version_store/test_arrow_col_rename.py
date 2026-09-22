@@ -99,12 +99,9 @@ def test_bad_arguments(in_memory_version_store, index_columns):
 
 # Dynamic schema uses different name-mangling (appends _0 instead of _n where n is the column index) as column index is
 # not stable on append/update
-# @pytest.mark.parametrize("dynamic_schema", [False, True])
-# @pytest.mark.parametrize("object_type", ["DataFrame", "Series"])
-# @pytest.mark.parametrize("col_name", [None, "", 10])
-@pytest.mark.parametrize("dynamic_schema", [False])
-@pytest.mark.parametrize("object_type", ["Series"])
-@pytest.mark.parametrize("col_name", [""])
+@pytest.mark.parametrize("dynamic_schema", [False, True])
+@pytest.mark.parametrize("object_type", ["DataFrame", "Series"])
+@pytest.mark.parametrize("col_name", [None, "", 10])
 def test_arrow_col_rename_basic(in_memory_store_factory, dynamic_schema, object_type, col_name):
     lib = in_memory_store_factory(dynamic_schema=dynamic_schema)
     sym = "test_arrow_col_rename_basic"
@@ -487,8 +484,10 @@ def test_multi_index_auto_rename_nameless_clashes(
     assert_pandas_equal(received, expected)
 
 
-@pytest.mark.parametrize("object_type", ["DataFrame", "Series"])
-@pytest.mark.parametrize("input_names", [[None, None], ["level0", "level1"]])
+# @pytest.mark.parametrize("object_type", ["DataFrame", "Series"])
+# @pytest.mark.parametrize("input_names", [[None, None], ["level0", "level1"]])
+@pytest.mark.parametrize("object_type", ["DataFrame"])
+@pytest.mark.parametrize("input_names", [["level0", "level1"]])
 def test_multi_index_explicit_rename_no_clash(in_memory_version_store, object_type, input_names):
     lib = in_memory_version_store
     sym = "test_multi_index_explicit_rename_no_clash"

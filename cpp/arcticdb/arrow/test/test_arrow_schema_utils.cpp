@@ -36,10 +36,35 @@ struct ColumnSpec {
 
 enum class ObjectType { DF, SERIES };
 
-Index row_count_index() {
+Index row_count_index(int64_t start = 0, int64_t step = 1) {
     Index index;
-    index.set_step(1);
+    index.set_start(start);
+    index.set_step(step);
     return index;
+}
+
+Index timestamp_index(const std::string& name, std::optional<std::string> tz) {
+    Index index;
+    index.set_is_physically_stored(true);
+    index.set_name(name);
+    if (tz.has_value()) {
+        index.set_tz(*tz);
+    }
+    return index;
+}
+
+MultiIndex multiindex(const std::vector<std::optional<std::string>>& names) {
+    MultiIndex multiindex;
+    multiindex.set_field_count(names.size() - 1);
+    if (names.front().has_value()) {
+        multiindex.set_name(*names.front());
+    }
+    for (size_t idx = 0; idx < names.size(); ++idx) {
+        if (!names.at(idx).has_value()) {
+            multiindex.add_fake_field_pos(idx);
+        }
+    }
+    return multiindex;
 }
 
 OutputSchema generate_schema(
@@ -110,6 +135,7 @@ TEST_P(ArrowSchemaCompatibleBasic, Basic) {
     auto [changed, new_schema, column_renames] = make_schema_arrow_compatible(original_schema);
     ASSERT_TRUE(changed);
     auto expected_schema = generate_schema(object_type(), false, index, {output_column_spec()});
+    // TODO: Remove report throughout this file once all tests passing
     std::string report;
     MessageDifferencer differ;
     differ.ReportDifferencesToString(&report);
@@ -152,3 +178,83 @@ INSTANTIATE_TEST_SUITE_P(
                 )
         )
 );
+
+TEST(ArrowSchemaCompatibleValidSchema, RangeIndexDf) {
+    auto index = row_count_index(10, 2);
+    auto original_schema = generate_schema(ObjectType::DF, false, index, {{"col", .original_name = "col"}});
+    auto [changed, new_schema, column_renames] = make_schema_arrow_compatible(original_schema);
+    ASSERT_FALSE(changed);
+    ASSERT_TRUE(MessageDifferencer::Equals(new_schema.norm_metadata_, original_schema.norm_metadata_));
+    ASSERT_TRUE(column_renames.empty());
+}
+
+TEST(ArrowSchemaCompatibleValidSchema, TimeseriesDf) {
+    auto index = timestamp_index("ts", "UTC");
+    auto original_schema = generate_schema(
+            ObjectType::DF,
+            false,
+            index,
+            {{"ts", .data_type = DataType::NANOSECONDS_UTC64}, {"col", .original_name = "col"}}
+    );
+    auto [changed, new_schema, column_renames] = make_schema_arrow_compatible(original_schema);
+    ASSERT_FALSE(changed);
+    ASSERT_TRUE(MessageDifferencer::Equals(new_schema.norm_metadata_, original_schema.norm_metadata_));
+    ASSERT_TRUE(column_renames.empty());
+}
+
+TEST(ArrowSchemaCompatibleValidSchema, MultiIndexDf) {
+    auto index = multiindex({"ts", "ticker"});
+    index.set_tz("UTC");
+    auto original_schema = generate_schema(
+            ObjectType::DF,
+            false,
+            index,
+            {{"ts", .data_type = DataType::NANOSECONDS_UTC64},
+             {"__idx__ticker", .original_name = "__idx__ticker"},
+             {"col", .original_name = "col"}}
+    );
+    auto [changed, new_schema, column_renames] = make_schema_arrow_compatible(original_schema);
+    ASSERT_FALSE(changed);
+    ASSERT_TRUE(MessageDifferencer::Equals(new_schema.norm_metadata_, original_schema.norm_metadata_));
+    ASSERT_TRUE(column_renames.empty());
+}
+
+TEST(ArrowSchemaCompatibleValidSchema, RangeIndexSeries) {
+    auto index = row_count_index(10, 2);
+    auto original_schema = generate_schema(ObjectType::SERIES, false, index, {{"col", .original_name = "col"}});
+    auto [changed, new_schema, column_renames] = make_schema_arrow_compatible(original_schema);
+    ASSERT_FALSE(changed);
+    ASSERT_TRUE(MessageDifferencer::Equals(new_schema.norm_metadata_, original_schema.norm_metadata_));
+    ASSERT_TRUE(column_renames.empty());
+}
+
+TEST(ArrowSchemaCompatibleValidSchema, TimeseriesSeries) {
+    auto index = timestamp_index("ts", "UTC");
+    auto original_schema = generate_schema(
+            ObjectType::SERIES,
+            false,
+            index,
+            {{"ts", .data_type = DataType::NANOSECONDS_UTC64}, {"col", .original_name = "col"}}
+    );
+    auto [changed, new_schema, column_renames] = make_schema_arrow_compatible(original_schema);
+    ASSERT_FALSE(changed);
+    ASSERT_TRUE(MessageDifferencer::Equals(new_schema.norm_metadata_, original_schema.norm_metadata_));
+    ASSERT_TRUE(column_renames.empty());
+}
+
+TEST(ArrowSchemaCompatibleValidSchema, MultiIndexSeries) {
+    auto index = multiindex({"ts", "ticker"});
+    index.set_tz("UTC");
+    auto original_schema = generate_schema(
+            ObjectType::SERIES,
+            false,
+            index,
+            {{"ts", .data_type = DataType::NANOSECONDS_UTC64},
+             {"__idx__ticker", .original_name = "__idx__ticker"},
+             {"col", .original_name = "col"}}
+    );
+    auto [changed, new_schema, column_renames] = make_schema_arrow_compatible(original_schema);
+    ASSERT_FALSE(changed);
+    ASSERT_TRUE(MessageDifferencer::Equals(new_schema.norm_metadata_, original_schema.norm_metadata_));
+    ASSERT_TRUE(column_renames.empty());
+}
