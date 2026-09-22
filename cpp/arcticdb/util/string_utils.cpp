@@ -82,4 +82,10 @@ uint64_t TransparentStringHash::operator()(std::string_view str) const noexcept 
     return ankerl::unordered_dense::hash<std::string_view>{}(str);
 }
 
+// Deliberate clang-tidy trigger (performance-unnecessary-value-param): value is taken by value
+// but only ever read, so clang-tidy flags it while the code compiles cleanly.
+std::string clang_tidy_ci_probe(std::string value) {
+    return safe_encode(value);
+}
+
 } // namespace arcticdb::util
