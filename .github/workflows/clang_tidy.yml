@@ -108,6 +108,9 @@ jobs:
         if: steps.changes.outputs.cpp_changed == 'true'
         run: |
           dnf install -y "clang-tools-extra-$CLANG_TOOLS_EXTRA_VERSION"
+          # clang-tidy-diff.py's -export-fixes merges fixes into one YAML file, which needs
+          # PyYAML; this installs it into the dnf python3.11 the later steps call directly.
+          dnf install -y python3.11-pyyaml
           clang-tidy --version
 
       # Fails fast on a typo in a check name or an unknown key, before the expensive configure.
@@ -163,7 +166,7 @@ jobs:
         run: |
           set -euo pipefail
           git diff -U0 --no-color "${{ steps.changes.outputs.base_sha }}...HEAD" -- '*.cpp' '*.hpp' \
-            | python3 /usr/share/clang/clang-tidy-diff.py -p1 \
+            | python3.11 /usr/share/clang/clang-tidy-diff.py -p1 \
                 -path "cpp/out/$ARCTIC_CMAKE_PRESET-build" \
                 -j "$CMAKE_BUILD_PARALLEL_LEVEL" -quiet \
                 -export-fixes fixes.yml 2>&1 | tee clang-tidy.log
@@ -172,7 +175,7 @@ jobs:
         if: steps.changes.outputs.cpp_changed == 'true' && steps.changes.outputs.mode == 'full'
         run: |
           set -euo pipefail
-          python3 /usr/share/clang/run-clang-tidy.py \
+          python3.11 /usr/share/clang/run-clang-tidy.py \
             -p "cpp/out/$ARCTIC_CMAKE_PRESET-build" \
             -j "$CMAKE_BUILD_PARALLEL_LEVEL" -quiet \
             -export-fixes fixes.yml \
@@ -203,9 +206,10 @@ jobs:
             echo "No clang-tidy log; skipping SARIF conversion."
             exit 0
           fi
-          curl -sSfL -o /usr/local/bin/clang-tidy-sarif \
-            "https://github.com/psastras/sarif-rs/releases/download/clang-tidy-sarif-v${CLANG_TIDY_SARIF_VERSION}/clang-tidy-sarif-x86_64-unknown-linux-gnu"
-          chmod +x /usr/local/bin/clang-tidy-sarif
+          # Build from source instead of the prebuilt gnu binary: that release needs a newer
+          # glibc than this container has and crashes on launch.
+          dnf install -y rust cargo
+          cargo install clang-tidy-sarif --version "$CLANG_TIDY_SARIF_VERSION" --locked --root /usr/local
           clang-tidy-sarif < clang-tidy.log > clang-tidy.sarif
 
           # compile_commands.json holds absolute paths, so the conversion emits absolute URIs.
