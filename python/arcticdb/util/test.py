@@ -229,6 +229,16 @@ assert_frame_equal = maybe_not_check_freq(pd.testing.assert_frame_equal)
 assert_series_equal = maybe_not_check_freq(pd.testing.assert_series_equal)
 
 
+def assert_pandas_equal(expected, actual, **kwargs):
+    assert type(expected) is type(actual)
+    if isinstance(expected, pd.DataFrame):
+        assert_frame_equal(expected, actual, **kwargs)
+    elif isinstance(expected, pd.Series):
+        assert_series_equal(expected, actual, **kwargs)
+    else:
+        assert False, f"Unexpected type {type(expected)} in assert_pandas_equal"
+
+
 def assert_series_equal_pandas_1(expected: pd.Series, actual: pd.Series, **kwargs):
     """For Pandas 1 type of empty series will be float64 when returned by arctic"""
     if IS_PANDAS_ONE:

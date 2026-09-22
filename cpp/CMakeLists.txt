@@ -51,6 +51,7 @@ set(ARCTICDB_COMPILER_CACHE_PATH "" CACHE FILEPATH
 set_arcticdb_compiler_cache()
 
 set(ARCTICDB_SANITIZER_FLAGS)
+link_libraries(atomic)
 if(${ARCTICDB_USING_ADDRESS_SANITIZER})
     # Note: -shared-libasan is not needed for sanitizers to work correctly.
     list(APPEND ARCTICDB_SANITIZER_FLAGS "-fsanitize=address")

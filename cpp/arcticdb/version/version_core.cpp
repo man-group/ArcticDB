@@ -6,6 +6,7 @@
  * will be governed by the Apache License, version 2.0.
  */
 
+#include <arcticdb/arrow/arrow_schema_utils.hpp>
 #include <arcticdb/version/version_core.hpp>
 #include <arcticdb/column_store/column_algorithms.hpp>
 #include <arcticdb/column_store/column_reslicer.hpp>
@@ -3655,6 +3656,43 @@ folly::Future<std::optional<AtomKey>> async_compact_data_impl(
                                             });
                                 }
                         );
+            });
+}
+
+folly::Future<std::optional<AtomKey>> async_rename_columns_arrow_compat_impl(
+        const std::shared_ptr<Store>& store, const UpdateInfo& update_info,
+        const std::optional<std::vector<std::string>>& index_columns
+) {
+    // Once column stats are fully supported, the rename will also need to be applied to the column stats key
+    // TODO: Add a ticket to the column stats epic and link to it here
+    return read_index_key_without_column_stats(store, *update_info.previous_index_key_)
+            .via(&async::cpu_executor())
+            .thenValue([store, update_info, index_columns](auto&& index_information) -> std::optional<AtomKey> {
+                const auto& original_tsd = index_information.index_.second.index_descriptor();
+                schema::check<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_RECURSIVE_NORMALIZED_DATA>(
+                        variant_key_type(index_information.index_.first) == KeyType::TABLE_INDEX,
+                        "rename_columns_arrow_compat not supported with recursively normalized data"
+                );
+                schema::check<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_PICKLED_DATA>(
+                        !original_tsd.normalization().has_msg_pack_frame(),
+                        "rename_columns_arrow_compat not supported with pickled data"
+                );
+                schema::check<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_NUMPY_ARRAY>(
+                        !original_tsd.normalization().has_np(),
+                        "rename_columns_arrow_compat not supported with numpy arrays"
+                );
+                if (original_tsd.normalization().has_experimental_arrow()) {
+                    return std::nullopt;
+                }
+                OutputSchema original_schema{original_tsd.as_stream_descriptor(), original_tsd.normalization()};
+                auto arrow_transformed_schema = make_schema_arrow_compatible(original_schema, index_columns);
+                if (!arrow_transformed_schema.changed_) {
+                    return std::nullopt;
+                }
+
+                ARCTICDB_UNUSED VersionIdentifier resolved =
+                        std::make_shared<IndexInformation>(std::move(index_information));
+                return std::nullopt;
             });
 }
 
