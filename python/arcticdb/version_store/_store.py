@@ -1486,11 +1486,11 @@ class NativeVersionStore:
         --------
 
         >>> lib.batch_read(
-                ['1', '2', '3'],  # Three symbols to read in batch mode
-                date_ranges=[
-                    (pd.Timestamp('2000-01-01 00:00:00'), pd.Timestamp('2000-02-01 00:00:00'))
-                ]*3  # Note that number of date ranges must match number of symbols
-            )
+        ...         ['1', '2', '3'],  # Three symbols to read in batch mode
+        ...         date_ranges=[
+        ...             (pd.Timestamp('2000-01-01 00:00:00'), pd.Timestamp('2000-02-01 00:00:00'))
+        ...         ]*3  # Note that number of date ranges must match number of symbols
+        ...     )
 
         Returns
         -------
@@ -1614,19 +1614,19 @@ class NativeVersionStore:
         Join 2 symbols together without any pre or post processing.
 
         >>> df0 = pd.DataFrame(
-            {
-                "col1": [0.5],
-                "col2": [1],
-            },
-            index=[pd.Timestamp("2025-01-01")],
-        )
+        ...     {
+        ...         "col1": [0.5],
+        ...         "col2": [1],
+        ...     },
+        ...     index=[pd.Timestamp("2025-01-01")],
+        ... )
         >>> df1 = pd.DataFrame(
-            {
-                "col3": ["hello"],
-                "col2": [2],
-            },
-            index=[pd.Timestamp("2025-01-02")],
-        )
+        ...     {
+        ...         "col3": ["hello"],
+        ...         "col2": [2],
+        ...     },
+        ...     index=[pd.Timestamp("2025-01-02")],
+        ... )
         >>> q = adb.QueryBuilder()
         >>> q = q.concat("outer")
         >>> lib.write("symbol0", df0)
@@ -1712,9 +1712,9 @@ class NativeVersionStore:
         --------
 
         >>> lib.batch_read_metadata(
-                ['1', '2', '3'],  # Three symbols to read in batch mode
-                as_ofs=[32, 33, 34]  # Note that number of as_ofs must match number of symbols
-            )
+        ...         ['1', '2', '3'],  # Three symbols to read in batch mode
+        ...         as_ofs=[32, 33, 34]  # Note that number of as_ofs must match number of symbols
+        ...     )
 
         Returns
         -------
@@ -1781,9 +1781,9 @@ class NativeVersionStore:
         --------
 
         >>> lib.batch_read_metadata_multi(
-                ['1', '1', '2'],  # Three symbols to read in batch mode
-                as_ofs=[32, 33, 34]  # Note that number of as_ofs must match number of symbols
-            )
+        ...         ['1', '1', '2'],  # Three symbols to read in batch mode
+        ...         as_ofs=[32, 33, 34]  # Note that number of as_ofs must match number of symbols
+        ...     )
 
         Returns
         -------
@@ -1874,9 +1874,9 @@ class NativeVersionStore:
         --------
 
         >>> lib.batch_write(
-                ['1', '2', '3'],  # Three symbols to write in one call
-                [df1, df2, df3],  # Three dataframes
-            )
+        ...         ['1', '2', '3'],  # Three symbols to write in one call
+        ...         [df1, df2, df3],  # Three dataframes
+        ...     )
 
         Returns
         -------
@@ -3083,7 +3083,7 @@ class NativeVersionStore:
           'date': Timestamp('2021-09-23 11:34:33.560910368+0000', tz='UTC'),
           'deleted': True,
           'snapshots': ["my_snapshot"]},
-        ...
+        >>>
 
         Returns
         -------
@@ -4119,7 +4119,7 @@ class NativeVersionStore:
 
         >>> df = pd.DataFrame({"col": np.arange(100_000)})
         >>> for idx in range(100):
-        >>>     lib.append("sym", df[idx * 1_000: (idx + 1) * 1_000])
+        ...     lib.append("sym", df[idx * 1_000: (idx + 1) * 1_000])
         >>> compact_data_info = lib.compact_data_explain_plan("sym")
         >>> compact_data_info.row_slices_before
         [0, 1000, 2000, ..., 99000, 100000]
@@ -4191,7 +4191,7 @@ class NativeVersionStore:
 
         >>> df = pd.DataFrame({"col": np.arange(100_000)})
         >>> for idx in range(100):
-        >>>     lib.append("sym", df[idx * 1_000: (idx + 1) * 1_000])
+        ...     lib.append("sym", df[idx * 1_000: (idx + 1) * 1_000])
         >>> len(lib.read_index("sym"))
         100
         >>> lib.compact_data("sym")
@@ -4262,7 +4262,7 @@ class NativeVersionStore:
         >>> df1 = pd.DataFrame({"col": np.arange(100_000)})
         >>> df2 = pd.DataFrame({"col": np.arange(200_000)})
         >>> for i in range(100):
-        >>>     lib.batch_append(["sym1", "sym2"], [df1[i * 1_000: (i + 1) * 1_000], df2[i * 2_000: (i + 1) * 2_000]])
+        ...     lib.batch_append(["sym1", "sym2"], [df1[i * 1_000: (i + 1) * 1_000], df2[i * 2_000: (i + 1) * 2_000]])
         >>> len(lib.read_index("sym1"))
         100
         >>> len(lib.read_index("sym2"))
@@ -4525,7 +4525,7 @@ class NativeVersionStore:
         --------
 
         >>> lib.write("symbol", pd.DataFrame({'a': [1, 2, 3]}, index=pd.DatetimeIndex([pd.Timestamp(1), pd.Timestamp(2), pd.Timestamp(3)])))
-        >>> lib.merge_experimental("symbol", pd.DataFrame({"a": [100, 200]}, index=pd.DatetimeIndex([pd.Timestamp(2), pd.Timestamp(4)])), strategy=MergeStrategy(matched="update", not_matched_by_target="do_nothing"))))
+        >>> lib.merge_experimental("symbol", pd.DataFrame({"a": [100, 200]}, index=pd.DatetimeIndex([pd.Timestamp(2), pd.Timestamp(4)])), strategy=MergeStrategy(matched="update", not_matched_by_target="do_nothing"))
         >>> lib.read("symbol").data
                                        a
         1970-01-01 00:00:00.000000001  1
