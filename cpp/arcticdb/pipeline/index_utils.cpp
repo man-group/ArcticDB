@@ -79,12 +79,11 @@ bool is_timeseries_or_empty_index(const IndexDescriptorImpl& index_desc) {
 
 RequiredFieldInfo required_fields_info(const proto::descriptors::NormalizationMetadata& norm_meta) {
     RequiredFieldInfo info;
-    // A one-dimensional Arrow structure is the Arrow spelling of a Series, so its single column is a required field.
-    // It is the value column, unless it was written as the index, in which case that is the only field there is.
-    const auto& arrow = norm_meta.experimental_arrow();
-    info.has_series_value_column = norm_meta.has_series() || (norm_meta.has_experimental_arrow() &&
-                                                              arrow.one_dimensional() && !arrow.has_index());
+    // We prefer the pandas metadata even for arrow since it's the only place we store information about multiindex
     if (const auto* common = pandas_common(norm_meta); common != nullptr) {
+        const auto* embedded_arrow = norm_meta.has_experimental_arrow() ? &norm_meta.experimental_arrow() : nullptr;
+        info.has_series_value_column =
+                norm_meta.has_series() || (embedded_arrow != nullptr && embedded_arrow->has_series());
         info.has_multi_index = common->has_multi_index();
         // The field count in the norm metadata is one less than the actual number of levels in the multi-index.
         // See index_norm.field_count = len(index.levels) - 1 in _normalization.py::_PandasNormalizer::_index_to_records
@@ -92,7 +91,11 @@ RequiredFieldInfo required_fields_info(const proto::descriptors::NormalizationMe
                                     : common->index().is_physically_stored() ? 1
                                                                              : 0;
     } else if (norm_meta.has_experimental_arrow()) {
-        info.num_physical_indices = norm_meta.experimental_arrow().has_index() ? 1 : 0;
+        const auto& arrow = norm_meta.experimental_arrow();
+        // A one-dimensional structure is the Arrow spelling of a Series, so its single column is a required field. It
+        // is the value column, unless it was written as the index, in which case that is the only field there is.
+        info.has_series_value_column = arrow.one_dimensional() && !arrow.has_index();
+        info.num_physical_indices = arrow.has_index() ? 1 : 0;
     }
     return info;
 }
