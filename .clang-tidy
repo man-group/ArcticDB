@@ -2,6 +2,7 @@
 Checks: >
   -*,
   bugprone-*,
+  -bugprone-easily-swappable-parameters,
   performance-*,
   modernize-use-ranges,
   modernize-use-constraints,
