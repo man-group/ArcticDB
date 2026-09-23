@@ -25,9 +25,10 @@ jobs:
   clang-tidy:
     name: analyse
     timeout-minutes: 180
-    runs-on: ubuntu-22.04
-    container:
-      image: ghcr.io/man-group/arcticdb-dev-clang:latest
+    # Stock GitHub-hosted ubuntu runner (glibc 2.39), not the manylinux arcticdb-dev-clang
+    # image: modern glibc runs the prebuilt clang-tidy-sarif and .NET tooling without a fight.
+    # The vcpkg build deps the image used to bake in are installed below.
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       security-events: write
@@ -49,15 +50,20 @@ jobs:
       CMAKE_CXX_COMPILER_LAUNCHER: sccache
       ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
       ARCTIC_CMAKE_PRESET: linux-debug
-      # Matches the clang-19.1.7 the dev-clang image pins: clang-tidy has to understand the
-      # flags in compile_commands.json, and clang-tools-extra is what ships clang-tidy plus
-      # the clang-tidy-diff.py / run-clang-tidy.py wrappers.
-      CLANG_TOOLS_EXTRA_VERSION: 19.1.7
+      # clang/clang-tidy come from the official LLVM binary release (installed below), not a
+      # package manager, so the exact 19.1.7 is pinned: clang-tidy has to understand the flags
+      # in compile_commands.json, and the release ships clang-tidy plus the clang-tidy-diff.py /
+      # run-clang-tidy.py wrappers. CC/CXX point both the vcpkg build and the configure at that
+      # clang so the compilation database is clang's, not gcc's.
+      CLANG_VERSION: 19.1.7
+      CLANG_HOME: /opt/clang-19.1.7
+      CC: /opt/clang-19.1.7/bin/clang
+      CXX: /opt/clang-19.1.7/bin/clang++
+      # cmake is pinned to match the dev images: a newer cmake's stricter -Werror=<category>
+      # validation breaks the vcpkg benchmark port.
+      CMAKE_VERSION: 3.31.6
       CLANG_TIDY_SARIF_VERSION: 0.8.0
       CLANG_HTML_VERSION: 1.6.1
-      # Sarif.Multitool targets net8.0, so the SDK has to be 8.0: a newer one ships no 8.0
-      # runtime and the tool refuses to start.
-      DOTNET_SDK_VERSION: "8.0"
       SARIF_MULTITOOL_VERSION: 5.7.0
     defaults:
       run: {shell: bash}
@@ -104,16 +110,45 @@ jobs:
             echo "No C++ changes; skipping clang-tidy." >> "$GITHUB_STEP_SUMMARY"
           fi
 
-      - name: Install clang-tidy
+      # Everything the vcpkg build needs that the manylinux dev image used to bake in. clang and
+      # clang-tidy are installed separately from the official LLVM release; awscli and .NET are
+      # already present on the ubuntu-24.04 runner. mono runs the vcpkg NuGet client.
+      - name: Install build dependencies
         if: steps.changes.outputs.cpp_changed == 'true'
         run: |
-          dnf install -y "clang-tools-extra-$CLANG_TOOLS_EXTRA_VERSION"
-          # clang-tidy-diff.py's -export-fixes merges fixes into one YAML file, which needs
-          # PyYAML. It lands in the dnf python3.11 (/usr/bin/python3.11), which the wrapper
-          # steps invoke by absolute path: /opt/python/cp311-cp311/bin precedes /usr/bin on
-          # PATH, so a bare python3.11 would hit the manylinux interpreter, which lacks it.
-          dnf install -y python3.11-pyyaml
-          clang-tidy --version
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential autoconf automake libtool autoconf-archive pkg-config \
+            flex bison ninja-build \
+            libkrb5-dev libsasl2-dev libssl-dev libcurl4-openssl-dev \
+            zip unzip tar jq wget curl git-lfs perl \
+            python3-yaml python3-pip pipx \
+            mono-complete
+
+      - name: Install clang and clang-tidy (official LLVM release)
+        if: steps.changes.outputs.cpp_changed == 'true'
+        run: |
+          set -euo pipefail
+          dir="clang+llvm-${CLANG_VERSION}-x86_64-linux-gnu-ubuntu-24.04"
+          curl -sSfL -O "https://github.com/llvm/llvm-project/releases/download/llvmorg-${CLANG_VERSION}/${dir}.tar.xz"
+          tar -xf "${dir}.tar.xz"
+          sudo mv "${dir}" "$CLANG_HOME"
+          echo "$CLANG_HOME/bin" >> "$GITHUB_PATH"
+
+      - name: Verify clang-tidy
+        if: steps.changes.outputs.cpp_changed == 'true'
+        run: "$CLANG_HOME/bin/clang-tidy --version"
+
+      # Pin cmake to match the dev images (see CMAKE_VERSION). pipx installs it into
+      # ~/.local/bin, prepended to PATH for the later steps.
+      - name: Install pinned CMake
+        if: steps.changes.outputs.cpp_changed == 'true'
+        run: |
+          set -euo pipefail
+          pipx install "cmake==${CMAKE_VERSION}"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          "$HOME/.local/bin/cmake" --version
 
       # Fails fast on a typo in a check name or an unknown key, before the expensive configure.
       - name: Verify .clang-tidy
@@ -126,11 +161,6 @@ jobs:
         with:
           version: "v0.10.0"
           disable_annotations: 'true'  # supress noisy report that pollutes the summary page
-
-      - name: Install AWS CLI
-        # For VCPKG source asset download from the S3 cache
-        if: steps.changes.outputs.cpp_changed == 'true'
-        run: yum install -y awscli
 
       - name: Extra envs
         if: steps.changes.outputs.cpp_changed == 'true'
@@ -162,13 +192,14 @@ jobs:
 
       # clang-tidy-diff.py restricts diagnostics to the changed lines via -line-filter, though
       # it still parses whole translation units, and it skips any file absent from the
-      # compilation database. Diagnostics go to stderr, hence the 2>&1.
+      # compilation database. Diagnostics go to stderr, hence the 2>&1. The wrappers ship in the
+      # LLVM release under share/clang; the system python3 has PyYAML (apt python3-yaml).
       - name: Run clang-tidy (changed lines)
         if: steps.changes.outputs.cpp_changed == 'true' && steps.changes.outputs.mode == 'diff'
         run: |
           set -euo pipefail
           git diff -U0 --no-color "${{ steps.changes.outputs.base_sha }}...HEAD" -- '*.cpp' '*.hpp' \
-            | /usr/bin/python3.11 /usr/share/clang/clang-tidy-diff.py -p1 \
+            | python3 "$CLANG_HOME/share/clang/clang-tidy-diff.py" -p1 \
                 -path "cpp/out/$ARCTIC_CMAKE_PRESET-build" \
                 -j "$CMAKE_BUILD_PARALLEL_LEVEL" -quiet \
                 -export-fixes fixes.yml 2>&1 | tee clang-tidy.log
@@ -177,7 +208,7 @@ jobs:
         if: steps.changes.outputs.cpp_changed == 'true' && steps.changes.outputs.mode == 'full'
         run: |
           set -euo pipefail
-          /usr/bin/python3.11 /usr/share/clang/run-clang-tidy.py \
+          python3 "$CLANG_HOME/share/clang/run-clang-tidy.py" \
             -p "cpp/out/$ARCTIC_CMAKE_PRESET-build" \
             -j "$CMAKE_BUILD_PARALLEL_LEVEL" -quiet \
             -export-fixes fixes.yml \
@@ -208,24 +239,24 @@ jobs:
             echo "No clang-tidy log; skipping SARIF conversion."
             exit 0
           fi
-          # Build from source instead of the prebuilt gnu binary: that release needs a newer
-          # glibc than this container has and crashes on launch.
-          dnf install -y rust cargo
-          cargo install clang-tidy-sarif --version "$CLANG_TIDY_SARIF_VERSION" --locked --root /usr/local
-          clang-tidy-sarif < clang-tidy.log > clang-tidy.sarif
+          # ubuntu-24.04's glibc (2.39) runs the prebuilt gnu binary directly, so no build step.
+          curl -sSfL -o clang-tidy-sarif \
+            "https://github.com/psastras/sarif-rs/releases/download/clang-tidy-sarif-v${CLANG_TIDY_SARIF_VERSION}/clang-tidy-sarif-x86_64-unknown-linux-gnu"
+          chmod +x clang-tidy-sarif
+          ./clang-tidy-sarif < clang-tidy.log > clang-tidy.sarif
 
           # compile_commands.json holds absolute paths, so the conversion emits absolute URIs.
           # Code scanning matches results to blobs by repo-relative path, so those alerts would
           # point at nothing. rebaseuri moves them onto a uriBaseId, which is the same shape
-          # CodeQL's own uploads use.
-          dnf install -y "dotnet-sdk-$DOTNET_SDK_VERSION"
-          dotnet tool install --tool-path /usr/local/bin \
+          # CodeQL's own uploads use. .NET 8 is preinstalled on the ubuntu-24.04 runner; the
+          # multitool goes into a user tool path so no sudo is needed.
+          dotnet tool install --tool-path "$HOME/.dotnet-tools" \
             Sarif.Multitool --version "$SARIF_MULTITOOL_VERSION"
           # rebaseuri only rewrites URIs it considers absolute, and .NET parses a scheme-less
           # POSIX path as a relative URI, so the scheme has to be there first or the rebase is a
           # silent no-op.
           sed -i -E 's@("uri"[[:space:]]*:[[:space:]]*")/@\1file:///@g' clang-tidy.sarif
-          sarif rebaseuri clang-tidy.sarif \
+          "$HOME/.dotnet-tools/sarif" rebaseuri clang-tidy.sarif \
             --base-path-value "$GITHUB_WORKSPACE" --base-path-token SRCROOT --log Inline
 
       # Fork pull requests get a read-only token with no security-events scope, so this
@@ -244,8 +275,8 @@ jobs:
         if: always() && steps.changes.outputs.artifacts == 'true' && steps.changes.outputs.cpp_changed == 'true'
         continue-on-error: true
         run: |
-          python3 -m pip install --retries 3 "clang-html==$CLANG_HTML_VERSION"
-          clang-tidy-html clang-tidy.log -o clang-tidy-report.html
+          pipx install "clang-html==$CLANG_HTML_VERSION"
+          "$HOME/.local/bin/clang-tidy-html" clang-tidy.log -o clang-tidy-report.html
 
       - name: Upload clang-tidy artifacts
         if: always() && steps.changes.outputs.artifacts == 'true' && steps.changes.outputs.cpp_changed == 'true'
