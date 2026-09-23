@@ -79,7 +79,11 @@ bool is_timeseries_or_empty_index(const IndexDescriptorImpl& index_desc) {
 
 RequiredFieldInfo required_fields_info(const proto::descriptors::NormalizationMetadata& norm_meta) {
     RequiredFieldInfo info;
-    info.has_series_value_column = norm_meta.has_series();
+    // A one-dimensional Arrow structure is the Arrow spelling of a Series, so its single column is a required field.
+    // It is the value column, unless it was written as the index, in which case that is the only field there is.
+    const auto& arrow = norm_meta.experimental_arrow();
+    info.has_series_value_column = norm_meta.has_series() || (norm_meta.has_experimental_arrow() &&
+                                                              arrow.one_dimensional() && !arrow.has_index());
     if (const auto* common = pandas_common(norm_meta); common != nullptr) {
         info.has_multi_index = common->has_multi_index();
         // The field count in the norm metadata is one less than the actual number of levels in the multi-index.
