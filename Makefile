@@ -29,9 +29,11 @@ _ENV        := $(strip $(_TMPDIR_ENV) $(_PROTOC_ENV))
 _VENV_ROOT := $(firstword $(wildcard $(if $(VIRTUAL_ENV),$(VIRTUAL_ENV))) $(VENV_DIR)/$(VENV_NAME))
 _VENV_PYTHON := $(_VENV_ROOT)/bin/python
 _VENV_PIP := $(VENV_DIR)/$(VENV_NAME)/bin/pip
+# Separate venv so the pinned type-checking deps don't disturb the dev venv
+_TYPECHECK_VENV := $(VENV_DIR)/arcticdb-typecheck
 
 # ── Phony targets ────────────────────────────────────────────────────────────
-.PHONY: help setup protoc venv activate lint lint-check \
+.PHONY: help setup protoc venv activate lint lint-check typecheck \
         build build-debug configure configure-debug \
         test-cpp test-cpp-debug test-cpp-rapidcheck test-cpp-rapidcheck-debug symlink symlink-debug \
         test-py build-and-test-py build-and-test-py-debug \
@@ -85,6 +87,11 @@ lint: ## Run formatters (in-place)
 
 lint-check: ## Check formatting (no changes)
 	$(_VENV_PYTHON) build_tooling/format.py --check --type all
+
+typecheck: ## Run mypy over python/arcticdb (dedicated venv with pinned deps)
+	test -x $(_TYPECHECK_VENV)/bin/python || python3 -m venv $(_TYPECHECK_VENV)
+	$(PROXY_CMD) $(_TYPECHECK_VENV)/bin/python -m pip install -q -r build_tooling/requirements-typecheck.txt
+	$(_TYPECHECK_VENV)/bin/python -m mypy
 
 # ── configure ────────────────────────────────────────────────────────────────
 # Files whose changes should trigger a cmake reconfigure.

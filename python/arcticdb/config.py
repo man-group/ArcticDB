@@ -72,7 +72,7 @@ class Defaults(object):
 
 
 def _extract_lib_config(env_cfg, lib_path):
-    # type: (EnvironmentConfig)->LibraryConfig
+    # type: (EnvironmentConfig, str)->LibraryConfig
     if lib_path not in env_cfg.lib_by_path:
         raise ArcticNativeException("Missing library {} in config {}".format(lib_path, env_cfg))
     cfg = LibraryConfig()

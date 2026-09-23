@@ -13,7 +13,7 @@ import warnings
 
 import pytz
 from enum import Enum, auto
-from typing import Optional, Any, Tuple, Dict, Union, List, Iterable, NamedTuple
+from typing import Optional, Any, Tuple, Dict, Union, List, Iterable, NamedTuple, cast
 
 from arcticdb.dependencies import _PYARROW_AVAILABLE, _POLARS_AVAILABLE, pyarrow as pa, polars as pl
 from arcticdb.exceptions import (
@@ -66,7 +66,7 @@ AsOf = Union[int, str, datetime.datetime, _PreloadedIndexQuery]
 NORMALIZABLE_TYPES = (pd.DataFrame, pd.Series, np.ndarray)
 
 
-NormalizableType = Union[NORMALIZABLE_TYPES]
+NormalizableType = Union[pd.DataFrame, pd.Series, np.ndarray]
 """Types that can be normalised into Arctic's internal storage structure.
 
 See Also
@@ -162,8 +162,8 @@ class SymbolDescription(NamedTuple):
                   written by a client that predates this information being stored.
     """
 
-    columns: Tuple[NameWithDType]
-    index: Tuple[NameWithDType]
+    columns: Tuple[NameWithDType, ...]
+    index: Tuple[NameWithDType, ...]  # type: ignore[assignment]
     index_type: str
     row_count: int
     last_update_time: datetime.datetime
@@ -508,7 +508,7 @@ class LazyDataFrame(QueryBuilder):
             Object that contains a .data and .metadata element.
         """
         if self._preloaded_index is None:
-            return self.lib.read(**self._to_read_request()._asdict())
+            return cast(VersionedItem, self.lib.read(**self._to_read_request()._asdict()))
         else:
             read_request = self._to_read_request()._replace(as_of=self._preloaded_index)
             return self.lib.read(**read_request._asdict())
@@ -634,8 +634,8 @@ class LazyDataFrameCollection(QueryBuilder):
         """
         if not len(self._lazy_dataframes):
             return []
-        return self._lib.read_batch(
-            self._read_requests(),
+        return self._lib.read_batch(  # type: ignore[return-value]
+            self._read_requests(),  # type: ignore[arg-type]
             output_format=self._output_format,
             arrow_string_format_default=self._arrow_string_format_default,
             arrow_string_format_per_column=self._arrow_string_format_per_column,
@@ -646,10 +646,12 @@ class LazyDataFrameCollection(QueryBuilder):
         # LazyDataFrameCollection and returns a list of corresponding read requests
         read_requests = [lazy_dataframe._to_read_request() for lazy_dataframe in self._lazy_dataframes]
         if len(self.clauses):
-            for read_request in read_requests:
-                if read_request.query_builder is None:
-                    read_request.query_builder = QueryBuilder()
-                read_request.query_builder.then(self)
+            for i, read_request in enumerate(read_requests):
+                query_builder = read_request.query_builder
+                if query_builder is None:
+                    query_builder = QueryBuilder()
+                    read_requests[i] = read_request._replace(query_builder=query_builder)
+                query_builder.then(self)
         return read_requests
 
     def __str__(self) -> str:
@@ -710,7 +712,7 @@ class LazyDataFrameAfterJoin(QueryBuilder):
             version number, metadata, etc., of the symbols that were joined together.
         """
         if not len(self._lazy_dataframes._lazy_dataframes):
-            return []
+            return []  # type: ignore[return-value]
         else:
             lib = self._lazy_dataframes._lib
             return lib.read_batch_and_join(
@@ -916,7 +918,7 @@ class Library:
         )
 
     def __getitem__(self, symbol: str) -> VersionedItem:
-        return self.read(symbol)
+        return cast(VersionedItem, self.read(symbol))
 
     def __contains__(self, symbol: str) -> bool:
         return self.has_symbol(symbol)
@@ -957,7 +959,7 @@ class Library:
         data: NormalizableType,
         validate_index=True,
         sort_on_index=False,
-        sort_columns: List[str] = None,
+        sort_columns: Optional[List[str]] = None,
         index_column: bool = False,
     ) -> StageResult:
         """
@@ -1022,7 +1024,7 @@ class Library:
         staged=False,
         validate_index=True,
         index_column: bool = False,
-        recursive_normalizers: bool = None,
+        recursive_normalizers: Optional[bool] = None,
     ) -> VersionedItem:
         """
         Write ``data`` to the specified ``symbol``.
@@ -1141,7 +1143,8 @@ class Library:
                     f"write_pickle instead. type(data)=[{type(data)}]"
                 )
 
-        return self._nvs.write(
+        # Returns None only for the deprecated staged=True
+        return self._nvs.write(  # type: ignore[return-value]
             symbol=symbol,
             data=data,
             metadata=metadata,
@@ -1163,7 +1166,7 @@ class Library:
         metadata: Any = None,
         prune_previous_versions: Optional[bool] = None,
         staged=False,
-        recursive_normalizers: bool = None,
+        recursive_normalizers: Optional[bool] = None,
     ) -> VersionedItem:
         """
         This method differs from `write` only in that ``data`` can be of any type that is serialisable via the Pickle library.
@@ -1222,7 +1225,8 @@ class Library:
                 DeprecationWarning,
                 stacklevel=2,
             )
-        return self._nvs.write(
+        # Returns None only for the deprecated staged=True
+        return self._nvs.write(  # type: ignore[return-value]
             symbol=symbol,
             data=data,
             metadata=metadata,
@@ -1473,7 +1477,7 @@ class Library:
                 f"data is of a type that cannot be normalized. type(data)=[{type(data)}]"
             )
 
-        return self._nvs.append(
+        return self._nvs.append(  # type: ignore[return-value]
             symbol=symbol,
             dataframe=data,
             metadata=metadata,
@@ -2760,7 +2764,7 @@ class Library:
         if isinstance(versions, int):
             versions = (versions,)
 
-        self._nvs.delete_versions(symbol, versions)
+        self._nvs.delete_versions(symbol, list(versions))
 
     def delete_batch(self, delete_requests: List[Union[str, DeleteRequest]]) -> List[Optional[DataError]]:
         """
@@ -2780,7 +2784,7 @@ class Library:
             If the symbol was already deleted, there will be no error, just a warning.
         """
         symbols = []
-        versions = []
+        versions: List[List[int]] = []
 
         for request in delete_requests:
             if isinstance(request, str):
@@ -2998,7 +3002,7 @@ class Library:
         symbol: str,
         n: int = 5,
         as_of: Optional[AsOf] = None,
-        columns: List[str] = None,
+        columns: Optional[List[str]] = None,
         lazy: bool = False,
         output_format: Optional[Union[OutputFormat, str]] = None,
         arrow_string_format_default: Optional[Union[ArrowOutputStringFormat, "pa.DataType"]] = None,
@@ -3064,7 +3068,7 @@ class Library:
         symbol: str,
         n: int = 5,
         as_of: Optional[Union[int, str]] = None,
-        columns: List[str] = None,
+        columns: Optional[List[str]] = None,
         lazy: bool = False,
         output_format: Optional[Union[OutputFormat, str]] = None,
         arrow_string_format_default: Optional[Union[ArrowOutputStringFormat, "pa.DataType"]] = None,
@@ -3175,7 +3179,7 @@ class Library:
         return self._info_to_desc(info)
 
     @staticmethod
-    def parse_list_of_symbols(symbols: List[Union[str, ReadInfoRequest]]) -> (List, List):
+    def parse_list_of_symbols(symbols: List[Union[str, ReadInfoRequest]]) -> Tuple[List, List]:
         symbol_strings = []
         as_ofs = []
 
@@ -3246,7 +3250,7 @@ class Library:
         """
         self._nvs.version_store.reload_symbol_list()
 
-    def compact_symbol_list(self) -> None:
+    def compact_symbol_list(self) -> int:
         """
         Compact the symbol list cache into a single key in the storage.
 
@@ -3667,7 +3671,7 @@ class Library:
         return AdminTools(self._nvs)
 
     @staticmethod
-    def _normalize_staged_data_mode(mode: Union[StagedDataFinalizeMethod, str]) -> StagedDataFinalizeMethod:
+    def _normalize_staged_data_mode(mode: Optional[Union[StagedDataFinalizeMethod, str]]) -> StagedDataFinalizeMethod:
         if mode is None:
             return StagedDataFinalizeMethod.WRITE
 

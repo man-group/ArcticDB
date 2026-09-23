@@ -59,6 +59,13 @@ def test_read_arctic(mem_storage, lib_name, arctic_output_format, library_output
     assert_frame_equal_with_arrow(df, result)
 
 
+def test_get_library_create_if_missing_output_format(mem_storage, lib_name):
+    ac = mem_storage.create_arctic()
+    lib = ac.get_library(lib_name, create_if_missing=True, output_format=OutputFormat.PYARROW)
+    lib.write("sym", sample_dataframe())
+    assert isinstance(lib.read("sym").data, pa.Table)
+
+
 @pytest.mark.parametrize("arctic_output_format", no_str_output_format_args)
 @pytest.mark.parametrize("output_format_override", no_str_output_format_args)
 def test_head(lmdb_storage, lib_name, arctic_output_format, output_format_override):
