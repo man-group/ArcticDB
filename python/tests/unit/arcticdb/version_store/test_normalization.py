@@ -665,6 +665,24 @@ def test_will_item_be_pickled(lmdb_version_store, sym):
 
 
 @pytest.mark.parametrize(
+    "item",
+    [
+        pytest.param(type("Unnormalizable", (object,), {})(), id="custom_object"),
+        pytest.param(lambda x: x, id="lambda"),
+    ],
+)
+def test_will_item_be_pickled_when_normalization_raises(lmdb_version_store, item):
+    """An item that cannot be normalized must report True, not raise.
+
+    `_try_normalize` is called with `pickle_on_failure=False`, so it raises for
+    anything msgpack cannot handle. `norm_meta` was only bound inside the `try`,
+    and the following line dereferenced it unconditionally, so the API raised
+    `UnboundLocalError` in precisely the case where the answer is True.
+    """
+    assert lmdb_version_store.will_item_be_pickled(item) is True
+
+
+@pytest.mark.parametrize(
     "data",
     [
         {"a": {"b": {"c": {"d": np.arange(24)}}}},
