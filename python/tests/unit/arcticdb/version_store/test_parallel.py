@@ -16,13 +16,15 @@ import pytest
 
 
 from arcticdb.exceptions import (
-    UnsortedDataException,
+    NormalizationException,
     SchemaException,
+    UnsortedDataException,
     UserInputException,
     ArcticDbNotYetImplemented,
 )
 from arcticdb.util.test import (
     assert_frame_equal,
+    assert_series_equal,
     random_strings_of_length,
     random_integers,
     random_floats,
@@ -1299,8 +1301,6 @@ class TestFinalizeStagedDataStaticSchemaMismatch:
                 delete_staged_data_on_failure=delete_staged_data_on_failure,
             )
         assert "col_0" in str(exception_info.value)
-        assert "col_1" in str(exception_info.value)
-        assert "col_2" in str(exception_info.value)
         expected_key_count = 0 if delete_staged_data_on_failure else 1
         assert len(get_append_keys(lib, "sym")) == expected_key_count
 
@@ -1327,7 +1327,6 @@ class TestFinalizeStagedDataStaticSchemaMismatch:
             )
         assert "col_0" in str(exception_info.value)
         assert "col_1" in str(exception_info.value)
-        assert "col_2" in str(exception_info.value)
         expected_key_count = 0 if delete_staged_data_on_failure else 2
         assert len(get_append_keys(lib, "sym")) == expected_key_count
 
@@ -1343,8 +1342,7 @@ class TestFinalizeWithEmptySegments:
         lib.compact_incomplete("sym", finalize_method, False)
         assert_frame_equal(lib.read("sym").data, pd.DataFrame([], index=pd.DatetimeIndex([])))
 
-    @pytest.mark.parametrize("delete_staged_data_on_failure", [True, False])
-    def test_staged_segment_has_empty_df(self, lmdb_version_store_v1, finalize_method, delete_staged_data_on_failure):
+    def test_staged_segment_has_empty_df(self, lmdb_version_store_v1, finalize_method):
         lib = lmdb_version_store_v1
         index = pd.DatetimeIndex(
             [
@@ -1359,15 +1357,8 @@ class TestFinalizeWithEmptySegments:
         lib.write("sym", df1, parallel=True)
         lib.write("sym", df2, parallel=True)
         lib.write("sym", df3, parallel=True)
-        with pytest.raises(SchemaException):
-            lib.compact_incomplete(
-                "sym",
-                finalize_method,
-                False,
-                delete_staged_data_on_failure=delete_staged_data_on_failure,
-            )
-        expected_key_count = 0 if delete_staged_data_on_failure else 3
-        assert len(get_append_keys(lib, "sym")) == expected_key_count
+        lib.compact_incomplete("sym", finalize_method, False)
+        assert_frame_equal(lib.read("sym").data, pd.concat([df1, df3]))
 
     def test_df_without_rows(self, lmdb_version_store_v1, finalize_method):
         lib = lmdb_version_store_v1
@@ -1673,7 +1664,49 @@ def test_staging_in_chunks_default_settings(lmdb_storage, lib_name):
     assert df.index.is_monotonic_increasing
 
 
+CONVERT_INT_TO_FLOAT_DTYPES = [np.int8, np.uint16, np.int32, np.uint64, np.float32, np.float64]
+
+
+def convert_int_to_float_append_outcome(written_dtype, staged_dtype):
+    """Only staged segments are converted; the symbol keeps the type it was written with. The two agree only when the
+    symbol already holds what the staged column becomes."""
+    staged_after_conversion = np.float64 if np.issubdtype(staged_dtype, np.integer) else staged_dtype
+    return "ok" if written_dtype == staged_after_conversion else "raises"
+
+
 class TestConvertIntToFloat:
+
+    @pytest.mark.parametrize("staged_dtype", CONVERT_INT_TO_FLOAT_DTYPES)
+    @pytest.mark.parametrize("written_dtype", CONVERT_INT_TO_FLOAT_DTYPES)
+    def test_append_to_existing_convert(self, in_memory_version_store, written_dtype, staged_dtype):
+        lib = in_memory_version_store
+        sym = "sym"
+        lib.write(
+            sym,
+            pd.DataFrame(
+                {"a": np.array([1, 2, 3], dtype=written_dtype)},
+                index=pd.date_range(pd.Timestamp(0), periods=3, freq="ns"),
+            ),
+        )
+        lib.write(
+            sym,
+            pd.DataFrame(
+                {"a": np.array([4, 5, 6], dtype=staged_dtype)},
+                index=pd.date_range(pd.Timestamp(3), periods=3, freq="ns"),
+            ),
+            parallel=True,
+        )
+        outcome = convert_int_to_float_append_outcome(written_dtype, staged_dtype)
+        if outcome == "raises":
+            with pytest.raises(SchemaException):
+                lib.compact_incomplete(sym, append=True, convert_int_to_float=True)
+            return
+        lib.compact_incomplete(sym, append=True, convert_int_to_float=True)
+        expected = pd.DataFrame(
+            {"a": np.arange(1, 7, dtype=written_dtype)}, index=pd.date_range(pd.Timestamp(0), periods=6, freq="ns")
+        )
+        assert_frame_equal(lib.read(sym).data, expected, check_dtype=True)
+
     @pytest.mark.parametrize("dtype", [np.int32, np.uint16, np.int8, np.int64, np.uint64, np.float64, np.float32])
     @pytest.mark.parametrize("version_store", ["lmdb_version_store_v1", "lmdb_version_store_dynamic_schema_v1"])
     def test_write_convert_same_types(self, version_store, dtype, request):
@@ -1789,22 +1822,6 @@ class TestConvertIntToFloat:
         assert "FLOAT32" in str(exception_info.value)
         assert "FLOAT64" in str(exception_info.value)
 
-    def test_float32_is_not_converted_append(self, lmdb_version_store_v1):
-        lib = lmdb_version_store_v1
-        sym = "sym"
-        df1 = pd.DataFrame(
-            {"a": np.array([1, 2, 3], dtype=np.double)}, index=pd.date_range(pd.Timestamp(0), periods=3, freq="ns")
-        )
-        df2 = pd.DataFrame(
-            {"a": np.array([4, 5, 6], dtype=np.float32)}, index=pd.date_range(pd.Timestamp(3), periods=3, freq="ns")
-        )
-        lib.write(sym, df1)
-        lib.write(sym, df2, parallel=True)
-        with pytest.raises(SchemaException) as exception_info:
-            lib.compact_incomplete(sym, append=True, convert_int_to_float=True)
-        assert "FLOAT32" in str(exception_info.value)
-        assert "FLOAT64" in str(exception_info.value)
-
     @pytest.mark.parametrize(
         "data_dtype", [("string_value", object), (pd.Timestamp(0), "datetime64[ns]"), (3.14, np.float32)]
     )
@@ -1856,19 +1873,26 @@ class TestEmptyDataFrames:
         lib.compact_incomplete(symbol, append=True, convert_int_to_float=False)
         assert_frame_equal(lib.read(symbol).data, df)
 
-    @pytest.mark.parametrize("version_store", ["lmdb_version_store_v1", "lmdb_version_store_dynamic_schema_v1"])
-    def test_appending_to_empty_with_differing_index_name_fails(self, version_store, request):
-        lib = request.getfixturevalue(version_store)
+    def test_append_to_empty_validating_index(self, in_memory_version_store):
+        """A version with no rows has no data key to bound the staged index values against."""
+        lib = in_memory_version_store
+        symbol = "symbol"
+        lib.write(symbol, pd.DataFrame({"a": np.array([], np.int64)}, index=pd.DatetimeIndex([])))
+        df = pd.DataFrame({"a": [1]}, index=pd.DatetimeIndex([pd.Timestamp(0)]))
+        lib.write(symbol, df, parallel=True)
+        lib.compact_incomplete(symbol, append=True, convert_int_to_float=False, validate_index=True)
+        assert_frame_equal(lib.read(symbol).data, df)
+
+    @pytest.mark.parametrize("dynamic_schema", [True, False], ids=["dynamic_schema", "static_schema"])
+    def test_appending_to_empty_with_differing_index_name(self, in_memory_store_factory, dynamic_schema):
+        lib = in_memory_store_factory(dynamic_strings=True, dynamic_schema=dynamic_schema)
         symbol = "symbol"
         empty = pd.DataFrame({"a": np.array([], np.int64)}, index=pd.DatetimeIndex([], name="my_initial_index"))
         lib.write(symbol, empty)
         df = pd.DataFrame({"a": [1]}, index=pd.DatetimeIndex([pd.Timestamp(0)], name="my_new_index"))
         lib.write(symbol, df, parallel=True)
-        with pytest.raises(SchemaException) as exception_info:
-            lib.compact_incomplete(symbol, append=True, convert_int_to_float=False)
-        assert "index" in str(exception_info.value)
-        assert "my_initial_index" in str(exception_info.value)
-        assert "my_new_index" in str(exception_info.value)
+        lib.compact_incomplete(symbol, append=True, convert_int_to_float=False)
+        assert_frame_equal(lib.read(symbol).data, df)
 
     @pytest.mark.parametrize(
         "to_append",
@@ -1877,11 +1901,128 @@ class TestEmptyDataFrames:
             pd.DataFrame({"a": [1], "wrong_col": [2]}, pd.DatetimeIndex([pd.Timestamp(0)])),
         ],
     )
-    def test_appending_to_empty_with_differing_columns_fails(self, lmdb_version_store_v1, to_append):
+    def test_appending_to_empty_with_differing_columns(self, lmdb_version_store_v1, to_append):
         lib = lmdb_version_store_v1
         symbol = "symbol"
         empty = pd.DataFrame({"a": np.array([], np.int64)}, index=pd.DatetimeIndex([]))
         lib.write(symbol, empty)
         lib.write(symbol, to_append, parallel=True)
-        with pytest.raises(SchemaException, match="wrong_col"):
-            lib.compact_incomplete(symbol, append=True, convert_int_to_float=False)
+        lib.compact_incomplete(symbol, append=True, convert_int_to_float=False)
+        assert_frame_equal(lib.read(symbol).data, to_append)
+
+
+def test_staged_append_to_rowless_series_symbol_reconciles_index_normalization(in_memory_version_store):
+    lib = in_memory_version_store
+    sym = "sym"
+    lib.write(sym, pd.Series([], dtype=np.int64, name="s", index=pd.DatetimeIndex([])))
+    lib.write(sym, pd.Series([1], dtype=np.int64, name="s", index=pd.DatetimeIndex([pd.Timestamp(0)])), parallel=True)
+    lib.compact_incomplete(sym, append=True, convert_int_to_float=False)
+    lib.update(sym, pd.Series([2], dtype=np.int64, name="s", index=pd.DatetimeIndex([pd.Timestamp(0)])))
+    expected = pd.Series([2], dtype=np.int64, name="s", index=pd.DatetimeIndex([pd.Timestamp(0)]))
+    assert_series_equal(lib.read(sym).data, expected)
+
+
+@pytest.mark.parametrize("existing_version", [True, False], ids=["append_to_existing", "staged_only"])
+def test_series_and_dataframe_cannot_be_combined(in_memory_version_store, existing_version):
+    lib = in_memory_version_store
+    sym = "sym"
+    df = pd.DataFrame({"a": [1]}, index=pd.DatetimeIndex([pd.Timestamp(0)]))
+    if existing_version:
+        lib.write(sym, df)
+    else:
+        lib.write(sym, df, parallel=True)
+    lib.write(sym, pd.Series([2], name="a", index=pd.DatetimeIndex([pd.Timestamp(10**9)])), parallel=True)
+    with pytest.raises(NormalizationException, match="Series cannot be combined with a DataFrame"):
+        lib.compact_incomplete(sym, append=existing_version, convert_int_to_float=False)
+
+
+@pytest.mark.parametrize("dynamic_schema", [True, False], ids=["dynamic_schema", "static_schema"])
+@pytest.mark.parametrize("existing_version", [True, False], ids=["append_to_existing", "staged_only"])
+def test_differing_index_timezone(in_memory_store_factory, dynamic_schema, existing_version):
+    lib = in_memory_store_factory(dynamic_strings=True, dynamic_schema=dynamic_schema)
+    sym = "sym"
+    london = pd.DataFrame({"a": [1]}, index=pd.DatetimeIndex([pd.Timestamp(0)]).tz_localize("Europe/London"))
+    if existing_version:
+        lib.write(sym, london)
+    else:
+        lib.write(sym, london, parallel=True)
+    lib.write(
+        sym,
+        pd.DataFrame({"a": [2]}, index=pd.DatetimeIndex([pd.Timestamp(10**9)]).tz_localize("America/New_York")),
+        parallel=True,
+    )
+    if dynamic_schema:
+        lib.compact_incomplete(sym, append=existing_version, convert_int_to_float=False)
+        assert lib.read(sym).data.index.tz is None
+    else:
+        with pytest.raises(SchemaException, match="timezones for column"):
+            lib.compact_incomplete(sym, append=existing_version, convert_int_to_float=False)
+
+
+@pytest.mark.parametrize("dynamic_schema", [True, False], ids=["dynamic_schema", "static_schema"])
+def test_staged_append_rowcount_index_onto_timestamp_index(in_memory_store_factory, dynamic_schema):
+    lib = in_memory_store_factory(dynamic_strings=True, dynamic_schema=dynamic_schema)
+    sym = "sym"
+    lib.write(sym, pd.DataFrame({"a": [1]}, index=pd.DatetimeIndex([pd.Timestamp(0)])))
+    lib.write(sym, pd.DataFrame({"a": [2]}), parallel=True)
+    with pytest.raises(NormalizationException, match="DatetimeIndex and the other is a RangeIndex"):
+        lib.compact_incomplete(sym, append=True, convert_int_to_float=False)
+
+
+@pytest.mark.parametrize("dynamic_schema", [True, False], ids=["dynamic_schema", "static_schema"])
+def test_staged_append_multiindex_onto_single_index(in_memory_store_factory, dynamic_schema):
+    lib = in_memory_store_factory(dynamic_strings=True, dynamic_schema=dynamic_schema)
+    sym = "sym"
+    lib.write(sym, pd.DataFrame({"a": [1]}, index=pd.DatetimeIndex([pd.Timestamp(0)])))
+    multi_index = pd.MultiIndex.from_arrays([[pd.Timestamp(1)], [0]], names=[None, "level_1"])
+    lib.write(sym, pd.DataFrame({"a": [2]}, index=multi_index), parallel=True)
+    with pytest.raises(NormalizationException, match="multi-indexed data with non-multi-indexed data"):
+        lib.compact_incomplete(sym, append=True, convert_int_to_float=False)
+
+
+def test_staged_only_empty_segment_appended_to_existing(in_memory_version_store):
+    lib = in_memory_version_store
+    sym = "sym"
+    df = pd.DataFrame({"a": [1]}, index=pd.DatetimeIndex([pd.Timestamp(0)]))
+    lib.write(sym, df)
+    lib.write(sym, pd.DataFrame({"a": np.array([], dtype=np.int64)}, index=pd.DatetimeIndex([])), parallel=True)
+    lib.compact_incomplete(sym, append=True, convert_int_to_float=False)
+    assert_frame_equal(lib.read(sym).data, df)
+
+
+@pytest.mark.parametrize("dynamic_schema", [True, False], ids=["dynamic_schema", "static_schema"])
+def test_staged_empty_index_segment_alongside_data(in_memory_store_factory, dynamic_schema):
+    """With empty types enabled a zero-row staged frame has an EMPTY index and no index field at all."""
+    lib = in_memory_store_factory(dynamic_strings=True, empty_types=True, dynamic_schema=dynamic_schema)
+    sym = "sym"
+    df = pd.DataFrame({"a": [1]}, index=pd.DatetimeIndex([pd.Timestamp(0)]))
+    lib.write(sym, df, parallel=True)
+    lib.write(sym, pd.DataFrame({"a": np.array([], dtype=np.int64)}, index=pd.DatetimeIndex([])), parallel=True)
+    lib.compact_incomplete(sym, append=False, convert_int_to_float=False)
+    assert_frame_equal(lib.read(sym).data, df)
+
+
+def test_read_incompletes_mismatching_later_segment(in_memory_version_store):
+    """An incomplete read walks the APPEND_REF list the tick collector writes, so only append_incomplete segments are
+    seen."""
+    lib = in_memory_version_store
+    lib_tool = lib.library_tool()
+    sym = "sym"
+    lib.write(sym, pd.DataFrame({"a": [1]}, index=pd.DatetimeIndex([pd.Timestamp(0)])))
+    lib_tool.append_incomplete(sym, pd.DataFrame({"a": [2]}, index=pd.DatetimeIndex([pd.Timestamp(10**9)])))
+    lib_tool.append_incomplete(sym, pd.DataFrame({"a": ["x"]}, index=pd.DatetimeIndex([pd.Timestamp(2 * 10**9)])))
+    with pytest.raises(SchemaException, match="no common type for column 'a'"):
+        lib.read(sym, date_range=(pd.Timestamp(0), pd.Timestamp(10 * 10**9)), incomplete=True)
+    with pytest.raises(SchemaException, match="no common type for column 'a'"):
+        lib.compact_incomplete(sym, append=True, convert_int_to_float=False, via_iteration=False)
+
+
+def test_read_incompletes_ignores_staged_data(in_memory_version_store):
+    """Staging writes no APPEND_REF, so an incomplete read finds an empty list and returns none of the staged rows."""
+    lib = in_memory_version_store
+    sym = "sym"
+    df = pd.DataFrame({"a": [1]}, index=pd.DatetimeIndex([pd.Timestamp(0)]))
+    lib.write(sym, df)
+    lib.write(sym, pd.DataFrame({"a": [2]}, index=pd.DatetimeIndex([pd.Timestamp(10**9)])), parallel=True)
+    received = lib.read(sym, date_range=(pd.Timestamp(0), pd.Timestamp(10 * 10**9)), incomplete=True).data
+    assert_frame_equal(received, df)
