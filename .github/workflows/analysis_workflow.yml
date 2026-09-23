@@ -259,7 +259,7 @@ jobs:
     if: ${{ !cancelled() && needs.detect_changes.outputs.docs_only != 'true' && github.event_name != 'push' }}
     uses: ./.github/workflows/clang_tidy.yml
     secrets: inherit
-    permissions: {contents: read, security-events: write}
+    permissions: {contents: read, security-events: write, packages: write}
     with:
       # Pull requests are analysed on changed lines only; the nightly cron and a dispatch of
       # this workflow analyse everything.

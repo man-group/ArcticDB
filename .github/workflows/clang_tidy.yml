@@ -1,8 +1,5 @@
 name: clang-tidy
 
-# Called by analysis_workflow.yml for pull requests and the nightly cron (not on master
-# pushes), and dispatchable on its own for a full sweep on demand: dispatching
-# analysis_workflow.yml would also start the benchmarks, the ASV checks and the sanitizer job.
 on:
   workflow_call:
     inputs:
@@ -25,34 +22,24 @@ jobs:
   clang-tidy:
     name: analyse
     timeout-minutes: 180
-    # Stock GitHub-hosted ubuntu runner (glibc 2.39), not the manylinux arcticdb-dev-clang
-    # image: modern glibc runs the prebuilt clang-tidy-sarif and .NET tooling without a fight.
-    # The vcpkg build deps the image used to bake in are installed below.
     runs-on: ubuntu-24.04
     permissions:
       contents: read
       security-events: write
+      packages: write
     env:
-      # AWS creds authorise the vcpkg S3 asset cache (source tarballs) used in vcpkg_caching.sh.
       AWS_ACCESS_KEY_ID: ${{secrets.AWS_S3_ACCESS_KEY}}
       AWS_SECRET_ACCESS_KEY: ${{secrets.AWS_S3_SECRET_KEY}}
       VCPKG_NUGET_USER: ${{secrets.VCPKG_NUGET_USER || github.repository_owner}}
       VCPKG_NUGET_TOKEN: ${{secrets.VCPKG_NUGET_TOKEN || secrets.GITHUB_TOKEN}}
-      VCPKG_MAN_NUGET_USER: ${{secrets.VCPKG_MAN_NUGET_USER}} # For forks to download pre-compiled dependencies from the Man repo
+      VCPKG_MAN_NUGET_USER: ${{secrets.VCPKG_MAN_NUGET_USER}}
       VCPKG_MAN_NUGET_TOKEN: ${{secrets.VCPKG_MAN_NUGET_TOKEN}}
-      ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
       ARCTIC_CMAKE_PRESET: linux-debug
-      # clang/clang-tidy come from the official LLVM binary release (installed below), not a
-      # package manager, so the exact 19.1.7 is pinned: clang-tidy has to understand the flags
-      # in compile_commands.json, and the release ships clang-tidy plus the clang-tidy-diff.py /
-      # run-clang-tidy.py wrappers. CC/CXX point both the vcpkg build and the configure at that
-      # clang so the compilation database is clang's, not gcc's.
       CLANG_VERSION: 19.1.7
+      CLANG_SHA256: 4a5ec53951a584ed36f80240f6fbf8fdd46b4cf6c7ee87cc2d5018dc37caf679
       CLANG_HOME: /opt/clang-19.1.7
       CC: /opt/clang-19.1.7/bin/clang
       CXX: /opt/clang-19.1.7/bin/clang++
-      # cmake is pinned to match the dev images: a newer cmake's stricter -Werror=<category>
-      # validation breaks the vcpkg benchmark port.
       CMAKE_VERSION: 3.31.6
       CLANG_TIDY_SARIF_VERSION: 0.8.0
       CLANG_HTML_VERSION: 1.6.1
@@ -63,23 +50,10 @@ jobs:
       - uses: actions/checkout@v7
         with:
           lfs: 'true'
-          # Full history so the pull request base commit is present for the diff
           fetch-depth: 0
           submodules: recursive
           ref: ${{ inputs.ref }}
-          token: ${{ secrets.ARCTICDB_TEST_PAT }}
 
-      - name: Allow git to read the checkout
-        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
-
-      # Normalises the two boolean inputs into string outputs, and decides whether there is
-      # anything to analyse. workflow_dispatch can deliver a boolean input as the string
-      # "false", which is truthy in a GitHub expression, so every later condition compares
-      # these strings rather than testing the input directly.
-      #
-      # The changed-file check matters because analysis_workflow only filters out **/*.md, so
-      # a Python-only pull request would otherwise pay the full configure cost to analyse
-      # nothing.
       - name: Resolve mode and changed files
         id: changes
         run: |
@@ -102,20 +76,14 @@ jobs:
             echo "No C++ changes; skipping clang-tidy." >> "$GITHUB_STEP_SUMMARY"
           fi
 
-      # Only what the ubuntu-24.04 runner does not already ship: the build toolchain
-      # (build-essential, autotools, pkg-config, ninja, perl, curl, tar, pipx, git-lfs) and .NET
-      # 8 / aws v2 are preinstalled. These are the vcpkg-port linkage/build deps plus PyYAML for
-      # the clang-tidy wrappers and mono for the vcpkg NuGet client. clang/clang-tidy come from
-      # the official LLVM release below.
       - name: Install build dependencies
         if: steps.changes.outputs.cpp_changed == 'true'
         run: |
           set -euo pipefail
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            autoconf-archive flex bison \
-            libkrb5-dev libsasl2-dev libssl-dev libcurl4-openssl-dev \
-            python3-yaml \
+            autoconf-archive \
+            libkrb5-dev libsasl2-dev libcurl4-openssl-dev \
             mono-complete
 
       - name: Install clang and clang-tidy (official LLVM release)
@@ -124,30 +92,26 @@ jobs:
           set -euo pipefail
           dir="LLVM-${CLANG_VERSION}-Linux-X64"
           curl -sSfL -O "https://github.com/llvm/llvm-project/releases/download/llvmorg-${CLANG_VERSION}/${dir}.tar.xz"
+          echo "${CLANG_SHA256}  ${dir}.tar.xz" | sha256sum -c -
           tar -xf "${dir}.tar.xz"
+          rm "${dir}.tar.xz"
           sudo mv "${dir}" "$CLANG_HOME"
           echo "$CLANG_HOME/bin" >> "$GITHUB_PATH"
+          "$CLANG_HOME/bin/clang-tidy" --version
+          "$CLANG_HOME/bin/clang-tidy" --verify-config
 
-      - name: Verify clang-tidy
-        if: steps.changes.outputs.cpp_changed == 'true'
-        run: "$CLANG_HOME/bin/clang-tidy --version"
-
-      # Pin cmake to match the dev images (see CMAKE_VERSION). Debian's apt-packaged pipx
-      # doesn't always symlink apps into ~/.local/bin, so ask pipx where it actually put them
-      # rather than assuming.
       - name: Install pinned CMake
         if: steps.changes.outputs.cpp_changed == 'true'
         run: |
           set -euo pipefail
+          if [[ "$(cmake --version | head -n1)" == "cmake version ${CMAKE_VERSION}" ]]; then
+            echo "Runner already provides cmake ${CMAKE_VERSION}"
+            exit 0
+          fi
           pipx install "cmake==${CMAKE_VERSION}"
           bin_dir="$(pipx environment --value PIPX_BIN_DIR)"
           echo "$bin_dir" >> "$GITHUB_PATH"
           "$bin_dir/cmake" --version
-
-      # Fails fast on a typo in a check name or an unknown key, before the expensive configure.
-      - name: Verify .clang-tidy
-        if: steps.changes.outputs.cpp_changed == 'true'
-        run: clang-tidy --verify-config
 
       - name: Extra envs
         if: steps.changes.outputs.cpp_changed == 'true'
@@ -160,27 +124,14 @@ jobs:
         env:
           CMAKE_BUILD_PARALLEL_LEVEL: ${{vars.CMAKE_BUILD_PARALLEL_LEVEL}}
 
-      - name: Prepare C++ compilation env
-        if: steps.changes.outputs.cpp_changed == 'true'
-        run: . build_tooling/prep_cpp_build.sh
-
-      # Configure only. clang-tidy needs compile_commands.json, which cpp/CMakeLists.txt
-      # already exports (CMAKE_EXPORT_COMPILE_COMMANDS ON). TEST is left off, so the
-      # database covers production sources and the C++ tests are out of scope for now.
       - name: CMake configure
         if: steps.changes.outputs.cpp_changed == 'true'
         run: cmake --preset $ARCTIC_CMAKE_PRESET -DVCPKG_INSTALL_OPTIONS=--clean-after-build cpp
 
-      # The generated protobuf headers must exist or every translation unit that includes
-      # them fails to parse.
       - name: Build generated sources
         if: steps.changes.outputs.cpp_changed == 'true'
         run: cmake --build cpp/out/$ARCTIC_CMAKE_PRESET-build --target arcticdb_proto -j $CMAKE_BUILD_PARALLEL_LEVEL
 
-      # clang-tidy-diff.py restricts diagnostics to the changed lines via -line-filter, though
-      # it still parses whole translation units, and it skips any file absent from the
-      # compilation database. Diagnostics go to stderr, hence the 2>&1. The wrappers ship in the
-      # LLVM release under share/clang; the system python3 has PyYAML (apt python3-yaml).
       - name: Run clang-tidy (changed lines)
         if: steps.changes.outputs.cpp_changed == 'true' && steps.changes.outputs.mode == 'diff'
         run: |
@@ -195,15 +146,12 @@ jobs:
         if: steps.changes.outputs.cpp_changed == 'true' && steps.changes.outputs.mode == 'full'
         run: |
           set -euo pipefail
-          python3 "$CLANG_HOME/share/clang/run-clang-tidy.py" \
+          "$CLANG_HOME/bin/run-clang-tidy" \
             -p "cpp/out/$ARCTIC_CMAKE_PRESET-build" \
             -j "$CMAKE_BUILD_PARALLEL_LEVEL" -quiet \
             -export-fixes fixes.yml \
             "$GITHUB_WORKSPACE/cpp/arcticdb/.*" 2>&1 | tee clang-tidy.log
 
-      # clang-tidy exits 0 when it only emits warnings, and neither wrapper is given
-      # -warnings-as-errors (.clang-tidy keeps WarningsAsErrors empty so clangd does not flag
-      # every finding as an editor error), so the log is what decides pass/fail.
       - name: Fail on findings
         if: steps.changes.outputs.cpp_changed == 'true'
         run: |
@@ -214,52 +162,33 @@ jobs:
           fi
 
       - name: Convert findings to SARIF
-        if: always() && steps.changes.outputs.cpp_changed == 'true'
+        if: always() && steps.changes.outputs.cpp_changed == 'true' && hashFiles('clang-tidy.log') != ''
         env:
           DOTNET_CLI_TELEMETRY_OPTOUT: 1
           DOTNET_NOLOGO: 1
         run: |
           set -euo pipefail
-          # An earlier failure (configure, generated sources) leaves no log; do not pile a
-          # second, misleading failure on top of it.
-          if [[ ! -f clang-tidy.log ]]; then
-            echo "No clang-tidy log; skipping SARIF conversion."
-            exit 0
-          fi
-          # ubuntu-24.04's glibc (2.39) runs the prebuilt gnu binary directly, so no build step.
           curl -sSfL -o clang-tidy-sarif \
             "https://github.com/psastras/sarif-rs/releases/download/clang-tidy-sarif-v${CLANG_TIDY_SARIF_VERSION}/clang-tidy-sarif-x86_64-unknown-linux-gnu"
           chmod +x clang-tidy-sarif
           ./clang-tidy-sarif < clang-tidy.log > clang-tidy.sarif
 
-          # compile_commands.json holds absolute paths, so the conversion emits absolute URIs.
-          # Code scanning matches results to blobs by repo-relative path, so those alerts would
-          # point at nothing. rebaseuri moves them onto a uriBaseId, which is the same shape
-          # CodeQL's own uploads use. .NET 8 is preinstalled on the ubuntu-24.04 runner; the
-          # multitool goes into a user tool path so no sudo is needed.
           dotnet tool install --tool-path "$HOME/.dotnet-tools" \
             Sarif.Multitool --version "$SARIF_MULTITOOL_VERSION"
-          # rebaseuri only rewrites URIs it considers absolute, and .NET parses a scheme-less
-          # POSIX path as a relative URI, so the scheme has to be there first or the rebase is a
-          # silent no-op.
           sed -i -E 's@("uri"[[:space:]]*:[[:space:]]*")/@\1file:///@g' clang-tidy.sarif
           "$HOME/.dotnet-tools/sarif" rebaseuri clang-tidy.sarif \
             --base-path-value "$GITHUB_WORKSPACE" --base-path-token SRCROOT --log Inline
 
-      # Fork pull requests get a read-only token with no security-events scope, so this
-      # cannot succeed there. Those runs fall back to the step summary and the job log.
       - name: Upload SARIF to code scanning
-        if: always() && steps.changes.outputs.cpp_changed == 'true'
+        if: always() && steps.changes.outputs.cpp_changed == 'true' && hashFiles('clang-tidy.sarif') != ''
         uses: github/codeql-action/upload-sarif@v4
         continue-on-error: true
         with:
           sarif_file: clang-tidy.sarif
           category: clang-tidy
 
-      # clang-html scrapes the check list from the LLVM docs site at run time, so a docs
-      # outage must not fail the run.
       - name: Build HTML report
-        if: always() && steps.changes.outputs.artifacts == 'true' && steps.changes.outputs.cpp_changed == 'true'
+        if: always() && steps.changes.outputs.artifacts == 'true' && steps.changes.outputs.cpp_changed == 'true' && hashFiles('clang-tidy.log') != ''
         continue-on-error: true
         run: |
           pipx install "clang-html==$CLANG_HTML_VERSION"
@@ -267,7 +196,7 @@ jobs:
           "$bin_dir/clang-tidy-html" clang-tidy.log -o clang-tidy-report.html
 
       - name: Upload clang-tidy artifacts
-        if: always() && steps.changes.outputs.artifacts == 'true' && steps.changes.outputs.cpp_changed == 'true'
+        if: always() && steps.changes.outputs.artifacts == 'true' && steps.changes.outputs.cpp_changed == 'true' && hashFiles('clang-tidy.log') != ''
         uses: actions/upload-artifact@v7
         with:
           name: clang-tidy-report

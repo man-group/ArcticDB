@@ -75,8 +75,8 @@ A root `Makefile` provides shortcuts for common tasks. User-specific overrides (
 | `make activate NAME=x` | Print activate path. Use: `source $(make activate NAME=x)` | `VENV_DIR` |
 | `make lint` | Run formatters in-place | |
 | `make lint-check` | Check formatting without changes | |
-| `make tidy-diff` | clang-tidy on changed lines only | `TIDY_BASE=` base ref, `CLANG_TIDY=` binary |
-| `make tidy` | clang-tidy over all of `cpp/arcticdb` | `CLANG_TIDY=`, `CMAKE_JOBS=` |
+| `make tidy-diff` | clang-tidy on changed lines only | `TIDY_BASE=` base ref, `CLANG_TIDY=` binary, `CLANG_TIDY_DIFF=` wrapper |
+| `make tidy` | clang-tidy over all of `cpp/arcticdb` | `CLANG_TIDY=`, `RUN_CLANG_TIDY=`, `CMAKE_JOBS=` |
 | `make build` / `build-debug` | Configure, build, and symlink `arcticdb_ext` | `RELEASE_PRESET` / `DEBUG_PRESET`, `CMAKE_JOBS` |
 | `make configure` / `configure-debug` | CMake configure only | |
 | `make test-cpp` / `test-cpp-debug` | Build and run C++ unit tests | `FILTER=` for gtest_filter |
@@ -199,9 +199,10 @@ tolerate a stale build — including in test helpers.
 
 ### Static Analysis (clang-tidy)
 
-`.clang-tidy` at the repo root enables all of `bugprone-*` and `performance-*`, plus
-`modernize-use-ranges` and `modernize-use-constraints`. The rest of `modernize-*` and all
-style checks are left off; formatting is `make lint`'s job.
+`.clang-tidy` at the repo root enables all of `bugprone-*` and `performance-*`, plus a short
+hand-picked list of `modernize-*`, `misc-*`, `readability-*` and `cppcoreguidelines-*` checks
+(see the file for the exact set). All other style checks are left off; formatting is
+`make lint`'s job.
 
 Everything lives in `clang_tidy.yml`, which declares both `workflow_call` and
 `workflow_dispatch`:
@@ -228,11 +229,14 @@ blocking a merge. Findings are uploaded to GitHub code scanning under the `clang
 category and appear as annotations on the lines a PR touches. `clang-tidy-sarif` emits the
 absolute paths it finds in `compile_commands.json`, so `Sarif.Multitool rebaseuri` rebases
 them onto a `SRCROOT` uriBaseId before the upload; code scanning cannot resolve absolute
-paths to blobs. That step pins `dotnet-sdk-8.0` because the tool targets net8.0.
+paths to blobs. The multitool is a .NET 8 tool; the ubuntu-24.04 runner ships .NET 8, so
+nothing is installed for it.
 
 Locally, `make tidy-diff` and `make tidy` need a **clang-configured** debug build. clang-tidy
 uses clang's driver, so a gcc-configured `compile_commands.json` produces spurious errors
-from libstdc++ and vcpkg headers.
+from libstdc++ and vcpkg headers. Both targets locate the wrappers relative to the
+`clang-tidy` binary (`CLANG_TIDY=`); override `CLANG_TIDY_DIFF=` / `RUN_CLANG_TIDY=` if your
+install puts them elsewhere.
 
 Two things to know before reading the raw output:
 
