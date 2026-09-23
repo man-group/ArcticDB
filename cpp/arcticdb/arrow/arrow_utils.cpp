@@ -263,10 +263,18 @@ sparrow::array string_dict_from_block(
 }
 
 const date::time_zone* timezone(const std::optional<ArrowMeta::ColumnMeta>& column_meta) {
-    if (column_meta.has_value() && column_meta->has_timezone()) {
-        return date::locate_zone(column_meta->timezone());
-    } else {
+    if (!column_meta.has_value() || !column_meta->has_timezone()) {
         return nullptr;
+    }
+    try {
+        return date::locate_zone(column_meta->timezone());
+    } catch (const std::runtime_error& e) {
+        // `date` is built with USE_OS_TZDB=1, so this reads the OS database - /usr/share/zoneinfo on Linux. That is a
+        // different database from the one pyarrow uses, which is its own, so a timezone can resolve for one and not the
+        // other. USE_OS_TZDB is a compile error on Windows, so a Windows build ships date's own tzdb instead.
+        normalization::raise<ErrorCode::E_UNIMPLEMENTED_INPUT_TYPE>(
+                "Cannot look up timezone '{}' for Arrow output: {}", column_meta->timezone(), e.what()
+        );
     }
 }
 

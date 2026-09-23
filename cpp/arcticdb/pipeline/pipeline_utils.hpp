@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include <arcticdb/entity/arrow_pandas_norm.hpp>
 #include <arcticdb/pipeline/pipeline_context.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/pipeline/read_frame.hpp>
@@ -72,6 +73,24 @@ inline ReadResult create_python_read_result(
                 index->start() == 0 && index->step() == 0) {
                 index->set_step(1);
             }
+        }
+    }
+
+    const auto convert_pandas_normalization_to_arrow = [](FrameAndDescriptor& frame_and_descriptor) {
+        auto* norm = frame_and_descriptor.desc_.mutable_proto().mutable_normalization();
+        if (is_pandas_convertible_to_arrow(*norm)) {
+            *norm = arrow_norm_from_pandas(*norm, frame_and_descriptor.frame_.descriptor());
+        }
+    };
+    // For OutputFormat::ARROW we convert pandas metadata to arrow before `segment_to_arrow_data` is called.
+    // This way all timezone operations for arrow output are handled in C++ layer.
+    // Ideally for OutputFormat::PANDAS we would convert arrow metadata to pandas here as well. However that is
+    // impossible since this conversion is inherently lossy. Pandas metadata doesn't have a structure to specify
+    // timezones for non index columns.
+    if (output_format == OutputFormat::ARROW) {
+        convert_pandas_normalization_to_arrow(result);
+        for (auto& node_output : node_outputs) {
+            convert_pandas_normalization_to_arrow(node_output.frame_and_descriptor_);
         }
     }
 

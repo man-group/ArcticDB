@@ -12,9 +12,10 @@
 
 namespace arcticdb {
 
-/// DataFrames, Series and TimeFrames all describe their index through the same Pandas submessage; every other input
-/// type - an ndarray, a pickled object, an Arrow table - has none, and returns nullptr. An input type this build does
-/// not know about is reached by reflection, so that data written by a newer client is still read correctly.
+/// DataFrames, Series and TimeFrames all describe their index through the same Pandas submessage, as does Arrow data
+/// that was combined with one of those; every other input type - an ndarray, a pickled object, Arrow data of its own -
+/// has none, and returns nullptr. An input type this build does not know about is reached by reflection, so that data
+/// written by a newer client is still read correctly.
 const proto::descriptors::NormalizationMetadata_Pandas* pandas_common(
         const proto::descriptors::NormalizationMetadata& norm_meta
 );
@@ -22,6 +23,20 @@ const proto::descriptors::NormalizationMetadata_Pandas* pandas_common(
 proto::descriptors::NormalizationMetadata_Pandas* mutable_pandas_common(
         proto::descriptors::NormalizationMetadata& norm_meta
 );
+
+/// The pandas metadata Arrow data carries once it has been combined with pandas data. Nullptr for Arrow-only data, and
+/// for input types that are pandas in their own right - use pandas_common for those.
+const proto::descriptors::NormalizationMetadata_Pandas* embedded_pandas_common(
+        const proto::descriptors::NormalizationMetadata_ExperimentalArrow& arrow_meta
+);
+
+proto::descriptors::NormalizationMetadata_Pandas* mutable_embedded_pandas_common(
+        proto::descriptors::NormalizationMetadata_ExperimentalArrow& arrow_meta
+);
+
+/// True for the input types that are pandas objects in their own right: a DataFrame, a Series or a TimeFrame. False for
+/// Arrow data that merely carries pandas metadata, whose shape is described by the Arrow fields.
+bool is_pandas_input_type(const proto::descriptors::NormalizationMetadata& norm_meta);
 
 /// In case both indexes are row-ranged sanity checks will be performed:
 /// * Both indexes must have the same step
