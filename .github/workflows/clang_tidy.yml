@@ -140,15 +140,17 @@ jobs:
         if: steps.changes.outputs.cpp_changed == 'true'
         run: "$CLANG_HOME/bin/clang-tidy --version"
 
-      # Pin cmake to match the dev images (see CMAKE_VERSION). pipx installs it into
-      # ~/.local/bin, prepended to PATH for the later steps.
+      # Pin cmake to match the dev images (see CMAKE_VERSION). Debian's apt-packaged pipx
+      # doesn't always symlink apps into ~/.local/bin, so ask pipx where it actually put them
+      # rather than assuming.
       - name: Install pinned CMake
         if: steps.changes.outputs.cpp_changed == 'true'
         run: |
           set -euo pipefail
           pipx install "cmake==${CMAKE_VERSION}"
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-          "$HOME/.local/bin/cmake" --version
+          bin_dir="$(pipx environment --value PIPX_BIN_DIR)"
+          echo "$bin_dir" >> "$GITHUB_PATH"
+          "$bin_dir/cmake" --version
 
       # Fails fast on a typo in a check name or an unknown key, before the expensive configure.
       - name: Verify .clang-tidy
@@ -276,7 +278,8 @@ jobs:
         continue-on-error: true
         run: |
           pipx install "clang-html==$CLANG_HTML_VERSION"
-          "$HOME/.local/bin/clang-tidy-html" clang-tidy.log -o clang-tidy-report.html
+          bin_dir="$(pipx environment --value PIPX_BIN_DIR)"
+          "$bin_dir/clang-tidy-html" clang-tidy.log -o clang-tidy-report.html
 
       - name: Upload clang-tidy artifacts
         if: always() && steps.changes.outputs.artifacts == 'true' && steps.changes.outputs.cpp_changed == 'true'
