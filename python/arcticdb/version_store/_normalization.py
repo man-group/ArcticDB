@@ -225,6 +225,45 @@ def get_timezone_from_metadata(norm_meta):
     return None
 
 
+def _check_arrow_column_names(column_names):
+    # type: (List[str])->None
+    """ArcticDB neither accepts nor emits an empty Arrow column name: a pandas column labelled "" is stored, and
+    presented to Arrow, as ``__empty__N``. sparrow aborts the process on an empty name, and polars renames one
+    positionally to ``column_N``, so it cannot round-trip. Duplicates are rejected for the same reason - polars raises
+    on reading them, and the column metadata and schema combining are keyed by name."""
+    if not all(column_names):
+        raise NormalizationException("Arrow column names must not be empty")
+    duplicates = {name for name in column_names if column_names.count(name) > 1}
+    if duplicates:
+        raise NormalizationException(f"Arrow column names must be unique, received duplicates: {sorted(duplicates)}")
+
+
+def _series_name(norm_meta):
+    # type: (Union[NormalizationMetadata.PandasDataFrame, NormalizationMetadata.ExperimentalArrow])->Optional[str]
+    if isinstance(norm_meta, NormalizationMetadata.ExperimentalArrow):
+        # A one-dimensional Arrow structure only has a name if it was written as a polars Series
+        return norm_meta.polars_series_name if norm_meta.HasField("polars_series_name") else None
+    if len(norm_meta.common.name) or norm_meta.common.has_name:
+        return norm_meta.common.name
+    # Either the Series was written with a new client that understands the has_name field, and it was None, or
+    # the Series was written by an older client as either an empty string or None, we cannot tell, so maintain
+    # behaviour as it was before the has_name field was added
+    return None
+
+
+def polars_series_name(norm_meta):
+    # type: (NormalizationMetadata)->str
+    """polars has no unnamed Series, so a Series written without a name reads back with an empty name."""
+    input_type = norm_meta.WhichOneof("input_type")
+    if input_type == "experimental_arrow":
+        name = _series_name(norm_meta.experimental_arrow)
+    elif input_type == "series":
+        name = _series_name(norm_meta.series)
+    else:
+        name = None
+    return name if name is not None else ""
+
+
 def _to_primitive(
     arr, arr_name, dynamic_strings, string_max_len=None, coerce_column_type=None, norm_meta=None
 ) -> Union[np.ndarray, List[RecordBatchData]]:
@@ -769,6 +808,7 @@ class ArrowTableNormalizer(Normalizer):
         if _POLARS_AVAILABLE and isinstance(arrow_structure, pl.Series):
             norm_metadata.experimental_arrow.polars_series_name = arrow_structure.name
         arrow_structure = to_pyarrow_table(arrow_structure)
+        _check_arrow_column_names(arrow_structure.column_names)
         if arrow_structure.num_rows == 0:
             # to_batches has a bug https://github.com/apache/arrow/issues/49309 so that it returns an empty list when
             # the table has zero rows, losing the schema information
@@ -831,19 +871,24 @@ class ArrowTableNormalizer(Normalizer):
                     res.add(col)
             return res
 
+        def single_array_output():
+            check(
+                item.num_columns == 1,
+                f"Unexpected {item.num_columns} column Arrow table read for single-array output",
+            )
+            return item.column(0)
+
         input_type = norm_meta.WhichOneof("input_type")
         if input_type == "df":
             pandas_meta = norm_meta.df.common
         elif input_type == "series":
-            # For pandas series we always return a dataframe (to not lose the index information).
             pandas_meta = norm_meta.series.common
+            # A Series with no index column is one-dimensional, like a pa.ChunkedArray or a pl.Series
+            if num_pandas_index_cols(pandas_meta) == 0:
+                return single_array_output()
         elif input_type == "experimental_arrow":
             if norm_meta.experimental_arrow.one_dimensional:
-                check(
-                    item.num_columns == 1,
-                    f"Unexpected {item.num_columns} column Arrow table read for single-array output",
-                )
-                return item.column(0)
+                return single_array_output()
             else:
                 return item
         else:
@@ -1036,19 +1081,12 @@ class SeriesNormalizer(_PandasNormalizer):
         return NormalizedInput(item=df, metadata=norm)
 
     def denormalize(self, item, norm_meta):
-        # type: (_FrameData, NormalizationMetadata.PandaDataFrame)->DataFrame
+        # type: (_FrameData, Union[NormalizationMetadata.PandasDataFrame, NormalizationMetadata.ExperimentalArrow])->Series
 
         df = self._df_norm.denormalize(item, norm_meta)
 
         series = pd.Series() if df.columns.empty else df.iloc[:, 0]
-
-        if len(norm_meta.common.name) or norm_meta.common.has_name:
-            series.name = norm_meta.common.name
-        else:
-            # Either the Series was written with a new client that understands the has_name field, and it was None, or
-            # the Series was written by an older client as either an empty string or None, we cannot tell, so maintain
-            # behaviour as it was before the has_name field was added
-            series.name = None
+        series.name = _series_name(norm_meta)
 
         return series
 
@@ -1729,7 +1767,10 @@ class CompositeNormalizer(Normalizer):
             elif input_type == "np":
                 return self.np.denormalize(item, norm_meta.np)
             elif input_type == "experimental_arrow":
-                return self.df.denormalize(item, norm_meta.experimental_arrow)
+                arrow_meta = norm_meta.experimental_arrow
+                # A one-dimensional Arrow structure is the Arrow spelling of a Series with no index column
+                normalizer = self.series if arrow_meta.one_dimensional else self.df
+                return normalizer.denormalize(item, arrow_meta)
             elif input_type == "msg_pack_frame":
                 return self.msg_pack_denorm.denormalize(item, norm_meta)
 

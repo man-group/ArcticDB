@@ -149,7 +149,6 @@ def test_write_pandas_series_datetime_index_read_arrow(in_memory_version_store_a
     assert received.column_names == ["ts", "values"]
 
 
-@pytest.mark.xfail(reason="Series with RangeIndex returns a single-column Table, not a ChunkedArray yet", strict=True)
 def test_write_pandas_series_rangeindex_read_arrow(in_memory_version_store_arrow):
     """A Series with a RangeIndex has no physical index column, so it reads back as a
     pa.ChunkedArray or pl.Series."""
@@ -581,7 +580,6 @@ def test_write_arrow_strings_read_pandas(in_memory_version_store_arrow):
 # --- writing pyarrow / polars input primitives other than a plain Table -----
 
 
-@pytest.mark.xfail(reason="pyarrow Array input should read back as a pandas Series, not be pickled", strict=True)
 def test_write_arrow_array_read_pandas(in_memory_version_store_arrow):
     lib = in_memory_version_store_arrow
     sym = "test_write_arrow_array_read_pandas"
@@ -591,7 +589,6 @@ def test_write_arrow_array_read_pandas(in_memory_version_store_arrow):
     assert_series_equal(pd.Series(np.arange(1, 4, dtype=np.int64)), received)
 
 
-@pytest.mark.xfail(reason="pyarrow ChunkedArray input should read back as a pandas Series, not be pickled", strict=True)
 def test_write_arrow_chunked_array_read_pandas(in_memory_version_store_arrow):
     lib = in_memory_version_store_arrow
     sym = "test_write_arrow_chunked_array_read_pandas"
@@ -611,7 +608,6 @@ def test_write_arrow_record_batch_read_pandas(in_memory_version_store_arrow):
     assert_frame_equal(pd.DataFrame({"col": np.array([1, 2], dtype=np.int64)}), received)
 
 
-@pytest.mark.xfail(reason="polars Series input should read back as a range-indexed pandas Series", strict=True)
 def test_write_polars_series_read_pandas(in_memory_version_store_arrow):
     lib = in_memory_version_store_arrow
     sym = "test_write_polars_series_read_pandas"
@@ -897,8 +893,9 @@ def test_combine_column_tz_mismatch_concat_clears_tz(arrow_library_any_schema, f
 
 
 @pytest.mark.parametrize("op", UNINDEXED_OPS)
-@pytest.mark.xfail(reason="merging a Series with a pyarrow ChunkedArray is not supported yet", strict=True)
 def test_combine_series_with_chunked_array(arrow_library, op):
+    """An unnamed Series and a pyarrow ChunkedArray are both stored under the column name "0", so they
+    combine without any name reconciliation."""
     received = _combine(
         arrow_library, op, pd.Series(np.array([0, 1], dtype=np.int64)), pa.chunked_array([[2, 3]], pa.int64())
     )
@@ -906,9 +903,22 @@ def test_combine_series_with_chunked_array(arrow_library, op):
 
 
 @pytest.mark.parametrize("op", UNINDEXED_OPS)
-@pytest.mark.xfail(reason="merging a Series with a polars Series is not supported yet", strict=True)
 def test_combine_series_with_polars_series(arrow_library, op):
-    received = _combine(arrow_library, op, pd.Series(np.array([0, 1], dtype=np.int64)), pl.Series("col", [2, 3]))
+    received = _combine(
+        arrow_library, op, pd.Series(np.array([0, 1], dtype=np.int64), name="col"), pl.Series("col", [2, 3])
+    )
+    assert received.to_pylist() == [0, 1, 2, 3]
+
+
+def test_append_series_with_mismatched_polars_series_name_raises(arrow_library):
+    """Series names must match to append, as they must for two polars Series."""
+    with pytest.raises(SchemaException):
+        _combine(arrow_library, "append", pd.Series(np.array([0, 1], dtype=np.int64)), pl.Series("col", [2, 3]))
+
+
+def test_concat_series_with_mismatched_polars_series_name(arrow_library):
+    """concat reconciles mismatched Series names to unnamed rather than raising."""
+    received = _combine(arrow_library, "concat", pd.Series(np.array([0, 1], dtype=np.int64)), pl.Series("col", [2, 3]))
     assert received.to_pylist() == [0, 1, 2, 3]
 
 
