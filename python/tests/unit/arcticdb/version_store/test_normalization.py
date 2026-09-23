@@ -232,6 +232,25 @@ def test_warns_on_large_meta(log):
     assert "User defined metadata is above warning size" in log.warn.call_args[0][0]
 
 
+class _Unserializable:
+    """Something msgpack cannot handle, so it falls through to the pickler."""
+
+
+@patch("arcticdb.version_store._normalization.log")
+def test_pickling_metadata_says_metadata(log):
+    normalize_metadata({"a": _Unserializable()})
+    assert "Pickling metadata" in log.log.call_args[0][1]
+
+
+@patch("arcticdb.version_store._normalization.log")
+def test_pickling_data_does_not_say_metadata(log):
+    # The same MsgPackNormalizer is the fallback for user data, where the message
+    # previously still claimed metadata was being pickled.
+    MsgPackNormalizer().normalize(_Unserializable())
+    assert "Pickling data" in log.log.call_args[0][1]
+    assert "metadata" not in log.log.call_args[0][1]
+
+
 def test_fails_humongous_meta():
     with pytest.raises(ArcticDbNotYetImplemented):
         from arcticdb.version_store._normalization import _MAX_USER_DEFINED_META as MAX
