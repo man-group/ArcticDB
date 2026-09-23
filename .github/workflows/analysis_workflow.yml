@@ -139,6 +139,8 @@ jobs:
     if: ${{ !cancelled() && needs.detect_changes.outputs.docs_only != 'true' }}
     timeout-minutes: 120
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     container:
       image: ghcr.io/man-group/arcticdb-dev:${{ inputs.dev_image_tag || 'latest' }}
       volumes:
