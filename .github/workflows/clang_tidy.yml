@@ -102,20 +102,20 @@ jobs:
             echo "No C++ changes; skipping clang-tidy." >> "$GITHUB_STEP_SUMMARY"
           fi
 
-      # Everything the vcpkg build needs that the manylinux dev image used to bake in. clang and
-      # clang-tidy are installed separately from the official LLVM release; awscli and .NET are
-      # already present on the ubuntu-24.04 runner. mono runs the vcpkg NuGet client.
+      # Only what the ubuntu-24.04 runner does not already ship: the build toolchain
+      # (build-essential, autotools, pkg-config, ninja, perl, curl, tar, pipx, git-lfs) and .NET
+      # 8 / aws v2 are preinstalled. These are the vcpkg-port linkage/build deps plus PyYAML for
+      # the clang-tidy wrappers and mono for the vcpkg NuGet client. clang/clang-tidy come from
+      # the official LLVM release below.
       - name: Install build dependencies
         if: steps.changes.outputs.cpp_changed == 'true'
         run: |
           set -euo pipefail
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            build-essential autoconf automake libtool autoconf-archive pkg-config \
-            flex bison ninja-build \
+            autoconf-archive flex bison \
             libkrb5-dev libsasl2-dev libssl-dev libcurl4-openssl-dev \
-            unzip tar wget curl perl \
-            python3-yaml pipx \
+            python3-yaml \
             mono-complete
 
       - name: Install clang and clang-tidy (official LLVM release)
