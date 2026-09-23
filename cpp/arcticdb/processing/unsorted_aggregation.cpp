@@ -86,12 +86,16 @@ void MinMaxAggregatorData::aggregate(const ColumnWithStrings& input_column) {
                 null_count_ += static_cast<uint64_t>(sparse_gap_count);
             }
 
-            auto pack_at_offset = [&input_column](entity::position_t pool_offset) {
-                const auto str = input_column.string_at_offset(pool_offset, true);
+            auto pack_string_at_offset = [&input_column](entity::position_t offset_in_pool) {
+                const auto raw_pool_string = input_column.string_at_offset(offset_in_pool);
+
                 internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-                        str.has_value(), "Missing string pool entry at offset {} generating column stats", pool_offset
+                        raw_pool_string.has_value(),
+                        "Missing string pool entry at offset {} generating column stats",
+                        offset_in_pool
                 );
-                return pack_string_stat(*str, type_info::data_type);
+
+                return pack_string(*raw_pool_string, type_info::data_type);
             };
 
             ankerl::unordered_dense::set<RawType> seen_offsets_in_pool;
@@ -108,18 +112,19 @@ void MinMaxAggregatorData::aggregate(const ColumnWithStrings& input_column) {
                     return;
                 }
 
+                // the string at this offset was already seen and processed for min/max
                 if (!seen_offsets_in_pool.emplace(offset).second) {
                     return;
                 }
 
-                const auto packed = pack_at_offset(offset_in_pool);
+                const auto packed_string = pack_string_at_offset(offset_in_pool);
 
                 if (ARCTICDB_UNLIKELY(!min_.has_value())) {
-                    min_ = Value{packed, DataType::UINT64};
-                    max_ = Value{packed, DataType::UINT64};
+                    min_ = Value{packed_string, DataType::UINT64};
+                    max_ = Value{packed_string, DataType::UINT64};
                 } else {
-                    min_->set(std::min(min_->get<uint64_t>(), packed));
-                    max_->set(std::max(max_->get<uint64_t>(), packed));
+                    min_->set(std::min(min_->get<uint64_t>(), packed_string));
+                    max_->set(std::max(max_->get<uint64_t>(), packed_string));
                 }
             });
         }

@@ -43,18 +43,19 @@ constexpr uint64_t rightmost_byte_only_mask = 0xFFULL;
 // is harmless because every comparison of packed stats is bytewise.
 uint64_t pack_string_stat(std::string_view utf8_str);
 
-// Transcodes to UTF-8 first when data_type is a fixed-width UTF column, whose string pool holds
-// UTF-32. All other string types already hold UTF-8 (or ASCII, which is a subset), so every packed
-// stat is comparable regardless of the source column's type.
-uint64_t pack_string_stat(std::string_view raw_str, entity::DataType data_type);
+// Takes a string exactly as the column's string pool holds it. Fixed-width pools null pad to the
+// column width, which is stripped here, and a fixed-width UTF pool holds UTF-32, which is transcoded
+// to UTF-8 here. All other string types already hold UTF-8 (or ASCII, which is a subset), so every
+// packed stat is comparable regardless of the source column's type.
+uint64_t pack_string(std::string_view raw_pool_string, entity::DataType raw_pool_string_data_type);
 
 // The prefix bytes are not necessarily valid UTF-8, since truncation can split a codepoint. Callers
 // that need to display them must decode permissively.
 struct UnpackedStringStat {
-    std::string prefix;
-    bool truncated;
+    std::string text;
+    bool was_truncated;
 };
 
-UnpackedStringStat unpack_string_stat(uint64_t packed);
+UnpackedStringStat unpack_string(uint64_t packed);
 
 } // namespace arcticdb

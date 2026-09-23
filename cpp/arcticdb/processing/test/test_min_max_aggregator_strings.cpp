@@ -46,6 +46,10 @@ ColumnWithStrings build_string_column(
                     reinterpret_cast<const char*>(padded.data()), padded.size() * sizeof(char32_t)
             };
             offsets.emplace_back(string_pool->get(bytes, false).offset());
+        } else if (data_type == DataType::ASCII_FIXED64 && fixed_width.has_value()) {
+            std::string padded{*value};
+            padded.resize(*fixed_width, '\0');
+            offsets.emplace_back(string_pool->get(padded, false).offset());
         } else {
             offsets.emplace_back(string_pool->get(*value, false).offset());
         }
@@ -220,6 +224,18 @@ TEST(MinMaxAggregatorStrings, FixedWidthPaddingIsStripped) {
     ASSERT_EQ(stat_value(stats, ColumnStatTypeInternal::MIN_STR_V1)->get<uint64_t>(), pack_string_stat("ab"));
 }
 
+TEST(MinMaxAggregatorStrings, AsciiFixedWidthPaddingIsStripped) {
+    MinMaxAggregatorData aggregator{data_col_offset};
+    aggregator.aggregate(build_string_column({"ab", "cd"}, DataType::ASCII_FIXED64, /*fixed_width=*/8));
+    const auto stats = aggregator.finalize();
+
+    // The pool holds eight null padded bytes per value. The aggregator hands them to the packer
+    // as-is, so the packer is what has to strip them - relying on the caller to do it would make the
+    // stored stat depend on how wide the caller thinks a character is.
+    ASSERT_EQ(stat_value(stats, ColumnStatTypeInternal::MIN_STR_V1)->get<uint64_t>(), pack_string_stat("ab"));
+    ASSERT_EQ(stat_value(stats, ColumnStatTypeInternal::MAX_STR_V1)->get<uint64_t>(), pack_string_stat("cd"));
+}
+
 TEST(MinMaxAggregatorStrings, FixedWidthRepeatedOffsetsAreSkippedWithoutLosingMinMax) {
     MinMaxAggregatorData aggregator{data_col_offset};
     aggregator.aggregate(build_string_column({"zz", "aa", "zz", "aa"}, DataType::UTF_FIXED64, /*fixed_width=*/8));
@@ -281,8 +297,8 @@ TEST(MinMaxAggregatorStrings, MaxTruncatedMidCodepointStillBracketsItsOwnValue) 
     // value must still sort within its own recorded range or a query for it would prune this slice.
     ASSERT_EQ(min, pack_string_stat("日本"));
     ASSERT_EQ(max, pack_string_stat("日本語"));
-    ASSERT_TRUE(unpack_string_stat(max).truncated);
-    ASSERT_FALSE(unpack_string_stat(min).truncated);
+    ASSERT_TRUE(unpack_string(max).was_truncated);
+    ASSERT_FALSE(unpack_string(min).was_truncated);
     ASSERT_GE(pack_string_stat("日本語"), min);
     ASSERT_LE(pack_string_stat("日本語"), max);
     // Anything sharing the truncated prefix is equally unprunable, which is the conservative side.

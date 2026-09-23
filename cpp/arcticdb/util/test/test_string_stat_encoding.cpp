@@ -96,10 +96,10 @@ TEST(StringStatEncoding, MultiByteCodepointsPackWithoutSignExtension) {
 }
 
 TEST(StringStatEncoding, TruncationSplittingACodepointIsStable) {
-    const auto unpacked = unpack_string_stat(pack_string_stat(cjk_utf8));
-    ASSERT_TRUE(unpacked.truncated);
+    const auto unpacked = unpack_string(pack_string_stat(cjk_utf8));
+    ASSERT_TRUE(unpacked.was_truncated);
     // Nine bytes cut at seven leaves 日本 plus the first byte of 語, which is not valid UTF-8.
-    ASSERT_EQ(unpacked.prefix, cjk_utf8.substr(0, truncated_prefix_bytes));
+    ASSERT_EQ(unpacked.text, cjk_utf8.substr(0, truncated_prefix_bytes));
 }
 
 TEST(StringStatEncoding, SplitAtEveryOffsetWithinACodepoint) {
@@ -126,11 +126,8 @@ TEST(StringStatEncoding, InvalidUtf8PacksWithoutThrowing) {
 TEST(StringStatEncoding, Utf32SourceTranscodesToTheSamePackedValue) {
     // Makes stats comparable across a dynamic schema symbol whose slices differ in string type.
     const auto utf32 = as_utf32(cjk_utf8);
-    ASSERT_EQ(
-            pack_string_stat(bytes_of(utf32), DataType::UTF_FIXED64),
-            pack_string_stat(cjk_utf8, DataType::UTF_DYNAMIC64)
-    );
-    ASSERT_EQ(pack_string_stat(bytes_of(utf32), DataType::UTF_FIXED64), 0xE697A5E69CACE8FFULL);
+    ASSERT_EQ(pack_string(bytes_of(utf32), DataType::UTF_FIXED64), pack_string(cjk_utf8, DataType::UTF_DYNAMIC64));
+    ASSERT_EQ(pack_string(bytes_of(utf32), DataType::UTF_FIXED64), 0xE697A5E69CACE8FFULL);
     // Without the transcode the UTF-32 bytes would pack as themselves, which is a different value.
     ASSERT_NE(pack_string_stat(bytes_of(utf32)), 0xE697A5E69CACE8FFULL);
 }
@@ -140,16 +137,16 @@ TEST(StringStatEncoding, Utf32SourceTranscodesToTheSamePackedValue) {
 // query for the whole value would sort above the stored max and prune a slice that contains it.
 TEST(StringStatEncoding, Utf32EmbeddedNullIsNotATerminator) {
     const std::string with_null{"a\0b", 3};
-    ASSERT_EQ(pack_string_stat(bytes_of(as_utf32(with_null)), DataType::UTF_FIXED64), pack_string_stat(with_null));
-    ASSERT_GT(pack_string_stat(bytes_of(as_utf32(with_null)), DataType::UTF_FIXED64), pack_string_stat("a"));
+    ASSERT_EQ(pack_string(bytes_of(as_utf32(with_null)), DataType::UTF_FIXED64), pack_string_stat(with_null));
+    ASSERT_GT(pack_string(bytes_of(as_utf32(with_null)), DataType::UTF_FIXED64), pack_string_stat("a"));
 }
 
 TEST(StringStatEncoding, EveryStringDataTypeAgreesOnAsciiText) {
     const auto expected = pack_string_stat("ab");
-    ASSERT_EQ(pack_string_stat("ab", DataType::ASCII_FIXED64), expected);
-    ASSERT_EQ(pack_string_stat("ab", DataType::ASCII_DYNAMIC64), expected);
-    ASSERT_EQ(pack_string_stat("ab", DataType::UTF_DYNAMIC64), expected);
-    ASSERT_EQ(pack_string_stat(bytes_of(as_utf32("ab")), DataType::UTF_FIXED64), expected);
+    ASSERT_EQ(pack_string("ab", DataType::ASCII_FIXED64), expected);
+    ASSERT_EQ(pack_string("ab", DataType::ASCII_DYNAMIC64), expected);
+    ASSERT_EQ(pack_string("ab", DataType::UTF_DYNAMIC64), expected);
+    ASSERT_EQ(pack_string(bytes_of(as_utf32("ab")), DataType::UTF_FIXED64), expected);
 }
 
 TEST(StringStatEncoding, Utf32PaddingIsNotPacked) {
@@ -157,37 +154,56 @@ TEST(StringStatEncoding, Utf32PaddingIsNotPacked) {
     // seven-byte value rather than a two-byte one.
     auto padded = as_utf32("ab");
     padded.resize(8, char32_t{0});
-    ASSERT_EQ(pack_string_stat(bytes_of(padded), DataType::UTF_FIXED64), pack_string_stat("ab"));
+    ASSERT_EQ(pack_string(bytes_of(padded), DataType::UTF_FIXED64), pack_string_stat("ab"));
+}
+
+TEST(StringStatEncoding, AsciiFixedWidthPaddingIsNotPacked) {
+    // An ASCII fixed-width pool pads at one byte per character. The packer must strip that itself
+    // rather than rely on the caller, so that a packed stat never depends on how the caller decided
+    // how wide a character is.
+    std::string padded{"ab"};
+    padded.resize(8, '\0');
+    ASSERT_EQ(pack_string(padded, DataType::ASCII_FIXED64), pack_string_stat("ab"));
+    // Only the padding goes: an interior null is data, exactly as in the UTF-32 case.
+    std::string with_null{"a\0b", 3};
+    with_null.resize(8, '\0');
+    ASSERT_EQ(pack_string(with_null, DataType::ASCII_FIXED64), pack_string_stat(std::string{"a\0b", 3}));
+}
+
+TEST(StringStatEncoding, AllPaddingPacksToZero) {
+    // A fixed-width column can hold the empty string, which reaches the packer as pure padding.
+    ASSERT_EQ(pack_string(std::string(8, '\0'), DataType::ASCII_FIXED64), 0ULL);
+    ASSERT_EQ(pack_string(std::string(32, '\0'), DataType::UTF_FIXED64), 0ULL);
 }
 
 TEST(StringStatEncoding, UnpackRoundTripsUntruncatedValues) {
     for (const std::string source : {"", "a", "ab", "abcdef", "abcdefg"}) {
-        const auto unpacked = unpack_string_stat(pack_string_stat(source));
-        ASSERT_EQ(unpacked.prefix, source);
-        ASSERT_FALSE(unpacked.truncated) << source;
+        const auto unpacked = unpack_string(pack_string_stat(source));
+        ASSERT_EQ(unpacked.text, source);
+        ASSERT_FALSE(unpacked.was_truncated) << source;
     }
 }
 
 TEST(StringStatEncoding, UnpackReportsTruncation) {
-    const auto unpacked = unpack_string_stat(pack_string_stat("abcdefghij"));
-    ASSERT_EQ(unpacked.prefix, "abcdefg");
-    ASSERT_TRUE(unpacked.truncated);
+    const auto unpacked = unpack_string(pack_string_stat("abcdefghij"));
+    ASSERT_EQ(unpacked.text, "abcdefg");
+    ASSERT_TRUE(unpacked.was_truncated);
 }
 
 TEST(StringStatEncoding, UnpackClampsImpossibleLengthBytes) {
     // Corrupt or future on-disk bytes must not make unpack read past the prefix, which would shift
     // by a negative amount and be undefined.
     for (const uint64_t bogus_length : {8ULL, 9ULL, 100ULL, 254ULL}) {
-        const auto unpacked = unpack_string_stat(0x6162636465666700ULL | bogus_length);
-        ASSERT_EQ(unpacked.prefix, "abcdefg") << bogus_length;
-        ASSERT_FALSE(unpacked.truncated) << bogus_length;
+        const auto unpacked = unpack_string(0x6162636465666700ULL | bogus_length);
+        ASSERT_EQ(unpacked.text, "abcdefg") << bogus_length;
+        ASSERT_FALSE(unpacked.was_truncated) << bogus_length;
     }
 }
 
 TEST(StringStatEncoding, UnpackZeroGivesEmptyUntruncated) {
-    const auto unpacked = unpack_string_stat(0);
-    ASSERT_TRUE(unpacked.prefix.empty());
-    ASSERT_FALSE(unpacked.truncated);
+    const auto unpacked = unpack_string(0);
+    ASSERT_TRUE(unpacked.text.empty());
+    ASSERT_FALSE(unpacked.was_truncated);
 }
 
 } // namespace arcticdb
