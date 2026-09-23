@@ -33,21 +33,13 @@ jobs:
       contents: read
       security-events: write
     env:
-      # 0 - uses S3 Cache, 1 - uses GHA cache
-      # this way the external PRs can use the GHA cache
-      SCCACHE_GHA_VERSION: ${{secrets.AWS_S3_ACCESS_KEY == null}}
-      SCCACHE_BUCKET: arcticdb-ci-sccache-bucket
-      SCCACHE_ENDPOINT: http://s3.eu-west-1.amazonaws.com
-      SCCACHE_REGION: eu-west-1
-      SCCACHE_S3_USE_SSL: false
+      # AWS creds authorise the vcpkg S3 asset cache (source tarballs) used in vcpkg_caching.sh.
       AWS_ACCESS_KEY_ID: ${{secrets.AWS_S3_ACCESS_KEY}}
       AWS_SECRET_ACCESS_KEY: ${{secrets.AWS_S3_SECRET_KEY}}
       VCPKG_NUGET_USER: ${{secrets.VCPKG_NUGET_USER || github.repository_owner}}
       VCPKG_NUGET_TOKEN: ${{secrets.VCPKG_NUGET_TOKEN || secrets.GITHUB_TOKEN}}
       VCPKG_MAN_NUGET_USER: ${{secrets.VCPKG_MAN_NUGET_USER}} # For forks to download pre-compiled dependencies from the Man repo
       VCPKG_MAN_NUGET_TOKEN: ${{secrets.VCPKG_MAN_NUGET_TOKEN}}
-      CMAKE_C_COMPILER_LAUNCHER: sccache
-      CMAKE_CXX_COMPILER_LAUNCHER: sccache
       ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
       ARCTIC_CMAKE_PRESET: linux-debug
       # clang/clang-tidy come from the official LLVM binary release (installed below), not a
@@ -122,8 +114,8 @@ jobs:
             build-essential autoconf automake libtool autoconf-archive pkg-config \
             flex bison ninja-build \
             libkrb5-dev libsasl2-dev libssl-dev libcurl4-openssl-dev \
-            zip unzip tar jq wget curl git-lfs perl \
-            python3-yaml python3-pip pipx \
+            unzip tar wget curl perl \
+            python3-yaml pipx \
             mono-complete
 
       - name: Install clang and clang-tidy (official LLVM release)
@@ -156,13 +148,6 @@ jobs:
       - name: Verify .clang-tidy
         if: steps.changes.outputs.cpp_changed == 'true'
         run: clang-tidy --verify-config
-
-      - name: Configure sccache
-        if: steps.changes.outputs.cpp_changed == 'true'
-        uses: mozilla-actions/sccache-action@v0.0.11
-        with:
-          version: "v0.10.0"
-          disable_annotations: 'true'  # supress noisy report that pollutes the summary page
 
       - name: Extra envs
         if: steps.changes.outputs.cpp_changed == 'true'
