@@ -75,6 +75,7 @@ A root `Makefile` provides shortcuts for common tasks. User-specific overrides (
 | `make activate NAME=x` | Print activate path. Use: `source $(make activate NAME=x)` | `VENV_DIR` |
 | `make lint` | Run formatters in-place | |
 | `make lint-check` | Check formatting without changes | |
+| `make typecheck` | Run mypy over `python/arcticdb` in a dedicated venv (also gated in CI) | `VENV_DIR` |
 | `make build` / `build-debug` | Configure, build, and symlink `arcticdb_ext` | `RELEASE_PRESET` / `DEBUG_PRESET`, `CMAKE_JOBS` |
 | `make configure` / `configure-debug` | CMake configure only | |
 | `make test-cpp` / `test-cpp-debug` | Build and run C++ unit tests | `FILTER=` for gtest_filter |
