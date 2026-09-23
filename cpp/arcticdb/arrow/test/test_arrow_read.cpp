@@ -334,7 +334,7 @@ TEST(ArrowRead, ConvertSegmentWithTimezones) {
     // Verify the index column has the expected number of chunks
     EXPECT_EQ(segment.column(0).num_blocks(), num_chunks);
 
-    std::string tz_str{"Europe/Brussels"};
+    std::string tz_str{"Europe/Amsterdam"};
     proto::descriptors::NormalizationMetadata norm_meta;
     proto::descriptors::NormalizationMetadata::ExperimentalArrow::ColumnMeta column_meta;
     column_meta.set_timezone(tz_str);
@@ -354,9 +354,11 @@ TEST(ArrowRead, ConvertSegmentWithTimezones) {
         ASSERT_TRUE(dtz == nullptr);
         EXPECT_EQ(names[1], "col_with_tz");
         EXPECT_EQ(columns[1].data_type(), sparrow::data_type::TIMESTAMP_NANOSECONDS);
-        dtz = sparrow::get_timezone(sparrow::detail::array_access::get_arrow_proxy(columns[1]));
+        const auto& proxy = sparrow::detail::array_access::get_arrow_proxy(columns[1]);
+        EXPECT_EQ(std::string{proxy.format()}, std::string{"tsn:"} + tz_str);
+        dtz = sparrow::get_timezone(proxy);
         ASSERT_FALSE(dtz == nullptr);
-        ASSERT_EQ(dtz->name(), tz_str);
+        ASSERT_EQ(dtz, date::locate_zone(tz_str));
         EXPECT_EQ(names[2], "col_without_tz");
         EXPECT_EQ(columns[2].data_type(), sparrow::data_type::TIMESTAMP_NANOSECONDS);
         dtz = sparrow::get_timezone(sparrow::detail::array_access::get_arrow_proxy(columns[2]));
