@@ -109,7 +109,9 @@ jobs:
         run: |
           dnf install -y "clang-tools-extra-$CLANG_TOOLS_EXTRA_VERSION"
           # clang-tidy-diff.py's -export-fixes merges fixes into one YAML file, which needs
-          # PyYAML; this installs it into the dnf python3.11 the later steps call directly.
+          # PyYAML. It lands in the dnf python3.11 (/usr/bin/python3.11), which the wrapper
+          # steps invoke by absolute path: /opt/python/cp311-cp311/bin precedes /usr/bin on
+          # PATH, so a bare python3.11 would hit the manylinux interpreter, which lacks it.
           dnf install -y python3.11-pyyaml
           clang-tidy --version
 
@@ -166,7 +168,7 @@ jobs:
         run: |
           set -euo pipefail
           git diff -U0 --no-color "${{ steps.changes.outputs.base_sha }}...HEAD" -- '*.cpp' '*.hpp' \
-            | python3.11 /usr/share/clang/clang-tidy-diff.py -p1 \
+            | /usr/bin/python3.11 /usr/share/clang/clang-tidy-diff.py -p1 \
                 -path "cpp/out/$ARCTIC_CMAKE_PRESET-build" \
                 -j "$CMAKE_BUILD_PARALLEL_LEVEL" -quiet \
                 -export-fixes fixes.yml 2>&1 | tee clang-tidy.log
@@ -175,7 +177,7 @@ jobs:
         if: steps.changes.outputs.cpp_changed == 'true' && steps.changes.outputs.mode == 'full'
         run: |
           set -euo pipefail
-          python3.11 /usr/share/clang/run-clang-tidy.py \
+          /usr/bin/python3.11 /usr/share/clang/run-clang-tidy.py \
             -p "cpp/out/$ARCTIC_CMAKE_PRESET-build" \
             -j "$CMAKE_BUILD_PARALLEL_LEVEL" -quiet \
             -export-fixes fixes.yml \
