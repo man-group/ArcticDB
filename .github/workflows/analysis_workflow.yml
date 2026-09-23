@@ -141,7 +141,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: read
+      packages: write
     container:
       image: ghcr.io/man-group/arcticdb-dev:${{ inputs.dev_image_tag || 'latest' }}
       volumes:
