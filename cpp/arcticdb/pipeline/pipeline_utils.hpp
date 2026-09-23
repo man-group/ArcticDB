@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include <arcticdb/entity/arrow_pandas_norm.hpp>
 #include <arcticdb/pipeline/pipeline_context.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/pipeline/read_frame.hpp>
@@ -72,6 +73,22 @@ inline ReadResult create_python_read_result(
                 index->start() == 0 && index->step() == 0) {
                 index->set_step(1);
             }
+        }
+    }
+
+    // Arrow output is generated from Arrow metadata, so pandas data is described in Arrow terms before it is. That way
+    // timezones are applied in one place, here, and Python is handed one shape whatever was written.
+    const auto describe_in_arrow_terms = [](FrameAndDescriptor& frame_and_descriptor) {
+        auto* norm = frame_and_descriptor.desc_.mutable_proto().mutable_normalization();
+        if (is_embeddable_pandas(*norm)) {
+            *norm = arrow_norm_from_pandas(*norm, frame_and_descriptor.frame_.descriptor());
+        }
+    };
+    if (output_format == OutputFormat::ARROW) {
+        describe_in_arrow_terms(result);
+        // Recursively normalized data reaches Python as one node per leaf, each with metadata of its own
+        for (auto& node_output : node_outputs) {
+            describe_in_arrow_terms(node_output.frame_and_descriptor_);
         }
     }
 

@@ -11,6 +11,7 @@
 #include <pybind11/numpy.h>
 #include <pybind11/operators.h>
 #include <pybind11/stl.h>
+#include <arcticdb/entity/arrow_pandas_norm.hpp>
 #include <arcticdb/entity/data_error.hpp>
 #include <arcticdb/entity/protobuf_mappings.hpp>
 #include <arcticdb/python/python_to_tensor_frame.hpp>
@@ -1263,6 +1264,11 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                         !norm.has_msg_pack_frame(), "_collect_schema() not supported with pickled data"
                 );
                 auto schema = modify_schema({tsd.as_stream_descriptor().clone(), norm}, read_query->clauses_);
+                // As create_python_read_result does, so that the schema this reports and the schema of the data a read
+                // returns agree - see the invariant below
+                if (is_embeddable_pandas(schema.norm_metadata_)) {
+                    schema.norm_metadata_ = arrow_norm_from_pandas(schema.norm_metadata_, schema.stream_descriptor());
+                }
                 const auto& stream_desc = schema.stream_descriptor();
                 const auto columns = [&]() -> std::optional<ankerl::unordered_dense::set<std::string_view>> {
                     if (read_query->columns.has_value()) {
@@ -1284,7 +1290,7 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                     }
                 }();
                 auto record_batch = empty_record_batch_from_descriptor(
-                        stream_desc, read_options.arrow_output_config(), columns, norm
+                        stream_desc, read_options.arrow_output_config(), columns, schema.norm_metadata_
                 );
                 return std::make_pair(std::move(record_batch), python_util::pb_to_python(schema.norm_metadata_));
             }

@@ -515,7 +515,6 @@ def test_write_arrow_with_index_read_pandas(in_memory_version_store_arrow):
     assert_frame_equal(expected, received)
 
 
-@pytest.mark.xfail(reason="Arrow index timezone not propagated to pandas norm metadata", strict=True)
 def test_write_arrow_index_timezone_read_pandas(in_memory_version_store_arrow):
     """A tz-aware arrow timestamp index column reads back as a tz-aware pandas index."""
     lib = in_memory_version_store_arrow
@@ -536,7 +535,6 @@ def test_write_arrow_index_timezone_read_pandas(in_memory_version_store_arrow):
     assert_frame_equal(expected, received)
 
 
-@pytest.mark.xfail(reason="Arrow column timezone not propagated to pandas norm metadata", strict=True)
 def test_write_arrow_column_timezone_read_pandas(in_memory_version_store_arrow):
     """A tz-aware arrow timestamp *column* (not the index) reads back as a tz-aware pandas column."""
     lib = in_memory_version_store_arrow

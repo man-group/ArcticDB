@@ -263,10 +263,19 @@ sparrow::array string_dict_from_block(
 }
 
 const date::time_zone* timezone(const std::optional<ArrowMeta::ColumnMeta>& column_meta) {
-    if (column_meta.has_value() && column_meta->has_timezone()) {
-        return date::locate_zone(column_meta->timezone());
-    } else {
+    if (!column_meta.has_value() || !column_meta->has_timezone()) {
         return nullptr;
+    }
+    try {
+        return date::locate_zone(column_meta->timezone());
+    } catch (const std::runtime_error& e) {
+        // Every lookup fails when the timezone database is missing, which on Windows it is until it is installed
+        normalization::raise<ErrorCode::E_UNIMPLEMENTED_INPUT_TYPE>(
+                "Cannot look up timezone '{}' for Arrow output: {}. On Windows a timezone database has to be installed "
+                "first, see https://arrow.apache.org/docs/python/install.html#tzdata-on-windows",
+                column_meta->timezone(),
+                e.what()
+        );
     }
 }
 
