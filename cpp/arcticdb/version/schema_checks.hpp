@@ -10,7 +10,7 @@ namespace arcticdb {
 
 entity::OutputSchema combine_existing_tsd_with_frame(
         NormalizationOperation operation, bool dynamic_schema, const TimeseriesDescriptor& existing_tsd,
-        const pipelines::InputFrame& new_frame
+        pipelines::InputFrame& new_frame
 );
 
 struct IncompleteSchemas {

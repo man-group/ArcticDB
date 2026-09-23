@@ -16,6 +16,7 @@
 #include <arcticdb/log/log.hpp>
 #include <arcticdb/pipeline/frame_utils.hpp>
 #include <arcticdb/pipeline/index_utils.hpp>
+#include <arcticdb/stream/index.hpp>
 #include <arcticdb/pipeline/input_frame.hpp>
 #include <arcticdb/util/collection_utils.hpp>
 #include <arcticdb/util/preconditions.hpp>
@@ -1065,6 +1066,32 @@ SortedValue combine_sorted(std::span<const OutputSchema> schemas) {
     return result;
 }
 } // namespace
+
+void align_multi_index_names(const OutputSchema& existing, StreamDescriptor& incoming) {
+    const auto info = required_fields_info(existing);
+    if (!info.has_multi_index) {
+        return;
+    }
+    const auto levels = std::min(info.num_physical_indices, static_cast<size_t>(incoming.field_count()));
+    auto aligned = std::make_shared<FieldCollection>();
+    bool renamed = false;
+    for (size_t idx = 0; idx < static_cast<size_t>(incoming.field_count()); ++idx) {
+        const auto& field = incoming.field(idx);
+        // Level 0 is stored unprefixed, so there is nothing to align there
+        if (idx > 0 && idx < levels) {
+            const auto stored_name = existing.stream_descriptor().field(idx).name();
+            if (stored_name == stream::mangled_name(field.name())) {
+                aligned->add_field(field.type(), stored_name);
+                renamed = true;
+                continue;
+            }
+        }
+        aligned->add_field(field.type(), field.name());
+    }
+    if (renamed) {
+        incoming = StreamDescriptor{incoming.segment_desc_, std::move(aligned), incoming.id()};
+    }
+}
 
 SortedValue deduce_sorted(SortedValue existing_frame, SortedValue input_frame) {
     constexpr auto UNKNOWN = SortedValue::UNKNOWN;

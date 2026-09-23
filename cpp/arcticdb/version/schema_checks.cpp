@@ -39,10 +39,13 @@ namespace arcticdb {
 
 entity::OutputSchema combine_existing_tsd_with_frame(
         NormalizationOperation operation, bool dynamic_schema, const TimeseriesDescriptor& existing_tsd,
-        const pipelines::InputFrame& new_frame
+        pipelines::InputFrame& new_frame
 ) {
     const auto options = within_symbol_combine_options(dynamic_schema, operation, new_frame.desc().id());
     auto existing = schema_from_tsd(existing_tsd);
+    // Before the schema is taken from the frame, and so before the frame writes its data keys, so that the names those
+    // keys record are the ones the index key will
+    align_multi_index_names(existing, new_frame.desc());
     auto incoming = schema_from_input_frame(new_frame);
     if (operation == NormalizationOperation::APPEND) {
         align_rowrange_norm_for_append(existing, existing_tsd.total_rows(), incoming);
@@ -66,6 +69,10 @@ IncompleteSchemas combine_incomplete_schemas(
         if (flags.convert_int_to_float) {
             stream::convert_descriptor_types(descriptor);
         }
+        // Staged data is deliberately not aligned to an existing multi-index. Its segments are already written, and the
+        // dynamic read maps their columns by name, so aligning only the schema would leave the data behind and the
+        // combination is better refused. Doing it properly means renaming each segment's descriptor as compaction
+        // reads it.
         auto norm = entry.norm_meta_;
         // A segment staged by the tick collector carries no normalization metadata of its own.
         ensure_timeseries_norm_meta(norm, stream_id);

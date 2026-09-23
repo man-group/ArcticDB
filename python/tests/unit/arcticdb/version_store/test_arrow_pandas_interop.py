@@ -23,7 +23,7 @@ import polars as pl
 import pyarrow as pa
 import pytest
 
-from arcticdb import concat
+from arcticdb import concat, StagedDataFinalizeMethod
 from arcticdb.exceptions import ArcticException, NormalizationException, SchemaException
 from arcticdb.options import OutputFormat
 from arcticdb.util.test import assert_frame_equal, assert_series_equal, assert_frame_equal_with_arrow
@@ -637,15 +637,19 @@ def _maybe_arrow(df: pd.DataFrame, fmt: str) -> ArrowOrPandas:
 
 
 def _combine(lib, op: str, first: ArrowOrPandas, second: ArrowOrPandas, index_column: bool = False) -> ArrowOrPandas:
-    """Write ``first``, combine ``second`` via ``op`` ("append"/"update"/"concat"), return read-back
-    data. ``index_column`` applied to all operations (but affects only arrow inputs)
+    """Write ``first``, combine ``second`` via ``op``, return read-back data. ``index_column`` applied to
+    all operations (but affects only arrow inputs)
     """
     if op == "concat":
         lib.write("sym0", first, index_column=index_column)
         lib.write("sym1", second, index_column=index_column)
         return concat(lib.read_batch(["sym0", "sym1"], lazy=True)).collect().data
     lib.write("sym", first, index_column=index_column)
-    getattr(lib, op)("sym", second, index_column=index_column)
+    if op == "stage":
+        lib.stage("sym", second, index_column=index_column)
+        lib.finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
+    else:
+        getattr(lib, op)("sym", second, index_column=index_column)
     return lib.read("sym").data
 
 
@@ -659,10 +663,11 @@ def _index_tz(received: ArrowOrPandas):
 
 
 FORMATS_ORDER = [("arrow", "pandas"), ("pandas", "arrow")]
-# append/update/concat all produce a row-wise union for disjoint, contiguous timeseries chunks.
-INDEXED_OPS = ["append", "update", "concat"]
+# append, update, concat and stage+finalize all produce a row-wise union for disjoint, contiguous
+# timeseries chunks.
+INDEXED_OPS = ["append", "update", "concat", "stage"]
 # operations that apply without a timeseries index.
-UNINDEXED_OPS = ["append", "concat"]
+UNINDEXED_OPS = ["append", "concat", "stage"]
 
 
 # --- matching schema (row-wise union), both directions --------------------
@@ -938,33 +943,62 @@ def test_combine_series_with_index_and_table(arrow_library, op):
 # --- non-timeseries multiindex (matching column names) --------------------
 
 
-@pytest.mark.xfail(
-    reason="pandas stores multi-index levels beyond the first under __idx__<name>, which no arrow column name can "
-    "match; needs rename_columns_arrow_compat (monday 12844033169) to strip that prefix",
-    strict=True,
-)
-def test_append_non_timeseries_multiindex_pandas_with_unindexed_arrow(arrow_library_any_schema):
-    """When the top level of a MultiIndex is not a timeseries the symbol has row-count semantics, so
-    appending an unindexed arrow table carrying the same columns should be allowed."""
-    lib = arrow_library_any_schema
+def _non_timeseries_multiindex_pandas_and_arrow():
+    """A row-count MultiIndex pandas frame and an unindexed arrow table carrying the same columns."""
     index = pd.MultiIndex.from_arrays([[10, 20], ["a", "b"]], names=["l0", "grp"])
-    lib.write("sym", pd.DataFrame({"col": np.array([0, 1], dtype=np.int64)}, index=index))
-    lib.append(
-        "sym",
-        pa.table(
-            {
-                "l0": pa.array([30, 40], pa.int64()),
-                "grp": pa.array(["c", "d"], pa.large_string()),
-                "col": pa.array([2, 3], pa.int64()),
-            }
-        ),
+    return pd.DataFrame({"col": np.array([0, 1], dtype=np.int64)}, index=index), pa.table(
+        {
+            "l0": pa.array([30, 40], pa.int64()),
+            "grp": pa.array(["c", "d"], pa.large_string()),
+            "col": pa.array([2, 3], pa.int64()),
+        }
     )
-    received = lib.read("sym").data
+
+
+def test_append_non_timeseries_multiindex_pandas_with_unindexed_arrow(arrow_library_any_schema):
+    """When the top level of a MultiIndex is not a timeseries the symbol has row-count semantics, so an
+    unindexed arrow table carrying the same columns appends to it - its level names being aligned to the
+    ``__idx__`` prefix pandas stores them under."""
+    first, second = _non_timeseries_multiindex_pandas_and_arrow()
+    received = _combine(arrow_library_any_schema, "append", first, second)
     expected = pd.DataFrame(
         {"col": np.array([0, 1, 2, 3], dtype=np.int64)},
         index=pd.MultiIndex.from_arrays([[10, 20, 30, 40], ["a", "b", "c", "d"]], names=["l0", "grp"]),
     )
     assert_frame_equal_with_arrow(received, expected)
+
+
+def test_stage_multiindex_pandas_with_unindexed_arrow_raises(arrow_library_any_schema):
+    """Staged data is not aligned to an existing multi-index: its segments are already written under the
+    names it staged, so the combination is refused rather than silently dropping the level's data."""
+    first, second = _non_timeseries_multiindex_pandas_and_arrow()
+    with pytest.raises(SchemaException):
+        _combine(arrow_library_any_schema, "stage", first, second)
+
+
+def test_append_timeseries_multiindex_pandas_with_matching_arrow(arrow_library_any_schema):
+    """The same alignment for a timeseries MultiIndex, where the first level is the index column."""
+    lib = arrow_library_any_schema
+    index = pd.MultiIndex.from_arrays([pd.date_range("2025-01-01", periods=2), ["a", "b"]], names=["ts", "grp"])
+    lib.write("sym", pd.DataFrame({"col": np.array([0, 1], dtype=np.int64)}, index=index))
+    lib.append(
+        "sym",
+        pa.table(
+            {
+                "ts": _ts_array(pd.date_range("2025-01-03", periods=2)),
+                "grp": pa.array(["c", "d"], pa.large_string()),
+                "col": pa.array([2, 3], pa.int64()),
+            }
+        ),
+        index_column=True,
+    )
+    expected = pd.DataFrame(
+        {"col": np.array([0, 1, 2, 3], dtype=np.int64)},
+        index=pd.MultiIndex.from_arrays(
+            [pd.date_range("2025-01-01", periods=4), ["a", "b", "c", "d"]], names=["ts", "grp"]
+        ),
+    )
+    assert_frame_equal_with_arrow(lib.read("sym").data, expected)
 
 
 # --- failure conditions ----------------------------------------------------
