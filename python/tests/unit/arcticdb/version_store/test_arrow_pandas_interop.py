@@ -26,6 +26,7 @@ import pytest
 from arcticdb import concat, StagedDataFinalizeMethod
 from arcticdb.exceptions import ArcticException, NormalizationException, SchemaException
 from arcticdb.options import OutputFormat
+from arcticdb.version_store import TimeFrame
 from arcticdb.util.test import assert_frame_equal, assert_series_equal, assert_frame_equal_with_arrow
 
 
@@ -999,6 +1000,36 @@ def test_append_timeseries_multiindex_pandas_with_matching_arrow(arrow_library_a
         ),
     )
     assert_frame_equal_with_arrow(lib.read("sym").data, expected)
+
+
+# --- TimeFrame -------------------------------------------------------------
+
+
+@pytest.mark.parametrize("op", ["append", "update"])
+def test_combine_timeframe_with_arrow(in_memory_version_store_arrow, op):
+    """A TimeFrame stores its index as "times", so an arrow table naming it that combines with one, and
+    the symbol still reads back as a TimeFrame."""
+    lib = in_memory_version_store_arrow
+    sym = "test_combine_timeframe_with_arrow"
+    lib.write(
+        sym,
+        TimeFrame(
+            pd.date_range("2025-01-01", periods=2).values,
+            columns_names=["col"],
+            columns_values=[np.arange(2, dtype=np.int64)],
+        ),
+    )
+    lib.append(
+        sym,
+        pa.table({"times": _ts_array(pd.date_range("2025-01-03", periods=2)), "col": pa.array([2, 3], pa.int64())}),
+        index_column=True,
+    )
+
+    assert lib.read(sym).data.column_names == ["times", "col"]
+    received = lib.read(sym, output_format="pandas").data
+    assert isinstance(received, TimeFrame)
+    assert list(received.times) == list(pd.date_range("2025-01-01", periods=4))
+    assert list(received.columns_values[0]) == [0, 1, 2, 3]
 
 
 # --- failure conditions ----------------------------------------------------

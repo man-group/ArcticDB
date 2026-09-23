@@ -116,3 +116,32 @@ The material for commits 2-4 is in `full-with-validation.patch`, inside
 `/users/is/idilov/arrow-pandas-interop-bundle.tar.gz` (extracted at `~/.tmp/bundle-in/`). The draft's
 `mirror_index_timezones` improves on the in-combine version: with the descriptor to hand it mirrors
 multi-index levels beyond the first by position, which removes the limitation noted in §2 of the plan.
+
+## 2026-09-23 — Split into commits
+
+Five commits, verified each in turn. The interop suite finishes at **180 passed, none xfailed**, from
+110 passed / 48 xfailed.
+
+- `Plan the Arrow/pandas interop work…` — the docs in this directory.
+- `Name one-dimensional Arrow data as pandas names a Series` — as brought back from the headnode.
+- `Describe pandas data in Arrow terms before generating Arrow output` — the conversion in
+  `entity/arrow_pandas_norm`, called from the read path, and the Python simplification that follows.
+- `Combine Arrow data with pandas data` — the embedded merge, adapted to call the conversion rather
+  than keeping its own copy.
+- `Align incoming Arrow index levels with a pandas multi-index`.
+
+Three things the work turned up:
+
+- **Recursive normalization is a third conversion call site.** Making the Arrow denormalizer *require*
+  Arrow metadata found it, along with the fact that the conversion has to carry the `custom` field
+  across, or `ArcticDbNotYetImplemented` stops being raised for custom-normalized data.
+- **The accessors had to land with the conversion**, not with the combining work: once the metadata is
+  converted, every consumer of `required_fields_info` must understand the embedded message, or an
+  unnamed multi-index loses a level under column selection — which `test_collect_schema_multiindex`
+  caught.
+- **Aligning only the staged schema is worse than refusing.** The first attempt aligned the incomplete's
+  schema at finalize; the combine then succeeded, the already-written segments still carried their own
+  names, and the dynamic read aborted in sparrow on a column with no buffer. Refused instead, with a
+  test, until each segment's descriptor can be renamed as compaction reads it.
+
+`TimeFrame` combined with Arrow is now tested, which is the only coverage of the embedded `ts` arm.

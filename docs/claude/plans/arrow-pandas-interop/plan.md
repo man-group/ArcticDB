@@ -1,11 +1,15 @@
-# Arrow / pandas interop — implementation proposal
+# Arrow / pandas interop — design
 
-Target: the 48 `xfail`s in `python/tests/unit/arcticdb/version_store/test_arrow_pandas_interop.py`
-(110 pass today). 46 are cleared here; 2 stay xfailed pending the column-rename API (§4.4). The
-design is RFC option A: the Arrow normalization metadata may carry the pandas metadata.
+Target: the 48 `xfail`s that
+`python/tests/unit/arcticdb/version_store/test_arrow_pandas_interop.py` started with, against 110
+passing. All 48 are cleared, and the file is now 180 passing with none xfailed. The design is RFC
+option A: the Arrow normalization metadata may carry the pandas metadata.
 
 No compatibility constraints: Arrow input is opt-in behind a private
 `_nvs._set_allow_arrow_input()`, so nothing outside beta has written Arrow data.
+
+The commits this landed in, and the decisions taken along the way, are in
+[`follow-up-actions.md`](follow-up-actions.md).
 
 ## 1. Shape of the change
 
@@ -14,8 +18,9 @@ No compatibility constraints: Arrow input is opt-in behind a private
 | A | Arrow → pandas denormalization reads timezones from `ExperimentalArrow.columns` | 2 |
 | B | One-dimensional Arrow ↔ pandas Series: naming, Series output both ways, reject invalid Arrow column names | 4 |
 | C | `combine_schema` combines Arrow with pandas, storing the pandas metadata inside the Arrow message | 40 |
+| D | Align incoming Arrow index levels with a pandas multi-index (§4.4) | 2 |
 
-A and B need no protobuf change and can land first.
+B needs no protobuf change and landed first; A came with the read-path conversion it belongs to.
 
 ## 2. Format change
 
@@ -66,9 +71,8 @@ the mirrored oneof it costs one arm and one dispatch branch, against a carve-out
 4. Index names and `fake_name`, `RangeIndex` start/step, multi-index level positions and
    `fake_field_pos`, `col_names`, `has_synthetic_columns` live only in the embedded pandas message.
 
-Limitation of 1: the timezone of a multi-index level beyond the first is not mirrored into `columns`,
-because the metadata does not record what that level's column is called (§4.4), so it stays in the
-embedded pandas metadata alone and does not reach Arrow output.
+Limitation of 1: mirroring is per level, but the merge syncs only the first level's timezone back, so
+a multi-index level beyond the first keeps a combined symbol's timezone in the pandas metadata alone.
 
 ## 3. One-dimensional Arrow naming (piece B)
 
@@ -104,7 +108,7 @@ Combining Arrow with pandas is combining two Arrow metadatas, one of which has p
 embedded in it. So `combine_norm_metadata` describes each pandas schema in Arrow terms first,
 whenever any schema is Arrow, and the fold itself only ever combines like with like — no
 `accumulate_arrow_and_pandas_norm`, and no descriptors in `accumulate_norm_metadata`'s signature.
-`arrow_norm_from_pandas` takes the whole `OutputSchema`, which is what the fold has to hand:
+`arrow_norm_from_pandas` takes the metadata and a descriptor, so that the read path can call it too:
 
 - the pandas message embedded by `CopyFrom`;
 - `has_index` from the index descriptor. Not from `is_physically_stored`, which is also true for a
@@ -119,7 +123,7 @@ whenever any schema is Arrow, and the fold itself only ever combines like with l
   timezone. This is the one part that needs the descriptor — an index level's own name is in the
   metadata (`PandasIndex.name`, or `PandasMultiIndex.name` for level 0, both equal to the stored
   field name, `"index"` when unnamed);
-- the index timezone mirrored into that entry.
+- every index level's timezone mirrored into the entry for the column holding it, by position.
 
 `accumulate_arrow_and_arrow_norm` then merges the two, and with them their embedded pandas metadata:
 when both sides have one it hands them to `accumulate_pandas_and_pandas_norm` unchanged; when only
@@ -160,31 +164,23 @@ Arrow column reconcile against a pandas Series value column. It has to land with
 in §3, not after it: once a 1-D structure is stored under its own name, name reconciliation is the
 only thing that keeps Arrow-only concatenation of differently-named 1-D structures working.
 
-### 4.4 Multi-index level names — needs a decision
+### 4.4 Multi-index level names
 
-pandas stores multi-index levels ≥ 1 as `__idx__<name>`, or `__fkidx__N` when unnamed (verified:
-`MultiIndex(["ts", "grp"])` → fields `["ts", "__idx__grp", "col"]`; unnamed → `["index",
+pandas stores multi-index levels >= 1 as `__idx__<name>`, or `__fkidx__N` when unnamed (verified:
+`MultiIndex(["ts", "grp"])` gives fields `["ts", "__idx__grp", "col"]`; unnamed gives `["index",
 "__fkidx__1", "col"]`). Level 0 is not mangled. An Arrow table names its columns plainly.
 
-No demangling. Required-field names must match as stored, because making them match would mean
-renaming the incoming frame's columns before writing its data keys — otherwise the index key's
-descriptor and the appended segments' descriptors disagree, which breaks static-schema reads.
-Consequences:
+No demangling: the required field names have to agree as stored, because the incoming data writes its
+data keys under its own names and a dynamic read maps them by name. The incoming names are aligned to
+the stored ones instead, for the `__idx__` prefix and nothing else. Consequences:
 
-- **Unnamed** pandas multi-index against Arrow: concat reconciles the mismatched level names to
-  unnamed and the result reads back as `["__index_level_0__", "__index_level_1__", "col"]` (§5);
-  append and update raise. Both are what the tests expect, and neither needs level-name matching.
-- **Named** pandas multi-index against Arrow: raises unless the Arrow table happens to name the
-  column `__idx__grp`. So `test_append_non_timeseries_multiindex_pandas_with_unindexed_arrow` (2
-  parametrizations) stays xfailed, with `rename_columns_arrow_compat` as its reason.
-
-That API (Alex, monday 12844033169, xfail suite in `test_arrow_col_rename.py`) is the escape hatch
-for every pandas naming feature we decline to reconcile — duplicate, `None`, empty and integer
-labels, `has_synthetic_columns`, `fake_name` — since it rewrites a symbol into names Arrow can
-express. **Coordination needed**: does it also rewrite multi-index levels ≥ 1 from `__idx__<name>` to
-plain `<name>`? Its tests assert the read-back level names and that stored names are unique, both of
-which hold with or without the prefix, so it is not pinned. Arrow interop needs the prefix gone; if
-it stays, a renamed symbol still cannot take an Arrow append that names the level plainly.
+- **Named** pandas multi-index against Arrow: aligned, so append, update and merge_update work.
+- **Unnamed** pandas multi-index against Arrow: placeholder names are not aligned, so concat reconciles
+  the mismatched level names to unnamed and reads back as `["__index_level_0__", "__index_level_1__",
+  "col"]` (see section 5), while append and update raise. `rename_columns_arrow_compat` is the way out,
+  as it is for duplicate, `None`, empty and integer labels.
+- **Staged** data against either: refused. Its segments are written before finalize sees them, so
+  aligning the schema alone would leave the level's data behind.
 
 ### 4.5 Name mismatch application
 
@@ -242,27 +238,19 @@ for it.
 - The polars Series name lookup (≈2968 and ≈3945) must also handle a pandas `series` norm, for
   piece B.
 
-## 6. Staging
+## 6. What is not covered
 
-1. **Piece A** — Arrow → pandas timezones. Clears `test_write_arrow_{index,column}_timezone_read_pandas`.
-2. **Piece B** — 1-D naming, Series output both ways, invalid Arrow column names. Clears
-   `test_write_arrow_{array,chunked_array}_read_pandas`, `test_write_polars_series_read_pandas`,
-   `test_write_pandas_series_rangeindex_read_arrow`, and unskips
-   `test_write_empty_column_name_fails`.
-3. **Piece C1** — protobuf field, `accumulate_arrow_and_pandas_norm`, the checks and the accessor
-   audit, with C++ unit tests in `test_schema_combine.cpp`. Clears the timezone-mismatch, synthetic
-   column, Series-with-1-D-Arrow and `DataFrame`-with-1-D-Arrow groups.
-4. **Piece C2** — `required_fields_info` and the embedded reach of
-   `apply_required_name_mismatches`. Clears `test_combine_unnamed_multiindex_*`.
-
-New coverage rather than un-xfailing: `TimeFrame` combined with Arrow, both directions, append and
-concat. The 110 tests passing today must keep passing — in particular
-`test_combine_matching_schema_indexed`, which asserts through `to_pandas()` and so depends on
-`pandas_metadata` still being attached to a combined symbol's Arrow output.
-
-## 7. Open questions
-
-1. **§4.4**: the named-multi-index case, and the `__idx__` question for `rename_columns_arrow_compat`
-   to settle with Alex.
-2. **Groupby / resample clobbering**: separate PR plus a new monday ticket, or fold the fix in? It is
-   ~30 lines but carries its own behaviour change, so the write-up recommends separate.
+- Staged data is not aligned to an existing pandas multi-index, and the combination raises (section
+  4.4). Aligning it means renaming each segment's descriptor as compaction reads it.
+- A multi-index level beyond the first keeps its timezone only in the pandas metadata when schemas are
+  combined: the conversion mirrors every level in, but the merge syncs only the first level back out.
+  Unreachable while such a level cannot be combined without the alignment above.
+- The pandas read path still applies column timezones itself, because pandas metadata cannot express
+  one and C++ cannot make a numpy array timezone-aware. Making the two directions symmetrical means
+  giving the `Pandas` message per-column timezones, which would also close the standing gap where a
+  pandas write loses a column's timezone (`test_non_index_column_timezone_not_preserved`).
+- `AggregationClause` and `ResampleClause` still write their output index metadata through
+  `mutable_df()`, which discards the Arrow metadata wholesale. Pre-existing; see
+  [`groupby-resample-arrow-norm-bug.md`](groupby-resample-arrow-norm-bug.md).
+- The timezone lookup moved from pyarrow to sparrow for every symbol, and the Windows tzdata path has
+  not been exercised there.

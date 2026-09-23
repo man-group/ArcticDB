@@ -57,25 +57,24 @@ multi-index symbol silently drops the appended level column.
 
 One naming rule, applied wherever an incoming schema meets an existing one:
 
-| Operation | Where |
-|-----------|-------|
-| append, update | `combine_existing_tsd_with_frame` — mutate the `InputFrame` before `combine_schema` |
-| merge_update | its `combine_schema` call in `clause_merge_update.cpp` |
-| finalize staged data | `read_incompletes_to_pipeline`, so the staged schema does not raise — and probably a second change where the segment itself is read, so its descriptor is renamed too |
+| Operation | Where | Status |
+|-----------|-------|--------|
+| append, update | `combine_existing_tsd_with_frame` — the `InputFrame` before `combine_schema` | done |
+| merge_update | its `combine_schema` call in `clause_merge_update.cpp` | done |
+| finalize staged data | see below | refused, not aligned |
 
-Staging cannot do this at write time: `write_parallel_impl` never reads the existing symbol, only
-`verify_symbol_key`, and writes each segment with `frame->desc()`. Finalize rewrites the data
-(`do_compact` writes fresh `TABLE_DATA` keys), so renaming the incomplete's descriptor in memory is
-enough.
+**Staged data is left out, and refused instead.** Staging cannot align at write time:
+`write_parallel_impl` never reads the existing symbol, only `verify_symbol_key`, and writes each
+segment with `frame->desc()`. Aligning only the schema at finalize is worse than refusing, which is
+what the attempt showed: the combine then succeeds, the already-written segments still carry the names
+they staged under, and the dynamic read finds no destination for the level's data, so sparrow aborts
+on a column with no buffer (`buffer_view.hpp:180`) instead of anything reporting the problem. Doing it
+properly means renaming each segment's descriptor as `do_compact` reads it, which is its own piece of
+work; until then the combination raises and a test pins that.
 
-**In this PR, as its own commit** so it reviews separately from the metadata work. It clears the two
-remaining xfails. Also:
-
-- extend the interop harness with stage + finalize as a fourth operation — the one path where the
-  alignment cannot happen at write time, so a mistake would hide there. Two unknowns to resolve:
-  whether `stage` accepts `index_column` for Arrow input, and whether unindexed staging is allowed,
-  since `UNINDEXED_OPS` wants it;
-- update §4.4 of the plan, whose conclusion is that this case raises.
+Done in this PR as its own commit, along with stage and finalize as a fourth operation in the interop
+harness — the path where an alignment that did not reach the data would hide, as it duly did. `stage`
+takes `index_column` for Arrow input and unindexed staging is allowed, so both op lists include it.
 
 ## 3. Duplicate Arrow column names
 
@@ -141,32 +140,43 @@ The metadata-only accessors (`embedded_pandas_common`, `mutable_embedded_pandas_
 `(const NormalizationMetadata&, const StreamDescriptor&)` rather than an `OutputSchema`, because the
 read-path caller has a `TimeseriesDescriptor` and would otherwise have to build one to call it.
 
-### Two call sites, not one
+### Three call sites, not one
 
 `_modify_schema` (the `python_bindings.cpp` binding behind `_collect_schema`) is a second path that
 produces Arrow data and hands a norm to Python, and it does not go through
 `create_python_read_result`. Both need the conversion, or the two disagree — and
 `lazy_df._collect_schema() == lazy_df.collect().data.schema` is the invariant that catches it.
 
+The third is recursively normalized data, whose leaves reach Python as one node each, with metadata of
+their own, converted in the same loop that builds them. Making the Arrow denormalizer *require* Arrow
+metadata is what found it, along with two more things worth keeping in mind: a custom normalizer's
+metadata sits beside the input type rather than inside it, so the conversion has to carry `custom`
+across or `ArcticDbNotYetImplemented` stops being raised for it; and converting the metadata means
+every consumer of `required_fields_info` has to understand the embedded message, or an unnamed
+multi-index loses a level under column selection. That last one is why the accessors landed with the
+conversion rather than with the combining work.
+
 ### Risk
 
 This moves timezone application for every existing pandas symbol read as Arrow from pyarrow to
 sparrow. The value semantics are identical — both are pure relabelling of UTC instants — but the
-failure surface is not: `_tz_error_context` exists only to turn pyarrow's missing-Windows-tzdata
-error into a useful message, and sparrow's `date::locate_zone` needs its own equivalent. It is the
-most behaviour-sensitive commit of the set, and it gates the others.
+failure surface is not, so the Windows tzdata message `_tz_error_context` existed for moves to the
+`date::locate_zone` call in `arrow_utils.cpp`, which is now the path every symbol takes rather than
+only Arrow-written ones. **Untested on Windows**, and worth a look there before this ships.
 
 Not a risk, checked: fixed-offset timezones. `date::locate_zone` would throw on `"+05:30"`, but such
 a timezone never reaches the stored metadata — `get_timezone` returns a `pytz.FixedOffset` object
 rather than a string for those, so the protobuf string field rejects it on write.
 
-## Commit plan
+## Commits
 
-The prototype in the working tree gets split into:
-
-1. One-dimensional Arrow naming, Series output in both directions, Arrow column name validation, and
-   the `required_fields_info` change they depend on. No protobuf change; clears 4 xfails.
-2. `descriptors.proto`, the conversion utilities, and the read-path conversion (§4), with the Python
-   simplification that follows and the Arrow → pandas timezone work absorbed into it.
-3. Schema combining: the embedded merge, the accessors, the compatibility checks.
-4. `__idx__` alignment (§2) with stage + finalize test coverage; clears the last 2 xfails.
+1. `Plan the Arrow/pandas interop work and record the decisions taken` — this file and its siblings.
+2. `Name one-dimensional Arrow data as pandas names a Series` — with Series output in both directions,
+   Arrow column name validation, and the `required_fields_info` change they depend on. No protobuf
+   change.
+3. `Describe pandas data in Arrow terms before generating Arrow output` — `descriptors.proto`, the
+   conversion, the three read-path call sites, and the Python simplification that follows, with the
+   accessors, because a converted metadata has to behave like the pandas one it came from.
+4. `Combine Arrow data with pandas data` — the embedded merge and the compatibility checks.
+5. `Align incoming Arrow index levels with a pandas multi-index` — for append, update and merge_update;
+   refused for staged data.
