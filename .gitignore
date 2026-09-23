@@ -68,3 +68,11 @@ docs/mkdocs/docs/notebooks/exports/
 
 venv
 arcticdb_ext-stubs
+
+# Ignore clang-tidy output written by `make tidy` / `make tidy-diff`
+/clang-tidy.log
+/fixes.yml
+/clang-tidy.sarif
+/clang-tidy-report.html
+
+.clangd
