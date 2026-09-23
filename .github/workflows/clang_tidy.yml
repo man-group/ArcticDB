@@ -130,7 +130,7 @@ jobs:
         if: steps.changes.outputs.cpp_changed == 'true'
         run: |
           set -euo pipefail
-          dir="clang+llvm-${CLANG_VERSION}-x86_64-linux-gnu-ubuntu-24.04"
+          dir="LLVM-${CLANG_VERSION}-Linux-X64"
           curl -sSfL -O "https://github.com/llvm/llvm-project/releases/download/llvmorg-${CLANG_VERSION}/${dir}.tar.xz"
           tar -xf "${dir}.tar.xz"
           sudo mv "${dir}" "$CLANG_HOME"
