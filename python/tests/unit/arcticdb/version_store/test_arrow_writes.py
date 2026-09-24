@@ -19,6 +19,7 @@ from polars.testing import assert_series_equal as polars_assert_series_equal
 import pytest
 from arcticdb import DataError
 from arcticdb.exceptions import (
+    ArcticException,
     NormalizationException,
     SchemaException,
     StreamDescriptorMismatch,
@@ -434,16 +435,22 @@ def test_basic_write_strings(in_memory_version_store_arrow, type):
     assert table.equals(received)
 
 
-@pytest.mark.skip(
-    reason="Writing an arrow column with an empty-string name aborts in sparrow "
-    "(record_batch.cpp: 'A column can not have an empty name'); the assertion is uncatchable so this "
-    "cannot run as a live test until sparrow raises instead"
-)
 def test_write_empty_column_name_fails(in_memory_version_store_arrow):
-    """An empty-string arrow column name is rejected by sparrow. Skipped because the failure is a hard
-    assertion abort rather than a catchable exception."""
+    """An empty Arrow column name is rejected: a pandas column labelled "" is stored, and presented to
+    Arrow, as ``__empty__N``, so "" is a name ArcticDB never emits."""
     lib = in_memory_version_store_arrow
-    lib.write("sym", pa.table({"": pa.array([0, 1], pa.int64())}))
+    # Normalization failures are re-raised as ArcticException by NativeVersionStore._try_normalize
+    with pytest.raises(ArcticException, match="column names must not be empty"):
+        lib.write("sym", pa.table({"": pa.array([0, 1], pa.int64())}))
+
+
+def test_write_duplicate_column_names_fails(in_memory_version_store_arrow):
+    """pyarrow allows duplicate field names, but polars raises on reading them and both the column
+    metadata and schema combining are keyed by name."""
+    lib = in_memory_version_store_arrow
+    table = pa.table([pa.array([0, 1], pa.int64()), pa.array([2, 3], pa.int64())], names=["col", "col"])
+    with pytest.raises(ArcticException, match="column names must be unique"):
+        lib.write("sym", table)
 
 
 @pytest.mark.skip(reason="Not implemented yet 9951777416")

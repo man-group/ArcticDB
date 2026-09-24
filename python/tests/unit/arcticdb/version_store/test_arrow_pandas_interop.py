@@ -23,8 +23,10 @@ import polars as pl
 import pyarrow as pa
 import pytest
 
-from arcticdb import concat
+from arcticdb import concat, StagedDataFinalizeMethod
 from arcticdb.exceptions import ArcticException, NormalizationException, SchemaException
+from arcticdb.options import OutputFormat
+from arcticdb.version_store import TimeFrame
 from arcticdb.util.test import assert_frame_equal, assert_series_equal, assert_frame_equal_with_arrow
 
 
@@ -149,7 +151,6 @@ def test_write_pandas_series_datetime_index_read_arrow(in_memory_version_store_a
     assert received.column_names == ["ts", "values"]
 
 
-@pytest.mark.xfail(reason="Series with RangeIndex returns a single-column Table, not a ChunkedArray yet", strict=True)
 def test_write_pandas_series_rangeindex_read_arrow(in_memory_version_store_arrow):
     """A Series with a RangeIndex has no physical index column, so it reads back as a
     pa.ChunkedArray or pl.Series."""
@@ -516,7 +517,6 @@ def test_write_arrow_with_index_read_pandas(in_memory_version_store_arrow):
     assert_frame_equal(expected, received)
 
 
-@pytest.mark.xfail(reason="Arrow index timezone not propagated to pandas norm metadata", strict=True)
 def test_write_arrow_index_timezone_read_pandas(in_memory_version_store_arrow):
     """A tz-aware arrow timestamp index column reads back as a tz-aware pandas index."""
     lib = in_memory_version_store_arrow
@@ -537,7 +537,6 @@ def test_write_arrow_index_timezone_read_pandas(in_memory_version_store_arrow):
     assert_frame_equal(expected, received)
 
 
-@pytest.mark.xfail(reason="Arrow column timezone not propagated to pandas norm metadata", strict=True)
 def test_write_arrow_column_timezone_read_pandas(in_memory_version_store_arrow):
     """A tz-aware arrow timestamp *column* (not the index) reads back as a tz-aware pandas column."""
     lib = in_memory_version_store_arrow
@@ -581,7 +580,6 @@ def test_write_arrow_strings_read_pandas(in_memory_version_store_arrow):
 # --- writing pyarrow / polars input primitives other than a plain Table -----
 
 
-@pytest.mark.xfail(reason="pyarrow Array input should read back as a pandas Series, not be pickled", strict=True)
 def test_write_arrow_array_read_pandas(in_memory_version_store_arrow):
     lib = in_memory_version_store_arrow
     sym = "test_write_arrow_array_read_pandas"
@@ -591,7 +589,6 @@ def test_write_arrow_array_read_pandas(in_memory_version_store_arrow):
     assert_series_equal(pd.Series(np.arange(1, 4, dtype=np.int64)), received)
 
 
-@pytest.mark.xfail(reason="pyarrow ChunkedArray input should read back as a pandas Series, not be pickled", strict=True)
 def test_write_arrow_chunked_array_read_pandas(in_memory_version_store_arrow):
     lib = in_memory_version_store_arrow
     sym = "test_write_arrow_chunked_array_read_pandas"
@@ -611,7 +608,6 @@ def test_write_arrow_record_batch_read_pandas(in_memory_version_store_arrow):
     assert_frame_equal(pd.DataFrame({"col": np.array([1, 2], dtype=np.int64)}), received)
 
 
-@pytest.mark.xfail(reason="polars Series input should read back as a range-indexed pandas Series", strict=True)
 def test_write_polars_series_read_pandas(in_memory_version_store_arrow):
     lib = in_memory_version_store_arrow
     sym = "test_write_polars_series_read_pandas"
@@ -642,15 +638,19 @@ def _maybe_arrow(df: pd.DataFrame, fmt: str) -> ArrowOrPandas:
 
 
 def _combine(lib, op: str, first: ArrowOrPandas, second: ArrowOrPandas, index_column: bool = False) -> ArrowOrPandas:
-    """Write ``first``, combine ``second`` via ``op`` ("append"/"update"/"concat"), return read-back
-    data. ``index_column`` applied to all operations (but affects only arrow inputs)
+    """Write ``first``, combine ``second`` via ``op``, return read-back data. ``index_column`` applied to
+    all operations (but affects only arrow inputs)
     """
     if op == "concat":
         lib.write("sym0", first, index_column=index_column)
         lib.write("sym1", second, index_column=index_column)
         return concat(lib.read_batch(["sym0", "sym1"], lazy=True)).collect().data
     lib.write("sym", first, index_column=index_column)
-    getattr(lib, op)("sym", second, index_column=index_column)
+    if op == "stage":
+        lib.stage("sym", second, index_column=index_column)
+        lib.finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
+    else:
+        getattr(lib, op)("sym", second, index_column=index_column)
     return lib.read("sym").data
 
 
@@ -664,10 +664,11 @@ def _index_tz(received: ArrowOrPandas):
 
 
 FORMATS_ORDER = [("arrow", "pandas"), ("pandas", "arrow")]
-# append/update/concat all produce a row-wise union for disjoint, contiguous timeseries chunks.
-INDEXED_OPS = ["append", "update", "concat"]
+# append, update, concat and stage+finalize all produce a row-wise union for disjoint, contiguous
+# timeseries chunks.
+INDEXED_OPS = ["append", "update", "concat", "stage"]
 # operations that apply without a timeseries index.
-UNINDEXED_OPS = ["append", "concat"]
+UNINDEXED_OPS = ["append", "concat", "stage"]
 
 
 # --- matching schema (row-wise union), both directions --------------------
@@ -694,6 +695,23 @@ def test_combine_matching_schema_rowcount(arrow_library, op, first_fmt, second_f
     assert received.column_names == ["col"]
     assert received.column("col").to_pylist() == [0, 1, 2, 3]
     assert_frame_equal_with_arrow(received, pd.DataFrame({"col": [0, 1, 2, 3]}))
+
+
+@pytest.mark.parametrize("arrow_position", [0, 1, 2])
+def test_concat_three_symbols_one_arrow(arrow_library, arrow_position):
+    """More than two schemas, mixed: every pandas schema is combined in arrow terms wherever the arrow
+    one sits in the order."""
+    lib = arrow_library
+    symbols = []
+    for position in range(3):
+        frame = _pandas_ts([2 * position, 2 * position + 1], start=f"2025-01-0{1 + 2 * position}")
+        symbol = f"sym{position}"
+        lib.write(symbol, _maybe_arrow(frame, "arrow" if position == arrow_position else "pandas"), index_column=True)
+        symbols.append(symbol)
+
+    received = concat(lib.read_batch(symbols, lazy=True)).collect().data
+    assert received.column_names == ["ts", "col"]
+    assert_frame_equal_with_arrow(received, _pandas_ts([0, 1, 2, 3, 4, 5]))
 
 
 # --- unnamed pandas index / multiindex combined with named arrow ----------
@@ -743,10 +761,6 @@ def _pandas_unnamed_multiindex_or_arrow_named(fmt, values, start):
 
 
 @pytest.mark.parametrize("first_fmt, second_fmt", FORMATS_ORDER)
-@pytest.mark.xfail(
-    reason="concat should permissively join a named arrow table with an unnamed multi-indexed pandas frame",
-    strict=True,
-)
 def test_combine_unnamed_multiindex_concat(arrow_library_any_schema, first_fmt, second_fmt):
     """concat should permissively join a named arrow table with an unnamed-MultiIndex pandas frame,
     keeping the synthetic ``__index_level_N__`` names and reading back both levels unnamed."""
@@ -763,11 +777,6 @@ def test_combine_unnamed_multiindex_concat(arrow_library_any_schema, first_fmt, 
 
 @pytest.mark.parametrize("first_fmt, second_fmt", FORMATS_ORDER)
 @pytest.mark.parametrize("op", ["append", "update"])
-@pytest.mark.xfail(
-    reason="append/update with a column-name mismatch (unnamed pandas multiindex levels stored as "
-    "__index_level_N__ vs named arrow index columns) should raise SchemaException; align names via the rename API",
-    strict=True,
-)
 def test_combine_unnamed_multiindex_append_update_raises(arrow_library_any_schema, op, first_fmt, second_fmt):
     """Unnamed MultiIndex levels are stored under synthetic ``__index_level_N__`` names, which do not
     match the named arrow index columns, so append/update must raise rather than silently combine."""
@@ -782,14 +791,19 @@ def test_combine_unnamed_multiindex_append_update_raises(arrow_library_any_schem
 
 @pytest.mark.parametrize("first_fmt, second_fmt", FORMATS_ORDER)
 @pytest.mark.parametrize("op", UNINDEXED_OPS)
-@pytest.mark.xfail(reason="has_synthetic_columns should be preserved on append/concat", strict=True)
 def test_combine_synthetic_columns(arrow_library, op, first_fmt, second_fmt):
+    """``has_synthetic_columns`` survives the combination, so the pandas read restores the integer
+    RangeIndex columns."""
     first = _maybe_arrow(pd.DataFrame([[1, 2], [3, 4]]).astype(np.int64), first_fmt)
     second = _maybe_arrow(pd.DataFrame([[5, 6], [7, 8]]).astype(np.int64), second_fmt)
     received = _combine(arrow_library, op, first, second)
     expected = pd.DataFrame([[1, 2], [3, 4], [5, 6], [7, 8]]).astype(np.int64)
     expected.index = pd.RangeIndex(4)
-    assert_frame_equal_with_arrow(received, expected)
+    # arrow.to_pandas does not convert to int column names correctly when `has_synthetic_columns=True`,
+    # as for a pandas-only symbol - see test_write_pandas_synthetic_columns_read_arrow
+    assert_frame_equal_with_arrow(received, expected.rename(columns=str))
+    if op != "concat":
+        assert_frame_equal(arrow_library.read("sym", output_format=OutputFormat.PANDAS).data, expected)
 
 
 @pytest.mark.parametrize("first_fmt, second_fmt", FORMATS_ORDER)
@@ -818,9 +832,6 @@ def test_combine_index_tz_match(arrow_library, op, first_fmt, second_fmt):
 
 @pytest.mark.parametrize("first_fmt, second_fmt", FORMATS_ORDER)
 @pytest.mark.parametrize("op", ["append", "update"])
-@pytest.mark.xfail(
-    reason="tz-mismatch under static schema should raise SchemaException once cross-format combine lands", strict=True
-)
 def test_combine_index_tz_mismatch_static_raises(arrow_library, op, first_fmt, second_fmt):
     """Static schema: a timezone mismatch on the index must raise SchemaException."""
     first = _maybe_arrow(_pandas_ts([0, 1, 2, 3], tz="America/New_York"), first_fmt)
@@ -831,7 +842,6 @@ def test_combine_index_tz_mismatch_static_raises(arrow_library, op, first_fmt, s
 
 @pytest.mark.parametrize("first_fmt, second_fmt", FORMATS_ORDER)
 @pytest.mark.parametrize("op", ["append", "update"])
-@pytest.mark.xfail(reason="tz-mismatch under dynamic schema should return timezone naive results", strict=True)
 def test_combine_index_tz_mismatch_dynamic_clears_tz(arrow_library_dynamic, op, first_fmt, second_fmt):
     """Dynamic schema append/update are permissive about an index timezone mismatch and yield a
     timezone-naive index (concat is covered separately, for any schema)."""
@@ -842,9 +852,6 @@ def test_combine_index_tz_mismatch_dynamic_clears_tz(arrow_library_dynamic, op, 
 
 
 @pytest.mark.parametrize("first_fmt, second_fmt", FORMATS_ORDER)
-@pytest.mark.xfail(
-    reason="concat should permissively yield a timezone-naive index on a tz mismatch (any schema)", strict=True
-)
 def test_combine_index_tz_mismatch_concat_clears_tz(arrow_library_any_schema, first_fmt, second_fmt):
     """concat is permissive under any schema: an index timezone mismatch should yield a timezone-naive
     index rather than raising or silently keeping one side's timezone."""
@@ -871,9 +878,6 @@ def _tz_aware_arrow_naive_pandas_column(fmt, values, start):
 
 @pytest.mark.parametrize("first_fmt, second_fmt", FORMATS_ORDER)
 @pytest.mark.parametrize("op", ["append", "update"])
-@pytest.mark.xfail(
-    reason="non-index column tz mismatch handling for pandas<->arrow combine is not implemented yet", strict=True
-)
 def test_combine_column_tz_mismatch_static_raises(arrow_library, op, first_fmt, second_fmt):
     """Static schema: a non-index column that is tz-aware in arrow but tz-naive in pandas must
     raise."""
@@ -897,8 +901,9 @@ def test_combine_column_tz_mismatch_concat_clears_tz(arrow_library_any_schema, f
 
 
 @pytest.mark.parametrize("op", UNINDEXED_OPS)
-@pytest.mark.xfail(reason="merging a Series with a pyarrow ChunkedArray is not supported yet", strict=True)
 def test_combine_series_with_chunked_array(arrow_library, op):
+    """An unnamed Series and a pyarrow ChunkedArray are both stored under the column name "0", so they
+    combine without any name reconciliation."""
     received = _combine(
         arrow_library, op, pd.Series(np.array([0, 1], dtype=np.int64)), pa.chunked_array([[2, 3]], pa.int64())
     )
@@ -906,9 +911,22 @@ def test_combine_series_with_chunked_array(arrow_library, op):
 
 
 @pytest.mark.parametrize("op", UNINDEXED_OPS)
-@pytest.mark.xfail(reason="merging a Series with a polars Series is not supported yet", strict=True)
 def test_combine_series_with_polars_series(arrow_library, op):
-    received = _combine(arrow_library, op, pd.Series(np.array([0, 1], dtype=np.int64)), pl.Series("col", [2, 3]))
+    received = _combine(
+        arrow_library, op, pd.Series(np.array([0, 1], dtype=np.int64), name="col"), pl.Series("col", [2, 3])
+    )
+    assert received.to_pylist() == [0, 1, 2, 3]
+
+
+def test_append_series_with_mismatched_polars_series_name_raises(arrow_library):
+    """Series names must match to append, as they must for two polars Series."""
+    with pytest.raises(SchemaException):
+        _combine(arrow_library, "append", pd.Series(np.array([0, 1], dtype=np.int64)), pl.Series("col", [2, 3]))
+
+
+def test_concat_series_with_mismatched_polars_series_name(arrow_library):
+    """concat reconciles mismatched Series names to unnamed rather than raising."""
+    received = _combine(arrow_library, "concat", pd.Series(np.array([0, 1], dtype=np.int64)), pl.Series("col", [2, 3]))
     assert received.to_pylist() == [0, 1, 2, 3]
 
 
@@ -926,33 +944,92 @@ def test_combine_series_with_index_and_table(arrow_library, op):
 # --- non-timeseries multiindex (matching column names) --------------------
 
 
-@pytest.mark.xfail(
-    reason="appending an unindexed arrow table to a MultiIndex whose top level is not a timeseries "
-    "should be allowed (row-count semantics), but arrow<->pandas append is not implemented yet",
-    strict=True,
-)
-def test_append_non_timeseries_multiindex_pandas_with_unindexed_arrow(arrow_library_any_schema):
-    """When the top level of a MultiIndex is not a timeseries the symbol has row-count semantics, so
-    appending an unindexed arrow table carrying the same columns should be allowed."""
-    lib = arrow_library_any_schema
+def _non_timeseries_multiindex_pandas_and_arrow():
+    """A row-count MultiIndex pandas frame and an unindexed arrow table carrying the same columns."""
     index = pd.MultiIndex.from_arrays([[10, 20], ["a", "b"]], names=["l0", "grp"])
-    lib.write("sym", pd.DataFrame({"col": np.array([0, 1], dtype=np.int64)}, index=index))
-    lib.append(
-        "sym",
-        pa.table(
-            {
-                "l0": pa.array([30, 40], pa.int64()),
-                "grp": pa.array(["c", "d"], pa.large_string()),
-                "col": pa.array([2, 3], pa.int64()),
-            }
-        ),
+    return pd.DataFrame({"col": np.array([0, 1], dtype=np.int64)}, index=index), pa.table(
+        {
+            "l0": pa.array([30, 40], pa.int64()),
+            "grp": pa.array(["c", "d"], pa.large_string()),
+            "col": pa.array([2, 3], pa.int64()),
+        }
     )
-    received = lib.read("sym").data
+
+
+def test_append_non_timeseries_multiindex_pandas_with_unindexed_arrow(arrow_library_any_schema):
+    """When the top level of a MultiIndex is not a timeseries the symbol has row-count semantics, so an
+    unindexed arrow table carrying the same columns appends to it - its level names being aligned to the
+    ``__idx__`` prefix pandas stores them under."""
+    first, second = _non_timeseries_multiindex_pandas_and_arrow()
+    received = _combine(arrow_library_any_schema, "append", first, second)
     expected = pd.DataFrame(
         {"col": np.array([0, 1, 2, 3], dtype=np.int64)},
         index=pd.MultiIndex.from_arrays([[10, 20, 30, 40], ["a", "b", "c", "d"]], names=["l0", "grp"]),
     )
     assert_frame_equal_with_arrow(received, expected)
+
+
+def test_stage_multiindex_pandas_with_unindexed_arrow_raises(arrow_library_any_schema):
+    """Staged data is not aligned to an existing multi-index: its segments are already written under the
+    names it staged, so the combination is refused rather than silently dropping the level's data."""
+    first, second = _non_timeseries_multiindex_pandas_and_arrow()
+    with pytest.raises(SchemaException):
+        _combine(arrow_library_any_schema, "stage", first, second)
+
+
+def test_append_timeseries_multiindex_pandas_with_matching_arrow(arrow_library_any_schema):
+    """The same alignment for a timeseries MultiIndex, where the first level is the index column."""
+    lib = arrow_library_any_schema
+    index = pd.MultiIndex.from_arrays([pd.date_range("2025-01-01", periods=2), ["a", "b"]], names=["ts", "grp"])
+    lib.write("sym", pd.DataFrame({"col": np.array([0, 1], dtype=np.int64)}, index=index))
+    lib.append(
+        "sym",
+        pa.table(
+            {
+                "ts": _ts_array(pd.date_range("2025-01-03", periods=2)),
+                "grp": pa.array(["c", "d"], pa.large_string()),
+                "col": pa.array([2, 3], pa.int64()),
+            }
+        ),
+        index_column=True,
+    )
+    expected = pd.DataFrame(
+        {"col": np.array([0, 1, 2, 3], dtype=np.int64)},
+        index=pd.MultiIndex.from_arrays(
+            [pd.date_range("2025-01-01", periods=4), ["a", "b", "c", "d"]], names=["ts", "grp"]
+        ),
+    )
+    assert_frame_equal_with_arrow(lib.read("sym").data, expected)
+
+
+# --- TimeFrame -------------------------------------------------------------
+
+
+@pytest.mark.parametrize("op", ["append", "update"])
+def test_combine_timeframe_with_arrow(in_memory_version_store_arrow, op):
+    """A TimeFrame stores its index as "times", so an arrow table naming it that combines with one, and
+    the symbol still reads back as a TimeFrame."""
+    lib = in_memory_version_store_arrow
+    sym = "test_combine_timeframe_with_arrow"
+    lib.write(
+        sym,
+        TimeFrame(
+            pd.date_range("2025-01-01", periods=2).values,
+            columns_names=["col"],
+            columns_values=[np.arange(2, dtype=np.int64)],
+        ),
+    )
+    lib.append(
+        sym,
+        pa.table({"times": _ts_array(pd.date_range("2025-01-03", periods=2)), "col": pa.array([2, 3], pa.int64())}),
+        index_column=True,
+    )
+
+    assert lib.read(sym).data.column_names == ["times", "col"]
+    received = lib.read(sym, output_format="pandas").data
+    assert isinstance(received, TimeFrame)
+    assert list(received.times) == list(pd.date_range("2025-01-01", periods=4))
+    assert list(received.columns_values[0]) == [0, 1, 2, 3]
 
 
 # --- failure conditions ----------------------------------------------------
@@ -1017,10 +1094,6 @@ def test_append_rowcount_pandas_with_indexed_arrow_raises(arrow_library_any_sche
         lib.append("sym", _indexed_arrow_table("ts", [2, 3], start="2025-01-03"), index_column=True)
 
 
-@pytest.mark.xfail(
-    reason="Combining a pandas.DataFrame with pyarrow.ChunkedArray should raise a NormalizationException",
-    strict=True,
-)
 @pytest.mark.parametrize("op", ["append", "concat"])
 def test_combine_dataframe_with_chunked_array_raises(arrow_library, op):
     """Combining a DataFrame with an arrow ChunkedArray raises."""
@@ -1033,10 +1106,6 @@ def test_combine_dataframe_with_chunked_array_raises(arrow_library, op):
         )
 
 
-@pytest.mark.xfail(
-    reason="Combining a pandas.DataFrame with polars.Series should raise a NormalizationException",
-    strict=True,
-)
 @pytest.mark.parametrize("op", ["append", "concat"])
 def test_combine_dataframe_with_polars_series_raises(arrow_library, op):
     """Combining a DataFrame with a polars Series raises."""

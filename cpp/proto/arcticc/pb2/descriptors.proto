@@ -245,6 +245,16 @@ message NormalizationMetadata {
         bool one_dimensional = 3;
         // Set only when data written is a Polars Series
         optional string polars_series_name = 4;
+
+        // Set when the data also has a pandas provenance: pandas data combined with Arrow data, or the other way
+        // round. Unset for Arrow-only data. Mirrors the input_type oneof below, so that a pandas normalization
+        // metadata is embedded, and recovered, by copying the message across.
+        // Timezones are held in `columns` as well as here, and the two are kept in step.
+        oneof pandas_input_type {
+            PandasDataFrame df = 5;
+            PandasDataFrame series = 6;
+            NormalisedTimeSeries ts = 7;
+        }
     }
 
     oneof input_type {

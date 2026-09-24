@@ -140,6 +140,22 @@ def test_collect_schema_with_timezones(lmdb_library):
     )
 
 
+def test_collect_schema_pandas_with_timezone(lmdb_library):
+    """Pandas-written data has to be described in Arrow terms here exactly as the read path describes it."""
+    lib = lmdb_library
+    lib._nvs.set_output_format(OutputFormat.POLARS)
+    sym = "test_collect_schema_pandas_with_timezone"
+    df = pd.DataFrame(
+        {"col": np.arange(2, dtype=np.int64)}, index=pd.date_range("2025-01-01", periods=2, tz="America/New_York")
+    )
+    df.index.name = "ts"
+    lib.write(sym, df)
+
+    schema = lib.read(sym, lazy=True)._collect_schema()
+    assert schema == lib.read(sym).data.schema
+    assert schema["ts"].time_zone == "America/New_York"
+
+
 def test_collect_schema_multiindex(lmdb_library):
     lib = lmdb_library
     lib._nvs.set_output_format(OutputFormat.POLARS)

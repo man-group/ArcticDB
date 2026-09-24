@@ -217,9 +217,10 @@ struct OutputSchema {
     // If `inferred_from_empty_frame` is True, pandas index metadata should be ignored.
     [[nodiscard]] bool inferred_from_empty_frame() const { return inferred_from_empty_frame_; }
 
-    // Index metadata and column dtypes can be incorrect when inferred from an empty pandas dataframe
+    // Index metadata and column dtypes can be incorrect when inferred from an empty pandas dataframe. Arrow data that
+    // carries pandas metadata is not affected: its own fields describe its shape.
     [[nodiscard]] bool is_inferred_from_empty_pandas() const {
-        return inferred_from_empty_frame_ && pandas_common(norm_metadata_) != nullptr;
+        return inferred_from_empty_frame_ && is_pandas_input_type(norm_metadata_);
     }
 
     void set_inferred_from_empty_frame(bool inferred_from_empty_frame) {

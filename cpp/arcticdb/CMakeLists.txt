@@ -255,6 +255,7 @@ set(arcticdb_srcs
         entity/index_range.hpp
         entity/key.hpp
         entity/metrics.hpp
+        entity/arrow_pandas_norm.hpp
         entity/data_error.hpp
         entity/descriptors.hpp
         entity/native_tensor.hpp
@@ -502,6 +503,7 @@ set(arcticdb_srcs
         entity/compact_data_info.cpp
         entity/data_error.cpp
         entity/field_collection.cpp
+        entity/arrow_pandas_norm.cpp
         entity/field_collection_proto.cpp
         entity/key.cpp
         entity/metrics.cpp

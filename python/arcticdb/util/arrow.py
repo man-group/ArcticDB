@@ -6,6 +6,10 @@ from arcticdb.exceptions import ArcticUnsupportedDataTypeException
 NORMALIZABLE_PYARROW_TYPES = (pa.Table, pa.RecordBatch, pa.ChunkedArray, pa.Array) if _PYARROW_AVAILABLE else tuple()
 NORMALIZABLE_POLARS_TYPES = (pl.DataFrame, pl.Series) if _POLARS_AVAILABLE else tuple()
 
+# pandas.Series.to_frame() names an unnamed Series' column 0, so storing an unnamed one-dimensional Arrow structure
+# under the same name is what lets the two be appended to, or concatenated with, each other.
+UNNAMED_ONE_DIMENSIONAL_COLUMN = "0"
+
 
 def cast_string_columns(table, string_type=None):
     """
@@ -51,19 +55,23 @@ def convert_arrow_to_pandas_for_tests(table):
 def to_pyarrow_table(
     arrow_structure: "Union[pa.Table, pa.RecordBatch, pa.ChunkedArray, pa.Array, pl.DataFrame, pl.Series]",
 ) -> "pa.Table":
+    one_dimensional_name = None
     if isinstance(arrow_structure, NORMALIZABLE_POLARS_TYPES):
         if not _PYARROW_AVAILABLE:
             raise ModuleNotFoundError(
                 "ArcticDB's pyarrow optional dependency is missing and is required for working with polars DataFrames."
             )
         if isinstance(arrow_structure, pl.Series):
+            one_dimensional_name = arrow_structure.name
             # For some reason to_arrow() on a pl.DataFrame maintains the chunking and so is zero-copy, but on a
             # pl.Series it copies into a pa.Array if the Series was chunked
             arrow_structure = arrow_structure.to_frame().to_arrow().column(0)
         else:  # pl.DataFrame
             arrow_structure = arrow_structure.to_arrow()
     if isinstance(arrow_structure, (pa.ChunkedArray, pa.Array)):
-        arrow_structure = pa.Table.from_arrays([arrow_structure], names=["__array__"])
+        # pa.Array/pa.ChunkedArray have no name, and polars uses the empty string for an unnamed Series
+        name = one_dimensional_name if one_dimensional_name else UNNAMED_ONE_DIMENSIONAL_COLUMN
+        arrow_structure = pa.Table.from_arrays([arrow_structure], names=[name])
     elif isinstance(arrow_structure, pa.RecordBatch):
         arrow_structure = pa.Table.from_batches([arrow_structure])
     elif not isinstance(arrow_structure, pa.Table):
