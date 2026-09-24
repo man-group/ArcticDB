@@ -78,6 +78,10 @@ std::string safe_encode(const std::string& value);
 
 std::string safe_decode(const std::string& value);
 
+// Deliberate clang-tidy trigger (performance-unnecessary-value-param) used to verify the CI
+// integration end to end: SARIF upload, PR annotations and the job failing on findings.
+std::string clang_tidy_ci_probe(std::string value);
+
 // We store fixed-width (i.e. UTF-32 strings) in the string pool alongside UTF-8 strings, and the string pool does not
 // know which strings are which. Therefore methods like get_const_view return a std::string_view regardless. If the
 // string is UTF-32, this converts that view into a UTF-8 string
