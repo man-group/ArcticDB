@@ -20,7 +20,7 @@ from Arctic in three main ways:
 
 1. ArcticDB does not depend on Mongo. Instead, ArcticDB is designed to work with consumer grade
 S3 - on prem or in the cloud.
-2. ArcticDB is written in C++, enabling signficant performance improvements. ArcticDB is an order
+2. ArcticDB is written in C++, enabling significant performance improvements. ArcticDB is an order
 of magnitude faster than Arctic whilst being vastly easier to set up and get started with. 
 3. ArcticDB unifies streaming and batch workflows behind the same easy to use, consistent API. 
 

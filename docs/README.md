@@ -109,4 +109,4 @@ The reason for the separate docs tags is to allow improvements to the docs to be
 
 ## Deployment of `docs.arcticdb.io`
 
-[docs.arcticdb.io](https://docs.arcticdb.io) is hosted by netlify and runs continous deployment on the `docs-pages` branch of ArcticDB.
+[docs.arcticdb.io](https://docs.arcticdb.io) is hosted by netlify and runs continuous deployment on the `docs-pages` branch of ArcticDB.

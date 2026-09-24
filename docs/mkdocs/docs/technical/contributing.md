@@ -256,7 +256,7 @@ New-Item -Path .\python\arcticdb_ext.cp311-win_amd64.pyd -ItemType SymbolicLink 
 Running Python tests
 --------------------
 
-With `python` pointing to a Python interpeter with `ArcticDB` installed/on the `PYTHON_PATH`:
+With `python` pointing to a Python interpreter with `ArcticDB` installed/on the `PYTHON_PATH`:
 
 ```bash
 python -m pip install arcticdb[Testing]
