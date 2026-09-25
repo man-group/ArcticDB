@@ -52,7 +52,7 @@ ColumnWithStrings::ColumnWithStrings(
     }
     std::string_view raw = string_pool_->get_view(offset);
     if (strip_fixed_width_trailing_nulls && is_fixed_string_type(column_->type().data_type())) {
-        auto char_width = is_utf_type(slice_value_type(column_->type().data_type())) ? UNICODE_WIDTH : ASCII_WIDTH;
+        auto char_width = is_utf_type(slice_value_type(column_->type().data_type())) ? UTF32_WIDTH : ASCII_WIDTH;
         const std::string_view null_char_view("\0\0\0\0", char_width);
         while (!raw.empty() && raw.substr(raw.size() - char_width) == null_char_view) {
             raw.remove_suffix(char_width);

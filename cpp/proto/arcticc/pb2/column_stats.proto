@@ -25,6 +25,8 @@ enum ColumnStatsType {
     MAX_V1 = 2;
     NAN_COUNT_V1 = 3;
     NULL_COUNT_V1 = 4;
+    MIN_STR_V1 = 5;
+    MAX_STR_V1 = 6;
 }
 
 message StatEntry {

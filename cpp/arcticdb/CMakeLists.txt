@@ -443,6 +443,7 @@ set(arcticdb_srcs
         util/storage_lock.hpp
         util/reliable_storage_lock.hpp
         util/reliable_storage_lock-inl.hpp
+        util/string_stat_encoding.hpp
         util/string_utils.hpp
         util/thread_cached_int.hpp
         util/timeouts.hpp
@@ -613,6 +614,7 @@ set(arcticdb_srcs
         util/name_validation.cpp
         util/offset_string.cpp
         util/sparse_utils.cpp
+        util/string_stat_encoding.cpp
         util/string_utils.cpp
         util/trace.cpp
         util/type_handler.cpp
@@ -1122,6 +1124,7 @@ if(${TEST})
             pipeline/test/test_column_stats_dispatch_range_vs_range.cpp
             pipeline/test/test_column_stats_isin.cpp
             pipeline/test/test_column_stats_query_metadata.cpp
+            pipeline/test/test_column_stats_string_columns.cpp
             util/test/test_regex.cpp
             processing/test/ast_test_helpers.hpp
             processing/test/test_arithmetic_type_promotion.cpp
@@ -1131,6 +1134,7 @@ if(${TEST})
             processing/test/test_expression.cpp
             processing/test/test_filter_and_project_sparse.cpp
             processing/test/test_join_schemas.cpp
+            processing/test/test_min_max_aggregator_strings.cpp
             processing/test/test_type_promotion.cpp
             processing/test/test_operation_dispatch.cpp
             processing/test/test_output_schema_aggregator_types.cpp
@@ -1186,6 +1190,7 @@ if(${TEST})
             util/test/test_slab_allocator.cpp
             util/test/test_storage_lock.cpp
             util/test/test_string_pool.cpp
+            util/test/test_string_stat_encoding.cpp
             util/test/test_string_utils.cpp
             util/test/test_tracing_allocator.cpp
             util/test/gtest_custom_formatters.hpp

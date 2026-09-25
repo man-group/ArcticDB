@@ -11,6 +11,8 @@
 #include <arcticdb/processing/aggregation_utils.hpp>
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/util/constants.hpp>
+#include <arcticdb/util/offset_string.hpp>
+#include <arcticdb/util/string_stat_encoding.hpp>
 #include <arcticdb/column_store/memory_segment.hpp>
 #include <column_stats.pb.h>
 
@@ -24,62 +26,85 @@ void MinMaxAggregatorData::aggregate(const ColumnWithStrings& input_column) {
     details::visit_type(input_column.column_->type().data_type(), [&](auto col_tag) {
         using type_info = ScalarTypeInfo<decltype(col_tag)>;
         using RawType = typename type_info::RawType;
-        if constexpr (!is_sequence_type(type_info::data_type)) {
-            // null_count_ tracks rows that are genuinely absent (sparse-map gaps from Arrow
-            // validity bitmaps). nan_count_ tracks in-band sentinel values found while iterating
-            // the dense values (NaN for floats, NaT for time types) - see the for_each below.
-            if (input_column.column_->is_sparse()) {
-                const auto sparse_gap_count = input_column.column_->last_row() + 1 - input_column.column_->row_count();
-                null_count_ += static_cast<uint64_t>(sparse_gap_count);
+
+        constexpr bool is_string_column = is_sequence_type(type_info::data_type);
+        if constexpr (is_string_column) {
+            packed_strings_ = true;
+        }
+
+        constexpr auto stat_data_type = is_string_column ? DataType::UINT64 : type_info::data_type;
+        using StatType = std::conditional_t<is_string_column, uint64_t, RawType>;
+
+        if (input_column.column_->is_sparse()) {
+            const auto sparse_gap_count = input_column.column_->last_row() + 1 - input_column.column_->row_count();
+            null_count_ += static_cast<uint64_t>(sparse_gap_count);
+        }
+
+        auto is_nan = []([[maybe_unused]] RawType value_or_offset) {
+            if constexpr (is_string_column) {
+                return value_or_offset == nan_placeholder();
+            } else if constexpr (is_floating_point_type(type_info::data_type)) {
+                return std::isnan(value_or_offset);
+            } else if constexpr (is_time_type(type_info::data_type)) {
+                return value_or_offset == NaT;
+            } else {
+                return false;
             }
-            auto is_nat_or_nan = []([[maybe_unused]] RawType v) {
-                if constexpr (is_floating_point_type(type_info::data_type)) {
-                    return std::isnan(v);
-                } else if constexpr (is_time_type(type_info::data_type)) {
-                    return v == NaT;
-                } else {
-                    return false;
-                }
-            };
-            auto missing_value = []() -> RawType {
-                if constexpr (is_floating_point_type(type_info::data_type)) {
-                    return std::numeric_limits<RawType>::quiet_NaN();
-                } else if constexpr (is_time_type(type_info::data_type)) {
-                    return static_cast<RawType>(NaT);
-                } else {
-                    return RawType{};
-                }
-            };
-            [[maybe_unused]] bool any_nan{false};
-            arcticdb::for_each<typename type_info::TDT>(*input_column.column_, [&](auto value) {
-                // In-band sentinel (NaN for floats, NaT for time types) - count it and skip the
-                // min/max update so those reflect only real values.
-                if constexpr (is_floating_point_type(type_info::data_type) || is_time_type(type_info::data_type)) {
-                    if (is_nat_or_nan(value)) {
-                        ++nan_count_;
-                        any_nan = true;
-                        return;
-                    }
-                }
-                if (ARCTICDB_UNLIKELY(!min_.has_value())) {
-                    min_ = Value{value, type_info::data_type};
-                    max_ = Value{value, type_info::data_type};
-                } else {
-                    min_->set(std::min(min_->get<RawType>(), value));
-                    max_->set(std::max(max_->get<RawType>(), value));
-                }
-            });
-            if constexpr (is_floating_point_type(type_info::data_type) || is_time_type(type_info::data_type)) {
-                if (any_nan && !min_) {
-                    // Everything in the block is NaN/NaT, reflect this in the stats
-                    min_ = Value{missing_value(), type_info::data_type};
-                    max_ = Value{missing_value(), type_info::data_type};
-                }
+        };
+
+        auto is_null = []([[maybe_unused]] RawType value_or_offset) {
+            if constexpr (is_string_column) {
+                return !is_a_string(value_or_offset);
+            } else {
+                return false;
             }
-        } else {
-            schema::raise<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
-                    "Minmax column stat generation not supported with string types"
-            );
+        };
+
+        auto update_min_max = [&](StatType value_or_offset) {
+            if (ARCTICDB_UNLIKELY(!min_.has_value())) {
+                min_ = Value{value_or_offset, stat_data_type};
+                max_ = Value{value_or_offset, stat_data_type};
+            } else {
+                min_->set(std::min(min_->get<StatType>(), value_or_offset));
+                max_->set(std::max(max_->get<StatType>(), value_or_offset));
+            }
+        };
+
+        ankerl::unordered_dense::set<RawType> seen_offsets_in_pool;
+        [[maybe_unused]] bool column_has_nan{false};
+
+        arcticdb::for_each<typename type_info::TDT>(*input_column.column_, [&](auto value_or_offset) {
+            if (is_nan(value_or_offset)) {
+                ++nan_count_;
+                column_has_nan = true;
+                return;
+            }
+
+            if (is_null(value_or_offset)) {
+                ++null_count_;
+                return;
+            }
+
+            if constexpr (is_string_column) {
+                if (!seen_offsets_in_pool.emplace(value_or_offset).second) {
+                    return;
+                }
+                const auto packed_string = pack_string_at_offset(input_column, value_or_offset);
+                update_min_max(packed_string);
+            } else {
+                update_min_max(value_or_offset);
+            }
+        });
+
+        if constexpr (is_floating_point_type(type_info::data_type) || is_time_type(type_info::data_type)) {
+            if (column_has_nan && !min_) {
+                constexpr auto missing_value = is_floating_point_type(type_info::data_type)
+                                                       ? std::numeric_limits<RawType>::quiet_NaN()
+                                                       : static_cast<RawType>(NaT);
+
+                min_ = Value{missing_value, type_info::data_type};
+                max_ = Value{missing_value, type_info::data_type};
+            }
         }
     });
 }
@@ -87,11 +112,14 @@ void MinMaxAggregatorData::aggregate(const ColumnWithStrings& input_column) {
 std::vector<ColumnStatValue> MinMaxAggregatorData::finalize() const {
     std::vector<ColumnStatValue> res;
     if (min_.has_value()) {
+        const auto min_type = packed_strings_ ? ColumnStatTypeInternal::MIN_STR_V1 : ColumnStatTypeInternal::MIN_V1;
+        const auto max_type = packed_strings_ ? ColumnStatTypeInternal::MAX_STR_V1 : ColumnStatTypeInternal::MAX_V1;
         res.reserve(4);
-        res.emplace_back(ColumnStatValue{ColumnStatTypeInternal::MIN_V1, data_col_offset_, *min_});
-        res.emplace_back(ColumnStatValue{ColumnStatTypeInternal::MAX_V1, data_col_offset_, *max_});
-    } else if (null_count_ == 0) {
-        // The column is absent from this slice entirely, so there is nothing to record
+        res.emplace_back(ColumnStatValue{min_type, data_col_offset_, *min_});
+        res.emplace_back(ColumnStatValue{max_type, data_col_offset_, *max_});
+    } else if (null_count_ == 0 && nan_count_ == 0) {
+        // The column is absent from this slice entirely, so there is nothing to record. Both counts
+        // must be checked: a slice of only NaN strings leaves min_ unset but has counts to record.
         return res;
     }
     res.emplace_back(

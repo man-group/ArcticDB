@@ -2,6 +2,7 @@
 #include <arcticdb/pipeline/column_stats.hpp>
 #include <arcticdb/pipeline/column_stats_filter.hpp>
 #include <arcticdb/util/constants.hpp>
+#include <arcticdb/util/string_stat_encoding.hpp>
 #include <google/protobuf/any.pb.h>
 
 namespace arcticdb {
@@ -450,5 +451,99 @@ TEST(ColumnStatsDataTest, AllNullSliceKeepsCountsAndNotAbsent) {
     ASSERT_FALSE(v1.column_absent); // present-but-all-null, not absent
     ASSERT_EQ(v1.nan_count, 0u);
     ASSERT_EQ(v1.null_count, 3u);
+}
+
+// Pruning against packed string min/max is not implemented yet, so a string column's stats must be
+// ignored in their entirety. Skipping only the MIN_STR/MAX_STR entries is not enough: their sibling
+// count entries would leave the column in stats_by_column_ with no min, which values_for_column
+// reports as only_nulls (when the slice has nulls) or column_absent (when it does not), and the
+// comparator reads either as "prune this row slice" - so every string equality filter would return
+// nothing.
+TEST(ColumnStatsDataTest, PackedStringStatsAreIgnoredForTheWholeColumn) {
+    using namespace arcticc::pb2::column_stats_pb2;
+    constexpr uint32_t fruit_data_col_offset = 2;
+
+    // Stats segment layout: start_row, end_row, price MIN/MAX, fruit MIN_STR/MAX_STR/NAN/NULL.
+    // Row 0 has no null fruits, row 1 has two - the two ways the bug manifests.
+    auto start_col = std::make_shared<Column>(make_scalar_type(DataType::UINT64), Sparsity::PERMITTED);
+    auto end_col = std::make_shared<Column>(make_scalar_type(DataType::UINT64), Sparsity::PERMITTED);
+    auto min_price_col = std::make_shared<Column>(make_scalar_type(DataType::INT64), Sparsity::PERMITTED);
+    auto max_price_col = std::make_shared<Column>(make_scalar_type(DataType::INT64), Sparsity::PERMITTED);
+    auto min_fruit_col = std::make_shared<Column>(make_scalar_type(DataType::UINT64), Sparsity::PERMITTED);
+    auto max_fruit_col = std::make_shared<Column>(make_scalar_type(DataType::UINT64), Sparsity::PERMITTED);
+    auto nan_count_col = std::make_shared<Column>(make_scalar_type(DataType::UINT64), Sparsity::PERMITTED);
+    auto null_count_col = std::make_shared<Column>(make_scalar_type(DataType::UINT64), Sparsity::PERMITTED);
+
+    start_col->push_back<uint64_t>(100);
+    end_col->push_back<uint64_t>(200);
+    min_price_col->push_back<int64_t>(10);
+    max_price_col->push_back<int64_t>(20);
+    min_fruit_col->push_back<uint64_t>(pack_string_stat("apple"));
+    max_fruit_col->push_back<uint64_t>(pack_string_stat("cherry"));
+    nan_count_col->push_back<uint64_t>(0);
+    null_count_col->push_back<uint64_t>(0);
+
+    start_col->push_back<uint64_t>(300);
+    end_col->push_back<uint64_t>(400);
+    min_price_col->push_back<int64_t>(30);
+    max_price_col->push_back<int64_t>(40);
+    min_fruit_col->push_back<uint64_t>(pack_string_stat("damson"));
+    max_fruit_col->push_back<uint64_t>(pack_string_stat("elderberry"));
+    nan_count_col->push_back<uint64_t>(0);
+    null_count_col->push_back<uint64_t>(2);
+
+    constexpr ssize_t last_row = 1;
+    SegmentInMemory seg;
+    seg.descriptor().set_index(IndexDescriptorImpl(IndexDescriptorImpl::Type::ROWCOUNT, 0));
+    seg.add_column(scalar_field(DataType::UINT64, start_row_column_name), start_col);
+    seg.add_column(scalar_field(DataType::UINT64, end_row_column_name), end_col);
+    seg.add_column(scalar_field(DataType::INT64, "v1_MIN(price)"), min_price_col);
+    seg.add_column(scalar_field(DataType::INT64, "v1_MAX(price)"), max_price_col);
+    seg.add_column(scalar_field(DataType::UINT64, "v1_MIN_STR(fruit)"), min_fruit_col);
+    seg.add_column(scalar_field(DataType::UINT64, "v1_MAX_STR(fruit)"), max_fruit_col);
+    seg.add_column(scalar_field(DataType::UINT64, "v1_NAN_COUNT(fruit)"), nan_count_col);
+    seg.add_column(scalar_field(DataType::UINT64, "v1_NULL_COUNT(fruit)"), null_count_col);
+    seg.set_row_data(last_row);
+
+    ColumnStatsHeader header;
+    header.set_version(1);
+    auto& price_entries = (*header.mutable_stats_by_column())[price_data_col_offset];
+    price_entries.add_entries()->set_type(MIN_V1);
+    price_entries.mutable_entries(0)->set_stats_seg_offset(2);
+    price_entries.add_entries()->set_type(MAX_V1);
+    price_entries.mutable_entries(1)->set_stats_seg_offset(3);
+    auto& fruit_entries = (*header.mutable_stats_by_column())[fruit_data_col_offset];
+    for (const auto& [offset, type] : std::vector<std::pair<uint32_t, ColumnStatsType>>{
+                 {4, MIN_STR_V1}, {5, MAX_STR_V1}, {6, NAN_COUNT_V1}, {7, NULL_COUNT_V1}
+         }) {
+        auto* entry = fruit_entries.add_entries();
+        entry->set_stats_seg_offset(offset);
+        entry->set_type(type);
+    }
+
+    google::protobuf::Any any;
+    any.PackFrom(header);
+    seg.set_metadata(std::move(any));
+
+    TimeseriesDescriptor tsd;
+    tsd.mutable_fields().add_field(scalar_field(DataType::NANOSECONDS_UTC64, "timestamp"));
+    tsd.mutable_fields().add_field(scalar_field(DataType::INT64, "price"));
+    tsd.mutable_fields().add_field(scalar_field(DataType::UTF_DYNAMIC64, "fruit"));
+
+    ColumnStatsData data(std::move(seg), tsd);
+    ASSERT_FALSE(data.empty());
+
+    for (const auto& row_range : {pipelines::RowRange{100, 200}, pipelines::RowRange{300, 400}}) {
+        const auto row = data.find_row(row_range);
+        ASSERT_TRUE(row.has_value());
+        const auto fruit = stats_for(data, "fruit", *row);
+        EXPECT_FALSE(fruit.min.has_value());
+        EXPECT_FALSE(fruit.column_absent);
+        EXPECT_FALSE(fruit.only_nulls());
+        EXPECT_EQ(fruit.null_count, 0u);
+        // The numeric column sharing the segment must still prune normally.
+        const auto price = stats_for(data, "price", *row);
+        ASSERT_TRUE(price.min.has_value());
+    }
 }
 } // namespace arcticdb
