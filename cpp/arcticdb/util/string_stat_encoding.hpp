@@ -16,6 +16,8 @@
 
 namespace arcticdb {
 
+struct ColumnWithStrings;
+
 // A column stats segment holds one fixed-width cell per statistic, so a string min/max cannot store
 // the whole value. Instead we keep the first truncated_prefix_bytes UTF-8 bytes in the high bytes
 // of a uint64_t and the byte length in the low byte.
@@ -48,6 +50,10 @@ uint64_t pack_string_stat(std::string_view utf8_str);
 // to UTF-8 here. All other string types already hold UTF-8 (or ASCII, which is a subset), so every
 // packed stat is comparable regardless of the source column's type.
 uint64_t pack_string(std::string_view raw_pool_string, entity::DataType raw_pool_string_data_type);
+
+// Resolves offset_in_pool against the column's string pool and packs what it finds. Raises if the
+// offset has no pool entry, so callers must filter out the None and NaN placeholder offsets first.
+uint64_t pack_string_at_offset(const ColumnWithStrings& column, entity::position_t offset_in_pool);
 
 // The prefix bytes are not necessarily valid UTF-8, since truncation can split a codepoint. Callers
 // that need to display them must decode permissively.

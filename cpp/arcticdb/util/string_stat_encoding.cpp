@@ -8,6 +8,9 @@
 
 #include <arcticdb/util/string_stat_encoding.hpp>
 
+#include <arcticdb/column_store/column.hpp>
+#include <arcticdb/processing/expression_node.hpp>
+
 #include <boost/locale.hpp>
 
 #include <algorithm>
@@ -75,6 +78,16 @@ uint64_t pack_string(std::string_view raw_pool_string, entity::DataType raw_pool
     }
 
     return pack_string_stat(raw_pool_string);
+}
+
+uint64_t pack_string_at_offset(const ColumnWithStrings& column, entity::position_t offset_in_pool) {
+    const auto raw_pool_string = column.string_at_offset(offset_in_pool);
+    internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+            raw_pool_string.has_value(),
+            "Missing string pool entry at offset {} generating column stats",
+            offset_in_pool
+    );
+    return pack_string(*raw_pool_string, column.column_->type().data_type());
 }
 
 UnpackedStringStat unpack_string(uint64_t packed) {
