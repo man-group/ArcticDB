@@ -138,8 +138,9 @@ std::vector<StatsMetadataForColumn> calculate_stats_metadata(
                 tsd.fields().size()
         );
         stats_metadata_for_column.col_name = std::string{tsd.fields().at(data_col_offset).name()};
-        // Pruning on packed string stats is not implemented yet. Skipping only the MIN_STR/MAX_STR
-        // entries would leave the column min-less, which the comparator reads as "prune this slice".
+        // Ignore a column's stats entirely once it has packed string min/max, which we cannot prune on
+        // yet. Skipping just the MIN_STR/MAX_STR entries is not enough: the sibling NAN_COUNT/NULL_COUNT
+        // entries keep the column here with no min, which the comparator reads as "prune this slice".
         if (std::ranges::any_of(entry_list.entries(), [](const auto& entry) {
                 return is_packed_string_stat(entry.type());
             })) {
