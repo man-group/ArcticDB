@@ -513,10 +513,10 @@ TEST(TestS3Storage, curl_http_client_factory_is_registered) {
     ASSERT_NE(dynamic_cast<arcticdb::storage::s3::ArcticCurlHttpClient*>(http_client.get()), nullptr);
 }
 
-TEST(TestS3Storage, dns_shuffle_addresses_enabled_by_default) {
+TEST(TestS3Storage, dns_shuffle_addresses_disabled_by_default) {
     using namespace arcticdb::storage::s3;
     ScopedConfig::unset_int("S3Storage.DnsShuffleAddresses");
-    ASSERT_TRUE(dns_shuffle_addresses_enabled());
+    ASSERT_FALSE(dns_shuffle_addresses_enabled());
 }
 
 TEST(TestS3Storage, dns_shuffle_addresses_can_be_disabled_via_config) {
