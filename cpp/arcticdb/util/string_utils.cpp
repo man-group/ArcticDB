@@ -69,8 +69,10 @@ std::string safe_decode(const std::string& value) {
 
 std::string utf32_to_u8(std::string_view strv) {
     std::u32string_view strv32{reinterpret_cast<const char32_t*>(strv.data()), strv.size() / 4};
-    // Strip trailing null characters
-    strv32 = strv32.substr(0, strv32.find_first_of(char32_t(0)));
+    // Strip the trailing null codepoints a fixed-width pool pads with, and only those: a null before a
+    // non-null one is data, so stopping at the first null would drop the rest of the value.
+    const auto last_non_zero_symbol_pos = strv32.find_last_not_of(char32_t{0});
+    strv32 = strv32.substr(0, last_non_zero_symbol_pos == std::u32string_view::npos ? 0 : last_non_zero_symbol_pos + 1);
     return boost::locale::conv::utf_to_utf<char>(strv32.data(), strv32.data() + strv32.size());
 }
 
