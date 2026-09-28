@@ -83,7 +83,7 @@ constexpr const char* ARCTIC_CURL_ALLOCATION_TAG = "ArcticCurlHttpClient";
 } // namespace
 
 bool dns_shuffle_addresses_enabled() {
-    return ConfigsMap::instance()->get_int("S3Storage.DnsShuffleAddresses", 1) != 0;
+    return ConfigsMap::instance()->get_int("S3Storage.DnsShuffleAddresses", 0) != 0;
 }
 
 ArcticCurlHttpClient::ArcticCurlHttpClient(const Aws::Client::ClientConfiguration& client_configuration) :
@@ -139,7 +139,7 @@ void ArcticCurlHttpClientFactory::CleanupStaticState() {
 #endif // WIN32
 
 uint16_t event_loop_thread_count_from_config() {
-    const auto configured = ConfigsMap::instance()->get_int("AWS.EventLoopThreads", 1);
+    const auto configured = ConfigsMap::instance()->get_int("AWS.EventLoopThreads", 0);
     return static_cast<uint16_t>(std::clamp<int64_t>(configured, 0, std::numeric_limits<uint16_t>::max()));
 }
 
