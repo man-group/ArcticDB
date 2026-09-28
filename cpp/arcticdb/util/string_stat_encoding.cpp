@@ -10,10 +10,16 @@
 
 #include <arcticdb/column_store/column.hpp>
 #include <arcticdb/processing/expression_node.hpp>
+#include <arcticdb/util/string_utils.hpp>
 
 #include <boost/locale.hpp>
 
 #include <algorithm>
+#include <cstring>
+
+#ifdef _MSC_VER
+#include <cstdlib>
+#endif
 
 namespace arcticdb {
 
@@ -36,29 +42,20 @@ std::string utf32_to_utf8_stripping_padding(std::string_view raw_utf32_string) {
     return boost::locale::conv::utf_to_utf<char>(utf32.data(), utf32.data() + utf32.size());
 }
 
-// As above, only the padding goes: ASCII_FIXED64 pads a byte at a time, and an interior null is data.
-std::string_view strip_ascii_padding(std::string_view raw_ascii_string) {
-    const auto last_non_zero_symbol_pos = raw_ascii_string.find_last_not_of('\0');
-    return raw_ascii_string.substr(
-            0, last_non_zero_symbol_pos == std::string_view::npos ? 0 : last_non_zero_symbol_pos + 1
-    );
-}
-
-constexpr uint64_t shift_to_byte_in_packed(char byte, size_t i) {
-    const auto unsigned_byte = static_cast<uint8_t>(byte);
-    const auto shift_left_bits = calculate_shift_bits(i);
-    return (static_cast<uint64_t>(unsigned_byte) << shift_left_bits);
+uint64_t byteswap_to_most_significant_first(uint64_t value) {
+#ifdef _MSC_VER
+    return _byteswap_uint64(value);
+#else
+    return __builtin_bswap64(value);
+#endif
 }
 } // namespace
 
 uint64_t pack_string_stat(std::string_view utf8_str) {
-    const auto bytes_kept = std::min(utf8_str.size(), truncated_prefix_bytes);
     uint64_t packed{0};
 
-    for (size_t i = 0; i < bytes_kept; ++i) {
-        const uint64_t byte_in_packed = shift_to_byte_in_packed(utf8_str[i], i);
-        packed |= byte_in_packed;
-    }
+    std::memcpy(&packed, utf8_str.data(), std::min(utf8_str.size(), truncated_prefix_bytes));
+    packed = byteswap_to_most_significant_first(packed) & ~least_significant_byte_only_mask;
 
     const uint64_t length_byte =
             utf8_str.size() > truncated_prefix_bytes ? truncated_string_length_marker : utf8_str.size();
@@ -74,7 +71,7 @@ uint64_t pack_string(std::string_view raw_pool_string, entity::DataType raw_pool
     }
 
     if (raw_pool_string_data_type == entity::DataType::ASCII_FIXED64) {
-        return pack_string_stat(strip_ascii_padding(raw_pool_string));
+        return pack_string_stat(util::strip_ascii_padding(raw_pool_string));
     }
 
     return pack_string_stat(raw_pool_string);
@@ -91,7 +88,7 @@ uint64_t pack_string_at_offset(const ColumnWithStrings& column, entity::position
 }
 
 UnpackedStringStat unpack_string(uint64_t packed) {
-    const auto length_byte = static_cast<size_t>(static_cast<uint8_t>(packed & least_significant_byte_only_mask));
+    const auto length_byte = packed & least_significant_byte_only_mask;
     const bool was_truncated = (length_byte == truncated_string_length_marker);
     const auto length = was_truncated ? truncated_prefix_bytes : std::min(length_byte, truncated_prefix_bytes);
 
