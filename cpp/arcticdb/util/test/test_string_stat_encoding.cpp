@@ -55,6 +55,27 @@ TEST(StringStatEncoding, LongerThanPrefixIsMarkedTruncated) {
     ASSERT_LT(pack_string_stat("abcdefg"), pack_string_stat("abcdefgh"));
 }
 
+// pack_string_stat copies the prefix in one go and byte swaps it into place rather than shifting a
+// byte at a time, so this pins the result at every length against the shift the format specifies.
+// The bytes are chosen to expose a wrong byte order or a stray byte read past the end of the string.
+TEST(StringStatEncoding, PackedPrefixMatchesPerByteShift) {
+    const std::string source{"\x01\x7F\x80\xFEqrstuvwx", 12};
+    for (size_t length = 0; length <= source.size(); ++length) {
+        // Rebuilding the prefix in its own allocation means there are no trailing bytes of source
+        // after it to accidentally pick up, so a copy reading too far shows as a mismatch here.
+        const std::string exact{std::string_view{source}.substr(0, length)};
+        const auto packed = pack_string_stat(exact);
+
+        uint64_t expected{0};
+        for (size_t i = 0; i < std::min(length, truncated_prefix_bytes); ++i) {
+            expected |= static_cast<uint64_t>(static_cast<uint8_t>(exact[i])) << ((truncated_prefix_bytes - i) * 8);
+        }
+        expected |= length > truncated_prefix_bytes ? truncated_string_length_marker : length;
+
+        ASSERT_EQ(packed, expected) << "length " << length;
+    }
+}
+
 TEST(StringStatEncoding, PackingPreservesBytewiseOrder) {
     // The invariant the whole design rests on. Bytewise sorted; packing must be non-decreasing
     // across it. Not strictly increasing, because values sharing a full seven-byte prefix collapse.
