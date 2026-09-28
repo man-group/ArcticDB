@@ -11,6 +11,7 @@
 #include <arcticdb/entity/types.hpp>
 
 #include <cstdint>
+#include <limits>
 #include <string>
 #include <string_view>
 
@@ -34,11 +35,11 @@ constexpr size_t truncated_prefix_bytes = 7;
 // Length byte meaning "the source string was longer than truncated_prefix_bytes, so the prefix
 // stored here is incomplete". Deliberately the largest byte value so that a truncated stat sorts
 // above any exact-length value sharing its prefix.
-constexpr uint8_t truncated_string_length_marker = 255;
+constexpr uint8_t truncated_string_length_marker = std::numeric_limits<uint8_t>::max();
 
 // Stencil for pulling the length byte out of a packed stat: ones in the low byte, zeros in the other
 // seven, so ANDing keeps that byte and erases everything above it.
-constexpr uint64_t rightmost_byte_only_mask = 0xFFULL;
+constexpr uint64_t least_significant_byte_only_mask = 0xFFULL;
 
 // Packs the first truncated_prefix_bytes bytes of utf8_str into the high bytes, zero padded if
 // shorter, and the byte length into the low byte. Truncation can split a multi-byte codepoint, which

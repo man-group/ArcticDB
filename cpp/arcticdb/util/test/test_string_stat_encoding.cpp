@@ -41,7 +41,7 @@ TEST(StringStatEncoding, LengthByteCoversEveryExactLength) {
     const std::string source{"abcdefg"};
     for (size_t length = 0; length <= truncated_prefix_bytes; ++length) {
         const auto packed = pack_string_stat(std::string_view{source}.substr(0, length));
-        ASSERT_EQ(packed & rightmost_byte_only_mask, length) << "length " << length;
+        ASSERT_EQ(packed & least_significant_byte_only_mask, length) << "length " << length;
     }
 }
 

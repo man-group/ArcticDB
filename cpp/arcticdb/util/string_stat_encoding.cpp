@@ -91,7 +91,7 @@ uint64_t pack_string_at_offset(const ColumnWithStrings& column, entity::position
 }
 
 UnpackedStringStat unpack_string(uint64_t packed) {
-    const auto length_byte = static_cast<size_t>(static_cast<uint8_t>(packed & rightmost_byte_only_mask));
+    const auto length_byte = static_cast<size_t>(static_cast<uint8_t>(packed & least_significant_byte_only_mask));
     const bool was_truncated = (length_byte == truncated_string_length_marker);
     const auto length = was_truncated ? truncated_prefix_bytes : std::min(length_byte, truncated_prefix_bytes);
 
@@ -100,7 +100,7 @@ UnpackedStringStat unpack_string(uint64_t packed) {
     for (size_t i = 0; i < length; ++i) {
         const auto shift_right_bits = calculate_shift_bits(i);
         const auto packed_shifted_right = (packed >> shift_right_bits);
-        text[i] = static_cast<char>(packed_shifted_right & rightmost_byte_only_mask);
+        text[i] = static_cast<char>(packed_shifted_right & least_significant_byte_only_mask);
     }
     return {std::move(text), was_truncated};
 }
