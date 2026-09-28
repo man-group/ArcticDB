@@ -80,6 +80,13 @@ std::u32string utf8_to_u32(std::string_view strv) {
     return boost::locale::conv::utf_to_utf<char32_t>(strv.data(), strv.data() + strv.size());
 }
 
+std::string_view strip_ascii_padding(std::string_view raw_ascii_string) {
+    const auto last_non_zero_symbol_pos = raw_ascii_string.find_last_not_of('\0');
+    return raw_ascii_string.substr(
+            0, last_non_zero_symbol_pos == std::string_view::npos ? 0 : last_non_zero_symbol_pos + 1
+    );
+}
+
 uint64_t TransparentStringHash::operator()(std::string_view str) const noexcept {
     return ankerl::unordered_dense::hash<std::string_view>{}(str);
 }
