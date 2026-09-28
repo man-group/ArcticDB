@@ -164,8 +164,6 @@ S3ApiInstance::S3ApiInstance(
     // that have special characters (eg ':').
     options_.httpOptions.compliantRfc3986Encoding = true;
 
-    // Left unset, Aws::InitAPI builds a ClientBootstrap with one AWS CRT event-loop thread per two logical
-    // processors, which ArcticDB's S3Client has no use for - its HTTP transport is never CRT-backed.
     options_.ioOptions.clientBootstrap_create_fn = make_client_bootstrap_factory(event_loop_thread_count);
 
     if (log_level_ > Aws::Utils::Logging::LogLevel::Off) {
