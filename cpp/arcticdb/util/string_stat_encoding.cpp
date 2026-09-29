@@ -41,9 +41,9 @@ uint64_t pack_string_stat(std::string_view utf8_str) {
     uint64_t packed{0};
 
     if (utf8_str.size() > truncated_prefix_bytes) {
-        // length is at least 8 bytes -> extract the first 7 bytes -> leave the least significant for the marker
-        std::memcpy(&packed, utf8_str.data(), truncated_prefix_bytes);
-        return byteswap_to_most_significant_first(packed) | truncated_string_length_marker;
+        std::memcpy(&packed, utf8_str.data(), sizeof(uint64_t));
+        packed = byteswap_to_most_significant_first(packed) & ~least_significant_byte_only_mask;
+        return packed | truncated_string_length_marker;
     }
 
     for (size_t i = 0; i < utf8_str.size(); ++i) {
