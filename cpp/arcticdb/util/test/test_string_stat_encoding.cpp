@@ -17,8 +17,6 @@
 namespace arcticdb {
 
 namespace {
-std::u32string as_utf32(std::string_view utf8) { return util::utf8_to_u32(utf8); }
-
 // A fixed-width UTF column's string pool holds UTF-32, which reaches the packer as raw bytes.
 std::string_view bytes_of(const std::u32string& utf32) {
     return {reinterpret_cast<const char*>(utf32.data()), utf32.size() * sizeof(char32_t)};
@@ -139,7 +137,7 @@ TEST(StringStatEncoding, InvalidUtf8PacksWithoutThrowing) {
 
 TEST(StringStatEncoding, Utf32SourceTranscodesToTheSamePackedValue) {
     // Makes stats comparable across a dynamic schema symbol whose slices differ in string type.
-    const auto utf32 = as_utf32(cjk_utf8);
+    const auto utf32 = util::utf8_to_u32(cjk_utf8);
     ASSERT_EQ(pack_string(bytes_of(utf32), DataType::UTF_FIXED64), pack_string(cjk_utf8, DataType::UTF_DYNAMIC64));
     ASSERT_EQ(pack_string(bytes_of(utf32), DataType::UTF_FIXED64), 0xE697A5E69CACE8FFULL);
     // Without the transcode the UTF-32 bytes would pack as themselves, which is a different value.
@@ -148,8 +146,8 @@ TEST(StringStatEncoding, Utf32SourceTranscodesToTheSamePackedValue) {
 
 TEST(StringStatEncoding, Utf32EmbeddedNullIsNotATerminator) {
     const std::string with_null{"a\0b", 3};
-    ASSERT_EQ(pack_string(bytes_of(as_utf32(with_null)), DataType::UTF_FIXED64), pack_string_stat(with_null));
-    ASSERT_GT(pack_string(bytes_of(as_utf32(with_null)), DataType::UTF_FIXED64), pack_string_stat("a"));
+    ASSERT_EQ(pack_string(bytes_of(util::utf8_to_u32(with_null)), DataType::UTF_FIXED64), pack_string_stat(with_null));
+    ASSERT_GT(pack_string(bytes_of(util::utf8_to_u32(with_null)), DataType::UTF_FIXED64), pack_string_stat("a"));
 }
 
 TEST(StringStatEncoding, EveryStringDataTypeAgreesOnAsciiText) {
@@ -157,13 +155,13 @@ TEST(StringStatEncoding, EveryStringDataTypeAgreesOnAsciiText) {
     ASSERT_EQ(pack_string("ab", DataType::ASCII_FIXED64), expected);
     ASSERT_EQ(pack_string("ab", DataType::ASCII_DYNAMIC64), expected);
     ASSERT_EQ(pack_string("ab", DataType::UTF_DYNAMIC64), expected);
-    ASSERT_EQ(pack_string(bytes_of(as_utf32("ab")), DataType::UTF_FIXED64), expected);
+    ASSERT_EQ(pack_string(bytes_of(util::utf8_to_u32("ab")), DataType::UTF_FIXED64), expected);
 }
 
 TEST(StringStatEncoding, Utf32PaddingIsNotPacked) {
     // Fixed-width pools pad with nulls. If they reached the packer, "ab" would look like a
     // seven-byte value rather than a two-byte one.
-    auto padded = as_utf32("ab");
+    auto padded = util::utf8_to_u32("ab");
     padded.resize(8, char32_t{0});
     ASSERT_EQ(pack_string(bytes_of(padded), DataType::UTF_FIXED64), pack_string_stat("ab"));
 }
