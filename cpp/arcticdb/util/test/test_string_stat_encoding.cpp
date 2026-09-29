@@ -10,6 +10,7 @@
 
 #include <arcticdb/util/string_stat_encoding.hpp>
 #include <arcticdb/util/string_utils.hpp>
+#include <arcticdb/util/test/string_stat_test_utils.hpp>
 
 #include <vector>
 

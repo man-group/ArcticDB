@@ -24,8 +24,6 @@
 namespace arcticdb {
 
 namespace {
-constexpr size_t calculate_shift_bits(size_t i) { return (truncated_prefix_bytes - i) * 8; }
-
 // Fixed-width pools pad with null codepoints, so trailing nulls are dropped. Interior ones are data
 // and must survive, which is why this cannot use util::utf32_to_u8: that stops at the *first* null,
 // so "a\0b" would pack as "a", and since the engine's equality path does match an embedded null in a
@@ -85,21 +83,6 @@ uint64_t pack_string_at_offset(const ColumnWithStrings& column, entity::position
             offset_in_pool
     );
     return pack_string(*raw_pool_string, column.column_->type().data_type());
-}
-
-UnpackedStringStat unpack_string(uint64_t packed) {
-    const auto length_byte = packed & least_significant_byte_only_mask;
-    const bool was_truncated = (length_byte == truncated_string_length_marker);
-    const auto length = was_truncated ? truncated_prefix_bytes : std::min(length_byte, truncated_prefix_bytes);
-
-    std::string text(length, '\0');
-
-    for (size_t i = 0; i < length; ++i) {
-        const auto shift_right_bits = calculate_shift_bits(i);
-        const auto packed_shifted_right = (packed >> shift_right_bits);
-        text[i] = static_cast<char>(packed_shifted_right & least_significant_byte_only_mask);
-    }
-    return {std::move(text), was_truncated};
 }
 
 } // namespace arcticdb

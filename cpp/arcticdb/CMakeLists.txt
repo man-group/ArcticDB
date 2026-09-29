@@ -1190,6 +1190,7 @@ if(${TEST})
             util/test/gtest_utils.hpp
             util/test/input_frame_utils.hpp
             util/test/segment_generation_utils.hpp
+            util/test/string_stat_test_utils.hpp
             util/test/segment_generation_utils.cpp
             version/test/test_admission_handler.cpp
             version/test/test_append.cpp

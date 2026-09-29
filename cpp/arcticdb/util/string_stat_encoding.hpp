@@ -56,13 +56,4 @@ uint64_t pack_string(std::string_view raw_pool_string, entity::DataType raw_pool
 // offset has no pool entry, so callers must filter out the None and NaN placeholder offsets first.
 uint64_t pack_string_at_offset(const ColumnWithStrings& column, entity::position_t offset_in_pool);
 
-// The prefix bytes are not necessarily valid UTF-8, since truncation can split a codepoint. Callers
-// that need to display them must decode permissively.
-struct UnpackedStringStat {
-    std::string text;
-    bool was_truncated;
-};
-
-UnpackedStringStat unpack_string(uint64_t packed);
-
 } // namespace arcticdb
