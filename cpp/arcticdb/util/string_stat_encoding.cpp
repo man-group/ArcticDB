@@ -29,18 +29,29 @@ uint64_t byteswap_to_most_significant_first(uint64_t value) {
     return __builtin_bswap64(value);
 #endif
 }
+
+constexpr uint64_t shift_to_byte_in_packed(char byte, size_t i) {
+    const auto unsigned_byte = static_cast<uint8_t>(byte);
+    const auto shift_left_bits = (truncated_prefix_bytes - i) * 8;
+    return (static_cast<uint64_t>(unsigned_byte) << shift_left_bits);
+}
 } // namespace
 
 uint64_t pack_string_stat(std::string_view utf8_str) {
     uint64_t packed{0};
 
-    std::memcpy(&packed, utf8_str.data(), std::min(utf8_str.size(), truncated_prefix_bytes));
-    packed = byteswap_to_most_significant_first(packed) & ~least_significant_byte_only_mask;
+    if (utf8_str.size() > truncated_prefix_bytes) {
+        // length is at least 8 bytes -> extract the first 7 bytes -> leave the least significant for the marker
+        std::memcpy(&packed, utf8_str.data(), truncated_prefix_bytes);
+        return byteswap_to_most_significant_first(packed) | truncated_string_length_marker;
+    }
 
-    const uint64_t length_byte =
-            utf8_str.size() > truncated_prefix_bytes ? truncated_string_length_marker : utf8_str.size();
+    for (size_t i = 0; i < utf8_str.size(); ++i) {
+        const uint64_t byte_in_packed = shift_to_byte_in_packed(utf8_str[i], i);
+        packed |= byte_in_packed;
+    }
 
-    return packed | length_byte;
+    return packed | utf8_str.size();
 }
 
 uint64_t pack_string(std::string_view raw_pool_string, entity::DataType raw_pool_string_data_type) {
