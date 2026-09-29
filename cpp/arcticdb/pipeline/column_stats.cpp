@@ -345,8 +345,9 @@ ColumnStats::ColumnStats(
 
 namespace {
 bool is_col_eligible_for_stats(DataType col_data_type) {
-    // String stats are min/max of the packed UTF-8 prefix, which supports pruning the equality and
-    // membership predicates. is_arrow_output_only_type is excluded as it never reaches stats generation.
+    // String stats are min/max of the packed UTF-8 prefix. They are generated and stored, but not yet
+    // read back for pruning - see calculate_stats_metadata in column_stats_filter.cpp.
+    // is_arrow_output_only_type is excluded as it never reaches stats generation.
     return is_numeric_type(col_data_type) || is_bool_type(col_data_type) ||
            (is_sequence_type(col_data_type) && !is_arrow_output_only_type(col_data_type));
 }

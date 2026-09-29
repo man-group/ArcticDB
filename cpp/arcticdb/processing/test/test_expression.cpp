@@ -153,8 +153,9 @@ TEST(ColumnWithStringsFixedWidth, Utf32PaddingComesOffAWholeCodepointAtATime) {
     const auto column = build_fixed_width_column(DataType::UTF_FIXED64, padded_utf32("ab", 8));
     const auto stripped = stripped_string_at_row_zero(column);
 
-    // Stripping in units of sizeof(wchar_t) leaves six bytes here, counting the two trailing zero
-    // bytes of 'b' as padding, and then anything reading the view as UCS-4 silently loses the 'b'.
+    // Stripping in units of UNICODE_WIDTH, which is sizeof(wchar_t) and so two bytes on Windows,
+    // leaves six bytes here: the two trailing zero bytes of 'b' are counted as padding, and anything
+    // reading the view back as UCS-4 then silently loses the 'b'.
     ASSERT_TRUE(stripped.has_value());
     ASSERT_EQ(stripped->size(), 2 * UTF32_WIDTH);
     ASSERT_EQ(util::utf32_to_u8(*stripped), "ab");

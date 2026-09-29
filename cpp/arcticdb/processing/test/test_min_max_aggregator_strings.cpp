@@ -24,7 +24,7 @@ namespace {
 constexpr size_t data_col_offset = 1;
 
 // A string column holds string pool offsets, not text. std::nullopt in |values| means the reserved
-// None sentinel, and |nan_rows| names rows holding the reserved NaN sentinel instead.
+// None sentinel.
 ColumnWithStrings build_string_column(
         const std::vector<std::optional<std::string>>& values, DataType data_type = DataType::UTF_DYNAMIC64,
         std::optional<size_t> fixed_width = std::nullopt
@@ -202,8 +202,9 @@ TEST(MinMaxAggregatorStrings, AllNanRecordsCountsWithoutMinMax) {
     aggregator.aggregate(build_string_column_with_nans({"ignored", "ignored_too"}, {0, 1}));
     const auto stats = aggregator.finalize();
 
-    // finalize() returns early when there is no min and no nulls, which would silently drop a
-    // nan-only slice's counts. Unreachable for numerics, reachable here.
+    // finalize() must check the NaN count as well as the null count before deciding the column is
+    // absent, or a nan-only slice's counts are silently dropped. Unreachable for numerics, where an
+    // all-NaN slice records NaN as its min, reachable here.
     ASSERT_FALSE(stat_value(stats, ColumnStatTypeInternal::MIN_STR_V1).has_value());
     ASSERT_EQ(count_stat(stats, ColumnStatTypeInternal::NAN_COUNT_V1), 2);
     ASSERT_EQ(count_stat(stats, ColumnStatTypeInternal::NULL_COUNT_V1), 0);
