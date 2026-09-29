@@ -12,8 +12,6 @@
 #include <arcticdb/processing/expression_node.hpp>
 #include <arcticdb/util/string_utils.hpp>
 
-#include <boost/locale.hpp>
-
 #include <algorithm>
 #include <cstring>
 
@@ -24,22 +22,6 @@
 namespace arcticdb {
 
 namespace {
-// Fixed-width pools pad with null codepoints, so trailing nulls are dropped. Interior ones are data
-// and must survive, which is why this cannot use util::utf32_to_u8: that stops at the *first* null,
-// so "a\0b" would pack as "a", and since the engine's equality path does match an embedded null in a
-// fixed-width column, a query for the whole value would sort above the stored max and prune a row
-// slice that contains it.
-std::string utf32_to_utf8_stripping_padding(std::string_view raw_utf32_string) {
-    std::u32string_view utf32{
-            reinterpret_cast<const char32_t*>(raw_utf32_string.data()), raw_utf32_string.size() / entity::UTF32_WIDTH
-    };
-
-    const auto last_non_zero_symbol_pos = utf32.find_last_not_of(char32_t{0});
-    utf32 = utf32.substr(0, last_non_zero_symbol_pos == std::u32string_view::npos ? 0 : last_non_zero_symbol_pos + 1);
-
-    return boost::locale::conv::utf_to_utf<char>(utf32.data(), utf32.data() + utf32.size());
-}
-
 uint64_t byteswap_to_most_significant_first(uint64_t value) {
 #ifdef _MSC_VER
     return _byteswap_uint64(value);
@@ -65,7 +47,7 @@ uint64_t pack_string(std::string_view raw_pool_string, entity::DataType raw_pool
     // UTF_FIXED64 is the only type whose pool holds null-padded UTF-32. Not is_fixed_string_type:
     // ASCII_FIXED64 pads at one byte per character, and reinterpreting that as UTF-32 packs garbage.
     if (raw_pool_string_data_type == entity::DataType::UTF_FIXED64) {
-        return pack_string_stat(utf32_to_utf8_stripping_padding(raw_pool_string));
+        return pack_string_stat(util::utf32_to_u8(raw_pool_string));
     }
 
     if (raw_pool_string_data_type == entity::DataType::ASCII_FIXED64) {

@@ -146,9 +146,6 @@ TEST(StringStatEncoding, Utf32SourceTranscodesToTheSamePackedValue) {
     ASSERT_NE(pack_string_stat(bytes_of(utf32)), 0xE697A5E69CACE8FFULL);
 }
 
-// util::utf32_to_u8 stops at the first null codepoint. If the packer used it, "a\0b" would pack as
-// "a" - and since the engine's equality path does match an embedded null in a fixed-width column, a
-// query for the whole value would sort above the stored max and prune a slice that contains it.
 TEST(StringStatEncoding, Utf32EmbeddedNullIsNotATerminator) {
     const std::string with_null{"a\0b", 3};
     ASSERT_EQ(pack_string(bytes_of(as_utf32(with_null)), DataType::UTF_FIXED64), pack_string_stat(with_null));
