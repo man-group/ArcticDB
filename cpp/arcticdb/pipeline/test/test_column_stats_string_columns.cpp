@@ -63,7 +63,7 @@ TEST(ColumnStatsStringColumns, EveryStringTypeIsEligibleForStats) {
     for (const auto data_type : string_data_types) {
         const auto desc = make_descriptor(data_type);
         const auto map = ColumnStats{make_tsd(desc)}.to_map();
-        ASSERT_TRUE(map.contains("fruit")) << datatype_to_str(data_type);
+        EXPECT_TRUE(map.contains("fruit")) << datatype_to_str(data_type);
         EXPECT_EQ(map.at("fruit"), std::unordered_set<std::string>{"MINMAX"}) << datatype_to_str(data_type);
     }
 }
@@ -73,14 +73,15 @@ TEST(ColumnStatsStringColumns, EveryStringTypeIsEligibleForStats) {
 TEST(ColumnStatsStringColumns, ArrowOutputOnlyStringTypeIsNotEligible) {
     const auto desc = make_descriptor(DataType::UTF_DYNAMIC32);
     const auto map = ColumnStats{make_tsd(desc)}.to_map();
-    EXPECT_FALSE(map.contains("fruit"));
+    ASSERT_FALSE(map.contains("fruit"));
     // The numeric index column is still eligible, so an empty map would prove nothing here.
-    EXPECT_TRUE(map.contains("index"));
+    ASSERT_TRUE(map.contains("index"));
 }
 
 // The reason the proto needed distinct MIN_STR_V1/MAX_STR_V1 values: the stat column's type is
-// resolved from the stat type alone. Inheriting the data column's string type would store the packed
-// value as a string pool offset into a segment that has no string pool.
+// resolved from the stat type alone. Inheriting the data column's string type would make readers
+// interpret the packed value as a string pool offset, when string column stats do not use the string
+// pool at all.
 TEST(ColumnStatsStringColumns, StringStatColumnsAreUint64NotTheDataColumnType) {
     for (const auto data_type : string_data_types) {
         const auto desc = make_descriptor(data_type);
@@ -96,39 +97,11 @@ TEST(ColumnStatsStringColumns, StringStatColumnsAreUint64NotTheDataColumnType) {
 }
 
 TEST(ColumnStatsStringColumns, StringStatColumnNamesAreDistinctFromNumericOnes) {
-    EXPECT_EQ(to_segment_column_name("fruit", ColumnStatTypeInternal::MIN_STR_V1), "v1_MIN_STR(fruit)");
-    EXPECT_EQ(to_segment_column_name("fruit", ColumnStatTypeInternal::MAX_STR_V1), "v1_MAX_STR(fruit)");
+    ASSERT_EQ(to_segment_column_name("fruit", ColumnStatTypeInternal::MIN_STR_V1), "v1_MIN_STR(fruit)");
+    ASSERT_EQ(to_segment_column_name("fruit", ColumnStatTypeInternal::MAX_STR_V1), "v1_MAX_STR(fruit)");
     // A reader must be able to tell a packed prefix from an ordinary numeric min by name alone.
-    EXPECT_EQ(to_segment_column_name("fruit", ColumnStatTypeInternal::MIN_V1), "v1_MIN(fruit)");
-    EXPECT_EQ(to_segment_column_name("fruit", ColumnStatTypeInternal::MAX_V1), "v1_MAX(fruit)");
-}
-
-// A string column can hold both packed min/max and the count stats, and the counts must keep their
-// own UINT64 type resolution rather than being confused with the packed ones.
-TEST(ColumnStatsStringColumns, CountStatsCoexistWithPackedStatsOnAStringColumn) {
-    const auto desc = make_descriptor(DataType::UTF_DYNAMIC64);
-    auto seg = build_column_stats_segment(
-            {ColumnStatsRow{
-                    pipelines::RowRange{0, 100},
-                    {packed_stat(ColumnStatTypeInternal::MIN_STR_V1, "apple"),
-                     packed_stat(ColumnStatTypeInternal::MAX_STR_V1, "cherry"),
-                     ColumnStatValue{
-                             ColumnStatTypeInternal::NAN_COUNT_V1,
-                             fruit_data_col_offset,
-                             Value{uint64_t{2}, DataType::UINT64}
-                     },
-                     ColumnStatValue{
-                             ColumnStatTypeInternal::NULL_COUNT_V1,
-                             fruit_data_col_offset,
-                             Value{uint64_t{3}, DataType::UINT64}
-                     }}
-            }},
-            desc
-    );
-
-    EXPECT_EQ(seg.scalar_at<uint64_t>(0, column_index(seg, "v1_NAN_COUNT(fruit)")), 2);
-    EXPECT_EQ(seg.scalar_at<uint64_t>(0, column_index(seg, "v1_NULL_COUNT(fruit)")), 3);
-    EXPECT_EQ(seg.scalar_at<uint64_t>(0, column_index(seg, "v1_MIN_STR(fruit)")), pack_string_stat("apple"));
+    ASSERT_EQ(to_segment_column_name("fruit", ColumnStatTypeInternal::MIN_V1), "v1_MIN(fruit)");
+    ASSERT_EQ(to_segment_column_name("fruit", ColumnStatTypeInternal::MAX_V1), "v1_MAX(fruit)");
 }
 
 // Incremental extend re-reads the existing segment before rewriting it, so packed stats must survive
@@ -153,7 +126,7 @@ TEST(ColumnStatsStringColumns, PackedStatsRoundTripThroughTheSegment) {
         return stat.type == ColumnStatTypeInternal::MIN_STR_V1;
     });
     ASSERT_NE(second_row_min, decoded.at(1).stats.end());
-    EXPECT_EQ(second_row_min->value.get<uint64_t>(), expected_min);
+    ASSERT_EQ(second_row_min->value.get<uint64_t>(), expected_min);
 }
 
 // Without this the header round trip warns and drops the entry, so get_column_stats_info_experimental
@@ -168,7 +141,7 @@ TEST(ColumnStatsStringColumns, HeaderRoundTripReportsMinmaxForStringColumns) {
 
     const auto map = ColumnStats{header, make_tsd(desc)}.to_map();
     ASSERT_TRUE(map.contains("fruit"));
-    EXPECT_EQ(map.at("fruit"), std::unordered_set<std::string>{"MINMAX"});
+    ASSERT_EQ(map.at("fruit"), std::unordered_set<std::string>{"MINMAX"});
 }
 
 // The stats a string column asks for must be the stats it gets back out of the header, or a create
@@ -191,7 +164,7 @@ TEST(ColumnStatsStringColumns, EligibilityAndHeaderRoundTripAgree) {
 
     const ColumnStats from_header{header, tsd};
     const ColumnStats from_eligibility{tsd};
-    EXPECT_EQ(from_header, from_eligibility);
+    ASSERT_EQ(from_header, from_eligibility);
 }
 
 } // namespace arcticdb

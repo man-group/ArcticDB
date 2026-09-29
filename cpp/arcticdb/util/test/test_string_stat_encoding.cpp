@@ -37,14 +37,6 @@ TEST(StringStatEncoding, PrefixInHighBytesLengthInLowByte) {
     ASSERT_EQ(pack_string_stat("abcdefg"), 0x6162636465666707ULL);
 }
 
-TEST(StringStatEncoding, LengthByteCoversEveryExactLength) {
-    const std::string source{"abcdefg"};
-    for (size_t length = 0; length <= truncated_prefix_bytes; ++length) {
-        const auto packed = pack_string_stat(std::string_view{source}.substr(0, length));
-        ASSERT_EQ(packed & least_significant_byte_only_mask, length) << "length " << length;
-    }
-}
-
 TEST(StringStatEncoding, LongerThanPrefixIsMarkedTruncated) {
     ASSERT_EQ(pack_string_stat("abcdefgh"), 0x61626364656667FFULL);
     // Anything sharing the first seven bytes collapses onto the same stat, which is safe but

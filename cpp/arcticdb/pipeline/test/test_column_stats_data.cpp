@@ -507,19 +507,17 @@ TEST(ColumnStatsDataTest, PackedStringStatsAreIgnoredForTheWholeColumn) {
 
     ColumnStatsHeader header;
     header.set_version(1);
-    auto& price_entries = (*header.mutable_stats_by_column())[price_data_col_offset];
-    price_entries.add_entries()->set_type(MIN_V1);
-    price_entries.mutable_entries(0)->set_stats_seg_offset(2);
-    price_entries.add_entries()->set_type(MAX_V1);
-    price_entries.mutable_entries(1)->set_stats_seg_offset(3);
-    auto& fruit_entries = (*header.mutable_stats_by_column())[fruit_data_col_offset];
-    for (const auto& [offset, type] : std::vector<std::pair<uint32_t, ColumnStatsType>>{
-                 {4, MIN_STR_V1}, {5, MAX_STR_V1}, {6, NAN_COUNT_V1}, {7, NULL_COUNT_V1}
-         }) {
-        auto* entry = fruit_entries.add_entries();
-        entry->set_stats_seg_offset(offset);
-        entry->set_type(type);
-    }
+    const auto add_entries =
+            [&header](uint32_t data_col_offset, const std::vector<std::pair<uint32_t, ColumnStatsType>>& entries) {
+                auto& column_entries = (*header.mutable_stats_by_column())[data_col_offset];
+                for (const auto& [offset, type] : entries) {
+                    auto* entry = column_entries.add_entries();
+                    entry->set_stats_seg_offset(offset);
+                    entry->set_type(type);
+                }
+            };
+    add_entries(price_data_col_offset, {{2, MIN_V1}, {3, MAX_V1}});
+    add_entries(fruit_data_col_offset, {{4, MIN_STR_V1}, {5, MAX_STR_V1}, {6, NAN_COUNT_V1}, {7, NULL_COUNT_V1}});
 
     google::protobuf::Any any;
     any.PackFrom(header);
