@@ -26,7 +26,7 @@ struct UnpackedStringStat {
 // compares packed values directly - so this exists only for tests to assert on what a packed stat
 // holds.
 inline UnpackedStringStat unpack_string(uint64_t packed) {
-    const auto length_byte = packed & least_significant_byte_only_mask;
+    const auto length_byte = static_cast<size_t>(packed & least_significant_byte_only_mask);
     const bool was_truncated = (length_byte == truncated_string_length_marker);
     const auto length = was_truncated ? truncated_prefix_bytes : std::min(length_byte, truncated_prefix_bytes);
 
