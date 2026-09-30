@@ -11,14 +11,17 @@
         <link rel="canonical" href="https://docs.arcticdb.io/dev/notebooks/ArcticDB_aws_public_blockchain/">
       
       
-        <link rel="prev" href="../ArcticDB_demo_resample/">
+        <link rel="prev" href="../ArcticDB_demo_compact_data/">
       
       
         <link rel="next" href="../ArcticDB_demo_snapshots/">
       
       
+        
+      
+      
       <link rel="icon" href="../../images/ArcticDB Logo.svg">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.6.7">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
     
     
       
@@ -26,10 +29,10 @@
       
     
     
-      <link rel="stylesheet" href="../../assets/stylesheets/main.8608ea7d.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
       
         
-        <link rel="stylesheet" href="../../assets/stylesheets/palette.06af60db.min.css">
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
       
       
 
@@ -62,7 +65,6 @@
 
     
     
-    
   </head>
   
   
@@ -80,7 +82,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#in-this-demo-we-illustrate-how-to-use-aws-with-arcticdb-we-are-going-to" class="md-skip">
+        <a href="#loading-aws-bitcoin-blockchain-data-into-arcticdb-using-aws-as-storage" class="md-skip">
           Skip to content
         </a>
       
@@ -141,11 +143,13 @@
     
     
     
-      <label class="md-header__button md-icon" for="__search">
-        
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
-      </label>
-      <div class="md-search" data-md-component="search" role="dialog">
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
   <label class="md-search__overlay" for="__search"></label>
   <div class="md-search__inner" role="search">
     <form class="md-search__form" name="search">
@@ -177,13 +181,14 @@
     </div>
   </div>
 </div>
+      
     
     
       <div class="md-header__source">
         <a href="https://github.com/man-group/ArcticDB" title="Go to repository" class="md-source" data-md-component="source">
   <div class="md-source__icon md-icon">
     
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81"/></svg>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
   </div>
   <div class="md-source__repository">
     man-group/ArcticDB
@@ -209,11 +214,13 @@
   
   
   
+  
     
     
       <li class="md-tabs__item">
         <a href="../.." class="md-tabs__link">
           
+  
   
   Home
 
@@ -227,9 +234,11 @@
   
   
   
+  
     
     
       
+  
   
   
   
@@ -238,6 +247,7 @@
       <li class="md-tabs__item">
         <a href="../../tutorials/fundamentals/" class="md-tabs__link">
           
+  
   
   Guides
 
@@ -253,6 +263,7 @@
         
   
   
+  
     
   
   
@@ -261,6 +272,7 @@
       <li class="md-tabs__item md-tabs__item--active">
         <a href="../ArcticDB_demo_lmdb/" class="md-tabs__link">
           
+  
   
   Notebooks
 
@@ -274,11 +286,13 @@
   
   
   
+  
     
     
       <li class="md-tabs__item">
         <a href="../../api/" class="md-tabs__link">
           
+  
   
   Python API Reference
 
@@ -324,7 +338,7 @@
       <a href="https://github.com/man-group/ArcticDB" title="Go to repository" class="md-source" data-md-component="source">
   <div class="md-source__icon md-icon">
     
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81"/></svg>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
   </div>
   <div class="md-source__repository">
     man-group/ArcticDB
@@ -340,6 +354,7 @@
   
   
   
+    
     
     
     
@@ -359,10 +374,16 @@
           <label class="md-nav__link" for="__nav_1" id="__nav_1_label" tabindex="0">
             
   
+  
   <span class="md-ellipsis">
+    
+  
     Home
+  
+
     
   </span>
+  
   
 
             <span class="md-nav__icon md-icon"></span>
@@ -371,7 +392,11 @@
         <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_1_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_1">
             <span class="md-nav__icon md-icon"></span>
-            Home
+            
+  
+    Home
+  
+
           </label>
           <ul class="md-nav__list" data-md-scrollfix>
             
@@ -385,10 +410,16 @@
       <a href="../.." class="md-nav__link">
         
   
+  
   <span class="md-ellipsis">
+    
+  
     Introduction
+  
+
     
   </span>
+  
   
 
       </a>
@@ -407,10 +438,44 @@
       <a href="../../history/" class="md-nav__link">
         
   
+  
   <span class="md-ellipsis">
+    
+  
     History of ArcticDB
+  
+
     
   </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../release_notes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Release Notes
+  
+
+    
+  </span>
+  
   
 
       </a>
@@ -429,10 +494,16 @@
       <a href="../../faq/" class="md-nav__link">
         
   
+  
   <span class="md-ellipsis">
+    
+  
     Frequently Asked Questions
+  
+
     
   </span>
+  
   
 
       </a>
@@ -451,10 +522,16 @@
       <a href="../../licensing/" class="md-nav__link">
         
   
+  
   <span class="md-ellipsis">
+    
+  
     Licensing FAQs
+  
+
     
   </span>
+  
   
 
       </a>
@@ -476,6 +553,7 @@
   
   
   
+    
     
     
     
@@ -495,10 +573,16 @@
           <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
             
   
+  
   <span class="md-ellipsis">
+    
+  
     Guides
+  
+
     
   </span>
+  
   
 
             <span class="md-nav__icon md-icon"></span>
@@ -507,7 +591,11 @@
         <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_2">
             <span class="md-nav__icon md-icon"></span>
-            Guides
+            
+  
+    Guides
+  
+
           </label>
           <ul class="md-nav__list" data-md-scrollfix>
             
@@ -517,6 +605,7 @@
   
   
   
+    
     
     
     
@@ -536,10 +625,16 @@
           <label class="md-nav__link" for="__nav_2_1" id="__nav_2_1_label" tabindex="0">
             
   
+  
   <span class="md-ellipsis">
+    
+  
     Tutorials
+  
+
     
   </span>
+  
   
 
             <span class="md-nav__icon md-icon"></span>
@@ -548,7 +643,11 @@
         <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_1_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_2_1">
             <span class="md-nav__icon md-icon"></span>
-            Tutorials
+            
+  
+    Tutorials
+  
+
           </label>
           <ul class="md-nav__list" data-md-scrollfix>
             
@@ -562,10 +661,16 @@
       <a href="../../tutorials/fundamentals/" class="md-nav__link">
         
   
+  
   <span class="md-ellipsis">
+    
+  
     Fundamentals
+  
+
     
   </span>
+  
   
 
       </a>
@@ -584,10 +689,16 @@
       <a href="../../tutorials/parallel_writes/" class="md-nav__link">
         
   
+  
   <span class="md-ellipsis">
+    
+  
     Parallel Writes
+  
+
     
   </span>
+  
   
 
       </a>
@@ -606,10 +717,16 @@
       <a href="../../tutorials/snapshots/" class="md-nav__link">
         
   
+  
   <span class="md-ellipsis">
+    
+  
     Snapshots
+  
+
     
   </span>
+  
   
 
       </a>
@@ -628,10 +745,16 @@
       <a href="../../tutorials/metadata/" class="md-nav__link">
         
   
+  
   <span class="md-ellipsis">
+    
+  
     Metadata
+  
+
     
   </span>
+  
   
 
       </a>
@@ -650,10 +773,16 @@
       <a href="../../tutorials/lmdb_and_in_memory/" class="md-nav__link">
         
   
+  
   <span class="md-ellipsis">
-    In-memory backends
+    
+  
+    In-memory Backends
+  
+
     
   </span>
+  
   
 
       </a>
@@ -672,10 +801,72 @@
       <a href="../../tutorials/data_organisation/" class="md-nav__link">
         
   
+  
   <span class="md-ellipsis">
+    
+  
     Data Organisation Guide
+  
+
     
   </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/library_sizes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Library Sizes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/query_stats/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Statistics
+  
+
+    
+  </span>
+  
   
 
       </a>
@@ -698,6 +889,7 @@
   
   
   
+    
     
     
     
@@ -717,10 +909,16 @@
           <label class="md-nav__link" for="__nav_2_2" id="__nav_2_2_label" tabindex="0">
             
   
+  
   <span class="md-ellipsis">
+    
+  
     Storage Guides
+  
+
     
   </span>
+  
   
 
             <span class="md-nav__icon md-icon"></span>
@@ -729,7 +927,11 @@
         <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_2_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_2_2">
             <span class="md-nav__icon md-icon"></span>
-            Storage Guides
+            
+  
+    Storage Guides
+  
+
           </label>
           <ul class="md-nav__list" data-md-scrollfix>
             
@@ -743,10 +945,16 @@
       <a href="../../aws/" class="md-nav__link">
         
   
+  
   <span class="md-ellipsis">
+    
+  
     Getting started with AWS S3
+  
+
     
   </span>
+  
   
 
       </a>
@@ -765,10 +973,16 @@
       <a href="../../aws_permissions/" class="md-nav__link">
         
   
+  
   <span class="md-ellipsis">
+    
+  
     Library Permissions with AWS S3
+  
+
     
   </span>
+  
   
 
       </a>
@@ -787,10 +1001,16 @@
       <a href="../../azure/" class="md-nav__link">
         
   
+  
   <span class="md-ellipsis">
+    
+  
     Getting started with Azure Blob Storage
+  
+
     
   </span>
+  
   
 
       </a>
@@ -813,6 +1033,7 @@
   
   
   
+    
     
     
     
@@ -832,10 +1053,16 @@
           <label class="md-nav__link" for="__nav_2_3" id="__nav_2_3_label" tabindex="0">
             
   
+  
   <span class="md-ellipsis">
+    
+  
     Technical Information
+  
+
     
   </span>
+  
   
 
             <span class="md-nav__icon md-icon"></span>
@@ -844,7 +1071,11 @@
         <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_3_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_2_3">
             <span class="md-nav__icon md-icon"></span>
-            Technical Information
+            
+  
+    Technical Information
+  
+
           </label>
           <ul class="md-nav__list" data-md-scrollfix>
             
@@ -858,10 +1089,16 @@
       <a href="../../technical/architecture/" class="md-nav__link">
         
   
+  
   <span class="md-ellipsis">
+    
+  
     Architecture
+  
+
     
   </span>
+  
   
 
       </a>
@@ -880,10 +1117,16 @@
       <a href="../../technical/on_disk_storage/" class="md-nav__link">
         
   
+  
   <span class="md-ellipsis">
+    
+  
     On-Disk Storage
+  
+
     
   </span>
+  
   
 
       </a>
@@ -902,10 +1145,16 @@
       <a href="../../technical/migration/" class="md-nav__link">
         
   
+  
   <span class="md-ellipsis">
+    
+  
     Arctic Migration
+  
+
     
   </span>
+  
   
 
       </a>
@@ -924,10 +1173,16 @@
       <a href="../../technical/contributing/" class="md-nav__link">
         
   
+  
   <span class="md-ellipsis">
+    
+  
     Contributing
+  
+
     
   </span>
+  
   
 
       </a>
@@ -946,10 +1201,16 @@
       <a href="../../technical/upgrade_storage/" class="md-nav__link">
         
   
+  
   <span class="md-ellipsis">
+    
+  
     Upgrade Storage
+  
+
     
   </span>
+  
   
 
       </a>
@@ -972,6 +1233,7 @@
   
   
   
+    
     
     
     
@@ -991,10 +1253,16 @@
           <label class="md-nav__link" for="__nav_2_4" id="__nav_2_4_label" tabindex="0">
             
   
+  
   <span class="md-ellipsis">
+    
+  
     Configuration
+  
+
     
   </span>
+  
   
 
             <span class="md-nav__icon md-icon"></span>
@@ -1003,7 +1271,11 @@
         <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_4_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_2_4">
             <span class="md-nav__icon md-icon"></span>
-            Configuration
+            
+  
+    Configuration
+  
+
           </label>
           <ul class="md-nav__list" data-md-scrollfix>
             
@@ -1017,10 +1289,16 @@
       <a href="../../lib_config/" class="md-nav__link">
         
   
+  
   <span class="md-ellipsis">
+    
+  
     Library Configuration
+  
+
     
   </span>
+  
   
 
       </a>
@@ -1039,10 +1317,16 @@
       <a href="../../runtime_config/" class="md-nav__link">
         
   
+  
   <span class="md-ellipsis">
+    
+  
     Runtime Configuration
+  
+
     
   </span>
+  
   
 
       </a>
@@ -1061,10 +1345,16 @@
       <a href="../../error_messages/" class="md-nav__link">
         
   
+  
   <span class="md-ellipsis">
+    
+  
     Error Messages
+  
+
     
   </span>
+  
   
 
       </a>
@@ -1096,6 +1386,7 @@
   
   
   
+    
     
     
     
@@ -1118,10 +1409,16 @@
           <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
             
   
+  
   <span class="md-ellipsis">
+    
+  
     Notebooks
+  
+
     
   </span>
+  
   
 
             <span class="md-nav__icon md-icon"></span>
@@ -1130,7 +1427,11 @@
         <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_3">
             <span class="md-nav__icon md-icon"></span>
-            Notebooks
+            
+  
+    Notebooks
+  
+
           </label>
           <ul class="md-nav__list" data-md-scrollfix>
             
@@ -1144,10 +1445,16 @@
       <a href="../ArcticDB_demo_lmdb/" class="md-nav__link">
         
   
+  
   <span class="md-ellipsis">
+    
+  
     Intro Notebook
+  
+
     
   </span>
+  
   
 
       </a>
@@ -1166,10 +1473,16 @@
       <a href="../ArcticDB_demo_lazydataframe/" class="md-nav__link">
         
   
+  
   <span class="md-ellipsis">
+    
+  
     LazyDataFrame Notebook
+  
+
     
   </span>
+  
   
 
       </a>
@@ -1188,10 +1501,16 @@
       <a href="../ArcticDB_demo_querybuilder/" class="md-nav__link">
         
   
+  
   <span class="md-ellipsis">
+    
+  
     Querybuilder Notebook
+  
+
     
   </span>
+  
   
 
       </a>
@@ -1210,10 +1529,72 @@
       <a href="../ArcticDB_demo_resample/" class="md-nav__link">
         
   
+  
   <span class="md-ellipsis">
+    
+  
     Resample Notebook
+  
+
     
   </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ArcticDB_demo_concat/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Symbol Concat Notebook
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ArcticDB_demo_compact_data/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Data Compaction Notebook
+  
+
+    
+  </span>
+  
   
 
       </a>
@@ -1235,14 +1616,22 @@
       <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
       
       
+        
+      
       
         <label class="md-nav__link md-nav__link--active" for="__toc">
           
   
+  
   <span class="md-ellipsis">
+    
+  
     AWS Blockchain Notebook
+  
+
     
   </span>
+  
   
 
           <span class="md-nav__icon md-icon"></span>
@@ -1251,10 +1640,16 @@
       <a href="./" class="md-nav__link md-nav__link--active">
         
   
+  
   <span class="md-ellipsis">
+    
+  
     AWS Blockchain Notebook
+  
+
     
   </span>
+  
   
 
       </a>
@@ -1264,6 +1659,8 @@
 <nav class="md-nav md-nav--secondary" aria-label="Table of contents">
   
   
+  
+    
   
   
     <label class="md-nav__title" for="__toc">
@@ -1275,7 +1672,9 @@
         <li class="md-nav__item">
   <a href="#in-this-demo-we-illustrate-how-to-use-aws-with-arcticdb-we-are-going-to" class="md-nav__link">
     <span class="md-ellipsis">
-      In this demo, we illustrate how to use AWS with ArcticDB. We are going to
+      
+        In this demo, we illustrate how to use AWS with ArcticDB. We are going to
+      
     </span>
   </a>
   
@@ -1284,7 +1683,9 @@
         <li class="md-nav__item">
   <a href="#install-arcticdb-and-s3-libraries" class="md-nav__link">
     <span class="md-ellipsis">
-      Install ArcticDB and S3 libraries
+      
+        Install ArcticDB and S3 libraries
+      
     </span>
   </a>
   
@@ -1293,7 +1694,9 @@
         <li class="md-nav__item">
   <a href="#imports" class="md-nav__link">
     <span class="md-ellipsis">
-      Imports
+      
+        Imports
+      
     </span>
   </a>
   
@@ -1302,7 +1705,9 @@
         <li class="md-nav__item">
   <a href="#read-or-create-aws-config" class="md-nav__link">
     <span class="md-ellipsis">
-      Read or Create AWS config
+      
+        Read or Create AWS config
+      
     </span>
   </a>
   
@@ -1312,7 +1717,9 @@
           <li class="md-nav__item">
   <a href="#create-a-config-file" class="md-nav__link">
     <span class="md-ellipsis">
-      Create a config file
+      
+        Create a config file
+      
     </span>
   </a>
   
@@ -1326,7 +1733,9 @@
         <li class="md-nav__item">
   <a href="#set-up-the-aws-bucket" class="md-nav__link">
     <span class="md-ellipsis">
-      Set up the AWS bucket
+      
+        Set up the AWS bucket
+      
     </span>
   </a>
   
@@ -1335,7 +1744,9 @@
         <li class="md-nav__item">
   <a href="#initialise-arcticdb" class="md-nav__link">
     <span class="md-ellipsis">
-      Initialise ArcticDB
+      
+        Initialise ArcticDB
+      
     </span>
   </a>
   
@@ -1344,7 +1755,9 @@
         <li class="md-nav__item">
   <a href="#mark-the-btc-blockchain-data-from-june-2023-for-processing" class="md-nav__link">
     <span class="md-ellipsis">
-      Mark the BTC blockchain data from June 2023 for processing
+      
+        Mark the BTC blockchain data from June 2023 for processing
+      
     </span>
   </a>
   
@@ -1353,7 +1766,9 @@
         <li class="md-nav__item">
   <a href="#read-the-data-from-an-aws-public-dataset-as-parquet-files" class="md-nav__link">
     <span class="md-ellipsis">
-      Read the data from an AWS public dataset as parquet files
+      
+        Read the data from an AWS public dataset as parquet files
+      
     </span>
   </a>
   
@@ -1362,7 +1777,9 @@
         <li class="md-nav__item">
   <a href="#write-the-data-to-arcticdb" class="md-nav__link">
     <span class="md-ellipsis">
-      Write the data to ArcticDB
+      
+        Write the data to ArcticDB
+      
     </span>
   </a>
   
@@ -1371,7 +1788,9 @@
         <li class="md-nav__item">
   <a href="#read-the-data-from-arcticdb" class="md-nav__link">
     <span class="md-ellipsis">
-      Read the data from ArcticDB
+      
+        Read the data from ArcticDB
+      
     </span>
   </a>
   
@@ -1380,7 +1799,9 @@
         <li class="md-nav__item">
   <a href="#chart-the-transaction-fees-per-day" class="md-nav__link">
     <span class="md-ellipsis">
-      Chart the transaction fees per day
+      
+        Chart the transaction fees per day
+      
     </span>
   </a>
   
@@ -1389,7 +1810,9 @@
         <li class="md-nav__item">
   <a href="#conclusions" class="md-nav__link">
     <span class="md-ellipsis">
-      Conclusions
+      
+        Conclusions
+      
     </span>
   </a>
   
@@ -1414,10 +1837,16 @@
       <a href="../ArcticDB_demo_snapshots/" class="md-nav__link">
         
   
+  
   <span class="md-ellipsis">
+    
+  
     Snapshots Notebook
+  
+
     
   </span>
+  
   
 
       </a>
@@ -1436,10 +1865,16 @@
       <a href="../ArcticDB_demo_equity_analytics/" class="md-nav__link">
         
   
+  
   <span class="md-ellipsis">
+    
+  
     Equity Analytics Notebook
+  
+
     
   </span>
+  
   
 
       </a>
@@ -1458,10 +1893,16 @@
       <a href="../ArcticDB_demo_equity_options/" class="md-nav__link">
         
   
+  
   <span class="md-ellipsis">
+    
+  
     Equity Options Notebook
+  
+
     
   </span>
+  
   
 
       </a>
@@ -1480,10 +1921,156 @@
       <a href="../ArcticDB_billion_row_challenge/" class="md-nav__link">
         
   
+  
   <span class="md-ellipsis">
+    
+  
     1 Billion Row Challenge Notebook
+  
+
     
   </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ArcticDB_pythagorean_won_loss_formula_notebook/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pythagorean Won Loss Formula Notebook
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ArcticDB_staged_data_with_tokens/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Staged Data Notebook
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ArcticDB_demo_recursive_normalizers/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Recursive normalizer Notebook
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ArcticDB_demo_read_as_arrow/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Arrow Notebook
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ArcticDB_merge/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Merge Notebook
+  
+
+    
+  </span>
+  
   
 
       </a>
@@ -1508,6 +2095,7 @@
     
     
     
+    
       
       
         
@@ -1524,10 +2112,16 @@
           <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
             
   
+  
   <span class="md-ellipsis">
+    
+  
     Python API Reference
+  
+
     
   </span>
+  
   
 
             <span class="md-nav__icon md-icon"></span>
@@ -1536,7 +2130,11 @@
         <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_4">
             <span class="md-nav__icon md-icon"></span>
-            Python API Reference
+            
+  
+    Python API Reference
+  
+
           </label>
           <ul class="md-nav__list" data-md-scrollfix>
             
@@ -1550,10 +2148,16 @@
       <a href="../../api/" class="md-nav__link">
         
   
+  
   <span class="md-ellipsis">
+    
+  
     Introduction
+  
+
     
   </span>
+  
   
 
       </a>
@@ -1572,10 +2176,16 @@
       <a href="../../api/arctic/" class="md-nav__link">
         
   
+  
   <span class="md-ellipsis">
+    
+  
     Arctic
+  
+
     
   </span>
+  
   
 
       </a>
@@ -1594,10 +2204,16 @@
       <a href="../../api/arctic_uri/" class="md-nav__link">
         
   
+  
   <span class="md-ellipsis">
+    
+  
     Arctic URI
+  
+
     
   </span>
+  
   
 
       </a>
@@ -1616,10 +2232,16 @@
       <a href="../../api/library/" class="md-nav__link">
         
   
+  
   <span class="md-ellipsis">
+    
+  
     Library
+  
+
     
   </span>
+  
   
 
       </a>
@@ -1638,10 +2260,16 @@
       <a href="../../api/library_types/" class="md-nav__link">
         
   
+  
   <span class="md-ellipsis">
-    Library related objects
+    
+  
+    Library Related Objects
+  
+
     
   </span>
+  
   
 
       </a>
@@ -1660,10 +2288,16 @@
       <a href="../../api/processing/" class="md-nav__link">
         
   
+  
   <span class="md-ellipsis">
+    
+  
     DataFrame Processing Operations API
+  
+
     
   </span>
+  
   
 
       </a>
@@ -1682,10 +2316,16 @@
       <a href="../../api/exceptions/" class="md-nav__link">
         
   
+  
   <span class="md-ellipsis">
+    
+  
     Exceptions
+  
+
     
   </span>
+  
   
 
       </a>
@@ -1704,10 +2344,72 @@
       <a href="../../api/config/" class="md-nav__link">
         
   
+  
   <span class="md-ellipsis">
+    
+  
     Config
+  
+
     
   </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/admin_tools/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Admin Tools
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/query_stats/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Query Stats
+  
+
+    
+  </span>
+  
   
 
       </a>
@@ -1733,6 +2435,7 @@
           
           
             <div class="md-content" data-md-component="content">
+              
               <article class="md-content__inner md-typeset">
                 
 
@@ -2042,7 +2745,12 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
     if (!diagrams.length) {
       return;
     }
-    const mermaid = (await import("https://cdnjs.cloudflare.com/ajax/libs/mermaid/10.7.0/mermaid.esm.min.mjs")).default;
+    const mermaid = (await import("https://cdnjs.cloudflare.com/ajax/libs/mermaid/11.10.0/mermaid.esm.min.mjs")).default;
+    const elkUrl = "https://cdnjs.cloudflare.com/ajax/libs/mermaid-layout-elk/0.1.9/mermaid-layout-elk.esm.min.mjs";
+    if(elkUrl) {
+      const elkLayouts = (await import(elkUrl)).default;
+      mermaid.registerLayoutLoaders(elkLayouts);
+    }
     const parser = new DOMParser();
 
     mermaid.initialize({
@@ -2139,7 +2847,8 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
      * Post-process to ensure mermaid diagrams contain only valid SVG and XHTML.
      */
     function cleanMermaidSvg(svg) {
-      return svg.replace(RE_VOID_ELEMENT, replaceVoidElement);
+      svg = svg.replace(RE_VOID_ELEMENT, replaceVoidElement);
+      return `${SVG_XML_HEADER}${svg}`;
     }
 
 
@@ -2165,6 +2874,285 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
       }
       return `<${tag} ${rest}>`;
     }
+
+
+  /**
+   * Named HTML entities with their decimal equivalent codes.
+   *
+   * @see https://www.w3.org/TR/WD-html40-970708/sgml/entities.html
+   * */
+  const HTML_ENTITIES = `<!ENTITY Aacute "&#193;">
+<!ENTITY aacute "&#225;">
+<!ENTITY Acirc "&#194;">
+<!ENTITY acirc "&#226;">
+<!ENTITY acute "&#180;">
+<!ENTITY AElig "&#198;">
+<!ENTITY aelig "&#230;">
+<!ENTITY Agrave "&#192;">
+<!ENTITY agrave "&#224;">
+<!ENTITY alefsym "&#8501;">
+<!ENTITY Alpha "&#913;">
+<!ENTITY alpha "&#945;">
+<!ENTITY amp "&#38;">
+<!ENTITY and "&#8869;">
+<!ENTITY ang "&#8736;">
+<!ENTITY Aring "&#197;">
+<!ENTITY aring "&#229;">
+<!ENTITY asymp "&#8776;">
+<!ENTITY Atilde "&#195;">
+<!ENTITY atilde "&#227;">
+<!ENTITY Auml "&#196;">
+<!ENTITY auml "&#228;">
+<!ENTITY bdquo "&#8222;">
+<!ENTITY Beta "&#914;">
+<!ENTITY beta "&#946;">
+<!ENTITY brvbar "&#166;">
+<!ENTITY bull "&#8226;">
+<!ENTITY cap "&#8745;">
+<!ENTITY Ccedil "&#199;">
+<!ENTITY ccedil "&#231;">
+<!ENTITY cedil "&#184;">
+<!ENTITY cent "&#162;">
+<!ENTITY Chi "&#935;">
+<!ENTITY chi "&#967;">
+<!ENTITY circ "&#710;">
+<!ENTITY clubs "&#9827;">
+<!ENTITY cong "&#8773;">
+<!ENTITY copy "&#169;">
+<!ENTITY crarr "&#8629;">
+<!ENTITY cup "&#8746;">
+<!ENTITY curren "&#164;">
+<!ENTITY dagger "&#8224;">
+<!ENTITY Dagger "&#8225;">
+<!ENTITY darr "&#8595;">
+<!ENTITY dArr "&#8659;">
+<!ENTITY deg "&#176;">
+<!ENTITY Delta "&#916;">
+<!ENTITY delta "&#948;">
+<!ENTITY diams "&#9830;">
+<!ENTITY divide "&#247;">
+<!ENTITY Eacute "&#201;">
+<!ENTITY eacute "&#233;">
+<!ENTITY Ecirc "&#202;">
+<!ENTITY ecirc "&#234;">
+<!ENTITY Egrave "&#200;">
+<!ENTITY egrave "&#232;">
+<!ENTITY empty "&#8709;">
+<!ENTITY emsp "&#8195;">
+<!ENTITY ensp "&#8194;">
+<!ENTITY epsilon "&#949;">
+<!ENTITY Epsilon "&#917;">
+<!ENTITY equiv "&#8801;">
+<!ENTITY Eta "&#919;">
+<!ENTITY eta "&#951;">
+<!ENTITY ETH "&#208;">
+<!ENTITY eth "&#240;">
+<!ENTITY Euml "&#203;">
+<!ENTITY euml "&#235;">
+<!ENTITY exist "&#8707;">
+<!ENTITY fnof "&#402;">
+<!ENTITY forall "&#8704;">
+<!ENTITY frac12 "&#189;">
+<!ENTITY frac14 "&#188;">
+<!ENTITY frac34 "&#190;">
+<!ENTITY frasl "&#8260;">
+<!ENTITY Gamma "&#915;">
+<!ENTITY gamma "&#947;">
+<!ENTITY ge "&#8805;">
+<!ENTITY gt "&#62;">
+<!ENTITY harr "&#8596;">
+<!ENTITY hArr "&#8660;">
+<!ENTITY hearts "&#9829;">
+<!ENTITY hellip "&#8230;">
+<!ENTITY Iacute "&#205;">
+<!ENTITY iacute "&#237;">
+<!ENTITY Icirc "&#206;">
+<!ENTITY icirc "&#238;">
+<!ENTITY iexcl "&#161;">
+<!ENTITY Igrave "&#204;">
+<!ENTITY igrave "&#236;">
+<!ENTITY image "&#8465;">
+<!ENTITY infin "&#8734;">
+<!ENTITY int "&#8747;">
+<!ENTITY Iota "&#921;">
+<!ENTITY iota "&#953;">
+<!ENTITY iquest "&#191;">
+<!ENTITY isin "&#8712;">
+<!ENTITY Iuml "&#207;">
+<!ENTITY iuml "&#239;">
+<!ENTITY Kappa "&#922;">
+<!ENTITY kappa "&#954;">
+<!ENTITY Lambda "&#923;">
+<!ENTITY lambda "&#955;">
+<!ENTITY lang "&#9001;">
+<!ENTITY laquo "&#171;">
+<!ENTITY larr "&#8592;">
+<!ENTITY lArr "&#8656;">
+<!ENTITY lceil "&#8968;">
+<!ENTITY ldquo "&#8220;">
+<!ENTITY le "&#8804;">
+<!ENTITY lfloor "&#8970;">
+<!ENTITY lowast "&#8727;">
+<!ENTITY loz "&#9674;">
+<!ENTITY lrm "&#8206;">
+<!ENTITY lsaquo "&#8249;">
+<!ENTITY lsquo "&#8216;">
+<!ENTITY lt "&#60;">
+<!ENTITY macr "&#175;">
+<!ENTITY mdash "&#8212;">
+<!ENTITY micro "&#181;">
+<!ENTITY middot "&#183;">
+<!ENTITY minus "&#8722;">
+<!ENTITY Mu "&#924;">
+<!ENTITY mu "&#956;">
+<!ENTITY nabla "&#8711;">
+<!ENTITY nbsp "&#160;">
+<!ENTITY ndash "&#8211;">
+<!ENTITY ne "&#8800;">
+<!ENTITY ni "&#8715;">
+<!ENTITY not "&#172;">
+<!ENTITY notin "&#8713;">
+<!ENTITY nsub "&#8836;">
+<!ENTITY Ntilde "&#209;">
+<!ENTITY ntilde "&#241;">
+<!ENTITY Nu "&#925;">
+<!ENTITY nu "&#957;">
+<!ENTITY Oacute "&#211;">
+<!ENTITY oacute "&#243;">
+<!ENTITY Ocirc "&#212;">
+<!ENTITY ocirc "&#244;">
+<!ENTITY OElig "&#338;">
+<!ENTITY oelig "&#339;">
+<!ENTITY Ograve "&#210;">
+<!ENTITY ograve "&#242;">
+<!ENTITY oline "&#8254;">
+<!ENTITY Omega "&#937;">
+<!ENTITY omega "&#969;">
+<!ENTITY Omicron "&#927;">
+<!ENTITY omicron "&#959;">
+<!ENTITY oplus "&#8853;">
+<!ENTITY or "&#8870;">
+<!ENTITY ordf "&#170;">
+<!ENTITY ordm "&#186;">
+<!ENTITY Oslash "&#216;">
+<!ENTITY oslash "&#248;">
+<!ENTITY Otilde "&#213;">
+<!ENTITY otilde "&#245;">
+<!ENTITY otimes "&#8855;">
+<!ENTITY Ouml "&#214;">
+<!ENTITY ouml "&#246;">
+<!ENTITY para "&#182;">
+<!ENTITY part "&#8706;">
+<!ENTITY permil "&#8240;">
+<!ENTITY perp "&#8869;">
+<!ENTITY Phi "&#934;">
+<!ENTITY phi "&#966;">
+<!ENTITY Pi "&#928;">
+<!ENTITY pi "&#960;">
+<!ENTITY piv "&#982;">
+<!ENTITY plusmn "&#177;">
+<!ENTITY pound "&#163;">
+<!ENTITY prime "&#8242;">
+<!ENTITY Prime "&#8243;">
+<!ENTITY prod "&#8719;">
+<!ENTITY prop "&#8733;">
+<!ENTITY Psi "&#936;">
+<!ENTITY psi "&#968;">
+<!ENTITY quot "&#34;">
+<!ENTITY radic "&#8730;">
+<!ENTITY rang "&#9002;">
+<!ENTITY raquo "&#187;">
+<!ENTITY rarr "&#8594;">
+<!ENTITY rArr "&#8658;">
+<!ENTITY rceil "&#8969;">
+<!ENTITY rdquo "&#8221;">
+<!ENTITY real "&#8476;">
+<!ENTITY reg "&#174;">
+<!ENTITY rfloor "&#8971;">
+<!ENTITY Rho "&#929;">
+<!ENTITY rho "&#961;">
+<!ENTITY rlm "&#8207;">
+<!ENTITY rsaquo "&#8250;">
+<!ENTITY rsquo "&#8217;">
+<!ENTITY sbquo "&#8218;">
+<!ENTITY Scaron "&#352;">
+<!ENTITY scaron "&#353;">
+<!ENTITY sdot "&#8901;">
+<!ENTITY sect "&#167;">
+<!ENTITY shy "&#173;">
+<!ENTITY Sigma "&#931;">
+<!ENTITY sigma "&#963;">
+<!ENTITY sigmaf "&#962;">
+<!ENTITY sim "&#8764;">
+<!ENTITY spades "&#9824;">
+<!ENTITY sub "&#8834;">
+<!ENTITY sube "&#8838;">
+<!ENTITY sum "&#8721;">
+<!ENTITY sup "&#8835;">
+<!ENTITY sup1 "&#185;">
+<!ENTITY sup2 "&#178;">
+<!ENTITY sup3 "&#179;">
+<!ENTITY supe "&#8839;">
+<!ENTITY szlig "&#223;">
+<!ENTITY Tau "&#932;">
+<!ENTITY tau "&#964;">
+<!ENTITY there4 "&#8756;">
+<!ENTITY Theta "&#920;">
+<!ENTITY theta "&#952;">
+<!ENTITY thetasym "&#977;">
+<!ENTITY thinsp "&#8201;">
+<!ENTITY THORN "&#222;">
+<!ENTITY thorn "&#254;">
+<!ENTITY tilde "&#732;">
+<!ENTITY times "&#215;">
+<!ENTITY trade "&#8482;">
+<!ENTITY Uacute "&#218;">
+<!ENTITY uacute "&#250;">
+<!ENTITY uarr "&#8593;">
+<!ENTITY uArr "&#8657;">
+<!ENTITY Ucirc "&#219;">
+<!ENTITY ucirc "&#251;">
+<!ENTITY Ugrave "&#217;">
+<!ENTITY ugrave "&#249;">
+<!ENTITY uml "&#168;">
+<!ENTITY upsih "&#978;">
+<!ENTITY Upsilon "&#933;">
+<!ENTITY upsilon "&#965;">
+<!ENTITY Uuml "&#220;">
+<!ENTITY uuml "&#252;">
+<!ENTITY weierp "&#8472;">
+<!ENTITY Xi "&#926;">
+<!ENTITY xi "&#958;">
+<!ENTITY Yacute "&#221;">
+<!ENTITY yacute "&#253;">
+<!ENTITY yen "&#165;">
+<!ENTITY Yuml "&#376;">
+<!ENTITY yuml "&#255;">
+<!ENTITY Zeta "&#918;">
+<!ENTITY zeta "&#950;">
+<!ENTITY zwj "&#8205;">
+<!ENTITY zwnj "&#8204;">`.replace(/\n/g, ' ');
+
+  /**
+   * A reasonably strict xml declaration.
+   */
+  const XML_DECL = '<?xml version="1.0" standalone="no"?>';
+
+  /**
+   * The beginning of the XML doctype declaration.
+   */
+  const DOCTYPE_START = `<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd" [`;
+
+  /**
+   * The end of the XML docype declaration.
+   */
+  const DOCTYPE_END = ']>';
+
+  /**
+   * A full header for an SVG XML document.
+   */
+  const SVG_XML_HEADER = `${XML_DECL}
+    ${DOCTYPE_START}${HTML_ENTITIES}${DOCTYPE_END}`;
 
     void Promise.all([...diagrams].map(renderOneMarmaid));
   });
@@ -2226,11 +3214,20 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 </div>
 <div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<hr/>
-<h1 align="center">Loading AWS Bitcoin blockchain data into ArcticDB, using AWS as storage</h1>
-<center><img alt="ArcticDB Logo" src="https://raw.githubusercontent.com/man-group/ArcticDB/master/static/ArcticDBCropped.png" width="400"/>
-<hr/>
-</center></div>
+<center><img alt="No description has been provided for this image" src="data:image/png;base64,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"/>
+</center>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
+</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
+<h1 id="loading-aws-bitcoin-blockchain-data-into-arcticdb-using-aws-as-storage">Loading AWS Bitcoin blockchain data into ArcticDB, using AWS as storage<a class="anchor-link" href="#loading-aws-bitcoin-blockchain-data-into-arcticdb-using-aws-as-storage">¶</a></h1>
+</div>
 </div>
 </div>
 </div>
@@ -2334,17 +3331,17 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 </div>
 </clipboard-copy>
 </div>
-<div class="highlight-ipynb hl-python"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">uuid</span><span class="w"> </span><span class="kn">import</span> <span class="n">uuid4</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">datetime</span><span class="w"> </span><span class="kn">import</span> <span class="n">timedelta</span><span class="p">,</span> <span class="n">datetime</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">tqdm</span><span class="w"> </span><span class="kn">import</span> <span class="n">tqdm</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">boto3</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">botocore</span><span class="w"> </span><span class="kn">import</span> <span class="n">UNSIGNED</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">botocore.client</span><span class="w"> </span><span class="kn">import</span> <span class="n">Config</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">arcticdb</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">adb</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">google.colab</span><span class="w"> </span><span class="kn">import</span> <span class="n">drive</span><span class="p">,</span> <span class="n">userdata</span>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">from</span> <span class="nn">uuid</span> <span class="kn">import</span> <span class="n">uuid4</span>
+<span class="kn">from</span> <span class="nn">datetime</span> <span class="kn">import</span> <span class="n">timedelta</span><span class="p">,</span> <span class="n">datetime</span>
+<span class="kn">from</span> <span class="nn">tqdm</span> <span class="kn">import</span> <span class="n">tqdm</span>
+<span class="kn">import</span> <span class="nn">boto3</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="nn">pd</span>
+<span class="kn">from</span> <span class="nn">botocore</span> <span class="kn">import</span> <span class="n">UNSIGNED</span>
+<span class="kn">from</span> <span class="nn">botocore.client</span> <span class="kn">import</span> <span class="n">Config</span>
+<span class="kn">import</span> <span class="nn">arcticdb</span> <span class="k">as</span> <span class="nn">adb</span>
+<span class="kn">from</span> <span class="nn">google.colab</span> <span class="kn">import</span> <span class="n">drive</span><span class="p">,</span> <span class="n">userdata</span>
 </pre></div>
 <div class="clipboard-copy-txt" id="cell-2">import os
 from uuid import uuid4
@@ -3137,10 +4134,13 @@ ax.figure.autofmt_xdate(rotation=60)</div>
     </div>
     
     
-    <script id="__config" type="application/json">{"base": "../..", "features": ["navigation.tabs", "navigation.sections", "content.code.copy", "toc.integrate"], "search": "../../assets/javascripts/workers/search.f8cc74c7.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.sections", "content.code.copy", "toc.integrate"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
     
     
-      <script src="../../assets/javascripts/bundle.c8b220af.min.js"></script>
+      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
       
     
   </body>
