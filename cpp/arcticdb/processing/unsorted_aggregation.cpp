@@ -32,7 +32,7 @@ void MinMaxAggregatorData::aggregate(const ColumnWithStrings& input_column) {
             packed_strings_ = true;
         }
 
-        constexpr auto stat_data_type = is_string_column ? DataType::UINT64 : type_info::data_type;
+        static constexpr auto stat_data_type = is_string_column ? DataType::UINT64 : type_info::data_type;
         using StatType = std::conditional_t<is_string_column, uint64_t, RawType>;
 
         if (input_column.column_->is_sparse()) {
