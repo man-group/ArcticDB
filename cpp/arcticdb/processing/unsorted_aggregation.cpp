@@ -27,7 +27,7 @@ void MinMaxAggregatorData::aggregate(const ColumnWithStrings& input_column) {
         using type_info = ScalarTypeInfo<decltype(col_tag)>;
         using RawType = typename type_info::RawType;
 
-        constexpr bool is_string_column = is_sequence_type(type_info::data_type);
+        static constexpr bool is_string_column = is_sequence_type(type_info::data_type);
         if constexpr (is_string_column) {
             packed_strings_ = true;
         }
