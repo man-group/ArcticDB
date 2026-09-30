@@ -1124,9 +1124,9 @@ std::vector<EntityId> WriteClause::process(std::vector<EntityId>&& entity_ids) c
                 );
 
         for (size_t i = 0; i < proc.segments_->size(); ++i) {
-            const SegmentInMemory &segment = *(*proc.segments_)[i];
-            const RowRange &row_range = *(*proc.row_ranges_)[i];
-            const ColRange &col_range = *(*proc.col_ranges_)[i];
+            const SegmentInMemory& segment = *(*proc.segments_)[i];
+            const RowRange& row_range = *(*proc.row_ranges_)[i];
+            const ColRange& col_range = *(*proc.col_ranges_)[i];
             stream::PartialKey partial_key = create_partial_key(segment, row_range);
             component_manager_->add_components(
                     entity_ids[i],
@@ -1137,7 +1137,11 @@ std::vector<EntityId> WriteClause::process(std::vector<EntityId>&& entity_ids) c
             );
         }
     } else {
-        auto components = component_manager_->get_and_remove_components<std::shared_ptr<Segment>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>, std::shared_ptr<AtomKey>>(entity_ids);
+        auto components = component_manager_->get_and_remove_components<
+                std::shared_ptr<Segment>,
+                std::shared_ptr<RowRange>,
+                std::shared_ptr<ColRange>,
+                std::shared_ptr<AtomKey>>(entity_ids);
         const auto& segments = std::get<0>(components);
         const auto& row_ranges = std::get<1>(components);
         const auto& col_ranges = std::get<2>(components);
@@ -1146,15 +1150,22 @@ std::vector<EntityId> WriteClause::process(std::vector<EntityId>&& entity_ids) c
             // AtomKey is as read from disk. Version ID, creation timestamp, and content hash need updating
             const auto& original_atom_key = *atom_keys.at(i);
             auto content_hash = get_segment_hash(*segments.at(i));
-            auto new_key = AtomKeyBuilder().version_id(index_partial_key_.version_id).creation_ts(0 /*ClockType::nanos_since_epoch() */).start_index(original_atom_key.start_index()).end_index(original_atom_key.end_index()).content_hash(content_hash).build(index_partial_key_.id, original_atom_key.type());
+            auto new_key = AtomKeyBuilder()
+                                   .version_id(index_partial_key_.version_id)
+                                   .creation_ts(0 /*ClockType::nanos_since_epoch() */)
+                                   .start_index(original_atom_key.start_index())
+                                   .end_index(original_atom_key.end_index())
+                                   .content_hash(content_hash)
+                                   .build(index_partial_key_.id, original_atom_key.type());
             storage::KeySegmentPair ks{new_key, std::move(*segments.at(i))};
             component_manager_->add_components(
                     entity_ids[i],
-                    std::make_shared<folly::Future<SliceAndKey>>(store_->write_compressed(ks)
-                    .thenValueInline([row_range = row_ranges.at(i), col_range = col_ranges.at(i), new_key](auto&&) {
-                        FrameSlice frame_slice{*col_range, *row_range};
-                        return SliceAndKey{std::move(frame_slice), new_key};
-                    }))
+                    std::make_shared<folly::Future<SliceAndKey>>(store_->write_compressed(ks).thenValueInline(
+                            [row_range = row_ranges.at(i), col_range = col_ranges.at(i), new_key](auto&&) {
+                                FrameSlice frame_slice{*col_range, *row_range};
+                                return SliceAndKey{std::move(frame_slice), new_key};
+                            }
+                    ))
             );
         }
     }

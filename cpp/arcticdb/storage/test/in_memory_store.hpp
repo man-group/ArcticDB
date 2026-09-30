@@ -53,8 +53,8 @@ class InMemoryStore : public Store {
         throw std::runtime_error("Not implemented for tests");
     }
 
-    std::function<folly::Future<pipelines::SegmentAndSlice>(pipelines::RangesAndKey&&)>
-    make_compressed_reader() override {
+    std::function<folly::Future<pipelines::SegmentAndSlice>(pipelines::RangesAndKey&&)> make_compressed_reader(
+    ) override {
         throw std::runtime_error("Not implemented for tests");
     }
 

@@ -758,7 +758,8 @@ folly::Future<std::vector<EntityId>> read_and_schedule_processing(
     const size_t read_window = segment_read_window();
 
     // TODO: Tidy this up
-    auto base_reader = decode ? store->make_uncompressed_reader(columns_to_decode(pipeline_context)) : store->make_compressed_reader();
+    auto base_reader = decode ? store->make_uncompressed_reader(columns_to_decode(pipeline_context))
+                              : store->make_compressed_reader();
     SegmentReader reader = [base_reader = std::move(base_reader),
                             pipeline_desc = pipeline_context->on_disk_descriptor(),
                             processing_config](pipelines::RangesAndKey&& rk) {
@@ -802,12 +803,14 @@ folly::Future<std::vector<EntityId>> read_modify_write_data_keys(
     const auto write_clause_processing_structure =
             read_query->clauses_.empty() ? ProcessingStructure::ROW_SLICE
                                          : read_query->clauses_.back()->clause_info().output_structure_;
-    read_query->clauses_.push_back(std::make_shared<Clause>(
-            WriteClause(target_partial_index_key, std::move(de_dup_map), store, write_clause_processing_structure, decode_and_encode)
-    ));
+    read_query->clauses_.push_back(std::make_shared<Clause>(WriteClause(
+            target_partial_index_key, std::move(de_dup_map), store, write_clause_processing_structure, decode_and_encode
+    )));
     pipeline_context->set_output_schema(generate_output_schema(*pipeline_context, *read_query));
 
-    return read_and_schedule_processing(store, pipeline_context, read_query, read_options, component_manager, decode_and_encode)
+    return read_and_schedule_processing(
+                   store, pipeline_context, read_query, read_options, component_manager, decode_and_encode
+    )
             .thenValue([component_manager = std::move(component_manager),
                         read_query = std::move(read_query)](std::vector<EntityId>&& processed_entity_ids) {
                 std::vector<std::shared_ptr<folly::Future<SliceAndKey>>> slice_futures = std::get<0>(
