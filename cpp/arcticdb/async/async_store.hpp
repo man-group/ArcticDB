@@ -462,6 +462,17 @@ class AsyncStore : public Store {
         };
     }
 
+    std::function<folly::Future<pipelines::SegmentAndSlice>(pipelines::RangesAndKey&&)> make_compressed_reader(
+    ) override {
+        return [this](pipelines::RangesAndKey&& ranges_and_key) {
+            const auto key = ranges_and_key.key_;
+            return read_compressed(key, storage::ReadKeyOpts{})
+                    .thenValueInline([ranges_and_key](storage::KeySegmentPair&& key_segment) mutable {
+                        return SegmentAndSlice{std::move(ranges_and_key), key_segment.segment_ptr()};
+                    });
+        };
+    }
+
     std::vector<folly::Future<bool>> batch_key_exists(const std::vector<entity::VariantKey>& keys) override {
         std::vector<folly::Future<bool>> res;
         res.reserve(keys.size());

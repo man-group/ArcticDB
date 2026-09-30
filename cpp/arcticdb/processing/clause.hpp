@@ -814,10 +814,11 @@ struct WriteClause {
     IndexPartialKey index_partial_key_;
     std::shared_ptr<DeDupMap> dedup_map_;
     std::shared_ptr<Store> store_;
+    bool encode_;
 
     WriteClause(
             const IndexPartialKey& index_partial_key, std::shared_ptr<DeDupMap> dedup_map, std::shared_ptr<Store> store,
-            ProcessingStructure input_processing_structure
+            ProcessingStructure input_processing_structure, const bool encode
     );
     ARCTICDB_MOVE_COPY_DEFAULT(WriteClause)
 
@@ -1013,5 +1014,36 @@ struct CompactDataClause {
     void add_segment_from_frame(
             const ProcessingUnit& proc, size_t col_range_start, std::vector<SegmentInMemory>& segments
     ) const;
+};
+
+struct RenameColumnsClause {
+    ClauseInfo clause_info_;
+    std::shared_ptr<ComponentManager> component_manager_;
+    ankerl::unordered_dense::map<std::string, std::string> column_renames_;
+
+    RenameColumnsClause(ankerl::unordered_dense::map<std::string, std::string>&& column_renames);
+    ARCTICDB_MOVE_COPY_DEFAULT(RenameColumnsClause)
+
+    [[nodiscard]] std::vector<std::vector<size_t>> structure_for_processing(std::vector<RangesAndKey>& ranges_and_keys);
+
+    [[nodiscard]] std::vector<std::vector<EntityId>> structure_for_processing(
+            std::vector<std::vector<EntityId>>&& entity_ids_vec
+    );
+
+    [[nodiscard]] std::vector<EntityId> process(std::vector<EntityId>&& entity_ids) const;
+
+    [[nodiscard]] const ClauseInfo& clause_info() const;
+
+    void set_processing_config(const ProcessingConfig& processing_config);
+
+    void set_component_manager(std::shared_ptr<ComponentManager> component_manager);
+
+    OutputSchema modify_schema(OutputSchema&& output_schema) const;
+
+    OutputSchema join_schemas(std::vector<OutputSchema>&&) const;
+
+    [[nodiscard]] std::string to_string() const;
+
+  private:
 };
 } // namespace arcticdb

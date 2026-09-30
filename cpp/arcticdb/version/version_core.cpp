@@ -6,6 +6,7 @@
  * will be governed by the Apache License, version 2.0.
  */
 
+#include <arcticdb/arrow/arrow_schema_utils.hpp>
 #include <arcticdb/version/version_core.hpp>
 #include <arcticdb/column_store/column_algorithms.hpp>
 #include <arcticdb/column_store/column_reslicer.hpp>
@@ -728,7 +729,7 @@ std::shared_ptr<std::unordered_set<std::string>> columns_to_decode(
 folly::Future<std::vector<EntityId>> read_and_schedule_processing(
         const std::shared_ptr<Store>& store, const std::shared_ptr<PipelineContext>& pipeline_context,
         const std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options,
-        std::shared_ptr<ComponentManager> component_manager
+        std::shared_ptr<ComponentManager> component_manager, const bool decode = true
 ) {
     const ProcessingConfig processing_config{
             opt_false(read_options.dynamic_schema()),
@@ -756,17 +757,22 @@ folly::Future<std::vector<EntityId>> read_and_schedule_processing(
     const size_t max_processing_units_in_flight = max_resident_processing_units(processing_unit_indexes);
     const size_t read_window = segment_read_window();
 
-    auto base_reader = store->make_uncompressed_reader(columns_to_decode(pipeline_context));
+    // TODO: Tidy this up
+    auto base_reader = decode ? store->make_uncompressed_reader(columns_to_decode(pipeline_context))
+                              : store->make_compressed_reader();
     SegmentReader reader = [base_reader = std::move(base_reader),
                             pipeline_desc = pipeline_context->on_disk_descriptor(),
                             processing_config](pipelines::RangesAndKey&& rk) {
         const bool is_incomplete = rk.is_incomplete();
         return base_reader(std::move(rk))
                 .thenValueInline([pipeline_desc, processing_config, is_incomplete](pipelines::SegmentAndSlice&& r) {
-                    if (is_incomplete && !processing_config.dynamic_schema_) {
-                        auto check = check_schema_matches_incomplete(r.segment_in_memory_.descriptor(), pipeline_desc);
-                        if (std::holds_alternative<Error>(check)) {
-                            std::get<Error>(check).throw_error();
+                    if (const auto* segment_in_memory = std::get_if<SegmentInMemory>(&r.segment_)) {
+                        if (is_incomplete && !processing_config.dynamic_schema_) {
+                            auto check =
+                                    check_schema_matches_incomplete(segment_in_memory->descriptor(), pipeline_desc);
+                            if (std::holds_alternative<Error>(check)) {
+                                std::get<Error>(check).throw_error();
+                            }
                         }
                     }
                     return std::move(r);
@@ -792,17 +798,19 @@ folly::Future<std::vector<EntityId>> read_modify_write_data_keys(
         const std::shared_ptr<Store>& store, std::shared_ptr<ReadQuery> read_query, const ReadOptions& read_options,
         const IndexPartialKey& target_partial_index_key, const std::shared_ptr<PipelineContext>& pipeline_context,
         std::shared_ptr<ComponentManager> component_manager,
-        std::shared_ptr<DeDupMap> de_dup_map = std::make_shared<DeDupMap>()
+        std::shared_ptr<DeDupMap> de_dup_map = std::make_shared<DeDupMap>(), const bool decode_and_encode = true
 ) {
     const auto write_clause_processing_structure =
             read_query->clauses_.empty() ? ProcessingStructure::ROW_SLICE
                                          : read_query->clauses_.back()->clause_info().output_structure_;
-    read_query->clauses_.push_back(std::make_shared<Clause>(
-            WriteClause(target_partial_index_key, std::move(de_dup_map), store, write_clause_processing_structure)
-    ));
+    read_query->clauses_.push_back(std::make_shared<Clause>(WriteClause(
+            target_partial_index_key, std::move(de_dup_map), store, write_clause_processing_structure, decode_and_encode
+    )));
     pipeline_context->set_output_schema(generate_output_schema(*pipeline_context, *read_query));
 
-    return read_and_schedule_processing(store, pipeline_context, read_query, read_options, component_manager)
+    return read_and_schedule_processing(
+                   store, pipeline_context, read_query, read_options, component_manager, decode_and_encode
+    )
             .thenValue([component_manager = std::move(component_manager),
                         read_query = std::move(read_query)](std::vector<EntityId>&& processed_entity_ids) {
                 std::vector<std::shared_ptr<folly::Future<SliceAndKey>>> slice_futures = std::get<0>(
@@ -1181,14 +1189,25 @@ void add_slice_to_component_manager(
         std::shared_ptr<ComponentManager> component_manager, EntityFetchCount fetch_count
 ) {
     ARCTICDB_DEBUG(log::memory(), "Adding entity id {}", entity_id);
-    component_manager->add_components(
-            entity_id,
-            std::make_shared<SegmentInMemory>(std::move(segment_and_slice.segment_in_memory_)),
-            std::make_shared<RowRange>(std::move(segment_and_slice.ranges_and_key_.row_range_)),
-            std::make_shared<ColRange>(std::move(segment_and_slice.ranges_and_key_.col_range_)),
-            std::make_shared<AtomKey>(std::move(segment_and_slice.ranges_and_key_.key_)),
-            fetch_count
-    );
+    if (std::holds_alternative<SegmentInMemory>(segment_and_slice.segment_)) {
+        component_manager->add_components(
+                entity_id,
+                std::make_shared<SegmentInMemory>(std::move(std::get<SegmentInMemory>(segment_and_slice.segment_))),
+                std::make_shared<RowRange>(std::move(segment_and_slice.ranges_and_key_.row_range_)),
+                std::make_shared<ColRange>(std::move(segment_and_slice.ranges_and_key_.col_range_)),
+                std::make_shared<AtomKey>(std::move(segment_and_slice.ranges_and_key_.key_)),
+                fetch_count
+        );
+    } else {
+        // TODO: Decide what to do about fetch_count
+        component_manager->add_components(
+                entity_id,
+                std::move(std::get<std::shared_ptr<Segment>>(segment_and_slice.segment_)),
+                std::make_shared<RowRange>(std::move(segment_and_slice.ranges_and_key_.row_range_)),
+                std::make_shared<ColRange>(std::move(segment_and_slice.ranges_and_key_.col_range_)),
+                std::make_shared<AtomKey>(std::move(segment_and_slice.ranges_and_key_.key_))
+        );
+    }
 }
 
 size_t num_scheduling_iterations(const std::vector<std::shared_ptr<Clause>>& clauses) {
@@ -1303,8 +1322,8 @@ std::shared_ptr<std::vector<folly::Future<std::vector<EntityId>>>> schedule_firs
                         .via(&async::cpu_executor())
                         .thenValueInline([](std::vector<folly::Try<pipelines::SegmentAndSlice>>&& segment_and_slice_trys
                                          ) {
-                            std::vector<pipelines::SegmentAndSlice> segment_and_slices;
-                            segment_and_slices.reserve(segment_and_slice_trys.size());
+                            auto segment_and_slices =
+                                    util::reserve_vector<pipelines::SegmentAndSlice>(segment_and_slice_trys.size());
                             for (auto& segment_and_slice_try : segment_and_slice_trys) {
                                 segment_and_slices.emplace_back(std::move(segment_and_slice_try).value());
                             }
@@ -3656,6 +3675,93 @@ folly::Future<std::optional<AtomKey>> async_compact_data_impl(
                                 }
                         );
             });
+}
+
+folly::Future<std::optional<AtomKey>> async_rename_columns_arrow_compat_impl(
+        const std::shared_ptr<Store>& store, const UpdateInfo& update_info,
+        const std::optional<std::vector<std::string>>& index_columns
+) {
+    // Once column stats are fully supported, the rename will also need to be applied to the column stats key
+    // TODO: Add a ticket to the column stats epic and link to it here
+    return read_index_key_without_column_stats(store, *update_info.previous_index_key_)
+            .via(&async::cpu_executor())
+            .thenValue(
+                    [store, update_info, index_columns](auto&& index_information
+                    ) -> folly::Future<std::optional<AtomKey>> {
+                        const auto& original_tsd = index_information.index_.second.index_descriptor();
+                        schema::check<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_RECURSIVE_NORMALIZED_DATA>(
+                                variant_key_type(index_information.index_.first) == KeyType::TABLE_INDEX,
+                                "rename_columns_arrow_compat not supported with recursively normalized data"
+                        );
+                        schema::check<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_PICKLED_DATA>(
+                                !original_tsd.normalization().has_msg_pack_frame(),
+                                "rename_columns_arrow_compat not supported with pickled data"
+                        );
+                        schema::check<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_NUMPY_ARRAY>(
+                                !original_tsd.normalization().has_np(),
+                                "rename_columns_arrow_compat not supported with numpy arrays"
+                        );
+                        if (original_tsd.normalization().has_experimental_arrow()) {
+                            return std::nullopt;
+                        }
+                        OutputSchema original_schema{original_tsd.as_stream_descriptor(), original_tsd.normalization()};
+                        auto arrow_transformed_schema = make_schema_arrow_compatible(original_schema, index_columns);
+                        if (!arrow_transformed_schema.changed_) {
+                            return std::nullopt;
+                        }
+                        auto tsd = make_timeseries_descriptor(
+                                original_tsd.total_rows(),
+                                arrow_transformed_schema.schema_.stream_descriptor(),
+                                arrow_transformed_schema.schema_.norm_metadata_,
+                                original_tsd.user_metadata(),
+                                std::nullopt,
+                                false
+                        ); // Set this and ReadOptions from WriteOptions
+                        VersionIdentifier resolved = std::make_shared<IndexInformation>(std::move(index_information));
+                        auto read_query = std::make_shared<ReadQuery>();
+                        read_query->clauses_.push_back(std::make_shared<Clause>(
+                                RenameColumnsClause(std::move(arrow_transformed_schema.column_renames_))
+                        ));
+                        auto pipeline_context = setup_pipeline_context(store, std::move(resolved), *read_query, {});
+                        const auto& stream_id = update_info.previous_index_key_->id();
+                        IndexPartialKey target_partial_index_key{stream_id, update_info.next_version_id_};
+                        auto component_manager = std::make_shared<ComponentManager>();
+                        // Read options only used to set dynamic_schema in ProcessingConfig, which is ignored by
+                        // RenameColumnsClause. If needed in the future, pass WriteOptions into this function as in
+                        // async_compact_data_impl
+                        return read_modify_write_data_keys(
+                                       store,
+                                       read_query,
+                                       ReadOptions{},
+                                       target_partial_index_key,
+                                       pipeline_context,
+                                       component_manager,
+                                       std::make_shared<DeDupMap>(),
+                                       false
+                        )
+                                .thenValue([pipeline_context = std::move(pipeline_context),
+                                            store,
+                                            target_partial_index_key,
+                                            read_query,
+                                            component_manager,
+                                            tsd = std::move(tsd)](std::vector<EntityId>&& entities) {
+                                    // TODO: Are these slices in the right order? Could solve this via
+                                    //  RenameColumnsClause::structure_for_processing or here
+                                    std::vector<SliceAndKey> slices_and_keys =
+                                            std::get<0>(component_manager->get_components<SliceAndKey>(entities));
+                                    return index::write_index(
+                                                   index_type_from_descriptor(pipeline_context->output_descriptor()),
+                                                   tsd,
+                                                   std::move(slices_and_keys),
+                                                   target_partial_index_key,
+                                                   store
+                                    )
+                                            .thenValueInline([](AtomKey&& index_key) {
+                                                return std::make_optional(std::move(index_key));
+                                            });
+                                });
+                    }
+            );
 }
 
 folly::Future<SymbolProcessingResult> read_and_process(

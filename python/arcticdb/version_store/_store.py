@@ -93,6 +93,8 @@ from arcticdb.exceptions import (
     ArcticNativeException,
     MissingKeysInStageResultsError,
     ArcticDuplicateSymbolsInBatchException,
+    SchemaException,
+    UserInputException,
 )
 from arcticdb.flattener import Flattener
 from arcticdb.log import version as log
@@ -2577,6 +2579,36 @@ class NativeVersionStore:
 
         read_result = self._read_dataframe(symbol, version_query, read_query, read_options)
         return self._post_process_dataframe(read_result, read_query, read_options, output_format, implement_read_index)
+
+    def rename_columns_arrow_compat(
+        self,
+        symbol: str,
+        index_columns: Optional[Union[str, List[str]]] = None,
+        prune_previous_version: Optional[bool] = None,
+    ) -> VersionedItem:
+        explicit_index_names = None
+        if isinstance(index_columns, str):
+            explicit_index_names = [index_columns]
+        elif (
+            isinstance(index_columns, list)
+            and len(index_columns) > 0
+            and all(isinstance(elem, str) for elem in index_columns)
+        ):
+            explicit_index_names = index_columns
+        elif index_columns is not None:
+            raise UserInputException(f"method_arg must be a non-empty str or list of str, received {index_columns!r}")
+
+        prune_previous_version = resolve_defaults(
+            "prune_previous_version",
+            self._lib_cfg.lib_desc.version.write_options,
+            global_default=False,
+            existing_value=prune_previous_version,
+        )
+
+        cxx_versioned_item = self.version_store._rename_columns_arrow_compat(
+            symbol, explicit_index_names, prune_previous_version
+        )
+        return self._convert_thin_cxx_item_to_python(cxx_versioned_item, None)
 
     def head(
         self,
