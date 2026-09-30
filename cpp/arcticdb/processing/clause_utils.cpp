@@ -141,8 +141,7 @@ std::vector<FutureOrSplitter> split_futures(
         std::vector<folly::Future<SegmentAndSlice>>&& segment_and_slice_futures,
         std::vector<EntityFetchCount>& segment_fetch_counts
 ) {
-    std::vector<FutureOrSplitter> res;
-    res.reserve(segment_and_slice_futures.size());
+    auto res = util::reserve_vector<FutureOrSplitter>(segment_and_slice_futures.size());
     for (auto&& [index, future] : folly::enumerate(segment_and_slice_futures)) {
         if (segment_fetch_counts[index] > 1)
             res.emplace_back(folly::splitFuture(std::move(future)));

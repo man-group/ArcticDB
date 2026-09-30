@@ -451,7 +451,7 @@ class AsyncStore : public Store {
         );
     }
 
-    std::function<folly::Future<pipelines::SegmentAndSlice>(pipelines::RangesAndKey&&)> make_uncompressed_reader(
+    std::function<folly::Future<pipelines::SegmentAndSlice>(pipelines::RangesAndKey&&)> make_reader(
             std::shared_ptr<std::unordered_set<std::string>> columns_to_decode
     ) override {
         return [this, columns_to_decode](pipelines::RangesAndKey&& ranges_and_key) {

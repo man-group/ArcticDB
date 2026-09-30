@@ -757,17 +757,20 @@ folly::Future<std::vector<EntityId>> read_and_schedule_processing(
     const size_t max_processing_units_in_flight = max_resident_processing_units(processing_unit_indexes);
     const size_t read_window = segment_read_window();
 
-    auto base_reader = store->make_uncompressed_reader(columns_to_decode(pipeline_context));
+    auto base_reader = store->make_reader(columns_to_decode(pipeline_context));
     SegmentReader reader = [base_reader = std::move(base_reader),
                             pipeline_desc = pipeline_context->on_disk_descriptor(),
                             processing_config](pipelines::RangesAndKey&& rk) {
         const bool is_incomplete = rk.is_incomplete();
         return base_reader(std::move(rk))
                 .thenValueInline([pipeline_desc, processing_config, is_incomplete](pipelines::SegmentAndSlice&& r) {
-                    if (is_incomplete && !processing_config.dynamic_schema_) {
-                        auto check = check_schema_matches_incomplete(r.segment_in_memory_.descriptor(), pipeline_desc);
-                        if (std::holds_alternative<Error>(check)) {
-                            std::get<Error>(check).throw_error();
+                    if (const auto* segment_in_memory = std::get_if<SegmentInMemory>(&r.segment_)) {
+                        if (is_incomplete && !processing_config.dynamic_schema_) {
+                            auto check =
+                                    check_schema_matches_incomplete(segment_in_memory->descriptor(), pipeline_desc);
+                            if (std::holds_alternative<Error>(check)) {
+                                std::get<Error>(check).throw_error();
+                            }
                         }
                     }
                     return std::move(r);
@@ -1182,14 +1185,25 @@ void add_slice_to_component_manager(
         std::shared_ptr<ComponentManager> component_manager, EntityFetchCount fetch_count
 ) {
     ARCTICDB_DEBUG(log::memory(), "Adding entity id {}", entity_id);
-    component_manager->add_components(
-            entity_id,
-            std::make_shared<SegmentInMemory>(std::move(segment_and_slice.segment_in_memory_)),
-            std::make_shared<RowRange>(std::move(segment_and_slice.ranges_and_key_.row_range_)),
-            std::make_shared<ColRange>(std::move(segment_and_slice.ranges_and_key_.col_range_)),
-            std::make_shared<AtomKey>(std::move(segment_and_slice.ranges_and_key_.key_)),
-            fetch_count
-    );
+    if (std::holds_alternative<SegmentInMemory>(segment_and_slice.segment_)) {
+        component_manager->add_components(
+                entity_id,
+                std::make_shared<SegmentInMemory>(std::move(std::get<SegmentInMemory>(segment_and_slice.segment_))),
+                std::make_shared<RowRange>(std::move(segment_and_slice.ranges_and_key_.row_range_)),
+                std::make_shared<ColRange>(std::move(segment_and_slice.ranges_and_key_.col_range_)),
+                std::make_shared<AtomKey>(std::move(segment_and_slice.ranges_and_key_.key_)),
+                fetch_count
+        );
+    } else {
+        // TODO: Decide what to do about fetch_count
+        component_manager->add_components(
+                entity_id,
+                std::move(std::get<std::shared_ptr<Segment>>(segment_and_slice.segment_)),
+                std::make_shared<RowRange>(std::move(segment_and_slice.ranges_and_key_.row_range_)),
+                std::make_shared<ColRange>(std::move(segment_and_slice.ranges_and_key_.col_range_)),
+                std::make_shared<AtomKey>(std::move(segment_and_slice.ranges_and_key_.key_))
+        );
+    }
 }
 
 size_t num_scheduling_iterations(const std::vector<std::shared_ptr<Clause>>& clauses) {
@@ -1304,8 +1318,8 @@ std::shared_ptr<std::vector<folly::Future<std::vector<EntityId>>>> schedule_firs
                         .via(&async::cpu_executor())
                         .thenValueInline([](std::vector<folly::Try<pipelines::SegmentAndSlice>>&& segment_and_slice_trys
                                          ) {
-                            std::vector<pipelines::SegmentAndSlice> segment_and_slices;
-                            segment_and_slices.reserve(segment_and_slice_trys.size());
+                            auto segment_and_slices =
+                                    util::reserve_vector<pipelines::SegmentAndSlice>(segment_and_slice_trys.size());
                             for (auto& segment_and_slice_try : segment_and_slice_trys) {
                                 segment_and_slices.emplace_back(std::move(segment_and_slice_try).value());
                             }

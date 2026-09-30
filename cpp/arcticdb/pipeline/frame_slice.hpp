@@ -10,6 +10,7 @@
 
 #include <folly/hash/Hash.h>
 
+#include <arcticdb/codec/segment.hpp>
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/entity/atom_key.hpp>
 #include <arcticdb/column_store/memory_segment.hpp>
@@ -194,19 +195,22 @@ struct RangesAndKey {
 };
 
 /*
- * The return type of the uncompressed reader (Store::make_uncompressed_reader)
+ * The return type of the [un]compressed reader (Store::make_reader)
  * Intended as a replacement for SliceAndKey without the baggage that class has accumulated, use in preference where
  * possible.
  */
 struct SegmentAndSlice {
     explicit SegmentAndSlice(RangesAndKey&& ranges_and_key, SegmentInMemory&& segment_in_memory) :
         ranges_and_key_(std::move(ranges_and_key)),
-        segment_in_memory_(std::move(segment_in_memory)) {}
+        segment_(std::move(segment_in_memory)) {}
+    explicit SegmentAndSlice(RangesAndKey&& ranges_and_key, Segment&& segment) :
+        ranges_and_key_(std::move(ranges_and_key)),
+        segment_(std::make_shared<Segment>(std::move(segment))) {}
     SegmentAndSlice() = delete;
-    ARCTICDB_MOVE_COPY_DEFAULT(SegmentAndSlice)
+    ARCTICDB_MOVE_COPY_DEFAULT(SegmentAndSlice);
 
     RangesAndKey ranges_and_key_;
-    SegmentInMemory segment_in_memory_;
+    std::variant<SegmentInMemory, std::shared_ptr<Segment>> segment_;
 };
 
 /*
