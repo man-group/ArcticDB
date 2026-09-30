@@ -21,6 +21,7 @@ void align_rowrange_norm_for_append(
     }
     if (existing.stream_descriptor().index().type() != IndexDescriptor::Type::ROWCOUNT ||
         incoming.stream_descriptor().index().type() != IndexDescriptor::Type::ROWCOUNT) {
+        // If index types don't match `combine_schema` will raise later in the callstack
         return;
     }
     // We need to update only for pandas rowrange.

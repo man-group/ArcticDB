@@ -168,9 +168,8 @@ def test_sort_merge_static_schema_write(lmdb_library, df_list):
         assert_cannot_finalize_without_staged_data(lib, sym, StagedDataFinalizeMethod.WRITE)
         return
     contributing = staged_segments_that_contribute(df_list)
-    if not contributing:
-        # All staged segments empty is covered by test_finalize_only_empty
-        return
+    # All staged segments empty is covered by test_finalize_only_empty
+    assume(contributing)
     if not all(contributing[0].dtypes.equals(segment.dtypes) for segment in contributing):
         assert_staged_columns_are_incompatible(lib, sym, StagedDataFinalizeMethod.WRITE)
         return
@@ -232,9 +231,8 @@ def test_sort_merge_dynamic_schema_write(lmdb_library_dynamic_schema, df_list):
         assert_cannot_finalize_without_staged_data(lib, sym, StagedDataFinalizeMethod.WRITE)
         return
     contributing = staged_segments_that_contribute(df_list)
-    if not contributing:
-        # All staged segments empty is covered by test_finalize_only_empty
-        return
+    # All staged segments empty is covered by test_finalize_only_empty
+    assume(contributing)
     if not segments_have_compatible_schema(contributing):
         assert_staged_columns_are_incompatible(lib, sym, StagedDataFinalizeMethod.WRITE)
         return

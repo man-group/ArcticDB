@@ -1917,46 +1917,39 @@ def test_staged_append_to_rowless_series_symbol_reconciles_index_normalization(i
     lib.write(sym, pd.Series([], dtype=np.int64, name="s", index=pd.DatetimeIndex([])))
     lib.write(sym, pd.Series([1], dtype=np.int64, name="s", index=pd.DatetimeIndex([pd.Timestamp(0)])), parallel=True)
     lib.compact_incomplete(sym, append=True, convert_int_to_float=False)
-    lib.update(sym, pd.Series([2], dtype=np.int64, name="s", index=pd.DatetimeIndex([pd.Timestamp(0)])))
-    expected = pd.Series([2], dtype=np.int64, name="s", index=pd.DatetimeIndex([pd.Timestamp(0)]))
+    assert lib.get_info(sym)["normalization_metadata"].series.common.index.is_physically_stored
+    expected = pd.Series([1], dtype=np.int64, name="s", index=pd.DatetimeIndex([pd.Timestamp(0)]))
     assert_series_equal(lib.read(sym).data, expected)
 
 
-@pytest.mark.parametrize("existing_version", [True, False], ids=["append_to_existing", "staged_only"])
-def test_series_and_dataframe_cannot_be_combined(in_memory_version_store, existing_version):
+@pytest.mark.parametrize("staged_only", [False, True], ids=["append_to_existing", "staged_only"])
+def test_series_and_dataframe_cannot_be_combined(in_memory_version_store, staged_only):
     lib = in_memory_version_store
     sym = "sym"
-    df = pd.DataFrame({"a": [1]}, index=pd.DatetimeIndex([pd.Timestamp(0)]))
-    if existing_version:
-        lib.write(sym, df)
-    else:
-        lib.write(sym, df, parallel=True)
+    lib.write(sym, pd.DataFrame({"a": [1]}, index=pd.DatetimeIndex([pd.Timestamp(0)])), parallel=staged_only)
     lib.write(sym, pd.Series([2], name="a", index=pd.DatetimeIndex([pd.Timestamp(10**9)])), parallel=True)
     with pytest.raises(NormalizationException, match="Series cannot be combined with a DataFrame"):
-        lib.compact_incomplete(sym, append=existing_version, convert_int_to_float=False)
+        lib.compact_incomplete(sym, append=not staged_only, convert_int_to_float=False)
 
 
 @pytest.mark.parametrize("dynamic_schema", [True, False], ids=["dynamic_schema", "static_schema"])
-@pytest.mark.parametrize("existing_version", [True, False], ids=["append_to_existing", "staged_only"])
-def test_differing_index_timezone(in_memory_store_factory, dynamic_schema, existing_version):
+@pytest.mark.parametrize("staged_only", [False, True], ids=["append_to_existing", "staged_only"])
+def test_differing_index_timezone(in_memory_store_factory, dynamic_schema, staged_only):
     lib = in_memory_store_factory(dynamic_strings=True, dynamic_schema=dynamic_schema)
     sym = "sym"
     london = pd.DataFrame({"a": [1]}, index=pd.DatetimeIndex([pd.Timestamp(0)]).tz_localize("Europe/London"))
-    if existing_version:
-        lib.write(sym, london)
-    else:
-        lib.write(sym, london, parallel=True)
+    lib.write(sym, london, parallel=staged_only)
     lib.write(
         sym,
         pd.DataFrame({"a": [2]}, index=pd.DatetimeIndex([pd.Timestamp(10**9)]).tz_localize("America/New_York")),
         parallel=True,
     )
     if dynamic_schema:
-        lib.compact_incomplete(sym, append=existing_version, convert_int_to_float=False)
+        lib.compact_incomplete(sym, append=not staged_only, convert_int_to_float=False)
         assert lib.read(sym).data.index.tz is None
     else:
         with pytest.raises(SchemaException, match="timezones for column"):
-            lib.compact_incomplete(sym, append=existing_version, convert_int_to_float=False)
+            lib.compact_incomplete(sym, append=not staged_only, convert_int_to_float=False)
 
 
 @pytest.mark.parametrize("dynamic_schema", [True, False], ids=["dynamic_schema", "static_schema"])
