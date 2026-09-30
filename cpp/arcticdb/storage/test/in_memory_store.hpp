@@ -49,7 +49,12 @@ class InMemoryStore : public Store {
     }
 
     std::function<folly::Future<pipelines::SegmentAndSlice>(pipelines::RangesAndKey&&)>
-    make_reader(std::shared_ptr<std::unordered_set<std::string>>) override {
+    make_uncompressed_reader(std::shared_ptr<std::unordered_set<std::string>>) override {
+        throw std::runtime_error("Not implemented for tests");
+    }
+
+    std::function<folly::Future<pipelines::SegmentAndSlice>(pipelines::RangesAndKey&&)>
+    make_compressed_reader() override {
         throw std::runtime_error("Not implemented for tests");
     }
 

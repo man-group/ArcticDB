@@ -814,10 +814,11 @@ struct WriteClause {
     IndexPartialKey index_partial_key_;
     std::shared_ptr<DeDupMap> dedup_map_;
     std::shared_ptr<Store> store_;
+    bool encode_;
 
     WriteClause(
             const IndexPartialKey& index_partial_key, std::shared_ptr<DeDupMap> dedup_map, std::shared_ptr<Store> store,
-            ProcessingStructure input_processing_structure
+            ProcessingStructure input_processing_structure, const bool encode
     );
     ARCTICDB_MOVE_COPY_DEFAULT(WriteClause)
 

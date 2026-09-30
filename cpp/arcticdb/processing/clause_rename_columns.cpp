@@ -51,23 +51,18 @@ std::vector<EntityId> RenameColumnsClause::process(std::vector<EntityId>&& entit
             "Unexpected number of segments {} in RenameColumnsClause::process",
             input_segment_count
     );
-    auto proc = gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(
-            *component_manager_, entity_ids
-    );
-    const auto& input_desc = proc.segments_->front()->descriptor();
-    auto output_desc = std::make_shared<StreamDescriptor>(
-            input_desc.data_ptr(), std::make_shared<FieldCollection>(), input_desc.stream_id_
-    );
-    auto& new_fields = output_desc->fields();
-    for (const auto& field : input_desc) {
+    auto segment = std::get<0>(component_manager_->get_components<std::shared_ptr<Segment>>(entity_ids)).at(0);
+    auto input_fields = segment->fields_ptr();
+    auto new_fields = std::make_shared<FieldCollection>();
+    for (const auto& field : *input_fields) {
         if (auto it = column_renames_.find(std::string(field.name())); it != column_renames_.end()) {
-            new_fields.add_field(field.type(), it->second);
+            new_fields->add_field(field.type(), it->second);
         } else {
-            new_fields.add_field(field.type(), field.name());
+            new_fields->add_field(field.type(), field.name());
         }
     }
-    proc.segments_->front()->attach_descriptor(output_desc);
-    return push_entities(*component_manager_, std::move(proc));
+    std::swap(input_fields, new_fields);
+    return entity_ids;
 }
 
 const ClauseInfo& RenameColumnsClause::clause_info() const { return clause_info_; }

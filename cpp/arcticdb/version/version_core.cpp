@@ -729,7 +729,7 @@ std::shared_ptr<std::unordered_set<std::string>> columns_to_decode(
 folly::Future<std::vector<EntityId>> read_and_schedule_processing(
         const std::shared_ptr<Store>& store, const std::shared_ptr<PipelineContext>& pipeline_context,
         const std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options,
-        std::shared_ptr<ComponentManager> component_manager
+        std::shared_ptr<ComponentManager> component_manager, const bool decode = true
 ) {
     const ProcessingConfig processing_config{
             opt_false(read_options.dynamic_schema()),
@@ -757,7 +757,8 @@ folly::Future<std::vector<EntityId>> read_and_schedule_processing(
     const size_t max_processing_units_in_flight = max_resident_processing_units(processing_unit_indexes);
     const size_t read_window = segment_read_window();
 
-    auto base_reader = store->make_reader(columns_to_decode(pipeline_context));
+    // TODO: Tidy this up
+    auto base_reader = decode ? store->make_uncompressed_reader(columns_to_decode(pipeline_context)) : store->make_compressed_reader();
     SegmentReader reader = [base_reader = std::move(base_reader),
                             pipeline_desc = pipeline_context->on_disk_descriptor(),
                             processing_config](pipelines::RangesAndKey&& rk) {
@@ -796,17 +797,17 @@ folly::Future<std::vector<EntityId>> read_modify_write_data_keys(
         const std::shared_ptr<Store>& store, std::shared_ptr<ReadQuery> read_query, const ReadOptions& read_options,
         const IndexPartialKey& target_partial_index_key, const std::shared_ptr<PipelineContext>& pipeline_context,
         std::shared_ptr<ComponentManager> component_manager,
-        std::shared_ptr<DeDupMap> de_dup_map = std::make_shared<DeDupMap>()
+        std::shared_ptr<DeDupMap> de_dup_map = std::make_shared<DeDupMap>(), const bool decode_and_encode = true
 ) {
     const auto write_clause_processing_structure =
             read_query->clauses_.empty() ? ProcessingStructure::ROW_SLICE
                                          : read_query->clauses_.back()->clause_info().output_structure_;
     read_query->clauses_.push_back(std::make_shared<Clause>(
-            WriteClause(target_partial_index_key, std::move(de_dup_map), store, write_clause_processing_structure)
+            WriteClause(target_partial_index_key, std::move(de_dup_map), store, write_clause_processing_structure, decode_and_encode)
     ));
     pipeline_context->set_output_schema(generate_output_schema(*pipeline_context, *read_query));
 
-    return read_and_schedule_processing(store, pipeline_context, read_query, read_options, component_manager)
+    return read_and_schedule_processing(store, pipeline_context, read_query, read_options, component_manager, decode_and_encode)
             .thenValue([component_manager = std::move(component_manager),
                         read_query = std::move(read_query)](std::vector<EntityId>&& processed_entity_ids) {
                 std::vector<std::shared_ptr<folly::Future<SliceAndKey>>> slice_futures = std::get<0>(
@@ -3731,7 +3732,9 @@ folly::Future<std::optional<AtomKey>> async_rename_columns_arrow_compat_impl(
                                        ReadOptions{},
                                        target_partial_index_key,
                                        pipeline_context,
-                                       component_manager
+                                       component_manager,
+                                       std::make_shared<DeDupMap>(),
+                                       false
                         )
                                 .thenValue([pipeline_context = std::move(pipeline_context),
                                             store,

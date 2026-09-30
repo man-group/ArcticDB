@@ -195,7 +195,7 @@ struct RangesAndKey {
 };
 
 /*
- * The return type of the [un]compressed reader (Store::make_reader)
+ * The return type of the [un]compressed reader (Store::make_uncompressed_reader/make_compressed_reader)
  * Intended as a replacement for SliceAndKey without the baggage that class has accumulated, use in preference where
  * possible.
  */
@@ -203,9 +203,9 @@ struct SegmentAndSlice {
     explicit SegmentAndSlice(RangesAndKey&& ranges_and_key, SegmentInMemory&& segment_in_memory) :
         ranges_and_key_(std::move(ranges_and_key)),
         segment_(std::move(segment_in_memory)) {}
-    explicit SegmentAndSlice(RangesAndKey&& ranges_and_key, Segment&& segment) :
+    explicit SegmentAndSlice(RangesAndKey&& ranges_and_key, std::shared_ptr<Segment>&& segment) :
         ranges_and_key_(std::move(ranges_and_key)),
-        segment_(std::make_shared<Segment>(std::move(segment))) {}
+        segment_(std::move(segment)) {}
     SegmentAndSlice() = delete;
     ARCTICDB_MOVE_COPY_DEFAULT(SegmentAndSlice);
 
