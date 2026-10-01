@@ -1102,6 +1102,12 @@ jobs:
       # profiles library's line-table sidecar, against the row `collect` just wrote
       # (hence after it), which is where `viz export-profiles` feeds the code view
       # from. Idempotent: a re-run stores nothing it already has.
+      # profile-code-view 13: the resolver is llvm-symbolizer. This runner's addr2line
+      # (binutils 2.38) is quadratic in each compilation unit's functions and took
+      # the first real run's 9,062 addresses past this step's 15 minutes;
+      # llvm-symbolizer answers them in seconds. The image ships it versioned (lldb
+      # pulls in llvm-NN), so the install below is a fallback that should never run.
+      # `srclines` also stops its resolver after 8 minutes and keeps what it answered.
       - name: resolve native frames to source lines
         if: always()
         continue-on-error: true
@@ -1109,6 +1115,10 @@ jobs:
         env:
           LIBRARY: ${{ steps.library.outputs.library }}
         run: |
+          if ! ls /usr/bin/llvm-symbolizer* >/dev/null 2>&1; then
+            sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends llvm \
+              || echo "::notice::no llvm-symbolizer: lines resolve with addr2line, slowly"
+          fi
           arctic-winds srclines \
             --artifacts artifacts \
             --debug all-artifacts \
