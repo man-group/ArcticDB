@@ -464,4 +464,8 @@ void Segment::write_to(std::uint8_t* dst) {
     );
 }
 
+void Segment::set_fields(FieldCollection&& fields) {
+    desc_.fields_ = std::make_shared<FieldCollection>(std::move(fields));
+}
+
 } // namespace arcticdb

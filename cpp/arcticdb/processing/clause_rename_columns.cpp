@@ -19,6 +19,10 @@
 #include <arcticdb/processing/clause_utils.hpp>
 #include <arcticdb/util/collection_utils.hpp>
 
+// Remove
+#include <arcticdb/async/tasks.hpp>
+#include <arcticdb/storage/key_segment_pair.hpp>
+
 namespace arcticdb {
 
 RenameColumnsClause::RenameColumnsClause(ankerl::unordered_dense::map<std::string, std::string>&& column_renames) :
@@ -53,15 +57,15 @@ std::vector<EntityId> RenameColumnsClause::process(std::vector<EntityId>&& entit
     );
     auto segment = std::get<0>(component_manager_->get_components<std::shared_ptr<Segment>>(entity_ids)).at(0);
     auto input_fields = segment->fields_ptr();
-    auto new_fields = std::make_shared<FieldCollection>();
+    FieldCollection new_fields;
     for (const auto& field : *input_fields) {
         if (auto it = column_renames_.find(std::string(field.name())); it != column_renames_.end()) {
-            new_fields->add_field(field.type(), it->second);
+            new_fields.add_field(field.type(), it->second);
         } else {
-            new_fields->add_field(field.type(), field.name());
+            new_fields.add_field(field.type(), field.name());
         }
     }
-    std::swap(input_fields, new_fields);
+    segment->set_fields(std::move(new_fields));
     return entity_ids;
 }
 
