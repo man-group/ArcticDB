@@ -228,15 +228,9 @@ bool is_segment_unsorted(const SegmentInMemory& segment);
 
 size_t n_segments_live_during_compaction();
 
-CheckOutcome check_schema_matches_incomplete(
-        const StreamDescriptor& stream_descriptor_incomplete, const StreamDescriptor& pipeline_context,
-        const bool convert_int_to_float = false
-);
-
 struct CompactionOptions {
     bool convert_int_to_float{false};
     bool validate_index{true};
-    bool perform_schema_checks{true};
 };
 
 template<typename IndexType>
@@ -343,36 +337,10 @@ template<
                 segment.descriptor().uncompressed_bytes()
         );
 
-        if (!index_names_match(segment.descriptor(), pipeline_context->on_disk_descriptor())) {
-            auto written_keys = folly::collect(write_futures).get();
-            remove_written_keys(store.get(), std::move(written_keys));
-            return Error{
-                    throw_error<ErrorCode::E_DESCRIPTOR_MISMATCH>,
-                    fmt::format(
-                            "Index names in segment {} and pipeline context {} do not match",
-                            segment.descriptor(),
-                            pipeline_context->on_disk_descriptor()
-                    )
-            };
-        }
-
         if (options.validate_index && is_segment_unsorted(segment)) {
             auto written_keys = folly::collect(write_futures).get();
             remove_written_keys(store.get(), std::move(written_keys));
             return Error{throw_error<ErrorCode::E_UNSORTED_DATA>, "Cannot compact unordered segment"};
-        }
-
-        if constexpr (std::is_same_v<SchemaType, FixedSchema>) {
-            if (options.perform_schema_checks) {
-                CheckOutcome outcome = check_schema_matches_incomplete(
-                        segment.descriptor(), pipeline_context->on_disk_descriptor(), options.convert_int_to_float
-                );
-                if (std::holds_alternative<Error>(outcome)) {
-                    auto written_keys = folly::collect(write_futures).get();
-                    remove_written_keys(store.get(), std::move(written_keys));
-                    return std::get<Error>(std::move(outcome));
-                }
-            }
         }
 
         aggregator.add_segment(std::move(sk.segment(store)), sk.slice(), options.convert_int_to_float);

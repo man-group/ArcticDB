@@ -924,10 +924,14 @@ VersionedItem LocalVersionedEngine::write_segment(
             auto tsd = TimeseriesDescriptor();
             tsd.set_stream_descriptor(segment.descriptor());
             tsd.set_total_rows(segment.row_count());
+            // The metadata has to describe the index the segment actually carries, otherwise a later append
+            // disagrees with it about whether the index is stored as a column.
             arcticdb::proto::descriptors::NormalizationMetadata norm_meta;
-            norm_meta.mutable_df()->mutable_common()->mutable_index()->set_is_physically_stored(false);
-            norm_meta.mutable_df()->mutable_common()->mutable_index()->set_start(0);
-            norm_meta.mutable_df()->mutable_common()->mutable_index()->set_step(1);
+            if (segment.descriptor().index().type() == IndexDescriptorImpl::Type::TIMESTAMP) {
+                ensure_timeseries_norm_meta(norm_meta, stream_id);
+            } else {
+                ensure_rowcount_norm_meta(norm_meta, stream_id);
+            }
             tsd.set_normalization_metadata(std::move(norm_meta));
             return tsd;
         } else {
