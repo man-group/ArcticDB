@@ -68,3 +68,5 @@ docs/mkdocs/docs/notebooks/exports/
 
 venv
 arcticdb_ext-stubs
+
+compile_commands.json

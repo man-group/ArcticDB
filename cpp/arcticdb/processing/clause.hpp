@@ -22,12 +22,16 @@
 #include <arcticdb/version/merge_options.hpp>
 #include <arcticdb/util/string_utils.hpp>
 #include <arcticdb/pipeline/input_frame.hpp>
+#include <arcticdb/util/flatten_utils.hpp>
+#include <arcticdb/python/gil_lock.hpp>
+#include <arcticdb/python/python_to_tensor_frame.hpp>
+#include <arcticdb/pipeline/frame_utils.hpp>
 
+#include <optional>
 #include <vector>
 #include <string>
 #include <variant>
 #include <memory>
-#include <ranges>
 
 namespace arcticdb {
 
@@ -845,6 +849,109 @@ struct WriteClause {
     stream::PartialKey create_partial_key(const SegmentInMemory& segment, const RowRange& row_range) const;
 };
 
+/// Type used as the key when target column values of type TDT are indexed for matching.
+template<util::type_descriptor_tag TDT>
+using MatchKeyType = std::conditional_t<
+        is_sequence_type(TDT::data_type()), std::optional<std::string_view>, typename TDT::DataTypeTag::raw_type>;
+
+template<typename TDT, typename T>
+concept sequence_type_raw_value =
+        util::type_descriptor_tag<TDT> && is_sequence_type(TDT::data_type()) &&
+        util::any_of<std::remove_cvref_t<T>, PyObject*, typename TDT::RawType, std::optional<std::string_view>>;
+
+template<typename TDT, typename T>
+concept raw_value_for_type_descriptor =
+        util::type_descriptor_tag<TDT> &&
+        (std::same_as<T, typename TDT::DataTypeTag::raw_type> || sequence_type_raw_value<TDT, T>);
+
+/// Whether value, one of the representations merge-update uses for a column of type TDT, denotes a missing entry.
+/// TDT is always the type of the column itself. value can be the raw type stored in the target column, or, only for
+/// sequence types, the PyObject* read from the source tensor or the decoded std::optional<std::string_view> match
+/// key.
+template<util::type_descriptor_tag TDT, typename V>
+requires raw_value_for_type_descriptor<TDT, V>
+constexpr bool is_na(V value) {
+    if constexpr (is_floating_point_type(TDT::data_type())) {
+        return std::isnan(value);
+    } else if constexpr (is_time_type(TDT::data_type())) {
+        return value == NaT;
+    } else if constexpr (is_sequence_type(TDT::data_type())) {
+        if constexpr (std::same_as<std::remove_const_t<V>, PyObject*>) {
+            return is_py_none(value) || is_py_nan(value);
+        } else if constexpr (std::same_as<V, std::optional<std::string_view>>) {
+            return !value.has_value();
+        } else {
+            return !is_a_string(value);
+        }
+    } else {
+        return false;
+    }
+}
+
+template<util::type_descriptor_tag TDT, typename SourceElementType>
+auto get_source_value(std::span<SourceElementType> data, size_t row) {
+    return data[row];
+}
+
+template<util::type_descriptor_tag TDT>
+requires(is_sequence_type(TDT::data_type()))
+TDT::RawType get_source_value(
+        const std::pair<std::span<const typename TDT::RawType>, const StringPool*>& data, size_t row
+) {
+    return data.first[row];
+}
+
+template<util::type_descriptor_tag TDT>
+requires(is_sequence_type(TDT::data_type()))
+std::pair<std::optional<std::string_view>, std::optional<convert::PyStringWrapper>> get_source_string(
+        std::span<PyObject* const> data, size_t row, std::string_view column_name, size_t source_row_offset,
+        std::optional<ScopedGILLock>* gil
+) {
+    PyObject* const value = data[row];
+    if (is_na<TDT>(value)) {
+        return {std::nullopt, std::nullopt};
+    }
+    return util::variant_match(
+            create_py_object_wrapper_or_error<TDT::data_type()>(data[row], *gil),
+            [&](convert::StringEncodingError&& err
+            ) -> std::pair<std::optional<std::string_view>, std::optional<convert::PyStringWrapper>> {
+                err.row_index_in_slice_ = row;
+                err.raise(column_name, source_row_offset);
+            },
+            [&](convert::PyStringWrapper&& wrapper
+            ) -> std::pair<std::optional<std::string_view>, std::optional<convert::PyStringWrapper>> {
+                return std::pair{
+                        std::make_optional(std::string_view{wrapper.buffer_, wrapper.length_}),
+                        std::make_optional(std::move(wrapper))
+                };
+            }
+    );
+}
+
+template<util::type_descriptor_tag TDT>
+requires(is_sequence_type(TDT::data_type()))
+std::pair<std::optional<std::string_view>, std::optional<convert::PyStringWrapper>>
+get_source_string(const std::pair<std::span<const typename TDT::RawType>, const StringPool*>& data, size_t row, std::string_view, size_t, std::optional<ScopedGILLock>*) {
+    auto offset = data.first[row];
+    if (is_na<TDT>(offset)) {
+        return {std::nullopt, std::nullopt};
+    }
+    return {data.second->get_const_view(offset), std::nullopt};
+}
+
+template<util::type_descriptor_tag TDT>
+struct NaAwareComparator {
+    bool match_na;
+    bool operator()(MatchKeyType<TDT> left, MatchKeyType<TDT> right) const {
+        const bool left_na = is_na<TDT>(left);
+        const bool right_na = is_na<TDT>(right);
+        if (left_na || right_na) {
+            return match_na && left_na && right_na;
+        }
+        return left == right;
+    }
+};
+
 /// This clause will perform update values or insert values based on strategy_ in a segment. The source of new values is
 /// the source_ member. Source and target must have the same index type. There are two actions
 /// UPDATE: For a particular row in the segment if there's a row in source_ for which all values in the columns listed
@@ -892,15 +999,65 @@ struct MergeUpdateClause {
     OutputSchema join_schemas(std::vector<OutputSchema>&&) const;
 
     [[nodiscard]] std::string to_string() const;
+
+    /// The Arrow source converted to a segment. Empty when the source is not Arrow.
+    [[nodiscard]] const SegmentInMemory& source_as_segment() const;
+
     class MatchRecord {
       public:
         MatchRecord(std::span<ProcessingUnit> row_slices, size_t num_source_rows);
         void add_match(size_t source_row, size_t target_row_slice, size_t target_row);
         void add_match(size_t source_row, size_t target_row_slice, std::span<size_t> target_rows);
+        template<util::type_descriptor_tag TargetTDT, util::type_descriptor_tag SourceTDT, typename Source>
         void filter_matching_rows(
-                std::string_view column_name, DataType source_type, DataType target_type, size_t source_offset,
-                std::span<const std::byte> source_data_bytes, bool match_na
-        );
+                std::string_view column_name, size_t source_offset, const Source& variant_source, bool match_na
+        ) {
+            if (total_matched_target_rows_count_ == 0) {
+                // This function can only remove matches in case of a mismatch. In case there are no matched
+                // target rows, there's nothing left to remove.
+                return;
+            }
+            util::variant_match(variant_source, [&](const auto& source) {
+                // GIL will be acquired if there is a string that is not pure ASCII/UTF-8
+                // In this case a PyObject will be allocated by convert::py_unicode_to_buffer
+                // If such a string is encountered in a column, then the GIL will be held until that whole column has
+                // been processed, on the assumption that if a column has one such string it will probably have many.
+                std::optional<ScopedGILLock> gil;
+                for (size_t row_slice_idx = 0; row_slice_idx < matched_target_rows_.size(); ++row_slice_idx) {
+                    ProcessingUnit& row_slice = row_slices_[row_slice_idx];
+                    const ColumnWithStrings target_column =
+                            std::get<ColumnWithStrings>(row_slice.get(ColumnName{column_name}));
+                    ColumnData col_data = target_column.column_->data();
+                    auto target_column_accessor = random_accessor<TargetTDT>(&col_data);
+                    std::vector<std::vector<size_t>>& matched_rows = matched_target_rows_[row_slice_idx];
+                    for (size_t source_row_idx = 0; source_row_idx < matched_rows.size(); ++source_row_idx) {
+                        const size_t discarded_matches =
+                                std::erase_if(matched_rows[source_row_idx], [&](const size_t target_row) {
+                                    const auto target_value = target_column_accessor[target_row];
+                                    NaAwareComparator<SourceTDT> comparator{match_na};
+                                    bool are_values_equal = false;
+                                    if constexpr (is_sequence_type(SourceTDT::data_type())) {
+                                        const auto [source_string, opt_owner] = get_source_string<SourceTDT>(
+                                                source, source_row_idx, column_name, source_offset, &gil
+                                        );
+                                        const std::optional<std::string_view> target_string =
+                                                target_column.string_at_offset(target_value);
+                                        are_values_equal = comparator(source_string, target_string);
+                                    } else {
+                                        const auto source_value = get_source_value<SourceTDT>(source, source_row_idx);
+                                        are_values_equal = comparator(target_value, source_value);
+                                    }
+                                    return !are_values_equal;
+                                });
+                        source_row_matched_count_[source_row_idx] -= discarded_matches;
+                        total_matched_target_rows_count_ -= discarded_matches;
+                        if (total_matched_target_rows_count_ == 0) {
+                            return;
+                        }
+                    }
+                }
+            });
+        }
         void clone_source_match(size_t source_row_src, size_t source_row_dst, size_t row_slice);
         void validate_rows_to_update(const MergeStrategy& strategy) const;
         [[nodiscard]] size_t total_unmatched_source_rows() const;
@@ -956,9 +1113,77 @@ struct MergeUpdateClause {
 
     [[nodiscard]] bool must_structure_by_time_slice() const;
 
-    std::span<const timestamp> get_source_index(std::pair<size_t, size_t> source_start_end) const;
+    /// Raises if a pandas source column is not contiguous in memory, which get_source_column requires.
+    /// get_source_column returns string columns as PyObject* for pandas sources and as offsets into the string pool of
+    /// the converted segment for Arrow sources.
+    template<typename RawType>
+    void check_source_tensor_is_contiguous(const NativeTensor& tensor, size_t field_index) const {
+        user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                util::is_cstyle_array<RawType>(tensor),
+                "Fortran-style arrays are not supported by merge update yet. Column \"{}\" has data type {} of size {} "
+                "bytes but the stride is {} bytes",
+                source_->desc().field(field_index).name(),
+                source_->desc().field(field_index).type(),
+                sizeof(RawType),
+                tensor.strides()[0]
+        );
+    }
 
-    std::span<const std::byte> get_source_data_bytes(size_t field_index, std::pair<size_t, size_t> range) const;
+    template<util::type_descriptor_tag TDT>
+    requires(!is_sequence_type(TDT::data_type()))
+    std::span<const typename TDT::RawType> get_source_column(
+            size_t field_index, std::optional<std::pair<size_t, size_t>> required_range = std::nullopt
+    ) const {
+        using RawType = TDT::RawType;
+        auto [first, last] = required_range.value_or(
+                std::pair<size_t, size_t>{0, is_source_arrow() ? source_as_segment_.row_count() : source_->num_rows}
+        );
+        const auto element_count = last - first;
+        if (is_source_arrow()) {
+            // TODO: Assert contiguous
+            return std::span{
+                    reinterpret_cast<const RawType*>(source_as_segment_.column_data(field_index).buffer().data()) +
+                            first,
+                    element_count
+            };
+        } else {
+            const NativeTensor& tensor = source_->get_tensor(field_index);
+            check_source_tensor_is_contiguous<RawType>(tensor, field_index);
+            return std::span{static_cast<const RawType*>(tensor.data()) + first, element_count};
+        }
+    }
+
+    template<util::type_descriptor_tag TDT>
+    requires(is_sequence_type(TDT::data_type()))
+    std::variant<std::span<PyObject* const>, std::pair<std::span<const typename TDT::RawType>, StringPool*>>
+    get_source_column(size_t field_index, std::optional<std::pair<size_t, size_t>> required_range = std::nullopt)
+            const {
+        using RawType = TDT::RawType;
+        auto [first, last] = required_range.value_or(std::pair<size_t, size_t>{0, source_as_segment_.row_count()});
+        const auto element_count = last - first;
+        if (is_source_arrow()) {
+            // TODO: Assert contiguous
+            return std::pair{
+                    std::span{
+                            reinterpret_cast<const RawType*>(source_as_segment_.column_data(field_index).buffer().data()
+                            ) + first,
+                            element_count
+                    },
+                    source_as_segment().string_pool_ptr().get()
+            };
+        } else {
+            const NativeTensor& tensor = source_->get_tensor(field_index);
+            check_source_tensor_is_contiguous<PyObject*>(tensor, field_index);
+            return std::span{static_cast<PyObject* const*>(tensor.data()) + first, element_count};
+        }
+    }
+
+    bool is_source_arrow() const;
+
+    const StreamDescriptor& get_source_descriptor() const;
+
+    /// Used when the source is Arrow
+    SegmentInMemory source_as_segment_;
 
     size_t rows_per_segment_;
 };

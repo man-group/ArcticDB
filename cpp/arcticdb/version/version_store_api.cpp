@@ -1552,7 +1552,7 @@ void PythonVersionStore::force_delete_symbol(const StreamId& stream_id) {
 }
 
 VersionedItem PythonVersionStore::merge(
-        const StreamId& stream_id, const std::shared_ptr<convert::PandasData>& source, const py::object& norm,
+        const StreamId& stream_id, const convert::InputItem& source, const py::object& norm,
         const py::object& user_meta, const bool prune_previous_versions, const bool upsert,
         const py::tuple& py_strategy, std::vector<std::string> on, const bool match_na
 ) {
@@ -1563,13 +1563,14 @@ VersionedItem PythonVersionStore::merge(
     };
     return merge_internal(
             stream_id,
+            // merge always requires a sorted index, so always determine the Arrow index sort order.
             convert::py_input_item_to_frame(
                     stream_id,
                     source,
                     norm,
                     user_meta,
                     cfg().write_options().empty_types(),
-                    pipelines::SortednessScan::SKIP
+                    pipelines::SortednessScan::SCAN_IF_UNKNOWN
             ),
             prune_previous_versions,
             upsert,
