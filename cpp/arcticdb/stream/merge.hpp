@@ -95,9 +95,8 @@ void do_merge(QueueType& input_streams, AggregatorType& agg, bool add_symbol_col
                                         typename std::decay_t<decltype(row_field_descriptor_tag)>;
                                 using RowFieldDescriptorTagDataType = typename RowFieldDescriptorTagType::DataTypeTag;
                                 using row_type_info = ScalarTypeInfo<RowFieldDescriptorTagDataType>;
-                                // At this point all staged descriptors were merged using merge_descriptors, and it
-                                // ensured that all staged descriptors are either the same or are convertible to the
-                                // stream descriptor in the aggregator.
+                                // The staged descriptors have already been combined, which ensured they are either
+                                // the same or convertible to the stream descriptor in the aggregator.
                                 if constexpr (merged_type_info::data_type == row_type_info::data_type) {
                                     rb.set_scalar_by_name(name, opt_v.value(), merged_type_info::data_type);
                                 } else if constexpr (std::is_convertible_v<

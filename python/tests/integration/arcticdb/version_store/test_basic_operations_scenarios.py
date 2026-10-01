@@ -84,20 +84,7 @@ def get_metadata():
 @SLOW_TESTS_MARK
 @pytest.mark.parametrize("dtype", supported_types_list)
 @pytest.mark.parametrize("dynamic_schema", [True, False])
-@pytest.mark.parametrize(
-    "append_type",
-    [
-        "append",
-        pytest.param(
-            "stage",
-            marks=pytest.mark.xfail(
-                strict=True,
-                reason="Staged-data compaction does not reconcile normalization metadata with the staged frame. "
-                "Monday 12821228270",
-            ),
-        ),
-    ],
-)
+@pytest.mark.parametrize("append_type", ["append", "stage"])
 def test_write_append_update_read_scenario_with_different_series_combinations(
     version_store_factory, dtype, dynamic_schema, append_type
 ):

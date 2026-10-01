@@ -44,14 +44,28 @@ arcticdb::proto::descriptors::NormalizationMetadata make_rowcount_norm_meta(cons
  * Set the minimum defaults into norm_meta. Originally created to synthesize norm_meta for incomplete compaction.
  */
 void ensure_timeseries_norm_meta(
-        arcticdb::proto::descriptors::NormalizationMetadata& norm_meta, const StreamId& stream_id, bool set_tz
+        arcticdb::proto::descriptors::NormalizationMetadata& norm_meta, const StreamId& stream_id
 ) {
     if (norm_meta.input_type_case() == arcticdb::proto::descriptors::NormalizationMetadata::INPUT_TYPE_NOT_SET) {
         norm_meta.CopyFrom(make_timeseries_norm_meta(stream_id));
     }
+}
 
-    if (set_tz && norm_meta.df().common().index().tz().empty())
-        norm_meta.mutable_df()->mutable_common()->mutable_index()->set_tz("UTC");
+void label_index_utc_if_unlabelled(arcticdb::proto::descriptors::NormalizationMetadata& norm_meta) {
+    // `df` and `series` share a oneof, as do `index` and `multi_index`, so reading or mutating the wrong member of
+    // either would report an empty timezone and then discard the member that was actually set.
+    if (!norm_meta.has_df()) {
+        return;
+    }
+    const auto& common = norm_meta.df().common();
+    if (common.index_type_case() != arcticdb::proto::descriptors::NormalizationMetadata_Pandas::kIndex) {
+        return;
+    }
+    // A range index occupies no column, so there is no timestamp to label.
+    if (!common.index().is_physically_stored() || !common.index().tz().empty()) {
+        return;
+    }
+    norm_meta.mutable_df()->mutable_common()->mutable_index()->set_tz("UTC");
 }
 
 void ensure_rowcount_norm_meta(

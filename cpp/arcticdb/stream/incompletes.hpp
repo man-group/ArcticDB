@@ -30,10 +30,15 @@ struct AppendMapEntry {
     arcticdb::pipelines::SliceAndKey slice_and_key_;
     std::optional<arcticdb::entity::AtomKey> next_key_;
     uint64_t total_rows_ = 0;
+    // The normalization metadata the key was written with, decoded from its header without reading any column data.
+    // Empty for anything the tick collector staged, which writes none.
+    arcticdb::proto::descriptors::NormalizationMetadata norm_meta_;
 
     const arcticdb::entity::StreamDescriptor& descriptor() const { return *slice_and_key_.slice_.desc(); }
 
     arcticdb::entity::StreamDescriptor& descriptor() { return *slice_and_key_.slice_.desc(); }
+
+    [[nodiscard]] bool empty() const { return slice_and_key_.slice_.rows().diff() == 0; }
 
     const arcticdb::pipelines::FrameSlice& slice() const { return slice_and_key_.slice_; }
 
@@ -94,7 +99,7 @@ std::set<StreamId> get_incomplete_symbols(const std::shared_ptr<Store>& store);
 
 std::set<StreamId> get_active_incomplete_refs(const std::shared_ptr<Store>& store);
 
-std::vector<pipelines::SliceAndKey> get_incomplete(
+std::vector<AppendMapEntry> get_incomplete(
         const std::shared_ptr<Store>& store, const StreamId& stream_id, const pipelines::FilterRange& range,
         uint64_t last_row, bool via_iteration, bool load_data
 );
@@ -170,7 +175,7 @@ void delete_incomplete_keys_for_stage_results(
  * Throws if any of the stage results refer to segments that no longer exist (for example, because they have already
  * been finalised).
  */
-std::variant<std::vector<SliceAndKey>, CompactionError> get_incomplete_segments_using_stage_results(
+std::variant<std::vector<AppendMapEntry>, CompactionError> get_incomplete_segments_using_stage_results(
         const std::shared_ptr<Store>& store, const std::shared_ptr<PipelineContext>& pipeline_context,
         const std::vector<StageResult>& stage_results, const ReadQuery& read_query, const ReadIncompletesFlags& flags,
         bool load_data
