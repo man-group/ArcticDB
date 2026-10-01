@@ -258,7 +258,7 @@ TEST_F(VersionStoreTest, CompactIncompleteDynamicSchema) {
         test_store_->write_parallel_frame(symbol, std::move(frame.input_frame_), true, false, std::nullopt);
     }
 
-    auto vit = test_store_->compact_incomplete(symbol, false, false, true, false);
+    auto vit = test_store_->compact_incomplete(symbol, false, false, true);
     auto read_query = std::make_shared<ReadQuery>();
     register_native_handler_data_factory();
     auto handler_data =
@@ -346,7 +346,7 @@ TEST_F(VersionStoreTest, CompactIncompleteStaticSchemaIndexed) {
         test_store_->write_parallel_frame(symbol, frame.input_frame_, true, false, std::nullopt);
     }
 
-    auto vit = test_store_->compact_incomplete(symbol, false, false, true, false);
+    auto vit = test_store_->compact_incomplete(symbol, false, false, true);
     auto read_query = std::make_shared<ReadQuery>();
     register_native_handler_data_factory();
     auto handler_data =
@@ -429,7 +429,7 @@ TEST_F(VersionStoreTest, CompactIncompleteStaticSchemaRowCountIndex) {
         test_store_->write_parallel_frame(symbol, frame.input_frame_, true, false, std::nullopt);
     }
 
-    auto vit = test_store_->compact_incomplete(symbol, false, false, true, false);
+    auto vit = test_store_->compact_incomplete(symbol, false, false, true);
     auto read_query = std::make_shared<ReadQuery>();
     register_native_handler_data_factory();
     auto handler_data =

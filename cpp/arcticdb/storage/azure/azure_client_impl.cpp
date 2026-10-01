@@ -49,6 +49,7 @@
 #include <azure/storage/blobs.hpp>
 
 #include <arcticdb/storage/azure/azure_client_impl.hpp>
+#include <arcticdb/util/configs_map.hpp>
 #include <arcticdb/storage/azure/azure_client_interface.hpp>
 #include <arcticdb/storage/object_store_utils.hpp>
 #include <arcticdb/util/error_code.hpp>
@@ -111,6 +112,9 @@ Azure::Storage::Blobs::BlobClientOptions RealAzureClient::get_client_options(con
     // On Linux, use libcurl with CA cert configuration
     ARCTICDB_RUNTIME_DEBUG(log::storage(), "Using libcurl transport");
     Azure::Core::Http::CurlTransportOptions curl_transport_options;
+    // Reusing a pooled connection that the server has already closed makes the next request hang for ~2 minutes
+    // before it is retried. Azurite (node) closes idle connections after 5s, so tests hit this regularly.
+    curl_transport_options.HttpKeepAlive = ConfigsMap::instance()->get_int("AzureStorage.HttpKeepAlive", 1) != 0;
     if (!conf.ca_cert_path().empty()) {
         curl_transport_options.CAInfo = conf.ca_cert_path();
     }

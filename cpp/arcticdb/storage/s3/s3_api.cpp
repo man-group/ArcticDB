@@ -12,7 +12,9 @@
 #include <arcticdb/util/configs_map.hpp>
 #include <arcticdb/log/log.hpp>
 #include <arcticdb/storage/s3/ec2_utils.hpp>
+#include <algorithm>
 #include <cstdarg>
+#include <limits>
 #include <vector>
 #ifndef WIN32
 #include <aws/core/http/standard/StandardHttpRequest.h>
@@ -23,6 +25,8 @@
 namespace arcticdb::storage::s3 {
 
 namespace {
+constexpr const char* EventLoopAllocationTag = "ArcticDBS3EventLoop";
+
 spdlog::level::level_enum to_spdlog_level(Aws::Utils::Logging::LogLevel log_level) {
     switch (log_level) {
     case Aws::Utils::Logging::LogLevel::Fatal:
@@ -79,7 +83,7 @@ constexpr const char* ARCTIC_CURL_ALLOCATION_TAG = "ArcticCurlHttpClient";
 } // namespace
 
 bool dns_shuffle_addresses_enabled() {
-    return ConfigsMap::instance()->get_int("S3Storage.DnsShuffleAddresses", 1) != 0;
+    return ConfigsMap::instance()->get_int("S3Storage.DnsShuffleAddresses", 0) != 0;
 }
 
 ArcticCurlHttpClient::ArcticCurlHttpClient(const Aws::Client::ClientConfiguration& client_configuration) :
@@ -134,12 +138,33 @@ void ArcticCurlHttpClientFactory::CleanupStaticState() {
 }
 #endif // WIN32
 
-S3ApiInstance::S3ApiInstance(Aws::Utils::Logging::LogLevel log_level, bool log_to_file) :
+uint16_t event_loop_thread_count_from_config() {
+    const auto configured = ConfigsMap::instance()->get_int("AWS.EventLoopThreads", 0);
+    return static_cast<uint16_t>(std::clamp<int64_t>(configured, 0, std::numeric_limits<uint16_t>::max()));
+}
+
+ClientBootstrapFactory make_client_bootstrap_factory(uint16_t event_loop_thread_count) {
+    // Mirrors Aws::InitAPI's own default construction, apart from the explicit thread count.
+    return [event_loop_thread_count]() {
+        Aws::Crt::Io::EventLoopGroup event_loop_group(event_loop_thread_count);
+        Aws::Crt::Io::DefaultHostResolver host_resolver(event_loop_group, 8, 30);
+        auto client_bootstrap =
+                Aws::MakeShared<Aws::Crt::Io::ClientBootstrap>(EventLoopAllocationTag, event_loop_group, host_resolver);
+        client_bootstrap->EnableBlockingShutdown();
+        return client_bootstrap;
+    };
+}
+
+S3ApiInstance::S3ApiInstance(
+        Aws::Utils::Logging::LogLevel log_level, bool log_to_file, uint16_t event_loop_thread_count
+) :
     log_level_(log_level),
     options_() {
     // Use correct URI encoding rather than legacy compat one in AWS SDK. PURE S3 needs this to handle symbol names
     // that have special characters (eg ':').
     options_.httpOptions.compliantRfc3986Encoding = true;
+
+    options_.ioOptions.clientBootstrap_create_fn = make_client_bootstrap_factory(event_loop_thread_count);
 
     if (log_level_ > Aws::Utils::Logging::LogLevel::Off) {
         if (log_to_file) {
@@ -185,7 +210,9 @@ S3ApiInstance::~S3ApiInstance() {
 void S3ApiInstance::init() {
     auto log_level = ConfigsMap::instance()->get_int("AWS.LogLevel", 0);
     auto log_to_file = ConfigsMap::instance()->get_int("AWS.LogToFile", 0) != 0;
-    S3ApiInstance::instance_ = std::make_shared<S3ApiInstance>(Aws::Utils::Logging::LogLevel(log_level), log_to_file);
+    S3ApiInstance::instance_ = std::make_shared<S3ApiInstance>(
+            Aws::Utils::Logging::LogLevel(log_level), log_to_file, event_loop_thread_count_from_config()
+    );
 }
 
 std::shared_ptr<S3ApiInstance> S3ApiInstance::instance() {

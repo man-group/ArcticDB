@@ -70,12 +70,12 @@ def test_read_incomplete_no_warning(s3_store_factory, sym, get_stderr):
     write_df = pd.DataFrame({"a": [1, 2, 3]}, index=pd.DatetimeIndex([1, 2, 3]))
     lib_tool.append_incomplete(symbol, write_df)
     # Need to compact so that the APPEND_REF points to a non-existent APPEND_DATA (intentionally)
-    lib.compact_incomplete(symbol, True, False, False, True)
+    lib.compact_incomplete(symbol, True, False, False)
     set_log_level("DEBUG")
 
     try:
         read_df = lib.read(symbol, date_range=(pd.to_datetime(0), pd.to_datetime(10))).data
-        assert_frame_equal(read_df, write_df.tz_localize("UTC"))
+        assert_frame_equal(read_df, write_df)
 
         err = get_stderr()
         assert err.count("W arcticdb.storage | Failed to find segment for key") == 0

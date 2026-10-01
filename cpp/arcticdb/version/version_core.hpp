@@ -240,6 +240,30 @@ struct CompactionOptions {
     bool perform_schema_checks{true};
 };
 
+template<typename IndexType>
+folly::Future<entity::VariantKey> write_compacted_segment(
+        Store& store, const StreamId stream_id, VersionId version_id, SegmentInMemory&& segment,
+        std::shared_ptr<folly::NativeSemaphore> semaphore
+) {
+    auto local_index_start = IndexType::start_value_for_segment(segment);
+    auto local_index_end = pipelines::end_index_generator(IndexType::end_value_for_segment(segment));
+    const PartialKey pk{KeyType::TABLE_DATA, version_id, stream_id, local_index_start, local_index_end};
+    for (auto& col : segment.columns()) {
+        // Encoding rejects zero byte blocks, but staged data finalization pre-allocates a block with the expected
+        // capacity (e.g. 800,000 bytes for an int64 column with default 100k rows per slice). In the case of an
+        // all-null column being flushed to storage, dropping the empty block and ensuring the sparse map is set makes
+        // everything downstream just work. Changing encoding to support zero-byte blocks is a bigger change, not
+        // obviously desirable, and almost certainly not backwards-compatible (i.e. older clients may not be able to
+        // read zero byte blocks).
+        if (col->row_count() == 0) {
+            col->buffer().clear();
+        }
+        // Ensure that sparse maps are set correctly on all columns
+        col->set_row_data(segment.row_count() - 1);
+    }
+    return store.write_maybe_blocking(pk, std::move(segment), semaphore);
+}
+
 template<
         typename IndexType, typename SchemaType, typename SegmentationPolicy, typename DensityPolicy,
         typename IteratorType>
@@ -257,18 +281,14 @@ template<
     stream::SegmentAggregator<IndexType, SchemaType, SegmentationPolicy, DensityPolicy> aggregator{
             [&slices](pipelines::FrameSlice&& slice) { slices.emplace_back(std::move(slice)); },
             SchemaType{pipeline_context->on_disk_descriptor(), index},
-            [&write_futures, &store, &pipeline_context, &semaphore](SegmentInMemory&& segment) {
-                auto local_index_start = IndexType::start_value_for_segment(segment);
-                auto local_index_end = pipelines::end_index_generator(IndexType::end_value_for_segment(segment));
-                const PartialKey pk{
-                        KeyType::TABLE_DATA,
-                        pipeline_context->version_id_,
+            [&write_futures, store, pipeline_context, semaphore](SegmentInMemory&& segment) {
+                write_futures.emplace_back(write_compacted_segment<IndexType>(
+                        *store,
                         pipeline_context->stream_id_,
-                        local_index_start,
-                        local_index_end
-                };
-
-                write_futures.emplace_back(store->write_maybe_blocking(pk, std::move(segment), semaphore));
+                        pipeline_context->version_id_,
+                        std::move(segment),
+                        semaphore
+                ));
             },
             segment_size.has_value() ? SegmentationPolicy{*segment_size} : SegmentationPolicy{}
     };

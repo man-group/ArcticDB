@@ -34,7 +34,13 @@ from arcticdb import QueryBuilder
 from arcticdb.storage_fixtures.api import StorageFixture, ArcticUriFields, StorageFixtureFactory
 from arcticdb.storage_fixtures.mongo import MongoDatabase
 from arcticdb.storage_fixtures.utils import GracefulProcessUtils
-from arcticdb.util.test import assert_frame_equal, sample_dataframe, config_context, config_context_string
+from arcticdb.util.test import (
+    assert_frame_equal,
+    sample_dataframe,
+    config_context,
+    config_context_multi,
+    config_context_string,
+)
 from arcticdb.storage_fixtures.s3 import S3Bucket
 from arcticdb.config import Defaults
 from arcticdb.version_store.library import (
@@ -377,6 +383,23 @@ def test_staged_data_bad_mode(arctic_library, sort):
 
     with pytest.raises(ArcticInvalidApiUsageException):
         fn("sym", mode="bad_mode")
+
+
+def test_delete_staged_data_by_stage_result(lmdb_library):
+    lib = lmdb_library
+    sym = "test_delete_staged_data_by_stage_result"
+
+    df1 = pd.DataFrame({"col": [0, 1]}, index=pd.date_range("2024-01-01", periods=2))
+    df2 = pd.DataFrame({"col": [2, 3]}, index=pd.date_range("2024-01-03", periods=2))
+
+    stage_result_1 = lib.stage(sym, df1)
+    stage_result_2 = lib.stage(sym, df2)
+
+    lib.delete_staged_data(stage_result_1)
+
+    lib_tool = lib._nvs.library_tool()
+    remaining = {str(k) for k in lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, sym)}
+    assert remaining == {str(k) for k in stage_result_2.staged_segments}
 
 
 @pytest.mark.parametrize(
@@ -1694,7 +1717,12 @@ def test_backing_store(lmdb_version_store_v1, s3_version_store_v1):
 @SLOW_TESTS_MARK
 @MONGO_TESTS_MARK
 def test_mongo_retryable_network_error(mongo_server_fn_scope, sym):
-    with config_context("VersionMap.MaxReadRefTrials", 0):
+    # The server is killed below, so every operation waits for server selection on each retry. The defaults
+    # (120s selection timeout, backoff up to 2s) make this test take ~15 minutes; the error path is the same
+    # with short timeouts. Both settings are read when the Arctic instance creates the mongo client.
+    with config_context_multi(
+        {"VersionMap.MaxReadRefTrials": 0, "MongoClient.SelectionTimeoutMs": 500, "MongoClient.RetryWaitMaxMs": 200}
+    ):
         ac = Arctic(mongo_server_fn_scope.mongo_uri)
         lib = ac.get_library("test", create_if_missing=True)
         lt = lib._nvs.library_tool()

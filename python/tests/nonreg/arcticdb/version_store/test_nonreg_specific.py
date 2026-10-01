@@ -676,3 +676,33 @@ def test_write_version_chain_minimal_io(in_memory_store_factory, clear_query_sta
         # again when the version map is being written. Ideally this would only be loaded once and the 4 below would be a
         # 2
         assert query_stats_operation_count(stats, "Memory_GetObject", "VERSION") == (13 if dedup else 4)
+
+
+def test_staged_writes_atom_key_end_index(in_memory_library):
+    # Prior to #3378, sort_and_finalize_staged_data used the last index value from a data segment in the end_index
+    # value in the data keys it wrote, rather than 1ns greater as everything else does
+    lib = in_memory_library
+    sym = "test_staged_writes_atom_key_end_index"
+    df = pd.DataFrame({"col": [0, 1]}, index=pd.date_range("2026-01-01", periods=2))
+    lib.stage(sym, df)
+    lt = lib._nvs.library_tool()
+    append_data_keys = lt.find_keys(KeyType.APPEND_DATA)
+    assert len(append_data_keys) == 1
+    assert append_data_keys[0].end_index == df.index[-1].value + 1
+    lib.sort_and_finalize_staged_data(sym)
+    data_keys = lt.find_keys(KeyType.TABLE_DATA)
+    assert len(data_keys) == 1
+    assert data_keys[0].end_index == df.index[-1].value + 1
+
+
+def test_sorted_staged_writes_atom_key_end_index(in_memory_library):
+    # Prior to #3378, stage with sorting used the last index value from a data segment in the end_index value in the
+    # APPEND_DATA keys it wrote, rather than 1ns greater as everything else does
+    lib = in_memory_library
+    sym = "test_sorted_staged_writes_atom_key_end_index"
+    df = pd.DataFrame({"col": [0, 1]}, index=reversed(pd.date_range("2026-01-01", periods=2)))
+    lib.stage(sym, df, sort_on_index=True)
+    lt = lib._nvs.library_tool()
+    append_data_keys = lt.find_keys(KeyType.APPEND_DATA)
+    assert len(append_data_keys) == 1
+    assert append_data_keys[0].end_index == df.index[0].value + 1

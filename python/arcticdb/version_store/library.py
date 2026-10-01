@@ -9,6 +9,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 import copy
 import datetime
 import os
+import warnings
 
 import pytz
 from enum import Enum, auto
@@ -1119,6 +1120,12 @@ class Library:
         >>> w = adb.WritePayload("symbol", df, metadata={'the': 'metadata'})
         >>> lib.write(*w, staged=True)
         """
+        if staged:
+            warnings.warn(
+                "The `staged` parameter will be removed in v7.0.0. Use stage() instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
         is_recursive_normalizers_enabled = self._nvs._is_recursive_normalizers_enabled(
             **{"recursive_normalizers": recursive_normalizers}
         )
@@ -1209,6 +1216,12 @@ class Library:
         --------
         write: For more detailed documentation.
         """
+        if staged:
+            warnings.warn(
+                "The `staged` parameter will be removed in v7.0.0. Use stage() instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
         return self._nvs.write(
             symbol=symbol,
             data=data,
@@ -1741,19 +1754,30 @@ class Library:
         )
         return batch_update_result
 
-    def delete_staged_data(self, symbol: str) -> None:
+    def delete_staged_data(self, symbol: Union[str, StageResult, List[StageResult]]) -> None:
         """
         Removes staged data.
 
         Parameters
         ----------
-        symbol : `str`
-            Symbol to remove staged data for.
+        symbol : `str`, `StageResult`, or `List[StageResult]`
+            If a symbol name (`str`), removes all staged data for that symbol.
+            If a `StageResult` or list of them (as returned by ``stage``), removes only the staged
+            segments named by those stage result(s). Missing keys are ignored.
 
         See Also
         --------
         write
             Documentation on the ``staged`` parameter explains the concept of staged data in more detail.
+        stage
+            Returns the ``StageResult`` objects accepted by this method.
+
+        Examples
+        --------
+        >>> stage_result_1 = lib.stage("symbol", df1)
+        >>> stage_result_2 = lib.stage("symbol", df2)
+        >>> lib.delete_staged_data(stage_result_1)  # delete only the first batch's staged keys
+        >>> lib.delete_staged_data("symbol")        # delete all remaining staged data for the symbol
         """
         self._nvs.remove_incomplete(symbol)
 

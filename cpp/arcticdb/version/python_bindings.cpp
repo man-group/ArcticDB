@@ -762,7 +762,7 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
             .def("remove_incomplete",
                  &PythonVersionStore::remove_incomplete,
                  py::call_guard<SingleThreadMutexHolder>(),
-                 "Delete incomplete segments")
+                 "Delete incomplete segments for a symbol, or the APPEND_DATA keys named by the given stage results")
             .def(
                     "remove_incompletes",
                     [&](PythonVersionStore& v,
@@ -777,7 +777,6 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                  py::arg("append"),
                  py::arg("convert_int_to_float"),
                  py::arg("via_iteration") = true,
-                 py::arg("sparsify") = false,
                  py::arg("user_meta") = std::nullopt,
                  py::arg("prune_previous_versions") = false,
                  py::arg("validate_index") = false,
@@ -791,9 +790,6 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                  py::arg("stream_id"),
                  py::arg("user_meta") = std::nullopt,
                  py::arg("append") = false,
-                 py::arg("convert_int_to_float") = false,
-                 py::arg("via_iteration") = true,
-                 py::arg("sparsify") = false,
                  py::arg("prune_previous_versions") = false,
                  py::arg("delete_staged_data_on_failure") = false,
                  py::kw_only(),

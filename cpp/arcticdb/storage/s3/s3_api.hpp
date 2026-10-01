@@ -15,6 +15,8 @@
 #include <aws/core/http/curl/CurlHttpClient.h>
 #endif
 #include <atomic>
+#include <cstdint>
+#include <functional>
 #include <memory>
 #include <mutex>
 
@@ -79,12 +81,23 @@ class ArcticCurlHttpClientFactory : public Aws::Http::HttpClientFactory {
 };
 #endif // WIN32
 
+using ClientBootstrapFactory = std::function<std::shared_ptr<Aws::Crt::Io::ClientBootstrap>()>;
+
+// A count of 0 means one event loop thread per two logical processors, which is what the AWS SDK does when left to
+// itself.
+uint16_t event_loop_thread_count_from_config();
+
+ClientBootstrapFactory make_client_bootstrap_factory(uint16_t event_loop_thread_count);
+
 class S3ApiInstance {
   public:
     S3ApiInstance(
-            Aws::Utils::Logging::LogLevel log_level = Aws::Utils::Logging::LogLevel::Off, bool log_to_file = false
+            Aws::Utils::Logging::LogLevel log_level = Aws::Utils::Logging::LogLevel::Off, bool log_to_file = false,
+            uint16_t event_loop_thread_count = 1
     );
     ~S3ApiInstance();
+
+    const Aws::SDKOptions& options() const { return options_; }
 
     static std::shared_ptr<S3ApiInstance> instance_;
     static std::once_flag init_flag_;

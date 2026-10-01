@@ -2838,16 +2838,20 @@ class NativeVersionStore:
         """
         return list(self.version_store.get_incomplete_symbols())
 
-    def remove_incomplete(self, symbol: str):
+    def remove_incomplete(self, symbol: Union[str, StageResult, List[StageResult]]) -> None:
         """
         Remove previously written un-indexed chunks of data, produced by a tick collector or parallel
         writes/appends.
 
         Parameters
         ----------
-        symbol : `str`
-            Symbol name.
+        symbol : `str`, `StageResult`, or `List[StageResult]`
+            If a symbol name (`str`), removes all incomplete segments for that symbol.
+            If a `StageResult` or list of them, removes only the APPEND_DATA keys named by
+            those stage result(s). Missing keys are ignored.
         """
+        if isinstance(symbol, StageResult):
+            symbol = [symbol]
         self.version_store.remove_incomplete(symbol)
 
     def compact_incomplete(
@@ -2856,7 +2860,6 @@ class NativeVersionStore:
         append: bool,
         convert_int_to_float: bool,
         via_iteration: Optional[bool] = True,
-        sparsify: Optional[bool] = False,
         metadata: Optional[Any] = None,
         prune_previous_version: Optional[bool] = None,
         validate_index: bool = False,
@@ -2880,8 +2883,6 @@ class NativeVersionStore:
             Tick collectors can always write data in the correct order, so don't
             need to iterate the keys, which is faster. Everything else needs to
             set this to True.
-        sparsify : `Optional[bool]`, default=False
-            Convert data to sparse format (for tick data only)
         metadata : `Optional[Any]`, default=None
             Add user-defined metadata in the same way as write etc
         prune_previous_version
@@ -2917,7 +2918,6 @@ class NativeVersionStore:
             append,
             convert_int_to_float,
             via_iteration,
-            sparsify,
             udm,
             prune_previous_version,
             validate_index,

@@ -421,19 +421,6 @@ inline std::vector<std::string> get_index_columns_from_descriptor(const Timeseri
     return index_columns;
 }
 
-inline IndexRange get_range_from_segment(const Index& index, const SegmentInMemory& segment) {
-    return util::variant_match(
-            index,
-            [](const EmptyIndex&) { return IndexRange{}; },
-            [&segment](auto index_type) {
-                using IndexType = decltype(index_type);
-                auto start = IndexType::start_value_for_segment(segment);
-                auto end = IndexType::end_value_for_segment(segment);
-                return IndexRange{start, end};
-            }
-    );
-}
-
 template<typename ClockType>
 storage::KeySegmentPair make_target_key(
         KeyType key_type, const StreamId& stream_id, VersionId version_id, const VariantKey& source_key,

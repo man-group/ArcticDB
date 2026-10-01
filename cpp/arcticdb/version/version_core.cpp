@@ -1271,9 +1271,11 @@ std::shared_ptr<std::vector<folly::Future<std::vector<EntityId>>>> schedule_firs
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(
             static_cast<bool>(admission), "schedule_first_iteration requires an admission handler"
     );
-    // Used to make sure each entity is only added into the component manager once
+    // Adds each entity to the component manager exactly once. uint8_t not bool: std::vector<bool> is
+    // bit-packed, so adjacent flags share a word and updates under different position mutexes are lost
+    // (#3381). The lock is held across the add so a unit that skips it still sees the components.
     auto slice_added_mtx = std::make_shared<std::vector<std::mutex>>(num_segments);
-    auto slice_added = std::make_shared<std::vector<bool>>(num_segments, false);
+    auto slice_added = std::make_shared<std::vector<uint8_t>>(num_segments, 0);
     auto futures = std::make_shared<std::vector<folly::Future<std::vector<EntityId>>>>();
 
     for (auto& entity_ids : entities_by_work_unit) {
@@ -1330,7 +1332,7 @@ std::shared_ptr<std::vector<folly::Future<std::vector<EntityId>>>> schedule_firs
                                             component_manager,
                                             segment_fetch_counts->at(pos)
                                     );
-                                    (*slice_added)[pos] = true;
+                                    (*slice_added)[pos] = 1;
                                 }
                             }
                             return async::MemSegmentProcessingTask(*clauses, std::move(entity_ids))();
@@ -2475,21 +2477,18 @@ DeleteIncompleteKeysOnExit::~DeleteIncompleteKeysOnExit() {
         return;
 
     try {
-        storage::RemoveOpts opts{.ignores_missing_key_ = true};
         if (context_->incompletes_after_) {
             delete_incomplete_keys(*context_, *store_);
         } else {
             // If an exception is thrown before read_incompletes_to_pipeline the keys won't be placed inside the
             // context thus they must be read manually.
-            std::vector<VariantKey> keys_to_delete;
             if (stage_results_) {
-                auto keys_to_delete_view =
-                        *stage_results_ | std::views::transform(&StageResult::staged_segments) | std::views::join;
-                keys_to_delete = std::vector<VariantKey>(keys_to_delete_view.begin(), keys_to_delete_view.end());
+                delete_incomplete_keys_for_stage_results(store_, *stage_results_);
             } else {
-                keys_to_delete = read_incomplete_keys_for_symbol(store_, context_->stream_id_, via_iteration_);
+                storage::RemoveOpts opts{.ignores_missing_key_ = true};
+                auto keys_to_delete = read_incomplete_keys_for_symbol(store_, context_->stream_id_, via_iteration_);
+                store_->remove_keys(keys_to_delete, opts).get();
             }
-            store_->remove_keys(keys_to_delete, opts).get();
         }
     } catch (const std::exception& e) {
         // Don't emit exceptions from destructor
@@ -2561,7 +2560,7 @@ std::variant<VersionedItem, CompactionError> sort_merge_impl(
     validate_slicing_policy_for_compaction(compaction_parameters, update_info, pipeline_context, write_options);
     const auto num_versioned_rows = pipeline_context->total_rows_;
     const bool append_to_existing = compaction_parameters.append_ && update_info.previous_index_key_.has_value();
-    // Cache this before calling read_incompletes_to_pipeline as it changes the descripor
+    // Cache this before calling read_incompletes_to_pipeline as it changes the descriptor
     const std::optional<SortedValue> initial_index_sorted_status =
             append_to_existing ? std::optional{pipeline_context->on_disk_descriptor().sorted()} : std::nullopt;
     const ReadIncompletesFlags read_incomplete_flags{
@@ -2592,7 +2591,7 @@ std::variant<VersionedItem, CompactionError> sort_merge_impl(
     );
 
     std::vector<FrameSlice> slices;
-    std::vector<folly::Future<VariantKey>> fut_vec;
+    std::vector<folly::Future<VariantKey>> write_futures;
     auto semaphore = std::make_shared<folly::NativeSemaphore>(n_segments_live_during_compaction());
     auto index = stream::index_type_from_descriptor(pipeline_context->on_disk_descriptor());
     util::variant_match(
@@ -2638,18 +2637,14 @@ std::variant<VersionedItem, CompactionError> sort_merge_impl(
                         aggregator{
                                 [&slices](FrameSlice&& slice) { slices.emplace_back(std::move(slice)); },
                                 DynamicSchema{*pipeline_context->staged_descriptor_, index},
-                                [pipeline_context, &fut_vec, &store, &semaphore](SegmentInMemory&& segment) {
-                                    const auto local_index_start = TimeseriesIndex::start_value_for_segment(segment);
-                                    const auto local_index_end = TimeseriesIndex::end_value_for_segment(segment);
-                                    const PartialKey pk{
-                                            KeyType::TABLE_DATA,
-                                            pipeline_context->version_id_,
+                                [&write_futures, store, pipeline_context, semaphore](SegmentInMemory&& segment) {
+                                    write_futures.emplace_back(write_compacted_segment<TimeseriesIndex>(
+                                            *store,
                                             pipeline_context->stream_id_,
-                                            local_index_start,
-                                            local_index_end
-                                    };
-                                    fut_vec.emplace_back(store->write_maybe_blocking(pk, std::move(segment), semaphore)
-                                    );
+                                            pipeline_context->version_id_,
+                                            std::move(segment),
+                                            semaphore
+                                    ));
                                 },
                                 RowCountSegmentPolicy(write_options.segment_row_size)
                         };
@@ -2687,7 +2682,7 @@ std::variant<VersionedItem, CompactionError> sort_merge_impl(
             }
     );
 
-    auto keys = folly::collect(fut_vec).get();
+    auto keys = folly::collect(write_futures).get();
     auto vit =
             collate_and_write(store, pipeline_context, slices, keys, pipeline_context->incompletes_after(), user_meta);
     return vit;
@@ -2751,8 +2746,7 @@ std::variant<VersionedItem, CompactionError> compact_incomplete_impl(
             index,
             dynamic_schema ? VariantSchema{DynamicSchema::default_schema(index, stream_id)}
                            : VariantSchema{FixedSchema::default_schema(index, stream_id)},
-            compaction_parameters.sparsify_ ? VariantColumnPolicy{SparseColumnPolicy{}}
-                                            : VariantColumnPolicy{DenseColumnPolicy{}}
+            VariantColumnPolicy{SparseColumnPolicy{}}
     );
 
     CompactionResult result =

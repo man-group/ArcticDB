@@ -15,6 +15,7 @@
 
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/util/constructors.hpp>
+#include <arcticdb/util/preconditions.hpp>
 #include <folly/container/Enumerate.h>
 
 namespace arcticdb {
@@ -67,6 +68,16 @@ class ComponentManager {
         std::unique_lock lock(mtx_);
         (
                 [&] {
+                    // A double add trips a plain assert() deep inside EnTT, which aborts the process rather
+                    // than raising something a caller can catch. Debug only: this is a caller precondition,
+                    // and the lookup would otherwise run for every component of every entity added. EnTT's
+                    // own assert is compiled out in release builds anyway. See #3381.
+                    ARCTICDB_DEBUG_CHECK(
+                            ErrorCode::E_ASSERTION_FAILURE,
+                            !registry_.all_of<Args>(id),
+                            "ComponentManager::add_components: entity {} already has this component",
+                            static_cast<uint64_t>(id)
+                    );
                     registry_.emplace<Args>(id, args);
                     // Store the initial entity fetch count component as a "first-class" entity, accessible by
                     // registry_.get<EntityFetchCount>(id), as this is external facing (used by resample)

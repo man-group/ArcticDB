@@ -648,7 +648,7 @@ TEST_F(SparseTestStore, Compact) {
     }
 
     aggregator.commit();
-    test_store_->compact_incomplete(stream_id, false, false, false, true);
+    test_store_->compact_incomplete(stream_id, false, false, false);
 
     ReadOptions read_options;
     read_options.set_dynamic_schema(true);
@@ -714,7 +714,7 @@ TEST_F(SparseTestStore, CompactWithStrings) {
     }
 
     aggregator.commit();
-    test_store_->compact_incomplete(stream_id, false, false, false, true);
+    test_store_->compact_incomplete(stream_id, false, false, false);
 
     ReadOptions read_options;
     read_options.set_dynamic_schema(true);

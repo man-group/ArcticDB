@@ -55,6 +55,11 @@ cd docs/mkdocs
 pybind11-stubgen arcticdb_ext --ignore-all-errors -o .
 ```
 
+The Release Notes page is generated from GitHub Releases and is not committed. Generate it first from the repository root. It needs an authenticated `gh`; without one, it writes a placeholder page:
+```
+python .github/scripts/release_notes.py
+```
+
 To build the latest mkdocs to docs/mkdocs/site:
 ```
 cd docs/mkdocs

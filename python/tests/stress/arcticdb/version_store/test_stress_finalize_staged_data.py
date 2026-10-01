@@ -42,6 +42,9 @@ class Results:
         return f"Options: {self.options}\nIteration: {self.iteration}\n# staged chunks: {self.number_staged_chunks}\ntotal rows finalized: {self.total_rows_finalized}\ntime for finalization (s): {self.finalization_time}"
 
 
+# Peaks at several GB: keep it in the shared stress_heavy xdist_group so that only one such test runs at a
+# time under -n 4 (see PYTEST_XDIST_MODE in .github/workflows/build_steps.yml).
+@pytest.mark.xdist_group(name="stress_heavy")
 @SLOW_TESTS_MARK
 @SKIP_CONDA_MARK  # Conda CI runner doesn't have enough storage to perform these stress tests
 @pytest.mark.skipif(sys.platform == "win32", reason="Not enough storage on Windows runners")
