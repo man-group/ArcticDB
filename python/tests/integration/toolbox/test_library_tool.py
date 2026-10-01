@@ -306,9 +306,9 @@ def test_overwrite_append_data(lmdb_version_store_v1):
     str_dtype = DataType.UTF_DYNAMIC64 if lib_tool._nvs._resolve_dynamic_strings({}) else DataType.UTF_FIXED64
     assert [read_type(key, "col") for key in append_keys] == [DataType.INT64, str_dtype, DataType.INT64]
     assert [read_type(key, "other") for key in append_keys] == [DataType.INT64, DataType.INT64, DataType.INT64]
-    with pytest.raises(InternalException):
+    with pytest.raises(SchemaException, match="no common type for column 'col'"):
         lib.read(sym, incomplete=True, date_range=(pd.Timestamp(0), pd.Timestamp(2030, 1, 1)))
-    with pytest.raises(SchemaException):
+    with pytest.raises(SchemaException, match="no common type for column 'col'"):
         lib.compact_incomplete(sym, append=True, convert_int_to_float=False, via_iteration=False)
 
     # We change the last append data key to string and verify it's now a string
