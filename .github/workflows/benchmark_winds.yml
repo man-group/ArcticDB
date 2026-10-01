@@ -576,16 +576,15 @@ jobs:
       # so writing it leaves the checkout clean. cibuildwheel copies the project into
       # the container, so the file travels with it.
       #
-      # Two cache variables, and no third:
-      #   ARCTICDB_KEEP_DEBUG_SYMBOLS=ON  takes the strip out of the install target.
-      #   CMAKE_MODULE_LINKER_FLAGS=-Wl,--strip-debug  drops the DWARF at link time and
-      #     keeps `.symtab` (measured on a toy pybind11-shaped module: `--strip-debug`
-      #     keeps `.symtab`/`.strtab`/`.eh_frame` and removes every `.debug_*`, while
-      #     `--strip-unneeded` removes `.symtab` too). py-spy only needs names, and
-      #     names are in `.symtab`; DWARF would add file/line at a cost measured in
-      #     hundreds of megabytes on a library whose stripped form is already 65 MB.
-      #     Delete this one line if a profile ever needs source lines. `.eh_frame` —
-      #     what libunwind actually walks — survives either way.
+      # One cache variable:
+      #   ARCTICDB_KEEP_DEBUG_SYMBOLS=ON  takes the strip out of the install target, so
+      #     the extension is linked with `.symtab` *and* the DWARF the RelWithDebInfo
+      #     compile already produced. Until profile-code-view 01 a second variable,
+      #     `CMAKE_MODULE_LINKER_FLAGS=-Wl,--strip-debug`, dropped the DWARF at link
+      #     time, because it costs hundreds of megabytes in a wheel every worker
+      #     installs. Per-line C++ time needs it, so it is now kept and moved out of
+      #     the wheel instead: `split the DWARF out of the extension` below.
+      #     `.eh_frame` — what libunwind actually walks — survives either way.
       #
       # `binaryDir` is pinned to the inherited preset's directory deliberately. The
       # default is `out/${presetName}-build`, and a new directory would move the
@@ -594,8 +593,8 @@ jobs:
       # would cold-build every benchmark run instead of riding the `build.yml` entries
       # already in `arcticdb-ci-sccache-bucket` — ArcticDB's own Linux build uses this
       # same preset and this same `/tmp/cpp_build` — and no cold ArcticDB build fits
-      # this job's timeout. Nothing about the *compile* changes here: only the link
-      # (one flag) and the install (no strip) do.
+      # this job's timeout. Nothing about the *compile* changes here: only the install
+      # (no strip) does.
       #
       # setup.py then globs `cpp/out/<preset>-build` and asserts exactly one match, so
       # the pinned directory needs a second name under the preset it was asked for.
@@ -612,8 +611,7 @@ jobs:
                 "inherits": "linux-release",
                 "binaryDir": "${sourceDir}/out/linux-release-build",
                 "cacheVariables": {
-                  "ARCTICDB_KEEP_DEBUG_SYMBOLS": "ON",
-                  "CMAKE_MODULE_LINKER_FLAGS": "-Wl,--strip-debug"
+                  "ARCTICDB_KEEP_DEBUG_SYMBOLS": "ON"
                 }
               }
             ]
@@ -629,6 +627,34 @@ jobs:
         run: |
           python -m pip install pipx --retries 3 --timeout 180
           python -m pipx run "cibuildwheel==$CIBW_VERSION"
+
+      # profile-code-view 01: per-line C++ time, without a bigger wheel. The DWARF the
+      # link kept goes into `arcticdb_ext-<build id>.debug` (zlib-compressed), and the
+      # extension in the wheel is stripped of it with a `.gnu_debuglink` pointing at
+      # that file, so every worker installs today's size and `.symtab` (what py-spy
+      # and perf name frames from) stays. The two files share the `.note.gnu.build-id`
+      # the profile pass records per DSO, which is how `arctic-winds srclines` in
+      # `collect` pairs a recording with its debug file.
+      #
+      # `wheel pack` rewrites RECORD, whose hash for the extension would otherwise be
+      # wrong and fail `pip install`. On the host, after auditwheel: the debug file
+      # must be split from the exact bytes the workers will run.
+      - name: split the DWARF out of the extension
+        run: |
+          python -m pip install wheel --retries 3 --timeout 180
+          wheel=$(ls wheelhouse/*.whl)
+          rm -rf /tmp/unpacked && mkdir -p /tmp/unpacked debug
+          python -m wheel unpack "$wheel" -d /tmp/unpacked
+          so=$(find /tmp/unpacked -name 'arcticdb_ext*.so' | head -1)
+          id=$(readelf -n "$so" | sed -n 's/^ *Build ID: *//p' | head -1)
+          if [ -z "$id" ]; then
+            echo "::error::$(basename "$so") has no GNU build id: a debug file could never be matched to a profile"
+            exit 1
+          fi
+          objcopy --only-keep-debug --compress-debug-sections=zlib "$so" "debug/arcticdb_ext-$id.debug"
+          objcopy --strip-debug --add-gnu-debuglink="debug/arcticdb_ext-$id.debug" "$so"
+          rm "$wheel"
+          python -m wheel pack /tmp/unpacked/* -d wheelhouse
 
       # The step above is a lever pulled from outside ArcticDB's build, so it can be
       # taken away from outside too — a preset key renamed upstream, a `.gitignore`
@@ -649,8 +675,13 @@ jobs:
           fi
           # `grep -oE` finds nothing on a wheel built some other way, and the job runs
           # under `-o pipefail`, hence the `|| true` on both pipelines.
-          sections=$(readelf -SW "$so" | grep -oE '\.(symtab|dynsym|debug_info|eh_frame)\b' | sort -u | tr '\n' ' ' || true)
+          sections=$(readelf -SW "$so" | grep -oE '\.(symtab|dynsym|debug_info|eh_frame|gnu_debuglink)\b' | sort -u | tr '\n' ' ' || true)
           named=$(readelf -sW "$so" | grep -c arcticdb || true)
+          debug=$(ls debug/*.debug 2>/dev/null | head -1 || true)
+          dwarf=""
+          if [ -n "$debug" ]; then
+            dwarf=$(readelf -SW "$debug" | grep -oE '\.debug_(info|line)\b' | sort -u | tr '\n' ' ' || true)
+          fi
           {
             echo "### wheel symbols"
             echo '```'
@@ -658,6 +689,8 @@ jobs:
             echo "arcticdb_ext $(stat -c%s "$so") bytes"
             echo "sections     $sections"
             echo "arcticdb symbols $named"
+            echo "debug file   ${debug:-none} $([ -n "$debug" ] && stat -c%s "$debug") bytes"
+            echo "debug DWARF  $dwarf"
             echo '```'
           } | tee -a "$GITHUB_STEP_SUMMARY"
           case "$sections" in
@@ -674,10 +707,23 @@ jobs:
             echo "::error::only $named arcticdb symbols in the extension: the symbol table is not this build's own"
             exit 1
           fi
+          # profile-code-view 01: the DWARF lives in the side file, never in the wheel.
           case "$sections" in
             *.debug_info*)
-              echo "::notice::DWARF is still in the extension, so -Wl,--strip-debug did not take and this wheel is far larger than it needs to be" ;;
+              echo "::error::DWARF is still in the extension: the split did not take and every worker would install hundreds of megabytes more"; exit 1 ;;
           esac
+          case "$sections" in
+            *.gnu_debuglink*) ;;
+            *) echo "::error::$(basename "$so") has no .gnu_debuglink: the split step did not strip it"; exit 1 ;;
+          esac
+          case "$dwarf" in
+            *.debug_line*) ;;
+            *) echo "::error::${debug:-no debug file} carries no .debug_line: there are no source lines to resolve"; exit 1 ;;
+          esac
+          if [ "$(readelf -n "$so" | sed -n 's/^ *Build ID: *//p')" != "$(readelf -n "$debug" | sed -n 's/^ *Build ID: *//p')" ]; then
+            echo "::error::the extension and $debug carry different build ids"
+            exit 1
+          fi
 
       - name: store the wheel
         uses: actions/upload-artifact@v4
@@ -686,6 +732,20 @@ jobs:
           path: wheelhouse/*.whl
           if-no-files-found: error
           retention-days: 7   # only ever needed inside this run
+
+      # Its own artifact, so no worker downloads it: `collect` resolves lines from it
+      # (`arctic-winds srclines`). Findable from a profile by the build id in its file
+      # name and in the profile's sites document; across runs, by this name plus the
+      # run's head sha (`gh api repos/<repo>/actions/artifacts?name=<this name>`).
+      # Kept longer than the wheel so a run's profiles can be re-resolved for a month.
+      - name: store the debug file
+        uses: actions/upload-artifact@v4
+        with:
+          name: arcticdb-ext-debug-cp311-manylinux_x86_64
+          path: debug/*.debug
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0   # already zlib-compressed by objcopy
 
   # The same job for `cp311-win_amd64`, and the reason ticket 41 exists: a lane on
   # `windows-latest` cannot install a manylinux wheel, so `uv pip install` refuses it and
@@ -981,7 +1041,9 @@ jobs:
               # `benchmark-reference` is the plan's own artifact (ticket 48), not a
               # worker's, and a directory of that name holding one JSON would
               # otherwise collect as a worker with somebody else's numbers in it.
-              wheel-*|compare-report|benchmark-reference) continue ;;
+              # `arcticdb-ext-debug-*` (the build's split DWARF) and `profile-lines`
+              # (a re-run's earlier resolution) are not workers either.
+              wheel-*|arcticdb-ext-debug-*|profile-lines|compare-report|benchmark-reference) continue ;;
             esac
             mv "$dir" "artifacts/$name"
           done
@@ -1029,6 +1091,39 @@ jobs:
             --library "$LIBRARY" \
             --expect "$WORKERS" \
             --measure-only "$MEASURE_ONLY"
+
+      # profile-code-view 01: each native window's sampled addresses, resolved to
+      # `cpp/arcticdb/...:line` against the build's split debug file with one batched
+      # `addr2line` per build. Here and not on the worker, because the worker's budget
+      # buys recordings (gha 148/150) and the debug file is hundreds of megabytes no
+      # worker should download. Never fails the job: a missing line table is a
+      # missing view. With no debug file it writes nothing and nothing changes.
+      # profile-code-view 11: `--results`/`--library` also store each table in the
+      # profiles library's line-table sidecar, against the row `collect` just wrote
+      # (hence after it), which is where `viz export-profiles` feeds the code view
+      # from. Idempotent: a re-run stores nothing it already has.
+      - name: resolve native frames to source lines
+        if: always()
+        continue-on-error: true
+        timeout-minutes: 15
+        env:
+          LIBRARY: ${{ steps.library.outputs.library }}
+        run: |
+          arctic-winds srclines \
+            --artifacts artifacts \
+            --debug all-artifacts \
+            --out profile-lines \
+            --results "$RESULTS" \
+            --library "$LIBRARY"
+
+      - name: keep the line tables
+        if: always() && hashFiles('profile-lines/*') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: profile-lines
+          path: profile-lines/*
+          retention-days: 30
+          overwrite: true
 
       # The PR regression check, replacing `asv compare -s -f 1.15 <master> HEAD` from
       # `benchmark_commits.yml:150-166`. Exit 1 = something got worse; exit 2 = the check
