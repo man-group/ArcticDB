@@ -8,12 +8,12 @@ As of the Change Date specified in that file, in accordance with the Business So
 
 import arcticdb
 import os
-from typing import List, Optional, Union
+from typing import List, Optional, Tuple, Union
 import arcticdb.toolbox.query_stats as qs
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 import pytest
-from arcticdb.exceptions import ArcticException, StorageException, UnsortedDataException, UserInputException
 from arcticdb.util.test import (
     assert_frame_equal,
     assert_index_key_structure_static_schema,
@@ -30,8 +30,9 @@ from arcticdb.exceptions import (
     ArcticException,
     NormalizationException,
     SchemaException,
+    StreamDescriptorMismatch,
 )
-from arcticdb.version_store.library import MergeAction, MergeStrategy
+from arcticdb.version_store.library import MergeAction, MergeStrategy, Library
 from arcticdb.version_store._store import normalize_merge_action
 from tests.util.mark import WINDOWS
 
@@ -49,8 +50,52 @@ def mock_find_keys_for_symbol(key_types):
     return lambda key_type, symbol: keys[key_type]
 
 
+arrow_source_param = pytest.mark.parametrize("is_arrow_source", [False, True], ids=["pandas_source", "arrow_source"])
+# Reproducible with write/append/update(upsert=True) of the same Arrow table followed by a pandas read.
+ARROW_WRITTEN_UNNAMED_INDEX_XFAIL = pytest.mark.xfail(
+    raises=(AssertionError, IndexError),
+    reason='Data written from Arrow reads back in pandas with the index named "index" instead of None, and with '
+    "IndexError when the table has no data columns",
+    strict=True,
+)
+# append/update reject this with E_INCOMPATIBLE_OBJECTS; merge writes the Arrow source as a new version instead.
+ARROW_SOURCE_INTO_EMPTY_PANDAS_TARGET_XFAIL = pytest.mark.xfail(
+    raises=AssertionError,
+    reason="Inserting an Arrow source into an empty symbol written as pandas replaces its pandas normalization "
+    "metadata with Arrow normalization metadata",
+    strict=True,
+)
+ARROW_SOURCE_INTO_PANDAS_MULTIINDEX_XFAIL = pytest.mark.xfail(
+    raises=NormalizationException,
+    reason="Merge update with an Arrow source into a symbol written as a pandas MultiIndex is not supported yet",
+    strict=True,
+)
+# Pandas stores a data column that clashes with the index name as __col_<name>__N, which the Arrow source cannot match.
+ARROW_SOURCE_INTO_PANDAS_MANGLED_COLUMN_XFAIL = pytest.mark.xfail(
+    raises=StreamDescriptorMismatch,
+    reason="Merge update with an Arrow source into a symbol whose pandas column names were mangled on write is not "
+    "supported yet",
+    strict=True,
+)
+
+
+def to_arrow_source(source: pd.DataFrame) -> Tuple[pa.Table, bool]:
+    has_index = isinstance(source.index, (pd.DatetimeIndex, pd.MultiIndex))
+    table = pa.Table.from_pandas(source.reset_index() if has_index else source, preserve_index=False)
+    return table, has_index and pd.api.types.is_datetime64_any_dtype(source.index.get_level_values(0))
+
+
+def run_merge(lib, is_arrow_source: bool, symbol: str, source: pd.DataFrame, *args, **kwargs):
+    if not is_arrow_source:
+        return lib.merge(symbol, source, *args, **kwargs)
+    (lib._nvs if isinstance(lib, Library) else lib)._set_allow_arrow_input()
+    table, index_column = to_arrow_source(source)
+    return lib.merge(symbol, table, *args, index_column=index_column, **kwargs)
+
+
 def generic_merge_test(
     lib,
+    is_arrow_source: bool,
     sym: str,
     target: Union[List[pd.DataFrame], pd.DataFrame],
     source: pd.DataFrame,
@@ -65,7 +110,7 @@ def generic_merge_test(
     lib.write(sym, target[0])
     for df in target[1:]:
         lib.append(sym, df)
-    lib.merge(sym, source, strategy=strategy, on=on)
+    run_merge(lib, is_arrow_source, sym, source, strategy=strategy, on=on)
     read_vit = lib.read(sym)
     assert_frame_equal(read_vit.data, expected)
     oracle_expected = merge(concat_target, source, strategy, on=on)
@@ -94,6 +139,7 @@ def test_normalize_merge_action(action):
     assert normalize_merge_action(action[0]) == action[1]
 
 
+@arrow_source_param
 @pytest.mark.parametrize(
     "strategy",
     (
@@ -103,8 +149,7 @@ def test_normalize_merge_action(action):
     ),
 )
 class TestMergeTimeseriesCommon:
-
-    def test_merge_matched_update_with_metadata(self, lmdb_library, strategy):
+    def test_merge_matched_update_with_metadata(self, lmdb_library, strategy, is_arrow_source):
         lib = lmdb_library
 
         target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]}, index=pd.date_range("2024-01-01", periods=3))
@@ -117,7 +162,7 @@ class TestMergeTimeseriesCommon:
 
         metadata = {"meta": "data"}
 
-        merge_vit = lib.merge("sym", source, metadata=metadata, strategy=strategy)
+        merge_vit = run_merge(lib, is_arrow_source, "sym", source, metadata=metadata, strategy=strategy)
         assert merge_vit.version == 1
         assert merge_vit.symbol == write_vit.symbol
         assert merge_vit.metadata == metadata
@@ -135,11 +180,11 @@ class TestMergeTimeseriesCommon:
         assert len(lt.find_keys_for_symbol(KeyType.VERSION, "sym")) == 2
 
     @pytest.mark.parametrize("metadata", ({"meta": "data"}, None))
-    def test_merge_writes_new_version_with_empty_source(self, lmdb_library, metadata, strategy):
+    def test_merge_writes_new_version_with_empty_source(self, lmdb_library, metadata, strategy, is_arrow_source):
         lib = lmdb_library
         target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]}, index=pd.date_range("2024-01-01", periods=3))
         lib.write("sym", target, metadata="v0")
-        merge_vit = lib.merge("sym", pd.DataFrame(), metadata=metadata, strategy=strategy)
+        merge_vit = run_merge(lib, is_arrow_source, "sym", pd.DataFrame(), metadata=metadata, strategy=strategy)
         assert merge_vit.metadata is None if metadata is None else merge_vit.metadata == metadata
         lt = lib._dev_tools.library_tool()
         assert len(lt.find_keys_for_symbol(KeyType.TABLE_DATA, "sym")) == 1
@@ -183,14 +228,14 @@ class TestMergeTimeseriesCommon:
             ),
         ],
     )
-    def test_static_schema_merge_throws_when_schemas_differ(self, lmdb_library, strategy, source):
+    def test_static_schema_merge_throws_when_schemas_differ(self, lmdb_library, strategy, source, is_arrow_source):
         lib = lmdb_library
         target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]}, index=pd.date_range("2024-01-01", periods=3))
         lib.write("sym", target)
         with pytest.raises(SchemaException):
-            lib.merge("sym", source, strategy=strategy)
+            run_merge(lib, is_arrow_source, "sym", source, strategy=strategy)
 
-    def test_throws_if_source_is_not_sorted(self, lmdb_library, strategy):
+    def test_throws_if_source_is_not_sorted(self, lmdb_library, strategy, is_arrow_source):
         # This requirement can be lifted, however, passing a sorted source will be faster. We can start with it and
         # extend if needed.
         lib = lmdb_library
@@ -205,11 +250,11 @@ class TestMergeTimeseriesCommon:
         )
 
         with pytest.raises(UnsortedDataException):
-            lib.merge("sym", source, strategy=strategy)
+            run_merge(lib, is_arrow_source, "sym", source, strategy=strategy)
 
 
+@arrow_source_param
 class TestMergeTimeseriesUpdate:
-
     def setup_method(self):
         self.strategy = MergeStrategy(MergeAction.UPDATE, MergeAction.DO_NOTHING)
 
@@ -221,7 +266,7 @@ class TestMergeTimeseriesUpdate:
             pytest.param(MergeStrategy("update", "do_nothing"), marks=pytest.mark.skip),
         ),
     )
-    def test_basic(self, lmdb_library, strategy):
+    def test_basic(self, lmdb_library, strategy, is_arrow_source):
         lib = lmdb_library
 
         target = pd.DataFrame(
@@ -235,7 +280,7 @@ class TestMergeTimeseriesUpdate:
             index=pd.DatetimeIndex(["2024-01-01 10:00:00", "2024-01-02", "2024-01-04"]),
         )
 
-        merge_vit = lib.merge("sym", source, strategy=strategy)
+        merge_vit = run_merge(lib, is_arrow_source, "sym", source, strategy=strategy)
         assert merge_vit.version == 1
         assert merge_vit.symbol == write_vit.symbol
         assert merge_vit.metadata == write_vit.metadata
@@ -259,7 +304,7 @@ class TestMergeTimeseriesUpdate:
         assert len(lt.find_keys_for_symbol(KeyType.TABLE_INDEX, "sym")) == 2
         assert len(lt.find_keys_for_symbol(KeyType.VERSION, "sym")) == 2
 
-    def test_write_new_version_even_if_nothing_is_changed(self, lmdb_library):
+    def test_write_new_version_even_if_nothing_is_changed(self, lmdb_library, is_arrow_source):
         # In theory, it's possible to make so that it doesn't write a new version when nothing is matched, but the source
         # is not empty. This has lots of edge cases and will burden the implementation for almost no gain. If nothing is
         #  changed, we'll create a new index key pointing to the existing data keys and write a new version key which is cheap.
@@ -267,7 +312,9 @@ class TestMergeTimeseriesUpdate:
         target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]}, index=pd.date_range("2024-01-01", periods=3))
         lib.write("sym", target)
         source = pd.DataFrame({"a": [4, 5], "b": [4.0, 5.0]}, index=pd.date_range("2023-01-01", periods=2))
-        merge_vit = lib.merge("sym", source, strategy=MergeStrategy(not_matched_by_target=MergeAction.DO_NOTHING))
+        merge_vit = run_merge(
+            lib, is_arrow_source, "sym", source, strategy=MergeStrategy(not_matched_by_target=MergeAction.DO_NOTHING)
+        )
         assert merge_vit.version == 1
 
         read_vit = lib.read("sym")
@@ -284,7 +331,7 @@ class TestMergeTimeseriesUpdate:
         "slicing_policy",
         [{"rows_per_segment": 2}, {"columns_per_segment": 2}, {"rows_per_segment": 2, "columns_per_segment": 2}],
     )
-    def test_row_slicing(self, lmdb_library_factory, slicing_policy):
+    def test_row_slicing(self, lmdb_library_factory, slicing_policy, is_arrow_source):
         lib = lmdb_library_factory(arcticdb.LibraryOptions(**slicing_policy))
         target = pd.DataFrame(
             {
@@ -310,7 +357,7 @@ class TestMergeTimeseriesUpdate:
             },
             index=pd.date_range("2024-01-01", periods=5),
         )
-        read_vit = generic_merge_test(lib, "sym", target, source, self.strategy, expected)
+        read_vit = generic_merge_test(lib, is_arrow_source, "sym", target, source, self.strategy, expected)
 
         lt = lib._dev_tools.library_tool()
         if "rows_per_segment" in slicing_policy and "columns_per_segment" in slicing_policy:
@@ -331,7 +378,7 @@ class TestMergeTimeseriesUpdate:
         assert len(lt.find_keys_for_symbol(KeyType.TABLE_INDEX, "sym")) == 2
         assert len(lt.find_keys_for_symbol(KeyType.VERSION, "sym")) == 2
 
-    def test_dedup_map_deduplicates_unchanged_column_slice(self, lmdb_library_factory):
+    def test_dedup_map_deduplicates_unchanged_column_slice(self, lmdb_library_factory, is_arrow_source):
         lib = lmdb_library_factory(arcticdb.LibraryOptions(columns_per_segment=2, dedup=True))
         target = pd.DataFrame(
             {"a": [1, 2, 3], "b": [1.0, 2.0, 3.0], "c": [10, 20, 30], "d": [100.0, 200.0, 300.0]},
@@ -342,7 +389,7 @@ class TestMergeTimeseriesUpdate:
             {"a": [20, 30], "b": [20.0, 30.0], "c": [20, 30], "d": [200.0, 300.0]},
             index=pd.DatetimeIndex([pd.Timestamp("2024-01-02"), pd.Timestamp("2024-01-03")]),
         )
-        lib.merge("sym", source, strategy=self.strategy)
+        run_merge(lib, is_arrow_source, "sym", source, strategy=self.strategy)
         expected = pd.DataFrame(
             {"a": [1, 20, 30], "b": [1.0, 20.0, 30.0], "c": [10, 20, 30], "d": [100.0, 200.0, 300.0]},
             index=pd.date_range("2024-01-01", periods=3),
@@ -356,7 +403,9 @@ class TestMergeTimeseriesUpdate:
         assert keys_v0[-1] == keys_v1[-1]
 
     @pytest.mark.parametrize("de_duplication", [False, True])
-    def test_skips_writing_row_slice_left_unchanged_by_on_mismatch(self, in_memory_store_factory, de_duplication):
+    def test_skips_writing_row_slice_left_unchanged_by_on_mismatch(
+        self, in_memory_store_factory, de_duplication, is_arrow_source
+    ):
         # A row slice whose index matches but whose "on" column does not match is not re-emitted,
         # so no data segment is written regardless of whether dedup is enabled.
         lib = in_memory_store_factory(segment_row_size=2, de_duplication=de_duplication)
@@ -368,7 +417,7 @@ class TestMergeTimeseriesUpdate:
         source = pd.DataFrame({"a": [999], "b": [99.0]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-03")]))
         qs.reset_stats()
         with qs.query_stats():
-            lib.merge("sym", source, self.strategy, on=["a"])
+            run_merge(lib, is_arrow_source, "sym", source, self.strategy, on=["a"])
         stats = qs.get_query_stats()
         assert query_stats_operation_count(stats, "Memory_PutObject", "TABLE_DATA") == 0
         assert query_stats_operation_count(stats, "Memory_PutObject", "TABLE_INDEX") == 1
@@ -425,7 +474,7 @@ class TestMergeTimeseriesUpdate:
             ),
         ],
     )
-    def test_on_column_with_column_slicing(self, lmdb_library_factory, slicing_policy, on, expected):
+    def test_on_column_with_column_slicing(self, lmdb_library_factory, slicing_policy, on, expected, is_arrow_source):
         lib = lmdb_library_factory(arcticdb.LibraryOptions(**slicing_policy))
         target = pd.DataFrame(
             {
@@ -445,9 +494,9 @@ class TestMergeTimeseriesUpdate:
             },
             index=pd.date_range("2024-01-01", periods=5),
         )
-        generic_merge_test(lib, "sym", target, source, self.strategy, expected, on=on)
+        generic_merge_test(lib, is_arrow_source, "sym", target, source, self.strategy, expected, on=on)
 
-    def test_on_empty_list_same_as_none(self, lmdb_library):
+    def test_on_empty_list_same_as_none(self, lmdb_library, is_arrow_source):
         lib = lmdb_library
         target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]}, index=pd.date_range("2024-01-01", periods=3))
         source = pd.DataFrame(
@@ -456,9 +505,9 @@ class TestMergeTimeseriesUpdate:
         )
         # on=[] same as None: match on index only. Jan1 matches → update; Jan5 no match
         expected = pd.DataFrame({"a": [10, 2, 3], "b": [10.0, 2.0, 3.0]}, index=pd.date_range("2024-01-01", periods=3))
-        generic_merge_test(lib, "sym", target, source, self.strategy, expected, on=[])
+        generic_merge_test(lib, is_arrow_source, "sym", target, source, self.strategy, expected, on=[])
 
-    def test_on_index_and_column(self, lmdb_library):
+    def test_on_index_and_column(self, lmdb_library, is_arrow_source):
         lib = lmdb_library
         target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]}, index=pd.date_range("2024-01-01", periods=3))
         source = pd.DataFrame(
@@ -474,9 +523,9 @@ class TestMergeTimeseriesUpdate:
         )
         # Only first source row matches (index=Jan1, a=1)
         expected = pd.DataFrame({"a": [1, 2, 3], "b": [10.0, 2.0, 3.0]}, index=pd.date_range("2024-01-01", periods=3))
-        generic_merge_test(lib, "sym", target, source, self.strategy, expected, on=["a"])
+        generic_merge_test(lib, is_arrow_source, "sym", target, source, self.strategy, expected, on=["a"])
 
-    def test_multiple_columns(self, lmdb_library):
+    def test_multiple_columns(self, lmdb_library, is_arrow_source):
         lib = lmdb_library
         target = pd.DataFrame(
             {
@@ -518,9 +567,9 @@ class TestMergeTimeseriesUpdate:
             },
             index=pd.date_range("2024-01-01", periods=4),
         )
-        generic_merge_test(lib, "sym", target, source, self.strategy, expected, on=["b", "d", "e"])
+        generic_merge_test(lib, is_arrow_source, "sym", target, source, self.strategy, expected, on=["b", "d", "e"])
 
-    def test_row_from_source_matches_multiple_rows_from_target(self, lmdb_library):
+    def test_row_from_source_matches_multiple_rows_from_target(self, lmdb_library, is_arrow_source):
         lib = lmdb_library
         target = pd.DataFrame(
             {"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]},
@@ -536,9 +585,11 @@ class TestMergeTimeseriesUpdate:
                 [pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-02")]
             ),
         )
-        generic_merge_test(lib, "sym", target, source, self.strategy, expected)
+        generic_merge_test(lib, is_arrow_source, "sym", target, source, self.strategy, expected)
 
-    def test_row_from_source_matches_multiple_rows_from_target_in_separate_slices(self, lmdb_library_factory):
+    def test_row_from_source_matches_multiple_rows_from_target_in_separate_slices(
+        self, lmdb_library_factory, is_arrow_source
+    ):
         lib = lmdb_library_factory(arcticdb.LibraryOptions(rows_per_segment=2))
         target = pd.DataFrame(
             {"a": [1, 2, 3], "b": [1.0, 2.0, 3.0], "c": ["a", "b", "c"]},
@@ -554,9 +605,9 @@ class TestMergeTimeseriesUpdate:
                 [pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-02"), pd.Timestamp("2024-01-02")]
             ),
         )
-        generic_merge_test(lib, "sym", target, source, self.strategy, expected)
+        generic_merge_test(lib, is_arrow_source, "sym", target, source, self.strategy, expected)
 
-    def test_throws_when_target_row_is_matched_more_than_once(self, lmdb_library):
+    def test_throws_when_target_row_is_matched_more_than_once(self, lmdb_library, is_arrow_source):
         lib = lmdb_library
         target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]}, index=pd.date_range("2024-01-01", periods=3))
         lib.write("sym", target)
@@ -572,16 +623,21 @@ class TestMergeTimeseriesUpdate:
             ),
         )
         with pytest.raises(UserInputException):
-            lib.merge("sym", source, strategy=self.strategy)
+            run_merge(lib, is_arrow_source, "sym", source, strategy=self.strategy)
 
     @pytest.mark.parametrize("merge_metadata", (None, "meta"))
-    def test_target_is_empty(self, lmdb_library, merge_metadata):
+    def test_target_is_empty(self, lmdb_library, merge_metadata, is_arrow_source):
         lib = lmdb_library
         target = pd.DataFrame({"a": np.array([], dtype=np.int64)}, index=pd.DatetimeIndex([]))
         lib.write("sym", target)
         source = pd.DataFrame({"a": np.array([1, 2], dtype=np.int64)}, index=pd.date_range("2024-01-01", periods=2))
-        merge_vit = lib.merge(
-            "sym", source, strategy=MergeStrategy(not_matched_by_target=MergeAction.DO_NOTHING), metadata=merge_metadata
+        merge_vit = run_merge(
+            lib,
+            is_arrow_source,
+            "sym",
+            source,
+            strategy=MergeStrategy(not_matched_by_target=MergeAction.DO_NOTHING),
+            metadata=merge_metadata,
         )
         assert merge_vit.metadata is None if merge_metadata is None else merge_vit.metadata == merge_metadata
         lt = lib._dev_tools.library_tool()
@@ -601,17 +657,24 @@ class TestMergeTimeseriesUpdate:
         ),
     )
     @pytest.mark.parametrize("upsert", (True, False))
-    def test_target_symbol_does_not_exist(self, lmdb_library, source, upsert):
+    def test_target_symbol_does_not_exist(self, lmdb_library, source, upsert, is_arrow_source):
         # An update-only strategy never inserts unmatched rows, so upserting into a non-existent symbol could only
         # ever create an empty symbol. That is most likely a user error, thus it throws instead.
         lib = lmdb_library
 
         expected_exception = UserInputException if upsert else StorageException
         with pytest.raises(expected_exception):
-            lib.merge("sym", source, strategy=MergeStrategy(MergeAction.UPDATE, MergeAction.DO_NOTHING), upsert=upsert)
+            run_merge(
+                lib,
+                is_arrow_source,
+                "sym",
+                source,
+                strategy=MergeStrategy(MergeAction.UPDATE, MergeAction.DO_NOTHING),
+                upsert=upsert,
+            )
         assert not lib.has_symbol("sym")
 
-    def test_upsert_with_existing_symbol(self, lmdb_library):
+    def test_upsert_with_existing_symbol(self, lmdb_library, is_arrow_source):
         # When the symbol exists upsert is irrelevant and a regular merge is performed.
         lib = lmdb_library
         target = pd.DataFrame({"a": [1, 2, 3]}, index=pd.date_range("2024-01-01", periods=3))
@@ -619,12 +682,12 @@ class TestMergeTimeseriesUpdate:
         source = pd.DataFrame(
             {"a": [20, 40]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-02"), pd.Timestamp("2024-01-04")])
         )
-        merge_vit = lib.merge("sym", source, strategy=self.strategy, upsert=True)
+        merge_vit = run_merge(lib, is_arrow_source, "sym", source, strategy=self.strategy, upsert=True)
         assert merge_vit.version == 1
         expected = pd.DataFrame({"a": [1, 20, 3]}, index=pd.date_range("2024-01-01", periods=3))
         assert_frame_equal(lib.read("sym").data, expected)
 
-    def test_updates_the_latest_live_version(self, lmdb_version_store_v1):
+    def test_updates_the_latest_live_version(self, lmdb_version_store_v1, is_arrow_source):
         lib = lmdb_version_store_v1
 
         target = pd.DataFrame(
@@ -648,7 +711,7 @@ class TestMergeTimeseriesUpdate:
         )
 
         # The merge will be performed on the latest undeleted version
-        merge_vit = lib.merge("sym", source, strategy=self.strategy)
+        merge_vit = run_merge(lib, is_arrow_source, "sym", source, strategy=self.strategy)
         # Only Jan2 matches → update row 1 with source values
         expected = pd.DataFrame(
             {"a": [1, 5, 3], "b": [1.0, 8.0, 3.0], "c": ["a", "B", "c"]},
@@ -659,7 +722,7 @@ class TestMergeTimeseriesUpdate:
         assert merge_vit.version == 2
         assert_frame_equal(read_vit.data, expected)
 
-    def test_throws_if_all_versions_are_deleted(self, lmdb_version_store_v1):
+    def test_throws_if_all_versions_are_deleted(self, lmdb_version_store_v1, is_arrow_source):
         lib = lmdb_version_store_v1
 
         target = pd.DataFrame(
@@ -684,9 +747,9 @@ class TestMergeTimeseriesUpdate:
 
         # The merge will be performed on the latest undeleted version
         with pytest.raises(StorageException):
-            lib.merge("sym", source, strategy=self.strategy)
+            run_merge(lib, is_arrow_source, "sym", source, strategy=self.strategy)
 
-    def test_two_segments_with_same_index_value(self, s3_version_store_v1):
+    def test_two_segments_with_same_index_value(self, s3_version_store_v1, is_arrow_source):
         # The merge operation will write two segments with the same index range and the same content in parallel,
         # occasionally both data keys will end up with the same ID. LMDB throws in that case while S3 will overwrite
         # the key.
@@ -699,13 +762,13 @@ class TestMergeTimeseriesUpdate:
         source = pd.DataFrame({"a": [3]}, index=[pd.Timestamp(0)])
         for df in target:
             lib.append("sym", df)
-        lib.merge("sym", source, strategy=self.strategy)
+        run_merge(lib, is_arrow_source, "sym", source, strategy=self.strategy)
         result = lib.read("sym").data
         # Both target rows at Ts0 match source at Ts0 → both updated to a=3
         expected = pd.DataFrame({"a": [3, 3]}, index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(0)]))
         assert_frame_equal(result, expected)
 
-    def test_sorted_segments_overlap(self, lmdb_version_store_v1):
+    def test_sorted_segments_overlap(self, lmdb_version_store_v1, is_arrow_source):
         lib = lmdb_version_store_v1
         target_list = [
             pd.DataFrame({"a": [1]}, index=pd.DatetimeIndex([pd.Timestamp(0)])),
@@ -714,7 +777,7 @@ class TestMergeTimeseriesUpdate:
         source = pd.DataFrame({"a": [5, 6]}, index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(5)]))
         for tgt in target_list:
             lib.append("test", tgt)
-        lib.merge("test", source, strategy=self.strategy)
+        run_merge(lib, is_arrow_source, "test", source, strategy=self.strategy)
         res = lib.read("test").data
         # Ts0 from source matches target rows 0 and 1 → both updated to a=5; Ts5 no match → do_nothing
         expected = pd.DataFrame(
@@ -722,7 +785,7 @@ class TestMergeTimeseriesUpdate:
         )
         assert_frame_equal(res, expected)
 
-    def test_sorted_segments_overlap_but_source_is_in_first_segment_only(self, lmdb_version_store_v1):
+    def test_sorted_segments_overlap_but_source_is_in_first_segment_only(self, lmdb_version_store_v1, is_arrow_source):
         target1 = pd.DataFrame({"a": [1, 2]}, index=pd.to_datetime([pd.Timestamp(1), pd.Timestamp(2)]))
         target2 = pd.DataFrame({"a": [3]}, index=pd.to_datetime([pd.Timestamp(2)]))
         target_list = [target1, target2]
@@ -732,9 +795,11 @@ class TestMergeTimeseriesUpdate:
         expected = pd.DataFrame(
             {"a": [5, 2, 3]}, index=pd.to_datetime([pd.Timestamp(1), pd.Timestamp(2), pd.Timestamp(2)])
         )
-        generic_merge_test(lib, "sym", target_list, source, self.strategy, expected)
+        generic_merge_test(lib, is_arrow_source, "sym", target_list, source, self.strategy, expected)
 
-    def test_source_matches_first_value_of_first_segment_and_last_value_of_second_segment(self, lmdb_version_store_v1):
+    def test_source_matches_first_value_of_first_segment_and_last_value_of_second_segment(
+        self, lmdb_version_store_v1, is_arrow_source
+    ):
         target1 = pd.DataFrame({"a": [1, 2]}, index=pd.to_datetime([pd.Timestamp(0), pd.Timestamp(1)]))
         target2 = pd.DataFrame({"a": [3]}, index=pd.to_datetime([pd.Timestamp(1)]))
         target_list = [target1, target2]
@@ -744,7 +809,7 @@ class TestMergeTimeseriesUpdate:
         expected = pd.DataFrame(
             {"a": [5, 6, 6]}, index=pd.to_datetime([pd.Timestamp(0), pd.Timestamp(1), pd.Timestamp(1)])
         )
-        generic_merge_test(lib, "sym", target_list, source, self.strategy, expected)
+        generic_merge_test(lib, is_arrow_source, "sym", target_list, source, self.strategy, expected)
 
     @pytest.mark.parametrize(
         "source, expected",
@@ -767,15 +832,15 @@ class TestMergeTimeseriesUpdate:
             ),
         ],
     )
-    def test_on_column_with_overlapping_segments(self, lmdb_version_store_v1, source, expected):
+    def test_on_column_with_overlapping_segments(self, lmdb_version_store_v1, source, expected, is_arrow_source):
         lib = lmdb_version_store_v1
         target_list = [
             pd.DataFrame({"a": [1], "b": [10.0]}, index=pd.DatetimeIndex([pd.Timestamp(0)])),
             pd.DataFrame({"a": [2, 3], "b": [20.0, 30.0]}, index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(1)])),
         ]
-        generic_merge_test(lib, "sym", target_list, source, self.strategy, expected, on=["a"])
+        generic_merge_test(lib, is_arrow_source, "sym", target_list, source, self.strategy, expected, on=["a"])
 
-    def test_index_matches_but_on_column_differs(self, lmdb_library):
+    def test_index_matches_but_on_column_differs(self, lmdb_library, is_arrow_source):
         lib = lmdb_library
         target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]}, index=pd.date_range("2024-01-01", periods=3))
         source = pd.DataFrame(
@@ -784,9 +849,9 @@ class TestMergeTimeseriesUpdate:
         )
         # Index matches but a values differ (1≠10, 2≠20, 3≠30) → no updates
         expected = target.copy()
-        generic_merge_test(lib, "sym", target, source, self.strategy, expected, on=["a"])
+        generic_merge_test(lib, is_arrow_source, "sym", target, source, self.strategy, expected, on=["a"])
 
-    def test_all_columns_in_on(self, lmdb_library):
+    def test_all_columns_in_on(self, lmdb_library, is_arrow_source):
         lib = lmdb_library
         target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]}, index=pd.date_range("2024-01-01", periods=3))
         source = pd.DataFrame(
@@ -795,9 +860,9 @@ class TestMergeTimeseriesUpdate:
         )
         # b values differ (99≠1, 99≠2, 99≠3) → no matches
         expected = target.copy()
-        generic_merge_test(lib, "sym", target, source, self.strategy, expected, on=["a", "b"])
+        generic_merge_test(lib, is_arrow_source, "sym", target, source, self.strategy, expected, on=["a", "b"])
 
-    def test_on_column_one_source_row_matches_multiple_target_rows(self, lmdb_library):
+    def test_on_column_one_source_row_matches_multiple_target_rows(self, lmdb_library, is_arrow_source):
         lib = lmdb_library
         target = pd.DataFrame(
             {"a": [1, 1, 2], "b": [10.0, 20.0, 30.0]},
@@ -813,9 +878,9 @@ class TestMergeTimeseriesUpdate:
                 [pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-02")]
             ),
         )
-        generic_merge_test(lib, "sym", target, source, self.strategy, expected, on=["a"])
+        generic_merge_test(lib, is_arrow_source, "sym", target, source, self.strategy, expected, on=["a"])
 
-    def test_on_column_one_source_row_matches_multiple_target_rows_across_segments(self, lmdb_library):
+    def test_on_column_one_source_row_matches_multiple_target_rows_across_segments(self, lmdb_library, is_arrow_source):
         lib = lmdb_library
         target = [
             pd.DataFrame(
@@ -843,18 +908,18 @@ class TestMergeTimeseriesUpdate:
                 ]
             ),
         )
-        generic_merge_test(lib, "sym", target, source, self.strategy, expected, on=["a"])
+        generic_merge_test(lib, is_arrow_source, "sym", target, source, self.strategy, expected, on=["a"])
 
-    def test_on_nonexistent_column_raises(self, lmdb_library):
+    def test_on_nonexistent_column_raises(self, lmdb_library, is_arrow_source):
         lib = lmdb_library
         target = pd.DataFrame({"a": [1, 2], "b": [1.0, 2.0]}, index=pd.date_range("2024-01-01", periods=2))
         lib.write("sym", target)
         source = pd.DataFrame({"a": [1], "b": [10.0]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-01")]))
         with pytest.raises(UserInputException) as exc_info:
-            lib.merge("sym", source, strategy=self.strategy, on=["nonexistent"])
+            run_merge(lib, is_arrow_source, "sym", source, strategy=self.strategy, on=["nonexistent"])
         assert '"nonexistent"' in str(exc_info.value)
 
-    def test_on_with_repeated_index_values(self, lmdb_library):
+    def test_on_with_repeated_index_values(self, lmdb_library, is_arrow_source):
         lib = lmdb_library
         target = pd.DataFrame(
             {"a": [1, 2, 3, 4, 5], "b": [1.0, 2.0, 3.0, 4.0, 5.0], "c": ["a", "b", "c", "d", "e"]},
@@ -868,9 +933,9 @@ class TestMergeTimeseriesUpdate:
         )
         # No source (a,b) pair matches any target (a,b) pair at the same timestamp → no updates
         expected = target.copy()
-        generic_merge_test(lib, "sym", target, source, self.strategy, expected, on=["a", "b"])
+        generic_merge_test(lib, is_arrow_source, "sym", target, source, self.strategy, expected, on=["a", "b"])
 
-    def test_on_list_contains_the_same_column_twice(self, lmdb_library):
+    def test_on_list_contains_the_same_column_twice(self, lmdb_library, is_arrow_source):
         lib = lmdb_library
         target = pd.DataFrame(
             {"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]},
@@ -885,9 +950,9 @@ class TestMergeTimeseriesUpdate:
             {"a": [1, 2, 3], "b": [1.0, 2.0, 30.0]},
             index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(1), pd.Timestamp(2)]),
         )
-        generic_merge_test(lib, "sym", target, source, self.strategy, expected, on=["a", "a"])
+        generic_merge_test(lib, is_arrow_source, "sym", target, source, self.strategy, expected, on=["a", "a"])
 
-    def test_throws_when_multiple_source_rows_match_same_target_row(self, lmdb_library):
+    def test_throws_when_multiple_source_rows_match_same_target_row(self, lmdb_library, is_arrow_source):
         lib = lmdb_library
         target = pd.DataFrame(
             {"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]},
@@ -899,9 +964,9 @@ class TestMergeTimeseriesUpdate:
         )
         lib.write("sym", target)
         with pytest.raises(UserInputException, match="Multiple source rows match the same target row"):
-            lib.merge("sym", source, strategy=self.strategy)
+            run_merge(lib, is_arrow_source, "sym", source, strategy=self.strategy)
 
-    def test_throws_when_multiple_source_rows_match_same_target_row_with_on(self, lmdb_library):
+    def test_throws_when_multiple_source_rows_match_same_target_row_with_on(self, lmdb_library, is_arrow_source):
         lib = lmdb_library
         target = pd.DataFrame(
             {"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]},
@@ -913,9 +978,9 @@ class TestMergeTimeseriesUpdate:
         )
         lib.write("sym", target)
         with pytest.raises(UserInputException, match="Multiple source rows match the same target row"):
-            lib.merge("sym", source, strategy=self.strategy, on=["a"])
+            run_merge(lib, is_arrow_source, "sym", source, strategy=self.strategy, on=["a"])
 
-    def test_two_segments_same_timestamp_repeated_source_values(self, lmdb_library):
+    def test_two_segments_same_timestamp_repeated_source_values(self, lmdb_library, is_arrow_source):
         lib = lmdb_library
 
         t0 = pd.Timestamp("2000-01-01")
@@ -927,10 +992,10 @@ class TestMergeTimeseriesUpdate:
 
         # Source (t0,a=0) no match; (t1,a=1) matches df1 row → b=0.0; (t1,a=0) matches df2 row → b=0.0
         expected = pd.DataFrame({"a": [1, 0], "b": [0.0, 0.0]}, index=pd.DatetimeIndex([t1, t1]))
-        generic_merge_test(lib, "sym", [df1, df2], source, self.strategy, expected, on=["a"])
+        generic_merge_test(lib, is_arrow_source, "sym", [df1, df2], source, self.strategy, expected, on=["a"])
 
     @pytest.mark.parametrize("on", ([None], ["a", None]))
-    def test_match_on_column_named_none(self, lmdb_library, on):
+    def test_match_on_column_named_none(self, lmdb_library, on, is_arrow_source):
         lib = lmdb_library
         target = pd.DataFrame(
             {"a": [1, 2, 3], None: [1.0, 2.0, 3.0]},
@@ -942,9 +1007,11 @@ class TestMergeTimeseriesUpdate:
         )
         lib.write("sym", target)
         with pytest.raises(TypeError):
-            lib.merge("sym", source, strategy=self.strategy, on=on)
+            run_merge(lib, is_arrow_source, "sym", source, strategy=self.strategy, on=on)
 
-    def test_match_on_column_named_index_and_unnamed_index(self, lmdb_library):
+    def test_match_on_column_named_index_and_unnamed_index(self, request, lmdb_library, is_arrow_source):
+        if is_arrow_source:
+            request.applymarker(ARROW_SOURCE_INTO_PANDAS_MANGLED_COLUMN_XFAIL)
         lib = lmdb_library
         target = pd.DataFrame({"index": [1, 2, 3], "b": [1.0, 2.0, 3.0]}, index=pd.date_range("2024-01-01", periods=3))
         source = pd.DataFrame(
@@ -963,9 +1030,9 @@ class TestMergeTimeseriesUpdate:
         expected = pd.DataFrame(
             {"index": [1, 2, 3], "b": [10.0, 2.0, 3.0]}, index=pd.date_range("2024-01-01", periods=3)
         )
-        generic_merge_test(lib, "sym", target, source, self.strategy, expected, on=["index"])
+        generic_merge_test(lib, is_arrow_source, "sym", target, source, self.strategy, expected, on=["index"])
 
-    def test_match_on_non_existing_column_named_index_and_unnamed_index(self, lmdb_library):
+    def test_match_on_non_existing_column_named_index_and_unnamed_index(self, lmdb_library, is_arrow_source):
         lib = lmdb_library
         target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]}, index=pd.date_range("2024-01-01", periods=3))
         source = pd.DataFrame(
@@ -981,10 +1048,12 @@ class TestMergeTimeseriesUpdate:
         )
         lib.write("sym", target)
         with pytest.raises(UserInputException) as exc_info:
-            lib.merge("sym", source, strategy=self.strategy, on=["index"])
+            run_merge(lib, is_arrow_source, "sym", source, strategy=self.strategy, on=["index"])
         assert "E_COLUMN_NOT_FOUND" in str(exc_info.value)
 
-    def test_match_on_column_named_index_and_unnamed_index_with_duplicates(self, lmdb_library):
+    def test_match_on_column_named_index_and_unnamed_index_with_duplicates(self, lmdb_library, is_arrow_source):
+        if is_arrow_source:
+            pytest.skip("pyarrow Table cannot have duplicate column names")
         lib = lmdb_library
         column_names = ["index", "index"]
         target = pd.DataFrame(
@@ -997,11 +1066,15 @@ class TestMergeTimeseriesUpdate:
         )
         lib.write("sym", target)
         with pytest.raises(UserInputException, match="E_DUPLICATE_COLUMN") as exc_info:
-            lib.merge("sym", source, strategy=self.strategy, on=["index"])
+            run_merge(lib, is_arrow_source, "sym", source, strategy=self.strategy, on=["index"])
 
     @pytest.mark.parametrize("index_name", ("index", "some_name"))
     @pytest.mark.parametrize("column_name", ("index", "some_name"))
-    def test_match_on_column_named_as_explicitly_named_index(self, lmdb_library, index_name, column_name):
+    def test_match_on_column_named_as_explicitly_named_index(
+        self, lmdb_library, index_name, column_name, is_arrow_source
+    ):
+        if is_arrow_source and index_name == column_name:
+            pytest.skip("Index and column share a name so the source cannot be a pyarrow Table")
         lib = lmdb_library
         target = pd.DataFrame(
             {column_name: [1, 2, 3], "b": [1.0, 2.0, 3.0]}, index=pd.date_range("2024-01-01", periods=3)
@@ -1021,11 +1094,13 @@ class TestMergeTimeseriesUpdate:
         source.index.name = index_name
         lib.write("sym", target)
         with pytest.raises(UserInputException) as exc_info:
-            lib.merge("sym", source, strategy=self.strategy, on=[index_name])
+            run_merge(lib, is_arrow_source, "sym", source, strategy=self.strategy, on=[index_name])
         assert f'"{index_name}"' in str(exc_info.value)
         assert "not contain the datetime index column" in str(exc_info.value)
 
-    def test_on_columns_with_repeated_name(self, lmdb_library):
+    def test_on_columns_with_repeated_name(self, lmdb_library, is_arrow_source):
+        if is_arrow_source:
+            pytest.skip("pyarrow Table cannot have duplicate column names")
         lib = lmdb_library
         target = pd.DataFrame(
             [[1, 2, 3], [4, 5, 6]],
@@ -1039,9 +1114,9 @@ class TestMergeTimeseriesUpdate:
         )
         lib.write("sym", target)
         with pytest.raises(UserInputException, match="E_DUPLICATE_COLUMN") as exc_info:
-            lib.merge("sym", source, strategy=self.strategy, on=["my_duplicated_column"])
+            run_merge(lib, is_arrow_source, "sym", source, strategy=self.strategy, on=["my_duplicated_column"])
 
-    def test_on_colum_reorders_matched_rows(self, lmdb_library):
+    def test_on_colum_reorders_matched_rows(self, lmdb_library, is_arrow_source):
         lib = lmdb_library
         target = pd.DataFrame(
             {"a": [1, 0, 0, 1, 1], "b": [1, 2, 3, 4, 5], "c": ["a", "b", "c", "d", "e"]},
@@ -1059,15 +1134,15 @@ class TestMergeTimeseriesUpdate:
             {"a": [1, 0, 0, 1, 1], "b": [300, 100, 100, 300, 300], "c": ["C", "A", "A", "C", "C"]},
             index=pd.DatetimeIndex([pd.Timestamp(0)] * 5),
         )
-        generic_merge_test(lib, "sym", target, source, self.strategy, expected, on=["a"])
+        generic_merge_test(lib, is_arrow_source, "sym", target, source, self.strategy, expected, on=["a"])
 
 
+@arrow_source_param
 class TestMergeTimeseriesInsert:
-
     def setup_method(self):
         self.strategy = MergeStrategy("do_nothing", "insert")
 
-    def test_insert_past_row_slice_boundary_is_not_dropped(self, lmdb_library_factory):
+    def test_insert_past_row_slice_boundary_is_not_dropped(self, lmdb_library_factory, is_arrow_source):
         # Regression test: an unmatched insert row that falls in the gap between two row slices used to be dropped.
         # With rows_per_segment=2 the target [10, 20, 30] is sliced into [10, 20] and [30]; inserting the unmatched
         # rows at 15 and 25 must keep both (25 previously landed past the first slice's end and was lost).
@@ -1081,7 +1156,7 @@ class TestMergeTimeseriesInsert:
             {"a": [100, 101]},
             index=pd.DatetimeIndex([pd.Timestamp(15), pd.Timestamp(25)]),
         )
-        lib.merge("sym", source, strategy=self.strategy)
+        run_merge(lib, is_arrow_source, "sym", source, strategy=self.strategy)
         expected = pd.DataFrame(
             {"a": [0, 100, 1, 101, 2]},
             index=pd.DatetimeIndex(
@@ -1094,7 +1169,7 @@ class TestMergeTimeseriesInsert:
         "strategy",
         (MergeStrategy(MergeAction.DO_NOTHING, MergeAction.INSERT), MergeStrategy("do_nothing", "insert")),
     )
-    def test_basic(self, lmdb_library, strategy):
+    def test_basic(self, lmdb_library, strategy, is_arrow_source):
         lib = lmdb_library
 
         target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]}, index=pd.date_range("2024-01-01", periods=3))
@@ -1105,7 +1180,7 @@ class TestMergeTimeseriesInsert:
             index=pd.DatetimeIndex(["2023-01-01", "2024-01-01 10:00:00", "2025-01-04"]),
         )
 
-        merge_vit = lib.merge("sym", source, strategy=strategy)
+        merge_vit = run_merge(lib, is_arrow_source, "sym", source, strategy=strategy)
         assert merge_vit.version == 1
         assert merge_vit.symbol == write_vit.symbol
         assert merge_vit.metadata == write_vit.metadata
@@ -1118,14 +1193,18 @@ class TestMergeTimeseriesInsert:
 
     # The row slice is not re-emitted when unchanged, so no second data key is written regardless of dedup.
     @pytest.mark.parametrize("dedup, expected_data_keys", [(False, 1), (True, 1)])
-    def test_writes_new_version_even_if_nothing_is_changed(self, lmdb_library_factory, dedup, expected_data_keys):
+    def test_writes_new_version_even_if_nothing_is_changed(
+        self, lmdb_library_factory, dedup, expected_data_keys, is_arrow_source
+    ):
         lib = lmdb_library_factory(arcticdb.LibraryOptions(dedup=dedup))
         target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]}, index=pd.date_range("2024-01-01", periods=3))
         lib.write("sym", target)
         source = pd.DataFrame(
             {"a": [10, 20, 30], "b": [10.0, 20.0, 30.0]}, index=pd.date_range("2024-01-01", periods=3)
         )
-        merge_vit = lib.merge("sym", source, strategy=MergeStrategy(MergeAction.DO_NOTHING, MergeAction.INSERT))
+        merge_vit = run_merge(
+            lib, is_arrow_source, "sym", source, strategy=MergeStrategy(MergeAction.DO_NOTHING, MergeAction.INSERT)
+        )
         assert merge_vit.version == 1
 
         read_vit = lib.read("sym")
@@ -1137,7 +1216,7 @@ class TestMergeTimeseriesInsert:
         assert len(lt.find_keys_for_symbol(KeyType.TABLE_INDEX, "sym")) == 2
         assert len(lt.find_keys_for_symbol(KeyType.VERSION, "sym")) == 2
 
-    def test_index_and_column(self, lmdb_library):
+    def test_index_and_column(self, lmdb_library, is_arrow_source):
         lib = lmdb_library
         target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]}, index=pd.date_range("2024-01-01", periods=3))
         lib.write("sym", target)
@@ -1153,7 +1232,14 @@ class TestMergeTimeseriesInsert:
                 ]
             ),
         )
-        lib.merge("sym", source, on=["a"], strategy=MergeStrategy(MergeAction.DO_NOTHING, MergeAction.INSERT))
+        run_merge(
+            lib,
+            is_arrow_source,
+            "sym",
+            source,
+            on=["a"],
+            strategy=MergeStrategy(MergeAction.DO_NOTHING, MergeAction.INSERT),
+        )
 
         # The first row is matched, but the strategy for matched rows is DO_NOTHING, so no update
         # the rest rows are inserted
@@ -1161,7 +1247,7 @@ class TestMergeTimeseriesInsert:
         received = lib.read("sym").data
         assert_frame_equal(received, expected)
 
-    def test_on_multiple_columns(self, lmdb_library):
+    def test_on_multiple_columns(self, lmdb_library, is_arrow_source):
         lib = lmdb_library
         target = pd.DataFrame(
             {
@@ -1194,12 +1280,21 @@ class TestMergeTimeseriesInsert:
             ),
         )
 
-        lib.merge("sym", source, on=["b", "d", "e"], strategy=MergeStrategy(MergeAction.DO_NOTHING, MergeAction.INSERT))
+        run_merge(
+            lib,
+            is_arrow_source,
+            "sym",
+            source,
+            on=["b", "d", "e"],
+            strategy=MergeStrategy(MergeAction.DO_NOTHING, MergeAction.INSERT),
+        )
         expected = pd.concat([target, source.tail(len(source) - 1)]).sort_index()
         received = lib.read("sym").data
         assert_frame_equal(received, expected)
 
-    def test_does_not_throw_when_target_row_is_matched_more_than_once_when_matched_is_do_nothing(self, lmdb_library):
+    def test_does_not_throw_when_target_row_is_matched_more_than_once_when_matched_is_do_nothing(
+        self, lmdb_library, is_arrow_source
+    ):
         lib = lmdb_library
         target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]}, index=pd.date_range("2024-01-01", periods=3))
         lib.write("sym", target)
@@ -1215,7 +1310,9 @@ class TestMergeTimeseriesInsert:
             ),
         )
 
-        lib.merge("sym", source, strategy=MergeStrategy(MergeAction.DO_NOTHING, MergeAction.INSERT))
+        run_merge(
+            lib, is_arrow_source, "sym", source, strategy=MergeStrategy(MergeAction.DO_NOTHING, MergeAction.INSERT)
+        )
         expected = pd.DataFrame(
             {
                 "a": [
@@ -1238,14 +1335,21 @@ class TestMergeTimeseriesInsert:
         received = lib.read("sym").data
         assert_frame_equal(received, expected)
 
-    def test_target_is_empty(self, lmdb_library):
+    def test_target_is_empty(self, request, lmdb_library, is_arrow_source):
+        if is_arrow_source:
+            request.applymarker(ARROW_SOURCE_INTO_EMPTY_PANDAS_TARGET_XFAIL)
         lib = lmdb_library
         target = pd.DataFrame({"a": np.array([], dtype=np.int64)}, index=pd.DatetimeIndex([]))
         write_vit = lib.write("sym", target, metadata={"meta": "data"})
         assert write_vit.version == 0
         source = pd.DataFrame({"a": np.array([1, 2], dtype=np.int64)}, index=pd.date_range("2024-01-01", periods=2))
-        merge_vit = lib.merge(
-            "sym", source, strategy=MergeStrategy("do_nothing", "insert"), metadata={"new_meta": "new_data"}
+        merge_vit = run_merge(
+            lib,
+            is_arrow_source,
+            "sym",
+            source,
+            strategy=MergeStrategy("do_nothing", "insert"),
+            metadata={"new_meta": "new_data"},
         )
         assert merge_vit.version == 1
         expected = source
@@ -1254,7 +1358,7 @@ class TestMergeTimeseriesInsert:
         assert_vit_equals_except_data(merge_vit, read_vit)
         assert_frame_equal(read_vit.data, expected)
 
-    def test_insert_within_single_segment(self, lmdb_library):
+    def test_insert_within_single_segment(self, lmdb_library, is_arrow_source):
         lib = lmdb_library
         target = pd.DataFrame(
             {"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]},
@@ -1272,7 +1376,7 @@ class TestMergeTimeseriesInsert:
                 ]
             ),
         )
-        lib.merge("sym", source, self.strategy)
+        run_merge(lib, is_arrow_source, "sym", source, self.strategy)
         expected = pd.concat([target, source]).sort_index()
         assert_frame_equal(lib.read("sym").data, expected)
 
@@ -1362,7 +1466,7 @@ class TestMergeTimeseriesInsert:
             ),
         ],
     )
-    def test_within_single_segment_match_on_column(self, lmdb_library, source, expected):
+    def test_within_single_segment_match_on_column(self, lmdb_library, source, expected, is_arrow_source):
         lib = lmdb_library
         index = pd.DatetimeIndex(
             [
@@ -1377,7 +1481,7 @@ class TestMergeTimeseriesInsert:
         )
         target = pd.DataFrame({"a": range(len(index)), "b": np.linspace(0, len(index) - 1, len(index))}, index=index)
         lib.write("sym", target)
-        lib.merge("sym", source, self.strategy, on=["a"])
+        run_merge(lib, is_arrow_source, "sym", source, self.strategy, on=["a"])
         assert_frame_equal(lib.read("sym").data, expected)
 
     @pytest.mark.parametrize(
@@ -1401,14 +1505,14 @@ class TestMergeTimeseriesInsert:
             ),
         ],
     )
-    def test_within_single_segment_matched_rows_stay_the_same(self, lmdb_library, source):
+    def test_within_single_segment_matched_rows_stay_the_same(self, lmdb_library, source, is_arrow_source):
         lib = lmdb_library
         target = pd.DataFrame(
             {"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]},
             index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(5), pd.Timestamp(10)]),
         )
         lib.write("sym", target)
-        lib.merge("sym", source, self.strategy)
+        run_merge(lib, is_arrow_source, "sym", source, self.strategy)
         assert_frame_equal(lib.read("sym").data, target)
 
     @pytest.mark.parametrize(
@@ -1452,7 +1556,7 @@ class TestMergeTimeseriesInsert:
             ),
         ],
     )
-    def test_within_two_segments(self, lmdb_library, source):
+    def test_within_two_segments(self, lmdb_library, source, is_arrow_source):
         lib = lmdb_library
         seg0 = pd.DataFrame(
             {"a": [1, 2, 3], "b": [1.0, 2.0, 3.0], "c": [True, False, True]},
@@ -1465,7 +1569,7 @@ class TestMergeTimeseriesInsert:
         )
         lib.append("sym", seg1)
         expected = pd.concat([seg0, seg1, source]).sort_index()
-        lib.merge("sym", source, self.strategy)
+        run_merge(lib, is_arrow_source, "sym", source, self.strategy)
         assert_frame_equal(lib.read("sym").data, expected)
 
     @pytest.mark.parametrize(
@@ -1478,7 +1582,7 @@ class TestMergeTimeseriesInsert:
             ],
         ],
     )
-    def test_insert_before_first_segment_start(self, in_memory_store_factory, target):
+    def test_insert_before_first_segment_start(self, in_memory_store_factory, target, is_arrow_source):
         lib = in_memory_store_factory()
         for tgt in target:
             lib.append("sym", tgt)
@@ -1487,7 +1591,7 @@ class TestMergeTimeseriesInsert:
         )
         qs.reset_stats()
         with qs.query_stats():
-            lib.merge("sym", source, self.strategy)
+            run_merge(lib, is_arrow_source, "sym", source, self.strategy)
         stats = qs.get_query_stats()
         assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_DATA") == 1
         assert query_stats_operation_count(stats, "Memory_PutObject", "TABLE_DATA") == 1
@@ -1508,7 +1612,7 @@ class TestMergeTimeseriesInsert:
             ],
         ],
     )
-    def test_insert_after_last_segment_end(self, in_memory_store_factory, target):
+    def test_insert_after_last_segment_end(self, in_memory_store_factory, target, is_arrow_source):
         lib = in_memory_store_factory()
         for tgt in target:
             lib.append("sym", tgt)
@@ -1517,7 +1621,7 @@ class TestMergeTimeseriesInsert:
         )
         qs.reset_stats()
         with qs.query_stats():
-            lib.merge("sym", source, self.strategy)
+            run_merge(lib, is_arrow_source, "sym", source, self.strategy)
         stats = qs.get_query_stats()
         assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_DATA") == 1
         assert query_stats_operation_count(stats, "Memory_PutObject", "TABLE_DATA") == 1
@@ -1538,7 +1642,7 @@ class TestMergeTimeseriesInsert:
             ],
         ],
     )
-    def test_insert_before_first_segment_start_and_after_last_segment_end(self, lmdb_library, target):
+    def test_insert_before_first_segment_start_and_after_last_segment_end(self, lmdb_library, target, is_arrow_source):
         lib = lmdb_library
         for tgt in target:
             lib.append("sym", tgt)
@@ -1555,10 +1659,10 @@ class TestMergeTimeseriesInsert:
                 ]
             ),
         )
-        lib.merge("sym", source, self.strategy)
+        run_merge(lib, is_arrow_source, "sym", source, self.strategy)
         assert_frame_equal(lib.read("sym").data, pd.concat(target + [source]).sort_index())
 
-    def test_insert_between_two_segments_appends_to_first(self, in_memory_store_factory):
+    def test_insert_between_two_segments_appends_to_first(self, in_memory_store_factory, is_arrow_source):
         lib = in_memory_store_factory()
         seg0 = pd.DataFrame({"a": [1, 2]}, index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(5)]))
         lib.write("sym", seg0)
@@ -1567,7 +1671,7 @@ class TestMergeTimeseriesInsert:
         source = pd.DataFrame({"a": [100, 200]}, index=pd.DatetimeIndex([pd.Timestamp(6), pd.Timestamp(7)]))
         qs.reset_stats()
         with qs.query_stats():
-            lib.merge("sym", source, self.strategy)
+            run_merge(lib, is_arrow_source, "sym", source, self.strategy)
         stats = qs.get_query_stats()
         assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_DATA") == 1
         assert query_stats_operation_count(stats, "Memory_PutObject", "TABLE_DATA") == 1
@@ -1582,8 +1686,8 @@ class TestMergeTimeseriesInsert:
         assert_frame_equal(segments[1], seg1)
 
 
+@arrow_source_param
 class TestMergeTimeseriesUpdateAndInsert:
-
     def setup_method(self):
         self.strategy = MergeStrategy(MergeAction.UPDATE, MergeAction.INSERT)
 
@@ -1591,7 +1695,7 @@ class TestMergeTimeseriesUpdateAndInsert:
         "strategy",
         (None, MergeStrategy(MergeAction.UPDATE, MergeAction.INSERT), MergeStrategy("update", "insert")),
     )
-    def test_basic(self, lmdb_library, strategy):
+    def test_basic(self, lmdb_library, strategy, is_arrow_source):
         lib = lmdb_library
         target = pd.DataFrame(
             {"a": [1, 2, 3], "b": [1.0, 2.0, 3.0], "c": ["a", "b", "c"]}, index=pd.date_range("2024-01-01", periods=3)
@@ -1605,7 +1709,11 @@ class TestMergeTimeseriesUpdateAndInsert:
             ),
         )
 
-        merge_vit = lib.merge("sym", source, strategy=strategy) if strategy else lib.merge("sym", source)
+        merge_vit = (
+            run_merge(lib, is_arrow_source, "sym", source, strategy=strategy)
+            if strategy
+            else run_merge(lib, is_arrow_source, "sym", source)
+        )
         assert merge_vit.version == 1
         assert merge_vit.symbol == write_vit.symbol
         assert merge_vit.metadata == write_vit.metadata
@@ -1646,7 +1754,11 @@ class TestMergeTimeseriesUpdateAndInsert:
     @pytest.mark.parametrize("upsert", (True, False))
     @pytest.mark.parametrize("strategy", (MergeStrategy("update", "insert"), MergeStrategy("do_nothing", "insert")))
     @pytest.mark.parametrize("metadata", (None, {"meta": "data"}))
-    def test_target_symbol_does_not_exist(self, lmdb_library, source, upsert, strategy, metadata):
+    def test_target_symbol_does_not_exist(
+        self, request, lmdb_library, source, upsert, strategy, metadata, is_arrow_source
+    ):
+        if is_arrow_source and upsert:
+            request.applymarker(ARROW_WRITTEN_UNNAMED_INDEX_XFAIL)
         # Model non-existing target after Library.update
         # There is an upsert parameter to control whether to create the index. If upsert=False exception is thrown.
         # Since we're doing a merge on non-existing data, I think it's logical to assume that nothing matches. No
@@ -1655,10 +1767,12 @@ class TestMergeTimeseriesUpdateAndInsert:
 
         if not upsert:
             with pytest.raises(StorageException):
-                lib.merge("sym", source, strategy=strategy, upsert=upsert, metadata=metadata)
+                run_merge(lib, is_arrow_source, "sym", source, strategy=strategy, upsert=upsert, metadata=metadata)
             assert not lib.has_symbol("sym")
         else:
-            merge_vit = lib.merge("sym", source, strategy=strategy, upsert=upsert, metadata=metadata)
+            merge_vit = run_merge(
+                lib, is_arrow_source, "sym", source, strategy=strategy, upsert=upsert, metadata=metadata
+            )
             assert merge_vit.version == 0
             assert merge_vit.metadata == metadata
             assert lib.list_symbols() == ["sym"]
@@ -1666,7 +1780,7 @@ class TestMergeTimeseriesUpdateAndInsert:
             assert_vit_equals_except_data(merge_vit, read_vit)
             assert_frame_equal(read_vit.data, source)
 
-    def test_upsert_with_existing_symbol(self, lmdb_library):
+    def test_upsert_with_existing_symbol(self, lmdb_library, is_arrow_source):
         # When the symbol exists upsert is irrelevant and a regular merge is performed.
         lib = lmdb_library
         target = pd.DataFrame({"a": [1, 2, 3]}, index=pd.date_range("2024-01-01", periods=3))
@@ -1674,7 +1788,7 @@ class TestMergeTimeseriesUpdateAndInsert:
         source = pd.DataFrame(
             {"a": [20, 40]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-02"), pd.Timestamp("2024-01-04")])
         )
-        merge_vit = lib.merge("sym", source, strategy=self.strategy, upsert=True)
+        merge_vit = run_merge(lib, is_arrow_source, "sym", source, strategy=self.strategy, upsert=True)
         assert merge_vit.version == 1
         expected = pd.DataFrame(
             {"a": [1, 20, 3, 40]},
@@ -1689,7 +1803,9 @@ class TestMergeTimeseriesUpdateAndInsert:
         )
         assert_frame_equal(lib.read("sym").data, expected)
 
-    def test_upsert_recreates_symbol_after_delete(self, lmdb_library):
+    def test_upsert_recreates_symbol_after_delete(self, request, lmdb_library, is_arrow_source):
+        if is_arrow_source:
+            request.applymarker(ARROW_WRITTEN_UNNAMED_INDEX_XFAIL)
         # Recreating a deleted symbol continues the version counter and adds a symbol list key.
         lib = lmdb_library
         lib.write("sym", pd.DataFrame({"a": [1, 2, 3]}, index=pd.date_range("2024-01-01", periods=3)))
@@ -1698,13 +1814,13 @@ class TestMergeTimeseriesUpdateAndInsert:
         assert not len(lib.list_symbols())
         num_symbol_list_keys = len(lib_tool.find_keys(KeyType.SYMBOL_LIST))
         source = pd.DataFrame({"a": [10]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-05")]))
-        merge_vit = lib.merge("sym", source, strategy=self.strategy, upsert=True)
+        merge_vit = run_merge(lib, is_arrow_source, "sym", source, strategy=self.strategy, upsert=True)
         assert merge_vit.version == 1
         assert_frame_equal(lib.read("sym").data, source)
         assert len(lib_tool.find_keys(KeyType.SYMBOL_LIST)) == num_symbol_list_keys + 1
         assert lib.list_symbols() == ["sym"]
 
-    def test_on_index_and_column(self, lmdb_library):
+    def test_on_index_and_column(self, lmdb_library, is_arrow_source):
         lib = lmdb_library
         target = pd.DataFrame(
             {"a": [1, 2, 3], "b": [1.0, 2.0, 3.0], "c": ["a", "b", "c"]}, index=pd.date_range("2024-01-01", periods=3)
@@ -1722,7 +1838,7 @@ class TestMergeTimeseriesUpdateAndInsert:
                 ]
             ),
         )
-        lib.merge("sym", source, on=["a"])
+        run_merge(lib, is_arrow_source, "sym", source, on=["a"])
 
         expected = pd.DataFrame(
             {"a": [1, 2, 2, 3, 30, 40], "b": [10.0, 2.0, 20.0, 3.0, 30.0, 40.0], "c": ["A", "b", "B", "c", "A", "C"]},
@@ -1741,7 +1857,7 @@ class TestMergeTimeseriesUpdateAndInsert:
 
         assert_frame_equal(received, expected)
 
-    def test_on_multiple_columns(self, lmdb_library):
+    def test_on_multiple_columns(self, lmdb_library, is_arrow_source):
         lib = lmdb_library
         target = pd.DataFrame(
             {
@@ -1774,7 +1890,7 @@ class TestMergeTimeseriesUpdateAndInsert:
             ),
         )
 
-        lib.merge("sym", source, on=["b", "d", "e"])
+        run_merge(lib, is_arrow_source, "sym", source, on=["b", "d", "e"])
         expected = pd.DataFrame(
             {
                 "a": [10, 2, 20, 3, 30, 4, 40, 50],
@@ -1799,12 +1915,14 @@ class TestMergeTimeseriesUpdateAndInsert:
         received = lib.read("sym").data
         assert_frame_equal(received, expected)
 
-    def test_target_is_empty(self, lmdb_library):
+    def test_target_is_empty(self, request, lmdb_library, is_arrow_source):
+        if is_arrow_source:
+            request.applymarker(ARROW_SOURCE_INTO_EMPTY_PANDAS_TARGET_XFAIL)
         lib = lmdb_library
         target = pd.DataFrame({"a": np.array([], dtype=np.int64)}, index=pd.DatetimeIndex([]))
         write_vit = lib.write("sym", target)
         source = pd.DataFrame({"a": np.array([1, 2], dtype=np.int64)}, index=pd.date_range("2024-01-01", periods=2))
-        merge_vit = lib.merge("sym", source)
+        merge_vit = run_merge(lib, is_arrow_source, "sym", source)
         expected = source
         read_vit = lib.read("sym")
         assert_vit_equals_except_data(merge_vit, read_vit)
@@ -1828,7 +1946,7 @@ class TestMergeTimeseriesUpdateAndInsert:
             ),
         ],
     )
-    def test_throws_when_target_row_is_matched_more_than_once(self, lmdb_library, source):
+    def test_throws_when_target_row_is_matched_more_than_once(self, lmdb_library, source, is_arrow_source):
         lib = lmdb_library
         target = pd.DataFrame(
             {"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]},
@@ -1836,7 +1954,7 @@ class TestMergeTimeseriesUpdateAndInsert:
         )
         lib.write("sym", target)
         with pytest.raises(UserInputException):
-            lib.merge("sym", source, strategy=self.strategy)
+            run_merge(lib, is_arrow_source, "sym", source, strategy=self.strategy)
 
     @pytest.mark.parametrize(
         "source,expected",
@@ -1924,7 +2042,7 @@ class TestMergeTimeseriesUpdateAndInsert:
             ),
         ],
     )
-    def test_within_single_segment_match_on_column(self, lmdb_library, source, expected):
+    def test_within_single_segment_match_on_column(self, lmdb_library, source, expected, is_arrow_source):
         lib = lmdb_library
         index = pd.DatetimeIndex(
             [
@@ -1939,45 +2057,45 @@ class TestMergeTimeseriesUpdateAndInsert:
         )
         target = pd.DataFrame({"a": range(len(index)), "b": np.linspace(0, len(index) - 1, len(index))}, index=index)
         lib.write("sym", target)
-        lib.merge("sym", source, self.strategy, on=["a"])
+        run_merge(lib, is_arrow_source, "sym", source, self.strategy, on=["a"])
         assert_frame_equal(lib.read("sym").data, expected)
 
-    def test_insert_before_first_segment_start_and_update_first_value(self, lmdb_library):
+    def test_insert_before_first_segment_start_and_update_first_value(self, lmdb_library, is_arrow_source):
         lib = lmdb_library
         lib.write("sym", pd.DataFrame({"a": [1, 2]}, index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(5)])))
         source = pd.DataFrame({"a": [10, 20]}, index=pd.DatetimeIndex([pd.Timestamp(-5), pd.Timestamp(0)]))
-        lib.merge("sym", source, self.strategy)
+        run_merge(lib, is_arrow_source, "sym", source, self.strategy)
         expected = pd.DataFrame(
             {"a": [10, 20, 2]}, index=pd.DatetimeIndex([pd.Timestamp(-5), pd.Timestamp(0), pd.Timestamp(5)])
         )
         assert_frame_equal(lib.read("sym").data, expected)
 
-    def test_insert_before_first_segment_start_and_update_first_value_on(self, lmdb_library):
+    def test_insert_before_first_segment_start_and_update_first_value_on(self, lmdb_library, is_arrow_source):
         lib = lmdb_library
         lib.write("sym", pd.DataFrame({"a": [1, 2]}, index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(5)])))
         source = pd.DataFrame({"a": [10, 20]}, index=pd.DatetimeIndex([pd.Timestamp(-5), pd.Timestamp(0)]))
-        lib.merge("sym", source, self.strategy, on=["a"])
+        run_merge(lib, is_arrow_source, "sym", source, self.strategy, on=["a"])
         expected = pd.DataFrame(
             {"a": [10, 1, 20, 2]},
             index=pd.DatetimeIndex([pd.Timestamp(-5), pd.Timestamp(0), pd.Timestamp(0), pd.Timestamp(5)]),
         )
         assert_frame_equal(lib.read("sym").data, expected)
 
-    def test_insert_after_last_and_match_last(self, lmdb_library):
+    def test_insert_after_last_and_match_last(self, lmdb_library, is_arrow_source):
         lib = lmdb_library
         lib.write("sym", pd.DataFrame({"a": [1, 2]}, index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(5)])))
         source = pd.DataFrame({"a": [10, 20]}, index=pd.DatetimeIndex([pd.Timestamp(5), pd.Timestamp(10)]))
-        lib.merge("sym", source, self.strategy)
+        run_merge(lib, is_arrow_source, "sym", source, self.strategy)
         expected = pd.DataFrame(
             {"a": [1, 10, 20]}, index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(5), pd.Timestamp(10)])
         )
         assert_frame_equal(lib.read("sym").data, expected)
 
-    def test_insert_after_last_and_match_last_on(self, lmdb_library):
+    def test_insert_after_last_and_match_last_on(self, lmdb_library, is_arrow_source):
         lib = lmdb_library
         lib.write("sym", pd.DataFrame({"a": [1, 2]}, index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(5)])))
         source = pd.DataFrame({"a": [10, 20]}, index=pd.DatetimeIndex([pd.Timestamp(5), pd.Timestamp(10)]))
-        lib.merge("sym", source, self.strategy, on=["a"])
+        run_merge(lib, is_arrow_source, "sym", source, self.strategy, on=["a"])
         expected = pd.DataFrame(
             {"a": [1, 2, 10, 20]},
             index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(5), pd.Timestamp(5), pd.Timestamp(10)]),
@@ -1985,6 +2103,7 @@ class TestMergeTimeseriesUpdateAndInsert:
         assert_frame_equal(lib.read("sym").data, expected)
 
 
+@arrow_source_param
 class TestMergeUpdateInsertIndexSpansMultipleSegments:
     """End-to-end translation of the C++ fixture ``MergeUpdateInsertIndexSpansMultipleSegments``
     (cpp/arcticdb/processing/test/test_merge_update.cpp): a single index value spans a segment boundary. The C++ tests
@@ -1994,13 +2113,15 @@ class TestMergeUpdateInsertIndexSpansMultipleSegments:
 
     strategy = MergeStrategy(MergeAction.UPDATE, MergeAction.INSERT)
 
-    def _run(self, lmdb_library_factory, target, source, expected, on):
+    def _run(self, lmdb_library_factory, is_arrow_source, target, source, expected, on):
         lib = lmdb_library_factory(arcticdb.LibraryOptions(rows_per_segment=5, columns_per_segment=1))
         lib.write("sym", target)
-        lib.merge("sym", source, strategy=self.strategy, on=on)
+        run_merge(lib, is_arrow_source, "sym", source, strategy=self.strategy, on=on)
         assert_frame_equal(lib.read("sym").data, expected)
 
-    def test_last_index_value_same_as_next_segment_first_two_overlapping_segments(self, lmdb_library_factory):
+    def test_last_index_value_same_as_next_segment_first_two_overlapping_segments(
+        self, lmdb_library_factory, is_arrow_source
+    ):
         target = pd.DataFrame(
             {"a": np.arange(27, dtype=np.int64), "b": np.arange(27, dtype=np.int32)},
             index=pd.DatetimeIndex(
@@ -2147,9 +2268,11 @@ class TestMergeUpdateInsertIndexSpansMultipleSegments:
                 ]
             ),
         )
-        self._run(lmdb_library_factory, target, source, expected, on=["a"])
+        self._run(lmdb_library_factory, is_arrow_source, target, source, expected, on=["a"])
 
-    def test_last_index_value_same_as_next_segment_first_three_overlapping_segments(self, lmdb_library_factory):
+    def test_last_index_value_same_as_next_segment_first_three_overlapping_segments(
+        self, lmdb_library_factory, is_arrow_source
+    ):
         target = pd.DataFrame(
             {"a": np.arange(27, dtype=np.int64), "b": np.arange(27, dtype=np.int32)},
             index=pd.DatetimeIndex(
@@ -2277,9 +2400,9 @@ class TestMergeUpdateInsertIndexSpansMultipleSegments:
                 ]
             ),
         )
-        self._run(lmdb_library_factory, target, source, expected, on=["a"])
+        self._run(lmdb_library_factory, is_arrow_source, target, source, expected, on=["a"])
 
-    def test_two_groups_of_segments_with_matching_last_index_value(self, lmdb_library_factory):
+    def test_two_groups_of_segments_with_matching_last_index_value(self, lmdb_library_factory, is_arrow_source):
         target = pd.DataFrame(
             {"a": np.arange(27, dtype=np.int64), "b": np.arange(27, dtype=np.int32)},
             index=pd.DatetimeIndex(
@@ -2419,9 +2542,10 @@ class TestMergeUpdateInsertIndexSpansMultipleSegments:
                 ]
             ),
         )
-        self._run(lmdb_library_factory, target, source, expected, on=["a"])
+        self._run(lmdb_library_factory, is_arrow_source, target, source, expected, on=["a"])
 
 
+@arrow_source_param
 class TestMergeUpdateInsertIndexSpansMultipleSegmentsChain:
     """End-to-end translation of the C++ fixture ``MergeUpdateInsertIndexSpansMultipleSegmentsChain``
     (cpp/arcticdb/processing/test/test_merge_update.cpp): the same index value chains across several segments. The C++
@@ -2440,13 +2564,13 @@ class TestMergeUpdateInsertIndexSpansMultipleSegmentsChain:
             index=pd.DatetimeIndex([pd.Timestamp(v) for v in self._CHAIN_INDEX]),
         )
 
-    def _run(self, lmdb_library_factory, source, expected, on):
+    def _run(self, lmdb_library_factory, is_arrow_source, source, expected, on):
         lib = lmdb_library_factory(arcticdb.LibraryOptions(rows_per_segment=3, columns_per_segment=1))
         lib.write("sym", self._chain_target())
-        lib.merge("sym", source, strategy=self.strategy, on=on)
+        run_merge(lib, is_arrow_source, "sym", source, strategy=self.strategy, on=on)
         assert_frame_equal(lib.read("sym").data, expected)
 
-    def test_source_in_row_slice_0(self, lmdb_library_factory):
+    def test_source_in_row_slice_0(self, lmdb_library_factory, is_arrow_source):
         source = pd.DataFrame(
             {"a": np.array([0, 10], dtype=np.int64), "b": np.array([100, 200], dtype=np.int32)},
             index=pd.DatetimeIndex([pd.Timestamp(v) for v in [0, 2]]),
@@ -2464,9 +2588,9 @@ class TestMergeUpdateInsertIndexSpansMultipleSegmentsChain:
                 [pd.Timestamp(v) for v in [0, 1, 2, 2, 4, 5, 6, 6, 6, 6, 6, 10, 11, 11, 13, 15, 15, 16, 17, 17, 19, 20]]
             ),
         )
-        self._run(lmdb_library_factory, source, expected, on=["a"])
+        self._run(lmdb_library_factory, is_arrow_source, source, expected, on=["a"])
 
-    def test_source_in_row_slice_1_value_is_not_in_multiple_segments(self, lmdb_library_factory):
+    def test_source_in_row_slice_1_value_is_not_in_multiple_segments(self, lmdb_library_factory, is_arrow_source):
         source = pd.DataFrame(
             {"a": np.array([4], dtype=np.int64), "b": np.array([100], dtype=np.int32)},
             index=pd.DatetimeIndex([pd.Timestamp(5)]),
@@ -2480,9 +2604,9 @@ class TestMergeUpdateInsertIndexSpansMultipleSegmentsChain:
             },
             index=pd.DatetimeIndex([pd.Timestamp(v) for v in self._CHAIN_INDEX]),
         )
-        self._run(lmdb_library_factory, source, expected, on=["a"])
+        self._run(lmdb_library_factory, is_arrow_source, source, expected, on=["a"])
 
-    def test_source_in_row_slice_1_value_is_in_multiple_segments(self, lmdb_library_factory):
+    def test_source_in_row_slice_1_value_is_in_multiple_segments(self, lmdb_library_factory, is_arrow_source):
         source = pd.DataFrame(
             {"a": np.array([9, 5, 6, 100], dtype=np.int64), "b": np.array([100, 200, 300, 400], dtype=np.int32)},
             index=pd.DatetimeIndex([pd.Timestamp(v) for v in [6, 6, 6, 6]]),
@@ -2501,9 +2625,9 @@ class TestMergeUpdateInsertIndexSpansMultipleSegmentsChain:
                 [pd.Timestamp(v) for v in [0, 1, 2, 4, 5, 6, 6, 6, 6, 6, 6, 10, 11, 11, 13, 15, 15, 16, 17, 17, 19, 20]]
             ),
         )
-        self._run(lmdb_library_factory, source, expected, on=["a"])
+        self._run(lmdb_library_factory, is_arrow_source, source, expected, on=["a"])
 
-    def test_source_in_row_slice_3(self, lmdb_library_factory):
+    def test_source_in_row_slice_3(self, lmdb_library_factory, is_arrow_source):
         source = pd.DataFrame(
             {"a": np.array([100], dtype=np.int64), "b": np.array([100], dtype=np.int32)},
             index=pd.DatetimeIndex([pd.Timestamp(11)]),
@@ -2524,9 +2648,9 @@ class TestMergeUpdateInsertIndexSpansMultipleSegmentsChain:
                 ]
             ),
         )
-        self._run(lmdb_library_factory, source, expected, on=["a"])
+        self._run(lmdb_library_factory, is_arrow_source, source, expected, on=["a"])
 
-    def test_source_in_row_slice_5(self, lmdb_library_factory):
+    def test_source_in_row_slice_5(self, lmdb_library_factory, is_arrow_source):
         source = pd.DataFrame(
             {"a": np.array([100], dtype=np.int64), "b": np.array([100], dtype=np.int32)},
             index=pd.DatetimeIndex([pd.Timestamp(15)]),
@@ -2547,9 +2671,9 @@ class TestMergeUpdateInsertIndexSpansMultipleSegmentsChain:
                 ]
             ),
         )
-        self._run(lmdb_library_factory, source, expected, on=["a"])
+        self._run(lmdb_library_factory, is_arrow_source, source, expected, on=["a"])
 
-    def test_insert_in_row_slice_3_without_column_matching(self, lmdb_library_factory):
+    def test_insert_in_row_slice_3_without_column_matching(self, lmdb_library_factory, is_arrow_source):
         # on=None matches on the index only; index 7 is absent from the target so the row is inserted.
         source = pd.DataFrame(
             {"a": np.array([100], dtype=np.int64), "b": np.array([100], dtype=np.int32)},
@@ -2568,9 +2692,10 @@ class TestMergeUpdateInsertIndexSpansMultipleSegmentsChain:
                 [pd.Timestamp(v) for v in [0, 1, 2, 4, 5, 6, 6, 6, 6, 6, 7, 10, 11, 11, 13, 15, 15, 16, 17, 17, 19, 20]]
             ),
         )
-        self._run(lmdb_library_factory, source, expected, on=None)
+        self._run(lmdb_library_factory, is_arrow_source, source, expected, on=None)
 
 
+@arrow_source_param
 @pytest.mark.parametrize(
     "strategy",
     (
@@ -2580,8 +2705,7 @@ class TestMergeUpdateInsertIndexSpansMultipleSegmentsChain:
     ),
 )
 class TestMergeRowrangeCommon:
-
-    def test_merge_matched_update_with_metadata(self, lmdb_library, strategy):
+    def test_merge_matched_update_with_metadata(self, lmdb_library, strategy, is_arrow_source):
         lib = lmdb_library
 
         target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]})
@@ -2591,7 +2715,7 @@ class TestMergeRowrangeCommon:
 
         metadata = {"meta": "data"}
 
-        merge_vit = lib.merge("sym", source, metadata=metadata, strategy=strategy, on=["a"])
+        merge_vit = run_merge(lib, is_arrow_source, "sym", source, metadata=metadata, strategy=strategy, on=["a"])
         assert merge_vit.version == 1
         assert merge_vit.symbol == write_vit.symbol
         assert merge_vit.metadata == metadata
@@ -2612,11 +2736,13 @@ class TestMergeRowrangeCommon:
         assert len(lt.find_keys_for_symbol(KeyType.VERSION, "sym")) == 2
 
     @pytest.mark.parametrize("metadata", ({"meta": "data"}, None))
-    def test_merge_writes_new_version_with_empty_source(self, lmdb_library, metadata, strategy):
+    def test_merge_writes_new_version_with_empty_source(self, lmdb_library, metadata, strategy, is_arrow_source):
         lib = lmdb_library
         target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]})
         lib.write("sym", target)
-        merge_vit = lib.merge("sym", pd.DataFrame(), metadata=metadata, strategy=strategy, on=["a"])
+        merge_vit = run_merge(
+            lib, is_arrow_source, "sym", pd.DataFrame(), metadata=metadata, strategy=strategy, on=["a"]
+        )
         assert merge_vit.metadata is None if metadata is None else merge_vit.metadata == metadata
         lt = lib._dev_tools.library_tool()
         assert len(lt.find_keys_for_symbol(KeyType.TABLE_DATA, "sym")) == 1
@@ -2639,66 +2765,66 @@ class TestMergeRowrangeCommon:
             pd.DataFrame({"b": [1.0, 2.0, 3.0]}),
         ],
     )
-    def test_static_schema_merge_throws_when_schemas_differ(self, lmdb_library, strategy, source):
+    def test_static_schema_merge_throws_when_schemas_differ(self, lmdb_library, strategy, source, is_arrow_source):
         lib = lmdb_library
         target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]})
         lib.write("sym", target)
         with pytest.raises(SchemaException):
-            lib.merge("sym", source, strategy=strategy, on=["b"])
+            run_merge(lib, is_arrow_source, "sym", source, strategy=strategy, on=["b"])
 
-    def test_requires_on_column_none(self, lmdb_library, strategy):
+    def test_requires_on_column_none(self, lmdb_library, strategy, is_arrow_source):
         lib = lmdb_library
         target = pd.DataFrame({"a": [1, 2], "b": [1.0, 2.0]})
         lib.write("sym", target)
         source = pd.DataFrame({"a": [1], "b": [10.0]})
         with pytest.raises(UserInputException):
-            lib.merge("sym", source, strategy=strategy, on=None)
+            run_merge(lib, is_arrow_source, "sym", source, strategy=strategy, on=None)
 
-    def test_requires_on_column_empty_list(self, lmdb_library, strategy):
+    def test_requires_on_column_empty_list(self, lmdb_library, strategy, is_arrow_source):
         lib = lmdb_library
         target = pd.DataFrame({"a": [1, 2], "b": [1.0, 2.0]})
         lib.write("sym", target)
         source = pd.DataFrame({"a": [1], "b": [10.0]})
         with pytest.raises(UserInputException):
-            lib.merge("sym", source, strategy=strategy, on=[])
+            run_merge(lib, is_arrow_source, "sym", source, strategy=strategy, on=[])
 
-    def test_on_nonexistent_column_raises(self, lmdb_library, strategy):
+    def test_on_nonexistent_column_raises(self, lmdb_library, strategy, is_arrow_source):
         lib = lmdb_library
         target = pd.DataFrame({"a": [1, 2], "b": [1.0, 2.0]})
         lib.write("sym", target)
         source = pd.DataFrame({"a": [1], "b": [10.0]})
         with pytest.raises(UserInputException):
-            lib.merge("sym", source, strategy=strategy, on=["nonexistent"])
+            run_merge(lib, is_arrow_source, "sym", source, strategy=strategy, on=["nonexistent"])
 
 
+@arrow_source_param
 class TestMergeRowrangeUpdate:
-
     def setup_method(self):
         self.strategy = MergeStrategy(MergeAction.UPDATE, MergeAction.DO_NOTHING)
 
-    def test_basic(self, lmdb_library):
+    def test_basic(self, lmdb_library, is_arrow_source):
         lib = lmdb_library
         target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0], "c": ["x", "y", "z"]})
         source = pd.DataFrame({"a": [1, 99, 3], "b": [10.0, 20.0, 30.0], "c": ["X", "Y", "Z"]})
         # a=1 matches row 0, a=99 no match, a=3 matches row 2
         expected = pd.DataFrame({"a": [1, 2, 3], "b": [10.0, 2.0, 30.0], "c": ["X", "y", "Z"]})
-        generic_merge_test(lib, "sym", target, source, self.strategy, expected, on=["a"])
+        generic_merge_test(lib, is_arrow_source, "sym", target, source, self.strategy, expected, on=["a"])
 
-    def test_no_matches(self, lmdb_library):
+    def test_no_matches(self, lmdb_library, is_arrow_source):
         lib = lmdb_library
         target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]})
         source = pd.DataFrame({"a": [10, 20, 30], "b": [10.0, 20.0, 30.0]})
         # No a values match → no updates
         expected = target.copy()
-        generic_merge_test(lib, "sym", target, source, self.strategy, expected, on=["a"])
+        generic_merge_test(lib, is_arrow_source, "sym", target, source, self.strategy, expected, on=["a"])
 
-    def test_all_rows_match(self, lmdb_library):
+    def test_all_rows_match(self, lmdb_library, is_arrow_source):
         lib = lmdb_library
         target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]})
         source = pd.DataFrame({"a": [3, 1, 2], "b": [30.0, 10.0, 20.0]})
         # All a values match: 1→10.0, 2→20.0, 3→30.0
         expected = pd.DataFrame({"a": [1, 2, 3], "b": [10.0, 20.0, 30.0]})
-        generic_merge_test(lib, "sym", target, source, self.strategy, expected, on=["a"])
+        generic_merge_test(lib, is_arrow_source, "sym", target, source, self.strategy, expected, on=["a"])
 
     @pytest.mark.parametrize(
         "target, source, expected",
@@ -2717,23 +2843,23 @@ class TestMergeRowrangeUpdate:
             ),
         ],
     )
-    def test_multiple_on_columns(self, lmdb_library, target, source, expected):
+    def test_multiple_on_columns(self, lmdb_library, target, source, expected, is_arrow_source):
         lib = lmdb_library
-        generic_merge_test(lib, "sym", target, source, self.strategy, expected, on=["a", "b"])
+        generic_merge_test(lib, is_arrow_source, "sym", target, source, self.strategy, expected, on=["a", "b"])
 
-    def test_one_source_row_matches_multiple_target_rows(self, lmdb_library):
+    def test_one_source_row_matches_multiple_target_rows(self, lmdb_library, is_arrow_source):
         lib = lmdb_library
         target = pd.DataFrame({"a": [1, 1, 2], "b": [10.0, 20.0, 30.0]})
         source = pd.DataFrame({"a": [1], "b": [99.0]})
         # a=1 matches rows 0 and 1
         expected = pd.DataFrame({"a": [1, 1, 2], "b": [99.0, 99.0, 30.0]})
-        generic_merge_test(lib, "sym", target, source, self.strategy, expected, on=["a"])
+        generic_merge_test(lib, is_arrow_source, "sym", target, source, self.strategy, expected, on=["a"])
 
     @pytest.mark.parametrize(
         "slicing_policy",
         [{"rows_per_segment": 2}, {"columns_per_segment": 2}, {"rows_per_segment": 2, "columns_per_segment": 2}],
     )
-    def test_row_and_column_slicing(self, lmdb_library_factory, slicing_policy):
+    def test_row_and_column_slicing(self, lmdb_library_factory, slicing_policy, is_arrow_source):
         lib = lmdb_library_factory(arcticdb.LibraryOptions(**slicing_policy))
         target = pd.DataFrame(
             {
@@ -2760,15 +2886,15 @@ class TestMergeRowrangeUpdate:
                 "d": ["a", "b", "C", "d", "E"],
             }
         )
-        generic_merge_test(lib, "sym", target, source, self.strategy, expected, on=["a"])
+        generic_merge_test(lib, is_arrow_source, "sym", target, source, self.strategy, expected, on=["a"])
 
-    def test_all_columns_in_on(self, lmdb_library):
+    def test_all_columns_in_on(self, lmdb_library, is_arrow_source):
         lib = lmdb_library
         target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]})
         source = pd.DataFrame({"a": [1, 2, 3], "b": [99.0, 99.0, 99.0]})
         # When all columns are in on, b values differ → no matches
         expected = target.copy()
-        generic_merge_test(lib, "sym", target, source, self.strategy, expected, on=["a", "b"])
+        generic_merge_test(lib, is_arrow_source, "sym", target, source, self.strategy, expected, on=["a", "b"])
 
     @pytest.mark.xfail(
         reason="In pandas 2 empty data frame is written it's index is datetime by default. The current implementation"
@@ -2776,31 +2902,35 @@ class TestMergeRowrangeUpdate:
         "target is empty, so it's not easy to do an early return. Ideally the empty index should be used"
     )
     @pytest.mark.parametrize("merge_metadata", (None, "meta"))
-    def test_target_is_empty(self, lmdb_library, merge_metadata):
+    def test_target_is_empty(self, lmdb_library, merge_metadata, is_arrow_source):
         lib = lmdb_library
         target = pd.DataFrame({"a": np.array([], dtype=np.int64)})
         lib.write("sym", target)
         source = pd.DataFrame({"a": np.array([1, 2], dtype=np.int64)})
-        merge_vit = lib.merge("sym", source, strategy=self.strategy, metadata=merge_metadata, on=["a"])
+        merge_vit = run_merge(
+            lib, is_arrow_source, "sym", source, strategy=self.strategy, metadata=merge_metadata, on=["a"]
+        )
         expected = target
         read_vit = lib.read("sym")
         assert_vit_equals_except_data(merge_vit, read_vit)
         assert_frame_equal(read_vit.data, expected)
 
-    def test_target_symbol_does_not_exist(self, lmdb_library):
+    def test_target_symbol_does_not_exist(self, lmdb_library, is_arrow_source):
         lib = lmdb_library
         source = pd.DataFrame({"a": [1], "b": [10.0]})
         with pytest.raises(StorageException):
-            lib.merge("sym", source, strategy=self.strategy, on=["a"])
+            run_merge(lib, is_arrow_source, "sym", source, strategy=self.strategy, on=["a"])
 
     # The row slice is not re-emitted when unchanged, so no second data key is written regardless of dedup.
     @pytest.mark.parametrize("dedup, expected_data_keys", [(False, 1), (True, 1)])
-    def test_writes_new_version_even_if_nothing_is_changed(self, lmdb_library_factory, dedup, expected_data_keys):
+    def test_writes_new_version_even_if_nothing_is_changed(
+        self, lmdb_library_factory, dedup, expected_data_keys, is_arrow_source
+    ):
         lib = lmdb_library_factory(arcticdb.LibraryOptions(dedup=dedup))
         target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]})
         lib.write("sym", target)
         source = pd.DataFrame({"a": [10, 20], "b": [10.0, 20.0]})
-        merge_vit = lib.merge("sym", source, strategy=self.strategy, on=["a"])
+        merge_vit = run_merge(lib, is_arrow_source, "sym", source, strategy=self.strategy, on=["a"])
         assert merge_vit.version == 1
 
         read_vit = lib.read("sym")
@@ -2860,7 +2990,7 @@ class TestMergeRowrangeUpdate:
             ),
         ],
     )
-    def test_on_column_with_column_slicing(self, lmdb_library_factory, slicing_policy, on, expected):
+    def test_on_column_with_column_slicing(self, lmdb_library_factory, slicing_policy, on, expected, is_arrow_source):
         lib = lmdb_library_factory(arcticdb.LibraryOptions(**slicing_policy))
         target = pd.DataFrame(
             {
@@ -2878,17 +3008,17 @@ class TestMergeRowrangeUpdate:
                 "d": [100, 200, 300, 400, 500],
             }
         )
-        generic_merge_test(lib, "sym", target, source, self.strategy, expected, on=on)
+        generic_merge_test(lib, is_arrow_source, "sym", target, source, self.strategy, expected, on=on)
 
-    def test_throws_when_multiple_source_rows_match_same_target_row(self, lmdb_library):
+    def test_throws_when_multiple_source_rows_match_same_target_row(self, lmdb_library, is_arrow_source):
         lib = lmdb_library
         target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]})
         source = pd.DataFrame({"a": [2, 2], "b": [10.0, 20.0]})
         lib.write("sym", target)
         with pytest.raises(UserInputException, match="Multiple source rows match the same target row"):
-            lib.merge("sym", source, strategy=self.strategy, on=["a"])
+            run_merge(lib, is_arrow_source, "sym", source, strategy=self.strategy, on=["a"])
 
-    def test_on_column_named_same_as_index(self, lmdb_library):
+    def test_on_column_named_same_as_index(self, lmdb_library, is_arrow_source):
         """Row-range index name is protobuf-only and does not collide with data columns.
         on=["col"] should match the data column and work without error."""
         lib = lmdb_library
@@ -2897,7 +3027,7 @@ class TestMergeRowrangeUpdate:
         source = pd.DataFrame({"col": [2], "val": [99.0]})
         source.index.name = "col"
         lib.write("sym", target)
-        lib.merge("sym", source, strategy=self.strategy, on=["col"])
+        run_merge(lib, is_arrow_source, "sym", source, strategy=self.strategy, on=["col"])
         result = lib.read("sym").data
         expected = pd.DataFrame({"col": [1, 2, 3], "val": [10.0, 99.0, 30.0]})
         expected.index.name = "col"
@@ -2908,8 +3038,10 @@ class TestMergeRowrangeUpdate:
         ["col", None],
         ids=["row_range_index_name_same_as_duplicated_column_name", "row_range_index_does_not_have_a_name"],
     )
-    def test_on_duplicate_data_columns_raises(self, lmdb_library, index_name):
+    def test_on_duplicate_data_columns_raises(self, lmdb_library, index_name, is_arrow_source):
         """Two data columns with the same name: on=["col"] is ambiguous → UserInputException."""
+        if is_arrow_source:
+            pytest.skip("pyarrow Table cannot have duplicate column names")
         lib = lmdb_library
         target = pd.DataFrame(
             np.array([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0], [7.0, 8.0, 9.0]]),
@@ -2921,18 +3053,18 @@ class TestMergeRowrangeUpdate:
             source.index.name = index_name
         lib.write("sym", target)
         with pytest.raises(UserInputException):
-            lib.merge("sym", source, strategy=self.strategy, on=["col"])
+            run_merge(lib, is_arrow_source, "sym", source, strategy=self.strategy, on=["col"])
 
     @pytest.mark.parametrize("on", ([None], ["a", None]))
-    def test_match_on_column_named_none(self, lmdb_library, on):
+    def test_match_on_column_named_none(self, lmdb_library, on, is_arrow_source):
         lib = lmdb_library
         target = pd.DataFrame({"a": [1, 2, 3], None: [1.0, 2.0, 3.0]})
         source = pd.DataFrame({"a": [10, 20, 30], None: [10.0, 20.0, 30.0]})
         lib.write("sym", target)
         with pytest.raises(TypeError):
-            lib.merge("sym", source, strategy=self.strategy, on=on)
+            run_merge(lib, is_arrow_source, "sym", source, strategy=self.strategy, on=on)
 
-    def test_row_range_index_name_is_not_an_actual_column(self, lmdb_library):
+    def test_row_range_index_name_is_not_an_actual_column(self, lmdb_library, is_arrow_source):
         lib = lmdb_library
         target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]}, index=pd.RangeIndex(start=0, stop=3))
         target.index.name = "my_index"
@@ -2940,11 +3072,11 @@ class TestMergeRowrangeUpdate:
         source.index.name = "my_index"
         lib.write("sym", target)
         with pytest.raises(UserInputException) as exc_info:
-            lib.merge("sym", source, strategy=self.strategy, on=["my_index"])
+            run_merge(lib, is_arrow_source, "sym", source, strategy=self.strategy, on=["my_index"])
         assert "E_COLUMN_NOT_FOUND" in str(exc_info.value)
         assert "my_index" in str(exc_info.value)
 
-    def test_row_range_index_name_does_not_count_as_duplicate(self, lmdb_library):
+    def test_row_range_index_name_does_not_count_as_duplicate(self, lmdb_library, is_arrow_source):
         lib = lmdb_library
         target = pd.DataFrame({"my_index": [1, 2, 3], "b": [1.0, 2.0, 3.0]}, index=pd.RangeIndex(start=0, stop=3))
         target.index.name = "my_index"
@@ -2953,9 +3085,10 @@ class TestMergeRowrangeUpdate:
         lib.write("sym", target)
         expected = pd.DataFrame({"my_index": [1, 2, 3], "b": [10.0, 2.0, 3.0]}, index=pd.RangeIndex(start=0, stop=3))
         expected.index.name = "my_index"
-        generic_merge_test(lib, "sym", target, source, self.strategy, expected, on=["my_index"])
+        generic_merge_test(lib, is_arrow_source, "sym", target, source, self.strategy, expected, on=["my_index"])
 
 
+@arrow_source_param
 class TestMergeRowrangeInsert:
     """Row count indexed merge with strategy do_nothing/insert: unmatched source rows are appended to the target in
     source order; matched source rows are left untouched (no in-place rewrite)."""
@@ -2963,7 +3096,7 @@ class TestMergeRowrangeInsert:
     def setup_method(self):
         self.strategy = MergeStrategy(MergeAction.DO_NOTHING, MergeAction.INSERT)
 
-    def test_basic_append_unmatched(self, in_memory_store_factory):
+    def test_basic_append_unmatched(self, in_memory_store_factory, is_arrow_source):
         lib = in_memory_store_factory()
         target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]})
         # a=1 matches (do_nothing leaves it untouched), a=99 and a=100 are unmatched and appended in source order.
@@ -2971,79 +3104,88 @@ class TestMergeRowrangeInsert:
         lib.write("sym", target)
         qs.reset_stats()
         with qs.query_stats():
-            lib.merge("sym", source, strategy=self.strategy, on=["a"])
+            run_merge(lib, is_arrow_source, "sym", source, strategy=self.strategy, on=["a"])
         stats = qs.get_query_stats()
         # a single-column-slice target's unmatched rows are appended as exactly one new data segment.
         assert query_stats_operation_count(stats, "Memory_PutObject", "TABLE_DATA") == 1
         expected = pd.DataFrame({"a": [1, 2, 3, 99, 100], "b": [1.0, 2.0, 3.0, 99.0, 100.0]})
         assert_frame_equal(lib.read("sym").data, expected)
 
-    def test_none_matched_appends_all(self, lmdb_library):
+    def test_none_matched_appends_all(self, lmdb_library, is_arrow_source):
         lib = lmdb_library
         target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]})
         source = pd.DataFrame({"a": [10, 20], "b": [10.0, 20.0]})
         lib.write("sym", target)
-        lib.merge("sym", source, strategy=self.strategy, on=["a"])
+        run_merge(lib, is_arrow_source, "sym", source, strategy=self.strategy, on=["a"])
         expected = pd.DataFrame({"a": [1, 2, 3, 10, 20], "b": [1.0, 2.0, 3.0, 10.0, 20.0]})
         assert_frame_equal(lib.read("sym").data, expected)
 
-    def test_all_matched_writes_no_new_data_keys(self, lmdb_library):
+    def test_all_matched_writes_no_new_data_keys(self, lmdb_library, is_arrow_source):
         lib = lmdb_library
         target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]})
         source = pd.DataFrame({"a": [3, 1, 2], "b": [30.0, 10.0, 20.0]})
         lib.write("sym", target)
         lt = lib._dev_tools.library_tool()
         assert len(lt.find_keys_for_symbol(KeyType.TABLE_DATA, "sym")) == 1
-        lib.merge("sym", source, strategy=self.strategy, on=["a"])
+        run_merge(lib, is_arrow_source, "sym", source, strategy=self.strategy, on=["a"])
         # do_nothing on matched means no row slice is rewritten, and every source row matched means nothing is
         # inserted, so no new data key is created.
         assert len(lt.find_keys_for_symbol(KeyType.TABLE_DATA, "sym")) == 1
         assert_frame_equal(lib.read("sym").data, target)
 
-    def test_match_in_one_row_slice_only_suppresses_insert(self, lmdb_library_factory):
+    def test_match_in_one_row_slice_only_suppresses_insert(self, lmdb_library_factory, is_arrow_source):
         lib = lmdb_library_factory(arcticdb.LibraryOptions(rows_per_segment=2))
         target = pd.DataFrame({"a": [1, 2, 3, 4], "b": [1.0, 2.0, 3.0, 4.0]})  # row slices [0,2) and [2,4)
         # a=3 lives in the second row slice, so only that slice's processing unit matches it. The matched bitsets are
         # ORed across all units, so a=3 must NOT be inserted even though the first slice's unit did not match it.
         source = pd.DataFrame({"a": [3, 5], "b": [30.0, 50.0]})
         lib.write("sym", target)
-        lib.merge("sym", source, strategy=self.strategy, on=["a"])
+        run_merge(lib, is_arrow_source, "sym", source, strategy=self.strategy, on=["a"])
         expected = pd.DataFrame({"a": [1, 2, 3, 4, 5], "b": [1.0, 2.0, 3.0, 4.0, 50.0]})
         assert_frame_equal(lib.read("sym").data, expected)
 
-    def test_duplicate_unmatched_source_rows_both_inserted(self, lmdb_library):
+    def test_duplicate_unmatched_source_rows_both_inserted(self, lmdb_library, is_arrow_source):
         lib = lmdb_library
         target = pd.DataFrame({"a": [1], "b": [1.0]})
         source = pd.DataFrame({"a": [7, 7], "b": [70.0, 71.0]})
         lib.write("sym", target)
-        lib.merge("sym", source, strategy=self.strategy, on=["a"])
+        run_merge(lib, is_arrow_source, "sym", source, strategy=self.strategy, on=["a"])
         expected = pd.DataFrame({"a": [1, 7, 7], "b": [1.0, 70.0, 71.0]})
         assert_frame_equal(lib.read("sym").data, expected)
 
-    def test_string_columns_inserted(self, lmdb_library):
+    def test_string_columns_inserted(self, request, lmdb_library, is_arrow_source):
+        if is_arrow_source:
+            request.applymarker(
+                pytest.mark.xfail(
+                    raises=SchemaException,
+                    reason="Merge update does not support Arrow sources with nulls yet",
+                    strict=True,
+                )
+            )
         lib = lmdb_library
         target = pd.DataFrame({"a": [1, 2], "s": ["x", "y"]})
         # Non-ASCII string exercises the GIL/string-pool path in build_row_range_insert_segments.
         source = pd.DataFrame({"a": [1, 3, 4], "s": ["x", "café", None]})
         lib.write("sym", target)
-        lib.merge("sym", source, strategy=self.strategy, on=["a"])
+        run_merge(lib, is_arrow_source, "sym", source, strategy=self.strategy, on=["a"])
         expected = pd.DataFrame({"a": [1, 2, 3, 4], "s": ["x", "y", "café", None]})
         assert_frame_equal(lib.read("sym").data, expected)
 
-    def test_column_sliced_insert(self, lmdb_library_factory):
+    def test_column_sliced_insert(self, lmdb_library_factory, is_arrow_source):
         lib = lmdb_library_factory(arcticdb.LibraryOptions(columns_per_segment=2))
         target = pd.DataFrame({"a": [1, 2], "b": [1.0, 2.0], "c": [10, 20]})  # column slices [a, b] and [c]
         source = pd.DataFrame({"a": [1, 3], "b": [1.0, 30.0], "c": [10, 300]})
         lib.write("sym", target)
         lt = lib._dev_tools.library_tool()
         assert len(lt.find_keys_for_symbol(KeyType.TABLE_DATA, "sym")) == 2  # 1 row slice x 2 column slices
-        lib.merge("sym", source, strategy=self.strategy, on=["a"])
+        run_merge(lib, is_arrow_source, "sym", source, strategy=self.strategy, on=["a"])
         expected = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 30.0], "c": [10, 20, 300]})
         assert_frame_equal(lib.read("sym").data, expected)
         # One insert segment is appended per column slice; do_nothing leaves the matched rows untouched.
         assert len(lt.find_keys_for_symbol(KeyType.TABLE_DATA, "sym")) == 4
 
 
+@arrow_source_param
 class TestMergeRowrangeUpdateAndInsert:
     """Row count indexed merge with strategy update/insert: matched source rows update the target in place and
     unmatched source rows are appended in source order."""
@@ -3051,7 +3193,7 @@ class TestMergeRowrangeUpdateAndInsert:
     def setup_method(self):
         self.strategy = MergeStrategy(MergeAction.UPDATE, MergeAction.INSERT)
 
-    def test_update_matched_and_append_unmatched(self, in_memory_store_factory):
+    def test_update_matched_and_append_unmatched(self, in_memory_store_factory, is_arrow_source):
         lib = in_memory_store_factory(dynamic_strings=True)
         target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0], "c": ["x", "y", "z"]})
         source = pd.DataFrame({"a": [1, 99, 3, 100], "b": [10.0, 99.0, 30.0, 100.0], "c": ["X", "N", "Z", "M"]})
@@ -3059,7 +3201,7 @@ class TestMergeRowrangeUpdateAndInsert:
         lib.write("sym", target)
         qs.reset_stats()
         with qs.query_stats():
-            lib.merge("sym", source, strategy=self.strategy, on=["a"])
+            run_merge(lib, is_arrow_source, "sym", source, strategy=self.strategy, on=["a"])
         stats = qs.get_query_stats()
         # update one segment in place and append one segment for insertion
         assert query_stats_operation_count(stats, "Memory_PutObject", "TABLE_DATA") == 2
@@ -3072,46 +3214,46 @@ class TestMergeRowrangeUpdateAndInsert:
         )
         assert_frame_equal(lib.read("sym").data, expected)
 
-    def test_only_matches_no_insert_segment(self, lmdb_library):
+    def test_only_matches_no_insert_segment(self, lmdb_library, is_arrow_source):
         lib = lmdb_library
         target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]})
         source = pd.DataFrame({"a": [1, 2], "b": [10.0, 20.0]})
         lib.write("sym", target)
         lt = lib._dev_tools.library_tool()
-        lib.merge("sym", source, strategy=self.strategy, on=["a"])
+        run_merge(lib, is_arrow_source, "sym", source, strategy=self.strategy, on=["a"])
         expected = pd.DataFrame({"a": [1, 2, 3], "b": [10.0, 20.0, 3.0]})
         assert_frame_equal(lib.read("sym").data, expected)
         # The update rewrites the single row slice (one new data key); nothing is inserted.
         assert len(lt.find_keys_for_symbol(KeyType.TABLE_DATA, "sym")) == 2
 
-    def test_multiple_on_columns(self, lmdb_library):
+    def test_multiple_on_columns(self, lmdb_library, is_arrow_source):
         lib = lmdb_library
         target = pd.DataFrame({"a": [1, 2], "b": ["x", "y"], "c": [1.0, 2.0]})
         source = pd.DataFrame({"a": [1, 3], "b": ["x", "q"], "c": [10.0, 30.0]})
         # (a=1, b="x") matches row 0 and updates c; (a=3, b="q") is unmatched and appended.
         lib.write("sym", target)
-        lib.merge("sym", source, strategy=self.strategy, on=["a", "b"])
+        run_merge(lib, is_arrow_source, "sym", source, strategy=self.strategy, on=["a", "b"])
         expected = pd.DataFrame({"a": [1, 2, 3], "b": ["x", "y", "q"], "c": [10.0, 2.0, 30.0]})
         assert_frame_equal(lib.read("sym").data, expected)
 
-    def test_ambiguous_multi_match_raises(self, lmdb_library):
+    def test_ambiguous_multi_match_raises(self, lmdb_library, is_arrow_source):
         lib = lmdb_library
         # Two source rows match the same target row on "a"; an update strategy cannot resolve which value wins.
         target = pd.DataFrame({"a": [1, 2], "b": [1.0, 2.0]})
         source = pd.DataFrame({"a": [1, 1], "b": [10.0, 11.0]})
         lib.write("sym", target)
         with pytest.raises(UserInputException):
-            lib.merge("sym", source, strategy=self.strategy, on=["a"])
+            run_merge(lib, is_arrow_source, "sym", source, strategy=self.strategy, on=["a"])
 
 
+@arrow_source_param
 @pytest.mark.parametrize(
     "strategy",
     [MergeStrategy(MergeAction.DO_NOTHING, MergeAction.INSERT), MergeStrategy(MergeAction.UPDATE, MergeAction.INSERT)],
     ids=["do_nothing_insert", "update_insert"],
 )
 class TestMergeInsertRowSlicingRowRange:
-
-    def test_insert_splits_into_multiple_row_slices(self, mem_library_factory, strategy):
+    def test_insert_splits_into_multiple_row_slices(self, mem_library_factory, strategy, is_arrow_source):
         lib = mem_library_factory(arcticdb.LibraryOptions(rows_per_segment=3))
         target = pd.DataFrame({"a": [1, 2, 3, 4, 5, 6], "b": ["a", "b", "c", "d", "e", "f"]})
         source = pd.DataFrame(
@@ -3126,7 +3268,7 @@ class TestMergeInsertRowSlicingRowRange:
         expected_data_key_writes = 4 if strategy.matched == MergeAction.UPDATE else 3
         qs.reset_stats()
         with qs.query_stats():
-            lib.merge("sym", source, strategy=strategy, on=["a"])
+            run_merge(lib, is_arrow_source, "sym", source, strategy=strategy, on=["a"])
         stats = qs.get_query_stats()
         assert query_stats_operation_count(stats, "Memory_PutObject", "TABLE_DATA") == expected_data_key_writes
         if strategy.matched == MergeAction.UPDATE:
@@ -3223,6 +3365,7 @@ class TestMergeInsertRowSlicingRowRange:
         expected_b,
         expected_num_segments,
         expected_data_key_writes,
+        is_arrow_source,
     ):
         """
         Rows per segment is 3. Using the formula for max allowed rows for reslicing
@@ -3235,7 +3378,7 @@ class TestMergeInsertRowSlicingRowRange:
         lib.write("sym", target)
         qs.reset_stats()
         with qs.query_stats():
-            lib.merge("sym", source, strategy=strategy, on=["a"])
+            run_merge(lib, is_arrow_source, "sym", source, strategy=strategy, on=["a"])
         stats = qs.get_query_stats()
         assert query_stats_operation_count(stats, "Memory_PutObject", "TABLE_DATA") == expected_data_key_writes
         expected = pd.DataFrame({"a": expected_a, "b": expected_b})
@@ -3244,7 +3387,7 @@ class TestMergeInsertRowSlicingRowRange:
         assert len(index_df) == expected_num_segments
         assert_index_key_structure_static_schema(index_df, rows_per_segment=3)
 
-    def test_alternating_matched_unmatched(self, mem_library_factory, strategy):
+    def test_alternating_matched_unmatched(self, mem_library_factory, strategy, is_arrow_source):
         lib = mem_library_factory(arcticdb.LibraryOptions(rows_per_segment=3))
         target = pd.DataFrame(
             {"a": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9], "b": ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"]}
@@ -3261,7 +3404,7 @@ class TestMergeInsertRowSlicingRowRange:
         expected_data_key_writes = 6 if strategy.matched == MergeAction.UPDATE else 2
         qs.reset_stats()
         with qs.query_stats():
-            lib.merge("sym", source, strategy=strategy, on=["a"])
+            run_merge(lib, is_arrow_source, "sym", source, strategy=strategy, on=["a"])
         stats = qs.get_query_stats()
         assert query_stats_operation_count(stats, "Memory_PutObject", "TABLE_DATA") == expected_data_key_writes
         if strategy.matched == MergeAction.UPDATE:
@@ -3314,14 +3457,14 @@ class TestMergeInsertRowSlicingRowRange:
         index_df = lib._dev_tools.library_tool().read_index("sym")
         assert_index_key_structure_static_schema(index_df, rows_per_segment=3)
 
-    def test_all_source_rows_unmatched(self, mem_library_factory, strategy):
+    def test_all_source_rows_unmatched(self, mem_library_factory, strategy, is_arrow_source):
         lib = mem_library_factory(arcticdb.LibraryOptions(rows_per_segment=3))
         target = pd.DataFrame({"a": [1, 2, 3, 4, 5, 6], "b": ["a", "b", "c", "d", "e", "f"]})
         source = pd.DataFrame({"a": [101, 102, 103, 104, 105, 106, 107], "b": ["A", "B", "C", "D", "E", "F", "G"]})
         lib.write("sym", target)
         qs.reset_stats()
         with qs.query_stats():
-            lib.merge("sym", source, strategy=strategy, on=["a"])
+            run_merge(lib, is_arrow_source, "sym", source, strategy=strategy, on=["a"])
         stats = qs.get_query_stats()
         assert query_stats_operation_count(stats, "Memory_PutObject", "TABLE_DATA") == 2
         expected = pd.DataFrame(
@@ -3334,14 +3477,14 @@ class TestMergeInsertRowSlicingRowRange:
         index_df = lib._dev_tools.library_tool().read_index("sym")
         assert_index_key_structure_static_schema(index_df, rows_per_segment=3)
 
-    def test_target_empty(self, mem_library_factory, strategy):
+    def test_target_empty(self, mem_library_factory, strategy, is_arrow_source):
         lib = mem_library_factory(arcticdb.LibraryOptions(rows_per_segment=3))
         target = pd.DataFrame({"a": np.array([], dtype=np.int64), "b": np.array([], dtype=np.float64)})
         source = pd.DataFrame({"a": [10, 20, 30, 40, 50], "b": [10.0, 20.0, 30.0, 40.0, 50.0]})
         lib.write("sym", target)
         qs.reset_stats()
         with qs.query_stats():
-            lib.merge("sym", source, strategy=strategy, on=["a"])
+            run_merge(lib, is_arrow_source, "sym", source, strategy=strategy, on=["a"])
         stats = qs.get_query_stats()
         assert query_stats_operation_count(stats, "Memory_PutObject", "TABLE_DATA") == 2
         expected = pd.DataFrame({"a": [10, 20, 30, 40, 50], "b": [10.0, 20.0, 30.0, 40.0, 50.0]})
@@ -3349,7 +3492,7 @@ class TestMergeInsertRowSlicingRowRange:
         index_df = lib._dev_tools.library_tool().read_index("sym")
         assert_index_key_structure_static_schema(index_df, rows_per_segment=3)
 
-    def test_with_column_slicing(self, mem_library_factory, strategy):
+    def test_with_column_slicing(self, mem_library_factory, strategy, is_arrow_source):
         lib = mem_library_factory(arcticdb.LibraryOptions(rows_per_segment=3, columns_per_segment=2))
         target = pd.DataFrame(
             {
@@ -3375,7 +3518,7 @@ class TestMergeInsertRowSlicingRowRange:
         expected_data_key_writes = 9 if strategy.matched == MergeAction.UPDATE else 6
         qs.reset_stats()
         with qs.query_stats():
-            lib.merge("sym", source, strategy=strategy, on=["a"])
+            run_merge(lib, is_arrow_source, "sym", source, strategy=strategy, on=["a"])
         stats = qs.get_query_stats()
         assert query_stats_operation_count(stats, "Memory_PutObject", "TABLE_DATA") == expected_data_key_writes
         if strategy.matched == MergeAction.UPDATE:
@@ -3416,7 +3559,7 @@ class TestMergeInsertRowSlicingRowRange:
         index_df = lib._dev_tools.library_tool().read_index("sym")
         assert_index_key_structure_static_schema(index_df, rows_per_segment=3)
 
-    def test_duplicate_unmatched_on_values_across_slice_boundary(self, mem_library_factory, strategy):
+    def test_duplicate_unmatched_on_values_across_slice_boundary(self, mem_library_factory, strategy, is_arrow_source):
         """Unmatched rows are inserted in order even when there are duplicates"""
         lib = mem_library_factory(arcticdb.LibraryOptions(rows_per_segment=3))
         target = pd.DataFrame({"a": [1], "b": ["a"]})
@@ -3424,7 +3567,7 @@ class TestMergeInsertRowSlicingRowRange:
         lib.write("sym", target)
         qs.reset_stats()
         with qs.query_stats():
-            lib.merge("sym", source, strategy=strategy, on=["a"])
+            run_merge(lib, is_arrow_source, "sym", source, strategy=strategy, on=["a"])
         stats = qs.get_query_stats()
         assert query_stats_operation_count(stats, "Memory_PutObject", "TABLE_DATA") == 2
         expected = pd.DataFrame({"a": [1, 7, 7, 7, 7, 7, 8], "b": ["a", "A", "B", "C", "D", "E", "F"]})
@@ -3433,14 +3576,14 @@ class TestMergeInsertRowSlicingRowRange:
         assert_index_key_structure_static_schema(index_df, rows_per_segment=3)
 
 
+@arrow_source_param
 @pytest.mark.parametrize(
     "strategy",
     [MergeStrategy(MergeAction.DO_NOTHING, MergeAction.INSERT), MergeStrategy(MergeAction.UPDATE, MergeAction.INSERT)],
     ids=["do_nothing_insert", "update_insert"],
 )
 class TestMergeDatetimeInsertRowSlicing:
-
-    def test_interleaved_insert_slices_touched_groups(self, mem_library_factory, strategy):
+    def test_interleaved_insert_slices_touched_groups(self, mem_library_factory, strategy, is_arrow_source):
         """
         When inserting values in a middle of the segment, the segment must be split.
         """
@@ -3458,7 +3601,7 @@ class TestMergeDatetimeInsertRowSlicing:
         lib.write("sym", target)
         qs.reset_stats()
         with qs.query_stats():
-            lib.merge("sym", source, strategy=strategy)
+            run_merge(lib, is_arrow_source, "sym", source, strategy=strategy)
         stats = qs.get_query_stats()
         assert query_stats_operation_count(stats, "Memory_PutObject", "TABLE_DATA") == 4
         expected = pd.DataFrame(
@@ -3554,6 +3697,7 @@ class TestMergeDatetimeInsertRowSlicing:
         expected_b,
         expected_s,
         expected_num_segments,
+        is_arrow_source,
     ):
         lib = mem_library_factory(arcticdb.LibraryOptions(rows_per_segment=3))
         target = pd.DataFrame({"b": target_b, "s": target_s}, index=target_index)
@@ -3564,7 +3708,7 @@ class TestMergeDatetimeInsertRowSlicing:
         lib.write("sym", target)
         qs.reset_stats()
         with qs.query_stats():
-            lib.merge("sym", source, strategy=strategy)
+            run_merge(lib, is_arrow_source, "sym", source, strategy=strategy)
         stats = qs.get_query_stats()
         assert query_stats_operation_count(stats, "Memory_PutObject", "TABLE_DATA") == 3
         expected = pd.DataFrame({"b": expected_b, "s": expected_s}, index=expected_index)
@@ -3624,6 +3768,7 @@ class TestMergeDatetimeInsertRowSlicing:
         expected_b,
         expected_s,
         expected_num_segments,
+        is_arrow_source,
     ):
         lib = mem_library_factory(arcticdb.LibraryOptions(rows_per_segment=3))
         target = pd.DataFrame({"b": target_b, "s": target_s}, index=target_index)
@@ -3634,7 +3779,7 @@ class TestMergeDatetimeInsertRowSlicing:
         lib.write("sym", target)
         qs.reset_stats()
         with qs.query_stats():
-            lib.merge("sym", source, strategy=strategy)
+            run_merge(lib, is_arrow_source, "sym", source, strategy=strategy)
         stats = qs.get_query_stats()
         assert query_stats_operation_count(stats, "Memory_PutObject", "TABLE_DATA") == 2
         expected = pd.DataFrame({"b": expected_b, "s": expected_s}, index=expected_index)
@@ -3643,7 +3788,7 @@ class TestMergeDatetimeInsertRowSlicing:
         assert len(index_df) == expected_num_segments
         assert_index_key_structure_static_schema(index_df, rows_per_segment=3)
 
-    def test_index_value_spanning_two_slices(self, mem_library_factory, strategy):
+    def test_index_value_spanning_two_slices(self, mem_library_factory, strategy, is_arrow_source):
         lib = mem_library_factory(arcticdb.LibraryOptions(rows_per_segment=3))
         target = pd.DataFrame(
             {"a": [1, 2, 3, 4, 5, 6], "b": ["a", "b", "c", "d", "e", "f"]},
@@ -3659,7 +3804,7 @@ class TestMergeDatetimeInsertRowSlicing:
         lib.write("sym", target)
         qs.reset_stats()
         with qs.query_stats():
-            lib.merge("sym", source, strategy=strategy, on=["a"])
+            run_merge(lib, is_arrow_source, "sym", source, strategy=strategy, on=["a"])
         stats = qs.get_query_stats()
         assert query_stats_operation_count(stats, "Memory_PutObject", "TABLE_DATA") == 3
         expected = pd.DataFrame(
@@ -3687,7 +3832,7 @@ class TestMergeDatetimeInsertRowSlicing:
         assert_index_key_structure_static_schema(index_df, rows_per_segment=3)
 
     @pytest.mark.parametrize("dedup", [True, False])
-    def test_index_value_spanning_three_slices(self, mem_library_factory, strategy, dedup):
+    def test_index_value_spanning_three_slices(self, mem_library_factory, strategy, dedup, is_arrow_source):
         lib = mem_library_factory(arcticdb.LibraryOptions(rows_per_segment=3, dedup=dedup))
         target = pd.DataFrame(
             {"a": [1, 2, 3, 4, 5, 6, 7, 8, 9], "b": ["a", "b", "c", "d", "e", "f", "g", "h", "i"]},
@@ -3709,7 +3854,7 @@ class TestMergeDatetimeInsertRowSlicing:
         lib.write("sym", target)
         qs.reset_stats()
         with qs.query_stats():
-            lib.merge("sym", source, strategy=strategy, on=["a"])
+            run_merge(lib, is_arrow_source, "sym", source, strategy=strategy, on=["a"])
         stats = qs.get_query_stats()
         assert query_stats_operation_count(stats, "Memory_PutObject", "TABLE_DATA") == (2 if dedup else 4)
         expected = pd.DataFrame(
@@ -3737,7 +3882,7 @@ class TestMergeDatetimeInsertRowSlicing:
         assert (index_df["end_row"] - index_df["start_row"]).tolist() == [3, 3, 3, 1]
         assert_index_key_structure_static_schema(index_df, rows_per_segment=3)
 
-    def test_matched_update_inside_resliced_group(self, mem_library_factory, strategy):
+    def test_matched_update_inside_resliced_group(self, mem_library_factory, strategy, is_arrow_source):
         """Update happens in a row slice that is being resliced"""
         lib = mem_library_factory(arcticdb.LibraryOptions(rows_per_segment=3))
         target = pd.DataFrame(
@@ -3753,7 +3898,7 @@ class TestMergeDatetimeInsertRowSlicing:
         lib.write("sym", target)
         qs.reset_stats()
         with qs.query_stats():
-            lib.merge("sym", source, strategy=strategy)
+            run_merge(lib, is_arrow_source, "sym", source, strategy=strategy)
         stats = qs.get_query_stats()
         assert query_stats_operation_count(stats, "Memory_PutObject", "TABLE_DATA") == 2
         expected_index = pd.DatetimeIndex(
@@ -3779,7 +3924,7 @@ class TestMergeDatetimeInsertRowSlicing:
         index_df = lib._dev_tools.library_tool().read_index("sym")
         assert_index_key_structure_static_schema(index_df, rows_per_segment=3)
 
-    def test_with_column_slicing(self, mem_library_factory, strategy):
+    def test_with_column_slicing(self, mem_library_factory, strategy, is_arrow_source):
         lib = mem_library_factory(arcticdb.LibraryOptions(rows_per_segment=3, columns_per_segment=2))
         target = pd.DataFrame(
             {
@@ -3808,7 +3953,7 @@ class TestMergeDatetimeInsertRowSlicing:
         lib.write("sym", target)
         qs.reset_stats()
         with qs.query_stats():
-            lib.merge("sym", source, strategy=strategy)
+            run_merge(lib, is_arrow_source, "sym", source, strategy=strategy)
         stats = qs.get_query_stats()
         assert query_stats_operation_count(stats, "Memory_PutObject", "TABLE_DATA") == 6
         if strategy.matched == MergeAction.UPDATE:
@@ -3839,7 +3984,7 @@ class TestMergeDatetimeInsertRowSlicing:
         index_df = lib._dev_tools.library_tool().read_index("sym")
         assert_index_key_structure_static_schema(index_df, rows_per_segment=3)
 
-    def test_merging_touches_only_first_row_slice(self, mem_library_factory, strategy):
+    def test_merging_touches_only_first_row_slice(self, mem_library_factory, strategy, is_arrow_source):
         lib = mem_library_factory(arcticdb.LibraryOptions(rows_per_segment=3))
         # Row slices [0,3) = [Jan1, Jan8, Jan9], [3,6) = [Jan20, Jan21, Jan22].
         target = pd.DataFrame(
@@ -3857,7 +4002,7 @@ class TestMergeDatetimeInsertRowSlicing:
         lib.write("sym", target)
         qs.reset_stats()
         with qs.query_stats():
-            lib.merge("sym", source, strategy=strategy)
+            run_merge(lib, is_arrow_source, "sym", source, strategy=strategy)
         stats = qs.get_query_stats()
         assert query_stats_operation_count(stats, "Memory_PutObject", "TABLE_DATA") == 2
         expected = pd.DataFrame(
@@ -3886,6 +4031,7 @@ class TestMergeDatetimeInsertRowSlicing:
         assert_index_key_structure_static_schema(index_df, rows_per_segment=3)
 
 
+@arrow_source_param
 class TestMergeMultiindexUpdate:
     """MultiIndex with datetime first level behaves like datetime-indexed merge.
     MultiIndex without datetime first level behaves like row-range-indexed merge."""
@@ -3955,7 +4101,11 @@ class TestMergeMultiindexUpdate:
             ),
         ],
     )
-    def test_duplicate_on_column_raises_rowrange(self, lmdb_library, index_column_names, data_column_names, on):
+    def test_duplicate_on_column_raises_rowrange(
+        self, lmdb_library, index_column_names, data_column_names, on, is_arrow_source
+    ):
+        if is_arrow_source:
+            pytest.skip("Index level and column names are not unique so the source cannot be a pyarrow Table")
         lib = lmdb_library
 
         target_index_values = [["A", "B"], [1, 2], [10.0, 20.0]]
@@ -3970,7 +4120,7 @@ class TestMergeMultiindexUpdate:
 
         lib.write("sym", target)
         with pytest.raises(UserInputException, match="E_DUPLICATE_COLUMN") as exc_info:
-            lib.merge("sym", source, strategy=self.strategy, on=on)
+            run_merge(lib, is_arrow_source, "sym", source, strategy=self.strategy, on=on)
         assert '"my_duplicate"' in str(exc_info.value)
 
     @pytest.mark.parametrize(
@@ -4035,8 +4185,10 @@ class TestMergeMultiindexUpdate:
         ],
     )
     def test_cannot_contain_index_column_name_when_datetime(
-        self, lmdb_library, index_column_names, data_column_names, on
+        self, lmdb_library, index_column_names, data_column_names, on, is_arrow_source
     ):
+        if is_arrow_source:
+            pytest.skip("Index level and column names are not unique so the source cannot be a pyarrow Table")
         lib = lmdb_library
 
         target_index_values = [pd.date_range("2025-01-01", "2025-01-02"), [1, 2], [10.0, 20.0]]
@@ -4051,10 +4203,14 @@ class TestMergeMultiindexUpdate:
 
         lib.write("sym", target)
         with pytest.raises(UserInputException) as exc_info:
-            lib.merge("sym", source, strategy=self.strategy, on=on)
+            run_merge(lib, is_arrow_source, "sym", source, strategy=self.strategy, on=on)
         assert "not contain the datetime index column" in str(exc_info.value)
 
-    def test_unnamed_datetime_index_on_contains_column_named_index_not_in_dataframe(self, lmdb_library):
+    def test_unnamed_datetime_index_on_contains_column_named_index_not_in_dataframe(
+        self, request, lmdb_library, is_arrow_source
+    ):
+        if is_arrow_source:
+            request.applymarker(ARROW_SOURCE_INTO_PANDAS_MULTIINDEX_XFAIL)
         lib = lmdb_library
 
         index_column_names = [None, "secondary0", "secondary1"]
@@ -4073,7 +4229,7 @@ class TestMergeMultiindexUpdate:
 
         lib.write("sym", target)
         with pytest.raises(UserInputException, match="E_COLUMN_NOT_FOUND"):
-            lib.merge("sym", source, strategy=self.strategy, on=on)
+            run_merge(lib, is_arrow_source, "sym", source, strategy=self.strategy, on=on)
 
     @pytest.mark.parametrize(
         "index_column_names, data_column_names, on",
@@ -4145,8 +4301,10 @@ class TestMergeMultiindexUpdate:
         ],
     )
     def test_unnamed_datetime_index_and_on_contains_duplicate_colum(
-        self, lmdb_library, index_column_names, data_column_names, on
+        self, lmdb_library, index_column_names, data_column_names, on, is_arrow_source
     ):
+        if is_arrow_source:
+            pytest.skip("Index level and column names are not unique so the source cannot be a pyarrow Table")
         lib = lmdb_library
 
         target_index_values = [pd.date_range("2025-01-01", "2025-01-02"), [1, 2], [10.0, 20.0]]
@@ -4161,9 +4319,11 @@ class TestMergeMultiindexUpdate:
 
         lib.write("sym", target)
         with pytest.raises(UserInputException, match="E_DUPLICATE_COLUMN"):
-            lib.merge("sym", source, strategy=self.strategy, on=on)
+            run_merge(lib, is_arrow_source, "sym", source, strategy=self.strategy, on=on)
 
-    def test_default_on_rowrange_raises(self, lmdb_library):
+    def test_default_on_rowrange_raises(self, request, lmdb_library, is_arrow_source):
+        if is_arrow_source:
+            request.applymarker(ARROW_SOURCE_INTO_PANDAS_MULTIINDEX_XFAIL)
         index_names = ["idx", "a", "b"]
         primary_target_vals = ["P", "Q", "R"]
         primary_source_vals = ["Q", "Z"]
@@ -4173,13 +4333,17 @@ class TestMergeMultiindexUpdate:
         source = pd.DataFrame({"c": [1000, 2000], "d": [-1000.0, -2000.0]}, index=source_idx)
         lmdb_library.write("sym", target)
         with pytest.raises(UserInputException):
-            lmdb_library.merge("sym", source, strategy=self.strategy)
+            run_merge(lmdb_library, is_arrow_source, "sym", source, strategy=self.strategy)
 
     ####################################################################################################################
     # Happy paths
     ####################################################################################################################
 
-    def test_can_match_on_data_column_named_index_when_primary_is_unnamed_datetime_index(self, lmdb_library):
+    def test_can_match_on_data_column_named_index_when_primary_is_unnamed_datetime_index(
+        self, request, lmdb_library, is_arrow_source
+    ):
+        if is_arrow_source:
+            request.applymarker(ARROW_SOURCE_INTO_PANDAS_MULTIINDEX_XFAIL)
         lib = lmdb_library
         index_names = [None, "a", "b"]
         data_names = ["index", "d"]
@@ -4198,9 +4362,13 @@ class TestMergeMultiindexUpdate:
         expected_data = [[1.0, 10], [2.0, 888], [3.0, 30]]
         expected = pd.DataFrame(expected_data, columns=data_names, index=expected_idx)
 
-        generic_merge_test(lib, "sym", target, source, self.strategy, expected, on=["index"])
+        generic_merge_test(lib, is_arrow_source, "sym", target, source, self.strategy, expected, on=["index"])
 
-    def test_can_match_on_secondary_index_column_named_index_when_primary_is_unnamed_datetime_index(self, lmdb_library):
+    def test_can_match_on_secondary_index_column_named_index_when_primary_is_unnamed_datetime_index(
+        self, request, lmdb_library, is_arrow_source
+    ):
+        if is_arrow_source:
+            request.applymarker(ARROW_SOURCE_INTO_PANDAS_MULTIINDEX_XFAIL)
         lib = lmdb_library
         index_names = [None, "index", "b"]
         data_names = ["c", "d"]
@@ -4219,9 +4387,11 @@ class TestMergeMultiindexUpdate:
         expected_data = [[1.0, 10], [2.0, 888], [3.0, 30]]
         expected = pd.DataFrame(expected_data, columns=data_names, index=expected_idx)
 
-        generic_merge_test(lib, "sym", target, source, self.strategy, expected, on=["index"])
+        generic_merge_test(lib, is_arrow_source, "sym", target, source, self.strategy, expected, on=["index"])
 
-    def test_default_on_datetime(self, lmdb_library):
+    def test_default_on_datetime(self, request, lmdb_library, is_arrow_source):
+        if is_arrow_source:
+            request.applymarker(ARROW_SOURCE_INTO_PANDAS_MULTIINDEX_XFAIL)
         index_names = ["idx", "a", "b"]
         primary_target_vals = pd.to_datetime(["2024-01-01", "2024-01-02", "2024-01-03"])
         target_idx = pd.MultiIndex.from_arrays([primary_target_vals, ["A", "B", "C"], [1, 2, 3]], names=index_names)
@@ -4235,9 +4405,11 @@ class TestMergeMultiindexUpdate:
             [primary_target_vals, ["A", "a", "C"], [1, 200, 3]], names=["idx", "a", "b"]
         )
         expected = pd.DataFrame({"c": [1, 1000, 3], "d": [-1.0, -1000.0, -3.0]}, index=expected_idx)
-        generic_merge_test(lmdb_library, "sym", target, source, self.strategy, expected)
+        generic_merge_test(lmdb_library, is_arrow_source, "sym", target, source, self.strategy, expected)
 
-    def test_on_secondary_index_column_datetime(self, lmdb_library):
+    def test_on_secondary_index_column_datetime(self, request, lmdb_library, is_arrow_source):
+        if is_arrow_source:
+            request.applymarker(ARROW_SOURCE_INTO_PANDAS_MULTIINDEX_XFAIL)
         index_names = [None, "a", "b"]
         primary_target_vals = pd.to_datetime(["2024-01-01", "2024-01-02", "2024-01-03"])
         target_idx = pd.MultiIndex.from_arrays([primary_target_vals, ["A", "B", "C"], [1, 2, 3]], names=index_names)
@@ -4251,9 +4423,11 @@ class TestMergeMultiindexUpdate:
             [primary_target_vals, ["A", "B", "C"], [1, 200, 3]], names=[None, "a", "b"]
         )
         expected = pd.DataFrame({"c": [1, 1000, 3], "d": [-1.0, -1000.0, -3.0]}, index=expected_idx)
-        generic_merge_test(lmdb_library, "sym", target, source, self.strategy, expected, on=["a"])
+        generic_merge_test(lmdb_library, is_arrow_source, "sym", target, source, self.strategy, expected, on=["a"])
 
-    def test_on_secondary_index_column_rowrange(self, lmdb_library):
+    def test_on_secondary_index_column_rowrange(self, request, lmdb_library, is_arrow_source):
+        if is_arrow_source:
+            request.applymarker(ARROW_SOURCE_INTO_PANDAS_MULTIINDEX_XFAIL)
         index_names = ["idx", "a", "b"]
         target_idx = pd.MultiIndex.from_arrays(
             [np.array([-1, -2, -3], dtype=np.int8), ["A", "B", "C"], [1, 2, 3]], names=index_names
@@ -4270,9 +4444,11 @@ class TestMergeMultiindexUpdate:
             names=["idx", "a", "b"],
         )
         expected = pd.DataFrame({"c": [1, 1000, 3], "d": [-1.0, -1000.0, -3.0]}, index=expected_idx)
-        generic_merge_test(lmdb_library, "sym", target, source, self.strategy, expected, on=["a"])
+        generic_merge_test(lmdb_library, is_arrow_source, "sym", target, source, self.strategy, expected, on=["a"])
 
-    def test_on_data_column_datetime(self, lmdb_library):
+    def test_on_data_column_datetime(self, request, lmdb_library, is_arrow_source):
+        if is_arrow_source:
+            request.applymarker(ARROW_SOURCE_INTO_PANDAS_MULTIINDEX_XFAIL)
         index_names = [None, "a", "b"]
         primary_target_vals = pd.to_datetime(["2024-01-01", "2024-01-02", "2024-01-03"])
         target_idx = pd.MultiIndex.from_arrays([primary_target_vals, ["A", "B", "C"], [1, 2, 3]], names=index_names)
@@ -4286,9 +4462,11 @@ class TestMergeMultiindexUpdate:
             [primary_target_vals, ["A", "a", "C"], [1, 200, 3]], names=[None, "a", "b"]
         )
         expected = pd.DataFrame({"c": [1, 2, 3], "d": [-1.0, -1000.0, -3.0]}, index=expected_idx)
-        generic_merge_test(lmdb_library, "sym", target, source, self.strategy, expected, on=["c"])
+        generic_merge_test(lmdb_library, is_arrow_source, "sym", target, source, self.strategy, expected, on=["c"])
 
-    def test_on_data_column_rowrange(self, lmdb_library):
+    def test_on_data_column_rowrange(self, request, lmdb_library, is_arrow_source):
+        if is_arrow_source:
+            request.applymarker(ARROW_SOURCE_INTO_PANDAS_MULTIINDEX_XFAIL)
         index_names = [None, "a", "b"]
         target_idx = pd.MultiIndex.from_arrays(
             [np.array([-1, -2, -3], dtype=np.int8), ["A", "B", "C"], [1, 2, 3]], names=index_names
@@ -4304,9 +4482,11 @@ class TestMergeMultiindexUpdate:
             [np.array([-1, -20, -3], dtype=np.int8), ["A", "b", "C"], [1, 300, 3]], names=index_names
         )
         expected = pd.DataFrame({"c": [1, 2, 3], "d": [-1.0, -2000.0, -3.0]}, index=expected_idx)
-        generic_merge_test(lmdb_library, "sym", target, source, self.strategy, expected, on=["c"])
+        generic_merge_test(lmdb_library, is_arrow_source, "sym", target, source, self.strategy, expected, on=["c"])
 
-    def test_on_secondary_index_and_data_column_datetime(self, lmdb_library):
+    def test_on_secondary_index_and_data_column_datetime(self, request, lmdb_library, is_arrow_source):
+        if is_arrow_source:
+            request.applymarker(ARROW_SOURCE_INTO_PANDAS_MULTIINDEX_XFAIL)
         index_names = [None, "a", "b"]
         primary_target_vals = pd.to_datetime(["2024-01-01", "2024-01-02", "2024-01-03", "2024-01-04"])
         target_idx = pd.MultiIndex.from_arrays(
@@ -4323,9 +4503,11 @@ class TestMergeMultiindexUpdate:
             [primary_target_vals, ["A", "B", "C", "D"], [1, 200, 3, 4]], names=index_names
         )
         expected = pd.DataFrame({"c": [10, 20, 30, 40], "d": [-1.0, -200.0, -3.0, -4.0]}, index=expected_idx)
-        generic_merge_test(lmdb_library, "sym", target, source, self.strategy, expected, on=["a", "c"])
+        generic_merge_test(lmdb_library, is_arrow_source, "sym", target, source, self.strategy, expected, on=["a", "c"])
 
-    def test_on_secondary_index_and_data_column_rowrange(self, lmdb_library):
+    def test_on_secondary_index_and_data_column_rowrange(self, request, lmdb_library, is_arrow_source):
+        if is_arrow_source:
+            request.applymarker(ARROW_SOURCE_INTO_PANDAS_MULTIINDEX_XFAIL)
         index_names = ["idx", "a", "b"]
         target_idx = pd.MultiIndex.from_arrays(
             [np.array([-1, -2, -3, -4], dtype=np.int8), ["A", "B", "C", "D"], [1, 2, 3, 4]], names=index_names
@@ -4340,9 +4522,11 @@ class TestMergeMultiindexUpdate:
             [np.array([-1, -10, -3, -4], dtype=np.int8), ["A", "B", "C", "D"], [1, 200, 3, 4]], names=index_names
         )
         expected = pd.DataFrame({"c": [10, 20, 30, 40], "d": [-1.0, -200.0, -3.0, -4.0]}, index=expected_idx)
-        generic_merge_test(lmdb_library, "sym", target, source, self.strategy, expected, on=["a", "c"])
+        generic_merge_test(lmdb_library, is_arrow_source, "sym", target, source, self.strategy, expected, on=["a", "c"])
 
-    def test_no_data_columns_datetime(self, lmdb_library):
+    def test_no_data_columns_datetime(self, request, lmdb_library, is_arrow_source):
+        if is_arrow_source:
+            request.applymarker(ARROW_SOURCE_INTO_PANDAS_MULTIINDEX_XFAIL)
         dates = pd.to_datetime(["2024-01-01", "2024-01-02", "2024-01-03"])
         target_idx = pd.MultiIndex.from_arrays([dates, ["A", "B", "C"]], names=["idx", "a"])
         target = pd.DataFrame(index=target_idx)
@@ -4354,9 +4538,11 @@ class TestMergeMultiindexUpdate:
         # on=None matches by timestamp only. Jan2 matches → __idx__a updated from B to X. Jan5 no match.
         expected_idx = pd.MultiIndex.from_arrays([dates, ["A", "X", "C"]], names=["idx", "a"])
         expected = pd.DataFrame(index=expected_idx)
-        generic_merge_test(lmdb_library, "sym", target, source, self.strategy, expected)
+        generic_merge_test(lmdb_library, is_arrow_source, "sym", target, source, self.strategy, expected)
 
-    def test_no_data_columns_rowrange(self, lmdb_library):
+    def test_no_data_columns_rowrange(self, request, lmdb_library, is_arrow_source):
+        if is_arrow_source:
+            request.applymarker(ARROW_SOURCE_INTO_PANDAS_MULTIINDEX_XFAIL)
         target_idx = pd.MultiIndex.from_arrays([["A", "B", "C"], [1, 2, 3]], names=["a", "b"])
         target = pd.DataFrame(index=target_idx)
 
@@ -4364,14 +4550,14 @@ class TestMergeMultiindexUpdate:
         source = pd.DataFrame(index=source_idx)
         # a=B matches row 1, but b=2 same in source and target; no data columns → unchanged
         expected = target.copy()
-        generic_merge_test(lmdb_library, "sym", target, source, self.strategy, expected, on=["a"])
+        generic_merge_test(lmdb_library, is_arrow_source, "sym", target, source, self.strategy, expected, on=["a"])
 
     @pytest.mark.parametrize("on", ([None], ["a", None]))
     @pytest.mark.parametrize("is_datetime", [True, False], ids=["datetime", "rowrange"])
     @pytest.mark.parametrize(
         "index_names, data_names", [([None, "a"], ["b"]), (["a", None], ["b"]), (["a", "b"], [None])]
     )
-    def test_match_on_column_named_none(self, lmdb_library, on, is_datetime, index_names, data_names):
+    def test_match_on_column_named_none(self, lmdb_library, on, is_datetime, index_names, data_names, is_arrow_source):
         lib = lmdb_library
         if is_datetime:
             idx = pd.MultiIndex.from_arrays(
@@ -4385,9 +4571,10 @@ class TestMergeMultiindexUpdate:
         source = pd.DataFrame({c: [99.0] for c in data_names}, index=src_idx)
         lib.write("sym", target)
         with pytest.raises(TypeError):
-            lib.merge("sym", source, strategy=self.strategy, on=on)
+            run_merge(lib, is_arrow_source, "sym", source, strategy=self.strategy, on=on)
 
 
+@arrow_source_param
 @pytest.mark.parametrize(
     "target_segments, source, expected",
     [
@@ -4446,7 +4633,9 @@ class TestMergeMultiindexUpdate:
         ),
     ],
 )
-def test_merge_insert_with_repeated_boundary_timestamps(lmdb_library, target_segments, source, expected):
+def test_merge_insert_with_repeated_boundary_timestamps(
+    lmdb_library, target_segments, source, expected, is_arrow_source
+):
     lib = lmdb_library
     lib.write("sym", target_segments[0])
     for segment in target_segments[1:]:
@@ -4455,11 +4644,14 @@ def test_merge_insert_with_repeated_boundary_timestamps(lmdb_library, target_seg
     lt = lib._dev_tools.library_tool()
     assert len(lt.find_keys_for_symbol(KeyType.TABLE_DATA, "sym")) == len(target_segments)
 
-    lib.merge("sym", source, strategy=MergeStrategy(MergeAction.UPDATE, MergeAction.INSERT), on=["a"])
+    run_merge(
+        lib, is_arrow_source, "sym", source, strategy=MergeStrategy(MergeAction.UPDATE, MergeAction.INSERT), on=["a"]
+    )
     assert_frame_equal(lib.read("sym").data, expected)
 
 
-def test_merge_insert_into_back_shared_middle_group(lmdb_library):
+@arrow_source_param
+def test_merge_insert_into_back_shared_middle_group(lmdb_library, is_arrow_source):
     lib = lmdb_library
     lib.write("sym", pd.DataFrame({"a": [0, 1]}, index=pd.DatetimeIndex([10, 20])))
     lib.append("sym", pd.DataFrame({"a": [2, 3]}, index=pd.DatetimeIndex([20, 30])))
@@ -4468,7 +4660,9 @@ def test_merge_insert_into_back_shared_middle_group(lmdb_library):
     assert len(lib._dev_tools.library_tool().find_keys_for_symbol(KeyType.TABLE_DATA, "sym")) == 4
 
     source = pd.DataFrame({"a": [1000, 1001, 1002]}, index=pd.DatetimeIndex([15, 25, 35]))
-    lib.merge("sym", source, strategy=MergeStrategy(MergeAction.UPDATE, MergeAction.INSERT), on=["a"])
+    run_merge(
+        lib, is_arrow_source, "sym", source, strategy=MergeStrategy(MergeAction.UPDATE, MergeAction.INSERT), on=["a"]
+    )
 
     expected = pd.DataFrame(
         {"a": [0, 1000, 1, 2, 1001, 3, 4, 1002, 5, 6, 7]},
@@ -4477,7 +4671,8 @@ def test_merge_insert_into_back_shared_middle_group(lmdb_library):
     assert_frame_equal(lib.read("sym").data, expected)
 
 
-def test_merge_insert_only_into_chain_with_shared_boundaries(lmdb_library):
+@arrow_source_param
+def test_merge_insert_only_into_chain_with_shared_boundaries(lmdb_library, is_arrow_source):
     lib = lmdb_library
     lib.write("sym", pd.DataFrame({"a": [0, 1]}, index=pd.DatetimeIndex([10, 20])))
     lib.append("sym", pd.DataFrame({"a": [2, 3]}, index=pd.DatetimeIndex([20, 30])))
@@ -4486,7 +4681,14 @@ def test_merge_insert_only_into_chain_with_shared_boundaries(lmdb_library):
     assert len(lib._dev_tools.library_tool().find_keys_for_symbol(KeyType.TABLE_DATA, "sym")) == 4
 
     source = pd.DataFrame({"a": [1000]}, index=pd.DatetimeIndex([25]))
-    lib.merge("sym", source, strategy=MergeStrategy(MergeAction.DO_NOTHING, MergeAction.INSERT), on=["a"])
+    run_merge(
+        lib,
+        is_arrow_source,
+        "sym",
+        source,
+        strategy=MergeStrategy(MergeAction.DO_NOTHING, MergeAction.INSERT),
+        on=["a"],
+    )
 
     expected = pd.DataFrame(
         {"a": [0, 1, 2, 1000, 3, 4, 5, 6, 7]},
@@ -4495,6 +4697,7 @@ def test_merge_insert_only_into_chain_with_shared_boundaries(lmdb_library):
     assert_frame_equal(lib.read("sym").data, expected)
 
 
+@arrow_source_param
 class TestMergeMultiindexInsert:
     """MultiIndex insert tests for datetime and row-range merge strategies."""
 
@@ -4506,7 +4709,9 @@ class TestMergeMultiindexInsert:
         ],
         ids=["do_nothing_insert", "update_insert"],
     )
-    def test_datetime_basic(self, lmdb_library, strategy):
+    def test_datetime_basic(self, request, lmdb_library, strategy, is_arrow_source):
+        if is_arrow_source:
+            request.applymarker(ARROW_SOURCE_INTO_PANDAS_MULTIINDEX_XFAIL)
         lib = lmdb_library
         index_names = [None, "sec"]
         primary_target_vals = pd.DatetimeIndex(["2024-01-01", "2024-01-02", "2024-01-03"])
@@ -4550,7 +4755,7 @@ class TestMergeMultiindexInsert:
         expected = pd.DataFrame({"c": expected_c, "d": expected_d}, index=expected_idx)
 
         lib.write("sym", target)
-        lib.merge("sym", source, strategy=strategy, on=None)
+        run_merge(lib, is_arrow_source, "sym", source, strategy=strategy, on=None)
         assert_frame_equal(lib.read("sym").data, expected)
 
     @pytest.mark.parametrize(
@@ -4561,7 +4766,9 @@ class TestMergeMultiindexInsert:
         ],
         ids=["do_nothing_insert", "update_insert"],
     )
-    def test_rowrange_basic(self, lmdb_library, strategy):
+    def test_rowrange_basic(self, request, lmdb_library, strategy, is_arrow_source):
+        if is_arrow_source:
+            request.applymarker(ARROW_SOURCE_INTO_PANDAS_MULTIINDEX_XFAIL)
         lib = lmdb_library
         index_names = ["p", "s"]
         target_idx = pd.MultiIndex.from_arrays([["P", "Q", "R"], [1, 2, 3]], names=index_names)
@@ -4578,7 +4785,7 @@ class TestMergeMultiindexInsert:
             expected = pd.DataFrame({"a": [1, 2, 3, 9], "b": [1.0, 20.0, 3.0, 90.0]}, index=expected_idx)
 
         lib.write("sym", target)
-        lib.merge("sym", source, strategy=strategy, on=["a"])
+        run_merge(lib, is_arrow_source, "sym", source, strategy=strategy, on=["a"])
         assert_frame_equal(lib.read("sym").data, expected)
 
     @pytest.mark.parametrize(
@@ -4589,7 +4796,9 @@ class TestMergeMultiindexInsert:
         ],
         ids=["do_nothing_insert", "update_insert"],
     )
-    def test_rowrange_requires_on(self, lmdb_library, strategy):
+    def test_rowrange_requires_on(self, request, lmdb_library, strategy, is_arrow_source):
+        if is_arrow_source:
+            request.applymarker(ARROW_SOURCE_INTO_PANDAS_MULTIINDEX_XFAIL)
         lib = lmdb_library
         index_names = ["p", "s"]
         target_idx = pd.MultiIndex.from_arrays([["P", "Q", "R"], [1, 2, 3]], names=index_names)
@@ -4600,14 +4809,16 @@ class TestMergeMultiindexInsert:
 
         lib.write("sym", target)
         with pytest.raises(UserInputException):
-            lib.merge("sym", source, strategy=strategy, on=None)
+            run_merge(lib, is_arrow_source, "sym", source, strategy=strategy, on=None)
 
     @pytest.mark.parametrize(
         "is_datetime",
         [True, False],
         ids=["datetime", "rowrange"],
     )
-    def test_on_secondary_index_level(self, lmdb_library, is_datetime):
+    def test_on_secondary_index_level(self, request, lmdb_library, is_datetime, is_arrow_source):
+        if is_arrow_source:
+            request.applymarker(ARROW_SOURCE_INTO_PANDAS_MULTIINDEX_XFAIL)
         lib = lmdb_library
         strategy = MergeStrategy(MergeAction.UPDATE, MergeAction.INSERT)
 
@@ -4640,10 +4851,18 @@ class TestMergeMultiindexInsert:
         expected = pd.DataFrame({"c": expected_c}, index=expected_idx)
 
         lib.write("sym", target)
-        lib.merge("sym", source, strategy=strategy, on=["a"])
+        run_merge(lib, is_arrow_source, "sym", source, strategy=strategy, on=["a"])
         assert_frame_equal(lib.read("sym").data, expected)
 
-    def test_string_secondary_level_insert(self, lmdb_library):
+    def test_string_secondary_level_insert(self, request, lmdb_library, is_arrow_source):
+        if is_arrow_source:
+            request.applymarker(
+                pytest.mark.xfail(
+                    raises=SchemaException,
+                    reason="Merge update does not support Arrow sources with nulls yet",
+                    strict=True,
+                )
+            )
         lib = lmdb_library
         strategy = MergeStrategy(MergeAction.DO_NOTHING, MergeAction.INSERT)
         index_names = [None, "s"]
@@ -4662,10 +4881,12 @@ class TestMergeMultiindexInsert:
         expected = pd.DataFrame({"a": [1, 2, 3, 4]}, index=expected_idx)
 
         lib.write("sym", target)
-        lib.merge("sym", source, strategy=strategy, on=None)
+        run_merge(lib, is_arrow_source, "sym", source, strategy=strategy, on=None)
         assert_frame_equal(lib.read("sym").data, expected)
 
-    def test_datetime_insert_across_row_slices(self, lmdb_library_factory):
+    def test_datetime_insert_across_row_slices(self, request, lmdb_library_factory, is_arrow_source):
+        if is_arrow_source:
+            request.applymarker(ARROW_SOURCE_INTO_PANDAS_MULTIINDEX_XFAIL)
         lib = lmdb_library_factory(arcticdb.LibraryOptions(rows_per_segment=2))
         strategy = MergeStrategy(MergeAction.DO_NOTHING, MergeAction.INSERT)
         index_names = [None, "s"]
@@ -4698,7 +4919,7 @@ class TestMergeMultiindexInsert:
         expected = pd.DataFrame({"a": [0, 100, 1, 101, 2]}, index=expected_idx)
 
         lib.write("sym", target)
-        lib.merge("sym", source, strategy=strategy, on=None)
+        run_merge(lib, is_arrow_source, "sym", source, strategy=strategy, on=None)
         assert_frame_equal(lib.read("sym").data, expected)
 
     @pytest.mark.parametrize(
@@ -4706,7 +4927,9 @@ class TestMergeMultiindexInsert:
         [True, False],
         ids=["datetime", "rowrange"],
     )
-    def test_upsert_nonexistent_symbol(self, lmdb_library, is_datetime):
+    def test_upsert_nonexistent_symbol(self, request, lmdb_library, is_datetime, is_arrow_source):
+        if is_arrow_source:
+            pytest.skip("Upserting with multiindex cannot happen with pyarrow because it does not support multiindex")
         lib = lmdb_library
         strategy = MergeStrategy(MergeAction.UPDATE, MergeAction.INSERT)
 
@@ -4723,7 +4946,7 @@ class TestMergeMultiindexInsert:
             on = ["s"]
 
         sym = f"nonexistent_{is_datetime}"
-        lib.merge(sym, source, strategy=strategy, upsert=True, on=on)
+        run_merge(lib, is_arrow_source, sym, source, strategy=strategy, upsert=True, on=on)
         assert_frame_equal(lib.read(sym).data, source)
 
 
@@ -4732,6 +4955,7 @@ class TestMergeMultiindexInsert:
 # additions) ----
 
 
+@arrow_source_param
 @pytest.mark.parametrize("match_na", [True, False], ids=["match_na_true", "match_na_false"])
 @pytest.mark.parametrize(
     "target, source, expected_match_na_true, expected_match_na_false",
@@ -4754,17 +4978,26 @@ class TestMergeMultiindexInsert:
     ],
     ids=["datetime", "rowrange"],
 )
-def test_match_on_float_nan(lmdb_library, match_na, target, source, expected_match_na_true, expected_match_na_false):
+def test_match_on_float_nan(
+    request, lmdb_library, match_na, target, source, expected_match_na_true, expected_match_na_false, is_arrow_source
+):
+    if is_arrow_source:
+        request.applymarker(
+            pytest.mark.xfail(
+                raises=SchemaException, reason="Merge update does not support Arrow sources with nulls yet", strict=True
+            )
+        )
     lib = lmdb_library
     strategy = MergeStrategy(MergeAction.UPDATE, MergeAction.DO_NOTHING)
     lib.write("sym", target)
-    lib.merge("sym", source, strategy=strategy, on=["a"], match_na=match_na)
+    run_merge(lib, is_arrow_source, "sym", source, strategy=strategy, on=["a"], match_na=match_na)
     expected = expected_match_na_true if match_na else expected_match_na_false
     assert_frame_equal(lib.read("sym").data, expected)
     lt = lib._dev_tools.library_tool()
     assert len(lt.find_keys_for_symbol(KeyType.TABLE_DATA, "sym")) == 2
 
 
+@arrow_source_param
 @pytest.mark.parametrize("match_na", [True, False], ids=["match_na_true", "match_na_false"])
 @pytest.mark.parametrize(
     "target, source, on, expected_match_na_true, expected_match_na_false",
@@ -4799,16 +5032,31 @@ def test_match_on_float_nan(lmdb_library, match_na, target, source, expected_mat
     ids=["datetime", "rowrange"],
 )
 def test_match_on_string_none_nan(
-    lmdb_version_store_v1, match_na, target, source, on, expected_match_na_true, expected_match_na_false
+    request,
+    lmdb_version_store_v1,
+    match_na,
+    target,
+    source,
+    on,
+    expected_match_na_true,
+    expected_match_na_false,
+    is_arrow_source,
 ):
+    if is_arrow_source:
+        request.applymarker(
+            pytest.mark.xfail(
+                raises=SchemaException, reason="Merge update does not support Arrow sources with nulls yet", strict=True
+            )
+        )
     lib = lmdb_version_store_v1
     strategy = MergeStrategy(MergeAction.UPDATE, MergeAction.DO_NOTHING)
     lib.write("sym", target)
-    lib.merge("sym", source, strategy=strategy, on=on, match_na=match_na)
+    run_merge(lib, is_arrow_source, "sym", source, strategy=strategy, on=on, match_na=match_na)
     expected = expected_match_na_true if match_na else expected_match_na_false
     assert_frame_equal(lib.read("sym").data, expected)
 
 
+@arrow_source_param
 @pytest.mark.parametrize("match_na", [True, False], ids=["match_na_true", "match_na_false"])
 @pytest.mark.parametrize(
     "target, source",
@@ -4830,18 +5078,25 @@ def test_match_on_string_none_nan(
     ],
     ids=["datetime", "rowrange"],
 )
-def test_multiple_source_rows_match_via_missing(lmdb_library, match_na, target, source):
+def test_multiple_source_rows_match_via_missing(request, lmdb_library, match_na, target, source, is_arrow_source):
+    if is_arrow_source:
+        request.applymarker(
+            pytest.mark.xfail(
+                raises=SchemaException, reason="Merge update does not support Arrow sources with nulls yet", strict=True
+            )
+        )
     lib = lmdb_library
     strategy = MergeStrategy(MergeAction.UPDATE, MergeAction.DO_NOTHING)
     lib.write("sym", target)
     if match_na:
         with pytest.raises(UserInputException, match="Multiple source rows match the same target row"):
-            lib.merge("sym", source, strategy=strategy, on=["a"], match_na=match_na)
+            run_merge(lib, is_arrow_source, "sym", source, strategy=strategy, on=["a"], match_na=match_na)
     else:
-        lib.merge("sym", source, strategy=strategy, on=["a"], match_na=match_na)
+        run_merge(lib, is_arrow_source, "sym", source, strategy=strategy, on=["a"], match_na=match_na)
         assert_frame_equal(lib.read("sym").data, target)
 
 
+@arrow_source_param
 @pytest.mark.parametrize("match_na", [True, False], ids=["match_na_true", "match_na_false"])
 @pytest.mark.parametrize(
     "target, source, expected_match_na_true, expected_match_na_false",
@@ -4873,15 +5128,24 @@ def test_multiple_source_rows_match_via_missing(lmdb_library, match_na, target, 
     ],
     ids=["datetime", "rowrange"],
 )
-def test_match_on_datetime_nat(lmdb_library, match_na, target, source, expected_match_na_true, expected_match_na_false):
+def test_match_on_datetime_nat(
+    request, lmdb_library, match_na, target, source, expected_match_na_true, expected_match_na_false, is_arrow_source
+):
+    if is_arrow_source:
+        request.applymarker(
+            pytest.mark.xfail(
+                raises=SchemaException, reason="Merge update does not support Arrow sources with nulls yet", strict=True
+            )
+        )
     lib = lmdb_library
     strategy = MergeStrategy(MergeAction.UPDATE, MergeAction.DO_NOTHING)
     lib.write("sym", target)
-    lib.merge("sym", source, strategy=strategy, on=["a"], match_na=match_na)
+    run_merge(lib, is_arrow_source, "sym", source, strategy=strategy, on=["a"], match_na=match_na)
     expected = expected_match_na_true if match_na else expected_match_na_false
     assert_frame_equal(lib.read("sym").data, expected)
 
 
+@arrow_source_param
 @pytest.mark.parametrize(
     "target, source, expected",
     [
@@ -4911,11 +5175,17 @@ def test_match_on_datetime_nat(lmdb_library, match_na, target, source, expected_
     ],
     ids=["datetime", "rowrange"],
 )
-def test_unmatched_nan_source_rows_inserted_default(lmdb_library, target, source, expected):
+def test_unmatched_nan_source_rows_inserted_default(request, lmdb_library, target, source, expected, is_arrow_source):
+    if is_arrow_source:
+        request.applymarker(
+            pytest.mark.xfail(
+                raises=SchemaException, reason="Merge update does not support Arrow sources with nulls yet", strict=True
+            )
+        )
     lib = lmdb_library
     strategy = MergeStrategy(MergeAction.UPDATE, MergeAction.INSERT)
     lib.write("sym", target)
-    lib.merge("sym", source, strategy=strategy, on=["a"])
+    run_merge(lib, is_arrow_source, "sym", source, strategy=strategy, on=["a"])
     assert_frame_equal(lib.read("sym").data, expected)
 
 
