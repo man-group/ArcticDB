@@ -53,7 +53,7 @@ std::string SchemaCombineOptions::name() const {
     return std::string{operation_str};
 }
 
-SchemaCombineOptions append_or_update_options(
+SchemaCombineOptions within_symbol_combine_options(
         bool dynamic_schema, NormalizationOperation operation, std::optional<StreamId> stream_id
 ) {
     const auto missing_column = dynamic_schema ? MissingColumnPolicy::KEEP : MissingColumnPolicy::STRICT;
@@ -61,9 +61,13 @@ SchemaCombineOptions append_or_update_options(
     return {missing_column, type_promotion, RequiredNameMismatchPolicy::RAISE, operation, std::move(stream_id)};
 }
 
-SchemaCombineOptions append_options(bool dynamic_schema) { return append_or_update_options(dynamic_schema, APPEND); }
+SchemaCombineOptions append_options(bool dynamic_schema) {
+    return within_symbol_combine_options(dynamic_schema, APPEND);
+}
 
-SchemaCombineOptions update_options(bool dynamic_schema) { return append_or_update_options(dynamic_schema, UPDATE); }
+SchemaCombineOptions update_options(bool dynamic_schema) {
+    return within_symbol_combine_options(dynamic_schema, UPDATE);
+}
 
 SchemaCombineOptions concat_options(JoinType join_type) {
     const auto missing_column = join_type == JoinType::OUTER ? MissingColumnPolicy::KEEP : MissingColumnPolicy::DROP;
