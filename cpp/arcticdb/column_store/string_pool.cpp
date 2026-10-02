@@ -132,6 +132,8 @@ OffsetString StringPool::get(const char* data, size_t size, bool deduplicate) {
     return get(StringType(data, size), deduplicate);
 }
 
+void StringPool::reserve(size_t num_strings) { map_.reserve(num_strings); }
+
 const ChunkedBuffer& StringPool::data() const { return block_.buffer(); }
 
 std::string_view StringPool::get_view(offset_t o) { return block_.at(o); }

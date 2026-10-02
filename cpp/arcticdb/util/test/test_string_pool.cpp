@@ -107,6 +107,28 @@ TEST(StringPool, WithoutDeduplication) {
     ASSERT_EQ(pool.get_view(deduplicated.offset()), "abc");
 }
 
+TEST(StringPool, Reserve) {
+    StringPool pool;
+    pool.reserve(1024);
+
+    const auto alpha = pool.get(std::string_view("alpha")).offset();
+    const auto beta = pool.get(std::string_view("beta")).offset();
+    ASSERT_NE(alpha, beta);
+
+    // Reserving again, including for fewer strings than are already present, keeps the pool intact
+    pool.reserve(1 << 16);
+    pool.reserve(1);
+    ASSERT_EQ(pool.get(std::string_view("alpha")).offset(), alpha);
+    ASSERT_EQ(pool.get(std::string_view("beta")).offset(), beta);
+    ASSERT_EQ(pool.get_view(alpha), "alpha");
+    ASSERT_EQ(pool.get_view(beta), "beta");
+
+    const auto gamma = pool.get(std::string_view("gamma")).offset();
+    ASSERT_NE(gamma, alpha);
+    ASSERT_NE(gamma, beta);
+    ASSERT_EQ(pool.get_view(gamma), "gamma");
+}
+
 TEST(StringPool, StressTest) {
     StringPool pool;
 
