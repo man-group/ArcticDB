@@ -1224,15 +1224,6 @@ std::vector<ProcessingUnit> MergeUpdateClause::update_and_insert(
                     details::visit_type(target_field.type().data_type(), [&]<typename TypeTag>(TypeTag) {
                         using TargetDataTDT = ScalarTagType<TypeTag>;
                         has_string_column_in_column_slice |= is_sequence_type(TargetDataTDT::data_type());
-                        user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
-                                util::is_cstyle_array<SourceRawType<TargetDataTDT>>(source_->get_tensor(field_idx)),
-                                "Fortran-style arrays are not supported by merge update yet. Column \"{}\" has data "
-                                "type {} of size {} bytes but the stride is {} bytes",
-                                target_field.name(),
-                                target_field.type(),
-                                sizeof(SourceRawType<TargetDataTDT>),
-                                source_->get_tensor(field_idx).strides()[0]
-                        );
                         return merge<TargetDataTDT>(
                                 InsertSourceData{
                                         .index = source_index,
@@ -1445,6 +1436,7 @@ void MergeUpdateClause::set_component_manager(std::shared_ptr<ComponentManager> 
 }
 
 OutputSchema MergeUpdateClause::modify_schema(OutputSchema&& output_schema) const {
+    align_multi_index_names(output_schema, source_->desc(), source_->norm_meta);
     const std::array schemas{output_schema, schema_from_input_frame(*source_)};
     return combine_schema(
             schemas,

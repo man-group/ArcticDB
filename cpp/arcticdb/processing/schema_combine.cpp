@@ -1079,6 +1079,40 @@ SortedValue combine_sorted(std::span<const OutputSchema> schemas) {
 }
 } // namespace
 
+void align_multi_index_names(
+        const OutputSchema& existing, StreamDescriptor& incoming, NormalizationMetadata& incoming_norm
+) {
+    const auto info = required_fields_info(existing);
+    if (!info.has_multi_index) {
+        return;
+    }
+    const auto levels = std::min(info.num_physical_indices, static_cast<size_t>(incoming.field_count()));
+    auto aligned = std::make_shared<FieldCollection>();
+    bool renamed = false;
+    for (size_t idx = 0; idx < static_cast<size_t>(incoming.field_count()); ++idx) {
+        const auto& field = incoming.field(idx);
+        // Level 0 is stored unprefixed, so there is nothing to align there
+        const bool is_aligned_level = idx > 0 && idx < levels;
+        const auto stored_name =
+                is_aligned_level ? std::string{existing.stream_descriptor().field(idx).name()} : std::string{};
+        if (is_aligned_level && stored_name == stream::mangled_name(field.name())) {
+            aligned->add_field(field.type(), stored_name);
+            // Arrow keys its column metadata by field name, so the timezone of a renamed level moves with it
+            if (incoming_norm.has_experimental_arrow()) {
+                rename_column_metadata(
+                        *incoming_norm.mutable_experimental_arrow(), {std::string{field.name()}}, stored_name
+                );
+            }
+            renamed = true;
+        } else {
+            aligned->add_field(field.type(), field.name());
+        }
+    }
+    if (renamed) {
+        incoming = StreamDescriptor{incoming.segment_desc_, std::move(aligned), incoming.id()};
+    }
+}
+
 SortedValue deduce_sorted(SortedValue existing_frame, SortedValue input_frame) {
     constexpr auto UNKNOWN = SortedValue::UNKNOWN;
     constexpr auto ASCENDING = SortedValue::ASCENDING;
