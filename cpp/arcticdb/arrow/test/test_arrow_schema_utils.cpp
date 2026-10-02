@@ -133,6 +133,58 @@ OutputSchema generate_schema(
 
 } // namespace
 
+using param_types = std::tuple<
+        ObjectType, bool, std::variant<Index, MultiIndex>, std::variant<Index, MultiIndex>, std::vector<ColumnSpec>,
+        std::vector<ColumnSpec>, ankerl::unordered_dense::map<std::string, std::string>>;
+
+struct MakeSchemaArrowCompatibleFixture : public ::testing::TestWithParam<param_types> {
+    static ObjectType object_type() { return std::get<0>(GetParam()); }
+    static bool has_synthetic_columns() { return std::get<1>(GetParam()); }
+    static std::variant<Index, MultiIndex> input_index() { return std::get<2>(GetParam()); }
+    static std::variant<Index, MultiIndex> output_index() { return std::get<3>(GetParam()); }
+    static std::vector<ColumnSpec> input_columns() { return std::get<4>(GetParam()); }
+    static std::vector<ColumnSpec> output_columns() { return std::get<5>(GetParam()); }
+    static ankerl::unordered_dense::map<std::string, std::string> expected_column_renames() {
+        return std::get<6>(GetParam());
+    }
+};
+
+TEST_P(MakeSchemaArrowCompatibleFixture, MakeSchemaArrowCompatibleTests) {
+    auto input_schema = generate_schema(object_type(), has_synthetic_columns(), input_index(), input_columns());
+    auto [changed, new_schema, column_renames] = make_schema_arrow_compatible(input_schema);
+    ASSERT_TRUE(changed);
+    auto expected_output_schema = generate_schema(object_type(), false, output_index(), output_columns());
+    // TODO: Check StreamDescriptors match as well
+    // TODO: Remove report throughout this file once all tests passing
+    std::string report;
+    MessageDifferencer differ;
+    differ.ReportDifferencesToString(&report);
+    auto same = differ.Compare(new_schema.norm_metadata_, expected_output_schema.norm_metadata_);
+    ASSERT_TRUE(same);
+    ASSERT_EQ(column_renames, expected_column_renames());
+}
+
+INSTANTIATE_TEST_SUITE_P(
+        MakeSchemaArrowCompatibleParametrizedTests, MakeSchemaArrowCompatibleFixture,
+        ::testing::Values(
+                param_types(
+                        ObjectType::DF, false, row_count_index(), row_count_index(),
+                        {{.name = "__none__0", .is_none = true}}, {{.name = "None", .original_name = "None"}},
+                        {{"__none__0", "None"}}
+                ),
+                param_types(
+                        ObjectType::DF, false, row_count_index(), row_count_index(),
+                        {{.name = "10", .original_name = "10", .is_int = true}},
+                        {{.name = "10", .original_name = "10"}}, {}
+                ),
+                param_types(
+                        ObjectType::DF, false, row_count_index(), row_count_index(),
+                        {{.name = "__empty__0", .is_empty = true}},
+                        {{.name = "__empty__", .original_name = "__empty__"}}, {{"__empty__0", "__empty__"}}
+                )
+        )
+);
+
 struct ArrowSchemaCompatibleBasic
     : public ::testing::TestWithParam<
               std::tuple<ObjectType, ColumnSpec, ColumnSpec, ankerl::unordered_dense::map<std::string, std::string>>> {
