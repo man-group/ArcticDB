@@ -15,6 +15,7 @@ from arcticdb import QueryBuilder
 from arcticdb.exceptions import InternalException, NoSuchVersionException, SchemaException, UserInputException
 from arcticdb.options import OutputFormat
 from arcticdb.util.test import assert_frame_equal, assert_pandas_equal
+from arcticdb_ext.storage import KeyType
 
 
 def assert_norm_meta_arrow_compatible(lib, sym):
@@ -78,6 +79,26 @@ def generic_rename_columns_arrow_compat_test(lib, sym, index_columns=None):
     assert vit_idempotent.version == vit.version
     after_after_pandas = lib.read(sym, output_format=OutputFormat.PANDAS).data
     assert_pandas_equal(after_after_pandas, after_pandas)
+
+    lib_tool = lib.library_tool()
+    data_keys = [
+        data_key
+        for data_key in lib_tool.find_keys_for_id(KeyType.TABLE_DATA, sym)
+        if data_key.version_id == vit.version
+    ]
+    column_set = (
+        set(after_pandas.columns.to_list()) if isinstance(after_pandas, pd.DataFrame) else set([after_pandas.name])
+    )
+    if isinstance(after_pandas.index, pd.DatetimeIndex):
+        column_set.add(after_pandas.index.name)
+    elif isinstance(after_pandas.index, pd.MultiIndex):
+        column_set.add(after_pandas.index.names[0])
+        for idx in range(1, after_pandas.index.nlevels):
+            column_set.add(f"__idx__{after_pandas.index.names[idx]}")
+    for data_key in data_keys:
+        desc = lib_tool.read_descriptor(data_key)
+        for field in desc.fields():
+            assert field.name in column_set
 
 
 @pytest.mark.parametrize("index_columns", [5, [], [5, "hello"]])
