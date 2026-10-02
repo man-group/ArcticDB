@@ -23,7 +23,7 @@ import polars as pl
 import pyarrow as pa
 import pytest
 
-from arcticdb import concat
+from arcticdb import concat, StagedDataFinalizeMethod
 from arcticdb.exceptions import ArcticException, NormalizationException, SchemaException
 from arcticdb.util.test import assert_frame_equal, assert_series_equal, assert_frame_equal_with_arrow
 
@@ -642,15 +642,19 @@ def _maybe_arrow(df: pd.DataFrame, fmt: str) -> ArrowOrPandas:
 
 
 def _combine(lib, op: str, first: ArrowOrPandas, second: ArrowOrPandas, index_column: bool = False) -> ArrowOrPandas:
-    """Write ``first``, combine ``second`` via ``op`` ("append"/"update"/"concat"), return read-back
-    data. ``index_column`` applied to all operations (but affects only arrow inputs)
+    """Write ``first``, combine ``second`` via ``op``, return read-back data. ``index_column`` applied to
+    all operations (but affects only arrow inputs)
     """
     if op == "concat":
         lib.write("sym0", first, index_column=index_column)
         lib.write("sym1", second, index_column=index_column)
         return concat(lib.read_batch(["sym0", "sym1"], lazy=True)).collect().data
     lib.write("sym", first, index_column=index_column)
-    getattr(lib, op)("sym", second, index_column=index_column)
+    if op == "stage":
+        lib.stage("sym", second, index_column=index_column)
+        lib.finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
+    else:
+        getattr(lib, op)("sym", second, index_column=index_column)
     return lib.read("sym").data
 
 
@@ -664,10 +668,11 @@ def _index_tz(received: ArrowOrPandas):
 
 
 FORMATS_ORDER = [("arrow", "pandas"), ("pandas", "arrow")]
-# append/update/concat all produce a row-wise union for disjoint, contiguous timeseries chunks.
-INDEXED_OPS = ["append", "update", "concat"]
+# append, update, concat and stage+finalize all produce a row-wise union for disjoint, contiguous
+# timeseries chunks.
+INDEXED_OPS = ["append", "update", "concat", "stage"]
 # operations that apply without a timeseries index.
-UNINDEXED_OPS = ["append", "concat"]
+UNINDEXED_OPS = ["append", "concat", "stage"]
 
 
 # --- matching schema (row-wise union), both directions --------------------
