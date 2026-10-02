@@ -26,7 +26,7 @@ using MultiIndex = NormalizationMetadata::PandasMultiIndex;
 namespace {
 
 struct ColumnSpec {
-    std::string name;
+    std::string name{""};
     DataType data_type{DataType::INT64};
     bool is_none{false};
     bool is_empty{false};
@@ -164,32 +164,33 @@ INSTANTIATE_TEST_SUITE_P(
         ArrowSchemaCompatibleBasicTests, ArrowSchemaCompatibleBasic,
         ::testing::Values(
                 std::make_tuple(
-                        ObjectType::DF, ColumnSpec{"__none__0", .is_none = true},
-                        ColumnSpec{"None", .original_name = "None"},
+                        ObjectType::DF, ColumnSpec{.name = "__none__0", .is_none = true},
+                        ColumnSpec{.name = "None", .original_name = "None"},
                         ankerl::unordered_dense::map<std::string, std::string>{{"__none__0", "None"}}
                 ),
                 std::make_tuple(
-                        ObjectType::DF, ColumnSpec{"10", .original_name = "10", .is_int = true},
-                        ColumnSpec{"10", .original_name = "10"},
+                        ObjectType::DF, ColumnSpec{.name = "10", .original_name = "10", .is_int = true},
+                        ColumnSpec{.name = "10", .original_name = "10"},
                         ankerl::unordered_dense::map<std::string, std::string>{}
                 ),
                 std::make_tuple(
-                        ObjectType::DF, ColumnSpec{"__empty__0", .is_empty = true},
-                        ColumnSpec{"__empty__", .original_name = "__empty__"},
+                        ObjectType::DF, ColumnSpec{.name = "__empty__0", .is_empty = true},
+                        ColumnSpec{.name = "__empty__", .original_name = "__empty__"},
                         ankerl::unordered_dense::map<std::string, std::string>{{"__empty__0", "__empty__"}}
                 ),
                 std::make_tuple(
-                        ObjectType::SERIES, ColumnSpec{"0"}, ColumnSpec{"None", .original_name = "None"},
+                        ObjectType::SERIES, ColumnSpec{.name = "0"},
+                        ColumnSpec{.name = "None", .original_name = "None"},
                         ankerl::unordered_dense::map<std::string, std::string>{{"0", "None"}}
                 ),
                 std::make_tuple(
-                        ObjectType::SERIES, ColumnSpec{"10", .original_name = "10", .is_int = true},
-                        ColumnSpec{"10", .original_name = "10"},
+                        ObjectType::SERIES, ColumnSpec{.name = "10", .original_name = "10", .is_int = true},
+                        ColumnSpec{.name = "10", .original_name = "10"},
                         ankerl::unordered_dense::map<std::string, std::string>{}
                 ),
                 std::make_tuple(
-                        ObjectType::SERIES, ColumnSpec{"__empty__0", .is_empty = true},
-                        ColumnSpec{"__empty__", .original_name = "__empty__"},
+                        ObjectType::SERIES, ColumnSpec{.name = "__empty__0", .is_empty = true},
+                        ColumnSpec{.name = "__empty__", .original_name = "__empty__"},
                         ankerl::unordered_dense::map<std::string, std::string>{{"__empty__0", "__empty__"}}
                 )
         )
@@ -201,15 +202,15 @@ TEST(ArrowSchemaCompatible, Duplicates) {
             ObjectType::DF,
             false,
             index,
-            {{"__col_a__0", .original_name = "a"},
-             {"__col_a__1", .original_name = "a"},
-             {"__col_a__2", .original_name = "a"},
-             {"__empty__3", .is_empty = true},
-             {"__empty__4", .is_empty = true},
-             {"__empty__5", .is_empty = true},
-             {"__none__6", .is_none = true},
-             {"__none__7", .is_none = true},
-             {"None", .original_name = "None"}}
+            {{.name = "__col_a__0", .original_name = "a"},
+             {.name = "__col_a__1", .original_name = "a"},
+             {.name = "__col_a__2", .original_name = "a"},
+             {.name = "__empty__3", .is_empty = true},
+             {.name = "__empty__4", .is_empty = true},
+             {.name = "__empty__5", .is_empty = true},
+             {.name = "__none__6", .is_none = true},
+             {.name = "__none__7", .is_none = true},
+             {.name = "None", .original_name = "None"}}
     );
     auto [changed, new_schema, column_renames] = make_schema_arrow_compatible(original_schema);
     ASSERT_TRUE(changed);
@@ -217,15 +218,15 @@ TEST(ArrowSchemaCompatible, Duplicates) {
             ObjectType::DF,
             false,
             index,
-            {{"a", .original_name = "a"},
-             {"_a_", .original_name = "_a_"},
-             {"__a__", .original_name = "__a__"},
-             {"__empty__", .original_name = "__empty__"},
-             {"___empty___", .original_name = "___empty___"},
-             {"____empty____", .original_name = "____empty____"},
-             {"None", .original_name = "None"},
-             {"_None_", .original_name = "_None_"},
-             {"__None__", .original_name = "__None__"}}
+            {{.name = "a", .original_name = "a"},
+             {.name = "_a_", .original_name = "_a_"},
+             {.name = "__a__", .original_name = "__a__"},
+             {.name = "__empty__", .original_name = "__empty__"},
+             {.name = "___empty___", .original_name = "___empty___"},
+             {.name = "____empty____", .original_name = "____empty____"},
+             {.name = "None", .original_name = "None"},
+             {.name = "_None_", .original_name = "_None_"},
+             {.name = "__None__", .original_name = "__None__"}}
     );
     std::string report;
     MessageDifferencer differ;
@@ -248,12 +249,14 @@ TEST(ArrowSchemaCompatible, Duplicates) {
 
 TEST(ArrowSchemaCompatible, SyntheticColumns) {
     auto index = row_count_index();
-    auto original_schema =
-            generate_schema(ObjectType::DF, true, index, {{"0", .original_name = "0"}, {"1", .original_name = "1"}});
+    auto original_schema = generate_schema(
+            ObjectType::DF, true, index, {{.name = "0", .original_name = "0"}, {.name = "1", .original_name = "1"}}
+    );
     auto [changed, new_schema, column_renames] = make_schema_arrow_compatible(original_schema);
     ASSERT_TRUE(changed);
-    auto expected_schema =
-            generate_schema(ObjectType::DF, false, index, {{"0", .original_name = "0"}, {"1", .original_name = "1"}});
+    auto expected_schema = generate_schema(
+            ObjectType::DF, false, index, {{.name = "0", .original_name = "0"}, {.name = "1", .original_name = "1"}}
+    );
     std::string report;
     MessageDifferencer differ;
     differ.ReportDifferencesToString(&report);
@@ -294,48 +297,48 @@ INSTANTIATE_TEST_SUITE_P(
                 std::make_tuple(
                         ObjectType::DF,
                         std::vector<ColumnSpec>{
-                                {"10", .data_type = DataType::NANOSECONDS_UTC64},
-                                {"col", .original_name = "col"}
+                                {.name = "10", .data_type = DataType::NANOSECONDS_UTC64},
+                                {.name = "col", .original_name = "col"}
                         },
                         std::vector<ColumnSpec>{
-                                {"10", .data_type = DataType::NANOSECONDS_UTC64},
-                                {"col", .original_name = "col"}
+                                {.name = "10", .data_type = DataType::NANOSECONDS_UTC64},
+                                {.name = "col", .original_name = "col"}
                         },
                         ankerl::unordered_dense::map<std::string, std::string>{}
                 ),
                 std::make_tuple(
                         ObjectType::DF,
                         std::vector<ColumnSpec>{
-                                {"10", .data_type = DataType::NANOSECONDS_UTC64},
-                                {"__col_10__0", .original_name = "10"}
+                                {.name = "10", .data_type = DataType::NANOSECONDS_UTC64},
+                                {.name = "__col_10__0", .original_name = "10"}
                         },
                         std::vector<ColumnSpec>{
-                                {"10", .data_type = DataType::NANOSECONDS_UTC64},
-                                {"_10_", .original_name = "_10_"}
+                                {.name = "10", .data_type = DataType::NANOSECONDS_UTC64},
+                                {.name = "_10_", .original_name = "_10_"}
                         },
                         ankerl::unordered_dense::map<std::string, std::string>{{"__col_10__0", "_10_"}}
                 ),
                 std::make_tuple(
                         ObjectType::SERIES,
                         std::vector<ColumnSpec>{
-                                {"10", .data_type = DataType::NANOSECONDS_UTC64},
-                                {"col", .original_name = "col"}
+                                {.name = "10", .data_type = DataType::NANOSECONDS_UTC64},
+                                {.name = "col", .original_name = "col"}
                         },
                         std::vector<ColumnSpec>{
-                                {"10", .data_type = DataType::NANOSECONDS_UTC64},
-                                {"col", .original_name = "col"}
+                                {.name = "10", .data_type = DataType::NANOSECONDS_UTC64},
+                                {.name = "col", .original_name = "col"}
                         },
                         ankerl::unordered_dense::map<std::string, std::string>{}
                 ),
                 std::make_tuple(
                         ObjectType::SERIES,
                         std::vector<ColumnSpec>{
-                                {"10", .data_type = DataType::NANOSECONDS_UTC64},
-                                {"__col_10__0", .original_name = "10"}
+                                {.name = "10", .data_type = DataType::NANOSECONDS_UTC64},
+                                {.name = "__col_10__0", .original_name = "10"}
                         },
                         std::vector<ColumnSpec>{
-                                {"10", .data_type = DataType::NANOSECONDS_UTC64},
-                                {"_10_", .original_name = "_10_"}
+                                {.name = "10", .data_type = DataType::NANOSECONDS_UTC64},
+                                {.name = "_10_", .original_name = "_10_"}
                         },
                         ankerl::unordered_dense::map<std::string, std::string>{{"__col_10__0", "_10_"}}
                 )
@@ -349,7 +352,7 @@ TEST(ArrowSchemaCompatible, AutoRenameNamelessIndexNoClash) {
                 object_type,
                 false,
                 original_index,
-                {{"index", .data_type = DataType::NANOSECONDS_UTC64}, {"col", .original_name = "col"}}
+                {{.name = "index", .data_type = DataType::NANOSECONDS_UTC64}, {.name = "col", .original_name = "col"}}
         );
         auto [changed, new_schema, column_renames] = make_schema_arrow_compatible(original_schema);
         ASSERT_TRUE(changed);
@@ -358,7 +361,8 @@ TEST(ArrowSchemaCompatible, AutoRenameNamelessIndexNoClash) {
                 object_type,
                 false,
                 expected_index,
-                {{"__index__", .data_type = DataType::NANOSECONDS_UTC64}, {"col", .original_name = "col"}}
+                {{.name = "__index__", .data_type = DataType::NANOSECONDS_UTC64},
+                 {.name = "col", .original_name = "col"}}
         );
         std::string report;
         MessageDifferencer differ;
@@ -377,7 +381,8 @@ TEST(ArrowSchemaCompatible, AutoRenameNamelessIndexOneClash) {
                 object_type,
                 false,
                 original_index,
-                {{"index", .data_type = DataType::NANOSECONDS_UTC64}, {"__index__", .original_name = "__index__"}}
+                {{.name = "index", .data_type = DataType::NANOSECONDS_UTC64},
+                 {.name = "__index__", .original_name = "__index__"}}
         );
         auto [changed, new_schema, column_renames] = make_schema_arrow_compatible(original_schema);
         ASSERT_TRUE(changed);
@@ -386,7 +391,8 @@ TEST(ArrowSchemaCompatible, AutoRenameNamelessIndexOneClash) {
                 object_type,
                 false,
                 expected_index,
-                {{"___index___", .data_type = DataType::NANOSECONDS_UTC64}, {"__index__", .original_name = "__index__"}}
+                {{.name = "___index___", .data_type = DataType::NANOSECONDS_UTC64},
+                 {.name = "__index__", .original_name = "__index__"}}
         );
         std::string report;
         MessageDifferencer differ;
@@ -404,9 +410,9 @@ TEST(ArrowSchemaCompatible, AutoRenameNamelessIndexMultipleClashes) {
             ObjectType::DF,
             false,
             original_index,
-            {{"index", .data_type = DataType::NANOSECONDS_UTC64},
-             {"__col___index____0", .original_name = "__index__"},
-             {"__col___index____1", .original_name = "__index__"}}
+            {{.name = "index", .data_type = DataType::NANOSECONDS_UTC64},
+             {.name = "__col___index____0", .original_name = "__index__"},
+             {.name = "__col___index____1", .original_name = "__index__"}}
     );
     auto [changed, new_schema, column_renames] = make_schema_arrow_compatible(original_schema);
     ASSERT_TRUE(changed);
@@ -415,9 +421,9 @@ TEST(ArrowSchemaCompatible, AutoRenameNamelessIndexMultipleClashes) {
             ObjectType::DF,
             false,
             expected_index,
-            {{"___index___", .data_type = DataType::NANOSECONDS_UTC64},
-             {"__index__", .original_name = "__index__"},
-             {"____index____", .original_name = "____index____"}}
+            {{.name = "___index___", .data_type = DataType::NANOSECONDS_UTC64},
+             {.name = "__index__", .original_name = "__index__"},
+             {.name = "____index____", .original_name = "____index____"}}
     );
     std::string report;
     MessageDifferencer differ;
@@ -437,7 +443,7 @@ TEST(ArrowSchemaCompatible, AutoRenameEmptyStringIndexNoClash) {
                 object_type,
                 false,
                 original_index,
-                {{"", .data_type = DataType::NANOSECONDS_UTC64}, {"col", .original_name = "col"}}
+                {{.name = "", .data_type = DataType::NANOSECONDS_UTC64}, {.name = "col", .original_name = "col"}}
         );
         auto [changed, new_schema, column_renames] = make_schema_arrow_compatible(original_schema);
         ASSERT_TRUE(changed);
@@ -446,7 +452,8 @@ TEST(ArrowSchemaCompatible, AutoRenameEmptyStringIndexNoClash) {
                 object_type,
                 false,
                 expected_index,
-                {{"__empty__", .data_type = DataType::NANOSECONDS_UTC64}, {"col", .original_name = "col"}}
+                {{.name = "__empty__", .data_type = DataType::NANOSECONDS_UTC64},
+                 {.name = "col", .original_name = "col"}}
         );
         std::string report;
         MessageDifferencer differ;
@@ -465,7 +472,8 @@ TEST(ArrowSchemaCompatible, AutoRenameEmptyStringIndexOneClash) {
                 object_type,
                 false,
                 original_index,
-                {{"", .data_type = DataType::NANOSECONDS_UTC64}, {"__empty__0", .is_empty = true, .original_name = ""}}
+                {{.name = "", .data_type = DataType::NANOSECONDS_UTC64},
+                 {.name = "__empty__0", .is_empty = true, .original_name = ""}}
         );
         auto [changed, new_schema, column_renames] = make_schema_arrow_compatible(original_schema);
         ASSERT_TRUE(changed);
@@ -474,8 +482,8 @@ TEST(ArrowSchemaCompatible, AutoRenameEmptyStringIndexOneClash) {
                 object_type,
                 false,
                 expected_index,
-                {{"__empty__", .data_type = DataType::NANOSECONDS_UTC64},
-                 {"___empty___", .original_name = "___empty___"}}
+                {{.name = "__empty__", .data_type = DataType::NANOSECONDS_UTC64},
+                 {.name = "___empty___", .original_name = "___empty___"}}
         );
         std::string report;
         MessageDifferencer differ;
@@ -496,9 +504,9 @@ TEST(ArrowSchemaCompatible, AutoRenameEmptyStringIndexmultipleClashes) {
                 object_type,
                 false,
                 original_index,
-                {{"", .data_type = DataType::NANOSECONDS_UTC64},
-                 {"__empty__0", .is_empty = true, .original_name = ""},
-                 {"__empty__1", .is_empty = true, .original_name = ""}}
+                {{.name = "", .data_type = DataType::NANOSECONDS_UTC64},
+                 {.name = "__empty__0", .is_empty = true, .original_name = ""},
+                 {.name = "__empty__1", .is_empty = true, .original_name = ""}}
         );
         auto [changed, new_schema, column_renames] = make_schema_arrow_compatible(original_schema);
         ASSERT_TRUE(changed);
@@ -507,9 +515,9 @@ TEST(ArrowSchemaCompatible, AutoRenameEmptyStringIndexmultipleClashes) {
                 object_type,
                 false,
                 expected_index,
-                {{"__empty__", .data_type = DataType::NANOSECONDS_UTC64},
-                 {"___empty___", .original_name = "___empty___"},
-                 {"____empty____", .original_name = "____empty____"}}
+                {{.name = "__empty__", .data_type = DataType::NANOSECONDS_UTC64},
+                 {.name = "___empty___", .original_name = "___empty___"},
+                 {.name = "____empty____", .original_name = "____empty____"}}
         );
         std::string report;
         MessageDifferencer differ;
@@ -533,8 +541,8 @@ TEST(ArrowSchemaCompatible, ExplicitRenameIndexNoClash) {
                     object_type,
                     false,
                     original_index,
-                    {{unnamed_index ? "index" : original_index_name, .data_type = DataType::NANOSECONDS_UTC64},
-                     {"col", .original_name = "col"}}
+                    {{.name = unnamed_index ? "index" : original_index_name, .data_type = DataType::NANOSECONDS_UTC64},
+                     {.name = "col", .original_name = "col"}}
             );
             auto [changed, new_schema, column_renames] = make_schema_arrow_compatible(original_schema, {{"ts"}});
             ASSERT_EQ(changed, original_index_name != "ts");
@@ -543,7 +551,7 @@ TEST(ArrowSchemaCompatible, ExplicitRenameIndexNoClash) {
                     object_type,
                     false,
                     expected_index,
-                    {{"ts", .data_type = DataType::NANOSECONDS_UTC64}, {"col", .original_name = "col"}}
+                    {{.name = "ts", .data_type = DataType::NANOSECONDS_UTC64}, {.name = "col", .original_name = "col"}}
             );
             std::string report;
             MessageDifferencer differ;
@@ -566,7 +574,7 @@ TEST(ArrowSchemaCompatible, ExplicitRenameIndexClash) {
                 object_type,
                 false,
                 original_index,
-                {{"index", .data_type = DataType::NANOSECONDS_UTC64}, {"ts", .original_name = "ts"}}
+                {{.name = "index", .data_type = DataType::NANOSECONDS_UTC64}, {.name = "ts", .original_name = "ts"}}
         );
         ASSERT_THROW(make_schema_arrow_compatible(original_schema, {{"ts"}}), UserInputException);
     }
@@ -579,7 +587,7 @@ TEST(ArrowSchemaCompatible, ExplicitRenameIndexTooManyIndexNames) {
                 object_type,
                 false,
                 original_index,
-                {{"index", .data_type = DataType::NANOSECONDS_UTC64}, {"col", .original_name = "ts"}}
+                {{.name = "index", .data_type = DataType::NANOSECONDS_UTC64}, {.name = "col", .original_name = "ts"}}
         );
         ASSERT_THROW(make_schema_arrow_compatible(original_schema, {{"level0", "level1"}}), UserInputException);
     }
@@ -592,7 +600,7 @@ TEST(ArrowSchemaCompatible, ExplicitRenameNamelessIndexClash) {
                 object_type,
                 false,
                 original_index,
-                {{"index", .data_type = DataType::NANOSECONDS_UTC64}, {"ts", .original_name = "ts"}}
+                {{.name = "index", .data_type = DataType::NANOSECONDS_UTC64}, {.name = "ts", .original_name = "ts"}}
         );
         ASSERT_THROW(make_schema_arrow_compatible(original_schema, {{"ts"}}), UserInputException);
     }
@@ -605,7 +613,9 @@ TEST(ArrowSchemaCompatible, AutoRenameIntMultiIndexNoClash) {
                 object_type,
                 false,
                 original_index,
-                {{"10"}, {"__idx__level1", .original_name = "__idx__level1"}, {"col", .original_name = "col"}}
+                {{.name = "10"},
+                 {.name = "__idx__level1", .original_name = "__idx__level1"},
+                 {.name = "col", .original_name = "col"}}
         );
         auto [changed, new_schema, column_renames] = make_schema_arrow_compatible(original_schema);
         ASSERT_TRUE(changed);
@@ -614,7 +624,9 @@ TEST(ArrowSchemaCompatible, AutoRenameIntMultiIndexNoClash) {
                 object_type,
                 false,
                 expected_index,
-                {{"10"}, {"__idx__level1", .original_name = "__idx__level1"}, {"col", .original_name = "col"}}
+                {{.name = "10"},
+                 {.name = "__idx__level1", .original_name = "__idx__level1"},
+                 {.name = "col", .original_name = "col"}}
         );
         std::string report;
         MessageDifferencer differ;
@@ -632,7 +644,9 @@ TEST(ArrowSchemaCompatible, AutoRenameNamelessMultiIndexNoClash) {
                 object_type,
                 false,
                 original_index,
-                {{"index"}, {"__fkidx__1", .original_name = "__fkidx__1"}, {"col", .original_name = "col"}}
+                {{.name = "index"},
+                 {.name = "__fkidx__1", .original_name = "__fkidx__1"},
+                 {.name = "col", .original_name = "col"}}
         );
         auto [changed, new_schema, column_renames] = make_schema_arrow_compatible(original_schema);
         ASSERT_TRUE(changed);
@@ -641,9 +655,9 @@ TEST(ArrowSchemaCompatible, AutoRenameNamelessMultiIndexNoClash) {
                 object_type,
                 false,
                 expected_index,
-                {{"__index_level_0__"},
-                 {"__idx____index_level_1__", .original_name = "__idx____index_level_1__"},
-                 {"col", .original_name = "col"}}
+                {{.name = "__index_level_0__"},
+                 {.name = "__idx____index_level_1__", .original_name = "__idx____index_level_1__"},
+                 {.name = "col", .original_name = "col"}}
         );
         std::string report;
         MessageDifferencer differ;
@@ -664,7 +678,9 @@ TEST(ArrowSchemaCompatible, ExplicitRenameNamelessMultiIndexNoClash) {
                 object_type,
                 false,
                 original_index,
-                {{"index"}, {"__fkidx__1", .original_name = "__fkidx__1"}, {"col", .original_name = "col"}}
+                {{.name = "index"},
+                 {.name = "__fkidx__1", .original_name = "__fkidx__1"},
+                 {.name = "col", .original_name = "col"}}
         );
         auto [changed, new_schema, column_renames] =
                 make_schema_arrow_compatible(original_schema, {{"level0", "level1"}});
@@ -674,7 +690,9 @@ TEST(ArrowSchemaCompatible, ExplicitRenameNamelessMultiIndexNoClash) {
                 object_type,
                 false,
                 expected_index,
-                {{"level0"}, {"__idx__level1", .original_name = "__idx__level1"}, {"col", .original_name = "col"}}
+                {{.name = "level0"},
+                 {.name = "__idx__level1", .original_name = "__idx__level1"},
+                 {.name = "col", .original_name = "col"}}
         );
         std::string report;
         MessageDifferencer differ;
@@ -695,9 +713,9 @@ TEST(ArrowSchemaCompatible, ExplicitRenameNamedMultiIndexNoClash) {
                 object_type,
                 false,
                 original_index,
-                {{"old_name0"},
-                 {"__idx__old_name1", .original_name = "__idx__old_name1"},
-                 {"col", .original_name = "col"}}
+                {{.name = "old_name0"},
+                 {.name = "__idx__old_name1", .original_name = "__idx__old_name1"},
+                 {.name = "col", .original_name = "col"}}
         );
         auto [changed, new_schema, column_renames] =
                 make_schema_arrow_compatible(original_schema, {{"level0", "level1"}});
@@ -707,7 +725,9 @@ TEST(ArrowSchemaCompatible, ExplicitRenameNamedMultiIndexNoClash) {
                 object_type,
                 false,
                 expected_index,
-                {{"level0"}, {"__idx__level1", .original_name = "__idx__level1"}, {"col", .original_name = "col"}}
+                {{.name = "level0"},
+                 {.name = "__idx__level1", .original_name = "__idx__level1"},
+                 {.name = "col", .original_name = "col"}}
         );
         std::string report;
         MessageDifferencer differ;
@@ -730,7 +750,9 @@ TEST(ArrowSchemaCompatible, ExplicitRenameMultiIndexClash) {
                     object_type,
                     false,
                     original_index,
-                    {{"index"}, {"__fkidx__1", .original_name = "__fkidx__1"}, {"col", .original_name = "col"}}
+                    {{.name = "index"},
+                     {.name = "__fkidx__1", .original_name = "__fkidx__1"},
+                     {.name = "col", .original_name = "col"}}
             );
             ASSERT_THROW(make_schema_arrow_compatible(original_schema, index_names), UserInputException);
         }
@@ -747,9 +769,9 @@ TEST(ArrowSchemaCompatible, ExplicitRenameMultiIndexClashInOverwrittenIndexNames
                     object_type,
                     false,
                     original_index,
-                    {{original_primary},
-                     {original_secondary, .original_name = original_secondary},
-                     {"col", .original_name = "col"}}
+                    {{.name = original_primary},
+                     {.name = original_secondary, .original_name = original_secondary},
+                     {.name = "col", .original_name = "col"}}
             );
             for (const auto& index_names :
                  std::vector<std::vector<std::string>>{{"blah", "level1"}, {"level0", "blah"}}) {
@@ -762,9 +784,9 @@ TEST(ArrowSchemaCompatible, ExplicitRenameMultiIndexClashInOverwrittenIndexNames
                         object_type,
                         false,
                         expected_index,
-                        {{expected_primary},
-                         {expected_secondary, .original_name = expected_secondary},
-                         {"col", .original_name = "col"}}
+                        {{.name = expected_primary},
+                         {.name = expected_secondary, .original_name = expected_secondary},
+                         {.name = "col", .original_name = "col"}}
                 );
                 std::string report;
                 MessageDifferencer differ;
@@ -797,7 +819,9 @@ TEST(ArrowSchemaCompatible, ExplicitRenameMultiIndexIncorrectIndexCount) {
                     object_type,
                     false,
                     original_index,
-                    {{"index"}, {"__fkidx__1", .original_name = "__fkidx__1"}, {"col", .original_name = "col"}}
+                    {{.name = "index"},
+                     {.name = "__fkidx__1", .original_name = "__fkidx__1"},
+                     {.name = "col", .original_name = "col"}}
             );
             ASSERT_THROW(make_schema_arrow_compatible(original_schema, index_names), UserInputException);
         }
@@ -806,7 +830,7 @@ TEST(ArrowSchemaCompatible, ExplicitRenameMultiIndexIncorrectIndexCount) {
 
 TEST(ArrowSchemaCompatibleValidSchema, RangeIndexDf) {
     auto index = row_count_index(10, 2);
-    auto original_schema = generate_schema(ObjectType::DF, false, index, {{"col", .original_name = "col"}});
+    auto original_schema = generate_schema(ObjectType::DF, false, index, {{.name = "col", .original_name = "col"}});
     auto [changed, new_schema, column_renames] = make_schema_arrow_compatible(original_schema);
     ASSERT_FALSE(changed);
     ASSERT_TRUE(MessageDifferencer::Equals(new_schema.norm_metadata_, original_schema.norm_metadata_));
@@ -819,7 +843,7 @@ TEST(ArrowSchemaCompatibleValidSchema, TimeseriesDf) {
             ObjectType::DF,
             false,
             index,
-            {{"ts", .data_type = DataType::NANOSECONDS_UTC64}, {"col", .original_name = "col"}}
+            {{.name = "ts", .data_type = DataType::NANOSECONDS_UTC64}, {.name = "col", .original_name = "col"}}
     );
     auto [changed, new_schema, column_renames] = make_schema_arrow_compatible(original_schema);
     ASSERT_FALSE(changed);
@@ -834,9 +858,9 @@ TEST(ArrowSchemaCompatibleValidSchema, MultiIndexDf) {
             ObjectType::DF,
             false,
             index,
-            {{"ts", .data_type = DataType::NANOSECONDS_UTC64},
-             {"__idx__ticker", .original_name = "__idx__ticker"},
-             {"col", .original_name = "col"}}
+            {{.name = "ts", .data_type = DataType::NANOSECONDS_UTC64},
+             {.name = "__idx__ticker", .original_name = "__idx__ticker"},
+             {.name = "col", .original_name = "col"}}
     );
     auto [changed, new_schema, column_renames] = make_schema_arrow_compatible(original_schema);
     ASSERT_FALSE(changed);
@@ -846,7 +870,7 @@ TEST(ArrowSchemaCompatibleValidSchema, MultiIndexDf) {
 
 TEST(ArrowSchemaCompatibleValidSchema, RangeIndexSeries) {
     auto index = row_count_index(10, 2);
-    auto original_schema = generate_schema(ObjectType::SERIES, false, index, {{"col", .original_name = "col"}});
+    auto original_schema = generate_schema(ObjectType::SERIES, false, index, {{.name = "col", .original_name = "col"}});
     auto [changed, new_schema, column_renames] = make_schema_arrow_compatible(original_schema);
     ASSERT_FALSE(changed);
     ASSERT_TRUE(MessageDifferencer::Equals(new_schema.norm_metadata_, original_schema.norm_metadata_));
@@ -859,7 +883,7 @@ TEST(ArrowSchemaCompatibleValidSchema, TimeseriesSeries) {
             ObjectType::SERIES,
             false,
             index,
-            {{"ts", .data_type = DataType::NANOSECONDS_UTC64}, {"col", .original_name = "col"}}
+            {{.name = "ts", .data_type = DataType::NANOSECONDS_UTC64}, {.name = "col", .original_name = "col"}}
     );
     auto [changed, new_schema, column_renames] = make_schema_arrow_compatible(original_schema);
     ASSERT_FALSE(changed);
@@ -874,9 +898,9 @@ TEST(ArrowSchemaCompatibleValidSchema, MultiIndexSeries) {
             ObjectType::SERIES,
             false,
             index,
-            {{"ts", .data_type = DataType::NANOSECONDS_UTC64},
-             {"__idx__ticker", .original_name = "__idx__ticker"},
-             {"col", .original_name = "col"}}
+            {{.name = "ts", .data_type = DataType::NANOSECONDS_UTC64},
+             {.name = "__idx__ticker", .original_name = "__idx__ticker"},
+             {.name = "col", .original_name = "col"}}
     );
     auto [changed, new_schema, column_renames] = make_schema_arrow_compatible(original_schema);
     ASSERT_FALSE(changed);
