@@ -59,8 +59,29 @@ inline void merge_string_columns(
     }
 }
 
+// An upper bound on the distinct strings that merging segments into one pool can produce: no more than the string
+// values they hold, and no more than the strings their pools hold. The second bound is what keeps a reserve from
+// over-sizing the merged pool when the inputs repeat strings, which an over-sized map pays for in cache misses.
+inline size_t merged_distinct_strings_upper_bound(const std::vector<SegmentInMemory>& segments) {
+    size_t string_values = 0;
+    size_t pooled_strings = 0;
+    for (const auto& segment : segments) {
+        size_t segment_string_values = 0;
+        for (size_t c = 0; c < segment.descriptor().field_count(); ++c) {
+            if (is_sequence_type(segment.field(c).type().data_type()))
+                segment_string_values += segment.column(static_cast<position_t>(c)).row_count();
+        }
+        if (segment_string_values > 0 && segment.has_string_pool()) {
+            string_values += segment_string_values;
+            pooled_strings += segment.string_pool_size() / StringPool::min_string_bytes();
+        }
+    }
+    return std::min(string_values, pooled_strings);
+}
+
 inline void merge_segments(std::vector<SegmentInMemory>& segments, SegmentInMemory& merged, Sparsity is_sparse) {
     ARCTICDB_DEBUG(log::version(), "Appending {} segments", segments.size());
+    merged.string_pool().reserve(merged_distinct_strings_upper_bound(segments));
     timestamp min_idx = std::numeric_limits<timestamp>::max();
     timestamp max_idx = std::numeric_limits<timestamp>::min();
     for (auto& segment : segments) {
