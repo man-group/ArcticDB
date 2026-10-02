@@ -21,7 +21,6 @@ ArrowTransformedSchema make_schema_arrow_compatible(
     const bool unnamed_series = norm.has_series() && (!pandas_common.has_name() and pandas_common.name().empty());
     const auto pandas_indexes = [&pandas_common]() -> size_t {
         if (pandas_common.has_index()) {
-            // TODO: Handle len(item) == 0 case from ArrowTableNormalizer.denormalize
             return (pandas_common.index().is_physically_stored() || pandas_common.index().step() == 0) ? 1 : 0;
         } else { // multiindex
             return pandas_common.multi_index().field_count() + 1;

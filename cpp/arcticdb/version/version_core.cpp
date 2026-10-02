@@ -3681,7 +3681,7 @@ folly::Future<std::optional<AtomKey>> async_rename_columns_arrow_compat_impl(
         const std::shared_ptr<Store>& store, const UpdateInfo& update_info,
         const std::optional<std::vector<std::string>>& index_columns
 ) {
-    // Once column stats are fully supported, the rename will also need to be applied to the column stats key
+    // Once column stats are fully supported, the rename should also be applied to the column stats key
     // TODO: Add a ticket to the column stats epic and link to it here
     return read_index_key_without_column_stats(store, *update_info.previous_index_key_)
             .via(&async::cpu_executor())
