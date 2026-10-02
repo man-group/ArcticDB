@@ -101,7 +101,6 @@
     { "name": "aws-checksums", "version": "0.2.10" },
     { "name": "azure-core-cpp", "version": "1.12.0" },
     { "name": "azure-identity-cpp", "version": "1.6.0" },
-    { "name": "benchmark", "version": "1.9.0" },
     { "name": "bitmagic", "version": "7.12.3" },
     { "name": "double-conversion", "version": "3.2.1" },
     { "name": "fmt", "version": "12.1.0" },
@@ -127,6 +126,7 @@
   "vcpkg-configuration": {
     "overlay-ports": ["third_party/vcpkg_overlays"]
   },
+  "$note on benchmark": "Deliberately not pinned. benchmark 1.9.0 passes -Werror=old-style-cast to cmake itself, which CMake >=4.4.0 rejects as an unknown warning category. The baseline port uses -DBENCHMARK_ENABLE_WERROR=OFF instead, so it builds with any cmake.",
   "$note on builtin-baseline": "Remember to regenerate third_party/vcpkg_overlays",
   "builtin-baseline": "cea592f4772491abdb7c483387a59ea89889f4be"
 }
