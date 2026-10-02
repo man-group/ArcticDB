@@ -1,0 +1,544 @@
+# ===========================================================================
+# EXPERIMENT — NOT PART OF THE PIPELINE. Delete this file, its worker
+# (`benchmark_worker_commit_ab.yml`) and the branch they live on
+# (`benchmark-winds-commit-ab`) when the experiment is over.
+# ===========================================================================
+#
+# arctic-winds gha 154: an interleaved A/B of two or more ArcticDB COMMITS on the
+# same box.
+#
+# `benchmark_winds.yml` cannot do this. It benchmarks exactly one commit per run —
+# the dispatched ref's HEAD (`resolve the commit`), built by a `build` job that checks
+# out the run's own commit — and every lane is a separate EC2 instance. Two commits
+# therefore mean two runs on two sets of boxes, and the box-to-box spread (gha 90;
+# `time_groupby_count` 10M moves 5-8 % run to run on the shadow series) lands in the
+# comparison. The earlier A/B experiments (`benchmark_pool_ab.yml`,
+# `benchmark_real_io_ab.yml`) vary an environment variable over ONE wheel, with each
+# arm on its own box. This one varies the wheel, and keeps every arm on ONE box:
+#
+#   plan ──┬─► build (matrix: one wheel per arm, each from the arm's own sha)
+#   cibw ──┘          │
+#                     └─► worker (matrix: one EC2 box per lane)
+#                           round 1: A B   round 2: B A   round 3: A B   …
+#                           then, optionally, one profiled run per arm
+#
+# Each round runs every arm once, in a fresh `arctic-winds bench` process with its
+# own venv and its own checkout of the arm's commit, and the order rotates round by
+# round, so drift on the box (a noisy neighbour, a page cache, thermal state) is
+# shared inside a round and cancels in the per-round ratio. `bench` itself is the
+# pipeline's, unchanged, so a round is exactly what a lane measures on a push run —
+# the same asv, the same benchmark bodies, the same rounds and repeats inside asv.
+#
+# The commits are INPUTS, full shas. They need no workflow files of their own: the
+# build checks each out by sha, so a fix branch based on master is benchmarked as it
+# is. It only has to be fetchable from this repository, i.e. pushed.
+#
+# Like the other experiments it does NOT collect. Results leave as GitHub artifacts
+# (`ab-<lane>`) and nothing is written to any results library, so no series can be
+# moved by it. `.scratch/arctic-winds-gha/assets/154/ci_ab_analyse.py` in arctic-winds
+# turns the artifacts into paired ratios with a 95 % interval. The profiled runs are
+# shaped exactly like a pipeline worker's artifact (`<lane>-<sha8>.json` + sidecar +
+# flame graphs), so `arctic-winds collect` can file them into a LOCAL store for
+# `viz export-profiles` if anyone wants the code views.
+name: EXPERIMENT commit A/B on one box (arctic-winds gha 154)
+
+on:
+  # The registration push, as `benchmark_pool_ab.yml` spells it: GitHub registers a
+  # workflow only once one of its trigger events can fire, and an unregistered
+  # workflow rejects `workflow_dispatch` too. Scoped to this branch and this one
+  # file; every job below is guarded on `workflow_dispatch`, so the registration
+  # run rents nothing and finishes in seconds. No other workflow in this repository
+  # triggers on a push to this branch.
+  push:
+    branches: [benchmark-winds-commit-ab]
+    paths: ['.github/workflows/benchmark_commit_ab.yml']
+
+  workflow_dispatch:
+    inputs:
+      arms:
+        description: >-
+          Semicolon-separated `<name>:<full sha>` pairs. The FIRST is the baseline every
+          other arm is divided by. Names are short, lowercase, and name the artifacts.
+        type: string
+        required: true
+      lanes:
+        description: >-
+          Semicolon-separated `<name>:<instance type>:<storage>` triples, one EC2 box
+          each. Storage is LMDB, or SEAWEED for the SeaweedFS the worker starts on the
+          box (the AMAZON-parameterised benchmarks, against a local S3). Real AWS is
+          not offered: an A/B has no business paying per request.
+        type: string
+        required: true
+      suite:
+        description: The asv --bench regex every lane runs, every round
+        type: string
+        required: true
+      rounds:
+        description: >-
+          Interleaved rounds per lane; each round runs every arm once. 0 runs no rounds
+          at all, only the profile pass, which then must be asked for.
+        type: string
+        default: '12'
+      budget_minutes:
+        description: >-
+          Wall minutes a lane may spend on its timed rounds. No round starts that the
+          previous one says would not finish inside it, so a slow lane hands back
+          fewer rounds rather than a timed-out job.
+        type: string
+        default: '120'
+      profile:
+        description: >-
+          Non-empty: after the rounds, one profiled `bench` per arm with this regex
+          (`--profile`), on the same box. Empty: no profile pass at all.
+        type: string
+        default: ''
+      label:
+        description: A label for this dispatch, e.g. groupby-r1; it only appears in the summary
+        type: string
+        default: ''
+
+# No workflow-level `concurrency:`, as in `benchmark_winds.yml`: cancelling a run
+# during an EC2 start orphans the instance.
+
+jobs:
+  plan:
+    name: plan the A/B
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    outputs:
+      arms: ${{ steps.plan.outputs.arms }}
+      lanes: ${{ steps.plan.outputs.lanes }}
+      bucket: ${{ steps.plan.outputs.bucket }}
+    steps:
+      - name: parse and check the inputs
+        id: plan
+        env:
+          ARMS: ${{ inputs.arms }}
+          LANES: ${{ inputs.lanes }}
+          ROUNDS: ${{ inputs.rounds }}
+          BUDGET: ${{ inputs.budget_minutes }}
+          PROFILE: ${{ inputs.profile }}
+        run: |
+          python3 - >> "$GITHUB_OUTPUT" <<'PY'
+          import json, os, re, secrets, sys, time
+
+          # stdout is $GITHUB_OUTPUT here, so the annotation goes to stderr.
+          def fail(message):
+              print(f"::error::{message}", file=sys.stderr, flush=True)
+              raise SystemExit(1)
+
+          NAME = re.compile(r"^[a-z][a-z0-9-]{0,23}$")
+          SHA = re.compile(r"^[0-9a-f]{40}$")
+          arms = []
+          for spec in os.environ["ARMS"].split(";"):
+              if not spec.strip():
+                  continue
+              parts = [part.strip() for part in spec.split(":")]
+              if len(parts) != 2:
+                  fail(f"arm {spec!r} is not <name>:<sha>")
+              name, sha = parts
+              if not NAME.match(name):
+                  fail(f"arm name {name!r}: lowercase letters, digits and '-', at most 24")
+              # actions/checkout reads anything shorter as a branch name (plan.py's
+              # `commits_for` learned this on the first shadow run).
+              if not SHA.match(sha):
+                  fail(f"arm {name}: {sha!r} is not a full 40-character sha")
+              arms.append({"arm": name, "sha": sha, "sha8": sha[:8]})
+          if not 2 <= len(arms) <= 4:
+              fail(f"{len(arms)} arms; an A/B wants 2, and more than 4 will not fit a lane's budget")
+          for key in ("arm", "sha8"):
+              values = [arm[key] for arm in arms]
+              if len(set(values)) != len(values):
+                  fail(f"two arms share a {key}: {values}")
+
+          lanes = []
+          for spec in os.environ["LANES"].split(";"):
+              if not spec.strip():
+                  continue
+              parts = [part.strip() for part in spec.split(":")]
+              if len(parts) != 3:
+                  fail(f"lane {spec!r} is not <name>:<instance type>:<storage>")
+              name, instance, storage = parts
+              if not NAME.match(name):
+                  fail(f"lane name {name!r}: lowercase letters, digits and '-', at most 24")
+              if not re.match(r"^[a-z0-9]+\.[a-z0-9]+$", instance):
+                  fail(f"lane {name}: {instance!r} is not an EC2 instance type")
+              if storage not in ("LMDB", "SEAWEED"):
+                  fail(f"lane {name}: storage {storage!r} is not LMDB or SEAWEED")
+              lanes.append({"lane": name, "instance_type": instance, "storage": storage})
+          if not lanes:
+              fail("no lanes")
+          if len({lane["lane"] for lane in lanes}) != len(lanes):
+              fail("two lanes share a name")
+
+          try:
+              rounds, budget = int(os.environ["ROUNDS"]), int(os.environ["BUDGET"])
+          except ValueError:
+              fail("rounds and budget_minutes must be whole numbers")
+          if not 0 <= rounds <= 40:
+              fail(f"rounds={rounds}: 0 to 40")
+          if rounds == 0 and not os.environ["PROFILE"].strip():
+              fail("rounds=0 and no profile: that dispatch would rent boxes to do nothing")
+          # The worker job's own timeout is 180 minutes, and ~25 of them go to the
+          # runner, the image, provisioning and the profile pass.
+          if not 10 <= budget <= 150:
+              fail(f"budget_minutes={budget}: 10 to 150")
+
+          print("arms=" + json.dumps(arms, separators=(",", ":")))
+          print("lanes=" + json.dumps(lanes, separators=(",", ":")))
+          # One name for every SEAWEED lane's bucket, each on its own box's server.
+          print(f"bucket=arcticdb-ab-{int(time.time())}-{secrets.token_hex(4)}")
+          PY
+
+      - name: report the plan
+        env:
+          ARMS_JSON: ${{ steps.plan.outputs.arms }}
+          LANES_JSON: ${{ steps.plan.outputs.lanes }}
+          SUITE: ${{ inputs.suite }}
+          ROUNDS: ${{ inputs.rounds }}
+          BUDGET: ${{ inputs.budget_minutes }}
+          PROFILE: ${{ inputs.profile }}
+          LABEL: ${{ inputs.label }}
+        run: |
+          {
+            echo "### 🔀 commit A/B on one box${LABEL:+ — \`$LABEL\`}"
+            echo
+            echo "- suite: \`$SUITE\`"
+            echo "- rounds: $ROUNDS per lane, order rotated each round, inside $BUDGET min"
+            echo "- profile pass: ${PROFILE:+\`$PROFILE\`, one per arm after the rounds}${PROFILE:-none}"
+            echo
+            echo "| arm | sha | role |"
+            echo "| --- | --- | --- |"
+            jq -r 'to_entries[] | "| \(.value.arm) | `\(.value.sha)` | \(if .key == 0 then "baseline" else "treatment" end) |"' <<<"$ARMS_JSON"
+            echo
+            echo "| lane | instance | storage |"
+            echo "| --- | --- | --- |"
+            jq -r '.[] | "| \(.lane) | \(.instance_type) | \(.storage) |"' <<<"$LANES_JSON"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ~6 s; the same manylinux image `benchmark_winds.yml` builds with.
+  cibw_docker_image:
+    name: cibuildwheel image
+    if: github.event_name == 'workflow_dispatch'
+    uses: ./.github/workflows/cibw_docker_image.yml
+    permissions: {packages: write}
+    with:
+      cibuildwheel_ver: "3.1.4"   # keep in sync with benchmark_winds.yml
+      force_update: false
+
+  # Copied from `benchmark_winds.yml`'s `build`, with three changes: a matrix over the
+  # arms, `ref: <arm sha>` on the checkout, and the artifacts named per arm
+  # (`wheel-<arm>`, `debug-<arm>`).
+  build:
+    name: build ${{ matrix.arm }} (${{ matrix.sha8 }})
+    needs: [plan, cibw_docker_image]
+    if: github.event_name == 'workflow_dispatch'
+    # One wheel per arm, each built from the arm's own commit by this one job
+    # definition: same image, same preset, same flags. The arms can differ in their
+    # source and in nothing about how it was compiled.
+    strategy:
+      fail-fast: true   # an arm without a wheel is an experiment without an arm
+      matrix:
+        include: ${{ fromJson(needs.plan.outputs.arms) }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    defaults:
+      run: {shell: bash}
+    env:
+      # ---- copied from build_steps.yml:46-79; keep the two in sync ----
+      SCCACHE_GHA_VERSION: ${{ secrets.AWS_S3_ACCESS_KEY == null }}
+      SCCACHE_BUCKET: arcticdb-ci-sccache-bucket
+      SCCACHE_ENDPOINT: http://s3.eu-west-1.amazonaws.com
+      SCCACHE_REGION: eu-west-1
+      SCCACHE_S3_USE_SSL: false
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_S3_ACCESS_KEY }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_S3_SECRET_KEY }}
+      VCPKG_NUGET_USER: ${{ secrets.VCPKG_NUGET_USER || github.repository_owner }}
+      VCPKG_NUGET_TOKEN: ${{ secrets.VCPKG_NUGET_TOKEN || secrets.GITHUB_TOKEN }}
+      VCPKG_MAN_NUGET_USER: ${{ secrets.VCPKG_MAN_NUGET_USER }}
+      VCPKG_MAN_NUGET_TOKEN: ${{ secrets.VCPKG_MAN_NUGET_TOKEN }}
+      CMAKE_C_COMPILER_LAUNCHER: sccache
+      CMAKE_CXX_COMPILER_LAUNCHER: sccache
+      # `linux-release` plus the two cache variables that keep the C++ symbol table in
+      # the extension (gha 49). The preset does not exist in ArcticDB's
+      # `cpp/CMakePresets.json`; the `keep the C++ symbols` step below writes it into
+      # the `CMakeUserPresets.json` beside it, and that comment explains the mechanism.
+      # It still inherits `linux-release`, so this is still RelWithDebInfo at -O3:
+      # benchmarks must never run a debug build.
+      ARCTIC_CMAKE_PRESET: linux-release-symbols
+      ARCTICDB_BUILD_DIR: /tmp/cpp_build
+      CIBW_BUILD: cp311-manylinux_x86_64   # the whole point: exactly one wheel
+      CIBW_ENVIRONMENT_PASS_LINUX: SCCACHE_GHA_VERSION ACTIONS_CACHE_URL ACTIONS_RUNTIME_TOKEN
+        VCPKG_INSTALLATION_ROOT VCPKG_BINARY_SOURCES VCPKG_NUGET_USER VCPKG_NUGET_TOKEN
+        VCPKG_MAN_NUGET_USER VCPKG_MAN_NUGET_TOKEN CMAKE_C_COMPILER_LAUNCHER
+        CMAKE_CXX_COMPILER_LAUNCHER CMAKE_BUILD_PARALLEL_LEVEL ARCTIC_CMAKE_PRESET
+        ARCTICDB_BUILD_DIR X_VCPKG_ASSET_SOURCES
+        SCCACHE_BUCKET SCCACHE_ENDPOINT AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY
+        SCCACHE_REGION SCCACHE_S3_USE_SSL
+      CIBW_ENVIRONMENT_LINUX: COPY_VCPKG_DOWNLOADS_TO_HOST=1
+      ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
+    steps:
+      # NOT the run's own commit: the arm's. This is the one line that lets this
+      # workflow benchmark a commit that carries no workflow files of its own.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.sha }}
+          fetch-depth: 1
+
+      - name: init submodules
+        run: |
+          git submodule update --init --recursive
+          git -C cpp/vcpkg submodule update --init --recursive
+
+      - uses: mozilla-actions/sccache-action@v0.0.9
+        with:
+          disable_annotations: 'true'
+
+      - name: free disk space
+        uses: jlumbroso/free-disk-space@v1.3.1
+        with:
+          tool-cache: false
+          large-packages: false
+          docker-images: false
+
+      - uses: jwlawson/actions-setup-cmake@v2
+        with:
+          cmake-version: '3.31.6'   # same pin as build_steps.yml
+
+      - name: extra envs
+        env:
+          CMAKE_BUILD_PARALLEL_LEVEL: ${{ vars.CMAKE_BUILD_PARALLEL_LEVEL }}
+        run: |
+          HOME=~ . build_tooling/vcpkg_caching.sh
+          echo -e "VCPKG_BINARY_SOURCES=$VCPKG_BINARY_SOURCES
+          VCPKG_ROOT=$PLATFORM_VCPKG_ROOT
+          ${X_VCPKG_ASSET_SOURCES:+X_VCPKG_ASSET_SOURCES=$X_VCPKG_ASSET_SOURCES}" | tee -a "$GITHUB_ENV"
+          cmake -P cpp/CMake/CpuCount.cmake | sed 's/^-- //' | tee -a "$GITHUB_ENV"
+
+      - name: pull the cibuildwheel manylinux image
+        env:
+          IMAGE: ${{ needs.cibw_docker_image.outputs.tag }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          docker login ghcr.io -u token -p "$GHCR_TOKEN"
+          docker pull "$IMAGE"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'   # host interpreter that runs cibuildwheel
+
+      # ---- the symbols the profile pass needs (gha 49) --------------------------
+      # py-spy --native names a C++ frame from the extension's own ELF symbol table:
+      # its ladder is DWARF -> `.symtab` -> `.dynsym`. ArcticDB's shipped Linux wheel
+      # has no DWARF and no `.symtab`, and it is built `-fvisibility=hidden`, so
+      # `.dynsym` holds almost nothing — which is why profiling a stock wheel returns a
+      # wall of `0x… (?)` and not one `arcticdb_ext` frame (gha 47).
+      #
+      # The loss is neither cibuildwheel's nor auditwheel's (auditwheel does not strip
+      # unless asked). It is `cpp/arcticdb/CMakeLists.txt`: the `install_arcticdb_ext`
+      # target — the only target setup.py builds — installs `strip --strip-unneeded`
+      # output in place of the linked file whenever the build is Linux + RelWithDebInfo
+      # and `ARCTICDB_KEEP_DEBUG_SYMBOLS` is off, which is its default. That option is
+      # the whole lever, and `--strip-unneeded` deletes exactly `.symtab`.
+      #
+      # This pipeline cannot patch ArcticDB, and setup.py forwards no extra `-D` to
+      # CMake — but it does take the preset name from `ARCTIC_CMAKE_PRESET`, and CMake
+      # reads `CMakeUserPresets.json` beside `CMakePresets.json`, which is the file
+      # that exists for exactly this and which ArcticDB's `.gitignore` already lists,
+      # so writing it leaves the checkout clean. cibuildwheel copies the project into
+      # the container, so the file travels with it.
+      #
+      # One cache variable:
+      #   ARCTICDB_KEEP_DEBUG_SYMBOLS=ON  takes the strip out of the install target, so
+      #     the extension is linked with `.symtab` *and* the DWARF the RelWithDebInfo
+      #     compile already produced. Until profile-code-view 01 a second variable,
+      #     `CMAKE_MODULE_LINKER_FLAGS=-Wl,--strip-debug`, dropped the DWARF at link
+      #     time, because it costs hundreds of megabytes in a wheel every worker
+      #     installs. Per-line C++ time needs it, so it is now kept and moved out of
+      #     the wheel instead: `split the DWARF out of the extension` below.
+      #     `.eh_frame` — what libunwind actually walks — survives either way.
+      #
+      # `binaryDir` is pinned to the inherited preset's directory deliberately. The
+      # default is `out/${presetName}-build`, and a new directory would move the
+      # compiler's working directory, which sccache folds into its hash whenever debug
+      # info is on (measured: same source, same flags, different cwd = a miss). That
+      # would cold-build every benchmark run instead of riding the `build.yml` entries
+      # already in `arcticdb-ci-sccache-bucket` — ArcticDB's own Linux build uses this
+      # same preset and this same `/tmp/cpp_build` — and no cold ArcticDB build fits
+      # this job's timeout. Nothing about the *compile* changes here: only the install
+      # (no strip) does.
+      #
+      # setup.py then globs `cpp/out/<preset>-build` and asserts exactly one match, so
+      # the pinned directory needs a second name under the preset it was asked for.
+      # That is the symlink. (`prep_cpp_build.sh` re-points `cpp/out` at
+      # `$ARCTICDB_BUILD_DIR` inside the container and leaves its contents alone.)
+      - name: keep the C++ symbols in the extension
+        run: |
+          cat > cpp/CMakeUserPresets.json <<'JSON'
+          {
+            "version": 3,
+            "configurePresets": [
+              {
+                "name": "linux-release-symbols",
+                "inherits": "linux-release",
+                "binaryDir": "${sourceDir}/out/linux-release-build",
+                "cacheVariables": {
+                  "ARCTICDB_KEEP_DEBUG_SYMBOLS": "ON"
+                }
+              }
+            ]
+          }
+          JSON
+          mkdir -p "$ARCTICDB_BUILD_DIR/linux-release-build"
+          ln -sfn linux-release-build "$ARCTICDB_BUILD_DIR/linux-release-symbols-build"
+
+      - name: build the wheel
+        env:
+          CIBW_MANYLINUX_X86_64_IMAGE: ${{ needs.cibw_docker_image.outputs.tag }}
+          CIBW_VERSION: ${{ needs.cibw_docker_image.outputs.cibuildwheel_ver }}
+        run: |
+          python -m pip install pipx --retries 3 --timeout 180
+          python -m pipx run "cibuildwheel==$CIBW_VERSION"
+
+      # profile-code-view 01: per-line C++ time, without a bigger wheel. The DWARF the
+      # link kept goes into `arcticdb_ext-<build id>.debug` (zlib-compressed), and the
+      # extension in the wheel is stripped of it with a `.gnu_debuglink` pointing at
+      # that file, so every worker installs today's size and `.symtab` (what py-spy
+      # and perf name frames from) stays. The two files share the `.note.gnu.build-id`
+      # the profile pass records per DSO, which is how `arctic-winds srclines` in
+      # `collect` pairs a recording with its debug file.
+      #
+      # `wheel pack` rewrites RECORD, whose hash for the extension would otherwise be
+      # wrong and fail `pip install`. On the host, after auditwheel: the debug file
+      # must be split from the exact bytes the workers will run.
+      - name: split the DWARF out of the extension
+        run: |
+          python -m pip install wheel --retries 3 --timeout 180
+          wheel=$(ls wheelhouse/*.whl)
+          rm -rf /tmp/unpacked && mkdir -p /tmp/unpacked debug
+          python -m wheel unpack "$wheel" -d /tmp/unpacked
+          so=$(find /tmp/unpacked -name 'arcticdb_ext*.so' | head -1)
+          id=$(readelf -n "$so" | sed -n 's/^ *Build ID: *//p' | head -1)
+          if [ -z "$id" ]; then
+            echo "::error::$(basename "$so") has no GNU build id: a debug file could never be matched to a profile"
+            exit 1
+          fi
+          objcopy --only-keep-debug --compress-debug-sections=zlib "$so" "debug/arcticdb_ext-$id.debug"
+          objcopy --strip-debug --add-gnu-debuglink="debug/arcticdb_ext-$id.debug" "$so"
+          rm "$wheel"
+          python -m wheel pack /tmp/unpacked/* -d wheelhouse
+
+      # The step above is a lever pulled from outside ArcticDB's build, so it can be
+      # taken away from outside too — a preset key renamed upstream, a `.gitignore`
+      # entry dropped, an `install_arcticdb_ext` rewrite — and none of that fails a
+      # build. It would surface a whole run later, as a profile of nothing but
+      # addresses. So no wheel leaves this job unless its extension still carries the
+      # table py-spy reads, and the sizes go into the summary because this is the run
+      # that measures what the symbols cost.
+      - name: assert the extension carries C++ symbols
+        run: |
+          rm -rf /tmp/wheel-check && mkdir -p /tmp/wheel-check
+          wheel=$(ls wheelhouse/*.whl)
+          python -m zipfile -e "$wheel" /tmp/wheel-check
+          so=$(find /tmp/wheel-check -name 'arcticdb_ext*.so' | head -1)
+          if [ -z "$so" ]; then
+            echo "::error::no arcticdb_ext*.so inside $(basename "$wheel")"
+            exit 1
+          fi
+          # `grep -oE` finds nothing on a wheel built some other way, and the job runs
+          # under `-o pipefail`, hence the `|| true` on both pipelines.
+          sections=$(readelf -SW "$so" | grep -oE '\.(symtab|dynsym|debug_info|eh_frame|gnu_debuglink)\b' | sort -u | tr '\n' ' ' || true)
+          named=$(readelf -sW "$so" | grep -c arcticdb || true)
+          debug=$(ls debug/*.debug 2>/dev/null | head -1 || true)
+          dwarf=""
+          if [ -n "$debug" ]; then
+            dwarf=$(readelf -SW "$debug" | grep -oE '\.debug_(info|line)\b' | sort -u | tr '\n' ' ' || true)
+          fi
+          {
+            echo "### wheel symbols"
+            echo '```'
+            echo "wheel        $(stat -c%s "$wheel") bytes"
+            echo "arcticdb_ext $(stat -c%s "$so") bytes"
+            echo "sections     $sections"
+            echo "arcticdb symbols $named"
+            echo "debug file   ${debug:-none} $([ -n "$debug" ] && stat -c%s "$debug") bytes"
+            echo "debug DWARF  $dwarf"
+            echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+          case "$sections" in
+            *.symtab*) ;;
+            *) echo "::error::$(basename "$so") has no .symtab: py-spy --native cannot name its C++ frames"; exit 1 ;;
+          esac
+          case "$sections" in
+            *.eh_frame*) ;;
+            *) echo "::error::$(basename "$so") has no .eh_frame: libunwind cannot walk it"; exit 1 ;;
+          esac
+          # A `.symtab` holding only the module init symbol would pass the check above;
+          # a real one holds ArcticDB's own mangled names in their tens of thousands.
+          if [ "$named" -lt 1000 ]; then
+            echo "::error::only $named arcticdb symbols in the extension: the symbol table is not this build's own"
+            exit 1
+          fi
+          # profile-code-view 01: the DWARF lives in the side file, never in the wheel.
+          case "$sections" in
+            *.debug_info*)
+              echo "::error::DWARF is still in the extension: the split did not take and every worker would install hundreds of megabytes more"; exit 1 ;;
+          esac
+          case "$sections" in
+            *.gnu_debuglink*) ;;
+            *) echo "::error::$(basename "$so") has no .gnu_debuglink: the split step did not strip it"; exit 1 ;;
+          esac
+          case "$dwarf" in
+            *.debug_line*) ;;
+            *) echo "::error::${debug:-no debug file} carries no .debug_line: there are no source lines to resolve"; exit 1 ;;
+          esac
+          if [ "$(readelf -n "$so" | sed -n 's/^ *Build ID: *//p')" != "$(readelf -n "$debug" | sed -n 's/^ *Build ID: *//p')" ]; then
+            echo "::error::the extension and $debug carry different build ids"
+            exit 1
+          fi
+
+      - name: store the wheel
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheel-${{ matrix.arm }}
+          path: wheelhouse/*.whl
+          if-no-files-found: error
+          retention-days: 7   # only ever needed inside this run
+
+      # Its own artifact, so no worker downloads it: `collect` resolves lines from it
+      # (`arctic-winds srclines`). Findable from a profile by the build id in its file
+      # name and in the profile's sites document; across runs, by this name plus the
+      # run's head sha (`gh api repos/<repo>/actions/artifacts?name=<this name>`).
+      # Kept longer than the wheel so a run's profiles can be re-resolved for a month.
+      - name: store the debug file
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-${{ matrix.arm }}
+          path: debug/*.debug
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0   # already zlib-compressed by objcopy
+
+  worker:
+    needs: [plan, build]
+    if: >-
+      !cancelled() && github.event_name == 'workflow_dispatch'
+      && needs.plan.result == 'success' && needs.build.result == 'success'
+    strategy:
+      fail-fast: false   # one lane dying must not cancel the others
+      matrix:
+        include: ${{ fromJson(needs.plan.outputs.lanes) }}
+    name: ${{ matrix.lane }}
+    uses: ./.github/workflows/benchmark_worker_commit_ab.yml
+    secrets: inherit
+    with:
+      lane: ${{ matrix.lane }}
+      instance_type: ${{ matrix.instance_type }}
+      storage: ${{ matrix.storage }}
+      arms: ${{ needs.plan.outputs.arms }}
+      suite: ${{ inputs.suite }}
+      rounds: ${{ inputs.rounds }}
+      budget_minutes: ${{ inputs.budget_minutes }}
+      profile: ${{ inputs.profile }}
+      bucket: ${{ needs.plan.outputs.bucket }}

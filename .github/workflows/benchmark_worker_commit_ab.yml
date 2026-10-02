@@ -1,0 +1,328 @@
+# ===========================================================================
+# EXPERIMENT — NOT PART OF THE PIPELINE. Called only by `benchmark_commit_ab.yml`
+# (arctic-winds gha 154); delete the two together.
+# ===========================================================================
+#
+# One EC2 box, several commits, interleaved. A trimmed copy of
+# `benchmark_worker.yml`: the same start/stop jobs, the same container and
+# capabilities, the same `arctic-winds bench` — called once per (round, arm) instead
+# of once per job. What differs, and why:
+#
+#   * one checkout PER ARM (`git worktree`, by sha) instead of one at the run's commit,
+#     because `bench --tree` must be the commit being measured: asv resolves
+#     `<commit>^!` in it and imports the benchmark bodies from it;
+#   * one provisioning home PER ARM (`bench --home`), so the arms never share a venv,
+#     an asv machine file or a wheel path — every non-tag wheel is named `0.0.0.dev0`,
+#     and two of them at one path would be one wheel;
+#   * the venv and asv's results for the lane are wiped before every call, so each
+#     call is a fresh process tree that measures exactly one arm once, and its result
+#     file holds that call's numbers and no merge of an earlier one;
+#   * `--no-profile` on every timed call: a profile pass re-runs benchmarks through
+#     the same asv and is a difference between calls that is not the one under test.
+#     The optional profile pass is a separate call per arm, after every round.
+name: __benchmark_worker_commit_ab
+
+on:
+  workflow_call:
+    inputs:
+      lane:           {required: true,  type: string, description: "the lane's name: asv's --machine, and the artifact is ab-<lane>"}
+      instance_type:  {required: true,  type: string, description: "EC2 instance type"}
+      storage:        {required: true,  type: string, description: "LMDB, or SEAWEED for the AMAZON benchmarks against the box's own SeaweedFS"}
+      arms:           {required: true,  type: string, description: "the plan's JSON list of {arm, sha, sha8}; the first is the baseline"}
+      suite:          {required: true,  type: string, description: "the asv --bench regex"}
+      rounds:         {required: true,  type: string, description: "interleaved rounds; each runs every arm once"}
+      budget_minutes: {required: true,  type: string, description: "wall minutes the timed rounds may take"}
+      profile:        {required: false, type: string, default: '', description: "non-empty: one profiled bench per arm after the rounds"}
+      bucket:         {required: false, type: string, default: '', description: "the SeaweedFS bucket a SEAWEED lane creates on its own server"}
+
+jobs:
+  start:
+    name: start ${{ inputs.lane }} runner
+    uses: ./.github/workflows/ec2_runner_jobs.yml
+    secrets: inherit
+    with:
+      job_type: start
+      instance-type: ${{ inputs.instance_type }}
+      market-type: spot
+
+  bench:
+    name: A/B ${{ inputs.lane }}
+    needs: [start]
+    # `ec2_runner_jobs.yml` sets `continue-on-error: true` on the start job, so a failed
+    # start arrives as a *successful* job with an empty label — see benchmark_worker.yml.
+    if: always() && needs.start.result == 'success' && needs.start.outputs.label != ''
+    runs-on: ${{ needs.start.outputs.label }}
+    # The pipeline's own lane timeout. The rounds stop at `budget_minutes` (at most 150),
+    # which leaves the rest for the runner, provisioning and the profile pass.
+    timeout-minutes: 180
+    container:
+      image: ghcr.io/man-group/arcticdb-dev:latest
+      # What the profile pass's native recorder needs (gha 74); see benchmark_worker.yml.
+      options: --cap-add PERFMON --cap-add SYS_ADMIN
+    env:
+      # Only ever the box's own SeaweedFS: a SEAWEED lane is `bench --storage REAL`
+      # pointed here, exactly as gha 94's `benchmark_worker_seaweed.yml`. An LMDB lane
+      # never reads these.
+      ARCTICDB_REAL_S3_ACCESS_KEY: seaweed
+      ARCTICDB_REAL_S3_SECRET_KEY: seaweed
+      ARCTICDB_REAL_S3_REGION: us-east-1
+      ARCTICDB_REAL_S3_ENDPOINT: http://127.0.0.1:8333
+      ARCTICDB_REAL_S3_BUCKET: ${{ inputs.bucket }}
+      ARCTICDB_WARN_ON_WRITING_EMPTY_DATAFRAME: "0"
+      ARCTICDB_LMDBSTORAGE_WARNIFOPENED_STR: all
+      ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
+      AB_ROOT: /tmp/ab
+    defaults:
+      run: {shell: bash}
+    steps:
+      # This branch, for `build_tooling/start_seaweed.sh`, and as the repository the
+      # arms' commits are fetched into below.
+      - name: check out this branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: mark the checkout safe for git
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      # One worktree per arm, at the arm's sha. `actions/checkout` persisted its
+      # credentials in this repository's config, so the fetch is authenticated. LFS is
+      # skipped: nothing under python/benchmarks reads an LFS file.
+      - name: check out every arm at its own commit
+        env:
+          ARMS: ${{ inputs.arms }}
+          GIT_LFS_SKIP_SMUDGE: "1"
+        run: |
+          set -euo pipefail
+          mkdir -p "$AB_ROOT/trees"
+          python3 -c 'import json, os; [print(a["arm"], a["sha"]) for a in json.loads(os.environ["ARMS"])]' \
+          | while read -r arm sha; do
+              git fetch --no-tags --depth=1 origin "$sha" < /dev/null
+              git worktree add --detach "$AB_ROOT/trees/$arm" "$sha" < /dev/null
+              echo "$arm -> $(git -C "$AB_ROOT/trees/$arm" rev-parse HEAD)"
+              git config --global --add safe.directory "$AB_ROOT/trees/$arm"
+            done
+
+      - name: download every arm's wheel
+        uses: actions/download-artifact@v8
+        with:
+          pattern: wheel-*
+          path: wheels
+
+      - name: install perf
+        if: inputs.profile != ''
+        continue-on-error: true
+        run: dnf install -y perf
+
+      - name: check out arctic-winds
+        uses: actions/checkout@v4
+        with:
+          repository: G-D-Petrov/arctic-winds
+          ref: main
+          path: arctic-winds
+          ssh-key: ${{ secrets.ARCTIC_WINDS_DEPLOY_KEY }}
+
+      - name: install arctic-winds
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install ./arctic-winds
+
+      - name: record the runner's image and lifecycle
+        id: runner
+        run: |
+          token=$(curl -sS -m 2 -X PUT http://169.254.169.254/latest/api/token -H 'X-aws-ec2-metadata-token-ttl-seconds: 60' || true)
+          meta() { curl -sS -m 2 -H "X-aws-ec2-metadata-token: $token" "http://169.254.169.254/latest/meta-data/$1" 2>/dev/null || echo unknown; }
+          ami=$(meta ami-id)
+          echo "runner: $(meta instance-id) $(meta instance-type) ami=$ami lifecycle=$(meta instance-life-cycle) az=$(meta placement/availability-zone) nproc=$(nproc)" | tee -a "$GITHUB_STEP_SUMMARY"
+          if [ "$ami" = unknown ]; then ami=''; fi
+          printf 'ami=%s\n' "$ami" >> "$GITHUB_OUTPUT"
+
+      - name: start SeaweedFS
+        if: inputs.storage == 'SEAWEED'
+        shell: bash -el {0}
+        run: build_tooling/start_seaweed.sh start
+
+      - name: create this lane's SeaweedFS bucket
+        if: inputs.storage == 'SEAWEED'
+        shell: bash -el {0}
+        env:
+          BUCKET: ${{ inputs.bucket }}
+        run: |
+          curl -fsS -X PUT "http://127.0.0.1:8333/$BUCKET"
+          curl -fsS "http://127.0.0.1:9333/vol/grow?collection=$BUCKET&count=64" | head -c 400; echo
+          echo "created bucket $BUCKET on the local SeaweedFS"
+
+      # The experiment. Round r runs every arm once, starting from arm (r-1) mod n, so
+      # with two arms the order alternates A B / B A and a linear drift on the box
+      # cancels over any two rounds. `rounds.jsonl` records what ran when, in which
+      # position and how it ended; the analysis pairs by it and refuses a round whose
+      # arms did not all succeed.
+      - name: interleaved rounds
+        if: inputs.rounds != '0'
+        env:
+          LANE: ${{ inputs.lane }}
+          ARMS: ${{ inputs.arms }}
+          SUITE: ${{ inputs.suite }}
+          ROUNDS: ${{ inputs.rounds }}
+          BUDGET_MINUTES: ${{ inputs.budget_minutes }}
+          STORAGE: ${{ inputs.storage }}
+          INSTANCE_TYPE: ${{ inputs.instance_type }}
+          AMI_ID: ${{ steps.runner.outputs.ami }}
+        run: |
+          set -uo pipefail
+          ARM_LINES=()
+          while read -r line; do ARM_LINES+=("$line"); done \
+            < <(python3 -c 'import json, os; [print(a["arm"], a["sha"]) for a in json.loads(os.environ["ARMS"])]')
+          n=${#ARM_LINES[@]}
+          storage=LMDB
+          if [ "$STORAGE" = SEAWEED ]; then storage=REAL; fi
+          mkdir -p artifacts/rounds
+          manifest=artifacts/rounds/rounds.jsonl
+          : > "$manifest"
+
+          budget_s=$(( BUDGET_MINUTES * 60 ))
+          t0=$(date +%s)
+          last=0
+          completed=0
+          for r in $(seq 1 "$ROUNDS"); do
+            elapsed=$(( $(date +%s) - t0 ))
+            # Do not start a round the previous one says would not finish in budget.
+            if [ "$r" -gt 1 ] && [ $(( elapsed + last )) -gt "$budget_s" ]; then
+              echo "::warning::${LANE}: stopping after ${completed} of ${ROUNDS} rounds — ${elapsed}s elapsed, the last round took ${last}s, the budget is ${budget_s}s"
+              break
+            fi
+            round_start=$(date +%s)
+            for k in $(seq 0 $(( n - 1 ))); do
+              i=$(( (k + r - 1) % n ))
+              read -r arm sha <<<"${ARM_LINES[$i]}"
+              tree="$AB_ROOT/trees/$arm"
+              home="$AB_ROOT/home-$arm"
+              wheel=$(find "wheels/wheel-$arm" -name '*.whl' | head -1)
+              results=$(python -c 'import sys; from pathlib import Path; from arctic_winds.asv_conf import read_asv_conf; print(read_asv_conf(Path(sys.argv[1])).results_path)' "$tree")
+              rm -rf "${home:?}/arctic-winds/venv" "${results:?}/${LANE:?}"
+              mkdir -p "$home"
+              out="artifacts/rounds/${LANE}-r$(printf '%02d' "$r")-${arm}.json"
+              echo "::group::round $r/$ROUNDS position $k: $arm (${sha:0:8})"
+              started=$(date +%s.%N)
+              if arctic-winds bench \
+                  --worker "$LANE" \
+                  --suite "$SUITE" \
+                  --commit "$sha" \
+                  --tree "$tree" \
+                  --wheel "$wheel" \
+                  --output "$out" \
+                  --python 3.11 \
+                  --storage "$storage" \
+                  --instance-type "$INSTANCE_TYPE" \
+                  --runner-image "$AMI_ID" \
+                  --no-profile \
+                  --home "$home"; then
+                status=ok
+              else
+                status=failed
+              fi
+              ended=$(date +%s.%N)
+              echo "::endgroup::"
+              printf '{"lane":"%s","round":%d,"position":%d,"arm":"%s","sha":"%s","status":"%s","started":%s,"ended":%s,"file":"%s"}\n' \
+                "$LANE" "$r" "$k" "$arm" "$sha" "$status" "$started" "$ended" "$(basename "$out")" >> "$manifest"
+              echo "round $r $arm: $status in $(python3 -c "print(round($ended - $started))")s"
+            done
+            last=$(( $(date +%s) - round_start ))
+            completed=$r
+          done
+          {
+            echo "### 🔀 \`$LANE\` ($INSTANCE_TYPE, $STORAGE)"
+            echo
+            echo "- rounds completed: $completed of $ROUNDS in $(( ($(date +%s) - t0) / 60 )) min (budget $BUDGET_MINUTES)"
+            echo "- calls that failed: $(grep -c '"status":"failed"' "$manifest" || true)"
+          } >> "$GITHUB_STEP_SUMMARY"
+          # A lane with no usable round is a failed lane; one with some is a result.
+          grep -q '"status":"ok"' "$manifest"
+
+      # One ordinary pipeline-shaped job per arm: the timed asv pass and then the
+      # profile pass with `--profile`, which records whatever the regex matches
+      # regardless of verdicts. The output is named `<lane>-<sha8>.json`, the same as a
+      # pipeline worker's, so `arctic-winds collect` can read it from a local copy.
+      - name: profile every arm
+        if: always() && inputs.profile != '' && steps.runner.outcome == 'success'
+        continue-on-error: true
+        env:
+          LANE: ${{ inputs.lane }}
+          ARMS: ${{ inputs.arms }}
+          SUITE: ${{ inputs.suite }}
+          PROFILE: ${{ inputs.profile }}
+          STORAGE: ${{ inputs.storage }}
+          INSTANCE_TYPE: ${{ inputs.instance_type }}
+          AMI_ID: ${{ steps.runner.outputs.ami }}
+        run: |
+          set -uo pipefail
+          storage=LMDB
+          if [ "$STORAGE" = SEAWEED ]; then storage=REAL; fi
+          mkdir -p artifacts/profile
+          python3 -c 'import json, os; [print(a["arm"], a["sha"]) for a in json.loads(os.environ["ARMS"])]' \
+          | while read -r arm sha; do
+              tree="$AB_ROOT/trees/$arm"
+              home="$AB_ROOT/home-$arm"
+              wheel=$(find "wheels/wheel-$arm" -name '*.whl' | head -1)
+              results=$(python -c 'import sys; from pathlib import Path; from arctic_winds.asv_conf import read_asv_conf; print(read_asv_conf(Path(sys.argv[1])).results_path)' "$tree")
+              rm -rf "${home:?}/arctic-winds/venv" "${results:?}/${LANE:?}"
+              mkdir -p "$home"
+              echo "::group::profile $arm (${sha:0:8})"
+              arctic-winds bench \
+                --worker "$LANE" \
+                --suite "$SUITE" \
+                --commit "$sha" \
+                --tree "$tree" \
+                --wheel "$wheel" \
+                --output "artifacts/profile/${LANE}-${sha:0:8}.json" \
+                --python 3.11 \
+                --storage "$storage" \
+                --instance-type "$INSTANCE_TYPE" \
+                --runner-image "$AMI_ID" \
+                --profile "$PROFILE" \
+                --home "$home" < /dev/null \
+                || echo "::warning::the profiled run of $arm failed"
+              echo "::endgroup::"
+            done
+
+      - name: stop SeaweedFS
+        if: always() && inputs.storage == 'SEAWEED'
+        shell: bash -el {0}
+        run: build_tooling/start_seaweed.sh stop
+
+      - name: upload this lane's rounds and profiles
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ab-${{ inputs.lane }}
+          path: artifacts/
+          if-no-files-found: warn
+          retention-days: 30
+          overwrite: true
+
+  no_runner:
+    name: no runner for ${{ inputs.lane }}
+    needs: [start]
+    if: >-
+      !cancelled() && (needs.start.result != 'success' || needs.start.outputs.label == '')
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - name: fail the lane so it can be retried
+        env:
+          LANE: ${{ inputs.lane }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          echo "::error::No EC2 runner arrived for ${LANE}. 'Re-run failed jobs' provisions a fresh instance. A start that died after launch can orphan an instance — check EC2 for one tagged RunId=${RUN_ID}."
+          exit 1
+
+  stop:
+    name: stop ${{ inputs.lane }} runner
+    needs: [start, bench]
+    if: always()
+    uses: ./.github/workflows/ec2_runner_jobs.yml
+    secrets: inherit
+    with:
+      job_type: stop
+      label: ${{ needs.start.outputs.label }}
+      ec2-instance-id: ${{ needs.start.outputs.ec2-instance-id }}
