@@ -46,6 +46,7 @@ from arcticdb_ext.version_store import (
 )
 from arcticc.pb2.storage_pb2 import LibraryConfig, EnvironmentConfigsMap
 from arcticdb.preconditions import check
+from arcticdb.util.utils import deferred_gc
 from arcticdb.supported_types import DateRangeInput, ExplicitlySupportedDates
 from arcticdb.toolbox.library_tool import LibraryTool
 from arcticdb.version_store.processing import QueryBuilder
@@ -3196,9 +3197,14 @@ class NativeVersionStore:
         """
         snap_data = self.version_store.list_snapshots(load_metadata)
         denormalized_snap_data = {}
-        for snap_name, normalized_metadata in snap_data:
-            metadata = denormalize_user_metadata(normalized_metadata) if normalized_metadata else None
-            denormalized_snap_data[snap_name] = metadata
+        # Every object unpacked here is retained in the returned dict, so the collector cannot free anything
+        # while the loop runs - it only re-traces a live set that keeps growing, once per allocation threshold
+        # crossed. A library with many snapshots each carrying large metadata unpacks millions of containers
+        # and pays that trace over and over; deferring it is most of the wall time on such a listing.
+        with deferred_gc():
+            for snap_name, normalized_metadata in snap_data:
+                metadata = denormalize_user_metadata(normalized_metadata) if normalized_metadata else None
+                denormalized_snap_data[snap_name] = metadata
 
         return denormalized_snap_data
 

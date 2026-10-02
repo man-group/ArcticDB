@@ -288,7 +288,13 @@ inline ankerl::unordered_dense::set<AtomKey> recurse_index_keys(
             }
         } catch (storage::KeyNotFoundException& e) {
             if (opts.ignores_missing_key_) {
-                log::version().info("Missing key while recursing index key {}", e.keys());
+                // Object storage raises a NoSuchKey that names no key at all, so its message is all there is
+                // to report.
+                if (e.has_keys()) {
+                    log::version().info("Missing key while recursing index key {}", e.keys());
+                } else {
+                    log::version().info("Missing key while recursing index key: {}", e.what());
+                }
             } else {
                 throw;
             }
