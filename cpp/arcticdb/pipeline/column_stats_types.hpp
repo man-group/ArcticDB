@@ -20,6 +20,10 @@ namespace arcticdb {
 
 using ColumnStatTypeInternal = arcticc::pb2::column_stats_pb2::ColumnStatsType;
 
+constexpr bool is_packed_string_stat(ColumnStatTypeInternal type) {
+    return type == ColumnStatTypeInternal::MIN_STR_V1 || type == ColumnStatTypeInternal::MAX_STR_V1;
+}
+
 struct ColumnStatValue {
     ColumnStatTypeInternal type;
     size_t data_col_offset;

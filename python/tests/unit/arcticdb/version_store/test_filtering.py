@@ -820,6 +820,21 @@ def test_filter_fixed_width_string_isin_truncation(lmdb_version_store_v1, any_ou
     generic_filter_test(lib, symbol, q, expected)
 
 
+@pytest.mark.xfail(
+    reason="ascii_to_padded_utf32 widens the query string a byte at a time, so a non-ASCII value never "
+    "matches the UTF-32 stored in a fixed-width pool"
+)
+@pytest.mark.parametrize("predicate", ["==", "isin"])
+def test_filter_fixed_width_string_non_ascii(lmdb_version_store_v1, predicate):
+    lib = lmdb_version_store_v1
+    symbol = "test_filter_fixed_width_string_non_ascii"
+    df = pd.DataFrame({"a": ["é", "Ā", "ascii"]}, index=np.arange(3))
+    lib.write(symbol, df, dynamic_strings=False)
+    q = QueryBuilder()
+    q = q[q["a"] == "é"] if predicate == "==" else q[q["a"].isin(["é"])]
+    assert_frame_equal(df.iloc[[0]], lib.read(symbol, query_builder=q).data)
+
+
 def test_filter_stringpool_shrinking_basic(lmdb_version_store_tiny_segment, any_output_format, read_string_dtype):
     if read_string_dtype and any_output_format != OutputFormat.PANDAS:
         pytest.skip("infer_string only affects pandas output")
