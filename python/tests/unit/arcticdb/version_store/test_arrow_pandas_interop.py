@@ -976,33 +976,97 @@ def test_combine_series_with_index_and_table(arrow_library_any_schema, op):
 # --- non-timeseries multiindex (matching column names) --------------------
 
 
-@pytest.mark.xfail(
-    reason="pandas stores multi-index levels beyond the first under __idx__<name>, which no arrow column name can "
-    "match; the incoming descriptor and its data need aligning",
-    strict=True,
-)
-def test_append_non_timeseries_multiindex_pandas_with_unindexed_arrow(arrow_library_any_schema):
-    """When the top level of a MultiIndex is not a timeseries the symbol has row-count semantics, so
-    appending an unindexed arrow table carrying the same columns should be allowed."""
-    lib = arrow_library_any_schema
+def _non_timeseries_multiindex_pandas_and_arrow():
     index = pd.MultiIndex.from_arrays([[10, 20], ["a", "b"]], names=["l0", "grp"])
-    lib.write("sym", pd.DataFrame({"col": np.array([0, 1], dtype=np.int64)}, index=index))
-    lib.append(
-        "sym",
-        pa.table(
-            {
-                "l0": pa.array([30, 40], pa.int64()),
-                "grp": pa.array(["c", "d"], pa.large_string()),
-                "col": pa.array([2, 3], pa.int64()),
-            }
-        ),
+    return pd.DataFrame({"col": np.array([0, 1], dtype=np.int64)}, index=index), pa.table(
+        {
+            "l0": pa.array([30, 40], pa.int64()),
+            "grp": pa.array(["c", "d"], pa.large_string()),
+            "col": pa.array([2, 3], pa.int64()),
+        }
     )
-    received = lib.read("sym").data
+
+
+@pytest.mark.parametrize(
+    "op",
+    [
+        "append",
+        "concat",
+        pytest.param(
+            "stage",
+            marks=pytest.mark.xfail(
+                reason="staged descriptors are already written under the unaligned names; Monday ref 13124164631",
+                raises=SchemaException,
+                strict=True,
+            ),
+        ),
+    ],
+)
+def test_combine_non_timeseries_multiindex_pandas_with_unindexed_arrow(arrow_library_any_schema, op):
+    """Append aligns Arrow index names with pandas; concat reconciles the mismatch to an unnamed level."""
+    first, second = _non_timeseries_multiindex_pandas_and_arrow()
+    received = _combine(arrow_library_any_schema, op, first, second)
     expected = pd.DataFrame(
         {"col": np.array([0, 1, 2, 3], dtype=np.int64)},
-        index=pd.MultiIndex.from_arrays([[10, 20, 30, 40], ["a", "b", "c", "d"]], names=["l0", "grp"]),
+        index=pd.MultiIndex.from_arrays(
+            [[10, 20, 30, 40], ["a", "b", "c", "d"]], names=["l0", None if op == "concat" else "grp"]
+        ),
     )
     assert_frame_equal_with_arrow(received, expected)
+
+
+def _timeseries_multiindex_pandas_and_arrow():
+    index = pd.MultiIndex.from_arrays([pd.date_range("2025-01-01", periods=2), ["a", "b"]], names=["ts", "grp"])
+    return pd.DataFrame({"col": np.array([0, 1], dtype=np.int64)}, index=index), pa.table(
+        {
+            "ts": _ts_array(pd.date_range("2025-01-03", periods=2)),
+            "grp": pa.array(["c", "d"], pa.large_string()),
+            "col": pa.array([2, 3], pa.int64()),
+        }
+    )
+
+
+@pytest.mark.parametrize(
+    "op",
+    [
+        "append",
+        "update",
+        "concat",
+        pytest.param(
+            "stage",
+            marks=pytest.mark.xfail(
+                reason="staged descriptors are already written under the unaligned names; Monday ref 13124164631",
+                raises=SchemaException,
+                strict=True,
+            ),
+        ),
+    ],
+)
+def test_combine_timeseries_multiindex_pandas_with_matching_arrow(arrow_library_any_schema, op):
+    first, second = _timeseries_multiindex_pandas_and_arrow()
+    received = _combine(arrow_library_any_schema, op, first, second, index_column=True)
+    expected = pd.DataFrame(
+        {"col": np.array([0, 1, 2, 3], dtype=np.int64)},
+        index=pd.MultiIndex.from_arrays(
+            [pd.date_range("2025-01-01", periods=4), ["a", "b", "c", "d"]],
+            names=["ts", None if op == "concat" else "grp"],
+        ),
+    )
+    assert_frame_equal_with_arrow(received, expected)
+
+
+def test_append_arrow_to_multiindex_with_level_timezones(arrow_library_any_schema):
+    lib = arrow_library_any_schema
+    tz = "Europe/London"
+    first = pd.date_range("2025-01-01", periods=2, tz=tz)
+    lib.write("sym", pd.DataFrame({"col": [0, 1]}, index=pd.MultiIndex.from_arrays([first, first], names=["a", "b"])))
+    second = _ts_array(pd.date_range("2025-01-03", periods=2, tz=tz))
+    lib.append("sym", pa.table({"a": second, "b": second, "col": pa.array([2, 3], pa.int64())}), index_column=True)
+
+    levels = pd.date_range("2025-01-01", periods=4, tz=tz)
+    expected = pd.DataFrame({"col": [0, 1, 2, 3]}, index=pd.MultiIndex.from_arrays([levels, levels], names=["a", "b"]))
+    assert_frame_equal_with_arrow(lib.read("sym").data, expected)
+    assert_frame_equal(lib.read("sym", output_format=OutputFormat.PANDAS).data, expected)
 
 
 # --- TimeFrame -------------------------------------------------------------
