@@ -23,9 +23,18 @@ from enum import Enum
 import multiprocessing
 
 from arcticdb_ext import get_config_int, set_config_int
-from arcticdb_ext.exceptions import InternalException, StorageException, UnsortedDataException, UserInputException
-from arcticdb_ext.storage import NoDataFoundException, KeyType, AWSAuthMethod
-from arcticdb.exceptions import ArcticDbNotYetImplemented, NoSuchVersionException
+from arcticdb_ext.storage import KeyType, AWSAuthMethod
+from arcticdb.exceptions import (
+    ArcticDbNotYetImplemented,
+    NoSuchVersionException,
+    InternalException,
+    StorageException,
+    UnsortedDataException,
+    UserInputException,
+    NoDataFoundException,
+    ArcticUnsupportedDataTypeException,
+    ArcticInvalidApiUsageException,
+)
 from arcticdb.adapters.mongo_library_adapter import MongoLibraryAdapter
 from arcticdb.arctic import Arctic
 import arcticdb.toolbox.query_stats as qs
@@ -43,16 +52,9 @@ from arcticdb.util.test import (
 )
 from arcticdb.storage_fixtures.s3 import S3Bucket
 from arcticdb.config import Defaults
-from arcticdb.version_store.library import (
-    WritePayload,
-    ArcticUnsupportedDataTypeException,
-    ReadRequest,
-    StagedDataFinalizeMethod,
-    DeleteRequest,
-)
+from arcticdb.version_store.library import WritePayload, ReadRequest, StagedDataFinalizeMethod, DeleteRequest
 from arcticdb.authorization.permissions import OpenMode
 from arcticdb.version_store._store import NativeVersionStore
-from arcticdb.version_store.library import ArcticInvalidApiUsageException
 from tests.conftest import Marks
 from tests.util.marking import marks
 from tests.util.storage_test import get_s3_storage_config
@@ -417,19 +419,19 @@ def test_staged_data(arctic_library, finalize_method):
     expected = pd.concat([df_0, df_1, df_2])
 
     if finalize_method == StagedDataFinalizeMethod.APPEND:
-        lib.write(sym_with_metadata, df_0, staged=False)
-        lib.write(sym_without_metadata, df_0, staged=False)
+        lib.write(sym_with_metadata, df_0)
+        lib.write(sym_without_metadata, df_0)
     else:
-        lib.write(sym_with_metadata, df_0, staged=True)
-        lib.write(sym_without_metadata, df_0, staged=True)
-        lib.write(sym_unfinalized, df_0, staged=True)
+        lib.stage(sym_with_metadata, df_0)
+        lib.stage(sym_without_metadata, df_0)
+        lib.stage(sym_unfinalized, df_0)
 
-    lib.write(sym_with_metadata, df_1, staged=True)
-    lib.write(sym_with_metadata, df_2, staged=True)
-    lib.write(sym_without_metadata, df_1, staged=True)
-    lib.write(sym_without_metadata, df_2, staged=True)
-    lib.write(sym_unfinalized, df_1, staged=True)
-    lib.write(sym_unfinalized, df_2, staged=True)
+    lib.stage(sym_with_metadata, df_1)
+    lib.stage(sym_with_metadata, df_2)
+    lib.stage(sym_without_metadata, df_1)
+    lib.stage(sym_without_metadata, df_2)
+    lib.stage(sym_unfinalized, df_1)
+    lib.stage(sym_unfinalized, df_2)
 
     metadata = {"hello": "world"}
     finalize_result_meta = lib.finalize_staged_data(sym_with_metadata, finalize_method, metadata=metadata)
@@ -462,8 +464,8 @@ def test_parallel_writes_and_appends_index_validation(arctic_library, finalize_m
         lib.write(sym, df_0)
     df_1 = pd.DataFrame({"col": [3, 4]}, index=[pd.Timestamp("2024-01-03"), pd.Timestamp("2024-01-04")])
     df_2 = pd.DataFrame({"col": [5, 6]}, index=[pd.Timestamp("2024-01-03T12"), pd.Timestamp("2024-01-05")])
-    lib.write(sym, df_2, staged=True)
-    lib.write(sym, df_1, staged=True)
+    lib.stage(sym, df_2)
+    lib.stage(sym, df_1)
     if validate_index is None:
         # Test default behaviour when arg isn't provided
         with pytest.raises(UnsortedDataException):
@@ -500,7 +502,7 @@ class TestAppendStagedData:
         )
         lib.write("sym", initial_df)
         df1 = pd.DataFrame({"col": [2]}, index=pd.DatetimeIndex([np.datetime64("2023-01-02")], dtype="datetime64[ns]"))
-        lib.write("sym", df1, staged=True)
+        lib.stage("sym", df1)
         with pytest.raises(UnsortedDataException) as exception_info:
             lib.finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
         assert "append" in str(exception_info.value)
@@ -524,7 +526,7 @@ class TestAppendStagedData:
                 dtype="datetime64[ns]",
             ),
         )
-        lib.write("sym", df_to_append, staged=True)
+        lib.stage("sym", df_to_append)
         lib.finalize_staged_data("sym", mode=mode)
         res = lib.read("sym").data
         expected_df = pd.concat([df, df_to_append])
@@ -998,6 +1000,15 @@ def test_append_prune_previous_versions(arctic_library):
 
 
 @pytest.mark.storage
+def test_append_missing_symbol_creates(arctic_library):
+    lib = arctic_library
+    df = pd.DataFrame({"a": [1, 2]}, index=pd.date_range("2024-01-01", periods=2))
+    lib.append("new_symbol", df)
+    assert "new_symbol" in lib.list_symbols()
+    assert_frame_equal(lib.read("new_symbol").data, df)
+
+
+@pytest.mark.storage
 def test_update_documented_example(arctic_library):
     """Test the example given on the `update` docstring."""
     lib = arctic_library
@@ -1176,8 +1187,9 @@ def test_update_with_daterange_restrictive(arctic_library):
 @pytest.mark.storage
 def test_update_with_upsert(arctic_library):
     lib = arctic_library
-    with pytest.raises(Exception):
+    with pytest.raises(NoSuchVersionException) as ex_info:
         lib.update("symbol", pd.DataFrame())
+    assert all(s in str(ex_info.value) for s in ["upsert", "Cannot update", "symbol"])
     assert not lib.list_symbols()
     lib.update("symbol", pd.DataFrame(), upsert=True)
     assert "symbol" in lib.list_symbols()

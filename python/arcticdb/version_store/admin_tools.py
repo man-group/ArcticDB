@@ -9,7 +9,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 from enum import Enum
 from typing import Dict, Iterable
 
-from arcticdb_ext.exceptions import ArcticException
+from arcticdb.exceptions import ArcticException
 from arcticdb_ext.storage import KeyType as NativeKeyType
 from arcticdb.version_store import NativeVersionStore
 from dataclasses import dataclass

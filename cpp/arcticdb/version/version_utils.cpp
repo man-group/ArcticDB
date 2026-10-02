@@ -94,7 +94,7 @@ FrameAndDescriptor frame_and_descriptor_from_segment(SegmentInMemory&& seg) {
     if (seg_descriptor.index().type() == IndexDescriptor::Type::ROWCOUNT)
         ensure_rowcount_norm_meta(*tsd_proto.mutable_normalization(), seg_descriptor.id());
     else
-        ensure_timeseries_norm_meta(*tsd.mutable_proto().mutable_normalization(), seg_descriptor.id(), false);
+        ensure_timeseries_norm_meta(*tsd.mutable_proto().mutable_normalization(), seg_descriptor.id());
     return {SegmentInMemory(std::move(seg)), tsd, {}};
 }
 

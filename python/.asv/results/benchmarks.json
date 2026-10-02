@@ -1078,7 +1078,7 @@
         "version": "81d79c51e980ab5ab2560d3dda7254baf61f7cc7dceef9fb70fa6ab52994f5f0"
     },
     "basic_functions.BasicFunctions.peakmem_write_staged": {
-        "code": "class BasicFunctions:\n    def peakmem_write_staged(self, *args):\n        self.lib.write(f\"peakmem_write_staged\", self.df, staged=True)\n\n    def setup(self, libs_for_storage, rows, use_query_stats, storage):\n        self.lib = libs_for_storage[storage][_lib_name(rows)]\n        if self.lib is None:\n            raise SkipNotImplemented\n    \n        if use_query_stats:\n            if storage != Storage.AMAZON:\n                raise SkipNotImplemented(\"Query stats only supported against S3\")\n            qs.enable()\n    \n        self.df = generate_pseudo_random_dataframe(rows)\n\n    def setup_cache(self):\n        start = time.time()\n        libs_for_storage = self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")\n        return libs_for_storage",
+        "code": "class BasicFunctions:\n    def peakmem_write_staged(self, *args):\n        self.lib.stage(\"peakmem_write_staged\", self.df)\n\n    def setup(self, libs_for_storage, rows, use_query_stats, storage):\n        self.lib = libs_for_storage[storage][_lib_name(rows)]\n        if self.lib is None:\n            raise SkipNotImplemented\n    \n        if use_query_stats:\n            if storage != Storage.AMAZON:\n                raise SkipNotImplemented(\"Query stats only supported against S3\")\n            qs.enable()\n    \n        self.df = generate_pseudo_random_dataframe(rows)\n\n    def setup_cache(self):\n        start = time.time()\n        libs_for_storage = self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")\n        return libs_for_storage",
         "name": "basic_functions.BasicFunctions.peakmem_write_staged",
         "param_names": [
             "num_rows",
@@ -1103,7 +1103,7 @@
         "timeout": 600,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "9ef0afeb65168b10326e44ed91dad7829e7137c0b123c262767cd9253539e37f"
+        "version": "cc2b6bba5401bc602b5fcef5e0baae962d228accb15fa485217980670ae5245b"
     },
     "basic_functions.BasicFunctions.time_read": {
         "code": "class BasicFunctions:\n    def time_read(self, *args):\n        self.lib.read(f\"sym\").data\n\n    def setup(self, libs_for_storage, rows, use_query_stats, storage):\n        self.lib = libs_for_storage[storage][_lib_name(rows)]\n        if self.lib is None:\n            raise SkipNotImplemented\n    \n        if use_query_stats:\n            if storage != Storage.AMAZON:\n                raise SkipNotImplemented(\"Query stats only supported against S3\")\n            qs.enable()\n    \n        self.df = generate_pseudo_random_dataframe(rows)\n\n    def setup_cache(self):\n        start = time.time()\n        libs_for_storage = self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")\n        return libs_for_storage",
@@ -1271,7 +1271,7 @@
         "warmup_time": 0.2
     },
     "basic_functions.BasicFunctions.time_write_staged": {
-        "code": "class BasicFunctions:\n    def time_write_staged(self, *args):\n        self.lib.write(f\"time_write_staged\", self.df, staged=True)\n\n    def setup(self, libs_for_storage, rows, use_query_stats, storage):\n        self.lib = libs_for_storage[storage][_lib_name(rows)]\n        if self.lib is None:\n            raise SkipNotImplemented\n    \n        if use_query_stats:\n            if storage != Storage.AMAZON:\n                raise SkipNotImplemented(\"Query stats only supported against S3\")\n            qs.enable()\n    \n        self.df = generate_pseudo_random_dataframe(rows)\n\n    def setup_cache(self):\n        start = time.time()\n        libs_for_storage = self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")\n        return libs_for_storage",
+        "code": "class BasicFunctions:\n    def time_write_staged(self, *args):\n        self.lib.stage(\"time_write_staged\", self.df)\n\n    def setup(self, libs_for_storage, rows, use_query_stats, storage):\n        self.lib = libs_for_storage[storage][_lib_name(rows)]\n        if self.lib is None:\n            raise SkipNotImplemented\n    \n        if use_query_stats:\n            if storage != Storage.AMAZON:\n                raise SkipNotImplemented(\"Query stats only supported against S3\")\n            qs.enable()\n    \n        self.df = generate_pseudo_random_dataframe(rows)\n\n    def setup_cache(self):\n        start = time.time()\n        libs_for_storage = self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")\n        return libs_for_storage",
         "min_run_count": 2,
         "name": "basic_functions.BasicFunctions.time_write_staged",
         "number": 0,
@@ -1300,7 +1300,7 @@
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
-        "version": "6b0ab769d32ef0743e047b41f528f691d89b59f258adb993d3ad62c1657bf018",
+        "version": "625af8b97156575b510ae2cc62ca78309e046dffd5349db40840d74d506b7edb",
         "warmup_time": 0.2
     },
     "basic_functions.BatchFunctions.peakmem_read_batch": {
@@ -1701,7 +1701,7 @@
         "version": "e7e630990fa7fd9ff165290297cc42118a322f07b4d95abfae6060760c83baea"
     },
     "basic_functions.ShortWideWrite.peakmem_write_staged": {
-        "code": "class ShortWideWrite:\n    def peakmem_write_staged(self, *args):\n        self.lib.write(f\"peakmem_write_staged\", self.df, staged=True)\n\n    def setup(self, lib_for_storage, rows, cols, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.df = generate_random_floats_dataframe(rows, cols)\n\n    def setup_cache(self):\n        lib_for_storage = create_libraries_across_storages(STORAGES)\n        return lib_for_storage",
+        "code": "class ShortWideWrite:\n    def peakmem_write_staged(self, *args):\n        self.lib.stage(\"peakmem_write_staged\", self.df)\n\n    def setup(self, lib_for_storage, rows, cols, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.df = generate_random_floats_dataframe(rows, cols)\n\n    def setup_cache(self):\n        lib_for_storage = create_libraries_across_storages(STORAGES)\n        return lib_for_storage",
         "name": "basic_functions.ShortWideWrite.peakmem_write_staged",
         "param_names": [
             "rows",
@@ -1724,7 +1724,7 @@
         "setup_cache_key": "basic_functions:145",
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "1f8533a2f894ad65e2fcfefcfadf85262eff10e7ff0ce3787dc6b7e709984dcc"
+        "version": "0dc1abdf55388bbd6e54a96520c14b07c833f01f9279c629ec3393a825763ed6"
     },
     "basic_functions.ShortWideWrite.time_write": {
         "code": "class ShortWideWrite:\n    def time_write(self, *args):\n        self.lib.write(\"sym\", self.df)\n\n    def setup(self, lib_for_storage, rows, cols, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.df = generate_random_floats_dataframe(rows, cols)\n\n    def setup_cache(self):\n        lib_for_storage = create_libraries_across_storages(STORAGES)\n        return lib_for_storage",
@@ -1759,7 +1759,7 @@
         "warmup_time": -1
     },
     "basic_functions.ShortWideWrite.time_write_staged": {
-        "code": "class ShortWideWrite:\n    def time_write_staged(self, *args):\n        self.lib.write(f\"time_write_staged\", self.df, staged=True)\n\n    def setup(self, lib_for_storage, rows, cols, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.df = generate_random_floats_dataframe(rows, cols)\n\n    def setup_cache(self):\n        lib_for_storage = create_libraries_across_storages(STORAGES)\n        return lib_for_storage",
+        "code": "class ShortWideWrite:\n    def time_write_staged(self, *args):\n        self.lib.stage(\"time_write_staged\", self.df)\n\n    def setup(self, lib_for_storage, rows, cols, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.df = generate_random_floats_dataframe(rows, cols)\n\n    def setup_cache(self):\n        lib_for_storage = create_libraries_across_storages(STORAGES)\n        return lib_for_storage",
         "min_run_count": 2,
         "name": "basic_functions.ShortWideWrite.time_write_staged",
         "number": 0,
@@ -1787,7 +1787,7 @@
         "setup_cache_key": "basic_functions:145",
         "type": "time",
         "unit": "seconds",
-        "version": "897174943e95686578befc161ffa75dd3b93b60e28885ef4005962198f3d2697",
+        "version": "59cf38e97ed6ade340def1d0fff0209a919d56ba0649890650b19751aa25c368",
         "warmup_time": -1
     },
     "column_stats.ColumnStatsCreate.time_create_column_stats": {

@@ -10,8 +10,8 @@ import time
 import numpy as np
 import pandas as pd
 from arcticdb.util.logger import get_logger
-import arcticdb_ext
 import arcticdb_ext.storage
+from arcticdb.exceptions import StorageException
 from arcticdb.util.test import sample_dataframe
 from arcticdb import KeyType, Size, Arctic
 from arcticdb.toolbox.library_tool import LibraryTool
@@ -28,7 +28,7 @@ def retry_get_sizes(admin_tools: AdminTools, retries=3, base_delay=1):
         try:
             result = admin_tools.get_sizes()
             return result
-        except arcticdb_ext.exceptions.StorageException as e:
+        except StorageException as e:
             if ("E_UNEXPECTED_AZURE_ERROR" in str(e)) and (attempt < retries):
                 wait_time = base_delay * (2**attempt)
                 logger.info(f"Attempt {attempt + 1} failed: {e}. Retrying in {wait_time} seconds...")
@@ -90,7 +90,7 @@ def test_get_sizes(arctic_client, lib_name, all_recursive_metastructure_versions
 
     # Check the other key types
     arctic_library.snapshot("snap")
-    arctic_library.write("new_sym", df, staged=True)
+    arctic_library.stage("new_sym", df)
     sizes = retry_get_sizes(arctic_library.admin_tools())
     assert sizes[KeyType.SNAPSHOT_REF].count == 1
     assert sizes[KeyType.APPEND_DATA].count == 3
@@ -221,7 +221,7 @@ def test_get_sizes_by_symbol(arctic_client, lib_name, all_recursive_metastructur
     assert sizes["sym_1"][KeyType.TABLE_INDEX].count == 0
     assert sizes["sym_1"][KeyType.TABLE_DATA].count == 0
 
-    arctic_library.write("new_sym", df, staged=True)
+    arctic_library.stage("new_sym", df)
     sizes = arctic_library.admin_tools().get_sizes_by_symbol()
     assert sizes["new_sym"][KeyType.APPEND_DATA].count == 3
     assert 10e6 < sizes["new_sym"][KeyType.APPEND_DATA].bytes_compressed < 15e6
@@ -291,7 +291,7 @@ def test_get_sizes_for_symbol(arctic_client, lib_name, all_recursive_metastructu
     assert sizes[KeyType.TABLE_DATA].count == 0
     assert sizes[KeyType.TABLE_DATA].bytes_compressed == 0
 
-    arctic_library.write("new_sym", df, staged=True)
+    arctic_library.stage("new_sym", df)
     sizes = arctic_library.admin_tools().get_sizes_for_symbol("new_sym")
     assert sizes[KeyType.APPEND_DATA].count == 3
     assert 10e6 < sizes[KeyType.APPEND_DATA].bytes_compressed < 15e6
@@ -308,7 +308,7 @@ def test_size_apis_self_consistent(arctic_library, lib_name):
     arctic_library.write_pickle("sym_1", 2)
     df = sample_dataframe(size=250_000)
     arctic_library.write("sym_1", df)
-    arctic_library.write("sym_1", df, staged=True)
+    arctic_library.stage("sym_1", df)
 
     # When
     sizes = retry_get_sizes(arctic_library.admin_tools())

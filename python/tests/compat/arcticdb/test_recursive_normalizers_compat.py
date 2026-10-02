@@ -89,7 +89,7 @@ assert len(lib_tool.find_keys_for_symbol(KeyType.MULTI_KEY, 'sym')) == 1
                 assert_frame_equal(data[key], expected[key])
 
 
-def test_recursive_norm_write_new_read_old(old_venv_and_arctic_uri, lib_name):
+def test_recursive_norm_write_new_read_old(old_venv_and_arctic_uri, lib_name, all_recursive_metastructure_versions):
     old_venv, arctic_uri = old_venv_and_arctic_uri
     with CompatLibrary(old_venv, arctic_uri, lib_name) as compat:
         dfs = {"df_1": pd.DataFrame({"a": [1, 2, 3]}), "df_2": pd.DataFrame({"b": ["a", "b"]})}
@@ -103,17 +103,23 @@ def test_recursive_norm_write_new_read_old(old_venv_and_arctic_uri, lib_name):
             lib_tool = curr.lib._nvs.library_tool()
             assert len(lib_tool.find_keys_for_symbol(KeyType.MULTI_KEY, "sym")) == 1
 
-        compat.old_lib.execute(
-            ["""
+        read_lines = (
+            """
 from pandas.testing import assert_frame_equal
 data = lib.read('sym').data
 expected = {'a': df_1, 'b' * 95: df_2, 'c' * 100: df_2}
 assert set(data.keys()) == set(expected.keys())
 for key in data.keys():
     assert_frame_equal(data[key], expected[key])
-"""],
-            dfs=dfs,
+"""
+            if all_recursive_metastructure_versions == 1  # V1
+            else """
+import pytest
+with pytest.raises(KeyError):
+    lib.read("sym")
+"""
         )
+        compat.old_lib.execute([read_lines], dfs=dfs)
 
 
 def test_recursive_norm_write_new_read_old_custom_normalizer(

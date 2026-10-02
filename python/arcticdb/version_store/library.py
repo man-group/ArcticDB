@@ -17,6 +17,7 @@ from typing import Optional, Any, Tuple, Dict, Union, List, Iterable, NamedTuple
 
 from arcticdb.dependencies import _PYARROW_AVAILABLE, _POLARS_AVAILABLE, pyarrow as pa, polars as pl
 from arcticdb.exceptions import (
+    ArcticException,
     ArcticNativeException,
     ArcticDbNotYetImplemented,
     MissingKeysInStageResultsError,
@@ -30,6 +31,7 @@ from arcticdb.options import LibraryOptions, EnterpriseLibraryOptions, OutputFor
 from arcticc.pb2.descriptors_pb2 import TypeDescriptor
 from arcticdb.preconditions import check
 from arcticdb.supported_types import Timestamp
+from arcticdb.util.arrow import NORMALIZABLE_PYARROW_TYPES, NORMALIZABLE_POLARS_TYPES
 from arcticdb.util._versions import IS_PANDAS_TWO
 
 from arcticdb.version_store.processing import ExpressionNode, QueryBuilder
@@ -41,7 +43,6 @@ from arcticdb.version_store._store import (
     MergeStrategy,
     MergeAction,
 )
-from arcticdb_ext.exceptions import ArcticException
 from arcticdb_ext.version_store import (
     CompactDataInfo,
     DataError,
@@ -415,8 +416,13 @@ class UpdatePayload:
         metadata : Any, default=None
             Optional metadata to persist along with the new symbol version.
         date_range : Optional[Tuple[Optional[Timestamp], Optional[Timestamp]]], default=None
-            Restricts the update to the specified range in the stored data. Leaving either bound as ``None`` leaves that
-            side of the range open-ended.
+            If a range is specified, the existing data within that range is cleared and overwritten by data. This allows
+            the user to update a subset of the original data. Note that date_range is end-inclusive, and if either the
+            start or end is None, the range becomes open-ended on that side. If date_range is narrower than data, rows
+            of data outside date_range are ignored. If date_range is wider than data, index entries within date_range
+            not covered by data are removed as well. date_range and data must both be timezone-aware or both
+            timezone-naive; they can use different zones, since the comparison is against the underlying instants
+            rather than local time.
         index_column: bool, default=False
             Only applicable when data is a PyArrow Table or Polars DataFrame. If True, the first column
             is treated as the timeseries index.
@@ -925,9 +931,9 @@ class Library:
         if isinstance(data, NORMALIZABLE_TYPES):
             return True
         if self._nvs._allow_arrow_input:
-            if _PYARROW_AVAILABLE and isinstance(data, pa.Table):
+            if isinstance(data, NORMALIZABLE_PYARROW_TYPES):
                 return True
-            if _POLARS_AVAILABLE and isinstance(data, pl.DataFrame):
+            if isinstance(data, NORMALIZABLE_POLARS_TYPES):
                 return True
         return False
 
@@ -1019,7 +1025,6 @@ class Library:
         data: NormalizableType,
         metadata: Any = None,
         prune_previous_versions: Optional[bool] = None,
-        staged=False,
         validate_index=True,
         index_column: bool = False,
         recursive_normalizers: bool = None,
@@ -1062,10 +1067,6 @@ class Library:
         prune_previous_versions : Optional[bool], default=None
             Removes previous (non-snapshotted) versions from the database. If None, the value is taken from the
             library configuration (defaults to False).
-        staged: bool, default=False
-            Deprecated. Use stage() instead.
-            Whether to write to a staging area rather than immediately to the library.
-            See documentation on `finalize_staged_data` for more information.
         validate_index: bool, default=True
             If True, verify that the index of `data` supports date range searches and update operations.
             This tests that the data is sorted in ascending order, using Pandas DataFrame.index.is_monotonic_increasing.
@@ -1088,10 +1089,10 @@ class Library:
                 lib.write(symbol, data) # The data will be successfully written
             Please refer to https://docs.arcticdb.io/latest/notebooks/arcticdb_demo_recursive_normalizers for more details
             of this feature.
-            Please check https://docs.arcticdb.io/latest/runtime_config/#versionstorerecursivenormalizermetastructure for the plan of
-            introducing meta structure v2. V2 has removed the dependency on pickle for normalizing meta structure. Please consider switching to V2
-            as V1 will be deprecated in future v7.0.0 release. However note that reading V2 meta structure requires ArcticDB version >= 6.7.0,
-            or KeyError will be raised.
+            Since v7.0.0 the meta structure is normalized as V2 by default, which removes the dependency on pickle.
+            Reading V2 meta structure requires ArcticDB version >= 6.7.0, or KeyError will be raised. To keep data readable
+            by older clients, set the runtime option VersionStore.RecursiveNormalizerMetastructure to 1. Please check
+            https://docs.arcticdb.io/latest/runtime_config/#versionstorerecursivenormalizermetastructure for more details.
 
         Returns
         -------
@@ -1118,24 +1119,10 @@ class Library:
 
         WritePayload objects can be unpacked and used as parameters:
         >>> w = adb.WritePayload("symbol", df, metadata={'the': 'metadata'})
-        >>> lib.write(*w, staged=True)
+        >>> lib.write(*w)
         """
-        if staged:
-            warnings.warn(
-                "The `staged` parameter will be removed in v7.0.0. Use stage() instead.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-        is_recursive_normalizers_enabled = self._nvs._is_recursive_normalizers_enabled(
-            **{"recursive_normalizers": recursive_normalizers}
-        )
         if not self._allowed_input_type(data):
-            if is_recursive_normalizers_enabled:
-                if staged:
-                    raise ArcticUnsupportedDataTypeException(
-                        "Staged data cannot be natively normalized. The recursive normalizer is enabled but is not allowed to work on staged data."
-                    )
-            else:
+            if not self._nvs._is_recursive_normalizers_enabled(**{"recursive_normalizers": recursive_normalizers}):
                 raise ArcticUnsupportedDataTypeException(
                     "Data is of a type that cannot be normalized. Consider using "
                     f"write_pickle instead. type(data)=[{type(data)}]"
@@ -1147,7 +1134,7 @@ class Library:
             metadata=metadata,
             prune_previous_version=prune_previous_versions,
             pickle_on_failure=False,
-            parallel=staged,
+            parallel=False,
             validate_index=validate_index,
             index_column=index_column,
             norm_failure_options_msg="Using write_pickle will allow the object to be written. However, many operations "
@@ -1162,7 +1149,6 @@ class Library:
         data: Any,
         metadata: Any = None,
         prune_previous_versions: Optional[bool] = None,
-        staged=False,
         recursive_normalizers: bool = None,
     ) -> VersionedItem:
         """
@@ -1183,8 +1169,6 @@ class Library:
         metadata
             See documentation on `write`.
         prune_previous_versions
-            See documentation on `write`.
-        staged
             See documentation on `write`.
         recursive_normalizers: bool, default None
             See documentation on `write`.
@@ -1216,19 +1200,13 @@ class Library:
         --------
         write: For more detailed documentation.
         """
-        if staged:
-            warnings.warn(
-                "The `staged` parameter will be removed in v7.0.0. Use stage() instead.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
         return self._nvs.write(
             symbol=symbol,
             data=data,
             metadata=metadata,
             prune_previous_version=prune_previous_versions,
             pickle_on_failure=True,
-            parallel=staged,
+            parallel=False,
             recursive_normalizers=recursive_normalizers,
             recursive_normalize_msgpack_no_pickle_fallback=False,
         )
@@ -1311,7 +1289,6 @@ class Library:
         >>> items[0].symbol, items[1].symbol
         ('symbol_1', 'symbol_2')
         """
-        self._nvs._raise_if_duplicate_symbols_in_batch(payloads)
         self._raise_if_unsupported_type_in_write_batch(payloads)
 
         throw_on_error = False
@@ -1360,7 +1337,6 @@ class Library:
         write: For more detailed documentation.
         write_pickle: For information on the implications of providing data that needs to be pickled.
         """
-        self._nvs._raise_if_duplicate_symbols_in_batch(payloads)
 
         return self._nvs._batch_write_internal(
             [p.symbol for p in payloads],
@@ -1532,7 +1508,6 @@ class Library:
             If data that is not of NormalizableType appears in any of the payloads.
         """
 
-        self._nvs._raise_if_duplicate_symbols_in_batch(append_payloads)
         self._raise_if_unsupported_type_in_write_batch(append_payloads)
         throw_on_error = False
 
@@ -1591,10 +1566,13 @@ class Library:
         upsert: bool, default=False
             If True, will write the data even if the symbol does not exist.
         date_range: `Tuple[Optional[Timestamp], Optional[Timestamp]]`, default=None
-            If a range is specified, it will delete the stored value within the range and overwrite it with the data in
-            ``data``. This allows the user to update with data that might only be a subset of the stored value. Leaving
-            any part of the tuple as None leaves that part of the range open ended. Only data with date_range will be
-            modified, even if ``data`` covers a wider date range.
+            If a range is specified, the existing data within that range is cleared and overwritten by data. This allows
+            the user to update a subset of the original data. Note that date_range is end-inclusive, and if either the
+            start or end is None, the range becomes open-ended on that side. If date_range is narrower than data, rows
+            of data outside date_range are ignored. If date_range is wider than data, index entries within date_range
+            not covered by data are removed as well. date_range and data must both be timezone-aware or both
+            timezone-naive; they can use different zones, since the comparison is against the underlying instants
+            rather than local time.
         prune_previous_versions: Optional[bool], default=None
             Removes previous (non-snapshotted) versions from the database. If None, the value is taken from the
             library configuration (defaults to False).
@@ -1740,7 +1718,6 @@ class Library:
         2024-01-02        11
         """
 
-        self._nvs._raise_if_duplicate_symbols_in_batch(update_payloads)
         self._raise_if_unsupported_type_in_write_batch(update_payloads)
 
         batch_update_result = self._nvs._batch_update_internal(
@@ -1767,10 +1744,9 @@ class Library:
 
         See Also
         --------
-        write
-            Documentation on the ``staged`` parameter explains the concept of staged data in more detail.
         stage
-            Returns the ``StageResult`` objects accepted by this method.
+            Documentation on the ``stage`` method explains the concept of staged data in more detail. The ``stage``
+            method returns the ``StageResult`` objects accepted by this method
 
         Examples
         --------
@@ -2013,13 +1989,13 @@ class Library:
 
         See Also
         --------
-        write
-            Documentation on the ``staged`` parameter explains the concept of staged data in more detail.
+        stage
+            Documentation on the ``stage`` method explains the concept of staged data in more detail.
 
         Examples
         --------
-        >>> lib.write("sym", pd.DataFrame({"col": [2, 4]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 2), pd.Timestamp(2024, 1, 4)])), staged=True)
-        >>> lib.write("sym", pd.DataFrame({"col": [3, 1]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 3), pd.Timestamp(2024, 1, 1)])), staged=True)
+        >>> lib.stage("sym", pd.DataFrame({"col": [2, 4]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 2), pd.Timestamp(2024, 1, 4)])), validate_index=False)
+        >>> lib.stage("sym", pd.DataFrame({"col": [3, 1]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 3), pd.Timestamp(2024, 1, 1)])), validate_index=False)
         >>> lib.sort_and_finalize_staged_data("sym")
         >>> lib.read("sym").data
                     col
@@ -2071,8 +2047,8 @@ class Library:
 
         See Also
         --------
-        write
-            Documentation on the ``staged`` parameter explains the concept of staged data in more detail.
+        stage
+            Documentation on the ``stage`` method explains the concept of staged data in more detail.
         """
         return self._nvs.list_symbols_with_incomplete_data()
 
@@ -2677,7 +2653,6 @@ class Library:
         {'the': 'metadata_2'}
         """
 
-        self._nvs._raise_if_duplicate_symbols_in_batch(write_metadata_payloads)
         throw_on_error = False
         return self._nvs._batch_write_metadata_to_versioned_items(
             [p.symbol for p in write_metadata_payloads],
@@ -3546,7 +3521,7 @@ class Library:
         """
         return self._nvs.defragment_symbol_data(symbol, segment_size, prune_previous_versions)
 
-    def merge_experimental(
+    def merge(
         self,
         symbol: str,
         source: NormalizableType,
@@ -3563,10 +3538,7 @@ class Library:
         See [Merge Notebook](../notebooks/ArcticDB_merge.ipynb) for usage examples.
 
         !!! warning
-            This API is under development and is subject to change. The API is not subject to semver and can change in
-            minor or patch releases.
-
-            Dynamic schema is not supported.
+            Dynamic schema is not supported. Sparse data is not supported. Fortran styled data is not supported.
 
         Parameters
         ----------
@@ -3639,14 +3611,14 @@ class Library:
         --------
 
         >>> lib.write("symbol", pd.DataFrame({'a': [1, 2, 3]}, index=pd.DatetimeIndex([pd.Timestamp(1), pd.Timestamp(2), pd.Timestamp(3)])))
-        >>> lib.merge_experimental("symbol", pd.DataFrame({"a": [100, 200]}, index=pd.DatetimeIndex([pd.Timestamp(2), pd.Timestamp(4)])), strategy=MergeStrategy(matched="update", not_matched_by_target="do_nothing"))))
+        >>> lib.merge("symbol", pd.DataFrame({"a": [100, 200]}, index=pd.DatetimeIndex([pd.Timestamp(2), pd.Timestamp(4)])), strategy=MergeStrategy(matched="update", not_matched_by_target="do_nothing"))))
         >>> lib.read("symbol").data
                                        a
         1970-01-01 00:00:00.000000001  1
         1970-01-01 00:00:00.000000002  100
         1970-01-01 00:00:00.000000003  3
         """
-        return self._nvs.merge_experimental(
+        return self._nvs.merge(
             symbol=symbol,
             source=source,
             strategy=strategy,

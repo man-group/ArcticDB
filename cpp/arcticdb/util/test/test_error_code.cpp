@@ -9,7 +9,6 @@
 #include <gtest/gtest.h>
 
 #include <arcticdb/util/preconditions.hpp>
-#include <arcticdb/python/normalization_checks.hpp>
 
 using ErrorCode = arcticdb::ErrorCode;
 
