@@ -11,10 +11,12 @@
 #include <arcticdb/entity/type_utils.hpp>
 #include <arcticdb/entity/types_proto.hpp>
 #include <arcticdb/entity/timeseries_descriptor.hpp>
+#include <arcticdb/entity/arrow_pandas_norm.hpp>
 #include <arcticdb/entity/normalization_utils.hpp>
 #include <arcticdb/log/log.hpp>
 #include <arcticdb/pipeline/frame_utils.hpp>
 #include <arcticdb/pipeline/index_utils.hpp>
+#include <arcticdb/stream/index.hpp>
 #include <arcticdb/pipeline/input_frame.hpp>
 #include <arcticdb/util/collection_utils.hpp>
 #include <arcticdb/util/preconditions.hpp>
@@ -40,6 +42,7 @@ using entity::IndexDescriptorImpl;
 using entity::OutputSchema;
 using entity::StreamDescriptor;
 using entity::TypeDescriptor;
+using ExperimentalArrow = NormalizationMetadata_ExperimentalArrow;
 using ArrowColumnMeta = NormalizationMetadata_ExperimentalArrow_ColumnMeta;
 using Pandas = NormalizationMetadata_Pandas;
 using PandasIndex = NormalizationMetadata_PandasIndex;
@@ -159,6 +162,15 @@ class RequiredNameMismatches {
         index_positions_.emplace(position);
     }
 
+    // A name a schema gave the required field at this position that is not the base schema's. Metadata keyed by field
+    // name - Arrow's column metadata - is found under these when the field is renamed.
+    void add_field_name(size_t position, std::string_view name) { field_names_[position].emplace(name); }
+
+    [[nodiscard]] std::set<std::string> field_names(size_t position) const {
+        const auto it = field_names_.find(position);
+        return it != field_names_.end() ? it->second : std::set<std::string>{};
+    }
+
     void add_series_name(std::string_view detail) {
         if (raises()) {
             schema::raise<ErrorCode::E_DESCRIPTOR_MISMATCH>(
@@ -181,6 +193,7 @@ class RequiredNameMismatches {
 
     const SchemaCombineOptions& options_;
     std::unordered_set<size_t> index_positions_{};
+    std::map<size_t, std::set<std::string>> field_names_{};
     bool series_name_{false};
 };
 
@@ -283,7 +296,8 @@ IndexDescriptorImpl combine_index_descriptors(
 }
 
 // Merge the required fields - the index levels, plus the value column for a Series - which are always the
-// leading fields of the descriptor.
+// leading fields of the descriptor. Fields the schemas disagree about the names of are output under the base schema's
+// name here, and renamed by apply_required_name_mismatches.
 void add_required_fields(
         StreamDescriptor& out, std::span<const OutputSchema> schemas, const RequiredFieldInfo& info,
         RequiredNameMismatches& mismatches, const SchemaCombineOptions& options
@@ -322,6 +336,7 @@ void add_required_fields(
                 } else {
                     mismatches.add_series_name(detail);
                 }
+                mismatches.add_field_name(idx, field.name());
             }
             combined->type_ = combine_field_type(combined->type(), field.type(), required_field_options, field.name());
         }
@@ -330,19 +345,7 @@ void add_required_fields(
         internal::check<ErrorCode::E_ASSERTION_FAILURE>(
                 fields[idx].has_value(), "No schema described required field {} of {}", idx, fields.size()
         );
-        const auto& field = *fields[idx];
-        const bool is_index_level = idx < info.num_physical_indices;
-        const bool unnamed = is_index_level ? mismatches.index_at(idx) : mismatches.series_name();
-        if (!unnamed) {
-            out.add_scalar_field(field.type().data_type(), field.name());
-        } else if (is_index_level) {
-            // Use the same naming scheme as _normalization.py does for unnamed multiindex levels, so that
-            // later processing which looks for columns of that form keeps working.
-            out.fields().add_field(field.type(), idx == 0 ? "index" : fmt::format("__fkidx__{}", idx));
-        } else {
-            // An unnamed Series is written with its value column named "0", the name Series.to_frame() gives it.
-            out.fields().add_field(field.type(), "0");
-        }
+        out.add_scalar_field(fields[idx]->type().data_type(), fields[idx]->name());
     }
 }
 
@@ -697,9 +700,44 @@ NormalizationMetadata combine_ndarray_metadata(
     return res;
 }
 
+// Move the column metadata found under any of `from` to `to`. Where several are found they are combined, a timezone
+// surviving only if every one of them agrees on it.
+void rename_column_metadata(ExperimentalArrow& arrow, const std::set<std::string>& from, const std::string& to) {
+    auto& columns = *arrow.mutable_columns();
+    std::vector<ArrowColumnMeta> moved;
+    for (const auto& name : from) {
+        if (name == to) {
+            continue;
+        }
+        if (const auto it = columns.find(name); it != columns.end()) {
+            moved.emplace_back(it->second);
+            columns.erase(it);
+        }
+    }
+    if (const auto it = columns.find(to); it != columns.end()) {
+        moved.emplace_back(it->second);
+    }
+    if (moved.empty()) {
+        return;
+    }
+    auto combined = moved.front();
+    const bool timezones_agree = std::ranges::all_of(moved, [&](const ArrowColumnMeta& meta) {
+        return meta.has_timezone() == combined.has_timezone() && meta.timezone() == combined.timezone();
+    });
+    if (!timezones_agree) {
+        combined.clear_timezone();
+    }
+    columns[to] = std::move(combined);
+}
+
+NormalizationMetadata accumulate_pandas_and_pandas_norm(
+        const NormalizationMetadata& accumulated, const NormalizationMetadata& other,
+        RequiredNameMismatches& mismatches, const SchemaCombineOptions& options
+);
+
 NormalizationMetadata accumulate_arrow_and_arrow_norm(
         const NormalizationMetadata& accumulated, const NormalizationMetadata& other,
-        const SchemaCombineOptions& options
+        RequiredNameMismatches& mismatches, const SchemaCombineOptions& options
 ) {
     normalization::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
             accumulated.experimental_arrow().has_index() == other.experimental_arrow().has_index(),
@@ -713,19 +751,11 @@ NormalizationMetadata accumulate_arrow_and_arrow_norm(
     );
     auto res = accumulated;
     // This correctly allows an unnamed Polars Series to be combined with [Chunked]Array as well as other unnamed Polars
-    // Series for append/update
-    if (res.experimental_arrow().polars_series_name() != other.experimental_arrow().polars_series_name() &&
-        options.name_mismatch == RequiredNameMismatchPolicy::RECONCILE_TO_UNNAMED) {
-        res.mutable_experimental_arrow()->clear_polars_series_name();
-    } else {
-        schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
-                res.experimental_arrow().polars_series_name() == other.experimental_arrow().polars_series_name(),
-                "Cannot {}: cannot combine single-array arrow data with mismatching names {}",
-                options.name(),
-                names_differ(
-                        res.experimental_arrow().polars_series_name(), other.experimental_arrow().polars_series_name()
-                )
-        );
+    // Series for append/update/concat
+    const auto& accumulated_name = res.experimental_arrow().polars_series_name();
+    const auto& other_name = other.experimental_arrow().polars_series_name();
+    if (accumulated_name != other_name) {
+        mismatches.add_series_name(names_differ(accumulated_name, other_name));
     }
     // Per-column metadata is merged rather than taking only the base schema's, so that a column only a later
     // schema has keeps what that schema says about it. Presence is checked per column rather than by comparing
@@ -772,27 +802,20 @@ NormalizationMetadata accumulate_arrow_and_arrow_norm(
                 }
             }
     );
+    // combine_norm_metadata gives every schema pandas metadata or none, so the two are always merged
+    const auto accumulated_pandas = embedded_pandas(accumulated.experimental_arrow());
+    const auto other_pandas = embedded_pandas(other.experimental_arrow());
+    internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+            accumulated_pandas.has_value() == other_pandas.has_value(),
+            "Only one of two Arrow schemas being combined carries pandas metadata"
+    );
+    if (accumulated_pandas.has_value()) {
+        embed_pandas(
+                accumulate_pandas_and_pandas_norm(*accumulated_pandas, *other_pandas, mismatches, options),
+                *res.mutable_experimental_arrow()
+        );
+    }
     return res;
-}
-
-// TODO (monday ref 11325694339): To be changed when working on arrow with pandas interop
-// One arrow, one pandas: pandas is preferred as it carries more detail. Compatible when
-// arrow.has_index() == pandas.index().is_physically_stored().
-NormalizationMetadata accumulate_arrow_and_pandas_norm(
-        const NormalizationMetadata& arrow, const NormalizationMetadata& pandas, const SchemaCombineOptions& options
-) {
-    const auto& common = *pandas_common(pandas);
-    normalization::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
-            common.has_index(),
-            "Cannot {}: cannot combine arrow-written data with multi-indexed pandas data",
-            options.name()
-    );
-    normalization::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
-            arrow.experimental_arrow().has_index() == common.index().is_physically_stored(),
-            "Cannot {}: cannot combine unindexed data with indexed data",
-            options.name()
-    );
-    return pandas;
 }
 
 void accumulate_multi_index(
@@ -928,26 +951,51 @@ NormalizationMetadata accumulate_norm_metadata(
         return other;
     }
 
+    // A mix of the two formats does not reach here: combine_norm_metadata describes every pandas schema in Arrow terms
+    // before folding, when any schema is Arrow.
     if (accumulated.has_experimental_arrow() && other.has_experimental_arrow()) {
-        return accumulate_arrow_and_arrow_norm(accumulated, other, options);
-    }
-
-    if (accumulated.has_experimental_arrow() || other.has_experimental_arrow()) {
-        const auto& arrow = accumulated.has_experimental_arrow() ? accumulated : other;
-        const auto& pandas = accumulated.has_experimental_arrow() ? other : accumulated;
-        return accumulate_arrow_and_pandas_norm(arrow, pandas, options);
+        return accumulate_arrow_and_arrow_norm(accumulated, other, mismatches, options);
     }
 
     return accumulate_pandas_and_pandas_norm(accumulated, other, mismatches, options);
 }
 
-// Apply the recorded name disagreements to the normalization metadata.
-// Should be done once with mismatches from both normalization metadatas and from descriptors.
+// Rename the required fields the schemas disagreed about to their placeholders, in the descriptor and in the
+// normalization metadata together, so that the two cannot end up disagreeing. Done once, with mismatches from both
+// the normalization metadatas and the descriptors.
 void apply_required_name_mismatches(
-        NormalizationMetadata& norm, const RequiredFieldInfo& info, const RequiredNameMismatches& mismatches
+        StreamDescriptor& desc, NormalizationMetadata& norm, const RequiredFieldInfo& info,
+        const RequiredNameMismatches& mismatches
 ) {
     if (!mismatches.any()) {
         return;
+    }
+    auto renamed = std::make_shared<FieldCollection>();
+    for (size_t idx = 0; idx < desc.field_count(); ++idx) {
+        const auto& field = desc.field(idx);
+        const bool is_index_level = idx < info.num_physical_indices;
+        const bool is_required = idx < info.num_physical_required_columns();
+        if (!is_required || !(is_index_level ? mismatches.index_at(idx) : mismatches.series_name())) {
+            renamed->add_field(field.type(), field.name());
+            continue;
+        }
+        // The naming scheme _normalization.py uses for unnamed multi-index levels, so that later processing which looks
+        // for columns of that form keeps working. An unnamed Series' value column is "0", as Series.to_frame() names
+        // it.
+        const auto placeholder = !is_index_level ? std::string{"0"}
+                                 : idx == 0      ? std::string{"index"}
+                                                 : fmt::format("__fkidx__{}", idx);
+        renamed->add_field(field.type(), placeholder);
+        if (norm.has_experimental_arrow()) {
+            auto from = mismatches.field_names(idx);
+            from.emplace(field.name());
+            rename_column_metadata(*norm.mutable_experimental_arrow(), from, placeholder);
+        }
+    }
+    desc = StreamDescriptor{desc.segment_desc_, std::move(renamed), desc.id()};
+
+    if (mismatches.series_name() && norm.has_experimental_arrow()) {
+        norm.mutable_experimental_arrow()->clear_polars_series_name();
     }
     auto* common = mutable_pandas_common(norm);
     if (common == nullptr) {
@@ -984,9 +1032,39 @@ void apply_required_name_mismatches(
 NormalizationMetadata combine_norm_metadata(
         std::span<const OutputSchema> schemas, RequiredNameMismatches& mismatches, const SchemaCombineOptions& options
 ) {
-    auto result = schemas.front().norm_metadata_;
-    for (const auto& schema : schemas.subspan(1)) {
-        result = accumulate_norm_metadata(result, schema.norm_metadata_, mismatches, options);
+    // With any Arrow in the mix, every pandas schema is converted to Arrow. With any pandas in it, every Arrow schema
+    // gets pandas metadata derived from its own fields, so the fold always merges two pandas metadatas.
+    const bool any_arrow = std::ranges::any_of(schemas, [](const OutputSchema& schema) {
+        return schema.norm_metadata_.has_experimental_arrow();
+    });
+    std::vector<NormalizationMetadata> norms;
+    norms.reserve(schemas.size());
+    std::optional<NormalizationMetadata> pandas_shape;
+    for (const auto& schema : schemas) {
+        const auto& norm = schema.norm_metadata_;
+        norms.emplace_back(
+                any_arrow && is_pandas_convertible_to_arrow(norm)
+                        ? arrow_norm_from_pandas(norm, schema.stream_descriptor())
+                        : norm
+        );
+        if (!pandas_shape.has_value() && norms.back().has_experimental_arrow()) {
+            pandas_shape = embedded_pandas(norms.back().experimental_arrow());
+        }
+    }
+    if (pandas_shape.has_value()) {
+        for (size_t idx = 0; idx < norms.size(); ++idx) {
+            if (!norms[idx].has_experimental_arrow()) {
+                continue;
+            }
+            auto& arrow = *norms[idx].mutable_experimental_arrow();
+            if (!embedded_pandas(arrow).has_value()) {
+                embed_pandas(derive_pandas_from_arrow(arrow, schemas[idx].stream_descriptor(), *pandas_shape), arrow);
+            }
+        }
+    }
+    auto result = norms.front();
+    for (const auto& norm : std::span{norms}.subspan(1)) {
+        result = accumulate_norm_metadata(result, norm, mismatches, options);
     }
     return result;
 }
@@ -1000,6 +1078,40 @@ SortedValue combine_sorted(std::span<const OutputSchema> schemas) {
     return result;
 }
 } // namespace
+
+void align_multi_index_names(
+        const OutputSchema& existing, StreamDescriptor& incoming, NormalizationMetadata& incoming_norm
+) {
+    const auto info = required_fields_info(existing);
+    if (!info.has_multi_index) {
+        return;
+    }
+    const auto levels = std::min(info.num_physical_indices, static_cast<size_t>(incoming.field_count()));
+    auto aligned = std::make_shared<FieldCollection>();
+    bool renamed = false;
+    for (size_t idx = 0; idx < static_cast<size_t>(incoming.field_count()); ++idx) {
+        const auto& field = incoming.field(idx);
+        // Level 0 is stored unprefixed, so there is nothing to align there
+        const bool is_aligned_level = idx > 0 && idx < levels;
+        const auto stored_name =
+                is_aligned_level ? std::string{existing.stream_descriptor().field(idx).name()} : std::string{};
+        if (is_aligned_level && stored_name == stream::mangled_name(field.name())) {
+            aligned->add_field(field.type(), stored_name);
+            // Arrow keys its column metadata by field name, so the timezone of a renamed level moves with it
+            if (incoming_norm.has_experimental_arrow()) {
+                rename_column_metadata(
+                        *incoming_norm.mutable_experimental_arrow(), {std::string{field.name()}}, stored_name
+                );
+            }
+            renamed = true;
+        } else {
+            aligned->add_field(field.type(), field.name());
+        }
+    }
+    if (renamed) {
+        incoming = StreamDescriptor{incoming.segment_desc_, std::move(aligned), incoming.id()};
+    }
+}
 
 SortedValue deduce_sorted(SortedValue existing_frame, SortedValue input_frame) {
     constexpr auto UNKNOWN = SortedValue::UNKNOWN;
@@ -1074,9 +1186,10 @@ OutputSchema combine_schema(std::span<const OutputSchema> schemas, const SchemaC
     out.set_sorted(combine_sorted(schemas));
     add_required_fields(out, schemas, info, mismatches, options);
     add_data_columns(out, schemas, info, options);
-    // Whatever only the normalization metadata reveals - a RangeIndex name, a Series name - is applied here, in
-    // one place, so that the descriptor field names and the metadata cannot end up disagreeing.
-    apply_required_name_mismatches(norm, info, mismatches);
+    apply_required_name_mismatches(out, norm, info, mismatches);
+    if (norm.has_experimental_arrow()) {
+        check_embedded_pandas_agrees(norm.experimental_arrow(), out);
+    }
     return OutputSchema{std::move(out), std::move(norm), all_inferred_from_empty_pandas};
 }
 
