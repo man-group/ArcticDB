@@ -104,17 +104,13 @@ requires std::integral<T>
 }
 
 std::vector<timestamp> generate_buckets(
-        timestamp start, timestamp end, std::string_view rule, ResampleBoundary closed_boundary_arg, timestamp offset,
+        timestamp start, timestamp end, timestamp rule_ns, ResampleBoundary closed_boundary_arg, timestamp offset,
         const ResampleOrigin& origin
 ) {
     // e.g. Can happen if date range specified does not overlap with the time range covered by the symbol
     if (end < start) {
         return {};
     }
-    const timestamp rule_ns = [](std::string_view rule) {
-        py::gil_scoped_acquire acquire_gil;
-        return python_util::pd_to_offset(rule);
-    }(rule);
     const auto [start_with_offset, end_with_offset] =
             compute_first_last_dates(start, end, rule_ns, closed_boundary_arg, offset, origin);
     const auto bucket_boundary_count = (end_with_offset - start_with_offset) / rule_ns + 1;
@@ -131,10 +127,34 @@ void declare_resample_clause(py::module& version) {
     const char* class_name =
             closed_boundary == ResampleBoundary::LEFT ? "ResampleClauseLeftClosed" : "ResampleClauseRightClosed";
     py::class_<ResampleClause<closed_boundary>, std::shared_ptr<ResampleClause<closed_boundary>>>(version, class_name)
-            .def(py::init([](std::string rule, ResampleBoundary label_boundary, timestamp offset, ResampleOrigin origin
-                          ) {
+            .def(py::init([](std::string rule,
+                             timestamp rule_ns,
+                             ResampleBoundary label_boundary,
+                             timestamp offset,
+                             ResampleOrigin origin) {
+                // rule_ns is the rule pre-parsed to nanoseconds in Python, so that bucket generation never acquires
+                // the GIL on the scheduler thread that runs it per read. This check runs once, at clause construction:
+                // QueryBuilder.resample validates already, but a non-positive value from a direct constructor call
+                // would make the boundary loop in generate_buckets non-terminating.
+                user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                        rule_ns > 0,
+                        "Resampling rule must be a positive fixed frequency, but '{}' is {}ns",
+                        rule,
+                        rule_ns
+                );
                 return ResampleClause<closed_boundary>(
-                        std::move(rule), label_boundary, generate_buckets, offset, std::move(origin)
+                        std::move(rule),
+                        label_boundary,
+                        [rule_ns](
+                                timestamp start,
+                                timestamp end,
+                                std::string_view,
+                                ResampleBoundary closed_boundary_arg,
+                                timestamp offset,
+                                const ResampleOrigin& origin
+                        ) { return generate_buckets(start, end, rule_ns, closed_boundary_arg, offset, origin); },
+                        offset,
+                        std::move(origin)
                 );
             }))
             .def_property_readonly("rule", &ResampleClause<closed_boundary>::rule)
