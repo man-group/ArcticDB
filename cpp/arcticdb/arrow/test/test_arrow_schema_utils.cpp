@@ -22,6 +22,7 @@ using MultiIndex = NormalizationMetadata::PandasMultiIndex;
 
 namespace {
 
+// ColumnName protobuf message, plus name in stream descriptor and a data type
 struct ColumnSpec {
     std::string name{""};
     DataType data_type{DataType::INT64};
@@ -40,7 +41,9 @@ Index row_count_index(int64_t start = 0, int64_t step = 1) {
     return index;
 }
 
-Index timestamp_index(const std::variant<std::monostate, std::string, int>& name, std::optional<std::string> tz) {
+Index timestamp_index(
+        const std::variant<std::monostate, std::string, int>& name, std::optional<std::string> tz = std::nullopt
+) {
     Index index;
     index.set_is_physically_stored(true);
     if (std::holds_alternative<std::monostate>(name)) {
@@ -130,25 +133,191 @@ OutputSchema generate_schema(
 
 } // namespace
 
-using param_types = std::tuple<
-        ObjectType, bool, std::variant<Index, MultiIndex>, std::variant<Index, MultiIndex>, std::vector<ColumnSpec>,
-        std::vector<ColumnSpec>, ankerl::unordered_dense::map<std::string, std::string>>;
+using NoOpParams = std::tuple<
+        ObjectType, std::optional<std::vector<std::string>>, std::variant<Index, MultiIndex>, std::vector<ColumnSpec>>;
 
-struct MakeSchemaArrowCompatibleFixture : public ::testing::TestWithParam<param_types> {
+struct ArrowSchemaCompatNoOpFixture : public ::testing::TestWithParam<NoOpParams> {
+    static ObjectType object_type() { return std::get<0>(GetParam()); }
+    static std::optional<std::vector<std::string>> index_columns() { return std::get<1>(GetParam()); }
+    static std::variant<Index, MultiIndex> index() { return std::get<2>(GetParam()); }
+    static std::vector<ColumnSpec> columns() { return std::get<3>(GetParam()); }
+};
+
+TEST_P(ArrowSchemaCompatNoOpFixture, Test) {
+    auto input_schema = generate_schema(object_type(), false, index(), columns());
+    ASSERT_FALSE(make_schema_arrow_compatible(input_schema, index_columns()).changed_);
+}
+
+INSTANTIATE_TEST_SUITE_P(
+        ArrowSchemaCompatNoOp, ArrowSchemaCompatNoOpFixture,
+        ::testing::Values(
+                // RangeIndex tests
+                NoOpParams(
+                        ObjectType::DF, std::nullopt, row_count_index(5, 10), {{.name = "col", .original_name = "col"}}
+                ),
+                NoOpParams(
+                        ObjectType::SERIES, std::nullopt, row_count_index(10, 5),
+                        {{.name = "col", .original_name = "col"}}
+                ),
+                // Timeseries tests
+                // Explicit index rename not provided
+                NoOpParams(
+                        ObjectType::DF, std::nullopt, timestamp_index("ts", "UTC"),
+                        {{.name = "ts", .data_type = DataType::NANOSECONDS_UTC64},
+                         {.name = "col", .original_name = "col"}}
+                ),
+                NoOpParams(
+                        ObjectType::SERIES, std::nullopt, timestamp_index("ts", "UTC"),
+                        {{.name = "ts", .data_type = DataType::NANOSECONDS_UTC64},
+                         {.name = "col", .original_name = "col"}}
+                ),
+                // Explicit index rename provided, but matches existing name
+                NoOpParams(
+                        ObjectType::DF, {{"ts"}}, timestamp_index("ts"),
+                        {{.name = "ts", .data_type = DataType::NANOSECONDS_UTC64},
+                         {.name = "col", .original_name = "col"}}
+                ),
+                NoOpParams(
+                        ObjectType::SERIES, {{"ts"}}, timestamp_index("ts", "UTC"),
+                        {{.name = "ts", .data_type = DataType::NANOSECONDS_UTC64},
+                         {.name = "col", .original_name = "col"}}
+                ),
+                // MultiIndex tests
+                // Explicit index renames not provided
+                NoOpParams(
+                        ObjectType::DF, std::nullopt, multiindex({"ts", "ticker"}),
+                        {{.name = "ts", .data_type = DataType::NANOSECONDS_UTC64},
+                         {"__idx__ticker", .original_name = "__idx__ticker"},
+                         {.name = "col", .original_name = "col"}}
+                ),
+                NoOpParams(
+                        ObjectType::SERIES, std::nullopt, multiindex({"ts", "ticker"}),
+                        {{.name = "ts", .data_type = DataType::NANOSECONDS_UTC64},
+                         {"__idx__ticker", .original_name = "__idx__ticker"},
+                         {.name = "col", .original_name = "col"}}
+                ),
+                // Explicit index renames provided, but match existing names
+                NoOpParams(
+                        ObjectType::DF, {{"ts", "ticker"}}, multiindex({"ts", "ticker"}),
+                        {{.name = "ts", .data_type = DataType::NANOSECONDS_UTC64},
+                         {"__idx__ticker", .original_name = "__idx__ticker"},
+                         {.name = "col", .original_name = "col"}}
+                ),
+                NoOpParams(
+                        ObjectType::SERIES, {{"ts", "ticker"}}, multiindex({"ts", "ticker"}),
+                        {{.name = "ts", .data_type = DataType::NANOSECONDS_UTC64},
+                         {"__idx__ticker", .original_name = "__idx__ticker"},
+                         {.name = "col", .original_name = "col"}}
+                )
+        )
+);
+
+struct ArrowSchemaCompatRaisesFixture : public ::testing::TestWithParam<NoOpParams> {
+    static ObjectType object_type() { return std::get<0>(GetParam()); }
+    static std::optional<std::vector<std::string>> index_columns() { return std::get<1>(GetParam()); }
+    static std::variant<Index, MultiIndex> index() { return std::get<2>(GetParam()); }
+    static std::vector<ColumnSpec> columns() { return std::get<3>(GetParam()); }
+};
+
+TEST_P(ArrowSchemaCompatRaisesFixture, Test) {
+    auto input_schema = generate_schema(object_type(), false, index(), columns());
+    ASSERT_THROW(make_schema_arrow_compatible(input_schema, index_columns()), UserInputException);
+}
+
+INSTANTIATE_TEST_SUITE_P(
+        ArrowSchemaCompatRaises, ArrowSchemaCompatRaisesFixture,
+        ::testing::Values(
+                // Timeseries index tests
+                // Explicit rename clashes with existing column
+                NoOpParams(
+                        ObjectType::DF, {{"ts"}}, timestamp_index(std::monostate(), "UTC"),
+                        {{.name = "index", .data_type = DataType::NANOSECONDS_UTC64},
+                         {.name = "ts", .original_name = "ts"}}
+                ),
+                NoOpParams(
+                        ObjectType::SERIES, {{"ts"}}, timestamp_index(std::monostate(), "UTC"),
+                        {{.name = "index", .data_type = DataType::NANOSECONDS_UTC64},
+                         {.name = "ts", .original_name = "ts"}}
+                ),
+                NoOpParams(
+                        ObjectType::DF, {{"ts"}}, timestamp_index("old_name", "UTC"),
+                        {{.name = "old_name", .data_type = DataType::NANOSECONDS_UTC64},
+                         {.name = "ts", .original_name = "ts"}}
+                ),
+                NoOpParams(
+                        ObjectType::SERIES, {{"ts"}}, timestamp_index("old_name", "UTC"),
+                        {{.name = "old_name", .data_type = DataType::NANOSECONDS_UTC64},
+                         {.name = "ts", .original_name = "ts"}}
+                ),
+                // Explicit rename has the wrong number of index levels
+                NoOpParams(
+                        ObjectType::DF, {{"ts", "ticker"}}, timestamp_index(std::monostate(), "UTC"),
+                        {{.name = "index", .data_type = DataType::NANOSECONDS_UTC64},
+                         {.name = "col", .original_name = "col"}}
+                ),
+                // MultiIndex tests
+                // Explicit rename clashes with existing column
+                NoOpParams(
+                        ObjectType::DF, {{"col", "level1"}}, multiindex({std::monostate(), std::monostate()}),
+                        {{.name = "index"},
+                         {.name = "__fkidx__1", .original_name = "__fkidx__1"},
+                         {.name = "col", .original_name = "col"}}
+                ),
+                NoOpParams(
+                        ObjectType::DF, {{"level0", "col"}}, multiindex({std::monostate(), std::monostate()}),
+                        {{.name = "index"},
+                         {.name = "__fkidx__1", .original_name = "__fkidx__1"},
+                         {.name = "col", .original_name = "col"}}
+                ),
+                NoOpParams(
+                        ObjectType::SERIES, {{"col", "level1"}}, multiindex({std::monostate(), std::monostate()}),
+                        {{.name = "index"},
+                         {.name = "__fkidx__1", .original_name = "__fkidx__1"},
+                         {.name = "col", .original_name = "col"}}
+                ),
+                NoOpParams(
+                        ObjectType::SERIES, {{"level0", "col"}}, multiindex({std::monostate(), std::monostate()}),
+                        {{.name = "index"},
+                         {.name = "__fkidx__1", .original_name = "__fkidx__1"},
+                         {.name = "col", .original_name = "col"}}
+                ),
+                // Explicit rename has the wrong number of index levels
+                NoOpParams(
+                        ObjectType::DF, {{"ts"}}, multiindex({std::monostate(), std::monostate()}),
+                        {{.name = "index"},
+                         {.name = "__fkidx__1", .original_name = "__fkidx__1"},
+                         {.name = "col", .original_name = "col"}}
+                ),
+                NoOpParams(
+                        ObjectType::DF, {{"ts", "ticker", "blah"}}, multiindex({std::monostate(), std::monostate()}),
+                        {{.name = "index"},
+                         {.name = "__fkidx__1", .original_name = "__fkidx__1"},
+                         {.name = "col", .original_name = "col"}}
+                )
+        )
+);
+
+using ModificationParams = std::tuple<
+        ObjectType, bool, std::optional<std::vector<std::string>>, std::variant<Index, MultiIndex>,
+        std::variant<Index, MultiIndex>, std::vector<ColumnSpec>, std::vector<ColumnSpec>,
+        ankerl::unordered_dense::map<std::string, std::string>>;
+
+struct ArrowSchemaCompatModificationFixture : public ::testing::TestWithParam<ModificationParams> {
     static ObjectType object_type() { return std::get<0>(GetParam()); }
     static bool has_synthetic_columns() { return std::get<1>(GetParam()); }
-    static std::variant<Index, MultiIndex> input_index() { return std::get<2>(GetParam()); }
-    static std::variant<Index, MultiIndex> output_index() { return std::get<3>(GetParam()); }
-    static std::vector<ColumnSpec> input_columns() { return std::get<4>(GetParam()); }
-    static std::vector<ColumnSpec> output_columns() { return std::get<5>(GetParam()); }
+    static std::optional<std::vector<std::string>> index_columns() { return std::get<2>(GetParam()); }
+    static std::variant<Index, MultiIndex> input_index() { return std::get<3>(GetParam()); }
+    static std::variant<Index, MultiIndex> output_index() { return std::get<4>(GetParam()); }
+    static std::vector<ColumnSpec> input_columns() { return std::get<5>(GetParam()); }
+    static std::vector<ColumnSpec> output_columns() { return std::get<6>(GetParam()); }
     static ankerl::unordered_dense::map<std::string, std::string> expected_column_renames() {
-        return std::get<6>(GetParam());
+        return std::get<7>(GetParam());
     }
 };
 
-TEST_P(MakeSchemaArrowCompatibleFixture, MakeSchemaArrowCompatibleTests) {
+TEST_P(ArrowSchemaCompatModificationFixture, Test) {
     auto input_schema = generate_schema(object_type(), has_synthetic_columns(), input_index(), input_columns());
-    auto [changed, new_schema, column_renames] = make_schema_arrow_compatible(input_schema);
+    auto [changed, new_schema, column_renames] = make_schema_arrow_compatible(input_schema, index_columns());
     ASSERT_TRUE(changed);
     auto expected_output_schema = generate_schema(object_type(), false, output_index(), output_columns());
     // TODO: Check StreamDescriptors match as well
@@ -162,42 +331,43 @@ TEST_P(MakeSchemaArrowCompatibleFixture, MakeSchemaArrowCompatibleTests) {
 }
 
 INSTANTIATE_TEST_SUITE_P(
-        MakeSchemaArrowCompatibleParametrizedTests, MakeSchemaArrowCompatibleFixture,
+        ArrowSchemaCompatModification, ArrowSchemaCompatModificationFixture,
         ::testing::Values(
                 // RangeIndex tests
                 // Tests that a single column of a df or a series called None/""/an integer gets renamed correctly
-                param_types(
-                        ObjectType::DF, false, row_count_index(), row_count_index(),
+                ModificationParams(
+                        ObjectType::DF, false, std::nullopt, row_count_index(), row_count_index(),
                         {{.name = "__none__0", .is_none = true}}, {{.name = "None", .original_name = "None"}},
                         {{"__none__0", "None"}}
                 ),
-                param_types(
-                        ObjectType::DF, false, row_count_index(), row_count_index(),
+                ModificationParams(
+                        ObjectType::DF, false, std::nullopt, row_count_index(), row_count_index(),
                         {{.name = "10", .original_name = "10", .is_int = true}},
                         {{.name = "10", .original_name = "10"}}, {}
                 ),
-                param_types(
-                        ObjectType::DF, false, row_count_index(), row_count_index(),
+                ModificationParams(
+                        ObjectType::DF, false, std::nullopt, row_count_index(), row_count_index(),
                         {{.name = "__empty__0", .is_empty = true}},
                         {{.name = "__empty__", .original_name = "__empty__"}}, {{"__empty__0", "__empty__"}}
                 ),
-                param_types(
-                        ObjectType::SERIES, true, row_count_index(), row_count_index(), {{.name = "0"}},
+                ModificationParams(
+                        // Series with an empty name have has_synthetic_columns set to true
+                        ObjectType::SERIES, true, std::nullopt, row_count_index(), row_count_index(), {{.name = "0"}},
                         {{.name = "None", .original_name = "None"}}, {{"0", "None"}}
                 ),
-                param_types(
-                        ObjectType::SERIES, false, row_count_index(), row_count_index(),
+                ModificationParams(
+                        ObjectType::SERIES, false, std::nullopt, row_count_index(), row_count_index(),
                         {{.name = "10", .original_name = "10", .is_int = true}},
                         {{.name = "10", .original_name = "10"}}, {}
                 ),
-                param_types(
-                        ObjectType::SERIES, false, row_count_index(), row_count_index(),
+                ModificationParams(
+                        ObjectType::SERIES, false, std::nullopt, row_count_index(), row_count_index(),
                         {{.name = "__empty__0", .is_empty = true}},
                         {{.name = "__empty__", .original_name = "__empty__"}}, {{"__empty__0", "__empty__"}}
                 ),
                 // Duplicate column name test
-                param_types(
-                        ObjectType::DF, false, row_count_index(), row_count_index(),
+                ModificationParams(
+                        ObjectType::DF, false, std::nullopt, row_count_index(), row_count_index(),
                         {{.name = "__col_a__0", .original_name = "a"},
                          {.name = "__col_a__1", .original_name = "a"},
                          {.name = "__col_a__2", .original_name = "a"},
@@ -227,24 +397,25 @@ INSTANTIATE_TEST_SUITE_P(
                          {"None", "__None__"}}
                 ),
                 // Synthetic columns test
-                param_types(
-                        ObjectType::DF, true, row_count_index(), row_count_index(),
+                ModificationParams(
+                        ObjectType::DF, true, std::nullopt, row_count_index(), row_count_index(),
                         {{.name = "0", .original_name = "0"}, {.name = "1", .original_name = "1"}},
                         {{.name = "0", .original_name = "0"}, {.name = "1", .original_name = "1"}}, {}
                 ),
                 // Timeseries index tests
                 // Auto-rename an int named index column
                 // No Clashes
-                param_types(
-                        ObjectType::DF, false, timestamp_index(10, "UTC"), timestamp_index("10", "UTC"),
+                ModificationParams(
+                        ObjectType::DF, false, std::nullopt, timestamp_index(10, "UTC"), timestamp_index("10", "UTC"),
                         {{.name = "10", .data_type = DataType::NANOSECONDS_UTC64},
                          {.name = "col", .original_name = "col"}},
                         {{.name = "10", .data_type = DataType::NANOSECONDS_UTC64},
                          {.name = "col", .original_name = "col"}},
                         {}
                 ),
-                param_types(
-                        ObjectType::SERIES, false, timestamp_index(10, "UTC"), timestamp_index("10", "UTC"),
+                ModificationParams(
+                        ObjectType::SERIES, false, std::nullopt, timestamp_index(10, "UTC"),
+                        timestamp_index("10", "UTC"),
                         {{.name = "10", .data_type = DataType::NANOSECONDS_UTC64},
                          {.name = "col", .original_name = "col"}},
                         {{.name = "10", .data_type = DataType::NANOSECONDS_UTC64},
@@ -252,16 +423,17 @@ INSTANTIATE_TEST_SUITE_P(
                         {}
                 ),
                 // With clashes
-                param_types(
-                        ObjectType::DF, false, timestamp_index(10, "UTC"), timestamp_index("10", "UTC"),
+                ModificationParams(
+                        ObjectType::DF, false, std::nullopt, timestamp_index(10, "UTC"), timestamp_index("10", "UTC"),
                         {{.name = "10", .data_type = DataType::NANOSECONDS_UTC64},
                          {.name = "__col_10__0", .original_name = "10"}},
                         {{.name = "10", .data_type = DataType::NANOSECONDS_UTC64},
                          {.name = "_10_", .original_name = "_10_"}},
                         {{"__col_10__0", "_10_"}}
                 ),
-                param_types(
-                        ObjectType::SERIES, false, timestamp_index(10, "UTC"), timestamp_index("10", "UTC"),
+                ModificationParams(
+                        ObjectType::SERIES, false, std::nullopt, timestamp_index(10, "UTC"),
+                        timestamp_index("10", "UTC"),
                         {{.name = "10", .data_type = DataType::NANOSECONDS_UTC64},
                          {.name = "__col_10__0", .original_name = "10"}},
                         {{.name = "10", .data_type = DataType::NANOSECONDS_UTC64},
@@ -270,8 +442,8 @@ INSTANTIATE_TEST_SUITE_P(
                 ),
                 // Auto-rename an index column with name None
                 // No clashes
-                param_types(
-                        ObjectType::DF, false, timestamp_index(std::monostate(), "UTC"),
+                ModificationParams(
+                        ObjectType::DF, false, std::nullopt, timestamp_index(std::monostate(), "UTC"),
                         timestamp_index("__index__", "UTC"),
                         {{.name = "index", .data_type = DataType::NANOSECONDS_UTC64},
                          {.name = "col", .original_name = "col"}},
@@ -279,8 +451,8 @@ INSTANTIATE_TEST_SUITE_P(
                          {.name = "col", .original_name = "col"}},
                         {{"index", "__index__"}}
                 ),
-                param_types(
-                        ObjectType::SERIES, false, timestamp_index(std::monostate(), "UTC"),
+                ModificationParams(
+                        ObjectType::SERIES, false, std::nullopt, timestamp_index(std::monostate(), "UTC"),
                         timestamp_index("__index__", "UTC"),
                         {{.name = "index", .data_type = DataType::NANOSECONDS_UTC64},
                          {.name = "col", .original_name = "col"}},
@@ -289,8 +461,8 @@ INSTANTIATE_TEST_SUITE_P(
                         {{"index", "__index__"}}
                 ),
                 // One clash
-                param_types(
-                        ObjectType::DF, false, timestamp_index(std::monostate(), "UTC"),
+                ModificationParams(
+                        ObjectType::DF, false, std::nullopt, timestamp_index(std::monostate(), "UTC"),
                         timestamp_index("___index___", "UTC"),
                         {{.name = "index", .data_type = DataType::NANOSECONDS_UTC64},
                          {.name = "__index__", .original_name = "__index__"}},
@@ -298,8 +470,8 @@ INSTANTIATE_TEST_SUITE_P(
                          {.name = "__index__", .original_name = "__index__"}},
                         {{"index", "___index___"}}
                 ),
-                param_types(
-                        ObjectType::SERIES, false, timestamp_index(std::monostate(), "UTC"),
+                ModificationParams(
+                        ObjectType::SERIES, false, std::nullopt, timestamp_index(std::monostate(), "UTC"),
                         timestamp_index("___index___", "UTC"),
                         {{.name = "index", .data_type = DataType::NANOSECONDS_UTC64},
                          {.name = "__index__", .original_name = "__index__"}},
@@ -308,8 +480,8 @@ INSTANTIATE_TEST_SUITE_P(
                         {{"index", "___index___"}}
                 ),
                 // Multiple clashes
-                param_types(
-                        ObjectType::DF, false, timestamp_index(std::monostate(), "UTC"),
+                ModificationParams(
+                        ObjectType::DF, false, std::nullopt, timestamp_index(std::monostate(), "UTC"),
                         timestamp_index("___index___", "UTC"),
                         {{.name = "index", .data_type = DataType::NANOSECONDS_UTC64},
                          {.name = "__col___index____0", .original_name = "__index__"},
@@ -323,465 +495,232 @@ INSTANTIATE_TEST_SUITE_P(
                 ),
                 // Auto-rename an index column with name ""
                 // No clashes
-                param_types(
-                        ObjectType::DF, false, timestamp_index("", "UTC"), timestamp_index("__empty__", "UTC"),
+                ModificationParams(
+                        ObjectType::DF, false, std::nullopt, timestamp_index("", "UTC"),
+                        timestamp_index("__empty__", "UTC"),
                         {{.name = "", .data_type = DataType::NANOSECONDS_UTC64}, {.name = "col", .original_name = "col"}
                         },
                         {{.name = "__empty__", .data_type = DataType::NANOSECONDS_UTC64},
                          {.name = "col", .original_name = "col"}},
                         {{"", "__empty__"}}
                 ),
-                param_types(
-                        ObjectType::SERIES, false, timestamp_index("", "UTC"), timestamp_index("__empty__", "UTC"),
+                ModificationParams(
+                        ObjectType::SERIES, false, std::nullopt, timestamp_index("", "UTC"),
+                        timestamp_index("__empty__", "UTC"),
                         {{.name = "", .data_type = DataType::NANOSECONDS_UTC64}, {.name = "col", .original_name = "col"}
                         },
                         {{.name = "__empty__", .data_type = DataType::NANOSECONDS_UTC64},
                          {.name = "col", .original_name = "col"}},
                         {{"", "__empty__"}}
-                )
+                ),
                 // One clash
+                ModificationParams(
+                        ObjectType::DF, false, std::nullopt, timestamp_index("", "UTC"),
+                        timestamp_index("__empty__", "UTC"),
+                        {{.name = "", .data_type = DataType::NANOSECONDS_UTC64},
+                         {.name = "__empty__0", .is_empty = true, .original_name = ""}},
+                        {{.name = "__empty__", .data_type = DataType::NANOSECONDS_UTC64},
+                         {.name = "___empty___", .original_name = "___empty___"}},
+                        {{"", "__empty__"}, {"__empty__0", "___empty___"}}
+                ),
+                ModificationParams(
+                        ObjectType::SERIES, false, std::nullopt, timestamp_index("", "UTC"),
+                        timestamp_index("__empty__", "UTC"),
+                        {{.name = "", .data_type = DataType::NANOSECONDS_UTC64},
+                         {.name = "__empty__0", .is_empty = true, .original_name = ""}},
+                        {{.name = "__empty__", .data_type = DataType::NANOSECONDS_UTC64},
+                         {.name = "___empty___", .original_name = "___empty___"}},
+                        {{"", "__empty__"}, {"__empty__0", "___empty___"}}
+                ),
+                // Multiple clashes
+                ModificationParams(
+                        ObjectType::DF, false, std::nullopt, timestamp_index("", "UTC"),
+                        timestamp_index("__empty__", "UTC"),
+                        {{.name = "", .data_type = DataType::NANOSECONDS_UTC64},
+                         {.name = "__empty__0", .is_empty = true, .original_name = ""},
+                         {.name = "__empty__1", .is_empty = true, .original_name = ""}},
+                        {{.name = "__empty__", .data_type = DataType::NANOSECONDS_UTC64},
+                         {.name = "___empty___", .original_name = "___empty___"},
+                         {.name = "____empty____", .original_name = "____empty____"}},
+                        {{"", "__empty__"}, {"__empty__0", "___empty___"}, {"__empty__1", "____empty____"}}
+                ),
+                // Explicit renaming to "ts"
+                // No clash
+                // Original index is named None
+                ModificationParams(
+                        ObjectType::DF, false, {{"ts"}}, timestamp_index(std::monostate(), "UTC"),
+                        timestamp_index("ts", "UTC"),
+                        {{.name = "index", .data_type = DataType::NANOSECONDS_UTC64},
+                         {.name = "col", .original_name = "col"}},
+                        {{.name = "ts", .data_type = DataType::NANOSECONDS_UTC64},
+                         {.name = "col", .original_name = "col"}},
+                        {{"index", "ts"}}
+                ),
+                ModificationParams(
+                        ObjectType::SERIES, false, {{"ts"}}, timestamp_index(std::monostate(), "UTC"),
+                        timestamp_index("ts", "UTC"),
+                        {{.name = "index", .data_type = DataType::NANOSECONDS_UTC64},
+                         {.name = "col", .original_name = "col"}},
+                        {{.name = "ts", .data_type = DataType::NANOSECONDS_UTC64},
+                         {.name = "col", .original_name = "col"}},
+                        {{"index", "ts"}}
+                ),
+                // Original index is named "old_ts"
+                ModificationParams(
+                        ObjectType::DF, false, {{"ts"}}, timestamp_index("old_ts", "UTC"), timestamp_index("ts", "UTC"),
+                        {{.name = "old_ts", .data_type = DataType::NANOSECONDS_UTC64},
+                         {.name = "col", .original_name = "col"}},
+                        {{.name = "ts", .data_type = DataType::NANOSECONDS_UTC64},
+                         {.name = "col", .original_name = "col"}},
+                        {{"old_ts", "ts"}}
+                ),
+                ModificationParams(
+                        ObjectType::SERIES, false, {{"ts"}}, timestamp_index("old_ts", "UTC"),
+                        timestamp_index("ts", "UTC"),
+                        {{.name = "old_ts", .data_type = DataType::NANOSECONDS_UTC64},
+                         {.name = "col", .original_name = "col"}},
+                        {{.name = "ts", .data_type = DataType::NANOSECONDS_UTC64},
+                         {.name = "col", .original_name = "col"}},
+                        {{"old_ts", "ts"}}
+                ),
+                // MultiIndex tests
+                // Auto-rename an int named primary index column with no clashes (clashes imply corrupted data, see
+                // Monday issues 9715738171 and 12909663080)
+                ModificationParams(
+                        ObjectType::DF, false, std::nullopt, multiindex({10, "level1"}), multiindex({"10", "level1"}),
+                        {{.name = "10"},
+                         {.name = "__idx__level1", .original_name = "__idx__level1"},
+                         {.name = "col", .original_name = "col"}},
+                        {{.name = "10"},
+                         {.name = "__idx__level1", .original_name = "__idx__level1"},
+                         {.name = "col", .original_name = "col"}},
+                        {}
+                ),
+                ModificationParams(
+                        ObjectType::SERIES, false, std::nullopt, multiindex({10, "level1"}),
+                        multiindex({"10", "level1"}),
+                        {{.name = "10"},
+                         {.name = "__idx__level1", .original_name = "__idx__level1"},
+                         {.name = "col", .original_name = "col"}},
+                        {{.name = "10"},
+                         {.name = "__idx__level1", .original_name = "__idx__level1"},
+                         {.name = "col", .original_name = "col"}},
+                        {}
+                ),
+                // Auto-rename nameless multiindex with no clash (clashes are tested in Python layer)
+                ModificationParams(
+                        ObjectType::DF, false, std::nullopt, multiindex({std::monostate(), std::monostate()}),
+                        multiindex({"__index_level_0__", "__index_level_1__"}),
+                        {{.name = "index"},
+                         {.name = "__fkidx__1", .original_name = "__fkidx__1"},
+                         {.name = "col", .original_name = "col"}},
+                        {{.name = "__index_level_0__"},
+                         {.name = "__idx____index_level_1__", .original_name = "__idx____index_level_1__"},
+                         {.name = "col", .original_name = "col"}},
+                        {{"index", "__index_level_0__"}, {"__fkidx__1", "__idx____index_level_1__"}}
+                ),
+                ModificationParams(
+                        ObjectType::SERIES, false, std::nullopt, multiindex({std::monostate(), std::monostate()}),
+                        multiindex({"__index_level_0__", "__index_level_1__"}),
+                        {{.name = "index"},
+                         {.name = "__fkidx__1", .original_name = "__fkidx__1"},
+                         {.name = "col", .original_name = "col"}},
+                        {{.name = "__index_level_0__"},
+                         {.name = "__idx____index_level_1__", .original_name = "__idx____index_level_1__"},
+                         {.name = "col", .original_name = "col"}},
+                        {{"index", "__index_level_0__"}, {"__fkidx__1", "__idx____index_level_1__"}}
+                ),
+                // Explicit rename nameless multiindex with no clash
+                ModificationParams(
+                        ObjectType::DF, false, {{"level0", "level1"}}, multiindex({std::monostate(), std::monostate()}),
+                        multiindex({"level0", "level1"}),
+                        {{.name = "index"},
+                         {.name = "__fkidx__1", .original_name = "__fkidx__1"},
+                         {.name = "col", .original_name = "col"}},
+                        {{.name = "level0"},
+                         {.name = "__idx__level1", .original_name = "__idx__level1"},
+                         {.name = "col", .original_name = "col"}},
+                        {{"index", "level0"}, {"__fkidx__1", "__idx__level1"}}
+                ),
+                ModificationParams(
+                        ObjectType::SERIES, false, {{"level0", "level1"}},
+                        multiindex({std::monostate(), std::monostate()}), multiindex({"level0", "level1"}),
+                        {{.name = "index"},
+                         {.name = "__fkidx__1", .original_name = "__fkidx__1"},
+                         {.name = "col", .original_name = "col"}},
+                        {{.name = "level0"},
+                         {.name = "__idx__level1", .original_name = "__idx__level1"},
+                         {.name = "col", .original_name = "col"}},
+                        {{"index", "level0"}, {"__fkidx__1", "__idx__level1"}}
+                ),
+                // Explicit rename named multiindex with no clash
+                ModificationParams(
+                        ObjectType::DF, false, {{"level0", "level1"}}, multiindex({"old_name0", "old_name1"}),
+                        multiindex({"level0", "level1"}),
+                        {{.name = "old_name0"},
+                         {.name = "__idx__old_name1", .original_name = "__idx__old_name1"},
+                         {.name = "col", .original_name = "col"}},
+                        {{.name = "level0"},
+                         {.name = "__idx__level1", .original_name = "__idx__level1"},
+                         {.name = "col", .original_name = "col"}},
+                        {{"old_name0", "level0"}, {"__idx__old_name1", "__idx__level1"}}
+                ),
+                ModificationParams(
+                        ObjectType::SERIES, false, {{"level0", "level1"}}, multiindex({"old_name0", "old_name1"}),
+                        multiindex({"level0", "level1"}),
+                        {{.name = "old_name0"},
+                         {.name = "__idx__old_name1", .original_name = "__idx__old_name1"},
+                         {.name = "col", .original_name = "col"}},
+                        {{.name = "level0"},
+                         {.name = "__idx__level1", .original_name = "__idx__level1"},
+                         {.name = "col", .original_name = "col"}},
+                        {{"old_name0", "level0"}, {"__idx__old_name1", "__idx__level1"}}
+                ),
+                // Explicit rename named multiindex. The specified new index names clash with existing index names,
+                // which is allowed
+                ModificationParams(
+                        ObjectType::DF, false, {{"blah", "level1"}}, multiindex({"level0", "level1"}),
+                        multiindex({"blah", "level1"}),
+                        {{.name = "level0"},
+                         {.name = "__idx__level1", .original_name = "__idx__level1"},
+                         {.name = "col", .original_name = "col"}},
+                        {{.name = "blah"},
+                         {.name = "__idx__level1", .original_name = "__idx__level1"},
+                         {.name = "col", .original_name = "col"}},
+                        {{"level0", "blah"}}
+                ),
+                ModificationParams(
+                        ObjectType::DF, false, {{"level0", "blah"}}, multiindex({"level0", "level1"}),
+                        multiindex({"level0", "blah"}),
+                        {{.name = "level0"},
+                         {.name = "__idx__level1", .original_name = "__idx__level1"},
+                         {.name = "col", .original_name = "col"}},
+                        {{.name = "level0"},
+                         {.name = "__idx__blah", .original_name = "__idx__blah"},
+                         {.name = "col", .original_name = "col"}},
+                        {{"__idx__level1", "__idx__blah"}}
+                ),
+                ModificationParams(
+                        ObjectType::DF, false, {{"blah", "level1"}}, multiindex({"level1", "level0"}),
+                        multiindex({"blah", "level1"}),
+                        {{.name = "level1"},
+                         {.name = "__idx__level0", .original_name = "__idx__level0"},
+                         {.name = "col", .original_name = "col"}},
+                        {{.name = "blah"},
+                         {.name = "__idx__level1", .original_name = "__idx__level1"},
+                         {.name = "col", .original_name = "col"}},
+                        {{"level1", "blah"}, {"__idx__level0", "__idx__level1"}}
+                ),
+                ModificationParams(
+                        ObjectType::DF, false, {{"level0", "blah"}}, multiindex({"level1", "level0"}),
+                        multiindex({"level0", "blah"}),
+                        {{.name = "level1"},
+                         {.name = "__idx__level0", .original_name = "__idx__level0"},
+                         {.name = "col", .original_name = "col"}},
+                        {{.name = "level0"},
+                         {.name = "__idx__blah", .original_name = "__idx__blah"},
+                         {.name = "col", .original_name = "col"}},
+                        {{"level1", "level0"}, {"__idx__level0", "__idx__blah"}}
+                )
         )
 );
-
-TEST(ArrowSchemaCompatible, AutoRenameEmptyStringIndexOneClash) {
-    for (auto object_type : std::array{ObjectType::DF, ObjectType::SERIES}) {
-        auto original_index = timestamp_index("", "UTC");
-        auto original_schema = generate_schema(
-                object_type,
-                false,
-                original_index,
-                {{.name = "", .data_type = DataType::NANOSECONDS_UTC64},
-                 {.name = "__empty__0", .is_empty = true, .original_name = ""}}
-        );
-        auto [changed, new_schema, column_renames] = make_schema_arrow_compatible(original_schema);
-        ASSERT_TRUE(changed);
-        auto expected_index = timestamp_index("__empty__", "UTC");
-        auto expected_schema = generate_schema(
-                object_type,
-                false,
-                expected_index,
-                {{.name = "__empty__", .data_type = DataType::NANOSECONDS_UTC64},
-                 {.name = "___empty___", .original_name = "___empty___"}}
-        );
-        std::string report;
-        MessageDifferencer differ;
-        differ.ReportDifferencesToString(&report);
-        auto same = differ.Compare(new_schema.norm_metadata_, expected_schema.norm_metadata_);
-        ASSERT_TRUE(same);
-        ankerl::unordered_dense::map<std::string, std::string> expected_column_renames{
-                {"", "__empty__"}, {"__empty__0", "___empty___"}
-        };
-        ASSERT_EQ(column_renames, expected_column_renames);
-    }
-}
-
-TEST(ArrowSchemaCompatible, AutoRenameEmptyStringIndexmultipleClashes) {
-    for (auto object_type : std::array{ObjectType::DF, ObjectType::SERIES}) {
-        auto original_index = timestamp_index("", "UTC");
-        auto original_schema = generate_schema(
-                object_type,
-                false,
-                original_index,
-                {{.name = "", .data_type = DataType::NANOSECONDS_UTC64},
-                 {.name = "__empty__0", .is_empty = true, .original_name = ""},
-                 {.name = "__empty__1", .is_empty = true, .original_name = ""}}
-        );
-        auto [changed, new_schema, column_renames] = make_schema_arrow_compatible(original_schema);
-        ASSERT_TRUE(changed);
-        auto expected_index = timestamp_index("__empty__", "UTC");
-        auto expected_schema = generate_schema(
-                object_type,
-                false,
-                expected_index,
-                {{.name = "__empty__", .data_type = DataType::NANOSECONDS_UTC64},
-                 {.name = "___empty___", .original_name = "___empty___"},
-                 {.name = "____empty____", .original_name = "____empty____"}}
-        );
-        std::string report;
-        MessageDifferencer differ;
-        differ.ReportDifferencesToString(&report);
-        auto same = differ.Compare(new_schema.norm_metadata_, expected_schema.norm_metadata_);
-        ASSERT_TRUE(same);
-        ankerl::unordered_dense::map<std::string, std::string> expected_column_renames{
-                {"", "__empty__"}, {"__empty__0", "___empty___"}, {"__empty__1", "____empty____"}
-        };
-        ASSERT_EQ(column_renames, expected_column_renames);
-    }
-}
-
-TEST(ArrowSchemaCompatible, ExplicitRenameIndexNoClash) {
-    for (auto object_type : std::array{ObjectType::DF, ObjectType::SERIES}) {
-        for (auto original_index_name : std::vector<std::string>{"None", "old_ts", "ts"}) {
-            bool unnamed_index = original_index_name == "None";
-            auto original_index = unnamed_index ? timestamp_index(std::monostate(), "UTC")
-                                                : timestamp_index(original_index_name, "UTC");
-            auto original_schema = generate_schema(
-                    object_type,
-                    false,
-                    original_index,
-                    {{.name = unnamed_index ? "index" : original_index_name, .data_type = DataType::NANOSECONDS_UTC64},
-                     {.name = "col", .original_name = "col"}}
-            );
-            auto [changed, new_schema, column_renames] = make_schema_arrow_compatible(original_schema, {{"ts"}});
-            ASSERT_EQ(changed, original_index_name != "ts");
-            auto expected_index = timestamp_index("ts", "UTC");
-            auto expected_schema = generate_schema(
-                    object_type,
-                    false,
-                    expected_index,
-                    {{.name = "ts", .data_type = DataType::NANOSECONDS_UTC64}, {.name = "col", .original_name = "col"}}
-            );
-            std::string report;
-            MessageDifferencer differ;
-            differ.ReportDifferencesToString(&report);
-            auto same = differ.Compare(new_schema.norm_metadata_, expected_schema.norm_metadata_);
-            ASSERT_TRUE(same);
-            ankerl::unordered_dense::map<std::string, std::string> expected_column_renames;
-            if (original_index_name != "ts") {
-                expected_column_renames.emplace(unnamed_index ? "index" : original_index_name, "ts");
-            }
-            ASSERT_EQ(column_renames, expected_column_renames);
-        }
-    }
-}
-
-TEST(ArrowSchemaCompatible, ExplicitRenameIndexClash) {
-    for (auto object_type : std::array{ObjectType::DF, ObjectType::SERIES}) {
-        auto original_index = timestamp_index(std::monostate(), "UTC");
-        auto original_schema = generate_schema(
-                object_type,
-                false,
-                original_index,
-                {{.name = "index", .data_type = DataType::NANOSECONDS_UTC64}, {.name = "ts", .original_name = "ts"}}
-        );
-        ASSERT_THROW(make_schema_arrow_compatible(original_schema, {{"ts"}}), UserInputException);
-    }
-}
-
-TEST(ArrowSchemaCompatible, ExplicitRenameIndexTooManyIndexNames) {
-    for (auto object_type : std::array{ObjectType::DF, ObjectType::SERIES}) {
-        auto original_index = timestamp_index(std::monostate(), "UTC");
-        auto original_schema = generate_schema(
-                object_type,
-                false,
-                original_index,
-                {{.name = "index", .data_type = DataType::NANOSECONDS_UTC64}, {.name = "col", .original_name = "ts"}}
-        );
-        ASSERT_THROW(make_schema_arrow_compatible(original_schema, {{"level0", "level1"}}), UserInputException);
-    }
-}
-
-TEST(ArrowSchemaCompatible, ExplicitRenameNamelessIndexClash) {
-    for (auto object_type : std::array{ObjectType::DF, ObjectType::SERIES}) {
-        auto original_index = timestamp_index(std::monostate(), "UTC");
-        auto original_schema = generate_schema(
-                object_type,
-                false,
-                original_index,
-                {{.name = "index", .data_type = DataType::NANOSECONDS_UTC64}, {.name = "ts", .original_name = "ts"}}
-        );
-        ASSERT_THROW(make_schema_arrow_compatible(original_schema, {{"ts"}}), UserInputException);
-    }
-}
-
-TEST(ArrowSchemaCompatible, AutoRenameIntMultiIndexNoClash) {
-    for (auto object_type : std::array{ObjectType::DF, ObjectType::SERIES}) {
-        auto original_index = multiindex({10, "level1"});
-        auto original_schema = generate_schema(
-                object_type,
-                false,
-                original_index,
-                {{.name = "10"},
-                 {.name = "__idx__level1", .original_name = "__idx__level1"},
-                 {.name = "col", .original_name = "col"}}
-        );
-        auto [changed, new_schema, column_renames] = make_schema_arrow_compatible(original_schema);
-        ASSERT_TRUE(changed);
-        auto expected_index = multiindex({"10", "level1"});
-        auto expected_schema = generate_schema(
-                object_type,
-                false,
-                expected_index,
-                {{.name = "10"},
-                 {.name = "__idx__level1", .original_name = "__idx__level1"},
-                 {.name = "col", .original_name = "col"}}
-        );
-        std::string report;
-        MessageDifferencer differ;
-        differ.ReportDifferencesToString(&report);
-        auto same = differ.Compare(new_schema.norm_metadata_, expected_schema.norm_metadata_);
-        ASSERT_TRUE(same);
-        ASSERT_TRUE(column_renames.empty());
-    }
-}
-
-TEST(ArrowSchemaCompatible, AutoRenameNamelessMultiIndexNoClash) {
-    for (auto object_type : std::array{ObjectType::DF, ObjectType::SERIES}) {
-        auto original_index = multiindex({std::monostate(), std::monostate()});
-        auto original_schema = generate_schema(
-                object_type,
-                false,
-                original_index,
-                {{.name = "index"},
-                 {.name = "__fkidx__1", .original_name = "__fkidx__1"},
-                 {.name = "col", .original_name = "col"}}
-        );
-        auto [changed, new_schema, column_renames] = make_schema_arrow_compatible(original_schema);
-        ASSERT_TRUE(changed);
-        auto expected_index = multiindex({"__index_level_0__", "__index_level_1__"});
-        auto expected_schema = generate_schema(
-                object_type,
-                false,
-                expected_index,
-                {{.name = "__index_level_0__"},
-                 {.name = "__idx____index_level_1__", .original_name = "__idx____index_level_1__"},
-                 {.name = "col", .original_name = "col"}}
-        );
-        std::string report;
-        MessageDifferencer differ;
-        differ.ReportDifferencesToString(&report);
-        auto same = differ.Compare(new_schema.norm_metadata_, expected_schema.norm_metadata_);
-        ASSERT_TRUE(same);
-        ankerl::unordered_dense::map<std::string, std::string> expected_column_renames{
-                {"index", "__index_level_0__"}, {"__fkidx__1", "__idx____index_level_1__"}
-        };
-        ASSERT_EQ(column_renames, expected_column_renames);
-    }
-}
-
-TEST(ArrowSchemaCompatible, ExplicitRenameNamelessMultiIndexNoClash) {
-    for (auto object_type : std::array{ObjectType::DF, ObjectType::SERIES}) {
-        auto original_index = multiindex({std::monostate(), std::monostate()});
-        auto original_schema = generate_schema(
-                object_type,
-                false,
-                original_index,
-                {{.name = "index"},
-                 {.name = "__fkidx__1", .original_name = "__fkidx__1"},
-                 {.name = "col", .original_name = "col"}}
-        );
-        auto [changed, new_schema, column_renames] =
-                make_schema_arrow_compatible(original_schema, {{"level0", "level1"}});
-        ASSERT_TRUE(changed);
-        auto expected_index = multiindex({"level0", "level1"});
-        auto expected_schema = generate_schema(
-                object_type,
-                false,
-                expected_index,
-                {{.name = "level0"},
-                 {.name = "__idx__level1", .original_name = "__idx__level1"},
-                 {.name = "col", .original_name = "col"}}
-        );
-        std::string report;
-        MessageDifferencer differ;
-        differ.ReportDifferencesToString(&report);
-        auto same = differ.Compare(new_schema.norm_metadata_, expected_schema.norm_metadata_);
-        ASSERT_TRUE(same);
-        ankerl::unordered_dense::map<std::string, std::string> expected_column_renames{
-                {"index", "level0"}, {"__fkidx__1", "__idx__level1"}
-        };
-        ASSERT_EQ(column_renames, expected_column_renames);
-    }
-}
-
-TEST(ArrowSchemaCompatible, ExplicitRenameNamedMultiIndexNoClash) {
-    for (auto object_type : std::array{ObjectType::DF, ObjectType::SERIES}) {
-        auto original_index = multiindex({"old_name0", "old_name1"});
-        auto original_schema = generate_schema(
-                object_type,
-                false,
-                original_index,
-                {{.name = "old_name0"},
-                 {.name = "__idx__old_name1", .original_name = "__idx__old_name1"},
-                 {.name = "col", .original_name = "col"}}
-        );
-        auto [changed, new_schema, column_renames] =
-                make_schema_arrow_compatible(original_schema, {{"level0", "level1"}});
-        ASSERT_TRUE(changed);
-        auto expected_index = multiindex({"level0", "level1"});
-        auto expected_schema = generate_schema(
-                object_type,
-                false,
-                expected_index,
-                {{.name = "level0"},
-                 {.name = "__idx__level1", .original_name = "__idx__level1"},
-                 {.name = "col", .original_name = "col"}}
-        );
-        std::string report;
-        MessageDifferencer differ;
-        differ.ReportDifferencesToString(&report);
-        auto same = differ.Compare(new_schema.norm_metadata_, expected_schema.norm_metadata_);
-        ASSERT_TRUE(same);
-        ankerl::unordered_dense::map<std::string, std::string> expected_column_renames{
-                {"old_name0", "level0"}, {"__idx__old_name1", "__idx__level1"}
-        };
-        ASSERT_EQ(column_renames, expected_column_renames);
-    }
-}
-
-// TODO: Add test that explicit renaming works if the new names appear in index names that will be overridden
-TEST(ArrowSchemaCompatible, ExplicitRenameMultiIndexClash) {
-    for (auto object_type : std::array{ObjectType::DF, ObjectType::SERIES}) {
-        for (const auto& index_names : std::vector<std::vector<std::string>>{{"col", "level1"}, {"level0", "col"}}) {
-            auto original_index = multiindex({std::monostate(), std::monostate()});
-            auto original_schema = generate_schema(
-                    object_type,
-                    false,
-                    original_index,
-                    {{.name = "index"},
-                     {.name = "__fkidx__1", .original_name = "__fkidx__1"},
-                     {.name = "col", .original_name = "col"}}
-            );
-            ASSERT_THROW(make_schema_arrow_compatible(original_schema, index_names), UserInputException);
-        }
-    }
-}
-
-TEST(ArrowSchemaCompatible, ExplicitRenameMultiIndexClashInOverwrittenIndexNames) {
-    for (auto object_type : std::array{ObjectType::DF, ObjectType::SERIES}) {
-        for (const auto& original_index :
-             std::vector<MultiIndex>{multiindex({"level0", "level1"}), multiindex({"level1", "level0"})}) {
-            auto original_primary = original_index.name();
-            auto original_secondary = original_primary == "level0" ? "__idx__level1" : "__idx__level0";
-            auto original_schema = generate_schema(
-                    object_type,
-                    false,
-                    original_index,
-                    {{.name = original_primary},
-                     {.name = original_secondary, .original_name = original_secondary},
-                     {.name = "col", .original_name = "col"}}
-            );
-            for (const auto& index_names :
-                 std::vector<std::vector<std::string>>{{"blah", "level1"}, {"level0", "blah"}}) {
-                auto [changed, new_schema, column_renames] = make_schema_arrow_compatible(original_schema, index_names);
-                ASSERT_TRUE(changed);
-                auto expected_primary = index_names.at(0);
-                auto expected_secondary = fmt::format("__idx__{}", index_names.at(1));
-                auto expected_index = multiindex({expected_primary, expected_secondary});
-                auto expected_schema = generate_schema(
-                        object_type,
-                        false,
-                        expected_index,
-                        {{.name = expected_primary},
-                         {.name = expected_secondary, .original_name = expected_secondary},
-                         {.name = "col", .original_name = "col"}}
-                );
-                std::string report;
-                MessageDifferencer differ;
-                differ.ReportDifferencesToString(&report);
-                auto same = differ.Compare(new_schema.norm_metadata_, expected_schema.norm_metadata_);
-                ASSERT_TRUE(same);
-                ankerl::unordered_dense::map<std::string, std::string> expected_column_renames{
-                        {original_primary, expected_primary}, {original_secondary, expected_secondary}
-                };
-                // TODO: Don't even add these in in the first place
-                for (auto it = expected_column_renames.begin(); it != expected_column_renames.end();) {
-                    if (it->first == it->second) {
-                        it = expected_column_renames.erase(it);
-                    } else {
-                        ++it;
-                    }
-                }
-                ASSERT_EQ(column_renames, expected_column_renames);
-            }
-        }
-    }
-}
-
-TEST(ArrowSchemaCompatible, ExplicitRenameMultiIndexIncorrectIndexCount) {
-    for (auto object_type : std::array{ObjectType::DF, ObjectType::SERIES}) {
-        for (const auto& index_names :
-             std::vector<std::vector<std::string>>{{"level0"}, {"level0", "level1", "level2"}}) {
-            auto original_index = multiindex({std::monostate(), std::monostate()});
-            auto original_schema = generate_schema(
-                    object_type,
-                    false,
-                    original_index,
-                    {{.name = "index"},
-                     {.name = "__fkidx__1", .original_name = "__fkidx__1"},
-                     {.name = "col", .original_name = "col"}}
-            );
-            ASSERT_THROW(make_schema_arrow_compatible(original_schema, index_names), UserInputException);
-        }
-    }
-}
-
-TEST(ArrowSchemaCompatibleValidSchema, RangeIndexDf) {
-    auto index = row_count_index(10, 2);
-    auto original_schema = generate_schema(ObjectType::DF, false, index, {{.name = "col", .original_name = "col"}});
-    auto [changed, new_schema, column_renames] = make_schema_arrow_compatible(original_schema);
-    ASSERT_FALSE(changed);
-    ASSERT_TRUE(MessageDifferencer::Equals(new_schema.norm_metadata_, original_schema.norm_metadata_));
-    ASSERT_TRUE(column_renames.empty());
-}
-
-TEST(ArrowSchemaCompatibleValidSchema, TimeseriesDf) {
-    auto index = timestamp_index("ts", "UTC");
-    auto original_schema = generate_schema(
-            ObjectType::DF,
-            false,
-            index,
-            {{.name = "ts", .data_type = DataType::NANOSECONDS_UTC64}, {.name = "col", .original_name = "col"}}
-    );
-    auto [changed, new_schema, column_renames] = make_schema_arrow_compatible(original_schema);
-    ASSERT_FALSE(changed);
-    ASSERT_TRUE(MessageDifferencer::Equals(new_schema.norm_metadata_, original_schema.norm_metadata_));
-    ASSERT_TRUE(column_renames.empty());
-}
-
-TEST(ArrowSchemaCompatibleValidSchema, MultiIndexDf) {
-    auto index = multiindex({"ts", "ticker"});
-    index.set_tz("UTC");
-    auto original_schema = generate_schema(
-            ObjectType::DF,
-            false,
-            index,
-            {{.name = "ts", .data_type = DataType::NANOSECONDS_UTC64},
-             {.name = "__idx__ticker", .original_name = "__idx__ticker"},
-             {.name = "col", .original_name = "col"}}
-    );
-    auto [changed, new_schema, column_renames] = make_schema_arrow_compatible(original_schema);
-    ASSERT_FALSE(changed);
-    ASSERT_TRUE(MessageDifferencer::Equals(new_schema.norm_metadata_, original_schema.norm_metadata_));
-    ASSERT_TRUE(column_renames.empty());
-}
-
-TEST(ArrowSchemaCompatibleValidSchema, RangeIndexSeries) {
-    auto index = row_count_index(10, 2);
-    auto original_schema = generate_schema(ObjectType::SERIES, false, index, {{.name = "col", .original_name = "col"}});
-    auto [changed, new_schema, column_renames] = make_schema_arrow_compatible(original_schema);
-    ASSERT_FALSE(changed);
-    ASSERT_TRUE(MessageDifferencer::Equals(new_schema.norm_metadata_, original_schema.norm_metadata_));
-    ASSERT_TRUE(column_renames.empty());
-}
-
-TEST(ArrowSchemaCompatibleValidSchema, TimeseriesSeries) {
-    auto index = timestamp_index("ts", "UTC");
-    auto original_schema = generate_schema(
-            ObjectType::SERIES,
-            false,
-            index,
-            {{.name = "ts", .data_type = DataType::NANOSECONDS_UTC64}, {.name = "col", .original_name = "col"}}
-    );
-    auto [changed, new_schema, column_renames] = make_schema_arrow_compatible(original_schema);
-    ASSERT_FALSE(changed);
-    ASSERT_TRUE(MessageDifferencer::Equals(new_schema.norm_metadata_, original_schema.norm_metadata_));
-    ASSERT_TRUE(column_renames.empty());
-}
-
-TEST(ArrowSchemaCompatibleValidSchema, MultiIndexSeries) {
-    auto index = multiindex({"ts", "ticker"});
-    index.set_tz("UTC");
-    auto original_schema = generate_schema(
-            ObjectType::SERIES,
-            false,
-            index,
-            {{.name = "ts", .data_type = DataType::NANOSECONDS_UTC64},
-             {.name = "__idx__ticker", .original_name = "__idx__ticker"},
-             {.name = "col", .original_name = "col"}}
-    );
-    auto [changed, new_schema, column_renames] = make_schema_arrow_compatible(original_schema);
-    ASSERT_FALSE(changed);
-    ASSERT_TRUE(MessageDifferencer::Equals(new_schema.norm_metadata_, original_schema.norm_metadata_));
-    ASSERT_TRUE(column_renames.empty());
-}
