@@ -1200,12 +1200,6 @@ class Library:
         --------
         write: For more detailed documentation.
         """
-        if staged:
-            warnings.warn(
-                "The `staged` parameter will be removed in v7.0.0. Use stage() instead.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
         return self._nvs.write(
             symbol=symbol,
             data=data,
