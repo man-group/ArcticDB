@@ -16,9 +16,6 @@
 using namespace arcticdb;
 using namespace arcticdb::entity;
 using namespace google::protobuf::util;
-using ::testing::ElementsAre;
-using ::testing::ElementsAreArray;
-using ::testing::IsEmpty;
 using NormalizationMetadata = arcticdb::proto::descriptors::NormalizationMetadata;
 using Index = NormalizationMetadata::PandasIndex;
 using MultiIndex = NormalizationMetadata::PandasMultiIndex;
@@ -167,6 +164,8 @@ TEST_P(MakeSchemaArrowCompatibleFixture, MakeSchemaArrowCompatibleTests) {
 INSTANTIATE_TEST_SUITE_P(
         MakeSchemaArrowCompatibleParametrizedTests, MakeSchemaArrowCompatibleFixture,
         ::testing::Values(
+                // RangeIndex tests
+                // Tests that a single column of a df or a series called None/""/an integer gets renamed correctly
                 param_types(
                         ObjectType::DF, false, row_count_index(), row_count_index(),
                         {{.name = "__none__0", .is_none = true}}, {{.name = "None", .original_name = "None"}},
@@ -181,341 +180,168 @@ INSTANTIATE_TEST_SUITE_P(
                         ObjectType::DF, false, row_count_index(), row_count_index(),
                         {{.name = "__empty__0", .is_empty = true}},
                         {{.name = "__empty__", .original_name = "__empty__"}}, {{"__empty__0", "__empty__"}}
+                ),
+                param_types(
+                        ObjectType::SERIES, true, row_count_index(), row_count_index(), {{.name = "0"}},
+                        {{.name = "None", .original_name = "None"}}, {{"0", "None"}}
+                ),
+                param_types(
+                        ObjectType::SERIES, false, row_count_index(), row_count_index(),
+                        {{.name = "10", .original_name = "10", .is_int = true}},
+                        {{.name = "10", .original_name = "10"}}, {}
+                ),
+                param_types(
+                        ObjectType::SERIES, false, row_count_index(), row_count_index(),
+                        {{.name = "__empty__0", .is_empty = true}},
+                        {{.name = "__empty__", .original_name = "__empty__"}}, {{"__empty__0", "__empty__"}}
+                ),
+                // Duplicate column name test
+                param_types(
+                        ObjectType::DF, false, row_count_index(), row_count_index(),
+                        {{.name = "__col_a__0", .original_name = "a"},
+                         {.name = "__col_a__1", .original_name = "a"},
+                         {.name = "__col_a__2", .original_name = "a"},
+                         {.name = "__empty__3", .is_empty = true},
+                         {.name = "__empty__4", .is_empty = true},
+                         {.name = "__empty__5", .is_empty = true},
+                         {.name = "__none__6", .is_none = true},
+                         {.name = "__none__7", .is_none = true},
+                         {.name = "None", .original_name = "None"}},
+                        {{.name = "a", .original_name = "a"},
+                         {.name = "_a_", .original_name = "_a_"},
+                         {.name = "__a__", .original_name = "__a__"},
+                         {.name = "__empty__", .original_name = "__empty__"},
+                         {.name = "___empty___", .original_name = "___empty___"},
+                         {.name = "____empty____", .original_name = "____empty____"},
+                         {.name = "None", .original_name = "None"},
+                         {.name = "_None_", .original_name = "_None_"},
+                         {.name = "__None__", .original_name = "__None__"}},
+                        {{"__col_a__0", "a"},
+                         {"__col_a__1", "_a_"},
+                         {"__col_a__2", "__a__"},
+                         {"__empty__3", "__empty__"},
+                         {"__empty__4", "___empty___"},
+                         {"__empty__5", "____empty____"},
+                         {"__none__6", "None"},
+                         {"__none__7", "_None_"},
+                         {"None", "__None__"}}
+                ),
+                // Synthetic columns test
+                param_types(
+                        ObjectType::DF, true, row_count_index(), row_count_index(),
+                        {{.name = "0", .original_name = "0"}, {.name = "1", .original_name = "1"}},
+                        {{.name = "0", .original_name = "0"}, {.name = "1", .original_name = "1"}}, {}
+                ),
+                // Timeseries index tests
+                // Auto-rename an int named index column
+                // No Clashes
+                param_types(
+                        ObjectType::DF, false, timestamp_index(10, "UTC"), timestamp_index("10", "UTC"),
+                        {{.name = "10", .data_type = DataType::NANOSECONDS_UTC64},
+                         {.name = "col", .original_name = "col"}},
+                        {{.name = "10", .data_type = DataType::NANOSECONDS_UTC64},
+                         {.name = "col", .original_name = "col"}},
+                        {}
+                ),
+                param_types(
+                        ObjectType::SERIES, false, timestamp_index(10, "UTC"), timestamp_index("10", "UTC"),
+                        {{.name = "10", .data_type = DataType::NANOSECONDS_UTC64},
+                         {.name = "col", .original_name = "col"}},
+                        {{.name = "10", .data_type = DataType::NANOSECONDS_UTC64},
+                         {.name = "col", .original_name = "col"}},
+                        {}
+                ),
+                // With clashes
+                param_types(
+                        ObjectType::DF, false, timestamp_index(10, "UTC"), timestamp_index("10", "UTC"),
+                        {{.name = "10", .data_type = DataType::NANOSECONDS_UTC64},
+                         {.name = "__col_10__0", .original_name = "10"}},
+                        {{.name = "10", .data_type = DataType::NANOSECONDS_UTC64},
+                         {.name = "_10_", .original_name = "_10_"}},
+                        {{"__col_10__0", "_10_"}}
+                ),
+                param_types(
+                        ObjectType::SERIES, false, timestamp_index(10, "UTC"), timestamp_index("10", "UTC"),
+                        {{.name = "10", .data_type = DataType::NANOSECONDS_UTC64},
+                         {.name = "__col_10__0", .original_name = "10"}},
+                        {{.name = "10", .data_type = DataType::NANOSECONDS_UTC64},
+                         {.name = "_10_", .original_name = "_10_"}},
+                        {{"__col_10__0", "_10_"}}
+                ),
+                // Auto-rename an index column with name None
+                // No clashes
+                param_types(
+                        ObjectType::DF, false, timestamp_index(std::monostate(), "UTC"),
+                        timestamp_index("__index__", "UTC"),
+                        {{.name = "index", .data_type = DataType::NANOSECONDS_UTC64},
+                         {.name = "col", .original_name = "col"}},
+                        {{.name = "__index__", .data_type = DataType::NANOSECONDS_UTC64},
+                         {.name = "col", .original_name = "col"}},
+                        {{"index", "__index__"}}
+                ),
+                param_types(
+                        ObjectType::SERIES, false, timestamp_index(std::monostate(), "UTC"),
+                        timestamp_index("__index__", "UTC"),
+                        {{.name = "index", .data_type = DataType::NANOSECONDS_UTC64},
+                         {.name = "col", .original_name = "col"}},
+                        {{.name = "__index__", .data_type = DataType::NANOSECONDS_UTC64},
+                         {.name = "col", .original_name = "col"}},
+                        {{"index", "__index__"}}
+                ),
+                // One clash
+                param_types(
+                        ObjectType::DF, false, timestamp_index(std::monostate(), "UTC"),
+                        timestamp_index("___index___", "UTC"),
+                        {{.name = "index", .data_type = DataType::NANOSECONDS_UTC64},
+                         {.name = "__index__", .original_name = "__index__"}},
+                        {{.name = "___index___", .data_type = DataType::NANOSECONDS_UTC64},
+                         {.name = "__index__", .original_name = "__index__"}},
+                        {{"index", "___index___"}}
+                ),
+                param_types(
+                        ObjectType::SERIES, false, timestamp_index(std::monostate(), "UTC"),
+                        timestamp_index("___index___", "UTC"),
+                        {{.name = "index", .data_type = DataType::NANOSECONDS_UTC64},
+                         {.name = "__index__", .original_name = "__index__"}},
+                        {{.name = "___index___", .data_type = DataType::NANOSECONDS_UTC64},
+                         {.name = "__index__", .original_name = "__index__"}},
+                        {{"index", "___index___"}}
+                ),
+                // Multiple clashes
+                param_types(
+                        ObjectType::DF, false, timestamp_index(std::monostate(), "UTC"),
+                        timestamp_index("___index___", "UTC"),
+                        {{.name = "index", .data_type = DataType::NANOSECONDS_UTC64},
+                         {.name = "__col___index____0", .original_name = "__index__"},
+                         {.name = "__col___index____1", .original_name = "__index__"}},
+                        {{.name = "___index___", .data_type = DataType::NANOSECONDS_UTC64},
+                         {.name = "__index__", .original_name = "__index__"},
+                         {.name = "____index____", .original_name = "____index____"}},
+                        {{"index", "___index___"},
+                         {"__col___index____0", "__index__"},
+                         {"__col___index____1", "____index____"}}
+                ),
+                // Auto-rename an index column with name ""
+                // No clashes
+                param_types(
+                        ObjectType::DF, false, timestamp_index("", "UTC"), timestamp_index("__empty__", "UTC"),
+                        {{.name = "", .data_type = DataType::NANOSECONDS_UTC64}, {.name = "col", .original_name = "col"}
+                        },
+                        {{.name = "__empty__", .data_type = DataType::NANOSECONDS_UTC64},
+                         {.name = "col", .original_name = "col"}},
+                        {{"", "__empty__"}}
+                ),
+                param_types(
+                        ObjectType::SERIES, false, timestamp_index("", "UTC"), timestamp_index("__empty__", "UTC"),
+                        {{.name = "", .data_type = DataType::NANOSECONDS_UTC64}, {.name = "col", .original_name = "col"}
+                        },
+                        {{.name = "__empty__", .data_type = DataType::NANOSECONDS_UTC64},
+                         {.name = "col", .original_name = "col"}},
+                        {{"", "__empty__"}}
                 )
+                // One clash
         )
 );
-
-struct ArrowSchemaCompatibleBasic
-    : public ::testing::TestWithParam<
-              std::tuple<ObjectType, ColumnSpec, ColumnSpec, ankerl::unordered_dense::map<std::string, std::string>>> {
-    ObjectType object_type() const { return std::get<0>(GetParam()); }
-    ColumnSpec input_column_spec() const { return std::get<1>(GetParam()); }
-    ColumnSpec output_column_spec() const { return std::get<2>(GetParam()); }
-    ankerl::unordered_dense::map<std::string, std::string> expected_column_renames() const {
-        return std::get<3>(GetParam());
-    }
-};
-
-TEST_P(ArrowSchemaCompatibleBasic, Basic) {
-    auto index = row_count_index();
-    const bool has_synthetic_columns = object_type() == ObjectType::SERIES && input_column_spec().name == "0";
-    auto original_schema = generate_schema(object_type(), has_synthetic_columns, index, {input_column_spec()});
-    auto [changed, new_schema, column_renames] = make_schema_arrow_compatible(original_schema);
-    ASSERT_TRUE(changed);
-    auto expected_schema = generate_schema(object_type(), false, index, {output_column_spec()});
-    // TODO: Remove report throughout this file once all tests passing
-    std::string report;
-    MessageDifferencer differ;
-    differ.ReportDifferencesToString(&report);
-    auto same = differ.Compare(new_schema.norm_metadata_, expected_schema.norm_metadata_);
-    ASSERT_TRUE(same);
-    ASSERT_EQ(column_renames, expected_column_renames());
-}
-
-INSTANTIATE_TEST_SUITE_P(
-        ArrowSchemaCompatibleBasicTests, ArrowSchemaCompatibleBasic,
-        ::testing::Values(
-                std::make_tuple(
-                        ObjectType::DF, ColumnSpec{.name = "__none__0", .is_none = true},
-                        ColumnSpec{.name = "None", .original_name = "None"},
-                        ankerl::unordered_dense::map<std::string, std::string>{{"__none__0", "None"}}
-                ),
-                std::make_tuple(
-                        ObjectType::DF, ColumnSpec{.name = "10", .original_name = "10", .is_int = true},
-                        ColumnSpec{.name = "10", .original_name = "10"},
-                        ankerl::unordered_dense::map<std::string, std::string>{}
-                ),
-                std::make_tuple(
-                        ObjectType::DF, ColumnSpec{.name = "__empty__0", .is_empty = true},
-                        ColumnSpec{.name = "__empty__", .original_name = "__empty__"},
-                        ankerl::unordered_dense::map<std::string, std::string>{{"__empty__0", "__empty__"}}
-                ),
-                std::make_tuple(
-                        ObjectType::SERIES, ColumnSpec{.name = "0"},
-                        ColumnSpec{.name = "None", .original_name = "None"},
-                        ankerl::unordered_dense::map<std::string, std::string>{{"0", "None"}}
-                ),
-                std::make_tuple(
-                        ObjectType::SERIES, ColumnSpec{.name = "10", .original_name = "10", .is_int = true},
-                        ColumnSpec{.name = "10", .original_name = "10"},
-                        ankerl::unordered_dense::map<std::string, std::string>{}
-                ),
-                std::make_tuple(
-                        ObjectType::SERIES, ColumnSpec{.name = "__empty__0", .is_empty = true},
-                        ColumnSpec{.name = "__empty__", .original_name = "__empty__"},
-                        ankerl::unordered_dense::map<std::string, std::string>{{"__empty__0", "__empty__"}}
-                )
-        )
-);
-
-TEST(ArrowSchemaCompatible, Duplicates) {
-    auto index = row_count_index();
-    auto original_schema = generate_schema(
-            ObjectType::DF,
-            false,
-            index,
-            {{.name = "__col_a__0", .original_name = "a"},
-             {.name = "__col_a__1", .original_name = "a"},
-             {.name = "__col_a__2", .original_name = "a"},
-             {.name = "__empty__3", .is_empty = true},
-             {.name = "__empty__4", .is_empty = true},
-             {.name = "__empty__5", .is_empty = true},
-             {.name = "__none__6", .is_none = true},
-             {.name = "__none__7", .is_none = true},
-             {.name = "None", .original_name = "None"}}
-    );
-    auto [changed, new_schema, column_renames] = make_schema_arrow_compatible(original_schema);
-    ASSERT_TRUE(changed);
-    auto expected_schema = generate_schema(
-            ObjectType::DF,
-            false,
-            index,
-            {{.name = "a", .original_name = "a"},
-             {.name = "_a_", .original_name = "_a_"},
-             {.name = "__a__", .original_name = "__a__"},
-             {.name = "__empty__", .original_name = "__empty__"},
-             {.name = "___empty___", .original_name = "___empty___"},
-             {.name = "____empty____", .original_name = "____empty____"},
-             {.name = "None", .original_name = "None"},
-             {.name = "_None_", .original_name = "_None_"},
-             {.name = "__None__", .original_name = "__None__"}}
-    );
-    std::string report;
-    MessageDifferencer differ;
-    differ.ReportDifferencesToString(&report);
-    auto same = differ.Compare(new_schema.norm_metadata_, expected_schema.norm_metadata_);
-    ASSERT_TRUE(same);
-    ankerl::unordered_dense::map<std::string, std::string> expected_column_renames{
-            {"__col_a__0", "a"},
-            {"__col_a__1", "_a_"},
-            {"__col_a__2", "__a__"},
-            {"__empty__3", "__empty__"},
-            {"__empty__4", "___empty___"},
-            {"__empty__5", "____empty____"},
-            {"__none__6", "None"},
-            {"__none__7", "_None_"},
-            {"None", "__None__"}
-    };
-    ASSERT_EQ(column_renames, expected_column_renames);
-}
-
-TEST(ArrowSchemaCompatible, SyntheticColumns) {
-    auto index = row_count_index();
-    auto original_schema = generate_schema(
-            ObjectType::DF, true, index, {{.name = "0", .original_name = "0"}, {.name = "1", .original_name = "1"}}
-    );
-    auto [changed, new_schema, column_renames] = make_schema_arrow_compatible(original_schema);
-    ASSERT_TRUE(changed);
-    auto expected_schema = generate_schema(
-            ObjectType::DF, false, index, {{.name = "0", .original_name = "0"}, {.name = "1", .original_name = "1"}}
-    );
-    std::string report;
-    MessageDifferencer differ;
-    differ.ReportDifferencesToString(&report);
-    auto same = differ.Compare(new_schema.norm_metadata_, expected_schema.norm_metadata_);
-    ASSERT_TRUE(same);
-    ASSERT_TRUE(column_renames.empty());
-}
-
-struct ArrowSchemaCompatibleAutoRenameIntIndex : public ::testing::TestWithParam<std::tuple<
-                                                         ObjectType, std::vector<ColumnSpec>, std::vector<ColumnSpec>,
-                                                         ankerl::unordered_dense::map<std::string, std::string>>> {
-    ObjectType object_type() const { return std::get<0>(GetParam()); }
-    std::vector<ColumnSpec> input_column_spec() const { return std::get<1>(GetParam()); }
-    std::vector<ColumnSpec> output_column_spec() const { return std::get<2>(GetParam()); }
-    ankerl::unordered_dense::map<std::string, std::string> expected_column_renames() const {
-        return std::get<3>(GetParam());
-    }
-};
-
-TEST_P(ArrowSchemaCompatibleAutoRenameIntIndex, Basic) {
-    auto original_index = timestamp_index(10, "UTC");
-    auto original_schema = generate_schema(object_type(), false, original_index, input_column_spec());
-    auto [changed, new_schema, column_renames] = make_schema_arrow_compatible(original_schema);
-    ASSERT_TRUE(changed);
-    auto expected_index = timestamp_index("10", "UTC");
-    auto expected_schema = generate_schema(object_type(), false, expected_index, output_column_spec());
-    std::string report;
-    MessageDifferencer differ;
-    differ.ReportDifferencesToString(&report);
-    auto same = differ.Compare(new_schema.norm_metadata_, expected_schema.norm_metadata_);
-    ASSERT_TRUE(same);
-    ASSERT_EQ(column_renames, expected_column_renames());
-}
-
-INSTANTIATE_TEST_SUITE_P(
-        ArrowSchemaCompatibleAutoRenameIntIndexTests, ArrowSchemaCompatibleAutoRenameIntIndex,
-        ::testing::Values(
-                std::make_tuple(
-                        ObjectType::DF,
-                        std::vector<ColumnSpec>{
-                                {.name = "10", .data_type = DataType::NANOSECONDS_UTC64},
-                                {.name = "col", .original_name = "col"}
-                        },
-                        std::vector<ColumnSpec>{
-                                {.name = "10", .data_type = DataType::NANOSECONDS_UTC64},
-                                {.name = "col", .original_name = "col"}
-                        },
-                        ankerl::unordered_dense::map<std::string, std::string>{}
-                ),
-                std::make_tuple(
-                        ObjectType::DF,
-                        std::vector<ColumnSpec>{
-                                {.name = "10", .data_type = DataType::NANOSECONDS_UTC64},
-                                {.name = "__col_10__0", .original_name = "10"}
-                        },
-                        std::vector<ColumnSpec>{
-                                {.name = "10", .data_type = DataType::NANOSECONDS_UTC64},
-                                {.name = "_10_", .original_name = "_10_"}
-                        },
-                        ankerl::unordered_dense::map<std::string, std::string>{{"__col_10__0", "_10_"}}
-                ),
-                std::make_tuple(
-                        ObjectType::SERIES,
-                        std::vector<ColumnSpec>{
-                                {.name = "10", .data_type = DataType::NANOSECONDS_UTC64},
-                                {.name = "col", .original_name = "col"}
-                        },
-                        std::vector<ColumnSpec>{
-                                {.name = "10", .data_type = DataType::NANOSECONDS_UTC64},
-                                {.name = "col", .original_name = "col"}
-                        },
-                        ankerl::unordered_dense::map<std::string, std::string>{}
-                ),
-                std::make_tuple(
-                        ObjectType::SERIES,
-                        std::vector<ColumnSpec>{
-                                {.name = "10", .data_type = DataType::NANOSECONDS_UTC64},
-                                {.name = "__col_10__0", .original_name = "10"}
-                        },
-                        std::vector<ColumnSpec>{
-                                {.name = "10", .data_type = DataType::NANOSECONDS_UTC64},
-                                {.name = "_10_", .original_name = "_10_"}
-                        },
-                        ankerl::unordered_dense::map<std::string, std::string>{{"__col_10__0", "_10_"}}
-                )
-        )
-);
-
-TEST(ArrowSchemaCompatible, AutoRenameNamelessIndexNoClash) {
-    for (auto object_type : std::array{ObjectType::DF, ObjectType::SERIES}) {
-        auto original_index = timestamp_index(std::monostate(), "UTC");
-        auto original_schema = generate_schema(
-                object_type,
-                false,
-                original_index,
-                {{.name = "index", .data_type = DataType::NANOSECONDS_UTC64}, {.name = "col", .original_name = "col"}}
-        );
-        auto [changed, new_schema, column_renames] = make_schema_arrow_compatible(original_schema);
-        ASSERT_TRUE(changed);
-        auto expected_index = timestamp_index("__index__", "UTC");
-        auto expected_schema = generate_schema(
-                object_type,
-                false,
-                expected_index,
-                {{.name = "__index__", .data_type = DataType::NANOSECONDS_UTC64},
-                 {.name = "col", .original_name = "col"}}
-        );
-        std::string report;
-        MessageDifferencer differ;
-        differ.ReportDifferencesToString(&report);
-        auto same = differ.Compare(new_schema.norm_metadata_, expected_schema.norm_metadata_);
-        ASSERT_TRUE(same);
-        ankerl::unordered_dense::map<std::string, std::string> expected_column_renames{{"index", "__index__"}};
-        ASSERT_EQ(column_renames, expected_column_renames);
-    }
-}
-
-TEST(ArrowSchemaCompatible, AutoRenameNamelessIndexOneClash) {
-    for (auto object_type : std::array{ObjectType::DF, ObjectType::SERIES}) {
-        auto original_index = timestamp_index(std::monostate(), "UTC");
-        auto original_schema = generate_schema(
-                object_type,
-                false,
-                original_index,
-                {{.name = "index", .data_type = DataType::NANOSECONDS_UTC64},
-                 {.name = "__index__", .original_name = "__index__"}}
-        );
-        auto [changed, new_schema, column_renames] = make_schema_arrow_compatible(original_schema);
-        ASSERT_TRUE(changed);
-        auto expected_index = timestamp_index("___index___", "UTC");
-        auto expected_schema = generate_schema(
-                object_type,
-                false,
-                expected_index,
-                {{.name = "___index___", .data_type = DataType::NANOSECONDS_UTC64},
-                 {.name = "__index__", .original_name = "__index__"}}
-        );
-        std::string report;
-        MessageDifferencer differ;
-        differ.ReportDifferencesToString(&report);
-        auto same = differ.Compare(new_schema.norm_metadata_, expected_schema.norm_metadata_);
-        ASSERT_TRUE(same);
-        ankerl::unordered_dense::map<std::string, std::string> expected_column_renames{{"index", "___index___"}};
-        ASSERT_EQ(column_renames, expected_column_renames);
-    }
-}
-
-TEST(ArrowSchemaCompatible, AutoRenameNamelessIndexMultipleClashes) {
-    auto original_index = timestamp_index(std::monostate(), "UTC");
-    auto original_schema = generate_schema(
-            ObjectType::DF,
-            false,
-            original_index,
-            {{.name = "index", .data_type = DataType::NANOSECONDS_UTC64},
-             {.name = "__col___index____0", .original_name = "__index__"},
-             {.name = "__col___index____1", .original_name = "__index__"}}
-    );
-    auto [changed, new_schema, column_renames] = make_schema_arrow_compatible(original_schema);
-    ASSERT_TRUE(changed);
-    auto expected_index = timestamp_index("___index___", "UTC");
-    auto expected_schema = generate_schema(
-            ObjectType::DF,
-            false,
-            expected_index,
-            {{.name = "___index___", .data_type = DataType::NANOSECONDS_UTC64},
-             {.name = "__index__", .original_name = "__index__"},
-             {.name = "____index____", .original_name = "____index____"}}
-    );
-    std::string report;
-    MessageDifferencer differ;
-    differ.ReportDifferencesToString(&report);
-    auto same = differ.Compare(new_schema.norm_metadata_, expected_schema.norm_metadata_);
-    ASSERT_TRUE(same);
-    ankerl::unordered_dense::map<std::string, std::string> expected_column_renames{
-            {"index", "___index___"}, {"__col___index____0", "__index__"}, {"__col___index____1", "____index____"}
-    };
-    ASSERT_EQ(column_renames, expected_column_renames);
-}
-
-TEST(ArrowSchemaCompatible, AutoRenameEmptyStringIndexNoClash) {
-    for (auto object_type : std::array{ObjectType::DF, ObjectType::SERIES}) {
-        auto original_index = timestamp_index("", "UTC");
-        auto original_schema = generate_schema(
-                object_type,
-                false,
-                original_index,
-                {{.name = "", .data_type = DataType::NANOSECONDS_UTC64}, {.name = "col", .original_name = "col"}}
-        );
-        auto [changed, new_schema, column_renames] = make_schema_arrow_compatible(original_schema);
-        ASSERT_TRUE(changed);
-        auto expected_index = timestamp_index("__empty__", "UTC");
-        auto expected_schema = generate_schema(
-                object_type,
-                false,
-                expected_index,
-                {{.name = "__empty__", .data_type = DataType::NANOSECONDS_UTC64},
-                 {.name = "col", .original_name = "col"}}
-        );
-        std::string report;
-        MessageDifferencer differ;
-        differ.ReportDifferencesToString(&report);
-        auto same = differ.Compare(new_schema.norm_metadata_, expected_schema.norm_metadata_);
-        ASSERT_TRUE(same);
-        ankerl::unordered_dense::map<std::string, std::string> expected_column_renames{{"", "__empty__"}};
-        ASSERT_EQ(column_renames, expected_column_renames);
-    }
-}
 
 TEST(ArrowSchemaCompatible, AutoRenameEmptyStringIndexOneClash) {
     for (auto object_type : std::array{ObjectType::DF, ObjectType::SERIES}) {
