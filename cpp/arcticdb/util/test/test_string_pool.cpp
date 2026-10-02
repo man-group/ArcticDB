@@ -7,6 +7,8 @@
  */
 
 #include <gtest/gtest.h> // googletest header file
+#include <cstring>
+#include <memory>
 #include <unordered_map>
 
 #include <arcticdb/column_store/string_pool.hpp>
@@ -65,6 +67,56 @@ TEST(StringPool, StressTest) {
     timer.stop_timer(timer_name);
     GTEST_COUT << " " << timer.display_all() << std::endl;
 }
+// A clone's dedup map must refer to the clone's own string storage, not the source's. Here the source's
+// bytes are changed in place after cloning: the clone must still find "alpha" and must not see "omega".
+TEST(StringPool, CloneKeysDoNotAliasSource) {
+    StringPool source;
+    const auto alpha = source.get(std::string_view{"alpha"}).offset();
+    const auto beta = source.get(std::string_view{"beta"}).offset();
+    auto clone = source.clone();
+
+    auto source_bytes = source.get_view(alpha);
+    std::memcpy(const_cast<char*>(source_bytes.data()), "omega", source_bytes.size());
+
+    EXPECT_EQ(clone->get(std::string_view{"alpha"}).offset(), alpha);
+    EXPECT_EQ(clone->get(std::string_view{"beta"}).offset(), beta);
+    const auto omega = clone->get(std::string_view{"omega"}).offset();
+    EXPECT_NE(omega, alpha);
+    EXPECT_EQ(clone->get_view(omega), "omega");
+    EXPECT_EQ(clone->get_view(alpha), "alpha");
+}
+
+// A clone that outlives its source and is then deduplicated into. Before the fix the clone's map keys
+// pointed into the destroyed source's blocks: AddressSanitizer reports heap-use-after-free, and on macOS
+// MallocScribble=1 or the reallocation below makes the lookups miss.
+TEST(StringPool, CloneOutlivesSource) {
+    std::vector<std::string> strings;
+    for (size_t i = 0; i < 1000; ++i)
+        strings.emplace_back("string-" + std::to_string(i) + "-" + std::string(i % 40, 'x'));
+
+    std::vector<position_t> offsets;
+    std::shared_ptr<StringPool> clone;
+    {
+        StringPool source;
+        for (const auto& s : strings)
+            offsets.push_back(source.get(std::string_view{s}).offset());
+        clone = source.clone();
+    }
+    // Reallocate and scribble over memory of similar sizes so the freed source blocks are likely to be reused.
+    std::vector<std::unique_ptr<char[]>> churn;
+    for (size_t size = 64; size <= (size_t{1} << 20); size *= 2) {
+        for (size_t i = 0; i < 8; ++i) {
+            churn.emplace_back(new char[size]);
+            std::memset(churn.back().get(), '#', size);
+        }
+    }
+
+    const auto size_before = clone->size();
+    for (size_t i = 0; i < strings.size(); ++i)
+        ASSERT_EQ(clone->get(std::string_view{strings[i]}).offset(), offsets[i]) << strings[i];
+    EXPECT_EQ(clone->size(), size_before);
+}
+
 //
 // TEST(StringPool, BitMagicTest) {
 //    bm::bvector<>   bv;
