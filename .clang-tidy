@@ -1,0 +1,24 @@
+---
+Checks: >
+  -*,
+  bugprone-*,
+  -bugprone-easily-swappable-parameters,
+  performance-*,
+  modernize-use-ranges,
+  modernize-use-constraints,
+  cppcoreguidelines-missing-std-forward,
+  misc-header-include-cycle,
+  misc-throw-by-value-catch-by-reference,
+  misc-unconventional-assign-operator,
+  misc-unused-alias-decls,
+  misc-unused-using-decls,
+  misc-use-anonymous-namespace,
+  misc-use-internal-linkage,
+  modernize-deprecated-headers,
+  readability-redundant-inline-specifier,
+  readability-redundant-declaration
+HeaderFilterRegex: 'cpp/arcticdb/.*\.hpp$'
+ExcludeHeaderFilterRegex: '.*(vcpkg_installed|third_party|/proto/|_pb2|\.pb\.h).*'
+WarningsAsErrors: ''
+FormatStyle: file
+...
