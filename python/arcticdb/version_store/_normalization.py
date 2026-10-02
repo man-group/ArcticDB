@@ -243,10 +243,14 @@ def _to_primitive(
             raise ArcticDbNotYetImplemented(
                 f"Failed to normalize column '{arr_name}' with dtype '{arr.dtype}': pd.NA dtype not supported"
             )
-        if arr.dtype.storage == "pyarrow":
+        storage_type = arr.dtype.storage
+        if storage_type == "pyarrow":
             return _pandas_str_column_to_record_batches(arr._pa_array, arr_name)
-        # No arrow buffer to hand over, so fall through to the object-string path below.
-        arr = arr._ndarray
+        if storage_type == "python":
+            # The contained array is just an object ndarray, so just unpack it and proceed normally
+            arr = arr._ndarray
+        else:
+            raise ArcticDbNotYetImplemented(f"Storage type {storage_type} not supported yet.")
     # This check has to come after the categorical check above, as Categoricals are a Pandas concept, not numpy, which
     # causes issubdtype to throw if arr.dtype == CategoricalDtype
     if np.issubdtype(arr.dtype, np.timedelta64):
@@ -1112,17 +1116,16 @@ class DataFrameNormalizer(_PandasNormalizer):
                     if idx < n_ind:
                         continue
                     pandas_column = _adapt_string_column(item, idx)
-                    if pandas_column is not a:
-                        yield make_block(pandas_column, placement=(column_placement_in_block,))
-                        column_placement_in_block += 1
-                        continue
+                    block_values = (
+                        pandas_column.reshape((1, _len)) if isinstance(pandas_column, np.ndarray) else pandas_column
+                    )
                     # In Pandas 1 the dtype param of make_block is ignored for empty blocks and the dtype is always object
                     # Pre-empty type Arctic has a default dtype of float64 for empty columns. Thus a casting to float64
                     # is needed.
                     # Note: empty datetime cannot be cast to float64
                     # TODO: Remove the casting after empty types become the only option
                     # Issue: https://github.com/man-group/ArcticDB/issues/1562
-                    block = make_block(values=a.reshape((1, _len)), placement=(column_placement_in_block,))
+                    block = make_block(values=block_values, placement=(column_placement_in_block,))
                     yield (
                         block.astype(np.float64)
                         if _len == 0 and block.dtype == np.dtype("object") and not IS_PANDAS_TWO

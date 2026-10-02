@@ -36,7 +36,7 @@ py::tuple extract_pandas_columns(PandasOutputFrame& pandas_output_frame) {
     auto frame = pandas_output_frame.release_frame();
     const size_t field_count = frame.fields().size();
     const size_t index_field_count = frame.descriptor().index().field_count();
-    std::vector<PandasColumn> arrays = util::reserve_vector<PandasColumn>(field_count);
+    auto arrays = util::reserve_vector<PandasColumn>(field_count);
     auto column_types = util::reserve_vector<TypeDescriptor>(field_count);
     auto index_column_names = util::reserve_vector<std::string>(index_field_count);
     auto column_names = util::reserve_vector<std::string>(field_count - index_field_count);
