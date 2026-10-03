@@ -220,7 +220,7 @@ ArcticDB supports many common DataFrame analytics operations, including filterin
 
 The legacy [`QueryBuilder`](api/processing.md#arcticdb.QueryBuilder) class can also be created directly and passed into `read` calls with the same effect.
 
-!!! info "ArcticDB Analytics Philosphy"
+!!! info "ArcticDB Analytics Philosophy"
 
     In most cases this is more memory efficient and performant than the equivalent Pandas operation as the processing is within the C++ storage engine and parallelized over multiple threads of execution. 
 
@@ -323,7 +323,7 @@ df = pd.DataFrame(random_data, columns=['COL_%d' % i for i in range(50)])
 df.index = pd.date_range(datetime(2000, 1, 1, 5), periods=2, freq="2h")
 df
 ```
-_output (rows 0 and 2 only as selected by the `iloc[]`)_
+_output (rows at 05:00 and 07:00 only, generated using a 2-hour frequency)_
 ```
                      COL_0  COL_1  COL_2  COL_3  COL_4  COL_5  COL_6  COL_7  ...
 2000-01-01 05:00:00     47     49     15      6     22     48     45     22  ...
@@ -479,7 +479,7 @@ import arcticdb as adb
 ac = adb.Arctic('lmdb://path/to/desired/database?map_size=2GB')
 ```
 
-The default on Windows is 2GiB. Errors with `lmdb errror code -30792` indicate that the map is getting full and that you should
+The default on Windows is 2GiB. Errors with `lmdb error code -30792` indicate that the map is getting full and that you should
 increase its size. This will happen if you are doing large writes.
 
 In each Python process, you should ensure that you only have one Arctic instance open over a given LMDB database.
@@ -503,7 +503,7 @@ For concurrent access to a local backend, we recommend LMDB connected to tmpfs, 
 
 ### Transactions
 
-- Transactions can be be very useful but are often expensive and slow
+- Transactions can be very useful but are often expensive and slow
 - If we unpack ACID: Atomicity, Consistency and Durability are useful, Isolation less so
 - Most analytical workflows can be constructed to run without needing transactions at all
 - So why pay the cost of transactions when they are often not needed?

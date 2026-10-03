@@ -6,7 +6,7 @@ For us to be able to accept your contributions, we will need explicit confirmati
 willing to provide them under these terms, and the mechanism we use to do this is the [ArcticDB Individual Contributor License Agreement](https://github.com/man-group/ArcticDB/blob/master/Individual%20Contributor%20License%20Agreement.md).
 
 **Individuals** - To participate under these terms, please include the following line as the last line of the commit
-message for each commit in your contribution.
+message for each commit in your contribution and in the PR description.
 You must use your real name (no pseudonyms, and no anonymous contributions).
 
 ```
@@ -256,7 +256,7 @@ New-Item -Path .\python\arcticdb_ext.cp311-win_amd64.pyd -ItemType SymbolicLink 
 Running Python tests
 --------------------
 
-With `python` pointing to a Python interpeter with `ArcticDB` installed/on the `PYTHON_PATH`:
+With `python` pointing to a Python interpreter with `ArcticDB` installed/on the `PYTHON_PATH`:
 
 ```bash
 python -m pip install arcticdb[Testing]
