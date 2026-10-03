@@ -247,7 +247,7 @@ Use the configuration in ArcticDB:
 >>> arctic = adb.Arctic('s3://s3.REGION.amazonaws.com:BUCKET?aws_auth=sts&aws_profile=PROFILE')
 ```
 
-For more in-depth documentation please refer to [the offical website](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_credentials_temp.html).
+For more in-depth documentation please refer to [the official website](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_credentials_temp.html).
 
 ---
 
@@ -297,7 +297,7 @@ A known [issue](https://github.com/aws/aws-sdk-cpp/issues/2920) in the AWS C++ S
 
 #### Affected users
 - **Use STS authentication, and**
-- **Use below opearting systems**
+- **Use below operating systems**
   - **RHEL distributions with custom CA certificates**
   - **Other Linux distributions**
 
