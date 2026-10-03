@@ -149,6 +149,13 @@ jobs:
         run: |
           python3 build_tooling/format.py --check --type cpp
 
+      - name: Type check Python
+        if: always()
+        run: |
+          python3 -m venv /tmp/typecheck-venv
+          /tmp/typecheck-venv/bin/python -m pip install -r build_tooling/requirements-typecheck.txt
+          /tmp/typecheck-venv/bin/python -m mypy
+
   common_config:
     needs: [cibw_docker_image]
     runs-on: ubuntu-22.04

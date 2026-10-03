@@ -8,7 +8,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 
 import logging
 from re import L
-from typing import List, Optional, Any, Union
+from typing import List, Optional, Any, Type, Union
 
 from arcticdb.options import (
     DEFAULT_ENCODING_VERSION,
@@ -101,7 +101,7 @@ class Arctic:
         >>> travel_library = ac['travel_data']
         >>> ac.delete_library('travel_data')
         """
-        _cls = None
+        _cls: Optional[Type[ArcticLibraryAdapter]] = None
         for adapter_cls in self._LIBRARY_ADAPTERS:
             if adapter_cls.supports_uri(uri):
                 _cls = adapter_cls
@@ -230,7 +230,12 @@ class Arctic:
             return lib
         except LibraryNotFound as e:
             if create_if_missing:
-                return self.create_library(name, library_options, output_format, arrow_string_format_default)
+                return self.create_library(
+                    name,
+                    library_options,
+                    output_format=output_format,
+                    arrow_string_format_default=arrow_string_format_default,
+                )
             else:
                 raise e
 

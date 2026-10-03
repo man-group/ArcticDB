@@ -1,5 +1,5 @@
 from types import ModuleType
-from typing import Any, Tuple
+from typing import TYPE_CHECKING, Any, Tuple
 from importlib import import_module
 
 
@@ -30,8 +30,15 @@ def _import_optional_dependency(module_name: str) -> Tuple[ModuleType, bool]:
         return module, False
 
 
-pyarrow, _PYARROW_AVAILABLE = _import_optional_dependency("pyarrow")
-polars, _POLARS_AVAILABLE = _import_optional_dependency("polars")
+if TYPE_CHECKING:
+    import pyarrow
+    import polars
+
+    _PYARROW_AVAILABLE: bool
+    _POLARS_AVAILABLE: bool
+else:
+    pyarrow, _PYARROW_AVAILABLE = _import_optional_dependency("pyarrow")
+    polars, _POLARS_AVAILABLE = _import_optional_dependency("polars")
 
 
 __all__ = ["pyarrow", "_PYARROW_AVAILABLE", "polars", "_POLARS_AVAILABLE"]

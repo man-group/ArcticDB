@@ -20,7 +20,7 @@ class CustomNormalizer(object):
     # N.B. This should be stateless
     @abstractmethod
     def normalize(self, item, **kwargs):
-        # type: (Any)->Optional[Tuple[Union[TimeFrame, DataFrame, Series], CustomNormalizerMeta]]
+        # type: (Any, **Any)->Optional[Tuple[Union[TimeFrame, DataFrame, Series], CustomNormalizerMeta]]
         pass
 
     @abstractmethod

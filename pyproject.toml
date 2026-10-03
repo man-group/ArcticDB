@@ -95,3 +95,76 @@ markers = [
     "prune_previous: marks tests using prune_previous_version=True",
     "encoding_v2: marks tests that use V2 encoding"
 ]
+
+[tool.mypy]
+files = ["python/arcticdb"]
+python_version = "3.12"
+warn_unused_configs = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+
+# Compiled extension and generated protobuf modules are not importable without a build.
+[[tool.mypy.overrides]]
+module = ["arcticdb_ext.*", "arcticc.*"]
+ignore_missing_imports = true
+
+# Third-party modules that are untyped, private, or test-only and not in build_tooling/requirements-typecheck.txt.
+[[tool.mypy.overrides]]
+module = [
+    "arctic.*",
+    "azure.*",
+    "boto3.*",
+    "botocore.*",
+    "hypothesis.*",
+    "moto.*",
+    "msgpack.*",
+    "pandas._libs.*",
+    "pandas.core.internals.*",
+    "pyarrow.*",
+    "pymongo.*",
+    "requests.*",
+    "retrying.*",
+    "trustme.*",
+    "werkzeug.*",
+]
+ignore_missing_imports = true
+
+# Modules with pre-existing errors. Remove entries as modules are fixed; do not add new ones.
+[[tool.mypy.overrides]]
+module = [
+    "arcticdb",
+    "arcticdb.adapters.arctic_library_adapter",
+    "arcticdb.adapters.azure_library_adapter",
+    "arcticdb.adapters.gcpxml_library_adapter",
+    "arcticdb.adapters.in_memory_library_adapter",
+    "arcticdb.adapters.lmdb_library_adapter",
+    "arcticdb.adapters.mongo_library_adapter",
+    "arcticdb.adapters.prefixing_library_adapter_decorator",
+    "arcticdb.adapters.s3_library_adapter",
+    "arcticdb.config",
+    "arcticdb.exceptions",
+    "arcticdb.flattener",
+    "arcticdb.storage_fixtures.api",
+    "arcticdb.storage_fixtures.azure",
+    "arcticdb.storage_fixtures.lmdb",
+    "arcticdb.storage_fixtures.s3",
+    "arcticdb.storage_fixtures.utils",
+    "arcticdb.supported_types",
+    "arcticdb.toolbox.library_tool",
+    "arcticdb.tools",
+    "arcticdb.util.append_and_defrag",
+    "arcticdb.util.arctic_simulator",
+    "arcticdb.util.errors",
+    "arcticdb.util.hypothesis",
+    "arcticdb.util.logger",
+    "arcticdb.util.test",
+    "arcticdb.util.test_utils",
+    "arcticdb.util.venv",
+    "arcticdb.version_store._common",
+    "arcticdb.version_store._custom_normalizers",
+    "arcticdb.version_store._normalization",
+    "arcticdb.version_store._store",
+    "arcticdb.version_store.helper",
+    "arcticdb.version_store.processing",
+]
+ignore_errors = true

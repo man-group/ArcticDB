@@ -621,7 +621,7 @@ class Normalizer(object):
 
     @abstractmethod
     def normalize(self, item, **kwargs):
-        # type: (Any)->NormalizedInput
+        # type: (Any, **Any)->NormalizedInput
         pass
 
     @abstractmethod
@@ -1328,7 +1328,7 @@ class DataFrameNormalizer(_PandasNormalizer):
     def normalize(
         self, item, string_max_len=None, dynamic_strings=False, coerce_columns=None, empty_types=False, **kwargs
     ):
-        # type: (DataFrame, Optional[int])->NormalizedInput
+        # type: (DataFrame, Optional[int], bool, Any, bool, **Any)->NormalizedInput
         norm_meta = NormalizationMetadata()
         norm_meta.df.common.mark = True
         if isinstance(item.columns, RangeIndex):

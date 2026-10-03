@@ -1,0 +1,17 @@
+# Pinned tooling for the mypy gate (see [tool.mypy] in pyproject.toml).
+mypy==2.3.1
+pandas-stubs==2.3.3.260113
+types-protobuf==6.32.1.20260221
+types-pytz==2026.3.1.20260727
+types-pyyaml==6.0.12.20260906
+# Runtime and optional dependencies of arcticdb, needed so their types resolve.
+pandas==2.3.3
+numpy==2.5.3
+attrs==26.1.0
+protobuf==6.33.6
+msgpack==1.2.2
+pyyaml==6.0.3
+packaging==26.3
+pytz==2026.3.post1
+pyarrow==25.0.1
+polars==1.44.2
