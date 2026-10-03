@@ -323,7 +323,7 @@ df = pd.DataFrame(random_data, columns=['COL_%d' % i for i in range(50)])
 df.index = pd.date_range(datetime(2000, 1, 1, 5), periods=2, freq="2h")
 df
 ```
-_output (rows 0 and 2 only as selected by the `iloc[]`)_
+_output (rows at 05:00 and 07:00 only, generated using a 2-hour frequency)_
 ```
                      COL_0  COL_1  COL_2  COL_3  COL_4  COL_5  COL_6  COL_7  ...
 2000-01-01 05:00:00     47     49     15      6     22     48     45     22  ...

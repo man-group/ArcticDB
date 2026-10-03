@@ -1,0 +1,207 @@
+name: clang-tidy
+
+on:
+  workflow_call:
+    inputs:
+      full_codebase:
+        {required: true, type: boolean, description: 'true analyses all of cpp/arcticdb, false analyses only the lines changed by the pull request'}
+      upload_artifacts:
+        {default: false, type: boolean, description: 'Build the HTML report and upload the log, fixes and report as artifacts'}
+      ref:
+        {default: '', type: string, description: 'The git ref to check out. Defaults to the triggering ref.'}
+  workflow_dispatch:
+    inputs:
+      full_codebase:
+        {default: true, type: boolean, description: 'Analyse all of cpp/arcticdb. Uncheck to analyse nothing, since there is no pull request diff to work from.'}
+      upload_artifacts:
+        {default: true, type: boolean, description: 'Upload the log, the suggested fixes and the HTML report'}
+      ref:
+        {default: '', type: string, description: 'Branch, tag or commit to analyse. Defaults to the branch this is run from.'}
+
+jobs:
+  clang-tidy:
+    name: analyse
+    timeout-minutes: 180
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      security-events: write
+      packages: write
+    env:
+      AWS_ACCESS_KEY_ID: ${{secrets.AWS_S3_ACCESS_KEY}}
+      AWS_SECRET_ACCESS_KEY: ${{secrets.AWS_S3_SECRET_KEY}}
+      VCPKG_NUGET_USER: ${{secrets.VCPKG_NUGET_USER || github.repository_owner}}
+      VCPKG_NUGET_TOKEN: ${{secrets.VCPKG_NUGET_TOKEN || secrets.GITHUB_TOKEN}}
+      VCPKG_MAN_NUGET_USER: ${{secrets.VCPKG_MAN_NUGET_USER}}
+      VCPKG_MAN_NUGET_TOKEN: ${{secrets.VCPKG_MAN_NUGET_TOKEN}}
+      ARCTIC_CMAKE_PRESET: linux-debug
+      CLANG_VERSION: 19.1.7
+      CLANG_SHA256: 4a5ec53951a584ed36f80240f6fbf8fdd46b4cf6c7ee87cc2d5018dc37caf679
+      CLANG_HOME: /opt/clang-19.1.7
+      CC: /opt/clang-19.1.7/bin/clang
+      CXX: /opt/clang-19.1.7/bin/clang++
+      CMAKE_VERSION: 3.31.6
+      CLANG_TIDY_SARIF_VERSION: 0.8.0
+      CLANG_HTML_VERSION: 1.6.1
+      SARIF_MULTITOOL_VERSION: 5.7.0
+    defaults:
+      run: {shell: bash}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          lfs: 'true'
+          fetch-depth: 0
+          submodules: recursive
+          ref: ${{ inputs.ref }}
+
+      - name: Resolve mode and changed files
+        id: changes
+        run: |
+          set -euo pipefail
+          [[ "${{ inputs.full_codebase }}" == "true" ]] && mode=full || mode=diff
+          [[ "${{ inputs.upload_artifacts }}" == "true" ]] && artifacts=true || artifacts=false
+          echo "mode=$mode" | tee -a "$GITHUB_OUTPUT"
+          echo "artifacts=$artifacts" | tee -a "$GITHUB_OUTPUT"
+
+          if [[ "$mode" == "full" ]]; then
+            echo "cpp_changed=true" | tee -a "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          base_sha="${{ github.event.pull_request.base.sha }}"
+          echo "base_sha=$base_sha" | tee -a "$GITHUB_OUTPUT"
+          if git diff --no-renames --name-only "$base_sha...HEAD" -- '*.cpp' '*.hpp' | grep -q .; then
+            echo "cpp_changed=true" | tee -a "$GITHUB_OUTPUT"
+          else
+            echo "cpp_changed=false" | tee -a "$GITHUB_OUTPUT"
+            echo "No C++ changes; skipping clang-tidy." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Install build dependencies
+        if: steps.changes.outputs.cpp_changed == 'true'
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            autoconf-archive \
+            libkrb5-dev libsasl2-dev libcurl4-openssl-dev \
+            mono-complete
+
+      - name: Install clang and clang-tidy (official LLVM release)
+        if: steps.changes.outputs.cpp_changed == 'true'
+        run: |
+          set -euo pipefail
+          dir="LLVM-${CLANG_VERSION}-Linux-X64"
+          curl -sSfL -O "https://github.com/llvm/llvm-project/releases/download/llvmorg-${CLANG_VERSION}/${dir}.tar.xz"
+          echo "${CLANG_SHA256}  ${dir}.tar.xz" | sha256sum -c -
+          tar -xf "${dir}.tar.xz"
+          rm "${dir}.tar.xz"
+          sudo mv "${dir}" "$CLANG_HOME"
+          echo "$CLANG_HOME/bin" >> "$GITHUB_PATH"
+          "$CLANG_HOME/bin/clang-tidy" --version
+          "$CLANG_HOME/bin/clang-tidy" --verify-config
+
+      - name: Install pinned CMake
+        if: steps.changes.outputs.cpp_changed == 'true'
+        run: |
+          set -euo pipefail
+          if [[ "$(cmake --version | head -n1)" == "cmake version ${CMAKE_VERSION}" ]]; then
+            echo "Runner already provides cmake ${CMAKE_VERSION}"
+            exit 0
+          fi
+          pipx install "cmake==${CMAKE_VERSION}"
+          bin_dir="$(pipx environment --value PIPX_BIN_DIR)"
+          echo "$bin_dir" >> "$GITHUB_PATH"
+          "$bin_dir/cmake" --version
+
+      - name: Extra envs
+        if: steps.changes.outputs.cpp_changed == 'true'
+        run: |
+          . build_tooling/vcpkg_caching.sh
+          echo -e "VCPKG_BINARY_SOURCES=$VCPKG_BINARY_SOURCES
+          VCPKG_ROOT=$PLATFORM_VCPKG_ROOT
+          ${X_VCPKG_ASSET_SOURCES:+X_VCPKG_ASSET_SOURCES=$X_VCPKG_ASSET_SOURCES}" | tee -a $GITHUB_ENV
+          cmake -P cpp/CMake/CpuCount.cmake | sed 's/^-- //' | tee -a $GITHUB_ENV
+        env:
+          CMAKE_BUILD_PARALLEL_LEVEL: ${{vars.CMAKE_BUILD_PARALLEL_LEVEL}}
+
+      - name: CMake configure
+        if: steps.changes.outputs.cpp_changed == 'true'
+        run: cmake --preset $ARCTIC_CMAKE_PRESET -DVCPKG_INSTALL_OPTIONS=--clean-after-build cpp
+
+      - name: Build generated sources
+        if: steps.changes.outputs.cpp_changed == 'true'
+        run: cmake --build cpp/out/$ARCTIC_CMAKE_PRESET-build --target arcticdb_proto -j $CMAKE_BUILD_PARALLEL_LEVEL
+
+      - name: Run clang-tidy (changed lines)
+        if: steps.changes.outputs.cpp_changed == 'true' && steps.changes.outputs.mode == 'diff'
+        run: |
+          set -euo pipefail
+          git diff -U0 --no-color "${{ steps.changes.outputs.base_sha }}...HEAD" -- '*.cpp' '*.hpp' \
+            | python3 "$CLANG_HOME/share/clang/clang-tidy-diff.py" -p1 \
+                -path "cpp/out/$ARCTIC_CMAKE_PRESET-build" \
+                -j "$CMAKE_BUILD_PARALLEL_LEVEL" -quiet \
+                -export-fixes fixes.yml 2>&1 | tee clang-tidy.log
+
+      - name: Run clang-tidy (whole codebase)
+        if: steps.changes.outputs.cpp_changed == 'true' && steps.changes.outputs.mode == 'full'
+        run: |
+          set -euo pipefail
+          "$CLANG_HOME/bin/run-clang-tidy" \
+            -p "cpp/out/$ARCTIC_CMAKE_PRESET-build" \
+            -j "$CMAKE_BUILD_PARALLEL_LEVEL" -quiet \
+            -export-fixes fixes.yml \
+            "$GITHUB_WORKSPACE/cpp/arcticdb/.*" 2>&1 | tee clang-tidy.log
+
+      - name: Fail on findings
+        if: steps.changes.outputs.cpp_changed == 'true'
+        run: |
+          set -euo pipefail
+          if grep -E ': (warning|error): ' clang-tidy.log; then
+            echo "clang-tidy reported the findings above; see clang-tidy.log in the job log."
+            exit 1
+          fi
+
+      - name: Convert findings to SARIF
+        if: always() && steps.changes.outputs.cpp_changed == 'true' && hashFiles('clang-tidy.log') != ''
+        env:
+          DOTNET_CLI_TELEMETRY_OPTOUT: 1
+          DOTNET_NOLOGO: 1
+        run: |
+          set -euo pipefail
+          curl -sSfL -o clang-tidy-sarif \
+            "https://github.com/psastras/sarif-rs/releases/download/clang-tidy-sarif-v${CLANG_TIDY_SARIF_VERSION}/clang-tidy-sarif-x86_64-unknown-linux-gnu"
+          chmod +x clang-tidy-sarif
+          ./clang-tidy-sarif < clang-tidy.log > clang-tidy.sarif
+
+          dotnet tool install --tool-path "$HOME/.dotnet-tools" \
+            Sarif.Multitool --version "$SARIF_MULTITOOL_VERSION"
+          sed -i -E 's@("uri"[[:space:]]*:[[:space:]]*")/@\1file:///@g' clang-tidy.sarif
+          "$HOME/.dotnet-tools/sarif" rebaseuri clang-tidy.sarif \
+            --base-path-value "$GITHUB_WORKSPACE" --base-path-token SRCROOT --log Inline
+
+      - name: Upload SARIF to code scanning
+        if: always() && steps.changes.outputs.cpp_changed == 'true' && hashFiles('clang-tidy.sarif') != ''
+        uses: github/codeql-action/upload-sarif@v4
+        continue-on-error: true
+        with:
+          sarif_file: clang-tidy.sarif
+          category: clang-tidy
+
+      - name: Build HTML report
+        if: always() && steps.changes.outputs.artifacts == 'true' && steps.changes.outputs.cpp_changed == 'true' && hashFiles('clang-tidy.log') != ''
+        continue-on-error: true
+        run: |
+          pipx install "clang-html==$CLANG_HTML_VERSION"
+          bin_dir="$(pipx environment --value PIPX_BIN_DIR)"
+          "$bin_dir/clang-tidy-html" clang-tidy.log -o clang-tidy-report.html
+
+      - name: Upload clang-tidy artifacts
+        if: always() && steps.changes.outputs.artifacts == 'true' && steps.changes.outputs.cpp_changed == 'true' && hashFiles('clang-tidy.log') != ''
+        uses: actions/upload-artifact@v7
+        with:
+          name: clang-tidy-report
+          path: |
+            clang-tidy.log
+            fixes.yml
+            clang-tidy-report.html
+          if-no-files-found: warn
