@@ -1,10 +1,12 @@
 #include <arcticdb/column_store/column_utils.hpp>
 #include <arcticdb/python/python_utils.hpp>
 #include <arcticdb/python/python_handler_data.hpp>
+#include <arcticdb/util/collection_utils.hpp>
 #include <arcticdb/arrow/arrow_utils.hpp>
 #include <arcticdb/arrow/arrow_c_interface.hpp>
 
 #include <pybind11/stl.h>
+#include <string>
 
 namespace arcticdb::python_util {
 
@@ -34,13 +36,12 @@ py::tuple extract_pandas_columns(PandasOutputFrame& pandas_output_frame) {
     auto frame = pandas_output_frame.release_frame();
     const size_t field_count = frame.fields().size();
     const size_t index_field_count = frame.descriptor().index().field_count();
-    std::vector<PandasColumn> arrays;
-    std::vector<std::string> index_column_names;
-    std::vector<std::string> column_names;
-    arrays.reserve(field_count);
-    index_column_names.reserve(index_field_count);
-    column_names.reserve(field_count - index_field_count);
+    auto arrays = util::reserve_vector<PandasColumn>(field_count);
+    auto column_types = util::reserve_vector<TypeDescriptor>(field_count);
+    auto index_column_names = util::reserve_vector<std::string>(index_field_count);
+    auto column_names = util::reserve_vector<std::string>(field_count - index_field_count);
     for (std::size_t c = 0; c < field_count; ++c) {
+        column_types.push_back(frame.field(c).type());
         if (frame.column(c).buffer().has_extra_bytes_per_block()) { // Checks if this column decoded as arrow string
             arrays.emplace_back(column_to_arrow_arrays(frame.column(c), frame.field(c).name()));
         } else {
@@ -53,7 +54,12 @@ py::tuple extract_pandas_columns(PandasOutputFrame& pandas_output_frame) {
         }
     }
     return py::make_tuple(
-            std::move(arrays), std::move(column_names), std::move(index_column_names), frame.row_count(), frame.offset()
+            std::move(arrays),
+            std::move(column_names),
+            std::move(index_column_names),
+            frame.row_count(),
+            frame.offset(),
+            std::move(column_types)
     );
 }
 
