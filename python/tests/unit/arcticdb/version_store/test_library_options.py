@@ -4,6 +4,7 @@ import pandas as pd
 import pytest
 
 from arcticdb import LibraryOptions
+from arcticdb.options import EnterpriseLibraryOptions
 from arcticdb.version_store.library import StagedDataFinalizeMethod, UpdatePayload, WriteMetadataPayload, WritePayload
 from arcticdb_ext.storage import ModifiableLibraryOption
 
@@ -210,3 +211,17 @@ def test_modify_library_option_to_false_stops_pruning(lmdb_storage, lib_name):
     lib.write(SYM, DF_1)
     lib.write(SYM, DF_2)
     assert list_versions(lib) == [0, 1]
+
+
+@pytest.mark.parametrize("options_class", [LibraryOptions, EnterpriseLibraryOptions])
+@pytest.mark.parametrize("other", [None, "a string", 1])
+def test_options_equality_with_other_type_is_false(options_class, other):
+    options = options_class()
+    assert options != other
+    assert not (options == other)
+    assert options in [other, options]
+
+
+@pytest.mark.parametrize("options_class", [LibraryOptions, EnterpriseLibraryOptions])
+def test_options_equality_with_same_type(options_class):
+    assert options_class() == options_class()
