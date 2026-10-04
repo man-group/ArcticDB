@@ -1311,6 +1311,16 @@ jobs:
       COMMIT: ${{ needs.plan.outputs.commit }}
       LIBRARY: ${{ needs.collect.outputs.library }}
       PR_NUMBER: ${{ github.event.pull_request.number }}
+      # The run's gate policy, so a row no gate watches is marked not gated on the
+      # page (site-consistency 76). Empty when every lane gates, which `viz pr` reads
+      # as exactly that.
+      MEASURE_ONLY: ${{ needs.plan.outputs.measure_only }}
+      # What the PR list and the PR page show beside the number (site-consistency 53).
+      # The title is text anybody opening a pull request writes, so it reaches the
+      # script through the environment only: spliced into `run:` as `${{ }}` it would
+      # be shell source, and a title with a `$(...)` in it would run.
+      PR_TITLE: ${{ github.event.pull_request.title }}
+      PR_AUTHOR: ${{ github.event.pull_request.user.login }}
       SITE_PREFIX: winds
     steps:
       - uses: actions/setup-python@v5
@@ -1368,7 +1378,9 @@ jobs:
             git -C gh-pages reset --hard FETCH_HEAD
 
             args=(--results "$RESULTS" --library "$LIBRARY" --commit "$COMMIT"
-                  --pr "$PR_NUMBER" --site-dir "gh-pages/${SITE_PREFIX}/data")
+                  --pr "$PR_NUMBER" --site-dir "gh-pages/${SITE_PREFIX}/data"
+                  --measure-only "$MEASURE_ONLY"
+                  --pr-title "$PR_TITLE" --pr-author "$PR_AUTHOR")
             if [ -f compare-report.json ]; then
               args+=(--compare-report compare-report.json)
             fi
