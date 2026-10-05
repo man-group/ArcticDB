@@ -315,7 +315,7 @@ struct formatter<FormattableRef<AtomKey, FormatTag>> {
     template<typename FormatContext>
     auto format(const FormattableRef<arcticdb::entity::AtomKey, FormatTag>& f, FormatContext& ctx) const {
         const auto& key = f.ref;
-        return format_to(
+        return fmt::format_to(
                 ctx.out(),
                 FMT_STRING(FormatTag::format),
                 key.type(),
