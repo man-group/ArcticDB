@@ -176,6 +176,13 @@ class SymbolDescription(NamedTuple):
                    work.
         UNKNOWN - Either the data does not have a timestamp index, or the data does have a timestamp index, but was
                   written by a client that predates this information being stored.
+    input_format : str
+        Format used to write the data. One of ``"DATAFRAME"``, ``"SERIES"``,
+        ``"TIMEFRAME"``, ``"NDARRAY"``, ``"PICKLED"``, ``"ARROW"``, or
+        ``"UNKNOWN"``. This records the input format at write time and does not
+        constrain the data returned by ``read``; the symbol may still be read
+        as pandas or Arrow. ``"UNKNOWN"`` is returned for recursively
+        normalized data or when no input type was recorded.
     """
 
     columns: Tuple[NameWithDType]
