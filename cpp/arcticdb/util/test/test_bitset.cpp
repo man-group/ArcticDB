@@ -39,6 +39,15 @@ TEST(BoolsToPacked, NonCanonicalTruthyValues) {
     EXPECT_EQ(dest[1], 0b11000111);
 }
 
+TEST(BoolsToPacked, NonCanonicalTruthyTail) {
+    // The bools past the last full byte must also pack a truthy byte other than 1 to a single set bit
+    uint8_t src[] = {0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 37, 0x80, 0};
+    uint8_t dest[2] = {0, 0xFF};
+    bools_to_packed_bits(reinterpret_cast<const bool*>(src), 13, dest);
+    EXPECT_EQ(dest[0], 0);
+    EXPECT_EQ(dest[1] & 0x1F, 0b01101);
+}
+
 TEST(BoolsToPacked, AllZero) {
     bool src[16] = {};
     memset(src, 0, 16);

@@ -92,7 +92,7 @@ void bools_to_packed_bits(const bool* src, size_t num_bools, uint8_t* dest) {
                   ((b[5] != 0) << 5) | ((b[6] != 0) << 6) | ((b[7] != 0) << 7);
     }
     for (size_t i = num_full_bytes * 8; i < num_bools; ++i) {
-        set_bit_at(dest, i, src[i]);
+        set_bit_at(dest, i, as_byte[i] != 0);
     }
 }
 
