@@ -1565,6 +1565,15 @@ def test_get_description_batch_empty_nat(arctic_library):
         assert np.isnat(results_list[sym].date_range[1])
 
 
+def test_get_description_batch_input_format(lmdb_library):
+    lib = lmdb_library
+    index = pd.date_range(start="1/1/2018", periods=3)
+    lib.write("batch_frame", pd.DataFrame({"column": [1, 2, 3]}, index=index))
+    lib.write("batch_series", pd.Series([1, 2, 3], name="column", index=index))
+    descs = lib.get_description_batch(["batch_frame", "batch_series"])
+    assert [desc.input_format for desc in descs] == ["DATAFRAME", "SERIES"]
+
+
 @pytest.mark.storage
 def test_read_batch_mixed_with_snapshots(arctic_library):
     num_symbols = 10

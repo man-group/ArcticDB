@@ -77,6 +77,21 @@ Library.write: for more documentation on normalisation.
 """
 
 
+INPUT_FORMATS = {
+    "df": "DATAFRAME",
+    "series": "SERIES",
+    "ts": "TIMEFRAME",  # arcticdb TimeFrame; only writable via the V1 API, but still readable in V2 API
+    "np": "NDARRAY",
+    "msg_pack_frame": "PICKLED",  # anything normalization could not handle; the pickled payload is self-describing
+    "experimental_arrow": "ARROW",
+}
+"""Maps the normalization metadata ``input_type`` to the ``input_format`` reported by ``SymbolDescription``.
+
+Recursively normalized data, and data written by a client that predates this information being recorded
+falls back to the "UNKNOWN" type.
+"""
+
+
 class SymbolVersion(NamedTuple):
     """A named tuple. A symbol name - version pair.
 
@@ -170,6 +185,7 @@ class SymbolDescription(NamedTuple):
     last_update_time: datetime.datetime
     date_range: Tuple[Union[datetime.datetime, datetime64], Union[datetime.datetime, datetime64]]
     sorted: str
+    input_format: str
 
     def __eq__(self, other):
         # Needed as NaT != NaT
@@ -3118,6 +3134,7 @@ class Library:
             index_type=info["index_type"],
             date_range=info["date_range"],
             sorted=info["sorted"],
+            input_format=INPUT_FORMATS.get(info["input_type"], "UNKNOWN"),
         )
 
     def get_description(self, symbol: str, as_of: Optional[AsOf] = None) -> SymbolDescription:

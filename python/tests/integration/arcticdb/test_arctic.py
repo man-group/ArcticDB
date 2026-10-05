@@ -37,6 +37,7 @@ from arcticdb.exceptions import (
 )
 from arcticdb.adapters.mongo_library_adapter import MongoLibraryAdapter
 from arcticdb.arctic import Arctic
+from arcticdb.dependencies import pyarrow as pa
 import arcticdb.toolbox.query_stats as qs
 from arcticdb.options import LibraryOptions
 from arcticdb import QueryBuilder
@@ -1286,6 +1287,66 @@ def test_get_description_multiindex(lmdb_library, names):
     assert len(index_info) == 2
     assert index_info[0].name == (names[0] if names is not None else None)
     assert index_info[1].name == (names[1] if names is not None else None)
+
+
+def test_get_description_input_format_dataframe(lmdb_library):
+    lib = lmdb_library
+    sym = "test_get_description_input_format_dataframe"
+    # A timestamp index does not make this a TIMEFRAME - that is reserved for the arcticdb TimeFrame type
+    df = pd.DataFrame({"column": [1, 2, 3]}, index=pd.date_range(start="1/1/2018", periods=3))
+    lib.write(sym, df)
+    assert lib.get_description(sym).input_format == "DATAFRAME"
+
+
+def test_get_description_input_format_series(lmdb_library):
+    lib = lmdb_library
+    sym = "test_get_description_input_format_series"
+    series = pd.Series([1, 2, 3], name="column", index=pd.date_range(start="1/1/2018", periods=3))
+    lib.write(sym, series)
+    assert lib.get_description(sym).input_format == "SERIES"
+
+
+def test_get_description_input_format_distinguishes_series_from_dataframe(lmdb_library):
+    # A Series is stored as a single-column DataFrame, so input_format is the only thing that separates these
+    lib = lmdb_library
+    index = pd.date_range(start="1/1/2018", periods=3)
+    lib.write("as_frame", pd.DataFrame({"column": [1, 2, 3]}, index=index))
+    lib.write("as_series", pd.Series([1, 2, 3], name="column", index=index))
+    assert lib.get_description("as_frame").input_format == "DATAFRAME"
+    assert lib.get_description("as_series").input_format == "SERIES"
+
+
+def test_get_description_input_format_ndarray(lmdb_library):
+    lib = lmdb_library
+    sym = "test_get_description_input_format_ndarray"
+    lib.write(sym, np.arange(5))
+    assert lib.get_description(sym).input_format == "NDARRAY"
+
+
+def test_get_description_input_format_pickled(lmdb_library):
+    lib = lmdb_library
+    sym = "test_get_description_input_format_pickled"
+    lib.write_pickle(sym, {"not": "normalizable"})
+    desc = lib.get_description(sym)
+    assert desc.input_format == "PICKLED"
+    assert desc.row_count is None
+
+
+def test_get_description_input_format_normalizable_data_written_with_write_pickle(lmdb_library):
+    # write_pickle only pickles as a fallback, so normalizable input is still reported as its normalized format
+    lib = lmdb_library
+    sym = "test_get_description_input_format_normalizable_data_written_with_write_pickle"
+    lib.write_pickle(sym, pd.DataFrame({"column": [1, 2, 3]}))
+    assert lib.get_description(sym).input_format == "DATAFRAME"
+
+
+def test_get_description_input_format_arrow(arrow_library):
+    # Arrow data is always written as a table, so the DataFrame/Series distinction does not apply to it
+    lib = arrow_library
+    sym = "test_get_description_input_format_arrow"
+    table = pa.table({"column": pa.array([1, 2, 3], type=pa.int64())})
+    lib.write(sym, table)
+    assert lib.get_description(sym).input_format == "ARROW"
 
 
 # See test_write_tz in test_normalization.py for the V1 API equivalent
