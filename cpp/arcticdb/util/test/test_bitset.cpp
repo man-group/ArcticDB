@@ -248,3 +248,75 @@ TEST(BitsetToPackedBits, ExhaustiveSmallSizes) {
         ASSERT_EQ(packed, packed_from_bitset_naive(bv)) << "n=" << n;
     }
 }
+
+namespace {
+
+// Reference: walk the validity bits, taking the next dense value at each set bit and writing zero at each unset one
+std::vector<uint8_t> scatter_naive(
+        const std::vector<uint8_t>& values, const std::vector<uint8_t>& validity, size_t num_bits
+) {
+    std::vector<uint8_t> packed(bitset_packed_size_bytes(num_bits), 0);
+    size_t next = 0;
+    for (size_t i = 0; i < num_bits; ++i) {
+        if (get_bit_at(validity.data(), i)) {
+            set_bit_at(packed.data(), i, values[next++] != 0);
+        }
+    }
+    return packed;
+}
+
+void check_scatter_matches_naive(const bm::bvector<>& bv, std::mt19937_64& rng) {
+    const size_t num_bits = bv.size();
+    std::vector<uint8_t> validity(bitset_packed_size_bytes(num_bits));
+    bitset_to_packed_bits(bv, validity.data());
+    // Truthy bytes other than 1 must still pack to 1
+    std::vector<uint8_t> values(bv.count());
+    for (auto& value : values) {
+        value = static_cast<uint8_t>(rng() % 3 == 0 ? 0 : 1 + rng() % 255);
+    }
+    std::vector<uint8_t> packed(bitset_packed_size_bytes(num_bits), 0xAB);
+    scatter_bools_to_packed_bits(
+            reinterpret_cast<const bool*>(values.data()), values.size(), validity.data(), num_bits, packed.data()
+    );
+    ASSERT_EQ(packed, scatter_naive(values, validity, num_bits)) << "size=" << num_bits << " count=" << values.size();
+}
+
+} // namespace
+
+TEST(ScatterBoolsToPackedBits, BlockLayoutsAgainstNaive) {
+    std::mt19937_64 rng(11);
+    for (const auto& bv : block_layout_bitsets()) {
+        check_scatter_matches_naive(bv, rng);
+    }
+}
+
+TEST(ScatterBoolsToPackedBits, ExhaustiveSmallSizes) {
+    std::mt19937_64 rng(42);
+    for (size_t n = 0; n <= 130; ++n) {
+        for (const unsigned density : {0u, 1u, 2u, 3u}) {
+            bm::bvector<> bv;
+            bv.resize(bv_size(n));
+            for (size_t i = 0; i < n; ++i) {
+                // density 0: none set, 3: all set, otherwise random
+                bv.set(bv_size(i), density == 3 || (density != 0 && rng() % (density + 1) != 0));
+            }
+            check_scatter_matches_naive(bv, rng);
+        }
+    }
+}
+
+TEST(ScatterBoolsToPackedBits, IgnoresValidityBitsPastTheEnd) {
+    const std::vector<uint8_t> validity{0xFF, 0xFF};
+    const bool values[] = {true, false, true, true, false, true, true, false, true, true};
+    std::vector<uint8_t> packed(2, 0xAB);
+    scatter_bools_to_packed_bits(values, 10, validity.data(), 10, packed.data());
+    EXPECT_EQ(packed[0], 0b01101101);
+    EXPECT_EQ(packed[1], 0b11);
+}
+
+TEST(ScatterBoolsToPackedBits, ThrowsOnCountMismatch) {
+    const std::vector<uint8_t> validity{0b00000111};
+    const bool values[] = {true, true};
+    std::vector<uint8_t> packed(1);
+    EXPECT_ANY_THROW(scatter_bools_to_packed_bits(values, 2, validity.data(), 8, packed.data()));
+}

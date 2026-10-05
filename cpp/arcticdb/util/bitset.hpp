@@ -64,6 +64,12 @@ void packed_bits_to_buffer(const uint8_t* packed_bits, size_t num_bits, size_t o
 
 void bools_to_packed_bits(const bool* src, size_t num_bools, uint8_t* dest);
 
+// Writes the num_values dense values, in order, to the set bits of the num_bits-bit validity bitmap, and zeros to its
+// unset bits. num_values must equal the number of set bits.
+void scatter_bools_to_packed_bits(
+        const bool* values, size_t num_values, const uint8_t* validity, size_t num_bits, uint8_t* dest
+);
+
 inline bool get_bit_at(const uint8_t* packed_bits, size_t bit_pos) {
     return (packed_bits[bit_pos >> 3] >> (bit_pos & 7)) & 1;
 }

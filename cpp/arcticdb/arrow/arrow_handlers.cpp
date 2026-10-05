@@ -462,7 +462,32 @@ void ArrowBoolHandler::
     const auto positions = get_positions_after_truncation(m);
 
     const bool is_sparse = source_column.opt_sparse_map().has_value();
-    if (is_sparse) {
+    const bool truncated = m.truncate_.start_.has_value() || m.truncate_.end_.has_value();
+    if (is_sparse && !truncated && source_column.data().buffer().num_blocks() <= 1) {
+        // Whole segment: export the validity bitmap block by block, then deposit the dense values at its set bits
+        const auto& sparse_map = *source_column.opt_sparse_map();
+        const size_t num_bits = sparse_map.size();
+        const size_t num_values = sparse_map.count();
+        util::check(
+                source_column.data().buffer().bytes() >= num_values,
+                "Sparse bool column holds {} bytes for {} values",
+                source_column.data().buffer().bytes(),
+                num_values
+        );
+        const auto* values = reinterpret_cast<const bool*>(source_column.data().buffer().data());
+        if (num_values == num_bits) {
+            bools_to_packed_bits(values, num_bits, packed_dest);
+        } else {
+            auto& validity = dest_column.create_extra_buffer(
+                    positions.extra_buffer_position,
+                    ExtraBufferType::BITMAP,
+                    bitset_packed_size_bytes(num_bits),
+                    AllocationType::DETACHABLE
+            );
+            bitset_to_packed_bits(sparse_map, validity.data());
+            scatter_bools_to_packed_bits(values, num_values, validity.data(), num_bits, packed_dest);
+        }
+    } else if (is_sparse) {
         using BoolTypeTag = ScalarTagType<DataTypeTag<DataType::BOOL8>>;
         for_each_enumerated_flattened<BoolTypeTag>(
                 source_column,

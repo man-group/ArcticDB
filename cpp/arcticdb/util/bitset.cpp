@@ -8,6 +8,9 @@
 
 #include <arcticdb/util/bitset.hpp>
 
+#include <array>
+#include <vector>
+
 namespace arcticdb {
 
 void bitset_to_packed_bits(const bm::bvector<>& bv, uint8_t* dest_ptr) {
@@ -94,6 +97,56 @@ void bools_to_packed_bits(const bool* src, size_t num_bools, uint8_t* dest) {
     for (size_t i = num_full_bytes * 8; i < num_bools; ++i) {
         set_bit_at(dest, i, as_byte[i] != 0);
     }
+}
+
+namespace {
+// deposit_nibble[mask][bits] places the low popcount(mask) bits of bits at the set positions of the 4-bit mask.
+constexpr auto deposit_nibble = [] {
+    std::array<std::array<uint8_t, 16>, 16> table{};
+    for (unsigned mask = 0; mask < 16; ++mask) {
+        for (unsigned bits = 0; bits < 16; ++bits) {
+            unsigned out = 0;
+            unsigned next = 0;
+            for (unsigned pos = 0; pos < 4; ++pos) {
+                if ((mask >> pos) & 1u) {
+                    out |= ((bits >> next++) & 1u) << pos;
+                }
+            }
+            table[mask][bits] = static_cast<uint8_t>(out);
+        }
+    }
+    return table;
+}();
+} // namespace
+
+void scatter_bools_to_packed_bits(
+        const bool* values, size_t num_values, const uint8_t* validity, size_t num_bits, uint8_t* dest
+) {
+    // Pack the values first, which vectorises, then deposit them a validity nibble at a time. The 8 bytes of slack let
+    // every read of the packed values be one unaligned 64-bit load.
+    std::vector<uint8_t> packed_values(bitset_packed_size_bytes(num_values) + 8, 0);
+    bools_to_packed_bits(values, num_values, packed_values.data());
+    const size_t num_bytes = bitset_packed_size_bytes(num_bits);
+    size_t value_pos = 0;
+    for (size_t byte_idx = 0; byte_idx < num_bytes; ++byte_idx) {
+        unsigned mask = validity[byte_idx];
+        if (byte_idx == num_bytes - 1 && num_bits % 8 != 0) {
+            mask &= (1u << (num_bits % 8)) - 1;
+        }
+        uint64_t window;
+        std::memcpy(&window, packed_values.data() + (value_pos >> 3), sizeof(window));
+        const auto bits = static_cast<unsigned>(window >> (value_pos & 7));
+        const unsigned lo = mask & 0xFu;
+        const unsigned hi = mask >> 4;
+        const auto lo_count = static_cast<unsigned>(std::popcount(lo));
+        dest[byte_idx] = static_cast<uint8_t>(
+                deposit_nibble[lo][bits & 0xFu] | (deposit_nibble[hi][(bits >> lo_count) & 0xFu] << 4)
+        );
+        value_pos += lo_count + static_cast<unsigned>(std::popcount(hi));
+    }
+    util::check(
+            value_pos == num_values, "scatter_bools_to_packed_bits: {} values for {} set bits", num_values, value_pos
+    );
 }
 
 void copy_packed_bits(const uint8_t* src, size_t src_bit_offset, size_t num_bits, uint8_t* dest) {
