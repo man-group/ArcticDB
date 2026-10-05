@@ -10,6 +10,8 @@
 
 #include <arcticdb/util/bitset.hpp>
 
+#include <bitmagic/bmserial.h>
+
 #include <random>
 #include <vector>
 
@@ -153,5 +155,87 @@ TEST(ForEachUnsetBit, RandomLargeAgainstNaive) {
                 check_matches_naive(bits, bit_offset, num_bits);
             }
         }
+    }
+}
+
+namespace {
+
+std::vector<uint8_t> packed_from_bitset_naive(const bm::bvector<>& bv) {
+    std::vector<uint8_t> packed(bitset_packed_size_bytes(bv.size()), 0);
+    for (size_t i = 0; i < bv.size(); ++i) {
+        set_bit_at(packed.data(), i, bv.test(bv_size(i)));
+    }
+    return packed;
+}
+
+// Sizes straddle BitMagic's 65536-bit blocks; the patterns produce empty, full, GAP and bit blocks.
+std::vector<bm::bvector<>> block_layout_bitsets() {
+    std::mt19937_64 rng(7);
+    std::vector<bm::bvector<>> bitsets;
+    for (const size_t n : {1u, 7u, 8u, 9u, 63u, 65'535u, 65'536u, 65'537u, 131'085u, 300'001u}) {
+        for (int pattern = 0; pattern < 6; ++pattern) {
+            bm::bvector<> bv;
+            bv.resize(bv_size(n));
+            if (pattern == 1) {
+                bv.set_range(0, bv_size(n - 1));
+            } else if (pattern == 2 && n > 10) {
+                bv.set_range(3, bv_size(n / 2));
+            } else if (pattern == 3) {
+                for (size_t i = 0; i < n; i += 3)
+                    bv.set(bv_size(i));
+            } else if (pattern == 4) {
+                for (size_t i = 0; i < n; ++i)
+                    if (rng() % 1000 == 0)
+                        bv.set(bv_size(i));
+            } else if (pattern == 5) {
+                bv.set_range(0, bv_size(n - 1));
+                for (size_t i = 0; i < n; i += 977)
+                    bv.set(bv_size(i), false);
+            }
+            bv.optimize();
+            // A deserialized bitset is what reads see, and may lay its blocks out differently
+            bm::serializer<bm::bvector<>> serializer;
+            bm::serializer<bm::bvector<>>::buffer buffer;
+            serializer.serialize(bv, buffer);
+            bm::bvector<> deserialized;
+            bm::deserialize(deserialized, buffer.buf());
+            deserialized.resize(bv_size(n));
+            bitsets.push_back(std::move(bv));
+            bitsets.push_back(std::move(deserialized));
+        }
+    }
+    return bitsets;
+}
+
+} // namespace
+
+TEST(BitsetToPackedBits, BlockLayoutsAgainstNaive) {
+    for (const auto& bv : block_layout_bitsets()) {
+        // Pre-filled so a byte the export forgets to write shows up as a mismatch
+        std::vector<uint8_t> packed(bitset_packed_size_bytes(bv.size()), 0xAB);
+        bitset_to_packed_bits(bv, packed.data());
+        ASSERT_EQ(packed, packed_from_bitset_naive(bv)) << "size=" << bv.size() << " count=" << bv.count();
+    }
+}
+
+TEST(BitsetToPackedBits, SizeBeyondLastAllocatedBlock) {
+    bm::bvector<> bv;
+    bv.set(5);
+    bv.resize(200'003);
+    std::vector<uint8_t> packed(bitset_packed_size_bytes(bv.size()), 0xAB);
+    bitset_to_packed_bits(bv, packed.data());
+    EXPECT_EQ(packed, packed_from_bitset_naive(bv));
+}
+
+TEST(BitsetToPackedBits, ExhaustiveSmallSizes) {
+    std::mt19937 rng(42);
+    for (size_t n = 0; n <= 130; ++n) {
+        bm::bvector<> bv;
+        bv.resize(bv_size(n));
+        for (size_t i = 0; i < n; ++i)
+            bv.set(bv_size(i), (rng() & 1) != 0);
+        std::vector<uint8_t> packed(bitset_packed_size_bytes(n), 0xAB);
+        bitset_to_packed_bits(bv, packed.data());
+        ASSERT_EQ(packed, packed_from_bitset_naive(bv)) << "n=" << n;
     }
 }

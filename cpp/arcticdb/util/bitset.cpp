@@ -11,13 +11,31 @@
 namespace arcticdb {
 
 void bitset_to_packed_bits(const bm::bvector<>& bv, uint8_t* dest_ptr) {
-    std::memset(dest_ptr, 0, bitset_packed_size_bytes(bv.size()));
-    auto last = bv.end();
-    for (auto en = bv.first(); en != last; ++en) {
-        size_t bit_pos = *en;
-        size_t byte_idx = bit_pos / 8;
-        size_t bit_idx = bit_pos % 8;
-        dest_ptr[byte_idx] |= (uint8_t(1) << bit_idx);
+    // A BitMagic bit block holds its bits least-significant first, which on a little-endian host is byte for byte the
+    // packed layout, so each block is copied whole rather than enumerating its set bits.
+    static_assert(std::endian::native == std::endian::little, "Block copy assumes a little-endian host");
+    const size_t num_bits = bv.size();
+    const size_t num_bytes = bitset_packed_size_bytes(num_bits);
+    constexpr size_t block_bytes = bm::gap_max_bits / 8;
+    const auto& blocks = bv.get_blocks_manager();
+    alignas(16) bm::word_t gap_scratch[bm::set_block_size];
+    for (size_t block_idx = 0, byte_offset = 0; byte_offset < num_bytes; ++block_idx, byte_offset += block_bytes) {
+        const size_t len = std::min(block_bytes, num_bytes - byte_offset);
+        unsigned i, j;
+        bm::get_block_coord(static_cast<bm::bvector<>::block_idx_type>(block_idx), i, j);
+        // get_block returns nullptr for an all-zero block and a real all-ones block for a full one
+        const bm::word_t* block = blocks.get_block(i, j);
+        if (block == nullptr) {
+            std::memset(dest_ptr + byte_offset, 0, len);
+        } else if (BM_IS_GAP(block)) {
+            bm::gap_convert_to_bitset(gap_scratch, BMGAP_PTR(block));
+            std::memcpy(dest_ptr + byte_offset, gap_scratch, len);
+        } else {
+            std::memcpy(dest_ptr + byte_offset, block, len);
+        }
+    }
+    if (const size_t tail_bits = num_bits % 8; tail_bits != 0) {
+        dest_ptr[num_bytes - 1] &= static_cast<uint8_t>((1u << tail_bits) - 1);
     }
 }
 
