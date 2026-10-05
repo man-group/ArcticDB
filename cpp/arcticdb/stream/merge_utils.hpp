@@ -59,9 +59,8 @@ inline void merge_string_columns(
     }
 }
 
-// An upper bound on the distinct strings that merging segments into one pool can produce: no more than the string
-// values they hold, and no more than the strings their pools hold. The second bound is what keeps a reserve from
-// over-sizing the merged pool when the inputs repeat strings, which an over-sized map pays for in cache misses.
+// Upper bound on the distinct strings in the merged pool: the smaller of the input string values and the
+// strings in the input pools. The latter keeps repeated strings from over-sizing the map.
 inline size_t merged_distinct_strings_upper_bound(const std::vector<SegmentInMemory>& segments) {
     size_t string_values = 0;
     size_t pooled_strings = 0;
