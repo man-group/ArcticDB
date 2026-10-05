@@ -104,12 +104,8 @@ void StringPool::set_allow_sparse(Sparsity) {
 
 size_t StringPool::num_blocks() const { return block_.num_blocks(); }
 
-// try_emplace hashes and probes once for both the lookup and the insertion, where find followed by
-// insert hashes the same string twice on the miss path. The key it stores is the caller's view, which
-// need not outlive this pool, so it is rebound to the block-backed copy. The two compare equal, so the
-// bucket the key was placed in remains the right one.
-// Invariant: a key is only left in the map once the block holds a copy of it, hence the erase if the
-// block insert throws.
+// One hash and probe for both lookup and insert. The key is then rebound from the caller's view to the
+// pool's own copy (equal, so its bucket is unchanged), and erased again if the block insert throws.
 OffsetString StringPool::get(std::string_view s, bool deduplicate) {
     if (!deduplicate)
         return OffsetString(block_.insert(s.data(), s.size()), this);
