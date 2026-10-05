@@ -187,11 +187,32 @@ jobs:
       # `site/data/.backfill.json` records which runs are published and is committed
       # with the rest, which is what makes tomorrow night incremental: it reads only
       # what `collect` added. A `rebuild` dispatch is how you throw it away.
+      #
+      # `--measure-only` is the gate policy the index publishes — which lanes, and which
+      # of their kinds, no gate watches — and it is what the site's "timings not gated"
+      # sentences read (site-consistency 82, 84). There is no plan job here to take it
+      # from, so `plan --output measure-only` prints the same list the benchmark run's
+      # plan publishes, out of the same `python/benchmarks/workers.toml` at this
+      # checkout's HEAD: one config decides both the gate and what the site says about
+      # it. It is published even on a night that writes no run. Empty is a valid
+      # answer (every lane gates) and is passed as such; a plan that fails fails here.
+      #
+      # `--asv-benchmarks` names the parameters of runs stored before `collect`
+      # recorded them, which otherwise publish as positions (`param0`), from the
+      # `benchmarks.json` ArcticDB tracks (site-consistency 58, 77). A name a run
+      # recorded always wins, and an entry whose axis count does not match is left
+      # alone. A missing or unreadable file fails the step before the store is read,
+      # as `viz reindex` refuses it: a quiet site of `param0`s is worse than a red night.
       - name: rebuild the exported dataset
         run: |
           set -euo pipefail
+          measure_only="$(arctic-winds plan --config python/benchmarks/workers.toml \
+                            --repo . --output measure-only)"
+          echo "gate policy: ${measure_only:-every lane gates}"
           args=(--results "$RESULTS" --library "$LIBRARY"
-                --site-dir site/data --repo . --batch --workers 8)
+                --site-dir site/data --repo . --batch --workers 8
+                --measure-only "$measure_only"
+                --asv-benchmarks python/.asv/results/benchmarks.json)
           if [ -n "${SINCE:-}" ]; then
             args+=(--since "$SINCE")
           fi
