@@ -128,6 +128,19 @@ the file lazily there), and with `MDB_NOSYNC` a full disk is not reported and pa
 
 Default: 0 (no extra flags).
 
+### LMDBStorage.GroupCommit
+
+Whether concurrent writes to one LMDB library share a write transaction. LMDB allows one write transaction at a time and
+each commit syncs to disk, so without this the storage keys of a large write (its data segments, for example) commit one
+at a time, each paying a sync. With it, keys that queue while a transaction commits are written together in the next
+transaction and share its sync. A write still returns only after the transaction holding its key has committed and
+synced, so durability is unchanged. If the shared transaction fails, its keys are retried one transaction each, so a
+failing key fails only its own write.
+
+Set to `0` for one transaction per key.
+
+Default: 1 (on).
+
 ### LMDBStorage.Diagnostics
 
 Whether `MDB_CORRUPTED`, `MDB_PAGE_NOTFOUND`, `MDB_PANIC`, `MDB_INVALID`, `MDB_MAP_RESIZED` and `MDB_BAD_TXN` carry a
