@@ -496,21 +496,18 @@ void ArrowBoolHandler::
                 positions.end_idx_after_truncation
         );
         const auto& sparse_map = *source_column.opt_sparse_map();
-        // Copy the sparse map, because handle_truncation modifies the bitset inplace.
-        auto validity_bitset = sparse_map;
-        auto bitmap_truncate = m.truncate_;
-        if (bitmap_truncate.start_.has_value()) {
-            // Round down the bitmap truncation start to the nearest byte boundary so that the BITMAP buffer's
-            // bit layout matches the packed data block's non-zero shift after handle_truncation(dest_column).
-            *bitmap_truncate.start_ -= *bitmap_truncate.start_ % 8;
-        }
-        handle_truncation(validity_bitset, bitmap_truncate);
-
-        if (validity_bitset.count() != validity_bitset.size()) {
-            create_dense_bitmap(
-                    positions.extra_buffer_position, validity_bitset, dest_column, AllocationType::DETACHABLE
-            );
-        }
+        // Start rounds down to a byte so the bitmap lines up with the packed values' shift after handle_truncation
+        size_t bitmap_start = m.truncate_.start_.value_or(0);
+        bitmap_start -= bitmap_start % 8;
+        const size_t bitmap_end = m.truncate_.end_.value_or(sparse_map.size());
+        create_dense_bitmap_for_range_if_any_nulls(
+                positions.extra_buffer_position,
+                sparse_map,
+                bitmap_start,
+                bitmap_end,
+                dest_column,
+                AllocationType::DETACHABLE
+        );
     } else {
         bools_to_packed_bits(
                 reinterpret_cast<const bool*>(source_column.data().buffer().data()), m.num_rows_, packed_dest

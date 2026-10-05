@@ -13,28 +13,57 @@
 
 namespace arcticdb {
 
-void bitset_to_packed_bits(const bm::bvector<>& bv, uint8_t* dest_ptr) {
-    // A BitMagic bit block holds its bits least-significant first, which on a little-endian host is byte for byte the
-    // packed layout, so each block is copied whole rather than enumerating its set bits.
+namespace {
+// Copies bytes [first_byte, first_byte + num_bytes) of bv's packed form. A BitMagic bit block is byte for byte the
+// packed layout on a little-endian host, so each block is copied whole rather than enumerating its set bits.
+void copy_bitset_bytes(const bm::bvector<>& bv, size_t first_byte, size_t num_bytes, uint8_t* dest_ptr) {
     static_assert(std::endian::native == std::endian::little, "Block copy assumes a little-endian host");
-    const size_t num_bits = bv.size();
-    const size_t num_bytes = bitset_packed_size_bytes(num_bits);
     constexpr size_t block_bytes = bm::gap_max_bits / 8;
     const auto& blocks = bv.get_blocks_manager();
     alignas(16) bm::word_t gap_scratch[bm::set_block_size];
-    for (size_t block_idx = 0, byte_offset = 0; byte_offset < num_bytes; ++block_idx, byte_offset += block_bytes) {
-        const size_t len = std::min(block_bytes, num_bytes - byte_offset);
+    for (size_t written = 0; written < num_bytes;) {
+        const size_t byte_idx = first_byte + written;
+        const size_t offset_in_block = byte_idx % block_bytes;
+        const size_t len = std::min(block_bytes - offset_in_block, num_bytes - written);
         unsigned i, j;
-        bm::get_block_coord(static_cast<bm::bvector<>::block_idx_type>(block_idx), i, j);
+        bm::get_block_coord(static_cast<bm::bvector<>::block_idx_type>(byte_idx / block_bytes), i, j);
         // get_block returns nullptr for an all-zero block and a real all-ones block for a full one
         const bm::word_t* block = blocks.get_block(i, j);
         if (block == nullptr) {
-            std::memset(dest_ptr + byte_offset, 0, len);
-        } else if (BM_IS_GAP(block)) {
-            bm::gap_convert_to_bitset(gap_scratch, BMGAP_PTR(block));
-            std::memcpy(dest_ptr + byte_offset, gap_scratch, len);
+            std::memset(dest_ptr + written, 0, len);
         } else {
-            std::memcpy(dest_ptr + byte_offset, block, len);
+            if (BM_IS_GAP(block)) {
+                bm::gap_convert_to_bitset(gap_scratch, BMGAP_PTR(block));
+                block = gap_scratch;
+            }
+            std::memcpy(dest_ptr + written, reinterpret_cast<const uint8_t*>(block) + offset_in_block, len);
+        }
+        written += len;
+    }
+}
+} // namespace
+
+void bitset_to_packed_bits(const bm::bvector<>& bv, uint8_t* dest_ptr) {
+    bitset_range_to_packed_bits(bv, 0, bv.size(), dest_ptr);
+}
+
+void bitset_range_to_packed_bits(const bm::bvector<>& bv, size_t start, size_t end, uint8_t* dest_ptr) {
+    util::check(start <= end, "Invalid bit set range: start {} end {}", start, end);
+    const size_t num_bits = end - start;
+    const size_t num_bytes = bitset_packed_size_bytes(num_bits);
+    if (num_bits == 0) {
+        return;
+    }
+    copy_bitset_bytes(bv, start / 8, num_bytes, dest_ptr);
+    if (const size_t shift = start % 8; shift != 0) {
+        // An unaligned start needs one more source byte when the range spills into it, then a shift down in place
+        uint8_t spill = 0;
+        if (bitset_packed_size_bytes(shift + num_bits) > num_bytes) {
+            copy_bitset_bytes(bv, start / 8 + num_bytes, 1, &spill);
+        }
+        for (size_t idx = 0; idx < num_bytes; ++idx) {
+            const unsigned next = idx + 1 < num_bytes ? dest_ptr[idx + 1] : spill;
+            dest_ptr[idx] = static_cast<uint8_t>((dest_ptr[idx] >> shift) | (next << (8 - shift)));
         }
     }
     if (const size_t tail_bits = num_bits % 8; tail_bits != 0) {

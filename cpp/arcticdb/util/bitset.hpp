@@ -60,6 +60,9 @@ constexpr size_t bitset_packed_size_bytes(size_t num_bits) { return (num_bits + 
 
 void bitset_to_packed_bits(const bm::bvector<>& bv, uint8_t* dest_ptr);
 
+// Packs bits [start, end) of bv into dest_ptr, bit start + i landing at bit i, without truncating a copy of bv.
+void bitset_range_to_packed_bits(const bm::bvector<>& bv, size_t start, size_t end, uint8_t* dest_ptr);
+
 void packed_bits_to_buffer(const uint8_t* packed_bits, size_t num_bits, size_t offset, uint8_t* dest_ptr);
 
 void bools_to_packed_bits(const bool* src, size_t num_bools, uint8_t* dest);

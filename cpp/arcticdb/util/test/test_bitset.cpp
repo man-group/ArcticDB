@@ -320,3 +320,57 @@ TEST(ScatterBoolsToPackedBits, ThrowsOnCountMismatch) {
     std::vector<uint8_t> packed(1);
     EXPECT_ANY_THROW(scatter_bools_to_packed_bits(values, 2, validity.data(), 8, packed.data()));
 }
+
+namespace {
+
+std::vector<uint8_t> range_packed_naive(const bm::bvector<>& bv, size_t start, size_t end) {
+    std::vector<uint8_t> packed(bitset_packed_size_bytes(end - start), 0);
+    for (size_t i = start; i < end; ++i) {
+        set_bit_at(packed.data(), i - start, bv.test(bv_size(i)));
+    }
+    return packed;
+}
+
+void check_range_matches_naive(const bm::bvector<>& bv, size_t start, size_t end) {
+    // Sized exactly and pre-filled, so an overrun is a heap overflow and a skipped byte is a mismatch
+    std::vector<uint8_t> packed(bitset_packed_size_bytes(end - start), 0xAB);
+    bitset_range_to_packed_bits(bv, start, end, packed.data());
+    ASSERT_EQ(packed, range_packed_naive(bv, start, end))
+            << "size=" << bv.size() << " start=" << start << " end=" << end;
+}
+
+} // namespace
+
+TEST(BitsetRangeToPackedBits, ExhaustiveSmallRanges) {
+    std::mt19937 rng(42);
+    constexpr size_t n = 140;
+    for (int pattern = 0; pattern < 4; ++pattern) {
+        bm::bvector<> bv;
+        bv.resize(bv_size(n));
+        for (size_t i = 0; i < n; ++i) {
+            bv.set(bv_size(i), pattern == 1 || (pattern == 2 && i % 2 == 0) || (pattern == 3 && (rng() & 1) != 0));
+        }
+        for (size_t start = 0; start <= n; ++start) {
+            for (size_t end = start; end <= n; ++end) {
+                check_range_matches_naive(bv, start, end);
+            }
+        }
+    }
+}
+
+TEST(BitsetRangeToPackedBits, BlockLayoutsAgainstNaive) {
+    constexpr size_t block_bits = bm::gap_max_bits;
+    for (const auto& bv : block_layout_bitsets()) {
+        const size_t n = bv.size();
+        // Aligned and unaligned starts, and ranges that begin, end or cross at a block boundary
+        for (const size_t start :
+             {size_t{0}, size_t{3}, size_t{8}, size_t{13}, block_bits - 5, block_bits, block_bits + 8, n / 2, n - 1, n
+             }) {
+            for (const size_t length : {size_t{0}, size_t{1}, size_t{9}, size_t{100'000}, n}) {
+                if (start <= n) {
+                    check_range_matches_naive(bv, start, std::min(n, start + length));
+                }
+            }
+        }
+    }
+}
