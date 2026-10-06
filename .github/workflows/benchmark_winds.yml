@@ -1058,7 +1058,7 @@ jobs:
               # otherwise collect as a worker with somebody else's numbers in it.
               # `arcticdb-ext-debug-*` (the build's split DWARF) and `profile-lines`
               # (a re-run's earlier resolution) are not workers either.
-              wheel-*|arcticdb-ext-debug-*|profile-lines|compare-report|benchmark-reference) continue ;;
+              wheel-*|arcticdb-ext-debug-*|profile-lines|compare-report|benchmark-reference|memlog-*) continue ;;
             esac
             mv "$dir" "artifacts/$name"
           done

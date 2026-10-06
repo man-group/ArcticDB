@@ -434,7 +434,13 @@ jobs:
       # matrix filled, and `bench` records it in the sidecar (ticket 13). `--runner-image`
       # is the other half of that record and travels the other way: only the box knows
       # which AMI it booted from, so the IMDS step above read it and hands it over here.
+      # The modification lane lost its runner 111 minutes into this step on run
+      # 37315141983 (35 minutes on LMDB), leaving no log. So the step is capped at 75
+      # minutes, a sampler writes memory, disk and the largest processes to
+      # `memlog/` every 15 s, and below 3% MemAvailable it stops asv rather than let the
+      # box starve, so the job ends with its log and the sample upload below runs.
       - name: benchmark
+        timeout-minutes: 75
         env:
           WORKER: ${{ inputs.worker }}
           SUITE: ${{ inputs.suite }}
@@ -474,6 +480,28 @@ jobs:
           if [ -n "$PROFILE" ]; then
             profile+=(--profile "$PROFILE")
           fi
+
+          mkdir -p memlog
+          (
+            set +e
+            while :; do
+              avail=$(awk '/MemAvailable/ {print $2}' /proc/meminfo)
+              total=$(awk '/MemTotal/ {print $2}' /proc/meminfo)
+              {
+                echo "=== $(date -u +%FT%TZ) MemAvailable=$((avail / 1024))MiB of $((total / 1024))MiB"
+                grep -E '^(Cached|Dirty|AnonPages|Shmem|SwapFree)' /proc/meminfo
+                df -h / /tmp 2>/dev/null | tail -n +2
+                ps -eo pid,rss,comm,args --sort=-rss | head -6 | cut -c1-160
+              } >> memlog/memory.log
+              if [ "$avail" -lt $((total * 3 / 100)) ]; then
+                echo "::error::MemAvailable $((avail / 1024)) MiB is under 3% of RAM; stopping asv so the job keeps its log" | tee -a memlog/memory.log
+                pkill -TERM -f 'asv ' || true
+              fi
+              sleep 15
+            done
+          ) &
+          sampler=$!
+          trap 'kill $sampler 2>/dev/null; tail -n 40 memlog/memory.log' EXIT
 
           arctic-winds bench \
             --worker "$WORKER" \
@@ -628,6 +656,14 @@ jobs:
         if: always() && inputs.runs_on == ''
         shell: bash -el {0}
         run: build_tooling/start_seaweed.sh stop
+
+      - name: upload the memory samples
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: memlog-${{ steps.artifact.outputs.name }}
+          path: memlog/
+          if-no-files-found: ignore
 
       - name: upload this worker's results
         uses: actions/upload-artifact@v4
