@@ -63,7 +63,28 @@
 # carry exactly the suites, boxes and gating they carry upstream.
 # ---------------------------------------------------------------------------------
 
-# TEMPORARY: re-run the modification lane alone (run 37315141983 lost it); restore the other five after.
+[[worker]]
+# 10M-row frames; RAM need unmeasured on the new pipeline, so the full box for now.
+name = "basic_functions"
+suite = "^basic_functions\\."
+# run 4 telemetry: peak 20.5 of 61.8 GiB on m6i.4xlarge — 32 GB is enough; keep 8 vCPU
+instance_type = "m6i.2xlarge"
+
+[[worker]]
+# ~7-minute setup_cache; RAM need unmeasured, so the full box for now.
+name = "list_versions"
+suite = "^list_versions\\."
+# run 4 telemetry: peak 1.8 GiB on m6i.4xlarge — tiny
+instance_type = "m6i.xlarge"
+
+[[worker]]
+# Under 3 minutes of benchmarks, but its setup_cache builds 10M-row frames (>9 GiB locally).
+name = "column_stats"
+suite = "^column_stats\\."
+# run 4 telemetry: peak 27.3 of 30.8 GiB on m6i.2xlarge (88%) — needs 64 GB
+# run 8: run 7 anon/file split: anon 17.4 GiB — fits 32 GB; r6i no longer needed
+instance_type = "m6i.2xlarge"
+
 [[worker]]
 # 21 min, CPU-bound, modest data.
 name = "modification"
@@ -71,4 +92,22 @@ suite = "^(?:modification_functions|finalize_staged_data)\\."
 # run 4 telemetry: peak 28.7 of 30.8 GiB on m6i.2xlarge (93%) — needs 64 GB; r6i keeps 8 vCPU for its 23 min at $0.564/h
 # run 8: run 7 anon/file split: anon 4.8 GiB, the other 54 GiB was LMDB page cache; 32 GB ran it in the same 23 min in run 4
 instance_type = "m6i.2xlarge"
+
+[[worker]]
+# 23 min of many small benchmarks.
+name = "query"
+suite = "^(?:query_builder|compact_data|nonreg_random_read)\\."
+# run 4 telemetry: peak 7.5 GiB would fit xlarge, but 24 min is the long pole — keep 8 vCPU
+# run 6 experiment: run 5 showed 4 vCPU costs these suites 0–25 % time (resample 16→20 min): try xlarge; 7.8 GiB peak
+# rev-2096 triage (2026-09-09): the downsize was a drift event over 78 of the lane's 192
+# series — the QueryBuilder filters are thread-pool work, and regex_match paid 1.7–1.9x
+# (0.031→0.054 s at 1M rows, 0.339→0.649 s at 10M), not the 0–25 % the wall predicted.
+# Same verdict as merge's run-8 triage: vCPUs are the constraint here, not memory — back to 8.
+instance_type = "m6i.2xlarge"
+
+[[worker]]
+# ~8 min, tiny data.
+name = "listing"
+suite = "^(?:list_symbols|list_snapshots)\\."
+instance_type = "m6i.xlarge"
 
