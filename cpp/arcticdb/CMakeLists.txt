@@ -898,7 +898,7 @@ target_include_directories(arcticdb_core_object
         $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/../>
         $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/../proto/arcticc/pb2/proto/>
         # For IDE resolution
-        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/..>
+        $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}>
         ${arcticdb_core_includes}
         )
 
