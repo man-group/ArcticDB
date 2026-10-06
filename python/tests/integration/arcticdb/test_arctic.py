@@ -1289,21 +1289,21 @@ def test_get_description_multiindex(lmdb_library, names):
     assert index_info[1].name == (names[1] if names is not None else None)
 
 
-def test_get_description_input_format_dataframe(lmdb_library):
+@pytest.mark.parametrize(
+    "input, expected_format",
+    [
+        # A timestamp index does not make the DataFrame case a TIMEFRAME - that is reserved for the
+        # arcticdb TimeFrame type, which is only writable via the V1 API
+        (pd.DataFrame({"column": [1, 2, 3]}, index=pd.date_range(start="1/1/2018", periods=3)), "DATAFRAME"),
+        (pd.Series([1, 2, 3], name="column", index=pd.date_range(start="1/1/2018", periods=3)), "SERIES"),
+        (np.arange(5), "NDARRAY"),
+    ],
+)
+def test_get_description_input_format(lmdb_library, input, expected_format):
     lib = lmdb_library
-    sym = "test_get_description_input_format_dataframe"
-    # A timestamp index does not make this a TIMEFRAME - that is reserved for the arcticdb TimeFrame type
-    df = pd.DataFrame({"column": [1, 2, 3]}, index=pd.date_range(start="1/1/2018", periods=3))
-    lib.write(sym, df)
-    assert lib.get_description(sym).input_format == "DATAFRAME"
-
-
-def test_get_description_input_format_series(lmdb_library):
-    lib = lmdb_library
-    sym = "test_get_description_input_format_series"
-    series = pd.Series([1, 2, 3], name="column", index=pd.date_range(start="1/1/2018", periods=3))
-    lib.write(sym, series)
-    assert lib.get_description(sym).input_format == "SERIES"
+    sym = "test_get_description_input_format"
+    lib.write(sym, input)
+    assert lib.get_description(sym).input_format == expected_format
 
 
 def test_get_description_input_format_distinguishes_series_from_dataframe(lmdb_library):
@@ -1314,13 +1314,6 @@ def test_get_description_input_format_distinguishes_series_from_dataframe(lmdb_l
     lib.write("as_series", pd.Series([1, 2, 3], name="column", index=index))
     assert lib.get_description("as_frame").input_format == "DATAFRAME"
     assert lib.get_description("as_series").input_format == "SERIES"
-
-
-def test_get_description_input_format_ndarray(lmdb_library):
-    lib = lmdb_library
-    sym = "test_get_description_input_format_ndarray"
-    lib.write(sym, np.arange(5))
-    assert lib.get_description(sym).input_format == "NDARRAY"
 
 
 def test_get_description_input_format_pickled(lmdb_library):
@@ -1340,13 +1333,30 @@ def test_get_description_input_format_normalizable_data_written_with_write_pickl
     assert lib.get_description(sym).input_format == "DATAFRAME"
 
 
-def test_get_description_input_format_arrow(arrow_library):
-    # Arrow data is always written as a table, so the DataFrame/Series distinction does not apply to it
+def test_get_description_input_format_recursive_normalized(lmdb_library):
+    # Recursively normalized data has no input_type of its own - it is a tree of independently normalized
+    # sub-objects stored under a single MULTI_KEY, which is what input_format is derived from instead
+    lib = lmdb_library
+    sym = "test_get_description_input_format_recursive_normalized"
+    data = {"a": np.arange(5), "b": pd.DataFrame({"column": [1, 2, 3]})}
+    lib.write(sym, data, recursive_normalizers=True)
+    assert lib.get_description(sym).input_format == "RECURSIVE_NORMALIZED"
+
+
+@pytest.mark.parametrize(
+    "data, expected_format",
+    [
+        # pa.Table/pa.RecordBatch are DataFrame-like (multiple named columns)
+        (pa.table({"column": pa.array([1, 2, 3], type=pa.int64())}), "ARROW_DATAFRAME"),
+        # pa.Array/pa.ChunkedArray are Series-like (a single, possibly unnamed, column)
+        (pa.chunked_array([[1, 2, 3]], type=pa.int64()), "ARROW_SERIES"),
+    ],
+)
+def test_get_description_input_format_arrow(arrow_library, data, expected_format):
     lib = arrow_library
     sym = "test_get_description_input_format_arrow"
-    table = pa.table({"column": pa.array([1, 2, 3], type=pa.int64())})
-    lib.write(sym, table)
-    assert lib.get_description(sym).input_format == "ARROW"
+    lib.write(sym, data)
+    assert lib.get_description(sym).input_format == expected_format
 
 
 # See test_write_tz in test_normalization.py for the V1 API equivalent

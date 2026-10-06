@@ -83,12 +83,15 @@ INPUT_FORMATS = {
     "ts": "TIMEFRAME",  # arcticdb TimeFrame; only writable via the V1 API, but still readable in V2 API
     "np": "NDARRAY",
     "msg_pack_frame": "PICKLED",  # anything normalization could not handle; the pickled payload is self-describing
-    "experimental_arrow": "ARROW",
+    # Experimental_arrow is split into two lookup keys by _info_to_desc, as Arrow data does not distinguish
+    # DataFrame-like and Series-like inputs the way the other input types do
+    "experimental_arrow_dataframe": "ARROW_DATAFRAME",
+    "experimental_arrow_series": "ARROW_SERIES",
+    "recursive_normalized": "RECURSIVE_NORMALIZED",
 }
 """Maps the normalization metadata ``input_type`` to the ``input_format`` reported by ``SymbolDescription``.
 
-Recursively normalized data, and data written by a client that predates this information being recorded
-falls back to the "UNKNOWN" type.
+Data written by a client that predates this information being recorded falls back to the "UNKNOWN" type.
 """
 
 
@@ -178,11 +181,16 @@ class SymbolDescription(NamedTuple):
                   written by a client that predates this information being stored.
     input_format : str
         Format used to write the data. One of ``"DATAFRAME"``, ``"SERIES"``,
-        ``"TIMEFRAME"``, ``"NDARRAY"``, ``"PICKLED"``, ``"ARROW"``, or
-        ``"UNKNOWN"``. This records the input format at write time and does not
-        constrain the data returned by ``read``; the symbol may still be read
-        as pandas or Arrow. ``"UNKNOWN"`` is returned for recursively
-        normalized data or when no input type was recorded.
+        ``"TIMEFRAME"``, ``"NDARRAY"``, ``"PICKLED"``, ``"ARROW_DATAFRAME"``,
+        ``"ARROW_SERIES"``, ``"RECURSIVE_NORMALIZED"``, or ``"UNKNOWN"``. This
+        records the input format at write time and does not constrain the data
+        returned by ``read``, e.g., the symbol may still be read as pandas or Arrow.
+        ``"ARROW_DATAFRAME"`` and ``"ARROW_SERIES"`` distinguish Arrow data
+        that is DataFrame-like (e.g. ``pyarrow.Table``, ``pyarrow.RecordBatch``)
+        from Series-like (e.g. ``pyarrow.Array``, ``pyarrow.ChunkedArray``).
+        ``"RECURSIVE_NORMALIZED"`` is returned for data written with
+        ``recursive_normalizers=True``. ``"UNKNOWN"`` is returned when no
+        input type was recorded.
     """
 
     columns: Tuple[NameWithDType]
@@ -3124,6 +3132,22 @@ class Library:
             )
 
     @staticmethod
+    def _info_to_input_format(info: Dict[str, Any]) -> str:
+        # Recursively normalized data has no input_type of its own (it is stored as a tree of independently
+        # normalized sub-objects under a single MULTI_KEY), so it is detected separately from input_type.
+        if info["is_recursive_normalized"]:
+            lookup_key = "recursive_normalized"
+        elif info["input_type"] == "experimental_arrow":
+            # Arrow data does not distinguish DataFrame-like and Series-like inputs the way the other input
+            # types do, so the one_dimensional flag on the normalization metadata is used instead.
+            lookup_key = (
+                "experimental_arrow_series" if info["arrow_one_dimensional"] else "experimental_arrow_dataframe"
+            )
+        else:
+            lookup_key = info["input_type"]
+        return INPUT_FORMATS.get(lookup_key, "UNKNOWN")
+
+    @staticmethod
     def _info_to_desc(info: Dict[str, Any]) -> SymbolDescription:
         last_update_time = pd.to_datetime(info["last_update"], utc=True)
         if IS_PANDAS_TWO:
@@ -3141,7 +3165,7 @@ class Library:
             index_type=info["index_type"],
             date_range=info["date_range"],
             sorted=info["sorted"],
-            input_format=INPUT_FORMATS.get(info["input_type"], "UNKNOWN"),
+            input_format=Library._info_to_input_format(info),
         )
 
     def get_description(self, symbol: str, as_of: Optional[AsOf] = None) -> SymbolDescription:

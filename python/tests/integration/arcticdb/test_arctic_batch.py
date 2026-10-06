@@ -12,6 +12,8 @@ from arcticdb_ext.exceptions import ErrorCode, ErrorCategory
 from arcticdb_ext.storage import KeyType
 from arcticdb_ext.version_store import VersionRequestType
 
+from arcticdb.dependencies import pyarrow as pa
+
 from arcticdb.options import LibraryOptions
 from arcticdb import QueryBuilder, VersionedItem, DataError
 from arcticdb.exceptions import (
@@ -1570,8 +1572,18 @@ def test_get_description_batch_input_format(lmdb_library):
     index = pd.date_range(start="1/1/2018", periods=3)
     lib.write("batch_frame", pd.DataFrame({"column": [1, 2, 3]}, index=index))
     lib.write("batch_series", pd.Series([1, 2, 3], name="column", index=index))
-    descs = lib.get_description_batch(["batch_frame", "batch_series"])
-    assert [desc.input_format for desc in descs] == ["DATAFRAME", "SERIES"]
+    lib.write("batch_ndarray", np.arange(5))
+    lib.write("batch_recursive_normalized", {"a": np.arange(5)}, recursive_normalizers=True)
+    descs = lib.get_description_batch(["batch_frame", "batch_series", "batch_ndarray", "batch_recursive_normalized"])
+    assert [desc.input_format for desc in descs] == ["DATAFRAME", "SERIES", "NDARRAY", "RECURSIVE_NORMALIZED"]
+
+
+def test_get_description_batch_input_format_arrow(arrow_library):
+    lib = arrow_library
+    lib.write("batch_arrow_dataframe", pa.table({"column": pa.array([1, 2, 3], type=pa.int64())}))
+    lib.write("batch_arrow_series", pa.chunked_array([[1, 2, 3]], type=pa.int64()))
+    descs = lib.get_description_batch(["batch_arrow_dataframe", "batch_arrow_series"])
+    assert [desc.input_format for desc in descs] == ["ARROW_DATAFRAME", "ARROW_SERIES"]
 
 
 @pytest.mark.storage

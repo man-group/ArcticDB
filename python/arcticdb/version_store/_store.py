@@ -64,6 +64,7 @@ from arcticdb_ext.storage import (
     LibraryIndex as _LibraryIndex,
     Library as _Library,
     OpenMode as _OpenMode,
+    KeyType as _KeyType,
 )
 from arcticdb_ext.types import IndexKind
 from arcticdb.version_store.read_result import ReadResult
@@ -3887,6 +3888,7 @@ class NativeVersionStore:
         index_dtype = []
         input_type = timeseries_descriptor.normalization.WhichOneof("input_type")
         index_type = "NA"
+        arrow_one_dimensional = None  # only set below when input_type is "experimental_arrow"
         if input_type == "series":
             _denormalize_columns_names(columns, timeseries_descriptor.normalization.series)
         elif input_type == "ts":
@@ -3933,6 +3935,7 @@ class NativeVersionStore:
                 columns = pd.RangeIndex(0, len(columns))
         elif input_type == "experimental_arrow":
             arrow_meta = timeseries_descriptor.normalization.experimental_arrow
+            arrow_one_dimensional = arrow_meta.one_dimensional  # True => Series-like, False => DataFrame-like
             if arrow_meta.one_dimensional:
                 # This correctly gives an empty string for Array/ChunkedArray written data as well as Series with empty
                 # names
@@ -3951,6 +3954,11 @@ class NativeVersionStore:
             "rows": None if self.is_pickled_descriptor(timeseries_descriptor) else timeseries_descriptor.total_rows,
             "last_update": last_update,
             "input_type": input_type,
+            # Set for "experimental_arrow" input_type only, to distinguish Arrow data that is DataFrame-like
+            # (one_dimensional=False) from Series-like (one_dimensional=True); unused for other input types.
+            "arrow_one_dimensional": arrow_one_dimensional,
+            # Recursively normalized data is stored under a MULTI_KEY and has no input_type of its own.
+            "is_recursive_normalized": dit.key.type == _KeyType.MULTI_KEY,
             "index_type": index_type,
             "normalization_metadata": timeseries_descriptor.normalization,
             "type": self.get_arctic_style_type_info_for_norm(timeseries_descriptor),
@@ -4008,6 +4016,12 @@ class NativeVersionStore:
             - rows, `Optional[int]`
             - last_update, `datetime`
             - input_type, `str`
+            - arrow_one_dimensional, `Optional[bool]`: only set when input_type is "experimental_arrow".
+              Exposed here as part of this method's return value, but only consumed internally, by the
+              V2 API, to distinguish Arrow data that is DataFrame-like from Series-like.
+            - is_recursive_normalized, `bool`: exposed here as part of this method's return value, but
+              only consumed internally, by the V2 API, to report recursively normalized data; such data
+              is stored under a MULTI_KEY and has no input_type of its own.
             - index_type, `index_type`
             - normalization_metadata,
             - type, `str`
@@ -4048,6 +4062,12 @@ class NativeVersionStore:
             - rows, `Optional[int]`
             - last_update, `datetime`
             - input_type, `str`
+            - arrow_one_dimensional, `Optional[bool]`: only set when input_type is "experimental_arrow".
+            Exposed here as part of this method's return value, but only consumed internally, by the
+            V2 API, to distinguish Arrow data that is DataFrame-like from Series-like.
+            - is_recursive_normalized, `bool`: exposed here as part of this method's return value, but
+            only consumed internally, by the V2 API, to report recursively normalized data; such data
+            is stored under a MULTI_KEY and has no input_type of its own.
             - index_type, `index_type`
             - normalization_metadata,
             - type, `str`
