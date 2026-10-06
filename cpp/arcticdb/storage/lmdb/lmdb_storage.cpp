@@ -32,10 +32,12 @@ namespace arcticdb::storage::lmdb {
 // A writer waiting in the group-commit queue. It lives on that writer's stack, which blocks until done_.
 struct LmdbPendingWrite {
     KeySegmentPair* key_seg_;
+    // Size of the value, which LMDB copies into memory until the transaction commits.
+    size_t bytes_;
     std::exception_ptr error_;
     bool done_{false};
 
-    explicit LmdbPendingWrite(KeySegmentPair& key_seg) : key_seg_(&key_seg) {}
+    LmdbPendingWrite(KeySegmentPair& key_seg, size_t bytes) : key_seg_(&key_seg), bytes_(bytes) {}
 };
 
 // Writers that queue while a transaction commits are committed together by the next of them, so one fsync per group.
@@ -149,7 +151,7 @@ void LmdbStorage::do_write(KeySegmentPair& key_seg) {
         return;
     }
 
-    LmdbPendingWrite pending{key_seg};
+    LmdbPendingWrite pending{key_seg, key_seg.segment_ptr()->calculate_size()};
     auto& group = *write_group_;
     std::unique_lock<std::mutex> group_lock{group.mutex_};
     group.queue_.push_back(&pending);
@@ -158,10 +160,22 @@ void LmdbStorage::do_write(KeySegmentPair& key_seg) {
             group.cv_.wait(group_lock, [&] { return pending.done_ || !group.committer_active_; });
             continue;
         }
-        // Commit everything queued so far, our own key included, then hand the committer role to the next waiter.
+        // Commit the queue (up to the byte cap), then hand the committer role to the next waiter.
         group.committer_active_ = true;
         std::vector<LmdbPendingWrite*> batch;
-        batch.swap(group.queue_);
+        if (group_commit_max_bytes_ == 0) {
+            batch.swap(group.queue_);
+        } else {
+            // Take the oldest writers up to the cap (at least one); a key left behind goes in a later group.
+            size_t bytes = 0;
+            auto it = group.queue_.begin();
+            do {
+                bytes += (*it)->bytes_;
+                ++it;
+            } while (it != group.queue_.end() && bytes + (*it)->bytes_ <= group_commit_max_bytes_);
+            batch.assign(group.queue_.begin(), it);
+            group.queue_.erase(group.queue_.begin(), it);
+        }
         group_lock.unlock();
         std::exception_ptr group_error;
         try {
@@ -504,6 +518,9 @@ LmdbStorage::LmdbStorage(const LibraryPath& library_path, OpenMode mode, const C
     write_mutex_ = std::make_unique<std::mutex>();
     write_group_ = std::make_unique<LmdbWriteGroup>();
     group_commit_enabled_ = ConfigsMap::instance()->get_int("LMDBStorage.GroupCommit", 1) != 0;
+    group_commit_max_bytes_ = static_cast<size_t>(
+            ConfigsMap::instance()->get_int("LMDBStorage.GroupCommitMaxBytes", 32 * 1024 * 1024)
+    );
     lmdb_instance_ = std::make_shared<LmdbInstance>(LmdbInstance{::lmdb::env::create(conf.flags()), {}});
 
     warn_if_lmdb_already_open();
@@ -611,6 +628,7 @@ LmdbStorage::LmdbStorage(LmdbStorage&& other) noexcept :
     write_mutex_(std::move(other.write_mutex_)),
     write_group_(std::move(other.write_group_)),
     group_commit_enabled_(other.group_commit_enabled_),
+    group_commit_max_bytes_(other.group_commit_max_bytes_),
     lmdb_instance_(std::move(other.lmdb_instance_)),
     lib_dir_(std::move(other.lib_dir_)) {
     other.lib_dir_ = "";

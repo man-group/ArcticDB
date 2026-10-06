@@ -141,6 +141,14 @@ Set to `0` for one transaction per key.
 
 Default: 1 (on).
 
+### LMDBStorage.GroupCommitMaxBytes
+
+The most bytes of values one group-commit transaction takes. LMDB keeps a copy of every value written in a transaction
+in memory until it commits, so this bounds the extra memory a group holds. A group always takes at least one key, so a
+single value larger than the cap still commits on its own. Keys left over go in the next group. Set to `0` for no cap.
+
+Default: 33554432 (32 MiB).
+
 ### LMDBStorage.Diagnostics
 
 Whether `MDB_CORRUPTED`, `MDB_PAGE_NOTFOUND`, `MDB_PANIC`, `MDB_INVALID`, `MDB_MAP_RESIZED` and `MDB_BAD_TXN` carry a

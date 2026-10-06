@@ -111,6 +111,8 @@ class LmdbStorage final : public Storage {
     std::unique_ptr<std::mutex> write_mutex_;
     std::unique_ptr<LmdbWriteGroup> write_group_;
     bool group_commit_enabled_;
+    // 0 means no cap.
+    size_t group_commit_max_bytes_;
     std::shared_ptr<LmdbInstance> lmdb_instance_;
 
     std::filesystem::path lib_dir_;
