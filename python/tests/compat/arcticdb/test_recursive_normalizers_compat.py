@@ -3,6 +3,7 @@ import sys
 import pandas as pd
 import pytest
 import numpy as np
+from packaging.version import Version
 from arcticdb.version_store._custom_normalizers import (
     CustomNormalizer,
     register_normalizer,
@@ -39,6 +40,11 @@ def root_custom_array():
     delattr(main_module, "CustomArrayNormalizer")
     globals()["CustomArray"].__module__ = "arcticdb.util.test"
     globals()["CustomArrayNormalizer"].__module__ = "arcticdb.util.test"
+
+
+def _can_read_metastructure(old_venv, metastructure_version):
+    # The V2 metastructure was introduced in 6.7.0.
+    return metastructure_version == 1 or Version(old_venv.version) >= Version("6.7.0")
 
 
 _COMPAT_TEST_CLASS_DEFINITIONS = """
@@ -112,7 +118,7 @@ assert set(data.keys()) == set(expected.keys())
 for key in data.keys():
     assert_frame_equal(data[key], expected[key])
 """
-            if all_recursive_metastructure_versions == 1  # V1
+            if _can_read_metastructure(old_venv, all_recursive_metastructure_versions)
             else """
 import pytest
 with pytest.raises(KeyError):
@@ -153,7 +159,7 @@ expected = {
 }
 equals(expected, data)
 """
-            if all_recursive_metastructure_versions == 1  # V1
+            if _can_read_metastructure(old_venv, all_recursive_metastructure_versions)
             else """
 with pytest.raises(KeyError):
     lib.read("sym")
