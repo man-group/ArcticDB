@@ -14,7 +14,7 @@ from arcticdb.version_store._string_dtype import _use_pyarrow_strings_in_pandas
 from arcticdb.version_store.library import MergeStrategy, MergeAction
 from arcticdb.options import ModifiableEnterpriseLibraryOption, OutputFormat
 from arcticdb.toolbox.library_tool import LibraryTool
-from tests.util.mark import ARCTICDB_USING_CONDA, MACOS_WHEEL_BUILD, ZONE_INFO_MARK
+from tests.util.mark import ARCTICDB_USING_CONDA, MACOS_WHEEL_BUILD, VENV_COMPAT_TESTS_MARK, ZONE_INFO_MARK
 from arcticdb_ext.tools import StorageMover
 from arcticdb_ext.types import IndexKind
 
@@ -265,7 +265,7 @@ def test_compat_read_incomplete(old_venv_and_arctic_uri, lib_name, any_output_fo
             # In version 5.1.0 (with commit a3b7545) we moved the streaming incomplete python API to the library tool.
             compat.old_lib.execute(
                 ["""
-lib_tool = lib.library_tool()
+lib_tool = lib._dev_tools.library_tool()
 lib_tool.append_incomplete("sym", df_1)
 lib_tool.append_incomplete("sym", df_2)
 """],
@@ -614,6 +614,30 @@ def test_compat_append_to_rowless_symbol(pandas_v1_venv, s3_ssl_disabled_storage
                 assert _stored_index_state(curr.lib, sym) == expected, sym
 
 
+# From 6.18.1 until 7.0.0 write(empty) followed by append(non_empty) can leave is_physically_stored False when it should
+# be True. This tests only 6.27.1 (which has the problem) and 5.0.0 (which doesn't have the bug) to save runtime
+@pytest.mark.parametrize(
+    "old_venv",
+    [pytest.param("5.0.0", marks=VENV_COMPAT_TESTS_MARK), pytest.param("6.27.1", marks=VENV_COMPAT_TESTS_MARK)],
+    indirect=True,
+)
+@pytest.mark.parametrize("first_modification", ["append", "update"])
+def test_compat_modify_symbol_first_written_empty(old_venv_and_arctic_uri, lib_name, first_modification):
+    old_venv, arctic_uri = old_venv_and_arctic_uri
+    with CompatLibrary(old_venv, arctic_uri, lib_name) as compat:
+        # Built in the venv, as the CSV round trip of execute() loses the empty DatetimeIndex
+        compat.old_lib.execute(
+            [
+                "lib.write('sym', pd.DataFrame({'col': []}, index=pd.DatetimeIndex([])))",
+                f"lib.{first_modification}('sym', pd.DataFrame({{'col': [1.0]}}, index=pd.DatetimeIndex(['2025-01-01'])))",
+            ]
+        )
+        with compat.current_version() as curr:
+            curr.lib.append("sym", pd.DataFrame({"col": [2.0]}, index=pd.DatetimeIndex(["2025-01-02"])))
+            expected = pd.DataFrame({"col": [1.0, 2.0]}, index=pd.DatetimeIndex(["2025-01-01", "2025-01-02"]))
+            assert_frame_equal(curr.lib.read("sym").data, expected)
+
+
 @pytest.mark.skipif(
     _use_pyarrow_strings_in_pandas(),
     reason="merge update does not accept arrow-backed input, which the string column here is under "
@@ -754,6 +778,11 @@ def test_norm_meta_column_and_index_names_write_new_read_old(old_venv_and_arctic
     df.index.set_names(
         ["col_one"], inplace=True
     )  # specifically testing an odd behaviour when an index name matches a column name
+    # Clients before 6.0.0 describe the column by the name it is stored under.
+    if version.Version(old_venv.version) >= version.Version("6.0.0"):
+        expected_desc_cols = ["col_one", "col_two"]
+    else:
+        expected_desc_cols = ["__col_col_one__0", "col_two"]
 
     with CompatLibrary(old_venv, arctic_uri, lib_name) as compat:
         with compat.current_version() as curr:
@@ -763,7 +792,7 @@ def test_norm_meta_column_and_index_names_write_new_read_old(old_venv_and_arctic
             [
                 f"desc = lib.get_description('sym')",
                 "actual_desc_cols = [c.name for c in desc.columns]",
-                "assert ['__col_col_one__0', 'col_two'] == actual_desc_cols, f'Actual columns were {actual_desc_cols}'",
+                f"assert {expected_desc_cols!r} == actual_desc_cols, f'Actual columns were {{actual_desc_cols}}'",
                 "actual_desc_index_name = desc.index[0][0]",
                 "assert actual_desc_index_name == 'col_one', f'Actual index name was {actual_desc_index_name}'",
                 "actual_df = lib.read('sym').data",

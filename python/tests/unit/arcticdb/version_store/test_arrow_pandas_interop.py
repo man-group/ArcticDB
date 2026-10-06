@@ -168,6 +168,19 @@ def test_write_pandas_series_rangeindex_read_arrow(in_memory_version_store_arrow
     assert received.to_list() == [0, 1, 2]
 
 
+@pytest.mark.parametrize("index", [None, pd.DatetimeIndex([], name="ts")], ids=["range_index", "datetime_index"])
+def test_write_empty_pandas_series_read_arrow(in_memory_version_store_arrow, index):
+    # An empty Series is stored with a DatetimeIndex whatever its index, so it reads back as a table
+    lib = in_memory_version_store_arrow
+    sym = "test_write_empty_pandas_series_read_arrow"
+    lib.write(sym, pd.Series([], index=index, name="values", dtype="float64"))
+
+    received = lib.read(sym).data
+    assert isinstance(received, pa.Table)
+    assert received.num_rows == 0
+    assert received.column_names[1:] == ["values"]
+
+
 def test_write_pandas_ignores_index_column_kwarg(in_memory_version_store_arrow):
     """``index_column`` is an arrow-write concept; when the input is pandas it is ignored"""
     lib = in_memory_version_store_arrow
