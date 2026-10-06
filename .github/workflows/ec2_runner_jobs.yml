@@ -10,6 +10,7 @@ on:
       market-type:        {default: '', type: string, description: "'spot' to launch a one-time spot instance; empty keeps on-demand (the default for every existing caller)"}
       subnet-id:          {default: subnet-04ee7771eea5d61d9, type: string, description: VPC Subnet to be used when creating the runner}
       security-group-id:  {default: sg-08bd5ce9b15ba4f4b, type: string, description: Security Group to be used when creating the runner}
+      volume-size:        {default: '', type: string, description: "Root EBS volume in GB; empty keeps the AMI's size"}
     outputs:
       label:             
         value: ${{ jobs.start-runner.outputs.label }}
@@ -45,6 +46,7 @@ jobs:
           market-type: ${{ inputs.market-type }}
           subnet-id: ${{ inputs.subnet-id }}
           security-group-id: ${{ inputs.security-group-id }}
+          ec2-volume-size: ${{ inputs.volume-size }}
           aws-resource-tags: >
             [
               {"Key": "Name", "Value": "arcticdb-ci-runner"},

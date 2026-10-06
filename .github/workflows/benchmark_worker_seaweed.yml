@@ -64,6 +64,9 @@ jobs:
       # comparable numbers; an interruption fails this worker (collect reports it
       # missing) and costs nothing in the first hour. Research: gha-spot-and-generations.
       market-type: ${{ inputs.market_type }}
+      # SeaweedFS keeps every append and update the modification lane makes, which
+      # filled the AMI's 200 GB root on runs 37429256122 and 37435448587.
+      volume-size: ${{ inputs.worker == 'modification' && '400' || '' }}
 
   bench:
     name: bench ${{ inputs.worker }}
@@ -437,9 +440,9 @@ jobs:
       # The modification lane lost its runner 111 minutes into this step on run
       # 37315141983 (35 minutes on LMDB), leaving no log, and filled the disk on run
       # 37429256122. So the step is capped at 75 minutes, a sampler writes memory, disk
-      # and the largest processes to `memlog/` every 15 s, vacuums SeaweedFS above 60%
-      # disk, and stops asv at 95% disk or below 3% MemAvailable, so the job ends with
-      # its log and the sample upload below runs.
+      # and the largest processes to `memlog/` every 15 s, and it stops asv at 95% disk
+      # or below 3% MemAvailable, so the job ends with its log and the sample upload
+      # below runs.
       - name: benchmark
         timeout-minutes: 75
         env:
@@ -494,15 +497,8 @@ jobs:
                 df -h / /tmp 2>/dev/null | tail -n +2
                 ps -eo pid,rss,comm,args --sort=-rss | head -6 | cut -c1-160
               } >> memlog/memory.log
-              # Automatic vacuuming is off, so deleted libraries stay on disk; the
-              # modification lane filled the 200 GB root on run 37429256122. Vacuum
-              # only under disk pressure, and stop asv before the disk is full.
+              # Stop asv before the disk is full, so the job keeps its log.
               used=$(df -P "${RUNNER_TEMP:-/tmp}" | awk 'NR==2 {print $5}' | tr -dc 0-9)
-              if [ "${used:-0}" -ge 60 ]; then
-                echo "=== $(date -u +%FT%TZ) disk ${used}% used: vacuuming SeaweedFS" >> memlog/memory.log
-                curl -fsS -m 600 "http://127.0.0.1:9333/vol/vacuum?garbageThreshold=0.2" >> memlog/memory.log 2>&1
-                echo "=== $(date -u +%FT%TZ) after vacuum: $(df -P "${RUNNER_TEMP:-/tmp}" | awk 'NR==2 {print $5}')" >> memlog/memory.log
-              fi
               if [ "${used:-0}" -ge 95 ]; then
                 echo "::error::disk ${used}% used; stopping asv so the job keeps its log" | tee -a memlog/memory.log
                 pkill -TERM -f 'asv ' || true
