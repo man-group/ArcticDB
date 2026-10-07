@@ -715,3 +715,83 @@ def test_delete_staged_data_on_failure_with_tokens_out_of_order_append(
     res = lib.read(sym)
     assert_frame_equal(res.data, df_3)
     assert res.version == 1
+
+
+@pytest.mark.parametrize("concurrency", [1, 2, 4, 8, 16])
+def test_stage_finalize_varying_pipeline_concurrency(lmdb_library_factory, arctic_api, concurrency):
+    """Test finalize_staged_data across read/process pipeline concurrency settings."""
+    sym = "sym_concurrency"
+    lib = lmdb_library_factory(LibraryOptions(rows_per_segment=2))
+
+    dfs = [
+        pd.DataFrame(
+            {
+                "a": np.arange(i * 10, (i + 1) * 10, dtype=np.int64),
+                "b": np.arange(i * 10, (i + 1) * 10, dtype=np.float64),
+            },
+            index=pd.date_range(f"2025-01-{i+1:02d}", periods=10, freq="h"),
+        )
+        for i in range(8)
+    ]
+
+    stage_results = [lib.stage(sym, df) for df in dfs]
+    expected_df = pd.concat(dfs)
+
+    with (
+        config_context("Processing.SegmentReadWindow", concurrency),
+        config_context("VersionStore.NumSegmentsLiveDuringCompaction", concurrency),
+    ):
+        finalize(arctic_api, lib, sym, mode="write", stage_results=stage_results)
+
+    res = lib.read(sym)
+    assert_frame_equal(res.data, expected_df, check_freq=False)
+
+
+def test_stage_finalize_single_slot_control(lmdb_library_factory, arctic_api):
+    """Verify strictly sequential behavior (concurrency=1) preserves exact ordering and values."""
+    sym = "sym_single_slot"
+    lib = lmdb_library_factory(LibraryOptions(rows_per_segment=1))
+
+    dfs = [pd.DataFrame({"v": [i]}, index=pd.date_range(f"2025-01-{i+1:02d}", periods=1)) for i in range(10)]
+
+    stage_results = [lib.stage(sym, df) for df in dfs]
+    expected_df = pd.concat(dfs)
+
+    with (
+        config_context("Processing.SegmentReadWindow", 1),
+        config_context("VersionStore.NumSegmentsLiveDuringCompaction", 1),
+    ):
+        finalize(arctic_api, lib, sym, mode="write", stage_results=stage_results)
+
+    res = lib.read(sym)
+    assert_frame_equal(res.data, expected_df, check_freq=False)
+
+
+def test_stage_finalize_middle_read_failure_cleanup(lmdb_library_factory, arctic_api):
+    """Verify error propagation and cleanup of prior dispatched writes when a subsequent segment read fails."""
+    sym = "sym_middle_read_fail"
+    lib = lmdb_library_factory(LibraryOptions(rows_per_segment=2))
+
+    df_initial = pd.DataFrame({"col": [1, 2]}, index=pd.date_range("2025-01-01", periods=2))
+    lib.write(sym, df_initial)
+
+    data_to_stage = [
+        pd.DataFrame({"col": [3, 4]}, index=pd.date_range("2025-01-03", periods=2)),
+        pd.DataFrame({"col": [5, 6]}, index=pd.date_range("2025-01-05", periods=2)),
+        pd.DataFrame({"col": [7, 8]}, index=pd.date_range("2025-01-07", periods=2)),
+    ]
+    staged_results = [lib.stage(sym, df) for df in data_to_stage]
+
+    # Delete the LAST staged segment (index 2) from storage.
+    # Segments 0 and 1 succeed in reading, decompressing, and aggregating/writing,
+    # then segment 2 fails on read.
+    staged_key_to_delete = staged_results[2].staged_segments[0]
+    lib._dev_tools.library_tool().remove(staged_key_to_delete)
+
+    with pytest.raises(Exception):
+        finalize(arctic_api, lib, sym, mode="append", stage_results=staged_results)
+
+    # Verify initial symbol data was not corrupted and version remains 0
+    res = lib.read(sym)
+    assert_frame_equal(res.data, df_initial, check_freq=False)
+    assert res.version == 0
