@@ -34,7 +34,6 @@
 namespace arcticdb {
 
 using namespace proto::descriptors;
-using entity::DataType;
 using entity::Field;
 using entity::IndexDescriptorImpl;
 using entity::OutputSchema;
@@ -393,7 +392,7 @@ std::string data_column_differences(
         return fmt::format(
                 "{} [{}{}]",
                 names.size(),
-                fmt::join(names.begin(), names.begin() + shown, ", "),
+                fmt::join(names.begin(), names.begin() + static_cast<std::ptrdiff_t>(shown), ", "),
                 names.size() > shown ? ", etc." : ""
         );
     };
@@ -1094,12 +1093,7 @@ TimeseriesDescriptor tsd_from_schema(OutputSchema&& schema, size_t total_rows, p
     auto [descriptor, norm_meta, _] = schema.release();
     descriptor.set_id(frame.desc().id());
     return make_timeseries_descriptor(
-            total_rows,
-            std::move(descriptor),
-            std::move(norm_meta),
-            std::move(frame.user_meta),
-            std::nullopt,
-            frame.bucketize_dynamic
+            total_rows, descriptor, norm_meta, std::move(frame.user_meta), std::nullopt, frame.bucketize_dynamic
     );
 }
 

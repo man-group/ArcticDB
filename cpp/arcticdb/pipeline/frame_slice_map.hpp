@@ -11,6 +11,8 @@
 #include <arcticdb/pipeline/pipeline_context.hpp>
 #include <arcticdb/pipeline/index_utils.hpp>
 
+#include <folly/container/Enumerate.h>
+
 namespace arcticdb::pipelines {
 
 struct ContextData {
