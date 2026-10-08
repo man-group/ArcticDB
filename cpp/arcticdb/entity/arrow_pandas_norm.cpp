@@ -45,7 +45,7 @@ void mirror_index_timezones(const Pandas& common, const StreamDescriptor& desc, 
         for (const auto& [level, timezone] : common.multi_index().timezone()) {
             set_timezone(level, timezone);
         }
-    } else if (common.index().is_physically_stored()) {
+    } else if (desc.index().type() == IndexDescriptorImpl::Type::TIMESTAMP) {
         set_timezone(0, common.index().tz());
     }
 }
@@ -92,7 +92,7 @@ void check_embedded_pandas_agrees(const ExperimentalArrow& arrow, const StreamDe
         for (const auto& [level, timezone] : common->multi_index().timezone()) {
             check_timezone(level, timezone);
         }
-    } else if (common->index().is_physically_stored()) {
+    } else if (desc.index().type() == IndexDescriptorImpl::Type::TIMESTAMP) {
         check_timezone(0, common->index().tz());
     }
 }
@@ -183,7 +183,7 @@ NormalizationMetadata derive_pandas_from_arrow(
             (*multi_index.mutable_timezone())[level] = timezone_of(level);
         }
         required_fields = field_count + 1;
-    } else if (template_common->index().is_physically_stored()) {
+    } else if (is_index_physically_stored(template_common->index(), desc.index().type())) {
         auto& index = *common.mutable_index();
         index.set_is_physically_stored(true);
         index.set_name(name_of(0));
@@ -232,7 +232,8 @@ NormalizationMetadata arrow_norm_from_pandas(const NormalizationMetadata& norm_m
     // comes from the index descriptor rather than from is_physically_stored.
     arrow.set_has_index(desc.index().type() == IndexDescriptorImpl::Type::TIMESTAMP);
 
-    if (norm_meta.has_series() && !common->has_multi_index() && !common->index().is_physically_stored()) {
+    if (norm_meta.has_series() && !common->has_multi_index() &&
+        !is_index_physically_stored(common->index(), desc.index().type())) {
         // A Series with no index column is one-dimensional, as a pa.[Chunked]Array or a pl.Series is
         arrow.set_one_dimensional(true);
         if (const auto name = series_name(*common)) {

@@ -3900,7 +3900,10 @@ class NativeVersionStore:
             else:
                 index_metadata = timeseries_descriptor.normalization.df.common.multi_index
 
-            if index_type == "multi_index" or (index_type == "index" and index_metadata.is_physically_stored):
+            if index_type == "multi_index" or (
+                index_type == "index"
+                and (index_metadata.is_physically_stored or timeseries_descriptor.index.kind() == IndexKind.TIMESTAMP)
+            ):
                 index_name_from_store = columns.pop(0)
                 has_fake_name = (
                     0 in index_metadata.fake_field_pos if index_type == "multi_index" else index_metadata.fake_name
