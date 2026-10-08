@@ -21,8 +21,10 @@ Base: `major-7-0-0`. Source of diagnostics: "clang-tidy / analyse" CI job on PR 
 - `cpp/arcticdb/processing/test/test_schema_combine.cpp` — four `for (auto schemas : ...)`
   loops changed to `for (const auto& schemas : ...)` (range-copy of vectors only ever used
   by const-ref).
-- `cpp/arcticdb/stream/stream_utils.hpp` — `get_index_columns_from_descriptor`: `reserve()`
-  before the loop since the final size is known ahead of time.
+- `cpp/arcticdb/stream/stream_utils.hpp` — `get_index_columns_from_descriptor`: build the
+  vector with `util::reserve_vector<std::string>(index_till)` instead of default-constructing
+  and calling `reserve()` separately, matching the codebase's established helper (used
+  throughout `version_core.cpp`, `schema_combine.cpp`, etc).
 - `cpp/arcticdb/version/version_core.cpp` — `check_update_data_is_sorted_timeseries` and the
   `OutputSchema` overload of `add_index_columns_to_query` marked `static`; both are
   file-local with no header declaration.
