@@ -24,7 +24,7 @@ struct InputFrame;
 //   STRICT - every schema must carry the same non-index columns in the same order (static append/update).
 //   DROP   - keep only the columns present in all of them (concat inner join).
 //   KEEP   - keep the union of columns (dynamic append/update, concat outer join).
-enum class MissingColumnPolicy { STRICT, DROP, KEEP };
+enum class MissingColumnPolicy : uint8_t { STRICT, DROP, KEEP };
 
 // How the type of a column present in more than one schema is reconciled.
 //   STATIC          - Static schema: promote empty->concrete and fixed->dynamic string
@@ -36,12 +36,12 @@ enum class MissingColumnPolicy { STRICT, DROP, KEEP };
 // column - fall back to DYNAMIC, because float64 cannot represent every 64-bit integer exactly, and an index
 // column is compared for equality when sorting and searching, so a lossy promotion there would silently
 // corrupt lookups rather than merely lose precision on read.
-enum class TypePromotionPolicy { STATIC, DYNAMIC, MOST_PERMISSIVE };
+enum class TypePromotionPolicy : uint8_t { STATIC, DYNAMIC, MOST_PERMISSIVE };
 
 // How a mismatch in the names of the required (index / Series) fields is treated.
 //   RAISE                - the required field names must match (append/update).
 //   RECONCILE_TO_UNNAMED - reconcile mismatched names to unnamed (concat).
-enum class RequiredNameMismatchPolicy { RAISE, RECONCILE_TO_UNNAMED };
+enum class RequiredNameMismatchPolicy : uint8_t { RAISE, RECONCILE_TO_UNNAMED };
 
 enum NormalizationOperation : uint8_t {
     APPEND,
