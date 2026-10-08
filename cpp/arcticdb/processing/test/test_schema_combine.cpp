@@ -262,7 +262,7 @@ TEST(CombineSchema, ConcatRenamedSeriesValueColumnDropsTheName) {
     const auto series_a = timeseries_series("ts", "a", DataType::FLOAT64);
     const auto series_b = timeseries_series("ts", "b", DataType::FLOAT64);
 
-    for (auto schemas :
+    for (const auto& schemas :
          {std::vector<OutputSchema>{series_a, series_b}, std::vector<OutputSchema>{series_b, series_a}}) {
         auto combined = combine(schemas, concat_options(JoinType::OUTER));
         ASSERT_EQ(combined.stream_descriptor().field(0).name(), "ts");
@@ -363,7 +363,7 @@ TEST(CombineSchema, ArrowSchemaHasNoShapeToDisagreeAbout) {
     arrow.norm_metadata_.mutable_experimental_arrow()->set_has_index(true);
 
     const std::array expected{ColumnSpec{"ts", DataType::NANOSECONDS_UTC64}, ColumnSpec{"col", DataType::INT64}};
-    for (auto schemas : {std::vector<OutputSchema>{series, arrow}, std::vector<OutputSchema>{arrow, series}}) {
+    for (const auto& schemas : {std::vector<OutputSchema>{series, arrow}, std::vector<OutputSchema>{arrow, series}}) {
         auto combined = combine(schemas, concat_options(JoinType::OUTER));
         ASSERT_THAT(columns_of(combined), ElementsAreArray(expected));
     }
@@ -809,7 +809,7 @@ TEST(CombineSchema, ArrowWithEmptyPandasKeepsTheArrowSchema) {
                                      : rowcount_df({{"a", DataType::FLOAT64}});
         arrow.norm_metadata_.mutable_experimental_arrow()->set_has_index(arrow_has_index);
 
-        for (auto schemas : {std::vector<OutputSchema>{empty, arrow}, std::vector<OutputSchema>{arrow, empty}}) {
+        for (const auto& schemas : {std::vector<OutputSchema>{empty, arrow}, std::vector<OutputSchema>{arrow, empty}}) {
             auto combined = combine(schemas, append_options(true));
             ASSERT_TRUE(combined.norm_metadata_.has_experimental_arrow());
             ASSERT_EQ(combined.norm_metadata_.experimental_arrow().has_index(), arrow_has_index);
@@ -875,7 +875,7 @@ TEST(CombineSchema1dArrow, SeriesNameMismatchAppendUpdate) {
     auto array_with_empty_name = arrow_1d_array(DataType::INT64, false, "");
     auto array_with_name_1 = arrow_1d_array(DataType::INT64, false, "name_1");
     auto array_with_name_2 = arrow_1d_array(DataType::INT64, false, "name_2");
-    for (auto schemas : std::vector<std::vector<OutputSchema>>{
+    for (const auto& schemas : std::vector<std::vector<OutputSchema>>{
                  {array_without_name, array_with_name_1},
                  {array_with_name_1, array_without_name},
                  {array_with_empty_name, array_with_name_1},
