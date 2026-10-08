@@ -1292,15 +1292,15 @@ def test_get_description_multiindex(lmdb_library, names):
 @pytest.mark.parametrize(
     "input, expected_format",
     [
-        # A timestamp index does not make the DataFrame case a TIMEFRAME - that is reserved for the
-        # arcticdb TimeFrame type, which is only writable via the V1 API
         (pd.DataFrame({"column": [1, 2, 3]}, index=pd.date_range(start="1/1/2018", periods=3)), "DATAFRAME"),
         (pd.Series([1, 2, 3], name="column", index=pd.date_range(start="1/1/2018", periods=3)), "SERIES"),
         (np.arange(5), "NDARRAY"),
+        (pa.table({"column": pa.array([1, 2, 3], type=pa.int64())}), "ARROW_DATAFRAME"),
+        (pa.chunked_array([[1, 2, 3]], type=pa.int64()), "ARROW_SERIES"),
     ],
 )
-def test_get_description_input_format(lmdb_library, input, expected_format):
-    lib = lmdb_library
+def test_get_description_input_format(arrow_library, input, expected_format):
+    lib = arrow_library
     sym = "test_get_description_input_format"
     lib.write(sym, input)
     assert lib.get_description(sym).input_format == expected_format
@@ -1341,22 +1341,6 @@ def test_get_description_input_format_recursive_normalized(lmdb_library):
     data = {"a": np.arange(5), "b": pd.DataFrame({"column": [1, 2, 3]})}
     lib.write(sym, data, recursive_normalizers=True)
     assert lib.get_description(sym).input_format == "RECURSIVE_NORMALIZED"
-
-
-@pytest.mark.parametrize(
-    "data, expected_format",
-    [
-        # pa.Table/pa.RecordBatch are DataFrame-like (multiple named columns)
-        (pa.table({"column": pa.array([1, 2, 3], type=pa.int64())}), "ARROW_DATAFRAME"),
-        # pa.Array/pa.ChunkedArray are Series-like (a single, possibly unnamed, column)
-        (pa.chunked_array([[1, 2, 3]], type=pa.int64()), "ARROW_SERIES"),
-    ],
-)
-def test_get_description_input_format_arrow(arrow_library, data, expected_format):
-    lib = arrow_library
-    sym = "test_get_description_input_format_arrow"
-    lib.write(sym, data)
-    assert lib.get_description(sym).input_format == expected_format
 
 
 # See test_write_tz in test_normalization.py for the V1 API equivalent

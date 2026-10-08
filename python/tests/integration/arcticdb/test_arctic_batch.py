@@ -1567,23 +1567,33 @@ def test_get_description_batch_empty_nat(arctic_library):
         assert np.isnat(results_list[sym].date_range[1])
 
 
-def test_get_description_batch_input_format(lmdb_library):
-    lib = lmdb_library
+def test_get_description_batch_input_format(arrow_library):
+    lib = arrow_library
     index = pd.date_range(start="1/1/2018", periods=3)
     lib.write("batch_frame", pd.DataFrame({"column": [1, 2, 3]}, index=index))
     lib.write("batch_series", pd.Series([1, 2, 3], name="column", index=index))
     lib.write("batch_ndarray", np.arange(5))
     lib.write("batch_recursive_normalized", {"a": np.arange(5)}, recursive_normalizers=True)
-    descs = lib.get_description_batch(["batch_frame", "batch_series", "batch_ndarray", "batch_recursive_normalized"])
-    assert [desc.input_format for desc in descs] == ["DATAFRAME", "SERIES", "NDARRAY", "RECURSIVE_NORMALIZED"]
-
-
-def test_get_description_batch_input_format_arrow(arrow_library):
-    lib = arrow_library
     lib.write("batch_arrow_dataframe", pa.table({"column": pa.array([1, 2, 3], type=pa.int64())}))
     lib.write("batch_arrow_series", pa.chunked_array([[1, 2, 3]], type=pa.int64()))
-    descs = lib.get_description_batch(["batch_arrow_dataframe", "batch_arrow_series"])
-    assert [desc.input_format for desc in descs] == ["ARROW_DATAFRAME", "ARROW_SERIES"]
+    descs = lib.get_description_batch(
+        [
+            "batch_frame",
+            "batch_series",
+            "batch_ndarray",
+            "batch_recursive_normalized",
+            "batch_arrow_dataframe",
+            "batch_arrow_series",
+        ]
+    )
+    assert [desc.input_format for desc in descs] == [
+        "DATAFRAME",
+        "SERIES",
+        "NDARRAY",
+        "RECURSIVE_NORMALIZED",
+        "ARROW_DATAFRAME",
+        "ARROW_SERIES",
+    ]
 
 
 @pytest.mark.storage
