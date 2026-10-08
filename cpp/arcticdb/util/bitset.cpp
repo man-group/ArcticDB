@@ -8,16 +8,66 @@
 
 #include <arcticdb/util/bitset.hpp>
 
+#include <array>
+#include <vector>
+
 namespace arcticdb {
 
+namespace {
+// Copies bytes [first_byte, first_byte + num_bytes) of bv's packed form. A BitMagic bit block is byte for byte the
+// packed layout on a little-endian host, so each block is copied whole rather than enumerating its set bits.
+void copy_bitset_bytes(const bm::bvector<>& bv, size_t first_byte, size_t num_bytes, uint8_t* dest_ptr) {
+    static_assert(std::endian::native == std::endian::little, "Block copy assumes a little-endian host");
+    constexpr size_t block_bytes = bm::gap_max_bits / 8;
+    const auto& blocks = bv.get_blocks_manager();
+    alignas(16) bm::word_t gap_scratch[bm::set_block_size];
+    for (size_t written = 0; written < num_bytes;) {
+        const size_t byte_idx = first_byte + written;
+        const size_t offset_in_block = byte_idx % block_bytes;
+        const size_t len = std::min(block_bytes - offset_in_block, num_bytes - written);
+        unsigned i, j;
+        bm::get_block_coord(static_cast<bm::bvector<>::block_idx_type>(byte_idx / block_bytes), i, j);
+        // get_block returns nullptr for an all-zero block and a real all-ones block for a full one
+        const bm::word_t* block = blocks.get_block(i, j);
+        if (block == nullptr) {
+            std::memset(dest_ptr + written, 0, len);
+        } else {
+            if (BM_IS_GAP(block)) {
+                bm::gap_convert_to_bitset(gap_scratch, BMGAP_PTR(block));
+                block = gap_scratch;
+            }
+            std::memcpy(dest_ptr + written, reinterpret_cast<const uint8_t*>(block) + offset_in_block, len);
+        }
+        written += len;
+    }
+}
+} // namespace
+
 void bitset_to_packed_bits(const bm::bvector<>& bv, uint8_t* dest_ptr) {
-    std::memset(dest_ptr, 0, bitset_packed_size_bytes(bv.size()));
-    auto last = bv.end();
-    for (auto en = bv.first(); en != last; ++en) {
-        size_t bit_pos = *en;
-        size_t byte_idx = bit_pos / 8;
-        size_t bit_idx = bit_pos % 8;
-        dest_ptr[byte_idx] |= (uint8_t(1) << bit_idx);
+    bitset_range_to_packed_bits(bv, 0, bv.size(), dest_ptr);
+}
+
+void bitset_range_to_packed_bits(const bm::bvector<>& bv, size_t start, size_t end, uint8_t* dest_ptr) {
+    util::check(start <= end, "Invalid bit set range: start {} end {}", start, end);
+    const size_t num_bits = end - start;
+    const size_t num_bytes = bitset_packed_size_bytes(num_bits);
+    if (num_bits == 0) {
+        return;
+    }
+    copy_bitset_bytes(bv, start / 8, num_bytes, dest_ptr);
+    if (const size_t shift = start % 8; shift != 0) {
+        // An unaligned start needs one more source byte when the range spills into it, then a shift down in place
+        uint8_t spill = 0;
+        if (bitset_packed_size_bytes(shift + num_bits) > num_bytes) {
+            copy_bitset_bytes(bv, start / 8 + num_bytes, 1, &spill);
+        }
+        for (size_t idx = 0; idx < num_bytes; ++idx) {
+            const unsigned next = idx + 1 < num_bytes ? dest_ptr[idx + 1] : spill;
+            dest_ptr[idx] = static_cast<uint8_t>((dest_ptr[idx] >> shift) | (next << (8 - shift)));
+        }
+    }
+    if (const size_t tail_bits = num_bits % 8; tail_bits != 0) {
+        dest_ptr[num_bytes - 1] &= static_cast<uint8_t>((1u << tail_bits) - 1);
     }
 }
 
@@ -74,23 +124,58 @@ void bools_to_packed_bits(const bool* src, size_t num_bools, uint8_t* dest) {
                   ((b[5] != 0) << 5) | ((b[6] != 0) << 6) | ((b[7] != 0) << 7);
     }
     for (size_t i = num_full_bytes * 8; i < num_bools; ++i) {
-        set_bit_at(dest, i, src[i]);
+        set_bit_at(dest, i, as_byte[i] != 0);
     }
 }
 
-bool get_bit_at(const uint8_t* packed_bits, size_t bit_pos) {
-    auto dv = std::div(bit_pos, 8);
-    size_t byte_idx = dv.quot;
-    size_t bit_idx = dv.rem;
-    return (packed_bits[byte_idx] >> bit_idx) & 1;
-}
+namespace {
+// deposit_nibble[mask][bits] places the low popcount(mask) bits of bits at the set positions of the 4-bit mask.
+constexpr auto deposit_nibble = [] {
+    std::array<std::array<uint8_t, 16>, 16> table{};
+    for (unsigned mask = 0; mask < 16; ++mask) {
+        for (unsigned bits = 0; bits < 16; ++bits) {
+            unsigned out = 0;
+            unsigned next = 0;
+            for (unsigned pos = 0; pos < 4; ++pos) {
+                if ((mask >> pos) & 1u) {
+                    out |= ((bits >> next++) & 1u) << pos;
+                }
+            }
+            table[mask][bits] = static_cast<uint8_t>(out);
+        }
+    }
+    return table;
+}();
+} // namespace
 
-void set_bit_at(uint8_t* packed_bits, size_t bit_pos, bool value) {
-    auto dv = std::div(bit_pos, 8);
-    size_t byte_idx = dv.quot;
-    size_t bit_idx = dv.rem;
-    packed_bits[byte_idx] &= ~(1 << bit_idx);                        // Unset bit
-    packed_bits[byte_idx] |= static_cast<uint8_t>(value) << bit_idx; // Set bit
+void scatter_bools_to_packed_bits(
+        const bool* values, size_t num_values, const uint8_t* validity, size_t num_bits, uint8_t* dest
+) {
+    // Pack the values first, which vectorises, then deposit them a validity nibble at a time. The 8 bytes of slack let
+    // every read of the packed values be one unaligned 64-bit load.
+    std::vector<uint8_t> packed_values(bitset_packed_size_bytes(num_values) + 8, 0);
+    bools_to_packed_bits(values, num_values, packed_values.data());
+    const size_t num_bytes = bitset_packed_size_bytes(num_bits);
+    size_t value_pos = 0;
+    for (size_t byte_idx = 0; byte_idx < num_bytes; ++byte_idx) {
+        unsigned mask = validity[byte_idx];
+        if (byte_idx == num_bytes - 1 && num_bits % 8 != 0) {
+            mask &= (1u << (num_bits % 8)) - 1;
+        }
+        uint64_t window;
+        std::memcpy(&window, packed_values.data() + (value_pos >> 3), sizeof(window));
+        const auto bits = static_cast<unsigned>(window >> (value_pos & 7));
+        const unsigned lo = mask & 0xFu;
+        const unsigned hi = mask >> 4;
+        const auto lo_count = static_cast<unsigned>(std::popcount(lo));
+        dest[byte_idx] = static_cast<uint8_t>(
+                deposit_nibble[lo][bits & 0xFu] | (deposit_nibble[hi][(bits >> lo_count) & 0xFu] << 4)
+        );
+        value_pos += lo_count + static_cast<unsigned>(std::popcount(hi));
+    }
+    util::check(
+            value_pos == num_values, "scatter_bools_to_packed_bits: {} values for {} set bits", num_values, value_pos
+    );
 }
 
 void copy_packed_bits(const uint8_t* src, size_t src_bit_offset, size_t num_bits, uint8_t* dest) {

@@ -95,6 +95,12 @@ void create_dense_bitmap(
         size_t offset, const util::BitSet& sparse_map, Column& dest_column, entity::AllocationType allocation_type
 );
 
+// Writes the validity bitmap of rows [start, end) of sparse_map, only if any of those rows is null
+void create_dense_bitmap_for_range_if_any_nulls(
+        size_t offset, const util::BitSet& sparse_map, size_t start, size_t end, Column& dest_column,
+        entity::AllocationType allocation_type
+);
+
 void create_dense_bitmap_all_zeros(
         size_t offset, size_t num_bits, Column& dest_column, entity::AllocationType allocation_type
 );

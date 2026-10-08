@@ -63,3 +63,28 @@ static void BM_bools_to_packed_bits(benchmark::State& state) {
 }
 
 BENCHMARK(BM_bools_to_packed_bits)->Args({100'000})->Args({1'000'000})->Args({10'000'000});
+
+// Args are {num_bits, percentage of unset bits, starting bit offset}. A non-zero offset covers the byte-unaligned
+// case, which is what the Arrow validity bitmap of a sliced array looks like.
+static void BM_for_each_unset_bit(benchmark::State& state) {
+    const auto num_bits = static_cast<size_t>(state.range(0));
+    const auto unset_percent = static_cast<size_t>(state.range(1));
+    const auto bit_offset = static_cast<size_t>(state.range(2));
+    std::vector<uint8_t> packed(bitset_packed_size_bytes(bit_offset + num_bits), 0);
+    std::uniform_int_distribution<size_t> dis(0, 99);
+    for (size_t i = 0; i < bit_offset + num_bits; ++i) {
+        set_bit_at(packed.data(), i, dis(gen) >= unset_percent);
+    }
+    for (auto _ : state) {
+        size_t total = 0;
+        for_each_unset_bit(packed.data(), bit_offset, num_bits, [&](size_t pos) { total += pos; });
+        benchmark::DoNotOptimize(total);
+    }
+}
+
+BENCHMARK(BM_for_each_unset_bit)
+        ->Args({10'000'000, 0, 0})
+        ->Args({10'000'000, 10, 0})
+        ->Args({10'000'000, 10, 5})
+        ->Args({10'000'000, 50, 0})
+        ->Args({10'000'000, 90, 0});
