@@ -9,6 +9,7 @@
 #pragma once
 
 #include <arcticdb/util/magic_num.hpp>
+#include <arcticdb/util/type_traits.hpp>
 
 #include <bitmagic/bm.h>
 #include <bitmagic/bmalgo.h>
@@ -24,19 +25,43 @@ using BitMagicEnd = SmallMagicNum<'M', 'e'>;
 using BitSetSizeType = bm::bvector<>::size_type;
 using BitIndex = bm::bvector<>::rs_index_type;
 
-template<typename functor>
-requires std::is_invocable_r_v<void, functor, size_t>
+namespace detail {
+
+template<typename F>
+concept bitset_visitor_functor = requires(F) {
+    requires std::same_as<typename util::function_arg_types<F>::return_t, void> ||
+                     std::signed_integral<typename util::function_arg_types<F>::return_t>;
+    requires std::invocable<F, size_t>;
+};
+} // namespace detail
+
+template<detail::bitset_visitor_functor functor>
 struct BitSetVisitor {
+    using functor_return_type = typename util::function_arg_types<functor>::return_t;
     functor& f;
     int add_bits(BitSet::size_type off, const unsigned char* bits, unsigned n) {
         for (unsigned i = 0; i < n; ++i) {
-            f(off + bits[i]);
+            if constexpr (std::same_as<functor_return_type, void>) {
+                f(off + bits[i]);
+            } else {
+                const auto res = f(off + bits[i]);
+                if (res < 0) {
+                    return res;
+                }
+            }
         }
         return 0;
     }
     int add_range(BitSet::size_type off, BitSet::size_type n) {
         for (BitSet::size_type i = 0; i < n; ++i) {
-            f(off + i);
+            if constexpr (std::same_as<functor_return_type, void>) {
+                f(off + i);
+            } else {
+                const auto res = f(off + i);
+                if (res < 0) {
+                    return res;
+                }
+            }
         }
         return 0;
     }

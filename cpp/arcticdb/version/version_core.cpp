@@ -507,9 +507,7 @@ SegmentInMemory create_segment_for_merge_update_row_range_insert(
         const util::BitSet& source_rows_to_insert
 ) {
     const size_t rows_to_insert = insert_info.output_row_range.diff();
-    SegmentInMemory new_segment(
-            col_slice_descriptor, rows_to_insert, AllocationType::PRESIZED, Sparsity::NOT_PERMITTED
-    );
+    SegmentInMemory new_segment(col_slice_descriptor, rows_to_insert, AllocationType::PRESIZED, Sparsity::PERMITTED);
     const StreamDescriptor& slice_descriptor = new_segment.descriptor();
     const size_t first_col_idx = insert_info.col_slice_index * columns_per_slice;
     for (size_t column_in_segment = 0; column_in_segment < slice_descriptor.field_count(); ++column_in_segment) {
@@ -533,8 +531,52 @@ SegmentInMemory create_segment_for_merge_update_row_range_insert(
             util::variant_match(
                     source,
                     [&](const SegmentInMemory& source) {
-                        ColumnData source_column_data = source.column_data(source_field_pos);
+                        const Column& source_column = source.column(static_cast<position_t>(source_field_pos));
+                        ColumnData source_column_data = source_column.data();
                         auto source_data = random_accessor<TDT>(&source_column_data);
+                        if (source_column.is_sparse()) {
+                            // Only the present values are written to the dense buffer, the rest are marked as missing.
+                            // A single block is allocated for the worst case and trimmed at the end.
+                            auto new_column = std::make_shared<Column>(
+                                    field.type(), rows_to_insert, AllocationType::DYNAMIC, Sparsity::PERMITTED
+                            );
+                            new_column->buffer().ensure(rows_to_insert * get_type_size(field.type().data_type()));
+                            ColumnData new_column_data = new_column->data();
+                            auto sparse_data_it = new_column_data.begin<TDT>();
+                            util::BitMagic& sparse_map = new_column->sparse_map();
+                            size_t output_row = 0;
+                            iterate_over_set_positions(
+                                    source_rows_to_insert,
+                                    insert_info.candidate_source_rows.first,
+                                    insert_info.candidate_source_rows.second,
+                                    [&](size_t source_row) {
+                                        const bool has_value =
+                                                source_column.has_value_at(static_cast<position_t>(source_row));
+                                        if (has_value) {
+                                            const auto value = source_data.at(source_row);
+                                            if constexpr (is_sequence_type(TDT::data_type())) {
+                                                *sparse_data_it = is_a_string(value)
+                                                                          ? new_segment.string_pool()
+                                                                                    .get(source.const_string_pool()
+                                                                                                 .get_const_view(value))
+                                                                                    .offset()
+                                                                          : value;
+                                            } else {
+                                                *sparse_data_it = value;
+                                            }
+                                            ++sparse_data_it;
+                                        }
+                                        sparse_map.set(output_row++, has_value);
+                                    }
+                            );
+                            const size_t dense_values = sparse_map.count();
+                            new_column->buffer().trim(dense_values * get_type_size(field.type().data_type()));
+                            if (dense_values == rows_to_insert) {
+                                new_column->opt_sparse_map().reset();
+                            }
+                            new_segment.columns()[column_in_segment] = std::move(new_column);
+                            return;
+                        }
                         for_each_row_to_insert([&](size_t source_row) {
                             const auto value = source_data.at(source_row);
                             if constexpr (is_sequence_type(TDT::data_type())) {
@@ -3221,16 +3263,7 @@ folly::Future<AtomKey> merge_update_impl(
                     ColRange{source->desc().index().field_count(), source->desc().field_count()},
                     RowRange{0, source->num_rows}
             };
-            SegmentInMemory source_segment = std::get<1>(WriteToSegmentTask(source, std::move(full_slice))());
-            for (size_t col = 0; col < source_segment.num_columns(); ++col) {
-                schema::check<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
-                        !source_segment.column(static_cast<position_t>(col)).is_sparse(),
-                        "Merge update does not support Arrow source data with null values yet. Column \"{}\" contains "
-                        "nulls.",
-                        source_segment.field(col).name()
-                );
-            }
-            return source_segment;
+            return std::get<1>(WriteToSegmentTask(source, std::move(full_slice))());
         } else {
             return source;
         }

@@ -75,15 +75,16 @@ ARROW_SOURCE_INTO_EMPTY_PANDAS_TARGET_XFAIL = pytest.mark.xfail(
     "metadata with Arrow normalization metadata",
     strict=True,
 )
+# An Arrow column containing only nulls has the Arrow null type, which ArcticDB cannot write.
+ARROW_NULL_TYPE_COLUMN_XFAIL = pytest.mark.xfail(
+    raises=SchemaException, reason="ArcticDB does not support Arrow columns of null type", strict=True
+)
 # Pandas stores a data column that clashes with the index name as __col_<name>__N, which the Arrow source cannot match.
 ARROW_SOURCE_INTO_PANDAS_MANGLED_COLUMN_XFAIL = pytest.mark.xfail(
     raises=StreamDescriptorMismatch,
     reason="Merge update with an Arrow source into a symbol whose pandas column names were mangled on write is not "
     "supported yet. Can be supported after #3418 by calling rename_columns_for_arrow on the target",
     strict=True,
-)
-ARROW_SOURCE_WITH_NULLS_XFAIL = pytest.mark.xfail(
-    raises=SchemaException, reason="Merge update does not support Arrow sources with nulls yet", strict=True
 )
 
 
@@ -3175,8 +3176,6 @@ class TestMergeRowrangeInsert:
         assert_frame_equal(lib.read("sym").data, expected)
 
     def test_string_columns_inserted(self, request, lmdb_library, source_format):
-        if source_format != SourceFormat.PANDAS:
-            request.applymarker(ARROW_SOURCE_WITH_NULLS_XFAIL)
         lib = lmdb_library
         target = pd.DataFrame({"a": [1, 2], "s": ["x", "y"]})
         # Non-ASCII string exercises the GIL/string-pool path in build_row_range_insert_segments.
@@ -4832,8 +4831,6 @@ class TestMergeMultiindexInsert:
         assert_frame_equal(lib.read("sym").data, expected)
 
     def test_string_secondary_level_insert(self, request, lmdb_library, source_format):
-        if source_format != SourceFormat.PANDAS:
-            request.applymarker(ARROW_SOURCE_WITH_NULLS_XFAIL)
         lib = lmdb_library
         strategy = MergeStrategy(MergeAction.DO_NOTHING, MergeAction.INSERT)
         index_names = [None, "s"]
@@ -4950,8 +4947,6 @@ class TestMergeMultiindexInsert:
 def test_match_on_float_nan(
     request, lmdb_library, match_na, target, source, expected_match_na_true, expected_match_na_false, source_format
 ):
-    if source_format != SourceFormat.PANDAS:
-        request.applymarker(ARROW_SOURCE_WITH_NULLS_XFAIL)
     lib = lmdb_library
     strategy = MergeStrategy(MergeAction.UPDATE, MergeAction.DO_NOTHING)
     lib.write("sym", target)
@@ -5007,8 +5002,6 @@ def test_match_on_string_none_nan(
     expected_match_na_false,
     source_format,
 ):
-    if source_format != SourceFormat.PANDAS:
-        request.applymarker(ARROW_SOURCE_WITH_NULLS_XFAIL)
     lib = lmdb_version_store_v1
     strategy = MergeStrategy(MergeAction.UPDATE, MergeAction.DO_NOTHING)
     lib.write("sym", target)
@@ -5041,7 +5034,7 @@ def test_match_on_string_none_nan(
 )
 def test_multiple_source_rows_match_via_missing(request, lmdb_library, match_na, target, source, source_format):
     if source_format != SourceFormat.PANDAS:
-        request.applymarker(ARROW_SOURCE_WITH_NULLS_XFAIL)
+        request.applymarker(ARROW_NULL_TYPE_COLUMN_XFAIL)
     lib = lmdb_library
     strategy = MergeStrategy(MergeAction.UPDATE, MergeAction.DO_NOTHING)
     lib.write("sym", target)
@@ -5088,8 +5081,6 @@ def test_multiple_source_rows_match_via_missing(request, lmdb_library, match_na,
 def test_match_on_datetime_nat(
     request, lmdb_library, match_na, target, source, expected_match_na_true, expected_match_na_false, source_format
 ):
-    if source_format != SourceFormat.PANDAS:
-        request.applymarker(ARROW_SOURCE_WITH_NULLS_XFAIL)
     lib = lmdb_library
     strategy = MergeStrategy(MergeAction.UPDATE, MergeAction.DO_NOTHING)
     lib.write("sym", target)
@@ -5129,8 +5120,6 @@ def test_match_on_datetime_nat(
     ids=["datetime", "rowrange"],
 )
 def test_unmatched_nan_source_rows_inserted_default(request, lmdb_library, target, source, expected, source_format):
-    if source_format != SourceFormat.PANDAS:
-        request.applymarker(ARROW_SOURCE_WITH_NULLS_XFAIL)
     lib = lmdb_library
     strategy = MergeStrategy(MergeAction.UPDATE, MergeAction.INSERT)
     lib.write("sym", target)

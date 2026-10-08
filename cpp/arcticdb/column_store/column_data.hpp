@@ -126,6 +126,7 @@ struct ColumnData {
   public:
     template<typename RawType>
     struct Enumeration {
+        using value_type = RawType;
         ssize_t idx_{0};
         RawType* ptr_{nullptr};
 
@@ -148,6 +149,37 @@ struct ColumnData {
             );
             return *ptr_;
         };
+
+        // Structured binding support: [idx, value]
+        template<std::size_t N>
+        decltype(auto) get() & {
+            static_assert(N < 2);
+            if constexpr (N == 0) {
+                return idx();
+            } else {
+                return value();
+            }
+        }
+
+        template<std::size_t N>
+        decltype(auto) get() const& {
+            static_assert(N < 2);
+            if constexpr (N == 0) {
+                return idx();
+            } else {
+                return value();
+            }
+        }
+
+        template<std::size_t N>
+        decltype(auto) get() && {
+            static_assert(N < 2);
+            if constexpr (N == 0) {
+                return idx();
+            } else {
+                return value();
+            }
+        }
     };
 
     // Wrapper to keep code in iterator clean when differentiating between regular and enumerating iterators
@@ -181,7 +213,7 @@ struct ColumnData {
         using RawType = typename TDT::DataTypeTag::raw_type;
 
       public:
-        ColumnDataIterator() = delete;
+        ColumnDataIterator() = default;
 
         // Used to construct [c]begin iterators
         explicit ColumnDataIterator(const ColumnData* parent) : parent_(parent), block_pos_(0) {
@@ -578,3 +610,21 @@ struct ColumnData {
 };
 
 } // namespace arcticdb
+
+// After ColumnData is complete:
+namespace std {
+
+template<typename RawType>
+struct tuple_size<arcticdb::ColumnData::Enumeration<RawType>> : std::integral_constant<std::size_t, 2> {};
+
+template<typename RawType>
+struct tuple_element<0, arcticdb::ColumnData::Enumeration<RawType>> {
+    using type = ssize_t;
+};
+
+template<typename RawType>
+struct tuple_element<1, arcticdb::ColumnData::Enumeration<RawType>> {
+    using type = RawType; // the binding is a reference to this
+};
+
+} // namespace std

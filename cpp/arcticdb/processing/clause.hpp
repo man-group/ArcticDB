@@ -26,12 +26,14 @@
 #include <arcticdb/python/gil_lock.hpp>
 #include <arcticdb/python/python_to_tensor_frame.hpp>
 #include <arcticdb/pipeline/frame_utils.hpp>
+#include <arcticdb/util/type_traits.hpp>
 
 #include <optional>
 #include <vector>
 #include <string>
 #include <variant>
 #include <memory>
+#include <ranges>
 
 namespace arcticdb {
 
@@ -852,26 +854,30 @@ struct WriteClause {
     void process_compressed(const std::vector<EntityId>& entity_ids) const;
 };
 
-/// Type used as the key when target column values of type TDT are indexed for matching.
-template<util::type_descriptor_tag TDT>
+/// Type used as the key when target column values of type TDT are indexed for matching. Types without an in-band NA
+/// representation are wrapped in std::optional so that std::nullopt can represent missing values.
+template<util::scalar_type_descriptor_tag TDT>
 using MatchKeyType = std::conditional_t<
-        is_sequence_type(TDT::data_type()), std::optional<std::string_view>, typename TDT::DataTypeTag::raw_type>;
+        is_sequence_type(TDT::data_type()), std::optional<std::string_view>,
+        std::conditional_t<
+                is_floating_point_type(TDT::data_type()) || is_time_type(TDT::data_type()),
+                typename TDT::DataTypeTag::raw_type, std::optional<typename TDT::DataTypeTag::raw_type>>>;
 
 template<typename TDT, typename T>
 concept sequence_type_raw_value =
-        util::type_descriptor_tag<TDT> && is_sequence_type(TDT::data_type()) &&
+        util::scalar_type_descriptor_tag<TDT> && is_sequence_type(TDT::data_type()) &&
         util::any_of<std::remove_cvref_t<T>, PyObject*, typename TDT::RawType, std::optional<std::string_view>>;
 
 template<typename TDT, typename T>
-concept raw_value_for_type_descriptor =
-        util::type_descriptor_tag<TDT> &&
-        (std::same_as<T, typename TDT::DataTypeTag::raw_type> || sequence_type_raw_value<TDT, T>);
+concept raw_value_for_type_descriptor = util::scalar_type_descriptor_tag<TDT> &&
+                                        (std::same_as<T, typename TDT::DataTypeTag::raw_type> ||
+                                         std::same_as<T, MatchKeyType<TDT>> || sequence_type_raw_value<TDT, T>);
 
 /// Whether value, one of the representations merge-update uses for a column of type TDT, denotes a missing entry.
 /// TDT is always the type of the column itself. value can be the raw type stored in the target column, or, only for
 /// sequence types, the PyObject* read from the source tensor or the decoded std::optional<std::string_view> match
-/// key.
-template<util::type_descriptor_tag TDT, typename V>
+/// key. For types without an in-band NA representation value can also be the std::optional match key.
+template<util::scalar_type_descriptor_tag TDT, typename V>
 requires raw_value_for_type_descriptor<TDT, V>
 constexpr bool is_na(V value) {
     if constexpr (is_floating_point_type(TDT::data_type())) {
@@ -886,26 +892,75 @@ constexpr bool is_na(V value) {
         } else {
             return !is_a_string(value);
         }
+    } else if constexpr (std::same_as<V, MatchKeyType<TDT>>) {
+        return !value.has_value();
     } else {
         return false;
     }
 }
 
-template<util::type_descriptor_tag TDT, typename SourceElementType>
+template<util::scalar_type_descriptor_tag TDT, typename SourceElementType>
 auto get_source_value(std::span<SourceElementType> data, size_t row) {
     return data[row];
 }
 
-template<util::type_descriptor_tag TDT>
-requires(is_sequence_type(TDT::data_type()))
+template<util::scalar_sequence_type TDT>
 TDT::RawType get_source_value(
         const std::pair<std::span<const typename TDT::RawType>, const StringPool*>& data, size_t row
 ) {
     return data.first[row];
 }
 
-template<util::type_descriptor_tag TDT>
-requires(is_sequence_type(TDT::data_type()))
+template<util::scalar_sequence_type SourceTDT, typename T>
+requires(!is_arrow_output_only_type(SourceTDT::data_type()) && util::any_of<std::remove_cvref_t<T>, PyObject*, typename SourceTDT::RawType>)
+std::pair<std::optional<std::string_view>, std::optional<convert::PyStringWrapper>> get_source_string(
+        const T& object, const StringPool* pool, size_t row, std::string_view column_name, size_t source_row_offset,
+        std::optional<ScopedGILLock>* gil
+) {
+    if constexpr (std::same_as<std::remove_cvref_t<T>, PyObject*>) {
+        ARCTICDB_DEBUG_CHECK(
+                ErrorCode::E_ASSERTION_FAILURE,
+                pool == nullptr,
+                "String pools are not expected in when extracting string from python object for column {}",
+                column_name
+        );
+        ARCTICDB_DEBUG_CHECK(
+                ErrorCode::E_ASSERTION_FAILURE,
+                gil,
+                "Scoped GIL object is expected when extracting string from a python object for column {}",
+                column_name
+        );
+        return util::variant_match(
+                create_py_object_wrapper_or_error<SourceTDT::data_type()>(object, *gil),
+                [&](convert::StringEncodingError&& err
+                ) -> std::pair<std::optional<std::string_view>, std::optional<convert::PyStringWrapper>> {
+                    err.row_index_in_slice_ = row;
+                    err.raise(column_name, source_row_offset);
+                },
+                [&](convert::PyStringWrapper&& wrapper
+                ) -> std::pair<std::optional<std::string_view>, std::optional<convert::PyStringWrapper>> {
+                    return std::pair{
+                            std::make_optional(std::string_view{wrapper.buffer_, wrapper.length_}),
+                            std::make_optional(std::move(wrapper))
+                    };
+                }
+        );
+    } else {
+        ARCTICDB_DEBUG_CHECK(
+                ErrorCode::E_ASSERTION_FAILURE,
+                pool,
+                "String pool is expected when extracting string from column {} of type {}",
+                column_name,
+                SourceTDT::type_descriptor()
+        );
+        if (is_na<SourceTDT>(object)) {
+            return {std::nullopt, std::nullopt};
+        }
+        return {std::optional{pool->get_const_view(object)}, std::nullopt};
+    }
+}
+
+template<util::scalar_sequence_type TDT>
 std::pair<std::optional<std::string_view>, std::optional<convert::PyStringWrapper>> get_source_string(
         std::span<PyObject* const> data, size_t row, std::string_view column_name, size_t source_row_offset,
         std::optional<ScopedGILLock>* gil
@@ -931,8 +986,7 @@ std::pair<std::optional<std::string_view>, std::optional<convert::PyStringWrappe
     );
 }
 
-template<util::type_descriptor_tag TDT>
-requires(is_sequence_type(TDT::data_type()))
+template<util::scalar_sequence_type TDT>
 std::pair<std::optional<std::string_view>, std::optional<convert::PyStringWrapper>>
 get_source_string(const std::pair<std::span<const typename TDT::RawType>, const StringPool*>& data, size_t row, std::string_view, size_t, std::optional<ScopedGILLock>*) {
     auto offset = data.first[row];
@@ -942,7 +996,7 @@ get_source_string(const std::pair<std::span<const typename TDT::RawType>, const 
     return {data.second->get_const_view(offset), std::nullopt};
 }
 
-template<util::type_descriptor_tag TDT>
+template<util::scalar_type_descriptor_tag TDT>
 struct NaAwareComparator {
     bool match_na;
     bool operator()(MatchKeyType<TDT> left, MatchKeyType<TDT> right) const {
@@ -955,9 +1009,9 @@ struct NaAwareComparator {
     }
 };
 
-/// This clause will perform update values or insert values based on strategy_ in a segment. The source of new values is
-/// the source_ member. Source and target must have the same index type. There are two actions
-/// UPDATE: For a particular row in the segment if there's a row in source_ for which all values in the columns listed
+/// This clause will perform update values or insert values based on strategy_ in a segment. The source of new
+/// values is the source_ member. Source and target must have the same index type. There are two actions UPDATE:
+/// For a particular row in the segment if there's a row in source_ for which all values in the columns listed
 /// in on and the index (only in case if timeseries) match update will be performed.
 /// INSERT: Each row in source_ not matched by the target will be inserted
 struct MergeUpdateClause {
@@ -1010,7 +1064,9 @@ struct MergeUpdateClause {
         MatchRecord(std::span<ProcessingUnit> row_slices, size_t num_source_rows);
         void add_match(size_t source_row, size_t target_row_slice, size_t target_row);
         void add_match(size_t source_row, size_t target_row_slice, std::span<size_t> target_rows);
-        template<util::type_descriptor_tag TargetTDT, util::type_descriptor_tag SourceTDT, typename Source>
+
+        template<
+                util::scalar_type_descriptor_tag TargetTDT, util::scalar_type_descriptor_tag SourceTDT, typename Source>
         void filter_matching_rows(
                 std::string_view column_name, size_t source_offset, const Source& variant_source, bool match_na
         ) {
@@ -1035,19 +1091,29 @@ struct MergeUpdateClause {
                     for (size_t source_row_idx = 0; source_row_idx < matched_rows.size(); ++source_row_idx) {
                         const size_t discarded_matches =
                                 std::erase_if(matched_rows[source_row_idx], [&](const size_t target_row) {
-                                    const auto target_value = target_column_accessor[target_row];
+                                    const bool target_has_value =
+                                            target_column.column_->has_value_at(static_cast<position_t>(target_row));
                                     NaAwareComparator<SourceTDT> comparator{match_na};
                                     bool are_values_equal = false;
-                                    if constexpr (is_sequence_type(SourceTDT::data_type())) {
+                                    if constexpr (util::scalar_sequence_type<SourceTDT>) {
                                         const auto [source_string, opt_owner] = get_source_string<SourceTDT>(
                                                 source, source_row_idx, column_name, source_offset, &gil
                                         );
                                         const std::optional<std::string_view> target_string =
-                                                target_column.string_at_offset(target_value);
+                                                target_has_value ? target_column.string_at_offset(
+                                                                           target_column_accessor[target_row]
+                                                                   )
+                                                                 : std::nullopt;
                                         are_values_equal = comparator(source_string, target_string);
                                     } else {
                                         const auto source_value = get_source_value<SourceTDT>(source, source_row_idx);
-                                        are_values_equal = comparator(target_value, source_value);
+                                        if (target_has_value) {
+                                            are_values_equal =
+                                                    comparator(target_column_accessor[target_row], source_value);
+                                        } else {
+                                            // A missing target value is equivalent to NA
+                                            are_values_equal = match_na && is_na<SourceTDT>(source_value);
+                                        }
                                     }
                                     return !are_values_equal;
                                 });
@@ -1060,6 +1126,84 @@ struct MergeUpdateClause {
                 }
             });
         }
+
+        template<util::scalar_type_descriptor_tag TargetTDT, util::scalar_type_descriptor_tag SourceTDT>
+        void filter_matching_rows_sparse(
+                std::string_view column_name, const ColumnWithStrings& source, bool match_na,
+                const std::pair<size_t, size_t>& source_range
+        ) {
+            if (total_matched_target_rows_count_ == 0) {
+                // This function can only remove matches in case of a mismatch. In case there are no matched
+                // target rows, there's nothing left to remove.
+                return;
+            }
+            ColumnData source_column_data = source.column_->data();
+            using SourceIterator =
+                    decltype(source_column_data.cbegin<SourceTDT, IteratorType::ENUMERATED, IteratorDensity::SPARSE>());
+            const SourceIterator source_end =
+                    source_column_data.cend<SourceTDT, IteratorType::ENUMERATED, IteratorDensity::SPARSE>();
+            SourceIterator source_range_begin =
+                    source_column_data.cbegin<SourceTDT, IteratorType::ENUMERATED, IteratorDensity::SPARSE>();
+            while (source_range_begin != source_end &&
+                   static_cast<size_t>(source_range_begin->idx()) < source_range.first) {
+                ++source_range_begin;
+            }
+            const size_t source_row_count = source_range.second - source_range.first;
+            for (size_t row_slice_idx = 0; row_slice_idx < matched_target_rows_.size(); ++row_slice_idx) {
+                ProcessingUnit& row_slice = row_slices_[row_slice_idx];
+                const ColumnWithStrings target_column =
+                        std::get<ColumnWithStrings>(row_slice.get(ColumnName{column_name}));
+                ColumnData target_col_data = target_column.column_->data();
+                auto target_accessor = random_accessor<TargetTDT>(&target_col_data);
+                // Points to the first present source value at or after the processed source row. The row has a value
+                // only if the indexes match.
+                SourceIterator source_it = source_range_begin;
+                for (size_t source_row_idx = 0; source_row_idx < source_row_count; ++source_row_idx) {
+                    const size_t source_row = source_row_idx + source_range.first;
+                    const bool source_has_value =
+                            source_it != source_end && static_cast<size_t>(source_it->idx()) == source_row;
+                    std::vector<size_t>& matched_rows = matched_target_rows_[row_slice_idx][source_row_idx];
+                    size_t discarded_values = 0;
+                    if (!match_na && (!source_has_value || is_na<SourceTDT>(source_it->value()))) {
+                        // NA source value cannot match anything
+                        discarded_values = matched_rows.size();
+                        matched_rows.clear();
+                    } else {
+                        // Missing values in either source or target are equivalent to NA
+                        discarded_values = std::erase_if(matched_rows, [&](const size_t target_row) {
+                            const bool target_has_value =
+                                    target_column.column_->has_value_at(static_cast<position_t>(target_row));
+                            NaAwareComparator<SourceTDT> comparator{match_na};
+                            if constexpr (util::scalar_sequence_type<SourceTDT>) {
+                                const std::optional<std::string_view> source_string =
+                                        source_has_value ? source.string_at_offset(source_it->value()) : std::nullopt;
+                                const std::optional<std::string_view> target_string =
+                                        target_has_value ? target_column.string_at_offset(target_accessor[target_row])
+                                                         : std::nullopt;
+                                return !comparator(source_string, target_string);
+                            } else {
+                                if (source_has_value && target_has_value) {
+                                    return !comparator(target_accessor[target_row], source_it->value());
+                                }
+                                const bool source_na = !source_has_value || is_na<SourceTDT>(source_it->value());
+                                const bool target_na =
+                                        !target_has_value || is_na<TargetTDT>(target_accessor[target_row]);
+                                return !(match_na && source_na && target_na);
+                            }
+                        });
+                    }
+                    source_row_matched_count_[source_row_idx] -= discarded_values;
+                    total_matched_target_rows_count_ -= discarded_values;
+                    if (total_matched_target_rows_count_ == 0) {
+                        return;
+                    }
+                    if (source_has_value) {
+                        ++source_it;
+                    }
+                }
+            }
+        }
+
         void clone_source_match(size_t source_row_src, size_t source_row_dst, size_t row_slice);
         void validate_rows_to_update(const MergeStrategy& strategy) const;
         [[nodiscard]] size_t total_unmatched_source_rows() const;
@@ -1067,8 +1211,26 @@ struct MergeUpdateClause {
         [[nodiscard]] bool is_source_row_matched(size_t source_row) const;
         [[nodiscard]] bool has_matched_target_rows() const;
         [[nodiscard]] util::BitSet unmatched_source_rows() const;
+        [[nodiscard]] std::optional<size_t> source_row_to_update_target(size_t row_slice, size_t target_row) const {
+            return source_row_to_update_target_[row_slice][target_row];
+        }
+        [[nodiscard]] std::span<const std::optional<size_t>> source_rows_to_update_target(size_t row_slice) const {
+            return source_row_to_update_target_[row_slice];
+        }
+        [[nodiscard]] const util::BitSet& matched_source_rows() const { return matched_source_rows_; }
+        /// Fills in source_row_to_update_target and matched_source_rows_ from matched_target_rows_. Must be called
+        /// after all filtering is done. Required by the functions handling sparse data.
+        /// TODO: these two fields can be computed without the need to transpose.
+        void transpose_matched_target_rows();
 
       private:
+        /// For each row slice, for each target row, keep the source row to update this row
+        /// This is the transpose of matched_target_rows_. We don't need both and matched_target_rows_ must be removed.
+        std::vector<std::vector<std::optional<size_t>>> source_row_to_update_target_;
+        /// Used to mark which source rows are matched. If the i-th source row is not match the bitmap value will be 0.
+        /// And that row must be inserted (in case the strategy requires insert)
+        util::BitSet matched_source_rows_;
+
         /// For each row slice, for each source row, store all target rows that match it
         std::vector<std::vector<std::vector<size_t>>> matched_target_rows_;
         std::span<ProcessingUnit> row_slices_;
@@ -1106,6 +1268,16 @@ struct MergeUpdateClause {
 
     size_t field_index_for_matching_on_column(std::string_view name, const StreamDescriptor& descriptor) const;
 
+    bool is_source_column_sparse(const size_t column_index) const {
+        return util::variant_match(
+                source_,
+                [](const std::shared_ptr<InputFrame>&) { return false; },
+                [column_index](const SegmentInMemory& seg) {
+                    return seg.column(static_cast<position_t>(column_index)).is_sparse();
+                }
+        );
+    }
+
     /// For each processing group, identified by its row range, stores the first and last row in the source that
     /// overlaps with it. The interval is closed in the start and open in the end: [start, end). The key is the row
     /// range rather than the timestamp range because overlapping-window groups can share a timestamp range when
@@ -1130,22 +1302,30 @@ struct MergeUpdateClause {
         );
     }
 
-    template<util::type_descriptor_tag TDT>
-    requires(!is_sequence_type(TDT::data_type()))
-    std::span<const typename TDT::RawType> get_source_column(
+    template<util::scalar_type_descriptor_tag TDT>
+    requires(!util::scalar_sequence_type<TDT>)
+    std::variant<std::span<const typename TDT::RawType>, ColumnWithStrings> get_source_column(
             size_t field_index, std::optional<std::pair<size_t, size_t>> required_range = std::nullopt
     ) const {
+        using ReturnT = std::variant<std::span<const typename TDT::RawType>, ColumnWithStrings>;
         using RawType = TDT::RawType;
         const auto [first, last] = required_range.value_or(std::pair<size_t, size_t>{0, source_row_count()});
         const auto element_count = last - first;
         return util::variant_match(
                 source_,
-                [&](const std::shared_ptr<InputFrame>& source) {
+                [&](const std::shared_ptr<InputFrame>& source) -> ReturnT {
                     const NativeTensor& tensor = source->get_tensor(field_index);
                     check_source_tensor_is_contiguous<RawType>(tensor, field_index);
                     return std::span{static_cast<const RawType*>(tensor.data()) + first, element_count};
                 },
-                [&](const SegmentInMemory& source) {
+                [&](const SegmentInMemory& source) -> ReturnT {
+                    if (is_source_column_sparse(field_index)) {
+                        return ColumnWithStrings(
+                                source.column_ptr(static_cast<position_t>(field_index)),
+                                source.string_pool_ptr(),
+                                source.descriptor().field(field_index).name()
+                        );
+                    }
                     return std::span{
                             reinterpret_cast<const RawType*>(source.column_data(field_index).buffer().data()) + first,
                             element_count
@@ -1156,14 +1336,17 @@ struct MergeUpdateClause {
 
     /// Returns string columns as PyObject* for pandas sources and as offsets into the string pool of the converted
     /// segment for Arrow sources.
-    template<util::type_descriptor_tag TDT>
-    requires(is_sequence_type(TDT::data_type()))
-    std::variant<std::span<PyObject* const>, std::pair<std::span<const typename TDT::RawType>, StringPool*>>
+    template<util::scalar_sequence_type TDT>
+    std::variant<
+            std::span<PyObject* const>, std::pair<std::span<const typename TDT::RawType>, StringPool*>,
+            ColumnWithStrings>
     get_source_column(size_t field_index, std::optional<std::pair<size_t, size_t>> required_range = std::nullopt)
             const {
         using RawType = TDT::RawType;
-        using ReturnT = std::
-                variant<std::span<PyObject* const>, std::pair<std::span<const typename TDT::RawType>, StringPool*>>;
+        using ReturnT = std::variant<
+                std::span<PyObject* const>,
+                std::pair<std::span<const typename TDT::RawType>, StringPool*>,
+                ColumnWithStrings>;
         const auto [first, last] = required_range.value_or(std::pair<size_t, size_t>{0, source_row_count()});
         const auto element_count = last - first;
         return util::variant_match(
@@ -1174,6 +1357,13 @@ struct MergeUpdateClause {
                     return std::span{static_cast<PyObject* const*>(tensor.data()) + first, element_count};
                 },
                 [&](const SegmentInMemory& source) -> ReturnT {
+                    if (is_source_column_sparse(field_index)) {
+                        return ColumnWithStrings(
+                                source.column_ptr(static_cast<position_t>(field_index)),
+                                source.string_pool_ptr(),
+                                source.descriptor().field(field_index).name()
+                        );
+                    }
                     return std::pair{
                             std::span{
                                     reinterpret_cast<const RawType*>(source.column_data(field_index).buffer().data()) +
