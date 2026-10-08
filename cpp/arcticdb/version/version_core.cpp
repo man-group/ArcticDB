@@ -109,7 +109,7 @@ void sorted_data_check_append(const InputFrame& frame, const TimeseriesDescripto
     );
 }
 
-void check_update_data_is_sorted_timeseries(
+static void check_update_data_is_sorted_timeseries(
         const InputFrame& frame, const index::IndexSegmentReader& index_segment_reader
 ) {
     bool is_time_series = std::holds_alternative<stream::TimeseriesIndex>(frame.index);
@@ -1444,7 +1444,7 @@ folly::Future<std::vector<SliceAndKey>> read_process_and_collect(
             });
 }
 
-void add_index_columns_to_query(const ReadQuery& read_query, const OutputSchema& schema) {
+static void add_index_columns_to_query(const ReadQuery& read_query, const OutputSchema& schema) {
     if (read_query.columns.has_value()) {
         auto index_columns = stream::get_index_columns_from_descriptor(schema);
         if (index_columns.empty())

@@ -18,7 +18,7 @@ namespace arcticdb {
 using namespace proto::descriptors;
 
 template<typename InnerFunction, typename FieldType = google::protobuf::FieldDescriptor*>
-auto get_pandas_common_via_reflection(
+static auto get_pandas_common_via_reflection(
         proto::descriptors::NormalizationMetadata norm_meta, InnerFunction&& inner_function
 ) -> decltype(inner_function(norm_meta, std::declval<FieldType>(), std::declval<FieldType>())) {
     try {
@@ -37,7 +37,7 @@ auto get_pandas_common_via_reflection(
                                 "{}.common must be Pandas",
                                 one_of->name()
                         );
-                        return inner_function(norm_meta, one_of, common_field);
+                        return std::forward<InnerFunction>(inner_function)(norm_meta, one_of, common_field);
                     }
                 }
             }
