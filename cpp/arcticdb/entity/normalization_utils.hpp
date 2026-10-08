@@ -9,8 +9,13 @@
 #pragma once
 
 #include <arcticdb/entity/descriptors.hpp>
+#include <arcticdb/storage/memory_layout.hpp>
 
 namespace arcticdb {
+
+bool is_index_physically_stored(
+        const proto::descriptors::NormalizationMetadata_PandasIndex& index, IndexDescriptor::Type index_type
+);
 
 /// DataFrames, Series and TimeFrames all describe their index through the same Pandas submessage, as does Arrow data
 /// that was combined with one of those; every other input type - an ndarray, a pickled object, Arrow data of its own -
@@ -42,10 +47,11 @@ bool is_pandas_input_type(const proto::descriptors::NormalizationMetadata& norm_
 /// * Both indexes must have the same step
 /// * The new index must start at the point where the old one ends
 /// If the checks above pass update the new normalization index so that it spans the whole index (old + new).
+/// Repairs an old index step of 0, by adopting the new index's step.
 /// A no-op for input types that have no pandas index, such as an ndarray or a pickled object.
 /// @throws In case the row-ranged indexes are incompatible
 void update_rowrange_norm_for_append(
-        const proto::descriptors::NormalizationMetadata& old_norm, proto::descriptors::NormalizationMetadata& new_norm,
+        proto::descriptors::NormalizationMetadata& old_norm, proto::descriptors::NormalizationMetadata& new_norm,
         size_t old_length
 );
 } // namespace arcticdb

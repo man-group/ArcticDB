@@ -13,7 +13,7 @@ using namespace arcticdb;
 // existing row count and so the only part combine_schema cannot do. Rewrites the incoming metadata's start so that it
 // spans both, and so has to run before the schemas are combined.
 void align_rowrange_norm_for_append(
-        const entity::OutputSchema& existing, size_t existing_total_rows, entity::OutputSchema& incoming
+        entity::OutputSchema& existing, size_t existing_total_rows, entity::OutputSchema& incoming
 ) {
     if (existing.inferred_from_empty_frame() || incoming.inferred_from_empty_frame()) {
         // A RangeIndex normalized from an empty frame needs no alignment. It will be skipped by `combine_schema`
@@ -77,7 +77,7 @@ IncompleteSchemas combine_incomplete_schemas(
         ensure_timeseries_norm_meta(norm, stream_id);
         if (flags.sparsify) {
             // Reaching a timezone decision through the sparsify flag is a bug. Monday ref 11198274752.
-            label_index_utc_if_unlabelled(norm);
+            label_index_utc_if_unlabelled(norm, descriptor.index().type());
         }
         return entity::OutputSchema{std::move(descriptor), std::move(norm), entry.empty()};
     };
@@ -92,8 +92,9 @@ IncompleteSchemas combine_incomplete_schemas(
     if (!existing.has_value()) {
         return {staged, staged};
     }
-    align_rowrange_norm_for_append(*existing, existing_total_rows, staged);
-    const std::array schemas{*existing, staged};
+    auto existing_schema = *existing;
+    align_rowrange_norm_for_append(existing_schema, existing_total_rows, staged);
+    const std::array schemas{std::move(existing_schema), staged};
     return {std::move(staged), combine_schema(schemas, options)};
 }
 } // namespace arcticdb

@@ -633,6 +633,15 @@ def test_compat_modify_symbol_first_written_empty(old_venv_and_arctic_uri, lib_n
             ]
         )
         with compat.current_version() as curr:
+            # Test the output of get_description is correct
+            assert [c.name for c in curr.lib.get_description("sym").columns] == ["col"]
+
+            # Test that reading as arrow and converting to pandas works
+            arrow_table = curr.lib.read("sym", output_format=OutputFormat.PYARROW).data
+            expected = pd.DataFrame({"col": [1.0]}, index=pd.DatetimeIndex(["2025-01-01"]))
+            assert_frame_equal_with_arrow(arrow_table, expected)
+
+            # Test that we can append to the old symbol
             curr.lib.append("sym", pd.DataFrame({"col": [2.0]}, index=pd.DatetimeIndex(["2025-01-02"])))
             expected = pd.DataFrame({"col": [1.0, 2.0]}, index=pd.DatetimeIndex(["2025-01-01", "2025-01-02"]))
             assert_frame_equal(curr.lib.read("sym").data, expected)
