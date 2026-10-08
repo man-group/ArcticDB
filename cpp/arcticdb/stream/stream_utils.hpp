@@ -18,6 +18,7 @@
 #include <arcticdb/util/regex_filter.hpp>
 #include <arcticdb/storage/storage_options.hpp>
 #include <arcticdb/util/constructors.hpp>
+#include <arcticdb/util/collection_utils.hpp>
 #include <arcticdb/pipeline/index_fields.hpp>
 #include <arcticdb/pipeline/index_utils.hpp>
 
@@ -397,7 +398,7 @@ R filter_by_regex(const R& results, const std::optional<std::string>& opt_regex)
 inline std::vector<std::string> get_index_columns_from_descriptor(const OutputSchema& schema) {
     const auto index_till = pipelines::index::required_fields_info(schema).num_physical_indices;
 
-    std::vector<std::string> index_columns;
+    auto index_columns = util::reserve_vector<std::string>(index_till);
     for (size_t field_idx = 0; field_idx < index_till; ++field_idx)
         index_columns.emplace_back(std::string{schema.stream_descriptor().fields(field_idx).name()});
 
