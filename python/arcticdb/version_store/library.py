@@ -77,6 +77,68 @@ Library.write: for more documentation on normalisation.
 """
 
 
+class InputFormat(str, Enum):
+    """
+    Format used to write the data, as reported by ``SymbolDescription.input_format``. As this is a ``str``
+    subclass, comparisons against plain strings (e.g. ``desc.input_format == "DATAFRAME"``) continue to work.
+
+    This records the input format at write time and does not constrain the data returned by ``read``; the
+    symbol may still be read as pandas or Arrow regardless of its recorded input format.
+
+    DATAFRAME, SERIES:
+        Data written as the corresponding pandas type.
+
+    NDARRAY:
+        Data written as a numpy ``ndarray``.
+
+    PICKLED:
+        Data that could not be normalized into one of the other types above. Despite the name, this does not
+        always mean Python's ``pickle`` module was used: msgpack can natively encode simple types (ints,
+        bools, floats, strings, and lists/dicts of these) without pickling anything; ArcticDB still reports
+        such data as ``PICKLED``.
+
+    TIMEFRAME:
+        The arcticdb TimeFrame type. Only writable via the V1 API, but still readable via the V2 API.
+
+    ARROW_DATAFRAME, ARROW_SERIES:
+        Data written as ``pyarrow`` or ``polars``. ``ARROW_DATAFRAME`` represents 2-dimensional inputs such
+        as ``pyarrow.Table`` or ``pyarrow.RecordBatch``. ``ARROW_SERIES`` represents 1-dimensional inputs
+        such as ``pyarrow.Array``, ``pyarrow.ChunkedArray``, or ``polars.Series``.
+
+    RECURSIVE_NORMALIZED:
+        A nested data structure, such as ``List[pd.DataFrame]`` or ``Dict[str, pd.DataFrame]``, written with
+        ``recursive_normalizers=True``.
+
+    UNKNOWN:
+        No input type was recorded, for example because the data was written by a client that predates this
+        information being recorded.
+    """
+
+    DATAFRAME = "DATAFRAME"
+    SERIES = "SERIES"
+    TIMEFRAME = "TIMEFRAME"
+    NDARRAY = "NDARRAY"
+    PICKLED = "PICKLED"
+    ARROW_DATAFRAME = "ARROW_DATAFRAME"
+    ARROW_SERIES = "ARROW_SERIES"
+    RECURSIVE_NORMALIZED = "RECURSIVE_NORMALIZED"
+    UNKNOWN = "UNKNOWN"
+
+
+# Translates V1's legacy "type" strings (from get_arctic_style_type_info, exposed via get_info()["type"])
+# into the InputFormat values that SymbolDescription reports in the V2 API.
+INPUT_FORMATS = {
+    "pandasdf": InputFormat.DATAFRAME,
+    "pandasseries": InputFormat.SERIES,
+    "normalized_timeseries": InputFormat.TIMEFRAME,
+    "ndarray": InputFormat.NDARRAY,
+    "pickled": InputFormat.PICKLED,
+    "arrow_dataframe": InputFormat.ARROW_DATAFRAME,
+    "arrow_series": InputFormat.ARROW_SERIES,
+    "recursive_normalized": InputFormat.RECURSIVE_NORMALIZED,
+}
+
+
 class SymbolVersion(NamedTuple):
     """A named tuple. A symbol name - version pair.
 
@@ -161,6 +223,8 @@ class SymbolDescription(NamedTuple):
                    work.
         UNKNOWN - Either the data does not have a timestamp index, or the data does have a timestamp index, but was
                   written by a client that predates this information being stored.
+    input_format : InputFormat
+        Format used to write the data. See `InputFormat` for the possible values and their meaning.
     """
 
     columns: Tuple[NameWithDType]
@@ -170,6 +234,7 @@ class SymbolDescription(NamedTuple):
     last_update_time: datetime.datetime
     date_range: Tuple[Union[datetime.datetime, datetime64], Union[datetime.datetime, datetime64]]
     sorted: str
+    input_format: InputFormat
 
     def __eq__(self, other):
         # Needed as NaT != NaT
@@ -3101,6 +3166,10 @@ class Library:
             )
 
     @staticmethod
+    def _info_to_input_format(info: Dict[str, Any]) -> InputFormat:
+        return INPUT_FORMATS.get(info["type"], InputFormat.UNKNOWN)
+
+    @staticmethod
     def _info_to_desc(info: Dict[str, Any]) -> SymbolDescription:
         last_update_time = pd.to_datetime(info["last_update"], utc=True)
         if IS_PANDAS_TWO:
@@ -3118,6 +3187,7 @@ class Library:
             index_type=info["index_type"],
             date_range=info["date_range"],
             sorted=info["sorted"],
+            input_format=Library._info_to_input_format(info),
         )
 
     def get_description(self, symbol: str, as_of: Optional[AsOf] = None) -> SymbolDescription:
