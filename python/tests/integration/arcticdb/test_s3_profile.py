@@ -17,7 +17,7 @@ from tempfile import mkdtemp
 import random
 from datetime import datetime
 
-from arcticdb_ext.exceptions import PermissionException
+from arcticdb.exceptions import PermissionException
 from arcticdb.arctic import Arctic
 from arcticdb.util.test import assert_frame_equal
 from arcticdb.storage_fixtures.s3 import (

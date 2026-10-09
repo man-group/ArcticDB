@@ -31,6 +31,7 @@ from arcticdb.version_store.library import (
     concat,
     StagedDataFinalizeMethod,
     WriteMetadataPayload,
+    InputFormat,
 )
 from arcticdb.version_store.admin_tools import KeyType, Size
 

@@ -124,10 +124,10 @@ class BasicFunctions:
         self.lib.read(f"sym", query_builder=q).data
 
     def time_write_staged(self, *args):
-        self.lib.write(f"time_write_staged", self.df, staged=True)
+        self.lib.stage("time_write_staged", self.df)
 
     def peakmem_write_staged(self, *args):
-        self.lib.write(f"peakmem_write_staged", self.df, staged=True)
+        self.lib.stage("peakmem_write_staged", self.df)
 
 
 class ShortWideWrite:
@@ -159,10 +159,10 @@ class ShortWideWrite:
         self.lib.write("sym", self.df)
 
     def time_write_staged(self, *args):
-        self.lib.write(f"time_write_staged", self.df, staged=True)
+        self.lib.stage("time_write_staged", self.df)
 
     def peakmem_write_staged(self, *args):
-        self.lib.write(f"peakmem_write_staged", self.df, staged=True)
+        self.lib.stage("peakmem_write_staged", self.df)
 
 
 class ShortWideRead:

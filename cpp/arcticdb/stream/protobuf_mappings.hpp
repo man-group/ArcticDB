@@ -27,8 +27,18 @@ arcticdb::proto::descriptors::NormalizationMetadata make_timeseries_norm_meta(co
 arcticdb::proto::descriptors::NormalizationMetadata make_rowcount_norm_meta(const StreamId& stream_id);
 
 void ensure_timeseries_norm_meta(
-        arcticdb::proto::descriptors::NormalizationMetadata& norm_meta, const StreamId& stream_id, bool set_tz
+        arcticdb::proto::descriptors::NormalizationMetadata& norm_meta, const StreamId& stream_id
 );
+
+// Attaches a UTC timezone to an index that has none. The values are untouched, only labelled: a naive 12:00 becomes
+// 12:00+00:00.
+//
+// TODO (monday 11198274752): the caller that decides this should be the library's `set_tz` option, but:
+// - Nothing reads `set_tz`. `ReadOptions::set_tz_` has no getter.
+// - The compaction paths pass their `sparsify` flag here instead, reusing the parameter slot by coincidence.
+// - The tick compactor always sets `sparsify`, so tick-streamed symbols are always relabelled UTC.
+// Untangling this changes what users read back, so it needs its own rollout.
+void label_index_utc_if_unlabelled(arcticdb::proto::descriptors::NormalizationMetadata& norm_meta);
 
 void ensure_rowcount_norm_meta(
         arcticdb::proto::descriptors::NormalizationMetadata& norm_meta, const StreamId& stream_id

@@ -3,7 +3,7 @@ import pytest
 from arcticdb.util.errors import *
 import arcticdb.exceptions as ae
 from arcticdb.exceptions import *  # keep as wildcard so all_exception_types below includes everything
-from arcticdb_ext.exceptions import _ArcticLegacyCompatibilityException
+from arcticdb.exceptions import _ArcticLegacyCompatibilityException
 from tests.util.mark import SLOW_TESTS_MARK
 
 test_raise_params = [(NormalizationError.E_UPDATE_NOT_SUPPORTED, NormalizationException)]
@@ -44,7 +44,7 @@ def test_compat_exception():
 
 def test_pickling_error(lmdb_version_store):
     lmdb_version_store.write("sym", [1, 2, 3])
-    with pytest.raises(InternalException):
+    with pytest.raises(NormalizationException):
         lmdb_version_store.append("sym", [4, 5, 6])
 
 

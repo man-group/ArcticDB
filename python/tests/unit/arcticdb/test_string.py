@@ -12,9 +12,8 @@ import platform
 import pandas as pd
 import pytest
 
-from arcticdb.exceptions import ArcticDbNotYetImplemented
+from arcticdb.exceptions import ArcticDbNotYetImplemented, UserInputException
 from arcticdb.version_store._string_dtype import _ARROW_BACKED_STR_DTYPE_SUPPORTED, _use_pyarrow_strings_in_pandas
-from arcticdb_ext.exceptions import UserInputException
 from arcticdb_ext.types import (
     TypeDescriptor,
     StreamDescriptor,

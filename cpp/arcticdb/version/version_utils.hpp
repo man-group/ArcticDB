@@ -384,47 +384,6 @@ inline bool key_exists_in_ref_entry(
     return false;
 }
 
-inline SortedValue deduce_sorted(SortedValue existing_frame, SortedValue input_frame) {
-    using namespace arcticdb;
-    constexpr auto UNKNOWN = SortedValue::UNKNOWN;
-    constexpr auto ASCENDING = SortedValue::ASCENDING;
-    constexpr auto DESCENDING = SortedValue::DESCENDING;
-    constexpr auto UNSORTED = SortedValue::UNSORTED;
-
-    SortedValue final_state;
-    switch (existing_frame) {
-    case UNKNOWN:
-        if (input_frame != UNSORTED) {
-            final_state = UNKNOWN;
-        } else {
-            final_state = UNSORTED;
-        }
-        break;
-    case ASCENDING:
-        if (input_frame == UNKNOWN) {
-            final_state = UNKNOWN;
-        } else if (input_frame != ASCENDING) {
-            final_state = UNSORTED;
-        } else {
-            final_state = ASCENDING;
-        }
-        break;
-    case DESCENDING:
-        if (input_frame == UNKNOWN) {
-            final_state = UNKNOWN;
-        } else if (input_frame != DESCENDING) {
-            final_state = UNSORTED;
-        } else {
-            final_state = DESCENDING;
-        }
-        break;
-    default:
-        final_state = UNSORTED;
-        break;
-    }
-    return final_state;
-}
-
 FrameAndDescriptor frame_and_descriptor_from_segment(SegmentInMemory&& seg);
 
 version_store::UpdateInfo populate_update_info(const VersionMapEntry& entry);

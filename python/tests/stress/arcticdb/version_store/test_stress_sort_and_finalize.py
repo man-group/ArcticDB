@@ -158,7 +158,7 @@ def test_sort_and_finalize_write_stress(lmdb_library):
     lib = lmdb_library
     dataframes = generate_overlapping_dataframes(5)
     for dataframe in dataframes:
-        lib.write("sym", dataframe, staged=True)
+        lib.stage("sym", dataframe)
     lib.sort_and_finalize_staged_data("sym", StagedDataFinalizeMethod.WRITE)
     sorted_input = pd.concat(dataframes).sort_index()
     assert_sorted_frames_with_repeated_index_equal(lib.read("sym").data, sorted_input)
@@ -190,7 +190,7 @@ def test_sort_and_finalize_append_stress(lmdb_library):
 
     dataframes = generate_overlapping_dataframes(5, start_time=df.index[-1])
     for dataframe in dataframes:
-        lib.write("sym", dataframe, staged=True)
+        lib.stage("sym", dataframe)
     lib.sort_and_finalize_staged_data("sym", StagedDataFinalizeMethod.APPEND)
     sorted_input = pd.concat([df] + dataframes).sort_index()
     assert_sorted_frames_with_repeated_index_equal(lib.read("sym").data, sorted_input)
