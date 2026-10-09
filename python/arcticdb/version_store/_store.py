@@ -64,6 +64,7 @@ from arcticdb_ext.storage import (
     LibraryIndex as _LibraryIndex,
     Library as _Library,
     OpenMode as _OpenMode,
+    KeyType as _KeyType,
 )
 from arcticdb_ext.types import IndexKind
 from arcticdb.version_store.read_result import ReadResult
@@ -3704,11 +3705,17 @@ class NativeVersionStore:
         return result
 
     @staticmethod
-    def get_arctic_style_type_info_for_norm(desc):
+    def get_arctic_style_type_info(dit):
         # Arctic used to have a type field in get_info which had info about the underlying store being used.
         # This is to provide some sort of compatibility to that notation
         # eg: https://github.com/manahl/arctic/blob/master/arctic/store/_pandas_ndarray_store.py#L177
-        input_type = desc.normalization.WhichOneof("input_type")
+
+        # Recursively normalized data has no input_type of its own (it is stored as a tree of independently
+        # normalized sub-objects under a single MULTI_KEY), so it is detected from the key type instead.
+        if dit.key.type == _KeyType.MULTI_KEY:
+            return "recursive_normalized"
+
+        input_type = dit.timeseries_descriptor.normalization.WhichOneof("input_type")
         if input_type == "df":
             return "pandasdf"
         elif input_type == "series":
@@ -3720,7 +3727,10 @@ class NativeVersionStore:
         elif input_type == "ts":
             return "normalized_timeseries"
         elif input_type == "experimental_arrow":
-            return "arrow"
+            # Arrow data does not distinguish DataFrame-like and Series-like inputs the way the other input
+            # types do, so the one_dimensional flag on the normalization metadata is used instead.
+            one_dimensional = dit.timeseries_descriptor.normalization.experimental_arrow.one_dimensional
+            return "arrow_series" if one_dimensional else "arrow_dataframe"
         else:
             return "missing_type_info"
 
@@ -3953,7 +3963,7 @@ class NativeVersionStore:
             "input_type": input_type,
             "index_type": index_type,
             "normalization_metadata": timeseries_descriptor.normalization,
-            "type": self.get_arctic_style_type_info_for_norm(timeseries_descriptor),
+            "type": self.get_arctic_style_type_info(dit),
             "date_range": date_range,
             "sorted": sorted_value_name(timeseries_descriptor.sorted),
         }

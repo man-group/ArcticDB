@@ -37,6 +37,7 @@ from arcticdb.exceptions import (
 )
 from arcticdb.adapters.mongo_library_adapter import MongoLibraryAdapter
 from arcticdb.arctic import Arctic
+from arcticdb.dependencies import pyarrow as pa
 import arcticdb.toolbox.query_stats as qs
 from arcticdb.options import LibraryOptions
 from arcticdb import QueryBuilder
@@ -1286,6 +1287,50 @@ def test_get_description_multiindex(lmdb_library, names):
     assert len(index_info) == 2
     assert index_info[0].name == (names[0] if names is not None else None)
     assert index_info[1].name == (names[1] if names is not None else None)
+
+
+@pytest.mark.parametrize(
+    "input, expected_format",
+    [
+        (pd.DataFrame({"column": [1, 2, 3]}, index=pd.date_range(start="1/1/2018", periods=3)), "DATAFRAME"),
+        (pd.Series([1, 2, 3], name="column", index=pd.date_range(start="1/1/2018", periods=3)), "SERIES"),
+        (np.arange(5), "NDARRAY"),
+        (pa.table({"column": pa.array([1, 2, 3], type=pa.int64())}), "ARROW_DATAFRAME"),
+        (pa.chunked_array([[1, 2, 3]], type=pa.int64()), "ARROW_SERIES"),
+    ],
+)
+def test_get_description_input_format(arrow_library, input, expected_format):
+    lib = arrow_library
+    sym = "test_get_description_input_format"
+    lib.write(sym, input)
+    assert lib.get_description(sym).input_format == expected_format
+
+
+def test_get_description_input_format_pickled(lmdb_library):
+    lib = lmdb_library
+    sym = "test_get_description_input_format_pickled"
+    lib.write_pickle(sym, {"not": "normalizable"})
+    desc = lib.get_description(sym)
+    assert desc.input_format == "PICKLED"
+    assert desc.row_count is None
+
+
+def test_get_description_input_format_normalizable_data_written_with_write_pickle(lmdb_library):
+    # write_pickle only pickles as a fallback, so normalizable input is still reported as its normalized format
+    lib = lmdb_library
+    sym = "test_get_description_input_format_normalizable_data_written_with_write_pickle"
+    lib.write_pickle(sym, pd.DataFrame({"column": [1, 2, 3]}))
+    assert lib.get_description(sym).input_format == "DATAFRAME"
+
+
+def test_get_description_input_format_recursive_normalized(lmdb_library):
+    # Recursively normalized data has no input_type of its own - it is a tree of independently normalized
+    # sub-objects stored under a single MULTI_KEY, which is what input_format is derived from instead
+    lib = lmdb_library
+    sym = "test_get_description_input_format_recursive_normalized"
+    data = {"a": np.arange(5), "b": pd.DataFrame({"column": [1, 2, 3]})}
+    lib.write(sym, data, recursive_normalizers=True)
+    assert lib.get_description(sym).input_format == "RECURSIVE_NORMALIZED"
 
 
 # See test_write_tz in test_normalization.py for the V1 API equivalent
