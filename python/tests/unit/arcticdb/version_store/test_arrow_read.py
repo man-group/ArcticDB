@@ -1343,7 +1343,7 @@ def test_arrow_written_data_get_info_non_timeseries(in_memory_version_store_arro
     assert info["rows"] == 10
     assert info["input_type"] == "experimental_arrow"
     assert info["index_type"] == "NA"
-    assert info["type"] == "arrow"
+    assert info["type"] == "arrow_dataframe"
     assert np.isnat(info["date_range"][0]) and np.isnat(info["date_range"][1])
     assert info["sorted"] == "UNKNOWN"
 
@@ -1403,7 +1403,7 @@ def test_arrow_written_data_get_info_timeseries(in_memory_version_store_arrow, t
     assert info["rows"] == 20
     assert info["input_type"] == "experimental_arrow"
     assert info["index_type"] == "NA"
-    assert info["type"] == "arrow"
+    assert info["type"] == "arrow_dataframe"
     if has_index:
         assert info["date_range"] == (table.to_pandas()["ts"][0], table.to_pandas()["ts"][19])
     else:
@@ -1440,7 +1440,7 @@ def test_arrow_written_1d_data_get_info(in_memory_version_store_arrow, timeserie
     assert info["rows"] == 10
     assert info["input_type"] == "experimental_arrow"
     assert info["index_type"] == "NA"
-    assert info["type"] == "arrow"
+    assert info["type"] == "arrow_series"
     if timeseries:
         assert info["date_range"] == (data.to_pandas()[0], data.to_pandas()[9])
     else:
