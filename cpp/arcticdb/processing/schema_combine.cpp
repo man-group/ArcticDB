@@ -11,10 +11,12 @@
 #include <arcticdb/entity/type_utils.hpp>
 #include <arcticdb/entity/types_proto.hpp>
 #include <arcticdb/entity/timeseries_descriptor.hpp>
+#include <arcticdb/entity/arrow_pandas_norm.hpp>
 #include <arcticdb/entity/normalization_utils.hpp>
 #include <arcticdb/log/log.hpp>
 #include <arcticdb/pipeline/frame_utils.hpp>
 #include <arcticdb/pipeline/index_utils.hpp>
+#include <arcticdb/stream/index.hpp>
 #include <arcticdb/pipeline/input_frame.hpp>
 #include <arcticdb/util/collection_utils.hpp>
 #include <arcticdb/util/preconditions.hpp>
@@ -39,6 +41,7 @@ using entity::IndexDescriptorImpl;
 using entity::OutputSchema;
 using entity::StreamDescriptor;
 using entity::TypeDescriptor;
+using ExperimentalArrow = NormalizationMetadata_ExperimentalArrow;
 using ArrowColumnMeta = NormalizationMetadata_ExperimentalArrow_ColumnMeta;
 using Pandas = NormalizationMetadata_Pandas;
 using PandasIndex = NormalizationMetadata_PandasIndex;
@@ -138,7 +141,7 @@ std::optional<Error> compare_pandas_names(const PandasName& left, const PandasNa
     return std::nullopt;
 }
 
-// What disagreed about the names of the required fields, accumulated across every schema being combined.
+// What disagreed about the names of the required fields across every schema being combined.
 class RequiredNameMismatches {
   public:
     explicit RequiredNameMismatches(const SchemaCombineOptions& options) : options_(options) {}
@@ -181,6 +184,11 @@ class RequiredNameMismatches {
     const SchemaCombineOptions& options_;
     std::unordered_set<size_t> index_positions_{};
     bool series_name_{false};
+};
+
+struct RequiredFieldsPlan {
+    RequiredFieldInfo info;
+    RequiredNameMismatches name_mismatches;
 };
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -281,11 +289,11 @@ IndexDescriptorImpl combine_index_descriptors(
     return result;
 }
 
-// Merge the required fields - the index levels, plus the value column for a Series - which are always the
-// leading fields of the descriptor.
+// Merge the required fields - the index levels, plus the value column for a Series - which are always the leading
+// fields of the descriptor. Their names have already been canonicalized across all schemas.
 void add_required_fields(
         StreamDescriptor& out, std::span<const OutputSchema> schemas, const RequiredFieldInfo& info,
-        RequiredNameMismatches& mismatches, const SchemaCombineOptions& options
+        const SchemaCombineOptions& options
 ) {
     const auto required_fields = info.num_physical_required_columns();
     // Required fields can't use the MOST_PERMISSIVE type promotion policy,
@@ -300,13 +308,6 @@ void add_required_fields(
     std::vector<std::optional<FieldRef>> fields(required_fields);
     for (const auto& schema : schemas) {
         const auto& desc = schema.stream_descriptor();
-        normalization::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
-                desc.field_count() >= required_fields,
-                "Cannot {}: expected at least {} required fields, but received {}",
-                options.name(),
-                required_fields,
-                desc.field_count()
-        );
         for (size_t idx = 0; idx < required_fields; ++idx) {
             const auto& field = desc.field(idx);
             auto& combined = fields[idx];
@@ -314,14 +315,12 @@ void add_required_fields(
                 combined = field.ref();
                 continue;
             }
-            if (combined->name() != field.name()) {
-                const auto detail = names_differ(combined->name(), field.name());
-                if (idx < info.num_physical_indices) {
-                    mismatches.add_index(idx, info.has_multi_index, detail);
-                } else {
-                    mismatches.add_series_name(detail);
-                }
-            }
+            internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+                    combined->name() == field.name(),
+                    "Required field {} was not canonicalized, {}",
+                    idx,
+                    names_differ(combined->name(), field.name())
+            );
             combined->type_ = combine_field_type(combined->type(), field.type(), required_field_options, field.name());
         }
     }
@@ -329,19 +328,7 @@ void add_required_fields(
         internal::check<ErrorCode::E_ASSERTION_FAILURE>(
                 fields[idx].has_value(), "No schema described required field {} of {}", idx, fields.size()
         );
-        const auto& field = *fields[idx];
-        const bool is_index_level = idx < info.num_physical_indices;
-        const bool unnamed = is_index_level ? mismatches.index_at(idx) : mismatches.series_name();
-        if (!unnamed) {
-            out.add_scalar_field(field.type().data_type(), field.name());
-        } else if (is_index_level) {
-            // Use the same naming scheme as _normalization.py does for unnamed multiindex levels, so that
-            // later processing which looks for columns of that form keeps working.
-            out.fields().add_field(field.type(), idx == 0 ? "index" : fmt::format("__fkidx__{}", idx));
-        } else {
-            // An unnamed Series is written with its value column named "0", the name Series.to_frame() gives it.
-            out.fields().add_field(field.type(), "0");
-        }
+        out.add_scalar_field(fields[idx]->type().data_type(), fields[idx]->name());
     }
 }
 
@@ -696,36 +683,35 @@ NormalizationMetadata combine_ndarray_metadata(
     return res;
 }
 
+// Move one schema's column metadata with the descriptor field it describes. The later normalization metadata fold
+// combines it with metadata from the corresponding fields of the other schemas.
+void rename_column_metadata(ExperimentalArrow& arrow, std::string_view from, const std::string& to) {
+    if (from == to) {
+        return;
+    }
+    auto& columns = *arrow.mutable_columns();
+    const auto from_it = columns.find(std::string{from});
+    if (from_it == columns.end()) {
+        return;
+    }
+    internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+            !columns.contains(to), "Cannot rename Arrow column metadata from '{}' to existing key '{}'", from, to
+    );
+    auto metadata = std::move(from_it->second);
+    columns.erase(from_it);
+    columns[to] = std::move(metadata);
+}
+
+NormalizationMetadata accumulate_pandas_and_pandas_norm(
+        const NormalizationMetadata& accumulated, const NormalizationMetadata& other,
+        const SchemaCombineOptions& options
+);
+
 NormalizationMetadata accumulate_arrow_and_arrow_norm(
         const NormalizationMetadata& accumulated, const NormalizationMetadata& other,
         const SchemaCombineOptions& options
 ) {
-    normalization::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
-            accumulated.experimental_arrow().has_index() == other.experimental_arrow().has_index(),
-            "Cannot {}: cannot combine indexed arrow data with unindexed arrow data",
-            options.name()
-    );
-    normalization::check<ErrorCode::E_INCOMPATIBLE_OBJECTS>(
-            accumulated.experimental_arrow().one_dimensional() == other.experimental_arrow().one_dimensional(),
-            "Cannot {}: cannot combine single-array arrow data with multi-array arrow data",
-            options.name()
-    );
     auto res = accumulated;
-    // This correctly allows an unnamed Polars Series to be combined with [Chunked]Array as well as other unnamed Polars
-    // Series for append/update
-    if (res.experimental_arrow().polars_series_name() != other.experimental_arrow().polars_series_name() &&
-        options.name_mismatch == RequiredNameMismatchPolicy::RECONCILE_TO_UNNAMED) {
-        res.mutable_experimental_arrow()->clear_polars_series_name();
-    } else {
-        schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
-                res.experimental_arrow().polars_series_name() == other.experimental_arrow().polars_series_name(),
-                "Cannot {}: cannot combine single-array arrow data with mismatching names {}",
-                options.name(),
-                names_differ(
-                        res.experimental_arrow().polars_series_name(), other.experimental_arrow().polars_series_name()
-                )
-        );
-    }
     // Per-column metadata is merged rather than taking only the base schema's, so that a column only a later
     // schema has keeps what that schema says about it. Presence is checked per column rather than by comparing
     // map sizes, so that a metadata field a future client adds does not make existing data un-appendable.
@@ -771,47 +757,25 @@ NormalizationMetadata accumulate_arrow_and_arrow_norm(
                 }
             }
     );
+    // prepare_schemas gives every schema pandas metadata or none, so the two are always merged
+    const auto accumulated_pandas = embedded_pandas(accumulated.experimental_arrow());
+    const auto other_pandas = embedded_pandas(other.experimental_arrow());
+    internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+            accumulated_pandas.has_value() == other_pandas.has_value(),
+            "Only one of two Arrow schemas being combined carries pandas metadata"
+    );
+    if (accumulated_pandas.has_value()) {
+        embed_pandas(
+                accumulate_pandas_and_pandas_norm(*accumulated_pandas, *other_pandas, options),
+                *res.mutable_experimental_arrow()
+        );
+    }
     return res;
 }
 
-// TODO (monday ref 11325694339): To be changed when working on arrow with pandas interop
-// One arrow, one pandas: pandas is preferred as it carries more detail. Compatible when
-// arrow.has_index() == pandas.index().is_physically_stored().
-NormalizationMetadata accumulate_arrow_and_pandas_norm(
-        const NormalizationMetadata& arrow, const NormalizationMetadata& pandas, const SchemaCombineOptions& options
-) {
-    const auto& common = *pandas_common(pandas);
-    normalization::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
-            common.has_index(),
-            "Cannot {}: cannot combine arrow-written data with multi-indexed pandas data",
-            options.name()
-    );
-    normalization::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
-            arrow.experimental_arrow().has_index() == common.index().is_physically_stored(),
-            "Cannot {}: cannot combine unindexed data with indexed data",
-            options.name()
-    );
-    return pandas;
-}
-
 void accumulate_multi_index(
-        PandasMultiIndex& res_index, const PandasMultiIndex& other_index, RequiredNameMismatches& mismatches,
-        const SchemaCombineOptions& options
+        PandasMultiIndex& res_index, const PandasMultiIndex& other_index, const SchemaCombineOptions& options
 ) {
-    normalization::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
-            res_index.field_count() == other_index.field_count(),
-            "Cannot {}: schemas have different index level counts, {} and {}",
-            options.name(),
-            res_index.field_count() + 1,
-            other_index.field_count() + 1
-    );
-    const std::set<uint32_t> res_unnamed{res_index.fake_field_pos().begin(), res_index.fake_field_pos().end()};
-    const std::set<uint32_t> other_unnamed{other_index.fake_field_pos().begin(), other_index.fake_field_pos().end()};
-    if (const auto error = compare_pandas_names(
-                PandasName::of_multi_index_level_0(res_index), PandasName::of_multi_index_level_0(other_index)
-        )) {
-        mismatches.add_index(0, true, *error);
-    }
     if (other_index.tz() != res_index.tz()) {
         on_timezone_mismatch(options, "Top level index", res_index.tz(), other_index.tz());
         res_index.clear_tz();
@@ -823,28 +787,9 @@ void accumulate_multi_index(
             res_timezone = "";
         }
     }
-    // A level both sides already record as unnamed agrees, and stays unnamed by virtue of already being in
-    // the accumulated positions. A level only one side records as unnamed is a disagreement, so it is the
-    // symmetric difference that matters.
-    std::vector<uint32_t> disagreed;
-    std::ranges::set_symmetric_difference(res_unnamed, other_unnamed, std::back_inserter(disagreed));
-    for (const auto position : disagreed) {
-        mismatches.add_index(position, true, fmt::format("level {} is unnamed on one side only", position));
-    }
 }
 
-void accumulate_index(
-        PandasIndex& res_index, const PandasIndex& other_index, RequiredNameMismatches& mismatches,
-        const SchemaCombineOptions& options
-) {
-    normalization::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
-            res_index.is_physically_stored() == other_index.is_physically_stored(),
-            "Cannot {}: one index is a DatetimeIndex and the other is a RangeIndex",
-            options.name()
-    );
-    if (const auto error = compare_pandas_names(PandasName::of_index(res_index), PandasName::of_index(other_index))) {
-        mismatches.add_index(0, false, *error);
-    }
+void accumulate_index(PandasIndex& res_index, const PandasIndex& other_index, const SchemaCombineOptions& options) {
     if (other_index.tz() != res_index.tz()) {
         on_timezone_mismatch(options, "Index", res_index.tz(), other_index.tz());
         res_index.clear_tz();
@@ -866,45 +811,26 @@ void accumulate_index(
 
 NormalizationMetadata accumulate_pandas_and_pandas_norm(
         const NormalizationMetadata& accumulated, const NormalizationMetadata& other,
-        RequiredNameMismatches& mismatches, const SchemaCombineOptions& options
+        const SchemaCombineOptions& options
 ) {
-    // Pandas + Pandas. A TimeFrame and a DataFrame describe their index alike but denormalize differently, and a
-    // Series carries a value column a DataFrame does not, so the kind of object has to agree.
-    check_same_input_type(accumulated, other, options);
     auto res = accumulated;
     auto* res_common = mutable_pandas_common(res);
     const auto& other_common = *pandas_common(other);
 
-    // First check the shapes are compatible.
-    normalization::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
-            res_common->has_multi_index() == other_common.has_multi_index(),
-            "Cannot {}: cannot combine multi-indexed data with non-multi-indexed data",
-            options.name()
-    );
-
     if (res_common->has_multi_index()) {
-        accumulate_multi_index(*res_common->mutable_multi_index(), other_common.multi_index(), mismatches, options);
+        accumulate_multi_index(*res_common->mutable_multi_index(), other_common.multi_index(), options);
     } else {
-        accumulate_index(*res_common->mutable_index(), other_common.index(), mismatches, options);
-    }
-
-    // Last of the required fields, so that a disagreement about the index - which every schema has - is reported
-    // ahead of one about the value column, which only a Series has.
-    if (res.has_series()) {
-        if (const auto error =
-                    compare_pandas_names(PandasName::of_series(*res_common), PandasName::of_series(other_common))) {
-            mismatches.add_series_name(*error);
-        }
+        accumulate_index(*res_common->mutable_index(), other_common.index(), options);
     }
     accumulate_norm_metadata_column_names(res, other);
     return res;
 }
 
-// Pairwise merge of two normalization metadata objects: timezones, RangeIndex start/step, multi-index fields
-// and per-column Arrow metadata. Required field name disagreements are added to mismatches.
+// Pairwise merge of two normalization metadata objects: timezones, RangeIndex start/step, multi-index fields and
+// per-column Arrow metadata. Required names have already been canonicalized.
 NormalizationMetadata accumulate_norm_metadata(
         const NormalizationMetadata& accumulated, const NormalizationMetadata& other,
-        RequiredNameMismatches& mismatches, const SchemaCombineOptions& options
+        const SchemaCombineOptions& options
 ) {
     const auto operation = options.name();
     normalization::check<ErrorCode::E_INCOMPATIBLE_OBJECTS>(
@@ -927,35 +853,268 @@ NormalizationMetadata accumulate_norm_metadata(
         return other;
     }
 
+    // A mix of the two formats does not reach here: combine_norm_metadata describes every pandas schema in Arrow terms
+    // before folding, when any schema is Arrow.
     if (accumulated.has_experimental_arrow() && other.has_experimental_arrow()) {
         return accumulate_arrow_and_arrow_norm(accumulated, other, options);
     }
 
-    if (accumulated.has_experimental_arrow() || other.has_experimental_arrow()) {
-        const auto& arrow = accumulated.has_experimental_arrow() ? accumulated : other;
-        const auto& pandas = accumulated.has_experimental_arrow() ? other : accumulated;
-        return accumulate_arrow_and_pandas_norm(arrow, pandas, options);
-    }
-
-    return accumulate_pandas_and_pandas_norm(accumulated, other, mismatches, options);
+    return accumulate_pandas_and_pandas_norm(accumulated, other, options);
 }
 
-// Apply the recorded name disagreements to the normalization metadata.
-// Should be done once with mismatches from both normalization metadatas and from descriptors.
-void apply_required_name_mismatches(
-        NormalizationMetadata& norm, const RequiredFieldInfo& info, const RequiredNameMismatches& mismatches
+struct PreparedSchemas {
+    std::vector<OutputSchema> schemas;
+    bool all_inferred_from_empty_pandas;
+};
+
+// Remove pandas schemas inferred from epty frame. Also if combining a mix of arrow and pandas, convert all schemas to
+// an arrow with pandas norm metadata.
+PreparedSchemas prepare_schemas(std::span<const OutputSchema> schemas) {
+    // Schemas inferred from empty pandas dataframes can have:
+    // - incorrect pandas index (pd.DataFrame({"col": []}) will have either a rowrange or datetime index depending on
+    //   pandas version)
+    // - incorrect column dtypes (pd.DataFrame({"col": []}) will have the "col" dtype be float64 or object depending on
+    //   pandas version)
+    // Thus we ignore their indices and column types when another schema is present. If all schemas are empty pandas,
+    // the first one is retained. Respecting their dtypes would need changes similar to commit 31c096da4 from PR #3406.
+    const bool all_inferred_from_empty_pandas =
+            std::ranges::all_of(schemas, &OutputSchema::is_inferred_from_empty_pandas);
+    std::vector<OutputSchema> prepared;
+    if (all_inferred_from_empty_pandas) {
+        prepared.emplace_back(schemas.front());
+    } else {
+        prepared = util::reserve_vector<OutputSchema>(schemas.size());
+        std::ranges::copy_if(schemas, std::back_inserter(prepared), [](const OutputSchema& schema) {
+            return !schema.is_inferred_from_empty_pandas();
+        });
+    }
+
+    // With any Arrow in the mix, every pandas schema is converted to Arrow. With any pandas in it, every Arrow schema
+    // gets pandas metadata derived from its own fields, so the fold always merges two pandas metadatas.
+    const bool any_arrow = std::ranges::any_of(prepared, [](const OutputSchema& schema) {
+        return schema.norm_metadata_.has_experimental_arrow();
+    });
+    std::optional<NormalizationMetadata> pandas_shape;
+    for (auto& schema : prepared) {
+        if (any_arrow && is_pandas_convertible_to_arrow(schema.norm_metadata_)) {
+            schema.norm_metadata_ = arrow_norm_from_pandas(schema.norm_metadata_, schema.stream_descriptor());
+        }
+        if (!pandas_shape.has_value() && schema.norm_metadata_.has_experimental_arrow()) {
+            pandas_shape = embedded_pandas(schema.norm_metadata_.experimental_arrow());
+        }
+    }
+    if (pandas_shape.has_value()) {
+        for (auto& schema : prepared) {
+            if (!schema.norm_metadata_.has_experimental_arrow()) {
+                continue;
+            }
+            auto& arrow = *schema.norm_metadata_.mutable_experimental_arrow();
+            if (!embedded_pandas(arrow).has_value()) {
+                embed_pandas(derive_pandas_from_arrow(arrow, schema.stream_descriptor(), *pandas_shape), arrow);
+            }
+        }
+    }
+    return {std::move(prepared), all_inferred_from_empty_pandas};
+}
+
+bool is_unnamed(const PandasMultiIndex& multi_index, size_t position) {
+    return std::ranges::find(multi_index.fake_field_pos(), static_cast<uint32_t>(position)) !=
+           multi_index.fake_field_pos().end();
+}
+
+std::optional<NormalizationMetadata> pandas_metadata(const NormalizationMetadata& norm) {
+    if (norm.has_experimental_arrow()) {
+        return embedded_pandas(norm.experimental_arrow());
+    }
+    return is_pandas_convertible_to_arrow(norm) ? std::optional{norm} : std::nullopt;
+}
+
+void add_normalization_name_mismatches(
+        const NormalizationMetadata& base, const NormalizationMetadata& other, const RequiredFieldInfo& info,
+        RequiredNameMismatches& mismatches
 ) {
+    const auto* base_common = pandas_common(base);
+    const auto* other_common = pandas_common(other);
+    internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+            (base_common == nullptr) == (other_common == nullptr),
+            "Only one of two schemas being inspected carries pandas metadata"
+    );
+    if (base_common == nullptr) {
+        if (base.has_experimental_arrow() && other.has_experimental_arrow() &&
+            base.experimental_arrow().polars_series_name() != other.experimental_arrow().polars_series_name()) {
+            mismatches.add_series_name(names_differ(
+                    base.experimental_arrow().polars_series_name(), other.experimental_arrow().polars_series_name()
+            ));
+        }
+        return;
+    }
+
+    if (info.has_multi_index) {
+        if (const auto error = compare_pandas_names(
+                    PandasName::of_multi_index_level_0(base_common->multi_index()),
+                    PandasName::of_multi_index_level_0(other_common->multi_index())
+            )) {
+            mismatches.add_index(0, true, *error);
+        }
+        for (size_t position = 1; position < info.num_physical_indices; ++position) {
+            if (is_unnamed(base_common->multi_index(), position) != is_unnamed(other_common->multi_index(), position)) {
+                mismatches.add_index(position, true, fmt::format("level {} is unnamed on one side only", position));
+            }
+        }
+    } else if (const auto error = compare_pandas_names(
+                       PandasName::of_index(base_common->index()), PandasName::of_index(other_common->index())
+               )) {
+        mismatches.add_index(0, false, *error);
+    }
+
+    if (info.has_series_value_column) {
+        if (const auto error =
+                    compare_pandas_names(PandasName::of_series(*base_common), PandasName::of_series(*other_common))) {
+            mismatches.add_series_name(*error);
+        }
+    }
+}
+
+RequiredFieldsPlan required_fields_plan(std::span<const OutputSchema> schemas, const SchemaCombineOptions& options) {
+    RequiredFieldsPlan plan{required_fields_info(schemas.front().norm_metadata_), RequiredNameMismatches{options}};
+    const auto& base = schemas.front();
+    const auto base_pandas = pandas_metadata(base.norm_metadata_);
+    for (const auto& other : schemas.subspan(1)) {
+        const bool base_has_arrow_or_pandas = has_arrow_or_pandas(base.norm_metadata_);
+        const bool other_has_arrow_or_pandas = has_arrow_or_pandas(other.norm_metadata_);
+        if (!base_has_arrow_or_pandas || !other_has_arrow_or_pandas) {
+            check_same_input_type(base.norm_metadata_, other.norm_metadata_, options);
+            continue;
+        }
+
+        const auto other_pandas = pandas_metadata(other.norm_metadata_);
+        internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+                base_pandas.has_value() == other_pandas.has_value(),
+                "Only one of two schemas being planned carries pandas metadata"
+        );
+        if (base_pandas.has_value()) {
+            check_same_input_type(*base_pandas, *other_pandas, options);
+        }
+
+        if (base.norm_metadata_.has_experimental_arrow() && other.norm_metadata_.has_experimental_arrow()) {
+            normalization::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
+                    base.norm_metadata_.experimental_arrow().has_index() ==
+                            other.norm_metadata_.experimental_arrow().has_index(),
+                    "Cannot {}: cannot combine indexed arrow data with unindexed arrow data",
+                    options.name()
+            );
+            normalization::check<ErrorCode::E_INCOMPATIBLE_OBJECTS>(
+                    base.norm_metadata_.experimental_arrow().one_dimensional() ==
+                            other.norm_metadata_.experimental_arrow().one_dimensional(),
+                    "Cannot {}: cannot combine single-array arrow data with multi-array arrow data",
+                    options.name()
+            );
+        }
+
+        const auto other_info = required_fields_info(other.norm_metadata_);
+        normalization::check<ErrorCode::E_INCOMPATIBLE_OBJECTS>(
+                plan.info.has_series_value_column == other_info.has_series_value_column,
+                "Cannot {}: a Series cannot be combined with a DataFrame",
+                options.name()
+        );
+        normalization::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
+                plan.info.has_multi_index == other_info.has_multi_index,
+                "Cannot {}: cannot combine multi-indexed data with non-multi-indexed data",
+                options.name()
+        );
+        if (base_pandas.has_value() && !plan.info.has_multi_index) {
+            const auto& base_index = pandas_common(*base_pandas)->index();
+            const auto& other_index = pandas_common(*other_pandas)->index();
+            normalization::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
+                    base_index.is_physically_stored() == other_index.is_physically_stored(),
+                    "Cannot {}: one index is a DatetimeIndex and the other is a RangeIndex",
+                    options.name()
+            );
+        }
+        normalization::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
+                plan.info.num_physical_indices == other_info.num_physical_indices,
+                "Cannot {}: schemas have different index level counts, {} and {}",
+                options.name(),
+                plan.info.num_physical_indices,
+                other_info.num_physical_indices
+        );
+        add_normalization_name_mismatches(base.norm_metadata_, other.norm_metadata_, plan.info, plan.name_mismatches);
+    }
+
+    const auto required_fields = plan.info.num_physical_required_columns();
+    for (const auto& schema : schemas) {
+        normalization::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
+                schema.stream_descriptor().field_count() >= required_fields,
+                "Cannot {}: expected at least {} required fields, but received {}",
+                options.name(),
+                required_fields,
+                schema.stream_descriptor().field_count()
+        );
+    }
+    const auto& base_desc = base.stream_descriptor();
+    for (const auto& other : schemas.subspan(1)) {
+        for (size_t position = 0; position < required_fields; ++position) {
+            const auto base_name = base_desc.field(position).name();
+            const auto other_name = other.stream_descriptor().field(position).name();
+            if (base_name == other_name) {
+                continue;
+            }
+            const auto detail = names_differ(base_name, other_name);
+            if (position < plan.info.num_physical_indices) {
+                plan.name_mismatches.add_index(position, plan.info.has_multi_index, detail);
+            } else {
+                plan.name_mismatches.add_series_name(detail);
+            }
+        }
+    }
+    return plan;
+}
+
+std::string reconciled_required_name(size_t position, const RequiredFieldInfo& info) {
+    if (position >= info.num_physical_indices) {
+        return "0";
+    }
+    return position == 0 ? std::string{"index"} : fmt::format("__fkidx__{}", position);
+}
+
+// Apply the required-field plan to one schema before any metadata or fields are combined. Every source then describes
+// corresponding required fields under the same name, so the ordinary folds also combine their column metadata.
+void apply_required_fields_plan(OutputSchema& schema, const RequiredFieldsPlan& plan) {
+    const auto& info = plan.info;
+    const auto& mismatches = plan.name_mismatches;
     if (!mismatches.any()) {
         return;
     }
-    auto* common = mutable_pandas_common(norm);
+
+    const auto& desc = schema.stream_descriptor();
+    auto renamed = std::make_shared<FieldCollection>();
+    for (size_t position = 0; position < desc.field_count(); ++position) {
+        const auto& field = desc.field(position);
+        const bool is_index_level = position < info.num_physical_indices;
+        const bool is_required = position < info.num_physical_required_columns();
+        const bool should_rename =
+                is_required && (is_index_level ? mismatches.index_at(position) : mismatches.series_name());
+        if (!should_rename) {
+            renamed->add_field(field.type(), field.name());
+            continue;
+        }
+        const auto name = reconciled_required_name(position, info);
+        renamed->add_field(field.type(), name);
+        if (schema.norm_metadata_.has_experimental_arrow()) {
+            rename_column_metadata(*schema.norm_metadata_.mutable_experimental_arrow(), field.name(), name);
+        }
+    }
+    schema.set_stream_descriptor(StreamDescriptor{desc.segment_desc_, std::move(renamed), desc.id()});
+
+    if (mismatches.series_name() && schema.norm_metadata_.has_experimental_arrow()) {
+        schema.norm_metadata_.mutable_experimental_arrow()->clear_polars_series_name();
+    }
+    auto* common = mutable_pandas_common(schema.norm_metadata_);
     if (common == nullptr) {
         return;
     }
     if (info.has_multi_index && !mismatches.index_positions().empty()) {
         auto* multi_index = common->mutable_multi_index();
-        // The accumulated positions are the levels every schema agrees are unnamed; the recorded ones are the
-        // levels they disagree about. Both end up unnamed, so the output is the union.
         std::set<uint32_t> unnamed{multi_index->fake_field_pos().begin(), multi_index->fake_field_pos().end()};
         for (const auto position : mismatches.index_positions()) {
             unnamed.insert(static_cast<uint32_t>(position));
@@ -979,13 +1138,13 @@ void apply_required_name_mismatches(
     }
 }
 
-// Fold the normalization metadata over every schema.
+// Fold normalization metadata whose required names have already been canonicalized.
 NormalizationMetadata combine_norm_metadata(
-        std::span<const OutputSchema> schemas, RequiredNameMismatches& mismatches, const SchemaCombineOptions& options
+        std::span<const OutputSchema> schemas, const SchemaCombineOptions& options
 ) {
     auto result = schemas.front().norm_metadata_;
     for (const auto& schema : schemas.subspan(1)) {
-        result = accumulate_norm_metadata(result, schema.norm_metadata_, mismatches, options);
+        result = accumulate_norm_metadata(result, schema.norm_metadata_, options);
     }
     return result;
 }
@@ -999,6 +1158,45 @@ SortedValue combine_sorted(std::span<const OutputSchema> schemas) {
     return result;
 }
 } // namespace
+
+void align_multi_index_names(
+        const OutputSchema& existing, StreamDescriptor& incoming, NormalizationMetadata& incoming_norm
+) {
+    const auto info = required_fields_info(existing);
+    if (!info.has_multi_index) {
+        return;
+    }
+    normalization::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
+            static_cast<size_t>(incoming.field_count()) >= info.num_physical_indices,
+            "Cannot align an incoming schema with a {}-level multi-index when it has only {} fields",
+            info.num_physical_indices,
+            incoming.field_count()
+    );
+    const auto levels = info.num_physical_indices;
+    auto aligned = std::make_shared<FieldCollection>();
+    bool renamed = false;
+    for (size_t idx = 0; idx < static_cast<size_t>(incoming.field_count()); ++idx) {
+        const auto& field = incoming.field(idx);
+        // Level 0 is stored unprefixed, so there is nothing to align there
+        const bool is_aligned_level = idx > 0 && idx < levels;
+        auto name_with_prefix = stream::mangled_name(field.name());
+        if (is_aligned_level && existing.stream_descriptor().field(idx).name() == name_with_prefix) {
+            aligned->add_field(field.type(), name_with_prefix);
+            // Arrow keys its column metadata by field name, so the timezone of a renamed level moves with it
+            if (incoming_norm.has_experimental_arrow()) {
+                rename_column_metadata(
+                        *incoming_norm.mutable_experimental_arrow(), {std::string{field.name()}}, name_with_prefix
+                );
+            }
+            renamed = true;
+        } else {
+            aligned->add_field(field.type(), field.name());
+        }
+    }
+    if (renamed) {
+        incoming = StreamDescriptor{incoming.segment_desc_, std::move(aligned), incoming.id()};
+    }
+}
 
 SortedValue deduce_sorted(SortedValue existing_frame, SortedValue input_frame) {
     constexpr auto UNKNOWN = SortedValue::UNKNOWN;
@@ -1039,44 +1237,24 @@ SortedValue deduce_sorted(SortedValue existing_frame, SortedValue input_frame) {
 OutputSchema combine_schema(std::span<const OutputSchema> schemas, const SchemaCombineOptions& options) {
     util::check(!schemas.empty(), "Cannot combine an empty list of schemas");
 
-    // Schemas inferred from empty pandas dataframes can have:
-    // - incorrect pandas index (pd.DataFrame({"col": []}) will have either a rowrange or datetime index depending on
-    //   pandas version)
-    // - incorrect column dtypes (pd.DataFrame({"col": []}) will have the "col" dtype be float64 or object depending on
-    //   pandas version)
-    // Thus we should ignore pandas indices and column data types of empty pandas dataframes when combining with other
-    // schemas. If we ever decide to respect column dtypes of empty pandas frames it will involve changes similar to
-    // commit 31c096da4 from PR #3406
-    std::vector<OutputSchema> retained;
-    const bool all_inferred_from_empty_pandas =
-            std::ranges::all_of(schemas, &OutputSchema::is_inferred_from_empty_pandas);
-    if (all_inferred_from_empty_pandas) {
-        // If all schemas are empty pandas we just use the first one's schema.
-        schemas = schemas.subspan(0, 1);
-    } else if (std::ranges::any_of(schemas, &OutputSchema::is_inferred_from_empty_pandas)) {
-        retained = util::reserve_vector<OutputSchema>(schemas.size());
-        std::ranges::copy_if(schemas, std::back_inserter(retained), [](const OutputSchema& schema) {
-            return !schema.is_inferred_from_empty_pandas();
-        });
-        schemas = retained;
+    auto prepared = prepare_schemas(schemas);
+    auto required_fields = required_fields_plan(prepared.schemas, options);
+    for (auto& schema : prepared.schemas) {
+        apply_required_fields_plan(schema, required_fields);
     }
+    schemas = prepared.schemas;
 
-    // The normalization metadata goes first because it is what decides which shapes may combine at all
-    RequiredNameMismatches mismatches{options};
-    auto norm = combine_norm_metadata(schemas, mismatches, options);
-
-    // The RequiredFieldsInfo is constructed from the combined norm.
-    // This allows combining arrow with pandas multindex (which would otherwise have different required fields counts).
-    const auto info = required_fields_info(norm);
+    auto norm = combine_norm_metadata(schemas, options);
+    const auto& info = required_fields.info;
 
     StreamDescriptor out{options.stream_id.value_or(StreamId{}), combine_index_descriptors(schemas, options)};
     out.set_sorted(combine_sorted(schemas));
-    add_required_fields(out, schemas, info, mismatches, options);
+    add_required_fields(out, schemas, info, options);
     add_data_columns(out, schemas, info, options);
-    // Whatever only the normalization metadata reveals - a RangeIndex name, a Series name - is applied here, in
-    // one place, so that the descriptor field names and the metadata cannot end up disagreeing.
-    apply_required_name_mismatches(norm, info, mismatches);
-    return OutputSchema{std::move(out), std::move(norm), all_inferred_from_empty_pandas};
+    if (norm.has_experimental_arrow()) {
+        check_embedded_pandas_agrees(norm.experimental_arrow(), out);
+    }
+    return OutputSchema{std::move(out), std::move(norm), prepared.all_inferred_from_empty_pandas};
 }
 
 OutputSchema schema_from_tsd(const TimeseriesDescriptor& tsd) {
