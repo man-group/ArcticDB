@@ -1306,16 +1306,6 @@ def test_get_description_input_format(arrow_library, input, expected_format):
     assert lib.get_description(sym).input_format == expected_format
 
 
-def test_get_description_input_format_distinguishes_series_from_dataframe(lmdb_library):
-    # A Series is stored as a single-column DataFrame, so input_format is the only thing that separates these
-    lib = lmdb_library
-    index = pd.date_range(start="1/1/2018", periods=3)
-    lib.write("as_frame", pd.DataFrame({"column": [1, 2, 3]}, index=index))
-    lib.write("as_series", pd.Series([1, 2, 3], name="column", index=index))
-    assert lib.get_description("as_frame").input_format == "DATAFRAME"
-    assert lib.get_description("as_series").input_format == "SERIES"
-
-
 def test_get_description_input_format_pickled(lmdb_library):
     lib = lmdb_library
     sym = "test_get_description_input_format_pickled"

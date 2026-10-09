@@ -85,20 +85,29 @@ class InputFormat(str, Enum):
     This records the input format at write time and does not constrain the data returned by ``read``; the
     symbol may still be read as pandas or Arrow regardless of its recorded input format.
 
-    DATAFRAME, SERIES, NDARRAY, PICKLED:
-        Data written as the corresponding pandas/numpy type. PICKLED covers anything normalization could not
-        handle; the pickled payload is self-describing.
+    DATAFRAME, SERIES:
+        Data written as the corresponding pandas type.
+
+    NDARRAY:
+        Data written as a numpy ``ndarray``.
+
+    PICKLED:
+        Data that could not be normalized into one of the other types above. Despite the name, this does not
+        always mean Python's ``pickle`` module was used: msgpack can natively encode simple types (ints,
+        bools, floats, strings, and lists/dicts of these) without pickling anything; ArcticDB still reports
+        such data as ``PICKLED``.
 
     TIMEFRAME:
         The arcticdb TimeFrame type. Only writable via the V1 API, but still readable via the V2 API.
 
     ARROW_DATAFRAME, ARROW_SERIES:
-        Arrow data does not distinguish DataFrame-like and Series-like inputs the way the other input types
-        do, so it is split into DataFrame-like (e.g. ``pyarrow.Table``, ``pyarrow.RecordBatch``) and
-        Series-like (e.g. ``pyarrow.Array``, ``pyarrow.ChunkedArray``, ``polars.Series``) sentinels.
+        Data written as ``pyarrow`` or ``polars``. ``ARROW_DATAFRAME`` represents 2-dimensional inputs such
+        as ``pyarrow.Table`` or ``pyarrow.RecordBatch``. ``ARROW_SERIES`` represents 1-dimensional inputs
+        such as ``pyarrow.Array``, ``pyarrow.ChunkedArray``, or ``polars.Series``.
 
     RECURSIVE_NORMALIZED:
-        Data written with ``recursive_normalizers=True``.
+        A nested data structure, such as ``List[pd.DataFrame]`` or ``Dict[str, pd.DataFrame]``, written with
+        ``recursive_normalizers=True``.
 
     UNKNOWN:
         No input type was recorded, for example because the data was written by a client that predates this
