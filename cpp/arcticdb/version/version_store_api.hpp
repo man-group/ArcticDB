@@ -289,7 +289,7 @@ class PythonVersionStore : public LocalVersionedEngine {
     std::vector<AtomKey> get_version_history(const StreamId& stream_id);
 
     VersionedItem merge(
-            const StreamId& stream_id, const std::shared_ptr<convert::PandasData>& source, const py::object& norm,
+            const StreamId& stream_id, const convert::InputItem& source, const py::object& norm,
             const py::object& user_meta, const bool prune_previous_versions, const bool upsert,
             const py::tuple& py_strategy, std::vector<std::string> on, const bool match_na
     );
