@@ -1,0 +1,22 @@
+Drop -Werror from the accept() probe's CMAKE_FLAGS.
+
+CMAKE_FLAGS entries are passed to the nested cmake, not to the compiler, so this
+-Werror never reached the probe and was silently ignored by cmake < 4.4.0. CMake
+4.4.0 validates -W<category> and fails with:
+
+    CMake Error: The warning category "error -DCMAKE_CXX_LINK_EXECUTABLE=..." is not known.
+
+Fixed upstream in mongo-c-driver 2.x; we are pinned to 1.28.0 because
+mongo-cxx-driver 4.x is a breaking API change.
+
+--- a/src/libmongoc/CMakeLists.txt
++++ b/src/libmongoc/CMakeLists.txt
+@@ -433,7 +433,7 @@
+ 
+    TRY_COMPILE (RES ${CMAKE_CURRENT_BINARY_DIR}
+    ${CMAKE_CURRENT_BINARY_DIR}/accept_test${VAR}.c CMAKE_FLAGS
+-   "-Werror -DCMAKE_CXX_LINK_EXECUTABLE='echo not linking now...'" OUTPUT_VARIABLE LOG2)
++   "-DCMAKE_CXX_LINK_EXECUTABLE='echo not linking now...'" OUTPUT_VARIABLE LOG2)
+ 
+    if (RES)
+       message (
