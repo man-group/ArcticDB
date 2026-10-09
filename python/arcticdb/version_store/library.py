@@ -3727,3 +3727,93 @@ class Library:
             raise ArcticInvalidApiUsageException(
                 "mode must be one of StagedDataFinalizeMethod.WRITE, StagedDataFinalizeMethod.APPEND, 'write', 'append'"
             )
+
+    def rename_columns_arrow_compat(
+        self,
+        symbol: str,
+        index_columns: Optional[Union[str, List[str]]] = None,
+        prune_previous_versions: Optional[bool] = None,
+    ) -> VersionedItem:
+        """
+        Rename the index and column names of a symbol to be Arrow compatible.
+
+        After calling this method, all index and column names will be unique, non-empty strings, with no overlap allowed
+        between the index and column names. Note that the Arrow spec itself only requires that column names are strings.
+        However, libraries such as Polars and PyArrow require uniqueness, and many downstream processing engines do not
+        gracefully handle empty strings as column names.
+
+        This operation creates a new version, unless the index and column names are already unique, non-empty strings,
+        in which case it is a no-op.
+
+        The metadata from the version being renamed is maintained with the newly created version.
+
+        The renaming follows these principles:
+        - Integer index/column names `i` will be renamed to `str(i)`.
+        - Empty string `""` index/column names will be renamed to `"__empty__"`.
+        - Unnamed (i.e. `None`) index/column names behave differently depending on where they are encountered:
+            - Single level (i.e. non-MultiIndex) timeseries index: renamed to `"__index__"`.
+            - MultiIndex: renamed to `"__index_level_i__"`, where `i` is the index level.
+            - Remaining columns: renamed to `None`.
+        - If the columns were named using a `RangeIndex` (e.g. by `df = pd.DataFrame(np.zeros((10, 4)))`), then these
+          will be renamed to string representations of the integers corresponding to the column position (e.g.
+          `["0", "1", "2", "3"]` in the previous example).
+        - Duplicated column names, and clashes caused by renaming to existing column names, are handled by prepending
+          and appending `"_"` characters. e.g. `pd.DataFrame(np.zeros(10, 2), columns=["col", "col"])` would become
+          `pd.DataFrame(np.zeros(10, 2), columns=["col", "_col_"])`.
+        - If the `index_columns` argument is provided, the index column(s) will be renamed to these provided name(s).
+        - Rules about column names specified above apply to the `name` field of `pd.Series`.
+
+        Parameters
+        ----------
+        symbol : str
+            The symbol to perform the renaming on.
+        index_columns : Optional[Union[str, List[str]]], default=None
+            Explicit names for the index columns. If None, uses defaults specified above. If a `str`, the existing data
+            must have a single-level (non-MultiIndex) timeseries index. If `List[str]`, the length of the list must
+            equal the number of levels in the existing data's MultiIndex.
+        prune_previous_versions : Optional[bool], default=None
+            If True, removes previous versions from the version list. If None, the value is taken from the
+            library configuration.
+
+        Returns
+        -------
+        VersionedItem
+            Structure containing information including the version number of the written symbol in the store. The data
+            and metadata attributes will not be populated. If no renaming occurs because the data is already
+            Arrow-compatible, the version field will be that of the latest live version for the symbol.
+
+        Raises
+        ------
+        NoSuchVersionException
+            If the symbol does not exist or has been deleted.
+        UserInputException
+            If the number of `index_columns` provided does not match the data on-disk.
+            If `index_columns` is specified, but there is an existing column name that clashes with at least one of the
+            specified index columns.
+        SchemaException
+            If the existing data is recursively normalized, pickled, or a numpy array.
+        InternalException
+            If the existing data contains multiple identical integer index/column names. This data is already corrupted
+            and cannot be read, and should be deleted and re-created without duplicate integer column names.
+
+        Examples
+        --------
+
+        >>> input_df = pd.DataFrame({None: [0], "": [1], 10: [2], "10": [3]}, index=pd.date_range("2026-06-06", periods=1))
+        >>> lib.write("sym", input_df)
+        >>> lib.rename_columns_arrow_compat("sym")
+        >>> output_df = lib.read("sym").data
+        >>> output_df.index.name
+        "__index__"
+        >>> output_df.columns.to_list()
+        ["None", "__empty__", "10", "_10_"]
+        >>> input_df = pd.DataFrame({"col": [0]}, index=pd.MultiIndex.from_arrays([[pd.Timestamp(0)], ["AAPL"]]))
+        >>> list(input_dfs.index.names)
+        [None, None]
+        >>> lib.write("sym", input_df)
+        >>> lib.rename_columns_arrow_compat("sym", index_columns=["ts", "ticker"])
+        >>> output_df = lib.read("sym").data
+        >>> list(output_df.index.names)
+        ["ts", "ticker"]
+        """
+        return self._nvs.rename_columns_arrow_compat(symbol, index_columns, prune_previous_versions)

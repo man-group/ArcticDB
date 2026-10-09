@@ -39,7 +39,7 @@ std::shared_ptr<version_store::ProcessingUnitAdmissionHandler> make_admission_ha
         ranges.emplace_back(RowRange{idx, idx + 1}, ColRange{0, 1}, entity::AtomKey{});
         processing_unit_indexes.emplace_back(std::vector<size_t>{idx});
     }
-    version_store::SegmentReader reader = [segment_and_slice_promises](RangesAndKey&& rk) {
+    SegmentReader reader = [segment_and_slice_promises](RangesAndKey&& rk) {
         return segment_and_slice_promises[rk.row_range().first].getFuture();
     };
     return std::make_shared<version_store::ProcessingUnitAdmissionHandler>(
@@ -256,7 +256,7 @@ TEST(Clause, ScheduleRowSliceProcessingAndWrite) {
     auto clauses = generate_random_clauses<RowSliceClause>(num_clauses);
     auto store = std::make_shared<InMemoryStore>();
     clauses->push_back(std::make_shared<Clause>(WriteClause(
-            IndexPartialKey{"target", 0}, std::make_shared<DeDupMap>(), store, ProcessingStructure::ROW_SLICE
+            IndexPartialKey{"target", 0}, std::make_shared<DeDupMap>(), store, ProcessingStructure::ROW_SLICE, true
     )));
 
     const auto component_manager = set_component_manager(*clauses);
