@@ -1656,7 +1656,7 @@ static std::variant<bool, CompactionError> read_incompletes_to_pipeline(
         ensure_timeseries_norm_meta(norm_meta, pipeline_context->stream_id_);
         if (flags.sparsify) {
             // Reaching a timezone decision through the sparsify flag is a bug. Monday ref 11198274752.
-            label_index_utc_if_unlabelled(norm_meta);
+            label_index_utc_if_unlabelled(norm_meta, pipeline_context->on_disk_descriptor().index().type());
         }
         existing.emplace(pipeline_context->on_disk_descriptor(), std::move(norm_meta), pipeline_context->rows_ == 0);
     }

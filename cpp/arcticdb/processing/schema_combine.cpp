@@ -977,7 +977,7 @@ void add_normalization_name_mismatches(
 }
 
 RequiredFieldsPlan required_fields_plan(std::span<const OutputSchema> schemas, const SchemaCombineOptions& options) {
-    RequiredFieldsPlan plan{required_fields_info(schemas.front().norm_metadata_), RequiredNameMismatches{options}};
+    RequiredFieldsPlan plan{required_fields_info(schemas.front()), RequiredNameMismatches{options}};
     const auto& base = schemas.front();
     const auto base_pandas = pandas_metadata(base.norm_metadata_);
     for (const auto& other : schemas.subspan(1)) {
@@ -1012,7 +1012,7 @@ RequiredFieldsPlan required_fields_plan(std::span<const OutputSchema> schemas, c
             );
         }
 
-        const auto other_info = required_fields_info(other.norm_metadata_);
+        const auto other_info = required_fields_info(other);
         normalization::check<ErrorCode::E_INCOMPATIBLE_OBJECTS>(
                 plan.info.has_series_value_column == other_info.has_series_value_column,
                 "Cannot {}: a Series cannot be combined with a DataFrame",
@@ -1027,7 +1027,8 @@ RequiredFieldsPlan required_fields_plan(std::span<const OutputSchema> schemas, c
             const auto& base_index = pandas_common(*base_pandas)->index();
             const auto& other_index = pandas_common(*other_pandas)->index();
             normalization::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
-                    base_index.is_physically_stored() == other_index.is_physically_stored(),
+                    is_index_physically_stored(base_index, base.stream_descriptor().index().type()) ==
+                            is_index_physically_stored(other_index, other.stream_descriptor().index().type()),
                     "Cannot {}: one index is a DatetimeIndex and the other is a RangeIndex",
                     options.name()
             );

@@ -841,7 +841,7 @@ class ArrowTableNormalizer(Normalizer):
                 index_meta = pandas_meta.index
                 # Empty tables don't have `is_physically_stored=True` but we still output them with an empty DateTimeIndex.
                 is_empty_table_with_datetime_index = len(item) == 0 and not index_meta.step
-                if index_meta.is_physically_stored or is_empty_table_with_datetime_index:
+                if arrow_meta.has_index or index_meta.is_physically_stored or is_empty_table_with_datetime_index:
                     return 1
                 else:
                     return 0

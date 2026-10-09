@@ -976,6 +976,32 @@ class TestAppend:
         assert lib.list_symbols() == [sym]
 
 
+@pytest.mark.parametrize("step", [1, 3])
+def test_append_to_range_index_without_start_and_step(in_memory_version_store, step):
+    # Clients before Nov 2020 stored a RangeIndex without start and step, so both read back as 0
+    lib = in_memory_version_store
+    sym = "test_append_to_range_index_without_start_and_step"
+    normalize = lib._normalizer.normalize
+
+    def normalize_without_start_and_step(*args, **kwargs):
+        item, norm_meta = normalize(*args, **kwargs)
+        norm_meta.df.common.index.ClearField("start")
+        norm_meta.df.common.index.ClearField("step")
+        return item, norm_meta
+
+    lib._normalizer.normalize = normalize_without_start_and_step
+    lib.write(sym, pd.DataFrame({"col": [0, 1]}))
+    lib._normalizer.normalize = normalize
+    descriptor = lib.version_store.read_descriptor(sym, lib._get_version_query(None))
+    stored_index = descriptor.timeseries_descriptor.normalization.df.common.index
+    assert (stored_index.start, stored_index.step) == (0, 0)
+
+    df = pd.DataFrame({"col": [2, 3]}, index=pd.RangeIndex(2 * step, 4 * step, step))
+    lib.append(sym, df)
+    expected = pd.DataFrame({"col": [0, 1, 2, 3]}, index=pd.RangeIndex(0, 4 * step, step))
+    assert_frame_equal(lib.read(sym).data, expected)
+
+
 def test_append_mismatched_column_count_message_is_truncated(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
     sym = "test_append_mismatched_column_count_message_is_truncated"
