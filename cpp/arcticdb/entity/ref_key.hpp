@@ -8,9 +8,10 @@
 
 #pragma once
 
-#include <arcticdb/entity/types.hpp>
 #include <fmt/format.h>
 #include <arcticdb/entity/key.hpp>
+#include <arcticdb/entity/types.hpp>
+#include <arcticdb/util/hash.hpp>
 
 namespace arcticdb::entity {
 class RefKey {

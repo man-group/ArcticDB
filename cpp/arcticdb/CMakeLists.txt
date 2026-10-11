@@ -1168,6 +1168,7 @@ if(${TEST})
             stream/test/test_segment_aggregator.cpp
             stream/test/test_types.cpp
             util/memory_tracing.hpp
+            util/test/gtest_custom_formatters.cpp
             util/test/gtest_main.cpp
             util/test/random_throw.hpp
             util/test/test_bitmagic.cpp
