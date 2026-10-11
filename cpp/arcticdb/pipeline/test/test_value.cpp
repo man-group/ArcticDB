@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 #include <arcticdb/pipeline/value.hpp>
+#include <arcticdb/util/constants.hpp>
 
 using namespace arcticdb;
 
