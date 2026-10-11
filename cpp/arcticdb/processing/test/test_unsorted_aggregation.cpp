@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 #include <arcticdb/column_store/column_algorithms.hpp>
+#include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/processing/unsorted_aggregation.hpp>
 #include <arcticdb/util/test/test_utils.hpp>
 
