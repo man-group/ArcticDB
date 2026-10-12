@@ -15,6 +15,7 @@ from arcticdb import QueryBuilder
 from arcticdb.exceptions import InternalException, NoSuchVersionException, SchemaException, UserInputException
 from arcticdb.options import OutputFormat
 from arcticdb.util.test import assert_frame_equal, assert_pandas_equal
+from arcticdb.version_store import TimeFrame
 from arcticdb_ext.storage import KeyType
 
 
@@ -104,18 +105,53 @@ def generic_rename_columns_arrow_compat_test(lib, sym, index_columns=None):
     assert_data_key_col_names_expected(lib, sym, vit.version, after_pandas)
 
 
-@pytest.mark.parametrize("index_columns", [5, [], [5, "hello"]])
-def test_bad_arguments(in_memory_version_store, index_columns):
-    lib = in_memory_version_store
+@pytest.mark.parametrize("index_columns", [5, "", [], [5, "hello"], [""], ["hello", "hello"]])
+def test_bad_arguments(lmdb_version_store_v1, index_columns):
+    lib = lmdb_version_store_v1
     sym = "test_bad_arguments"
     with pytest.raises(UserInputException):
         lib.rename_columns_arrow_compat(sym, index_columns)
 
 
+# TimeFrame always names it's index column "times", and have no concept of multiindex. Synthetic columns are also not
+# supported. Only None/int/empty string column names and duplicates need testing
+def test_timeframe(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    sym = "test_timeframe"
+    tf = TimeFrame(
+        pd.date_range("2025-01-01", periods=2).values,
+        columns_names=[None, None, 10, 10, "", ""],
+        columns_values=6 * [np.arange(2, dtype=np.int64)],
+    )
+    lib.write(sym, tf)
+    lib.rename_columns_arrow_compat(sym)
+    vit = lib.read(sym)
+    assert vit.version == 1
+    assert isinstance(vit.data, TimeFrame)
+    assert vit.data.columns_names == ["None", "_None_", "10", "_10_", "__empty__", "___empty___"]
+
+
+def test_timeframe_explicit_index_name(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    sym = "test_timeframe_explicit_index_name"
+    tf = TimeFrame(
+        pd.date_range("2025-01-01", periods=2).values,
+        columns_names=["col"],
+        columns_values=[np.arange(2, dtype=np.int64)],
+    )
+    lib.write(sym, tf)
+    # Allowed and is a no-op
+    lib.rename_columns_arrow_compat(sym, "times")
+    assert lib.read(sym).version == 0
+    # Disallowed for backwards-compatibility
+    with pytest.raises(UserInputException):
+        lib.rename_columns_arrow_compat(sym, "some other name")
+
+
 @pytest.mark.parametrize("object_type", ["DataFrame", "Series"])
 @pytest.mark.parametrize("col_name", [None, "", 10])
-def test_arrow_col_rename_basic(in_memory_version_store, object_type, col_name):
-    lib = in_memory_version_store
+def test_arrow_col_rename_basic(lmdb_version_store_v1, object_type, col_name):
+    lib = lmdb_version_store_v1
     sym = "test_arrow_col_rename_basic"
     input = make_df_or_series(object_type, col_name, [0])
     lib.write(sym, input, metadata="hello")
@@ -126,8 +162,8 @@ def test_arrow_col_rename_basic(in_memory_version_store, object_type, col_name):
     assert_pandas_equal(received, expected)
 
 
-def test_arrow_col_rename_previous_version_unchanged(in_memory_version_store):
-    lib = in_memory_version_store
+def test_arrow_col_rename_previous_version_unchanged(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
     sym = "test_arrow_col_rename_previous_version_unchanged"
     df_0 = pd.DataFrame({10: [0]})
     lib.write(sym, df_0)
@@ -141,20 +177,21 @@ def test_arrow_col_rename_previous_version_unchanged(in_memory_version_store):
 @pytest.mark.parametrize(
     "input",
     [
-        pd.DataFrame({"col": [0]}, index=[pd.date_range("2026-01-01", periods=1, name="ts")]),
+        pd.DataFrame({"col": [0]}, index=pd.date_range("2026-01-01", periods=1, name="ts")),
         pa.table({"col": pa.array([0], pa.int64())}),
     ],
 )
-def test_arrow_col_rename_valid_schema_is_noop(in_memory_version_store_arrow, input):
-    lib = in_memory_version_store_arrow
+def test_arrow_col_rename_valid_schema_is_noop(lmdb_version_store_v1, input):
+    lib = lmdb_version_store_v1
+    lib._set_allow_arrow_input()
     sym = "test_arrow_col_rename_valid_schema_is_noop"
     lib.write(sym, input)
     assert lib.rename_columns_arrow_compat(sym).version == 0
     assert lib.read_metadata(sym).version == 0
 
 
-def test_arrow_col_rename_norm_meta_only_change_doesnt_rewrite_data_keys(in_memory_version_store):
-    lib = in_memory_version_store
+def test_arrow_col_rename_norm_meta_only_change_doesnt_rewrite_data_keys(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
     sym = "test_arrow_col_rename_norm_meta_only_change_doesnt_rewrite_data_keys"
     # This dataframe has a StreamDescriptor with the field "10" that is already correct. Only the norm metadata needs
     # to change
@@ -166,8 +203,8 @@ def test_arrow_col_rename_norm_meta_only_change_doesnt_rewrite_data_keys(in_memo
 
 @pytest.mark.parametrize("rows_per_segment", [2, 100_000])
 @pytest.mark.parametrize("cols_per_segment", [2, 127])
-def test_arrow_col_rename_duplicates(in_memory_store_factory, rows_per_segment, cols_per_segment):
-    lib = in_memory_store_factory(segment_row_size=rows_per_segment, column_group_size=cols_per_segment)
+def test_arrow_col_rename_duplicates(version_store_factory, rows_per_segment, cols_per_segment):
+    lib = version_store_factory(segment_row_size=rows_per_segment, column_group_size=cols_per_segment)
     sym = "test_arrow_col_rename_duplicates"
     input = pd.DataFrame(
         np.zeros((10, 12)), columns=["col", "col", "col", "", "", "", None, None, "None", 10, "10", 10]
@@ -198,8 +235,8 @@ def test_arrow_col_rename_duplicates(in_memory_store_factory, rows_per_segment, 
 
 
 @pytest.mark.parametrize("cols_per_segment", [2, 127])
-def test_arrow_col_rename_synthetic_columns(in_memory_store_factory, cols_per_segment):
-    lib = in_memory_store_factory(column_group_size=cols_per_segment)
+def test_arrow_col_rename_synthetic_columns(version_store_factory, cols_per_segment):
+    lib = version_store_factory(column_group_size=cols_per_segment)
     sym = "test_arrow_col_rename_synthetic_columns"
     input = pd.DataFrame(np.zeros((1, 10)))
     lib.write(sym, input)
@@ -212,10 +249,8 @@ def test_arrow_col_rename_synthetic_columns(in_memory_store_factory, cols_per_se
 @pytest.mark.parametrize("object_type", ["DataFrame", "Series"])
 @pytest.mark.parametrize("rows_per_segment", [2, 100_000])
 @pytest.mark.parametrize("cols_per_segment", [2, 127])
-def test_single_index_auto_rename_int_no_clash(
-    in_memory_store_factory, object_type, rows_per_segment, cols_per_segment
-):
-    lib = in_memory_store_factory(segment_row_size=rows_per_segment, column_group_size=cols_per_segment)
+def test_single_index_auto_rename_int_no_clash(version_store_factory, object_type, rows_per_segment, cols_per_segment):
+    lib = version_store_factory(segment_row_size=rows_per_segment, column_group_size=cols_per_segment)
     sym = "test_single_index_auto_rename_int_no_clash"
     input = (
         pd.DataFrame(
@@ -237,8 +272,8 @@ def test_single_index_auto_rename_int_no_clash(
 # Empty DatetimeIndex frames are not marked as having a physically stored index, but still have an index column
 @pytest.mark.parametrize("object_type", ["DataFrame", "Series"])
 @pytest.mark.parametrize("index_name", [None, "ts"])
-def test_single_index_auto_rename_empty_frame(in_memory_version_store, object_type, index_name):
-    lib = in_memory_version_store
+def test_single_index_auto_rename_empty_frame(lmdb_version_store_v1, object_type, index_name):
+    lib = lmdb_version_store_v1
     sym = "test_single_index_auto_rename_empty_frame"
     index = pd.DatetimeIndex([], name=index_name)
     values = np.array([], dtype=np.int64)
@@ -272,9 +307,9 @@ def test_single_index_auto_rename_empty_frame(in_memory_version_store, object_ty
     ],
 )
 def test_single_index_auto_rename(
-    in_memory_version_store, object_type, col_name, index_name, expected_col_name, expected_index_name
+    lmdb_version_store_v1, object_type, col_name, index_name, expected_col_name, expected_index_name
 ):
-    lib = in_memory_version_store
+    lib = lmdb_version_store_v1
     sym = "test_single_index_auto_rename"
     input = make_df_or_series(object_type, col_name, [0], index=[pd.Timestamp(0)])
     input.index.name = index_name
@@ -286,8 +321,8 @@ def test_single_index_auto_rename(
     assert_pandas_equal(received, expected)
 
 
-def test_single_index_auto_rename_nameless_multiple_clashes(in_memory_version_store):
-    lib = in_memory_version_store
+def test_single_index_auto_rename_nameless_multiple_clashes(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
     sym = "test_single_index_auto_rename_nameless_multiple_clashes"
     input = pd.DataFrame(np.zeros((1, 2)), columns=["__index__", "__index__"], index=[pd.Timestamp(0)])
     assert input.index.name is None
@@ -303,8 +338,8 @@ def test_single_index_auto_rename_nameless_multiple_clashes(in_memory_version_st
 @pytest.mark.parametrize("input_index_name", [None, "my_index", "ts"])
 # Single-element lists allowed for timeseries index
 @pytest.mark.parametrize("index_columns", ["ts", ["ts"]])
-def test_single_index_explicit_rename_no_clash(in_memory_version_store, object_type, input_index_name, index_columns):
-    lib = in_memory_version_store
+def test_single_index_explicit_rename_no_clash(lmdb_version_store_v1, object_type, input_index_name, index_columns):
+    lib = lmdb_version_store_v1
     sym = "test_single_index_explicit_rename_no_clash"
     input = make_df_or_series(object_type, "col", [0], index=[pd.Timestamp(0)])
     input.index.name = input_index_name
@@ -346,8 +381,8 @@ def test_single_index_explicit_rename_no_clash(in_memory_version_store, object_t
         ),
     ],
 )
-def test_explicit_rename_raises(in_memory_version_store, object_type, index, col_name, index_columns):
-    lib = in_memory_version_store
+def test_explicit_rename_raises(lmdb_version_store_v1, object_type, index, col_name, index_columns):
+    lib = lmdb_version_store_v1
     sym = "test_explicit_rename_raises"
     input = make_df_or_series(object_type, col_name, [0], index=index)
     lib.write(sym, input)
@@ -359,9 +394,9 @@ def test_explicit_rename_raises(in_memory_version_store, object_type, index, col
 @pytest.mark.parametrize("rows_per_segment", [2, 100_000])
 @pytest.mark.parametrize("cols_per_segment", [2, 127])
 def test_multi_index_auto_rename_nameless_no_clash(
-    in_memory_store_factory, object_type, rows_per_segment, cols_per_segment
+    version_store_factory, object_type, rows_per_segment, cols_per_segment
 ):
-    lib = in_memory_store_factory(segment_row_size=rows_per_segment, column_group_size=cols_per_segment)
+    lib = version_store_factory(segment_row_size=rows_per_segment, column_group_size=cols_per_segment)
     sym = "test_multi_index_auto_rename_nameless_no_clash"
     index = pd.MultiIndex.from_arrays([pd.date_range("2026-01-01", periods=10), np.arange(10)])
     input = (
@@ -385,8 +420,9 @@ def test_multi_index_auto_rename_nameless_no_clash(
     assert_pandas_equal(received, expected)
 
 
-# See test_compatability.py::test_arrow_col_rename_multi_index_auto_rename_clashes for int top-level index, as this has
-# always been False since July 2026
+# 5.0.0 and earlier (including arcticc) threw at write time with an int top-level index name in multiindex
+# 5.10.0 and later succeeded on write but did not set the is_int flag, and so read back as strings
+# So int top-level index names are only covered by the C++ tests in test_arrow_schema_utils.cpp
 @pytest.mark.parametrize("object_type", ["DataFrame", "Series"])
 @pytest.mark.parametrize(
     "col_name,input_names,output_names,output_col_name",
@@ -415,9 +451,9 @@ def test_multi_index_auto_rename_nameless_no_clash(
     ],
 )
 def test_multi_index_auto_rename_clashes(
-    in_memory_version_store, object_type, col_name, input_names, output_names, output_col_name
+    lmdb_version_store_v1, object_type, col_name, input_names, output_names, output_col_name
 ):
-    lib = in_memory_version_store
+    lib = lmdb_version_store_v1
     sym = "test_multi_index_auto_rename_clashes"
     index = pd.MultiIndex.from_arrays([[0], [1]], names=input_names)
     input = make_df_or_series(object_type, col_name, [0], index=index)
@@ -431,8 +467,8 @@ def test_multi_index_auto_rename_clashes(
 
 @pytest.mark.parametrize("object_type", ["DataFrame", "Series"])
 @pytest.mark.parametrize("input_names", [[None, None], ["level0", "level1"]])
-def test_multi_index_explicit_rename_no_clash(in_memory_version_store, object_type, input_names):
-    lib = in_memory_version_store
+def test_multi_index_explicit_rename_no_clash(lmdb_version_store_v1, object_type, input_names):
+    lib = lmdb_version_store_v1
     sym = "test_multi_index_explicit_rename_no_clash"
     index = pd.MultiIndex.from_arrays([[0], [1]], names=input_names)
     input = make_df_or_series(object_type, "col", [0], index=index)
@@ -444,11 +480,41 @@ def test_multi_index_explicit_rename_no_clash(in_memory_version_store, object_ty
     assert_pandas_equal(received, expected)
 
 
+def test_data_segment_only_rewritten_if_changed_static(lmdb_version_store_tiny_segment):
+    lib = lmdb_version_store_tiny_segment
+    sym = "test_data_segment_only_rewritten_if_changed_static"
+    # tiny_segment fixture has 2 rows and cols per slice, so this produces 4 slices, but only the 2 slices in the
+    # right-most column slice have columns that need renaming
+    df = pd.DataFrame(
+        {"col0": np.arange(4), "col1": np.arange(4, 8), "col2": np.arange(8, 12), None: np.arange(12, 16)}
+    )
+    lib.write(sym, df)
+    lib.rename_columns_arrow_compat(sym)
+    data_key_versions = lib.read_index(sym)["version_id"].to_list()
+    assert data_key_versions == [0, 0, 1, 1]
+
+
+def test_data_segment_only_rewritten_if_changed_dynamic(lmdb_version_store_dynamic_schema_v1):
+    lib = lmdb_version_store_dynamic_schema_v1
+    sym = "test_data_segment_only_rewritten_if_changed_dynamic"
+    df0 = pd.DataFrame({"col0": [0]})
+    df1 = pd.DataFrame({"col0": [1], None: [2]})
+    df2 = pd.DataFrame({"col1": [3]})
+    df3 = pd.DataFrame({"": [4]})
+    lib.write(sym, df0)
+    lib.append(sym, df1)
+    lib.append(sym, df2)
+    lib.append(sym, df3)
+    lib.rename_columns_arrow_compat(sym)
+    data_key_versions = lib.read_index(sym)["version_id"].to_list()
+    assert data_key_versions == [0, 4, 2, 4]
+
+
 # Dynamic schema uses different name mangling to static schema as duplicate column names are not supported, and column
 # index used in static schema is not stable on append/update
 @pytest.mark.parametrize("col_name", [None, "", 10])
-def test_arrow_col_rename_dynamic_schema_basic(in_memory_version_store_dynamic_schema, col_name):
-    lib = in_memory_version_store_dynamic_schema
+def test_arrow_col_rename_dynamic_schema_basic(lmdb_version_store_dynamic_schema_v1, col_name):
+    lib = lmdb_version_store_dynamic_schema_v1
     sym = "test_arrow_col_rename_dynamic_schema_basic"
     input = pd.DataFrame({"col0": [0], "col1": [1], col_name: [2]})
     lib.write(sym, input, metadata="hello")
@@ -459,8 +525,8 @@ def test_arrow_col_rename_dynamic_schema_basic(in_memory_version_store_dynamic_s
     assert_pandas_equal(received, expected)
 
 
-def test_arrow_col_rename_dynamic_schema_multiple_row_slices(in_memory_store_factory):
-    lib = in_memory_store_factory(dynamic_schema=True, dynamic_strings=True)
+def test_arrow_col_rename_dynamic_schema_multiple_row_slices(version_store_factory):
+    lib = version_store_factory(dynamic_schema=True, dynamic_strings=True)
     sym = "test_arrow_col_rename_dynamic_schema_multiple_row_slices"
     df_0 = pd.DataFrame({"col0": np.arange(1, dtype=np.uint8), None: ["hello"], "": np.arange(1, dtype=np.float64)})
     df_1 = pd.DataFrame({"": np.arange(1, 2, dtype=np.float32), 10: [True], "col0": np.arange(1, 2, dtype=np.uint16)})
@@ -479,9 +545,30 @@ def test_arrow_col_rename_dynamic_schema_multiple_row_slices(in_memory_store_fac
     assert_pandas_equal(received, expected)
 
 
+# V2 encoding working for changes that affect only index keys
+def test_v2_encoding_norm_meta_only_change(lmdb_version_store_v2):
+    lib = lmdb_version_store_v2
+    sym = "test_v2_encoding_norm_meta_only_change"
+    input = make_df_or_series("DataFrame", 10, [0])
+    lib.write(sym, input)
+    generic_rename_columns_arrow_compat_test(lib, sym)
+    received = lib.read(sym).data
+    expected = make_df_or_series("DataFrame", "10", [0])
+    assert_pandas_equal(received, expected)
+
+
+def test_v2_encoding_column_renames_raise(lmdb_version_store_v2):
+    lib = lmdb_version_store_v2
+    sym = "test_v2_encoding_column_renames_raise"
+    input = make_df_or_series("DataFrame", None, [0])
+    lib.write(sym, input)
+    with pytest.raises(InternalException):
+        lib.rename_columns_arrow_compat(sym)
+
+
 @pytest.mark.parametrize("input", [{"a": pd.DataFrame({"col": [0]})}, "hello", np.arange(1)])
-def test_exception_with_unsupported_data(in_memory_version_store, input):
-    lib = in_memory_version_store
+def test_exception_with_unsupported_data(lmdb_version_store_v1, input):
+    lib = lmdb_version_store_v1
     sym = "test_exception_with_unsupported_data"
     lib.write(sym, input, recursive_normalizers=isinstance(input, dict))
     is_symbol_pickled = lib.is_symbol_pickled(sym)
@@ -490,8 +577,8 @@ def test_exception_with_unsupported_data(in_memory_version_store, input):
         lib.rename_columns_arrow_compat(sym)
 
 
-def test_exception_with_non_existent_symbol(in_memory_version_store):
-    lib = in_memory_version_store
+def test_exception_with_non_existent_symbol(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
     sym = "test_exception_with_non_existent_symbol"
     with pytest.raises(NoSuchVersionException):
         lib.rename_columns_arrow_compat(sym)
@@ -501,8 +588,8 @@ def test_exception_with_non_existent_symbol(in_memory_version_store):
 # cannot even be correctly decoded (the SegmentInMemory column_map contains fewer entries than there are columns)
 # See Monday issues 9715738171 and 12909663080
 @pytest.mark.parametrize("index", [[pd.Timestamp(0)], pd.MultiIndex.from_arrays([[0], [1]], names=[10, 10])])
-def test_auto_rename_int_multiple_clashes(in_memory_version_store, index):
-    lib = in_memory_version_store
+def test_auto_rename_int_multiple_clashes(lmdb_version_store_v1, index):
+    lib = lmdb_version_store_v1
     sym = "test_auto_rename_int_multiple_clashes"
     input = pd.DataFrame({"10": [0], 10: [1]}, index=index)
     input.index.name = 10

@@ -9,6 +9,7 @@
 #include <google/protobuf/util/message_differencer.h>
 
 #include <arcticdb/arrow/arrow_schema_utils.hpp>
+#include <arcticdb/entity/normalization_utils.hpp>
 
 namespace arcticdb {
 
@@ -187,7 +188,7 @@ FieldCollection generate_output_fields(const FieldCollection& input_fields, cons
     StringSet final_col_names;
     for (auto input_field = input_fields.begin(); input_field != input_fields.end(); ++input_field) {
         const auto final_col_name = [&]() -> std::string {
-            if (auto it = column_renames.find(std::string(input_field->name())); it != column_renames.end()) {
+            if (auto it = column_renames.find(input_field->name()); it != column_renames.end()) {
                 return it->second;
             } else {
                 return std::string{input_field->name()};
@@ -208,18 +209,19 @@ proto::descriptors::NormalizationMetadata generate_output_norm(
         const size_t index_count, const bool range_index
 ) {
     proto::descriptors::NormalizationMetadata output_norm = input_norm;
-    auto& output_pandas_common =
-            *(output_norm.has_df() ? output_norm.mutable_df()->mutable_common()
-                                   : output_norm.mutable_series()->mutable_common());
+    auto& output_pandas_common = *mutable_pandas_common(output_norm);
     output_pandas_common.clear_col_names();
     if (output_norm.has_series()) {
         auto& series_meta = *output_norm.mutable_series();
         series_meta.set_has_synthetic_columns(false);
         output_pandas_common.set_has_name(true);
         output_pandas_common.set_name(std::string(output_fields.at(output_fields.size() - 1).name()));
-    } else {
+    } else if (output_norm.has_df()) {
         auto& df_meta = *output_norm.mutable_df();
         df_meta.set_has_synthetic_columns(false);
+    } else { // ts
+        auto& ts_meta = *output_norm.mutable_ts();
+        ts_meta.set_has_synthetic_columns(false);
     }
     if (output_pandas_common.has_index()) {
         auto& index_meta = *output_pandas_common.mutable_index();
@@ -256,25 +258,33 @@ std::optional<ArrowTransformedSchema> make_schema_arrow_compatible(
             !norm.has_np(), "rename_columns_arrow_compat not supported with numpy arrays"
     );
     const auto& desc = input_schema.stream_descriptor();
-    const auto& pandas_common = norm.has_df() ? norm.df().common() : norm.series().common();
-    const bool unnamed_series = norm.has_series() && (!pandas_common.has_name() && pandas_common.name().empty());
-    const auto index_count = count_indexes(pandas_common);
+    const auto& input_pandas_common = *pandas_common(norm);
+    const bool unnamed_series =
+            norm.has_series() && (!input_pandas_common.has_name() && input_pandas_common.name().empty());
+    const auto index_count = count_indexes(input_pandas_common);
     user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
             !index_columns.has_value() || index_columns->size() == index_count,
             "Symbol has {} index levels, but {} index names were provided",
             index_count,
-            index_columns->size()
+            index_columns.has_value() ? index_columns->size() : 0
     );
     const bool range_index{index_count == 0};
-    auto original_index_names = generate_original_index_names(desc.fields(), pandas_common, index_count);
+    auto original_index_names = generate_original_index_names(desc.fields(), input_pandas_common, index_count);
     auto original_column_names =
-            generate_original_column_names(desc.fields(), pandas_common, index_count, unnamed_series);
+            generate_original_column_names(desc.fields(), input_pandas_common, index_count, unnamed_series);
     if (index_columns.has_value()) {
         for (const auto& index_column : *index_columns) {
             user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
                     !original_column_names.contains(index_column),
-                    "Provided index colum name {} already exists in the data columns",
+                    "Provided index column name {} already exists in the data columns",
                     index_column
+            );
+        }
+        if (norm.has_ts()) {
+            user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                    index_columns->front() == "times",
+                    "Cannot rename NormalisedTimeSeries index to {}, must always be \"times\"",
+                    index_columns->front()
             );
         }
     } else {
@@ -284,7 +294,7 @@ std::optional<ArrowTransformedSchema> make_schema_arrow_compatible(
         );
     }
     auto column_renames = generate_column_renames(
-            desc.fields(), pandas_common, index_columns, index_count, unnamed_series, original_column_names
+            desc.fields(), input_pandas_common, index_columns, index_count, unnamed_series, original_column_names
     );
     auto output_fields = generate_output_fields(desc.fields(), column_renames);
     StreamDescriptor output_desc{

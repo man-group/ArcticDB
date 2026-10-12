@@ -846,7 +846,7 @@ class ArrowTableNormalizer(Normalizer):
             # For pandas series we always return a dataframe (to not lose the index information).
             pandas_meta = norm_meta.series.common
             # An unnamed pandas Series is stored under a synthetic positional column name. Arrow has no concept of an
-            # unnamed column, so follow the polars convention of naming it "" instead
+            # unnamed column, so name it "None"
             unnamed_series = not pandas_meta.has_name and not pandas_meta.name
         elif input_type == "experimental_arrow":
             if norm_meta.experimental_arrow.one_dimensional:

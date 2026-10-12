@@ -2605,13 +2605,13 @@ class NativeVersionStore:
         - Unnamed (i.e. `None`) index/column names behave differently depending on where they are encountered:
             - Single level (i.e. non-MultiIndex) timeseries index: renamed to `"__index__"`.
             - MultiIndex: renamed to `"__index_level_i__"`, where `i` is the index level.
-            - Remaining columns: renamed to `None`.
+            - Remaining columns: renamed to the string `"None"`.
         - If the columns were named using a `RangeIndex` (e.g. by `df = pd.DataFrame(np.zeros((10, 4)))`), then these
           will be renamed to string representations of the integers corresponding to the column position (e.g.
           `["0", "1", "2", "3"]` in the previous example).
         - Duplicated column names, and clashes caused by renaming to existing column names, are handled by prepending
-          and appending `"_"` characters. e.g. `pd.DataFrame(np.zeros(10, 2), columns=["col", "col"])` would become
-          `pd.DataFrame(np.zeros(10, 2), columns=["col", "_col_"])`.
+          and appending `"_"` characters. e.g. `pd.DataFrame(np.zeros((10, 2)), columns=["col", "col"])` would become
+          `pd.DataFrame(np.zeros((10, 2)), columns=["col", "_col_"])`.
         - If the `index_columns` argument is provided, the index column(s) will be renamed to these provided name(s).
         - Rules about column names specified above apply to the `name` field of `pd.Series`.
 
@@ -2660,7 +2660,7 @@ class NativeVersionStore:
         >>> output_df.columns.to_list()
         ["None", "__empty__", "10", "_10_"]
         >>> input_df = pd.DataFrame({"col": [0]}, index=pd.MultiIndex.from_arrays([[pd.Timestamp(0)], ["AAPL"]]))
-        >>> list(input_dfs.index.names)
+        >>> list(input_df.index.names)
         [None, None]
         >>> lib.write("sym", input_df)
         >>> lib.rename_columns_arrow_compat("sym", index_columns=["ts", "ticker"])
@@ -2669,17 +2669,19 @@ class NativeVersionStore:
         ["ts", "ticker"]
         """
         explicit_index_names = None
-        if isinstance(index_columns, str):
+        if isinstance(index_columns, str) and len(index_columns):
             explicit_index_names = [index_columns]
         elif (
             isinstance(index_columns, list)
             and len(index_columns) > 0
             and all(isinstance(elem, str) for elem in index_columns)
+            and len(index_columns) == len(set(index_columns))
+            and "" not in index_columns
         ):
             explicit_index_names = index_columns
         elif index_columns is not None:
             raise UserInputException(
-                f"index_columns arg to rename_columns_arrow_compat must be a non-empty str or list of str, received {index_columns!r}"
+                f"index_columns arg to rename_columns_arrow_compat must be a non-empty str or list of unique, non-empty str, received {index_columns!r}"
             )
 
         prune_previous_version = resolve_defaults(

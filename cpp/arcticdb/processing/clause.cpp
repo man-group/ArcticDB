@@ -1141,7 +1141,7 @@ void WriteClause::process_uncompressed(const std::vector<EntityId>& entity_ids) 
 }
 
 void WriteClause::process_compressed(const std::vector<EntityId>& entity_ids) const {
-    auto [segments, row_ranges, col_ranges, atom_keys] = component_manager_->get_components_and_decrement_refcount<
+    auto [segments, row_ranges, col_ranges, atom_keys] = component_manager_->get_and_remove_components<
             std::shared_ptr<Segment>,
             std::shared_ptr<RowRange>,
             std::shared_ptr<ColRange>,

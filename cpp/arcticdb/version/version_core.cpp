@@ -3656,9 +3656,36 @@ folly::Future<std::optional<AtomKey>> async_rename_columns_arrow_compat_impl(
                                                std::make_shared<DeDupMap>(),
                                                false
                                 )
-                                        .thenValueInline([component_manager](std::vector<EntityId>&& entities) {
-                                            return std::get<0>(component_manager->get_components<SliceAndKey>(entities)
+                                        .thenValueInline([component_manager,
+                                                          pipeline_context](std::vector<EntityId>&& entities) {
+                                            auto new_slice_and_keys =
+                                                    std::get<0>(component_manager->get_components<SliceAndKey>(entities)
+                                                    );
+                                            // Only data keys that changed were rewritten, so merge these with those
+                                            // from the pipeline context. By construction, the RowRange and ColRange of
+                                            // each new slice and key will always match exactly one from the pipeline
+                                            // context's slice and keys
+                                            if (new_slice_and_keys.size() == pipeline_context->slice_and_keys_.size()) {
+                                                return new_slice_and_keys;
+                                            }
+                                            // By construction a norm-metadata only change will not be in this branch
+                                            internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+                                                    !new_slice_and_keys.empty(),
+                                                    "Unexpected empty new slice and keys when renaming columns"
                                             );
+                                            // Both new and pipeline context's slice and keys are ordered by col
+                                            // range then row range, so we can scan forward through both
+                                            auto new_slice = new_slice_and_keys.begin();
+                                            for (auto& slice : pipeline_context->slice_and_keys_) {
+                                                if (slice.slice().rows() == new_slice->slice().rows() &&
+                                                    slice.slice().columns() == new_slice->slice().columns()) {
+                                                    slice = *new_slice++;
+                                                    if (new_slice == new_slice_and_keys.end()) {
+                                                        break;
+                                                    }
+                                                }
+                                            }
+                                            return std::move(pipeline_context->slice_and_keys_);
                                         });
                             }
                         }();

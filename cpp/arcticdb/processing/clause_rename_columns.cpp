@@ -47,23 +47,39 @@ std::vector<EntityId> RenameColumnsClause::process(std::vector<EntityId>&& entit
             "Unexpected number of segments {} in RenameColumnsClause::process",
             input_segment_count
     );
-    // Do not decrement the entity fetch count here as we are modifying the segments in place
-    auto [segments, keys] =
-            component_manager_->get_components<std::shared_ptr<Segment>, std::shared_ptr<AtomKey>>(entity_ids);
+    auto [segments, row_ranges, col_ranges, atom_keys] = component_manager_->get_components_and_decrement_refcount<
+            std::shared_ptr<Segment>,
+            std::shared_ptr<RowRange>,
+            std::shared_ptr<ColRange>,
+            std::shared_ptr<AtomKey>>(entity_ids);
     auto& segment = segments.at(0);
-    auto& key = keys.at(0);
+    // Renaming columns without decoding with V2 is much more complicated than with V1, and no data is written with this
+    // format yet. Implement when V2 encoding fully supported.
+    internal::check<ErrorCode::E_NOT_IMPLEMENTED>(
+            segment->header().encoding_version() == EncodingVersion::V1,
+            "Column renaming not supported with V2 encoding"
+    );
+    auto& key = atom_keys.at(0);
     auto input_fields = segment->fields_ptr();
-    FieldCollection new_fields;
+    // The number of fields in new_fields will be exact here. The buffer size will not be, but will be close enough
+    // to avoid a realloc+memcpy on most add_field calls
+    FieldCollection new_fields{input_fields->size(), input_fields->buffer().bytes()};
+    bool changed{false};
     for (const auto& field : *input_fields) {
-        if (auto it = column_renames_.find(std::string(field.name())); it != column_renames_.end()) {
+        if (auto it = column_renames_.find(field.name()); it != column_renames_.end()) {
             new_fields.add_field(field.type(), it->second);
+            changed = true;
         } else {
             new_fields.add_field(field.type(), field.name());
         }
     }
-    segment->set_fields(std::move(new_fields));
-    key->set_content_hash(get_segment_hash(*segment));
-    return entity_ids;
+    if (changed) {
+        segment->set_fields(std::move(new_fields));
+        key->set_content_hash(get_segment_hash(*segment));
+        return component_manager_->add_entities(segments, row_ranges, col_ranges, atom_keys);
+    } else {
+        return {};
+    }
 }
 
 const ClauseInfo& RenameColumnsClause::clause_info() const { return clause_info_; }
