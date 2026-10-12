@@ -46,6 +46,8 @@
 #include <optional>
 #include <aws/core/utils/stream/ResponseStream.h>
 #include <arcticdb/util/bitset.hpp>
+#include <arcticdb/version/admission_handler.hpp>
+#include <arcticdb/processing/clause.hpp>
 
 namespace arcticdb::version_store {
 
@@ -2209,6 +2211,157 @@ AtomKey index_key_to_column_stats_key(const IndexTypeKey& index_key) {
             .build(index_key.id(), KeyType::COLUMN_STATS);
 }
 
+namespace {
+
+// Decode sink that hands the codec one reusable per-thread buffer instead of allocating a column. Used to compute
+// column stats one column at a time while the decoded values are still in cache.
+struct ColumnStatsScratchSink {
+    uint8_t* allocate_data(std::size_t bytes) {
+        thread_local std::unique_ptr<uint8_t[]> buffer;
+        thread_local std::size_t capacity = 0;
+        if (bytes > capacity) {
+            buffer = std::make_unique_for_overwrite<uint8_t[]>(bytes);
+            capacity = bytes;
+        }
+        return buffer.get();
+    }
+    void advance_data(std::size_t) const {}
+    shape_t* allocate_shapes(std::size_t) const {
+        internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Column stats streaming decode does not support shapes");
+    }
+    void advance_shapes(std::size_t) const {}
+    void set_allow_sparse(Sparsity) const {}
+};
+
+bool can_stream_column_stats(const Segment& segment) {
+    const auto& hdr = segment.header();
+    if (hdr.encoding_version() != EncodingVersion::V1 || segment.buffer().data() == nullptr) {
+        return false;
+    }
+    const auto& desc = segment.descriptor();
+    const auto& fields = hdr.body_fields();
+    if (fields.size() != desc.fields().size()) {
+        return false;
+    }
+    for (std::size_t i = 0; i < fields.size(); ++i) {
+        const auto& field = fields.at(i);
+        if (field.encoding_case() != EncodedFieldType::NDARRAY || field.ndarray().sparse_map_bytes() != 0 ||
+            desc.fields(i).type().dimension() != Dimension::Dim0) {
+            return false;
+        }
+    }
+    return true;
+}
+
+using AggregatorsByColumn = std::unordered_map<std::string, std::vector<size_t>>;
+
+// Feed every column of `segment` that has a stats aggregator into it. V1 dense segments are decoded one column at a
+// time into a reused buffer and reduced immediately; anything else falls back to a full decode.
+void aggregate_segment_column_stats(
+        Segment& segment, const RowRange& row_range, const AggregatorsByColumn& by_column,
+        std::vector<ColumnStatsAggregatorData>& aggregators
+) {
+    if (!can_stream_column_stats(segment)) {
+        auto decoded = decode_segment(segment, AllocationType::DYNAMIC);
+        // As DecodeSliceTask does: trailing absent rows of sparse columns count up to the end of the slice
+        decoded.set_row_data(std::max(decoded.row_count() - 1, row_range.diff() - 1));
+        for (const auto& [name, indexes] : by_column) {
+            if (auto idx = decoded.column_index(name)) {
+                ColumnWithStrings column(decoded.column_ptr(static_cast<position_t>(*idx)), decoded.string_pool_ptr(), name);
+                for (auto i : indexes) {
+                    aggregators[i].aggregate(column);
+                }
+            }
+        }
+        return;
+    }
+    const auto& hdr = segment.header();
+    const auto& desc = segment.descriptor();
+    const auto& fields = hdr.body_fields();
+    const uint8_t* data = segment.buffer().data();
+    if (hdr.has_metadata_field()) {
+        data += encoding_sizes::ndarray_field_compressed_size(hdr.metadata_field().ndarray());
+    }
+    for (std::size_t i = 0; i < fields.size(); ++i) {
+        const auto& field = fields.at(i);
+        const auto& desc_field = desc.fields(i);
+        auto it = by_column.find(std::string{desc_field.name()});
+        const auto uncompressed = encoding_sizes::data_uncompressed_size(field.ndarray());
+        if (it == by_column.end() || uncompressed == 0) {
+            data += encoding_sizes::field_compressed_size(field);
+            continue;
+        }
+        ColumnStatsScratchSink sink;
+        std::optional<util::BitMagic> bv;
+        const uint8_t* decoded = sink.allocate_data(uncompressed);
+        data += decode_field(desc_field.type(), field, data, sink, bv, hdr.encoding_version());
+        ChunkedBuffer buffer;
+        buffer.add_external_block(decoded, uncompressed);
+        ColumnWithStrings column(
+                Column(desc_field.type(), Sparsity::NOT_PERMITTED, std::move(buffer)), nullptr, desc_field.name()
+        );
+        for (auto idx : it->second) {
+            aggregators[idx].aggregate(column);
+        }
+    }
+}
+
+// One task per row slice: fetch its segments, then decode and reduce them on the thread that completed the fetch
+// (or on the CPU pool when ColumnStats.StreamingCreate=2). Bounded by the segment read window.
+std::vector<ColumnStatsRow> stream_column_stats(
+        const std::shared_ptr<Store>& store, const PipelineContext& pipeline_context,
+        const std::shared_ptr<std::vector<ColumnStatsAggregator>>& aggregators, bool on_cpu_pool
+) {
+    auto by_column = std::make_shared<AggregatorsByColumn>();
+    for (auto&& [idx, agg] : folly::enumerate(*aggregators)) {
+        (*by_column)[agg.get_input_column_name().value].push_back(idx);
+    }
+    std::map<RowRange, std::vector<AtomKey>> groups;
+    for (const auto& sk : pipeline_context.slice_and_keys_) {
+        groups[sk.slice().rows()].push_back(sk.key());
+    }
+    std::vector<std::pair<RowRange, std::vector<AtomKey>>> work(groups.begin(), groups.end());
+    auto reduce = [aggregators, by_column](RowRange row_range, std::vector<storage::KeySegmentPair>&& segments) {
+        std::vector<ColumnStatsAggregatorData> data;
+        data.reserve(aggregators->size());
+        for (const auto& agg : *aggregators) {
+            data.emplace_back(agg.get_aggregator_data());
+        }
+        for (auto& ks : segments) {
+            aggregate_segment_column_stats(*ks.segment_ptr(), row_range, *by_column, data);
+        }
+        ColumnStatsRow row{.row_range = row_range, .stats = {}};
+        for (const auto& d : data) {
+            auto finalized = d.finalize();
+            row.stats.insert(
+                    row.stats.end(), std::make_move_iterator(finalized.begin()), std::make_move_iterator(finalized.end())
+            );
+        }
+        return row;
+    };
+    auto futures = folly::window(
+            std::move(work),
+            [store, reduce, on_cpu_pool](std::pair<RowRange, std::vector<AtomKey>>&& group) {
+                std::vector<folly::Future<storage::KeySegmentPair>> reads;
+                for (const auto& key : group.second) {
+                    reads.emplace_back(store->read_compressed(key, storage::ReadKeyOpts{}));
+                }
+                auto collected = folly::collect(std::move(reads)).toUnsafeFuture();
+                auto fn = [row_range = group.first, reduce](std::vector<storage::KeySegmentPair>&& segments) {
+                    return reduce(row_range, std::move(segments));
+                };
+                if (on_cpu_pool) {
+                    return std::move(collected).via(&async::cpu_executor()).thenValue(std::move(fn));
+                }
+                return std::move(collected).thenValueInline(std::move(fn));
+            },
+            segment_read_window()
+    );
+    return folly::collect(std::move(futures)).get();
+}
+
+} // namespace
+
 void create_column_stats_impl(
         const std::shared_ptr<Store>& store, const VersionedItem& versioned_item, const ReadOptions& read_options,
         const std::shared_ptr<ReadQuery>& read_query
@@ -2277,6 +2430,7 @@ void create_column_stats_impl(
 
     auto pipeline_context = std::make_shared<PipelineContext>();
     pipeline_context->stream_id_ = versioned_item.key_.id();
+    auto stats_aggregators = folly::poly_cast<ColumnStatsGenerationClause>(*clause).column_stats_aggregators_;
     read_query->add_clauses(std::vector{std::make_shared<Clause>(std::move(*clause))});
     read_indexed_keys_to_pipeline(pipeline_context, *read_query, read_options, index_info);
 
@@ -2291,11 +2445,17 @@ void create_column_stats_impl(
         return in_range.contains(c.row_range);
     });
 
-    auto component_manager = std::make_shared<ComponentManager>();
-    auto processed_entity_ids =
-            read_and_schedule_processing(store, pipeline_context, read_query, read_options, component_manager).get();
-
-    auto [new_column_stats_rows] = component_manager->get_components<ColumnStatsRow>(processed_entity_ids);
+    std::vector<ColumnStatsRow> new_column_stats_rows;
+    if (const auto streaming = ConfigsMap::instance()->get_int("ColumnStats.StreamingCreate", 1); streaming != 0) {
+        new_column_stats_rows = stream_column_stats(store, *pipeline_context, stats_aggregators, streaming == 2);
+    } else {
+        auto component_manager = std::make_shared<ComponentManager>();
+        auto processed_entity_ids =
+                read_and_schedule_processing(store, pipeline_context, read_query, read_options, component_manager)
+                        .get();
+        new_column_stats_rows =
+                std::move(std::get<0>(component_manager->get_components<ColumnStatsRow>(processed_entity_ids)));
+    }
     if (new_column_stats_rows.empty()) {
         return;
     }
