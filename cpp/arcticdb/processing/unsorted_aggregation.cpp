@@ -11,14 +11,68 @@
 #include <arcticdb/processing/aggregation_utils.hpp>
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/util/constants.hpp>
+#include <arcticdb/util/lambda_inlining.hpp>
 #include <arcticdb/column_store/memory_segment.hpp>
 #include <column_stats.pb.h>
 
 #include <cmath>
+#include <limits>
 
 namespace arcticdb {
 
 namespace ranges = std::ranges;
+
+namespace {
+
+// Min/max over one contiguous block of values, ignoring NaN (floats) and NaT (time types), which are counted
+// instead. The running min/max live in kLanes independent accumulators so the loop needs no reassociation to
+// vectorise (a single-accumulator floating-point min reduction does not vectorise without fast-math).
+// `lo`/`hi` start at the identities (+inf/-inf, or the type's max/lowest) so the first real value always wins.
+template<typename RawType, bool is_float, bool is_time>
+ARCTICDB_FLATTEN void min_max_of_block(const RawType* data, size_t n, RawType& lo, RawType& hi, uint64_t& nan_count) {
+    constexpr size_t kLanes = 8;
+    RawType lo_lanes[kLanes];
+    RawType hi_lanes[kLanes];
+    uint64_t nan_lanes[kLanes];
+    for (size_t k = 0; k < kLanes; ++k) {
+        lo_lanes[k] = lo;
+        hi_lanes[k] = hi;
+        nan_lanes[k] = 0;
+    }
+    auto step = [](RawType v, RawType& l, RawType& h, uint64_t& nans) {
+        if constexpr (is_float) {
+            // Comparisons with NaN are false, so a NaN never replaces the running min/max
+            nans += v != v;
+            l = v < l ? v : l;
+            h = v > h ? v : h;
+        } else if constexpr (is_time) {
+            const bool nat = v == NaT;
+            nans += nat;
+            // NaT is the lowest int64, so it can never win the max; keep it out of the min explicitly
+            l = (!nat && v < l) ? v : l;
+            h = v > h ? v : h;
+        } else {
+            l = v < l ? v : l;
+            h = v > h ? v : h;
+        }
+    };
+    size_t i = 0;
+    for (; i + kLanes <= n; i += kLanes) {
+        for (size_t k = 0; k < kLanes; ++k) {
+            step(data[i + k], lo_lanes[k], hi_lanes[k], nan_lanes[k]);
+        }
+    }
+    for (; i < n; ++i) {
+        step(data[i], lo_lanes[0], hi_lanes[0], nan_lanes[0]);
+    }
+    for (size_t k = 0; k < kLanes; ++k) {
+        lo = lo_lanes[k] < lo ? lo_lanes[k] : lo;
+        hi = hi_lanes[k] > hi ? hi_lanes[k] : hi;
+        nan_count += nan_lanes[k];
+    }
+}
+
+} // namespace
 
 void MinMaxAggregatorData::aggregate(const ColumnWithStrings& input_column) {
     details::visit_type(input_column.column_->type().data_type(), [&](auto col_tag) {
@@ -26,51 +80,58 @@ void MinMaxAggregatorData::aggregate(const ColumnWithStrings& input_column) {
         using RawType = typename type_info::RawType;
         if constexpr (!is_sequence_type(type_info::data_type)) {
             // null_count_ tracks rows that are genuinely absent (sparse-map gaps from Arrow
-            // validity bitmaps). nan_count_ tracks in-band sentinel values found while iterating
-            // the dense values (NaN for floats, NaT for time types) - see the for_each below.
+            // validity bitmaps). nan_count_ tracks in-band sentinel values found while scanning
+            // the dense values (NaN for floats, NaT for time types).
             if (input_column.column_->is_sparse()) {
                 const auto sparse_gap_count = input_column.column_->last_row() + 1 - input_column.column_->row_count();
                 null_count_ += static_cast<uint64_t>(sparse_gap_count);
             }
-            auto is_nat_or_nan = []([[maybe_unused]] RawType v) {
-                if constexpr (is_floating_point_type(type_info::data_type)) {
-                    return std::isnan(v);
-                } else if constexpr (is_time_type(type_info::data_type)) {
-                    return v == NaT;
-                } else {
-                    return false;
-                }
-            };
+            constexpr bool is_float = is_floating_point_type(type_info::data_type);
+            constexpr bool is_time = is_time_type(type_info::data_type);
             auto missing_value = []() -> RawType {
-                if constexpr (is_floating_point_type(type_info::data_type)) {
+                if constexpr (is_float) {
                     return std::numeric_limits<RawType>::quiet_NaN();
-                } else if constexpr (is_time_type(type_info::data_type)) {
+                } else if constexpr (is_time) {
                     return static_cast<RawType>(NaT);
                 } else {
                     return RawType{};
                 }
             };
-            [[maybe_unused]] bool any_nan{false};
-            arcticdb::for_each<typename type_info::TDT>(*input_column.column_, [&](auto value) {
-                // In-band sentinel (NaN for floats, NaT for time types) - count it and skip the
-                // min/max update so those reflect only real values.
-                if constexpr (is_floating_point_type(type_info::data_type) || is_time_type(type_info::data_type)) {
-                    if (is_nat_or_nan(value)) {
-                        ++nan_count_;
-                        any_nan = true;
-                        return;
-                    }
+            RawType lo;
+            RawType hi;
+            if constexpr (is_float) {
+                lo = std::numeric_limits<RawType>::infinity();
+                hi = -std::numeric_limits<RawType>::infinity();
+            } else {
+                lo = std::numeric_limits<RawType>::max();
+                hi = std::numeric_limits<RawType>::lowest();
+            }
+            uint64_t value_count = 0;
+            uint64_t nans = 0;
+            // Walk the dense values block by block, exactly as ColumnDataIterator does, so the inner loop runs
+            // over a plain array with the running min/max in registers rather than in the optional<Value> members
+            const auto& blocks = input_column.column_->data().buffer().blocks();
+            for (const IMemBlock* block : blocks) {
+                if (block == nullptr) {
+                    continue;
                 }
+                const size_t n = block->logical_size() / sizeof(RawType);
+                min_max_of_block<RawType, is_float, is_time>(
+                        reinterpret_cast<const RawType*>(block->data()), n, lo, hi, nans
+                );
+                value_count += n;
+            }
+            nan_count_ += nans;
+            if (value_count > nans) {
                 if (ARCTICDB_UNLIKELY(!min_.has_value())) {
-                    min_ = Value{value, type_info::data_type};
-                    max_ = Value{value, type_info::data_type};
+                    min_ = Value{lo, type_info::data_type};
+                    max_ = Value{hi, type_info::data_type};
                 } else {
-                    min_->set(std::min(min_->get<RawType>(), value));
-                    max_->set(std::max(max_->get<RawType>(), value));
+                    min_->set(std::min(min_->get<RawType>(), lo));
+                    max_->set(std::max(max_->get<RawType>(), hi));
                 }
-            });
-            if constexpr (is_floating_point_type(type_info::data_type) || is_time_type(type_info::data_type)) {
-                if (any_nan && !min_) {
+            } else if constexpr (is_float || is_time) {
+                if (nans > 0 && !min_) {
                     // Everything in the block is NaN/NaT, reflect this in the stats
                     min_ = Value{missing_value(), type_info::data_type};
                     max_ = Value{missing_value(), type_info::data_type};
