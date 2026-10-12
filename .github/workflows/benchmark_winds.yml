@@ -515,7 +515,10 @@ jobs:
   # would be a condition that is never false with a cost of its own to read.
   build:
     name: build cp311 wheel
-    needs: [cibw_docker_image]
+    # `plan` decides whether this run profiles (gha 155). Only then does the wheel keep its
+    # C++ symbols and split out the DWARF: about 4 of the build's 10 minutes, wasted on a
+    # run that never profiles.
+    needs: [plan, cibw_docker_image]
     runs-on: ubuntu-22.04
     timeout-minutes: 45
     defaults:
@@ -541,7 +544,7 @@ jobs:
       # the `CMakeUserPresets.json` beside it, and that comment explains the mechanism.
       # It still inherits `linux-release`, so this is still RelWithDebInfo at -O3:
       # benchmarks must never run a debug build.
-      ARCTIC_CMAKE_PRESET: linux-release-symbols
+      ARCTIC_CMAKE_PRESET: ${{ needs.plan.outputs.profiling != 'none' && 'linux-release-symbols' || 'linux-release' }}
       ARCTICDB_BUILD_DIR: /tmp/cpp_build
       CIBW_BUILD: cp311-manylinux_x86_64   # the whole point: exactly one wheel
       CIBW_ENVIRONMENT_PASS_LINUX: SCCACHE_GHA_VERSION ACTIONS_CACHE_URL ACTIONS_RUNTIME_TOKEN
@@ -647,6 +650,7 @@ jobs:
       # That is the symlink. (`prep_cpp_build.sh` re-points `cpp/out` at
       # `$ARCTICDB_BUILD_DIR` inside the container and leaves its contents alone.)
       - name: keep the C++ symbols in the extension
+        if: needs.plan.outputs.profiling != 'none'
         run: |
           cat > cpp/CMakeUserPresets.json <<'JSON'
           {
@@ -686,6 +690,7 @@ jobs:
       # wrong and fail `pip install`. On the host, after auditwheel: the debug file
       # must be split from the exact bytes the workers will run.
       - name: split the DWARF out of the extension
+        if: needs.plan.outputs.profiling != 'none'
         run: |
           python -m pip install wheel --retries 3 --timeout 180
           wheel=$(ls wheelhouse/*.whl)
@@ -710,6 +715,7 @@ jobs:
       # table py-spy reads, and the sizes go into the summary because this is the run
       # that measures what the symbols cost.
       - name: assert the extension carries C++ symbols
+        if: needs.plan.outputs.profiling != 'none'
         run: |
           rm -rf /tmp/wheel-check && mkdir -p /tmp/wheel-check
           wheel=$(ls wheelhouse/*.whl)
@@ -785,6 +791,7 @@ jobs:
       # run's head sha (`gh api repos/<repo>/actions/artifacts?name=<this name>`).
       # Kept longer than the wheel so a run's profiles can be re-resolved for a month.
       - name: store the debug file
+        if: needs.plan.outputs.profiling != 'none'
         uses: actions/upload-artifact@v4
         with:
           name: arcticdb-ext-debug-cp311-manylinux_x86_64
@@ -1156,7 +1163,7 @@ jobs:
       # pulls in llvm-NN), so the install below is a fallback that should never run.
       # `srclines` also stops its resolver after 8 minutes and keeps what it answered.
       - name: resolve native frames to source lines
-        if: always()
+        if: always() && needs.plan.outputs.profiling != 'none'
         continue-on-error: true
         timeout-minutes: 15
         env:
