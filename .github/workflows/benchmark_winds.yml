@@ -43,16 +43,25 @@ on:
         description: Regular expression to run instead of the workers.toml split
         type: string
         default: ''
-      # Ticket 48's manual escape hatch. The profile pass normally decides for itself
-      # — a benchmark new to a lane, or one that crossed the same gate the pull
-      # request check uses (1.20 since gha 38) — and this is how a human overrules it:
-      # every Linux lane
-      # profiles what matches, verdict or no verdict, still inside its ~10-minute
-      # budget. Empty on every run nobody typed it on, which is all of them.
+      # The profile pass is off unless somebody asks for it (gha 155): it added
+      # ~11 minutes to the end of the 2026-10-01 push run, after the last
+      # measurement. Two ways to ask on a dispatch, and they combine:
+      #
+      # `profile` (ticket 48) names benchmarks by regex. Every Linux lane profiles
+      # what matches, verdict or no verdict, inside its ~10-minute budget.
+      #
+      # `profile_flagged` brings back the automatic choice every run made from
+      # ticket 48 to gha 155: a benchmark new to a lane, or one that crossed the
+      # same gate the pull request check uses (1.20 since gha 38). A pull request
+      # asks for the same with the `benchmark-profile` label (`plan the matrix`).
       profile:
         description: Regular expression of benchmarks to profile regardless of verdicts
         type: string
         default: ''
+      profile_flagged:
+        description: Also profile benchmarks new to a lane or past the regression gate
+        type: boolean
+        default: false
 
   # Push to master, LMDB only, so PR runs have recent master results to compare against.
   push:
@@ -90,10 +99,13 @@ jobs:
     timeout-minutes: 20
     # `actions: read` is what `resolve the storage` needs to ask the Actions API whether
     # this commit already has a push run. Naming one permission drops every default, so
-    # `contents: read` — the checkout — has to be named alongside it.
+    # `contents: read` — the checkout — has to be named alongside it. `pull-requests:
+    # read` is `plan the matrix` reading the pull request's labels as they are now
+    # (gha 155), so a label added before a re-run is seen by it.
     permissions:
       contents: read
       actions: read
+      pull-requests: read
     outputs:
       matrix: ${{ steps.plan.outputs.matrix }}
       commit: ${{ steps.commit.outputs.commit }}
@@ -118,6 +130,10 @@ jobs:
       # job output and ride as the `benchmark-reference` artifact instead.
       profile: ${{ steps.plan.outputs.profile }}
       reference_commit: ${{ steps.plan.outputs.reference_commit }}
+      # gha 155: whether the lanes profile at all — `none`, `regex` (only what
+      # `profile` matches) or `flagged` (those, then what regressed or is new).
+      # `arctic-winds plan` decides it once and every lane obeys it.
+      profiling: ${{ steps.plan.outputs.profiling }}
     steps:
       # `fetch-depth: 0`: `plan --all-tags` walks the release tags with `git rev-list`.
       - name: check out ArcticDB
@@ -254,6 +270,13 @@ jobs:
           COMMIT: ${{ steps.commit.outputs.commit }}
           STORAGE: ${{ steps.storage.outputs.storage }}
           PROFILE: ${{ inputs.profile }}
+          # gha 155: the dispatch's checkbox, and on a pull request its labels. The
+          # payload's labels are the fallback; the API's are the ones a re-run sees.
+          PROFILE_FLAGGED: ${{ inputs.profile_flagged }}
+          PROFILE_LABEL: benchmark-profile
+          EVENT_LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RESULTS: "s3://s3.eu-west-1.amazonaws.com:arcticdb-ci-benchmark-results?aws_auth=true&region=eu-west-1&path_prefix=asv_results"
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_S3_ACCESS_KEY }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_S3_SECRET_KEY }}
@@ -301,6 +324,25 @@ jobs:
             reference_ref=HEAD
           fi
           echo "reference: the newest run of $reference_ref stored in $reference_lib"
+
+          # Off unless asked for (gha 155). A pull request asks with its label,
+          # read from the API rather than the event payload: a re-run replays the
+          # payload as it was, so a label added afterwards would never be seen.
+          # The payload is only the fallback for an API that will not answer.
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+            if ! labels=$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" \
+                  --jq '.labels[].name' 2>/dev/null); then
+              echo "::warning::Could not read #${PR_NUMBER}'s labels from the API; using the event's."
+              labels=$(jq -r '.[]?' <<<"$EVENT_LABELS")
+            fi
+            if grep -qxF "$PROFILE_LABEL" <<<"$labels"; then
+              echo "#${PR_NUMBER} is labelled ${PROFILE_LABEL}: profiling what is new or flagged"
+              PROFILE_FLAGGED=true
+            fi
+          fi
+          if [ "$PROFILE_FLAGGED" = "true" ]; then
+            args+=(--profile-flagged)
+          fi
 
           args+=(--profile "$PROFILE"
                  --reference-out reference-values.json
@@ -360,12 +402,16 @@ jobs:
           STORAGE: ${{ steps.storage.outputs.storage }}
           COMMIT: ${{ steps.commit.outputs.commit }}
           WHEEL_PLATFORMS: ${{ steps.plan.outputs.wheel_platforms }}
+          PROFILING: ${{ steps.plan.outputs.profiling }}
         run: |
           {
             echo "### 🌬️ arctic-winds plan"
             echo
             echo "- head commit: \`$COMMIT\`"
             echo "- storage: \`$STORAGE\`"
+            # gha 155: said on every run, because `none` is the answer to "why are
+            # there no flame graphs" and `flagged` the answer to "why did it run long".
+            echo "- profiling: \`$PROFILING\`"
             # The one line that says why a run has two build jobs and the last one had
             # one: a platform is here because some lane's label asked for it.
             echo "- wheels: \`$WHEEL_PLATFORMS\`"
@@ -957,6 +1003,7 @@ jobs:
       # arrive as the `benchmark-reference` artifact the worker downloads.
       profile: ${{ needs.plan.outputs.profile }}
       reference_commit: ${{ needs.plan.outputs.reference_commit }}
+      profiling: ${{ needs.plan.outputs.profiling }}
 
   # Every worker's artifact back into one symbol in the S3 results store, the reports on
   # the job summary, and — on a PR — the regression check against master.

@@ -44,6 +44,10 @@ on:
       # whole reason for the pass — exists at all.
       profile:         {required: false, type: string, default: '', description: "regex of benchmarks to profile regardless of verdicts; the run's `profile` dispatch input"}
       reference_commit: {required: false, type: string, default: '', description: "the master commit whose values this run is compared against, for the log; empty when the plan found none"}
+      # gha 155: the plan's word on whether this lane profiles at all. `none` — the
+      # default, and every run nobody asked to profile — skips the reference download,
+      # the perf install and the pass itself.
+      profiling:       {required: false, type: string, default: none, description: "none, regex or flagged: the run's profiling, as `arctic-winds plan` decided it"}
 
 jobs:
   # `benchmark_commits.yml:8-12` calls the shared `ec2_runner_jobs.yml` rather than inlining
@@ -213,14 +217,14 @@ jobs:
 
       # The reference values for the profile pass (ticket 48), published once by
       # `plan` for the whole run; this lane reads its own slice out of them. Only
-      # on a lane that will actually profile, because a managed one has no use for
-      # them, and `continue-on-error` because the pass is a bonus: a download that
+      # on a lane that will actually profile what is flagged — ours, on a run that
+      # asked for `flagged` (gha 155) — because nothing else divides by them, and `continue-on-error` because the pass is a bonus: a download that
       # 404s (a re-run whose artifacts expired, a plan step that never got there)
       # costs this worker its regression-triggered profiling and nothing else —
       # `arctic-winds bench` takes the missing file as an empty reference and says
       # so in its log.
       - name: download the run's reference values
-        if: inputs.runs_on == ''
+        if: inputs.runs_on == '' && inputs.profiling == 'flagged'
         continue-on-error: true
         uses: actions/download-artifact@v8
         with:
@@ -240,7 +244,7 @@ jobs:
       # EC2 lane — a managed lane is somebody else's machine and does not profile at all
       # (`why_not_profiled`).
       - name: install perf
-        if: inputs.runs_on == ''
+        if: inputs.runs_on == '' && inputs.profiling != 'none'
         continue-on-error: true
         shell: bash
         run: dnf install -y perf
@@ -351,6 +355,7 @@ jobs:
           RUNS_ON: ${{ inputs.runs_on }}
           PROFILE: ${{ inputs.profile }}
           REFERENCE_COMMIT: ${{ inputs.reference_commit }}
+          PROFILING: ${{ inputs.profiling }}
         run: |
           # One artifact, one wheel in it, and the filename carries no SHA (every
           # non-tag build is `0.0.0.dev0`), so the glob is the only way to name it.
@@ -368,11 +373,14 @@ jobs:
           # thing to `bench`, but only the option's absence is honest about a
           # download that never happened. With neither a reference nor a regex the
           # job takes no profile pass at all, which is what a managed lane gets.
-          profile=(--runs-on "$RUNS_ON")
+          #
+          # `--profiling` is the plan's decision (gha 155) and `bench` obeys it: a
+          # reference that arrived starts no pass on its own any more.
+          profile=(--runs-on "$RUNS_ON" --profiling "$PROFILING")
           if [ -f reference/reference-values.json ]; then
             echo "reference values: reference/reference-values.json (${REFERENCE_COMMIT:-none})"
             profile+=(--reference reference/reference-values.json)
-          elif [ -z "$RUNS_ON" ]; then
+          elif [ -z "$RUNS_ON" ] && [ "$PROFILING" = flagged ]; then
             echo "::notice::No reference values reached ${WORKER}; nothing will be profiled for a regression this run."
           fi
           if [ -n "$PROFILE" ]; then
