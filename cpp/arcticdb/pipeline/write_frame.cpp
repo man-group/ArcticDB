@@ -15,6 +15,7 @@
 #include <arcticdb/stream/stream_sink.hpp>
 #include <arcticdb/entity/performance_tracing.hpp>
 #include <arcticdb/stream/aggregator.hpp>
+#include <arcticdb/util/bitset.hpp>
 #include <arcticdb/util/variant.hpp>
 #include <arcticdb/pipeline/frame_utils.hpp>
 #include <arcticdb/pipeline/write_frame.hpp>
@@ -168,13 +169,13 @@ util::BitSet construct_sparse_map(const std::vector<ArrowInputContiguousSlice>& 
     auto dest_pos = 0u;
     for (const auto& slice : slices) {
         if (slice.bitmap_block.has_value()) {
-            for (auto i = 0u; i < slice.size; ++i) {
-                auto pos_in_bitmap_block = slice.bitmap_block.value()->shift() + slice.start_pos + i;
-                auto is_set = get_bit_at(slice.bitmap_block.value()->data(), pos_in_bitmap_block);
-                if (!is_set) {
-                    inserter = dest_pos + i;
-                }
-            }
+            const auto* bitmap_block = slice.bitmap_block.value();
+            for_each_unset_bit(
+                    bitmap_block->data(),
+                    bitmap_block->shift() + slice.start_pos,
+                    slice.size,
+                    [&] ARCTICDB_LAMBDA_INLINE(size_t i) { inserter = bv_size(dest_pos + i); }
+            );
         }
         dest_pos += slice.size;
     }
