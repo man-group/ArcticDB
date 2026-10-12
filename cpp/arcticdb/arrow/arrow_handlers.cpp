@@ -465,7 +465,7 @@ void ArrowBoolHandler::
     const bool truncated = m.truncate_.start_.has_value() || m.truncate_.end_.has_value();
     if (is_sparse && !truncated && source_column.data().buffer().num_blocks() <= 1) {
         // Whole segment: export the validity bitmap block by block, then deposit the dense values at its set bits
-        const auto& sparse_map = *source_column.opt_sparse_map();
+        const auto& sparse_map = source_column.opt_sparse_map().value();
         const size_t num_bits = sparse_map.size();
         const size_t num_values = sparse_map.count();
         util::check(
@@ -495,7 +495,7 @@ void ArrowBoolHandler::
                 positions.first_idx_after_truncation,
                 positions.end_idx_after_truncation
         );
-        const auto& sparse_map = *source_column.opt_sparse_map();
+        const auto& sparse_map = source_column.opt_sparse_map().value();
         // Start rounds down to a byte so the bitmap lines up with the packed values' shift after handle_truncation
         size_t bitmap_start = m.truncate_.start_.value_or(0);
         bitmap_start -= bitmap_start % 8;

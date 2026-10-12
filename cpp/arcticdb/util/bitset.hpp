@@ -90,7 +90,7 @@ inline void set_bit_at(uint8_t* packed_bits, size_t bit_pos, bool value) {
 // range is in bounds.
 template<typename functor>
 requires std::is_invocable_r_v<void, functor, size_t>
-void for_each_unset_bit(const uint8_t* packed_bits, size_t bit_offset, size_t num_bits, functor&& f) {
+void for_each_unset_bit(const uint8_t* packed_bits, size_t bit_offset, size_t num_bits, functor f) {
     static_assert(std::endian::native == std::endian::little, "Word-at-a-time bit scan assumes a little-endian host");
     if (num_bits == 0) {
         return;
