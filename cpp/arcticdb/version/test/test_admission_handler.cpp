@@ -77,6 +77,8 @@ int64_t high_water_for_create_column_stats(
         version_store::PythonVersionStore& pvs, const StreamId& stream_id, int64_t k
 ) {
     ScopedConfig config_guard{PROCESSING_UNITS_BOUND_KEY, k};
+    // These tests bound the processing pipeline's residency; the fused create path is bounded by the read window
+    ScopedConfig pipeline_guard{"ColumnStats.StreamingCreate", 0};
     ResidencyGuard residency_guard;
     pvs.create_column_stats_version(stream_id, VersionQuery{}, std::make_shared<ReadQuery>());
     return util::SegmentResidencyTracker::instance().high_water();
