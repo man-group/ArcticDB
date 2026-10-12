@@ -161,6 +161,12 @@ class Storage {
         return false;
     }
 
+    // Whether reading one key can block the calling thread for a meaningful time. True for every backend that goes
+    // over a network or a device queue; false for backends whose read hands back a view onto memory the process has
+    // already mapped (LMDB, in-memory), where the fetch costs nothing and a read task is pure CPU work. The read
+    // path uses this to decide which thread pool a read task belongs on.
+    [[nodiscard]] virtual bool fetch_blocks() const { return true; }
+
     void visit_object_sizes(KeyType key_type, const std::string& prefix, const ObjectSizesVisitor& visitor) {
         util::check(
                 supports_object_size_calculation(),

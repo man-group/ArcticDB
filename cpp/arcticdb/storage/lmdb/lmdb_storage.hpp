@@ -34,6 +34,9 @@ class LmdbStorage final : public Storage {
 
     std::string name() const final;
 
+    // A read hands back a BufferView onto the memory map and takes no writer lock, so nothing here blocks.
+    bool fetch_blocks() const final { return false; }
+
   private:
     void do_write(KeySegmentPair& key_seg) final;
 

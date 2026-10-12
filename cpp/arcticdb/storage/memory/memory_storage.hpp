@@ -23,6 +23,9 @@ class MemoryStorage final : public Storage {
 
     std::string name() const final;
 
+    // The segments are already in this process's heap.
+    bool fetch_blocks() const final { return false; }
+
   private:
     void do_write(KeySegmentPair& key_seg) final;
 

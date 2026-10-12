@@ -68,6 +68,9 @@ class Library {
 
     bool supports_object_size_calculation() { return storages_->supports_object_size_calculation(); }
 
+    // See Storage::fetch_blocks. Used by the read path to pick a thread pool for a read task.
+    [[nodiscard]] bool fetch_blocks() const { return storages_->fetch_blocks(); }
+
     void visit_object_sizes(KeyType type, const std::string& prefix, const ObjectSizesVisitor& visitor) {
         ARCTICDB_SAMPLE(VisitObjectSizes, 0)
         storages_->visit_object_sizes(type, prefix, visitor);

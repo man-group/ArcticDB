@@ -63,6 +63,13 @@ class Storages {
         });
     }
 
+    // True unless EVERY storage a read could land on is non-blocking: a fall-through read can reach any of them.
+    [[nodiscard]] bool fetch_blocks() const {
+        return std::any_of(storages_.begin(), storages_.end(), [](const auto& storage) {
+            return storage->fetch_blocks();
+        });
+    }
+
     bool fast_delete() { return primary().fast_delete(); }
 
     void cleanup() { primary().cleanup(); }

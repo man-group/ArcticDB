@@ -10,9 +10,12 @@
 
 #include <arcticdb/async/task_scheduler.hpp>
 #include <arcticdb/util/clock.hpp>
+#include <arcticdb/util/configs_map.hpp>
 #include <arcticdb/storage/store.hpp>
 #include <arcticdb/storage/library.hpp>
 #include <folly/futures/Future.h>
+#include <folly/executors/CPUThreadPoolExecutor.h>
+#include <folly/executors/thread_factory/NamedThreadFactory.h>
 #include <arcticdb/async/tasks.hpp>
 #include <arcticdb/storage/key_segment_pair.hpp>
 
@@ -30,17 +33,125 @@ DeDupLookupResult lookup_match_in_dedup_map(
         const std::shared_ptr<DeDupMap>& de_dup_map, storage::KeySegmentPair& key_seg
 );
 
+/*
+ * Read-path thread-pool routing.
+ *
+ * By default a read is one IO task carrying both the storage fetch and the decode continuation, the latter running
+ * inline on the IO thread. folly's IOThreadPoolExecutor binds a task to one EventBase thread's private queue at
+ * enqueue time and has no work stealing, so a long decode blocks every task queued behind it on that thread even
+ * while other IO threads are idle. The CPU pool has a shared queue and is work-conserving.
+ *
+ * Two routings are available, off by default:
+ *
+ *   ReadPath.DecodeOnCpuPool               hop the decode continuation to the CPU pool instead of running it inline.
+ *   ReadPath.CpuPoolForNonBlockingStorage  submit the whole read task to the CPU pool when the storage's fetch does
+ *                                          not block (Storage::fetch_blocks) -- on such a backend an "IO" task is
+ *                                          pure CPU work and does not need an IO thread at all.
+ *
+ * Both are read once per process: they choose a scheduling shape, not a per-read decision.
+ */
+inline bool decode_on_cpu_pool() {
+    static const bool enabled = ConfigsMap::instance()->get_int("ReadPath.DecodeOnCpuPool", 0) != 0;
+    return enabled;
+}
+
+inline bool cpu_pool_for_non_blocking_storage() {
+    static const bool enabled = ConfigsMap::instance()->get_int("ReadPath.CpuPoolForNonBlockingStorage", 0) != 0;
+    return enabled;
+}
+
+/*
+ * ReadPath.ContinueInReadTask: run the continuation (the decode) inside the read task itself whenever the fetch has
+ * already completed, which it always has on a synchronous storage (LMDB, in-memory: Storages::async_read wraps the
+ * result in makeFuture). Today's shape returns the fetched future from the IO task and attaches the continuation
+ * afterwards with thenValueInline, so the decode runs on whichever thread gets there second: the IO thread that
+ * completed the task (the usual case), or -- when the IO thread finished before the submitter attached its callback
+ * -- the submitting thread, which on the clause path is a CPU-pool thread inside fill_read_window. This switch removes
+ * that race: the decode always runs on the IO thread that did the read.
+ */
+inline bool continue_in_read_task() {
+    static const bool enabled = ConfigsMap::instance()->get_int("ReadPath.ContinueInReadTask", 0) != 0;
+    return enabled;
+}
+
+template<typename Callable>
+struct ReadAndContinueTask : BaseTask {
+    ReadCompressedTask<Callable> read_;
+
+    explicit ReadAndContinueTask(ReadCompressedTask<Callable>&& read) : read_(std::move(read)) {}
+
+    ARCTICDB_MOVE_ONLY_DEFAULT(ReadAndContinueTask)
+
+    auto operator()() {
+        auto key_seg_continuation = read_();
+        auto& key_seg_fut = key_seg_continuation.key_seg_;
+        auto& continuation = key_seg_continuation.continuation_;
+        if (key_seg_fut.isReady()) {
+            return folly::makeFutureWith([&]() mutable { return continuation(std::move(key_seg_fut).value()); });
+        }
+        return std::move(key_seg_fut)
+                .thenValueInline([continuation = std::move(continuation)](storage::KeySegmentPair&& key_seg) mutable {
+                    return continuation(std::move(key_seg));
+                });
+    }
+};
+
+/*
+ * ReadPath.SharedQueueIOPool (measurement only): run each read task -- fetch and decode together, as today -- on a
+ * separate pool of io_thread_count() threads with ONE shared queue (folly::CPUThreadPoolExecutor) instead of the IO
+ * pool. folly's IOThreadPoolExecutor binds each task to a thread round-robin at enqueue time and never steals, so a
+ * read's N segments are dealt 8-or-9 per thread up front and the read waits for the unluckiest thread. A shared queue
+ * is work-conserving: a thread that finishes early takes the next segment.
+ */
+inline bool shared_queue_io_pool() {
+    static const bool enabled = ConfigsMap::instance()->get_int("ReadPath.SharedQueueIOPool", 1) != 0;
+    return enabled;
+}
+
+inline folly::Executor& shared_queue_io_executor() {
+    static auto* exec = new folly::CPUThreadPoolExecutor(
+            async::TaskScheduler::instance()->io_thread_count(),
+            std::make_shared<folly::NamedThreadFactory>("IOShared")
+    );
+    return *exec;
+}
+
 template<typename Callable>
 auto read_and_continue(
         const VariantKey& key, std::shared_ptr<storage::Library> library, const storage::ReadKeyOpts& opts, Callable&& c
 ) {
-    return async::submit_io_task(ReadCompressedTask{key, library, opts, std::forward<decltype(c)>(c)})
-            .thenValueInline([](auto&& result) mutable {
-                auto&& [key_seg_fut, continuation] = std::forward<decltype(result)>(result);
-                return std::move(key_seg_fut)
-                        .thenValueInline([continuation = std::move(continuation)](storage::KeySegmentPair&& key_seg
-                                         ) mutable { return continuation(std::move(key_seg)); });
-            });
+    auto task = ReadCompressedTask{key, library, opts, std::forward<decltype(c)>(c)};
+    if (shared_queue_io_pool()) {
+        return folly::via(
+                folly::getKeepAliveToken(shared_queue_io_executor()),
+                ReadAndContinueTask<typename decltype(task)::ContinuationType>{std::move(task)}
+        );
+    }
+    if (continue_in_read_task() && !decode_on_cpu_pool() && !cpu_pool_for_non_blocking_storage()) {
+        return async::submit_io_task(ReadAndContinueTask<typename decltype(task)::ContinuationType>{std::move(task)});
+    }
+    const bool on_cpu_pool = cpu_pool_for_non_blocking_storage() && !library->fetch_blocks();
+    auto fetched = on_cpu_pool ? async::submit_cpu_task(std::move(task)) : async::submit_io_task(std::move(task));
+
+    // Measurement only: ReadPath.DecodeOnCpuPoolEvery=N hops every Nth decode to the CPU pool, to emulate on an
+    // uncontended machine the share of decodes that the submit/attach race puts on the CPU pool on a small runner.
+    static const int64_t every = ConfigsMap::instance()->get_int("ReadPath.DecodeOnCpuPoolEvery", 0);
+    static std::atomic<uint64_t> counter{0};
+    const bool hop_this = decode_on_cpu_pool() || (every > 0 && counter.fetch_add(1) % every == 0);
+    return std::move(fetched).thenValueInline([hop = hop_this](auto&& result) mutable {
+        auto&& [key_seg_fut, continuation] = std::forward<decltype(result)>(result);
+        if (hop) {
+            return std::move(key_seg_fut)
+                    .via(&async::cpu_executor())
+                    .thenValue([continuation = std::move(continuation)](storage::KeySegmentPair&& key_seg) mutable {
+                        return continuation(std::move(key_seg));
+                    });
+        }
+        return std::move(key_seg_fut)
+                .thenValueInline([continuation = std::move(continuation)](storage::KeySegmentPair&& key_seg) mutable {
+                    return continuation(std::move(key_seg));
+                });
+    });
 }
 
 /*
