@@ -25,6 +25,75 @@ from benchmarks.common import lib_name
 random.seed(42)
 rng = np.random.default_rng(42)
 
+# ---- EXPERIMENT ONLY (compact-strings-experiment): per-call diagnostics, never timed ----
+import sys
+
+_AW_LINUX = sys.platform.startswith("linux")
+# Pin every thread of the benchmark process to a small fixed CPU set (set True on the -pin branch)
+_AW_PIN = False
+_AW_PIN_COUNT = 4
+
+
+def _aw_pin_set():
+    """Up to _AW_PIN_COUNT logical CPUs, skipping CPUs 0-1, each on a distinct physical core."""
+    chosen, cores = [], set()
+    for cpu in sorted(os.sched_getaffinity(0)):
+        if cpu < 2:
+            continue
+        try:
+            base = f"/sys/devices/system/cpu/cpu{cpu}/topology"
+            core = (open(f"{base}/physical_package_id").read().strip(), open(f"{base}/core_id").read().strip())
+        except OSError:
+            core = ("?", str(cpu))
+        if core in cores:
+            continue
+        cores.add(core)
+        chosen.append(cpu)
+        if len(chosen) == _AW_PIN_COUNT:
+            break
+    return set(chosen)
+
+
+_AW_ALL_CPUS = sorted(os.sched_getaffinity(0)) if _AW_LINUX else []
+_AW_PIN_SET = _aw_pin_set() if (_AW_LINUX and _AW_PIN) else set()
+_AW_PIN_LOGGED = False
+
+
+def _aw_pin_all_threads():
+    global _AW_PIN_LOGGED
+    bad = []
+    tids = os.listdir("/proc/self/task")
+    for tid in tids:
+        try:
+            os.sched_setaffinity(int(tid), _AW_PIN_SET)
+            if os.sched_getaffinity(int(tid)) != _AW_PIN_SET:
+                bad.append(tid)
+        except OSError:
+            pass
+    if not _AW_PIN_LOGGED or bad:
+        _AW_PIN_LOGGED = True
+        print(
+            f"AWPIN pid={os.getpid()} all={_AW_ALL_CPUS} pin={sorted(_AW_PIN_SET)} threads={len(tids)} mismatched={bad}",
+            file=sys.stderr,
+            flush=True,
+        )
+
+
+def _aw_threads():
+    """{tid: (ns on CPU, last CPU)} for every thread of this process."""
+    out = {}
+    for tid in os.listdir("/proc/self/task"):
+        try:
+            with open(f"/proc/self/task/{tid}/schedstat") as f:
+                ns = int(f.read().split()[0])
+            with open(f"/proc/self/task/{tid}/stat") as f:
+                last_cpu = int(f.read().rsplit(")", 1)[1].split()[36])
+            out[tid] = (ns, last_cpu)
+        except (OSError, ValueError, IndexError):
+            pass
+    return out
+
+
 
 class CompactDataBase:
     def __init__(self):
@@ -67,6 +136,8 @@ class CompactDataBase:
             lib.append(self.SYM, df)
 
     def _setup(self, lib_name, target_rows_per_segment):
+        if _AW_PIN_SET:
+            _aw_pin_all_threads()
         os.mkdir(self.LMDB_DIR)
         # Copy the config database and the relevant library database for these benchmark parameters to the actual
         # LMDB directory where compaction will happen
@@ -85,8 +156,28 @@ class CompactDataBase:
         assert self.lib.compact_data_explain_plan(self.SYM, rows_per_segment=target_rows_per_segment).will_do_work
         # read the symbol to warm up the cache
         self.lib.read(self.SYM)
+        if _AW_LINUX:
+            self._aw_lib = lib_name.replace(" ", "")
+            self._aw_before = _aw_threads()
+            self._aw_t0 = time.perf_counter()
 
     def _teardown(self):
+        if _AW_LINUX and getattr(self, "_aw_t0", None) is not None:
+            wall = time.perf_counter() - self._aw_t0
+            after = _aw_threads()
+            used = {
+                tid: (ns - self._aw_before.get(tid, (0, 0))[0], cpu)
+                for tid, (ns, cpu) in after.items()
+                if ns - self._aw_before.get(tid, (0, 0))[0] > 200_000
+            }
+            cpu_ms = sum(ns for ns, _ in used.values()) / 1e6
+            print(
+                f"AWCALL {self._aw_lib} wall_ms={wall * 1e3:.3f} cpu_ms={cpu_ms:.3f} "
+                f"threads_used={len(used)} threads={len(after)} lastcpus={sorted({c for _, c in used.values()})}",
+                file=sys.stderr,
+                flush=True,
+            )
+            self._aw_t0 = None
         shutil.rmtree(self.LMDB_DIR)
 
     def compact_data(self, target_rows_per_segment):
