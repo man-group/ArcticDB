@@ -59,6 +59,9 @@ on:
         description: >-
           Semicolon-separated `<name>:<full sha>` pairs. The FIRST is the baseline every
           other arm is divided by. Names are short, lowercase, and name the artifacts.
+          Optionally `<name>:<full sha>@<requirement>[@<requirement>…]`: the arm's bench
+          venv is installed with those requirements as uv overrides (e.g.
+          `@asv-runner==0.2.5`). Two arms may share a sha (one wheel is built for it).
         type: string
         required: true
       lanes:
@@ -108,6 +111,7 @@ jobs:
     timeout-minutes: 10
     outputs:
       arms: ${{ steps.plan.outputs.arms }}
+      builds: ${{ steps.plan.outputs.builds }}
       lanes: ${{ steps.plan.outputs.lanes }}
       bucket: ${{ steps.plan.outputs.bucket }}
     steps:
@@ -130,27 +134,43 @@ jobs:
 
           NAME = re.compile(r"^[a-z][a-z0-9-]{0,23}$")
           SHA = re.compile(r"^[0-9a-f]{40}$")
+          # A uv override, one requirement with an exact-ish version: `asv-runner==0.2.5`.
+          PIN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*(==|~=|!=|<=|>=|<|>)[A-Za-z0-9.*+!_-]+$")
           arms = []
           for spec in os.environ["ARMS"].split(";"):
               if not spec.strip():
                   continue
               parts = [part.strip() for part in spec.split(":")]
               if len(parts) != 2:
-                  fail(f"arm {spec!r} is not <name>:<sha>")
-              name, sha = parts
+                  fail(f"arm {spec!r} is not <name>:<sha>[@<requirement>…]")
+              name, rest = parts
+              sha, *pins = [part.strip() for part in rest.split("@")]
               if not NAME.match(name):
                   fail(f"arm name {name!r}: lowercase letters, digits and '-', at most 24")
               # actions/checkout reads anything shorter as a branch name (plan.py's
               # `commits_for` learned this on the first shadow run).
               if not SHA.match(sha):
                   fail(f"arm {name}: {sha!r} is not a full 40-character sha")
-              arms.append({"arm": name, "sha": sha, "sha8": sha[:8]})
-          if not 2 <= len(arms) <= 4:
-              fail(f"{len(arms)} arms; an A/B wants 2, and more than 4 will not fit a lane's budget")
-          for key in ("arm", "sha8"):
-              values = [arm[key] for arm in arms]
-              if len(set(values)) != len(values):
-                  fail(f"two arms share a {key}: {values}")
+              for pin in pins:
+                  if not PIN.match(pin):
+                      fail(f"arm {name}: {pin!r} is not a requirement like asv-runner==0.2.5")
+              arms.append({"arm": name, "sha": sha, "sha8": sha[:8], "pins": "@".join(pins)})
+          if not 2 <= len(arms) <= 8:
+              fail(f"{len(arms)} arms; an A/B wants 2, and more than 8 will not fit a lane's budget")
+          names = [arm["arm"] for arm in arms]
+          if len(set(names)) != len(names):
+              fail(f"two arms share a name: {names}")
+          # Two arms may share a commit (an A/A, or one commit under two pinned
+          # environments): one wheel per distinct sha, named after its first arm, so
+          # with distinct shas every arm builds `wheel-<arm>` exactly as before.
+          builds = {}
+          for arm in arms:
+              builds.setdefault(arm["sha"], {"arm": arm["arm"], "sha": arm["sha"], "sha8": arm["sha8"]})
+              arm["build"] = builds[arm["sha"]]["arm"]
+          if len({b["sha8"] for b in builds.values()}) != len(builds):
+              fail("two different shas share their first 8 characters")
+          if os.environ["PROFILE"].strip() and len(builds) != len(arms):
+              fail("the profile pass names its files by sha8, so it needs every arm on its own sha")
 
           lanes = []
           for spec in os.environ["LANES"].split(";"):
@@ -186,6 +206,7 @@ jobs:
               fail(f"budget_minutes={budget}: 10 to 150")
 
           print("arms=" + json.dumps(arms, separators=(",", ":")))
+          print("builds=" + json.dumps(list(builds.values()), separators=(",", ":")))
           print("lanes=" + json.dumps(lanes, separators=(",", ":")))
           # One name for every SEAWEED lane's bucket, each on its own box's server.
           print(f"bucket=arcticdb-ab-{int(time.time())}-{secrets.token_hex(4)}")
@@ -208,9 +229,9 @@ jobs:
             echo "- rounds: $ROUNDS per lane, order rotated each round, inside $BUDGET min"
             echo "- profile pass: ${PROFILE:+\`$PROFILE\`, one per arm after the rounds}${PROFILE:-none}"
             echo
-            echo "| arm | sha | role |"
-            echo "| --- | --- | --- |"
-            jq -r 'to_entries[] | "| \(.value.arm) | `\(.value.sha)` | \(if .key == 0 then "baseline" else "treatment" end) |"' <<<"$ARMS_JSON"
+            echo "| arm | sha | role | overrides |"
+            echo "| --- | --- | --- | --- |"
+            jq -r 'to_entries[] | "| \(.value.arm) | `\(.value.sha)` | \(if .key == 0 then "baseline" else "treatment" end) | \(.value.pins // "" | gsub("@"; " ")) |"' <<<"$ARMS_JSON"
             echo
             echo "| lane | instance | storage |"
             echo "| --- | --- | --- |"
@@ -240,7 +261,7 @@ jobs:
     strategy:
       fail-fast: true   # an arm without a wheel is an experiment without an arm
       matrix:
-        include: ${{ fromJson(needs.plan.outputs.arms) }}
+        include: ${{ fromJson(needs.plan.outputs.builds) }}
     runs-on: ubuntu-22.04
     timeout-minutes: 45
     defaults:

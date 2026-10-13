@@ -28,7 +28,7 @@ on:
       lane:           {required: true,  type: string, description: "the lane's name: asv's --machine, and the artifact is ab-<lane>"}
       instance_type:  {required: true,  type: string, description: "EC2 instance type"}
       storage:        {required: true,  type: string, description: "LMDB, or SEAWEED for the AMAZON benchmarks against the box's own SeaweedFS"}
-      arms:           {required: true,  type: string, description: "the plan's JSON list of {arm, sha, sha8}; the first is the baseline"}
+      arms:           {required: true,  type: string, description: "the plan's JSON list of {arm, sha, sha8, build, pins}; the first is the baseline"}
       suite:          {required: true,  type: string, description: "the asv --bench regex"}
       rounds:         {required: true,  type: string, description: "interleaved rounds; each runs every arm once"}
       budget_minutes: {required: true,  type: string, description: "wall minutes the timed rounds may take"}
@@ -171,8 +171,11 @@ jobs:
         run: |
           set -uo pipefail
           ARM_LINES=()
+          # `build` names the arm's wheel (an arm sharing a sha shares its wheel) and
+          # `pins` its uv overrides, `@`-joined, or `-` for none. Both default to the
+          # pre-pin behaviour for a plan that does not carry them.
           while read -r line; do ARM_LINES+=("$line"); done \
-            < <(python3 -c 'import json, os; [print(a["arm"], a["sha"]) for a in json.loads(os.environ["ARMS"])]')
+            < <(python3 -c 'import json, os; [print(a["arm"], a["sha"], a.get("build") or a["arm"], a.get("pins") or "-") for a in json.loads(os.environ["ARMS"])]')
           n=${#ARM_LINES[@]}
           storage=LMDB
           if [ "$STORAGE" = SEAWEED ]; then storage=REAL; fi
@@ -194,17 +197,25 @@ jobs:
             round_start=$(date +%s)
             for k in $(seq 0 $(( n - 1 ))); do
               i=$(( (k + r - 1) % n ))
-              read -r arm sha <<<"${ARM_LINES[$i]}"
+              read -r arm sha build pins <<<"${ARM_LINES[$i]}"
               tree="$AB_ROOT/trees/$arm"
               home="$AB_ROOT/home-$arm"
-              wheel=$(find "wheels/wheel-$arm" -name '*.whl' | head -1)
+              wheel=$(find "wheels/wheel-$build" -name '*.whl' | head -1)
               results=$(python -c 'import sys; from pathlib import Path; from arctic_winds.asv_conf import read_asv_conf; print(read_asv_conf(Path(sys.argv[1])).results_path)' "$tree")
               rm -rf "${home:?}/arctic-winds/venv" "${results:?}/${LANE:?}"
               mkdir -p "$home"
+              # An arm's pins reach `bench`'s `uv pip install` calls as uv overrides
+              # (UV_OVERRIDE), which replace every other requirement on that package —
+              # asv's own `asv-runner>=…` included. Empty for an unpinned arm.
+              overrides=""
+              if [ "$pins" != "-" ]; then
+                overrides="$AB_ROOT/overrides-$arm.txt"
+                tr '@' '\n' <<<"$pins" > "$overrides"
+              fi
               out="artifacts/rounds/${LANE}-r$(printf '%02d' "$r")-${arm}.json"
-              echo "::group::round $r/$ROUNDS position $k: $arm (${sha:0:8})"
+              echo "::group::round $r/$ROUNDS position $k: $arm (${sha:0:8})${overrides:+ overrides: ${pins//@/ }}"
               started=$(date +%s.%N)
-              if arctic-winds bench \
+              if env ${overrides:+UV_OVERRIDE="$overrides"} arctic-winds bench \
                   --worker "$LANE" \
                   --suite "$SUITE" \
                   --commit "$sha" \
@@ -222,10 +233,12 @@ jobs:
                 status=failed
               fi
               ended=$(date +%s.%N)
+              # What the call actually measured with, read back from its own venv.
+              runner=$("$home/arctic-winds/venv/bin/python" -c 'import importlib.metadata as m; print(m.version("asv_runner"))' 2>/dev/null || echo unknown)
               echo "::endgroup::"
-              printf '{"lane":"%s","round":%d,"position":%d,"arm":"%s","sha":"%s","status":"%s","started":%s,"ended":%s,"file":"%s"}\n' \
-                "$LANE" "$r" "$k" "$arm" "$sha" "$status" "$started" "$ended" "$(basename "$out")" >> "$manifest"
-              echo "round $r $arm: $status in $(python3 -c "print(round($ended - $started))")s"
+              printf '{"lane":"%s","round":%d,"position":%d,"arm":"%s","sha":"%s","status":"%s","started":%s,"ended":%s,"file":"%s","asv_runner":"%s"}\n' \
+                "$LANE" "$r" "$k" "$arm" "$sha" "$status" "$started" "$ended" "$(basename "$out")" "$runner" >> "$manifest"
+              echo "round $r $arm: $status in $(python3 -c "print(round($ended - $started))")s (asv_runner $runner)"
             done
             last=$(( $(date +%s) - round_start ))
             completed=$r
@@ -259,11 +272,11 @@ jobs:
           storage=LMDB
           if [ "$STORAGE" = SEAWEED ]; then storage=REAL; fi
           mkdir -p artifacts/profile
-          python3 -c 'import json, os; [print(a["arm"], a["sha"]) for a in json.loads(os.environ["ARMS"])]' \
-          | while read -r arm sha; do
+          python3 -c 'import json, os; [print(a["arm"], a["sha"], a.get("build") or a["arm"]) for a in json.loads(os.environ["ARMS"])]' \
+          | while read -r arm sha build; do
               tree="$AB_ROOT/trees/$arm"
               home="$AB_ROOT/home-$arm"
-              wheel=$(find "wheels/wheel-$arm" -name '*.whl' | head -1)
+              wheel=$(find "wheels/wheel-$build" -name '*.whl' | head -1)
               results=$(python -c 'import sys; from pathlib import Path; from arctic_winds.asv_conf import read_asv_conf; print(read_asv_conf(Path(sys.argv[1])).results_path)' "$tree")
               rm -rf "${home:?}/arctic-winds/venv" "${results:?}/${LANE:?}"
               mkdir -p "$home"
