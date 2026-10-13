@@ -75,6 +75,7 @@ A root `Makefile` provides shortcuts for common tasks. User-specific overrides (
 | `make activate NAME=x` | Print activate path. Use: `source $(make activate NAME=x)` | `VENV_DIR` |
 | `make lint` | Run formatters in-place | |
 | `make lint-check` | Check formatting without changes | |
+| `make typecheck` | Run mypy over `python/arcticdb` in a dedicated venv (also gated in CI) | `VENV_DIR` |
 | `make tidy-diff` | clang-tidy on changed lines only | `TIDY_BASE=` base ref, `CLANG_TIDY=` binary, `CLANG_TIDY_DIFF=` wrapper |
 | `make tidy` | clang-tidy over all of `cpp/arcticdb` | `CLANG_TIDY=`, `RUN_CLANG_TIDY=`, `CMAKE_JOBS=` |
 | `make build` / `build-debug` | Configure, build, and symlink `arcticdb_ext` | `RELEASE_PRESET` / `DEBUG_PRESET`, `CMAKE_JOBS` |
