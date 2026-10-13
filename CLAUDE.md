@@ -230,7 +230,9 @@ category and appear as annotations on the lines a PR touches. `clang-tidy-sarif`
 absolute paths it finds in `compile_commands.json`, so `Sarif.Multitool rebaseuri` rebases
 them onto a `SRCROOT` uriBaseId before the upload; code scanning cannot resolve absolute
 paths to blobs. The multitool is a .NET 8 tool; the ubuntu-24.04 runner ships .NET 8, so
-nothing is installed for it.
+nothing is installed for it. `build_tooling/dedup_sarif.py` then drops results that match on
+file, line, column, severity, rule and message, since code scanning rejects a run with more
+than 25,000 results before it merges anything.
 
 Locally, `make tidy-diff` and `make tidy` need a **clang-configured** debug build. clang-tidy
 uses clang's driver, so a gcc-configured `compile_commands.json` produces spurious errors
@@ -241,8 +243,8 @@ install puts them elsewhere.
 Two things to know before reading the raw output:
 
 - clang-tidy re-reports a header diagnostic once per translation unit that includes the
-  header, so raw counts over-count by orders of magnitude on this codebase, including the
-  code scanning alert count from the (undeduplicated) SARIF upload.
+  header, so raw counts in the log over-count by orders of magnitude on this codebase. The
+  SARIF upload is deduplicated.
 - Diagnostics go to **stderr**, so any invocation that captures them needs `2>&1`.
 - clang-tidy exits 0 when it only emits warnings, and neither wrapper is passed
   `-warnings-as-errors` (`.clang-tidy` keeps `WarningsAsErrors` empty so clangd does not flag

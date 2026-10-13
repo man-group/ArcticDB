@@ -21,7 +21,7 @@ on:
 jobs:
   clang-tidy:
     name: analyse
-    timeout-minutes: 180
+    timeout-minutes: 300
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -178,6 +178,7 @@ jobs:
           sed -i -E 's@("uri"[[:space:]]*:[[:space:]]*")/@\1file:///@g' clang-tidy.sarif
           "$HOME/.dotnet-tools/sarif" rebaseuri clang-tidy.sarif \
             --base-path-value "$GITHUB_WORKSPACE" --base-path-token SRCROOT --log Inline
+          python3 build_tooling/dedup_sarif.py clang-tidy.sarif
 
       - name: Upload SARIF to code scanning
         if: always() && steps.changes.outputs.cpp_changed == 'true' && hashFiles('clang-tidy.sarif') != ''
