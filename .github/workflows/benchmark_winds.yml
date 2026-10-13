@@ -62,6 +62,32 @@ on:
         description: Also profile benchmarks new to a lane or past the regression gate
         type: boolean
         default: false
+      # gha 156: re-measure one worker of a commit this branch already stored — a lane
+      # that died, or one whose numbers look like noise — without re-running the other
+      # workers. The run plans that one lane at `commit` on the instance type and AMI
+      # the stored rows recorded, builds the commit's wheel, rents and returns its own
+      # EC2 instance, and `collect` merges the new rows into the commit's results as
+      # a new version (the version before keeps the old values). `benchmarks` narrows
+      # it to the benchmarks a regex finds; `reason` is stamped on every replaced value
+      # and shown on the site's run page. `profile`/`profile_flagged`/`storage` apply
+      # as on any dispatch. See docs/arcticdb/README.md, "Re-running a worker or flaky
+      # benchmarks".
+      worker:
+        description: Re-measure only this worker (its workers.toml name) at `commit`
+        type: string
+        default: ''
+      commit:
+        description: With `worker`, the commit to re-measure (a SHA or ref; blank = this branch's head)
+        type: string
+        default: ''
+      benchmarks:
+        description: With `worker`, re-measure only the benchmarks this regex finds
+        type: string
+        default: ''
+      reason:
+        description: With `worker`, why (stamped on every replaced value)
+        type: string
+        default: ''
       # The Windows lane is on request too: its own wheel and worker add about 6 minutes
       # to a run's wall time, and its numbers never gate. The nightly always runs it; a
       # pull request asks with the `benchmark-windows` label (`keep the Windows lane`).
@@ -141,6 +167,10 @@ jobs:
       # `profile` matches) or `flagged` (those, then what regressed or is new).
       # `arctic-winds plan` decides it once and every lane obeys it.
       profiling: ${{ steps.plan.outputs.profiling }}
+      # gha 156: the worker a `worker` dispatch re-measures, empty on every other run.
+      # The build checks out the planned commit only when it is set, and `collect`
+      # merges instead of writing the commit whole.
+      remeasure: ${{ steps.plan.outputs.remeasure }}
     steps:
       # `fetch-depth: 0`: `plan --all-tags` walks the release tags with `git rev-list`.
       - name: check out ArcticDB
@@ -171,11 +201,31 @@ jobs:
 
       - name: resolve the commit
         id: commit
+        env:
+          REMEASURE: ${{ inputs.worker }}
+          REQUESTED: ${{ inputs.commit }}
+          BENCHMARKS: ${{ inputs.benchmarks }}
         run: |
           # On a pull_request this is the merge commit actions/checkout produced, which is
           # what today's pipeline benchmarks too (`asv run … HEAD^!`). Resolved before the
           # storage, which asks the Actions API about this exact SHA.
-          printf 'commit=%s\n' "$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          #
+          # gha 156: a `worker` dispatch re-measures the commit it names instead, typed
+          # however its author typed it — a short SHA, a tag — and resolved here, in
+          # the full clone, because every job downstream needs all 40 characters.
+          if [ -z "$REMEASURE" ] && { [ -n "$REQUESTED" ] || [ -n "$BENCHMARKS" ]; }; then
+            echo "::error::\`commit\` and \`benchmarks\` say what a re-measure re-measures; name the \`worker\` too."
+            exit 1
+          fi
+          if [ -n "$REMEASURE" ] && [ -n "$REQUESTED" ]; then
+            if ! commit=$(git rev-parse --verify "${REQUESTED}^{commit}"); then
+              echo "::error::${REQUESTED} is not a commit this branch's clone can reach."
+              exit 1
+            fi
+          else
+            commit=$(git rev-parse HEAD)
+          fi
+          printf 'commit=%s\n' "$commit" >> "$GITHUB_OUTPUT"
 
       # LMDB on push and PRs, REAL on the nightly, whatever the dispatch asked for
       # otherwise. `analysis_workflow.yml:79` keys ALL off `github.ref_name == 'master'`;
@@ -280,6 +330,8 @@ jobs:
           # gha 155: the dispatch's checkbox, and on a pull request its labels. The
           # payload's labels are the fallback; the API's are the ones a re-run sees.
           PROFILE_FLAGGED: ${{ inputs.profile_flagged }}
+          REMEASURE: ${{ inputs.worker }}
+          BENCHMARKS: ${{ inputs.benchmarks }}
           PROFILE_LABEL: benchmark-profile
           EVENT_LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
@@ -351,6 +403,15 @@ jobs:
             args+=(--profile-flagged)
           fi
 
+          # gha 156: one lane at one commit, on the machine the commit's stored rows
+          # recorded — read from the library `collect` will merge into, which on a
+          # dispatch is `reference_lib` above (a ref's own library, or master's).
+          # A store that cannot be read fails the plan here: a re-measure that could
+          # not check the machine would be free to move the series.
+          if [ -n "$REMEASURE" ]; then
+            args+=(--remeasure "$REMEASURE" --benchmarks "$BENCHMARKS" --library "$reference_lib")
+          fi
+
           args+=(--profile "$PROFILE"
                  --reference-out reference-values.json
                  --results "$RESULTS"
@@ -389,13 +450,16 @@ jobs:
           WHEEL_PLATFORMS: ${{ steps.plan.outputs.wheel_platforms }}
           MEASURE_ONLY: ${{ steps.plan.outputs.measure_only }}
           WINDOWS: ${{ inputs.windows }}
+          REMEASURE: ${{ inputs.worker }}
           WINDOWS_LABEL: benchmark-windows
           EVENT_LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           want=false
-          if [ "$WINDOWS" = "true" ] || [ "$GITHUB_EVENT_NAME" = schedule ]; then
+          # A re-measure (gha 156) planned exactly the lane it was asked for, and a
+          # Windows lane named there is asked for by name.
+          if [ "$WINDOWS" = "true" ] || [ "$GITHUB_EVENT_NAME" = schedule ] || [ -n "$REMEASURE" ]; then
             want=true
           elif [ "$GITHUB_EVENT_NAME" = pull_request ]; then
             if ! labels=$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" \
@@ -455,11 +519,19 @@ jobs:
           COMMIT: ${{ steps.commit.outputs.commit }}
           WHEEL_PLATFORMS: ${{ steps.lanes.outputs.wheel_platforms }}
           PROFILING: ${{ steps.plan.outputs.profiling }}
+          REMEASURE: ${{ inputs.worker }}
+          BENCHMARKS: ${{ inputs.benchmarks }}
+          REASON: ${{ inputs.reason }}
         run: |
           {
             echo "### 🌬️ arctic-winds plan"
             echo
             echo "- head commit: \`$COMMIT\`"
+            # gha 156: the line that says why this run has one lane and writes a version
+            # of a commit that already had one.
+            if [ -n "$REMEASURE" ]; then
+              echo "- re-measure: \`$REMEASURE\`${BENCHMARKS:+, benchmarks matching \`$BENCHMARKS\`}, merged into the stored results${REASON:+ — $REASON}"
+            fi
             echo "- storage: \`$STORAGE\`"
             # gha 155: said on every run, because `none` is the answer to "why are
             # there no flame graphs" and `flagged` the answer to "why did it run long".
@@ -609,9 +681,14 @@ jobs:
       CIBW_ENVIRONMENT_LINUX: COPY_VCPKG_DOWNLOADS_TO_HOST=1
       ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
     steps:
-      # The run's own commit is the one that gets benchmarked, so no `ref:` here.
+      # The run's own commit is the one that gets benchmarked, so no `ref:` here —
+      # except on a re-measure (gha 156), whose commit is the one it names. The wheel
+      # is rebuilt rather than fetched from the run that first measured the commit:
+      # sccache makes it the same ~7 minutes either way, and a rebuild has no
+      # artifact to have expired (7 days) or to look for in another event's run.
       - uses: actions/checkout@v4
         with:
+          ref: ${{ needs.plan.outputs.remeasure != '' && needs.plan.outputs.commit || '' }}
           fetch-depth: 1
 
       - name: init submodules
@@ -915,9 +992,14 @@ jobs:
       CIBW_BUILD: cp311-win_amd64   # the whole point: exactly one wheel
       ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
     steps:
-      # The run's own commit is the one that gets benchmarked, so no `ref:` here.
+      # The run's own commit is the one that gets benchmarked, so no `ref:` here —
+      # except on a re-measure (gha 156), whose commit is the one it names. The wheel
+      # is rebuilt rather than fetched from the run that first measured the commit:
+      # sccache makes it the same ~7 minutes either way, and a rebuild has no
+      # artifact to have expired (7 days) or to look for in another event's run.
       - uses: actions/checkout@v4
         with:
+          ref: ${{ needs.plan.outputs.remeasure != '' && needs.plan.outputs.commit || '' }}
           fetch-depth: 1
 
       - name: init submodules
@@ -1044,6 +1126,9 @@ jobs:
       # for everything else, which is also how the action spells on-demand.
       runs_on: ${{ matrix.runs_on }}
       market_type: ${{ matrix.market_type }}
+      # gha 156: the AMI a re-measure must boot — the one the commit's stored rows
+      # recorded. Absent from every other plan's entries, which reads as ''.
+      image_id: ${{ matrix.image_id }}
       python: "3.11"
       # Which of the run's wheels this lane installs (gha 41). `plan` derived the
       # platform from the lane's own label — `windows-*` is `win_amd64`, `macos-*` is
@@ -1179,6 +1264,9 @@ jobs:
         id: collect
         env:
           LIBRARY: ${{ steps.library.outputs.library }}
+          REMEASURE: ${{ needs.plan.outputs.remeasure }}
+          BENCHMARKS: ${{ inputs.benchmarks }}
+          REASON: ${{ inputs.reason }}
         run: |
           # `--measure-only` is still expected of, and reported for, every lane it names;
           # it only stops a managed lane's silence or failures from turning the job red
@@ -1191,12 +1279,24 @@ jobs:
           # numbers do. A run that profiled nothing never opens that library at all,
           # and a profile that cannot be stored is a line on this job's summary
           # rather than a red run — the measurements are already written by then.
+          #
+          # gha 156: a re-measure merges. The commit's newest version is read back, the
+          # lane's rows (or only those `benchmarks` finds) are replaced, every other
+          # lane's are kept, and the result is the next version; one measured on another
+          # instance type or AMI than the rows it replaces is refused. A re-run of this
+          # job finds its rows already merged and writes nothing.
+          remeasure=()
+          if [ -n "$REMEASURE" ]; then
+            remeasure=(--remeasure "$REMEASURE" --benchmarks "$BENCHMARKS" --reason "$REASON"
+                       --remeasure-run "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}")
+          fi
           arctic-winds collect \
             --artifacts artifacts \
             --results "$RESULTS" \
             --library "$LIBRARY" \
             --expect "$WORKERS" \
-            --measure-only "$MEASURE_ONLY"
+            --measure-only "$MEASURE_ONLY" \
+            "${remeasure[@]}"
 
       # profile-code-view 01: each native window's sampled addresses, resolved to
       # `cpp/arcticdb/...:line` against the build's split debug file with one batched
