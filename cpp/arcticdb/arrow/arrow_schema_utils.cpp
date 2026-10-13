@@ -129,7 +129,7 @@ StringMap generate_index_renames(
                 } else if (fake_field_pos.contains(index_col_idx)) {
                     return ensure_unique_name(fmt::format("__index_level_{}__", index_col_idx), original_column_names);
                 } else if (index_col_idx == 0) {
-                    return multi_index_meta.name();
+                    return multi_index_meta.name().empty() ? "__empty__" : multi_index_meta.name();
                 } else {
                     return ensure_unique_name(
                             fields.at(index_col_idx).name().substr(multiindex_prefix.size()), taken_column_names

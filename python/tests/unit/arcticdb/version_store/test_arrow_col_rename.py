@@ -460,6 +460,13 @@ def test_multi_index_auto_rename_nameless_no_clash(
             "__index_level_0__",
             id="nameless_one_clash_second_level",
         ),
+        pytest.param(
+            "",
+            ["", "level1"],
+            ["__empty__", "level1"],
+            "___empty___",
+            id="empty_string_one_clash_first_level",
+        ),
     ],
 )
 def test_multi_index_auto_rename_clashes(
