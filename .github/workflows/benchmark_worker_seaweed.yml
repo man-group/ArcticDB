@@ -48,6 +48,10 @@ on:
       # default, and every run nobody asked to profile — skips the reference download,
       # the perf install and the pass itself.
       profiling:       {required: false, type: string, default: none, description: "none, regex or flagged: the run's profiling, as `arctic-winds plan` decided it"}
+      # gha 156: a re-measure boots the AMI its commit was first measured on, so the
+      # point it adds belongs to the same series. Empty on every other run, which keeps
+      # `ec2_runner_jobs.yml`'s default image.
+      image_id:        {required: false, type: string, default: '', description: "the AMI `start` boots; empty = ec2_runner_jobs.yml's default"}
 
 jobs:
   # `benchmark_commits.yml:8-12` calls the shared `ec2_runner_jobs.yml` rather than inlining
@@ -68,6 +72,9 @@ jobs:
       # comparable numbers; an interruption fails this worker (collect reports it
       # missing) and costs nothing in the first hour. Research: gha-spot-and-generations.
       market-type: ${{ inputs.market_type }}
+      # A `with:` key cannot be left out conditionally, so the empty case names the
+      # default itself. Keep this AMI the same as `ec2_runner_jobs.yml`'s `image-id`.
+      image-id: ${{ inputs.image_id != '' && inputs.image_id || 'ami-0936679d3002e5be3' }}
       # SeaweedFS keeps every append and update the modification lane makes, which
       # filled the AMI's 200 GB root on runs 37429256122 and 37435448587.
       volume-size: ${{ inputs.worker == 'modification' && '400' || '' }}
