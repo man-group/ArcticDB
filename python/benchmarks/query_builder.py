@@ -81,6 +81,9 @@ class QueryBuilderFunctions:
             raise SkipNotImplemented
         self.symbol = _symbol_name(num_rows)
         self.null_symbol = _null_symbol_name(num_rows)
+        # EXPERIMENT (asv number): calls per sample; at 1M rows a sample is >= ~100 ms
+        # (filtering_numeric ~3.5 ms a call) and at 10M >= ~100 ms (~36 ms a call).
+        self.number = 30 if num_rows == 1_000_000 else 3
 
     def _groupby_read(self, groupby_col, aggs):
         q = QueryBuilder()

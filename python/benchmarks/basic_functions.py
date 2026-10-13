@@ -84,6 +84,9 @@ class BasicFunctions:
             qs.enable()
 
         self.df = generate_pseudo_random_dataframe(rows)
+        # EXPERIMENT (asv number): calls per sample, ~100 ms of LMDB reads a sample.
+        if storage == Storage.LMDB:
+            self.number = 10 if rows == 5_000_000 else 5
 
     def teardown(self, *args):
         qs.disable()

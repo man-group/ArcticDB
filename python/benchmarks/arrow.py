@@ -154,6 +154,12 @@ class ArrowSparseNumeric:
         self.table = self._generate_table(rows, sparsity)
         self.sym = self.symbol_name(rows, sparsity)
         self.sym_with_type_promotion = self.symbol_name(rows, sparsity, self.type_promotion_suffix)
+        # EXPERIMENT (asv number): calls per sample, so a sample is >= ~50 ms of reads.
+        self.number = {
+            (1_000_000, 0.1): 3,
+            (1_000_000, 0.5): 5,
+            (1_000_000, 0.9): 8,
+        }.get((rows, sparsity), 1)
 
     def get_fresh_lib(self):
         self.ac.delete_library(self.lib_name_fresh)
@@ -231,6 +237,18 @@ class ArrowBools:
         self.fresh_lib._nvs._set_allow_arrow_input()
         self.table = self._generate_table(rows, sparsity)
         self.sym = self.symbol_name(rows, sparsity)
+        # EXPERIMENT (asv number): calls per sample, so a sample is >= ~50 ms of reads
+        # where setup allows (10M rows with nulls regenerate the table in ~1 s a call).
+        self.number = {
+            (1_000_000, 0.0): 50,
+            (1_000_000, 0.1): 4,
+            (1_000_000, 0.5): 5,
+            (1_000_000, 0.9): 12,
+            (10_000_000, 0.0): 50,
+            (10_000_000, 0.1): 3,
+            (10_000_000, 0.5): 4,
+            (10_000_000, 0.9): 4,
+        }[(rows, sparsity)]
 
     def get_fresh_lib(self):
         self.ac.delete_library(self.lib_name_fresh)

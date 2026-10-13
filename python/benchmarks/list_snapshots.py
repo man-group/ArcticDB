@@ -78,6 +78,18 @@ class Snapshots:
         self.lib = libs_for_storage[storage][get_lib_name(num_symbols, num_snapshots, metadata_entries)]
         if self.lib is None:
             raise SkipNotImplemented
+        # EXPERIMENT (asv number): calls per sample on LMDB, >= ~30-50 ms a sample.
+        if storage == Storage.LMDB:
+            self.number = {
+                (1, 0, False): 15_000,
+                (1, 0, True): 1_000,
+                (1, 10_000, False): 15_000,
+                (1, 10_000, True): 16,
+                (1_000, 0, False): 100,
+                (1_000, 0, True): 3,
+                (1_000, 10_000, False): 100,
+                (1_000, 10_000, True): 1,
+            }[(num_snapshots, metadata_entries, load_metadata)]
 
     def time_list_snapshots(
         self, libs_for_storage, storage, num_symbols, num_snapshots, metadata_entries, load_metadata
