@@ -30,7 +30,7 @@ import sys
 
 _AW_LINUX = sys.platform.startswith("linux")
 # Pin every thread of the benchmark process to a small fixed CPU set (set True on the -pin branch)
-_AW_PIN = False
+_AW_PIN = True
 _AW_PIN_COUNT = 4
 
 
