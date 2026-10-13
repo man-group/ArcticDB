@@ -62,6 +62,13 @@ on:
         description: Also profile benchmarks new to a lane or past the regression gate
         type: boolean
         default: false
+      # The Windows lane is on request too: its own wheel and worker add about 6 minutes
+      # to a run's wall time, and its numbers never gate. The nightly always runs it; a
+      # pull request asks with the `benchmark-windows` label (`keep the Windows lane`).
+      windows:
+        description: Run the Windows lane too
+        type: boolean
+        default: false
 
   # Push to master, LMDB only, so PR runs have recent master results to compare against.
   push:
@@ -107,18 +114,18 @@ jobs:
       actions: read
       pull-requests: read
     outputs:
-      matrix: ${{ steps.plan.outputs.matrix }}
+      matrix: ${{ steps.lanes.outputs.matrix }}
       commit: ${{ steps.commit.outputs.commit }}
       workers: ${{ steps.suites.outputs.workers }}
       # The lanes gha 26 Q4 says may never produce a verdict — `gating = false` in
       # workers.toml. `arctic-winds plan` writes this beside the matrix, because the plan
       # is the one thing that read the config; `collect` and `compare-values` both take it.
-      measure_only: ${{ steps.plan.outputs.measure_only }}
+      measure_only: ${{ steps.lanes.outputs.measure_only }}
       # The wheels this run's lanes can install, derived from their `runs_on` labels
       # (gha 41) — `manylinux_x86_64` always, plus `win_amd64` when a Windows lane is
       # planned. The per-platform build jobs below are gated on it, so a run without
       # such a lane never starts a Windows build.
-      wheel_platforms: ${{ steps.plan.outputs.wheel_platforms }}
+      wheel_platforms: ${{ steps.lanes.outputs.wheel_platforms }}
       reference_suite: ${{ steps.suites.outputs.reference_suite }}
       storage: ${{ steps.storage.outputs.storage }}
       bucket: ${{ steps.bucket.outputs.bucket }}
@@ -371,9 +378,54 @@ jobs:
       # split (see the README's open decisions). The job count is the only guard left: a
       # multi-commit run is otherwise fine now that artifacts are named per commit and
       # `collect` writes a symbol for each (ticket 18).
-      - name: check the matrix against GitHub's 256-job cap
+      # The Windows lane only when asked: the `windows` dispatch input, the nightly, or
+      # the `benchmark-windows` label on a pull request. Otherwise its matrix entries,
+      # its wheel platform and its measure-only mention go, so neither its wheel nor its
+      # worker is planned and `collect` does not expect it.
+      - name: keep the Windows lane only when asked
+        id: lanes
         env:
           MATRIX: ${{ steps.plan.outputs.matrix }}
+          WHEEL_PLATFORMS: ${{ steps.plan.outputs.wheel_platforms }}
+          MEASURE_ONLY: ${{ steps.plan.outputs.measure_only }}
+          WINDOWS: ${{ inputs.windows }}
+          WINDOWS_LABEL: benchmark-windows
+          EVENT_LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          want=false
+          if [ "$WINDOWS" = "true" ] || [ "$GITHUB_EVENT_NAME" = schedule ]; then
+            want=true
+          elif [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+            if ! labels=$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" \
+                  --jq '.labels[].name' 2>/dev/null); then
+              labels=$(jq -r '.[]?' <<<"$EVENT_LABELS")
+            fi
+            if grep -qxF "$WINDOWS_LABEL" <<<"$labels"; then
+              echo "#${PR_NUMBER} is labelled ${WINDOWS_LABEL}: running the Windows lane"
+              want=true
+            fi
+          fi
+          if [ "$want" = "true" ]; then
+            matrix=$MATRIX platforms=$WHEEL_PLATFORMS measure_only=$MEASURE_ONLY
+          else
+            matrix=$(jq -c '[.[] | select(.wheel_platform != "win_amd64")]' <<<"$MATRIX")
+            platforms=$(tr ',' '\n' <<<"$WHEEL_PLATFORMS" | grep -vx win_amd64 | paste -sd, -)
+            kept=$(jq -r '[.[].worker] | unique | .[]' <<<"$matrix")
+            measure_only=$(tr ',' '\n' <<<"$MEASURE_ONLY" | grep -xF -f <(printf '%s\n' "$kept") | paste -sd, - || true)
+            dropped=$(jq '[.[] | select(.wheel_platform == "win_amd64")] | length' <<<"$MATRIX")
+            [ "$dropped" -gt 0 ] && echo "Windows lane not requested: $dropped matrix entr(ies) left out"
+          fi
+          {
+            printf 'matrix=%s\n' "$matrix"
+            printf 'wheel_platforms=%s\n' "$platforms"
+            printf 'measure_only=%s\n' "$measure_only"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: check the matrix against GitHub's 256-job cap
+        env:
+          MATRIX: ${{ steps.lanes.outputs.matrix }}
         run: |
           count=$(jq 'length' <<<"$MATRIX")
           commits=$(jq '[.[].commit] | unique | length' <<<"$MATRIX")
@@ -389,7 +441,7 @@ jobs:
       - name: derive the worker list and the combined suite
         id: suites
         env:
-          MATRIX: ${{ steps.plan.outputs.matrix }}
+          MATRIX: ${{ steps.lanes.outputs.matrix }}
         run: |
           printf 'workers=%s\n' "$(jq -r '[.[].worker] | unique | join(",")' <<<"$MATRIX")" \
             >> "$GITHUB_OUTPUT"
@@ -398,10 +450,10 @@ jobs:
 
       - name: report the plan
         env:
-          MATRIX: ${{ steps.plan.outputs.matrix }}
+          MATRIX: ${{ steps.lanes.outputs.matrix }}
           STORAGE: ${{ steps.storage.outputs.storage }}
           COMMIT: ${{ steps.commit.outputs.commit }}
-          WHEEL_PLATFORMS: ${{ steps.plan.outputs.wheel_platforms }}
+          WHEEL_PLATFORMS: ${{ steps.lanes.outputs.wheel_platforms }}
           PROFILING: ${{ steps.plan.outputs.profiling }}
         run: |
           {
