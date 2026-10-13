@@ -12,7 +12,11 @@
 #define ARCTICDB_UNUSED __attribute__((unused))
 #define ARCTICDB_UNREACHABLE __builtin_unreachable();
 
+#ifdef ARCTICDB_SHARED_CORE
+#define ARCTICDB_VISIBILITY_HIDDEN
+#else
 #define ARCTICDB_VISIBILITY_HIDDEN __attribute__((visibility("hidden")))
+#endif
 #define ARCTICDB_VISIBILITY_DEFAULT __attribute__((visibility("default")))
 
 #define ARCTICDB_LIKELY(condition) __builtin_expect(condition, 1)
