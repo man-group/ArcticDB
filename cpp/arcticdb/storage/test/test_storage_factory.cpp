@@ -16,16 +16,12 @@
 #include <arcticdb/util/pb_util.hpp>
 #include <arcticdb/util/test/config_common.hpp>
 
-#include <unordered_map>
 #include <vector>
-#include <type_traits>
 
 namespace ac = arcticdb;
 namespace as = arcticdb::storage;
-namespace asl = arcticdb::storage::lmdb;
 
 TEST(TestStorageFactory, LmdbLookup) {
-    namespace pbs = arcticdb::proto::storage;
     as::EnvironmentName environment_name{"research"};
     as::StorageName storage_name("lmdb_local");
     as::LibraryPath library_path{"a", "b"};

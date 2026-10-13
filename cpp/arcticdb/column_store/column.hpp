@@ -22,6 +22,8 @@
 #include <arcticdb/util/sparse_utils.hpp>
 #include <arcticdb/util/type_traits.hpp>
 
+#include <boost/container/small_vector.hpp>
+
 // Compilation fails on Mac if cstdio is not included prior to folly/Function.h due to a missing definition of memalign
 // in folly/Memory.h
 #ifdef __APPLE__
