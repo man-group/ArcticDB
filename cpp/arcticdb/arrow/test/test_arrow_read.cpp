@@ -17,6 +17,7 @@
 #include <arcticdb/arrow/arrow_handlers.hpp>
 #include <arcticdb/util/allocator.hpp>
 #include <arcticdb/util/constants.hpp>
+#include <arcticdb/util/decode_path_data.hpp>
 
 using namespace arcticdb;
 
