@@ -14,9 +14,12 @@ import pytest
 from arcticdb import QueryBuilder
 from arcticdb.exceptions import InternalException, NoSuchVersionException, SchemaException, UserInputException
 from arcticdb.options import OutputFormat
-from arcticdb.util.test import assert_frame_equal, assert_pandas_equal
+import arcticdb.toolbox.query_stats as qs
+from arcticdb.util.test import assert_frame_equal, assert_pandas_equal, query_stats_operation_count
 from arcticdb.version_store import TimeFrame
 from arcticdb_ext.storage import KeyType
+
+from python.tests.conftest import in_memory_version_store_arrow
 
 
 def make_df_or_series(object_type, name, values, index=None):
@@ -181,23 +184,32 @@ def test_arrow_col_rename_previous_version_unchanged(lmdb_version_store_v1):
         pa.table({"col": pa.array([0], pa.int64())}),
     ],
 )
-def test_arrow_col_rename_valid_schema_is_noop(lmdb_version_store_v1, input):
-    lib = lmdb_version_store_v1
-    lib._set_allow_arrow_input()
+def test_arrow_col_rename_valid_schema_is_noop(in_memory_version_store_arrow, clear_query_stats, input):
+    lib = in_memory_version_store_arrow
     sym = "test_arrow_col_rename_valid_schema_is_noop"
     lib.write(sym, input)
-    assert lib.rename_columns_arrow_compat(sym).version == 0
+    with qs.query_stats():
+        assert lib.rename_columns_arrow_compat(sym).version == 0
+        stats = qs.get_query_stats()
+    assert query_stats_operation_count(stats, "Memory_PutObject", "TABLE_INDEX") == 0
+    assert query_stats_operation_count(stats, "Memory_PutObject", "TABLE_DATA") == 0
     assert lib.read_metadata(sym).version == 0
 
 
-def test_arrow_col_rename_norm_meta_only_change_doesnt_rewrite_data_keys(lmdb_version_store_v1):
-    lib = lmdb_version_store_v1
+def test_arrow_col_rename_norm_meta_only_change_doesnt_rewrite_data_keys(
+    in_memory_version_store_arrow, clear_query_stats
+):
+    lib = in_memory_version_store_arrow
     sym = "test_arrow_col_rename_norm_meta_only_change_doesnt_rewrite_data_keys"
     # This dataframe has a StreamDescriptor with the field "10" that is already correct. Only the norm metadata needs
     # to change
     df = pd.DataFrame({10: [0]})
     lib.write(sym, df)
-    assert lib.rename_columns_arrow_compat(sym).version == 1
+    with qs.query_stats():
+        assert lib.rename_columns_arrow_compat(sym).version == 1
+        stats = qs.get_query_stats()
+        assert query_stats_operation_count(stats, "Memory_PutObject", "TABLE_INDEX") == 1
+        assert query_stats_operation_count(stats, "Memory_PutObject", "TABLE_DATA") == 0
     assert lib.read_index(sym)["version_id"].iloc[0] == 0
 
 
@@ -480,22 +492,24 @@ def test_multi_index_explicit_rename_no_clash(lmdb_version_store_v1, object_type
     assert_pandas_equal(received, expected)
 
 
-def test_data_segment_only_rewritten_if_changed_static(lmdb_version_store_tiny_segment):
-    lib = lmdb_version_store_tiny_segment
+def test_data_segment_only_rewritten_if_changed_static(in_memory_store_factory, clear_query_stats):
+    lib = in_memory_store_factory(segment_row_size=2, column_group_size=2)
     sym = "test_data_segment_only_rewritten_if_changed_static"
-    # tiny_segment fixture has 2 rows and cols per slice, so this produces 4 slices, but only the 2 slices in the
-    # right-most column slice have columns that need renaming
+    # This produces 4 slices, but only the 2 slices in the right-most column slice have columns that need renaming
     df = pd.DataFrame(
         {"col0": np.arange(4), "col1": np.arange(4, 8), "col2": np.arange(8, 12), None: np.arange(12, 16)}
     )
     lib.write(sym, df)
-    lib.rename_columns_arrow_compat(sym)
+    with qs.query_stats():
+        lib.rename_columns_arrow_compat(sym)
+        stats = qs.get_query_stats()
+    assert query_stats_operation_count(stats, "Memory_PutObject", "TABLE_DATA") == 2
     data_key_versions = lib.read_index(sym)["version_id"].to_list()
     assert data_key_versions == [0, 0, 1, 1]
 
 
-def test_data_segment_only_rewritten_if_changed_dynamic(lmdb_version_store_dynamic_schema_v1):
-    lib = lmdb_version_store_dynamic_schema_v1
+def test_data_segment_only_rewritten_if_changed_dynamic(in_memory_version_store_dynamic_schema, clear_query_stats):
+    lib = in_memory_version_store_dynamic_schema
     sym = "test_data_segment_only_rewritten_if_changed_dynamic"
     df0 = pd.DataFrame({"col0": [0]})
     df1 = pd.DataFrame({"col0": [1], None: [2]})
@@ -505,7 +519,10 @@ def test_data_segment_only_rewritten_if_changed_dynamic(lmdb_version_store_dynam
     lib.append(sym, df1)
     lib.append(sym, df2)
     lib.append(sym, df3)
-    lib.rename_columns_arrow_compat(sym)
+    with qs.query_stats():
+        lib.rename_columns_arrow_compat(sym)
+        stats = qs.get_query_stats()
+    assert query_stats_operation_count(stats, "Memory_PutObject", "TABLE_DATA") == 2
     data_key_versions = lib.read_index(sym)["version_id"].to_list()
     assert data_key_versions == [0, 4, 2, 4]
 

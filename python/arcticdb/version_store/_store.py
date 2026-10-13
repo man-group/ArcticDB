@@ -2622,7 +2622,7 @@ class NativeVersionStore:
         index_columns : Optional[Union[str, List[str]]], default=None
             Explicit names for the index columns. If None, uses defaults specified above. If a `str`, the existing data
             must have a single-level (non-MultiIndex) timeseries index. If `List[str]`, the length of the list must
-            equal the number of levels in the existing data's MultiIndex.
+            equal the number of indexes of the existing data.
         prune_previous_version : Optional[bool], default=None
             If True, removes previous versions from the version list. If None, the value is taken from the
             library configuration.
