@@ -723,33 +723,17 @@ namespace ranges = std::ranges;
 using namespace pipelines;
 
 MergeUpdateClause::MergeUpdateClause(
-        std::vector<std::string>&& on, MergeStrategy strategy, std::shared_ptr<InputFrame> source,
+        std::vector<std::string>&& on, MergeStrategy strategy,
+        std::variant<std::shared_ptr<InputFrame>, SegmentInMemory> source, OutputSchema source_output_schema,
         size_t rows_per_segment
 ) :
 
     on_(std::move(on)),
     strategy_(strategy),
     source_(std::move(source)),
+    source_output_schema_(std::move(source_output_schema)),
     rows_per_segment_(rows_per_segment) {
     std::erase_if(on_, [&](const std::string& column) { return !on_set_.insert(column).second; });
-    const bool is_source_arrow = !source_->has_only_tensors();
-    if (is_source_arrow) {
-        // WriteToSegmentTask adds the index column itself, so the column range covers only the data columns.
-        FrameSlice full_slice{
-                std::make_shared<StreamDescriptor>(source_->desc().clone()),
-                ColRange{source_->desc().index().field_count(), source_->desc().field_count()},
-                RowRange{0, source_->num_rows}
-        };
-        source_as_segment_ = std::get<1>(WriteToSegmentTask(source_, std::move(full_slice))());
-        for (size_t col = 0; col < source_as_segment_.num_columns(); ++col) {
-            schema::check<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
-                    !source_as_segment_.column(col).is_sparse(),
-                    "Merge update does not support Arrow source data with null values yet. Column \"{}\" contains "
-                    "nulls.",
-                    source_as_segment_.field(col).name()
-            );
-        }
-    }
 }
 
 std::vector<std::vector<size_t>> MergeUpdateClause::structure_for_processing(std::vector<RangesAndKey>& ranges_and_keys
@@ -757,7 +741,7 @@ std::vector<std::vector<size_t>> MergeUpdateClause::structure_for_processing(std
     if (ranges_and_keys.empty()) {
         return {};
     }
-    if (!source_->has_index()) {
+    if (!is_source_datetime()) {
         return structure_by_row_slice(ranges_and_keys);
     }
     return structure_for_processing_log(ranges_and_keys);
@@ -877,9 +861,9 @@ std::vector<EntityId> MergeUpdateClause::process(std::vector<EntityId>&& entity_
         }
         return res;
     }
-    const StreamDescriptor& target_descriptor = get_source_descriptor(); // TODO: Not true for dynamic schema
+    const StreamDescriptor* target_descriptor = get_source_descriptor(); // TODO: Not true for dynamic schema
 
-    if (target_descriptor.index().type() == IndexDescriptor::Type::ROWCOUNT) {
+    if (target_descriptor->index().type() == IndexDescriptor::Type::ROWCOUNT) {
         MergeUpdateNotMatchedSourceRowsComponent unmatched_source_rows_component(
                 std::make_shared<util::BitSet>(matched.unmatched_source_rows())
         );
@@ -916,7 +900,7 @@ std::vector<EntityId> MergeUpdateClause::process(std::vector<EntityId>&& entity_
         return {};
     }
 
-    auto new_row_slices = update_and_insert(matched, target_descriptor, std::move(row_slices), source_start_end);
+    auto new_row_slices = update_and_insert(matched, *target_descriptor, std::move(row_slices), source_start_end);
 
     std::vector<EntityId> res;
     for (auto&& [row_slice_idx, row_slice] : folly::enumerate(new_row_slices)) {
@@ -999,7 +983,7 @@ MergeUpdateClause::MatchRecord MergeUpdateClause::initialize_rows_to_update_for_
 }
 
 std::pair<size_t, size_t> MergeUpdateClause::get_source_start_end(std::span<const ProcessingUnit> row_slices) const {
-    if (source_->has_index()) {
+    if (is_source_datetime()) {
         const pipelines::RowRange row_range = get_row_range(row_slices);
         const auto source_row_range_it = source_start_end_for_row_range_.find(row_range);
         util::check(
@@ -1042,7 +1026,7 @@ std::pair<size_t, size_t> MergeUpdateClause::get_source_start_end(std::span<cons
         }
         return result;
     } else {
-        return std::pair{0, source_->num_rows};
+        return std::pair{0, source_row_count()};
     }
 }
 
@@ -1070,7 +1054,7 @@ std::vector<ProcessingUnit> MergeUpdateClause::update_and_insert(
         return {};
     }
     const std::span<const timestamp> source_index = get_source_column<IndexType>(0, source_start_end);
-    const StreamDescriptor source_descriptor = get_source_descriptor();
+    const StreamDescriptor& source_descriptor = *get_source_descriptor();
     const size_t num_col_slices = row_slices.begin()->col_ranges_->size();
     ARCTICDB_DEBUG_CHECK(
             ErrorCode::E_ASSERTION_FAILURE,
@@ -1130,7 +1114,7 @@ std::vector<ProcessingUnit> MergeUpdateClause::update_and_insert(
                     details::visit_type(target_field.type().data_type(), [&]<typename TypeTag>(TypeTag) {
                         using TargetDataTDT = ScalarTagType<TypeTag>;
                         has_string_column_in_column_slice |= is_sequence_type(TargetDataTDT::data_type());
-                        const Field& source_field = get_source_descriptor().field(field_idx);
+                        const Field& source_field = source_descriptor.field(field_idx);
                         return details::visit_type(
                                 source_field.type().data_type(),
                                 [&]<typename SourceTypeTag>(SourceTypeTag) -> std::vector<std::shared_ptr<Column>> {
@@ -1207,7 +1191,7 @@ std::vector<ProcessingUnit> MergeUpdateClause::update(
         std::pair<size_t, size_t> source_start_end
 ) const {
     std::vector<ProcessingUnit> result;
-    const StreamDescriptor& source_descriptor = get_source_descriptor();
+    const StreamDescriptor& source_descriptor = *get_source_descriptor();
     for (size_t i = 0; i < row_slices.size(); ++i) {
         const ProcessingUnit& proc = row_slices[i];
         const std::span<const std::shared_ptr<SegmentInMemory>> target_segments = *proc.segments_;
@@ -1278,20 +1262,35 @@ MergeUpdateClause::MatchRecord MergeUpdateClause::match(
         std::span<ProcessingUnit> row_slices, std::pair<size_t, size_t> source_start_end
 ) const {
     std::optional<MatchRecord> maybe_index_match;
-    if (source_->has_index()) {
+    if (is_source_datetime()) {
         maybe_index_match.emplace(filter_index_match(get_source_column<IndexType>(0, source_start_end), row_slices));
     }
+    const StreamDescriptor& source_descriptor = *get_source_descriptor();
     return filter_on_additional_columns_match(
-            get_source_descriptor(), get_source_descriptor(), row_slices, std::move(maybe_index_match), source_start_end
+            source_descriptor, source_descriptor, row_slices, std::move(maybe_index_match), source_start_end
     );
 }
 
-bool MergeUpdateClause::is_source_arrow() const { return !source_->has_only_tensors(); }
+bool MergeUpdateClause::is_source_datetime() const {
+    return get_source_descriptor()->index().type() == IndexDescriptor::Type::TIMESTAMP;
+}
+
+size_t MergeUpdateClause::source_row_count() const {
+    return util::variant_match(
+            source_,
+            [](const std::shared_ptr<InputFrame>& source) { return source->num_rows; },
+            [](const SegmentInMemory& source) { return source.row_count(); }
+    );
+}
 
 // The converted Arrow segment can store a column with a different type than the Arrow input, e.g. strings become
 // UTF_DYNAMIC64, so for Arrow sources the segment's descriptor describes the data the clause actually reads.
-const StreamDescriptor& MergeUpdateClause::get_source_descriptor() const {
-    return is_source_arrow() ? source_as_segment_.descriptor() : source_->desc();
+const StreamDescriptor* MergeUpdateClause::get_source_descriptor() const {
+    return util::variant_match(
+            source_,
+            [](const std::shared_ptr<InputFrame>& source) -> const StreamDescriptor* { return source->desc_ptr(); },
+            [](const SegmentInMemory& source) -> const StreamDescriptor* { return source.descriptor_ptr().get(); }
+    );
 }
 
 /// Complexity: $$O(c * n * m)$$ m is the count of source rows in the bounds of the segment, n is the  number of target
@@ -1360,11 +1359,11 @@ void MergeUpdateClause::set_component_manager(std::shared_ptr<ComponentManager> 
 }
 
 OutputSchema MergeUpdateClause::modify_schema(OutputSchema&& output_schema) const {
-    const std::array schemas{output_schema, schema_from_input_frame(*source_)};
+    const std::array schemas{std::move(output_schema), source_output_schema_};
     return combine_schema(
             schemas,
             within_symbol_combine_options(
-                    false, NormalizationOperation::MERGE_UPDATE, output_schema.stream_descriptor().id()
+                    false, NormalizationOperation::MERGE_UPDATE, schemas[0].stream_descriptor().id()
             )
     );
 }
@@ -1374,8 +1373,6 @@ OutputSchema MergeUpdateClause::join_schemas(std::vector<OutputSchema>&&) const 
 }
 
 std::string MergeUpdateClause::to_string() const { return "MERGE_UPDATE"; }
-
-const SegmentInMemory& MergeUpdateClause::source_as_segment() const { return source_as_segment_; }
 
 size_t MergeUpdateClause::field_index_for_matching_on_column(std::string_view name, const StreamDescriptor& descriptor)
         const {
@@ -1418,7 +1415,7 @@ size_t MergeUpdateClause::field_index_for_matching_on_column(std::string_view na
 }
 
 bool MergeUpdateClause::must_structure_by_time_slice() const {
-    return source_->has_index() && !on_.empty() && strategy_.insert();
+    return is_source_datetime() && !on_.empty() && strategy_.insert();
 }
 
 MergeUpdateClause::MatchRecord::MatchRecord(std::span<ProcessingUnit> row_slices, const size_t num_source_rows) :

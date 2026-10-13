@@ -966,10 +966,12 @@ struct MergeUpdateClause {
     /// Used to check if a column is in on_ without performing a linear search.
     ankerl::unordered_dense::set<std::string, util::TransparentStringHash, std::equal_to<>> on_set_;
     MergeStrategy strategy_;
-    std::shared_ptr<InputFrame> source_;
+
+    std::variant<std::shared_ptr<InputFrame>, SegmentInMemory> source_;
     bool fake_index_name_ = false;
     MergeUpdateClause(
-            std::vector<std::string>&& on, MergeStrategy strategy, std::shared_ptr<InputFrame> source,
+            std::vector<std::string>&& on, MergeStrategy strategy,
+            std::variant<std::shared_ptr<InputFrame>, SegmentInMemory> source, OutputSchema source_output_schema,
             size_t rows_per_segment
     );
     ARCTICDB_MOVE_COPY_DEFAULT(MergeUpdateClause)
@@ -999,9 +1001,6 @@ struct MergeUpdateClause {
     OutputSchema join_schemas(std::vector<OutputSchema>&&) const;
 
     [[nodiscard]] std::string to_string() const;
-
-    /// The Arrow source converted to a segment. Empty when the source is not Arrow.
-    [[nodiscard]] const SegmentInMemory& source_as_segment() const;
 
     class MatchRecord {
       public:
@@ -1114,16 +1113,15 @@ struct MergeUpdateClause {
     [[nodiscard]] bool must_structure_by_time_slice() const;
 
     /// Raises if a pandas source column is not contiguous in memory, which get_source_column requires.
-    /// get_source_column returns string columns as PyObject* for pandas sources and as offsets into the string pool of
-    /// the converted segment for Arrow sources.
     template<typename RawType>
     void check_source_tensor_is_contiguous(const NativeTensor& tensor, size_t field_index) const {
+        const StreamDescriptor* desc = get_source_descriptor();
         user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
                 util::is_cstyle_array<RawType>(tensor),
                 "Fortran-style arrays are not supported by merge update yet. Column \"{}\" has data type {} of size {} "
                 "bytes but the stride is {} bytes",
-                source_->desc().field(field_index).name(),
-                source_->desc().field(field_index).type(),
+                desc->field(field_index).name(),
+                desc->field(field_index).type(),
                 sizeof(RawType),
                 tensor.strides()[0]
         );
@@ -1135,55 +1133,60 @@ struct MergeUpdateClause {
             size_t field_index, std::optional<std::pair<size_t, size_t>> required_range = std::nullopt
     ) const {
         using RawType = TDT::RawType;
-        auto [first, last] = required_range.value_or(
-                std::pair<size_t, size_t>{0, is_source_arrow() ? source_as_segment_.row_count() : source_->num_rows}
-        );
+        const auto [first, last] = required_range.value_or(std::pair<size_t, size_t>{0, source_row_count()});
         const auto element_count = last - first;
-        if (is_source_arrow()) {
-            return std::span{
-                    reinterpret_cast<const RawType*>(source_as_segment_.column_data(field_index).buffer().data()) +
-                            first,
-                    element_count
-            };
-        } else {
-            const NativeTensor& tensor = source_->get_tensor(field_index);
-            check_source_tensor_is_contiguous<RawType>(tensor, field_index);
-            return std::span{static_cast<const RawType*>(tensor.data()) + first, element_count};
-        }
+        return util::variant_match(
+                source_,
+                [&](const std::shared_ptr<InputFrame>& source) {
+                    const NativeTensor& tensor = source->get_tensor(field_index);
+                    check_source_tensor_is_contiguous<RawType>(tensor, field_index);
+                    return std::span{static_cast<const RawType*>(tensor.data()) + first, element_count};
+                },
+                [&](const SegmentInMemory& source) {
+                    return std::span{
+                            reinterpret_cast<const RawType*>(source.column_data(field_index).buffer().data()) + first,
+                            element_count
+                    };
+                }
+        );
     }
 
+    /// Returns string columns as PyObject* for pandas sources and as offsets into the string pool of the converted
+    /// segment for Arrow sources.
     template<util::type_descriptor_tag TDT>
     requires(is_sequence_type(TDT::data_type()))
     std::variant<std::span<PyObject* const>, std::pair<std::span<const typename TDT::RawType>, StringPool*>>
     get_source_column(size_t field_index, std::optional<std::pair<size_t, size_t>> required_range = std::nullopt)
             const {
         using RawType = TDT::RawType;
-        auto [first, last] = required_range.value_or(
-                std::pair<size_t, size_t>{0, is_source_arrow() ? source_as_segment_.row_count() : source_->num_rows}
-        );
+        using ReturnT = std::
+                variant<std::span<PyObject* const>, std::pair<std::span<const typename TDT::RawType>, StringPool*>>;
+        const auto [first, last] = required_range.value_or(std::pair<size_t, size_t>{0, source_row_count()});
         const auto element_count = last - first;
-        if (is_source_arrow()) {
-            return std::pair{
-                    std::span{
-                            reinterpret_cast<const RawType*>(source_as_segment_.column_data(field_index).buffer().data()
-                            ) + first,
-                            element_count
-                    },
-                    source_as_segment().string_pool_ptr().get()
-            };
-        } else {
-            const NativeTensor& tensor = source_->get_tensor(field_index);
-            check_source_tensor_is_contiguous<PyObject*>(tensor, field_index);
-            return std::span{static_cast<PyObject* const*>(tensor.data()) + first, element_count};
-        }
+        return util::variant_match(
+                source_,
+                [&](const std::shared_ptr<InputFrame>& source) -> ReturnT {
+                    const NativeTensor& tensor = source->get_tensor(field_index);
+                    check_source_tensor_is_contiguous<PyObject*>(tensor, field_index);
+                    return std::span{static_cast<PyObject* const*>(tensor.data()) + first, element_count};
+                },
+                [&](const SegmentInMemory& source) -> ReturnT {
+                    return std::pair{
+                            std::span{
+                                    reinterpret_cast<const RawType*>(source.column_data(field_index).buffer().data()) +
+                                            first,
+                                    element_count
+                            },
+                            source.string_pool_ptr().get()
+                    };
+                }
+        );
     }
+    [[nodiscard]] bool is_source_datetime() const;
+    [[nodiscard]] size_t source_row_count() const;
+    [[nodiscard]] const StreamDescriptor* get_source_descriptor() const;
 
-    bool is_source_arrow() const;
-
-    const StreamDescriptor& get_source_descriptor() const;
-
-    /// Used when the source is Arrow
-    SegmentInMemory source_as_segment_;
+    OutputSchema source_output_schema_;
 
     size_t rows_per_segment_;
 };

@@ -4494,12 +4494,13 @@ class NativeVersionStore:
 
         !!! warning
             Dynamic schema is not supported. Sparse data is not supported. Fortran styled data is not supported.
+            PyArrow and Polars sources containing null values are not supported.
 
         Parameters
         ----------
         symbol : str
             The symbol to merge data into.
-        source : pandas.DataFrame or pandas.Series
+        source : Union[pandas.DataFrame, pandas.Series, pyarrow.Table, polars.DataFrame]
             The new data to merge. In the case of timeseries, the index must be sorted.
         strategy : Optional[MergeStrategy], default=MergeStrategy(matched="update", not_matched_by_target="insert")
             Determines how to handle matched and unmatched rows. Accepted strategies are:
@@ -4562,7 +4563,8 @@ class NativeVersionStore:
         UnsortedDataException
             If date-time index is used and source or target are not sorted
         SchemaException
-            If dynamic schema is used or if source's schema is incompatible with target's schema
+            If dynamic schema is used, if source's schema is incompatible with target's schema or if a PyArrow or
+            Polars source contains null values
 
         Examples
         --------
