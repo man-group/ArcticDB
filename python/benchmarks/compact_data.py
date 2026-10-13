@@ -247,6 +247,9 @@ class CompactDataStringsStaticSchema(CompactDataBase):
         self.LMDB_DIR = "compact_data_strings_static_schema"
         super().finish_init()
         self.param_names = self.base_param_names + ["num_unique_strings"]
+        # EXPERIMENT: 3x the samples per call
+        self.repeat = 45
+        self.timeout = 600
         self.params = [
             [
                 (1_000_000, 10_000, 100_000),
