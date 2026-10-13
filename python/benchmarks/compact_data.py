@@ -15,6 +15,7 @@ import pandas as pd
 import random
 
 from arcticdb import Arctic, LibraryOptions, WritePayload
+from arcticdb.config import set_config_int
 from arcticdb.options import ModifiableLibraryOption
 from arcticdb.util.logger import get_logger
 from arcticdb.util.test import random_strings_of_length
@@ -74,6 +75,10 @@ class CompactDataBase:
         # Create a new Arctic instance, otherwise we will be holding a reference to the previous iteration's .mdb files
         # and the deletion and recreation won't be noticed by Arctic
         del self.ac
+        # Skip LMDB's fsync on every commit (MDB_NOSYNC | MDB_NOMETASYNC). compact_data commits each key in its own
+        # transaction, so with syncing on, the low-cardinality parameters measure ~10-20 disk flushes rather than
+        # compaction (>90% of their runtime), and flush latency on the CI disks is bimodal. This data is throwaway.
+        set_config_int("LMDBStorage.ExtraFlags", 0x50000)
         self.ac = Arctic(self.CONNECTION_STRING)
         self.lib = self.ac.get_library(lib_name)
         # Check the compaction will actually do something!
@@ -160,7 +165,11 @@ class CompactDataStringsStaticSchema(CompactDataBase):
             [False, True],  # column_slicing
             [2, 10, 100_000],  # num_unique_strings
         ]
-        self.unique_strings = random_strings_of_length(max(self.params[3]), length=10, unique=True, kind="ascii")
+        # sorted: random_strings_of_length(unique=True) returns list(set(...)), whose order follows the per-process string
+        # hash seed, so without sorting every run would pick different strings for the low-cardinality parameters
+        self.unique_strings = sorted(
+            random_strings_of_length(max(self.params[3]), length=10, unique=True, kind="ascii")
+        )
 
     def setup_cache(self):
         start = time.time()
@@ -373,7 +382,7 @@ class AppendCompactDataStringsStaticSchema(AppendCompactDataBase):
             [1, 50_000, 1_000_000],  # append_rows
         ]
         super().finish_init()
-        self.unique_strings = random_strings_of_length(10, length=10, unique=True, kind="ascii")
+        self.unique_strings = sorted(random_strings_of_length(10, length=10, unique=True, kind="ascii"))
 
     def setup_cache(self):
         start = time.time()
