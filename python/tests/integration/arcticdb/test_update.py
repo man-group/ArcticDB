@@ -18,7 +18,8 @@ import pandas as pd
 import numpy as np
 import string
 
-from arcticdb_ext.exceptions import ArcticException as ArcticNativeException
+from arcticdb.exceptions import ArcticException as ArcticNativeException
+from arcticdb_ext.version_store import DataError
 
 from arcticdb.options import LibraryOptions
 from arcticdb.util._versions import IS_PANDAS_ONE
@@ -28,7 +29,6 @@ from arcticdb.util.logger import get_logger
 from arcticdb.version_store._store import VersionedItem
 from arcticdb.version_store.library import Library, UpdatePayload, WritePayload
 from arcticdb.util.test import assert_frame_equal, sample_dataframe
-from arcticdb_ext.version_store import DataError
 from tests.util.mark import LINUX
 
 logger = get_logger()

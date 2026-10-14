@@ -68,9 +68,9 @@ std::vector<StatColumn> collect_stat_columns(
     return stat_columns;
 }
 
-// The target is the descriptor's field type, which merge_descriptors resolved as a common type over
-// every slice's type for that column, so the static_cast is OK. The source type is needed to
-// interpret Value's raw bytes, hence the nested visit.
+// The target is the descriptor's field type, resolved as a common type over every slice's type for that
+// column, so the static_cast is OK. The source type is needed to interpret Value's raw bytes, hence the
+// nested visit.
 void set_stat_value(Column& column, size_t row, const Value& value) {
     details::visit_type(column.type().data_type(), [&column, row, &value](auto target_tag) {
         using TargetRaw = typename ScalarTypeInfo<decltype(target_tag)>::RawType;

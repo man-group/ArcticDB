@@ -505,3 +505,38 @@ def test_update_num_reads(s3_store_factory, clear_query_stats, dynamic_schema, u
         result_df = lib.read(sym).data
         qs.reset_stats()
         assert_frame_equal(result_df, expected_df)
+
+
+@MEM_TESTS_MARK
+@pytest.mark.parametrize("append", [True, False])
+@pytest.mark.parametrize("finalize", ["compact_incomplete", "sort_merge"])
+def test_finalize_reads_each_staged_key_twice(in_memory_version_store, clear_query_stats, finalize, append):
+    """Every APPEND_DATA key is fetched twice:
+
+    1. `append_map_entry_from_key`, which decodes the timeseries descriptor and discards the body.
+    2. `SliceAndKey::ensure_segment` for `compact_incomplete`, or `read_and_schedule_processing` for `sort_merge`,
+       when the data is needed.
+
+    TODO (monday 12955314293): the first read already holds the body. Keeping it would mean holding every staged
+    segment in memory at once instead of streaming them past the aggregator.
+    """
+    lib = in_memory_version_store
+    sym = "sym"
+    num_staged = 4
+    if append:
+        lib.write(sym, pd.DataFrame({"a": [0]}, index=pd.DatetimeIndex([pd.Timestamp(0)])))
+    for i in range(1, num_staged + 1):
+        lib.write(sym, pd.DataFrame({"a": [i]}, index=pd.DatetimeIndex([pd.Timestamp(i)])), parallel=True)
+
+    qs.enable()
+    if finalize == "compact_incomplete":
+        lib.compact_incomplete(sym, append=append, convert_int_to_float=False)
+    else:
+        lib.version_store.sort_merge(sym, append=append)
+    stats = qs.get_query_stats()
+    qs.reset_stats()
+
+    assert query_stats_operation_count(stats, "Memory_GetObject", "APPEND_DATA") == 2 * num_staged, pformat(stats)
+    # The keys are only listed once, and deleted once each.
+    assert query_stats_operation_count(stats, "Memory_ListObjects", "APPEND_DATA") == 1, pformat(stats)
+    assert query_stats_operation_count(stats, "Memory_DeleteObject", "APPEND_DATA") == num_staged, pformat(stats)

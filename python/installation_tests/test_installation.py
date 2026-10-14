@@ -20,7 +20,7 @@ from arcticdb.util.test import random_floats, random_strings_of_length
 from arcticdb.version_store import VersionedItem as PythonVersionedItem
 from arcticdb.toolbox.library_tool import KeyType
 from arcticdb.version_store.library import ReadRequest, StagedDataFinalizeMethod, WritePayload
-from arcticdb_ext.exceptions import UnsortedDataException
+from arcticdb.exceptions import UnsortedDataException
 from arcticdb_ext.version_store import AtomKey, RefKey
 from packaging import version
 
@@ -36,6 +36,7 @@ from client_utils import delete_library
 PRE_4_X_X = False if "dev" in arcticdb.__version__ else version.parse(arcticdb.__version__) < version.Version("4.0.0")
 PRE_5_X_X = False if "dev" in arcticdb.__version__ else version.parse(arcticdb.__version__) < version.Version("5.0.0")
 PRE_5_2_X = False if "dev" in arcticdb.__version__ else version.parse(arcticdb.__version__) < version.Version("5.2.0")
+PRE_7_X_X = False if "dev" in arcticdb.__version__ else version.parse(arcticdb.__version__) < version.Version("7.0.0")
 
 
 def generate_dataframe(columns, dt, num_days, num_rows_per_day):
@@ -47,6 +48,17 @@ def generate_dataframe(columns, dt, num_days, num_rows_per_day):
         dataframes.append(new_df)
         dt = dt + timedelta(days=1)
     return pd.concat(dataframes)
+
+
+def stage_compat(lib, symbol, df, validate_index=True):
+    """
+    Stages `df` under `symbol`, using `write(staged=True)` on wheels older than 7.0.0 (which is when
+    `staged`/`parallel` were removed from `write`) and `stage()` on current wheels.
+    """
+    if PRE_7_X_X:
+        lib.write(symbol, df, staged=True, validate_index=validate_index)
+    else:
+        lib.stage(symbol, df, validate_index=validate_index)
 
 
 def test_write_batch_dedup(ac_library_factory):
@@ -177,8 +189,8 @@ def test_parallel_writes_and_appends_index_validation(ac_library, finalize_metho
         lib.write(sym, df_0)
     df_1 = pd.DataFrame({"col": [3, 4]}, index=[pd.Timestamp("2024-01-03"), pd.Timestamp("2024-01-04")])
     df_2 = pd.DataFrame({"col": [5, 6]}, index=[pd.Timestamp("2024-01-03T12"), pd.Timestamp("2024-01-05")])
-    lib.write(sym, df_2, staged=True)
-    lib.write(sym, df_1, staged=True)
+    stage_compat(lib, sym, df_2)
+    stage_compat(lib, sym, df_1)
     if validate_index is None:
         # Test default behaviour when arg isn't provided
         with pytest.raises(UnsortedDataException):
@@ -479,7 +491,7 @@ def test_finalize_staged_data_mode_append(ac_library, mode):
     df_initial = sample_dataframe("2020-1-1", [1, 2, 3], [4, 5, 6])
     df_staged = sample_dataframe("2020-1-4", [7, 8, 9], [10, 11, 12])
     lib.write(symbol, df_initial)
-    lib.write(symbol, df_staged, staged=True)
+    stage_compat(lib, symbol, df_staged)
     assert_frame_equal(lib.read(symbol).data, df_initial)
 
     lib.finalize_staged_data(symbol="symbol", mode=mode)

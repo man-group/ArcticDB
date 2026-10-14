@@ -240,6 +240,11 @@ message NormalizationMetadata {
 
         bool has_index = 1;
         map<string, ColumnMeta> columns = 2;
+        // True for Polars series, and PyArrow chunked arrays and arrays. False for Polars dataframes, and PyArrow
+        // tables and record batches
+        bool one_dimensional = 3;
+        // Set only when data written is a Polars Series
+        optional string polars_series_name = 4;
     }
 
     oneof input_type {
