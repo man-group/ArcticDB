@@ -524,6 +524,7 @@ set(arcticdb_srcs
         pipeline/index_utils.cpp
         pipeline/input_frame.cpp
         pipeline/pipeline_context.cpp
+        pipeline/pipeline_utils.cpp
         pipeline/query.cpp
         pipeline/read_frame.cpp
         pipeline/read_pipeline.cpp

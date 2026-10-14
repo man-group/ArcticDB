@@ -19,6 +19,11 @@ RecordBatchData::RecordBatchData(ArrowArray array, ArrowSchema schema) : array_(
 
 ArrowOutputFrame::ArrowOutputFrame(std::vector<sparrow::record_batch>&& data) : data_(std::move(data)) {}
 
+ArrowOutputFrame::~ArrowOutputFrame() = default;
+
+ArrowOutputFrame::ArrowOutputFrame(ArrowOutputFrame&&) noexcept = default;
+ArrowOutputFrame& ArrowOutputFrame::operator=(ArrowOutputFrame&&) noexcept = default;
+
 size_t ArrowOutputFrame::num_blocks() const { return data_.size(); }
 
 std::vector<RecordBatchData> ArrowOutputFrame::extract_record_batches() {

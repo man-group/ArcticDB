@@ -8,9 +8,16 @@
 
 #pragma once
 
+// NOLINTBEGIN(bugprone-macro-parentheses)
 #define ARCTICDB_MOVE_ONLY_DEFAULT(__T__)                                                                              \
     __T__(__T__&&) noexcept = default;                                                                                 \
     __T__& operator=(__T__&&) noexcept = default;                                                                      \
+    __T__(const __T__&) = delete;                                                                                      \
+    __T__& operator=(const __T__&) = delete;
+
+#define ARCTICDB_MOVE_ONLY_OUT_OF_LINE(__T__)                                                                          \
+    __T__(__T__&&) noexcept;                                                                                           \
+    __T__& operator=(__T__&&) noexcept;                                                                                \
     __T__(const __T__&) = delete;                                                                                      \
     __T__& operator=(const __T__&) = delete;
 
@@ -39,3 +46,4 @@
 #define ARCTICDB_MOVE(__T__)                                                                                           \
     __T__(__T__&&) noexcept = default;                                                                                 \
     __T__& operator=(__T__&&) noexcept = default;
+// NOLINTEND(bugprone-macro-parentheses)

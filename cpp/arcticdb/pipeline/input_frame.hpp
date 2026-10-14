@@ -10,15 +10,14 @@
 
 #include "column_store/column.hpp"
 #include "entity/stream_descriptor.hpp"
-#include <sparrow/record_batch.hpp>
 #include <arcticdb/arrow/arrow_c_interface.hpp>
 #include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/entity/native_tensor.hpp>
 #include <arcticdb/stream/index.hpp>
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/entity/index_range.hpp>
+#include <arcticdb/util/constructors.hpp>
 #include <arcticdb/util/type_traits.hpp>
-#include <utility>
 
 namespace arcticdb::pipelines {
 
@@ -43,12 +42,12 @@ struct InputFrame {
     using FieldData = std::variant<NativeTensor, Column>;
 
     InputFrame();
+    ~InputFrame();
+
+    ARCTICDB_MOVE_ONLY_OUT_OF_LINE(InputFrame);
 
     template<ValidIndex Index>
-    InputFrame(StreamDescriptor&& desc, std::vector<NativeTensor>&& field_tensors, Index&& index) :
-        index(std::forward<Index>(index)) {
-        set_from_tensors(std::move(desc), std::move(field_tensors));
-    }
+    InputFrame(StreamDescriptor&& desc, std::vector<NativeTensor>&& field_tensors, Index&& index);
 
     // field_tensors are stored in order; the index column, when present, must be at field_tensors[0].
     void set_from_tensors(StreamDescriptor&& desc, std::vector<NativeTensor>&& field_tensors);
