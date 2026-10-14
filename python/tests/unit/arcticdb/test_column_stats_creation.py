@@ -24,6 +24,7 @@ from arcticdb_ext.storage import KeyType
 from arcticdb_ext.version_store import NoSuchVersionException
 from arcticdb import QueryBuilder
 from arcticdb.exceptions import ArcticNativeException
+from arcticdb.version_store._string_dtype import _use_pyarrow_strings_in_pandas
 from arcticdb.util.hypothesis import use_of_function_scoped_fixtures_in_hypothesis_checked
 from arcticdb.util.test import config_context
 
@@ -244,11 +245,17 @@ def test_column_stats_string_null_and_nan_counts(in_memory_store_factory, lib_na
 
     # The last slice holds nothing but Nones, so it legitimately has no min or max - unlike an
     # all-NaN float slice, where NaN itself is recorded as the min.
+    # With pyarrow strings in Pandas, None and np.nan become Arrow nulls, and so appear in the null count
+    # Without, both are treated as NaNs by the counting
     expected = row_range_columns_to_pl(lib, sym).with_columns(
         pl.Series("v1_MIN_STR(strings)", [pack_string_stat("a"), pack_string_stat("b"), None], dtype=pl.UInt64),
         pl.Series("v1_MAX_STR(strings)", [pack_string_stat("a"), pack_string_stat("b"), None], dtype=pl.UInt64),
-        pl.Series("v1_NAN_COUNT(strings)", [0, 1, 0], dtype=pl.UInt64),
-        pl.Series("v1_NULL_COUNT(strings)", [1, 0, 2], dtype=pl.UInt64),
+        pl.Series(
+            "v1_NAN_COUNT(strings)", [0, 0, 0] if _use_pyarrow_strings_in_pandas() else [1, 1, 2], dtype=pl.UInt64
+        ),
+        pl.Series(
+            "v1_NULL_COUNT(strings)", [1, 1, 2] if _use_pyarrow_strings_in_pandas() else [0, 0, 0], dtype=pl.UInt64
+        ),
     )
     assert_stats_equal(lib.read_column_stats_experimental(sym), expected, check_dtypes=True)
 
