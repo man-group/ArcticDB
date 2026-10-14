@@ -1,7 +1,9 @@
 # ===========================================================================
-# EXPERIMENT — NOT PART OF THE PIPELINE. Delete this file, its worker
-# (`benchmark_worker_commit_ab.yml`) and the branch they live on
-# (`benchmark-winds-commit-ab`) when the experiment is over.
+# Born as an experiment (gha 154) on `benchmark-winds-commit-ab`. Since gha 157
+# `benchmark_winds.yml` also calls it (`workflow_call`) to confirm a pull
+# request's flagged benchmarks on one box before the gate fails the run, so it
+# and its worker (`benchmark_worker_commit_ab.yml`) live beside the pipeline on
+# `benchmark-winds-shadow` too. Keep the two branches' copies identical.
 # ===========================================================================
 #
 # arctic-winds gha 154: an interleaved A/B of two or more ArcticDB COMMITS on the
@@ -53,6 +55,22 @@ on:
     branches: [benchmark-winds-commit-ab]
     paths: ['.github/workflows/benchmark_commit_ab.yml']
 
+  # gha 157: the pipeline's `confirm` job. The same inputs as a dispatch, plus the
+  # pull request whose head the lanes check between rounds, so a confirmation of a
+  # head the pull request has moved past stops early instead of being cancelled
+  # (cancelling during an EC2 start orphans the instance).
+  workflow_call:
+    inputs:
+      arms:           {required: true,  type: string, description: "as the dispatch's `arms`"}
+      lanes:          {required: true,  type: string, description: "as the dispatch's `lanes`; the pipeline passes the JSON form, each lane with its own suite"}
+      suite:          {required: false, type: string, default: '', description: "the regex for every lane without a suite of its own"}
+      rounds:         {required: false, type: string, default: '8'}
+      budget_minutes: {required: false, type: string, default: '60'}
+      profile:        {required: false, type: string, default: ''}
+      label:          {required: false, type: string, default: ''}
+      pr_number:      {required: false, type: string, default: '', description: "the pull request whose head the lanes watch"}
+      pr_head:        {required: false, type: string, default: '', description: "the head being confirmed; a lane stops between rounds once the pull request has moved past it"}
+
   workflow_dispatch:
     inputs:
       arms:
@@ -69,13 +87,17 @@ on:
           Semicolon-separated `<name>:<instance type>:<storage>` triples, one EC2 box
           each. Storage is LMDB, or SEAWEED for the SeaweedFS the worker starts on the
           box (the AMAZON-parameterised benchmarks, against a local S3). Real AWS is
-          not offered: an A/B has no business paying per request.
+          not offered: an A/B has no business paying per request. Or a JSON list of
+          `{"lane", "instance_type", "storage", "suite"?, "image_id"?}` — a lane with
+          its own suite runs that instead of `suite`, and `image_id` pins its AMI
+          (what `arctic-winds confirm plan` writes, gha 157).
         type: string
         required: true
       suite:
-        description: The asv --bench regex every lane runs, every round
+        description: The asv --bench regex every lane runs, every round (unless the lane names its own)
         type: string
-        required: true
+        required: false
+        default: ''
       rounds:
         description: >-
           Interleaved rounds per lane; each round runs every arm once. 0 runs no rounds
@@ -106,7 +128,9 @@ on:
 jobs:
   plan:
     name: plan the A/B
-    if: github.event_name == 'workflow_dispatch'
+    # A dispatch, or a call from `benchmark_winds.yml` (where `event_name` is the
+    # caller's); only the registration push runs nothing.
+    if: github.event_name != 'push'
     runs-on: ubuntu-22.04
     timeout-minutes: 10
     outputs:
@@ -120,6 +144,7 @@ jobs:
         env:
           ARMS: ${{ inputs.arms }}
           LANES: ${{ inputs.lanes }}
+          SUITE: ${{ inputs.suite }}
           ROUNDS: ${{ inputs.rounds }}
           BUDGET: ${{ inputs.budget_minutes }}
           PROFILE: ${{ inputs.profile }}
@@ -173,20 +198,42 @@ jobs:
               fail("the profile pass names its files by sha8, so it needs every arm on its own sha")
 
           lanes = []
-          for spec in os.environ["LANES"].split(";"):
-              if not spec.strip():
-                  continue
-              parts = [part.strip() for part in spec.split(":")]
-              if len(parts) != 3:
-                  fail(f"lane {spec!r} is not <name>:<instance type>:<storage>")
-              name, instance, storage = parts
+          text = os.environ["LANES"].strip()
+          if text.startswith("["):
+              # gha 157's form: one object per lane, each with its own suite.
+              try:
+                  specs = [(str(o.get("lane", "")), str(o.get("instance_type", "")),
+                            str(o.get("storage", "")), str(o.get("suite") or ""),
+                            str(o.get("image_id") or "")) for o in json.loads(text)]
+              except (ValueError, AttributeError):
+                  fail("lanes is not a JSON list of {lane, instance_type, storage, suite?, image_id?}")
+          else:
+              specs = []
+              for spec in text.split(";"):
+                  if not spec.strip():
+                      continue
+                  parts = [part.strip() for part in spec.split(":")]
+                  if len(parts) != 3:
+                      fail(f"lane {spec!r} is not <name>:<instance type>:<storage>")
+                  specs.append((*parts, "", ""))
+          for name, instance, storage, suite, image in specs:
               if not NAME.match(name):
                   fail(f"lane name {name!r}: lowercase letters, digits and '-', at most 24")
               if not re.match(r"^[a-z0-9]+\.[a-z0-9]+$", instance):
                   fail(f"lane {name}: {instance!r} is not an EC2 instance type")
               if storage not in ("LMDB", "SEAWEED"):
                   fail(f"lane {name}: storage {storage!r} is not LMDB or SEAWEED")
-              lanes.append({"lane": name, "instance_type": instance, "storage": storage})
+              suite = suite or os.environ["SUITE"].strip()
+              if not suite:
+                  fail(f"lane {name}: no suite, and no `suite` input to fall back on")
+              try:
+                  re.compile(suite)
+              except re.error as bad:
+                  fail(f"lane {name}: suite {suite!r} is not a regex: {bad}")
+              if image and not re.match(r"^ami-[0-9a-f]+$", image):
+                  fail(f"lane {name}: {image!r} is not an AMI id")
+              lanes.append({"lane": name, "instance_type": instance, "storage": storage,
+                            "suite": suite, "image_id": image})
           if not lanes:
               fail("no lanes")
           if len({lane["lane"] for lane in lanes}) != len(lanes):
@@ -225,7 +272,7 @@ jobs:
           {
             echo "### 🔀 commit A/B on one box${LABEL:+ — \`$LABEL\`}"
             echo
-            echo "- suite: \`$SUITE\`"
+            if [ -n "$SUITE" ]; then echo "- suite: \`$SUITE\`"; fi
             echo "- rounds: $ROUNDS per lane, order rotated each round, inside $BUDGET min"
             echo "- profile pass: ${PROFILE:+\`$PROFILE\`, one per arm after the rounds}${PROFILE:-none}"
             echo
@@ -233,15 +280,15 @@ jobs:
             echo "| --- | --- | --- | --- |"
             jq -r 'to_entries[] | "| \(.value.arm) | `\(.value.sha)` | \(if .key == 0 then "baseline" else "treatment" end) | \(.value.pins // "" | gsub("@"; " ")) |"' <<<"$ARMS_JSON"
             echo
-            echo "| lane | instance | storage |"
-            echo "| --- | --- | --- |"
-            jq -r '.[] | "| \(.lane) | \(.instance_type) | \(.storage) |"' <<<"$LANES_JSON"
+            echo "| lane | instance | storage | suite |"
+            echo "| --- | --- | --- | --- |"
+            jq -r '.[] | "| \(.lane) | \(.instance_type)\(if .image_id != "" then " (" + .image_id + ")" else "" end) | \(.storage) | `\(.suite)` |"' <<<"$LANES_JSON"
           } >> "$GITHUB_STEP_SUMMARY"
 
   # ~6 s; the same manylinux image `benchmark_winds.yml` builds with.
   cibw_docker_image:
     name: cibuildwheel image
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name != 'push'
     uses: ./.github/workflows/cibw_docker_image.yml
     permissions: {packages: write}
     with:
@@ -254,7 +301,7 @@ jobs:
   build:
     name: build ${{ matrix.arm }} (${{ matrix.sha8 }})
     needs: [plan, cibw_docker_image]
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name != 'push'
     # One wheel per arm, each built from the arm's own commit by this one job
     # definition: same image, same preset, same flags. The arms can differ in their
     # source and in nothing about how it was compiled.
@@ -526,6 +573,9 @@ jobs:
           path: wheelhouse/*.whl
           if-no-files-found: error
           retention-days: 7   # only ever needed inside this run
+          # A re-run of this job (or of the pipeline's `confirm`) uploads it again,
+          # and v4 refuses a name that already exists rather than replacing it.
+          overwrite: true
 
       # Its own artifact, so no worker downloads it: `collect` resolves lines from it
       # (`arctic-winds srclines`). Findable from a profile by the build id in its file
@@ -539,12 +589,13 @@ jobs:
           path: debug/*.debug
           if-no-files-found: error
           retention-days: 30
+          overwrite: true
           compression-level: 0   # already zlib-compressed by objcopy
 
   worker:
     needs: [plan, build]
     if: >-
-      !cancelled() && github.event_name == 'workflow_dispatch'
+      !cancelled() && github.event_name != 'push'
       && needs.plan.result == 'success' && needs.build.result == 'success'
     strategy:
       fail-fast: false   # one lane dying must not cancel the others
@@ -558,8 +609,13 @@ jobs:
       instance_type: ${{ matrix.instance_type }}
       storage: ${{ matrix.storage }}
       arms: ${{ needs.plan.outputs.arms }}
-      suite: ${{ inputs.suite }}
+      # The lane's own suite: the plan fell back to the `suite` input for a lane
+      # without one.
+      suite: ${{ matrix.suite }}
+      image_id: ${{ matrix.image_id }}
       rounds: ${{ inputs.rounds }}
       budget_minutes: ${{ inputs.budget_minutes }}
       profile: ${{ inputs.profile }}
       bucket: ${{ needs.plan.outputs.bucket }}
+      pr_number: ${{ inputs.pr_number || '' }}
+      pr_head: ${{ inputs.pr_head || '' }}

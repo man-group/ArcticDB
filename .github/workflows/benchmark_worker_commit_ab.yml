@@ -1,6 +1,7 @@
 # ===========================================================================
-# EXPERIMENT — NOT PART OF THE PIPELINE. Called only by `benchmark_commit_ab.yml`
-# (arctic-winds gha 154); delete the two together.
+# Called only by `benchmark_commit_ab.yml` (arctic-winds gha 154), which since
+# gha 157 the pipeline also calls to confirm a pull request's flagged rows.
+# The two files go together.
 # ===========================================================================
 #
 # One EC2 box, several commits, interleaved. A trimmed copy of
@@ -34,6 +35,9 @@ on:
       budget_minutes: {required: true,  type: string, description: "wall minutes the timed rounds may take"}
       profile:        {required: false, type: string, default: '', description: "non-empty: one profiled bench per arm after the rounds"}
       bucket:         {required: false, type: string, default: '', description: "the SeaweedFS bucket a SEAWEED lane creates on its own server"}
+      image_id:       {required: false, type: string, default: '', description: "the AMI to boot; empty = ec2_runner_jobs.yml's default, which is every pipeline lane's"}
+      pr_number:      {required: false, type: string, default: '', description: "with pr_head: stop between rounds once this pull request's head is no longer pr_head"}
+      pr_head:        {required: false, type: string, default: '', description: "the head this lane is confirming"}
 
 jobs:
   start:
@@ -43,6 +47,10 @@ jobs:
     with:
       job_type: start
       instance-type: ${{ inputs.instance_type }}
+      # gha 157: the flagged lane's own AMI when the pipeline pinned one. The
+      # fallback repeats `ec2_runner_jobs.yml`'s default, as `benchmark_worker.yml`
+      # does, because a `with:` key cannot be left out conditionally.
+      image-id: ${{ inputs.image_id != '' && inputs.image_id || 'ami-0936679d3002e5be3' }}
       market-type: spot
 
   bench:
@@ -168,8 +176,19 @@ jobs:
           STORAGE: ${{ inputs.storage }}
           INSTANCE_TYPE: ${{ inputs.instance_type }}
           AMI_ID: ${{ steps.runner.outputs.ami }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+          PR_HEAD: ${{ inputs.pr_head }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -uo pipefail
+          # gha 157: the head of the pull request being confirmed, as GitHub has it
+          # now, or nothing when it cannot be asked (which never stops a lane).
+          current_head() {
+            curl -fsS -m 10 -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
+              "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" 2>/dev/null \
+              | python3 -c 'import json, sys; print(json.load(sys.stdin)["head"]["sha"])' 2>/dev/null || true
+          }
+          stale=""
           ARM_LINES=()
           # `build` names the arm's wheel (an arm sharing a sha shares its wheel) and
           # `pins` its uv overrides, `@`-joined, or `-` for none. Both default to the
@@ -193,6 +212,16 @@ jobs:
             if [ "$r" -gt 1 ] && [ $(( elapsed + last )) -gt "$budget_s" ]; then
               echo "::warning::${LANE}: stopping after ${completed} of ${ROUNDS} rounds — ${elapsed}s elapsed, the last round took ${last}s, the budget is ${budget_s}s"
               break
+            fi
+            # A confirmation of a head the pull request has moved past is spent
+            # money: stop at the round boundary, and let `stop` return the box.
+            if [ "$r" -gt 1 ] && [ -n "$PR_NUMBER" ] && [ -n "$PR_HEAD" ]; then
+              now=$(current_head)
+              if [ -n "$now" ] && [ "$now" != "$PR_HEAD" ]; then
+                stale="$now"
+                echo "::notice::${LANE}: #${PR_NUMBER} moved on to ${now:0:8}; stopping after ${completed} rounds of ${PR_HEAD:0:8}"
+                break
+              fi
             fi
             round_start=$(date +%s)
             for k in $(seq 0 $(( n - 1 ))); do
@@ -248,6 +277,7 @@ jobs:
             echo
             echo "- rounds completed: $completed of $ROUNDS in $(( ($(date +%s) - t0) / 60 )) min (budget $BUDGET_MINUTES)"
             echo "- calls that failed: $(grep -c '"status":"failed"' "$manifest" || true)"
+            if [ -n "$stale" ]; then echo "- stopped early: the pull request moved on to \`${stale:0:8}\`"; fi
           } >> "$GITHUB_STEP_SUMMARY"
           # A lane with no usable round is a failed lane; one with some is a result.
           grep -q '"status":"ok"' "$manifest"
