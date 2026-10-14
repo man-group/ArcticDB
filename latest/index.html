@@ -8,7 +8,7 @@
       
       
       
-        <link rel="canonical" href="https://docs.arcticdb.io/6.27.1/">
+        <link rel="canonical" href="https://docs.arcticdb.io/6.28.0/">
       
       
       
@@ -605,6 +605,34 @@
     
   
     History of ArcticDB
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="release_notes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Release Notes
   
 
     
@@ -2543,7 +2571,7 @@ be slower.</p>
 <p>ArcticDB supports many common DataFrame analytics operations, including filtering, projections, group-bys, aggregations, and resampling. The most intuitive way to access these operations is via the <a href="api/processing/#arcticdb.LazyDataFrame"><code>LazyDataFrame</code></a> API, which should feel familiar to experienced users of Pandas or Polars.</p>
 <p>The legacy <a href="api/processing/#arcticdb.QueryBuilder"><code>QueryBuilder</code></a> class can also be created directly and passed into <code>read</code> calls with the same effect.</p>
 <div class="admonition info">
-<p class="admonition-title">ArcticDB Analytics Philosphy</p>
+<p class="admonition-title">ArcticDB Analytics Philosophy</p>
 <p>In most cases this is more memory efficient and performant than the equivalent Pandas operation as the processing is within the C++ storage engine and parallelized over multiple threads of execution. </p>
 </div>
 <p><div class="highlight"><pre><span></span><code><span class="kn">import</span> <span class="nn">arcticdb</span> <span class="k">as</span> <span class="nn">adb</span>
@@ -2617,7 +2645,7 @@ Then look at the final 5 rows to see what happened</p>
 <span class="n">df</span><span class="o">.</span><span class="n">index</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">date_range</span><span class="p">(</span><span class="n">datetime</span><span class="p">(</span><span class="mi">2000</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">5</span><span class="p">),</span> <span class="n">periods</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">freq</span><span class="o">=</span><span class="s2">&quot;2h&quot;</span><span class="p">)</span>
 <span class="n">df</span>
 </code></pre></div>
-<em>output (rows 0 and 2 only as selected by the <code>iloc[]</code>)</em>
+<em>output (rows at 05:00 and 07:00 only, generated using a 2-hour frequency)</em>
 <div class="highlight"><pre><span></span><code>                     COL_0  COL_1  COL_2  COL_3  COL_4  COL_5  COL_6  COL_7  ...
 2000-01-01 05:00:00     47     49     15      6     22     48     45     22  ...
 2000-01-01 07:00:00     46     10      2     49     24     49      8      0  ...
@@ -2715,7 +2743,7 @@ space for the map file eagerly, whereas on Linux the map size is an upper bound 
 <div class="highlight"><pre><span></span><code><span class="kn">import</span> <span class="nn">arcticdb</span> <span class="k">as</span> <span class="nn">adb</span>
 <span class="n">ac</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">Arctic</span><span class="p">(</span><span class="s1">&#39;lmdb://path/to/desired/database?map_size=2GB&#39;</span><span class="p">)</span>
 </code></pre></div>
-<p>The default on Windows is 2GiB. Errors with <code>lmdb errror code -30792</code> indicate that the map is getting full and that you should
+<p>The default on Windows is 2GiB. Errors with <code>lmdb error code -30792</code> indicate that the map is getting full and that you should
 increase its size. This will happen if you are doing large writes.</p>
 <p>In each Python process, you should ensure that you only have one Arctic instance open over a given LMDB database.</p>
 <p>LMDB does not work with remote filesystems.</p>
@@ -2729,7 +2757,7 @@ increase its size. This will happen if you are doing large writes.</p>
 <p>For concurrent access to a local backend, we recommend LMDB connected to tmpfs, see <a href="tutorials/lmdb_and_in_memory/">LMDB and In-Memory Tutorial</a>.</p>
 <h3 id="transactions">Transactions<a class="headerlink" href="#transactions" title="Permanent link">&para;</a></h3>
 <ul>
-<li>Transactions can be be very useful but are often expensive and slow</li>
+<li>Transactions can be very useful but are often expensive and slow</li>
 <li>If we unpack ACID: Atomicity, Consistency and Durability are useful, Isolation less so</li>
 <li>Most analytical workflows can be constructed to run without needing transactions at all</li>
 <li>So why pay the cost of transactions when they are often not needed?</li>

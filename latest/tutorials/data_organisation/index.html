@@ -8,7 +8,7 @@
       
       
       
-        <link rel="canonical" href="https://docs.arcticdb.io/6.27.1/tutorials/data_organisation/">
+        <link rel="canonical" href="https://docs.arcticdb.io/6.28.0/tutorials/data_organisation/">
       
       
         <link rel="prev" href="../lmdb_and_in_memory/">
@@ -445,6 +445,34 @@
     
   
     History of ArcticDB
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../release_notes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Release Notes
   
 
     
@@ -1059,10 +1087,10 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#seperate-symbol-for-each-security" class="md-nav__link">
+  <a href="#separate-symbol-for-each-security" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Seperate Symbol for Each Security
+        Separate Symbol for Each Security
       
     </span>
   </a>
@@ -2588,7 +2616,7 @@
 <p>The object stores available will typically be decided by external factors such as</p>
 <ul>
 <li>Environment: prod/uat/research</li>
-<li>Permissions: enviroments that grant/deny read/write permission to different groups of users/systems</li>
+<li>Permissions: environments that grant/deny read/write permission to different groups of users/systems</li>
 <li>Accounting: different cloud buckets may be charged to different internal accounts</li>
 <li>Storage Quotas: different amounts of storage may be allocated for different purposes</li>
 <li>Storage Performance: faster/slower storage for different applications according to requirements and cost</li>
@@ -2630,7 +2658,7 @@
 <li>Tooling to find and examine suspected bad data</li>
 <li>Consider how to reconcile suspected bad data vs the original data source</li>
 <li>Manual overrides to fix bad data to allow the system to run effectively while data is re-sourced</li>
-<li>Versioning and snaphsots makes it easy to return to a last known good state</li>
+<li>Versioning and snapshots makes it easy to return to a last known good state</li>
 </ul>
 <h3 id="maintenance">Maintenance<a class="headerlink" href="#maintenance" title="Permanent link">&para;</a></h3>
 <p>Some routine maintenance is required to keep systems running efficiently and deal with problems, some of which may have causes from outside the system.</p>
@@ -2677,7 +2705,7 @@
 <p>This means that lots of small appends or updates can result in lots of small data chunks, which makes reads slower.</p>
 <p>You can defragment a symbol manually using the <a href="../../api/library/">compact_data</a> library method.</p>
 <h2 id="examples-based-on-market-data">Examples Based on Market Data<a class="headerlink" href="#examples-based-on-market-data" title="Permanent link">&para;</a></h2>
-<h3 id="seperate-symbol-for-each-security">Seperate Symbol for Each Security<a class="headerlink" href="#seperate-symbol-for-each-security" title="Permanent link">&para;</a></h3>
+<h3 id="separate-symbol-for-each-security">Separate Symbol for Each Security<a class="headerlink" href="#separate-symbol-for-each-security" title="Permanent link">&para;</a></h3>
 <p>The data for a single security would be a timeseries of market data. In this set of sample data this would be all the price data for AAPL.</p>
 <p><img alt="" src="../../images/MarketData5MinBarsSingleSec.png" /></p>
 <p>Every security has its own symbol with the same data shape.</p>

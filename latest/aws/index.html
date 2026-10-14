@@ -8,7 +8,7 @@
       
       
       
-        <link rel="canonical" href="https://docs.arcticdb.io/6.27.1/aws/">
+        <link rel="canonical" href="https://docs.arcticdb.io/6.28.0/aws/">
       
       
         <link rel="prev" href="../tutorials/query_stats/">
@@ -445,6 +445,34 @@
     
   
     History of ArcticDB
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../release_notes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Release Notes
   
 
     
@@ -2531,7 +2559,7 @@ If any of the operations fail, verify the permissions assigned to your IAM role 
 <div class="highlight"><pre><span></span><code><span class="o">&gt;&gt;&gt;</span> <span class="kn">import</span> <span class="nn">arcticdb</span> <span class="k">as</span> <span class="nn">adb</span>
 <span class="o">&gt;&gt;&gt;</span> <span class="n">arctic</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">Arctic</span><span class="p">(</span><span class="s1">&#39;s3://s3.REGION.amazonaws.com:BUCKET?aws_auth=sts&amp;aws_profile=PROFILE&#39;</span><span class="p">)</span>
 </code></pre></div></p>
-<p>For more in-depth documentation please refer to <a href="https://docs.aws.amazon.com/IAM/latest/UserGuide/id_credentials_temp.html">the offical website</a>.</p>
+<p>For more in-depth documentation please refer to <a href="https://docs.aws.amazon.com/IAM/latest/UserGuide/id_credentials_temp.html">the official website</a>.</p>
 <hr />
 <h2 id="common-errors-when-working-with-sts-troubleshooting">Common Errors When Working with STS - Troubleshooting<a class="headerlink" href="#common-errors-when-working-with-sts-troubleshooting" title="Permanent link">&para;</a></h2>
 <p>When using STS with ArcticDB, the following common errors may occur. These are typically caused by issues with the AWS C++ SDK, incorrect IAM account setup, or misconfigured files. To enable additional logging, refer to <a href="../runtime_config/#logging-configuration">this guide</a>.</p>
@@ -2567,7 +2595,7 @@ If any of the operations fail, verify the permissions assigned to your IAM role 
 <h4 id="affected-users">Affected users<a class="headerlink" href="#affected-users" title="Permanent link">&para;</a></h4>
 <ul>
 <li><strong>Use STS authentication, and</strong></li>
-<li><strong>Use below opearting systems</strong></li>
+<li><strong>Use below operating systems</strong></li>
 <li><strong>RHEL distributions with custom CA certificates</strong></li>
 <li><strong>Other Linux distributions</strong></li>
 </ul>

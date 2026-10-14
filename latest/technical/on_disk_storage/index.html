@@ -8,7 +8,7 @@
       
       
       
-        <link rel="canonical" href="https://docs.arcticdb.io/6.27.1/technical/on_disk_storage/">
+        <link rel="canonical" href="https://docs.arcticdb.io/6.28.0/technical/on_disk_storage/">
       
       
         <link rel="prev" href="../architecture/">
@@ -445,6 +445,34 @@
     
   
     History of ArcticDB
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../release_notes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Release Notes
   
 
     
@@ -2553,7 +2581,7 @@ when using another storage engine such as LMDB.</p>
 <p>The below documentation details the architecture for the symbol list cache.</p>
 <p>It explains that to speed up <code>list_symbols</code>, <strong>simply run <code>list_symbols</code> through to completion frequently</strong>. 
 The cache is built on first run and <em>compacted</em> afterwards. 
-This will speed up <code>list_symbols</code> for <strong>all accessors of the library - not just the user that runs </strong><code>list_symbols</code>. </p>
+This will speed up <code>list_symbols</code> for **all accessors of the library - not just the user that runs **<code>list_symbols</code>. </p>
 </div>
 <p><code>list_symbols</code> is a common operation to perform on an ArcticDB library. As this returns a list of "live" symbols (those for which at least one version has not been deleted), using the data structures described above, this involves:</p>
 <ul>

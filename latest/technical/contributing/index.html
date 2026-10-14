@@ -8,7 +8,7 @@
       
       
       
-        <link rel="canonical" href="https://docs.arcticdb.io/6.27.1/technical/contributing/">
+        <link rel="canonical" href="https://docs.arcticdb.io/6.28.0/technical/contributing/">
       
       
         <link rel="prev" href="../migration/">
@@ -445,6 +445,34 @@
     
   
     History of ArcticDB
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../release_notes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Release Notes
   
 
     
@@ -2256,11 +2284,11 @@ contributions that you make are licensed under the same terms.
 For us to be able to accept your contributions, we will need explicit confirmation from you that you are able and
 willing to provide them under these terms, and the mechanism we use to do this is the <a href="https://github.com/man-group/ArcticDB/blob/master/Individual%20Contributor%20License%20Agreement.md">ArcticDB Individual Contributor License Agreement</a>.</p>
 <p><strong>Individuals</strong> - To participate under these terms, please include the following line as the last line of the commit
-message for each commit in your contribution.
+message for each commit in your contribution and in the PR description.
 You must use your real name (no pseudonyms, and no anonymous contributions).</p>
 <div class="highlight"><pre><span></span><code>Signed-Off By: Random J. Developer &lt;random@developer.example.org&gt;. By including this sign-off line I agree to the terms of the Contributor License Agreement.
 </code></pre></div>
-<p><strong>Corporations</strong> - For corporations who wish to make contributions to ArcticDB, please contact info@arcticdb.io and
+<p><strong>Corporations</strong> - For corporations who wish to make contributions to ArcticDB, please contact <a href="&#109;&#97;&#105;&#108;&#116;&#111;&#58;&#105;&#110;&#102;&#111;&#64;&#97;&#114;&#99;&#116;&#105;&#99;&#100;&#98;&#46;&#105;&#111;">&#105;&#110;&#102;&#111;&#64;&#97;&#114;&#99;&#116;&#105;&#99;&#100;&#98;&#46;&#105;&#111;</a> and
 we will arrange for the CLA to be sent to the signing authority within your corporation.</p>
 <h1 id="code-style">Code Style<a class="headerlink" href="#code-style" title="Permanent link">&para;</a></h1>
 <p>As part of the CI, linting checks are performed to ensure code meets our style guidelines. To automatically format code to match these guidelines, run the following commands from the project root directory:
@@ -2277,7 +2305,7 @@ ArcticDB releases on PyPi use vcpkg dependencies in the manner as described belo
 docker<span class="w"> </span>run<span class="w"> </span>-it<span class="w"> </span>ghcr.io/man-group/cibuildwheel_manylinux:2.12.1-3a897
 </code></pre></div>
 <blockquote>
-<p>:warning: The below instructions do not have to be run in the provided docker image. They can be run against any Python installation on any Linux distribution as long as the basic build <a href="#setting-up-linux">dependencies are available</a>.</p>
+<p><img alt="⚠" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/svg/26a0.svg" title=":warning:" /> The below instructions do not have to be run in the provided docker image. They can be run against any Python installation on any Linux distribution as long as the basic build <a href="#setting-up-linux">dependencies are available</a>.</p>
 <p>If running outside the provided docker image, please change <code>/opt/python/cp39-cp39/bin/python3</code> in the examples below
 to an appropriate path for Python.</p>
 </blockquote>
@@ -2314,7 +2342,7 @@ cmake<span class="w"> </span>--build<span class="w"> </span>--preset<span class=
 It is a pre-requisite for releasing ArcticDB on conda-forge.</p>
 <p><strong>⚠️ At the time of writing, installing ArcticDB with this setup under Windows is not possible
 due to a linkage problems with libprotobuf.
-See: https://github.com/man-group/ArcticDB/pull/449</strong></p>
+See: <a href="https://github.com/man-group/ArcticDB/pull/449">https://github.com/man-group/ArcticDB/pull/449</a></strong></p>
 <ul>
 <li><a href="https://mamba.readthedocs.io/en/latest/installation.html">Install <code>mamba</code></a></li>
 <li>Create the <code>arcticdb</code> environment from its specification (<code>environment-dev.yml</code>):</li>
@@ -2442,7 +2470,7 @@ to separately download from <a href="https://www.python.org/downloads/windows/">
 <span class="nb">New-Item</span> <span class="n">-Path</span> <span class="p">.\</span><span class="n">python</span><span class="p">\</span><span class="n">arcticdb_ext</span><span class="p">.</span><span class="n">cp311-win_amd64</span><span class="p">.</span><span class="n">pyd</span> <span class="n">-ItemType</span> <span class="n">SymbolicLink</span> <span class="n">-Value</span> <span class="p">.\</span><span class="n">cpp</span><span class="p">\</span><span class="n">out</span><span class="p">\</span><span class="n">windows-cl-debug-build</span><span class="p">\</span><span class="n">arcticdb</span><span class="p">\</span><span class="n">arcticdb_ext</span><span class="p">.</span><span class="n">cp311-win_amd64</span><span class="p">.</span><span class="n">pyd</span>
 </code></pre></div>
 <h2 id="running-python-tests">Running Python tests<a class="headerlink" href="#running-python-tests" title="Permanent link">&para;</a></h2>
-<p>With <code>python</code> pointing to a Python interpeter with <code>ArcticDB</code> installed/on the <code>PYTHON_PATH</code>:</p>
+<p>With <code>python</code> pointing to a Python interpreter with <code>ArcticDB</code> installed/on the <code>PYTHON_PATH</code>:</p>
 <div class="highlight"><pre><span></span><code>python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>arcticdb<span class="o">[</span>Testing<span class="o">]</span>
 python<span class="w"> </span>-m<span class="w"> </span>pytest<span class="w"> </span>python/tests
 </code></pre></div>

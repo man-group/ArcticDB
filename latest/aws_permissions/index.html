@@ -8,7 +8,7 @@
       
       
       
-        <link rel="canonical" href="https://docs.arcticdb.io/6.27.1/aws_permissions/">
+        <link rel="canonical" href="https://docs.arcticdb.io/6.28.0/aws_permissions/">
       
       
         <link rel="prev" href="../aws/">
@@ -445,6 +445,34 @@
     
   
     History of ArcticDB
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../release_notes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Release Notes
   
 
     
@@ -2339,7 +2367,7 @@
 
 <h1 id="dynamic-library-permissions-with-articdb-on-aws-s3">Dynamic library permissions with ArticDB on AWS S3<a class="headerlink" href="#dynamic-library-permissions-with-articdb-on-aws-s3" title="Permanent link">&para;</a></h1>
 <h2 id="goal">Goal<a class="headerlink" href="#goal" title="Permanent link">&para;</a></h2>
-<p>One of the advantages of ArcticDB is how easy it is to setup and use as a personal database.  But how can we extend this pattern to an organisation?  How can we keep it trivial to use as an individual, but allow for secure sharing of data with team-mates and groups across your organisation?  We also want this to be easy to maintain, a key challange for permissions generally.</p>
+<p>One of the advantages of ArcticDB is how easy it is to setup and use as a personal database.  But how can we extend this pattern to an organisation?  How can we keep it trivial to use as an individual, but allow for secure sharing of data with team-mates and groups across your organisation?  We also want this to be easy to maintain, a key challenge for permissions generally.</p>
 <p>Here we model a small two team organisation, 'Acme', in AWS and create some flexible permissions that allow users and teams to create
 and use private and shared data without any per-library setup.</p>
 <ul>
@@ -2445,7 +2473,7 @@ with all your users in, for this example the group is <code>acme</code>.
 <ul>
 <li><code>acme-arcticdb</code> is the name of the bucket and will need to be replaced everywhere</li>
 <li><code>s3:ListBucket</code> is used to permission <code>ListObjectsV2</code> and needs its own section, as it applies to the bucket as a whole.  We control access to paths by checking the <code>s3:prefix</code> argument that's part of the <code>ListObjectsV2</code> request.</li>
-<li><code>Put</code>, <code>Get</code> and <code>Delete</code> can be specifed for object paths in the second section.</li>
+<li><code>Put</code>, <code>Get</code> and <code>Delete</code> can be specified for object paths in the second section.</li>
 <li><code>_arctic_cfg/cref/*</code> is where the ArcticDB library configuration is stored and the data for each library is stored in the root of the bucket with a path that starts with the library name.</li>
 <li>By using <code>${aws:username}</code> and <code>${aws:PrincipalTag/team}</code> we've restricted library access to those with a matching AWS IAM username or a matched user 'team' tag.</li>
 </ul>
@@ -2481,7 +2509,7 @@ with all your users in, for this example the group is <code>acme</code>.
 <span class="c1"># Can&#39;t use or delete Alan or Quant team data</span>
 <span class="n">arctic</span><span class="o">.</span><span class="n">get_library</span><span class="p">(</span><span class="s1">&#39;alan@acme/bonds&#39;</span><span class="p">)</span>
 <span class="n">arctic</span><span class="o">.</span><span class="n">get_library</span><span class="p">(</span><span class="s1">&#39;quant/stocks&#39;</span><span class="p">)</span>
-<span class="n">arctic</span><span class="o">.</span><span class="n">delete_libraru</span><span class="p">(</span><span class="s1">&#39;alan@acme/bonds&#39;</span><span class="p">)</span>
+<span class="n">arctic</span><span class="o">.</span><span class="n">delete_library</span><span class="p">(</span><span class="s1">&#39;alan@acme/bonds&#39;</span><span class="p">)</span>
 <span class="c1"># All raise:</span>
 <span class="c1"># PermissionException: E_PERMISSION Permission error: S3Error#15 : No response body.</span>
 </code></pre></div>

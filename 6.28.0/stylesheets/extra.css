@@ -1,0 +1,23 @@
+@import url("https://fonts.googleapis.com/css2?family=Geist+Mono:wght@100..900&display=swap");
+
+@font-face {
+  font-family: "Aspekta";
+  font-style: normal;
+  src: url("../assets/fonts/AspektaVF.woff2");
+}
+
+[data-md-color-scheme="arcticdb"] {
+  --md-primary-fg-color: #141c52;
+  --md-primary-fg-color--light: #ecb7b7;
+  --md-primary-fg-color--dark: #90030c;
+  --md-primary-bg-color: #f9f9f9;
+  --md-typeset-a-color: #783abb;
+  --md-default-fg-color--light: #783abb;
+  --md-accent-fg-color: #141c52;
+  --md-typeset-color: #141c52;
+  --md-default-bg-color: #f9f9f9;
+  }
+
+.md-grid {
+    max-width: 75rem;
+}
