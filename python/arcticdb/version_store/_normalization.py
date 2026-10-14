@@ -47,7 +47,6 @@ from arcticdb.exceptions import (
 from arcticdb.supported_types import DateRangeInput, time_types as supported_time_types
 from arcticdb.util._versions import IS_PANDAS_TWO, IS_PANDAS_ZERO
 from arcticdb_ext.version_store import PandasData, RecordBatchData, SortedValue as _SortedValue
-from arcticdb_ext.types import TypeDescriptor
 from pandas.core.internals import make_block
 
 from pandas import DataFrame, MultiIndex, Series, DatetimeIndex, Index, RangeIndex
@@ -127,12 +126,11 @@ def get_pickled_metadata_loglevel():
 
 
 class FrameData(NamedTuple):
-    data: List[Union[np.ndarray, List[RecordBatchData]]]
+    data: List[Union[np.ndarray, pd.api.extensions.ExtensionArray, List[RecordBatchData]]]
     names: List[str]
     index_columns: List[str]
     row_count: int
     offset: int
-    column_types: List[TypeDescriptor]
 
     @staticmethod
     def from_pandas_data(df):
@@ -143,7 +141,6 @@ class FrameData(NamedTuple):
             index_columns=df.index_names,
             row_count=len(df.columns_values[0]),
             offset=0,
-            column_types=[],
         )
 
 

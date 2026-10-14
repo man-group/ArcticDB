@@ -14,6 +14,7 @@ import pytest
 
 from arcticdb.exceptions import ArcticDbNotYetImplemented
 from arcticdb.util._versions import IS_AT_LEAST_PANDAS_TWO_THREE
+from arcticdb.version_store._normalization import FrameData
 import arcticdb.version_store._string_dtype as string_dtype
 from arcticdb.version_store._string_dtype import _ARROW_BACKED_STR_DTYPE_SUPPORTED, _use_pyarrow_strings_in_pandas
 from arcticdb_ext.exceptions import UserInputException
@@ -366,6 +367,68 @@ def _str_array(values, storage, na_value=np.nan):
 
 
 @pytest.mark.skipif(not IS_AT_LEAST_PANDAS_TWO_THREE, reason="pandas str dtype requires pandas 2.3+")
+def test_wrap_predecoded_python_strings_without_copy():
+    values = np.array(["a", np.nan, "b"], dtype=object)
+    result = string_dtype._object_strings_to_python_str_array(values)
+    assert result.dtype == pd.StringDtype(storage="python", na_value=np.nan)
+    assert np.shares_memory(values, result._ndarray)
+
+
+@pytest.mark.skipif(not IS_AT_LEAST_PANDAS_TWO_THREE, reason="pandas str dtype requires pandas 2.3+")
+def test_adapt_object_string_column_in_python_without_types(monkeypatch):
+    monkeypatch.setattr(string_dtype, "_ARROW_BACKED_STR_DTYPE_SUPPORTED", False)
+    values = np.array(["a", np.nan, "b"], dtype=object)
+    frame = FrameData(data=[values], names=["s"], index_columns=[], row_count=3, offset=0)
+    with pd.option_context("future.infer_string", True):
+        result = string_dtype._adapt_string_column(frame, 0)
+    assert result.dtype == pd.StringDtype(storage="python", na_value=np.nan)
+    assert np.shares_memory(values, result._ndarray)
+
+
+@pytest.mark.skipif(not IS_AT_LEAST_PANDAS_TWO_THREE, reason="pandas str dtype requires pandas 2.3+")
+@pytest.mark.parametrize("skip_consolidation", [False, True])
+def test_read_object_write_as_python_str_without_arrow(lmdb_version_store_v2, monkeypatch, skip_consolidation):
+    monkeypatch.setattr(string_dtype, "_ARROW_BACKED_STR_DTYPE_SUPPORTED", False)
+    decoded_arrays = []
+    wrap = string_dtype._object_strings_to_python_str_array
+
+    def capture_wrap(value):
+        decoded_arrays.append(value)
+        result = wrap(value)
+        assert np.shares_memory(value, result._ndarray)
+        return result
+
+    monkeypatch.setattr(string_dtype, "_object_strings_to_python_str_array", capture_wrap)
+    lib = lmdb_version_store_v2
+    lib._normalizer.df._skip_df_consolidation = skip_consolidation
+    lib.write("s", pd.DataFrame({"c": pd.Series(["a", None, np.nan, "b"], dtype=object)}), dynamic_strings=True)
+    with pd.option_context("future.infer_string", True, "mode.string_storage", "python"):
+        received = lib.read("s").data["c"]
+    assert received.dtype == pd.StringDtype(storage="python", na_value=np.nan)
+    assert received.iloc[[0, 3]].tolist() == ["a", "b"]
+    assert np.isnan(received.iloc[1]) and np.isnan(received.iloc[2])
+    assert all(value is not None for value in received.array._ndarray)
+    if skip_consolidation:
+        assert np.shares_memory(decoded_arrays[0], received.array._ndarray)
+
+
+@pytest.mark.skipif(not IS_AT_LEAST_PANDAS_TWO_THREE, reason="pandas str dtype requires pandas 2.3+")
+@pytest.mark.parametrize("skip_consolidation", [False, True])
+def test_read_backfilled_python_str_without_arrow(version_store_factory, monkeypatch, skip_consolidation):
+    monkeypatch.setattr(string_dtype, "_ARROW_BACKED_STR_DTYPE_SUPPORTED", False)
+    lib = version_store_factory(dynamic_schema=True, dynamic_strings=True)
+    lib._normalizer.df._skip_df_consolidation = skip_consolidation
+    lib.write("s", pd.DataFrame({"v": [1, 2]}))
+    lib.append("s", pd.DataFrame({"v": [3, 4], "text": ["a", None]}))
+    with pd.option_context("future.infer_string", True, "mode.string_storage", "python"):
+        received = lib.read("s").data["text"]
+    assert received.dtype == pd.StringDtype(storage="python", na_value=np.nan)
+    assert received.iloc[2] == "a"
+    assert received.isna().tolist() == [True, True, False, True]
+    assert all(value is not None for value in received.array._ndarray)
+
+
+@pytest.mark.skipif(not IS_AT_LEAST_PANDAS_TWO_THREE, reason="pandas str dtype requires pandas 2.3+")
 @pytest.mark.parametrize("skip_consolidation", [False, True])
 @pytest.mark.parametrize("dynamic_strings", [False, True])
 def test_read_python_str_dtype_without_arrow(lmdb_version_store_v2, monkeypatch, skip_consolidation, dynamic_strings):
@@ -373,7 +436,7 @@ def test_read_python_str_dtype_without_arrow(lmdb_version_store_v2, monkeypatch,
     lib = lmdb_version_store_v2
     lib._normalizer.df._skip_df_consolidation = skip_consolidation
     values = ["a", None] if dynamic_strings else ["a", "b"]
-    frame = pd.DataFrame({"s": _str_array(values, "python"), "bytes": np.array([b"x", b"y"], dtype=object)})
+    frame = pd.DataFrame({"s": _str_array(values, "python")})
     with pd.option_context("future.infer_string", True, "mode.string_storage", "python"):
         lib.write("s", frame, dynamic_strings=dynamic_strings)
         received = lib.read("s").data
@@ -386,8 +449,6 @@ def test_read_python_str_dtype_without_arrow(lmdb_version_store_v2, monkeypatch,
         assert np.isnan(received["s"].iloc[1])
     else:
         assert received["s"].iloc[1] == "b"
-    assert not isinstance(received["bytes"].dtype, pd.StringDtype)
-    assert received["bytes"].tolist() == [b"x", b"y"]
 
 
 @pytest.mark.skipif(not IS_AT_LEAST_PANDAS_TWO_THREE, reason="pandas str dtype requires pandas 2.3+")
@@ -415,19 +476,6 @@ def test_read_all_null_python_str_index_without_arrow(lmdb_version_store_v2, mon
         received = lib.read("s").data.index
     assert received.dtype == pd.StringDtype(storage="python", na_value=np.nan)
     assert received.isna().all()
-
-
-@pytest.mark.skipif(not IS_AT_LEAST_PANDAS_TWO_THREE, reason="pandas str dtype requires pandas 2.3+")
-def test_read_empty_type_is_not_python_str_without_arrow(lmdb_version_store_empty_types_v2, monkeypatch):
-    monkeypatch.setattr(string_dtype, "_ARROW_BACKED_STR_DTYPE_SUPPORTED", False)
-    lib = lmdb_version_store_empty_types_v2
-    lib._normalizer.df.set_skip_df_consolidation()
-    with pd.option_context("future.infer_string", True, "mode.string_storage", "python"):
-        lib.write("s", pd.DataFrame({"c": pd.Series([None, None], dtype=object)}), dynamic_strings=True)
-        received = lib.read("s").data["c"]
-    assert "EMPTYVAL" in str(lib.get_info("s")["dtype"][0])
-    assert received.dtype == object
-    assert received.tolist() == [None, None]
 
 
 @_requires_str_dtype

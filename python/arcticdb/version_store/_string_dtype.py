@@ -13,7 +13,7 @@ import pandas as pd
 
 from arcticdb.dependencies import _PYARROW_AVAILABLE, pyarrow as pa
 from arcticdb.util._versions import IS_AT_LEAST_PANDAS_TWO_THREE, IS_AT_LEAST_PYARROW_TEN_ZERO_ONE
-from arcticdb_ext.types import DataType, Dimension
+from pandas._libs.arrays import NDArrayBacked
 from arcticdb_ext.version_store import RecordBatchData
 
 _ARROW_BACKED_STR_DTYPE_SUPPORTED = (
@@ -35,7 +35,13 @@ def _use_python_strings_in_pandas():
 
 
 def _object_strings_to_python_str_array(value):
-    return pd.array(value, dtype=pd.StringDtype(storage="python", na_value=np.nan))
+    dtype = pd.StringDtype(storage="python", na_value=np.nan)
+    if value.dtype != np.dtype("object"):
+        return pd.array(value, dtype=dtype)
+    array_type = dtype.construct_array_type()
+    result = array_type.__new__(array_type)
+    NDArrayBacked.__init__(result, value, dtype)
+    return result
 
 
 def _is_arrow_column(value):
@@ -52,19 +58,13 @@ def _arrow_string_arrays_to_pd_array(arrays):
 
 def _adapt_string_column(item, idx):
     column = item.data[idx]
-    if item.column_types:
-        column_type = item.column_types[idx]
-        is_string = column_type.dimension == Dimension.Dim0.value and column_type.data_type() in (
-            DataType.UTF_DYNAMIC64,
-            DataType.UTF_FIXED64,
-        )
-        if not is_string:
-            return column
-    elif not _is_arrow_column(column):
-        return column
     if _is_arrow_column(column):
         return _arrow_string_arrays_to_pd_array(column)
-    if _use_python_strings_in_pandas():
+    if (
+        isinstance(column, np.ndarray)
+        and (column.dtype == np.dtype("object") or column.dtype.kind == "U")
+        and _use_python_strings_in_pandas()
+    ):
         return _object_strings_to_python_str_array(column)
     return column
 

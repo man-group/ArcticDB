@@ -101,6 +101,7 @@ from arcticdb.version_store._custom_normalizers import get_custom_normalizer, Co
 from arcticdb.version_store._string_dtype import (
     _is_arrow_column,
     _use_pyarrow_strings_in_pandas,
+    _use_python_strings_in_pandas,
 )
 from arcticdb.version_store._normalization import (
     PandasData,
@@ -2389,11 +2390,12 @@ class NativeVersionStore:
                 },
             )
         else:  # Pandas
-            string_format = (
-                InternalPandasStringFormat.ARROW_LARGE_STRING
-                if _use_pyarrow_strings_in_pandas()
-                else InternalPandasStringFormat.OBJECT
-            )
+            if _use_pyarrow_strings_in_pandas():
+                string_format = InternalPandasStringFormat.ARROW_LARGE_STRING
+            elif _use_python_strings_in_pandas():
+                string_format = InternalPandasStringFormat.PYTHON_STRING
+            else:
+                string_format = InternalPandasStringFormat.OBJECT
             output_config = PandasOutputConfig(default_string_format=string_format)
         read_options.set_output_config(output_config)
         return read_options, output_format
@@ -2713,7 +2715,6 @@ class NativeVersionStore:
                     read_result.frame_data.index_columns,
                     row_count,
                     read_result.frame_data.offset,
-                    read_result.frame_data.column_types,
                 )
 
         vitem = self._adapt_read_res(read_result, output_format)
