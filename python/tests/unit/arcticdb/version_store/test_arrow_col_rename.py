@@ -19,8 +19,6 @@ from arcticdb.util.test import assert_frame_equal, assert_pandas_equal, query_st
 from arcticdb.version_store import TimeFrame
 from arcticdb_ext.storage import KeyType
 
-from python.tests.conftest import in_memory_version_store_arrow
-
 
 def make_df_or_series(object_type, name, values, index=None):
     if object_type == "DataFrame":
