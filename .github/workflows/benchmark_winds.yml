@@ -6,7 +6,9 @@
 #   plan ──┬─► cibw_docker_image ─► build ─────────┐
 #          ├──────────────────────► build_windows ─┤   (only when a lane needs it)
 #          └───────────────────────────────────────┴─► worker (matrix) ─► collect
-#                                                                            └─► publish_pr_page
+#                                                                                │
+#     (pull requests) confirm (same-box A/B of the flagged rows, if any) ◄───────┤
+#                        └─► gate (the pull request's verdict) ─► publish_pr_page
 #
 # The site those pages belong to is rebuilt by `publish_winds_site.yml`, which reads the
 # results store and needs nothing from a benchmark run.
@@ -1168,6 +1170,15 @@ jobs:
       actions: read
     outputs:
       library: ${{ steps.library.outputs.library }}
+      # gha 157: what `compare-values` said (0 clean, 1 flagged, 2 no comparison; empty
+      # when it never ran), and the same-box confirmation planned from it. `gate`
+      # turns the two into the pull request's verdict.
+      compare_rc: ${{ steps.compare.outputs.rc }}
+      confirm_run: ${{ steps.confirm.outputs.run }}
+      confirm_arms: ${{ steps.confirm.outputs.arms }}
+      confirm_lanes: ${{ steps.confirm.outputs.lanes }}
+      confirm_rounds: ${{ steps.confirm.outputs.rounds }}
+      confirm_budget: ${{ steps.confirm.outputs.budget_minutes }}
     env:
       # The bucket and prefix `transform_asv_results.py` writes to today. `aws_auth=true`
       # means arcticdb takes the credentials from the standard AWS environment below.
@@ -1233,8 +1244,12 @@ jobs:
               # worker's, and a directory of that name holding one JSON would
               # otherwise collect as a worker with somebody else's numbers in it.
               # `arcticdb-ext-debug-*` (the build's split DWARF) and `profile-lines`
-              # (a re-run's earlier resolution) are not workers either.
-              wheel-*|arcticdb-ext-debug-*|profile-lines|compare-report|benchmark-reference) continue ;;
+              # (a re-run's earlier resolution) are not workers either. Nor is
+              # anything the same-box confirmation left in the run (gha 157), which
+              # a re-run of this job downloads: its wheels (`wheel-base`,
+              # `wheel-head`, already caught above), their `debug-*` files, its
+              # lanes' `ab-*`, and the plan and verdict documents.
+              wheel-*|arcticdb-ext-debug-*|debug-*|ab-*|profile-lines|compare-report|benchmark-reference|confirm-plan|confirmation) continue ;;
             esac
             mv "$dir" "artifacts/$name"
           done
@@ -1372,7 +1387,13 @@ jobs:
       # can no longer decide which benchmarks are worth a flame graph.
       # `--report` writes the same verdict as JSON, which the PR page below is built
       # from: asv must not be run a second time to say what this step already knows.
+      #
+      # gha 157: a flag (exit 1) no longer turns this job red. It is put to a
+      # same-box A/B first (`confirm`), and the `gate` job is the pull request's
+      # verdict: red on a confirmed row, or on flags nothing could confirm. Exit 2
+      # still fails here, as before. The exit code is a step output either way.
       - name: compare against master
+        id: compare
         if: github.event_name == 'pull_request'
         env:
           LIBRARY: ${{ steps.library.outputs.library }}
@@ -1389,6 +1410,7 @@ jobs:
           # its timings sat at 11.36 %. The string is the plan's and nothing here reads
           # it: `compare-values` compares such a lane a second time, under its own
           # machine, precisely because of the name collision above.
+          rc=0
           arctic-winds compare-values \
             --commit "$COMMIT" \
             --tree . \
@@ -1398,7 +1420,13 @@ jobs:
             --repo . \
             --measure-only "$MEASURE_ONLY" \
             --normalize \
-            --report "$GITHUB_WORKSPACE/compare-report.json"
+            --report "$GITHUB_WORKSPACE/compare-report.json" || rc=$?
+          printf 'rc=%s\n' "$rc" >> "$GITHUB_OUTPUT"
+          if [ "$rc" = 1 ]; then
+            echo "::notice::The comparison flagged benchmarks. They are measured again on one box (job \`confirm\`) and the \`gate\` job gives the verdict."
+            exit 0
+          fi
+          exit "$rc"
 
       # The verdict, handed to `publish_pr_page`. The comparison must not be run twice
       # — asv would have to re-read both commits to say what this job already knows —
@@ -1415,6 +1443,86 @@ jobs:
           retention-days: 1
           # A re-run of this job uploads it a second time, and v4 refuses a name that
           # already exists rather than replacing it.
+          overwrite: true
+
+      # gha 157: the flagged rows, planned as a same-box A/B — the pull request's
+      # merge-base against its head, each flagged worker's rows on that worker's
+      # instance type and AMI, a suite that selects exactly those rows, capped so the
+      # rounds fit the budget. Here, not in a job of its own, because this job holds
+      # everything the plan reads: the report, the workers' result files (which lane
+      # measured a row, and how long it took), and the full clone the merge-base is
+      # computed in. `HEAD` is the merge commit `actions/checkout` made, so its first
+      # parent is the tip of the branch the pull request targets — whatever branch
+      # that is, the merge-base below is the pull request's own.
+      #
+      # One confirmation per head: a row an earlier run (or attempt) of this same
+      # head confirmed or cleared is carried from its `confirmation` artifact rather
+      # than measured again. A head the pull request has already moved past is not
+      # confirmed at all: its own newer run will be.
+      #
+      # `continue-on-error`: a plan that cannot be made leaves no `run=true`, the
+      # `confirm` job is skipped, and `gate` lets the flags stand.
+      - name: plan the same-box confirmation
+        id: confirm
+        if: always() && github.event_name == 'pull_request' && steps.compare.outputs.rc == '1'
+        continue-on-error: true
+        env:
+          MATRIX: ${{ needs.plan.outputs.matrix }}
+          STORAGE: ${{ needs.plan.outputs.storage }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          FORK: ${{ github.event.pull_request.head.repo.full_name != github.repository }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Repository variables, so the budget can move without a workflow edit;
+          # `arctic-winds confirm plan` validates them (rounds 1-40, 10-150 minutes).
+          ROUNDS: ${{ vars.WINDS_CONFIRM_ROUNDS || '8' }}
+          BUDGET: ${{ vars.WINDS_CONFIRM_BUDGET_MINUTES || '60' }}
+        run: |
+          skip=""
+          if [ "$FORK" = true ]; then
+            skip="a fork's pull request runs without the secrets that rent a box"
+          fi
+          base=$(git merge-base HEAD^1 "$HEAD_SHA" || true)
+          if [ -z "$skip" ]; then
+            now=$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" --jq .head.sha 2>/dev/null || true)
+            if [ -n "$now" ] && [ "$now" != "$HEAD_SHA" ]; then
+              skip="the pull request has moved on to ${now:0:8}, whose own run is the one to confirm"
+            fi
+          fi
+          previous=()
+          if [ -z "$skip" ]; then
+            mkdir -p previous
+            gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?name=confirmation&per_page=100" \
+              --jq ".artifacts[] | select(.expired == false and .workflow_run.head_sha == \"${HEAD_SHA}\") | .workflow_run.id" \
+              2>/dev/null | sort -u | while read -r id; do
+                gh run download "$id" -R "$GITHUB_REPOSITORY" -n confirmation -D "previous/$id" || true
+              done || true
+            for file in previous/*/confirmation.json; do
+              if [ -f "$file" ]; then previous+=(--previous "$file"); fi
+            done
+          fi
+          arctic-winds confirm plan \
+            --report compare-report.json \
+            --artifacts artifacts \
+            --matrix "$MATRIX" \
+            --base "$base" \
+            --head "$HEAD_SHA" \
+            --storage "$STORAGE" \
+            --skip "$skip" \
+            --rounds "$ROUNDS" \
+            --budget-minutes "$BUDGET" \
+            --repo "$GITHUB_REPOSITORY" \
+            --out confirm-plan.json \
+            --output github \
+            "${previous[@]}"
+
+      - name: keep the confirmation plan for the gate
+        if: always() && hashFiles('confirm-plan.json') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: confirm-plan
+          path: confirm-plan.json
+          retention-days: 7
           overwrite: true
 
       # A fork's `GITHUB_TOKEN` is read-only, so nothing can be pushed to gh-pages from
@@ -1473,6 +1581,137 @@ jobs:
           aws s3 rb --force --endpoint-url "http://${ARCTICDB_REAL_S3_ENDPOINT}" \
             --region "${ARCTICDB_REAL_S3_REGION}" "s3://${BUCKET}"
 
+  # gha 157: the flagged rows, measured again on one box before anything fails. The
+  # interleaved commit A/B of gha 154 (`benchmark_commit_ab.yml`), called as a
+  # reusable workflow so this run tells the whole story — the flag, the A/B and the
+  # verdict are jobs of one run, on one summary — and re-runs the way a worker does:
+  # re-running a lane's `start` job re-runs its bench, its stop and `gate` (gha 156).
+  # Its two wheels (merge-base and head) are its own builds; its lanes rent their own
+  # spot boxes, on the flagged workers' instance types and AMIs.
+  #
+  # No `concurrency` with `cancel-in-progress`: cancelling during an EC2 start
+  # orphans the instance. A stale confirmation stops itself instead — `plan` skips a
+  # head the pull request has moved past, and each lane checks the head between
+  # rounds and stops early (`pr_head`). `gate` sweeps anything left running.
+  confirm:
+    name: confirm
+    needs: [collect]
+    if: >-
+      !cancelled() && github.event_name == 'pull_request'
+      && needs.collect.outputs.confirm_run == 'true'
+    permissions:
+      contents: read
+      actions: read
+      packages: write
+      pull-requests: read
+    uses: ./.github/workflows/benchmark_commit_ab.yml
+    secrets: inherit
+    with:
+      arms: ${{ needs.collect.outputs.confirm_arms }}
+      lanes: ${{ needs.collect.outputs.confirm_lanes }}
+      rounds: ${{ needs.collect.outputs.confirm_rounds }}
+      budget_minutes: ${{ needs.collect.outputs.confirm_budget }}
+      label: confirm-pr-${{ github.event.pull_request.number }}
+      pr_number: ${{ format('{0}', github.event.pull_request.number) }}
+      pr_head: ${{ github.event.pull_request.head.sha }}
+
+  # The pull request's verdict (gha 157). `compare-values` flagged nothing: green.
+  # It could not compare: red, as before. It flagged rows: red only on a row the
+  # same-box A/B confirmed (95 % lower bound past 1.20), or when no confirmation
+  # settled anything at all — then the original flags stand. The verdict, row by
+  # row, is this job's summary and the `confirmation` artifact the PR page marks
+  # its rows from. This job's check is the gate's check; `collect` stays green on
+  # a flag.
+  gate:
+    name: gate verdict
+    needs: [plan, collect, confirm]
+    if: always() && github.event_name == 'pull_request' && needs.plan.result == 'success'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
+    env:
+      COMPARE_RC: ${{ needs.collect.outputs.compare_rc }}
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: check out arctic-winds
+        uses: actions/checkout@v4
+        with:
+          repository: G-D-Petrov/arctic-winds
+          ref: main
+          path: arctic-winds
+          ssh-key: ${{ secrets.ARCTIC_WINDS_DEPLOY_KEY }}
+
+      - name: install arctic-winds
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install ./arctic-winds
+
+      - name: fetch the confirmation plan
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          name: confirm-plan
+
+      - name: fetch the same-box rounds
+        if: needs.confirm.result != 'skipped'
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          pattern: ab-*
+          path: ab
+
+      # The EC2 runner leak (ec2-github-runner launches before it registers, and a
+      # registration timeout fails the start without terminating the instance). By
+      # now every stop of this run has run — the workers' before `collect`, the
+      # confirmation's before this job — so an instance still tagged with this run
+      # is one nothing will ever stop. Never fails the verdict.
+      - name: terminate this run's leaked runners
+        if: always()
+        continue-on-error: true
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_S3_ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_S3_SECRET_KEY }}
+          AWS_DEFAULT_REGION: eu-west-1
+        run: |
+          ids=$(aws ec2 describe-instances \
+            --filters "Name=tag:RunId,Values=${GITHUB_RUN_ID}" \
+                      "Name=tag:Name,Values=arcticdb-ci-runner" \
+                      "Name=instance-state-name,Values=pending,running" \
+            --query 'Reservations[].Instances[].InstanceId' --output text)
+          if [ -z "$ids" ] || [ "$ids" = None ]; then
+            echo "No EC2 runner of run ${GITHUB_RUN_ID} is still running."
+            exit 0
+          fi
+          echo "::warning::EC2 runners of this run still running after every stop: ${ids}. Terminating them."
+          # shellcheck disable=SC2086
+          aws ec2 terminate-instances --instance-ids $ids
+
+      - name: the pull request's verdict
+        run: |
+          plan=()
+          if [ -f confirm-plan.json ]; then plan=(--plan confirm-plan.json); fi
+          arctic-winds confirm verdict \
+            --compare-rc "$COMPARE_RC" \
+            "${plan[@]}" \
+            --ab ab \
+            --run "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+            --out confirmation.json
+
+      # Kept 30 days: a later run of this same head carries the rows it settled.
+      - name: keep the verdict
+        if: always() && hashFiles('confirmation.json') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: confirmation
+          path: confirmation.json
+          retention-days: 30
+          overwrite: true
+
   # The pull request's page on the benchmark site: this run's numbers, the values
   # already published for the master commit it was judged against, and asv's verdict,
   # written to `winds/data/pr/<number>.json` on the gh-pages branch and linked from
@@ -1495,7 +1734,10 @@ jobs:
   # `collect` finishes, and no `cancel-in-progress` appears anywhere near one.
   publish_pr_page:
     name: publish the pull request's page
-    needs: [plan, collect]
+    # After `gate`, so the page marks each flagged row confirmed, cleared or
+    # inconclusive (gha 157). A run with nothing to confirm reaches it as soon as
+    # before: `confirm` is skipped and `gate` takes seconds.
+    needs: [plan, collect, gate]
     if: |
       always() && needs.plan.result == 'success'
       && github.event_name == 'pull_request'
@@ -1554,6 +1796,13 @@ jobs:
         with:
           name: compare-report
 
+      # Absent when the gate had nothing to confirm, or never ran.
+      - name: fetch the same-box confirmation
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          name: confirmation
+
       - name: publish the pull request's page
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -1589,6 +1838,9 @@ jobs:
                   --pr-title "$PR_TITLE" --pr-author "$PR_AUTHOR")
             if [ -f compare-report.json ]; then
               args+=(--compare-report compare-report.json)
+            fi
+            if [ -f confirmation.json ]; then
+              args+=(--confirmation confirmation.json)
             fi
             arctic-winds viz pr "${args[@]}"
 
