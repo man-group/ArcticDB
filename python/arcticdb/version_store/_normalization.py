@@ -171,7 +171,8 @@ _SUPPORTED_NATIVE_RETURN_TYPES = Union[FrameData]
 def _accept_array_string(v):
     # TODO remove this once arctic keeps the string type under the hood
     # and does not transform string into bytes
-    return type(v) in (str, bytes)
+    # Exact types only (see #704); also accept NumPy string scalars (#2800).
+    return type(v) in (str, bytes, np.str_, np.bytes_)
 
 
 def _is_nan(element):
@@ -201,7 +202,7 @@ def get_sample_from_non_empty_arr(arr, arr_name):
 
 def coerce_string_column_to_fixed_length_array(arr, to_type, string_max_len):
     # in python3 all text will be treated as unicode
-    if to_type == str:
+    if to_type in (str, np.str_):
         if sys.platform == "win32":
             # See https://sourceforge.net/p/numpy/mailman/numpy-discussion/thread/1139250278.7538.52.camel%40localhost.localdomain/#msg11998404
             # Different wchar size on Windows is not compatible with our current internal representation of Numpy strings
@@ -212,6 +213,21 @@ def coerce_string_column_to_fixed_length_array(arr, to_type, string_max_len):
         log.debug("converted {} to {}".format(arr.dtype, casted_arr.dtype))
 
     return casted_arr
+
+
+def _normalize_numpy_string_scalars(arr):
+    """Convert np.str_/np.bytes_ scalars to plain str/bytes for the C++ writer."""
+    return np.array(
+        [
+            str(x)
+            if type(x) is np.str_
+            else bytes(x)
+            if type(x) is np.bytes_
+            else x
+            for x in arr
+        ],
+        dtype=object,
+    )
 
 
 def get_timezone_from_metadata(norm_meta):
@@ -327,6 +343,9 @@ def _to_primitive(
         return arr.astype(DTN64_DTYPE)
     elif _accept_array_string(sample):
         if dynamic_strings:
+            # C++ uses PyUnicode_CheckExact / PyBytes_CheckExact; coerce NumPy scalars.
+            if type(sample) in (np.str_, np.bytes_):
+                return _normalize_numpy_string_scalars(arr)
             return arr
         else:
             log.debug("Converting  array with dtype=object to native string. This might be a costly operation")
