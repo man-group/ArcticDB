@@ -29,7 +29,7 @@ void MinMaxAggregatorData::aggregate(const ColumnWithStrings& input_column) {
 
         static constexpr bool is_string_column = is_sequence_type(type_info::data_type);
         if constexpr (is_string_column) {
-            packed_strings_ = true;
+            string_column_ = true;
         }
 
         static constexpr auto stat_data_type = is_string_column ? DataType::UINT64 : type_info::data_type;
@@ -42,7 +42,9 @@ void MinMaxAggregatorData::aggregate(const ColumnWithStrings& input_column) {
 
         auto is_nan = []([[maybe_unused]] RawType value_or_offset) {
             if constexpr (is_string_column) {
-                return value_or_offset == nan_placeholder();
+                // Nones count towards nan rather than null count with string columns
+                // Nulls exclusively refer to missing values from sparse data produced by tick streaming or Arrow input
+                return !is_a_string(value_or_offset);
             } else if constexpr (is_floating_point_type(type_info::data_type)) {
                 return std::isnan(value_or_offset);
             } else if constexpr (is_time_type(type_info::data_type)) {
@@ -52,21 +54,13 @@ void MinMaxAggregatorData::aggregate(const ColumnWithStrings& input_column) {
             }
         };
 
-        auto is_null = []([[maybe_unused]] RawType value_or_offset) {
-            if constexpr (is_string_column) {
-                return !is_a_string(value_or_offset);
-            } else {
-                return false;
-            }
-        };
-
-        auto update_min_max = [&](StatType value_or_offset) {
+        auto update_min_max = [&](StatType value) {
             if (ARCTICDB_UNLIKELY(!min_.has_value())) {
-                min_ = Value{value_or_offset, stat_data_type};
-                max_ = Value{value_or_offset, stat_data_type};
+                min_ = Value{value, stat_data_type};
+                max_ = Value{value, stat_data_type};
             } else {
-                min_->set(std::min(min_->get<StatType>(), value_or_offset));
-                max_->set(std::max(max_->get<StatType>(), value_or_offset));
+                min_->set(std::min(min_->get<StatType>(), value));
+                max_->set(std::max(max_->get<StatType>(), value));
             }
         };
 
@@ -80,16 +74,13 @@ void MinMaxAggregatorData::aggregate(const ColumnWithStrings& input_column) {
                 return;
             }
 
-            if (is_null(value_or_offset)) {
-                ++null_count_;
-                return;
-            }
-
             if constexpr (is_string_column) {
                 if (!seen_offsets_in_pool.emplace(value_or_offset).second) {
                     return;
                 }
-                const auto packed_string = pack_string_at_offset(input_column, value_or_offset);
+                // Dereference is safe as NaN/None sentinels are filtered out above by is_nan
+                const auto pool_str = *input_column.string_at_offset(value_or_offset);
+                const auto packed_string = pack_string(pool_str, input_column.column_->type().data_type());
                 update_min_max(packed_string);
             } else {
                 update_min_max(value_or_offset);
@@ -101,7 +92,7 @@ void MinMaxAggregatorData::aggregate(const ColumnWithStrings& input_column) {
                 constexpr auto missing_value = is_floating_point_type(type_info::data_type)
                                                        ? std::numeric_limits<RawType>::quiet_NaN()
                                                        : static_cast<RawType>(NaT);
-
+                // TODO: Handle all-nan string columns. Could use a sentinel value in the size byte of the stored stat?
                 min_ = Value{missing_value, type_info::data_type};
                 max_ = Value{missing_value, type_info::data_type};
             }
@@ -112,8 +103,8 @@ void MinMaxAggregatorData::aggregate(const ColumnWithStrings& input_column) {
 std::vector<ColumnStatValue> MinMaxAggregatorData::finalize() const {
     std::vector<ColumnStatValue> res;
     if (min_.has_value()) {
-        const auto min_type = packed_strings_ ? ColumnStatTypeInternal::MIN_STR_V1 : ColumnStatTypeInternal::MIN_V1;
-        const auto max_type = packed_strings_ ? ColumnStatTypeInternal::MAX_STR_V1 : ColumnStatTypeInternal::MAX_V1;
+        const auto min_type = string_column_ ? ColumnStatTypeInternal::MIN_STR_V1 : ColumnStatTypeInternal::MIN_V1;
+        const auto max_type = string_column_ ? ColumnStatTypeInternal::MAX_STR_V1 : ColumnStatTypeInternal::MAX_V1;
         res.reserve(4);
         res.emplace_back(ColumnStatValue{min_type, data_col_offset_, *min_});
         res.emplace_back(ColumnStatValue{max_type, data_col_offset_, *max_});

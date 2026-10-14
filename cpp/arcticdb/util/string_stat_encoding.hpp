@@ -37,8 +37,7 @@ constexpr size_t truncated_prefix_bytes = 7;
 // above any exact-length value sharing its prefix.
 constexpr uint8_t truncated_string_length_marker = std::numeric_limits<uint8_t>::max();
 
-// Stencil for pulling the length byte out of a packed stat: ones in the low byte, zeros in the other
-// seven, so ANDing keeps that byte and erases everything above it.
+// Mask for extracting the length byte from a packed string stat
 constexpr uint64_t least_significant_byte_only_mask = 0xFFULL;
 
 // Packs the first truncated_prefix_bytes bytes of utf8_str into the high bytes, zero padded if
@@ -46,14 +45,10 @@ constexpr uint64_t least_significant_byte_only_mask = 0xFFULL;
 // is harmless because every comparison of packed stats is bytewise.
 uint64_t pack_string_stat(std::string_view utf8_str);
 
-// Takes a string exactly as the column's string pool holds it. Fixed-width pools null pad to the
-// column width, which is stripped here, and a fixed-width UTF pool holds UTF-32, which is transcoded
-// to UTF-8 here. All other string types already hold UTF-8 (or ASCII, which is a subset), so every
-// packed stat is comparable regardless of the source column's type.
+// Takes a string exactly as the column's string pool holds it. Fixed-width strings have trailing nulls stripped. UTF-32
+// strings are transcoded to UTF-8, and ASCII is already a subset of UTF-8. In this way, the packed string
+// representation is independent of the underlying type in a column, which is useful, as even with static schema, we
+// allow mixing fixed-width and dynamic strings in the same column across different segments.
 uint64_t pack_string(std::string_view raw_pool_string, entity::DataType raw_pool_string_data_type);
-
-// Resolves offset_in_pool against the column's string pool and packs what it finds. Raises if the
-// offset has no pool entry, so callers must filter out the None and NaN placeholder offsets first.
-uint64_t pack_string_at_offset(const ColumnWithStrings& column, entity::position_t offset_in_pool);
 
 } // namespace arcticdb

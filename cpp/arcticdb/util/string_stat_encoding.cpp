@@ -55,27 +55,19 @@ uint64_t pack_string_stat(std::string_view utf8_str) {
 }
 
 uint64_t pack_string(std::string_view raw_pool_string, entity::DataType raw_pool_string_data_type) {
-    // UTF_FIXED64 is the only type whose pool holds null-padded UTF-32. Not is_fixed_string_type:
-    // ASCII_FIXED64 pads at one byte per character, and reinterpreting that as UTF-32 packs garbage.
-    if (raw_pool_string_data_type == entity::DataType::UTF_FIXED64) {
+    switch (raw_pool_string_data_type) {
+    case entity::DataType::UTF_FIXED64:
         return pack_string_stat(util::utf32_to_u8(raw_pool_string));
-    }
-
-    if (raw_pool_string_data_type == entity::DataType::ASCII_FIXED64) {
+    case entity::DataType::ASCII_FIXED64:
         return pack_string_stat(util::strip_ascii_padding(raw_pool_string));
+    case entity::DataType::UTF_DYNAMIC64:
+    case entity::DataType::ASCII_DYNAMIC64:
+        return pack_string_stat(raw_pool_string);
+    default:
+        internal::raise<ErrorCode::E_ASSERTION_FAILURE>(
+                "Unexpected data type {} in pack_string", raw_pool_string_data_type
+        );
     }
-
-    return pack_string_stat(raw_pool_string);
-}
-
-uint64_t pack_string_at_offset(const ColumnWithStrings& column, entity::position_t offset_in_pool) {
-    const auto raw_pool_string = column.string_at_offset(offset_in_pool);
-    internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-            raw_pool_string.has_value(),
-            "Missing string pool entry at offset {} generating column stats",
-            offset_in_pool
-    );
-    return pack_string(*raw_pool_string, column.column_->type().data_type());
 }
 
 } // namespace arcticdb

@@ -157,22 +157,10 @@ TEST(MinMaxAggregatorStrings, RepeatedSentinelsAreStillCountedPerRow) {
     );
     const auto stats = aggregator.finalize();
 
-    ASSERT_EQ(count_stat(stats, ColumnStatTypeInternal::NULL_COUNT_V1), 2);
-    ASSERT_EQ(count_stat(stats, ColumnStatTypeInternal::NAN_COUNT_V1), 2);
+    ASSERT_EQ(count_stat(stats, ColumnStatTypeInternal::NULL_COUNT_V1), 0);
+    ASSERT_EQ(count_stat(stats, ColumnStatTypeInternal::NAN_COUNT_V1), 4);
     ASSERT_EQ(stat_value(stats, ColumnStatTypeInternal::MIN_STR_V1)->get<uint64_t>(), pack_string_stat("alpha"));
     ASSERT_EQ(stat_value(stats, ColumnStatTypeInternal::MAX_STR_V1)->get<uint64_t>(), pack_string_stat("alpha"));
-}
-
-TEST(MinMaxAggregatorStrings, NoneSentinelCountsAsNull) {
-    MinMaxAggregatorData aggregator{data_col_offset};
-    aggregator.aggregate(build_string_column({"beta", std::nullopt, "alpha", std::nullopt}));
-    const auto stats = aggregator.finalize();
-
-    ASSERT_EQ(count_stat(stats, ColumnStatTypeInternal::NULL_COUNT_V1), 2);
-    ASSERT_EQ(count_stat(stats, ColumnStatTypeInternal::NAN_COUNT_V1), 0);
-    // Sentinels must not participate in min/max, or the min would be a huge offset value.
-    ASSERT_EQ(stat_value(stats, ColumnStatTypeInternal::MIN_STR_V1)->get<uint64_t>(), pack_string_stat("alpha"));
-    ASSERT_EQ(stat_value(stats, ColumnStatTypeInternal::MAX_STR_V1)->get<uint64_t>(), pack_string_stat("beta"));
 }
 
 TEST(MinMaxAggregatorStrings, NanSentinelCountsAsNan) {
@@ -194,7 +182,7 @@ TEST(MinMaxAggregatorStrings, AllNoneRecordsCountsWithoutMinMax) {
     // has no minimum, so the counts must stand alone.
     ASSERT_FALSE(stat_value(stats, ColumnStatTypeInternal::MIN_STR_V1).has_value());
     ASSERT_FALSE(stat_value(stats, ColumnStatTypeInternal::MAX_STR_V1).has_value());
-    ASSERT_EQ(count_stat(stats, ColumnStatTypeInternal::NULL_COUNT_V1), 2);
+    ASSERT_EQ(count_stat(stats, ColumnStatTypeInternal::NAN_COUNT_V1), 2);
 }
 
 TEST(MinMaxAggregatorStrings, AllNanRecordsCountsWithoutMinMax) {

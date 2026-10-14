@@ -63,7 +63,7 @@ TEST(StringStatEncoding, PackedPrefixMatchesPerByteShift) {
         }
         expected |= length > truncated_prefix_bytes ? truncated_string_length_marker : length;
 
-        ASSERT_EQ(packed, expected) << "length " << length;
+        EXPECT_EQ(packed, expected) << "length " << length;
     }
 }
 
@@ -74,8 +74,8 @@ TEST(StringStatEncoding, PackingPreservesBytewiseOrder) {
             "", "a", "aa", "aaaaaaa", "aaaaaaaa", "aaaaaaaz", "ab", "az", "b", "bbbb", "bbbba", "bbbbbbb", "bbbbbbbz"
     };
     for (size_t i = 1; i < bytewise_sorted.size(); ++i) {
-        ASSERT_LT(bytewise_sorted[i - 1], bytewise_sorted[i]) << "test data is not bytewise sorted at " << i;
-        ASSERT_LE(pack_string_stat(bytewise_sorted[i - 1]), pack_string_stat(bytewise_sorted[i]))
+        EXPECT_LT(bytewise_sorted[i - 1], bytewise_sorted[i]) << "test data is not bytewise sorted at " << i;
+        EXPECT_LE(pack_string_stat(bytewise_sorted[i - 1]), pack_string_stat(bytewise_sorted[i]))
                 << bytewise_sorted[i - 1] << " vs " << bytewise_sorted[i];
     }
 }
