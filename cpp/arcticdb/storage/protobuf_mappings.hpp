@@ -9,18 +9,11 @@
 #pragma once
 
 #include <arcticdb/entity/protobufs.hpp>
-#include <arcticdb/entity/protobufs.hpp>
-#include <arcticdb/entity/protobufs.hpp>
-#include <arcticdb/storage/library_path.hpp>
-#include <arcticdb/storage/storage_factory.hpp>
+#include <arcticdb/storage/common.hpp>
 #include <arcticdb/storage/config_resolvers.hpp>
-#include <arcticdb/storage/memory/memory_storage.hpp>
-#include <arcticdb/storage/lmdb/lmdb_storage.hpp>
-#include <arcticdb/storage/mongo/mongo_storage.hpp>
-#include <arcticdb/util/pb_util.hpp>
+#include <arcticdb/storage/library_path.hpp>
 
 #include <vector>
-#include <arcticdb/storage/common.hpp>
 
 namespace arcticdb::storage {
 

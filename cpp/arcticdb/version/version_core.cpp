@@ -39,8 +39,8 @@
 #include <arcticdb/entity/merge_descriptors.hpp>
 #include <arcticdb/processing/component_manager.hpp>
 #include <arcticdb/util/collection_utils.hpp>
+#include <arcticdb/util/decode_path_data.hpp>
 #include <arcticdb/util/format_date.hpp>
-#include <atomic>
 #include <functional>
 #include <iterator>
 #include <optional>

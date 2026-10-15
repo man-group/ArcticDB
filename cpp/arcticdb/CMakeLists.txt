@@ -1189,6 +1189,7 @@ if(${TEST})
             util/test/test_string_pool.cpp
             util/test/test_string_utils.cpp
             util/test/test_tracing_allocator.cpp
+            util/test/test_utils.cpp
             util/test/gtest_custom_formatters.hpp
             util/test/gtest_utils.hpp
             util/test/input_frame_utils.hpp
