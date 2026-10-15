@@ -6,6 +6,7 @@
  * will be governed by the Apache License, version 2.0.
  */
 
+#include <arcticdb/async/task_scheduler.hpp>
 #include <arcticdb/version/snapshot.hpp>
 #include <arcticdb/version/version_log.hpp>
 #include <arcticdb/stream/index_aggregator.hpp>

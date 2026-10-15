@@ -18,6 +18,8 @@
 #include <arcticdb/entity/types_proto.hpp>
 #include <arcticdb/util/name_validation.hpp>
 
+#include <ranges>
+
 namespace py = pybind11;
 
 namespace arcticdb {

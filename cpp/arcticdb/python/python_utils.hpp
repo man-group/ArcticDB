@@ -9,16 +9,15 @@
 #pragma once
 
 #include <pybind11/pybind11.h>
+#include <arcticdb/column_store/row_ref.hpp>
+#include <arcticdb/column_store/string_pool.hpp>
 #include <arcticdb/entity/types.hpp>
-#include <arcticdb/entity/data_error.hpp>
 #include <arcticdb/entity/read_result.hpp>
 #include <arcticdb/entity/index_range.hpp>
-#include <arcticdb/processing/clause.hpp>
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/util/variant.hpp>
 #include <arcticdb/python/python_handler_data.hpp>
 #include <arcticdb/python/tensor_to_py_array.hpp>
-#include <arcticdb/column_store/row_ref.hpp>
 
 namespace arcticdb::python_util {
 
@@ -270,75 +269,6 @@ inline py::list node_results_to_python_list(std::vector<NodeReadResult>&& node_r
         ));
     }
     return node_results_list;
-}
-
-inline py::list adapt_read_dfs(std::vector<std::variant<ReadResult, DataError>>&& r, std::any* const handler) {
-    auto ret = std::move(r);
-    py::list lst;
-    std::optional<OutputFormat> output_format = std::nullopt;
-    for (auto& res : ret) {
-        util::variant_match(
-                res,
-                [&lst, &output_format](ReadResult& read_result) {
-                    auto pynorm = pb_to_python(read_result.norm_meta);
-                    util::check(
-                            std::holds_alternative<proto::descriptors::UserDefinedMetadata>(read_result.user_meta),
-                            "Expected single user metadata in adapt_read_dfs, received vector"
-                    );
-                    auto pyuser_meta =
-                            pb_to_python(std::get<proto::descriptors::UserDefinedMetadata>(read_result.user_meta));
-                    auto multi_key_meta = pb_to_python(read_result.multi_key_meta);
-                    auto node_results = node_results_to_python_list(std::move(read_result.node_results));
-                    lst.append(py::make_tuple(
-                            read_result.item,
-                            std::move(read_result.frame_data),
-                            pynorm,
-                            pyuser_meta,
-                            multi_key_meta,
-                            std::move(node_results),
-                            read_result.sorted
-                    ));
-                    util::check(
-                            !output_format.has_value() || output_format.value() == read_result.output_format,
-                            "All results from a batch operation are expected to have the same output_format"
-                    );
-                    output_format = read_result.output_format;
-                },
-                [&lst](DataError& data_error) { lst.append(data_error); }
-        );
-    }
-    if (handler && output_format.has_value()) {
-        apply_global_refcounts(*handler, *output_format);
-    }
-    return lst;
-}
-
-// aggregations is a dict similar to that accepted by Pandas agg method
-// The key-value pairs come in 2 forms:
-// 1: key is the column name to aggregate, value is the aggregation operator. Output column name will be the same as
-// input column name 2: key is the column name to output, value is a pair where the first element is the input column
-// name, and the second element is the aggregation operator These 2 styles can be mixed and matched
-inline std::vector<NamedAggregator> named_aggregators_from_dict(
-        std::unordered_map<std::string, std::variant<std::string, std::pair<std::string, std::string>>>&& aggregations
-) {
-    std::vector<NamedAggregator> named_aggregators;
-    named_aggregators.reserve(aggregations.size());
-    for (auto& [output_column_name, var_agg_named_agg] : aggregations) {
-        util::variant_match(
-                std::move(var_agg_named_agg),
-                [&](std::string&& agg_operator) {
-                    named_aggregators.emplace_back(std::move(agg_operator), output_column_name, output_column_name);
-                },
-                [&](std::pair<std::string, std::string>&& input_col_and_agg) {
-                    named_aggregators.emplace_back(
-                            std::move(input_col_and_agg.second),
-                            std::move(input_col_and_agg.first),
-                            std::move(output_column_name)
-                    );
-                }
-        );
-    }
-    return named_aggregators;
 }
 
 inline auto pd_to_offset(std::string_view rule) {

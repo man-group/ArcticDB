@@ -33,7 +33,9 @@
 #include <arcticdb/storage/key_segment_pair.hpp>
 #include <arcticdb/entity/python_bindings_common.hpp>
 
-namespace arcticdb::version_store {
+namespace {
+
+using namespace arcticdb;
 
 static consteval timestamp one_day_in_nanoseconds() { return timestamp(24) * 60 * 60 * 1'000'000'000; }
 
@@ -126,6 +128,34 @@ std::vector<timestamp> generate_buckets(
     return res;
 }
 
+// aggregations is a dict similar to that accepted by Pandas agg method
+// The key-value pairs come in 2 forms:
+// 1: key is the column name to aggregate, value is the aggregation operator. Output column name will be the same as
+// input column name 2: key is the column name to output, value is a pair where the first element is the input column
+// name, and the second element is the aggregation operator These 2 styles can be mixed and matched
+std::vector<NamedAggregator> named_aggregators_from_dict(
+        std::unordered_map<std::string, std::variant<std::string, std::pair<std::string, std::string>>>&& aggregations
+) {
+    std::vector<NamedAggregator> named_aggregators;
+    named_aggregators.reserve(aggregations.size());
+    for (auto& [output_column_name, var_agg_named_agg] : aggregations) {
+        util::variant_match(
+                std::move(var_agg_named_agg),
+                [&](std::string&& agg_operator) {
+                    named_aggregators.emplace_back(std::move(agg_operator), output_column_name, output_column_name);
+                },
+                [&](std::pair<std::string, std::string>&& input_col_and_agg) {
+                    named_aggregators.emplace_back(
+                            std::move(input_col_and_agg.second),
+                            std::move(input_col_and_agg.first),
+                            output_column_name
+                    );
+                }
+        );
+    }
+    return named_aggregators;
+}
+
 template<ResampleBoundary closed_boundary>
 void declare_resample_clause(py::module& version) {
     const char* class_name =
@@ -142,10 +172,55 @@ void declare_resample_clause(py::module& version) {
                  [](ResampleClause<closed_boundary>& self,
                     std::unordered_map<std::string, std::variant<std::string, std::pair<std::string, std::string>>>
                             aggregations) {
-                     self.set_aggregations(python_util::named_aggregators_from_dict(std::move(aggregations)));
+                     self.set_aggregations(named_aggregators_from_dict(std::move(aggregations)));
                  })
             .def("__str__", &ResampleClause<closed_boundary>::to_string);
 }
+
+py::list adapt_read_dfs(std::vector<std::variant<ReadResult, DataError>>&& r, std::any* const handler) {
+    auto ret = std::move(r);
+    py::list lst;
+    std::optional<OutputFormat> output_format = std::nullopt;
+    for (auto& res : ret) {
+        util::variant_match(
+                res,
+                [&lst, &output_format](ReadResult& read_result) {
+                    auto pynorm = python_util::pb_to_python(read_result.norm_meta);
+                    util::check(
+                            std::holds_alternative<proto::descriptors::UserDefinedMetadata>(read_result.user_meta),
+                            "Expected single user metadata in adapt_read_dfs, received vector"
+                    );
+                    auto pyuser_meta =
+                        python_util::pb_to_python(std::get<proto::descriptors::UserDefinedMetadata>(read_result.user_meta));
+                    auto multi_key_meta = python_util::pb_to_python(read_result.multi_key_meta);
+                    auto node_results = python_util::node_results_to_python_list(std::move(read_result.node_results));
+                    lst.append(py::make_tuple(
+                            read_result.item,
+                            std::move(read_result.frame_data),
+                            pynorm,
+                            pyuser_meta,
+                            multi_key_meta,
+                            std::move(node_results),
+                            read_result.sorted
+                    ));
+                    util::check(
+                            !output_format.has_value() || output_format.value() == read_result.output_format,
+                            "All results from a batch operation are expected to have the same output_format"
+                    );
+                    output_format = read_result.output_format;
+                },
+                [&lst](DataError& data_error) { lst.append(data_error); }
+        );
+    }
+    if (handler && output_format.has_value()) {
+        apply_global_refcounts(*handler, *output_format);
+    }
+    return lst;
+}
+
+} // namespace
+
+namespace arcticdb::version_store {
 
 void register_bindings(py::module& version, py::exception<arcticdb::ArcticException>& base_exception) {
 
@@ -283,7 +358,7 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
     version.def("write_dataframe_to_file", &write_dataframe_to_file);
     version.def(
             "read_dataframe_from_file",
-            [](StreamId sid, std::string path, std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options
+            [](const StreamId& sid, const std::string& path, std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options
             ) {
                 auto handler_data = std::make_shared<std::any>(
                         TypeHandlerRegistry::instance()->get_handler_data(read_options.output_format_for_frame())
@@ -453,7 +528,7 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                         constexpr int serialization_version = 0;
                         return py::make_tuple(serialization_version, s.staged_segments);
                     },
-                    [](py::tuple t) {
+                    [](const py::tuple& t) {
                         util::check(t.size() >= 1, "Invalid StageResult pickle object!");
 
                         [[maybe_unused]] const int serialization_version = t[0].cast<int>();
@@ -507,7 +582,7 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                        std::unordered_map<std::string, std::variant<std::string, std::pair<std::string, std::string>>>
                                aggregations) {
                         return AggregationClause(
-                                grouping_colum, python_util::named_aggregators_from_dict(std::move(aggregations))
+                                grouping_colum, named_aggregators_from_dict(std::move(aggregations))
                         );
                     }
             ))
@@ -670,7 +745,7 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
             .doc() = "Count of keys and their uncompressed sizes in bytes for a given key type";
 
     py::class_<PythonVersionStore>(version, "PythonVersionStore")
-            .def(py::init([](const std::shared_ptr<storage::Library>& library, std::optional<std::string>) {
+            .def(py::init([](const std::shared_ptr<storage::Library>& library, const std::optional<std::string>&) {
                      return PythonVersionStore(library);
                  }),
                  py::arg("library"),
@@ -746,7 +821,7 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                  "Drop column stats")
             .def(
                     "read_column_stats_version",
-                    [&](PythonVersionStore& v, StreamId sid, const VersionQuery& version_query) {
+                    [&](PythonVersionStore& v, const StreamId& sid, const VersionQuery& version_query) {
                         auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::PANDAS);
                         return adapt_read_df(
                                 v.read_column_stats_version(sid, version_query, handler_data), &handler_data
@@ -910,7 +985,7 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
             .def(
                     "read_dataframe_version",
                     [&](PythonVersionStore& v,
-                        StreamId sid,
+                        const StreamId& sid,
                         const VersionQuery& version_query,
                         const std::shared_ptr<ReadQuery>& read_query,
                         const ReadOptions& read_options) {
@@ -932,7 +1007,7 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                  "Read, modify and write the specified version for the dataframe (experimental)")
             .def(
                     "read_index",
-                    [&](PythonVersionStore& v, StreamId sid, const VersionQuery& version_query) {
+                    [&](PythonVersionStore& v, const StreamId& sid, const VersionQuery& version_query) {
                         constexpr OutputFormat output_format = OutputFormat::PANDAS;
                         auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(output_format);
                         return adapt_read_df(
@@ -1002,7 +1077,7 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
             .def(
                     "restore_version",
                     [&](PythonVersionStore& v,
-                        StreamId sid,
+                        const StreamId& sid,
                         const VersionQuery& version_query,
                         const ReadOptions& read_options) {
                         auto [vit, tsd] = v.restore_version(sid, version_query);
@@ -1069,7 +1144,7 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                         auto handler_data = std::make_shared<std::any>(
                                 TypeHandlerRegistry::instance()->get_handler_data(batch_read_options.output_format())
                         );
-                        return python_util::adapt_read_dfs(
+                        return adapt_read_dfs(
                                 v.batch_read(
                                         stream_ids, version_queries, read_queries, batch_read_options, handler_data
                                 ),
@@ -1175,7 +1250,7 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                             };
                             output.emplace_back(std::move(res));
                         }
-                        return python_util::adapt_read_dfs(std::move(output), nullptr);
+                        return adapt_read_dfs(std::move(output), nullptr);
                     },
                     py::call_guard<SingleThreadMutexHolder>(),
                     "Batch restore a group of versions to the versions indicated"
