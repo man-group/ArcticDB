@@ -33,6 +33,7 @@
 #include <concepts>
 #include <numeric>
 #include <optional>
+#include <shared_mutex>
 
 namespace py = pybind11;
 
