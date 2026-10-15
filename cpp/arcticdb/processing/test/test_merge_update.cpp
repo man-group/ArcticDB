@@ -7,6 +7,7 @@
  */
 #include <gtest/gtest.h>
 #include <arcticdb/processing/clause.hpp>
+#include <arcticdb/processing/schema_combine.hpp>
 #include <stream/test/stream_test_common.hpp>
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/util/test/segment_generation_utils.hpp>
@@ -110,8 +111,13 @@ MergeUpdateClause create_clause(
 ) {
     auto strat = strategy;
     strat.match_na = match_na;
+    OutputSchema source_output_schema = schema_from_input_frame(input_frame);
     MergeUpdateClause clause(
-            std::move(on), strat, std::make_shared<InputFrame>(std::move(input_frame)), rows_per_segment
+            std::move(on),
+            strat,
+            std::make_shared<InputFrame>(std::move(input_frame)),
+            std::move(source_output_schema),
+            rows_per_segment
     );
     clause.set_component_manager(std::move(component_manager));
     return clause;
