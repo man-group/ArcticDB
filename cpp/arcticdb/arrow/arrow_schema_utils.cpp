@@ -67,12 +67,7 @@ StringSet generate_original_column_names(
         std::advance(field, index_count);
         for (; field != fields.end(); ++field) {
             if (auto it = pandas_common.col_names().find(field->name()); it != pandas_common.col_names().end()) {
-                const auto& col_data = it->second;
-                if (col_data.original_name() != field->name()) {
-                    original_column_names.insert(col_data.original_name());
-                } else {
-                    original_column_names.insert(field->name());
-                }
+                original_column_names.insert(it->second.original_name());
             } else {
                 original_column_names.insert(field->name());
             }
@@ -119,7 +114,7 @@ StringMap generate_index_renames(
         }
     } else { // multiindex
         const auto& multi_index_meta = pandas_common.multi_index();
-        ankerl::unordered_dense::set<int> fake_field_pos(
+        ankerl::unordered_dense::set<size_t> fake_field_pos(
                 multi_index_meta.fake_field_pos().cbegin(), multi_index_meta.fake_field_pos().cend()
         );
         for (size_t index_col_idx = 0; index_col_idx < index_count; ++index_col_idx) {
@@ -159,26 +154,22 @@ StringMap generate_column_renames(
     auto field = fields.begin();
     std::advance(field, index_count);
     for (; field != fields.end(); ++field) {
-        if (unnamed_series || pandas_common.col_names().contains(field->name())) {
-            auto new_name = [&]() -> std::string {
-                if (unnamed_series) {
-                    return "None";
-                } else if (pandas_common.col_names().at(field->name()).is_none()) {
+        auto new_name = [&]() -> std::string {
+            if (unnamed_series || pandas_common.col_names().contains(field->name())) {
+                if (unnamed_series || pandas_common.col_names().at(field->name()).is_none()) {
                     return "None";
                 } else if (pandas_common.col_names().at(field->name()).is_empty()) {
                     return "__empty__";
-                } else if (pandas_common.col_names().at(field->name()).is_int()) {
-                    return pandas_common.col_names().at(field->name()).original_name();
-                } else if (pandas_common.col_names().at(field->name()).original_name() != field->name()) {
-                    return pandas_common.col_names().at(field->name()).original_name();
                 } else {
-                    return std::string(field->name());
+                    return pandas_common.col_names().at(field->name()).original_name();
                 }
-            }();
-            new_name = ensure_unique_name(new_name, taken_column_names);
-            taken_column_names.insert(new_name);
-            insert_if_non_matching(res, field->name(), new_name);
-        }
+            } else {
+                return std::string(field->name());
+            }
+        }();
+        new_name = ensure_unique_name(new_name, taken_column_names);
+        taken_column_names.insert(new_name);
+        insert_if_non_matching(res, field->name(), new_name);
     }
     return res;
 }

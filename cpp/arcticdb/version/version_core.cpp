@@ -1165,29 +1165,33 @@ folly::Future<ReadVersionOutput> read_multi_key(
 }
 
 void add_slice_to_component_manager(
-        EntityId entity_id, pipelines::SegmentAndSlice& segment_and_slice,
-        std::shared_ptr<ComponentManager> component_manager, EntityFetchCount fetch_count
+        EntityId entity_id, pipelines::SegmentAndSlice&& segment_and_slice, ComponentManager& component_manager,
+        EntityFetchCount fetch_count
 ) {
     ARCTICDB_DEBUG(log::memory(), "Adding entity id {}", entity_id);
-    if (std::holds_alternative<SegmentInMemory>(segment_and_slice.segment_)) {
-        component_manager->add_components(
-                entity_id,
-                std::make_shared<SegmentInMemory>(std::move(std::get<SegmentInMemory>(segment_and_slice.segment_))),
-                std::make_shared<RowRange>(std::move(segment_and_slice.ranges_and_key_.row_range_)),
-                std::make_shared<ColRange>(std::move(segment_and_slice.ranges_and_key_.col_range_)),
-                std::make_shared<AtomKey>(std::move(segment_and_slice.ranges_and_key_.key_)),
-                fetch_count
-        );
-    } else {
-        component_manager->add_components(
-                entity_id,
-                std::move(std::get<std::shared_ptr<Segment>>(segment_and_slice.segment_)),
-                std::make_shared<RowRange>(std::move(segment_and_slice.ranges_and_key_.row_range_)),
-                std::make_shared<ColRange>(std::move(segment_and_slice.ranges_and_key_.col_range_)),
-                std::make_shared<AtomKey>(std::move(segment_and_slice.ranges_and_key_.key_)),
-                fetch_count
-        );
-    }
+    util::variant_match(
+            std::move(segment_and_slice.segment_),
+            [&](SegmentInMemory&& segment_in_memory) {
+                component_manager.add_components(
+                        entity_id,
+                        std::make_shared<SegmentInMemory>(std::move(segment_in_memory)),
+                        std::make_shared<RowRange>(std::move(segment_and_slice.ranges_and_key_.row_range_)),
+                        std::make_shared<ColRange>(std::move(segment_and_slice.ranges_and_key_.col_range_)),
+                        std::make_shared<AtomKey>(std::move(segment_and_slice.ranges_and_key_.key_)),
+                        fetch_count
+                );
+            },
+            [&](std::shared_ptr<Segment>&& segment) {
+                component_manager.add_components(
+                        entity_id,
+                        std::move(segment),
+                        std::make_shared<RowRange>(std::move(segment_and_slice.ranges_and_key_.row_range_)),
+                        std::make_shared<ColRange>(std::move(segment_and_slice.ranges_and_key_.col_range_)),
+                        std::make_shared<AtomKey>(std::move(segment_and_slice.ranges_and_key_.key_)),
+                        fetch_count
+                );
+            }
+    );
 }
 
 size_t num_scheduling_iterations(const std::vector<std::shared_ptr<Clause>>& clauses) {
@@ -1325,8 +1329,8 @@ std::shared_ptr<std::vector<folly::Future<std::vector<EntityId>>>> schedule_firs
                                     ARCTICDB_DEBUG(log::version(), "Adding entity {}", entity_id);
                                     add_slice_to_component_manager(
                                             entity_id,
-                                            segment_and_slice,
-                                            component_manager,
+                                            std::move(segment_and_slice),
+                                            *component_manager,
                                             segment_fetch_counts->at(pos)
                                     );
                                     (*slice_added)[pos] = 1;
