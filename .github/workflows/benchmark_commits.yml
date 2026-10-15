@@ -143,10 +143,36 @@ jobs:
         run: | 
           echo "Using S3 bucket: ${ARCTICDB_REAL_S3_BUCKET}"
           git config --global --add safe.directory .
+          # TESTING ONLY: run twice to measure the cost of S3 checksums.
+          # Run 1: default (ArcticDB forces checksums off). Run 2: checksums on via env vars.
           python -m asv run --show-stderr --durations all --bench $SUITE ${{ inputs.commit }}^!
           exit_code=$?
+          cp -r python/.asv/results asv_results_checksum_default
+
+          rm -rf python/.asv/results/*/${{ inputs.commit }}*-*.json
+          AWS_REQUEST_CHECKSUM_CALCULATION=when_supported AWS_RESPONSE_CHECKSUM_VALIDATION=when_supported \
+            python -m asv run --show-stderr --durations all --bench $SUITE ${{ inputs.commit }}^!
+          cp -r python/.asv/results asv_results_checksum_on
+
+          ./tooling_venv/bin/python build_tooling/compare_asv_checksum_runs.py \
+            --commit-hash ${{ inputs.commit }} \
+            --baseline asv_results_checksum_default --candidate asv_results_checksum_on
+
+          # Restore run 1 so the later steps save the default results as usual
+          rm -rf python/.asv/results && cp -r asv_results_checksum_default python/.asv/results
           ./tooling_venv/bin/python build_tooling/summarize_asv_run.py --commit-hash ${{ inputs.commit }}
           exit $exit_code
+
+      - name: Upload checksum comparison results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: asv-checksum-comparison-${{ inputs.commit }}
+          path: |
+            asv_results_checksum_default
+            asv_results_checksum_on
+            checksum_comparison.md
+          if-no-files-found: ignore
 
       - name: Benchmark against master
         if: github.event_name == 'pull_request'
