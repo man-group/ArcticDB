@@ -157,6 +157,11 @@ struct StreamDescriptor {
 
     [[nodiscard]] std::shared_ptr<FieldCollection> fields_ptr() const { return fields_; }
 
+    void set_fields(std::shared_ptr<FieldCollection> fields) {
+        util::check(static_cast<bool>(fields), "Setting field collection to null pointer");
+        fields_ = std::move(fields);
+    }
+
     [[nodiscard]] std::shared_ptr<SegmentDescriptorImpl> data_ptr() const { return segment_desc_; }
 
     decltype(auto) begin() { return fields().begin(); }
@@ -210,6 +215,12 @@ struct OutputSchema {
         inferred_from_empty_frame_(inferred_from_empty_frame) {};
 
     const StreamDescriptor& stream_descriptor() const { return stream_descriptor_; }
+
+    // Invalidates column_types(), as the caller may change the fields through the returned reference
+    StreamDescriptor& mutable_stream_descriptor() {
+        column_types_ = std::nullopt;
+        return stream_descriptor_;
+    }
 
     // Whether this schema came from a frame that had no rows in it when it was normalized, in which case pandas
     // index normalization metadata depends on pandas version. For example:

@@ -358,7 +358,11 @@ TEST(ArrowRead, ConvertSegmentWithTimezones) {
         EXPECT_EQ(std::string{proxy.format()}, std::string{"tsn:"} + tz_str);
         dtz = sparrow::get_timezone(proxy);
         ASSERT_FALSE(dtz == nullptr);
-        ASSERT_EQ(dtz, date::locate_zone(tz_str));
+        // The zone's name is OS-dependent for a link like Amsterdam, so check its offsets instead
+        const date::sys_days winter{date::year{2025} / 1 / 15};
+        const date::sys_days summer{date::year{2025} / 7 / 15};
+        EXPECT_EQ(dtz->get_info(winter).offset, std::chrono::hours{1});
+        EXPECT_EQ(dtz->get_info(summer).offset, std::chrono::hours{2});
         EXPECT_EQ(names[2], "col_without_tz");
         EXPECT_EQ(columns[2].data_type(), sparrow::data_type::TIMESTAMP_NANOSECONDS);
         dtz = sparrow::get_timezone(sparrow::detail::array_access::get_arrow_proxy(columns[2]));

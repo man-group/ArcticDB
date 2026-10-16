@@ -1087,7 +1087,7 @@ void apply_required_fields_plan(OutputSchema& schema, const RequiredFieldsPlan& 
     }
 
     const auto& desc = schema.stream_descriptor();
-    auto renamed = std::make_shared<FieldCollection>();
+    auto renamed = std::make_shared<FieldCollection>(desc.field_count());
     for (size_t position = 0; position < desc.field_count(); ++position) {
         const auto& field = desc.field(position);
         const bool is_index_level = position < info.num_physical_indices;
@@ -1104,7 +1104,7 @@ void apply_required_fields_plan(OutputSchema& schema, const RequiredFieldsPlan& 
             rename_column_metadata(*schema.norm_metadata_.mutable_experimental_arrow(), field.name(), name);
         }
     }
-    schema.set_stream_descriptor(StreamDescriptor{desc.segment_desc_, std::move(renamed), desc.id()});
+    schema.mutable_stream_descriptor().set_fields(std::move(renamed));
 
     if (mismatches.series_name() && schema.norm_metadata_.has_experimental_arrow()) {
         schema.norm_metadata_.mutable_experimental_arrow()->clear_polars_series_name();
@@ -1163,17 +1163,14 @@ void align_multi_index_names(
         const OutputSchema& existing, StreamDescriptor& incoming, NormalizationMetadata& incoming_norm
 ) {
     const auto info = required_fields_info(existing);
-    if (!info.has_multi_index) {
+    // Pandas already stores its levels prefixed, and a schema with too few fields for the levels is left for
+    // combine_schema to reject
+    if (!info.has_multi_index || !incoming_norm.has_experimental_arrow() ||
+        static_cast<size_t>(incoming.field_count()) < info.num_physical_indices) {
         return;
     }
-    normalization::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
-            static_cast<size_t>(incoming.field_count()) >= info.num_physical_indices,
-            "Cannot align an incoming schema with a {}-level multi-index when it has only {} fields",
-            info.num_physical_indices,
-            incoming.field_count()
-    );
     const auto levels = info.num_physical_indices;
-    auto aligned = std::make_shared<FieldCollection>();
+    auto aligned = std::make_shared<FieldCollection>(incoming.field_count());
     bool renamed = false;
     for (size_t idx = 0; idx < static_cast<size_t>(incoming.field_count()); ++idx) {
         const auto& field = incoming.field(idx);
@@ -1183,18 +1180,16 @@ void align_multi_index_names(
         if (is_aligned_level && existing.stream_descriptor().field(idx).name() == name_with_prefix) {
             aligned->add_field(field.type(), name_with_prefix);
             // Arrow keys its column metadata by field name, so the timezone of a renamed level moves with it
-            if (incoming_norm.has_experimental_arrow()) {
-                rename_column_metadata(
-                        *incoming_norm.mutable_experimental_arrow(), {std::string{field.name()}}, name_with_prefix
-                );
-            }
+            rename_column_metadata(
+                    *incoming_norm.mutable_experimental_arrow(), {std::string{field.name()}}, name_with_prefix
+            );
             renamed = true;
         } else {
             aligned->add_field(field.type(), field.name());
         }
     }
     if (renamed) {
-        incoming = StreamDescriptor{incoming.segment_desc_, std::move(aligned), incoming.id()};
+        incoming.set_fields(std::move(aligned));
     }
 }
 
