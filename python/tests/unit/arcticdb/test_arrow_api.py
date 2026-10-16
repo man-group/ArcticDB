@@ -9,7 +9,7 @@ import pytest
 from arcticdb import LazyDataFrame, DataError, concat
 from arcticdb.exceptions import ArcticNativeException, ArcticUnsupportedDataTypeException
 from arcticdb.options import OutputFormat, ArrowOutputStringFormat, LibraryOptions
-from arcticdb.util.test import assert_frame_equal_with_arrow, sample_dataframe
+from arcticdb.util.test import assert_frame_equal, assert_frame_equal_with_arrow, sample_dataframe
 
 from arcticdb.version_store.library import WritePayload, UpdatePayload, ReadRequest
 from tests.util.arrow import create_1d_arrow_structure
@@ -548,3 +548,14 @@ def test_roundtrip_lower_level_arrow_primitives(mem_library, input_output):
     else:
         received = lib.read(sym, output_format="pyarrow").data
         assert received.equals(output)
+
+
+def test_rename_columns_arrow_compat(mem_library):
+    lib = mem_library
+    sym = "test_rename_columns_arrow_compat"
+    input = pd.DataFrame({10: [0]})
+    lib.write(sym, input)
+    lib.rename_columns_arrow_compat(sym)
+    received = lib.read(sym).data
+    expected = pd.DataFrame({"10": [0]})
+    assert_frame_equal(received, expected)

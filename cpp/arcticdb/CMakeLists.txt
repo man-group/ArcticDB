@@ -214,6 +214,7 @@ set(arcticdb_srcs
         # header files
         arrow/arrow_handlers.hpp
         arrow/arrow_c_interface.hpp
+        arrow/arrow_schema_utils.hpp
         arrow/arrow_utils.hpp
         async/async_store.hpp
         async/batch_read_args.hpp
@@ -474,6 +475,7 @@ set(arcticdb_srcs
         # CPP files
         arrow/arrow_handlers.cpp
         arrow/arrow_c_interface.cpp
+        arrow/arrow_schema_utils.cpp
         arrow/arrow_utils.cpp
         async/async_store.cpp
         async/bit_rate_stats.cpp
@@ -543,6 +545,7 @@ set(arcticdb_srcs
         processing/clause.cpp
         processing/clause_compact_data.cpp
         processing/clause_merge_update.cpp
+        processing/clause_rename_columns.cpp
         processing/clause_resample.cpp
         processing/clause_utils.cpp
         processing/schema_combine.cpp
@@ -1090,6 +1093,7 @@ if(${TEST})
             arrow/test/arrow_test_utils.cpp
             arrow/test/test_arrow_read.cpp
             arrow/test/test_arrow_write.cpp
+            arrow/test/test_arrow_schema_utils.cpp
             async/test/test_async.cpp
             codec/test/test_codec.cpp
             codec/test/test_encode_field_collection.cpp

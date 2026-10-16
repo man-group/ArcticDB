@@ -80,6 +80,11 @@ class AtomKeyImpl {
         return out;
     }
 
+    void set_content_hash(ContentHash hash) {
+        content_hash_ = hash;
+        reset_cached();
+    }
+
     friend bool operator==(const AtomKeyImpl& l, const AtomKeyImpl& r) {
         return l.version_id() == r.version_id() && l.creation_ts() == r.creation_ts() &&
                l.content_hash() == r.content_hash() && l.start_index() == r.start_index() &&
