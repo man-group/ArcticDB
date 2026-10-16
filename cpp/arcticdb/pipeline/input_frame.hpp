@@ -63,6 +63,7 @@ struct InputFrame {
             std::vector<Column>&& cols, StreamDescriptor&& desc,
             std::vector<sparrow::record_batch>&& arrow_buffer_owners, SortednessScan sortedness_scan
     );
+    [[nodiscard]] const StreamDescriptor* desc_ptr() const;
     StreamDescriptor& desc();
     const StreamDescriptor& desc() const;
     // The descriptor of the input frame can differ from that for the timeseries descriptor in the index key for
