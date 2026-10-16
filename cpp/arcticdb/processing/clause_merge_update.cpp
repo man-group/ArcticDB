@@ -1359,7 +1359,6 @@ void MergeUpdateClause::set_component_manager(std::shared_ptr<ComponentManager> 
 }
 
 OutputSchema MergeUpdateClause::modify_schema(OutputSchema&& output_schema) const {
-    align_multi_index_names(output_schema, source_output_schema_->stream_descriptor(), source_output_schema_->norm_metadata_);
     const std::array schemas{std::move(output_schema), source_output_schema_};
     return combine_schema(
             schemas,
