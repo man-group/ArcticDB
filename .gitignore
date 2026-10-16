@@ -78,3 +78,4 @@ arcticdb_ext-stubs
 /clang-tidy-report.html
 
 .clangd
+compile_commands.json
