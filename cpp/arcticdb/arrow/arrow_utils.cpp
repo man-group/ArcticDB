@@ -13,6 +13,7 @@
 #include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/util/allocator.hpp>
 #include <arcticdb/util/collection_utils.hpp>
+#include <fmt/format.h>
 #include <sparrow/layout/array_access.hpp>
 #include <sparrow/layout/primitive_data_access.hpp>
 #include <sparrow/utils/temporal.hpp>
@@ -93,10 +94,10 @@ sparrow::array create_packed_bool_array(
 
 sparrow::array create_timestamp_array(
         timestamp* data_ptr, size_t data_size, std::optional<sparrow::validity_bitmap>&& validity_bitmap,
-        const ResolvedTimezone* timezone = nullptr
+        const std::optional<ResolvedTimezone>& timezone = std::nullopt
 ) {
     static_assert(sizeof(timestamp) == sizeof(sparrow::zoned_time_without_timezone_nanoseconds));
-    if (timezone == nullptr) {
+    if (!timezone.has_value()) {
         // Timezone naive
         sparrow::u8_buffer<sparrow::zoned_time_without_timezone_nanoseconds> buffer(
                 reinterpret_cast<sparrow::zoned_time_without_timezone_nanoseconds*>(data_ptr),
@@ -124,10 +125,9 @@ sparrow::array create_timestamp_array(
             }
             return sparrow::timestamp_nanoseconds_array{timezone->zone, std::move(buffer)};
         }();
-        std::string format{"tsn:"};
-        format.append(timezone->original_name);
-        // Adds the original timezone name. Going through `date_localize` can otherwise loose the precise timezone with
+        // Adds the original timezone name. Going through `date_localize` can otherwise lose the precise timezone with
         // an equivalent one on Windows. E.g. otherwise `Europe/Amsterdam` could get translated to `Europe/Brussels`
+        const auto format = fmt::format("tsn:{}", timezone->original_name);
         sparrow::detail::array_access::get_arrow_proxy(array).set_format(format);
         return sparrow::array{std::move(array)};
     }
@@ -328,9 +328,7 @@ sparrow::array empty_arrow_array_for_column(
             }
         } else if constexpr (is_time_type(TagType::DataTypeTag::data_type)) {
             const auto timezone = resolve_timezone(opt_column_meta);
-            return create_timestamp_array(
-                    nullptr, 0, std::move(validity_bitmap), timezone.has_value() ? &*timezone : nullptr
-            );
+            return create_timestamp_array(nullptr, 0, std::move(validity_bitmap), timezone);
         } else {
             return create_primitive_array<RawType>(nullptr, 0, std::move(validity_bitmap));
         }
@@ -380,12 +378,9 @@ std::vector<sparrow::array> arrow_arrays_from_column(
                         vec.emplace_back(string_dict_from_block<TagType>(*block, column, name, std::move(bitmap)));
                     }
                 } else if constexpr (is_time_type(TagType::DataTypeTag::data_type)) {
-                    vec.emplace_back(create_timestamp_array(
-                            block->release(),
-                            block->row_count(),
-                            std::move(bitmap),
-                            timezone.has_value() ? &*timezone : nullptr
-                    ));
+                    vec.emplace_back(
+                            create_timestamp_array(block->release(), block->row_count(), std::move(bitmap), timezone)
+                    );
                     vec.back().set_name(name);
                 } else {
                     vec.emplace_back(arrow_array_from_block<TagType>(*block, name, std::move(bitmap)));
@@ -708,9 +703,7 @@ RecordBatchData empty_record_batch_from_descriptor(
                 } else if constexpr (is_time_type(TagType::DataTypeTag::data_type)) {
                     auto opt_column_meta = column_metadata(norm_meta, field.name());
                     const auto timezone = resolve_timezone(opt_column_meta);
-                    return create_timestamp_array(
-                            nullptr, 0, std::move(validity_bitmap), timezone.has_value() ? &*timezone : nullptr
-                    );
+                    return create_timestamp_array(nullptr, 0, std::move(validity_bitmap), timezone);
                 } else {
                     return create_primitive_array<RawType>(nullptr, 0, std::move(validity_bitmap));
                 }

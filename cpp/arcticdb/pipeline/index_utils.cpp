@@ -92,8 +92,8 @@ RequiredFieldInfo required_fields_info(const proto::descriptors::NormalizationMe
                                                                              : 0;
     } else if (norm_meta.has_experimental_arrow()) {
         const auto& arrow = norm_meta.experimental_arrow();
-        // A one-dimensional structure is the Arrow spelling of a Series, so its single column is a required field. It
-        // is the value column, unless it was written as the index, in which case that is the only field there is.
+        // A one-dimensional structure is the Arrow representation of a Series, so its single column is a required
+        // field. It is the value column, unless it was written as the index, in which case that is the only field.
         info.has_series_value_column = arrow.one_dimensional() && !arrow.has_index();
         info.num_physical_indices = arrow.has_index() ? 1 : 0;
     }

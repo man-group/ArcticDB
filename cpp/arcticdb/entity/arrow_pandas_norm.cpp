@@ -45,7 +45,7 @@ void mirror_index_timezones(const Pandas& common, const StreamDescriptor& desc, 
         for (const auto& [level, timezone] : common.multi_index().timezone()) {
             set_timezone(level, timezone);
         }
-    } else if (common.index().is_physically_stored()) {
+    } else {
         set_timezone(0, common.index().tz());
     }
 }
@@ -92,7 +92,8 @@ void check_embedded_pandas_agrees(const ExperimentalArrow& arrow, const StreamDe
         for (const auto& [level, timezone] : common->multi_index().timezone()) {
             check_timezone(level, timezone);
         }
-    } else if (common->index().is_physically_stored()) {
+    } else if (!common->index().tz().empty()) {
+        // A range index has no column, so column 0 may be a data column with a timezone of its own
         check_timezone(0, common->index().tz());
     }
 }

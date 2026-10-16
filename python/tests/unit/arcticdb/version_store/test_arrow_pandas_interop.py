@@ -640,15 +640,22 @@ def _maybe_arrow(df: pd.DataFrame, fmt: str) -> ArrowOrPandas:
 def _combine(
     lib, op: str, first: ArrowOrPandas, second: ArrowOrPandas, index_column: bool = False, output_format=None
 ) -> ArrowOrPandas:
-    """Write ``first``, combine ``second`` via ``op``, return read-back data. ``index_column`` applied to
+    """Combine ``first`` and ``second`` via ``op``, return read-back data. ``index_column`` applied to
     all operations (but affects only arrow inputs)
+
+    - ``write_and_stage``: write ``first``, stage ``second`` and finalize with append.
+    - ``stage_and_stage``: stage both as incomplete segments and finalize them together.
     """
     if op == "concat":
         lib.write("sym0", first, index_column=index_column)
         lib.write("sym1", second, index_column=index_column)
         return concat(lib.read_batch(["sym0", "sym1"], lazy=True, output_format=output_format)).collect().data
+    if op == "stage_and_stage":
+        stage_results = [lib.stage("sym", data, index_column=index_column) for data in (first, second)]
+        lib.finalize_staged_data("sym", stage_results=stage_results)
+        return lib.read("sym", output_format=output_format).data
     lib.write("sym", first, index_column=index_column)
-    if op == "stage":
+    if op == "write_and_stage":
         lib.stage("sym", second, index_column=index_column)
         lib.finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
     else:
@@ -666,11 +673,11 @@ def _index_tz(received: ArrowOrPandas):
 
 
 FORMATS_ORDER = [("arrow", "pandas"), ("pandas", "arrow")]
-# append, update, concat and stage+finalize all produce a row-wise union for disjoint, contiguous
+# append, update, concat and both staging variants all produce a row-wise union for disjoint, contiguous
 # timeseries chunks.
-INDEXED_OPS = ["append", "update", "concat", "stage"]
+INDEXED_OPS = ["append", "update", "concat", "write_and_stage", "stage_and_stage"]
 # operations that apply without a timeseries index.
-UNINDEXED_OPS = ["append", "concat", "stage"]
+UNINDEXED_OPS = ["append", "concat", "write_and_stage", "stage_and_stage"]
 
 
 # --- matching schema (row-wise union), both directions --------------------
@@ -933,11 +940,17 @@ def test_combine_series_with_chunked_array(arrow_library_any_schema, op):
 
 
 @pytest.mark.parametrize("op", UNINDEXED_OPS)
-def test_combine_series_with_polars_series(arrow_library_any_schema, op):
+@pytest.mark.parametrize("output_format", [OutputFormat.POLARS, OutputFormat.PANDAS])
+def test_combine_series_with_polars_series(arrow_library_any_schema, op, output_format):
     received = _combine(
-        arrow_library_any_schema, op, pd.Series(np.array([0, 1], dtype=np.int64), name="col"), pl.Series("col", [2, 3])
+        arrow_library_any_schema,
+        op,
+        pd.Series(np.array([0, 1], dtype=np.int64), name="col"),
+        pl.Series("col", [2, 3]),
+        output_format=output_format,
     )
-    assert received.to_pylist() == [0, 1, 2, 3]
+    assert received.to_list() == [0, 1, 2, 3]
+    assert received.name == "col"
 
 
 def test_append_series_with_mismatched_polars_series_name_raises(arrow_library_any_schema):
@@ -947,11 +960,17 @@ def test_append_series_with_mismatched_polars_series_name_raises(arrow_library_a
         )
 
 
-def test_concat_series_with_mismatched_polars_series_name(arrow_library_any_schema):
+@pytest.mark.parametrize("output_format, expected_name", [(OutputFormat.POLARS, ""), (OutputFormat.PANDAS, None)])
+def test_concat_series_with_mismatched_polars_series_name(arrow_library_any_schema, output_format, expected_name):
     received = _combine(
-        arrow_library_any_schema, "concat", pd.Series(np.array([0, 1], dtype=np.int64)), pl.Series("col", [2, 3])
+        arrow_library_any_schema,
+        "concat",
+        pd.Series(np.array([0, 1], dtype=np.int64)),
+        pl.Series("col", [2, 3]),
+        output_format=output_format,
     )
-    assert received.to_pylist() == [0, 1, 2, 3]
+    assert received.to_list() == [0, 1, 2, 3]
+    assert received.name == expected_name
 
 
 # Arrow+Arrow only: a pandas Series' value column loses its timezone on write, as any non-index pandas column does
@@ -987,19 +1006,25 @@ def _non_timeseries_multiindex_pandas_and_arrow():
     )
 
 
+_STAGE_OPS_MULTI_INDEX_XFAIL = [
+    pytest.param(
+        op,
+        marks=pytest.mark.xfail(
+            reason="Combining staged data with multiindex can't rename arrow columns; Monday ref 13124164631",
+            raises=SchemaException,
+            strict=True,
+        ),
+    )
+    for op in ("write_and_stage", "stage_and_stage")
+]
+
+
 @pytest.mark.parametrize(
     "op",
     [
         "append",
         "concat",
-        pytest.param(
-            "stage",
-            marks=pytest.mark.xfail(
-                reason="staged descriptors are already written under the unaligned names; Monday ref 13124164631",
-                raises=SchemaException,
-                strict=True,
-            ),
-        ),
+        *_STAGE_OPS_MULTI_INDEX_XFAIL,
     ],
 )
 def test_combine_non_timeseries_multiindex_pandas_with_unindexed_arrow(arrow_library_any_schema, op):
@@ -1032,14 +1057,7 @@ def _timeseries_multiindex_pandas_and_arrow():
         "append",
         "update",
         "concat",
-        pytest.param(
-            "stage",
-            marks=pytest.mark.xfail(
-                reason="staged descriptors are already written under the unaligned names; Monday ref 13124164631",
-                raises=SchemaException,
-                strict=True,
-            ),
-        ),
+        *_STAGE_OPS_MULTI_INDEX_XFAIL,
     ],
 )
 def test_combine_timeseries_multiindex_pandas_with_matching_arrow(arrow_library_any_schema, op):
