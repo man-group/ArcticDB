@@ -540,6 +540,73 @@ def test_snapshot_tombstoned_but_referenced_in_other_snapshot_version(basic_stor
     assert lib.read(symB, as_of="s2").data == 1
 
 
+def _index_keys_in(lt, key):
+    # The library tool gives the keys in a snapshot segment the segment's id, so leave the ids out
+    return sorted((k.type, k.version_id, k.content_hash, k.creation_ts) for k in lt.read_to_keys(key))
+
+
+def _snapshot_tombstone_contents(lib):
+    lt = lib.library_tool()
+    return [_index_keys_in(lt, t) for t in lt.find_keys(KeyType.SNAPSHOT_TOMBSTONE)]
+
+
+@pytest.mark.parametrize("method", ["add_to_snapshot", "remove_from_snapshot"])
+@pytest.mark.storage
+def test_rewriting_snapshot_with_delayed_deletes_keeps_replaced_contents(basic_store_delayed_deletes_v1, method):
+    """A deleted version can move between snapshots: added to one while another holds it, then removed from that one.
+    Keeping the contents a rewrite replaces as a snapshot tombstone, as delete_snapshot does, lets what deletes the data
+    of deleted versions later tell that the version was in a snapshot throughout."""
+    lib = basic_store_delayed_deletes_v1
+    lt = lib.library_tool()
+    lib.write("s1", 1)
+    lib.write("s2", 2)
+    lib.snapshot("snap")
+    contents = _index_keys_in(lt, lt.find_keys(KeyType.SNAPSHOT_REF)[0])
+    s1_v1 = lib.write("s1", 3).version
+
+    if method == "add_to_snapshot":
+        lib.add_to_snapshot("snap", ["s1"], [s1_v1])
+        assert lib.read("s1", as_of="snap").data == 3
+    else:
+        lib.remove_from_snapshot("snap", ["s2"], [0])
+        assert [v["symbol"] for v in lib.list_versions(snapshot="snap")] == ["s1"]
+
+    assert _snapshot_tombstone_contents(lib) == [contents]
+
+
+@pytest.mark.parametrize("method", ["add_to_snapshot", "remove_from_snapshot"])
+@pytest.mark.storage
+def test_rewriting_snapshot_without_delayed_deletes_writes_no_snapshot_tombstone(
+    basic_store_tombstone_and_pruning, method
+):
+    lib = basic_store_tombstone_and_pruning
+    lib.write("s1", 1)
+    lib.write("s2", 2)
+    lib.snapshot("snap")
+    s1_v1 = lib.write("s1", 3).version
+
+    if method == "add_to_snapshot":
+        lib.add_to_snapshot("snap", ["s1"], [s1_v1])
+    else:
+        lib.remove_from_snapshot("snap", ["s2"], [0])
+
+    assert _snapshot_tombstone_contents(lib) == []
+
+
+@pytest.mark.storage
+def test_delete_snapshot_with_delayed_deletes_keeps_contents(basic_store_delayed_deletes_v1):
+    lib = basic_store_delayed_deletes_v1
+    lt = lib.library_tool()
+    lib.write("s1", 1)
+    lib.snapshot("snap")
+    contents = _index_keys_in(lt, lt.find_keys(KeyType.SNAPSHOT_REF)[0])
+
+    lib.delete_snapshot("snap")
+
+    assert "snap" not in lib.list_snapshots()
+    assert _snapshot_tombstone_contents(lib) == [contents]
+
+
 @pytest.fixture(params=["basic_store_delayed_deletes_v1", "basic_store_prune_previous"])
 def tombstone_store(request, basic_store_factory):
     return request.getfixturevalue(request.param)

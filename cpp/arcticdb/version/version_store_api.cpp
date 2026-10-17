@@ -500,6 +500,12 @@ void PythonVersionStore::add_to_snapshot(
         retained_keys.emplace_back(std::move(key));
 
     std::sort(std::begin(retained_keys), std::end(retained_keys));
+    if (!is_delete_keys_immediately) {
+        // Keep the replaced contents as a snapshot tombstone, as delete_snapshot does. A deleted version can be moved
+        // between snapshots (added to one while another holds it, then removed from that one), and whatever deletes
+        // the data of deleted versions later relies on snapshot tombstones to tell it was in a snapshot throughout.
+        write_snapshot_tombstone(store(), to_ref(snap_key), std::move(snap_segment));
+    }
     write_snapshot_entry(store(), retained_keys, snap_name, user_meta, version_map()->log_changes());
     if (is_delete_keys_immediately) {
         std::unordered_set<StreamId> deleted_stream_ids;
@@ -554,6 +560,12 @@ void PythonVersionStore::remove_from_snapshot(
         }
     }
 
+    if (!is_delete_keys_immediately) {
+        // Keep the replaced contents as a snapshot tombstone, as delete_snapshot does. A deleted version can be moved
+        // between snapshots (added to one while another holds it, then removed from that one), and whatever deletes
+        // the data of deleted versions later relies on snapshot tombstones to tell it was in a snapshot throughout.
+        write_snapshot_tombstone(store(), to_ref(snap_key), std::move(snap_segment));
+    }
     write_snapshot_entry(store(), retained_keys, snap_name, user_meta, version_map()->log_changes());
     if (is_delete_keys_immediately) {
         std::unordered_set<StreamId> deleted_stream_ids;
