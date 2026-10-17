@@ -958,44 +958,18 @@ VersionedItem LocalVersionedEngine::write_segment(
 }
 
 /**
- * For an index key considered for deletion (target_key) we protect the nearest versions to it (above and below)
- * that are included in snapshots from deletion. This is because the index key may be dedup'd against an earlier
- * version in a snapshot, or a later version in a snapshot may be dedup'd against this index key.
+ * For index keys considered for deletion we protect every snapshotted index key of their symbol from deletion, as any
+ * of them may share data keys with them. A version shares data with the version it was built on (by append, update or
+ * dedup), which is the latest undeleted version when it was written, not necessarily its nearest snapshotted version.
+ * E.g. after deleting a snapshotted v1, an append builds v2 on v0, so v2 shares data with v0 even though v1 is between
+ * them.
  */
-void copy_versions_nearest_to_target(
-        const MasterSnapshotMap::value_type::second_type& index_key_to_snapshot_map, const IndexTypeKey& target_key,
+void copy_snapshotted_versions(
+        const MasterSnapshotMap::value_type::second_type& index_key_to_snapshot_map,
         util::ContainerFilterWrapper<std::unordered_set<IndexTypeKey>>& not_to_delete
 ) {
-    const auto target_version = target_key.version_id();
-
-    const IndexTypeKey* least_higher_version = nullptr;
-    const IndexTypeKey* greatest_lower_version = nullptr;
-
     for (const auto& pair : index_key_to_snapshot_map) {
-        const auto& key = pair.first;
-        if (key != target_key) {
-            const auto version = key.version_id();
-            if (version > target_version) {
-                if (!least_higher_version || least_higher_version->version_id() > version) {
-                    least_higher_version = &key;
-                }
-            } else if (version < target_version) {
-                if (!greatest_lower_version || greatest_lower_version->version_id() < version) {
-                    greatest_lower_version = &key;
-                }
-            } else {
-                log::version().warn(
-                        "Found two distinct index keys for the same version in snapshots:\n{}\n{}", key, target_key
-                );
-            }
-        }
-    }
-
-    if (least_higher_version) {
-        not_to_delete.insert(*least_higher_version);
-    }
-    if (greatest_lower_version) {
-        not_to_delete.insert(*greatest_lower_version);
+        not_to_delete.insert(pair.first);
     }
 }
 
@@ -1028,8 +1002,12 @@ folly::Future<DeleteTreesStats> delete_trees_responsibly(
 
     // Remove any keys considered for deletion that are covered by a snapshot.
     if (check.snapshots) {
-        keys_to_delete.remove_if([&snapshot_map, &snapshot_being_deleted, &not_to_delete, &stats](const auto& target_key
-                                 ) {
+        std::unordered_set<StreamId> symbols_with_snapshotted_versions_copied;
+        keys_to_delete.remove_if([&snapshot_map,
+                                  &snapshot_being_deleted,
+                                  &not_to_delete,
+                                  &stats,
+                                  &symbols_with_snapshotted_versions_copied](const auto& target_key) {
             // snapshot map is {symbol: {index_key: {snapshots...}}}
             if (auto find_symbol = snapshot_map.find(target_key.id()); find_symbol != snapshot_map.end()) {
                 const auto& keys_map = find_symbol->second;
@@ -1049,7 +1027,10 @@ folly::Future<DeleteTreesStats> delete_trees_responsibly(
                         return true;
                     }
                 }
-                copy_versions_nearest_to_target(keys_map, target_key, not_to_delete); // Check 2)
+                if (symbols_with_snapshotted_versions_copied.insert(target_key.id()).second) {
+                    // Check 2). Keys to delete that are copied too are erased from not_to_delete below.
+                    copy_snapshotted_versions(keys_map, not_to_delete);
+                }
             }
             return false;
         });
