@@ -290,6 +290,24 @@ def test_delete_keeps_data_deduplicated_with_snapshot_beyond_nearest_snapshotted
     assert_frame_equal(lib.read(sym, as_of="snap_v1").data, df + 1000)
 
 
+@pytest.mark.parametrize("delete_method", ["delete_version", "delete"])
+def test_add_to_snapshot_keeps_deleted_version_it_already_holds(version_store_factory, delete_method):
+    lib = version_store_factory(use_tombstones=True, delayed_deletes=False)
+    sym = "sym"
+    lib.write(sym, _df_for_day(0))  # v0
+    lib.snapshot("snap")
+    if delete_method == "delete_version":
+        lib.write(sym, _df_for_day(1))  # v1
+        lib.delete_version(sym, 0)
+    else:
+        lib.delete(sym)
+
+    # Re-adding v0 replaces snap's v0 with itself, which must not delete it
+    lib.add_to_snapshot("snap", [sym], [0])
+
+    assert_frame_equal(lib.read(sym, as_of="snap").data, _df_for_day(0))
+
+
 def test_tombstones_deleted_data_keys_prune(lmdb_version_store_prune_previous, sym):
     lib = lmdb_version_store_prune_previous
     assert lib._lib_cfg.lib_desc.version.write_options.prune_previous_version is True
