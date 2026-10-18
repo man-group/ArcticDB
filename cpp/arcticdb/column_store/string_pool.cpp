@@ -73,8 +73,15 @@ uint8_t* StringBlock::pos_data(size_t required_size) { return data_.pos_cast<uin
 std::shared_ptr<StringPool> StringPool::clone() const {
     auto output = std::make_shared<StringPool>();
     output->block_ = block_.clone();
-    output->map_ = map_;
     output->shapes_ = shapes_.clone();
+    // The map's keys are views into this pool's blocks. Copy the map, then re-point each key at the same offset in
+    // the clone's own copy so the clone does not depend on this pool staying alive or unchanged. The bytes are equal,
+    // so every key's hash and bucket stay valid and nothing needs rehashing. The value container is not const (ankerl
+    // only exposes it as const), so writing through const_cast is well defined.
+    static_assert(std::is_same_v<MapType::value_container_type::value_type, std::pair<StringType, offset_t>>);
+    output->map_ = map_;
+    for (auto& entry : const_cast<MapType::value_container_type&>(output->map_.values()))
+        entry.first = output->block_.at(entry.second);
     return output;
 }
 
