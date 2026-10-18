@@ -15,6 +15,20 @@ make lint-check     # check formatting without changes
 
 The `make venv` target installs the linter tools automatically.
 
+### Type Checking
+
+`mypy` runs over `python/arcticdb` in the "Linting checks" CI job and fails the build on any error. Run it locally with:
+
+```bash
+make typecheck
+```
+
+This installs the pinned tools from `build_tooling/requirements-typecheck.txt` into a dedicated venv
+(`$(VENV_DIR)/arcticdb-typecheck`), so it does not need a C++ build and does not touch your dev venv.
+
+Configuration is in `[tool.mypy]` in `pyproject.toml`. Modules that had errors when the gate was introduced are listed
+in an `ignore_errors` override. When you fix a module, remove it from that list; do not add new modules to it.
+
 ### Rebasing Old Work
 
 You may have old work that isn't auto-formatted that you need to rebase and merge. Steps taken from [this blog](https://blog.scottlogic.com/2019/03/04/retroactively-applying-prettier-to-existing-branches.html)

@@ -410,7 +410,7 @@ class NativeVersionStore:
     )
 
     def __init__(self, library, env, lib_cfg=None, open_mode=OpenMode.DELETE, native_cfg=None, runtime_options=None):
-        # type: (_Library, Optional[str], Optional[LibraryConfig], OpenMode)->None
+        # type: (_Library, Optional[str], Optional[LibraryConfig], OpenMode, Any, Any)->None
         fail_on_missing = library.config.fail_on_missing_custom_normalizer if library.config is not None else False
         custom_normalizer = get_custom_normalizer(fail_on_missing)
         self._initialize(library, env, lib_cfg, custom_normalizer, open_mode, native_cfg, runtime_options)
@@ -747,7 +747,7 @@ class NativeVersionStore:
         data: Any,
         validate_index: bool = False,
         sort_on_index: bool = False,
-        sort_columns: List[str] = None,
+        sort_columns: Optional[List[str]] = None,
         index_column: bool = False,
         **kwargs,
     ):
@@ -971,7 +971,7 @@ class NativeVersionStore:
     def append(
         self,
         symbol: str,
-        dataframe: TimeSeriesType,
+        dataframe: Union[TimeSeriesType, np.ndarray],
         metadata: Optional[Any] = None,
         incomplete: bool = False,
         prune_previous_version: Optional[bool] = None,
@@ -1273,10 +1273,10 @@ class NativeVersionStore:
     def _batch_update_internal(
         self,
         symbols: List[str],
-        data_vector: List[TimeSeriesType],
+        data_vector: List[Union[TimeSeriesType, np.ndarray]],
         metadata_vector: List[Any],
         date_range_vector: List[Optional[Tuple[Optional[Timestamp], Optional[Timestamp]]]],
-        prune_previous_version: bool = None,
+        prune_previous_version: Optional[bool] = None,
         upsert: bool = False,
         index_column_vector: Optional[List[bool]] = None,
     ):

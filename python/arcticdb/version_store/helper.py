@@ -107,7 +107,7 @@ class ArcticFileConfig(ArcticConfig):
 
 class ArcticMemoryConfig(ArcticConfig):
     def __init__(self, cfg, env, native_cfg=None):
-        # type: (EnvironmentConfigsMap, Optional[EnvName])->None
+        # type: (EnvironmentConfigsMap, Optional[EnvName], Any)->None
         self._cfg = cfg
         self._env = env
         self._native_cfg = native_cfg
@@ -178,7 +178,7 @@ def get_lib_cfg(cfg: ArcticMemoryConfig, env_name: str, lib_name: str) -> Librar
 
 
 def add_lmdb_library_to_env(cfg, lib_name, env_name, db_dir=Defaults.DATA_DIR, description=None, *, lmdb_config={}):
-    # type: (EnvironmentConfigsMap, LibName, EnvName, Optional[FilePath], Optional[str], None, Dict[str, Any])->None
+    # type: (EnvironmentConfigsMap, LibName, EnvName, Optional[FilePath], Optional[str], Dict[str, Any])->None
     env = cfg.env_by_id[env_name]
     lmdb = LmdbConfig()
     lmdb.path = db_dir
