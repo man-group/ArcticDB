@@ -69,8 +69,8 @@ inline ReadResult create_python_read_result(
                                           : norm_meta->mutable_series()->mutable_common();
         if (common->has_index()) {
             auto index = common->mutable_index();
-            if (result.desc_.index().type() == IndexDescriptor::Type::ROWCOUNT && !index->is_physically_stored() &&
-                index->start() == 0 && index->step() == 0) {
+            if (result.desc_.index().type() == IndexDescriptor::Type::ROWCOUNT && index->start() == 0 &&
+                index->step() == 0) {
                 index->set_step(1);
             }
         }

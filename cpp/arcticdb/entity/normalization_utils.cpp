@@ -148,11 +148,17 @@ NormalizationMetadata_Pandas* mutable_pandas_common(proto::descriptors::Normaliz
     }
 }
 
+// Between versions 6.18.1 and 7.0.0 arcticdb had a bug where `is_physically_stored` could be False for a TIMESERIES
+// index. We still need the `is_physically_stored` metadata to differentiate between an Int64Index and RowRangeIndex.
+bool is_index_physically_stored(const NormalizationMetadata_PandasIndex& index, IndexDescriptor::Type index_type) {
+    return index_type == IndexDescriptor::Type::TIMESTAMP || index.is_physically_stored();
+}
+
 void update_rowrange_norm_for_append(
-        const proto::descriptors::NormalizationMetadata& old_norm, proto::descriptors::NormalizationMetadata& new_norm,
+        proto::descriptors::NormalizationMetadata& old_norm, proto::descriptors::NormalizationMetadata& new_norm,
         size_t old_length
 ) {
-    const auto* old_pandas = pandas_common(old_norm);
+    auto* old_pandas = mutable_pandas_common(old_norm);
     auto* new_pandas = mutable_pandas_common(new_norm);
     if (old_pandas == nullptr || new_pandas == nullptr) {
         return;
@@ -172,6 +178,13 @@ void update_rowrange_norm_for_append(
         );
 
         if (!old_index->is_physically_stored()) {
+            // A step of 0 can happen with:
+            // - data written before Nov 2020 which didn't have the step protobuf field
+            // - data appended by versions [6.18.1, 7.0.0) to an empty frame
+            // In both cases we accept the new_index step.
+            if (old_index->step() == 0) {
+                old_pandas->mutable_index()->set_step(new_index->step());
+            }
             normalization::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
                     old_index->step() == new_index->step(),
                     "The new argument has a different RangeIndex step from {}",

@@ -864,12 +864,10 @@ class ArrowTableNormalizer(Normalizer):
         embedded = embedded_pandas_meta(arrow_meta)
         if embedded is None:
             return item
-        return self._apply_embedded_pandas_schema_changes(
-            item, embedded.common, arrow_meta.WhichOneof("pandas_input_type")
-        )
+        return self._apply_embedded_pandas_schema_changes(item, embedded.common, arrow_meta)
 
-    def _apply_embedded_pandas_schema_changes(self, item, pandas_meta, pandas_input_type):
-        # type: (pa.Table, NormalizationMetadata.Pandas, Optional[str]) -> pa.Table
+    def _apply_embedded_pandas_schema_changes(self, item, pandas_meta, arrow_meta):
+        # type: (pa.Table, NormalizationMetadata.Pandas, NormalizationMetadata.Arrow) -> pa.Table
         """Rename columns and attach pandas schema metadata so that ``to_pandas()`` reproduces the written frame."""
 
         # A lot of this logic also has a C++ implementation for the rename_columns_arrow_compat method. The main
@@ -877,7 +875,9 @@ class ArrowTableNormalizer(Normalizer):
         # always automatic, and that the Python implementation builds up the necessary metadata for pa.Table.to_pandas()
         # to restore the original index/column names. Combining them is therefore painful, and would also involve
         # round-tripping the protobuf back through the C++ layer.
-        unnamed_series = pandas_input_type == "series" and not pandas_meta.has_name and not pandas_meta.name
+        unnamed_series = (
+            arrow_meta.WhichOneof("pandas_input_type") == "series" and not pandas_meta.has_name and not pandas_meta.name
+        )
 
         def num_pandas_index_cols(pandas_meta):
             index_type = pandas_meta.WhichOneof("index_type")
@@ -885,7 +885,7 @@ class ArrowTableNormalizer(Normalizer):
                 index_meta = pandas_meta.index
                 # Empty tables don't have `is_physically_stored=True` but we still output them with an empty DateTimeIndex.
                 is_empty_table_with_datetime_index = len(item) == 0 and not index_meta.step
-                if index_meta.is_physically_stored or is_empty_table_with_datetime_index:
+                if arrow_meta.has_index or index_meta.is_physically_stored or is_empty_table_with_datetime_index:
                     return 1
                 else:
                     return 0
