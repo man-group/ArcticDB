@@ -541,7 +541,7 @@ def test_snapshot_tombstoned_but_referenced_in_other_snapshot_version(basic_stor
 
 
 def _index_keys_in(lt, key):
-    # The library tool gives the keys in a snapshot segment the segment's id, so leave the ids out
+    # read_to_keys gives snapshot entries the segment's id, so ignore ids
     return sorted((k.type, k.version_id, k.content_hash, k.creation_ts) for k in lt.read_to_keys(key))
 
 
@@ -553,9 +553,7 @@ def _snapshot_tombstone_contents(lib):
 @pytest.mark.parametrize("method", ["add_to_snapshot", "remove_from_snapshot"])
 @pytest.mark.storage
 def test_rewriting_snapshot_with_delayed_deletes_keeps_replaced_contents(basic_store_delayed_deletes_v1, method):
-    """A deleted version can move between snapshots: added to one while another holds it, then removed from that one.
-    Keeping the contents a rewrite replaces as a snapshot tombstone, as delete_snapshot does, lets what deletes the data
-    of deleted versions later tell that the version was in a snapshot throughout."""
+    """Lets delayed deletes see a deleted version that moves between snapshots."""
     lib = basic_store_delayed_deletes_v1
     lt = lib.library_tool()
     lib.write("s1", 1)

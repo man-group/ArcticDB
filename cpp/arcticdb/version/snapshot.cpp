@@ -71,7 +71,7 @@ void tombstone_snapshot(
         const std::shared_ptr<StreamSink>& store, const RefKey& key, SegmentInMemory&& segment_in_memory,
         bool log_changes
 ) {
-    // Write the tombstone first, so that the snapshot's contents are on storage throughout
+    // Tombstone first, so the contents never leave storage
     write_snapshot_tombstone(store, key, std::move(segment_in_memory));
     store->remove_key_sync(key); // Make the snapshot "disappear" to normal APIs
     if (log_changes) {
@@ -86,7 +86,7 @@ void tombstone_snapshot(
     // Append a timestamp to the ID so that other snapshot(s) can reuse the same snapshot name before the cleanup job:
     std::string new_key = fmt::format("{}@{:x}", ref_key, util::SysClock::coarse_nanos_since_epoch() / 1'000'000);
     key_segment_pair.set_key(RefKey(std::move(new_key), KeyType::SNAPSHOT_TOMBSTONE));
-    // Write the tombstone first, so that the snapshot's contents are on storage throughout
+    // Tombstone first, so the contents never leave storage
     store->write_compressed(std::move(key_segment_pair)).get();
     store->remove_key(ref_key).get(); // Make the snapshot "disappear" to normal APIs
     if (log_changes) {

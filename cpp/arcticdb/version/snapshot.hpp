@@ -23,7 +23,7 @@ void write_snapshot_entry(
         const py::object& user_meta, bool log_changes, KeyType key_type = KeyType::SNAPSHOT_REF
 );
 
-// Writes a SNAPSHOT_TOMBSTONE holding the given contents of the snapshot with the given ref key, which stays in place
+// Writes a SNAPSHOT_TOMBSTONE of the snapshot's contents, leaving the snapshot in place
 void write_snapshot_tombstone(
         const std::shared_ptr<stream::StreamSink>& store, const RefKey& key, SegmentInMemory&& segment_in_memory
 );

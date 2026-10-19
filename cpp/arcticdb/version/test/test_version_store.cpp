@@ -1321,6 +1321,5 @@ TEST(Snapshot, TombstoneSnapshotKeepsSnapshotIfItCannotWriteTheTombstone) {
     EXPECT_THROW(tombstone_snapshot(store, snapshot_key, std::move(segment), false), StorageException);
     StorageFailureSimulator::reset();
 
-    // Otherwise the snapshot would be gone without a tombstone holding its contents
     ASSERT_TRUE(store->key_exists_sync(snapshot_key));
 }
