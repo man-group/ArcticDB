@@ -248,7 +248,6 @@ void PythonStringHandler::default_initialize(
                                         : python_util::PythonMissingValue::None;
     fill_missing(buffer, bytes_offset, byte_size / type_size(), handler_data, python_missing_value);
 }
-}
 
 [[nodiscard]] static inline py::dtype generate_python_dtype(const TypeDescriptor& td, stride_t type_byte_size) {
     if (is_empty_type(td.data_type())) {
