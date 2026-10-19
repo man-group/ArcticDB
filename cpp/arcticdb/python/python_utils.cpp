@@ -14,22 +14,15 @@ namespace arcticdb::python_util {
 // arrow arrays (one per row-slice, for arrow-backed string columns).
 using PandasColumn = std::variant<py::array, std::vector<std::shared_ptr<RecordBatchData>>>;
 
-void prefill_with_none(
-        PyObject** ptr_dest, size_t num_rows, size_t sparse_count, PythonHandlerData& python_handler_data,
-        IncrementRefCount inc_ref_count
+PyObject** fill_with_none_or_nan(
+        PyObject** ptr_dest, size_t num_rows, PythonHandlerData& handler_data, PythonMissingValue value,
+        IncrementRefCount inc_ref_count, size_t sparse_count
 ) {
-    std::fill_n(ptr_dest, num_rows, Py_None);
-
+    std::fill_n(ptr_dest, num_rows, handler_data.get_missing_value(value));
     if (inc_ref_count == IncrementRefCount::ON) {
-        const auto none_count = num_rows - sparse_count;
-        python_handler_data.increment_none_refcount(none_count);
+        handler_data.increment_missing_refcount(value, num_rows - sparse_count);
     }
-}
-
-PyObject** fill_with_none(PyObject** ptr_dest, size_t count, PythonHandlerData& handler_data) {
-    std::fill_n(ptr_dest, count, Py_None);
-    handler_data.increment_none_refcount(count);
-    return ptr_dest + count;
+    return ptr_dest + num_rows;
 }
 
 py::tuple extract_pandas_columns(PandasOutputFrame& pandas_output_frame) {

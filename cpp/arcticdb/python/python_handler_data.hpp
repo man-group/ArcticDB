@@ -9,6 +9,10 @@
 // need to track how many times it was used and replay the INCREFs at end-of-read.
 #define ARCTICDB_PY_NONE_IMMORTAL_HEX 0x030C0000
 
+namespace arcticdb::python_util {
+enum class PythonMissingValue { None, NaN };
+}
+
 namespace arcticdb {
 
 namespace py = pybind11;
@@ -28,19 +32,25 @@ struct PythonHandlerData {
             PyGILState_Release(gstate);
         })) {}
 
-    void increment_none_refcount(size_t increment) {
+    void increment_missing_refcount(python_util::PythonMissingValue value, size_t increment) {
+        if (value == python_util::PythonMissingValue::NaN) {
+            nan_refcount_->fetch_add(increment, std::memory_order_relaxed);
+        } else {
 #if PY_VERSION_HEX < ARCTICDB_PY_NONE_IMMORTAL_HEX
-        none_refcount_->fetch_add(increment, std::memory_order_relaxed);
+            none_refcount_->fetch_add(increment, std::memory_order_relaxed);
 #else
-        (void)increment;
+            (void)increment;
 #endif
+        }
     }
-
-    void increment_nan_refcount(size_t increment) { nan_refcount_->fetch_add(increment, std::memory_order_relaxed); }
 
     bool is_nan_initialized() const { return static_cast<bool>(py_nan_); }
 
     PyObject* non_owning_nan_handle() const { return py_nan_->ptr(); }
+
+    PyObject* get_missing_value(python_util::PythonMissingValue value) const {
+        return value == python_util::PythonMissingValue::NaN ? non_owning_nan_handle() : Py_None;
+    }
 
     /// The GIL must be acquired when this is called as it changes the refcount of the global static None variable which
     /// can be used by other Python threads

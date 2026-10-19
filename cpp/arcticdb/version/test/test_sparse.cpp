@@ -15,7 +15,13 @@
 #include <arcticdb/stream/test/stream_test_common.hpp>
 #include <arcticdb/python/python_to_tensor_frame.hpp>
 #include <arcticdb/python/python_handlers.hpp>
+#include <arcticdb/python/python_strings.hpp>
+#include <arcticdb/python/gil_lock.hpp>
 #include <arcticdb/python/python_types.hpp>
+#include <arcticdb/column_store/string_pool.hpp>
+#include <arcticdb/pipeline/column_mapping.hpp>
+#include <arcticdb/util/decode_path_data.hpp>
+#include <arcticdb/util/offset_string.hpp>
 #include <arcticdb/util/native_handler.hpp>
 #include <arcticdb/util/test/gtest_utils.hpp>
 
@@ -23,6 +29,80 @@ struct SparseTestStore : arcticdb::TestStore {
   protected:
     std::string get_name() override { return "test.sparse"; }
 };
+
+TEST(ReadOptions, PandasStringFormat) {
+    using namespace arcticdb;
+
+    ReadOptions options;
+    EXPECT_EQ(options.pandas_string_format(), PandasStringFormat::OBJECT);
+    options.set_output_config(PandasOutputConfig{PandasStringFormat::PYTHON_STRING});
+    const ReadOptions& const_options = options;
+    EXPECT_EQ(const_options.pandas_string_format(), PandasStringFormat::PYTHON_STRING);
+
+    options.set_output_config(ArrowOutputConfig{});
+    EXPECT_ANY_THROW(static_cast<void>(const_options.pandas_string_format()));
+}
+
+TEST(PythonHandlerData, GetMissingValue) {
+    using namespace arcticdb;
+
+    PythonHandlerData handler_data;
+    EXPECT_EQ(handler_data.get_missing_value(python_util::PythonMissingValue::None), Py_None);
+    EXPECT_EQ(
+            handler_data.get_missing_value(python_util::PythonMissingValue::NaN), handler_data.non_owning_nan_handle()
+    );
+}
+
+TEST(PythonStringHandler, DefaultInitializeRespectsStringType) {
+    using namespace arcticdb;
+
+    register_python_string_types();
+
+    auto check = [](DataType type, PandasStringFormat format, bool expect_nan) {
+        auto handler = get_type_handler(OutputFormat::PANDAS, make_scalar_type(type));
+        ASSERT_NE(handler, nullptr);
+
+        ReadOptions options;
+        options.set_output_config(PandasOutputConfig{format});
+        std::any handler_data{PythonHandlerData{}};
+        ChunkedBuffer buffer = ChunkedBuffer::presized(sizeof(PyObject*));
+        handler->default_initialize(buffer, 0, sizeof(PyObject*), DecodePathData{}, handler_data, options);
+
+        auto actual = *buffer.ptr_cast<PyObject*>(0, sizeof(PyObject*));
+        auto expected = expect_nan ? std::any_cast<PythonHandlerData&>(handler_data).non_owning_nan_handle() : Py_None;
+        EXPECT_EQ(actual, expected);
+    };
+
+    check(DataType::ASCII_DYNAMIC64, PandasStringFormat::PYTHON_STRING, false);
+    check(DataType::UTF_DYNAMIC64, PandasStringFormat::PYTHON_STRING, true);
+    check(DataType::UTF_DYNAMIC64, PandasStringFormat::OBJECT, false);
+}
+
+TEST(PythonStringHandler, PresentNullRespectsStringFormatAndEncoding) {
+    using namespace arcticdb;
+
+    StringPool string_pool;
+    DecodePathData shared_data;
+
+    auto check = [&](DataType type, PandasStringFormat format, bool expect_nan) {
+        const auto descriptor = make_scalar_type(type);
+        const entity::FieldWrapper field(descriptor, "string");
+        const ColumnMapping mapping(
+                descriptor, descriptor, field.field(), sizeof(PyObject*), 1, 0, 0, sizeof(PyObject*), 0
+        );
+        Column source(descriptor);
+        source.set_scalar(0, not_a_string());
+        PythonHandlerData handler_data;
+        PyObject* output = nullptr;
+
+        write_python_dynamic_strings_to_dest(&output, source, mapping, string_pool, shared_data, handler_data, format);
+        EXPECT_EQ(output, expect_nan ? handler_data.non_owning_nan_handle() : Py_None);
+    };
+
+    check(DataType::ASCII_DYNAMIC64, PandasStringFormat::PYTHON_STRING, false);
+    check(DataType::UTF_DYNAMIC64, PandasStringFormat::PYTHON_STRING, true);
+    check(DataType::UTF_DYNAMIC64, PandasStringFormat::OBJECT, false);
+}
 
 TEST(Sparse, Simple) {
     using namespace arcticdb;

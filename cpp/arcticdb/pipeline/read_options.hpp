@@ -133,6 +133,15 @@ class ReadOptions {
         return const_cast<ReadOptions*>(this)->arrow_output_config();
     }
 
+    [[nodiscard]] PandasStringFormat pandas_string_format() const {
+        const auto& variant_config = data_->output_config_;
+        util::check(
+                std::holds_alternative<PandasOutputConfig>(variant_config),
+                "ReadOptions::pandas_string_format called for non-Pandas config."
+        );
+        return std::get<PandasOutputConfig>(variant_config).default_string_format_;
+    }
+
     [[nodiscard]] ReadOptions clone() const { return ReadOptions(std::make_shared<ReadOptionsData>(*data_)); }
 
   private:

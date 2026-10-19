@@ -17,7 +17,7 @@ namespace arcticdb {
 
 enum class ArrowOutputStringFormat : uint8_t { CATEGORICAL, LARGE_STRING, SMALL_STRING, UNSPECIFIED };
 
-enum class PandasStringFormat : uint8_t { OBJECT, ARROW_LARGE_STRING };
+enum class PandasStringFormat : uint8_t { OBJECT, ARROW_LARGE_STRING, PYTHON_STRING };
 
 enum class ArrowOutputFormat : uint8_t { PYARROW, POLARS };
 

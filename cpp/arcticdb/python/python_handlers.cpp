@@ -5,6 +5,8 @@
  * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
  * will be governed by the Apache License, version 2.0.
  */
+#include "entity/types.hpp"
+#include "pipeline/output_config.hpp"
 #include <python/python_handlers.hpp>
 #include <arcticdb/codec/encoding_sizes.hpp>
 #include <arcticdb/codec/codec.hpp>
@@ -16,9 +18,12 @@
 
 namespace arcticdb {
 
-static PyObject** fill_with_none(ChunkedBuffer& buffer, size_t offset, size_t count, PythonHandlerData& handler_data) {
+static void fill_missing(
+        ChunkedBuffer& buffer, size_t offset, size_t count, PythonHandlerData& handler_data,
+        python_util::PythonMissingValue value
+) {
     auto dest = buffer.ptr_cast<PyObject*>(offset, count * sizeof(PyObject*));
-    return python_util::fill_with_none(dest, count, handler_data);
+    python_util::fill_with_none_or_nan(dest, count, handler_data, value);
 }
 
 void PythonEmptyHandler::handle_type(
@@ -53,9 +58,10 @@ void PythonEmptyHandler::handle_type(
     convert_type({}, dest_column, mapping, {}, handler_data, string_pool, read_options);
 }
 
-void PythonEmptyHandler::
-        convert_type(const Column&, Column& dest_column, const ColumnMapping& mapping, const DecodePathData& shared_data, std::any& handler_data, const std::shared_ptr<StringPool>&, const ReadOptions&)
-                const {
+void PythonEmptyHandler::convert_type(
+        const Column&, Column& dest_column, const ColumnMapping& mapping, const DecodePathData& shared_data,
+        std::any& handler_data, const std::shared_ptr<StringPool>&, const ReadOptions& read_options
+) const {
     auto dest_data = dest_column.bytes_at(
             mapping.offset_bytes_, mapping.num_rows_ * get_type_size(mapping.dest_type_desc_.data_type())
     );
@@ -71,7 +77,12 @@ void PythonEmptyHandler::
 
     if (is_object_type(mapping.dest_type_desc_) || is_empty_type(mapping.dest_type_desc_.data_type())) {
         default_initialize(
-                dest_column.buffer(), mapping.offset_bytes_, mapping.num_rows_ * type_size(), shared_data, handler_data
+                dest_column.buffer(),
+                mapping.offset_bytes_,
+                mapping.num_rows_ * type_size(),
+                shared_data,
+                handler_data,
+                read_options
         );
     } else {
         mapping.dest_type_desc_.visit_tag([&mapping, dest_data](auto tdt) {
@@ -90,11 +101,11 @@ std::pair<TypeDescriptor, DetachableBlockConfig> PythonEmptyHandler::
     return {make_scalar_type(DataType::EMPTYVAL), {}};
 }
 
-void PythonEmptyHandler::default_initialize(
-        ChunkedBuffer& buffer, size_t bytes_offset, size_t byte_size, const DecodePathData&, std::any& any
-) const {
+void PythonEmptyHandler::
+        default_initialize(ChunkedBuffer& buffer, size_t bytes_offset, size_t byte_size, const DecodePathData&, std::any& any, const ReadOptions&)
+                const {
     auto& handler_data = cast_handler_data(any);
-    fill_with_none(buffer, bytes_offset, byte_size / type_size(), handler_data);
+    fill_missing(buffer, bytes_offset, byte_size / type_size(), handler_data, python_util::PythonMissingValue::None);
 }
 
 void PythonBoolHandler::handle_type(
@@ -137,11 +148,15 @@ void PythonBoolHandler::
         unsigned last_row = 0u;
         for (auto en = sparse_map->first(); en < sparse_map->end(); ++en, ++last_row) {
             const auto current_pos = *en;
-            ptr_dest = python_util::fill_with_none(ptr_dest, current_pos - last_row, handler_data);
+            ptr_dest = python_util::fill_with_none_or_nan(
+                    ptr_dest, current_pos - last_row, handler_data, python_util::PythonMissingValue::None
+            );
             last_row = current_pos;
             *ptr_dest++ = py::bool_(static_cast<bool>(*ptr_src++)).release().ptr();
         }
-        python_util::fill_with_none(ptr_dest, mapping.num_rows_ - last_row, handler_data);
+        python_util::fill_with_none_or_nan(
+                ptr_dest, mapping.num_rows_ - last_row, handler_data, python_util::PythonMissingValue::None
+        );
     } else {
         ARCTICDB_TRACE(log::codec(), "Bool handler didn't find a sparse map. Assuming dense array.");
         std::transform(ptr_src, ptr_src + num_bools, ptr_dest, [](uint8_t value) {
@@ -157,11 +172,11 @@ std::pair<TypeDescriptor, DetachableBlockConfig> PythonBoolHandler::
     return {make_scalar_type(DataType::BOOL_OBJECT8), {}};
 }
 
-void PythonBoolHandler::default_initialize(
-        ChunkedBuffer& buffer, size_t bytes_offset, size_t byte_size, const DecodePathData&, std::any& any
-) const {
+void PythonBoolHandler::
+        default_initialize(ChunkedBuffer& buffer, size_t bytes_offset, size_t byte_size, const DecodePathData&, std::any& any, const ReadOptions&)
+                const {
     auto& handler_data = cast_handler_data(any);
-    fill_with_none(buffer, bytes_offset, byte_size / type_size(), handler_data);
+    fill_missing(buffer, bytes_offset, byte_size / type_size(), handler_data, python_util::PythonMissingValue::None);
 }
 
 void PythonStringHandler::handle_type(
@@ -197,13 +212,21 @@ void PythonStringHandler::handle_type(
     }
 }
 
-void PythonStringHandler::
-        convert_type(const Column& source_column, Column& dest_column, const ColumnMapping& mapping, const DecodePathData& shared_data, std::any& handler_data, const std::shared_ptr<StringPool>& string_pool, const ReadOptions&)
-                const {
+void PythonStringHandler::convert_type(
+        const Column& source_column, Column& dest_column, const ColumnMapping& mapping,
+        const DecodePathData& shared_data, std::any& handler_data, const std::shared_ptr<StringPool>& string_pool,
+        const ReadOptions& read_options
+) const {
     auto dest_data = dest_column.bytes_at(mapping.offset_bytes_, mapping.num_rows_ * sizeof(PyObject*));
     auto ptr_dest = reinterpret_cast<PyObject**>(dest_data);
     write_python_dynamic_strings_to_dest(
-            ptr_dest, source_column, mapping, *string_pool, shared_data, cast_handler_data(handler_data)
+            ptr_dest,
+            source_column,
+            mapping,
+            *string_pool,
+            shared_data,
+            cast_handler_data(handler_data),
+            read_options.pandas_string_format()
     );
 }
 
@@ -215,10 +238,16 @@ std::pair<TypeDescriptor, DetachableBlockConfig> PythonStringHandler::
 }
 
 void PythonStringHandler::default_initialize(
-        ChunkedBuffer& buffer, size_t bytes_offset, size_t byte_size, const DecodePathData&, std::any& any
+        ChunkedBuffer& buffer, size_t bytes_offset, size_t byte_size, const DecodePathData&, std::any& any,
+        const ReadOptions& read_options
 ) const {
     auto& handler_data = cast_handler_data(any);
-    fill_with_none(buffer, bytes_offset, byte_size / type_size(), handler_data);
+    auto python_missing_value = string_type_ == DataType::UTF_DYNAMIC64 &&
+                                                read_options.pandas_string_format() == PandasStringFormat::PYTHON_STRING
+                                        ? python_util::PythonMissingValue::NaN
+                                        : python_util::PythonMissingValue::None;
+    fill_missing(buffer, bytes_offset, byte_size / type_size(), handler_data, python_missing_value);
+}
 }
 
 [[nodiscard]] static inline py::dtype generate_python_dtype(const TypeDescriptor& td, stride_t type_byte_size) {
@@ -285,7 +314,14 @@ void PythonArrayHandler::convert_type(
     auto column_data = source_column.data();
     if (source_column.is_sparse()) {
         auto& handler_data = cast_handler_data(any);
-        python_util::prefill_with_none(ptr_dest, mapping.num_rows_, source_column.sparse_map().count(), handler_data);
+        python_util::fill_with_none_or_nan(
+                ptr_dest,
+                mapping.num_rows_,
+                handler_data,
+                python_util::PythonMissingValue::None,
+                python_util::IncrementRefCount::ON,
+                source_column.sparse_map().count()
+        );
 
         auto en = sparse_map->first();
 
@@ -325,11 +361,11 @@ std::pair<TypeDescriptor, DetachableBlockConfig> PythonArrayHandler::
 
 int PythonArrayHandler::type_size() const { return sizeof(PyObject*); }
 
-void PythonArrayHandler::default_initialize(
-        ChunkedBuffer& buffer, size_t offset, size_t byte_size, const DecodePathData&, std::any& any
-) const {
+void PythonArrayHandler::
+        default_initialize(ChunkedBuffer& buffer, size_t offset, size_t byte_size, const DecodePathData&, std::any& any, const ReadOptions&)
+                const {
     auto& handler_data = cast_handler_data(any);
-    fill_with_none(buffer, offset, byte_size / type_size(), handler_data);
+    fill_missing(buffer, offset, byte_size / type_size(), handler_data, python_util::PythonMissingValue::None);
 }
 
 } // namespace arcticdb

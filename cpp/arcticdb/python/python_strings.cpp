@@ -63,26 +63,29 @@ static auto get_unique_counts(const Column& column) {
     return unique_counts;
 }
 
-static std::pair<size_t, size_t> write_strings_to_destination(
+static void write_strings_to_destination(
         PyObject** ptr_dest, size_t num_rows, const Column& source_column,
-        const ankerl::unordered_dense::map<entity::position_t, PyObject*>& py_strings, PythonHandlerData& handler_data
+        const ankerl::unordered_dense::map<entity::position_t, PyObject*>& py_strings, PythonHandlerData& handler_data,
+        python_util::PythonMissingValue none_value
 ) {
     if (source_column.is_sparse()) {
-        python_util::prefill_with_none(ptr_dest, num_rows, 0, handler_data, python_util::IncrementRefCount::OFF);
+        python_util::fill_with_none_or_nan(
+                ptr_dest, num_rows, handler_data, none_value, python_util::IncrementRefCount::OFF
+        );
     }
-    auto none_count = 0UL;
-    auto nan_count = 0UL;
+    auto not_a_string_count = 0UL;
+    auto nan_placeholder_count = 0UL;
     details::visit_type(source_column.type().data_type(), [&](auto source_tag) {
         using source_type_info = ScalarTypeInfo<decltype(source_tag)>;
         if constexpr (is_sequence_type(source_type_info::data_type)) {
             for_each_enumerated<typename source_type_info::TDT>(source_column, [&](const auto& en) {
                 const auto offset = en.value();
                 if (offset == not_a_string()) {
-                    ptr_dest[en.idx()] = Py_None;
-                    ++none_count;
+                    ptr_dest[en.idx()] = handler_data.get_missing_value(none_value);
+                    ++not_a_string_count;
                 } else if (offset == nan_placeholder()) {
-                    ptr_dest[en.idx()] = handler_data.non_owning_nan_handle();
-                    ++nan_count;
+                    ptr_dest[en.idx()] = handler_data.get_missing_value(python_util::PythonMissingValue::NaN);
+                    ++nan_placeholder_count;
                 } else {
                     ptr_dest[en.idx()] = py_strings.at(offset);
                 }
@@ -91,10 +94,9 @@ static std::pair<size_t, size_t> write_strings_to_destination(
             util::raise_rte("Expected column to have a string type but got {}", source_type_info::data_type);
         }
     });
-    if (source_column.is_sparse()) {
-        none_count += num_rows - source_column.sparse_map().count();
-    }
-    return {none_count, nan_count};
+    const auto sparse_missing_count = source_column.is_sparse() ? num_rows - source_column.sparse_map().count() : 0;
+    handler_data.increment_missing_refcount(none_value, not_a_string_count + sparse_missing_count);
+    handler_data.increment_missing_refcount(python_util::PythonMissingValue::NaN, nan_placeholder_count);
 }
 
 template<typename StringCreator>
@@ -123,17 +125,14 @@ static auto assign_python_strings(
 template<typename StringCreator>
 static void assign_strings_local(
         PyObject** ptr_dest, size_t num_rows, const Column& source_column, bool has_type_conversion,
-        const StringPool& string_pool, PythonHandlerData& handler_data
+        const StringPool& string_pool, PythonHandlerData& handler_data, python_util::PythonMissingValue none_value
 ) {
     ARCTICDB_SAMPLE(AssignStringsLocal, 0)
     auto unique_counts = get_unique_counts(source_column);
     auto py_strings = assign_python_strings<StringCreator>(unique_counts, has_type_conversion, string_pool);
 
     ARCTICDB_SUBSAMPLE(WriteStringsToColumn, 0)
-    auto [none_count, nan_count] =
-            write_strings_to_destination(ptr_dest, num_rows, source_column, py_strings, handler_data);
-    handler_data.increment_none_refcount(none_count);
-    handler_data.increment_nan_refcount(nan_count);
+    write_strings_to_destination(ptr_dest, num_rows, source_column, py_strings, handler_data, none_value);
 }
 
 static ankerl::unordered_dense::map<entity::position_t, PyObject*> get_allocated_strings(
@@ -154,7 +153,8 @@ static ankerl::unordered_dense::map<entity::position_t, PyObject*> get_allocated
 template<typename StringCreator>
 static void assign_strings_shared(
         PyObject** ptr_dest, size_t num_rows, const Column& source_column, bool has_type_conversion,
-        const StringPool& string_pool, const DecodePathData& shared_data, PythonHandlerData& handler_data
+        const StringPool& string_pool, const DecodePathData& shared_data, PythonHandlerData& handler_data,
+        python_util::PythonMissingValue none_value
 ) {
     ARCTICDB_SAMPLE(AssignStringsShared, 0)
     auto unique_counts = get_unique_counts(source_column);
@@ -180,24 +180,29 @@ static void assign_strings_shared(
             }
         }
     }
-    auto [none_count, nan_count] =
-            write_strings_to_destination(ptr_dest, num_rows, source_column, allocated, handler_data);
-    handler_data.increment_none_refcount(none_count);
-    handler_data.increment_nan_refcount(nan_count);
+    write_strings_to_destination(ptr_dest, num_rows, source_column, allocated, handler_data, none_value);
 }
 
 template<typename StringCreator>
 static void process_string_views_for_type(
         PyObject** ptr_dest, size_t num_rows, const Column& source_column, bool has_type_conversion,
-        const StringPool& string_pool, const DecodePathData& shared_data, PythonHandlerData& handler_data
+        const StringPool& string_pool, const DecodePathData& shared_data, PythonHandlerData& handler_data,
+        python_util::PythonMissingValue none_value
 ) {
     if (shared_data.optimize_for_memory())
         assign_strings_shared<StringCreator>(
-                ptr_dest, num_rows, source_column, has_type_conversion, string_pool, shared_data, handler_data
+                ptr_dest,
+                num_rows,
+                source_column,
+                has_type_conversion,
+                string_pool,
+                shared_data,
+                handler_data,
+                none_value
         );
     else
         assign_strings_local<StringCreator>(
-                ptr_dest, num_rows, source_column, has_type_conversion, string_pool, handler_data
+                ptr_dest, num_rows, source_column, has_type_conversion, string_pool, handler_data, none_value
         );
 }
 
@@ -217,31 +222,53 @@ static inline PyStringConstructor get_string_constructor(bool has_type_conversio
 
 static void process_string_views(
         PyObject** ptr_dest, bool has_type_conversion, bool is_utf, size_t num_rows, const Column& source_column,
-        const StringPool& string_pool, const DecodePathData& shared_data, PythonHandlerData& handler_data
+        const StringPool& string_pool, const DecodePathData& shared_data, PythonHandlerData& handler_data,
+        python_util::PythonMissingValue none_value
 ) {
     auto string_constructor = get_string_constructor(has_type_conversion, is_utf);
 
     switch (string_constructor) {
     case PyStringConstructor::Unicode_FromUnicode:
         process_string_views_for_type<UnicodeFromUnicodeCreator>(
-                ptr_dest, num_rows, source_column, has_type_conversion, string_pool, shared_data, handler_data
+                ptr_dest,
+                num_rows,
+                source_column,
+                has_type_conversion,
+                string_pool,
+                shared_data,
+                handler_data,
+                none_value
         );
         break;
     case PyStringConstructor::Unicode_FromStringAndSize:
         process_string_views_for_type<UnicodeFromStringAndSizeCreator>(
-                ptr_dest, num_rows, source_column, has_type_conversion, string_pool, shared_data, handler_data
+                ptr_dest,
+                num_rows,
+                source_column,
+                has_type_conversion,
+                string_pool,
+                shared_data,
+                handler_data,
+                none_value
         );
         break;
     case PyStringConstructor::Bytes_FromStringAndSize:
         process_string_views_for_type<BytesFromStringAndSizeCreator>(
-                ptr_dest, num_rows, source_column, has_type_conversion, string_pool, shared_data, handler_data
+                ptr_dest,
+                num_rows,
+                source_column,
+                has_type_conversion,
+                string_pool,
+                shared_data,
+                handler_data,
+                none_value
         );
     }
 }
 
 void write_python_dynamic_strings_to_dest(
         PyObject** ptr_dest, const Column& source_column, const ColumnMapping& mapping, const StringPool& string_pool,
-        const DecodePathData& shared_data, PythonHandlerData& handler_data
+        const DecodePathData& shared_data, PythonHandlerData& handler_data, PandasStringFormat string_format
 ) {
     util::check(handler_data.is_nan_initialized(), "Got null nan in string reducer");
     util::check(is_py_nan(handler_data.non_owning_nan_handle()), "Got the wrong value in global nan");
@@ -259,6 +286,9 @@ void write_python_dynamic_strings_to_dest(
 
     auto is_utf = is_utf_type(slice_value_type(source_type.data_type()));
     const auto has_type_conversion = source_type != target_type;
+    const auto none_value = is_utf && string_format == PandasStringFormat::PYTHON_STRING
+                                    ? python_util::PythonMissingValue::NaN
+                                    : python_util::PythonMissingValue::None;
     process_string_views(
             ptr_dest,
             has_type_conversion,
@@ -267,7 +297,8 @@ void write_python_dynamic_strings_to_dest(
             source_column,
             string_pool,
             shared_data,
-            handler_data
+            handler_data,
+            none_value
     );
 }
 
