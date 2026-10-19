@@ -1087,7 +1087,7 @@ void apply_required_fields_plan(OutputSchema& schema, const RequiredFieldsPlan& 
     }
 
     const auto& desc = schema.stream_descriptor();
-    auto renamed = std::make_shared<FieldCollection>(desc.field_count());
+    auto renamed = std::make_shared<FieldCollection>(desc.field_count(), desc.fields().buffer().bytes());
     for (size_t position = 0; position < desc.field_count(); ++position) {
         const auto& field = desc.field(position);
         const bool is_index_level = position < info.num_physical_indices;
