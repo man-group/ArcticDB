@@ -308,6 +308,21 @@ def test_add_to_snapshot_keeps_deleted_version_it_already_holds(version_store_fa
     assert_frame_equal(lib.read(sym, as_of="snap").data, _df_for_day(0))
 
 
+def test_remove_from_snapshot_deletes_version_it_held_last(version_store_factory):
+    lib = version_store_factory(use_tombstones=True, delayed_deletes=False)
+    sym = "sym"
+    lib.write(sym, _df_for_day(0))  # v0
+    lib.snapshot("snap")
+    lib.delete(sym)
+
+    # Removing snap's only entry leaves nothing to rewrite it with, so snap still lists v0 and must not keep it alive
+    lib.remove_from_snapshot("snap", [sym], [0])
+
+    lib_tool = lib.library_tool()
+    assert not lib_tool.find_keys_for_id(KeyType.TABLE_INDEX, sym)
+    assert not lib_tool.find_keys_for_id(KeyType.TABLE_DATA, sym)
+
+
 def test_tombstones_deleted_data_keys_prune(lmdb_version_store_prune_previous, sym):
     lib = lmdb_version_store_prune_previous
     assert lib._lib_cfg.lib_desc.version.write_options.prune_previous_version is True

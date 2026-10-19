@@ -567,13 +567,8 @@ void PythonVersionStore::remove_from_snapshot(
         for (const auto& key : deleted_keys) {
             deleted_stream_ids.insert(key.id());
         }
-        // As in add_to_snapshot, the snapshot map already has snap_name's new contents, so do not ignore snap_name
         delete_trees_responsibly(
-                store(),
-                version_map(),
-                deleted_keys,
-                get_master_snapshots_map(store(), deleted_stream_ids),
-                std::nullopt
+                store(), version_map(), deleted_keys, get_master_snapshots_map(store(), deleted_stream_ids), snap_name
         )
                 .get();
         if (version_map()->log_changes()) {
