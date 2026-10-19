@@ -1,6 +1,7 @@
 #pragma once
 
 #include <pybind11/pybind11.h>
+#include <arcticdb/pipeline/output_config.hpp>
 
 #include <atomic>
 #include <memory>
@@ -8,10 +9,6 @@
 // Python 3.12 (PEP 683) made Py_None immortal: Py_INCREF on it is a no-op, so we no longer
 // need to track how many times it was used and replay the INCREFs at end-of-read.
 #define ARCTICDB_PY_NONE_IMMORTAL_HEX 0x030C0000
-
-namespace arcticdb::python_util {
-enum class PythonMissingValue { None, NaN };
-}
 
 namespace arcticdb {
 
@@ -32,8 +29,8 @@ struct PythonHandlerData {
             PyGILState_Release(gstate);
         })) {}
 
-    void increment_missing_refcount(python_util::PythonMissingValue value, size_t increment) {
-        if (value == python_util::PythonMissingValue::NaN) {
+    void increment_missing_refcount(PandasMissingValue value, size_t increment) {
+        if (value == PandasMissingValue::NaN) {
             nan_refcount_->fetch_add(increment, std::memory_order_relaxed);
         } else {
 #if PY_VERSION_HEX < ARCTICDB_PY_NONE_IMMORTAL_HEX
@@ -48,8 +45,8 @@ struct PythonHandlerData {
 
     PyObject* non_owning_nan_handle() const { return py_nan_->ptr(); }
 
-    PyObject* get_missing_value(python_util::PythonMissingValue value) const {
-        return value == python_util::PythonMissingValue::NaN ? non_owning_nan_handle() : Py_None;
+    PyObject* get_missing_value(PandasMissingValue value) const {
+        return value == PandasMissingValue::NaN ? non_owning_nan_handle() : Py_None;
     }
 
     /// The GIL must be acquired when this is called as it changes the refcount of the global static None variable which

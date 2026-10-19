@@ -133,13 +133,17 @@ class ReadOptions {
         return const_cast<ReadOptions*>(this)->arrow_output_config();
     }
 
-    [[nodiscard]] PandasStringFormat pandas_string_format() const {
+    [[nodiscard]] PandasMissingValue pandas_none_value_for_type(const entity::TypeDescriptor& type) const {
         const auto& variant_config = data_->output_config_;
         util::check(
                 std::holds_alternative<PandasOutputConfig>(variant_config),
-                "ReadOptions::pandas_string_format called for non-Pandas config."
+                "ReadOptions::pandas_none_value_for_type called for non-Pandas config."
         );
-        return std::get<PandasOutputConfig>(variant_config).default_string_format_;
+        const auto format = std::get<PandasOutputConfig>(variant_config).default_string_format_;
+        return format == PandasStringFormat::OBJECT_WITH_NANS_ONLY &&
+                               type.data_type() == entity::DataType::UTF_DYNAMIC64
+                       ? PandasMissingValue::NaN
+                       : PandasMissingValue::None;
     }
 
     [[nodiscard]] ReadOptions clone() const { return ReadOptions(std::make_shared<ReadOptionsData>(*data_)); }

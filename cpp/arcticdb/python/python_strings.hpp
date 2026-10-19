@@ -24,7 +24,7 @@ inline PythonHandlerData& cast_handler_data(std::any& any) { return std::any_cas
 
 void write_python_dynamic_strings_to_dest(
         PyObject** ptr_dest, const Column& source_column, const ColumnMapping& mapping, const StringPool& string_pool,
-        const DecodePathData& shared_data, PythonHandlerData& handler_data, PandasStringFormat string_format
+        const DecodePathData& shared_data, PythonHandlerData& handler_data, PandasMissingValue none_value
 );
 
 } // namespace arcticdb

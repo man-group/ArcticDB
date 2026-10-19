@@ -15,7 +15,7 @@ namespace arcticdb::python_util {
 using PandasColumn = std::variant<py::array, std::vector<std::shared_ptr<RecordBatchData>>>;
 
 PyObject** fill_with_none_or_nan(
-        PyObject** ptr_dest, size_t num_rows, PythonHandlerData& handler_data, PythonMissingValue value,
+        PyObject** ptr_dest, size_t num_rows, PythonHandlerData& handler_data, PandasMissingValue value,
         IncrementRefCount inc_ref_count, size_t sparse_count
 ) {
     std::fill_n(ptr_dest, num_rows, handler_data.get_missing_value(value));

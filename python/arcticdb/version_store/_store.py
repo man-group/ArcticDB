@@ -2393,7 +2393,7 @@ class NativeVersionStore:
             if _use_pyarrow_strings_in_pandas():
                 string_format = InternalPandasStringFormat.ARROW_LARGE_STRING
             elif _use_python_strings_in_pandas():
-                string_format = InternalPandasStringFormat.PYTHON_STRING
+                string_format = InternalPandasStringFormat.OBJECT_WITH_NANS_ONLY
             else:
                 string_format = InternalPandasStringFormat.OBJECT
             output_config = PandasOutputConfig(default_string_format=string_format)

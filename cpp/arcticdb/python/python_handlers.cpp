@@ -19,8 +19,7 @@
 namespace arcticdb {
 
 static void fill_missing(
-        ChunkedBuffer& buffer, size_t offset, size_t count, PythonHandlerData& handler_data,
-        python_util::PythonMissingValue value
+        ChunkedBuffer& buffer, size_t offset, size_t count, PythonHandlerData& handler_data, PandasMissingValue value
 ) {
     auto dest = buffer.ptr_cast<PyObject*>(offset, count * sizeof(PyObject*));
     python_util::fill_with_none_or_nan(dest, count, handler_data, value);
@@ -59,8 +58,8 @@ void PythonEmptyHandler::handle_type(
 }
 
 void PythonEmptyHandler::convert_type(
-        const Column&, Column& dest_column, const ColumnMapping& mapping, const DecodePathData& shared_data,
-        std::any& handler_data, const std::shared_ptr<StringPool>&, const ReadOptions& read_options
+        const Column&, Column& dest_column, const ColumnMapping& mapping, const DecodePathData&, std::any& handler_data,
+        const std::shared_ptr<StringPool>&, const ReadOptions& read_options
 ) const {
     auto dest_data = dest_column.bytes_at(
             mapping.offset_bytes_, mapping.num_rows_ * get_type_size(mapping.dest_type_desc_.data_type())
@@ -76,13 +75,13 @@ void PythonEmptyHandler::convert_type(
     static_assert(get_type_size(DataType::EMPTYVAL) == sizeof(PyObject*));
 
     if (is_object_type(mapping.dest_type_desc_) || is_empty_type(mapping.dest_type_desc_.data_type())) {
-        default_initialize(
+        const auto missing_value = read_options.pandas_none_value_for_type(mapping.dest_type_desc_);
+        fill_missing(
                 dest_column.buffer(),
                 mapping.offset_bytes_,
-                mapping.num_rows_ * type_size(),
-                shared_data,
-                handler_data,
-                read_options
+                mapping.num_rows_,
+                cast_handler_data(handler_data),
+                missing_value
         );
     } else {
         mapping.dest_type_desc_.visit_tag([&mapping, dest_data](auto tdt) {
@@ -101,15 +100,11 @@ std::pair<TypeDescriptor, DetachableBlockConfig> PythonEmptyHandler::
     return {make_scalar_type(DataType::EMPTYVAL), {}};
 }
 
-void PythonEmptyHandler::default_initialize(
-        ChunkedBuffer& buffer, size_t bytes_offset, size_t byte_size, const DecodePathData&, std::any& any,
-        const ReadOptions& read_options
-) const {
+void PythonEmptyHandler::
+        default_initialize(ChunkedBuffer& buffer, size_t bytes_offset, size_t byte_size, const DecodePathData&, std::any& any, const ReadOptions&)
+                const {
     auto& handler_data = cast_handler_data(any);
-    const auto missing_value = read_options.pandas_string_format() == PandasStringFormat::PYTHON_STRING
-                                       ? python_util::PythonMissingValue::NaN
-                                       : python_util::PythonMissingValue::None;
-    fill_missing(buffer, bytes_offset, byte_size / type_size(), handler_data, missing_value);
+    fill_missing(buffer, bytes_offset, byte_size / type_size(), handler_data, PandasMissingValue::None);
 }
 
 void PythonBoolHandler::handle_type(
@@ -153,13 +148,13 @@ void PythonBoolHandler::
         for (auto en = sparse_map->first(); en < sparse_map->end(); ++en, ++last_row) {
             const auto current_pos = *en;
             ptr_dest = python_util::fill_with_none_or_nan(
-                    ptr_dest, current_pos - last_row, handler_data, python_util::PythonMissingValue::None
+                    ptr_dest, current_pos - last_row, handler_data, PandasMissingValue::None
             );
             last_row = current_pos;
             *ptr_dest++ = py::bool_(static_cast<bool>(*ptr_src++)).release().ptr();
         }
         python_util::fill_with_none_or_nan(
-                ptr_dest, mapping.num_rows_ - last_row, handler_data, python_util::PythonMissingValue::None
+                ptr_dest, mapping.num_rows_ - last_row, handler_data, PandasMissingValue::None
         );
     } else {
         ARCTICDB_TRACE(log::codec(), "Bool handler didn't find a sparse map. Assuming dense array.");
@@ -180,7 +175,7 @@ void PythonBoolHandler::
         default_initialize(ChunkedBuffer& buffer, size_t bytes_offset, size_t byte_size, const DecodePathData&, std::any& any, const ReadOptions&)
                 const {
     auto& handler_data = cast_handler_data(any);
-    fill_missing(buffer, bytes_offset, byte_size / type_size(), handler_data, python_util::PythonMissingValue::None);
+    fill_missing(buffer, bytes_offset, byte_size / type_size(), handler_data, PandasMissingValue::None);
 }
 
 void PythonStringHandler::handle_type(
@@ -230,7 +225,7 @@ void PythonStringHandler::convert_type(
             *string_pool,
             shared_data,
             cast_handler_data(handler_data),
-            read_options.pandas_string_format()
+            read_options.pandas_none_value_for_type(mapping.source_type_desc_)
     );
 }
 
@@ -246,10 +241,7 @@ void PythonStringHandler::default_initialize(
         const ReadOptions& read_options
 ) const {
     auto& handler_data = cast_handler_data(any);
-    auto python_missing_value = string_type_ == DataType::UTF_DYNAMIC64 &&
-                                                read_options.pandas_string_format() == PandasStringFormat::PYTHON_STRING
-                                        ? python_util::PythonMissingValue::NaN
-                                        : python_util::PythonMissingValue::None;
+    const auto python_missing_value = read_options.pandas_none_value_for_type(make_scalar_type(string_type_));
     fill_missing(buffer, bytes_offset, byte_size / type_size(), handler_data, python_missing_value);
 }
 
@@ -321,7 +313,7 @@ void PythonArrayHandler::convert_type(
                 ptr_dest,
                 mapping.num_rows_,
                 handler_data,
-                python_util::PythonMissingValue::None,
+                PandasMissingValue::None,
                 python_util::IncrementRefCount::ON,
                 source_column.sparse_map().count()
         );
@@ -368,7 +360,7 @@ void PythonArrayHandler::
         default_initialize(ChunkedBuffer& buffer, size_t offset, size_t byte_size, const DecodePathData&, std::any& any, const ReadOptions&)
                 const {
     auto& handler_data = cast_handler_data(any);
-    fill_missing(buffer, offset, byte_size / type_size(), handler_data, python_util::PythonMissingValue::None);
+    fill_missing(buffer, offset, byte_size / type_size(), handler_data, PandasMissingValue::None);
 }
 
 } // namespace arcticdb

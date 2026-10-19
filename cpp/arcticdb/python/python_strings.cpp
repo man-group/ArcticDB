@@ -66,7 +66,7 @@ static auto get_unique_counts(const Column& column) {
 static void write_strings_to_destination(
         PyObject** ptr_dest, size_t num_rows, const Column& source_column,
         const ankerl::unordered_dense::map<entity::position_t, PyObject*>& py_strings, PythonHandlerData& handler_data,
-        python_util::PythonMissingValue none_value
+        PandasMissingValue none_value
 ) {
     if (source_column.is_sparse()) {
         python_util::fill_with_none_or_nan(
@@ -84,7 +84,7 @@ static void write_strings_to_destination(
                     ptr_dest[en.idx()] = handler_data.get_missing_value(none_value);
                     ++not_a_string_count;
                 } else if (offset == nan_placeholder()) {
-                    ptr_dest[en.idx()] = handler_data.get_missing_value(python_util::PythonMissingValue::NaN);
+                    ptr_dest[en.idx()] = handler_data.get_missing_value(PandasMissingValue::NaN);
                     ++nan_placeholder_count;
                 } else {
                     ptr_dest[en.idx()] = py_strings.at(offset);
@@ -96,7 +96,7 @@ static void write_strings_to_destination(
     });
     const auto sparse_missing_count = source_column.is_sparse() ? num_rows - source_column.sparse_map().count() : 0;
     handler_data.increment_missing_refcount(none_value, not_a_string_count + sparse_missing_count);
-    handler_data.increment_missing_refcount(python_util::PythonMissingValue::NaN, nan_placeholder_count);
+    handler_data.increment_missing_refcount(PandasMissingValue::NaN, nan_placeholder_count);
 }
 
 template<typename StringCreator>
@@ -125,7 +125,7 @@ static auto assign_python_strings(
 template<typename StringCreator>
 static void assign_strings_local(
         PyObject** ptr_dest, size_t num_rows, const Column& source_column, bool has_type_conversion,
-        const StringPool& string_pool, PythonHandlerData& handler_data, python_util::PythonMissingValue none_value
+        const StringPool& string_pool, PythonHandlerData& handler_data, PandasMissingValue none_value
 ) {
     ARCTICDB_SAMPLE(AssignStringsLocal, 0)
     auto unique_counts = get_unique_counts(source_column);
@@ -154,7 +154,7 @@ template<typename StringCreator>
 static void assign_strings_shared(
         PyObject** ptr_dest, size_t num_rows, const Column& source_column, bool has_type_conversion,
         const StringPool& string_pool, const DecodePathData& shared_data, PythonHandlerData& handler_data,
-        python_util::PythonMissingValue none_value
+        PandasMissingValue none_value
 ) {
     ARCTICDB_SAMPLE(AssignStringsShared, 0)
     auto unique_counts = get_unique_counts(source_column);
@@ -187,7 +187,7 @@ template<typename StringCreator>
 static void process_string_views_for_type(
         PyObject** ptr_dest, size_t num_rows, const Column& source_column, bool has_type_conversion,
         const StringPool& string_pool, const DecodePathData& shared_data, PythonHandlerData& handler_data,
-        python_util::PythonMissingValue none_value
+        PandasMissingValue none_value
 ) {
     if (shared_data.optimize_for_memory())
         assign_strings_shared<StringCreator>(
@@ -223,7 +223,7 @@ static inline PyStringConstructor get_string_constructor(bool has_type_conversio
 static void process_string_views(
         PyObject** ptr_dest, bool has_type_conversion, bool is_utf, size_t num_rows, const Column& source_column,
         const StringPool& string_pool, const DecodePathData& shared_data, PythonHandlerData& handler_data,
-        python_util::PythonMissingValue none_value
+        PandasMissingValue none_value
 ) {
     auto string_constructor = get_string_constructor(has_type_conversion, is_utf);
 
@@ -268,7 +268,7 @@ static void process_string_views(
 
 void write_python_dynamic_strings_to_dest(
         PyObject** ptr_dest, const Column& source_column, const ColumnMapping& mapping, const StringPool& string_pool,
-        const DecodePathData& shared_data, PythonHandlerData& handler_data, PandasStringFormat string_format
+        const DecodePathData& shared_data, PythonHandlerData& handler_data, PandasMissingValue none_value
 ) {
     util::check(handler_data.is_nan_initialized(), "Got null nan in string reducer");
     util::check(is_py_nan(handler_data.non_owning_nan_handle()), "Got the wrong value in global nan");
@@ -286,9 +286,6 @@ void write_python_dynamic_strings_to_dest(
 
     auto is_utf = is_utf_type(slice_value_type(source_type.data_type()));
     const auto has_type_conversion = source_type != target_type;
-    const auto none_value = is_utf && string_format == PandasStringFormat::PYTHON_STRING
-                                    ? python_util::PythonMissingValue::NaN
-                                    : python_util::PythonMissingValue::None;
     process_string_views(
             ptr_dest,
             has_type_conversion,

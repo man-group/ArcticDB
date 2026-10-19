@@ -30,27 +30,84 @@ struct SparseTestStore : arcticdb::TestStore {
     std::string get_name() override { return "test.sparse"; }
 };
 
-TEST(ReadOptions, PandasStringFormat) {
+TEST(ReadOptions, PandasNoneValueForType) {
     using namespace arcticdb;
 
     ReadOptions options;
-    EXPECT_EQ(options.pandas_string_format(), PandasStringFormat::OBJECT);
-    options.set_output_config(PandasOutputConfig{PandasStringFormat::PYTHON_STRING});
+    const auto utf = make_scalar_type(DataType::UTF_DYNAMIC64);
+    const auto ascii = make_scalar_type(DataType::ASCII_DYNAMIC64);
+    const auto empty = make_scalar_type(DataType::EMPTYVAL);
+    const auto fixed_utf = make_scalar_type(DataType::UTF_FIXED64);
+    EXPECT_EQ(options.pandas_none_value_for_type(utf), PandasMissingValue::None);
+    options.set_output_config(PandasOutputConfig{PandasStringFormat::OBJECT_WITH_NANS_ONLY});
     const ReadOptions& const_options = options;
-    EXPECT_EQ(const_options.pandas_string_format(), PandasStringFormat::PYTHON_STRING);
+    EXPECT_EQ(const_options.pandas_none_value_for_type(utf), PandasMissingValue::NaN);
+    EXPECT_EQ(const_options.pandas_none_value_for_type(ascii), PandasMissingValue::None);
+    EXPECT_EQ(const_options.pandas_none_value_for_type(empty), PandasMissingValue::None);
+    EXPECT_EQ(const_options.pandas_none_value_for_type(fixed_utf), PandasMissingValue::None);
+
+    options.set_output_config(PandasOutputConfig{PandasStringFormat::ARROW_LARGE_STRING});
+    EXPECT_EQ(const_options.pandas_none_value_for_type(utf), PandasMissingValue::None);
+    EXPECT_EQ(const_options.pandas_none_value_for_type(ascii), PandasMissingValue::None);
+    EXPECT_EQ(const_options.pandas_none_value_for_type(empty), PandasMissingValue::None);
 
     options.set_output_config(ArrowOutputConfig{});
-    EXPECT_ANY_THROW(static_cast<void>(const_options.pandas_string_format()));
+    EXPECT_ANY_THROW(static_cast<void>(const_options.pandas_none_value_for_type(utf)));
+}
+
+TEST(PythonEmptyHandler, ConvertTypeRespectsDestinationType) {
+    using namespace arcticdb;
+
+    auto check = [](DataType dest_type, PandasStringFormat format, bool expect_nan) {
+        const auto source_desc = make_scalar_type(DataType::EMPTYVAL);
+        const auto dest_desc = make_scalar_type(dest_type);
+        const entity::FieldWrapper field(dest_desc, "column");
+        const ColumnMapping mapping(
+                source_desc, dest_desc, field.field(), sizeof(PyObject*), 1, 0, 0, sizeof(PyObject*), 0
+        );
+        Column source(source_desc);
+        Column dest(dest_desc);
+        dest.allocate_and_advance_by(sizeof(PyObject*));
+        ReadOptions options;
+        options.set_output_config(PandasOutputConfig{format});
+        std::any handler_data{PythonHandlerData{}};
+
+        PythonEmptyHandler{}.convert_type(
+                source, dest, mapping, DecodePathData{}, handler_data, std::make_shared<StringPool>(), options
+        );
+
+        const auto actual = *reinterpret_cast<PyObject**>(dest.bytes_at(0, sizeof(PyObject*)));
+        const auto expected =
+                expect_nan ? std::any_cast<PythonHandlerData&>(handler_data).non_owning_nan_handle() : Py_None;
+        EXPECT_EQ(actual, expected);
+    };
+
+    check(DataType::UTF_DYNAMIC64, PandasStringFormat::OBJECT_WITH_NANS_ONLY, true);
+    check(DataType::ASCII_DYNAMIC64, PandasStringFormat::OBJECT_WITH_NANS_ONLY, false);
+    check(DataType::EMPTYVAL, PandasStringFormat::OBJECT_WITH_NANS_ONLY, false);
+    check(DataType::BOOL_OBJECT8, PandasStringFormat::OBJECT_WITH_NANS_ONLY, false);
+    check(DataType::UTF_DYNAMIC64, PandasStringFormat::OBJECT, false);
+}
+
+TEST(PythonEmptyHandler, DefaultInitializeKeepsEmptyAsNone) {
+    using namespace arcticdb;
+
+    ReadOptions options;
+    options.set_output_config(PandasOutputConfig{PandasStringFormat::OBJECT_WITH_NANS_ONLY});
+    std::any handler_data{PythonHandlerData{}};
+    ChunkedBuffer buffer = ChunkedBuffer::presized(sizeof(PyObject*));
+
+    PythonEmptyHandler{}.default_initialize(buffer, 0, sizeof(PyObject*), DecodePathData{}, handler_data, options);
+
+    EXPECT_EQ(*buffer.ptr_cast<PyObject*>(0, sizeof(PyObject*)), Py_None);
 }
 
 TEST(PythonHandlerData, GetMissingValue) {
     using namespace arcticdb;
 
     PythonHandlerData handler_data;
-    EXPECT_EQ(handler_data.get_missing_value(python_util::PythonMissingValue::None), Py_None);
-    EXPECT_EQ(
-            handler_data.get_missing_value(python_util::PythonMissingValue::NaN), handler_data.non_owning_nan_handle()
-    );
+    EXPECT_EQ(handler_data.get_missing_value(PandasMissingValue::None), Py_None);
+    EXPECT_EQ(handler_data.get_missing_value(PandasMissingValue::NaN), handler_data.non_owning_nan_handle());
 }
 
 TEST(PythonStringHandler, DefaultInitializeRespectsStringType) {
@@ -73,8 +130,8 @@ TEST(PythonStringHandler, DefaultInitializeRespectsStringType) {
         EXPECT_EQ(actual, expected);
     };
 
-    check(DataType::ASCII_DYNAMIC64, PandasStringFormat::PYTHON_STRING, false);
-    check(DataType::UTF_DYNAMIC64, PandasStringFormat::PYTHON_STRING, true);
+    check(DataType::ASCII_DYNAMIC64, PandasStringFormat::OBJECT_WITH_NANS_ONLY, false);
+    check(DataType::UTF_DYNAMIC64, PandasStringFormat::OBJECT_WITH_NANS_ONLY, true);
     check(DataType::UTF_DYNAMIC64, PandasStringFormat::OBJECT, false);
 }
 
@@ -95,12 +152,22 @@ TEST(PythonStringHandler, PresentNullRespectsStringFormatAndEncoding) {
         PythonHandlerData handler_data;
         PyObject* output = nullptr;
 
-        write_python_dynamic_strings_to_dest(&output, source, mapping, string_pool, shared_data, handler_data, format);
+        ReadOptions options;
+        options.set_output_config(PandasOutputConfig{format});
+        write_python_dynamic_strings_to_dest(
+                &output,
+                source,
+                mapping,
+                string_pool,
+                shared_data,
+                handler_data,
+                options.pandas_none_value_for_type(descriptor)
+        );
         EXPECT_EQ(output, expect_nan ? handler_data.non_owning_nan_handle() : Py_None);
     };
 
-    check(DataType::ASCII_DYNAMIC64, PandasStringFormat::PYTHON_STRING, false);
-    check(DataType::UTF_DYNAMIC64, PandasStringFormat::PYTHON_STRING, true);
+    check(DataType::ASCII_DYNAMIC64, PandasStringFormat::OBJECT_WITH_NANS_ONLY, false);
+    check(DataType::UTF_DYNAMIC64, PandasStringFormat::OBJECT_WITH_NANS_ONLY, true);
     check(DataType::UTF_DYNAMIC64, PandasStringFormat::OBJECT, false);
 }
 
