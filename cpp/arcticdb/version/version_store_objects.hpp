@@ -30,9 +30,8 @@ struct PreDeleteChecks {
     bool version_visible = true;
 
     /**
-     * Check the nearest undeleted versions for data blocks shared with the key(s) being deleted. Each version builds
-     * on the latest undeleted version, so any undeleted version that shares data with a key being deleted shares it
-     * with these too. Deleted versions in snapshots can share data across others, so the snapshots check protects all.
+     * Check the nearest undeleted versions for data blocks shared with the key(s) being deleted. Versions build on the
+     * latest undeleted version, so this covers all undeleted versions. The snapshots check covers snapshotted ones.
      */
     bool prev_version = true;
     bool next_version = true;

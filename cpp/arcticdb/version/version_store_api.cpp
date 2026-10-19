@@ -507,8 +507,7 @@ void PythonVersionStore::add_to_snapshot(
         for (const auto& key : deleted_keys) {
             deleted_stream_ids.insert(key.id());
         }
-        // The snapshot map is read after snap_name was rewritten, so it has snap_name's new contents. Passing snap_name
-        // as the snapshot being deleted would ignore it, and delete a key it still holds, e.g. one re-added to it.
+        // Don't ignore snap_name: the map has its new contents, which may hold a re-added key
         delete_trees_responsibly(
                 store(),
                 version_map(),

@@ -211,12 +211,11 @@ def test_delete_keeps_data_shared_with_snapshot_above_nearest_snapshotted_versio
     lib.write(sym, _df_for_day(1))  # v1: data d1, shares nothing with v0
     lib.snapshot("snap_v1")
     lib.delete_version(sym, 1)
-    # The latest undeleted version is v0 again, so the append builds on it: v2 is (d0, d2)
-    lib.append(sym, _df_for_day(2))  # v2
+    lib.append(sym, _df_for_day(2))  # v2: built on v0, so (d0, d2)
     lib.snapshot("snap_v2")
     expected = pd.concat([_df_for_day(0), _df_for_day(2)])
 
-    # Deleting v0 must keep d0, which snap_v2's v2 references, although v0's nearest snapshotted version is v1
+    # Must keep d0 for snap_v2, though v0's nearest snapshotted version is v1
     if delete_method == "delete":
         lib.delete(sym)
     elif delete_method == "batch_delete_versions":
@@ -239,7 +238,7 @@ def test_delete_version_keeps_data_shared_with_snapshot_below_nearest_snapshotte
     lib.append(sym, _df_for_day(2))  # v2: built on v0, so (d0, d2)
     lib.delete_version(sym, 0)
 
-    # Deleting v2 must keep d0, which snap_v0's v0 references, although v2's nearest snapshotted version is v1
+    # Must keep d0 for snap_v0, though v2's nearest snapshotted version is v1
     lib.delete_version(sym, 2)
 
     assert_frame_equal(lib.read(sym, as_of="snap_v0").data, _df_for_day(0))
@@ -262,8 +261,7 @@ def test_delete_snapshot_keeps_data_shared_with_snapshot_below_nearest_snapshott
     lib.delete_version(sym, 2)
     lib.delete_version(sym, 0)
 
-    # Deleting v2 with its only snapshot must keep d0, which snap_v0's v0 references, although v2's nearest
-    # snapshotted version is v1
+    # Must keep d0 for snap_v0, though v2's nearest snapshotted version is v1
     if snapshot_method == "delete_snapshot":
         lib.delete_snapshot("snap_v2")
     else:
@@ -281,7 +279,7 @@ def test_delete_keeps_data_deduplicated_with_snapshot_beyond_nearest_snapshotted
     lib.write(sym, df + 1000)  # v1, shares nothing with v0
     lib.snapshot("snap_v1")
     lib.delete_version(sym, 1)
-    lib.write(sym, df)  # v2: dedups against v0, the latest undeleted version
+    lib.write(sym, df)  # v2: dedups against v0
     lib.snapshot("snap_v2")
 
     lib.delete(sym)
@@ -302,7 +300,7 @@ def test_add_to_snapshot_keeps_deleted_version_it_already_holds(version_store_fa
     else:
         lib.delete(sym)
 
-    # Re-adding v0 replaces snap's v0 with itself, which must not delete it
+    # Replacing snap's v0 with itself must not delete it
     lib.add_to_snapshot("snap", [sym], [0])
 
     assert_frame_equal(lib.read(sym, as_of="snap").data, _df_for_day(0))
@@ -315,7 +313,7 @@ def test_remove_from_snapshot_deletes_version_it_held_last(version_store_factory
     lib.snapshot("snap")
     lib.delete(sym)
 
-    # Removing snap's only entry leaves nothing to rewrite it with, so snap still lists v0 and must not keep it alive
+    # snap would be empty so isn't rewritten, but must not keep v0 alive
     lib.remove_from_snapshot("snap", [sym], [0])
 
     lib_tool = lib.library_tool()

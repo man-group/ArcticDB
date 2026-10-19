@@ -958,11 +958,8 @@ VersionedItem LocalVersionedEngine::write_segment(
 }
 
 /**
- * For index keys considered for deletion we protect every snapshotted index key of their symbol from deletion, as any
- * of them may share data keys with them. A version shares data with the version it was built on (by append, update or
- * dedup), which is the latest undeleted version when it was written, not necessarily its nearest snapshotted version.
- * E.g. after deleting a snapshotted v1, an append builds v2 on v0, so v2 shares data with v0 even though v1 is between
- * them.
+ * Protects every snapshotted index key of the symbol. Versions build on the latest undeleted version, so a version can
+ * share data with a snapshotted one beyond its nearest snapshotted neighbours.
  */
 void copy_snapshotted_versions(
         const MasterSnapshotMap::value_type::second_type& index_key_to_snapshot_map,
@@ -1028,7 +1025,7 @@ folly::Future<DeleteTreesStats> delete_trees_responsibly(
                     }
                 }
                 if (symbols_with_snapshotted_versions_copied.insert(target_key.id()).second) {
-                    // Check 2). Keys to delete that are copied too are erased from not_to_delete below.
+                    // Check 2), once per symbol
                     copy_snapshotted_versions(keys_map, not_to_delete);
                 }
             }
