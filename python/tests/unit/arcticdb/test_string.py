@@ -14,7 +14,6 @@ import pytest
 
 from arcticdb.exceptions import ArcticDbNotYetImplemented
 from arcticdb.util._versions import IS_AT_LEAST_PANDAS_TWO_THREE
-from arcticdb.version_store._normalization import FrameData
 import arcticdb.version_store._string_dtype as string_dtype
 from arcticdb.version_store._string_dtype import _ARROW_BACKED_STR_DTYPE_SUPPORTED, _use_pyarrow_strings_in_pandas
 from arcticdb_ext.exceptions import UserInputException
@@ -356,36 +355,22 @@ def test_read_dynamic_schema_backfilled_string_column_truncation(version_store_f
 
 
 _requires_str_dtype = pytest.mark.skipif(
-    not _ARROW_BACKED_STR_DTYPE_SUPPORTED,
-    reason="pandas too old for the arrow-backed str dtype (StringDtype na_value, added in 2.3)",
+    not IS_AT_LEAST_PANDAS_TWO_THREE, reason="pandas str dtype requires pandas 2.3+"
 )
-_STR_STORAGES = ["pyarrow", "python"]
+_STR_STORAGES = [
+    pytest.param(
+        "pyarrow",
+        marks=pytest.mark.skipif(not _ARROW_BACKED_STR_DTYPE_SUPPORTED, reason="arrow-backed str dtype unavailable"),
+    ),
+    "python",
+]
 
 
 def _str_array(values, storage, na_value=np.nan):
     return pd.array(values, dtype=pd.StringDtype(storage=storage, na_value=na_value))
 
 
-@pytest.mark.skipif(not IS_AT_LEAST_PANDAS_TWO_THREE, reason="pandas str dtype requires pandas 2.3+")
-def test_wrap_predecoded_python_strings_without_copy():
-    values = np.array(["a", np.nan, "b"], dtype=object)
-    result = string_dtype._object_strings_to_python_str_array(values)
-    assert result.dtype == pd.StringDtype(storage="python", na_value=np.nan)
-    assert np.shares_memory(values, result._ndarray)
-
-
-@pytest.mark.skipif(not IS_AT_LEAST_PANDAS_TWO_THREE, reason="pandas str dtype requires pandas 2.3+")
-def test_adapt_object_string_column_in_python_without_types(monkeypatch):
-    monkeypatch.setattr(string_dtype, "_ARROW_BACKED_STR_DTYPE_SUPPORTED", False)
-    values = np.array(["a", np.nan, "b"], dtype=object)
-    frame = FrameData(data=[values], names=["s"], index_columns=[], row_count=3, offset=0)
-    with pd.option_context("future.infer_string", True):
-        result = string_dtype._adapt_string_column(frame, 0)
-    assert result.dtype == pd.StringDtype(storage="python", na_value=np.nan)
-    assert np.shares_memory(values, result._ndarray)
-
-
-@pytest.mark.skipif(not IS_AT_LEAST_PANDAS_TWO_THREE, reason="pandas str dtype requires pandas 2.3+")
+@_requires_str_dtype
 @pytest.mark.parametrize("skip_consolidation", [False, True])
 def test_read_object_write_as_python_str_without_arrow(lmdb_version_store_v2, monkeypatch, skip_consolidation):
     monkeypatch.setattr(string_dtype, "_ARROW_BACKED_STR_DTYPE_SUPPORTED", False)
@@ -412,7 +397,19 @@ def test_read_object_write_as_python_str_without_arrow(lmdb_version_store_v2, mo
         assert np.shares_memory(decoded_arrays[0], received.array._ndarray)
 
 
-@pytest.mark.skipif(not IS_AT_LEAST_PANDAS_TWO_THREE, reason="pandas str dtype requires pandas 2.3+")
+@_requires_str_dtype
+@pytest.mark.xfail(strict=True, reason="ASCII bytes are incorrectly wrapped as pandas str")
+def test_read_ascii_bytes_stays_object_without_arrow(lmdb_version_store_v2, monkeypatch):
+    monkeypatch.setattr(string_dtype, "_ARROW_BACKED_STR_DTYPE_SUPPORTED", False)
+    lib = lmdb_version_store_v2
+    with pd.option_context("future.infer_string", True):
+        original = pd.DataFrame({"c": [b"a"]})
+        lib.write("s", original)
+        received = lib.read("s").data
+    assert_frame_equal(original, received)
+
+
+@_requires_str_dtype
 @pytest.mark.parametrize("skip_consolidation", [False, True])
 def test_read_backfilled_python_str_without_arrow(version_store_factory, monkeypatch, skip_consolidation):
     monkeypatch.setattr(string_dtype, "_ARROW_BACKED_STR_DTYPE_SUPPORTED", False)
@@ -428,14 +425,14 @@ def test_read_backfilled_python_str_without_arrow(version_store_factory, monkeyp
     assert all(value is not None for value in received.array._ndarray)
 
 
-@pytest.mark.skipif(not IS_AT_LEAST_PANDAS_TWO_THREE, reason="pandas str dtype requires pandas 2.3+")
+@_requires_str_dtype
 def test_read_empty_then_string_as_python_str_without_arrow(
     lmdb_version_store_empty_types_dynamic_schema_v2, monkeypatch
 ):
     monkeypatch.setattr(string_dtype, "_ARROW_BACKED_STR_DTYPE_SUPPORTED", False)
     lib = lmdb_version_store_empty_types_dynamic_schema_v2
     lib._normalizer.df._skip_df_consolidation = True
-    lib.write("s", pd.DataFrame({"text": pd.Series([None, None], dtype=object)}))
+    lib.write("s", pd.DataFrame({"text": [None, None]}))
     lib.append("s", pd.DataFrame({"text": ["a", "b"]}))
 
     with pd.option_context("future.infer_string", True, "mode.string_storage", "python"):
@@ -448,7 +445,7 @@ def test_read_empty_then_string_as_python_str_without_arrow(
     ), received.array._ndarray.tolist()
 
 
-@pytest.mark.skipif(not IS_AT_LEAST_PANDAS_TWO_THREE, reason="pandas str dtype requires pandas 2.3+")
+@_requires_str_dtype
 @pytest.mark.parametrize("skip_consolidation", [False, True])
 @pytest.mark.parametrize("dynamic_strings", [False, True])
 def test_read_python_str_dtype_without_arrow(lmdb_version_store_v2, monkeypatch, skip_consolidation, dynamic_strings):
@@ -456,44 +453,31 @@ def test_read_python_str_dtype_without_arrow(lmdb_version_store_v2, monkeypatch,
     lib = lmdb_version_store_v2
     lib._normalizer.df._skip_df_consolidation = skip_consolidation
     values = ["a", None] if dynamic_strings else ["a", "b"]
-    frame = pd.DataFrame({"s": _str_array(values, "python")})
     with pd.option_context("future.infer_string", True, "mode.string_storage", "python"):
+        frame = pd.DataFrame({"s": _str_array(values, "python")})
         lib.write("s", frame, dynamic_strings=dynamic_strings)
         received = lib.read("s").data
         sliced = lib.read("s", row_range=(1, 2)).data
-    assert received["s"].dtype == pd.StringDtype(storage="python", na_value=np.nan)
-    assert sliced["s"].dtype == received["s"].dtype
-    assert len(sliced) == 1
-    assert received["s"].iloc[0] == "a"
-    if dynamic_strings:
-        assert np.isnan(received["s"].iloc[1])
-    else:
-        assert received["s"].iloc[1] == "b"
+    assert_frame_equal(frame, received)
+    assert_frame_equal(frame.iloc[1:2].reset_index(drop=True), sliced)
 
 
-@pytest.mark.skipif(not IS_AT_LEAST_PANDAS_TWO_THREE, reason="pandas str dtype requires pandas 2.3+")
+@_requires_str_dtype
 @pytest.mark.parametrize("skip_consolidation", [False, True])
-def test_read_all_null_python_str_dtype_without_arrow(lmdb_version_store_v2, monkeypatch, skip_consolidation):
+@pytest.mark.parametrize("as_index", [False, True], ids=["column", "index"])
+def test_read_all_null_python_str_without_arrow(lmdb_version_store_v2, monkeypatch, skip_consolidation, as_index):
     monkeypatch.setattr(string_dtype, "_ARROW_BACKED_STR_DTYPE_SUPPORTED", False)
     lib = lmdb_version_store_v2
     lib._normalizer.df._skip_df_consolidation = skip_consolidation
+    frame = (
+        pd.DataFrame({"v": [1, 2]}, index=pd.Index(_str_array([None, None], "python"), name="k"))
+        if as_index
+        else pd.DataFrame({"s": _str_array([None, None], "python")})
+    )
     with pd.option_context("future.infer_string", True, "mode.string_storage", "python"):
-        lib.write("s", pd.DataFrame({"s": _str_array([None, None], "python")}), dynamic_strings=True)
-        received = lib.read("s").data["s"]
-    assert received.dtype == pd.StringDtype(storage="python", na_value=np.nan)
-    assert received.isna().all()
-
-
-@pytest.mark.skipif(not IS_AT_LEAST_PANDAS_TWO_THREE, reason="pandas str dtype requires pandas 2.3+")
-@pytest.mark.parametrize("skip_consolidation", [False, True])
-def test_read_all_null_python_str_index_without_arrow(lmdb_version_store_v2, monkeypatch, skip_consolidation):
-    monkeypatch.setattr(string_dtype, "_ARROW_BACKED_STR_DTYPE_SUPPORTED", False)
-    lib = lmdb_version_store_v2
-    lib._normalizer.df._skip_df_consolidation = skip_consolidation
-    index = pd.Index(_str_array([None, None], "python"), name="k")
-    with pd.option_context("future.infer_string", True, "mode.string_storage", "python"):
-        lib.write("s", pd.DataFrame({"v": [1, 2]}, index=index), dynamic_strings=True)
-        received = lib.read("s").data.index
+        lib.write("s", frame, dynamic_strings=True)
+        result = lib.read("s").data
+    received = result.index if as_index else result["s"]
     assert received.dtype == pd.StringDtype(storage="python", na_value=np.nan)
     assert received.isna().all()
 
@@ -535,14 +519,14 @@ def test_write_str_dtype_string_index(lmdb_version_store_v2, read_string_dtype, 
 
 @_requires_str_dtype
 @pytest.mark.parametrize("storage", _STR_STORAGES)
-def test_write_pd_na_string_dtype_rejected(lmdb_version_store_v2, storage):
+@pytest.mark.parametrize("as_index", [False, True], ids=["column", "index"])
+def test_write_pd_na_string_dtype_rejected(lmdb_version_store_v2, storage, as_index):
     # pd.NA's three-valued comparison semantics cannot be reproduced by the filter engine.
     lib = lmdb_version_store_v2
     values = _str_array(["a", None, "b"], storage, na_value=pd.NA)
+    frame = pd.DataFrame({"v": range(3)}, index=pd.Index(values, name="k")) if as_index else pd.DataFrame({"c": values})
     with pytest.raises(ArcticDbNotYetImplemented, match="pd.NA"):
-        lib.write("s", pd.DataFrame({"c": values}), dynamic_strings=True)
-    with pytest.raises(ArcticDbNotYetImplemented, match="pd.NA"):
-        lib.write("s", pd.DataFrame({"v": range(3)}, index=pd.Index(values, name="k")), dynamic_strings=True)
+        lib.write("s", frame, dynamic_strings=True)
 
 
 @_requires_str_dtype
@@ -576,6 +560,7 @@ def test_str_dtype_stores_same_as_object(lmdb_version_store_v2, read_string_dtyp
 
 
 @_requires_str_dtype
+@pytest.mark.skipif(not _ARROW_BACKED_STR_DTYPE_SUPPORTED, reason="arrow-backed str dtype unavailable")
 def test_str_dtype_append_across_write_routes(lmdb_version_store_v2, read_string_dtype):
     # An object symbol written by an older client, then appended to through both str storages.
     lib = lmdb_version_store_v2
