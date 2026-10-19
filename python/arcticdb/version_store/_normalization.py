@@ -125,13 +125,19 @@ def get_pickled_metadata_loglevel():
     return _PICKLED_METADATA_LOGLEVEL
 
 
-class FrameData(NamedTuple):
-    data: List[Union[np.ndarray, pd.api.extensions.ExtensionArray, List[RecordBatchData]]]
-    names: List[str]
-    index_columns: List[str]
-    row_count: int
-    offset: int
-
+# To simplify unit testing of serialization logic. This maps the cpp _FrameData exposed object
+class FrameData(
+    NamedTuple(
+        "FrameData",
+        [
+            ("data", List[np.ndarray]),
+            ("names", List[str]),
+            ("index_columns", List[str]),
+            ("row_count", int),
+            ("offset", int),
+        ],
+    )
+):
     @staticmethod
     def from_pandas_data(df):
         # type: (PandasData)->FrameData

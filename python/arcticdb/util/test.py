@@ -308,8 +308,8 @@ def random_unicode_string(length: int) -> str:
 def arrow_string_read(enabled: bool):
     """Read strings back as the pandas arrow-backed ``str`` dtype (``future.infer_string``) or as ``object``.
 
-    Wrap only the read call: the read dtype is the reader's decision, so wrapping the write too would confound
-    which side chose it. Skips when ``enabled`` is requested on pandas that lacks either ``future.infer_string``
+    Use this around reads so writes keep the CI variant's ``future.infer_string`` setting. Skips when ``enabled``
+    is requested on pandas that lacks either ``future.infer_string``
     (< 2.1) or the ``str`` dtype (StringDtype na_value, added in 2.3).
     """
     if enabled and not _ARROW_BACKED_STR_DTYPE_SUPPORTED:
