@@ -762,19 +762,19 @@ def concat(
     Join 2 symbols together without any pre or post processing.
 
     >>> df0 = pd.DataFrame(
-        {
-            "col1": [0.5],
-            "col2": [1],
-        },
-        index=[pd.Timestamp("2025-01-01")],
-    )
+    ...     {
+    ...         "col1": [0.5],
+    ...         "col2": [1],
+    ...     },
+    ...     index=[pd.Timestamp("2025-01-01")],
+    ... )
     >>> df1 = pd.DataFrame(
-        {
-            "col3": ["hello"],
-            "col2": [2],
-        },
-        index=[pd.Timestamp("2025-01-02")],
-    )
+    ...     {
+    ...         "col3": ["hello"],
+    ...         "col2": [2],
+    ...     },
+    ...     index=[pd.Timestamp("2025-01-02")],
+    ... )
     >>> lib.write("symbol0", df0)
     >>> lib.write("symbol1", df1)
     >>> lazy_dfs = lib.read_batch(["symbol0", "symbol1"], lazy=True)
@@ -788,17 +788,17 @@ def concat(
     the join.
 
     >>> df0 = pd.DataFrame(
-        {
-            "col": [0, 1, 2, 3, 4],
-        },
-        index=pd.date_range("2025-01-01", freq="min", periods=5),
-    )
+    ...     {
+    ...         "col": [0, 1, 2, 3, 4],
+    ...     },
+    ...     index=pd.date_range("2025-01-01", freq="min", periods=5),
+    ... )
     >>> df1 = pd.DataFrame(
-        {
-            "col": [5, 6, 7, 8, 9],
-        },
-        index=pd.date_range("2025-01-01T00:05:00", freq="min" periods=5),
-    )
+    ...     {
+    ...         "col": [5, 6, 7, 8, 9],
+    ...     },
+    ...     index=pd.date_range("2025-01-01T00:05:00", freq="min", periods=5),
+    ... )
     >>> lib.write("symbol0", df0)
     >>> lib.write("symbol1", df1)
     >>> lazy_df0, lazy_df1 = lib.read_batch(["symbol0", "symbol1"], lazy=True).split()
@@ -2463,19 +2463,19 @@ class Library:
         Join 2 symbols together without any pre or post processing.
 
         >>> df0 = pd.DataFrame(
-            {
-                "col1": [0.5],
-                "col2": [1],
-            },
-            index=[pd.Timestamp("2025-01-01")],
-        )
+        ...     {
+        ...         "col1": [0.5],
+        ...         "col2": [1],
+        ...     },
+        ...     index=[pd.Timestamp("2025-01-01")],
+        ... )
         >>> df1 = pd.DataFrame(
-            {
-                "col3": ["hello"],
-                "col2": [2],
-            },
-            index=[pd.Timestamp("2025-01-02")],
-        )
+        ...     {
+        ...         "col3": ["hello"],
+        ...         "col2": [2],
+        ...     },
+        ...     index=[pd.Timestamp("2025-01-02")],
+        ... )
         >>> q = adb.QueryBuilder()
         >>> q = q.concat("outer")
         >>> lib.write("symbol0", df0)
@@ -3300,7 +3300,7 @@ class Library:
 
         >>> df = pd.DataFrame({"col": np.arange(100_000)})
         >>> for idx in range(100):
-        >>>     lib.append("sym", df[idx * 1_000: (idx + 1) * 1_000])
+        ...     lib.append("sym", df[idx * 1_000: (idx + 1) * 1_000])
         >>> compact_data_info = lib.compact_data_explain_plan("sym")
         >>> compact_data_info.row_slices_before
         [0, 1000, 2000, ..., 99000, 100000]
@@ -3367,7 +3367,7 @@ class Library:
 
         >>> df = pd.DataFrame({"col": np.arange(100_000)})
         >>> for idx in range(100):
-        >>>     lib.append("sym", df[idx * 1_000: (idx + 1) * 1_000])
+        ...     lib.append("sym", df[idx * 1_000: (idx + 1) * 1_000])
         >>> lib_tool = lib._dev_tools.library_tool()
         >>> len(lib_tool.read_index("sym"))
         100
@@ -3427,12 +3427,12 @@ class Library:
         >>> df1 = pd.DataFrame({"col": np.arange(100_000)})
         >>> df2 = pd.DataFrame({"col": np.arange(200_000)})
         >>> for i in range(100):
-        >>>     lib.append_batch(
-        >>>         [
-        >>>             WritePayload("sym1", df1[i * 1_000 : (i + 1) * 1_000]),
-        >>>             WritePayload("sym2", df2[i * 2_000 : (i + 1) * 2_000]),
-        >>>         ]
-        >>>     )
+        ...     lib.append_batch(
+        ...         [
+        ...             WritePayload("sym1", df1[i * 1_000 : (i + 1) * 1_000]),
+        ...             WritePayload("sym2", df2[i * 2_000 : (i + 1) * 2_000]),
+        ...         ]
+        ...     )
         >>> lib_tool = lib._dev_tools.library_tool()
         >>> len(lib_tool.read_index("sym1"))
         100
@@ -3639,7 +3639,7 @@ class Library:
         --------
 
         >>> lib.write("symbol", pd.DataFrame({'a': [1, 2, 3]}, index=pd.DatetimeIndex([pd.Timestamp(1), pd.Timestamp(2), pd.Timestamp(3)])))
-        >>> lib.merge_experimental("symbol", pd.DataFrame({"a": [100, 200]}, index=pd.DatetimeIndex([pd.Timestamp(2), pd.Timestamp(4)])), strategy=MergeStrategy(matched="update", not_matched_by_target="do_nothing"))))
+        >>> lib.merge_experimental("symbol", pd.DataFrame({"a": [100, 200]}, index=pd.DatetimeIndex([pd.Timestamp(2), pd.Timestamp(4)])), strategy=MergeStrategy(matched="update", not_matched_by_target="do_nothing"))
         >>> lib.read("symbol").data
                                        a
         1970-01-01 00:00:00.000000001  1
