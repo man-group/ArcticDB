@@ -10,8 +10,6 @@
 #include <arcticdb/storage/open_mode.hpp>
 #include <arcticdb/storage/key_segment_pair.hpp>
 #include <arcticdb/storage/storage_options.hpp>
-#include <arcticdb/util/composite.hpp>
-#include <arcticdb/codec/codec.hpp>
 #include <arcticdb/util/configs_map.hpp>
 #include <arcticdb/stream/index.hpp>
 

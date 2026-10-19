@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include <arcticdb/entity/timeseries_descriptor.hpp>
 #include <arcticdb/storage/storage.hpp>
 #include <arcticdb/storage/storage_exceptions.hpp>
 #include <arcticdb/async/batch_read_args.hpp>
