@@ -429,6 +429,26 @@ def test_read_backfilled_python_str_without_arrow(version_store_factory, monkeyp
 
 
 @pytest.mark.skipif(not IS_AT_LEAST_PANDAS_TWO_THREE, reason="pandas str dtype requires pandas 2.3+")
+def test_read_empty_then_string_as_python_str_without_arrow(
+    lmdb_version_store_empty_types_dynamic_schema_v2, monkeypatch
+):
+    monkeypatch.setattr(string_dtype, "_ARROW_BACKED_STR_DTYPE_SUPPORTED", False)
+    lib = lmdb_version_store_empty_types_dynamic_schema_v2
+    lib._normalizer.df._skip_df_consolidation = True
+    lib.write("s", pd.DataFrame({"text": pd.Series([None, None], dtype=object)}))
+    lib.append("s", pd.DataFrame({"text": ["a", "b"]}))
+
+    with pd.option_context("future.infer_string", True, "mode.string_storage", "python"):
+        received = lib.read("s").data["text"]
+
+    assert received.dtype == pd.StringDtype(storage="python", na_value=np.nan)
+    assert received.array._ndarray[2:].tolist() == ["a", "b"]
+    assert all(
+        isinstance(value, float) and np.isnan(value) for value in received.array._ndarray[:2]
+    ), received.array._ndarray.tolist()
+
+
+@pytest.mark.skipif(not IS_AT_LEAST_PANDAS_TWO_THREE, reason="pandas str dtype requires pandas 2.3+")
 @pytest.mark.parametrize("skip_consolidation", [False, True])
 @pytest.mark.parametrize("dynamic_strings", [False, True])
 def test_read_python_str_dtype_without_arrow(lmdb_version_store_v2, monkeypatch, skip_consolidation, dynamic_strings):

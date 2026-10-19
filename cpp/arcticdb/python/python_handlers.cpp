@@ -101,11 +101,15 @@ std::pair<TypeDescriptor, DetachableBlockConfig> PythonEmptyHandler::
     return {make_scalar_type(DataType::EMPTYVAL), {}};
 }
 
-void PythonEmptyHandler::
-        default_initialize(ChunkedBuffer& buffer, size_t bytes_offset, size_t byte_size, const DecodePathData&, std::any& any, const ReadOptions&)
-                const {
+void PythonEmptyHandler::default_initialize(
+        ChunkedBuffer& buffer, size_t bytes_offset, size_t byte_size, const DecodePathData&, std::any& any,
+        const ReadOptions& read_options
+) const {
     auto& handler_data = cast_handler_data(any);
-    fill_missing(buffer, bytes_offset, byte_size / type_size(), handler_data, python_util::PythonMissingValue::None);
+    const auto missing_value = read_options.pandas_string_format() == PandasStringFormat::PYTHON_STRING
+                                       ? python_util::PythonMissingValue::NaN
+                                       : python_util::PythonMissingValue::None;
+    fill_missing(buffer, bytes_offset, byte_size / type_size(), handler_data, missing_value);
 }
 
 void PythonBoolHandler::handle_type(
