@@ -828,7 +828,7 @@ std::vector<EntityId> MergeUpdateClause::process(std::vector<EntityId>&& entity_
     for (const std::shared_ptr<SegmentInMemory>& segment : *proc.segments_) {
         for (size_t col = 0; col < segment->num_columns(); ++col) {
             schema::check<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
-                    !segment->column(col).is_sparse(),
+                    !segment->column(static_cast<position_t>(col)).is_sparse(),
                     "Merge update does not support sparse target data yet. Column \"{}\" is sparse.",
                     segment->field(col).name()
             );
@@ -1216,7 +1216,8 @@ std::vector<ProcessingUnit> MergeUpdateClause::update(
                                     [&]<typename SourceDataTypeTag>(SourceDataTypeTag) {
                                         using TargetTDT = ScalarTagType<TargetDataTypeTag>;
                                         using SourceTDT = ScalarTagType<SourceDataTypeTag>;
-                                        Column& target_column = target_segment.column(column_index_in_slice);
+                                        Column& target_column =
+                                                target_segment.column(static_cast<position_t>(column_index_in_slice));
                                         const auto source =
                                                 get_source_column<SourceTDT>(source_field_pos, source_start_end);
                                         std::span<const std::vector<size_t>> rows_to_update =
