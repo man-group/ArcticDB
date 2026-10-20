@@ -38,7 +38,9 @@ void ensure_timeseries_norm_meta(
 // - The compaction paths pass their `sparsify` flag here instead, reusing the parameter slot by coincidence.
 // - The tick compactor always sets `sparsify`, so tick-streamed symbols are always relabelled UTC.
 // Untangling this changes what users read back, so it needs its own rollout.
-void label_index_utc_if_unlabelled(arcticdb::proto::descriptors::NormalizationMetadata& norm_meta);
+void label_index_utc_if_unlabelled(
+        arcticdb::proto::descriptors::NormalizationMetadata& norm_meta, IndexDescriptor::Type index_type
+);
 
 void ensure_rowcount_norm_meta(
         arcticdb::proto::descriptors::NormalizationMetadata& norm_meta, const StreamId& stream_id

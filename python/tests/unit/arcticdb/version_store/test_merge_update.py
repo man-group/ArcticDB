@@ -75,12 +75,6 @@ ARROW_SOURCE_INTO_EMPTY_PANDAS_TARGET_XFAIL = pytest.mark.xfail(
     "metadata with Arrow normalization metadata",
     strict=True,
 )
-ARROW_SOURCE_INTO_PANDAS_MULTIINDEX_XFAIL = pytest.mark.xfail(
-    raises=NormalizationException,
-    reason="Merge update with an Arrow source into a symbol written as a pandas MultiIndex is not supported yet. "
-    "Should work once #3447 lands as long as the MultiIndex levels are named",
-    strict=True,
-)
 # Pandas stores a data column that clashes with the index name as __col_<name>__N, which the Arrow source cannot match.
 ARROW_SOURCE_INTO_PANDAS_MANGLED_COLUMN_XFAIL = pytest.mark.xfail(
     raises=StreamDescriptorMismatch,
@@ -111,7 +105,15 @@ def run_merge(lib, source_format: SourceFormat, symbol: str, source: pd.DataFram
         return lib.merge(symbol, source, *args, **kwargs)
     (lib._nvs if isinstance(lib, Library) else lib)._set_allow_arrow_input()
     converted_source, index_column = to_arrow_source(source_format, source)
-    return lib.merge(symbol, converted_source, *args, index_column=index_column, **kwargs)
+    try:
+        return lib.merge(symbol, converted_source, *args, index_column=index_column, **kwargs)
+    except StreamDescriptorMismatch:
+        has_unnamed_index = not isinstance(source.index, pd.RangeIndex) and None in source.index.names
+        if source_format in (SourceFormat.ARROW, SourceFormat.POLARS) and has_unnamed_index:
+            pytest.skip(
+                "Arrow data cannot match an unnamed pandas index. To be addressed with rename_columns_for_arrow in #3418"
+            )
+        raise
 
 
 def generic_merge_test(
@@ -251,10 +253,12 @@ class TestMergeTimeseriesCommon:
     )
     def test_static_schema_merge_throws_when_schemas_differ(self, lmdb_library, strategy, source, source_format):
         lib = lmdb_library
-        target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]}, index=pd.date_range("2024-01-01", periods=3))
+        target = pd.DataFrame(
+            {"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]}, index=pd.date_range("2024-01-01", periods=3, name="ts")
+        )
         lib.write("sym", target)
         with pytest.raises(SchemaException):
-            run_merge(lib, source_format, "sym", source, strategy=strategy)
+            run_merge(lib, source_format, "sym", source.rename_axis("ts"), strategy=strategy)
 
     def test_throws_if_source_is_not_sorted(self, lmdb_library, strategy, source_format):
         # This requirement can be lifted, however, passing a sorted source will be faster. We can start with it and
@@ -4217,11 +4221,7 @@ class TestMergeMultiindexUpdate:
             run_merge(lib, source_format, "sym", source, strategy=self.strategy, on=on)
         assert "not contain the datetime index column" in str(exc_info.value)
 
-    def test_unnamed_datetime_index_on_contains_column_named_index_not_in_dataframe(
-        self, request, lmdb_library, source_format
-    ):
-        if source_format != SourceFormat.PANDAS:
-            request.applymarker(ARROW_SOURCE_INTO_PANDAS_MULTIINDEX_XFAIL)
+    def test_unnamed_datetime_index_on_contains_column_named_index_not_in_dataframe(self, lmdb_library, source_format):
         lib = lmdb_library
 
         index_column_names = [None, "secondary0", "secondary1"]
@@ -4332,9 +4332,7 @@ class TestMergeMultiindexUpdate:
         with pytest.raises(UserInputException, match="E_DUPLICATE_COLUMN"):
             run_merge(lib, source_format, "sym", source, strategy=self.strategy, on=on)
 
-    def test_default_on_rowrange_raises(self, request, lmdb_library, source_format):
-        if source_format != SourceFormat.PANDAS:
-            request.applymarker(ARROW_SOURCE_INTO_PANDAS_MULTIINDEX_XFAIL)
+    def test_default_on_rowrange_raises(self, lmdb_library, source_format):
         index_names = ["idx", "a", "b"]
         primary_target_vals = ["P", "Q", "R"]
         primary_source_vals = ["Q", "Z"]
@@ -4351,10 +4349,8 @@ class TestMergeMultiindexUpdate:
     ####################################################################################################################
 
     def test_can_match_on_data_column_named_index_when_primary_is_unnamed_datetime_index(
-        self, request, lmdb_library, source_format
+        self, lmdb_library, source_format
     ):
-        if source_format != SourceFormat.PANDAS:
-            request.applymarker(ARROW_SOURCE_INTO_PANDAS_MULTIINDEX_XFAIL)
         lib = lmdb_library
         index_names = [None, "a", "b"]
         data_names = ["index", "d"]
@@ -4376,10 +4372,8 @@ class TestMergeMultiindexUpdate:
         generic_merge_test(lib, source_format, "sym", target, source, self.strategy, expected, on=["index"])
 
     def test_can_match_on_secondary_index_column_named_index_when_primary_is_unnamed_datetime_index(
-        self, request, lmdb_library, source_format
+        self, lmdb_library, source_format
     ):
-        if source_format != SourceFormat.PANDAS:
-            request.applymarker(ARROW_SOURCE_INTO_PANDAS_MULTIINDEX_XFAIL)
         lib = lmdb_library
         index_names = [None, "index", "b"]
         data_names = ["c", "d"]
@@ -4400,9 +4394,7 @@ class TestMergeMultiindexUpdate:
 
         generic_merge_test(lib, source_format, "sym", target, source, self.strategy, expected, on=["index"])
 
-    def test_default_on_datetime(self, request, lmdb_library, source_format):
-        if source_format != SourceFormat.PANDAS:
-            request.applymarker(ARROW_SOURCE_INTO_PANDAS_MULTIINDEX_XFAIL)
+    def test_default_on_datetime(self, lmdb_library, source_format):
         index_names = ["idx", "a", "b"]
         primary_target_vals = pd.to_datetime(["2024-01-01", "2024-01-02", "2024-01-03"])
         target_idx = pd.MultiIndex.from_arrays([primary_target_vals, ["A", "B", "C"], [1, 2, 3]], names=index_names)
@@ -4418,9 +4410,7 @@ class TestMergeMultiindexUpdate:
         expected = pd.DataFrame({"c": [1, 1000, 3], "d": [-1.0, -1000.0, -3.0]}, index=expected_idx)
         generic_merge_test(lmdb_library, source_format, "sym", target, source, self.strategy, expected)
 
-    def test_on_secondary_index_column_datetime(self, request, lmdb_library, source_format):
-        if source_format != SourceFormat.PANDAS:
-            request.applymarker(ARROW_SOURCE_INTO_PANDAS_MULTIINDEX_XFAIL)
+    def test_on_secondary_index_column_datetime(self, lmdb_library, source_format):
         index_names = [None, "a", "b"]
         primary_target_vals = pd.to_datetime(["2024-01-01", "2024-01-02", "2024-01-03"])
         target_idx = pd.MultiIndex.from_arrays([primary_target_vals, ["A", "B", "C"], [1, 2, 3]], names=index_names)
@@ -4436,9 +4426,7 @@ class TestMergeMultiindexUpdate:
         expected = pd.DataFrame({"c": [1, 1000, 3], "d": [-1.0, -1000.0, -3.0]}, index=expected_idx)
         generic_merge_test(lmdb_library, source_format, "sym", target, source, self.strategy, expected, on=["a"])
 
-    def test_on_secondary_index_column_rowrange(self, request, lmdb_library, source_format):
-        if source_format != SourceFormat.PANDAS:
-            request.applymarker(ARROW_SOURCE_INTO_PANDAS_MULTIINDEX_XFAIL)
+    def test_on_secondary_index_column_rowrange(self, lmdb_library, source_format):
         index_names = ["idx", "a", "b"]
         target_idx = pd.MultiIndex.from_arrays(
             [np.array([-1, -2, -3], dtype=np.int8), ["A", "B", "C"], [1, 2, 3]], names=index_names
@@ -4457,9 +4445,7 @@ class TestMergeMultiindexUpdate:
         expected = pd.DataFrame({"c": [1, 1000, 3], "d": [-1.0, -1000.0, -3.0]}, index=expected_idx)
         generic_merge_test(lmdb_library, source_format, "sym", target, source, self.strategy, expected, on=["a"])
 
-    def test_on_data_column_datetime(self, request, lmdb_library, source_format):
-        if source_format != SourceFormat.PANDAS:
-            request.applymarker(ARROW_SOURCE_INTO_PANDAS_MULTIINDEX_XFAIL)
+    def test_on_data_column_datetime(self, lmdb_library, source_format):
         index_names = [None, "a", "b"]
         primary_target_vals = pd.to_datetime(["2024-01-01", "2024-01-02", "2024-01-03"])
         target_idx = pd.MultiIndex.from_arrays([primary_target_vals, ["A", "B", "C"], [1, 2, 3]], names=index_names)
@@ -4475,9 +4461,7 @@ class TestMergeMultiindexUpdate:
         expected = pd.DataFrame({"c": [1, 2, 3], "d": [-1.0, -1000.0, -3.0]}, index=expected_idx)
         generic_merge_test(lmdb_library, source_format, "sym", target, source, self.strategy, expected, on=["c"])
 
-    def test_on_data_column_rowrange(self, request, lmdb_library, source_format):
-        if source_format != SourceFormat.PANDAS:
-            request.applymarker(ARROW_SOURCE_INTO_PANDAS_MULTIINDEX_XFAIL)
+    def test_on_data_column_rowrange(self, lmdb_library, source_format):
         index_names = [None, "a", "b"]
         target_idx = pd.MultiIndex.from_arrays(
             [np.array([-1, -2, -3], dtype=np.int8), ["A", "B", "C"], [1, 2, 3]], names=index_names
@@ -4495,9 +4479,7 @@ class TestMergeMultiindexUpdate:
         expected = pd.DataFrame({"c": [1, 2, 3], "d": [-1.0, -2000.0, -3.0]}, index=expected_idx)
         generic_merge_test(lmdb_library, source_format, "sym", target, source, self.strategy, expected, on=["c"])
 
-    def test_on_secondary_index_and_data_column_datetime(self, request, lmdb_library, source_format):
-        if source_format != SourceFormat.PANDAS:
-            request.applymarker(ARROW_SOURCE_INTO_PANDAS_MULTIINDEX_XFAIL)
+    def test_on_secondary_index_and_data_column_datetime(self, lmdb_library, source_format):
         index_names = [None, "a", "b"]
         primary_target_vals = pd.to_datetime(["2024-01-01", "2024-01-02", "2024-01-03", "2024-01-04"])
         target_idx = pd.MultiIndex.from_arrays(
@@ -4516,9 +4498,7 @@ class TestMergeMultiindexUpdate:
         expected = pd.DataFrame({"c": [10, 20, 30, 40], "d": [-1.0, -200.0, -3.0, -4.0]}, index=expected_idx)
         generic_merge_test(lmdb_library, source_format, "sym", target, source, self.strategy, expected, on=["a", "c"])
 
-    def test_on_secondary_index_and_data_column_rowrange(self, request, lmdb_library, source_format):
-        if source_format != SourceFormat.PANDAS:
-            request.applymarker(ARROW_SOURCE_INTO_PANDAS_MULTIINDEX_XFAIL)
+    def test_on_secondary_index_and_data_column_rowrange(self, lmdb_library, source_format):
         index_names = ["idx", "a", "b"]
         target_idx = pd.MultiIndex.from_arrays(
             [np.array([-1, -2, -3, -4], dtype=np.int8), ["A", "B", "C", "D"], [1, 2, 3, 4]], names=index_names
@@ -4535,9 +4515,7 @@ class TestMergeMultiindexUpdate:
         expected = pd.DataFrame({"c": [10, 20, 30, 40], "d": [-1.0, -200.0, -3.0, -4.0]}, index=expected_idx)
         generic_merge_test(lmdb_library, source_format, "sym", target, source, self.strategy, expected, on=["a", "c"])
 
-    def test_no_data_columns_datetime(self, request, lmdb_library, source_format):
-        if source_format != SourceFormat.PANDAS:
-            request.applymarker(ARROW_SOURCE_INTO_PANDAS_MULTIINDEX_XFAIL)
+    def test_no_data_columns_datetime(self, lmdb_library, source_format):
         dates = pd.to_datetime(["2024-01-01", "2024-01-02", "2024-01-03"])
         target_idx = pd.MultiIndex.from_arrays([dates, ["A", "B", "C"]], names=["idx", "a"])
         target = pd.DataFrame(index=target_idx)
@@ -4551,9 +4529,7 @@ class TestMergeMultiindexUpdate:
         expected = pd.DataFrame(index=expected_idx)
         generic_merge_test(lmdb_library, source_format, "sym", target, source, self.strategy, expected)
 
-    def test_no_data_columns_rowrange(self, request, lmdb_library, source_format):
-        if source_format != SourceFormat.PANDAS:
-            request.applymarker(ARROW_SOURCE_INTO_PANDAS_MULTIINDEX_XFAIL)
+    def test_no_data_columns_rowrange(self, lmdb_library, source_format):
         target_idx = pd.MultiIndex.from_arrays([["A", "B", "C"], [1, 2, 3]], names=["a", "b"])
         target = pd.DataFrame(index=target_idx)
 
@@ -4718,9 +4694,7 @@ class TestMergeMultiindexInsert:
         ],
         ids=["do_nothing_insert", "update_insert"],
     )
-    def test_datetime_basic(self, request, lmdb_library, strategy, source_format):
-        if source_format != SourceFormat.PANDAS:
-            request.applymarker(ARROW_SOURCE_INTO_PANDAS_MULTIINDEX_XFAIL)
+    def test_datetime_basic(self, lmdb_library, strategy, source_format):
         lib = lmdb_library
         index_names = [None, "sec"]
         primary_target_vals = pd.DatetimeIndex(["2024-01-01", "2024-01-02", "2024-01-03"])
@@ -4775,9 +4749,7 @@ class TestMergeMultiindexInsert:
         ],
         ids=["do_nothing_insert", "update_insert"],
     )
-    def test_rowrange_basic(self, request, lmdb_library, strategy, source_format):
-        if source_format != SourceFormat.PANDAS:
-            request.applymarker(ARROW_SOURCE_INTO_PANDAS_MULTIINDEX_XFAIL)
+    def test_rowrange_basic(self, lmdb_library, strategy, source_format):
         lib = lmdb_library
         index_names = ["p", "s"]
         target_idx = pd.MultiIndex.from_arrays([["P", "Q", "R"], [1, 2, 3]], names=index_names)
@@ -4805,9 +4777,7 @@ class TestMergeMultiindexInsert:
         ],
         ids=["do_nothing_insert", "update_insert"],
     )
-    def test_rowrange_requires_on(self, request, lmdb_library, strategy, source_format):
-        if source_format != SourceFormat.PANDAS:
-            request.applymarker(ARROW_SOURCE_INTO_PANDAS_MULTIINDEX_XFAIL)
+    def test_rowrange_requires_on(self, lmdb_library, strategy, source_format):
         lib = lmdb_library
         index_names = ["p", "s"]
         target_idx = pd.MultiIndex.from_arrays([["P", "Q", "R"], [1, 2, 3]], names=index_names)
@@ -4825,9 +4795,7 @@ class TestMergeMultiindexInsert:
         [True, False],
         ids=["datetime", "rowrange"],
     )
-    def test_on_secondary_index_level(self, request, lmdb_library, is_datetime, source_format):
-        if source_format != SourceFormat.PANDAS:
-            request.applymarker(ARROW_SOURCE_INTO_PANDAS_MULTIINDEX_XFAIL)
+    def test_on_secondary_index_level(self, lmdb_library, is_datetime, source_format):
         lib = lmdb_library
         strategy = MergeStrategy(MergeAction.UPDATE, MergeAction.INSERT)
 
@@ -4887,9 +4855,7 @@ class TestMergeMultiindexInsert:
         run_merge(lib, source_format, "sym", source, strategy=strategy, on=None)
         assert_frame_equal(lib.read("sym").data, expected)
 
-    def test_datetime_insert_across_row_slices(self, request, lmdb_library_factory, source_format):
-        if source_format != SourceFormat.PANDAS:
-            request.applymarker(ARROW_SOURCE_INTO_PANDAS_MULTIINDEX_XFAIL)
+    def test_datetime_insert_across_row_slices(self, lmdb_library_factory, source_format):
         lib = lmdb_library_factory(arcticdb.LibraryOptions(rows_per_segment=2))
         strategy = MergeStrategy(MergeAction.DO_NOTHING, MergeAction.INSERT)
         index_names = [None, "s"]

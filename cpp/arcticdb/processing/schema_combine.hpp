@@ -99,6 +99,15 @@ SchemaCombineOptions concat_options(JoinType join_type);
 // base: its column order leads the output, and for append/update it is the existing symbol's schema.
 entity::OutputSchema combine_schema(std::span<const entity::OutputSchema> schemas, const SchemaCombineOptions& options);
 
+// Rename an incoming Arrow schema's multi-index levels to their stored names in an existing pandas schema. For example,
+// an incoming level 1 field "col" is renamed to "__idx__col" when that is the existing field's name. Only the incoming
+// schema is mutable, so this supports the pandas-existing, Arrow-incoming order used by append, update and
+// merge-update.
+void align_multi_index_names(
+        const entity::OutputSchema& existing, entity::StreamDescriptor& incoming,
+        proto::descriptors::NormalizationMetadata& incoming_norm
+);
+
 SortedValue deduce_sorted(SortedValue existing_frame, SortedValue input_frame);
 
 // Extracting a schema out of an existing tsd or an input frame.

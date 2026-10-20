@@ -157,6 +157,11 @@ struct StreamDescriptor {
 
     [[nodiscard]] std::shared_ptr<FieldCollection> fields_ptr() const { return fields_; }
 
+    void set_fields(std::shared_ptr<FieldCollection> fields) {
+        util::check(static_cast<bool>(fields), "Setting field collection to null pointer");
+        fields_ = std::move(fields);
+    }
+
     [[nodiscard]] std::shared_ptr<SegmentDescriptorImpl> data_ptr() const { return segment_desc_; }
 
     decltype(auto) begin() { return fields().begin(); }
@@ -211,15 +216,22 @@ struct OutputSchema {
 
     const StreamDescriptor& stream_descriptor() const { return stream_descriptor_; }
 
+    // Invalidates column_types(), as the caller may change the fields through the returned reference
+    StreamDescriptor& mutable_stream_descriptor() {
+        column_types_ = std::nullopt;
+        return stream_descriptor_;
+    }
+
     // Whether this schema came from a frame that had no rows in it when it was normalized, in which case pandas
     // index normalization metadata depends on pandas version. For example:
     // - pandas 2 normalizes an empty default range index into a DatetimeIndex
     // If `inferred_from_empty_frame` is True, pandas index metadata should be ignored.
     [[nodiscard]] bool inferred_from_empty_frame() const { return inferred_from_empty_frame_; }
 
-    // Index metadata and column dtypes can be incorrect when inferred from an empty pandas dataframe
+    // Index metadata and column dtypes can be incorrect when inferred from an empty pandas dataframe. Arrow data that
+    // carries pandas metadata is not affected: its own fields describe its shape.
     [[nodiscard]] bool is_inferred_from_empty_pandas() const {
-        return inferred_from_empty_frame_ && pandas_common(norm_metadata_) != nullptr;
+        return inferred_from_empty_frame_ && is_pandas_input_type(norm_metadata_);
     }
 
     void set_inferred_from_empty_frame(bool inferred_from_empty_frame) {
