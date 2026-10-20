@@ -77,21 +77,33 @@ bool is_timeseries_or_empty_index(const IndexDescriptorImpl& index_desc) {
     return index_desc.type() == IndexDescriptor::Type::TIMESTAMP || index_desc.type() == IndexDescriptor::Type::EMPTY;
 }
 
-RequiredFieldInfo required_fields_info(const proto::descriptors::NormalizationMetadata& norm_meta) {
+namespace {
+RequiredFieldInfo required_fields_info(
+        const proto::descriptors::NormalizationMetadata& norm_meta, IndexDescriptor::Type index_type
+) {
     RequiredFieldInfo info;
-    info.has_series_value_column = norm_meta.has_series();
+    // We prefer the pandas metadata even for arrow since it's the only place we store information about multiindex
     if (const auto* common = pandas_common(norm_meta); common != nullptr) {
+        const auto* embedded_arrow = norm_meta.has_experimental_arrow() ? &norm_meta.experimental_arrow() : nullptr;
+        info.has_series_value_column =
+                norm_meta.has_series() || (embedded_arrow != nullptr && embedded_arrow->has_series());
         info.has_multi_index = common->has_multi_index();
         // The field count in the norm metadata is one less than the actual number of levels in the multi-index.
         // See index_norm.field_count = len(index.levels) - 1 in _normalization.py::_PandasNormalizer::_index_to_records
-        info.num_physical_indices = info.has_multi_index                     ? common->multi_index().field_count() + 1
-                                    : common->index().is_physically_stored() ? 1
-                                                                             : 0;
+        info.num_physical_indices = info.has_multi_index ? common->multi_index().field_count() + 1
+                                    : is_index_physically_stored(common->index(), index_type) ? 1
+                                                                                              : 0;
     } else if (norm_meta.has_experimental_arrow()) {
-        info.num_physical_indices = norm_meta.experimental_arrow().has_index() ? 1 : 0;
+        const auto& arrow = norm_meta.experimental_arrow();
+        // A one-dimensional structure is the Arrow representation of a Series, so its single column is a required
+        // field. It is the value column, unless it was written as the index, in which case that is the only field.
+        info.has_series_value_column = arrow.one_dimensional() && !arrow.has_index();
+        info.num_physical_indices = arrow.has_index() ? 1 : 0;
     }
     return info;
 }
+
+} // namespace
 
 RequiredFieldInfo required_fields_info(
         const StreamDescriptor& stream_desc, const std::optional<proto::descriptors::NormalizationMetadata>& norm_meta
@@ -99,7 +111,7 @@ RequiredFieldInfo required_fields_info(
     if (!norm_meta.has_value()) {
         return {.num_physical_indices = stream_desc.index().field_count()};
     }
-    auto info = required_fields_info(*norm_meta);
+    auto info = required_fields_info(*norm_meta, stream_desc.index().type());
     if (info.num_physical_indices == 0) {
         // The index field count may be different to the num physical indices when:
         // - norm_metadata doesn't have arrow or pandas

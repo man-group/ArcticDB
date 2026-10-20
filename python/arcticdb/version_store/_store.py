@@ -118,6 +118,7 @@ from arcticdb.version_store._normalization import (
     _from_tz_timestamp,
     restrict_data_to_date_range_only,
     normalize_dt_range_to_ts,
+    polars_series_name,
     _denormalize_columns_names,
     daterange_to_tuple,
 )
@@ -3118,8 +3119,8 @@ class NativeVersionStore:
                 and not norm.WhichOneof("input_type") == "msg_pack_frame"
             ):
                 data = pl.from_arrow(data, rechunk=False)
-                if isinstance(data, pl.Series) and norm.WhichOneof("input_type") == "experimental_arrow":
-                    data = data.rename(norm.experimental_arrow.polars_series_name)
+                if isinstance(data, pl.Series):
+                    data = data.rename(polars_series_name(norm))
                 data = self._apply_polars_sorted_flag_to_index(data, sort_order, norm)
         else:
             data = self._normalizer.denormalize(frame_data, norm)
@@ -4027,7 +4028,10 @@ class NativeVersionStore:
             else:
                 index_metadata = timeseries_descriptor.normalization.df.common.multi_index
 
-            if index_type == "multi_index" or (index_type == "index" and index_metadata.is_physically_stored):
+            if index_type == "multi_index" or (
+                index_type == "index"
+                and (index_metadata.is_physically_stored or timeseries_descriptor.index.kind() == IndexKind.TIMESTAMP)
+            ):
                 index_name_from_store = columns.pop(0)
                 has_fake_name = (
                     0 in index_metadata.fake_field_pos if index_type == "multi_index" else index_metadata.fake_name
@@ -4103,12 +4107,7 @@ class NativeVersionStore:
         if isinstance(data, pl.DataFrame):
             return data.schema
         else:  # Series
-            name = (
-                norm.experimental_arrow.polars_series_name
-                if norm.WhichOneof("input_type") == "experimental_arrow"
-                else ""
-            )
-            return pl.Schema({name: data.dtype})
+            return pl.Schema({polars_series_name(norm): data.dtype})
 
     def _get_info(self, symbol: str, version: Optional[VersionQueryInput] = None, **kwargs):
         version_query = self._get_version_query(version, **kwargs)

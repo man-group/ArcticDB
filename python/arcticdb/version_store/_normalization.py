@@ -36,7 +36,7 @@ from arcticdb.version_store._string_dtype import (
 )
 from arcticdb.preconditions import check
 from arcticdb_ext import get_config_string
-from pandas.api.types import infer_dtype, is_integer_dtype
+from pandas.api.types import infer_dtype, is_datetime64_dtype, is_integer_dtype
 from arcticc.pb2.descriptors_pb2 import UserDefinedMetadata, NormalizationMetadata, MsgPackSerialization
 from arcticc.pb2.storage_pb2 import VersionStoreConfig
 from collections import Counter
@@ -81,25 +81,6 @@ except ImportError:
 
 
 IS_WINDOWS = sys.platform == "win32"
-
-
-@contextlib.contextmanager
-def _tz_error_context():
-    """Wraps PyArrow timezone operations with a helpful error message on Windows."""
-    try:
-        yield
-    except pa.lib.ArrowInvalid as e:
-        if not IS_WINDOWS or "timezone" not in str(e).lower():
-            raise
-        raise NormalizationException(
-            f"{e}\n\n"
-            "ArcticDB Arrow/Polars output uses PyArrow for timezone conversion, which "
-            "requires a timezone database on Windows.\n"
-            "To install, run:\n"
-            '  python -c "from pyarrow.util import download_tzdata_on_windows; '
-            'download_tzdata_on_windows()"\n'
-            "Details: https://arrow.apache.org/docs/python/install.html#tzdata-on-windows"
-        ) from e
 
 
 NormalizedInput = NamedTuple("NormalizedInput", [("item", PandasData), ("metadata", NormalizationMetadata)])
@@ -223,6 +204,90 @@ def get_timezone_from_metadata(norm_meta):
         return norm_meta.multi_index.tz
 
     return None
+
+
+def _check_arrow_column_names(column_names):
+    # type: (List[str])->None
+    """Throw on invalid column names - empty string "", or duplicate column names."""
+    if not all(column_names):
+        raise NormalizationException("Arrow column names must not be empty")
+    duplicates = {name for name, count in Counter(column_names).items() if count > 1}
+    if duplicates:
+        raise NormalizationException(f"Arrow column names must be unique, received duplicates: {sorted(duplicates)}")
+
+
+def embedded_pandas_meta(
+    arrow_meta: NormalizationMetadata.ExperimentalArrow,
+) -> Optional[Union[NormalizationMetadata.PandasDataFrame, NormalizationMetadata.NormalisedTimeSeries]]:
+    input_type = arrow_meta.WhichOneof("pandas_input_type")
+    return getattr(arrow_meta, input_type) if input_type is not None else None
+
+
+def arrow_column_timezone(arrow_meta, column_name):
+    # type: (NormalizationMetadata.ExperimentalArrow, str)->Optional[str]
+    column_meta = arrow_meta.columns.get(column_name, None)
+    if column_meta is None or not column_meta.HasField("timezone"):
+        return None
+    return column_meta.timezone
+
+
+def _localize_arrow_timestamp_columns(df, arrow_meta, stored_column_names, num_index_levels_in_columns):
+    # type: (DataFrame, NormalizationMetadata.ExperimentalArrow, List[str], int)->None
+    """Apply Arrow's per-column timezones to a denormalized frame.
+
+    At this point ``df``:
+    - Has its columns renamed.
+    - Still holds multi-index levels > 0 as columns. The multi-index is created later.
+
+    ``stored_column_names`` are the descriptor's field names without the first index level, so they match the
+    ``df`` columns positionally. The first ``num_index_levels_in_columns`` are multi-index levels, which are skipped
+    because creating the multi-index applies their timezones.
+    """
+    for position, stored_name in enumerate(stored_column_names):
+        if position < num_index_levels_in_columns:
+            continue
+        tz = arrow_column_timezone(arrow_meta, stored_name)
+        if tz is None:
+            continue
+        label = df.columns[position]
+        check(
+            is_datetime64_dtype(df[label]),
+            "Column '{}' has timezone '{}' in its Arrow metadata but was read as {}",
+            stored_name,
+            tz,
+            df[label].dtype,
+        )
+        df[label] = df[label].dt.tz_localize("UTC").dt.tz_convert(tz)
+
+
+def _series_name(norm_meta):
+    # type: (Union[NormalizationMetadata.PandasDataFrame, NormalizationMetadata.ExperimentalArrow])->Optional[str]
+    if isinstance(norm_meta, NormalizationMetadata.ExperimentalArrow):
+        embedded = embedded_pandas_meta(norm_meta)
+        # Prefer the pandas metadata, which can distinguish None from "". Only matters for pandas output.
+        if embedded is not None:
+            return _series_name(embedded)
+        return norm_meta.polars_series_name if norm_meta.HasField("polars_series_name") else None
+    check(isinstance(norm_meta, NormalizationMetadata.PandasDataFrame), "Expected pandas metadata, got {}", norm_meta)
+    if len(norm_meta.common.name) or norm_meta.common.has_name:
+        return norm_meta.common.name
+    # Either the Series was written with a new client that understands the has_name field, and it was None, or
+    # the Series was written by an older client as either an empty string or None, we cannot tell, so maintain
+    # behaviour as it was before the has_name field was added
+    return None
+
+
+def polars_series_name(norm_meta):
+    # type: (NormalizationMetadata)->str
+    """polars has no unnamed Series, so a Series written without a name reads back with an empty name."""
+    input_type = norm_meta.WhichOneof("input_type")
+    if input_type == "experimental_arrow":
+        name = _series_name(norm_meta.experimental_arrow)
+    elif input_type == "series":
+        name = _series_name(norm_meta.series)
+    else:
+        name = None
+    return name if name is not None else ""
 
 
 def _to_primitive(
@@ -643,8 +708,6 @@ class ArrowNormalizationOperations(NamedTuple):
     ----------
     renames_for_table : Mapping[int, str]
         Column renames coming from normalization metadata to be applied to the pyarrow table. E.g. index names
-    timezones: Mapping[int, str]
-        Timezones to apply to timezone-naive timestamp columns
     range_index: Optional[Dict[str, Any]]
         Range index details to place in pandas_metadata
     pandas_indexes: Optional[int]
@@ -654,7 +717,6 @@ class ArrowNormalizationOperations(NamedTuple):
     """
 
     renames_for_table: Mapping[int, str]
-    timezones: Mapping[int, str]
     range_index: Optional[Dict[str, Any]]
     pandas_indexes: Optional[int]
     renames_for_pandas_metadata: Mapping[int, Union[int, str, None]]
@@ -732,7 +794,6 @@ class ArrowTableNormalizer(Normalizer):
         # type: (pa.Table, ArrowNormalizationOperations) -> pa.Table
         if (
             len(op.renames_for_table) == 0
-            and len(op.timezones) == 0
             and op.range_index is None
             and op.pandas_indexes == 0
             and len(op.renames_for_pandas_metadata) == 0
@@ -746,12 +807,6 @@ class ArrowTableNormalizer(Normalizer):
             field = table.field(i)
             if i in op.renames_for_table:
                 field = field.with_name(op.renames_for_table[i])
-            if i in op.timezones:
-                timezone = op.timezones[i]
-                with _tz_error_context():
-                    col = pa.compute.assume_timezone(col, timezone="UTC")
-                    col = col.cast(pa.timestamp("ns", timezone))
-                field = field.with_type(pa.timestamp("ns", timezone))
             new_columns.append(col)
             new_fields.append(field)
 
@@ -769,6 +824,7 @@ class ArrowTableNormalizer(Normalizer):
         if _POLARS_AVAILABLE and isinstance(arrow_structure, pl.Series):
             norm_metadata.experimental_arrow.polars_series_name = arrow_structure.name
         arrow_structure = to_pyarrow_table(arrow_structure)
+        _check_arrow_column_names(arrow_structure.column_names)
         if arrow_structure.num_rows == 0:
             # to_batches has a bug https://github.com/apache/arrow/issues/49309 so that it returns an empty list when
             # the table has zero rows, losing the schema information
@@ -790,18 +846,46 @@ class ArrowTableNormalizer(Normalizer):
 
     def denormalize(self, item, norm_meta):
         # type: (pa.Table, NormalizationMetadata) -> pa.Table
+        def single_array_output():
+            check(
+                item.num_columns == 1,
+                f"Unexpected {item.num_columns} column Arrow table read for single-array output",
+            )
+            return item.column(0)
+
+        input_type = norm_meta.WhichOneof("input_type")
+        check(
+            input_type == "experimental_arrow",
+            f"C++ layer should have converted pandas metadata to arrow, actual: {input_type}",
+        )
+        arrow_meta = norm_meta.experimental_arrow
+        if arrow_meta.one_dimensional:
+            return single_array_output()
+        embedded = embedded_pandas_meta(arrow_meta)
+        if embedded is None:
+            return item
+        return self._apply_embedded_pandas_schema_changes(item, embedded.common, arrow_meta)
+
+    def _apply_embedded_pandas_schema_changes(self, item, pandas_meta, arrow_meta):
+        # type: (pa.Table, NormalizationMetadata.Pandas, NormalizationMetadata.Arrow) -> pa.Table
+        """Rename columns and attach pandas schema metadata so that ``to_pandas()`` reproduces the written frame."""
+
         # A lot of this logic also has a C++ implementation for the rename_columns_arrow_compat method. The main
         # differences are that the C++ implementation allows users to specify index column names, whereas here it is
         # always automatic, and that the Python implementation builds up the necessary metadata for pa.Table.to_pandas()
         # to restore the original index/column names. Combining them is therefore painful, and would also involve
         # round-tripping the protobuf back through the C++ layer.
+        unnamed_series = (
+            arrow_meta.WhichOneof("pandas_input_type") == "series" and not pandas_meta.has_name and not pandas_meta.name
+        )
+
         def num_pandas_index_cols(pandas_meta):
             index_type = pandas_meta.WhichOneof("index_type")
             if index_type == "index":
                 index_meta = pandas_meta.index
                 # Empty tables don't have `is_physically_stored=True` but we still output them with an empty DateTimeIndex.
                 is_empty_table_with_datetime_index = len(item) == 0 and not index_meta.step
-                if index_meta.is_physically_stored or is_empty_table_with_datetime_index:
+                if arrow_meta.has_index or index_meta.is_physically_stored or is_empty_table_with_datetime_index:
                     return 1
                 else:
                     return 0
@@ -838,30 +922,7 @@ class ArrowTableNormalizer(Normalizer):
                     res.add(col)
             return res
 
-        unnamed_series = False
-        input_type = norm_meta.WhichOneof("input_type")
-        if input_type == "df":
-            pandas_meta = norm_meta.df.common
-        elif input_type == "series":
-            # For pandas series we always return a dataframe (to not lose the index information).
-            pandas_meta = norm_meta.series.common
-            # An unnamed pandas Series is stored under a synthetic positional column name. Arrow has no concept of an
-            # unnamed column, so name it "None"
-            unnamed_series = not pandas_meta.has_name and not pandas_meta.name
-        elif input_type == "experimental_arrow":
-            if norm_meta.experimental_arrow.one_dimensional:
-                check(
-                    item.num_columns == 1,
-                    f"Unexpected {item.num_columns} column Arrow table read for single-array output",
-                )
-                return item.column(0)
-            else:
-                return item
-        else:
-            raise ArcticNativeException(f"Expected dataframe or series input, actual: {input_type}")
-
         renames_for_table = {}
-        timezones = {}
         range_index = None
         pandas_indexes = num_pandas_index_cols(pandas_meta)
         renames_for_pandas_metadata = {}
@@ -879,11 +940,6 @@ class ArrowTableNormalizer(Normalizer):
             # Old arcticc tick streaming data does not populate `is_physically_stored` field and considers an index
             # physically stored if `step==0`
             if index_meta.is_physically_stored or not index_meta.step:
-                if index_meta.tz and len(item.columns) > 0 and pa.types.is_timestamp(item.columns[0].type):
-                    # We apply timezone metadata only when the first column is a timestamp column.
-                    # This matches the behavior and is required to handle `groupby`s which can change index type.
-                    # TODO: This is still not correct if grouping by a timestamp column. Monday ref: 18197986461
-                    timezones[0] = index_meta.tz
                 if index_meta.fake_name:
                     renames_for_pandas_metadata[0] = None
                     new_name = "__index__"
@@ -909,13 +965,6 @@ class ArrowTableNormalizer(Normalizer):
             multi_index_meta = pandas_meta.multi_index
             fake_field_pos = set(multi_index_meta.fake_field_pos)
             for index_col_idx in range(pandas_indexes):
-                if index_col_idx == 0:
-                    tz = multi_index_meta.tz
-                else:
-                    tz = multi_index_meta.timezone.get(index_col_idx, "")
-                if tz != "":
-                    timezones[index_col_idx] = tz
-
                 if index_col_idx in fake_field_pos:
                     renames_for_pandas_metadata[index_col_idx] = None
                     new_name = f"__index_level_{index_col_idx}__"
@@ -967,9 +1016,7 @@ class ArrowTableNormalizer(Normalizer):
                 taken_col_names.add(new_name)
                 renames_for_table[i] = new_name
 
-        op = ArrowNormalizationOperations(
-            renames_for_table, timezones, range_index, pandas_indexes, renames_for_pandas_metadata
-        )
+        op = ArrowNormalizationOperations(renames_for_table, range_index, pandas_indexes, renames_for_pandas_metadata)
         item = self.apply_pyarrow_operations(item, op)
         return item
 
@@ -1059,19 +1106,12 @@ class SeriesNormalizer(_PandasNormalizer):
         return NormalizedInput(item=df, metadata=norm)
 
     def denormalize(self, item, norm_meta):
-        # type: (_FrameData, NormalizationMetadata.PandaDataFrame)->DataFrame
+        # type: (_FrameData, Union[NormalizationMetadata.PandasDataFrame, NormalizationMetadata.ExperimentalArrow])->Series
 
         df = self._df_norm.denormalize(item, norm_meta)
 
         series = pd.Series() if df.columns.empty else df.iloc[:, 0]
-
-        if len(norm_meta.common.name) or norm_meta.common.has_name:
-            series.name = norm_meta.common.name
-        else:
-            # Either the Series was written with a new client that understands the has_name field, and it was None, or
-            # the Series was written by an older client as either an empty string or None, we cannot tell, so maintain
-            # behaviour as it was before the has_name field was added
-            series.name = None
+        series.name = _series_name(norm_meta)
 
         return series
 
@@ -1184,11 +1224,25 @@ class DataFrameNormalizer(_PandasNormalizer):
     def _pandas_norm_meta_from_arrow_norm_meta(
         self, arrow_meta: NormalizationMetadata.ExperimentalArrow, item: FrameData
     ) -> NormalizationMetadata.PandasDataFrame:
+        """Arrow data that has a pandas provenance carries the pandas metadata itself; Arrow-only data gets a
+        pandas view synthesized from what Arrow records."""
+        embedded = embedded_pandas_meta(arrow_meta)
+        if embedded is not None:
+            return embedded
         res = NormalizationMetadata.PandasDataFrame()
         if arrow_meta.has_index:
+            # Arrow index columns are timestamps, so the descriptor always has a timestamp index for them
+            check(
+                len(item.index_columns) == 1,
+                "Expected one index column for Arrow data written with an index, got {}",
+                item.index_columns,
+            )
+            index_column_name = item.index_columns[0]
             res.common.index.is_physically_stored = True
-            res.common.index.name = item.names[0]
-            # Handle timezones, issue number 9929831600
+            res.common.index.name = index_column_name
+            tz = arrow_column_timezone(arrow_meta, index_column_name)
+            if tz is not None:
+                res.common.index.tz = tz
         else:
             res.common.index.step = 1
         return res
@@ -1197,7 +1251,9 @@ class DataFrameNormalizer(_PandasNormalizer):
     def denormalize(self, item, norm_meta):
         # type: (_FrameData, NormalizationMetadata.PandaDataFrame)->DataFrame
 
+        arrow_meta = None
         if isinstance(norm_meta, NormalizationMetadata.ExperimentalArrow):
+            arrow_meta = norm_meta
             norm_meta = self._pandas_norm_meta_from_arrow_norm_meta(norm_meta, item)
 
         if norm_meta.HasField("multi_columns"):
@@ -1286,7 +1342,13 @@ class DataFrameNormalizer(_PandasNormalizer):
 
         if idx_type == "index":
             df.index.name = corrected_index_name(index, norm_meta)
-        elif idx_type == "multi_index":
+
+        if arrow_meta is not None:
+            # Before the multi-index levels move out of the columns, while they still line up with item.names
+            levels_in_columns = norm_meta.common.multi_index.field_count if idx_type == "multi_index" else 0
+            _localize_arrow_timestamp_columns(df, arrow_meta, item.names, levels_in_columns)
+
+        if idx_type == "multi_index":
             df = self._denormalize_multi_index(df=df, norm_meta=norm_meta)
 
         return df
@@ -1739,8 +1801,7 @@ class CompositeNormalizer(Normalizer):
             input_type = norm_meta.WhichOneof("input_type")
             if input_type == "msg_pack_frame":
                 return self.msg_pack_denorm.denormalize(item, norm_meta)
-            elif input_type == "df" or input_type == "series" or input_type == "experimental_arrow":
-                return self.pa.denormalize(item, norm_meta)
+            return self.pa.denormalize(item, norm_meta)
         if isinstance(item, FrameData):
             input_type = norm_meta.WhichOneof("input_type")
             if input_type == "df":
@@ -1752,7 +1813,14 @@ class CompositeNormalizer(Normalizer):
             elif input_type == "np":
                 return self.np.denormalize(item, norm_meta.np)
             elif input_type == "experimental_arrow":
-                return self.df.denormalize(item, norm_meta.experimental_arrow)
+                arrow_meta = norm_meta.experimental_arrow
+                embedded_type = arrow_meta.WhichOneof("pandas_input_type")
+                if embedded_type == "ts":
+                    return self.tf.denormalize(item, arrow_meta.ts)
+                # A one-dimensional Arrow structure is the Arrow representation of a Series with no index column
+                is_series = embedded_type == "series" if embedded_type is not None else arrow_meta.one_dimensional
+                normalizer = self.series if is_series else self.df
+                return normalizer.denormalize(item, arrow_meta)
             elif input_type == "msg_pack_frame":
                 return self.msg_pack_denorm.denormalize(item, norm_meta)
 

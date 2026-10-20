@@ -1,0 +1,7 @@
+arcticdb==6.27.1
+numpy
+pyarrow
+protobuf<7
+pytest
+pandas<3
+pytz

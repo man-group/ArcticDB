@@ -1705,7 +1705,7 @@ static std::variant<bool, CompactionError> read_incompletes_to_pipeline(
         ensure_timeseries_norm_meta(norm_meta, pipeline_context->stream_id_);
         if (flags.sparsify) {
             // Reaching a timezone decision through the sparsify flag is a bug. Monday ref 11198274752.
-            label_index_utc_if_unlabelled(norm_meta);
+            label_index_utc_if_unlabelled(norm_meta, pipeline_context->on_disk_descriptor().index().type());
         }
         existing.emplace(pipeline_context->on_disk_descriptor(), std::move(norm_meta), pipeline_context->rows_ == 0);
     }
@@ -3201,6 +3201,14 @@ folly::Future<AtomKey> merge_update_impl(
         std::shared_ptr<DeDupMap> de_dup_map
 ) {
     auto read_query = std::make_shared<ReadQuery>();
+    // TODO: Swap this out for the async version and chain futures from it
+    auto index_information = std::make_shared<IndexInformation>(
+            read_index_key_without_column_stats_sync(store, *update_info.previous_index_key_)
+    );
+    // Align before anything is derived from the source, so its schema and its converted Arrow segment agree
+    align_multi_index_names(
+            schema_from_tsd(index_information->index_.second.index_descriptor()), source->desc(), source->norm_meta
+    );
     OutputSchema source_output_schema = schema_from_input_frame(*source);
     auto variant_source = [&]() -> std::variant<std::shared_ptr<InputFrame>, SegmentInMemory> {
         const bool is_source_arrow = !source->has_only_tensors();
@@ -3230,13 +3238,8 @@ folly::Future<AtomKey> merge_update_impl(
     ));
 
     read_query->clauses_.push_back(merge_update_clause);
-    VersionIdentifier resolved = VersionedItem{*update_info.previous_index_key_};
-    if (auto* vi = std::get_if<VersionedItem>(&resolved)) {
-        // TODO: Swap this out for the async version and chain futures from it
-        resolved = std::make_shared<IndexInformation>(read_index_key_without_column_stats_sync(store, vi->key_));
-    }
     std::shared_ptr<PipelineContext> pipeline_context =
-            setup_pipeline_context(store, std::move(resolved), *read_query, read_options);
+            setup_pipeline_context(store, std::move(index_information), *read_query, read_options);
 
     // The target is empty.
     if (pipeline_context->rows_ == 0) {
