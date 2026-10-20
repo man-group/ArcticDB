@@ -18,6 +18,8 @@ constexpr std::string_view multiindex_prefix{"__idx__"};
 using StringSet = ankerl::unordered_dense::set<std::string, util::TransparentStringHash, std::equal_to<>>;
 using StringMap = ankerl::unordered_dense::map<std::string, std::string, util::TransparentStringHash, std::equal_to<>>;
 
+namespace {
+
 size_t count_indexes(const proto::descriptors::NormalizationMetadata_Pandas& pandas_common) {
     if (pandas_common.has_index()) {
         return (pandas_common.index().is_physically_stored() || pandas_common.index().step() == 0) ? 1 : 0;
@@ -42,7 +44,7 @@ StringSet generate_original_index_names(
                 multi_index_meta.fake_field_pos().cbegin(), multi_index_meta.fake_field_pos().cend()
         );
         for (size_t index_col_idx = 0; index_col_idx < index_count; ++index_col_idx) {
-            if (!fake_field_pos.contains(index_col_idx)) {
+            if (!fake_field_pos.contains(static_cast<int32_t>(index_col_idx))) {
                 if (index_col_idx == 0) {
                     original_index_names.insert(multi_index_meta.name());
                 } else {
@@ -238,6 +240,8 @@ proto::descriptors::NormalizationMetadata generate_output_norm(
     }
     return output_norm;
 }
+
+} // namespace
 
 std::optional<ArrowTransformedSchema> make_schema_arrow_compatible(
         const OutputSchema& input_schema, const std::optional<std::vector<std::string>>& index_columns

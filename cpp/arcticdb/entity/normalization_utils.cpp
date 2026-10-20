@@ -17,8 +17,9 @@
 namespace arcticdb {
 using namespace proto::descriptors;
 
+namespace {
 template<typename InnerFunction, typename FieldType = google::protobuf::FieldDescriptor*>
-static auto get_pandas_common_via_reflection(
+auto get_pandas_common_via_reflection(
         proto::descriptors::NormalizationMetadata norm_meta, InnerFunction&& inner_function
 ) -> decltype(inner_function(norm_meta, std::declval<FieldType>(), std::declval<FieldType>())) {
     try {
@@ -48,6 +49,7 @@ static auto get_pandas_common_via_reflection(
     log::storage().warn("New NormalizationMetadata.input_type access failure. Cannot check.");
     return nullptr;
 }
+} // namespace
 
 const NormalizationMetadata_Pandas* embedded_pandas_common(
         const proto::descriptors::NormalizationMetadata_ExperimentalArrow& arrow_meta
