@@ -15,7 +15,7 @@ Interop between pandas and arrow, structured in three groups:
 """
 
 import copy
-from typing import Union
+from typing import List, Union
 
 import numpy as np
 import pandas as pd
@@ -24,7 +24,11 @@ import pyarrow as pa
 import pytest
 
 from arcticdb import concat, StagedDataFinalizeMethod
-from arcticdb.exceptions import ArcticException, NormalizationException, SchemaException
+from arcticdb.exceptions import (
+    ArcticException,
+    NormalizationException,
+    SchemaException,
+)
 from arcticdb.options import OutputFormat
 from arcticdb.version_store import TimeFrame
 from arcticdb.util.test import assert_frame_equal, assert_series_equal, assert_frame_equal_with_arrow
@@ -659,23 +663,34 @@ def _maybe_arrow(df: pd.DataFrame, fmt: str) -> ArrowOrPandas:
 
 
 def _combine(
-    lib, op: str, first: ArrowOrPandas, second: ArrowOrPandas, index_column: bool = False, output_format=None
+    lib,
+    op: str,
+    first: ArrowOrPandas,
+    second: ArrowOrPandas,
+    index_column: bool = False,
+    output_format=None,
+    rename_first: Union[bool, str, List[str]] = False,
 ) -> ArrowOrPandas:
     """Combine ``first`` and ``second`` via ``op``, return read-back data. ``index_column`` applied to
     all operations (but affects only arrow inputs)
 
     - ``write_and_stage``: write ``first``, stage ``second`` and finalize with append.
     - ``stage_and_stage``: stage both as incomplete segments and finalize them together.
+    - ``rename_first``: call ``rename_columns_arrow_compat`` on the written ``first``. ``True`` uses the
+      default index names, a str or list sets them explicitly. Not applicable to ``stage_and_stage``.
     """
-    if op == "concat":
-        lib.write("sym0", first, index_column=index_column)
-        lib.write("sym1", second, index_column=index_column)
-        return concat(lib.read_batch(["sym0", "sym1"], lazy=True, output_format=output_format)).collect().data
     if op == "stage_and_stage":
+        assert rename_first is False
         stage_results = [lib.stage("sym", data, index_column=index_column) for data in (first, second)]
         lib.finalize_staged_data("sym", stage_results=stage_results)
         return lib.read("sym", output_format=output_format).data
-    lib.write("sym", first, index_column=index_column)
+    first_sym = "sym0" if op == "concat" else "sym"
+    lib.write(first_sym, first, index_column=index_column)
+    if rename_first is not False:
+        lib.rename_columns_arrow_compat(first_sym, None if rename_first is True else rename_first)
+    if op == "concat":
+        lib.write("sym1", second, index_column=index_column)
+        return concat(lib.read_batch(["sym0", "sym1"], lazy=True, output_format=output_format)).collect().data
     if op == "write_and_stage":
         lib.stage("sym", second, index_column=index_column)
         lib.finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
@@ -1106,6 +1121,99 @@ def test_append_arrow_to_multiindex_with_level_timezones(arrow_library_any_schem
     expected = pd.DataFrame({"col": [0, 1, 2, 3]}, index=pd.MultiIndex.from_arrays([levels, levels], names=["a", "b"]))
     assert_frame_equal_with_arrow(lib.read("sym").data, expected)
     assert_frame_equal(lib.read("sym", output_format=OutputFormat.PANDAS).data, expected)
+
+
+# --- uncombinable pandas made combinable by rename_columns_arrow_compat ----
+
+# stage_and_stage is excluded: renaming applies to a version, not to staged segments
+RENAME_OPS = ["append", "update", "concat", "write_and_stage"]
+
+
+@pytest.mark.parametrize("rename_index_name, expected_index_name", [(None, "__index__"), ("ts", "ts")])
+@pytest.mark.parametrize("op", RENAME_OPS)
+def test_combine_renamed_pandas_unnamed_index(arrow_library_any_schema, op, rename_index_name, expected_index_name):
+    first = _pandas_ts([0, 1], name=None)
+    second = _maybe_arrow(_pandas_ts([2, 3], start="2025-01-03", name=expected_index_name), "arrow")
+    received = _combine(
+        arrow_library_any_schema, op, first, second, index_column=True, rename_first=rename_index_name or True
+    )
+    assert received.column_names == [expected_index_name, "col"]
+    assert_frame_equal_with_arrow(received, _pandas_ts([0, 1, 2, 3], name=expected_index_name))
+
+
+@pytest.mark.parametrize("op", RENAME_OPS)
+def test_combine_renamed_pandas_special_col_names(arrow_library_any_schema, op):
+    index = pd.date_range("2025-01-01", periods=2, name="ts")
+    first = pd.DataFrame(np.arange(6, dtype=np.int64).reshape(2, 3), columns=["", None, 5], index=index)
+    expected = pd.DataFrame(
+        np.arange(12, dtype=np.int64).reshape(4, 3),
+        columns=["__empty__", "None", "5"],
+        index=pd.date_range("2025-01-01", periods=4, name="ts"),
+    )
+    second = _maybe_arrow(expected.iloc[2:], "arrow")
+    received = _combine(arrow_library_any_schema, op, first, second, index_column=True, rename_first=True)
+    assert received.column_names == ["ts", "__empty__", "None", "5"]
+    assert_frame_equal_with_arrow(received, expected)
+
+
+# Dynamic schema cannot write duplicate column names
+@pytest.mark.parametrize("op", RENAME_OPS)
+def test_combine_renamed_pandas_duplicate_columns(arrow_library, op):
+    index = pd.date_range("2025-01-01", periods=2, name="ts")
+    first = pd.DataFrame(np.arange(4, dtype=np.int64).reshape(2, 2), columns=["col", "col"], index=index)
+    expected = pd.DataFrame(
+        np.arange(8, dtype=np.int64).reshape(4, 2),
+        columns=["col", "_col_"],
+        index=pd.date_range("2025-01-01", periods=4, name="ts"),
+    )
+    second = _maybe_arrow(expected.iloc[2:], "arrow")
+    received = _combine(arrow_library, op, first, second, index_column=True, rename_first=True)
+    assert received.column_names == ["ts", "col", "_col_"]
+    assert_frame_equal_with_arrow(received, expected)
+
+
+@pytest.mark.parametrize(
+    "rename_index_names, expected_index_names",
+    [(None, ["__index_level_0__", "__index_level_1__"]), (["ts", "grp"], ["ts", "grp"])],
+)
+@pytest.mark.parametrize(
+    "op",
+    [
+        "append",
+        "update",
+        "concat",
+        pytest.param(
+            "write_and_stage",
+            marks=pytest.mark.xfail(
+                reason="Combining staged data with multiindex can't rename arrow columns; Monday ref 13124164631",
+                raises=SchemaException,
+                strict=True,
+            ),
+        ),
+    ],
+)
+def test_combine_renamed_pandas_unnamed_multiindex(
+    arrow_library_any_schema, op, rename_index_names, expected_index_names
+):
+    def frame(values, start, names):
+        index = pd.MultiIndex.from_arrays([pd.date_range(start, periods=len(values)), ["a"] * len(values)], names=names)
+        return pd.DataFrame({"col": np.array(values, dtype=np.int64)}, index=index)
+
+    first = frame([0, 1], "2025-01-01", [None, None])
+    second = _maybe_arrow(frame([2, 3], "2025-01-03", expected_index_names), "arrow")
+    received = _combine(
+        arrow_library_any_schema, op, first, second, index_column=True, rename_first=rename_index_names or True
+    )
+    # - concat reconciles a level after the first to unnamed, as in test_combine_timeseries_multiindex_pandas_with_matching_arrow
+    # - to_pandas reads any __index_level_N__ column back as an unnamed level
+    expected_columns = [
+        expected_index_names[0],
+        "__index_level_1__" if op == "concat" else expected_index_names[1],
+        "col",
+    ]
+    assert received.column_names == expected_columns
+    expected_names = [None if name.startswith("__index_level_") else name for name in expected_columns[:2]]
+    assert_frame_equal_with_arrow(received, frame([0, 1, 2, 3], "2025-01-01", expected_names))
 
 
 # --- TimeFrame -------------------------------------------------------------
