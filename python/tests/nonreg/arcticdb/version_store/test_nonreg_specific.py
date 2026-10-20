@@ -327,6 +327,15 @@ def test_date_range_multi_index(lmdb_version_store):
     assert_frame_equal(result_df, expected_df)
 
 
+def test_single_level_multiindex(in_memory_version_store):
+    lib = in_memory_version_store
+    sym = "test_single_level_multiindex"
+    df = pd.DataFrame({"col": [0]}, index=pd.MultiIndex.from_arrays([[pd.Timestamp(0)]], names=["ts"]))
+    lib.write(sym, df)
+    received = lib.read(sym).data
+    assert_frame_equal(received, df)
+
+
 @pytest.mark.parametrize(
     "method",
     (

@@ -1310,7 +1310,10 @@ class DataFrameNormalizer(_PandasNormalizer):
             df = df.iloc[:, midx.field_count :]
             df.index = index
         else:
-            df.set_index(list(df.columns[: midx.field_count]), append=True, inplace=True)
+            if midx.field_count == 0:
+                df.index = pd.MultiIndex.from_arrays([df.index])
+            else:
+                df.set_index(list(df.columns[: midx.field_count]), append=True, inplace=True)
 
             # Restore the timezones in all but the first index which is fixed in _index_from_records.
             for key in midx.timezone:
