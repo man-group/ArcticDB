@@ -32,7 +32,7 @@ struct ColumnSpec {
     bool is_int{false};
 };
 
-enum class ObjectType { DF, SERIES };
+enum class ObjectType : uint8_t { DF, SERIES };
 
 Index row_count_index(int64_t start = 0, int64_t step = 1) {
     Index index;
