@@ -13,15 +13,22 @@
 #include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/util/allocator.hpp>
 #include <arcticdb/util/collection_utils.hpp>
+#include <fmt/format.h>
 #include <sparrow/layout/array_access.hpp>
 #include <sparrow/layout/primitive_data_access.hpp>
 #include <sparrow/utils/temporal.hpp>
 #include <sparrow/record_batch.hpp>
+#include <string>
 #include <utility>
 
 namespace arcticdb {
 
 using ArrowMeta = proto::descriptors::NormalizationMetadata::ExperimentalArrow;
+
+struct ResolvedTimezone {
+    const date::time_zone* zone;
+    std::string original_name;
+};
 
 std::optional<sparrow::validity_bitmap> create_validity_bitmap(
         size_t offset, const Column& column, size_t bitmap_size
@@ -87,10 +94,10 @@ sparrow::array create_packed_bool_array(
 
 sparrow::array create_timestamp_array(
         timestamp* data_ptr, size_t data_size, std::optional<sparrow::validity_bitmap>&& validity_bitmap,
-        const date::time_zone* tz = nullptr
+        const std::optional<ResolvedTimezone>& timezone = std::nullopt
 ) {
     static_assert(sizeof(timestamp) == sizeof(sparrow::zoned_time_without_timezone_nanoseconds));
-    if (tz == nullptr) {
+    if (!timezone.has_value()) {
         // Timezone naive
         sparrow::u8_buffer<sparrow::zoned_time_without_timezone_nanoseconds> buffer(
                 reinterpret_cast<sparrow::zoned_time_without_timezone_nanoseconds*>(data_ptr),
@@ -110,13 +117,19 @@ sparrow::array create_timestamp_array(
         sparrow::u8_buffer<timestamp> buffer(
                 reinterpret_cast<timestamp*>(data_ptr), data_size, get_detachable_allocator()
         );
-        if (validity_bitmap) {
-            return sparrow::array{
-                    sparrow::timestamp_nanoseconds_array{tz, std::move(buffer), std::move(*validity_bitmap)}
-            };
-        } else {
-            return sparrow::array{sparrow::timestamp_nanoseconds_array{tz, std::move(buffer)}};
-        }
+        auto array = [&]() {
+            if (validity_bitmap) {
+                return sparrow::timestamp_nanoseconds_array{
+                        timezone->zone, std::move(buffer), std::move(*validity_bitmap)
+                };
+            }
+            return sparrow::timestamp_nanoseconds_array{timezone->zone, std::move(buffer)};
+        }();
+        // Adds the original timezone name. Going through `date_localize` can otherwise lose the precise timezone with
+        // an equivalent one on Windows. E.g. otherwise `Europe/Amsterdam` could get translated to `Europe/Brussels`
+        const auto format = fmt::format("tsn:{}", timezone->original_name);
+        sparrow::detail::array_access::get_arrow_proxy(array).set_format(format);
+        return sparrow::array{std::move(array)};
     }
 }
 
@@ -262,11 +275,19 @@ sparrow::array string_dict_from_block(
     return dict_encoded;
 }
 
-const date::time_zone* timezone(const std::optional<ArrowMeta::ColumnMeta>& column_meta) {
-    if (column_meta.has_value() && column_meta->has_timezone()) {
-        return date::locate_zone(column_meta->timezone());
-    } else {
-        return nullptr;
+std::optional<ResolvedTimezone> resolve_timezone(const std::optional<ArrowMeta::ColumnMeta>& column_meta) {
+    if (!column_meta.has_value() || !column_meta->has_timezone()) {
+        return std::nullopt;
+    }
+    try {
+        return ResolvedTimezone{date::locate_zone(column_meta->timezone()), column_meta->timezone()};
+    } catch (const std::runtime_error& e) {
+        // `date` is built with USE_OS_TZDB=1, so this reads the OS database - /usr/share/zoneinfo on Linux. That is a
+        // different database from the one pyarrow uses, which is its own, so a timezone can resolve for one and not the
+        // other. USE_OS_TZDB is a compile error on Windows, so a Windows build ships date's own tzdb instead.
+        normalization::raise<ErrorCode::E_UNIMPLEMENTED_INPUT_TYPE>(
+                "Cannot look up timezone '{}' for Arrow output: {}", column_meta->timezone(), e.what()
+        );
     }
 }
 
@@ -306,7 +327,8 @@ sparrow::array empty_arrow_array_for_column(
                 );
             }
         } else if constexpr (is_time_type(TagType::DataTypeTag::data_type)) {
-            return create_timestamp_array(nullptr, 0, std::move(validity_bitmap), timezone(opt_column_meta));
+            const auto timezone = resolve_timezone(opt_column_meta);
+            return create_timestamp_array(nullptr, 0, std::move(validity_bitmap), timezone);
         } else {
             return create_primitive_array<RawType>(nullptr, 0, std::move(validity_bitmap));
         }
@@ -329,7 +351,7 @@ std::vector<sparrow::array> arrow_arrays_from_column(
             return;
         }
         // Only used with timestamp columns
-        const date::time_zone* tz = timezone(opt_column_meta);
+        const auto timezone = resolve_timezone(opt_column_meta);
         while (auto block = column_data.next<TagType>()) {
             if (block->row_count() == 0) {
                 // Empty blocks should produce empty arrays, without reading extra buffers, because they share the same
@@ -356,7 +378,8 @@ std::vector<sparrow::array> arrow_arrays_from_column(
                         vec.emplace_back(string_dict_from_block<TagType>(*block, column, name, std::move(bitmap)));
                     }
                 } else if constexpr (is_time_type(TagType::DataTypeTag::data_type)) {
-                    vec.emplace_back(create_timestamp_array(block->release(), block->row_count(), std::move(bitmap), tz)
+                    vec.emplace_back(
+                            create_timestamp_array(block->release(), block->row_count(), std::move(bitmap), timezone)
                     );
                     vec.back().set_name(name);
                 } else {
@@ -679,7 +702,8 @@ RecordBatchData empty_record_batch_from_descriptor(
                     }
                 } else if constexpr (is_time_type(TagType::DataTypeTag::data_type)) {
                     auto opt_column_meta = column_metadata(norm_meta, field.name());
-                    return create_timestamp_array(nullptr, 0, std::move(validity_bitmap), timezone(opt_column_meta));
+                    const auto timezone = resolve_timezone(opt_column_meta);
+                    return create_timestamp_array(nullptr, 0, std::move(validity_bitmap), timezone);
                 } else {
                     return create_primitive_array<RawType>(nullptr, 0, std::move(validity_bitmap));
                 }

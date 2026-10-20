@@ -142,8 +142,6 @@ struct RequiredFieldInfo {
     }
 };
 
-RequiredFieldInfo required_fields_info(const proto::descriptors::NormalizationMetadata& norm_meta);
-
 RequiredFieldInfo required_fields_info(
         const StreamDescriptor& stream_desc,
         const std::optional<proto::descriptors::NormalizationMetadata>& norm_meta = std::nullopt

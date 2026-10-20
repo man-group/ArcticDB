@@ -51,7 +51,9 @@ void ensure_timeseries_norm_meta(
     }
 }
 
-void label_index_utc_if_unlabelled(arcticdb::proto::descriptors::NormalizationMetadata& norm_meta) {
+void label_index_utc_if_unlabelled(
+        arcticdb::proto::descriptors::NormalizationMetadata& norm_meta, IndexDescriptor::Type index_type
+) {
     // `df` and `series` share a oneof, as do `index` and `multi_index`, so reading or mutating the wrong member of
     // either would report an empty timezone and then discard the member that was actually set.
     if (!norm_meta.has_df()) {
@@ -61,8 +63,7 @@ void label_index_utc_if_unlabelled(arcticdb::proto::descriptors::NormalizationMe
     if (common.index_type_case() != arcticdb::proto::descriptors::NormalizationMetadata_Pandas::kIndex) {
         return;
     }
-    // A range index occupies no column, so there is no timestamp to label.
-    if (!common.index().is_physically_stored() || !common.index().tz().empty()) {
+    if (index_type != IndexDescriptor::Type::TIMESTAMP || !common.index().tz().empty()) {
         return;
     }
     norm_meta.mutable_df()->mutable_common()->mutable_index()->set_tz("UTC");
