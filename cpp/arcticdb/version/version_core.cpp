@@ -602,7 +602,7 @@ folly::SemiFuture<std::vector<SliceAndKey>> write_inserted_row_range_data(
             [source,
              source_rows_to_insert = source_rows_to_insert_ptr,
              column_slice_descriptors,
-             de_dup_map,
+             de_dup_map = std::move(de_dup_map),
              target_index_partial_key,
              columns_per_slice = write_opts.column_group_size,
              store = &store](MergeUpdateSliceInfo insert_info) {
@@ -798,7 +798,9 @@ folly::Future<std::vector<EntityId>> read_and_schedule_processing(
     );
 
     auto processed = schedule_clause_processing(
-            component_manager, admission, std::make_shared<std::vector<std::shared_ptr<Clause>>>(read_query->clauses_)
+            std::move(component_manager),
+            admission,
+            std::make_shared<std::vector<std::shared_ptr<Clause>>>(read_query->clauses_)
     );
 
     return std::move(processed).via(&async::cpu_executor());
@@ -3222,7 +3224,7 @@ folly::Future<AtomKey> merge_update_impl(
             SegmentInMemory source_segment = std::get<1>(WriteToSegmentTask(source, std::move(full_slice))());
             for (size_t col = 0; col < source_segment.num_columns(); ++col) {
                 schema::check<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
-                        !source_segment.column(col).is_sparse(),
+                        !source_segment.column(static_cast<position_t>(col)).is_sparse(),
                         "Merge update does not support Arrow source data with null values yet. Column \"{}\" contains "
                         "nulls.",
                         source_segment.field(col).name()
@@ -3692,7 +3694,9 @@ folly::Future<std::optional<AtomKey>> async_rename_columns_arrow_compat_impl(
                                 std::nullopt,
                                 write_options.bucketize_dynamic
                         );
-                        VersionIdentifier resolved = std::make_shared<IndexInformation>(std::move(index_information));
+                        VersionIdentifier resolved = std::make_shared<IndexInformation>(
+                                std::forward<decltype(index_information)>(index_information)
+                        );
                         auto read_query = std::make_shared<ReadQuery>();
                         read_query->clauses_.push_back(
                                 std::make_shared<Clause>(RenameColumnsClause(arrow_transformed_schema->column_renames_))

@@ -275,6 +275,7 @@ sparrow::array string_dict_from_block(
     return dict_encoded;
 }
 
+namespace {
 std::optional<ResolvedTimezone> resolve_timezone(const std::optional<ArrowMeta::ColumnMeta>& column_meta) {
     if (!column_meta.has_value() || !column_meta->has_timezone()) {
         return std::nullopt;
@@ -290,6 +291,7 @@ std::optional<ResolvedTimezone> resolve_timezone(const std::optional<ArrowMeta::
         );
     }
 }
+} // namespace
 
 template<typename TagType>
 requires(!is_time_type(TagType::DataTypeTag::data_type))
