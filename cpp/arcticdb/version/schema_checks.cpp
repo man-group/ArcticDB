@@ -13,7 +13,7 @@ using namespace arcticdb;
 // existing row count and so the only part combine_schema cannot do. Rewrites the incoming metadata's start so that it
 // spans both, and so has to run before the schemas are combined.
 void align_rowrange_norm_for_append(
-        const entity::OutputSchema& existing, size_t existing_total_rows, entity::OutputSchema& incoming
+        entity::OutputSchema& existing, size_t existing_total_rows, entity::OutputSchema& incoming
 ) {
     if (existing.inferred_from_empty_frame() || incoming.inferred_from_empty_frame()) {
         // A RangeIndex normalized from an empty frame needs no alignment. It will be skipped by `combine_schema`
@@ -40,10 +40,12 @@ namespace arcticdb {
 
 entity::OutputSchema combine_existing_tsd_with_frame(
         NormalizationOperation operation, bool dynamic_schema, const TimeseriesDescriptor& existing_tsd,
-        const pipelines::InputFrame& new_frame
+        pipelines::InputFrame& new_frame
 ) {
     const auto options = within_symbol_combine_options(dynamic_schema, operation, new_frame.desc().id());
     auto existing = schema_from_tsd(existing_tsd);
+    // Align the mutable input frame before combine_schema snapshots its schema and before its data keys are written.
+    align_multi_index_names(existing, new_frame.desc(), new_frame.norm_meta);
     auto incoming = schema_from_input_frame(new_frame);
     if (operation == NormalizationOperation::APPEND) {
         align_rowrange_norm_for_append(existing, existing_tsd.total_rows(), incoming);
@@ -67,12 +69,15 @@ IncompleteSchemas combine_incomplete_schemas(
         if (flags.convert_int_to_float) {
             stream::convert_descriptor_types(descriptor);
         }
+        // Staged data is deliberately not aligned to an existing multi-index. Supporting it requires renaming both the
+        // schema here and the segment descriptors when SegmentAggregator reads the append-data keys again.
+        // Monday ref 13124164631; best tackled after 12955314293.
         auto norm = entry.norm_meta_;
         // A segment staged by the tick collector carries no normalization metadata of its own.
         ensure_timeseries_norm_meta(norm, stream_id);
         if (flags.sparsify) {
             // Reaching a timezone decision through the sparsify flag is a bug. Monday ref 11198274752.
-            label_index_utc_if_unlabelled(norm);
+            label_index_utc_if_unlabelled(norm, descriptor.index().type());
         }
         return entity::OutputSchema{std::move(descriptor), std::move(norm), entry.empty()};
     };
@@ -87,8 +92,9 @@ IncompleteSchemas combine_incomplete_schemas(
     if (!existing.has_value()) {
         return {staged, staged};
     }
-    align_rowrange_norm_for_append(*existing, existing_total_rows, staged);
-    const std::array schemas{*existing, staged};
+    auto existing_schema = *existing;
+    align_rowrange_norm_for_append(existing_schema, existing_total_rows, staged);
+    const std::array schemas{std::move(existing_schema), staged};
     return {std::move(staged), combine_schema(schemas, options)};
 }
 } // namespace arcticdb
