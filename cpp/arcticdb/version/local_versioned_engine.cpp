@@ -321,8 +321,11 @@ std::string LocalVersionedEngine::dump_versions(const StreamId& stream_id) {
     return version_map()->dump_entry(store(), stream_id);
 }
 
-std::optional<VersionedItem> LocalVersionedEngine::get_latest_version(const StreamId& stream_id) {
-    auto key = get_latest_undeleted_version(store(), version_map(), stream_id);
+namespace {
+std::optional<VersionedItem> latest_version_to_read(
+        const std::shared_ptr<Store>& store, const std::shared_ptr<VersionMap>& version_map, const StreamId& stream_id
+) {
+    auto key = get_latest_undeleted_version(store, version_map, stream_id);
     if (!key) {
         ARCTICDB_DEBUG(log::version(), "get_latest_version didn't find version for stream_id: {}", stream_id);
         return std::nullopt;
@@ -330,11 +333,12 @@ std::optional<VersionedItem> LocalVersionedEngine::get_latest_version(const Stre
     return VersionedItem{std::move(*key)};
 }
 
-std::optional<VersionedItem> LocalVersionedEngine::get_specific_version(
-        const StreamId& stream_id, SignedVersionId signed_version_id, const VersionQuery& version_query
+std::optional<VersionedItem> specific_version_to_read(
+        const std::shared_ptr<Store>& store, const std::shared_ptr<VersionMap>& version_map, const StreamId& stream_id,
+        SignedVersionId signed_version_id, const VersionQuery& version_query
 ) {
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: get_specific_version");
-    auto key = ::arcticdb::get_specific_version(store(), version_map(), stream_id, signed_version_id);
+    auto key = ::arcticdb::get_specific_version(store, version_map, stream_id, signed_version_id);
     if (key) {
         return VersionedItem{std::move(key.value())};
     } else if (std::get<SpecificVersionQuery>(version_query.content_).iterate_snapshots_if_tombstoned) {
@@ -342,7 +346,7 @@ std::optional<VersionedItem> LocalVersionedEngine::get_specific_version(
         if (signed_version_id >= 0) {
             version_id = static_cast<VersionId>(signed_version_id);
         } else {
-            auto [opt_latest_key, deleted] = ::arcticdb::get_latest_version(store(), version_map(), stream_id);
+            auto [opt_latest_key, deleted] = ::arcticdb::get_latest_version(store, version_map, stream_id);
             if (opt_latest_key.has_value()) {
                 auto opt_version_id = get_version_id_negative_index(opt_latest_key->version_id(), signed_version_id);
                 if (opt_version_id.has_value()) {
@@ -357,7 +361,7 @@ std::optional<VersionedItem> LocalVersionedEngine::get_specific_version(
         ARCTICDB_DEBUG(
                 log::version(), "Version {} for symbol {} is missing, checking snapshots:", version_id, stream_id
         );
-        auto opt_index_key = find_index_key_in_snapshots(store(), stream_id, version_id);
+        auto opt_index_key = find_index_key_in_snapshots(store, stream_id, version_id);
         if (opt_index_key.has_value()) {
             ARCTICDB_DEBUG(log::version(), "Found version {} for symbol {} in snapshot:", version_id, stream_id);
             return VersionedItem{std::move(*opt_index_key)};
@@ -376,13 +380,14 @@ std::optional<VersionedItem> LocalVersionedEngine::get_specific_version(
     }
 }
 
-std::optional<VersionedItem> LocalVersionedEngine::get_version_at_time(
-        const StreamId& stream_id, timestamp as_of, const VersionQuery& version_query
+std::optional<VersionedItem> version_at_time_to_read(
+        const std::shared_ptr<Store>& store, const std::shared_ptr<VersionMap>& version_map, const StreamId& stream_id,
+        timestamp as_of, const VersionQuery& version_query
 ) {
 
-    auto index_key = load_index_key_from_time(store(), version_map(), stream_id, as_of);
+    auto index_key = load_index_key_from_time(store, version_map, stream_id, as_of);
     if (!index_key && std::get<TimestampVersionQuery>(version_query.content_).iterate_snapshots_if_tombstoned) {
-        auto index_keys = get_index_keys_in_snapshots(store(), stream_id);
+        auto index_keys = get_index_keys_in_snapshots(store, stream_id);
         auto vector_index_keys = std::vector<AtomKey>(index_keys.begin(), index_keys.end());
         std::sort(std::begin(vector_index_keys), std::end(vector_index_keys), [](auto& k1, auto& k2) {
             return k1.creation_ts() > k2.creation_ts();
@@ -400,10 +405,10 @@ std::optional<VersionedItem> LocalVersionedEngine::get_version_at_time(
     return VersionedItem(std::move(*index_key));
 }
 
-std::optional<VersionedItem> LocalVersionedEngine::get_version_from_snapshot(
-        const StreamId& stream_id, const SnapshotId& snap_name
+std::optional<VersionedItem> version_from_snapshot_to_read(
+        const std::shared_ptr<Store>& store, const StreamId& stream_id, const SnapshotId& snap_name
 ) {
-    auto opt_snapshot = get_snapshot(store(), snap_name);
+    auto opt_snapshot = get_snapshot(store, snap_name);
     if (!opt_snapshot) {
         throw storage::NoDataFoundException(snap_name);
     }
@@ -419,28 +424,58 @@ std::optional<VersionedItem> LocalVersionedEngine::get_version_from_snapshot(
     ARCTICDB_DEBUG(log::version(), "read_snapshot: {} id not found for snapshot {}", stream_id, snap_name);
     return std::nullopt;
 }
+} // namespace
 
-std::optional<VersionedItem> LocalVersionedEngine::get_version_to_read(
-        const StreamId& stream_id, const VersionQuery& version_query
+std::optional<VersionedItem> get_version_to_read(
+        const std::shared_ptr<Store>& store, const std::shared_ptr<VersionMap>& version_map, const StreamId& stream_id,
+        const VersionQuery& version_query
 ) {
     return util::variant_match(
             version_query.content_,
-            [&stream_id, &version_query, this](const SpecificVersionQuery& specific) {
-                return get_specific_version(stream_id, specific.version_id_, version_query);
+            [&](const SpecificVersionQuery& specific) {
+                return specific_version_to_read(store, version_map, stream_id, specific.version_id_, version_query);
             },
-            [&stream_id, this](const SnapshotVersionQuery& snapshot) {
-                return get_version_from_snapshot(stream_id, snapshot.name_);
+            [&](const SnapshotVersionQuery& snapshot) {
+                return version_from_snapshot_to_read(store, stream_id, snapshot.name_);
             },
-            [&stream_id, &version_query, this](const TimestampVersionQuery& timestamp) {
-                return get_version_at_time(stream_id, timestamp.timestamp_, version_query);
+            [&](const TimestampVersionQuery& timestamp) {
+                return version_at_time_to_read(store, version_map, stream_id, timestamp.timestamp_, version_query);
             },
             [](const std::shared_ptr<PreloadedIndexQuery>&) {
                 util::raise_rte("get_version_to_read shouldn't be called with PreloadedIndexQuery input");
                 // Avoid control reaches end of non-void function style compilation errors
                 return std::optional<VersionedItem>();
             },
-            [&stream_id, this](const std::monostate&) { return get_latest_version(stream_id); }
+            [&](const std::monostate&) { return latest_version_to_read(store, version_map, stream_id); }
     );
+}
+
+std::optional<VersionedItem> LocalVersionedEngine::get_latest_version(const StreamId& stream_id) {
+    return latest_version_to_read(store(), version_map(), stream_id);
+}
+
+std::optional<VersionedItem> LocalVersionedEngine::get_specific_version(
+        const StreamId& stream_id, SignedVersionId signed_version_id, const VersionQuery& version_query
+) {
+    return specific_version_to_read(store(), version_map(), stream_id, signed_version_id, version_query);
+}
+
+std::optional<VersionedItem> LocalVersionedEngine::get_version_at_time(
+        const StreamId& stream_id, timestamp as_of, const VersionQuery& version_query
+) {
+    return version_at_time_to_read(store(), version_map(), stream_id, as_of, version_query);
+}
+
+std::optional<VersionedItem> LocalVersionedEngine::get_version_from_snapshot(
+        const StreamId& stream_id, const SnapshotId& snap_name
+) {
+    return version_from_snapshot_to_read(store(), stream_id, snap_name);
+}
+
+std::optional<VersionedItem> LocalVersionedEngine::get_version_to_read(
+        const StreamId& stream_id, const VersionQuery& version_query
+) {
+    return version_store::get_version_to_read(store(), version_map(), stream_id, version_query);
 }
 
 IndexRange LocalVersionedEngine::get_index_range(const StreamId& stream_id, const VersionQuery& version_query) {
@@ -1819,7 +1854,7 @@ folly::Future<VersionedItem> LocalVersionedEngine::async_update_internal(
         // An update replaces a range of the symbol with what it was given.
         // With no rows and no date range there is no range to replace. We use async_write_metadata_impl to avoid
         // deleting the placeholder timestamp==0.
-        const bool replaces_nothing = frame->empty() && std::holds_alternative<std::monostate>(query.row_filter);
+        const bool replaces_nothing = frame->empty() && !query.row_filter.has_value();
         index_key_fut = replaces_nothing
                                 ? async_write_metadata_impl(store(), update_info, std::move(frame->user_meta))
                                 : async_update_impl(store(), update_info, query, frame, write_options_, dynamic_schema);

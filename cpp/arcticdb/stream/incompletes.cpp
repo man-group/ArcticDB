@@ -413,26 +413,18 @@ std::vector<AtomKey> write_parallel_impl(
 }
 
 std::vector<AppendMapEntry> get_incomplete(
-        const std::shared_ptr<Store>& store, const StreamId& stream_id, const pipelines::FilterRange& range,
+        const std::shared_ptr<Store>& store, const StreamId& stream_id, const std::optional<IndexRange>& range,
         uint64_t last_row, bool via_iteration, bool load_data
 ) {
     using namespace arcticdb::pipelines;
 
     auto entries = get_incomplete_append_slices_for_stream_id(store, stream_id, via_iteration, load_data);
 
-    util::variant_match(
-            range,
-            [](const RowRange&) { util::raise_rte("Only timestamp based ranges supported for filtering."); },
-            [&entries](const IndexRange& index_range) {
-                std::erase_if(entries, [&](const auto& entry) {
-                    return !intersects(index_range, entry.slice_and_key_.key().index_range());
-                });
-            },
-            [](const auto&) {
-                // Don't know what to do with this index
-            }
-    );
-
+    if (range.has_value()) {
+        std::erase_if(entries, [&](const auto& entry) {
+            return !intersects(*range, entry.slice_and_key_.key().index_range());
+        });
+    }
     fix_slice_rowcounts(entries, last_row);
     return entries;
 }
@@ -646,9 +638,8 @@ std::variant<std::vector<AppendMapEntry>, CompactionError> get_incomplete_segmen
         bool load_data
 ) {
     util::check(
-            std::holds_alternative<std::monostate>(read_query.row_filter),
-            "read_incompletes_to_pipeline with keys_to_read specified "
-            "and a row filter is not supported"
+            !read_query.has_row_filtering(),
+            "read_incompletes_to_pipeline with keys_to_read specified and a row filter is not supported"
     );
     // via_iteration false walks a linked list structure of append data keys that is only written by the tick collector
     user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(

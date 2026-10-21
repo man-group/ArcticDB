@@ -26,7 +26,7 @@ TEST(Append, Simple) {
     auto desc = frame->desc().clone();
     bool validate_index{true};
     append_incomplete(store, stream_id, frame, validate_index);
-    pipelines::FilterRange range;
+    std::optional<IndexRange> range;
     auto pipeline_context = std::make_shared<PipelineContext>(desc);
     pipeline_context->selected_columns_ = util::BitSet(2);
     pipeline_context->selected_columns_->flip();
