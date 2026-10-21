@@ -402,14 +402,19 @@ class AsyncStore : public Store {
             return async::submit_io_task(RemoveBatchTask{std::move(keys), library_, opts});
         }
         auto chunks = chunk_keys(std::move(keys), *batch_size);
+        // Capture the library by value: window() keeps submitting chunks after an earlier one fails, which can
+        // outlive this store. collectAll() then waits for every chunk before rethrowing the first error.
         auto futs = folly::window(
                 std::move(chunks),
-                [this, opts](std::vector<entity::VariantKey>&& chunk) {
-                    return async::submit_io_task(RemoveBatchTask{std::move(chunk), library_, opts});
+                [lib = library_, opts](std::vector<entity::VariantKey>&& chunk) {
+                    return async::submit_io_task(RemoveBatchTask{std::move(chunk), lib, opts});
                 },
                 async::TaskScheduler::instance()->io_thread_count()
         );
-        return folly::collect(std::move(futs)).via(&async::io_executor()).thenValue([](auto&&) {
+        return folly::collectAll(std::move(futs)).via(&async::io_executor()).thenValue([](auto&& results) {
+            for (auto& result : results) {
+                result.throwUnlessValue();
+            }
             return folly::Unit{};
         });
     }
