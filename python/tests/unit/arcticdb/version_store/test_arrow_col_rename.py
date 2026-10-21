@@ -403,12 +403,28 @@ def test_explicit_rename_raises(lmdb_version_store_v1, object_type, index, col_n
 @pytest.mark.parametrize("object_type", ["DataFrame", "Series"])
 @pytest.mark.parametrize("rows_per_segment", [2, 100_000])
 @pytest.mark.parametrize("cols_per_segment", [2, 127])
+@pytest.mark.parametrize(
+    "index_levels",
+    [
+        pytest.param(
+            1,
+            marks=pytest.mark.xfail(
+                reason="Monday 13335946520: Single-level multiindexes are not roundtripped correctly", strict=True
+            ),
+        ),
+        2,
+    ],
+)
 def test_multi_index_auto_rename_nameless_no_clash(
-    version_store_factory, object_type, rows_per_segment, cols_per_segment
+    version_store_factory, object_type, rows_per_segment, cols_per_segment, index_levels
 ):
     lib = version_store_factory(segment_row_size=rows_per_segment, column_group_size=cols_per_segment)
     sym = "test_multi_index_auto_rename_nameless_no_clash"
-    index = pd.MultiIndex.from_arrays([pd.date_range("2026-01-01", periods=10), np.arange(10)])
+    index = (
+        pd.MultiIndex.from_arrays([pd.date_range("2026-01-01", periods=10)])
+        if index_levels == 1
+        else pd.MultiIndex.from_arrays([pd.date_range("2026-01-01", periods=10), np.arange(10)])
+    )
     input = (
         pd.DataFrame({"col0": np.arange(10, 20), "col1": np.arange(20, 30), "col2": np.arange(30, 40)}, index=index)
         if object_type == "DataFrame"
@@ -417,8 +433,12 @@ def test_multi_index_auto_rename_nameless_no_clash(
     lib.write(sym, input)
     generic_rename_columns_arrow_compat_test(lib, sym)
     received = lib.read(sym).data
-    expected_index = pd.MultiIndex.from_arrays(
-        [pd.date_range("2026-01-01", periods=10), np.arange(10)], names=["__index_level_0__", "__index_level_1__"]
+    expected_index = (
+        pd.MultiIndex.from_arrays([pd.date_range("2026-01-01", periods=10)], names=["__index_level_0__"])
+        if index_levels == 1
+        else pd.MultiIndex.from_arrays(
+            [pd.date_range("2026-01-01", periods=10), np.arange(10)], names=["__index_level_0__", "__index_level_1__"]
+        )
     )
     expected = (
         pd.DataFrame(
@@ -479,6 +499,20 @@ def test_multi_index_auto_rename_clashes(
     received = lib.read(sym).data
     expected_index = pd.MultiIndex.from_arrays([[0], [1]], names=output_names)
     expected = make_df_or_series(object_type, output_col_name, [0], index=expected_index)
+    assert_pandas_equal(received, expected)
+
+
+@pytest.mark.xfail(reason="Monday 13335946520: Single-level multiindexes are not roundtripped correctly", strict=True)
+@pytest.mark.parametrize("object_type", ["DataFrame", "Series"])
+def test_multi_index_auto_rename_single_level_clashes(lmdb_version_store_v1, object_type):
+    lib = lmdb_version_store_v1
+    sym = "test_multi_index_auto_rename_single_level_clashes"
+    index = pd.MultiIndex.from_arrays([[pd.Timestamp(0)]], names=["ts"])
+    input = make_df_or_series(object_type, "ts", [0], index=index)
+    lib.write(sym, input)
+    generic_rename_columns_arrow_compat_test(lib, sym)
+    received = lib.read(sym).data
+    expected = make_df_or_series(object_type, "_ts_", [0], index=index)
     assert_pandas_equal(received, expected)
 
 
