@@ -24,6 +24,9 @@
 #include <arcticdb/storage/file/file_store.hpp>
 #include <arcticdb/version/version_functions.hpp>
 
+#include <algorithm>
+#include <ranges>
+
 namespace arcticdb::version_store {
 
 using namespace arcticdb::entity;
@@ -1595,6 +1598,42 @@ std::vector<std::variant<VersionedItem, DataError>> PythonVersionStore::batch_co
         bool throw_on_error
 ) {
     return batch_compact_data_internal(stream_ids, rows_per_segment, prune_previous_versions, throw_on_error);
+}
+
+std::unordered_map<VersionId, double> PythonVersionStore::dedup_ratios(const StreamId& stream_id) {
+    const std::vector<AtomKeyPacked> keys = get_all_versions(store(), version_map(), stream_id);
+    util::check(
+            ranges::is_sorted(keys | ranges::views::reverse, {}, &AtomKeyPacked::version_id_),
+            "Expected Index keys to be sorted in reverse by version_id"
+    );
+
+    // TODO: Pretty sure that non-existent stream_id leads to no exceptions and empty keys, so we need
+    //       an explicit throw.
+    if (keys.empty())
+        throw NoDataFoundException(fmt::format("dedup_ratios: version not found for symbol '{}'", stream_id));
+
+    std::unordered_map<VersionId, double> result;
+    ankerl::unordered_dense::set<AtomKey> seen_atom_keys;
+    for (const AtomKeyPacked& key : keys | std::ranges::views::reverse) {
+        size_t total_cells = 0;
+        auto key_and_segment = store()->read_sync(key.to_atom_key(stream_id));
+        pipelines::index::IndexSegmentReader isr(std::move(key_and_segment.second));
+        size_t num_rows = isr.size();
+        size_t newly_added_cells = 0;
+        for (size_t i = 0; i != num_rows; ++i) {
+            const auto slice_and_key = isr.row(i);
+            const size_t num_cells = slice_and_key.slice().rows().diff() * slice_and_key.slice().columns().diff();
+            total_cells += num_cells;
+            const auto [_, inserted] = seen_atom_keys.insert(slice_and_key.key());
+            if (inserted) {
+                newly_added_cells += num_cells;
+            }
+        }
+
+        result[key.version_id()] = 1 - static_cast<double>(newly_added_cells) / static_cast<double>(total_cells);
+    }
+
+    return result;
 }
 
 } // namespace arcticdb::version_store

@@ -305,6 +305,8 @@ class PythonVersionStore : public LocalVersionedEngine {
             bool prune_previous_versions, bool throw_on_error
     );
 
+    std::unordered_map<VersionId, double> dedup_ratios(const StreamId& stream_id);
+
   private:
     void delete_snapshot_sync(const SnapshotId& snap_name, const VariantKey& snap_key);
 };
