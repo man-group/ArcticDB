@@ -4557,6 +4557,32 @@ class NativeVersionStore:
         )
         return self._convert_thin_cxx_item_to_python(vit, metadata)
 
+    def batch_dedup_ratios(self, symbols: Sequence[str]) -> Dict[Tuple[str, int], float]:
+        """
+        For each (symbol, version) pair, report amount of data, which is shared with earlier versions.
+        The amounts are floats in the range 0 to 1. 0 indicates no data segments are shared, 1 indicates
+        the version consists entirely of segments shared with earlier versions.
+
+        Will raise if any of the symbols do not exist.
+
+        Examples
+        --------
+
+        >>> lib.write("symbol", pd.Series(np.arange(10), index=pd.date_range("2020-01-01", periods=10)))
+        >>> lib.write("symbol", pd.Series(np.arange(20), index=pd.date_range("2020-01-01", periods=20)))
+
+        Parameters
+        ----------
+        symbols : Sequence[str]
+            The symbols to measure.
+
+        Returns
+        -------
+        dict[tuple[str, int], float]
+            Mapping from symbol version number to percentage of de-duplicated data.
+        """
+        return self.version_store.batch_dedup_ratios(symbols)
+
 
 def resolve_dynamic_strings(kwargs):
     dynamic_strings = resolve_defaults("dynamic_strings", None, global_default=True, **kwargs)
