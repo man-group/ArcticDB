@@ -268,6 +268,36 @@ class VersionedItem:
         return iter(attr.astuple(self))
 
 
+# TODO: Move this somewhere else
+class StreamingReadGenerator:
+    def __init__(self, versioned_item: VersionedItem):
+        self._data = versioned_item.data
+        versioned_item.data = None
+        self._versioned_item = versioned_item
+        slice_lengths = [series.shape[0] for series in self._data.get_columns()[0].get_chunks()]
+        self._slice_boundaries = [0]
+        for slice_length in slice_lengths:
+            self._slice_boundaries.append(self._slice_boundaries[-1] + slice_length)
+        self._curr = 0
+        print("here")
+
+    def versioned_item(self):
+        return self._versioned_item
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        if self._curr == len(self._slice_boundaries) - 1:
+            raise StopIteration
+        res = self._data.slice(
+            self._slice_boundaries[self._curr],
+            self._slice_boundaries[self._curr + 1] - self._slice_boundaries[self._curr],
+        )
+        self._curr += 1
+        return res
+
+
 @dataclass
 class VersionedItemWithJoin:
     """
@@ -2581,6 +2611,38 @@ class NativeVersionStore:
 
         read_result = self._read_dataframe(symbol, version_query, read_query, read_options)
         return self._post_process_dataframe(read_result, read_query, read_options, output_format, implement_read_index)
+
+    # TODO: Add V2 API equivalent
+    def read_streaming(
+        self,
+        symbol: str,
+        as_of: Optional[VersionQueryInput] = None,
+        date_range: Optional[DateRangeInput] = None,
+        row_range: Optional[Tuple[int, int]] = None,
+        columns: Optional[List[str]] = None,
+        query_builder: Optional[QueryBuilder] = None,
+        **kwargs,
+    ) -> StreamingReadGenerator:
+        self._validate_kwargs("read", self._valid_read_kwargs.union({"implement_read_index"}), kwargs)
+
+        implement_read_index = kwargs.get("implement_read_index", False)
+        columns = self._resolve_empty_columns(columns, implement_read_index)
+        # Take a copy as _get_queries can modify the input argument, which makes reusing the input counter-intuitive
+        query_builder = copy.deepcopy(query_builder)
+        # TODO: Reject Pandas, allow pyarrow
+        kwargs["output_format"] = OutputFormat.POLARS
+        version_query, read_options, read_query, output_format = self._get_queries(
+            as_of=as_of,
+            date_range=date_range,
+            row_range=row_range,
+            columns=columns,
+            query_builder=query_builder,
+            **kwargs,
+        )
+
+        read_result = self._read_dataframe(symbol, version_query, read_query, read_options)
+        vit = self._post_process_dataframe(read_result, read_query, read_options, output_format, implement_read_index)
+        return StreamingReadGenerator(vit)
 
     def rename_columns_arrow_compat(
         self,
