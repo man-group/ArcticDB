@@ -10,6 +10,7 @@
 
 #include <arcticdb/arrow/arrow_schema_utils.hpp>
 #include <arcticdb/entity/normalization_utils.hpp>
+#include <arcticdb/pipeline/index_utils.hpp>
 
 namespace arcticdb {
 
@@ -20,30 +21,22 @@ using StringMap = ankerl::unordered_dense::map<std::string, std::string, util::T
 
 namespace {
 
-size_t count_indexes(const proto::descriptors::NormalizationMetadata_Pandas& pandas_common) {
-    if (pandas_common.has_index()) {
-        return (pandas_common.index().is_physically_stored() || pandas_common.index().step() == 0) ? 1 : 0;
-    } else { // multiindex
-        return pandas_common.multi_index().field_count() + 1;
-    }
-}
-
 StringSet generate_original_index_names(
         const FieldCollection& fields, const proto::descriptors::NormalizationMetadata_Pandas& pandas_common,
-        const size_t index_count
+        const pipelines::index::RequiredFieldInfo& index_info
 ) {
     StringSet original_index_names;
-    if (index_count == 1) {
+    if (index_info.num_physical_indices == 1 && !index_info.has_multi_index) {
         const auto& index_meta = pandas_common.index();
         if (!index_meta.fake_name()) {
             original_index_names.insert(index_meta.name());
         }
-    } else if (index_count > 1) {
+    } else if (index_info.has_multi_index) {
         const auto& multi_index_meta = pandas_common.multi_index();
         ankerl::unordered_dense::set<int> fake_field_pos(
                 multi_index_meta.fake_field_pos().cbegin(), multi_index_meta.fake_field_pos().cend()
         );
-        for (size_t index_col_idx = 0; index_col_idx < index_count; ++index_col_idx) {
+        for (size_t index_col_idx = 0; index_col_idx < index_info.num_physical_indices; ++index_col_idx) {
             if (!fake_field_pos.contains(static_cast<int32_t>(index_col_idx))) {
                 if (index_col_idx == 0) {
                     original_index_names.insert(multi_index_meta.name());
@@ -260,7 +253,8 @@ std::optional<ArrowTransformedSchema> make_schema_arrow_compatible(
     const auto& input_pandas_common = *pandas_common(norm);
     const bool unnamed_series =
             norm.has_series() && (!input_pandas_common.has_name() && input_pandas_common.name().empty());
-    const auto index_count = count_indexes(input_pandas_common);
+    const auto index_info = pipelines::index::required_fields_info(desc, norm);
+    const auto index_count = index_info.num_physical_indices;
     user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
             !index_columns.has_value() || index_columns->size() == index_count,
             "Symbol has {} index levels, but {} index names were provided",
@@ -268,7 +262,7 @@ std::optional<ArrowTransformedSchema> make_schema_arrow_compatible(
             index_columns.has_value() ? index_columns->size() : 0
     );
     const bool range_index{index_count == 0};
-    auto original_index_names = generate_original_index_names(desc.fields(), input_pandas_common, index_count);
+    auto original_index_names = generate_original_index_names(desc.fields(), input_pandas_common, index_info);
     auto original_column_names =
             generate_original_column_names(desc.fields(), input_pandas_common, index_count, unnamed_series);
     if (index_columns.has_value()) {
