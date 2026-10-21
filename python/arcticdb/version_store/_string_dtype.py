@@ -56,12 +56,12 @@ def _arrow_string_arrays_to_pd_array(arrays):
     return pd.array(pa.chunked_array(imported), dtype=dtype)
 
 
-def _adapt_string_column(item, idx):
-    column = item.data[idx]
+def _adapt_string_column(column):
     if _is_arrow_column(column):
         return _arrow_string_arrays_to_pd_array(column)
     if (
         isinstance(column, np.ndarray)
+        # Object dtype or fixed-width numpy strings
         and (column.dtype == np.dtype("object") or column.dtype.kind == "U")
         and _use_python_strings_in_pandas()
     ):

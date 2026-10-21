@@ -73,6 +73,8 @@ static void write_strings_to_destination(
                 ptr_dest, num_rows, handler_data, none_value, python_util::IncrementRefCount::OFF
         );
     }
+    auto missing_value_for_not_a_string = handler_data.get_missing_value(none_value);
+    auto missing_value_for_nan = handler_data.get_missing_value(PandasMissingValue::NaN);
     auto not_a_string_count = 0UL;
     auto nan_placeholder_count = 0UL;
     details::visit_type(source_column.type().data_type(), [&](auto source_tag) {
@@ -81,10 +83,10 @@ static void write_strings_to_destination(
             for_each_enumerated<typename source_type_info::TDT>(source_column, [&](const auto& en) {
                 const auto offset = en.value();
                 if (offset == not_a_string()) {
-                    ptr_dest[en.idx()] = handler_data.get_missing_value(none_value);
+                    ptr_dest[en.idx()] = missing_value_for_not_a_string;
                     ++not_a_string_count;
                 } else if (offset == nan_placeholder()) {
-                    ptr_dest[en.idx()] = handler_data.get_missing_value(PandasMissingValue::NaN);
+                    ptr_dest[en.idx()] = missing_value_for_nan;
                     ++nan_placeholder_count;
                 } else {
                     ptr_dest[en.idx()] = py_strings.at(offset);
@@ -95,7 +97,11 @@ static void write_strings_to_destination(
         }
     });
     const auto sparse_missing_count = source_column.is_sparse() ? num_rows - source_column.sparse_map().count() : 0;
-    handler_data.increment_missing_refcount(none_value, not_a_string_count + sparse_missing_count);
+    if (none_value == PandasMissingValue::NaN) {
+        nan_placeholder_count += not_a_string_count + sparse_missing_count;
+    } else {
+        handler_data.increment_missing_refcount(none_value, not_a_string_count + sparse_missing_count);
+    }
     handler_data.increment_missing_refcount(PandasMissingValue::NaN, nan_placeholder_count);
 }
 

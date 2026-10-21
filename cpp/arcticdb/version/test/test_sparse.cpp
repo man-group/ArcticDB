@@ -6,6 +6,7 @@
  * will be governed by the Apache License, version 2.0.
  */
 
+#include "util/constants.hpp"
 #include <gtest/gtest.h>
 
 #include <arcticdb/stream/index.hpp>
@@ -52,7 +53,7 @@ TEST(ReadOptions, PandasNoneValueForType) {
     EXPECT_EQ(const_options.pandas_none_value_for_type(empty), PandasMissingValue::None);
 
     options.set_output_config(ArrowOutputConfig{});
-    EXPECT_ANY_THROW(static_cast<void>(const_options.pandas_none_value_for_type(utf)));
+    EXPECT_THROW(static_cast<void>(const_options.pandas_none_value_for_type(utf)), InternalException);
 }
 
 TEST(PythonEmptyHandler, ConvertTypeRespectsDestinationType) {
@@ -148,7 +149,7 @@ TEST(PythonStringHandler, PresentNullRespectsStringFormatAndEncoding) {
                 descriptor, descriptor, field.field(), sizeof(PyObject*), 1, 0, 0, sizeof(PyObject*), 0
         );
         Column source(descriptor);
-        source.set_scalar(0, not_a_string());
+        source.set_scalar(0, string_none);
         PythonHandlerData handler_data;
         PyObject* output = nullptr;
 

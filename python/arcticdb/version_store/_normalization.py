@@ -475,7 +475,7 @@ def _denormalize_single_index(item, norm_meta):
 
     if len(item.index_columns) == 1:
         name = int(item.index_columns[0]) if norm_meta.index.is_int else item.index_columns[0]
-        index_data = _adapt_string_column(item, 0) if len(item.data) > 0 else []
+        index_data = _adapt_string_column(item.data[0]) if len(item.data) > 0 else []
         rtn = Index(index_data, name=name)
 
         tz = get_timezone_from_metadata(norm_meta)
@@ -1118,7 +1118,7 @@ class DataFrameNormalizer(_PandasNormalizer):
                 for idx, a in enumerate(arrays):
                     if idx < n_ind:
                         continue
-                    pandas_column = _adapt_string_column(item, idx)
+                    pandas_column = _adapt_string_column(a)
                     block_values = (
                         pandas_column.reshape((1, _len)) if isinstance(pandas_column, np.ndarray) else pandas_column
                     )
@@ -1183,7 +1183,7 @@ class DataFrameNormalizer(_PandasNormalizer):
         if not self._skip_df_consolidation:
             if data is not None:
                 for idx, name in enumerate(columns):
-                    data[name] = _adapt_string_column(item, idx + n_indexes)
+                    data[name] = _adapt_string_column(item.data[idx + n_indexes])
             df = DataFrame(data, index=index, columns=columns)
             # Setting the columns' dtype manually, since pandas might just convert the dtype of some
             # (empty) columns to another one and since the `dtype` keyword for `pd.DataFrame` constructor
