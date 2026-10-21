@@ -308,6 +308,9 @@ class PythonVersionStore : public LocalVersionedEngine {
     VersionedItem rename_columns_arrow_compat(
             const StreamId& stream_id, const std::optional<std::vector<std::string>>& index_columns,
             const bool prune_previous_versions
+
+    std::unordered_map<std::tuple<StreamId, VersionId>, double> batch_dedup_ratios(
+            const std::vector<StreamId>& stream_ids
     );
 
   private:
