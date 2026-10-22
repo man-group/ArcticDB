@@ -2910,7 +2910,7 @@ VersionedItem defragment_symbol_data_impl(
     );
 }
 
-static folly::Future<VersionIdentifier> fetch_index_and_column_stats(
+folly::Future<VersionIdentifier> fetch_index_and_column_stats(
         const std::shared_ptr<Store>& store, const VersionedItem& versioned_item, const ReadQuery& read_query
 ) {
     auto index_future = store->read(versioned_item.key_);

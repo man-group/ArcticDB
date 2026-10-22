@@ -10,7 +10,7 @@
 
 #include <any>
 #include <cstdint>
-#include <memory>
+#include <optional>
 
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/pipeline/query.hpp>
@@ -29,6 +29,8 @@ class StreamingReadGenerator {
     );
 
   private:
+    void ensure_index_information();
+
     // TODO: Make this shared_ptr
     ARCTICDB_UNUSED version_store::LocalVersionedEngine* engine_;
     ARCTICDB_UNUSED StreamId stream_id_;
@@ -37,5 +39,6 @@ class StreamingReadGenerator {
     ARCTICDB_UNUSED ReadOptions read_options_;
     ARCTICDB_UNUSED std::optional<uint64_t> prefetch_rows_;
     ARCTICDB_UNUSED std::shared_ptr<std::any> handler_data_;
+    ARCTICDB_UNUSED std::shared_ptr<IndexInformation> index_information_;
 };
 } // namespace arcticdb
