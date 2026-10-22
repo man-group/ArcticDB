@@ -17,13 +17,13 @@ from arcticdb.exceptions import NoDataFoundException
 
 
 def python_dedupe(lib, symbol):
+    from more_itertools import pairwise
 
     versions = lib.list_versions(symbol)
     if not versions:
-        from arcticdb.exceptions import NoDataFoundException
-
         raise NoDataFoundException(f"dedup_ratios: version not found for symbol {symbol}")
-    # assert all(new["version"] > old["version"] for new, old in pairwise(versions))
+
+    assert all(new["version"] > old["version"] for new, old in pairwise(versions))
 
     res = {}
     new_atom_keys = set()
@@ -52,11 +52,14 @@ def python_dedupe(lib, symbol):
     return res
 
 
+SEGMENT_SIZE = 10
+
 
 def test_basic(in_memory_store_factory):
-    lib = in_memory_store_factory(segment_row_size=10, de_duplication=True)
-    df1 = pd.Series(np.arange(10), index=pd.date_range("2020-01-01", periods=10, name="date"), name="data")
-    df2 = pd.Series(np.arange(20), index=pd.date_range("2020-01-01", periods=20, name="date"), name="data")
+
+    lib = in_memory_store_factory(segment_row_size=SEGMENT_SIZE, de_duplication=True)
+    df1 = pd.Series(np.arange(SEGMENT_SIZE), index=pd.date_range("2020-01-01", periods=10, name="date"), name="data")
+    df2 = pd.Series(np.arange(2 * SEGMENT_SIZE), index=pd.date_range("2020-01-01", periods=2 * SEGMENT_SIZE, name="date"), name="data")
     symbol_name: str = "symbol"
 
     lib.write(symbol_name, df1)
@@ -66,7 +69,7 @@ def test_basic(in_memory_store_factory):
     expected = {0: 0.0, 1: 0.5}
     assert result == pytest.approx(expected)
 
-    df3 = pd.Series(np.arange(30), index=pd.date_range("2020-01-01", periods=30, name="date"), name="data")
+    df3 = pd.Series(np.arange(3 * SEGMENT_SIZE), index=pd.date_range("2020-01-01", periods=30, name="date"), name="data")
     lib.write(symbol_name, df3)
     lib.delete_version(symbol_name, 1)
 
@@ -78,6 +81,33 @@ def test_basic(in_memory_store_factory):
 
     result = lib.dedup_ratios("symbol")
     expected = {2: 0}
+    assert result == pytest.approx(expected)
+
+
+def test_deleted_versions_in_snapshots(in_memory_store_factory):
+    lib = in_memory_store_factory(segment_row_size=SEGMENT_SIZE, de_duplication=True)
+    df1 = pd.Series(np.arange(SEGMENT_SIZE), index=pd.date_range("2020-01-01", periods=10, name="date"), name="data")
+    df2 = pd.Series(np.arange(2 * SEGMENT_SIZE), index=pd.date_range("2020-01-01", periods=2 * SEGMENT_SIZE, name="date"), name="data")
+    df3 = pd.Series(np.arange(3 * SEGMENT_SIZE), index=pd.date_range("2020-01-01", periods=30, name="date"), name="data")
+    symbol_name: str = "symbol"
+
+    lib.write(symbol_name, df1)
+    lib.snapshot("snapshot")
+    lib.write(symbol_name, df2)
+    lib.snapshot("snapshot2")
+    lib.write(symbol_name, df3)
+    # This will be kept alive by the snapshot
+    lib.delete_version(symbol_name, 0)
+
+    result = lib.dedup_ratios("symbol")
+    # result = python_dedupe(lib, "symbol")
+    expected = {0: 0.0, 1: 0.5, 2: 2 / 3}
+    assert result == pytest.approx(expected)
+
+    lib.delete_version(symbol_name, 1)
+    result = lib.dedup_ratios("symbol")
+    # result = python_dedupe(lib, "symbol")
+    expected = {0: 0.0, 1: 0.5, 2: 2 / 3}
     assert result == pytest.approx(expected)
 
 
