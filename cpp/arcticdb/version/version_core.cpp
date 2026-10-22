@@ -235,9 +235,7 @@ OutputSchema select_columns(OutputSchema&& output_schema, const std::unordered_s
             fields_to_use->add(field.ref());
         }
     }
-    output_schema.set_stream_descriptor(
-            StreamDescriptor{output_schema.stream_descriptor().data_ptr(), std::move(fields_to_use)}
-    );
+    output_schema.mutable_stream_descriptor().set_fields(std::move(fields_to_use));
     return output_schema;
 }
 

@@ -296,9 +296,8 @@ void prepare_for_arrow_output(StreamDescriptor& desc, proto::descriptors::Normal
     const auto index_info = pipelines::index::required_fields_info(desc, norm);
     const auto index_count = index_info.num_physical_indices;
     auto original_column_names = generate_original_column_names(fields, *common, index_count, unnamed_series);
-    for (auto&& name : generate_original_index_names(fields, *common, index_info)) {
-        original_column_names.insert(std::move(name));
-    }
+    auto original_index_names = generate_original_index_names(fields, *common, index_info);
+    original_column_names.insert(original_index_names.begin(), original_index_names.end());
     const auto output_names =
             generate_output_names(fields, *common, std::nullopt, index_count, unnamed_series, original_column_names);
     auto output_fields = std::make_shared<FieldCollection>(fields.size(), fields.buffer().bytes());
@@ -321,8 +320,8 @@ void prepare_for_arrow_output(StreamDescriptor& desc, proto::descriptors::Normal
 }
 
 void prepare_for_arrow_output(SegmentInMemory& segment, proto::descriptors::NormalizationMetadata& norm) {
-    // A copy, as other segments may share the descriptor
-    auto desc = std::make_shared<StreamDescriptor>(segment.descriptor());
+    // A deep copy, as other segments may share the descriptor
+    auto desc = std::make_shared<StreamDescriptor>(segment.descriptor().clone());
     prepare_for_arrow_output(*desc, norm);
     segment.attach_descriptor(std::move(desc));
 }
