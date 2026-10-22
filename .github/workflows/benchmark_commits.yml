@@ -99,7 +99,7 @@ jobs:
         run: |
           git config --global --add safe.directory .
           python -m pip install --upgrade pip
-          pip install asv virtualenv
+          pip install asv asv-runner==0.3.1 virtualenv
           python -m asv machine -v --yes --machine ArcticDB-Medium-Runner
           
           # Make a separate venv to run our build_tooling/ scripts, else ASV's venv creation wastes time uninstalling from the "python" installation
