@@ -303,6 +303,7 @@ set(arcticdb_srcs
         pipeline/read_options.hpp
         pipeline/read_pipeline.hpp
         pipeline/slicing.hpp
+        pipeline/streaming_read_generator.hpp
         pipeline/string_pool_utils.hpp
         pipeline/value.hpp
         pipeline/value_set.hpp
@@ -537,6 +538,7 @@ set(arcticdb_srcs
         pipeline/read_query.hpp
         pipeline/read_query.cpp
         pipeline/slicing.cpp
+        pipeline/streaming_read_generator.cpp
         pipeline/string_pool_utils.cpp
         pipeline/value_set.cpp
         pipeline/write_frame.cpp

@@ -33,6 +33,7 @@
 #include <arcticdb/storage/storage_exceptions.hpp>
 #include <arcticdb/storage/key_segment_pair.hpp>
 #include <arcticdb/entity/python_bindings_common.hpp>
+#include <arcticdb/pipeline/streaming_read_generator.hpp>
 
 namespace arcticdb::version_store {
 
@@ -213,6 +214,9 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                  py::arg("index_key"),
                  py::arg("index_seg"),
                  py::arg("column_stats_seg") = nullptr);
+
+    // TODO: Find a sensible place for this
+    py::class_<StreamingReadGenerator, std::shared_ptr<StreamingReadGenerator>>(version, "StreamingReadGenerator");
 
     py::class_<VersionQuery>(version, "PythonVersionStoreVersionQuery")
             .def(py::init())
@@ -919,6 +923,26 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                         return adapt_read_df(
                                 v.read_dataframe_version(sid, version_query, read_query, read_options, handler_data),
                                 handler_data.get()
+                        );
+                    },
+                    py::call_guard<SingleThreadMutexHolder>(),
+                    "Read the specified version of the dataframe from the store"
+            )
+            .def(
+                    "read_streaming",
+                    [&](PythonVersionStore& v,
+                        StreamId sid,
+                        const VersionQuery& version_query,
+                        const std::shared_ptr<ReadQuery>& read_query,
+                        const ReadOptions& read_options,
+                        std::optional<uint64_t>
+                                prefetch_rows) {
+                        auto handler_data =
+                                std::make_shared<std::any>(TypeHandlerRegistry::instance()->get_handler_data(
+                                        read_options.output_format_for_frame()
+                                ));
+                        return v.read_streaming(
+                                sid, version_query, read_query, read_options, prefetch_rows, handler_data
                         );
                     },
                     py::call_guard<SingleThreadMutexHolder>(),

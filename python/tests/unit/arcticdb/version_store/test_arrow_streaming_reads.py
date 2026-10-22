@@ -31,8 +31,7 @@ def test_arrow_streaming_reads_basic(in_memory_store_factory):
     lib.write(sym, df, metadata=metadata)
     gen = lib.read_streaming(sym)
     for idx, df_slice in enumerate(gen):
-        expected = df.slice(idx * 10, 10)
-        assert df_slice.equals(expected)
+        assert df_slice.equals(df.slice(idx * 10, 10))
     vit = lib.read(sym)
     vit.data = None
     assert vit == gen.versioned_item()

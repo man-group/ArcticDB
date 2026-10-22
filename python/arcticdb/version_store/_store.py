@@ -2621,8 +2621,10 @@ class NativeVersionStore:
         row_range: Optional[Tuple[int, int]] = None,
         columns: Optional[List[str]] = None,
         query_builder: Optional[QueryBuilder] = None,
+        prefetch_rows: Optional[int] = None,
         **kwargs,
     ) -> StreamingReadGenerator:
+        # TODO: All this stuff is shared with read/head/tail - factor it out
         self._validate_kwargs("read", self._valid_read_kwargs.union({"implement_read_index"}), kwargs)
 
         implement_read_index = kwargs.get("implement_read_index", False)
@@ -2639,6 +2641,14 @@ class NativeVersionStore:
             query_builder=query_builder,
             **kwargs,
         )
+        # TODO: Add a test for this check
+        check(
+            prefetch_rows is None or prefetch_rows >= 0,
+            "prefetch_rows must be None or a positive integer, received {}",
+            prefetch_rows,
+        )
+
+        generator = self.version_store.read_streaming(symbol, version_query, read_query, read_options, prefetch_rows)
 
         read_result = self._read_dataframe(symbol, version_query, read_query, read_options)
         vit = self._post_process_dataframe(read_result, read_query, read_options, output_format, implement_read_index)

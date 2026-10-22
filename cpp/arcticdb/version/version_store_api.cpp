@@ -1128,6 +1128,17 @@ ReadResult PythonVersionStore::read_dataframe_version(
     );
 }
 
+StreamingReadGenerator PythonVersionStore::read_streaming(
+        const StreamId& stream_id, const VersionQuery& version_query, const std::shared_ptr<ReadQuery>& read_query,
+        const ReadOptions& read_options, std::optional<uint64_t> prefetch_rows, std::shared_ptr<std::any> handler_data
+) {
+    // TODO: enable_shared_from_this once exactly which class is needed by StreamingReadGenerator is established
+    // TODO: Add a test that the generator still works even if the NativeVersionStore it was produced by was deleted
+    return StreamingReadGenerator{
+            this, stream_id, version_query, read_query, read_options, prefetch_rows, handler_data
+    };
+}
+
 VersionedItem PythonVersionStore::read_modify_write(
         const StreamId& source_stream, const StreamId& target_stream, const py::object& user_meta,
         const VersionQuery& version_query, const std::shared_ptr<ReadQuery>& read_query,
