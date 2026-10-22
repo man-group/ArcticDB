@@ -1,0 +1,18 @@
+diff --git a/src/aws-cpp-sdk-core/source/http/curl/CurlHttpClient.cpp b/src/aws-cpp-sdk-core/source/http/curl/CurlHttpClient.cpp
+index 6a16d7c..dd00c21 100644
+--- a/src/aws-cpp-sdk-core/source/http/curl/CurlHttpClient.cpp
++++ b/src/aws-cpp-sdk-core/source/http/curl/CurlHttpClient.cpp
+@@ -203,9 +203,10 @@ static size_t WriteData(char* ptr, size_t size, size_t nmemb, void* userdata)
+ 
+         for (const auto& hashIterator : context->m_request->GetResponseValidationHashes())
+         {
+-          std::stringstream headerStr;
+-          headerStr<<"x-amz-checksum-"<<hashIterator.first;
+-          if(context->m_response->HasHeader(headerStr.str().c_str()))
++          // std::stringstream takes the global locale mutex on construction, which causes
++          // lock contention because this runs for every chunk curl writes.
++          const Aws::String headerStr = "x-amz-checksum-" + hashIterator.first;
++          if(context->m_response->HasHeader(headerStr.c_str()))
+           {
+             hashIterator.second->Update(reinterpret_cast<unsigned char*>(ptr), sizeToWrite);
+             break;
