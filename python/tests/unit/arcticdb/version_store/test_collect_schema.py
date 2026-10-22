@@ -240,7 +240,6 @@ def test_collect_schema_column_filtering(lmdb_library):
     assert schema == expected_schema
 
 
-@pytest.mark.xfail(reason="_modify_schema always keeps a Series' value column", strict=True)
 @pytest.mark.parametrize("columns", [[], ["other"]])
 def test_collect_schema_series_column_selection_matches_read(lmdb_library, columns):
     lib = lmdb_library

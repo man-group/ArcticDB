@@ -58,7 +58,6 @@ std::pair<std::vector<Column>, entity::StreamDescriptor> record_batches_to_colum
 // - sparrow lacks support for easy construction of ArrowSchema directly without going through record batches anyway
 RecordBatchData empty_record_batch_from_descriptor(
         const entity::StreamDescriptor& stream_desc, ArrowOutputConfig arrow_output_config,
-        const std::optional<ankerl::unordered_dense::set<std::string_view>>& columns,
         const proto::descriptors::NormalizationMetadata& norm_meta
 );
 

@@ -1267,33 +1267,22 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                 schema::check<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_PICKLED_DATA>(
                         !norm.has_msg_pack_frame(), "_collect_schema() not supported with pickled data"
                 );
-                auto schema = modify_schema({tsd.as_stream_descriptor().clone(), norm}, read_query->clauses_);
+                // A copy, as adding the index columns modifies the query, which the caller may reuse
+                ReadQuery query{*read_query};
+                add_index_columns_to_query(query, tsd);
+                auto schema = modify_schema({tsd.as_stream_descriptor().clone(), norm}, query.clauses_);
+                if (query.columns) {
+                    schema = select_columns(
+                            std::move(schema),
+                            std::unordered_set<std::string_view>(query.columns->begin(), query.columns->end())
+                    );
+                }
                 // _modify_schema always outputs arrow, so we convert any pandas norm metadata to arrow
                 if (is_pandas_convertible_to_arrow(schema.norm_metadata_)) {
                     schema.norm_metadata_ = arrow_norm_from_pandas(schema.norm_metadata_, schema.stream_descriptor());
                 }
-                const auto& stream_desc = schema.stream_descriptor();
-                const auto columns = [&]() -> std::optional<ankerl::unordered_dense::set<std::string_view>> {
-                    if (read_query->columns.has_value()) {
-                        ankerl::unordered_dense::set<std::string_view> cols{
-                                read_query->columns->cbegin(), read_query->columns->cend()
-                        };
-                        // Always include index columns, so that the invariant:
-                        // lazy_df._collect_schema() == lazy_df.collect().data.schema
-                        // is maintained. In polarctic we can drop index columns if they are not in with_columns.
-                        auto num_index_levels =
-                                pipelines::index::required_fields_info(stream_desc, schema.norm_metadata_)
-                                        .num_physical_required_columns();
-                        for (size_t idx = 0; idx < num_index_levels; ++idx) {
-                            cols.insert(stream_desc.field(idx).name());
-                        }
-                        return cols;
-                    } else {
-                        return std::nullopt;
-                    }
-                }();
                 auto record_batch = empty_record_batch_from_descriptor(
-                        stream_desc, read_options.arrow_output_config(), columns, schema.norm_metadata_
+                        schema.stream_descriptor(), read_options.arrow_output_config(), schema.norm_metadata_
                 );
                 return std::make_pair(std::move(record_batch), python_util::pb_to_python(schema.norm_metadata_));
             }
