@@ -254,11 +254,7 @@ def test_collect_schema_series_column_selection_matches_read(lmdb_library, colum
 @pytest.mark.parametrize(
     "columns,expected_names",
     [
-        pytest.param(
-            None,
-            ["___index___", "a", "_a_", "__index__"],
-            marks=pytest.mark.xfail(reason='Duplicate column names "a" reach polars', strict=True),
-        ),
+        (None, ["___index___", "a", "_a_", "__index__"]),
         (["__index__"], ["___index___", "__index__"]),
         # Selection matches on-disk names, which "a" is not, so only the index is returned
         (["a"], ["__index__"]),

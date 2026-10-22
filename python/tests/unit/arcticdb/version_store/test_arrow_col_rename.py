@@ -516,7 +516,6 @@ def test_multi_index_auto_rename_single_level_clashes(lmdb_version_store_v1, obj
     assert_pandas_equal(received, expected)
 
 
-@pytest.mark.xfail(reason="rename_columns_arrow_compat leaves an empty level name as __idx__", strict=True)
 @pytest.mark.parametrize("object_type", ["DataFrame", "Series"])
 def test_multi_index_auto_rename_empty_string_second_level(lmdb_version_store_v1, object_type):
     lib = lmdb_version_store_v1

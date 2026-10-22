@@ -11,7 +11,7 @@
 #include <pybind11/numpy.h>
 #include <pybind11/operators.h>
 #include <pybind11/stl.h>
-#include <arcticdb/entity/arrow_pandas_norm.hpp>
+#include <arcticdb/arrow/arrow_schema_utils.hpp>
 #include <arcticdb/entity/data_error.hpp>
 #include <arcticdb/entity/protobuf_mappings.hpp>
 #include <arcticdb/python/python_to_tensor_frame.hpp>
@@ -1277,13 +1277,26 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                             std::unordered_set<std::string_view>(query.columns->begin(), query.columns->end())
                     );
                 }
-                // _modify_schema always outputs arrow, so we convert any pandas norm metadata to arrow
-                if (is_pandas_convertible_to_arrow(schema.norm_metadata_)) {
-                    schema.norm_metadata_ = arrow_norm_from_pandas(schema.norm_metadata_, schema.stream_descriptor());
+                const auto& stream_desc = schema.stream_descriptor();
+                const auto on_disk_fields = stream_desc.fields_ptr();
+                // _modify_schema always outputs arrow
+                prepare_for_arrow_output(schema.mutable_stream_descriptor(), schema.norm_metadata_);
+                // After renaming we should also rename the `per_column_string_format` dictionary to match the new
+                // names. This will ensure the output of `emty_record_batch_from_descriptor` is identical to the output
+                // of `read`. In practice this doesn't matter much because any column being renamed has a very
+                // unintuitive internal name the user would need to pass - but kept for consistency.
+                auto arrow_output_config = read_options.arrow_output_config();
+                std::unordered_map<std::string, ArrowOutputStringFormat> per_column_string_format;
+                for (size_t pos = 0; pos < stream_desc.field_count(); ++pos) {
+                    const auto& user_formats = arrow_output_config.per_column_string_format_;
+                    if (auto it = user_formats.find(std::string{on_disk_fields->at(pos).name()});
+                        it != user_formats.end()) {
+                        per_column_string_format.emplace(stream_desc.field(pos).name(), it->second);
+                    }
                 }
-                auto record_batch = empty_record_batch_from_descriptor(
-                        schema.stream_descriptor(), read_options.arrow_output_config(), schema.norm_metadata_
-                );
+                arrow_output_config.per_column_string_format_ = std::move(per_column_string_format);
+                auto record_batch =
+                        empty_record_batch_from_descriptor(stream_desc, arrow_output_config, schema.norm_metadata_);
                 return std::make_pair(std::move(record_batch), python_util::pb_to_python(schema.norm_metadata_));
             }
     );
