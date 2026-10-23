@@ -235,7 +235,8 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
 
     py::enum_<PandasStringFormat>(version, "InternalPandasStringFormat")
             .value("OBJECT", PandasStringFormat::OBJECT)
-            .value("ARROW_LARGE_STRING", PandasStringFormat::ARROW_LARGE_STRING);
+            .value("ARROW_LARGE_STRING", PandasStringFormat::ARROW_LARGE_STRING)
+            .value("OBJECT_WITH_NANS_ONLY", PandasStringFormat::OBJECT_WITH_NANS_ONLY);
 
     py::enum_<ArrowOutputFormat>(version, "InternalArrowOutputFormat")
             .value("PYARROW", ArrowOutputFormat::PYARROW)

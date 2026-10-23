@@ -99,8 +99,9 @@ from arcticdb.flattener import Flattener
 from arcticdb.log import version as log
 from arcticdb.version_store._custom_normalizers import get_custom_normalizer, CompositeCustomNormalizer
 from arcticdb.version_store._string_dtype import (
-    _is_arrow_string_column,
+    _is_arrow_column,
     _use_pyarrow_strings_in_pandas,
+    _use_python_strings_in_pandas,
 )
 from arcticdb.version_store._normalization import (
     PandasData,
@@ -2389,11 +2390,12 @@ class NativeVersionStore:
                 },
             )
         else:  # Pandas
-            string_format = (
-                InternalPandasStringFormat.ARROW_LARGE_STRING
-                if _use_pyarrow_strings_in_pandas()
-                else InternalPandasStringFormat.OBJECT
-            )
+            if _use_pyarrow_strings_in_pandas():
+                string_format = InternalPandasStringFormat.ARROW_LARGE_STRING
+            elif _use_python_strings_in_pandas():
+                string_format = InternalPandasStringFormat.OBJECT_WITH_NANS_ONLY
+            else:
+                string_format = InternalPandasStringFormat.OBJECT
             output_config = PandasOutputConfig(default_string_format=string_format)
         read_options.set_output_config(output_config)
         return read_options, output_format
@@ -2706,7 +2708,7 @@ class NativeVersionStore:
                 data = []
                 for c in read_result.frame_data.data:
                     # Arrow string columns are a list of RecordBatchData already truncated in C++ so only numpy columns are trimmed here.
-                    data.append(c if _is_arrow_string_column(c) else c[start_idx:end_idx])
+                    data.append(c if _is_arrow_column(c) else c[start_idx:end_idx])
                 read_result.frame_data = FrameData(
                     data,
                     read_result.frame_data.names,

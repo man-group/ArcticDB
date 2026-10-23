@@ -13,6 +13,7 @@ import pandas as pd
 
 from arcticdb.dependencies import _PYARROW_AVAILABLE, pyarrow as pa
 from arcticdb.util._versions import IS_AT_LEAST_PANDAS_TWO_THREE, IS_AT_LEAST_PYARROW_TEN_ZERO_ONE
+from pandas._libs.arrays import NDArrayBacked
 from arcticdb_ext.version_store import RecordBatchData
 
 _ARROW_BACKED_STR_DTYPE_SUPPORTED = (
@@ -25,7 +26,25 @@ def _use_pyarrow_strings_in_pandas():
     return _ARROW_BACKED_STR_DTYPE_SUPPORTED and bool(pd.get_option("future.infer_string"))
 
 
-def _is_arrow_string_column(value):
+def _use_python_strings_in_pandas():
+    return (
+        IS_AT_LEAST_PANDAS_TWO_THREE
+        and not _use_pyarrow_strings_in_pandas()
+        and bool(pd.get_option("future.infer_string"))
+    )
+
+
+def _object_strings_to_python_str_array(value):
+    dtype = pd.StringDtype(storage="python", na_value=np.nan)
+    if value.dtype != np.dtype("object"):
+        return pd.array(value, dtype=dtype)
+    array_type = dtype.construct_array_type()
+    result = array_type.__new__(array_type)
+    NDArrayBacked.__init__(result, value, dtype)
+    return result
+
+
+def _is_arrow_column(value):
     return isinstance(value, list) and (len(value) == 0 or isinstance(value[0], RecordBatchData))
 
 
@@ -37,8 +56,17 @@ def _arrow_string_arrays_to_pd_array(arrays):
     return pd.array(pa.chunked_array(imported), dtype=dtype)
 
 
-def _adopt_arrow_strings(column):
-    return _arrow_string_arrays_to_pd_array(column) if _is_arrow_string_column(column) else column
+def _adapt_string_column(column):
+    if _is_arrow_column(column):
+        return _arrow_string_arrays_to_pd_array(column)
+    if (
+        isinstance(column, np.ndarray)
+        # Object dtype or fixed-width numpy strings
+        and (column.dtype == np.dtype("object") or column.dtype.kind == "U")
+        and _use_python_strings_in_pandas()
+    ):
+        return _object_strings_to_python_str_array(column)
+    return column
 
 
 def _pandas_str_column_to_record_batches(chunked, arr_name) -> List[RecordBatchData]:

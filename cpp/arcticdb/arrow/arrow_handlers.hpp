@@ -31,7 +31,7 @@ struct ArrowStringHandler {
 
     void default_initialize(
             ChunkedBuffer& buffer, size_t offset, size_t byte_size, const DecodePathData& shared_data,
-            std::any& handler_data
+            std::any& handler_data, const ReadOptions& read_options
     ) const;
 };
 
@@ -54,7 +54,7 @@ struct ArrowBoolHandler {
 
     void default_initialize(
             ChunkedBuffer& buffer, size_t offset, size_t byte_size, const DecodePathData& shared_data,
-            std::any& handler_data
+            std::any& handler_data, const ReadOptions& read_options
     ) const;
 };
 
@@ -77,7 +77,7 @@ struct ArrowTimestampHandler {
 
     void default_initialize(
             ChunkedBuffer& buffer, size_t offset, size_t byte_size, const DecodePathData& shared_data,
-            std::any& handler_data
+            std::any& handler_data, const ReadOptions& read_options
     ) const;
 };
 
