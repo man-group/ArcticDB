@@ -241,6 +241,17 @@ struct ColumnData {
             recalculate_enumeration();
         }
 
+        // Construct an ENUMERATED SPARSE iterator pointing at element `in_block_offset` of block `block_pos`, which is
+        // the value of logical row `logical_row`. The caller provides both positions so no rank or select query is
+        // needed.
+        ColumnDataIterator(const ColumnData* parent, size_t block_pos, size_t in_block_offset, ssize_t logical_row)
+        requires(iterator_type == IteratorType::ENUMERATED && iterator_density == IteratorDensity::SPARSE)
+            : parent_(parent), block_pos_(block_pos) {
+            load_current_block();
+            in_block_offset_ = in_block_offset;
+            data_.idx_ = logical_row;
+        }
+
         // Optimized constructor that can skip `load_current_block` if caller already has `block_data` and
         // `block_row_count` Frequently used in search methods.
         ColumnDataIterator(
@@ -446,6 +457,56 @@ struct ColumnData {
         size_t in_block_elem = resolved.offset_ / sizeof(RawType);
         return ColumnDataIterator<TDT, iterator_type, IteratorDensity::DENSE, false>(
                 this, resolved.block_index_, in_block_elem
+        );
+    }
+
+    // Returns a const ENUMERATED SPARSE iterator pointing at the dense_idx-th existing value of the column, which is
+    // the value of logical row logical_row. The caller must provide both, so no rank or select query is done. Passing
+    // the number of existing values as dense_idx returns the end iterator. O(number of blocks).
+    template<typename TDT>
+    ColumnDataIterator<TDT, IteratorType::ENUMERATED, IteratorDensity::SPARSE, true> sparse_iterator_at(
+            size_t dense_idx, ssize_t logical_row
+    ) const {
+        using RawType = typename TDT::DataTypeTag::raw_type;
+        const size_t value_count = data_->bytes() / sizeof(RawType);
+        util::check(
+                dense_idx <= value_count,
+                "ColumnData::sparse_iterator_at: dense index {} out of range for column with {} values",
+                dense_idx,
+                value_count
+        );
+        ARCTICDB_DEBUG_CHECK(
+                ErrorCode::E_ASSERTION_FAILURE,
+                bit_vector_ != nullptr,
+                "ColumnData::sparse_iterator_at called on a column without a sparse map"
+        );
+        if (dense_idx == value_count) {
+            return ColumnDataIterator<TDT, IteratorType::ENUMERATED, IteratorDensity::SPARSE, true>::make_end(this);
+        }
+        ARCTICDB_DEBUG_CHECK(
+                ErrorCode::E_ASSERTION_FAILURE,
+                logical_row >= 0 && bit_vector_->test(static_cast<util::BitSetSizeType>(logical_row)) &&
+                        (logical_row == 0
+                                 ? 0
+                                 : bit_vector_->count_range(0, static_cast<util::BitSetSizeType>(logical_row - 1))) ==
+                                dense_idx,
+                "ColumnData::sparse_iterator_at: logical row {} does not hold the existing value with dense index {}",
+                logical_row,
+                dense_idx
+        );
+        // Blocks with no values are skipped the same way as ColumnDataIterator skips them
+        size_t block_pos = 0;
+        size_t offset_in_block = dense_idx;
+        for (const IMemBlock* block : data_->blocks()) {
+            const size_t values_in_block = block->logical_size() / sizeof(RawType);
+            if (offset_in_block < values_in_block) {
+                break;
+            }
+            offset_in_block -= values_in_block;
+            ++block_pos;
+        }
+        return ColumnDataIterator<TDT, IteratorType::ENUMERATED, IteratorDensity::SPARSE, true>(
+                this, block_pos, offset_in_block, logical_row
         );
     }
 

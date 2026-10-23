@@ -911,17 +911,23 @@ TDT::RawType get_source_value(
     return data.first[row];
 }
 
+/// Decodes one source string. Returns std::nullopt for NA values. row is relative to the processing group and
+/// source_row_offset is the first source row of the group, so a string encoding error reports row +
+/// source_row_offset.
 template<util::scalar_sequence_type SourceTDT, typename T>
 requires(!is_arrow_output_only_type(SourceTDT::data_type()) && util::any_of<std::remove_cvref_t<T>, PyObject*, typename SourceTDT::RawType>)
 std::pair<std::optional<std::string_view>, std::optional<convert::PyStringWrapper>> get_source_string(
         const T& object, const StringPool* pool, size_t row, std::string_view column_name, size_t source_row_offset,
         std::optional<ScopedGILLock>* gil
 ) {
+    if (is_na<SourceTDT>(object)) {
+        return {std::nullopt, std::nullopt};
+    }
     if constexpr (std::same_as<std::remove_cvref_t<T>, PyObject*>) {
         ARCTICDB_DEBUG_CHECK(
                 ErrorCode::E_ASSERTION_FAILURE,
                 pool == nullptr,
-                "String pools are not expected in when extracting string from python object for column {}",
+                "String pools are not expected when extracting string from python object for column {}",
                 column_name
         );
         ARCTICDB_DEBUG_CHECK(
@@ -953,9 +959,6 @@ std::pair<std::optional<std::string_view>, std::optional<convert::PyStringWrappe
                 column_name,
                 SourceTDT::type_descriptor()
         );
-        if (is_na<SourceTDT>(object)) {
-            return {std::nullopt, std::nullopt};
-        }
         return {std::optional{pool->get_const_view(object)}, std::nullopt};
     }
 }
@@ -1137,16 +1140,19 @@ struct MergeUpdateClause {
                 // target rows, there's nothing left to remove.
                 return;
             }
-            ColumnData source_column_data = source.column_->data();
-            using SourceIterator =
-                    decltype(source_column_data.cbegin<SourceTDT, IteratorType::ENUMERATED, IteratorDensity::SPARSE>());
-            const SourceIterator source_end =
+            const ColumnData source_column_data = source.column_->data();
+            const auto source_end =
                     source_column_data.cend<SourceTDT, IteratorType::ENUMERATED, IteratorDensity::SPARSE>();
-            SourceIterator source_range_begin =
-                    source_column_data.cbegin<SourceTDT, IteratorType::ENUMERATED, IteratorDensity::SPARSE>();
-            while (source_range_begin != source_end &&
-                   static_cast<size_t>(source_range_begin->idx()) < source_range.first) {
-                ++source_range_begin;
+            // Position at the first existing source value at or after source_range.first
+            auto source_range_begin = source_end;
+            const util::BitMagic& source_sparse_map = *source_column_data.bit_vector();
+            util::BitSetSizeType first_row_with_value = 0;
+            if (source_sparse_map.find(static_cast<util::BitSetSizeType>(source_range.first), first_row_with_value)) {
+                // The bit at first_row_with_value is set and counted, hence the -1
+                const size_t dense_idx = source_sparse_map.count_range(0, first_row_with_value) - 1;
+                source_range_begin = source_column_data.sparse_iterator_at<SourceTDT>(
+                        dense_idx, static_cast<ssize_t>(first_row_with_value)
+                );
             }
             const size_t source_row_count = source_range.second - source_range.first;
             for (size_t row_slice_idx = 0; row_slice_idx < matched_target_rows_.size(); ++row_slice_idx) {
@@ -1157,7 +1163,7 @@ struct MergeUpdateClause {
                 auto target_accessor = random_accessor<TargetTDT>(&target_col_data);
                 // Points to the first present source value at or after the processed source row. The row has a value
                 // only if the indexes match.
-                SourceIterator source_it = source_range_begin;
+                auto source_it = source_range_begin;
                 for (size_t source_row_idx = 0; source_row_idx < source_row_count; ++source_row_idx) {
                     const size_t source_row = source_row_idx + source_range.first;
                     const bool source_has_value =
@@ -1227,8 +1233,8 @@ struct MergeUpdateClause {
         /// For each row slice, for each target row, keep the source row to update this row
         /// This is the transpose of matched_target_rows_. We don't need both and matched_target_rows_ must be removed.
         std::vector<std::vector<std::optional<size_t>>> source_row_to_update_target_;
-        /// Used to mark which source rows are matched. If the i-th source row is not match the bitmap value will be 0.
-        /// And that row must be inserted (in case the strategy requires insert)
+        /// Used to mark which source rows are matched. If the i-th source row is not matched the bitmap value will be
+        /// 0. And that row must be inserted (in case the strategy requires insert)
         util::BitSet matched_source_rows_;
 
         /// For each row slice, for each source row, store all target rows that match it

@@ -9,7 +9,9 @@
 #pragma once
 
 #include <arcticdb/util/magic_num.hpp>
-#include <arcticdb/util/type_traits.hpp>
+
+#include <concepts>
+#include <type_traits>
 
 #include <bitmagic/bm.h>
 #include <bitmagic/bmalgo.h>
@@ -28,16 +30,15 @@ using BitIndex = bm::bvector<>::rs_index_type;
 namespace detail {
 
 template<typename F>
-concept bitset_visitor_functor = requires(F) {
-    requires std::same_as<typename util::function_arg_types<F>::return_t, void> ||
-                     std::signed_integral<typename util::function_arg_types<F>::return_t>;
-    requires std::invocable<F, size_t>;
-};
+concept bitset_visitor_functor = std::invocable<F, size_t> && (std::is_void_v<std::invoke_result_t<F, size_t>> ||
+                                                               std::signed_integral<std::invoke_result_t<F, size_t>>);
 } // namespace detail
 
+/// Adapts a functor taking the position of a set bit to the BitMagic visitor interface. If the functor returns a signed
+/// integer, a negative value stops the iteration.
 template<detail::bitset_visitor_functor functor>
 struct BitSetVisitor {
-    using functor_return_type = typename util::function_arg_types<functor>::return_t;
+    using functor_return_type = std::invoke_result_t<functor, size_t>;
     functor& f;
     int add_bits(BitSet::size_type off, const unsigned char* bits, unsigned n) {
         for (unsigned i = 0; i < n; ++i) {
@@ -92,7 +93,7 @@ void set_bit_at(uint8_t* packed_bits, size_t bit_pos, bool value);
 void copy_packed_bits(const uint8_t* src, size_t src_bit_offset, size_t num_bits, uint8_t* dest);
 
 template<typename functor>
-requires std::is_invocable_r_v<void, functor, size_t>
+requires util::detail::bitset_visitor_functor<functor>
 void iterate_over_set_positions(const bm::bvector<>& bv, size_t from, size_t to, functor&& f) {
     util::check(to >= from, "Invalid bit set iteration range: from {} to {}", from, to);
     if (from == to) {
@@ -104,7 +105,7 @@ void iterate_over_set_positions(const bm::bvector<>& bv, size_t from, size_t to,
 }
 
 template<typename functor>
-requires std::is_invocable_r_v<void, functor, size_t>
+requires util::detail::bitset_visitor_functor<functor>
 void iterate_over_set_positions(const bm::bvector<>& bv, functor&& f) {
     util::BitSetVisitor visitor{f};
     bm::for_each_bit(bv, visitor);

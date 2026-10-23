@@ -48,6 +48,26 @@ position_t get_string_na_placeholder(const T& value) {
     }
 }
 
+/// String pool of a dense source column passed to update_column. Pandas sources hold PyObject* and have no pool.
+const StringPool* source_string_pool(std::span<PyObject* const>) { return nullptr; }
+
+template<typename RawType>
+const StringPool* source_string_pool(const std::pair<std::span<const RawType>, StringPool*>& source) {
+    return source.second;
+}
+
+/// Adds a source string to new_pool and returns its offset, or returns the NA placeholder if the value is NA.
+/// row is relative to the processing group and first_source_row_in_group is added to it in string encoding errors.
+template<util::scalar_sequence_type SourceTDT, typename T>
+position_t write_source_string_to_pool(
+        const T& source_value, const StringPool* source_pool, size_t row, size_t first_source_row_in_group,
+        std::string_view column_name, StringPool& new_pool, std::optional<ScopedGILLock>* gil
+) {
+    const auto [source_string, owner] =
+            get_source_string<SourceTDT>(source_value, source_pool, row, column_name, first_source_row_in_group, gil);
+    return source_string ? new_pool.get(*source_string).offset() : get_string_na_placeholder(source_value);
+}
+
 struct TargetRange {
     size_t start_row_in_first_row_slice{};
     size_t end_row_in_last_row_slice{};
@@ -205,16 +225,16 @@ struct SourceInterface<SourceTDT, std::pair<std::span<const typename SourceTDT::
 
 template<util::scalar_type_descriptor_tag SourceTDT>
 struct SourceInterface<SourceTDT, ColumnWithStrings> {
-    SourceInterface(ColumnWithStrings column) :
+    explicit SourceInterface(ColumnWithStrings column) :
         column_{std::move(column)},
         column_data_(column_.column_->data()),
         accessor_{random_accessor<SourceTDT>(&column_data_)} {}
+    // accessor_ points into column_data_, so a copy or move would leave it pointing at the original
+    ARCTICDB_NO_MOVE_OR_COPY(SourceInterface)
     ColumnWithStrings column_;
     ColumnData column_data_;
     decltype(random_accessor<SourceTDT>(nullptr)) accessor_;
-    typename SourceTDT::RawType operator[](size_t idx) const {
-        return (*const_cast<decltype(accessor_)*>(&accessor_))[idx];
-    }
+    typename SourceTDT::RawType operator[](size_t idx) const { return accessor_.at(idx); }
     bool has_value_at(position_t row) const { return column_.column_->has_value_at(row); }
     StringPool* string_pool() const { return column_.string_pool_.get(); }
 };
@@ -227,25 +247,6 @@ struct InsertSourceData : SourceInterface<SourceTDT, Source> {
         global_row_range_{global_row_range} {}
     std::span<const timestamp> index_;
     std::pair<size_t, size_t> global_row_range_;
-
-    std::pair<std::optional<std::string_view>, std::optional<convert::PyStringWrapper>> get_string_value(
-            size_t source_row, std::string_view column_name, size_t source_row_offset, std::optional<ScopedGILLock>* gil
-    ) const
-    requires util::scalar_sequence_type<SourceTDT>
-    {
-        ARCTICDB_DEBUG_CHECK(
-                ErrorCode::E_ASSERTION_FAILURE,
-                this->has_value_at(source_row),
-                "Trying to get string value for a row that is sparse"
-        );
-        const auto source_value = (*this)[source_row];
-        if (is_na<SourceTDT>(source_value)) {
-            return {std::nullopt, std::nullopt};
-        }
-        return get_source_string<SourceTDT>(
-                source_value, this->string_pool(), source_row, column_name, source_row_offset, gil
-        );
-    }
 };
 
 template<util::scalar_type_descriptor_tag SourceTDT, typename Source>
@@ -328,8 +329,50 @@ std::vector<std::shared_ptr<Column>> merge_sparse(
     auto target_index_end = target_index_data.end<IndexType>();
 
     ColumnData target_column_data = target.columns[target_row_slice].column_->data();
-    auto target_data = random_accessor<TargetTDT>(&target_column_data);
     size_t target_row_idx = target.range.start_row_in_first_row_slice;
+    // Target rows are visited in order. Sparse target row slices are read with a sparse iterator to avoid a rank query
+    // per row, dense ones with a random accessor.
+    using TargetSparseIterator =
+            decltype(target_column_data.cbegin<TargetTDT, IteratorType::ENUMERATED, IteratorDensity::SPARSE>());
+    std::optional<TargetSparseIterator> target_it;
+    TargetSparseIterator target_end;
+    ColumnDataRandomAccessor<TargetTDT> target_accessor;
+    const auto start_reading_target_row_slice = [&](size_t first_row) {
+        if (target.columns[target_row_slice].column_->is_sparse()) {
+            target_end = target_column_data.cend<TargetTDT, IteratorType::ENUMERATED, IteratorDensity::SPARSE>();
+            // Position at the first existing target value at or after first_row
+            const util::BitMagic& target_sparse_map = *target_column_data.bit_vector();
+            util::BitSetSizeType first_row_with_value = 0;
+            if (target_sparse_map.find(static_cast<util::BitSetSizeType>(first_row), first_row_with_value)) {
+                const size_t dense_idx =
+                        first_row == 0
+                                ? 0
+                                : target_sparse_map.count_range(0, static_cast<util::BitSetSizeType>(first_row - 1));
+                target_it.emplace(target_column_data.sparse_iterator_at<TargetTDT>(
+                        dense_idx, static_cast<ssize_t>(first_row_with_value)
+                ));
+            } else {
+                target_it.emplace(target_end);
+            }
+        } else {
+            target_it.reset();
+            target_accessor = random_accessor<TargetTDT>(&target_column_data);
+        }
+    };
+    start_reading_target_row_slice(target_row_idx);
+    const auto target_value_at = [&](size_t target_row) -> std::optional<typename TargetTDT::DataTypeTag::raw_type> {
+        if (!target_it) {
+            return target_accessor[target_row];
+        }
+        // Rows updated from the source are not read, so the iterator can be several values behind target_row
+        while (*target_it != target_end && static_cast<size_t>((*target_it)->idx()) < target_row) {
+            ++*target_it;
+        }
+        if (*target_it != target_end && static_cast<size_t>((*target_it)->idx()) == target_row) {
+            return (*target_it)->value();
+        }
+        return std::nullopt;
+    };
 
     std::optional<ScopedGILLock> gil;
 
@@ -352,11 +395,12 @@ std::vector<std::shared_ptr<Column>> merge_sparse(
             target_index_data = target.indexes[target_row_slice].column_->data();
             target_index_it = target_index_data.begin<IndexType>();
             target_index_end = target_index_data.end<IndexType>();
-            target_data = random_accessor<TargetTDT>(&target_column_data);
+            start_reading_target_row_slice(0);
             if (target_row_slice == target.columns.size() - 1 &&
                 target.range.end_row_in_last_row_slice !=
                         static_cast<size_t>(target.columns.back().column_->row_count())) [[unlikely]] {
-                target_index_end = std::next(target_index_it, target.range.end_row_in_last_row_slice);
+                target_index_end =
+                        std::next(target_index_it, static_cast<std::ptrdiff_t>(target.range.end_row_in_last_row_slice));
             }
         }
     };
@@ -390,8 +434,13 @@ std::vector<std::shared_ptr<Column>> merge_sparse(
                 if (is_na<SourceTDT>(source_value)) {
                     *new_column_it = get_string_na_placeholder(source_value);
                 } else {
-                    const auto [source_string, _] = source.get_string_value(
-                            source_row, target.columns.front().column_name_, source.global_row_range_.first, &gil
+                    const auto [source_string, _] = get_source_string<SourceTDT>(
+                            source_value,
+                            source.string_pool(),
+                            row_in_index,
+                            target.columns.front().column_name_,
+                            source.global_row_range_.first,
+                            &gil
                     );
                     *new_column_it = target.new_string_pools[new_column_row_slice_index].get(*source_string).offset();
                 }
@@ -406,9 +455,9 @@ std::vector<std::shared_ptr<Column>> merge_sparse(
 
     const auto set_value_from_target = [&](size_t target_row) {
         bool has_value = false;
-        if (target.columns[target_row_slice].column_->has_value_at(static_cast<position_t>(target_row))) {
+        if (const auto target_value = target_value_at(target_row)) {
             if constexpr (util::scalar_sequence_type<TargetTDT>) {
-                const position_t offset = target_data[target_row];
+                const position_t offset = *target_value;
                 if (is_a_string(offset)) {
                     const std::string_view string_data = *target.columns[target_row_slice].string_at_offset(offset);
                     *new_column_it = target.new_string_pools[new_column_row_slice_index].get(string_data).offset();
@@ -416,7 +465,7 @@ std::vector<std::shared_ptr<Column>> merge_sparse(
                     *new_column_it = offset;
                 }
             } else {
-                *new_column_it = target_data[target_row];
+                *new_column_it = *target_value;
             }
             has_value = true;
             ++new_column_it;
@@ -442,7 +491,7 @@ std::vector<std::shared_ptr<Column>> merge_sparse(
 
         // Unlike the dense case this works with the transposed matching. Each target row has an optional source row
         // that updates it. There's a bitmap of matched source rows. If source[i] == 1 the source row is matched.
-        // Oherwise it's not and must be inserted.
+        // Otherwise it's not and must be inserted.
         //
         // TODO: The transposed matching turns out to be easier to work with. Compute only that.
         //
@@ -495,8 +544,8 @@ std::vector<std::shared_ptr<Column>> merge_sparse(
     }
 
     // Not all source rows were processed, copy the rest
-    // TODO: This now copies vaues one by one. It can be optmizied to memcpy the dense part of the source and set the
-    // poper sparse map bits in the output
+    // TODO: This now copies values one by one. It can be optimized to memcpy the dense part of the source and set the
+    // proper sparse map bits in the output
     while (source_row_idx < source.index_.size()) {
         set_value_from_source(source_row_idx);
         advance_output();
@@ -517,9 +566,11 @@ void update_column(
         const bool is_matching_column, [[maybe_unused]] std::string_view column_name, Column& target_column,
         StringPool& new_string_pool
 ) {
+    // When matched rows are updated, the columns used for matching keep the target values
+    const bool keep_target_values = is_matching_column && strategy.update();
     // The target type is checked before the source type because a pandas source never has fixed width strings.
     if constexpr (util::scalar_sequence_type<TargetTDT>) {
-        if (is_matching_column && strategy.update_only()) {
+        if (keep_target_values) {
             // Only move the data to the new string pool.
             rebuild_sequence_column_in_new_pool<TargetTDT>(target_column, old_string_pool, new_string_pool);
             return;
@@ -529,7 +580,7 @@ void update_column(
                     "Fixed string sequences are not supported for merge update"
             );
         }
-    } else if (is_matching_column) {
+    } else if (keep_target_values) {
         return;
     }
     [[maybe_unused]] util::BitSet target_rows_not_matched_by_source = [&]() {
@@ -548,14 +599,15 @@ void update_column(
             for (const size_t target_row_idx : rows_to_update[source_row_idx]) {
                 const auto source_value = get_source_value<SourceTDT>(source, source_row_idx);
                 if constexpr (util::scalar_sequence_type<SourceTDT>) {
-                    if (is_na<SourceTDT>(source_value)) {
-                        target[target_row_idx] = get_string_na_placeholder(source_value);
-                    } else {
-                        auto [source_string, opt_owner] = get_source_string<SourceTDT>(
-                                source, source_row_idx, column_name, source_row_offset, &gil
-                        );
-                        target[target_row_idx] = new_string_pool.get(*source_string).offset();
-                    }
+                    target[target_row_idx] = write_source_string_to_pool<SourceTDT>(
+                            source_value,
+                            source_string_pool(source),
+                            source_row_idx,
+                            source_row_offset,
+                            column_name,
+                            new_string_pool,
+                            &gil
+                    );
                     target_rows_not_matched_by_source.set(target_row_idx, false);
                 } else {
                     target[target_row_idx] = source_value;
@@ -574,21 +626,27 @@ void update_column(
 /// is sparse. The sparse map can change, thus the column cannot be modified in place and the dense data must be
 /// pushed one by one.
 /// @param updated_target_rows For each target row, the row of the source (relative to source_row_offset) updating it
+/// @param source_row_offset Position in source of the first source row of the processing group
+/// @param first_source_row_in_group Row of the whole source that the first row of the processing group corresponds
+/// to. Used only to report rows in errors. Differs from source_row_offset when source is already restricted to the
+/// processing group.
 /// @param target Consumed. Moved into the result if it is a column used for matching and needs no changes.
 template<util::scalar_type_descriptor_tag TargetTDT, util::scalar_type_descriptor_tag SourceTDT, typename Source>
 requires std::same_as<TargetTDT, SourceTDT>
 std::shared_ptr<Column> update_sparse(
-        const StringPool& old_string_pool, const SourceInterface<SourceTDT, Source>& source,
+        const MergeStrategy& strategy, const StringPool& old_string_pool,
+        const SourceInterface<SourceTDT, Source>& source,
         const std::span<const std::optional<size_t>> updated_target_rows, const size_t source_row_offset,
-        const bool is_matching_column, std::string_view column_name, Column&& target, StringPool& new_string_pool
+        const size_t first_source_row_in_group, const bool is_matching_column, std::string_view column_name,
+        Column&& target, StringPool& new_string_pool
 ) {
     if constexpr (is_fixed_string_type(TargetTDT::data_type())) {
         user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
                 "Fixed string sequences are not supported for merge update"
         );
     }
-    if (is_matching_column) {
-        // Columns used for matching have the same values in source and target, there is nothing to update
+    if (is_matching_column && strategy.update()) {
+        // When matched rows are updated, the columns used for matching keep the target values
         if constexpr (util::scalar_sequence_type<TargetTDT>) {
             rebuild_sequence_column_in_new_pool<TargetTDT>(target, old_string_pool, new_string_pool);
         }
@@ -601,7 +659,31 @@ std::shared_ptr<Column> update_sparse(
     auto new_column_it = new_column_data.begin<TargetTDT>();
     util::BitMagic& new_sparse_map = new_column->sparse_map();
     ColumnData target_data = target.data();
-    auto target_accessor = random_accessor<TargetTDT>(&target_data);
+    // Target rows are visited in order. A sparse target is read with a sparse iterator to avoid a rank query per row.
+    using TargetSparseIterator =
+            decltype(target_data.cbegin<TargetTDT, IteratorType::ENUMERATED, IteratorDensity::SPARSE>());
+    std::optional<TargetSparseIterator> target_it;
+    TargetSparseIterator target_end;
+    ColumnDataRandomAccessor<TargetTDT> target_accessor;
+    if (target.is_sparse()) {
+        target_it.emplace(target_data.cbegin<TargetTDT, IteratorType::ENUMERATED, IteratorDensity::SPARSE>());
+        target_end = target_data.cend<TargetTDT, IteratorType::ENUMERATED, IteratorDensity::SPARSE>();
+    } else {
+        target_accessor = random_accessor<TargetTDT>(&target_data);
+    }
+    const auto target_value_at = [&](size_t target_row) -> std::optional<typename TargetTDT::DataTypeTag::raw_type> {
+        if (!target_it) {
+            return target_accessor[target_row];
+        }
+        // Rows updated from the source are not read, so the iterator can be several values behind target_row
+        while (*target_it != target_end && static_cast<size_t>((*target_it)->idx()) < target_row) {
+            ++*target_it;
+        }
+        if (*target_it != target_end && static_cast<size_t>((*target_it)->idx()) == target_row) {
+            return (*target_it)->value();
+        }
+        return std::nullopt;
+    };
     [[maybe_unused]] std::optional<ScopedGILLock> gil;
     for (size_t target_row = 0; target_row < num_rows; ++target_row) {
         bool has_value = false;
@@ -611,27 +693,27 @@ std::shared_ptr<Column> update_sparse(
             if (source.has_value_at(static_cast<position_t>(source_row))) {
                 const auto source_value = source[source_row];
                 if constexpr (util::scalar_sequence_type<SourceTDT>) {
-                    if (is_na<SourceTDT>(source_value)) {
-                        *new_column_it = get_string_na_placeholder(source_value);
-                    } else {
-                        const auto [source_string, _] = get_source_string<SourceTDT>(
-                                source_value, source.string_pool(), source_row, column_name, source_row_offset, &gil
-                        );
-                        *new_column_it = new_string_pool.get(*source_string).offset();
-                    }
+                    *new_column_it = write_source_string_to_pool<SourceTDT>(
+                            source_value,
+                            source.string_pool(),
+                            *maybe_source,
+                            first_source_row_in_group,
+                            column_name,
+                            new_string_pool,
+                            &gil
+                    );
                 } else {
                     *new_column_it = source_value;
                 }
                 has_value = true;
             }
-        } else if (target.has_value_at(static_cast<position_t>(target_row))) {
-            const auto target_value = target_accessor[target_row];
+        } else if (const auto target_value = target_value_at(target_row)) {
             if constexpr (util::scalar_sequence_type<TargetTDT>) {
-                *new_column_it = is_a_string(target_value)
-                                         ? new_string_pool.get(old_string_pool.get_const_view(target_value)).offset()
-                                         : target_value;
+                *new_column_it = is_a_string(*target_value)
+                                         ? new_string_pool.get(old_string_pool.get_const_view(*target_value)).offset()
+                                         : *target_value;
             } else {
-                *new_column_it = target_value;
+                *new_column_it = *target_value;
             }
             has_value = true;
         }
@@ -710,7 +792,8 @@ std::vector<std::shared_ptr<Column>> merge(
             if (target_row_slice == target.columns.size() - 1 &&
                 target.range.end_row_in_last_row_slice !=
                         static_cast<size_t>(target.columns.back().column_->row_count())) [[unlikely]] {
-                target_index_end = std::next(target_index_it, target.range.end_row_in_last_row_slice);
+                target_index_end =
+                        std::next(target_index_it, static_cast<std::ptrdiff_t>(target.range.end_row_in_last_row_slice));
             }
         }
     };
@@ -751,7 +834,7 @@ std::vector<std::shared_ptr<Column>> merge(
                 const auto [source_string, _] = get_source_string<SourceTDT>(
                         source_value,
                         source.string_pool(),
-                        row,
+                        row_in_index,
                         target.columns.front().column_name_,
                         source.global_row_range_.first,
                         &scoped_gil_lock
@@ -774,7 +857,7 @@ std::vector<std::shared_ptr<Column>> merge(
                 const auto [source_string, _] = get_source_string<SourceTDT>(
                         source_value,
                         source.string_pool(),
-                        source_row,
+                        row_in_index,
                         target.columns.front().column_name_,
                         source.global_row_range_.first,
                         &scoped_gil_lock
@@ -789,10 +872,9 @@ std::vector<std::shared_ptr<Column>> merge(
 
     const auto set_value_from_target = [&](size_t target_row) {
         const auto target_value = target_data[target_row];
-        if constexpr (util::scalar_sequence_type<SourceTDT>) {
-            const position_t offset = target_data[target_row];
+        if constexpr (util::scalar_sequence_type<TargetTDT>) {
             if (is_a_string(target_value)) {
-                const std::string_view string_data = *target.columns[target_row_slice].string_at_offset(offset);
+                const std::string_view string_data = *target.columns[target_row_slice].string_at_offset(target_value);
                 *new_column_it = target.new_string_pools[new_column_row_slice_index].get(string_data).offset();
             } else {
                 *new_column_it = target_value;
@@ -1552,38 +1634,33 @@ std::vector<ProcessingUnit> MergeUpdateClause::update_and_insert(
                                                 std::ranges::any_of(target_datas, [](const ColumnWithStrings& col) {
                                                     return col.column_->is_sparse();
                                                 });
-                                        const bool is_source_sparse = is_source_column_sparse(field_idx);
                                         return util::variant_match(
                                                 get_source_column<SourceTDT>(field_idx),
-                                                [&](const auto source) {
-                                                    auto source_insert_data = make_insert_source_data<SourceTDT>(
-                                                            source_index, std::move(source), source_start_end
+                                                [&](const auto& source) -> std::vector<std::shared_ptr<Column>> {
+                                                    constexpr bool is_source_sparse = std::same_as<
+                                                            std::remove_cvref_t<decltype(source)>,
+                                                            ColumnWithStrings>;
+                                                    const auto source_insert_data = make_insert_source_data<SourceTDT>(
+                                                            source_index, source, source_start_end
                                                     );
-                                                    if (is_source_sparse || is_target_sparse) {
-                                                        return merge_sparse<TargetTDT, SourceTDT>(
-                                                                std::move(source_insert_data),
-                                                                target_data,
-                                                                match_record,
-                                                                strategy,
-                                                                reslicing_info
-                                                        );
+                                                    if constexpr (!is_source_sparse) {
+                                                        if (!is_target_sparse) {
+                                                            return merge<TargetTDT, SourceTDT>(
+                                                                    source_insert_data,
+                                                                    target_data,
+                                                                    match_record,
+                                                                    strategy,
+                                                                    reslicing_info
+                                                            );
+                                                        }
                                                     }
-                                                    if constexpr (!std::same_as<
-                                                                          std::remove_cvref_t<decltype(source)>,
-                                                                          ColumnWithStrings>) {
-                                                        return merge<TargetTDT, SourceTDT>(
-                                                                std::move(source_insert_data),
-                                                                target_data,
-                                                                match_record,
-                                                                strategy,
-                                                                reslicing_info
-                                                        );
-                                                    } else {
-                                                        internal::raise<ErrorCode::E_ASSERTION_FAILURE>(
-                                                                "Calling dense merge update with potentially sparse "
-                                                                "column"
-                                                        );
-                                                    }
+                                                    return merge_sparse<TargetTDT, SourceTDT>(
+                                                            source_insert_data,
+                                                            target_data,
+                                                            match_record,
+                                                            strategy,
+                                                            reslicing_info
+                                                    );
                                                 }
                                         );
                                     } else {
@@ -1626,6 +1703,11 @@ std::vector<ProcessingUnit> MergeUpdateClause::update(
         const MatchRecord& match_record, std::vector<ProcessingUnit>&& row_slices,
         std::pair<size_t, size_t> source_start_end
 ) const {
+    ARCTICDB_DEBUG_CHECK(
+            ErrorCode::E_ASSERTION_FAILURE,
+            strategy_.update(),
+            "MergeUpdateClause::update must only be called for strategies that update matched rows"
+    );
     std::vector<ProcessingUnit> result;
     const StreamDescriptor& source_descriptor = *get_source_descriptor();
     for (size_t i = 0; i < row_slices.size(); ++i) {
@@ -1680,10 +1762,12 @@ std::vector<ProcessingUnit> MergeUpdateClause::update(
                                                             is_source_sparse ? source_start_end.first : 0;
                                                     target_segment.columns()[column_index_in_slice] =
                                                             update_sparse<TargetTDT, SourceTDT>(
+                                                                    strategy_,
                                                                     target_segment.string_pool(),
                                                                     SourceInterface<SourceTDT, SourceData>{source_data},
                                                                     match_record.source_rows_to_update_target(i),
                                                                     source_offset,
+                                                                    source_start_end.first,
                                                                     on_set_.contains(target_field.name()),
                                                                     target_field.name(),
                                                                     std::move(target_column),
@@ -1809,14 +1893,14 @@ MergeUpdateClause::MatchRecord MergeUpdateClause::filter_on_additional_columns_m
                               !is_arrow_output_only_type(SourceTDT::data_type())) {
                     util::variant_match(
                             get_source_column<SourceTDT>(source_field_position, source_range),
-                            [&](ColumnWithStrings col) {
+                            [&](const ColumnWithStrings& col) {
                                 matched_rows.filter_matching_rows_sparse<TargetTDT, SourceTDT>(
-                                        column_name, std::move(col), strategy_.match_na, source_range
+                                        target_field.name(), col, strategy_.match_na, source_range
                                 );
                             },
-                            [&](auto col) {
+                            [&](const auto& col) {
                                 matched_rows.filter_matching_rows<TargetTDT, SourceTDT>(
-                                        target_field.name(), source_range.first, std::move(col), strategy_.match_na
+                                        target_field.name(), source_range.first, col, strategy_.match_na
                                 );
                             }
                     );

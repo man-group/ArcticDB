@@ -3281,7 +3281,7 @@ class TestMergeRowrangeInsert:
         expected = pd.DataFrame({"a": [1, 7, 7], "b": [1.0, 70.0, 71.0]})
         assert_frame_equal(lib.read("sym").data, expected)
 
-    def test_string_columns_inserted(self, request, lmdb_library, source_format):
+    def test_string_columns_inserted(self, lmdb_library, source_format):
         lib = lmdb_library
         target = pd.DataFrame({"a": [1, 2], "s": ["x", "y"]})
         # Non-ASCII string exercises the GIL/string-pool path in build_row_range_insert_segments.
@@ -4946,7 +4946,7 @@ class TestMergeMultiindexInsert:
         run_merge(lib, source_format, "sym", source, strategy=strategy, on=["a"])
         assert_frame_equal(lib.read("sym").data, expected)
 
-    def test_string_secondary_level_insert(self, request, lmdb_library, source_format):
+    def test_string_secondary_level_insert(self, lmdb_library, source_format):
         lib = lmdb_library
         strategy = MergeStrategy(MergeAction.DO_NOTHING, MergeAction.INSERT)
         index_names = ["ts", "s"]
@@ -5067,7 +5067,7 @@ class TestMergeMultiindexInsert:
     ids=["datetime", "rowrange"],
 )
 def test_match_on_float_nan(
-    request, lmdb_library, match_na, target, source, expected_match_na_true, expected_match_na_false, source_format
+    lmdb_library, match_na, target, source, expected_match_na_true, expected_match_na_false, source_format
 ):
     lib = lmdb_library
     strategy = MergeStrategy(MergeAction.UPDATE, MergeAction.DO_NOTHING)
@@ -5114,7 +5114,6 @@ def test_match_on_float_nan(
     ids=["datetime", "rowrange"],
 )
 def test_match_on_string_none_nan(
-    request,
     lmdb_version_store_v1,
     match_na,
     target,
@@ -5201,7 +5200,7 @@ def test_multiple_source_rows_match_via_missing(request, lmdb_library, match_na,
     ids=["datetime", "rowrange"],
 )
 def test_match_on_datetime_nat(
-    request, lmdb_library, match_na, target, source, expected_match_na_true, expected_match_na_false, source_format
+    lmdb_library, match_na, target, source, expected_match_na_true, expected_match_na_false, source_format
 ):
     lib = lmdb_library
     strategy = MergeStrategy(MergeAction.UPDATE, MergeAction.DO_NOTHING)
@@ -5241,7 +5240,7 @@ def test_match_on_datetime_nat(
     ],
     ids=["datetime", "rowrange"],
 )
-def test_unmatched_nan_source_rows_inserted_default(request, lmdb_library, target, source, expected, source_format):
+def test_unmatched_nan_source_rows_inserted_default(lmdb_library, target, source, expected, source_format):
     lib = lmdb_library
     strategy = MergeStrategy(MergeAction.UPDATE, MergeAction.INSERT)
     lib.write("sym", target)
@@ -5455,30 +5454,13 @@ def test_timeseries_insert_sparse_target_pandas_source(lmdb_library):
 
 
 @arrow_format_param
-def test_timeseries_insert_sparse_target(lmdb_library, arrow_format):
-    """merge_sparse with both the target and the source sparse."""
-    lib = lmdb_library
-    target = pa.table({"ts": ts(1, 3, 5), "a": pa.array([1.0, None, 3.0]), "s": pa.array(["a", None, "c"])})
-    write_arrow(lib, "sym", target, arrow_format, index_column=True)
-    source = pa.table({"ts": ts(1, 2, 4), "a": pa.array([None, 20.0, 30.0]), "s": pa.array(["u", None, "w"])})
-    merge_arrow(lib, "sym", source, arrow_format, index_column=True, strategy=MergeStrategy("update", "insert"))
-    expected = pa.table(
-        {
-            "ts": ts(1, 2, 3, 4, 5),
-            "a": pa.array([None, 20.0, None, 30.0, 3.0]),
-            "s": pa.array(["u", None, None, "w", "c"]),
-        }
-    )
-    assert_arrow_result(lib, "sym", expected)
-
-
-@arrow_format_param
 @pytest.mark.parametrize("index_type", ["datetime", "rowrange"])
-def test_update_sparse_source_non_on_column(lmdb_library, arrow_format, index_type):
+@pytest.mark.parametrize("rows_per_segment", [100_000, 2])
+def test_update_sparse_source_non_on_column(lmdb_library_factory, arrow_format, index_type, rows_per_segment):
     """update_sparse with a sparse source: a matched missing value makes the target missing, unmatched target rows are
-    copied.
+    copied. With two rows per segment, the matched null and the matched value fall in different processing groups.
     """
-    lib = lmdb_library
+    lib = lmdb_library_factory(arcticdb.LibraryOptions(rows_per_segment=rows_per_segment))
     datetime_index = index_type == "datetime"
     target = {"a": pa.array([1, 2, 3]), "b": pa.array([1.0, 2.0, 3.0])}
     # The matched null source value makes the target missing, the unmatched target row keeps its value
@@ -5510,17 +5492,6 @@ def test_update_sparse_target_pandas_source(lmdb_library):
     write_arrow(lib, "sym", target, SourceFormat.ARROW, index_column=True)
     source = pd.DataFrame({"b": [20]}, index=pd.DatetimeIndex(["2024-01-02"], name="ts"))
     lib.merge("sym", source, strategy=MergeStrategy("update", "do_nothing"))
-    assert_arrow_result(lib, "sym", pa.table({"ts": ts(1, 2, 3), "b": pa.array([1, 20, 3])}))
-
-
-@arrow_format_param
-def test_update_sparse_target_becomes_dense(lmdb_library, arrow_format):
-    """update_sparse with a sparse target: updating the only missing value makes the column fully dense."""
-    lib = lmdb_library
-    target = pa.table({"ts": ts(1, 2, 3), "b": pa.array([1, None, 3])})
-    write_arrow(lib, "sym", target, arrow_format, index_column=True)
-    source = pa.table({"ts": ts(2), "b": pa.array([20])})
-    merge_arrow(lib, "sym", source, arrow_format, index_column=True, strategy=MergeStrategy("update", "do_nothing"))
     assert_arrow_result(lib, "sym", pa.table({"ts": ts(1, 2, 3), "b": pa.array([1, 20, 3])}))
 
 
@@ -5558,7 +5529,7 @@ def test_update_sparse_strings(lmdb_library, arrow_format):
     ids=["float", "string"],
 )
 def test_match_on_sparse_target(lmdb_library, arrow_format, match_na, target_values, source_values):
-    """filter_matching_rows with a sparse target: a missing target value is equivalent to NA."""
+    """filter_matching_rows_sparse with a sparse target and a sparse source: a missing value is equivalent to NA."""
     lib = lmdb_library
     target = pa.table({"ts": ts(1, 2, 3), "a": target_values, "b": pa.array([1, 2, 3])})
     write_arrow(lib, "sym", target, arrow_format, index_column=True)
@@ -5578,18 +5549,23 @@ def test_match_on_sparse_target(lmdb_library, arrow_format, match_na, target_val
     assert_arrow_result(lib, "sym", pa.table({"ts": ts(1, 2, 3), "a": target_values, "b": pa.array(expected_b)}))
 
 
-def test_match_on_sparse_target_pandas_source(lmdb_library):
-    """filter_matching_rows with a sparse target and a dense pandas source: a missing target value matches NaN."""
+@pytest.mark.parametrize(
+    "target_values, source_values",
+    [(pa.array([1.0, None, 3.0]), [np.nan, 3.0]), (pa.array(["x", None, "z"]), [None, "z"])],
+    ids=["float", "string"],
+)
+def test_match_on_sparse_target_pandas_source(lmdb_library, target_values, source_values):
+    """filter_matching_rows with a sparse target and a dense pandas source: a missing target value matches the NA
+    source value.
+    """
     lib = lmdb_library
-    target = pa.table({"ts": ts(1, 2, 3), "a": pa.array([1.0, None, 3.0]), "b": pa.array([1, 2, 3])})
+    target = pa.table({"ts": ts(1, 2, 3), "a": target_values, "b": pa.array([1, 2, 3])})
     write_arrow(lib, "sym", target, SourceFormat.ARROW, index_column=True)
     source = pd.DataFrame(
-        {"a": [np.nan, 3.0], "b": [20, 30]}, index=pd.DatetimeIndex(["2024-01-02", "2024-01-03"], name="ts")
+        {"a": source_values, "b": [20, 30]}, index=pd.DatetimeIndex(["2024-01-02", "2024-01-03"], name="ts")
     )
     lib.merge("sym", source, strategy=MergeStrategy("update", "do_nothing"), on=["a"], match_na=True)
-    assert_arrow_result(
-        lib, "sym", pa.table({"ts": ts(1, 2, 3), "a": pa.array([1.0, None, 3.0]), "b": pa.array([1, 20, 30])})
-    )
+    assert_arrow_result(lib, "sym", pa.table({"ts": ts(1, 2, 3), "a": target_values, "b": pa.array([1, 20, 30])}))
 
 
 @arrow_format_param
@@ -5600,8 +5576,11 @@ def test_match_on_sparse_target_pandas_source(lmdb_library):
     [
         (pa.array([1.0, None, 3.0, None]), pa.array([None, 3.0, 4.0])),
         (pa.array(["x", None, "z", None]), pa.array([None, "z", "w"])),
+        # The last source value equals the last present target value, which must not match the missing target row
+        (pa.array([1, None, 3, None]), pa.array([None, 3, 3])),
+        (pa.array([True, None, False, None]), pa.array([None, False, False])),
     ],
-    ids=["float", "string"],
+    ids=["float", "string", "int64", "bool"],
 )
 def test_match_sparse_source_second_on_column(
     lmdb_library, arrow_format, match_na, index_type, target_values, source_values
@@ -5740,6 +5719,59 @@ def test_rowrange_match_on_nullable_int_and_bool(lmdb_library, arrow_format, mat
 
 
 @arrow_format_param
+@pytest.mark.parametrize("match_na", [True, False], ids=["match_na_true", "match_na_false"])
+@pytest.mark.parametrize("index_type", ["datetime", "rowrange"])
+def test_match_nan_against_missing(lmdb_library, arrow_format, match_na, index_type):
+    """A NaN and a missing value are both NA, so they match each other only if match_na is true."""
+    lib = lmdb_library
+    datetime_index = index_type == "datetime"
+    # The source swaps the target's NaN and missing value
+    target = {"k": pa.array([1, 2, 3, 4]), "a": pa.array([1.0, np.nan, None, 4.0]), "b": pa.array([1, 2, 3, 4])}
+    source = {"k": pa.array([2, 3]), "a": pa.array([None, np.nan]), "b": pa.array([20, 30])}
+    expected = {**target, "b": pa.array([1, 20, 30, 4] if match_na else [1, 2, 3, 4])}
+    if datetime_index:
+        target = {"ts": ts(1, 2, 3, 4), **target}
+        source = {"ts": ts(2, 3), **source}
+        expected = {"ts": ts(1, 2, 3, 4), **expected}
+    write_arrow(lib, "sym", pa.table(target), arrow_format, index_column=datetime_index)
+    merge_arrow(
+        lib,
+        "sym",
+        pa.table(source),
+        arrow_format,
+        index_column=datetime_index,
+        strategy=MergeStrategy("update", "do_nothing"),
+        on=["k", "a"],
+        match_na=match_na,
+    )
+    assert_arrow_result(lib, "sym", pa.table(expected))
+
+
+@arrow_format_param
+@pytest.mark.parametrize("match_na", [True, False], ids=["match_na_true", "match_na_false"])
+@pytest.mark.parametrize("index_type", ["datetime", "rowrange"])
+def test_multiple_sparse_source_rows_match_via_missing(lmdb_library, arrow_format, match_na, index_type):
+    """Two missing source values both match a missing target value if match_na is true, which is rejected."""
+    lib = lmdb_library
+    datetime_index = index_type == "datetime"
+    target = {"a": pa.array([None, "x", "y"]), "b": pa.array([1.0, 2.0, 3.0])}
+    source = {"a": pa.array([None, None], type=pa.string()), "b": pa.array([10.0, 20.0])}
+    if datetime_index:
+        target = {"ts": ts(1, 2, 3), **target}
+        source = {"ts": ts(1, 1), **source}
+    write_arrow(lib, "sym", pa.table(target), arrow_format, index_column=datetime_index)
+    merge_kwargs = dict(
+        index_column=datetime_index, strategy=MergeStrategy("update", "do_nothing"), on=["a"], match_na=match_na
+    )
+    if match_na:
+        with pytest.raises(UserInputException, match="Multiple source rows match the same target row"):
+            merge_arrow(lib, "sym", pa.table(source), arrow_format, **merge_kwargs)
+    else:
+        merge_arrow(lib, "sym", pa.table(source), arrow_format, **merge_kwargs)
+        assert_arrow_result(lib, "sym", pa.table(target))
+
+
+@arrow_format_param
 def test_rowrange_insert_sparse_source_all_inserted_present(lmdb_library, arrow_format):
     """create_segment_for_merge_update_row_range_insert with a sparse source whose inserted rows are all present."""
     lib = lmdb_library
@@ -5784,3 +5816,51 @@ def test_rowrange_insert_sparse_source_row_and_column_slicing(lmdb_library_facto
     lt = lib._dev_tools.library_tool()
     # The target row slice plus two inserted row slices, each in two column slices
     assert len(lt.find_keys_for_symbol(KeyType.TABLE_DATA, "sym")) == 6
+
+
+@pytest.mark.parametrize("sparse_target", [False, True], ids=["dense_target", "sparse_target"])
+@pytest.mark.parametrize(
+    "strategy",
+    [MergeStrategy("update", "do_nothing"), MergeStrategy("update", "insert")],
+    ids=["update", "update_insert"],
+)
+def test_string_encoding_error_reports_source_row(lmdb_library_factory, sparse_target, strategy):
+    """The string encoding error reports the row of the whole source, also when the row falls in a processing group
+    other than the first one.
+    """
+    lib = lmdb_library_factory(arcticdb.LibraryOptions(rows_per_segment=2))
+    if sparse_target:
+        target = pa.table({"ts": ts(1, 2, 3, 4, 5, 6), "s": pa.array([None, "b", None, "d", None, "f"])})
+        write_arrow(lib, "sym", target, SourceFormat.ARROW, index_column=True)
+    else:
+        lib.write(
+            "sym",
+            pd.DataFrame(
+                {"s": ["a", "b", "c", "d", "e", "f"]}, index=pd.date_range("2024-01-01", periods=6, name="ts")
+            ),
+        )
+    # A lone surrogate cannot be encoded as UTF-8. Source row 3 falls in the second row slice.
+    bad_string = b"\xff\xfe".decode("utf-8", "surrogateescape")
+    source = pd.DataFrame({"s": ["A", "B", "C", bad_string]}, index=pd.date_range("2024-01-01", periods=4, name="ts"))
+    with pytest.raises(UserInputException, match="row 3,"):
+        lib.merge("sym", source, strategy=strategy)
+
+
+@pytest.mark.parametrize("sparse_target", [False, True], ids=["dense_target", "sparse_target"])
+def test_rowrange_update_insert_keeps_matching_string_column(lmdb_library, sparse_target):
+    """The columns used for matching keep the target values when matched rows are updated. With match_na=True the
+    source NaN matches the target's missing value, which must not be overwritten.
+    """
+    lib = lmdb_library
+    if sparse_target:
+        write_arrow(
+            lib, "sym", pa.table({"k": pa.array(["x", None]), "v": pa.array([1, 2])}), SourceFormat.ARROW, False
+        )
+    else:
+        lib.write("sym", pd.DataFrame({"k": ["x", None], "v": [1, 2]}))
+    source = pd.DataFrame({"k": [np.nan, "q"], "v": [20, 30]})
+    lib.merge("sym", source, strategy=MergeStrategy("update", "insert"), on=["k"], match_na=True)
+    result = lib.read("sym").data
+    assert_frame_equal(result, pd.DataFrame({"k": ["x", None, "q"], "v": [1, 20, 30]}))
+    # assert_frame_equal treats None and NaN as equal, so check that the target's None was not replaced by NaN
+    assert result["k"][1] is None

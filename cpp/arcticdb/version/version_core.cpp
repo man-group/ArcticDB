@@ -533,7 +533,6 @@ SegmentInMemory create_segment_for_merge_update_row_range_insert(
                     [&](const SegmentInMemory& source) {
                         const Column& source_column = source.column(static_cast<position_t>(source_field_pos));
                         ColumnData source_column_data = source_column.data();
-                        auto source_data = random_accessor<TDT>(&source_column_data);
                         if (source_column.is_sparse()) {
                             // Only the present values are written to the dense buffer, the rest are marked as missing.
                             // A single block is allocated for the worst case and trimmed at the end.
@@ -545,15 +544,38 @@ SegmentInMemory create_segment_for_merge_update_row_range_insert(
                             auto sparse_data_it = new_column_data.begin<TDT>();
                             util::BitMagic& sparse_map = new_column->sparse_map();
                             size_t output_row = 0;
+                            // The source rows are visited in order, so the values are read with a sparse iterator to
+                            // avoid a rank query per row. It starts at the first existing value at or after the first
+                            // candidate row.
+                            const auto source_end =
+                                    source_column_data.cend<TDT, IteratorType::ENUMERATED, IteratorDensity::SPARSE>();
+                            auto source_it = source_end;
+                            const util::BitMagic& source_sparse_map = *source_column_data.bit_vector();
+                            const auto first_candidate_row =
+                                    static_cast<util::BitSetSizeType>(insert_info.candidate_source_rows.first);
+                            util::BitSetSizeType first_row_with_value = 0;
+                            if (source_sparse_map.find(first_candidate_row, first_row_with_value)) {
+                                // The bit at first_row_with_value is set and counted, hence the -1
+                                const size_t dense_idx = source_sparse_map.count_range(0, first_row_with_value) - 1;
+                                source_it = source_column_data.sparse_iterator_at<TDT>(
+                                        dense_idx, static_cast<ssize_t>(first_row_with_value)
+                                );
+                            }
                             iterate_over_set_positions(
                                     source_rows_to_insert,
                                     insert_info.candidate_source_rows.first,
                                     insert_info.candidate_source_rows.second,
                                     [&](size_t source_row) {
-                                        const bool has_value =
-                                                source_column.has_value_at(static_cast<position_t>(source_row));
+                                        // Rows that are not inserted are not read, so the iterator can be several
+                                        // values behind source_row
+                                        while (source_it != source_end &&
+                                               static_cast<size_t>(source_it->idx()) < source_row) {
+                                            ++source_it;
+                                        }
+                                        const bool has_value = source_it != source_end &&
+                                                               static_cast<size_t>(source_it->idx()) == source_row;
                                         if (has_value) {
-                                            const auto value = source_data.at(source_row);
+                                            const auto value = source_it->value();
                                             if constexpr (is_sequence_type(TDT::data_type())) {
                                                 *sparse_data_it = is_a_string(value)
                                                                           ? new_segment.string_pool()
@@ -577,6 +599,7 @@ SegmentInMemory create_segment_for_merge_update_row_range_insert(
                             new_segment.columns()[column_in_segment] = std::move(new_column);
                             return;
                         }
+                        auto source_data = random_accessor<TDT>(&source_column_data);
                         for_each_row_to_insert([&](size_t source_row) {
                             const auto value = source_data.at(source_row);
                             if constexpr (is_sequence_type(TDT::data_type())) {
