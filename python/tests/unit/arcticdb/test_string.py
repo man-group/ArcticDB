@@ -171,6 +171,19 @@ def test_write_fixed_coerce_dynamic(lmdb_version_store):
     assert_frame_equal(df, vit.data)
 
 
+@pytest.mark.skipif(platform.system() == "Windows", reason="We do not support fixed-width strings on Windows")
+def test_fixed_width_string_storage_roundtrips_dataframe(lmdb_version_store):
+    values = np.array(["a", "bb"], dtype="U")
+    with arrow_string_read(False):
+        frame = pd.DataFrame({"c": values})
+        assert frame["c"].to_numpy().dtype == np.dtype("object")
+        lmdb_version_store.write("s", frame, dynamic_strings=False)
+        assert lmdb_version_store.get_info("s")["dtype"][0].data_type() == DataType.UTF_FIXED64
+        received = lmdb_version_store.read("s").data
+    assert_frame_equal(frame, received)
+    assert received["c"].to_numpy().dtype == frame["c"].to_numpy().dtype
+
+
 def test_string_encoding_error_message(lmdb_version_store_tiny_segment):
     lib = lmdb_version_store_tiny_segment
 
@@ -411,37 +424,37 @@ def test_read_ascii_bytes_stays_object_without_arrow(lmdb_version_store_v2, monk
 
 @_requires_str_dtype
 @pytest.mark.parametrize("skip_consolidation", [False, True])
-def test_read_backfilled_python_str_without_arrow(version_store_factory, monkeypatch, skip_consolidation):
+@pytest.mark.parametrize(
+    "emptyval_column",
+    [
+        pytest.param(False, id="absent-column"),
+        pytest.param(True, id="EMPTYVAL-column", marks=(pytest.mark.empty_types, pytest.mark.encoding_v2)),
+    ],
+)
+def test_read_backfilled_python_str_without_arrow(
+    version_store_factory, request, monkeypatch, skip_consolidation, emptyval_column
+):
     monkeypatch.setattr(string_dtype, "_ARROW_BACKED_STR_DTYPE_SUPPORTED", False)
-    lib = version_store_factory(dynamic_schema=True, dynamic_strings=True)
+    lib = (
+        request.getfixturevalue("lmdb_version_store_empty_types_dynamic_schema_v2")
+        if emptyval_column
+        else version_store_factory(dynamic_schema=True, dynamic_strings=True)
+    )
     lib._normalizer.df._skip_df_consolidation = skip_consolidation
-    lib.write("s", pd.DataFrame({"v": [1, 2]}))
-    lib.append("s", pd.DataFrame({"v": [3, 4], "text": ["a", None]}))
+    initial = {"text": [None, None]} if emptyval_column else {"v": [1, 2]}
+    appended = {"text": ["a", "b"]} if emptyval_column else {"v": [3, 4], "text": ["a", None]}
+    lib.write("s", pd.DataFrame(initial))
+    lib.append("s", pd.DataFrame(appended))
     with pd.option_context("future.infer_string", True, "mode.string_storage", "python"):
         received = lib.read("s").data["text"]
     assert received.dtype == pd.StringDtype(storage="python", na_value=np.nan)
     assert received.iloc[2] == "a"
-    assert received.isna().tolist() == [True, True, False, True]
-    assert all(value is not None for value in received.array._ndarray)
-
-
-@_requires_str_dtype
-def test_read_empty_then_string_as_python_str_without_arrow(
-    lmdb_version_store_empty_types_dynamic_schema_v2, monkeypatch
-):
-    monkeypatch.setattr(string_dtype, "_ARROW_BACKED_STR_DTYPE_SUPPORTED", False)
-    lib = lmdb_version_store_empty_types_dynamic_schema_v2
-    lib._normalizer.df._skip_df_consolidation = True
-    lib.write("s", pd.DataFrame({"text": [None, None]}))
-    lib.append("s", pd.DataFrame({"text": ["a", "b"]}))
-
-    with pd.option_context("future.infer_string", True, "mode.string_storage", "python"):
-        received = lib.read("s").data["text"]
-
-    assert received.dtype == pd.StringDtype(storage="python", na_value=np.nan)
-    assert received.array._ndarray[2:].tolist() == ["a", "b"]
+    if emptyval_column:
+        assert received.iloc[3] == "b"
+    missing_positions = (0, 1) if emptyval_column else (0, 1, 3)
     assert all(
-        isinstance(value, float) and np.isnan(value) for value in received.array._ndarray[:2]
+        isinstance(received.array._ndarray[i], float) and np.isnan(received.array._ndarray[i])
+        for i in missing_positions
     ), received.array._ndarray.tolist()
 
 
@@ -571,7 +584,8 @@ def test_str_dtype_append_across_write_routes(lmdb_version_store_v2, read_string
         col = lib.read("s").data["c"]
     assert list(col.iloc[[0, 2, 4]]) == ["a", "b", "c"]
     for i in (1, 3, 5):
-        if i == 5 and not read_string_dtype:
+        # Python string dtype's missing values always get converted to NaN
+        if i == 5:
             assert np.isnan(col.iloc[i])
         else:
             assert_null_string(col.iloc[i], read_string_dtype)
