@@ -706,8 +706,6 @@ class ArrowNormalizationOperations(NamedTuple):
 
     Attributes
     ----------
-    renames_for_table : Mapping[int, str]
-        Column renames coming from normalization metadata to be applied to the pyarrow table. E.g. index names
     range_index: Optional[Dict[str, Any]]
         Range index details to place in pandas_metadata
     pandas_indexes: Optional[int]
@@ -716,7 +714,6 @@ class ArrowNormalizationOperations(NamedTuple):
         Column renames which can only be applied to pandas_metadata. E.g. renaming a column to an int
     """
 
-    renames_for_table: Mapping[int, str]
     range_index: Optional[Dict[str, Any]]
     pandas_indexes: Optional[int]
     renames_for_pandas_metadata: Mapping[int, Union[int, str, None]]
@@ -792,29 +789,10 @@ class ArrowTableNormalizer(Normalizer):
 
     def apply_pyarrow_operations(self, table, op: ArrowNormalizationOperations):
         # type: (pa.Table, ArrowNormalizationOperations) -> pa.Table
-        if (
-            len(op.renames_for_table) == 0
-            and op.range_index is None
-            and op.pandas_indexes == 0
-            and len(op.renames_for_pandas_metadata) == 0
-        ):
+        if op.range_index is None and op.pandas_indexes == 0 and len(op.renames_for_pandas_metadata) == 0:
             return table
-
-        new_columns = []
-        new_fields = []
-
-        for i, col in enumerate(table.columns):
-            field = table.field(i)
-            if i in op.renames_for_table:
-                field = field.with_name(op.renames_for_table[i])
-            new_columns.append(col)
-            new_fields.append(field)
-
-        pandas_metadata = self.construct_pandas_metadata(new_fields, op)
-
-        return pa.Table.from_arrays(
-            new_columns, schema=pa.schema(new_fields).with_metadata({b"pandas": json.dumps(pandas_metadata)})
-        )
+        pandas_metadata = self.construct_pandas_metadata(list(table.schema), op)
+        return table.replace_schema_metadata({b"pandas": json.dumps(pandas_metadata)})
 
     def normalize(self, arrow_structure, **kwargs):
         norm_metadata = NormalizationMetadata()
@@ -868,157 +846,47 @@ class ArrowTableNormalizer(Normalizer):
 
     def _apply_embedded_pandas_schema_changes(self, item, pandas_meta, arrow_meta):
         # type: (pa.Table, NormalizationMetadata.Pandas, NormalizationMetadata.Arrow) -> pa.Table
-        """Rename columns and attach pandas schema metadata so that ``to_pandas()`` reproduces the written frame."""
+        """Attach pandas schema metadata so that ``to_pandas()`` reproduces the written frame.
 
-        # A lot of this logic also has a C++ implementation for the rename_columns_arrow_compat method. The main
-        # differences are that the C++ implementation allows users to specify index column names, whereas here it is
-        # always automatic, and that the Python implementation builds up the necessary metadata for pa.Table.to_pandas()
-        # to restore the original index/column names. Combining them is therefore painful, and would also involve
-        # round-tripping the protobuf back through the C++ layer.
-        unnamed_series = (
-            arrow_meta.WhichOneof("pandas_input_type") == "series" and not pandas_meta.has_name and not pandas_meta.name
-        )
-
-        def num_pandas_index_cols(pandas_meta):
-            index_type = pandas_meta.WhichOneof("index_type")
-            if index_type == "index":
-                index_meta = pandas_meta.index
-                # Empty tables don't have `is_physically_stored=True` but we still output them with an empty DateTimeIndex.
-                is_empty_table_with_datetime_index = len(item) == 0 and not index_meta.step
-                if arrow_meta.has_index or index_meta.is_physically_stored or is_empty_table_with_datetime_index:
-                    return 1
-                else:
-                    return 0
-            else:
-                return pandas_meta.multi_index.field_count + 1
-
-        def generate_original_column_names():
-            res = set()
-            if pandas_indexes == 1:
-                index_meta = pandas_meta.index
-                if not index_meta.fake_name:
-                    res.add(index_meta.name)
-            elif pandas_indexes > 1:
-                multi_index_meta = pandas_meta.multi_index
-                fake_field_pos = set(multi_index_meta.fake_field_pos)
-                for index_col_idx in range(pandas_indexes):
-                    if index_col_idx not in fake_field_pos:
-                        if index_col_idx == 0:
-                            res.add(multi_index_meta.name)
-                        else:
-                            res.add(item.column_names[index_col_idx][_IDX_PREFIX_LEN:])
-
-            # Non-index columns
-            for col in item.column_names[pandas_indexes:]:
-                if unnamed_series:
-                    res.add("")
-                elif col in pandas_meta.col_names:
-                    col_data = pandas_meta.col_names[col]
-                    if col_data.original_name != col:
-                        res.add(col_data.original_name)
-                    else:
-                        res.add(col)
-                else:
-                    res.add(col)
-            return res
-
-        renames_for_table = {}
-        range_index = None
-        pandas_indexes = num_pandas_index_cols(pandas_meta)
-        renames_for_pandas_metadata = {}
-
-        # This is needed so that we can give unnamed indexes new names that do not clash with existing column names
-        original_column_names = generate_original_column_names()
-
-        # Track which column names we have used so far. When a clash is found, prepend and append underscore characters
-        # until the column name is unique
-        taken_col_names = set()
-
+        The C++ layer has already renamed the columns, and keyed ``col_names`` by the new names.
+        """
         index_type = pandas_meta.WhichOneof("index_type")
+        range_index = None
         if index_type == "index":
             index_meta = pandas_meta.index
+            # Empty tables don't have `is_physically_stored=True` but we still output them with an empty DateTimeIndex.
+            is_empty_table_with_datetime_index = len(item) == 0 and not index_meta.step
+            if arrow_meta.has_index or index_meta.is_physically_stored or is_empty_table_with_datetime_index:
+                pandas_indexes = 1
+            else:
+                pandas_indexes = 0
             # Old arcticc tick streaming data does not populate `is_physically_stored` field and considers an index
             # physically stored if `step==0`
-            if index_meta.is_physically_stored or not index_meta.step:
-                if index_meta.fake_name:
-                    renames_for_pandas_metadata[0] = None
-                    new_name = "__index__"
-                    while new_name in original_column_names:
-                        new_name = f"_{new_name}_"
-                    taken_col_names.add(new_name)
-                    renames_for_table[0] = new_name
-                else:
-                    # Primary index empty string names are stored down as "" rather than "__empty__n"
-                    final_name = "__empty__" if index_meta.name == "" else index_meta.name
-                    renames_for_pandas_metadata[0] = index_meta.name
-                    renames_for_table[0] = final_name
-                    taken_col_names.add(final_name)
-            else:
-                index_name = index_meta.name if index_meta.name else None
+            if not index_meta.is_physically_stored and index_meta.step:
                 range_index = {
-                    "name": index_name,
+                    "name": index_meta.name if index_meta.name else None,
                     "start": index_meta.start,
                     "step": index_meta.step,
                     "stop": index_meta.start + len(item) * index_meta.step,
                 }
         else:
-            multi_index_meta = pandas_meta.multi_index
-            fake_field_pos = set(multi_index_meta.fake_field_pos)
-            for index_col_idx in range(pandas_indexes):
-                if index_col_idx in fake_field_pos:
-                    renames_for_pandas_metadata[index_col_idx] = None
-                    new_name = f"__index_level_{index_col_idx}__"
-                    while new_name in original_column_names:
-                        new_name = f"_{new_name}_"
-                    taken_col_names.add(new_name)
-                    renames_for_table[index_col_idx] = new_name
-                elif index_col_idx == 0:
-                    # Primary index empty string names are stored down as "" rather than "__empty__n"
-                    final_name = "__empty__" if multi_index_meta.name == "" else multi_index_meta.name
-                    renames_for_pandas_metadata[0] = multi_index_meta.name
-                    renames_for_table[0] = final_name
-                    taken_col_names.add(final_name)
-                else:
-                    new_name = item.column_names[index_col_idx][_IDX_PREFIX_LEN:]
-                    if new_name == "":
-                        new_name = "__empty__"
-                    while new_name in taken_col_names:
-                        new_name = f"_{new_name}_"
-                    taken_col_names.add(new_name)
-                    renames_for_pandas_metadata[index_col_idx] = item.column_names[index_col_idx][_IDX_PREFIX_LEN:]
-                    renames_for_table[index_col_idx] = new_name
+            pandas_indexes = pandas_meta.multi_index.field_count + 1
 
-        for i, col in enumerate(item.column_names[pandas_indexes:]):
-            i += pandas_indexes
-            if unnamed_series or col in pandas_meta.col_names:
-                # Protobuf map subscripting inserts a default entry for missing keys, so only look up when present
-                col_data = pandas_meta.col_names[col] if not unnamed_series else None
-                if unnamed_series:
+        renames_for_pandas_metadata = {}
+        for i, col in enumerate(item.column_names):
+            if col in pandas_meta.col_names:
+                col_data = pandas_meta.col_names[col]
+                if col_data.is_none:
                     renames_for_pandas_metadata[i] = None
-                    new_name = "None"
-                elif col_data.is_none:
-                    renames_for_pandas_metadata[i] = None
-                    new_name = "None"
                 elif col_data.is_empty:
                     renames_for_pandas_metadata[i] = ""
-                    new_name = "__empty__"
                 elif col_data.is_int:
                     renames_for_pandas_metadata[i] = int(col_data.original_name)
-                    new_name = col_data.original_name
-                elif col_data.original_name != col:
-                    renames_for_pandas_metadata[i] = col_data.original_name
-                    new_name = col_data.original_name
                 else:
-                    renames_for_pandas_metadata[i] = col
-                    new_name = col
-                while new_name in taken_col_names:
-                    new_name = f"_{new_name}_"
-                taken_col_names.add(new_name)
-                renames_for_table[i] = new_name
+                    renames_for_pandas_metadata[i] = col_data.original_name
 
-        op = ArrowNormalizationOperations(renames_for_table, range_index, pandas_indexes, renames_for_pandas_metadata)
-        item = self.apply_pyarrow_operations(item, op)
-        return item
+        op = ArrowNormalizationOperations(range_index, pandas_indexes, renames_for_pandas_metadata)
+        return self.apply_pyarrow_operations(item, op)
 
 
 class _PandasNormalizer(Normalizer):

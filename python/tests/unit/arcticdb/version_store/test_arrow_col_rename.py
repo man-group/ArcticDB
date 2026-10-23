@@ -517,6 +517,21 @@ def test_multi_index_auto_rename_single_level_clashes(lmdb_version_store_v1, obj
 
 
 @pytest.mark.parametrize("object_type", ["DataFrame", "Series"])
+def test_multi_index_auto_rename_empty_string_second_level(lmdb_version_store_v1, object_type):
+    lib = lmdb_version_store_v1
+    sym = "test_multi_index_auto_rename_empty_string_second_level"
+    index = pd.MultiIndex.from_arrays([[0], [1]], names=["level0", ""])
+    input = make_df_or_series(object_type, "col", [0], index=index)
+    lib.write(sym, input)
+    assert lib.read(sym, output_format=OutputFormat.PYARROW).data.column_names == ["level0", "__empty__", "col"]
+    generic_rename_columns_arrow_compat_test(lib, sym)
+    received = lib.read(sym).data
+    expected_index = pd.MultiIndex.from_arrays([[0], [1]], names=["level0", "__empty__"])
+    expected = make_df_or_series(object_type, "col", [0], index=expected_index)
+    assert_pandas_equal(received, expected)
+
+
+@pytest.mark.parametrize("object_type", ["DataFrame", "Series"])
 @pytest.mark.parametrize("input_names", [[None, None], ["level0", "level1"]])
 def test_multi_index_explicit_rename_no_clash(lmdb_version_store_v1, object_type, input_names):
     lib = lmdb_version_store_v1
