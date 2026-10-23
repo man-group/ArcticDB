@@ -32,7 +32,6 @@ from arcticdb.exceptions import (
     ArcticException,
     NormalizationException,
     SchemaException,
-    StreamDescriptorMismatch,
 )
 from arcticdb.version_store.library import MergeAction, MergeStrategy, Library
 from arcticdb.version_store._store import normalize_merge_action
@@ -75,13 +74,6 @@ ARROW_SOURCE_INTO_EMPTY_PANDAS_TARGET_XFAIL = pytest.mark.xfail(
     "metadata with Arrow normalization metadata",
     strict=True,
 )
-# Pandas stores a data column that clashes with the index name as __col_<name>__N, which the Arrow source cannot match.
-ARROW_SOURCE_INTO_PANDAS_MANGLED_COLUMN_XFAIL = pytest.mark.xfail(
-    raises=StreamDescriptorMismatch,
-    reason="Merge update with an Arrow source into a symbol whose pandas column names were mangled on write is not "
-    "supported yet. Can be supported after #3418 by calling rename_columns_for_arrow on the target",
-    strict=True,
-)
 ARROW_SOURCE_WITH_NULLS_XFAIL = pytest.mark.xfail(
     raises=SchemaException, reason="Merge update does not support Arrow sources with nulls yet", strict=True
 )
@@ -100,20 +92,50 @@ def to_arrow_source(source_format: SourceFormat, source: pd.DataFrame) -> Tuple[
     return pa.Table.from_pandas(source, preserve_index=False), index_column
 
 
+def has_unnamed_index(df: pd.DataFrame) -> bool:
+    return not isinstance(df.index, pd.RangeIndex) and None in df.index.names
+
+
+def with_arrow_compat_index_names(df: pd.DataFrame) -> pd.DataFrame:
+    """Index names as produced by ``rename_columns_arrow_compat`` with the default ``index_columns``."""
+    if isinstance(df.index, pd.MultiIndex):
+        return df.rename_axis([f"__index_level_{i}__" if n is None else n for i, n in enumerate(df.index.names)])
+    return df.rename_axis(df.index.name or "__index__")
+
+
 def run_merge(lib, source_format: SourceFormat, symbol: str, source: pd.DataFrame, *args, **kwargs):
     if source_format == SourceFormat.PANDAS:
         return lib.merge(symbol, source, *args, **kwargs)
     (lib._nvs if isinstance(lib, Library) else lib)._set_allow_arrow_input()
     converted_source, index_column = to_arrow_source(source_format, source)
-    try:
-        return lib.merge(symbol, converted_source, *args, index_column=index_column, **kwargs)
-    except StreamDescriptorMismatch:
-        has_unnamed_index = not isinstance(source.index, pd.RangeIndex) and None in source.index.names
-        if source_format in (SourceFormat.ARROW, SourceFormat.POLARS) and has_unnamed_index:
-            pytest.skip(
-                "Arrow data cannot match an unnamed pandas index. To be addressed with rename_columns_for_arrow in #3418"
-            )
-        raise
+    return lib.merge(symbol, converted_source, *args, index_column=index_column, **kwargs)
+
+
+def write_target_and_merge(
+    lib,
+    source_format: SourceFormat,
+    sym: str,
+    target: Union[List[pd.DataFrame], pd.DataFrame],
+    source: pd.DataFrame,
+    strategy: MergeStrategy,
+    expected: pd.DataFrame,
+    on: Optional[List[str]] = None,
+):
+    """Arrow and Polars sources cannot match an unnamed index, so the target is first renamed with
+    ``rename_columns_arrow_compat`` and the source and expected levels are renamed to match."""
+    if isinstance(target, pd.DataFrame):
+        target = [target]
+    lib.write(sym, target[0])
+    for df in target[1:]:
+        lib.append(sym, df)
+    if source_format != SourceFormat.PANDAS and has_unnamed_index(source):
+        lib.rename_columns_arrow_compat(sym)
+        source = with_arrow_compat_index_names(source)
+        expected = with_arrow_compat_index_names(expected)
+    run_merge(lib, source_format, sym, source, strategy=strategy, on=on)
+    read_vit = lib.read(sym)
+    assert_frame_equal(read_vit.data, expected)
+    return read_vit
 
 
 def generic_merge_test(
@@ -128,17 +150,9 @@ def generic_merge_test(
 ):
     if isinstance(target, pd.DataFrame):
         target = [target]
-    concat_target = pd.concat(target)
-    # Run the actual merge and compare against expected
-    lib.write(sym, target[0])
-    for df in target[1:]:
-        lib.append(sym, df)
-    run_merge(lib, source_format, sym, source, strategy=strategy, on=on)
-    read_vit = lib.read(sym)
-    assert_frame_equal(read_vit.data, expected)
-    oracle_expected = merge(concat_target, source, strategy, on=on)
+    oracle_expected = merge(pd.concat(target), source, strategy, on=on)
     assert_frame_equal(oracle_expected, expected)
-    return read_vit
+    return write_target_and_merge(lib, source_format, sym, target, source, strategy, expected, on=on)
 
 
 @pytest.mark.parametrize(
@@ -175,12 +189,14 @@ class TestMergeTimeseriesCommon:
     def test_merge_matched_update_with_metadata(self, lmdb_library, strategy, source_format):
         lib = lmdb_library
 
-        target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]}, index=pd.date_range("2024-01-01", periods=3))
+        target = pd.DataFrame(
+            {"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]}, index=pd.date_range("2024-01-01", periods=3, name="ts")
+        )
         write_vit = lib.write("sym", target)
 
         source = pd.DataFrame(
             {"a": [1, 20, 3], "b": [1.0, 20.0, 3.0]},
-            index=pd.DatetimeIndex(["2024-01-01 10:00:00", "2024-01-02", "2024-01-04"]),
+            index=pd.DatetimeIndex(["2024-01-01 10:00:00", "2024-01-02", "2024-01-04"], name="ts"),
         )
 
         metadata = {"meta": "data"}
@@ -295,14 +311,15 @@ class TestMergeTimeseriesUpdate:
         lib = lmdb_library
 
         target = pd.DataFrame(
-            {"a": [1, 2, 3], "b": [1.0, 2.0, 3.0], "c": ["a", "b", "c"]}, index=pd.date_range("2024-01-01", periods=3)
+            {"a": [1, 2, 3], "b": [1.0, 2.0, 3.0], "c": ["a", "b", "c"]},
+            index=pd.date_range("2024-01-01", periods=3, name="ts"),
         )
         write_vit = lib.write("sym", target)
 
         source = pd.DataFrame(
             {"a": [4, 5, 6], "b": [7.0, 8.0, 9.0], "c": ["A", "B", "C"]},
             # Only the second row: "2024-01-02" matches
-            index=pd.DatetimeIndex(["2024-01-01 10:00:00", "2024-01-02", "2024-01-04"]),
+            index=pd.DatetimeIndex(["2024-01-01 10:00:00", "2024-01-02", "2024-01-04"], name="ts"),
         )
 
         merge_vit = run_merge(lib, source_format, "sym", source, strategy=strategy)
@@ -316,7 +333,7 @@ class TestMergeTimeseriesUpdate:
         # Only Jan2 matches → update row 1 with source values
         expected = pd.DataFrame(
             {"a": [1, 5, 3], "b": [1.0, 8.0, 3.0], "c": ["a", "B", "c"]},
-            index=pd.date_range("2024-01-01", periods=3),
+            index=pd.date_range("2024-01-01", periods=3, name="ts"),
         )
 
         read_vit = lib.read("sym")
@@ -334,9 +351,11 @@ class TestMergeTimeseriesUpdate:
         # is not empty. This has lots of edge cases and will burden the implementation for almost no gain. If nothing is
         #  changed, we'll create a new index key pointing to the existing data keys and write a new version key which is cheap.
         lib = lmdb_library
-        target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]}, index=pd.date_range("2024-01-01", periods=3))
+        target = pd.DataFrame(
+            {"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]}, index=pd.date_range("2024-01-01", periods=3, name="ts")
+        )
         lib.write("sym", target)
-        source = pd.DataFrame({"a": [4, 5], "b": [4.0, 5.0]}, index=pd.date_range("2023-01-01", periods=2))
+        source = pd.DataFrame({"a": [4, 5], "b": [4.0, 5.0]}, index=pd.date_range("2023-01-01", periods=2, name="ts"))
         merge_vit = run_merge(
             lib, source_format, "sym", source, strategy=MergeStrategy(not_matched_by_target=MergeAction.DO_NOTHING)
         )
@@ -365,12 +384,12 @@ class TestMergeTimeseriesUpdate:
                 "c": [True, False, True, False, True],
                 "d": ["a", "b", "c", "d", "e"],
             },
-            index=pd.date_range("2024-01-01", periods=5),
+            index=pd.date_range("2024-01-01", periods=5, name="ts"),
         )
 
         source = pd.DataFrame(
             {"a": [30, 50], "b": [30.1, 50.1], "c": [False, False], "d": ["C", "E"]},
-            index=pd.DatetimeIndex([pd.Timestamp("2024-01-03"), pd.Timestamp("2024-01-05")]),
+            index=pd.DatetimeIndex([pd.Timestamp("2024-01-03"), pd.Timestamp("2024-01-05")], name="ts"),
         )
         # Jan3 and Jan5 match → update those rows
         expected = pd.DataFrame(
@@ -380,7 +399,7 @@ class TestMergeTimeseriesUpdate:
                 "c": [True, False, False, False, False],
                 "d": ["a", "b", "C", "d", "E"],
             },
-            index=pd.date_range("2024-01-01", periods=5),
+            index=pd.date_range("2024-01-01", periods=5, name="ts"),
         )
         read_vit = generic_merge_test(lib, source_format, "sym", target, source, self.strategy, expected)
 
@@ -407,17 +426,17 @@ class TestMergeTimeseriesUpdate:
         lib = lmdb_library_factory(arcticdb.LibraryOptions(columns_per_segment=2, dedup=True))
         target = pd.DataFrame(
             {"a": [1, 2, 3], "b": [1.0, 2.0, 3.0], "c": [10, 20, 30], "d": [100.0, 200.0, 300.0]},
-            index=pd.date_range("2024-01-01", periods=3),
+            index=pd.date_range("2024-01-01", periods=3, name="ts"),
         )
         lib.write("sym", target)
         source = pd.DataFrame(
             {"a": [20, 30], "b": [20.0, 30.0], "c": [20, 30], "d": [200.0, 300.0]},
-            index=pd.DatetimeIndex([pd.Timestamp("2024-01-02"), pd.Timestamp("2024-01-03")]),
+            index=pd.DatetimeIndex([pd.Timestamp("2024-01-02"), pd.Timestamp("2024-01-03")], name="ts"),
         )
         run_merge(lib, source_format, "sym", source, strategy=self.strategy)
         expected = pd.DataFrame(
             {"a": [1, 20, 30], "b": [1.0, 20.0, 30.0], "c": [10, 20, 30], "d": [100.0, 200.0, 300.0]},
-            index=pd.date_range("2024-01-01", periods=3),
+            index=pd.date_range("2024-01-01", periods=3, name="ts"),
         )
         assert_frame_equal(lib.read("sym").data, expected)
 
@@ -436,10 +455,12 @@ class TestMergeTimeseriesUpdate:
         lib = in_memory_store_factory(segment_row_size=2, de_duplication=de_duplication)
         target = pd.DataFrame(
             {"a": [1, 2, 3, 4, 5, 6], "b": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]},
-            index=pd.date_range("2024-01-01", periods=6),
+            index=pd.date_range("2024-01-01", periods=6, name="ts"),
         )
         lib.write("sym", target)
-        source = pd.DataFrame({"a": [999], "b": [99.0]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-03")]))
+        source = pd.DataFrame(
+            {"a": [999], "b": [99.0]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-03")], name="ts")
+        )
         qs.reset_stats()
         with qs.query_stats():
             run_merge(lib, source_format, "sym", source, self.strategy, on=["a"])
@@ -634,7 +655,9 @@ class TestMergeTimeseriesUpdate:
 
     def test_throws_when_target_row_is_matched_more_than_once(self, lmdb_library, source_format):
         lib = lmdb_library
-        target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]}, index=pd.date_range("2024-01-01", periods=3))
+        target = pd.DataFrame(
+            {"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]}, index=pd.date_range("2024-01-01", periods=3, name="ts")
+        )
         lib.write("sym", target)
 
         source = pd.DataFrame(
@@ -644,7 +667,8 @@ class TestMergeTimeseriesUpdate:
                     pd.Timestamp("2024-01-01"),  # Matches first row of target
                     pd.Timestamp("2024-01-01"),  # Also matches first row of target
                     pd.Timestamp("2024-01-03"),
-                ]
+                ],
+                name="ts",
             ),
         )
         with pytest.raises(UserInputException):
@@ -702,21 +726,22 @@ class TestMergeTimeseriesUpdate:
     def test_upsert_with_existing_symbol(self, lmdb_library, source_format):
         # When the symbol exists upsert is irrelevant and a regular merge is performed.
         lib = lmdb_library
-        target = pd.DataFrame({"a": [1, 2, 3]}, index=pd.date_range("2024-01-01", periods=3))
+        target = pd.DataFrame({"a": [1, 2, 3]}, index=pd.date_range("2024-01-01", periods=3, name="ts"))
         lib.write("sym", target)
         source = pd.DataFrame(
-            {"a": [20, 40]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-02"), pd.Timestamp("2024-01-04")])
+            {"a": [20, 40]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-02"), pd.Timestamp("2024-01-04")], name="ts")
         )
         merge_vit = run_merge(lib, source_format, "sym", source, strategy=self.strategy, upsert=True)
         assert merge_vit.version == 1
-        expected = pd.DataFrame({"a": [1, 20, 3]}, index=pd.date_range("2024-01-01", periods=3))
+        expected = pd.DataFrame({"a": [1, 20, 3]}, index=pd.date_range("2024-01-01", periods=3, name="ts"))
         assert_frame_equal(lib.read("sym").data, expected)
 
     def test_updates_the_latest_live_version(self, lmdb_version_store_v1, source_format):
         lib = lmdb_version_store_v1
 
         target = pd.DataFrame(
-            {"a": [1, 2, 3], "b": [1.0, 2.0, 3.0], "c": ["a", "b", "c"]}, index=pd.date_range("2024-01-01", periods=3)
+            {"a": [1, 2, 3], "b": [1.0, 2.0, 3.0], "c": ["a", "b", "c"]},
+            index=pd.date_range("2024-01-01", periods=3, name="ts"),
         )
         lib.write("sym", target)
         # Write a second version. Nothing in this version will match the source
@@ -724,7 +749,7 @@ class TestMergeTimeseriesUpdate:
             "sym",
             pd.DataFrame(
                 {"a": [1, 2, 3], "b": [1.0, 2.0, 3.0], "c": ["a", "b", "c"]},
-                index=pd.date_range("2020-01-01", periods=3),
+                index=pd.date_range("2020-01-01", periods=3, name="ts"),
             ),
         )
         lib.delete_version("sym", 1)
@@ -732,7 +757,7 @@ class TestMergeTimeseriesUpdate:
         source = pd.DataFrame(
             {"a": [4, 5, 6], "b": [7.0, 8.0, 9.0], "c": ["A", "B", "C"]},
             # Only the second row: "2024-01-02" matches
-            index=pd.DatetimeIndex(["2024-01-01 10:00:00", "2024-01-02", "2024-01-04"]),
+            index=pd.DatetimeIndex(["2024-01-01 10:00:00", "2024-01-02", "2024-01-04"], name="ts"),
         )
 
         # The merge will be performed on the latest undeleted version
@@ -740,7 +765,7 @@ class TestMergeTimeseriesUpdate:
         # Only Jan2 matches → update row 1 with source values
         expected = pd.DataFrame(
             {"a": [1, 5, 3], "b": [1.0, 8.0, 3.0], "c": ["a", "B", "c"]},
-            index=pd.date_range("2024-01-01", periods=3),
+            index=pd.date_range("2024-01-01", periods=3, name="ts"),
         )
         read_vit = lib.read("sym")
         assert_vit_equals_except_data(merge_vit, read_vit)
@@ -780,33 +805,33 @@ class TestMergeTimeseriesUpdate:
         # the key.
         lib = s3_version_store_v1
         target = [
-            pd.DataFrame({"a": [1]}, index=[pd.Timestamp(0)]),
-            pd.DataFrame({"a": [2]}, index=[pd.Timestamp(0)]),
+            pd.DataFrame({"a": [1]}, index=pd.DatetimeIndex([pd.Timestamp(0)], name="ts")),
+            pd.DataFrame({"a": [2]}, index=pd.DatetimeIndex([pd.Timestamp(0)], name="ts")),
         ]
 
-        source = pd.DataFrame({"a": [3]}, index=[pd.Timestamp(0)])
+        source = pd.DataFrame({"a": [3]}, index=pd.DatetimeIndex([pd.Timestamp(0)], name="ts"))
         for df in target:
             lib.append("sym", df)
         run_merge(lib, source_format, "sym", source, strategy=self.strategy)
         result = lib.read("sym").data
         # Both target rows at Ts0 match source at Ts0 → both updated to a=3
-        expected = pd.DataFrame({"a": [3, 3]}, index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(0)]))
+        expected = pd.DataFrame({"a": [3, 3]}, index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(0)], name="ts"))
         assert_frame_equal(result, expected)
 
     def test_sorted_segments_overlap(self, lmdb_version_store_v1, source_format):
         lib = lmdb_version_store_v1
         target_list = [
-            pd.DataFrame({"a": [1]}, index=pd.DatetimeIndex([pd.Timestamp(0)])),
-            pd.DataFrame({"a": [2, 3]}, index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(1)])),
+            pd.DataFrame({"a": [1]}, index=pd.DatetimeIndex([pd.Timestamp(0)], name="ts")),
+            pd.DataFrame({"a": [2, 3]}, index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(1)], name="ts")),
         ]
-        source = pd.DataFrame({"a": [5, 6]}, index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(5)]))
+        source = pd.DataFrame({"a": [5, 6]}, index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(5)], name="ts"))
         for tgt in target_list:
             lib.append("test", tgt)
         run_merge(lib, source_format, "test", source, strategy=self.strategy)
         res = lib.read("test").data
         # Ts0 from source matches target rows 0 and 1 → both updated to a=5; Ts5 no match → do_nothing
         expected = pd.DataFrame(
-            {"a": [5, 5, 3]}, index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(0), pd.Timestamp(1)])
+            {"a": [5, 5, 3]}, index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(0), pd.Timestamp(1)], name="ts")
         )
         assert_frame_equal(res, expected)
 
@@ -937,9 +962,9 @@ class TestMergeTimeseriesUpdate:
 
     def test_on_nonexistent_column_raises(self, lmdb_library, source_format):
         lib = lmdb_library
-        target = pd.DataFrame({"a": [1, 2], "b": [1.0, 2.0]}, index=pd.date_range("2024-01-01", periods=2))
+        target = pd.DataFrame({"a": [1, 2], "b": [1.0, 2.0]}, index=pd.date_range("2024-01-01", periods=2, name="ts"))
         lib.write("sym", target)
-        source = pd.DataFrame({"a": [1], "b": [10.0]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-01")]))
+        source = pd.DataFrame({"a": [1], "b": [10.0]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-01")], name="ts"))
         with pytest.raises(UserInputException) as exc_info:
             run_merge(lib, source_format, "sym", source, strategy=self.strategy, on=["nonexistent"])
         assert '"nonexistent"' in str(exc_info.value)
@@ -981,11 +1006,11 @@ class TestMergeTimeseriesUpdate:
         lib = lmdb_library
         target = pd.DataFrame(
             {"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]},
-            index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(1), pd.Timestamp(2)]),
+            index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(1), pd.Timestamp(2)], name="ts"),
         )
         source = pd.DataFrame(
             {"a": [10, 20], "b": [10.0, 20.0]},
-            index=pd.DatetimeIndex([pd.Timestamp(1), pd.Timestamp(1)]),
+            index=pd.DatetimeIndex([pd.Timestamp(1), pd.Timestamp(1)], name="ts"),
         )
         lib.write("sym", target)
         with pytest.raises(UserInputException, match="Multiple source rows match the same target row"):
@@ -995,11 +1020,11 @@ class TestMergeTimeseriesUpdate:
         lib = lmdb_library
         target = pd.DataFrame(
             {"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]},
-            index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(1), pd.Timestamp(2)]),
+            index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(1), pd.Timestamp(2)], name="ts"),
         )
         source = pd.DataFrame(
             {"a": [2, 2], "b": [10.0, 20.0]},
-            index=pd.DatetimeIndex([pd.Timestamp(1), pd.Timestamp(1)]),
+            index=pd.DatetimeIndex([pd.Timestamp(1), pd.Timestamp(1)], name="ts"),
         )
         lib.write("sym", target)
         with pytest.raises(UserInputException, match="Multiple source rows match the same target row"):
@@ -1034,9 +1059,7 @@ class TestMergeTimeseriesUpdate:
         with pytest.raises(TypeError):
             run_merge(lib, source_format, "sym", source, strategy=self.strategy, on=on)
 
-    def test_match_on_column_named_index_and_unnamed_index(self, request, lmdb_library, source_format):
-        if source_format != SourceFormat.PANDAS:
-            request.applymarker(ARROW_SOURCE_INTO_PANDAS_MANGLED_COLUMN_XFAIL)
+    def test_match_on_column_named_index_and_unnamed_index(self, lmdb_library, source_format):
         lib = lmdb_library
         target = pd.DataFrame({"index": [1, 2, 3], "b": [1.0, 2.0, 3.0]}, index=pd.date_range("2024-01-01", periods=3))
         source = pd.DataFrame(
@@ -1072,6 +1095,9 @@ class TestMergeTimeseriesUpdate:
             ),
         )
         lib.write("sym", target)
+        if source_format != SourceFormat.PANDAS:
+            lib.rename_columns_arrow_compat("sym")
+            source = with_arrow_compat_index_names(source)
         with pytest.raises(UserInputException) as exc_info:
             run_merge(lib, source_format, "sym", source, strategy=self.strategy, on=["index"])
         assert "E_COLUMN_NOT_FOUND" in str(exc_info.value)
@@ -1174,18 +1200,18 @@ class TestMergeTimeseriesInsert:
         lib = lmdb_library_factory(arcticdb.LibraryOptions(rows_per_segment=2))
         target = pd.DataFrame(
             {"a": [0, 1, 2]},
-            index=pd.DatetimeIndex([pd.Timestamp(10), pd.Timestamp(20), pd.Timestamp(30)]),
+            index=pd.DatetimeIndex([pd.Timestamp(10), pd.Timestamp(20), pd.Timestamp(30)], name="ts"),
         )
         lib.write("sym", target)
         source = pd.DataFrame(
             {"a": [100, 101]},
-            index=pd.DatetimeIndex([pd.Timestamp(15), pd.Timestamp(25)]),
+            index=pd.DatetimeIndex([pd.Timestamp(15), pd.Timestamp(25)], name="ts"),
         )
         run_merge(lib, source_format, "sym", source, strategy=self.strategy)
         expected = pd.DataFrame(
             {"a": [0, 100, 1, 101, 2]},
             index=pd.DatetimeIndex(
-                [pd.Timestamp(10), pd.Timestamp(15), pd.Timestamp(20), pd.Timestamp(25), pd.Timestamp(30)]
+                [pd.Timestamp(10), pd.Timestamp(15), pd.Timestamp(20), pd.Timestamp(25), pd.Timestamp(30)], name="ts"
             ),
         )
         assert_frame_equal(lib.read("sym").data, expected)
@@ -1197,12 +1223,14 @@ class TestMergeTimeseriesInsert:
     def test_basic(self, lmdb_library, strategy, source_format):
         lib = lmdb_library
 
-        target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]}, index=pd.date_range("2024-01-01", periods=3))
+        target = pd.DataFrame(
+            {"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]}, index=pd.date_range("2024-01-01", periods=3, name="ts")
+        )
         write_vit = lib.write("sym", target)
 
         source = pd.DataFrame(
             {"a": [-1, -2, -3], "b": [-1.0, -2.0, -3.0]},
-            index=pd.DatetimeIndex(["2023-01-01", "2024-01-01 10:00:00", "2025-01-04"]),
+            index=pd.DatetimeIndex(["2023-01-01", "2024-01-01 10:00:00", "2025-01-04"], name="ts"),
         )
 
         merge_vit = run_merge(lib, source_format, "sym", source, strategy=strategy)
@@ -1222,10 +1250,12 @@ class TestMergeTimeseriesInsert:
         self, lmdb_library_factory, dedup, expected_data_keys, source_format
     ):
         lib = lmdb_library_factory(arcticdb.LibraryOptions(dedup=dedup))
-        target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]}, index=pd.date_range("2024-01-01", periods=3))
+        target = pd.DataFrame(
+            {"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]}, index=pd.date_range("2024-01-01", periods=3, name="ts")
+        )
         lib.write("sym", target)
         source = pd.DataFrame(
-            {"a": [10, 20, 30], "b": [10.0, 20.0, 30.0]}, index=pd.date_range("2024-01-01", periods=3)
+            {"a": [10, 20, 30], "b": [10.0, 20.0, 30.0]}, index=pd.date_range("2024-01-01", periods=3, name="ts")
         )
         merge_vit = run_merge(
             lib, source_format, "sym", source, strategy=MergeStrategy(MergeAction.DO_NOTHING, MergeAction.INSERT)
@@ -1243,7 +1273,9 @@ class TestMergeTimeseriesInsert:
 
     def test_index_and_column(self, lmdb_library, source_format):
         lib = lmdb_library
-        target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]}, index=pd.date_range("2024-01-01", periods=3))
+        target = pd.DataFrame(
+            {"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]}, index=pd.date_range("2024-01-01", periods=3, name="ts")
+        )
         lib.write("sym", target)
 
         source = pd.DataFrame(
@@ -1254,7 +1286,8 @@ class TestMergeTimeseriesInsert:
                     "2024-01-02 01:00:00",  # Matches column, but not index
                     "2024-01-03",  # Matches index, but not column
                     "2024-01-04",  # Does not match either
-                ]
+                ],
+                name="ts",
             ),
         )
         run_merge(
@@ -1282,7 +1315,7 @@ class TestMergeTimeseriesInsert:
                 "d": [10.1, 20.2, 30.3, 40.4],
                 "e": [100, 200, 300, 400],
             },
-            index=pd.date_range("2024-01-01", periods=4),
+            index=pd.date_range("2024-01-01", periods=4, name="ts"),
         )
         lib.write("sym", target)
 
@@ -1301,7 +1334,8 @@ class TestMergeTimeseriesInsert:
                     "2024-01-03",  # NOT_MATCH: index + b + d match, e differs
                     "2024-01-05",  # NOT_MATCH: new index, b+d+e match
                     "2024-01-06",  # NOT_MATCH: new index, new b, new d, new e
-                ]
+                ],
+                name="ts",
             ),
         )
 
@@ -1321,7 +1355,9 @@ class TestMergeTimeseriesInsert:
         self, lmdb_library, source_format
     ):
         lib = lmdb_library
-        target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]}, index=pd.date_range("2024-01-01", periods=3))
+        target = pd.DataFrame(
+            {"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]}, index=pd.date_range("2024-01-01", periods=3, name="ts")
+        )
         lib.write("sym", target)
 
         source = pd.DataFrame(
@@ -1331,7 +1367,8 @@ class TestMergeTimeseriesInsert:
                     pd.Timestamp("2024-01-01"),  # Matches first row of target
                     pd.Timestamp("2024-01-01"),  # Also matches first row of target
                     pd.Timestamp("2024-01-02 00:00:01"),
-                ]
+                ],
+                name="ts",
             ),
         )
 
@@ -1352,7 +1389,8 @@ class TestMergeTimeseriesInsert:
                     pd.Timestamp("2024-01-02"),
                     pd.Timestamp("2024-01-02 00:00:01"),
                     pd.Timestamp("2024-01-03"),
-                ]
+                ],
+                name="ts",
             ),
         )
         received = lib.read("sym").data
@@ -1385,7 +1423,7 @@ class TestMergeTimeseriesInsert:
         lib = lmdb_library
         target = pd.DataFrame(
             {"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]},
-            index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(5), pd.Timestamp(10)]),
+            index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(5), pd.Timestamp(10)], name="ts"),
         )
         lib.write("sym", target)
         source = pd.DataFrame(
@@ -1396,7 +1434,8 @@ class TestMergeTimeseriesInsert:
                     pd.Timestamp(2),
                     pd.Timestamp(6),
                     pd.Timestamp(9),
-                ]
+                ],
+                name="ts",
             ),
         )
         run_merge(lib, source_format, "sym", source, self.strategy)
@@ -1409,7 +1448,7 @@ class TestMergeTimeseriesInsert:
             pytest.param(
                 pd.DataFrame(
                     {"a": [0, 1, 100], "b": [100.0, 200.0, 300.0]},
-                    index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(0), pd.Timestamp(5)]),
+                    index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(0), pd.Timestamp(5)], name="ts"),
                 ),
                 pd.DataFrame(
                     {"a": [0, 1, 2, 3, 4, 5, 100, 6], "b": [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 300.0, 6.0]},
@@ -1423,7 +1462,8 @@ class TestMergeTimeseriesInsert:
                             pd.Timestamp(5),
                             pd.Timestamp(5),
                             pd.Timestamp(6),
-                        ]
+                        ],
+                        name="ts",
                     ),
                 ),
                 id="Match_first_equal_run_Insert_in_second_equal_run.",
@@ -1431,7 +1471,7 @@ class TestMergeTimeseriesInsert:
             pytest.param(
                 pd.DataFrame(
                     {"a": [0, 100, 3], "b": [100.0, 200.0, 300.0]},
-                    index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(0), pd.Timestamp(5)]),
+                    index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(0), pd.Timestamp(5)], name="ts"),
                 ),
                 pd.DataFrame(
                     {"a": [0, 1, 100, 2, 3, 4, 5, 6], "b": [0.0, 1.0, 200, 2.0, 3.0, 4.0, 5.0, 6.0]},
@@ -1445,7 +1485,8 @@ class TestMergeTimeseriesInsert:
                             pd.Timestamp(5),
                             pd.Timestamp(5),
                             pd.Timestamp(6),
-                        ]
+                        ],
+                        name="ts",
                     ),
                 ),
                 id="Match_in_second_equal_run_Insert_in_first.",
@@ -1463,7 +1504,8 @@ class TestMergeTimeseriesInsert:
                             pd.Timestamp(5),
                             pd.Timestamp(5),
                             pd.Timestamp(5),
-                        ]
+                        ],
+                        name="ts",
                     ),
                 ),
                 pd.DataFrame(
@@ -1482,7 +1524,8 @@ class TestMergeTimeseriesInsert:
                             pd.Timestamp(5),
                             pd.Timestamp(5),
                             pd.Timestamp(6),
-                        ]
+                        ],
+                        name="ts",
                     ),
                 ),
                 id="Match_in_both_equal_index_runs_and_insert_in_both.",
@@ -1500,7 +1543,8 @@ class TestMergeTimeseriesInsert:
                 pd.Timestamp(5),
                 pd.Timestamp(5),
                 pd.Timestamp(6),
-            ]
+            ],
+            name="ts",
         )
         target = pd.DataFrame({"a": range(len(index)), "b": np.linspace(0, len(index) - 1, len(index))}, index=index)
         lib.write("sym", target)
@@ -1510,21 +1554,24 @@ class TestMergeTimeseriesInsert:
     @pytest.mark.parametrize(
         "source",
         [
-            pd.DataFrame({"a": [10], "b": [10.0]}, index=pd.DatetimeIndex([pd.Timestamp(0)])),
-            pd.DataFrame({"a": [10], "b": [10.0]}, index=pd.DatetimeIndex([pd.Timestamp(5)])),
-            pd.DataFrame({"a": [10], "b": [10.0]}, index=pd.DatetimeIndex([pd.Timestamp(10)])),
+            pd.DataFrame({"a": [10], "b": [10.0]}, index=pd.DatetimeIndex([pd.Timestamp(0)], name="ts")),
+            pd.DataFrame({"a": [10], "b": [10.0]}, index=pd.DatetimeIndex([pd.Timestamp(5)], name="ts")),
+            pd.DataFrame({"a": [10], "b": [10.0]}, index=pd.DatetimeIndex([pd.Timestamp(10)], name="ts")),
             pd.DataFrame(
-                {"a": [10, 20], "b": [10.0, 20.0]}, index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(5)])
+                {"a": [10, 20], "b": [10.0, 20.0]},
+                index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(5)], name="ts"),
             ),
             pd.DataFrame(
-                {"a": [10, 20], "b": [10.0, 20.0]}, index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(10)])
+                {"a": [10, 20], "b": [10.0, 20.0]},
+                index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(10)], name="ts"),
             ),
             pd.DataFrame(
-                {"a": [10, 20], "b": [10.0, 20.0]}, index=pd.DatetimeIndex([pd.Timestamp(5), pd.Timestamp(10)])
+                {"a": [10, 20], "b": [10.0, 20.0]},
+                index=pd.DatetimeIndex([pd.Timestamp(5), pd.Timestamp(10)], name="ts"),
             ),
             pd.DataFrame(
                 {"a": [10, 20, 30], "b": [10.0, 20.0, 30.0]},
-                index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(5), pd.Timestamp(10)]),
+                index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(5), pd.Timestamp(10)], name="ts"),
             ),
         ],
     )
@@ -1532,7 +1579,7 @@ class TestMergeTimeseriesInsert:
         lib = lmdb_library
         target = pd.DataFrame(
             {"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]},
-            index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(5), pd.Timestamp(10)]),
+            index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(5), pd.Timestamp(10)], name="ts"),
         )
         lib.write("sym", target)
         run_merge(lib, source_format, "sym", source, self.strategy)
@@ -1542,17 +1589,21 @@ class TestMergeTimeseriesInsert:
         "source",
         [
             pytest.param(
-                pd.DataFrame({"a": [10], "b": [20.0], "c": [True]}, index=pd.DatetimeIndex([pd.Timestamp(2)])),
+                pd.DataFrame(
+                    {"a": [10], "b": [20.0], "c": [True]}, index=pd.DatetimeIndex([pd.Timestamp(2)], name="ts")
+                ),
                 id="Insert_single_row_in_first_segment",
             ),
             pytest.param(
-                pd.DataFrame({"a": [10], "b": [20.0], "c": [True]}, index=pd.DatetimeIndex([pd.Timestamp(21)])),
+                pd.DataFrame(
+                    {"a": [10], "b": [20.0], "c": [True]}, index=pd.DatetimeIndex([pd.Timestamp(21)], name="ts")
+                ),
                 id="Insert_single_row_in_second_segment",
             ),
             pytest.param(
                 pd.DataFrame(
                     {"a": [10, 100], "b": [20.0, 200.0], "c": [False, True]},
-                    index=pd.DatetimeIndex([pd.Timestamp(6), pd.Timestamp(26)]),
+                    index=pd.DatetimeIndex([pd.Timestamp(6), pd.Timestamp(26)], name="ts"),
                 ),
                 id="Insert_single_value_in_both_segments",
             ),
@@ -1572,7 +1623,8 @@ class TestMergeTimeseriesInsert:
                             pd.Timestamp(9),
                             pd.Timestamp(21),
                             pd.Timestamp(26),
-                        ]
+                        ],
+                        name="ts",
                     ),
                 ),
                 id="Insert_multiple_values_in_both_segments",
@@ -1583,12 +1635,12 @@ class TestMergeTimeseriesInsert:
         lib = lmdb_library
         seg0 = pd.DataFrame(
             {"a": [1, 2, 3], "b": [1.0, 2.0, 3.0], "c": [True, False, True]},
-            index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(5), pd.Timestamp(10)]),
+            index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(5), pd.Timestamp(10)], name="ts"),
         )
         lib.write("sym", seg0)
         seg1 = pd.DataFrame(
             {"a": [4, 5, 6], "b": [4.0, 5.0, 6.0], "c": [False, True, False]},
-            index=pd.DatetimeIndex([pd.Timestamp(20), pd.Timestamp(25), pd.Timestamp(30)]),
+            index=pd.DatetimeIndex([pd.Timestamp(20), pd.Timestamp(25), pd.Timestamp(30)], name="ts"),
         )
         lib.append("sym", seg1)
         expected = pd.concat([seg0, seg1, source]).sort_index()
@@ -1598,10 +1650,10 @@ class TestMergeTimeseriesInsert:
     @pytest.mark.parametrize(
         "target",
         [
-            [pd.DataFrame({"a": [1]}, index=pd.DatetimeIndex([pd.Timestamp(5)]))],
+            [pd.DataFrame({"a": [1]}, index=pd.DatetimeIndex([pd.Timestamp(5)], name="ts"))],
             [
-                pd.DataFrame({"a": [1]}, index=pd.DatetimeIndex([pd.Timestamp(5)])),
-                pd.DataFrame({"a": [10]}, index=pd.DatetimeIndex([pd.Timestamp(10)])),
+                pd.DataFrame({"a": [1]}, index=pd.DatetimeIndex([pd.Timestamp(5)], name="ts")),
+                pd.DataFrame({"a": [10]}, index=pd.DatetimeIndex([pd.Timestamp(10)], name="ts")),
             ],
         ],
     )
@@ -1610,7 +1662,8 @@ class TestMergeTimeseriesInsert:
         for tgt in target:
             lib.append("sym", tgt)
         source = pd.DataFrame(
-            {"a": [100, 200, 300]}, index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(0), pd.Timestamp(1)])
+            {"a": [100, 200, 300]},
+            index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(0), pd.Timestamp(1)], name="ts"),
         )
         qs.reset_stats()
         with qs.query_stats():
@@ -1628,10 +1681,10 @@ class TestMergeTimeseriesInsert:
     @pytest.mark.parametrize(
         "target",
         [
-            [pd.DataFrame({"a": [1]}, index=pd.DatetimeIndex([pd.Timestamp(5)]))],
+            [pd.DataFrame({"a": [1]}, index=pd.DatetimeIndex([pd.Timestamp(5)], name="ts"))],
             [
-                pd.DataFrame({"a": [1]}, index=pd.DatetimeIndex([pd.Timestamp(5)])),
-                pd.DataFrame({"a": [10]}, index=pd.DatetimeIndex([pd.Timestamp(10)])),
+                pd.DataFrame({"a": [1]}, index=pd.DatetimeIndex([pd.Timestamp(5)], name="ts")),
+                pd.DataFrame({"a": [10]}, index=pd.DatetimeIndex([pd.Timestamp(10)], name="ts")),
             ],
         ],
     )
@@ -1640,7 +1693,8 @@ class TestMergeTimeseriesInsert:
         for tgt in target:
             lib.append("sym", tgt)
         source = pd.DataFrame(
-            {"a": [100, 200, 300]}, index=pd.DatetimeIndex([pd.Timestamp(15), pd.Timestamp(15), pd.Timestamp(16)])
+            {"a": [100, 200, 300]},
+            index=pd.DatetimeIndex([pd.Timestamp(15), pd.Timestamp(15), pd.Timestamp(16)], name="ts"),
         )
         qs.reset_stats()
         with qs.query_stats():
@@ -1658,10 +1712,10 @@ class TestMergeTimeseriesInsert:
     @pytest.mark.parametrize(
         "target",
         [
-            [pd.DataFrame({"a": [1]}, index=pd.DatetimeIndex([pd.Timestamp(5)]))],
+            [pd.DataFrame({"a": [1]}, index=pd.DatetimeIndex([pd.Timestamp(5)], name="ts"))],
             [
-                pd.DataFrame({"a": [1]}, index=pd.DatetimeIndex([pd.Timestamp(5)])),
-                pd.DataFrame({"a": [10]}, index=pd.DatetimeIndex([pd.Timestamp(10)])),
+                pd.DataFrame({"a": [1]}, index=pd.DatetimeIndex([pd.Timestamp(5)], name="ts")),
+                pd.DataFrame({"a": [10]}, index=pd.DatetimeIndex([pd.Timestamp(10)], name="ts")),
             ],
         ],
     )
@@ -1679,7 +1733,8 @@ class TestMergeTimeseriesInsert:
                     pd.Timestamp(15),
                     pd.Timestamp(15),
                     pd.Timestamp(16),
-                ]
+                ],
+                name="ts",
             ),
         )
         run_merge(lib, source_format, "sym", source, self.strategy)
@@ -1687,11 +1742,11 @@ class TestMergeTimeseriesInsert:
 
     def test_insert_between_two_segments_appends_to_first(self, in_memory_store_factory, source_format):
         lib = in_memory_store_factory()
-        seg0 = pd.DataFrame({"a": [1, 2]}, index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(5)]))
+        seg0 = pd.DataFrame({"a": [1, 2]}, index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(5)], name="ts"))
         lib.write("sym", seg0)
-        seg1 = pd.DataFrame({"a": [3, 4]}, index=pd.DatetimeIndex([pd.Timestamp(10), pd.Timestamp(15)]))
+        seg1 = pd.DataFrame({"a": [3, 4]}, index=pd.DatetimeIndex([pd.Timestamp(10), pd.Timestamp(15)], name="ts"))
         lib.append("sym", seg1)
-        source = pd.DataFrame({"a": [100, 200]}, index=pd.DatetimeIndex([pd.Timestamp(6), pd.Timestamp(7)]))
+        source = pd.DataFrame({"a": [100, 200]}, index=pd.DatetimeIndex([pd.Timestamp(6), pd.Timestamp(7)], name="ts"))
         qs.reset_stats()
         with qs.query_stats():
             run_merge(lib, source_format, "sym", source, self.strategy)
@@ -1703,8 +1758,6 @@ class TestMergeTimeseriesInsert:
         assert_frame_equal(lib.read("sym").data, pd.concat([seg0, seg1, source]).sort_index())
         lt = lib.library_tool()
         segments = [lt.read_to_dataframe(key) for key in lt.dataframe_to_keys(lt.read_index("sym"), "sym")]
-        segments[0].index.name = None
-        segments[1].index.name = None
         assert_frame_equal(segments[0], pd.concat([seg0, source]).sort_index())
         assert_frame_equal(segments[1], seg1)
 
@@ -1721,14 +1774,16 @@ class TestMergeTimeseriesUpdateAndInsert:
     def test_basic(self, lmdb_library, strategy, source_format):
         lib = lmdb_library
         target = pd.DataFrame(
-            {"a": [1, 2, 3], "b": [1.0, 2.0, 3.0], "c": ["a", "b", "c"]}, index=pd.date_range("2024-01-01", periods=3)
+            {"a": [1, 2, 3], "b": [1.0, 2.0, 3.0], "c": ["a", "b", "c"]},
+            index=pd.date_range("2024-01-01", periods=3, name="ts"),
         )
         write_vit = lib.write("sym", target)
 
         source = pd.DataFrame(
             {"a": [-1, 20, -2], "b": [-1.1, 20.1, -3.1], "c": ["a", "c", "d"]},
             index=pd.DatetimeIndex(
-                [pd.Timestamp("2024-01-01 15:00:00"), pd.Timestamp("2024-01-02"), pd.Timestamp("2024-01-02 01:00:00")]
+                [pd.Timestamp("2024-01-01 15:00:00"), pd.Timestamp("2024-01-02"), pd.Timestamp("2024-01-02 01:00:00")],
+                name="ts",
             ),
         )
 
@@ -1753,7 +1808,8 @@ class TestMergeTimeseriesUpdateAndInsert:
                     pd.Timestamp("2024-01-02"),
                     pd.Timestamp("2024-01-02 01:00:00"),
                     pd.Timestamp("2024-01-03"),
-                ]
+                ],
+                name="ts",
             ),
         )
 
@@ -1806,10 +1862,10 @@ class TestMergeTimeseriesUpdateAndInsert:
     def test_upsert_with_existing_symbol(self, lmdb_library, source_format):
         # When the symbol exists upsert is irrelevant and a regular merge is performed.
         lib = lmdb_library
-        target = pd.DataFrame({"a": [1, 2, 3]}, index=pd.date_range("2024-01-01", periods=3))
+        target = pd.DataFrame({"a": [1, 2, 3]}, index=pd.date_range("2024-01-01", periods=3, name="ts"))
         lib.write("sym", target)
         source = pd.DataFrame(
-            {"a": [20, 40]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-02"), pd.Timestamp("2024-01-04")])
+            {"a": [20, 40]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-02"), pd.Timestamp("2024-01-04")], name="ts")
         )
         merge_vit = run_merge(lib, source_format, "sym", source, strategy=self.strategy, upsert=True)
         assert merge_vit.version == 1
@@ -1821,7 +1877,8 @@ class TestMergeTimeseriesUpdateAndInsert:
                     pd.Timestamp("2024-01-02"),
                     pd.Timestamp("2024-01-03"),
                     pd.Timestamp("2024-01-04"),
-                ]
+                ],
+                name="ts",
             ),
         )
         assert_frame_equal(lib.read("sym").data, expected)
@@ -1846,7 +1903,8 @@ class TestMergeTimeseriesUpdateAndInsert:
     def test_on_index_and_column(self, lmdb_library, source_format):
         lib = lmdb_library
         target = pd.DataFrame(
-            {"a": [1, 2, 3], "b": [1.0, 2.0, 3.0], "c": ["a", "b", "c"]}, index=pd.date_range("2024-01-01", periods=3)
+            {"a": [1, 2, 3], "b": [1.0, 2.0, 3.0], "c": ["a", "b", "c"]},
+            index=pd.date_range("2024-01-01", periods=3, name="ts"),
         )
         lib.write("sym", target)
 
@@ -1858,7 +1916,8 @@ class TestMergeTimeseriesUpdateAndInsert:
                     pd.Timestamp("2024-01-02 01:00:00"),  # Matches column, but not index
                     pd.Timestamp("2024-01-03"),  # Matches index, but not column
                     pd.Timestamp("2024-01-04"),  # Does not match either
-                ]
+                ],
+                name="ts",
             ),
         )
         run_merge(lib, source_format, "sym", source, on=["a"])
@@ -1873,7 +1932,8 @@ class TestMergeTimeseriesUpdateAndInsert:
                     pd.Timestamp("2024-01-03"),
                     pd.Timestamp("2024-01-03"),
                     pd.Timestamp("2024-01-04"),
-                ]
+                ],
+                name="ts",
             ),
         )
         received = lib.read("sym").data
@@ -1890,7 +1950,7 @@ class TestMergeTimeseriesUpdateAndInsert:
                 "d": [10.1, 20.2, 30.3, 40.4],
                 "e": [100, 200, 300, 400],
             },
-            index=pd.date_range("2024-01-01", periods=4),
+            index=pd.date_range("2024-01-01", periods=4, name="ts"),
         )
         lib.write("sym", target)
 
@@ -1909,7 +1969,8 @@ class TestMergeTimeseriesUpdateAndInsert:
                     "2024-01-03",  # index + b + d match, e differs (insert)
                     "2024-01-05",  # new index, b+d+e match (insert)
                     "2024-01-06",  # new index, new b, new d, new e (insert)
-                ]
+                ],
+                name="ts",
             ),
         )
 
@@ -1932,7 +1993,8 @@ class TestMergeTimeseriesUpdateAndInsert:
                     "2024-01-04",  # Original target row
                     "2024-01-05",  # Inserted: no match for b="d", d=40.4, e=400 (different index)
                     "2024-01-06",  # Inserted: completely new b="e", d=70.7, e=800
-                ]
+                ],
+                name="ts",
             ),
         )
         received = lib.read("sym").data
@@ -1956,14 +2018,15 @@ class TestMergeTimeseriesUpdateAndInsert:
         [
             pytest.param(
                 pd.DataFrame(
-                    {"a": [10, 20], "b": [10.0, 20.0]}, index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(0)])
+                    {"a": [10, 20], "b": [10.0, 20.0]},
+                    index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(0)], name="ts"),
                 ),
                 id="No_unmatched",
             ),
             pytest.param(
                 pd.DataFrame(
                     {"a": [10, 20, 30], "b": [10.0, 20.0, 30.0]},
-                    index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(0), pd.Timestamp(2)]),
+                    index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(0), pd.Timestamp(2)], name="ts"),
                 ),
                 id="Contains_unmatched",
             ),
@@ -1973,7 +2036,7 @@ class TestMergeTimeseriesUpdateAndInsert:
         lib = lmdb_library
         target = pd.DataFrame(
             {"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]},
-            index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(5), pd.Timestamp(10)]),
+            index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(5), pd.Timestamp(10)], name="ts"),
         )
         lib.write("sym", target)
         with pytest.raises(UserInputException):
@@ -1985,7 +2048,7 @@ class TestMergeTimeseriesUpdateAndInsert:
             pytest.param(
                 pd.DataFrame(
                     {"a": [0, 1, 100], "b": [100.0, 200.0, 300.0]},
-                    index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(0), pd.Timestamp(5)]),
+                    index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(0), pd.Timestamp(5)], name="ts"),
                 ),
                 pd.DataFrame(
                     {"a": [0, 1, 2, 3, 4, 5, 100, 6], "b": [100.0, 200.0, 2.0, 3.0, 4.0, 5.0, 300.0, 6.0]},
@@ -1999,7 +2062,8 @@ class TestMergeTimeseriesUpdateAndInsert:
                             pd.Timestamp(5),
                             pd.Timestamp(5),
                             pd.Timestamp(6),
-                        ]
+                        ],
+                        name="ts",
                     ),
                 ),
                 id="Match_first_equal_run_Insert_in_second_equal_run",
@@ -2007,7 +2071,7 @@ class TestMergeTimeseriesUpdateAndInsert:
             pytest.param(
                 pd.DataFrame(
                     {"a": [0, 100, 3], "b": [100.0, 200.0, 300.0]},
-                    index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(0), pd.Timestamp(5)]),
+                    index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(0), pd.Timestamp(5)], name="ts"),
                 ),
                 pd.DataFrame(
                     {"a": [0, 1, 100, 2, 3, 4, 5, 6], "b": [100.0, 1.0, 200, 2.0, 300.0, 4.0, 5.0, 6.0]},
@@ -2021,7 +2085,8 @@ class TestMergeTimeseriesUpdateAndInsert:
                             pd.Timestamp(5),
                             pd.Timestamp(5),
                             pd.Timestamp(6),
-                        ]
+                        ],
+                        name="ts",
                     ),
                 ),
                 id="Match_in_second_equal_run_Insert_in_first",
@@ -2039,7 +2104,8 @@ class TestMergeTimeseriesUpdateAndInsert:
                             pd.Timestamp(5),
                             pd.Timestamp(5),
                             pd.Timestamp(5),
-                        ]
+                        ],
+                        name="ts",
                     ),
                 ),
                 pd.DataFrame(
@@ -2058,7 +2124,8 @@ class TestMergeTimeseriesUpdateAndInsert:
                             pd.Timestamp(5),
                             pd.Timestamp(5),
                             pd.Timestamp(6),
-                        ]
+                        ],
+                        name="ts",
                     ),
                 ),
                 id="Match_in_both_equal_index_runs_and_insert_in_both",
@@ -2076,7 +2143,8 @@ class TestMergeTimeseriesUpdateAndInsert:
                 pd.Timestamp(5),
                 pd.Timestamp(5),
                 pd.Timestamp(6),
-            ]
+            ],
+            name="ts",
         )
         target = pd.DataFrame({"a": range(len(index)), "b": np.linspace(0, len(index) - 1, len(index))}, index=index)
         lib.write("sym", target)
@@ -2085,43 +2153,51 @@ class TestMergeTimeseriesUpdateAndInsert:
 
     def test_insert_before_first_segment_start_and_update_first_value(self, lmdb_library, source_format):
         lib = lmdb_library
-        lib.write("sym", pd.DataFrame({"a": [1, 2]}, index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(5)])))
-        source = pd.DataFrame({"a": [10, 20]}, index=pd.DatetimeIndex([pd.Timestamp(-5), pd.Timestamp(0)]))
+        lib.write(
+            "sym", pd.DataFrame({"a": [1, 2]}, index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(5)], name="ts"))
+        )
+        source = pd.DataFrame({"a": [10, 20]}, index=pd.DatetimeIndex([pd.Timestamp(-5), pd.Timestamp(0)], name="ts"))
         run_merge(lib, source_format, "sym", source, self.strategy)
         expected = pd.DataFrame(
-            {"a": [10, 20, 2]}, index=pd.DatetimeIndex([pd.Timestamp(-5), pd.Timestamp(0), pd.Timestamp(5)])
+            {"a": [10, 20, 2]}, index=pd.DatetimeIndex([pd.Timestamp(-5), pd.Timestamp(0), pd.Timestamp(5)], name="ts")
         )
         assert_frame_equal(lib.read("sym").data, expected)
 
     def test_insert_before_first_segment_start_and_update_first_value_on(self, lmdb_library, source_format):
         lib = lmdb_library
-        lib.write("sym", pd.DataFrame({"a": [1, 2]}, index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(5)])))
-        source = pd.DataFrame({"a": [10, 20]}, index=pd.DatetimeIndex([pd.Timestamp(-5), pd.Timestamp(0)]))
+        lib.write(
+            "sym", pd.DataFrame({"a": [1, 2]}, index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(5)], name="ts"))
+        )
+        source = pd.DataFrame({"a": [10, 20]}, index=pd.DatetimeIndex([pd.Timestamp(-5), pd.Timestamp(0)], name="ts"))
         run_merge(lib, source_format, "sym", source, self.strategy, on=["a"])
         expected = pd.DataFrame(
             {"a": [10, 1, 20, 2]},
-            index=pd.DatetimeIndex([pd.Timestamp(-5), pd.Timestamp(0), pd.Timestamp(0), pd.Timestamp(5)]),
+            index=pd.DatetimeIndex([pd.Timestamp(-5), pd.Timestamp(0), pd.Timestamp(0), pd.Timestamp(5)], name="ts"),
         )
         assert_frame_equal(lib.read("sym").data, expected)
 
     def test_insert_after_last_and_match_last(self, lmdb_library, source_format):
         lib = lmdb_library
-        lib.write("sym", pd.DataFrame({"a": [1, 2]}, index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(5)])))
-        source = pd.DataFrame({"a": [10, 20]}, index=pd.DatetimeIndex([pd.Timestamp(5), pd.Timestamp(10)]))
+        lib.write(
+            "sym", pd.DataFrame({"a": [1, 2]}, index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(5)], name="ts"))
+        )
+        source = pd.DataFrame({"a": [10, 20]}, index=pd.DatetimeIndex([pd.Timestamp(5), pd.Timestamp(10)], name="ts"))
         run_merge(lib, source_format, "sym", source, self.strategy)
         expected = pd.DataFrame(
-            {"a": [1, 10, 20]}, index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(5), pd.Timestamp(10)])
+            {"a": [1, 10, 20]}, index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(5), pd.Timestamp(10)], name="ts")
         )
         assert_frame_equal(lib.read("sym").data, expected)
 
     def test_insert_after_last_and_match_last_on(self, lmdb_library, source_format):
         lib = lmdb_library
-        lib.write("sym", pd.DataFrame({"a": [1, 2]}, index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(5)])))
-        source = pd.DataFrame({"a": [10, 20]}, index=pd.DatetimeIndex([pd.Timestamp(5), pd.Timestamp(10)]))
+        lib.write(
+            "sym", pd.DataFrame({"a": [1, 2]}, index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(5)], name="ts"))
+        )
+        source = pd.DataFrame({"a": [10, 20]}, index=pd.DatetimeIndex([pd.Timestamp(5), pd.Timestamp(10)], name="ts"))
         run_merge(lib, source_format, "sym", source, self.strategy, on=["a"])
         expected = pd.DataFrame(
             {"a": [1, 2, 10, 20]},
-            index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(5), pd.Timestamp(5), pd.Timestamp(10)]),
+            index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(5), pd.Timestamp(5), pd.Timestamp(10)], name="ts"),
         )
         assert_frame_equal(lib.read("sym").data, expected)
 
@@ -2179,12 +2255,13 @@ class TestMergeUpdateInsertIndexSpansMultipleSegments:
                         23,
                         24,
                     ]
-                ]
+                ],
+                name="ts",
             ),
         )
         source = pd.DataFrame(
             {"a": np.array([10, 8, 120], dtype=np.int64), "b": np.array([100, 200, 300], dtype=np.int32)},
-            index=pd.DatetimeIndex([pd.Timestamp(v) for v in [9, 9, 9]]),
+            index=pd.DatetimeIndex([pd.Timestamp(v) for v in [9, 9, 9]], name="ts"),
         )
         expected = pd.DataFrame(
             {
@@ -2288,7 +2365,8 @@ class TestMergeUpdateInsertIndexSpansMultipleSegments:
                         23,
                         24,
                     ]
-                ]
+                ],
+                name="ts",
             ),
         )
         self._run(lmdb_library_factory, source_format, target, source, expected, on=["a"])
@@ -2302,7 +2380,8 @@ class TestMergeUpdateInsertIndexSpansMultipleSegments:
                 [
                     pd.Timestamp(v)
                     for v in [1, 2, 3, 4, 5, 6, 7, 8, 9, 9, 9, 9, 9, 9, 9, 9, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
-                ]
+                ],
+                name="ts",
             ),
         )
         source = pd.DataFrame(
@@ -2310,7 +2389,7 @@ class TestMergeUpdateInsertIndexSpansMultipleSegments:
                 "a": np.array([100, 10, 8, 120, 15, 17, 100], dtype=np.int64),
                 "b": np.array([100, 200, 300, 400, 500, 600, 700], dtype=np.int32),
             },
-            index=pd.DatetimeIndex([pd.Timestamp(v) for v in [8, 9, 9, 9, 9, 10, 11]]),
+            index=pd.DatetimeIndex([pd.Timestamp(v) for v in [8, 9, 9, 9, 9, 10, 11]], name="ts"),
         )
         expected = pd.DataFrame(
             {
@@ -2420,7 +2499,8 @@ class TestMergeUpdateInsertIndexSpansMultipleSegments:
                         18,
                         19,
                     ]
-                ]
+                ],
+                name="ts",
             ),
         )
         self._run(lmdb_library_factory, source_format, target, source, expected, on=["a"])
@@ -2432,7 +2512,8 @@ class TestMergeUpdateInsertIndexSpansMultipleSegments:
                 [
                     pd.Timestamp(v)
                     for v in [1, 2, 3, 4, 5, 6, 7, 8, 9, 9, 9, 9, 9, 9, 9, 9, 9, 10, 10, 10, 10, 10, 10, 11, 12, 13, 14]
-                ]
+                ],
+                name="ts",
             ),
         )
         source = pd.DataFrame(
@@ -2440,7 +2521,9 @@ class TestMergeUpdateInsertIndexSpansMultipleSegments:
                 "a": np.array([100, 11, 16, 13, 100, 8, 200, 19, 100, 17, 20, 300, 400, 23, 500], dtype=np.int64),
                 "b": np.array([i * 100 for i in range(15)], dtype=np.int32),
             },
-            index=pd.DatetimeIndex([pd.Timestamp(v) for v in [8, 9, 9, 9, 9, 9, 9, 10, 10, 10, 10, 10, 11, 11, 13]]),
+            index=pd.DatetimeIndex(
+                [pd.Timestamp(v) for v in [8, 9, 9, 9, 9, 9, 9, 10, 10, 10, 10, 10, 11, 11, 13]], name="ts"
+            ),
         )
         expected = pd.DataFrame(
             {
@@ -2562,7 +2645,8 @@ class TestMergeUpdateInsertIndexSpansMultipleSegments:
                         13,
                         14,
                     ]
-                ]
+                ],
+                name="ts",
             ),
         )
         self._run(lmdb_library_factory, source_format, target, source, expected, on=["a"])
@@ -2584,7 +2668,7 @@ class TestMergeUpdateInsertIndexSpansMultipleSegmentsChain:
     def _chain_target(self):
         return pd.DataFrame(
             {"a": np.arange(21, dtype=np.int64), "b": np.arange(21, dtype=np.int32)},
-            index=pd.DatetimeIndex([pd.Timestamp(v) for v in self._CHAIN_INDEX]),
+            index=pd.DatetimeIndex([pd.Timestamp(v) for v in self._CHAIN_INDEX], name="ts"),
         )
 
     def _run(self, lmdb_library_factory, source_format, source, expected, on):
@@ -2596,7 +2680,7 @@ class TestMergeUpdateInsertIndexSpansMultipleSegmentsChain:
     def test_source_in_row_slice_0(self, lmdb_library_factory, source_format):
         source = pd.DataFrame(
             {"a": np.array([0, 10], dtype=np.int64), "b": np.array([100, 200], dtype=np.int32)},
-            index=pd.DatetimeIndex([pd.Timestamp(v) for v in [0, 2]]),
+            index=pd.DatetimeIndex([pd.Timestamp(v) for v in [0, 2]], name="ts"),
         )
         expected = pd.DataFrame(
             {
@@ -2608,7 +2692,11 @@ class TestMergeUpdateInsertIndexSpansMultipleSegmentsChain:
                 ),
             },
             index=pd.DatetimeIndex(
-                [pd.Timestamp(v) for v in [0, 1, 2, 2, 4, 5, 6, 6, 6, 6, 6, 10, 11, 11, 13, 15, 15, 16, 17, 17, 19, 20]]
+                [
+                    pd.Timestamp(v)
+                    for v in [0, 1, 2, 2, 4, 5, 6, 6, 6, 6, 6, 10, 11, 11, 13, 15, 15, 16, 17, 17, 19, 20]
+                ],
+                name="ts",
             ),
         )
         self._run(lmdb_library_factory, source_format, source, expected, on=["a"])
@@ -2616,7 +2704,7 @@ class TestMergeUpdateInsertIndexSpansMultipleSegmentsChain:
     def test_source_in_row_slice_1_value_is_not_in_multiple_segments(self, lmdb_library_factory, source_format):
         source = pd.DataFrame(
             {"a": np.array([4], dtype=np.int64), "b": np.array([100], dtype=np.int32)},
-            index=pd.DatetimeIndex([pd.Timestamp(5)]),
+            index=pd.DatetimeIndex([pd.Timestamp(5)], name="ts"),
         )
         expected = pd.DataFrame(
             {
@@ -2625,14 +2713,14 @@ class TestMergeUpdateInsertIndexSpansMultipleSegmentsChain:
                     [0, 1, 2, 3, 100, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20], dtype=np.int32
                 ),
             },
-            index=pd.DatetimeIndex([pd.Timestamp(v) for v in self._CHAIN_INDEX]),
+            index=pd.DatetimeIndex([pd.Timestamp(v) for v in self._CHAIN_INDEX], name="ts"),
         )
         self._run(lmdb_library_factory, source_format, source, expected, on=["a"])
 
     def test_source_in_row_slice_1_value_is_in_multiple_segments(self, lmdb_library_factory, source_format):
         source = pd.DataFrame(
             {"a": np.array([9, 5, 6, 100], dtype=np.int64), "b": np.array([100, 200, 300, 400], dtype=np.int32)},
-            index=pd.DatetimeIndex([pd.Timestamp(v) for v in [6, 6, 6, 6]]),
+            index=pd.DatetimeIndex([pd.Timestamp(v) for v in [6, 6, 6, 6]], name="ts"),
         )
         expected = pd.DataFrame(
             {
@@ -2645,7 +2733,11 @@ class TestMergeUpdateInsertIndexSpansMultipleSegmentsChain:
                 ),
             },
             index=pd.DatetimeIndex(
-                [pd.Timestamp(v) for v in [0, 1, 2, 4, 5, 6, 6, 6, 6, 6, 6, 10, 11, 11, 13, 15, 15, 16, 17, 17, 19, 20]]
+                [
+                    pd.Timestamp(v)
+                    for v in [0, 1, 2, 4, 5, 6, 6, 6, 6, 6, 6, 10, 11, 11, 13, 15, 15, 16, 17, 17, 19, 20]
+                ],
+                name="ts",
             ),
         )
         self._run(lmdb_library_factory, source_format, source, expected, on=["a"])
@@ -2653,7 +2745,7 @@ class TestMergeUpdateInsertIndexSpansMultipleSegmentsChain:
     def test_source_in_row_slice_3(self, lmdb_library_factory, source_format):
         source = pd.DataFrame(
             {"a": np.array([100], dtype=np.int64), "b": np.array([100], dtype=np.int32)},
-            index=pd.DatetimeIndex([pd.Timestamp(11)]),
+            index=pd.DatetimeIndex([pd.Timestamp(11)], name="ts"),
         )
         expected = pd.DataFrame(
             {
@@ -2668,7 +2760,8 @@ class TestMergeUpdateInsertIndexSpansMultipleSegmentsChain:
                 [
                     pd.Timestamp(v)
                     for v in [0, 1, 2, 4, 5, 6, 6, 6, 6, 6, 10, 11, 11, 11, 13, 15, 15, 16, 17, 17, 19, 20]
-                ]
+                ],
+                name="ts",
             ),
         )
         self._run(lmdb_library_factory, source_format, source, expected, on=["a"])
@@ -2676,7 +2769,7 @@ class TestMergeUpdateInsertIndexSpansMultipleSegmentsChain:
     def test_source_in_row_slice_5(self, lmdb_library_factory, source_format):
         source = pd.DataFrame(
             {"a": np.array([100], dtype=np.int64), "b": np.array([100], dtype=np.int32)},
-            index=pd.DatetimeIndex([pd.Timestamp(15)]),
+            index=pd.DatetimeIndex([pd.Timestamp(15)], name="ts"),
         )
         expected = pd.DataFrame(
             {
@@ -2691,7 +2784,8 @@ class TestMergeUpdateInsertIndexSpansMultipleSegmentsChain:
                 [
                     pd.Timestamp(v)
                     for v in [0, 1, 2, 4, 5, 6, 6, 6, 6, 6, 10, 11, 11, 13, 15, 15, 15, 16, 17, 17, 19, 20]
-                ]
+                ],
+                name="ts",
             ),
         )
         self._run(lmdb_library_factory, source_format, source, expected, on=["a"])
@@ -2700,7 +2794,7 @@ class TestMergeUpdateInsertIndexSpansMultipleSegmentsChain:
         # on=None matches on the index only; index 7 is absent from the target so the row is inserted.
         source = pd.DataFrame(
             {"a": np.array([100], dtype=np.int64), "b": np.array([100], dtype=np.int32)},
-            index=pd.DatetimeIndex([pd.Timestamp(7)]),
+            index=pd.DatetimeIndex([pd.Timestamp(7)], name="ts"),
         )
         expected = pd.DataFrame(
             {
@@ -2712,7 +2806,11 @@ class TestMergeUpdateInsertIndexSpansMultipleSegmentsChain:
                 ),
             },
             index=pd.DatetimeIndex(
-                [pd.Timestamp(v) for v in [0, 1, 2, 4, 5, 6, 6, 6, 6, 6, 7, 10, 11, 11, 13, 15, 15, 16, 17, 17, 19, 20]]
+                [
+                    pd.Timestamp(v)
+                    for v in [0, 1, 2, 4, 5, 6, 6, 6, 6, 6, 7, 10, 11, 11, 13, 15, 15, 16, 17, 17, 19, 20]
+                ],
+                name="ts",
             ),
         )
         self._run(lmdb_library_factory, source_format, source, expected, on=None)
@@ -3606,12 +3704,12 @@ class TestMergeDatetimeInsertRowSlicing:
         target = pd.DataFrame(
             {"b": [1.0, 3.0, 5.0, 7.0, 9.0, 11.0], "s": ["a", "b", "c", "d", "e", "f"]},
             index=pd.DatetimeIndex(
-                ["2024-01-01", "2024-01-03", "2024-01-05", "2024-01-07", "2024-01-09", "2024-01-11"]
+                ["2024-01-01", "2024-01-03", "2024-01-05", "2024-01-07", "2024-01-09", "2024-01-11"], name="ts"
             ),
         )
         source = pd.DataFrame(
             {"b": [2.0, 6.0, 8.0, 10.0], "s": ["A", "B", "C", "D"]},
-            index=pd.DatetimeIndex(["2024-01-02", "2024-01-06", "2024-01-08", "2024-01-10"]),
+            index=pd.DatetimeIndex(["2024-01-02", "2024-01-06", "2024-01-08", "2024-01-10"], name="ts"),
         )
         lib.write("sym", target)
         qs.reset_stats()
@@ -3636,7 +3734,8 @@ class TestMergeDatetimeInsertRowSlicing:
                     "2024-01-09",
                     "2024-01-10",
                     "2024-01-11",
-                ]
+                ],
+                name="ts",
             ),
         )
         assert_frame_equal(lib.read("sym").data, expected)
@@ -3650,7 +3749,7 @@ class TestMergeDatetimeInsertRowSlicing:
         "target_index, target_b, target_s, expected_index, expected_b, expected_s, expected_num_segments",
         [
             (
-                pd.date_range("2024-01-01", periods=6),
+                pd.date_range("2024-01-01", periods=6, name="ts"),
                 [1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
                 ["a", "b", "c", "d", "e", "f"],
                 pd.DatetimeIndex(
@@ -3668,14 +3767,15 @@ class TestMergeDatetimeInsertRowSlicing:
                         "2024-01-14",
                         "2024-01-15",
                         "2024-01-16",
-                    ]
+                    ],
+                    name="ts",
                 ),
                 [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0],
                 ["a", "b", "c", "d", "e", "f", "A", "B", "C", "D", "E", "F", "G"],
                 4,
             ),
             (
-                pd.date_range("2024-01-01", periods=5),
+                pd.date_range("2024-01-01", periods=5, name="ts"),
                 [1.0, 2.0, 3.0, 4.0, 5.0],
                 ["a", "b", "c", "d", "e"],
                 pd.DatetimeIndex(
@@ -3692,7 +3792,8 @@ class TestMergeDatetimeInsertRowSlicing:
                         "2024-01-14",
                         "2024-01-15",
                         "2024-01-16",
-                    ]
+                    ],
+                    name="ts",
                 ),
                 [1.0, 2.0, 3.0, 4.0, 5.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0],
                 ["a", "b", "c", "d", "e", "A", "B", "C", "D", "E", "F", "G"],
@@ -3718,7 +3819,7 @@ class TestMergeDatetimeInsertRowSlicing:
         target = pd.DataFrame({"b": target_b, "s": target_s}, index=target_index)
         source = pd.DataFrame(
             {"b": [10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0], "s": ["A", "B", "C", "D", "E", "F", "G"]},
-            index=pd.date_range("2024-01-10", periods=7),
+            index=pd.date_range("2024-01-10", periods=7, name="ts"),
         )
         lib.write("sym", target)
         qs.reset_stats()
@@ -3736,7 +3837,7 @@ class TestMergeDatetimeInsertRowSlicing:
         "target_index, target_b, target_s, expected_index, expected_b, expected_s, expected_num_segments",
         [
             (
-                pd.date_range("2024-01-10", periods=6),
+                pd.date_range("2024-01-10", periods=6, name="ts"),
                 [10.0, 11.0, 12.0, 13.0, 14.0, 15.0],
                 ["a", "b", "c", "d", "e", "f"],
                 pd.DatetimeIndex(
@@ -3752,18 +3853,20 @@ class TestMergeDatetimeInsertRowSlicing:
                         "2024-01-13",
                         "2024-01-14",
                         "2024-01-15",
-                    ]
+                    ],
+                    name="ts",
                 ),
                 [1.0, 2.0, 3.0, 4.0, 5.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0],
                 ["A", "B", "C", "D", "E", "a", "b", "c", "d", "e", "f"],
                 3,
             ),
             (
-                pd.DatetimeIndex(["2024-01-10", "2024-01-11"]),
+                pd.DatetimeIndex(["2024-01-10", "2024-01-11"], name="ts"),
                 [10.0, 11.0],
                 ["a", "b"],
                 pd.DatetimeIndex(
-                    ["2024-01-01", "2024-01-02", "2024-01-03", "2024-01-04", "2024-01-05", "2024-01-10", "2024-01-11"]
+                    ["2024-01-01", "2024-01-02", "2024-01-03", "2024-01-04", "2024-01-05", "2024-01-10", "2024-01-11"],
+                    name="ts",
                 ),
                 [1.0, 2.0, 3.0, 4.0, 5.0, 10.0, 11.0],
                 ["A", "B", "C", "D", "E", "a", "b"],
@@ -3789,7 +3892,7 @@ class TestMergeDatetimeInsertRowSlicing:
         target = pd.DataFrame({"b": target_b, "s": target_s}, index=target_index)
         source = pd.DataFrame(
             {"b": [1.0, 2.0, 3.0, 4.0, 5.0], "s": ["A", "B", "C", "D", "E"]},
-            index=pd.date_range("2024-01-01", periods=5),
+            index=pd.date_range("2024-01-01", periods=5, name="ts"),
         )
         lib.write("sym", target)
         qs.reset_stats()
@@ -3808,13 +3911,13 @@ class TestMergeDatetimeInsertRowSlicing:
         target = pd.DataFrame(
             {"a": [1, 2, 3, 4, 5, 6], "b": ["a", "b", "c", "d", "e", "f"]},
             index=pd.DatetimeIndex(
-                ["2024-01-01", "2024-01-02", "2024-01-02", "2024-01-02", "2024-01-03", "2024-01-04"]
+                ["2024-01-01", "2024-01-02", "2024-01-02", "2024-01-02", "2024-01-03", "2024-01-04"], name="ts"
             ),
         )
         # on=["a"] means the Jan2 source rows are unmatched despite the equal timestamps.
         source = pd.DataFrame(
             {"a": [20, 21, 22, 50], "b": ["A", "B", "C", "D"]},
-            index=pd.DatetimeIndex(["2024-01-02", "2024-01-02", "2024-01-02", "2024-01-05"]),
+            index=pd.DatetimeIndex(["2024-01-02", "2024-01-02", "2024-01-02", "2024-01-05"], name="ts"),
         )
         lib.write("sym", target)
         qs.reset_stats()
@@ -3839,7 +3942,8 @@ class TestMergeDatetimeInsertRowSlicing:
                     "2024-01-03",
                     "2024-01-04",
                     "2024-01-05",
-                ]
+                ],
+                name="ts",
             ),
         )
         assert_frame_equal(lib.read("sym").data, expected)
@@ -3862,10 +3966,11 @@ class TestMergeDatetimeInsertRowSlicing:
                     "2024-01-03",
                     "2024-01-03",
                     "2024-01-04",
-                ]
+                ],
+                name="ts",
             ),
         )
-        source = pd.DataFrame({"a": [999], "b": ["A"]}, index=pd.DatetimeIndex(["2024-01-03"]))
+        source = pd.DataFrame({"a": [999], "b": ["A"]}, index=pd.DatetimeIndex(["2024-01-03"], name="ts"))
         lib.write("sym", target)
         qs.reset_stats()
         with qs.query_stats():
@@ -3889,7 +3994,8 @@ class TestMergeDatetimeInsertRowSlicing:
                     "2024-01-03",
                     "2024-01-03",
                     "2024-01-04",
-                ]
+                ],
+                name="ts",
             ),
         )
         assert_frame_equal(lib.read("sym").data, expected)
@@ -3903,12 +4009,12 @@ class TestMergeDatetimeInsertRowSlicing:
         target = pd.DataFrame(
             {"b": [1.0, 2.0, 5.0, 6.0, 7.0, 8.0], "s": ["a", "b", "c", "d", "e", "f"]},
             index=pd.DatetimeIndex(
-                ["2024-01-01", "2024-01-02", "2024-01-05", "2024-01-06", "2024-01-07", "2024-01-08"]
+                ["2024-01-01", "2024-01-02", "2024-01-05", "2024-01-06", "2024-01-07", "2024-01-08"], name="ts"
             ),
         )
         source = pd.DataFrame(
             {"b": [10.0, 1.25, 1.5], "s": ["Z", "A", "B"]},
-            index=pd.DatetimeIndex(["2024-01-01", "2024-01-01 06:00:00", "2024-01-01 12:00:00"]),
+            index=pd.DatetimeIndex(["2024-01-01", "2024-01-01 06:00:00", "2024-01-01 12:00:00"], name="ts"),
         )
         lib.write("sym", target)
         qs.reset_stats()
@@ -3926,7 +4032,8 @@ class TestMergeDatetimeInsertRowSlicing:
                 "2024-01-06",
                 "2024-01-07",
                 "2024-01-08",
-            ]
+            ],
+            name="ts",
         )
         if strategy.matched == MergeAction.UPDATE:
             expected_b = [10.0, 1.25, 1.5, 2.0, 5.0, 6.0, 7.0, 8.0]
@@ -3950,7 +4057,7 @@ class TestMergeDatetimeInsertRowSlicing:
                 "e": [100, 400, 800],
                 "f": ["aaa", "bbb", "ccc"],
             },
-            index=pd.DatetimeIndex(["2024-01-01", "2024-01-04", "2024-01-08"]),
+            index=pd.DatetimeIndex(["2024-01-01", "2024-01-04", "2024-01-08"], name="ts"),
         )
         source = pd.DataFrame(
             {
@@ -3962,7 +4069,7 @@ class TestMergeDatetimeInsertRowSlicing:
                 "f": ["AAA", "BBB", "ZZZ", "CCC", "DDD", "EEE"],
             },
             index=pd.DatetimeIndex(
-                ["2024-01-02", "2024-01-03", "2024-01-04", "2024-01-05", "2024-01-06", "2024-01-07"]
+                ["2024-01-02", "2024-01-03", "2024-01-04", "2024-01-05", "2024-01-06", "2024-01-07"], name="ts"
             ),
         )
         lib.write("sym", target)
@@ -3981,7 +4088,7 @@ class TestMergeDatetimeInsertRowSlicing:
                     "e": [100, 200, 300, 4400, 500, 600, 700, 800],
                     "f": ["aaa", "AAA", "BBB", "ZZZ", "CCC", "DDD", "EEE", "ccc"],
                 },
-                index=pd.date_range("2024-01-01", periods=8),
+                index=pd.date_range("2024-01-01", periods=8, name="ts"),
             )
         else:
             expected = pd.DataFrame(
@@ -3993,7 +4100,7 @@ class TestMergeDatetimeInsertRowSlicing:
                     "e": [100, 200, 300, 400, 500, 600, 700, 800],
                     "f": ["aaa", "AAA", "BBB", "bbb", "CCC", "DDD", "EEE", "ccc"],
                 },
-                index=pd.date_range("2024-01-01", periods=8),
+                index=pd.date_range("2024-01-01", periods=8, name="ts"),
             )
         assert_frame_equal(lib.read("sym").data, expected)
         index_df = lib._dev_tools.library_tool().read_index("sym")
@@ -4005,14 +4112,14 @@ class TestMergeDatetimeInsertRowSlicing:
         target = pd.DataFrame(
             {"b": [1.0, 8.0, 9.0, 20.0, 21.0, 22.0], "s": ["a", "b", "c", "d", "e", "f"]},
             index=pd.DatetimeIndex(
-                ["2024-01-01", "2024-01-08", "2024-01-09", "2024-01-20", "2024-01-21", "2024-01-22"]
+                ["2024-01-01", "2024-01-08", "2024-01-09", "2024-01-20", "2024-01-21", "2024-01-22"], name="ts"
             ),
         )
         # 5 unmatched rows, all inside the first group's index range. Second slice is untouched. The result from
         # inserting in the first slice is resliced
         source = pd.DataFrame(
             {"b": [2.0, 3.0, 4.0, 5.0, 6.0], "s": ["A", "B", "C", "D", "E"]},
-            index=pd.DatetimeIndex(["2024-01-02", "2024-01-03", "2024-01-04", "2024-01-05", "2024-01-06"]),
+            index=pd.DatetimeIndex(["2024-01-02", "2024-01-03", "2024-01-04", "2024-01-05", "2024-01-06"], name="ts"),
         )
         lib.write("sym", target)
         qs.reset_stats()
@@ -4038,7 +4145,8 @@ class TestMergeDatetimeInsertRowSlicing:
                     "2024-01-20",
                     "2024-01-21",
                     "2024-01-22",
-                ]
+                ],
+                name="ts",
             ),
         )
         assert_frame_equal(lib.read("sym").data, expected)
@@ -4239,6 +4347,9 @@ class TestMergeMultiindexUpdate:
         source = pd.DataFrame(source_data_values, columns=data_column_names, index=source_idx)
 
         lib.write("sym", target)
+        if source_format != SourceFormat.PANDAS:
+            lib.rename_columns_arrow_compat("sym")
+            source = with_arrow_compat_index_names(source)
         with pytest.raises(UserInputException, match="E_COLUMN_NOT_FOUND"):
             run_merge(lib, source_format, "sym", source, strategy=self.strategy, on=on)
 
@@ -4567,54 +4678,54 @@ class TestMergeMultiindexUpdate:
     [
         pytest.param(
             [
-                pd.DataFrame({"a": [0]}, index=pd.DatetimeIndex([10])),
-                pd.DataFrame({"a": [1, 2, 3]}, index=pd.DatetimeIndex([10, 10, 30])),
-                pd.DataFrame({"a": [4, 5]}, index=pd.DatetimeIndex([30, 30])),
+                pd.DataFrame({"a": [0]}, index=pd.DatetimeIndex([10], name="ts")),
+                pd.DataFrame({"a": [1, 2, 3]}, index=pd.DatetimeIndex([10, 10, 30], name="ts")),
+                pd.DataFrame({"a": [4, 5]}, index=pd.DatetimeIndex([30, 30], name="ts")),
             ],
-            pd.DataFrame({"a": [1000, 1001, 1002, 1003]}, index=pd.DatetimeIndex([30, 40, 50, 60])),
+            pd.DataFrame({"a": [1000, 1001, 1002, 1003]}, index=pd.DatetimeIndex([30, 40, 50, 60], name="ts")),
             pd.DataFrame(
                 {"a": [0, 1, 2, 3, 4, 5, 1000, 1001, 1002, 1003]},
-                index=pd.DatetimeIndex([10, 10, 10, 30, 30, 30, 30, 40, 50, 60]),
+                index=pd.DatetimeIndex([10, 10, 10, 30, 30, 30, 30, 40, 50, 60], name="ts"),
             ),
             id="end_trailing",
         ),
         pytest.param(
             [
-                pd.DataFrame({"a": [0]}, index=pd.DatetimeIndex([10])),
-                pd.DataFrame({"a": [1, 2, 3]}, index=pd.DatetimeIndex([10, 10, 30])),
-                pd.DataFrame({"a": [4, 5]}, index=pd.DatetimeIndex([30, 30])),
-                pd.DataFrame({"a": [6]}, index=pd.DatetimeIndex([100])),
+                pd.DataFrame({"a": [0]}, index=pd.DatetimeIndex([10], name="ts")),
+                pd.DataFrame({"a": [1, 2, 3]}, index=pd.DatetimeIndex([10, 10, 30], name="ts")),
+                pd.DataFrame({"a": [4, 5]}, index=pd.DatetimeIndex([30, 30], name="ts")),
+                pd.DataFrame({"a": [6]}, index=pd.DatetimeIndex([100], name="ts")),
             ],
-            pd.DataFrame({"a": [1000, 1001, 1002]}, index=pd.DatetimeIndex([30, 40, 50])),
+            pd.DataFrame({"a": [1000, 1001, 1002]}, index=pd.DatetimeIndex([30, 40, 50], name="ts")),
             pd.DataFrame(
                 {"a": [0, 1, 2, 3, 4, 5, 1000, 1001, 1002, 6]},
-                index=pd.DatetimeIndex([10, 10, 10, 30, 30, 30, 30, 40, 50, 100]),
+                index=pd.DatetimeIndex([10, 10, 10, 30, 30, 30, 30, 40, 50, 100], name="ts"),
             ),
             id="middle_gap",
         ),
         pytest.param(
             [
-                pd.DataFrame({"a": [0]}, index=pd.DatetimeIndex([10])),
-                pd.DataFrame({"a": [1, 2, 3]}, index=pd.DatetimeIndex([10, 10, 30])),
-                pd.DataFrame({"a": [4, 5]}, index=pd.DatetimeIndex([30, 30])),
+                pd.DataFrame({"a": [0]}, index=pd.DatetimeIndex([10], name="ts")),
+                pd.DataFrame({"a": [1, 2, 3]}, index=pd.DatetimeIndex([10, 10, 30], name="ts")),
+                pd.DataFrame({"a": [4, 5]}, index=pd.DatetimeIndex([30, 30], name="ts")),
             ],
-            pd.DataFrame({"a": [1000, 1001, 1002]}, index=pd.DatetimeIndex([1, 2, 30])),
+            pd.DataFrame({"a": [1000, 1001, 1002]}, index=pd.DatetimeIndex([1, 2, 30], name="ts")),
             pd.DataFrame(
                 {"a": [1000, 1001, 0, 1, 2, 3, 4, 5, 1002]},
-                index=pd.DatetimeIndex([1, 2, 10, 10, 10, 30, 30, 30, 30]),
+                index=pd.DatetimeIndex([1, 2, 10, 10, 10, 30, 30, 30, 30], name="ts"),
             ),
             id="beginning_prepend",
         ),
         pytest.param(
             [
-                pd.DataFrame({"a": [0]}, index=pd.DatetimeIndex([10])),
-                pd.DataFrame({"a": [1, 2, 3]}, index=pd.DatetimeIndex([10, 10, 30])),
-                pd.DataFrame({"a": [4, 5]}, index=pd.DatetimeIndex([30, 30])),
+                pd.DataFrame({"a": [0]}, index=pd.DatetimeIndex([10], name="ts")),
+                pd.DataFrame({"a": [1, 2, 3]}, index=pd.DatetimeIndex([10, 10, 30], name="ts")),
+                pd.DataFrame({"a": [4, 5]}, index=pd.DatetimeIndex([30, 30], name="ts")),
             ],
-            pd.DataFrame({"a": [1000, 1001]}, index=pd.DatetimeIndex([20, 30])),
+            pd.DataFrame({"a": [1000, 1001]}, index=pd.DatetimeIndex([20, 30], name="ts")),
             pd.DataFrame(
                 {"a": [0, 1, 2, 1000, 3, 4, 5, 1001]},
-                index=pd.DatetimeIndex([10, 10, 10, 20, 30, 30, 30, 30]),
+                index=pd.DatetimeIndex([10, 10, 10, 20, 30, 30, 30, 30], name="ts"),
             ),
             id="within_span",
         ),
@@ -4638,20 +4749,20 @@ def test_merge_insert_with_repeated_boundary_timestamps(lmdb_library, target_seg
 @source_format_param
 def test_merge_insert_into_back_shared_middle_group(lmdb_library, source_format):
     lib = lmdb_library
-    lib.write("sym", pd.DataFrame({"a": [0, 1]}, index=pd.DatetimeIndex([10, 20])))
-    lib.append("sym", pd.DataFrame({"a": [2, 3]}, index=pd.DatetimeIndex([20, 30])))
-    lib.append("sym", pd.DataFrame({"a": [4, 5]}, index=pd.DatetimeIndex([30, 40])))
-    lib.append("sym", pd.DataFrame({"a": [6, 7]}, index=pd.DatetimeIndex([40, 50])))
+    lib.write("sym", pd.DataFrame({"a": [0, 1]}, index=pd.DatetimeIndex([10, 20], name="ts")))
+    lib.append("sym", pd.DataFrame({"a": [2, 3]}, index=pd.DatetimeIndex([20, 30], name="ts")))
+    lib.append("sym", pd.DataFrame({"a": [4, 5]}, index=pd.DatetimeIndex([30, 40], name="ts")))
+    lib.append("sym", pd.DataFrame({"a": [6, 7]}, index=pd.DatetimeIndex([40, 50], name="ts")))
     assert len(lib._dev_tools.library_tool().find_keys_for_symbol(KeyType.TABLE_DATA, "sym")) == 4
 
-    source = pd.DataFrame({"a": [1000, 1001, 1002]}, index=pd.DatetimeIndex([15, 25, 35]))
+    source = pd.DataFrame({"a": [1000, 1001, 1002]}, index=pd.DatetimeIndex([15, 25, 35], name="ts"))
     run_merge(
         lib, source_format, "sym", source, strategy=MergeStrategy(MergeAction.UPDATE, MergeAction.INSERT), on=["a"]
     )
 
     expected = pd.DataFrame(
         {"a": [0, 1000, 1, 2, 1001, 3, 4, 1002, 5, 6, 7]},
-        index=pd.DatetimeIndex([10, 15, 20, 20, 25, 30, 30, 35, 40, 40, 50]),
+        index=pd.DatetimeIndex([10, 15, 20, 20, 25, 30, 30, 35, 40, 40, 50], name="ts"),
     )
     assert_frame_equal(lib.read("sym").data, expected)
 
@@ -4659,13 +4770,13 @@ def test_merge_insert_into_back_shared_middle_group(lmdb_library, source_format)
 @source_format_param
 def test_merge_insert_only_into_chain_with_shared_boundaries(lmdb_library, source_format):
     lib = lmdb_library
-    lib.write("sym", pd.DataFrame({"a": [0, 1]}, index=pd.DatetimeIndex([10, 20])))
-    lib.append("sym", pd.DataFrame({"a": [2, 3]}, index=pd.DatetimeIndex([20, 30])))
-    lib.append("sym", pd.DataFrame({"a": [4, 5]}, index=pd.DatetimeIndex([30, 40])))
-    lib.append("sym", pd.DataFrame({"a": [6, 7]}, index=pd.DatetimeIndex([40, 50])))
+    lib.write("sym", pd.DataFrame({"a": [0, 1]}, index=pd.DatetimeIndex([10, 20], name="ts")))
+    lib.append("sym", pd.DataFrame({"a": [2, 3]}, index=pd.DatetimeIndex([20, 30], name="ts")))
+    lib.append("sym", pd.DataFrame({"a": [4, 5]}, index=pd.DatetimeIndex([30, 40], name="ts")))
+    lib.append("sym", pd.DataFrame({"a": [6, 7]}, index=pd.DatetimeIndex([40, 50], name="ts")))
     assert len(lib._dev_tools.library_tool().find_keys_for_symbol(KeyType.TABLE_DATA, "sym")) == 4
 
-    source = pd.DataFrame({"a": [1000]}, index=pd.DatetimeIndex([25]))
+    source = pd.DataFrame({"a": [1000]}, index=pd.DatetimeIndex([25], name="ts"))
     run_merge(
         lib,
         source_format,
@@ -4677,7 +4788,7 @@ def test_merge_insert_only_into_chain_with_shared_boundaries(lmdb_library, sourc
 
     expected = pd.DataFrame(
         {"a": [0, 1, 2, 1000, 3, 4, 5, 6, 7]},
-        index=pd.DatetimeIndex([10, 20, 20, 25, 30, 30, 40, 40, 50]),
+        index=pd.DatetimeIndex([10, 20, 20, 25, 30, 30, 40, 40, 50], name="ts"),
     )
     assert_frame_equal(lib.read("sym").data, expected)
 
@@ -4737,9 +4848,7 @@ class TestMergeMultiindexInsert:
         expected_idx = pd.MultiIndex.from_arrays([expected_primary, expected_secondary], names=index_names)
         expected = pd.DataFrame({"c": expected_c, "d": expected_d}, index=expected_idx)
 
-        lib.write("sym", target)
-        run_merge(lib, source_format, "sym", source, strategy=strategy, on=None)
-        assert_frame_equal(lib.read("sym").data, expected)
+        write_target_and_merge(lib, source_format, "sym", target, source, strategy, expected)
 
     @pytest.mark.parametrize(
         "strategy",
@@ -4827,9 +4936,7 @@ class TestMergeMultiindexInsert:
         expected_idx = pd.MultiIndex.from_arrays([expected_primary, expected_secondary], names=index_names)
         expected = pd.DataFrame({"c": expected_c}, index=expected_idx)
 
-        lib.write("sym", target)
-        run_merge(lib, source_format, "sym", source, strategy=strategy, on=["a"])
-        assert_frame_equal(lib.read("sym").data, expected)
+        write_target_and_merge(lib, source_format, "sym", target, source, strategy, expected, on=["a"])
 
     def test_string_secondary_level_insert(self, request, lmdb_library, source_format):
         if source_format != SourceFormat.PANDAS:
@@ -4887,9 +4994,7 @@ class TestMergeMultiindexInsert:
         )
         expected = pd.DataFrame({"a": [0, 100, 1, 101, 2]}, index=expected_idx)
 
-        lib.write("sym", target)
-        run_merge(lib, source_format, "sym", source, strategy=strategy, on=None)
-        assert_frame_equal(lib.read("sym").data, expected)
+        write_target_and_merge(lib, source_format, "sym", target, source, strategy, expected)
 
     @pytest.mark.parametrize(
         "is_datetime",
