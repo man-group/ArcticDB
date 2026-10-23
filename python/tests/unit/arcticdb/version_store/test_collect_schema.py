@@ -240,6 +240,37 @@ def test_collect_schema_column_filtering(lmdb_library):
     assert schema == expected_schema
 
 
+@pytest.mark.parametrize("columns", [[], ["other"]])
+def test_collect_schema_series_column_selection_matches_read(lmdb_library, columns):
+    lib = lmdb_library
+    lib._nvs.set_output_format(OutputFormat.POLARS)
+    sym = "test_collect_schema_series_column_selection_matches_read"
+    lib.write(sym, pd.Series([1, 2], index=pd.date_range("2026-01-01", periods=2), name="v"))
+    schema = lib.read(sym, columns=columns, lazy=True)._collect_schema()
+    assert schema.names() == ["__index__"]
+    assert schema == lib.read(sym, columns=columns).data.schema
+
+
+@pytest.mark.parametrize(
+    "columns,expected_names",
+    [
+        (None, ["___index___", "a", "_a_", "__index__"]),
+        (["__index__"], ["___index___", "__index__"]),
+        # Selection matches on-disk names, which "a" is not, so only the index is returned
+        (["a"], ["__index__"]),
+    ],
+)
+def test_collect_schema_pandas_renamed_columns(lmdb_library, columns, expected_names):
+    lib = lmdb_library
+    lib._nvs.set_output_format(OutputFormat.POLARS)
+    sym = "test_collect_schema_pandas_renamed_columns"
+    idx = pd.date_range("2026-01-01", periods=2)
+    lib.write(sym, pd.DataFrame([["x", "y", 0], ["z", "w", 1]], columns=["a", "a", "__index__"], index=idx))
+    schema = lib.read(sym, columns=columns, lazy=True)._collect_schema()
+    assert schema.names() == expected_names
+    assert schema == lib.read(sym, columns=columns).data.schema
+
+
 def test_collect_schema_timeseries(lmdb_library):
     lib = lmdb_library
     lib._nvs.set_output_format(OutputFormat.POLARS)
