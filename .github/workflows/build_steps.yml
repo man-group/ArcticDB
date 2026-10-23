@@ -95,6 +95,19 @@ jobs:
           git submodule update --init --recursive
           cd ../..
 
+      # The action only downloads sccache when it is missing from the tool cache, and that
+      # download intermittently fails with an HTTP 5xx (#3261)
+      # runner.tool_cache is the host path; in a job container the tool cache is mounted elsewhere
+      - name: Locate tool cache
+        id: tool_cache
+        run: echo "dir=$RUNNER_TOOL_CACHE" | tee -a "$GITHUB_OUTPUT"
+
+      - name: sccache binary cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.tool_cache.outputs.dir }}/sccache/0.10.0
+          key: sccache-0.10.0-${{ runner.os }}-${{ runner.arch }}
+
       - name: Configure sccache
         uses: mozilla-actions/sccache-action@v0.0.9
         with:
@@ -129,7 +142,8 @@ jobs:
       - name: Install AWS CLI
         # For VCPKG source asset upload to cache in S3
         if: matrix.os == 'linux' && inputs.job_type == 'cpp-tests'
-        run: yum install -y awscli
+        # Baked into the dev images (docker/Dockerfile*); yum hits flaky EPEL mirrors (#3441)
+        run: command -v aws >/dev/null || yum install -y awscli
 
       - name: Extra envs
         # This has to come after msvc-dev-cmd to overwrite the bad VCPKG_ROOT it sets
@@ -188,7 +202,17 @@ jobs:
           toolset: 14.41
           vs-path: 'C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools'
 
+      # The dev images ship the pinned cmake. setup-cmake always queries the GitHub API for the
+      # release list, even on a tool cache hit, and that query intermittently fails (#3413).
+      - name: Check for pinned cmake
+        id: cmake_check
+        run: |
+          if [[ "$(cmake --version 2>/dev/null | head -n1)" == "cmake version 3.31.6" ]]; then
+            echo "found=true" | tee -a "$GITHUB_OUTPUT"
+          fi
+
       - name: Setup cmake
+        if: steps.cmake_check.outputs.found != 'true'
         uses: jwlawson/actions-setup-cmake@v2
         with:
           # Pin to a known-good release. CMake 4.4.0 made -Werror=<category> validation

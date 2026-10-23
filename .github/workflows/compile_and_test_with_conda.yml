@@ -39,6 +39,13 @@ jobs:
       - name: Initialise lmdb and lmdbxx submodules
         run: git -c core.autocrlf=false submodule update --init cpp/third_party/lmdb cpp/third_party/lmdbxx
 
+      # Skips the sccache download, which intermittently fails with an HTTP 5xx (#3261)
+      - name: sccache binary cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.tool_cache }}/sccache/0.12.0
+          key: sccache-0.12.0-${{ runner.os }}-${{ runner.arch }}
+
       - name: Configure sccache
         uses: mozilla-actions/sccache-action@v0.0.9
         with:
@@ -117,6 +124,13 @@ jobs:
 
       - name: Initialise lmdb and lmdbxx submodules
         run: git -c core.autocrlf=false submodule update --init cpp/third_party/lmdb cpp/third_party/lmdbxx
+
+      # Skips the sccache download, which intermittently fails with an HTTP 5xx (#3261)
+      - name: sccache binary cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.tool_cache }}/sccache/0.12.0
+          key: sccache-0.12.0-${{ runner.os }}-${{ runner.arch }}
 
       - name: Configure sccache
         uses: mozilla-actions/sccache-action@v0.0.9
@@ -213,6 +227,13 @@ jobs:
 
       - name: Initialise lmdb and lmdbxx submodules
         run: git -c core.autocrlf=false submodule update --init cpp/third_party/lmdb cpp/third_party/lmdbxx
+
+      # Skips the sccache download, which intermittently fails with an HTTP 5xx (#3261)
+      - name: sccache binary cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.tool_cache }}/sccache/0.12.0
+          key: sccache-0.12.0-${{ runner.os }}-${{ runner.arch }}
 
       - name: Configure sccache
         uses: mozilla-actions/sccache-action@v0.0.9
