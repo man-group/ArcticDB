@@ -171,11 +171,21 @@ jobs:
         if: inputs.job_type != 'build-python-wheels'
         run: . build_tooling/prep_cpp_build.sh # Also applies to Windows
 
+      # Unpinned: builds use the runner image's MSVC, as this install fails intermittently (#3185). If an image update
+      # breaks the build, re-pin by uncommenting this step, toolset/vs-path below and VCPKG_PLATFORM_TOOLSET_VERSION
+      # in cpp/custom-triplets/x64-windows-static-msvc.cmake, all at the same version.
+      # - name: Install Required MSVC
+      #   if: matrix.os == 'windows'
+      #   run: |
+      #     choco install -y -f visualstudio2022buildtools --version=117.11.4 --params "--add Microsoft.VisualStudio.Component.VC.Tools.x86.x64 --installChannelUri https://aka.ms/vs/17/release/390666095_1317821361/channel"
+
       - name: Enable Windows compiler commands
         if: matrix.os == 'windows'
         uses: TheMrMilchmann/setup-msvc-dev@v3
         with:
           arch: x64
+          # toolset: 14.41
+          # vs-path: 'C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools'
 
       - name: Setup cmake
         uses: jwlawson/actions-setup-cmake@v2
