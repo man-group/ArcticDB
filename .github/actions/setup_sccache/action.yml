@@ -1,0 +1,28 @@
+name: 'Setup sccache'
+description: 'Run mozilla-actions/sccache-action with its sccache binary restored from the Actions cache'
+inputs:
+  version:
+    description: 'sccache version without the leading v, e.g. 0.10.0'
+    required: true
+runs:
+  using: "composite"
+  steps:
+    # The action downloads sccache only when it is missing from the tool cache, and that
+    # download intermittently fails with an HTTP 5xx (#3261).
+    # runner.tool_cache is the host path; in a job container the tool cache is mounted elsewhere.
+    - name: Locate tool cache
+      id: tool_cache
+      shell: bash
+      run: echo "dir=$RUNNER_TOOL_CACHE" | tee -a "$GITHUB_OUTPUT"
+
+    - name: sccache binary cache
+      uses: actions/cache@v4
+      with:
+        path: ${{ steps.tool_cache.outputs.dir }}/sccache/${{ inputs.version }}
+        key: sccache-${{ inputs.version }}-${{ runner.os }}-${{ runner.arch }}
+
+    - name: Configure sccache
+      uses: mozilla-actions/sccache-action@v0.0.9
+      with:
+        version: v${{ inputs.version }}
+        disable_annotations: 'true'  # suppress noisy report that pollutes the summary page
