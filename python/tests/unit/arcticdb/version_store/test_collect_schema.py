@@ -12,11 +12,11 @@ import pyarrow as pa
 import polars as pl
 import pytest
 
-from arcticdb_ext.exceptions import KeyNotFoundException
-from arcticdb.exceptions import SchemaException
+from arcticdb.exceptions import SchemaException, KeyNotFoundException
 from arcticdb.options import ArrowOutputStringFormat, OutputFormat
 import arcticdb.toolbox.query_stats as qs
 from arcticdb.util.test import assert_frame_equal_with_arrow, config_context, query_stats_operation_count
+from tests.util.arrow import create_1d_arrow_structure
 
 
 @pytest.mark.parametrize("num_rows", [0, 1])
@@ -140,6 +140,23 @@ def test_collect_schema_with_timezones(lmdb_library):
     )
 
 
+def test_collect_schema_pandas_with_timezone(lmdb_library):
+    """Pandas-written data has to be described in Arrow terms here exactly as the read path describes it,
+    so that _collect_schema and a read cannot disagree."""
+    lib = lmdb_library
+    lib._nvs.set_output_format(OutputFormat.POLARS)
+    sym = "test_collect_schema_pandas_with_timezone"
+    df = pd.DataFrame(
+        {"col": np.arange(2, dtype=np.int64)}, index=pd.date_range("2025-01-01", periods=2, tz="America/New_York")
+    )
+    df.index.name = "ts"
+    lib.write(sym, df)
+
+    schema = lib.read(sym, lazy=True)._collect_schema()
+    assert schema == lib.read(sym).data.schema
+    assert schema["ts"].time_zone == "America/New_York"
+
+
 def test_collect_schema_multiindex(lmdb_library):
     lib = lmdb_library
     lib._nvs.set_output_format(OutputFormat.POLARS)
@@ -221,6 +238,37 @@ def test_collect_schema_column_filtering(lmdb_library):
     schema = lazy_df._collect_schema()
     expected_schema = pl.from_arrow(table).select(["col2", "col4", "col5"]).schema
     assert schema == expected_schema
+
+
+@pytest.mark.parametrize("columns", [[], ["other"]])
+def test_collect_schema_series_column_selection_matches_read(lmdb_library, columns):
+    lib = lmdb_library
+    lib._nvs.set_output_format(OutputFormat.POLARS)
+    sym = "test_collect_schema_series_column_selection_matches_read"
+    lib.write(sym, pd.Series([1, 2], index=pd.date_range("2026-01-01", periods=2), name="v"))
+    schema = lib.read(sym, columns=columns, lazy=True)._collect_schema()
+    assert schema.names() == ["__index__"]
+    assert schema == lib.read(sym, columns=columns).data.schema
+
+
+@pytest.mark.parametrize(
+    "columns,expected_names",
+    [
+        (None, ["___index___", "a", "_a_", "__index__"]),
+        (["__index__"], ["___index___", "__index__"]),
+        # Selection matches on-disk names, which "a" is not, so only the index is returned
+        (["a"], ["__index__"]),
+    ],
+)
+def test_collect_schema_pandas_renamed_columns(lmdb_library, columns, expected_names):
+    lib = lmdb_library
+    lib._nvs.set_output_format(OutputFormat.POLARS)
+    sym = "test_collect_schema_pandas_renamed_columns"
+    idx = pd.date_range("2026-01-01", periods=2)
+    lib.write(sym, pd.DataFrame([["x", "y", 0], ["z", "w", 1]], columns=["a", "a", "__index__"], index=idx))
+    schema = lib.read(sym, columns=columns, lazy=True)._collect_schema()
+    assert schema.names() == expected_names
+    assert schema == lib.read(sym, columns=columns).data.schema
 
 
 def test_collect_schema_timeseries(lmdb_library):
@@ -417,3 +465,16 @@ def test_collect_schema_pickled_symbol(lmdb_library):
     lib.write_pickle(sym, "blah")
     with pytest.raises(SchemaException):
         lib.read(sym, lazy=True)._collect_schema()
+
+
+@pytest.mark.parametrize("input_type", ["Array", "ChunkedArray", "UnnamedSeries", "NamedSeries"])
+def test_collect_schema_1d(mem_library, input_type):
+    lib = mem_library
+    sym = "test_collect_schema_1d"
+    lib._nvs._set_allow_arrow_input()
+    data = pa.array([0], pa.int64())
+    input = create_1d_arrow_structure(input_type, data)
+    lib.write(sym, input)
+    schema = lib.read(sym, lazy=True)._collect_schema()
+    expected_name = "series_name" if input_type == "NamedSeries" else ""
+    assert schema == pl.Schema({expected_name: pl.Int64})

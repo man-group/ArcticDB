@@ -6,6 +6,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 
+import collections
 import copy
 from dataclasses import dataclass
 import datetime
@@ -19,16 +20,15 @@ import pandas as pd
 import numpy as np
 import pytz
 import re
-import itertools
 import attr
 import warnings
-import difflib
 from datetime import datetime
+
+from arcticdb.exceptions import NormalizationException
 
 from numpy import datetime64
 from pandas import Timestamp, Timedelta
 from typing import Any, Optional, Union, List, Sequence, Tuple, Dict, Set, NamedTuple
-from contextlib import contextmanager
 import time
 
 from arcticdb.dependencies import pyarrow as pa
@@ -64,6 +64,7 @@ from arcticdb_ext.storage import (
     LibraryIndex as _LibraryIndex,
     Library as _Library,
     OpenMode as _OpenMode,
+    KeyType as _KeyType,
 )
 from arcticdb_ext.types import IndexKind
 from arcticdb.version_store.read_result import ReadResult
@@ -76,7 +77,6 @@ from arcticdb_ext.version_store import PythonVersionStoreUpdateQuery as _PythonV
 from arcticdb_ext.version_store import PythonVersionStoreReadOptions as _PythonVersionStoreReadOptions
 from arcticdb_ext.version_store import PythonVersionStoreBatchReadOptions as _PythonVersionStoreBatchReadOptions
 from arcticdb_ext.version_store import PythonVersionStoreVersionQuery as _PythonVersionStoreVersionQuery
-from arcticdb_ext.version_store import StreamDescriptorMismatch
 from arcticdb_ext.version_store import DataError, KeyNotFoundInStageResultInfo
 from arcticdb_ext.version_store import sorted_value_name, PreloadedIndexQuery as _PreloadedIndexQuery
 from arcticdb_ext.version_store import ArrowOutputFrame, InternalOutputFormat, MergeAction, _modify_schema
@@ -94,6 +94,8 @@ from arcticdb.exceptions import (
     ArcticNativeException,
     MissingKeysInStageResultsError,
     ArcticDuplicateSymbolsInBatchException,
+    SchemaException,
+    UserInputException,
 )
 from arcticdb.flattener import Flattener
 from arcticdb.log import version as log
@@ -116,7 +118,9 @@ from arcticdb.version_store._normalization import (
     _from_tz_timestamp,
     restrict_data_to_date_range_only,
     normalize_dt_range_to_ts,
+    polars_series_name,
     _denormalize_columns_names,
+    daterange_to_tuple,
 )
 
 TimeSeriesType = Union[pd.DataFrame, pd.Series]
@@ -124,7 +128,11 @@ from arcticdb.util._versions import PANDAS_VERSION
 from packaging.version import Version
 import arcticdb_ext as ae
 
-from arcticdb.util.arrow import convert_arrow_to_pandas_for_tests
+from arcticdb.util.arrow import (
+    convert_arrow_to_pandas_for_tests,
+    NORMALIZABLE_PYARROW_TYPES,
+    NORMALIZABLE_POLARS_TYPES,
+)
 
 IS_WINDOWS = sys.platform == "win32"
 
@@ -318,7 +326,6 @@ def _handle_categorical_columns(symbol, data, throw=True, operation_supports_cat
 
 
 _BATCH_BAD_ARGS: Dict[Any, Sequence[str]] = {}
-_STREAM_DESCRIPTOR_SPLIT = re.compile(r", (?=FD<)")
 
 
 def _check_batch_kwargs(batch_fun, non_batch_fun, kwargs: Dict):
@@ -330,28 +337,6 @@ def _check_batch_kwargs(batch_fun, non_batch_fun, kwargs: Dict):
     union = cached & kwargs.keys()
     if union:
         log.warning("Using non-batch arguments {} with {}", union, batch_fun.__name__)
-
-
-@contextmanager
-def _diff_long_stream_descriptor_mismatch(nvs):  # Diffing strings is easier done in Python than C++
-    try:
-        yield
-    except StreamDescriptorMismatch as sdm:
-        nvs.last_mismatch_msg = sdm.args[0]
-        # TODO: This is too hacky. Consider providing a useful exception in C++ instead of string munging in Python.
-        preamble, stream_id, existing, new_val = sdm.args[0].split("; ")
-        existing = _STREAM_DESCRIPTOR_SPLIT.split(existing[existing.find("=") + 1 :])
-        new_val = _STREAM_DESCRIPTOR_SPLIT.split(new_val[new_val.find("=") + 1 :])
-        diff = difflib.unified_diff(existing, new_val, n=0)
-        new_msg_lines = (
-            preamble,
-            stream_id,
-            "(Showing only the mismatch. Full col list saved in the `last_mismatch_msg` attribute of the lib instance.",
-            "'-' marks columns missing from the argument, '+' for unexpected.)",
-            *(x for x in itertools.islice(diff, 3, None) if not x.startswith("@@")),
-        )
-        sdm.args = ("\n".join(new_msg_lines),)
-        raise
 
 
 def _assume_true(name, kwargs):
@@ -581,10 +566,15 @@ class NativeVersionStore:
         return backing_store
 
     @staticmethod
-    def _raise_if_duplicate_symbols_in_batch(batch):
-        symbols = {(p if isinstance(p, str) else p.symbol) for p in batch}
-        if len(symbols) < len(batch):
-            raise ArcticDuplicateSymbolsInBatchException
+    def _raise_if_duplicate_symbols_in_batch(symbols: List[str]):
+        symbol_counts = collections.defaultdict(int)
+        for sym in symbols:
+            symbol_counts[sym] += 1
+        duplicated_symbols = [sym for sym, count in symbol_counts.items() if count > 1]
+        if len(duplicated_symbols):
+            raise ArcticDuplicateSymbolsInBatchException(
+                f"Batch modification method received duplicate symbols {duplicated_symbols}"
+            )
 
     def _try_normalize(
         self,
@@ -966,8 +956,6 @@ class NativeVersionStore:
             dynamic_strings = True
         return dynamic_strings
 
-    last_mismatch_msg: Optional[str] = None
-
     def append(
         self,
         symbol: str,
@@ -1090,37 +1078,36 @@ class NativeVersionStore:
         write_if_missing = kwargs.get("write_if_missing", True)
 
         if self._valid_item_type(item):
-            with _diff_long_stream_descriptor_mismatch(self):
-                if incomplete:
-                    # Note that the V2 API has never called append with the incomplete kwarg, so we don't need the
-                    # stacklevel switching behaviour
-                    warn(
-                        "Staging data with append() is deprecated. Use stage() instead.",
-                        DeprecationWarning,
-                        stacklevel=2,
-                    )
-                    self.version_store.write_parallel(symbol, item, norm_meta, validate_index, False, None)
-                else:
-                    call_time = time.time_ns()
-                    vit = self.version_store.append(
-                        symbol,
-                        item,
-                        norm_meta,
-                        udm,
-                        write_if_missing,
-                        prune_previous_version,
-                        validate_index,
-                        compact_data,
-                    )
-                    # This is a heuristic to check for the case of using append call to write an empty dataframe in that
-                    # case we want to warn users that the processing pipeline might not work as expected. There are two
-                    # cases when the version is 0 either a new symbol was created by this call or there was an existing
-                    # symbol with version 0 and the input dataframe was empty, which makes the append a noop. That is
-                    # why the call_time is used to check if the symbol creation time was after the call to append in the
-                    # C++ layer.
-                    if vit.version == 0 and write_if_missing and vit.timestamp >= call_time:
-                        _log_warning_on_writing_empty_dataframe(dataframe, symbol)
-                    return self._convert_thin_cxx_item_to_python(vit, metadata)
+            if incomplete:
+                # Note that the V2 API has never called append with the incomplete kwarg, so we don't need the
+                # stacklevel switching behaviour
+                warn(
+                    "Staging data with append() is deprecated. Use stage() instead.",
+                    DeprecationWarning,
+                    stacklevel=2,
+                )
+                self.version_store.write_parallel(symbol, item, norm_meta, validate_index, False, None)
+            else:
+                call_time = time.time_ns()
+                vit = self.version_store.append(
+                    symbol,
+                    item,
+                    norm_meta,
+                    udm,
+                    write_if_missing,
+                    prune_previous_version,
+                    validate_index,
+                    compact_data,
+                )
+                # This is a heuristic to check for the case of using append call to write an empty dataframe in that
+                # case we want to warn users that the processing pipeline might not work as expected. There are two
+                # cases when the version is 0 either a new symbol was created by this call or there was an existing
+                # symbol with version 0 and the input dataframe was empty, which makes the append a noop. That is
+                # why the call_time is used to check if the symbol creation time was after the call to append in the
+                # C++ layer.
+                if vit.version == 0 and write_if_missing and vit.timestamp >= call_time:
+                    _log_warning_on_writing_empty_dataframe(dataframe, symbol)
+                return self._convert_thin_cxx_item_to_python(vit, metadata)
 
     def update(
         self,
@@ -1153,10 +1140,13 @@ class NativeVersionStore:
             Optional metadata to persist along with the new symbol version. Note that the metadata is
             not combined in any way with the metadata stored in the previous version.
         date_range: None, or one of the types in DateRangeInput
-            If a range is specified, it will clear/delete the data within the
-            range and overwrite it with the data in `data`. This allows the user
-            to update with data that might only be a subset of the
-            original data. Note date_range is end-inclusive.
+            If a range is specified, the existing data within that range is cleared and overwritten by data. This allows
+            the user to update a subset of the original data. Note that date_range is end-inclusive, and if either the
+            start or end is None, the range becomes open-ended on that side. If date_range is narrower than data, rows
+            of data outside date_range are ignored. If date_range is wider than data, index entries within date_range
+            not covered by data are removed as well. date_range and data must both be timezone-aware or both
+            timezone-naive; they can use different zones, since the comparison is against the underlying instants
+            rather than local time.
         upsert: bool, default=False
             If True, will write the data even if the symbol does not exist.
         prune_previous_version
@@ -1229,18 +1219,17 @@ class NativeVersionStore:
         )
 
         if self._valid_item_type(item):
-            with _diff_long_stream_descriptor_mismatch(self):
-                call_time = time.time_ns()
-                vit = self.version_store.update(
-                    symbol, update_query, item, norm_meta, udm, upsert, dynamic_schema, prune_previous_version
-                )
-                # This is a heuristic to check for using update to write an empty dataframe in that case we want to warn
-                # users that the processing pipeline might not work as expected. There are two cases when the version is
-                # 0 either a new symbol was created by this call or there was an existing symbol with version 0 and the
-                # input dataframe was empty, which makes the update a noop. That is why the call_time is used to check
-                # if the symbol creation time was after the call to append in the C++ layer.
-                if vit.version == 0 and upsert and vit.timestamp >= call_time:
-                    _log_warning_on_writing_empty_dataframe(data, symbol)
+            call_time = time.time_ns()
+            vit = self.version_store.update(
+                symbol, update_query, item, norm_meta, udm, upsert, dynamic_schema, prune_previous_version
+            )
+            # This is a heuristic to check for using update to write an empty dataframe in that case we want to warn
+            # users that the processing pipeline might not work as expected. There are two cases when the version is
+            # 0 either a new symbol was created by this call or there was an existing symbol with version 0 and the
+            # input dataframe was empty, which makes the update a noop. That is why the call_time is used to check
+            # if the symbol creation time was after the call to append in the C++ layer.
+            if vit.version == 0 and upsert and vit.timestamp >= call_time:
+                _log_warning_on_writing_empty_dataframe(data, symbol)
             return self._convert_thin_cxx_item_to_python(vit, metadata)
 
     def _apply_date_range_to_update_query(
@@ -1265,9 +1254,32 @@ class NativeVersionStore:
         Data filtered by date_range if date_range is not None or unmodified data otherwise
         """
         if date_range is not None:
-            start, end = normalize_dt_range_to_ts(date_range)
-            update_query.row_filter = _IndexRange(start.value, end.value)
-            return restrict_data_to_date_range_only(data, start=start, end=end, index_column=index_column)
+            if isinstance(data, NORMALIZABLE_PYARROW_TYPES + NORMALIZABLE_POLARS_TYPES) and not index_column:
+                raise NormalizationException(
+                    "Cannot update with pyarrow/polars Table without specifying index_column=True"
+                )
+            is_index_timezone_aware = is_dataframe_index_tz_aware(data)
+            start, end = daterange_to_tuple(date_range)
+            is_date_range_timezone_aware = False
+            if start and getattr(start, "tzinfo", None) is not None:
+                is_date_range_timezone_aware = True
+                if end and getattr(end, "tzinfo", None) is None:
+                    raise NormalizationException(
+                        "Both date_range members must be timezone aware or both must be timezone naive."
+                    )
+            if end and getattr(end, "tzinfo", None) is not None:
+                is_date_range_timezone_aware = True
+                if start and getattr(start, "tzinfo", None) is None:
+                    raise NormalizationException(
+                        "Both date_range members must be timezone aware or both must be timezone naive."
+                    )
+            if (start is not None or end is not None) and is_date_range_timezone_aware != is_index_timezone_aware:
+                raise NormalizationException(
+                    "When passing date_range parameter to update either both the date_range and the index of the data must be timezone aware or both must be timezone naive."
+                )
+            normalized_start, normalized_end = normalize_dt_range_to_ts(date_range)
+            update_query.row_filter = _IndexRange(normalized_start.value, normalized_end.value)
+            return restrict_data_to_date_range_only(data, start=normalized_start, end=normalized_end)
         return data
 
     def _batch_update_internal(
@@ -1280,10 +1292,12 @@ class NativeVersionStore:
         upsert: bool = False,
         index_column_vector: Optional[List[bool]] = None,
     ):
+        self._raise_if_duplicate_symbols_in_batch(symbols)
         update_queries = [_PythonVersionStoreUpdateQuery() for _ in range(len(symbols))]
         for i in range(len(data_vector)):
+            index_column = index_column_vector[i] if index_column_vector is not None else False
             data_vector[i] = self._apply_date_range_to_update_query(
-                data_vector[i], date_range_vector[i], update_queries[i]
+                data_vector[i], date_range_vector[i], update_queries[i], index_column
             )
         proto_cfg = self._lib_cfg.lib_desc.version.write_options
         prune_previous_version = resolve_defaults(
@@ -1965,6 +1979,7 @@ class NativeVersionStore:
         index_column_vector: Optional[List[bool]] = None,
         **kwargs,
     ) -> List[VersionedItem]:
+        self._raise_if_duplicate_symbols_in_batch(symbols)
         proto_cfg = self._lib_cfg.lib_desc.version.write_options
         prune_previous_version = resolve_defaults(
             "prune_previous_version", proto_cfg, global_default=False, existing_value=prune_previous_version
@@ -1995,6 +2010,7 @@ class NativeVersionStore:
     def _batch_write_metadata_to_versioned_items(
         self, symbols: List[str], metadata_vector: List[Any], prune_previous_version, throw_on_error
     ):
+        self._raise_if_duplicate_symbols_in_batch(symbols)
         proto_cfg = self._lib_cfg.lib_desc.version.write_options
         prune_previous_version = resolve_defaults(
             "prune_previous_version", proto_cfg, global_default=False, existing_value=prune_previous_version
@@ -2136,6 +2152,7 @@ class NativeVersionStore:
         compact_data,
         **kwargs,
     ):
+        self._raise_if_duplicate_symbols_in_batch(symbols)
         proto_cfg = self._lib_cfg.lib_desc.version.write_options
         prune_previous_version = resolve_defaults(
             "prune_previous_version", proto_cfg, global_default=False, existing_value=prune_previous_version
@@ -2205,7 +2222,7 @@ class NativeVersionStore:
             i-th entry corresponds to i-th element of `symbols`.
         """
         self._validate_kwargs("batch_restore_version", self._valid_read_kwargs, kwargs)
-
+        self._raise_if_duplicate_symbols_in_batch(symbols)
         _check_batch_kwargs(NativeVersionStore.batch_restore_version, NativeVersionStore.restore_version, kwargs)
         version_queries = self._get_version_queries(len(symbols), as_ofs, **kwargs)
         read_options, _ = self._get_read_options_and_output_format(**kwargs)
@@ -2564,6 +2581,122 @@ class NativeVersionStore:
 
         read_result = self._read_dataframe(symbol, version_query, read_query, read_options)
         return self._post_process_dataframe(read_result, read_query, read_options, output_format, implement_read_index)
+
+    def rename_columns_arrow_compat(
+        self,
+        symbol: str,
+        index_columns: Optional[Union[str, List[str]]] = None,
+        prune_previous_version: Optional[bool] = None,
+    ) -> VersionedItem:
+        """
+        Rename the index and column names of a symbol to be Arrow compatible.
+
+        After calling this method, all index and column names will be unique, non-empty strings, with no overlap allowed
+        between the index and column names. Note that the Arrow spec itself only requires that column names are strings.
+        However, libraries such as Polars and PyArrow require uniqueness, and many downstream processing engines do not
+        gracefully handle empty strings as column names.
+
+        This operation creates a new version, unless the index and column names are already unique, non-empty strings,
+        in which case it is a no-op.
+
+        The metadata from the version being renamed is maintained with the newly created version.
+
+        The renaming follows these principles:
+        - Integer index/column names `i` will be renamed to `str(i)`.
+        - Empty string `""` index/column names will be renamed to `"__empty__"`.
+        - Unnamed (i.e. `None`) index/column names behave differently depending on where they are encountered:
+            - Single level (i.e. non-MultiIndex) timeseries index: renamed to `"__index__"`.
+            - MultiIndex: renamed to `"__index_level_i__"`, where `i` is the index level.
+            - Remaining columns: renamed to the string `"None"`.
+        - If the columns were named using a `RangeIndex` (e.g. by `df = pd.DataFrame(np.zeros((10, 4)))`), then these
+          will be renamed to string representations of the integers corresponding to the column position (e.g.
+          `["0", "1", "2", "3"]` in the previous example).
+        - Duplicated column names, and clashes caused by renaming to existing column names, are handled by prepending
+          and appending `"_"` characters. e.g. `pd.DataFrame(np.zeros((10, 2)), columns=["col", "col"])` would become
+          `pd.DataFrame(np.zeros((10, 2)), columns=["col", "_col_"])`.
+        - If the `index_columns` argument is provided, the index column(s) will be renamed to these provided name(s).
+        - Rules about column names specified above apply to the `name` field of `pd.Series`.
+
+        Parameters
+        ----------
+        symbol : str
+            The symbol to perform the renaming on.
+        index_columns : Optional[Union[str, List[str]]], default=None
+            Explicit names for the index columns. If None, uses defaults specified above. If a `str`, the existing data
+            must have a single-level (non-MultiIndex) timeseries index. If `List[str]`, the length of the list must
+            equal the number of indexes of the existing data.
+        prune_previous_version : Optional[bool], default=None
+            If True, removes previous versions from the version list. If None, the value is taken from the
+            library configuration.
+
+        Returns
+        -------
+        VersionedItem
+            Structure containing information including the version number of the written symbol in the store. The data
+            and metadata attributes will not be populated. If no renaming occurs because the data is already
+            Arrow-compatible, the version field will be that of the latest live version for the symbol.
+
+        Raises
+        ------
+        NoSuchVersionException
+            If the symbol does not exist or has been deleted.
+        UserInputException
+            If the number of `index_columns` provided does not match the data on-disk.
+            If `index_columns` is specified, but there is an existing column name that clashes with at least one of the
+            specified index columns.
+        SchemaException
+            If the existing data is recursively normalized, pickled, or a numpy array.
+        InternalException
+            If the existing data contains multiple identical integer index/column names. This data is already corrupted
+            and cannot be read, and should be deleted and re-created without duplicate integer column names.
+
+        Examples
+        --------
+
+        >>> input_df = pd.DataFrame({None: [0], "": [1], 10: [2], "10": [3]}, index=pd.date_range("2026-06-06", periods=1))
+        >>> lib.write("sym", input_df)
+        >>> lib.rename_columns_arrow_compat("sym")
+        >>> output_df = lib.read("sym").data
+        >>> output_df.index.name
+        "__index__"
+        >>> output_df.columns.to_list()
+        ["None", "__empty__", "10", "_10_"]
+        >>> input_df = pd.DataFrame({"col": [0]}, index=pd.MultiIndex.from_arrays([[pd.Timestamp(0)], ["AAPL"]]))
+        >>> list(input_df.index.names)
+        [None, None]
+        >>> lib.write("sym", input_df)
+        >>> lib.rename_columns_arrow_compat("sym", index_columns=["ts", "ticker"])
+        >>> output_df = lib.read("sym").data
+        >>> list(output_df.index.names)
+        ["ts", "ticker"]
+        """
+        explicit_index_names = None
+        if isinstance(index_columns, str) and len(index_columns):
+            explicit_index_names = [index_columns]
+        elif (
+            isinstance(index_columns, list)
+            and len(index_columns) > 0
+            and all(isinstance(elem, str) for elem in index_columns)
+            and len(index_columns) == len(set(index_columns))
+            and "" not in index_columns
+        ):
+            explicit_index_names = index_columns
+        elif index_columns is not None:
+            raise UserInputException(
+                f"index_columns arg to rename_columns_arrow_compat must be a non-empty str or list of unique, non-empty str, received {index_columns!r}"
+            )
+
+        prune_previous_version = resolve_defaults(
+            "prune_previous_version",
+            self._lib_cfg.lib_desc.version.write_options,
+            global_default=False,
+            existing_value=prune_previous_version,
+        )
+
+        cxx_versioned_item = self.version_store._rename_columns_arrow_compat(
+            symbol, explicit_index_names, prune_previous_version
+        )
+        return self._convert_thin_cxx_item_to_python(cxx_versioned_item, None)
 
     def head(
         self,
@@ -2986,6 +3119,8 @@ class NativeVersionStore:
                 and not norm.WhichOneof("input_type") == "msg_pack_frame"
             ):
                 data = pl.from_arrow(data, rechunk=False)
+                if isinstance(data, pl.Series):
+                    data = data.rename(polars_series_name(norm))
                 data = self._apply_polars_sorted_flag_to_index(data, sort_order, norm)
         else:
             data = self._normalizer.denormalize(frame_data, norm)
@@ -3001,11 +3136,16 @@ class NativeVersionStore:
         # safely tell Polars the column is sorted.
         if sort_order not in (SortedValue.ASCENDING, SortedValue.DESCENDING):
             return data
-        if not _has_physically_stored_index(norm) or len(data.columns) == 0:
+        if not _has_physically_stored_index(norm):
             return data
-        # The index column is always the first column.
-        index_col = data.columns[0]
-        return data.with_columns(pl.col(index_col).set_sorted(descending=(sort_order == SortedValue.DESCENDING)))
+        if isinstance(data, pl.DataFrame):
+            if len(data.columns) == 0:
+                return data
+            # The index column is always the first column.
+            index_col = data.columns[0]
+            return data.with_columns(pl.col(index_col).set_sorted(descending=(sort_order == SortedValue.DESCENDING)))
+        else:  # Series
+            return data.set_sorted(descending=(sort_order == SortedValue.DESCENDING))
 
     def _adapt_read_res(self, read_result: ReadResult, output_format: OutputFormat) -> VersionedItem:
         data = self._adapt_frame_data(read_result.frame_data, read_result.norm, output_format, read_result.sort_order)
@@ -3684,11 +3824,17 @@ class NativeVersionStore:
         return result
 
     @staticmethod
-    def get_arctic_style_type_info_for_norm(desc):
+    def get_arctic_style_type_info(dit):
         # Arctic used to have a type field in get_info which had info about the underlying store being used.
         # This is to provide some sort of compatibility to that notation
         # eg: https://github.com/manahl/arctic/blob/master/arctic/store/_pandas_ndarray_store.py#L177
-        input_type = desc.normalization.WhichOneof("input_type")
+
+        # Recursively normalized data has no input_type of its own (it is stored as a tree of independently
+        # normalized sub-objects under a single MULTI_KEY), so it is detected from the key type instead.
+        if dit.key.type == _KeyType.MULTI_KEY:
+            return "recursive_normalized"
+
+        input_type = dit.timeseries_descriptor.normalization.WhichOneof("input_type")
         if input_type == "df":
             return "pandasdf"
         elif input_type == "series":
@@ -3700,7 +3846,10 @@ class NativeVersionStore:
         elif input_type == "ts":
             return "normalized_timeseries"
         elif input_type == "experimental_arrow":
-            return "arrow"
+            # Arrow data does not distinguish DataFrame-like and Series-like inputs the way the other input
+            # types do, so the one_dimensional flag on the normalization metadata is used instead.
+            one_dimensional = dit.timeseries_descriptor.normalization.experimental_arrow.one_dimensional
+            return "arrow_series" if one_dimensional else "arrow_dataframe"
         else:
             return "missing_type_info"
 
@@ -3879,7 +4028,10 @@ class NativeVersionStore:
             else:
                 index_metadata = timeseries_descriptor.normalization.df.common.multi_index
 
-            if index_type == "multi_index" or (index_type == "index" and index_metadata.is_physically_stored):
+            if index_type == "multi_index" or (
+                index_type == "index"
+                and (index_metadata.is_physically_stored or timeseries_descriptor.index.kind() == IndexKind.TIMESTAMP)
+            ):
                 index_name_from_store = columns.pop(0)
                 has_fake_name = (
                     0 in index_metadata.fake_field_pos if index_type == "multi_index" else index_metadata.fake_name
@@ -3913,6 +4065,10 @@ class NativeVersionStore:
                 columns = pd.RangeIndex(0, len(columns))
         elif input_type == "experimental_arrow":
             arrow_meta = timeseries_descriptor.normalization.experimental_arrow
+            if arrow_meta.one_dimensional:
+                # This correctly gives an empty string for Array/ChunkedArray written data as well as Series with empty
+                # names
+                columns[0] = arrow_meta.polars_series_name
             if arrow_meta.has_index:
                 index = [columns.pop(0)]
                 index_dtype = [dtypes.pop(0)]
@@ -3929,7 +4085,7 @@ class NativeVersionStore:
             "input_type": input_type,
             "index_type": index_type,
             "normalization_metadata": timeseries_descriptor.normalization,
-            "type": self.get_arctic_style_type_info_for_norm(timeseries_descriptor),
+            "type": self.get_arctic_style_type_info(dit),
             "date_range": date_range,
             "sorted": sorted_value_name(timeseries_descriptor.sorted),
         }
@@ -3947,8 +4103,11 @@ class NativeVersionStore:
         read_query = self._get_read_query(date_range=None, row_range=None, columns=columns, query_builder=query_builder)
         record_batch, norm = _modify_schema(preloaded_index, read_query, read_options)
         record_batch = pa.RecordBatch._import_from_c(record_batch.array(), record_batch.schema())
-        data = self._normalizer.denormalize(pa.Table.from_batches([record_batch]), norm)
-        return pl.Schema(data.schema)
+        data = pl.from_arrow(self._normalizer.denormalize(pa.Table.from_batches([record_batch]), norm))
+        if isinstance(data, pl.DataFrame):
+            return data.schema
+        else:  # Series
+            return pl.Schema({polars_series_name(norm): data.dtype})
 
     def _get_info(self, symbol: str, version: Optional[VersionQueryInput] = None, **kwargs):
         version_query = self._get_version_query(version, **kwargs)
@@ -4433,7 +4592,7 @@ class NativeVersionStore:
     def library_tool(self) -> LibraryTool:
         return LibraryTool(self._library, self)
 
-    def merge_experimental(
+    def merge(
         self,
         symbol: str,
         source: Any,
@@ -4443,6 +4602,7 @@ class NativeVersionStore:
         prune_previous_versions: Optional[bool] = None,
         upsert: bool = False,
         match_na: bool = False,
+        index_column: bool = False,
     ):
         """
         Merge new data into an existing symbol's DataFrame according to a specified strategy.
@@ -4450,16 +4610,14 @@ class NativeVersionStore:
         See [Merge Notebook](../notebooks/ArcticDB_merge.ipynb) for usage examples.
 
         !!! warning
-            This API is under development and is subject to change. The API is not subject to semver and can change in
-            minor or patch releases.
-
-            Dynamic schema is not supported.
+            Dynamic schema is not supported. Sparse data is not supported. Fortran styled data is not supported.
+            PyArrow and Polars sources containing null values are not supported.
 
         Parameters
         ----------
         symbol : str
             The symbol to merge data into.
-        source : pandas.DataFrame or pandas.Series
+        source : Union[pandas.DataFrame, pandas.Series, pyarrow.Table, polars.DataFrame]
             The new data to merge. In the case of timeseries, the index must be sorted.
         strategy : Optional[MergeStrategy], default=MergeStrategy(matched="update", not_matched_by_target="insert")
             Determines how to handle matched and unmatched rows. Accepted strategies are:
@@ -4502,6 +4660,9 @@ class NativeVersionStore:
         match_na : bool, default False
             Controls whether a missing value (float NaN, string None/NaN, or NaT in a datetime64 `on`
             column) can match another missing value in the `on` columns. See "Note on equality semantics" above.
+        index_column : bool, default False
+            Only applicable when source is a PyArrow Table or Polars DataFrame. If True, the first column
+            is treated as the timeseries index.
 
         Returns
         -------
@@ -4519,13 +4680,14 @@ class NativeVersionStore:
         UnsortedDataException
             If date-time index is used and source or target are not sorted
         SchemaException
-            If dynamic schema is used or if source's schema is incompatible with target's schema
+            If dynamic schema is used, if source's schema is incompatible with target's schema or if a PyArrow or
+            Polars source contains null values
 
         Examples
         --------
 
         >>> lib.write("symbol", pd.DataFrame({'a': [1, 2, 3]}, index=pd.DatetimeIndex([pd.Timestamp(1), pd.Timestamp(2), pd.Timestamp(3)])))
-        >>> lib.merge_experimental("symbol", pd.DataFrame({"a": [100, 200]}, index=pd.DatetimeIndex([pd.Timestamp(2), pd.Timestamp(4)])), strategy=MergeStrategy(matched="update", not_matched_by_target="do_nothing"))))
+        >>> lib.merge("symbol", pd.DataFrame({"a": [100, 200]}, index=pd.DatetimeIndex([pd.Timestamp(2), pd.Timestamp(4)])), strategy=MergeStrategy(matched="update", not_matched_by_target="do_nothing"))))
         >>> lib.read("symbol").data
                                        a
         1970-01-01 00:00:00.000000001  1
@@ -4542,6 +4704,7 @@ class NativeVersionStore:
             dynamic_strings=True,
             coerce_columns=None,
             norm_failure_options_msg="Source data must be normalizable in order to merge it into existing dataframe",
+            index_column=index_column,
         )
         on = [] if on is None else on
         prune_previous_versions = resolve_defaults(
@@ -4594,3 +4757,30 @@ def _log_warning_on_writing_empty_dataframe(dataframe, symbol):
             empty_column_type,
             current_dtypes,
         )
+
+
+def is_dataframe_index_tz_aware(data):
+    if hasattr(data, "loc"):
+        index = data.index.get_level_values(0)
+        return isinstance(index, pd.DatetimeIndex) and index.tz is not None
+    elif isinstance(data, NORMALIZABLE_POLARS_TYPES):
+        if isinstance(data, pl.Series):
+            dtype = data.dtype
+        elif isinstance(data, pl.DataFrame):
+            dtype = data.dtypes[0]
+        else:
+            raise ValueError(f"Unknown polars data type: {type(data)}")
+        return isinstance(dtype, pl.Datetime) and dtype.time_zone is not None
+    elif isinstance(data, NORMALIZABLE_PYARROW_TYPES):
+        if isinstance(data, (pa.Table, pa.RecordBatch)):
+            dtype = data.columns[0].type
+        elif isinstance(data, (pa.ChunkedArray, pa.Array)):
+            dtype = data.type
+        else:
+            raise ValueError(f"Unknown pyarrow data type: {type(data)}")
+        return pa.types.is_timestamp(dtype) and dtype.tz is not None
+    # This matches the tests in python/tests/integration/arcticdb/version_store/test_update_with_date_range.py which
+    # simulate timeseries classes that are not Pandas/Polars/Pyarrow but are custom and occasionally used inside Man.
+    # Data with no timezone attribute is timezone naive. Truthiness rather than "is not None" so that this agrees with
+    # restrict_data_to_date_range_only, which strips the timezone from the bounds on the same condition.
+    return bool(getattr(data, "timezone", None))

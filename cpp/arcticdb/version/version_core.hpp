@@ -8,6 +8,8 @@
 
 #pragma once
 
+#include <unordered_set>
+
 #include <arcticdb/entity/compact_data_info.hpp>
 #include <arcticdb/entity/versioned_item.hpp>
 #include <arcticdb/pipeline/column_stats.hpp>
@@ -53,12 +55,12 @@ folly::Future<entity::AtomKey> async_write_dataframe_impl(
 
 folly::Future<AtomKey> async_append_impl(
         const std::shared_ptr<Store>& store, const UpdateInfo& update_info, const std::shared_ptr<InputFrame>& frame,
-        const WriteOptions& options, bool validate_index, bool empty_types
+        const WriteOptions& options, bool validate_index
 );
 
 folly::Future<AtomKey> async_update_impl(
         const std::shared_ptr<Store>& store, const UpdateInfo& update_info, const UpdateQuery& query,
-        const std::shared_ptr<InputFrame>& frame, const WriteOptions& options, bool dynamic_schema, bool empty_types
+        const std::shared_ptr<InputFrame>& frame, const WriteOptions& options, bool dynamic_schema
 );
 
 folly::Future<AtomKey> async_write_metadata_impl(
@@ -135,6 +137,9 @@ std::variant<VersionedItem, CompactionError> sort_merge_impl(
 
 void add_index_columns_to_query(const ReadQuery& read_query, const TimeseriesDescriptor& desc);
 
+/// Keeps the fields of `output_schema` named in `columns`.
+OutputSchema select_columns(OutputSchema&& output_schema, const std::unordered_set<std::string_view>& columns);
+
 ReadOptions modify_read_options_from_norm_meta(
         const proto::descriptors::NormalizationMetadata& norm_meta, const ReadOptions& read_options
 );
@@ -204,12 +209,16 @@ folly::Future<CompactDataInfo> compact_data_explain_plan_impl(
 struct CompactDataFrame {
     std::shared_ptr<InputFrame> frame_;
     bool validate_index_;
-    bool empty_types_;
 };
 
 folly::Future<std::optional<AtomKey>> async_compact_data_impl(
         const std::shared_ptr<Store>& store, const UpdateInfo& update_info, const WriteOptions& write_options,
         uint64_t rows_per_segment, std::optional<CompactDataFrame> compact_data_frame = std::nullopt
+);
+
+folly::Future<std::optional<AtomKey>> async_rename_columns_arrow_compat_impl(
+        const std::shared_ptr<Store>& store, const UpdateInfo& update_info, const WriteOptions& write_options,
+        const std::optional<std::vector<std::string>>& index_columns
 );
 
 std::shared_ptr<PipelineContext> setup_pipeline_context(
@@ -229,15 +238,9 @@ bool is_segment_unsorted(const SegmentInMemory& segment);
 
 size_t n_segments_live_during_compaction();
 
-CheckOutcome check_schema_matches_incomplete(
-        const StreamDescriptor& stream_descriptor_incomplete, const StreamDescriptor& pipeline_context,
-        const bool convert_int_to_float = false
-);
-
 struct CompactionOptions {
     bool convert_int_to_float{false};
     bool validate_index{true};
-    bool perform_schema_checks{true};
 };
 
 template<typename IndexType>
@@ -344,36 +347,10 @@ template<
                 segment.descriptor().uncompressed_bytes()
         );
 
-        if (!index_names_match(segment.descriptor(), pipeline_context->on_disk_descriptor())) {
-            auto written_keys = folly::collect(write_futures).get();
-            remove_written_keys(store.get(), std::move(written_keys));
-            return Error{
-                    throw_error<ErrorCode::E_DESCRIPTOR_MISMATCH>,
-                    fmt::format(
-                            "Index names in segment {} and pipeline context {} do not match",
-                            segment.descriptor(),
-                            pipeline_context->on_disk_descriptor()
-                    )
-            };
-        }
-
         if (options.validate_index && is_segment_unsorted(segment)) {
             auto written_keys = folly::collect(write_futures).get();
             remove_written_keys(store.get(), std::move(written_keys));
             return Error{throw_error<ErrorCode::E_UNSORTED_DATA>, "Cannot compact unordered segment"};
-        }
-
-        if constexpr (std::is_same_v<SchemaType, FixedSchema>) {
-            if (options.perform_schema_checks) {
-                CheckOutcome outcome = check_schema_matches_incomplete(
-                        segment.descriptor(), pipeline_context->on_disk_descriptor(), options.convert_int_to_float
-                );
-                if (std::holds_alternative<Error>(outcome)) {
-                    auto written_keys = folly::collect(write_futures).get();
-                    remove_written_keys(store.get(), std::move(written_keys));
-                    return std::get<Error>(std::move(outcome));
-                }
-            }
         }
 
         aggregator.add_segment(std::move(sk.segment(store)), sk.slice(), options.convert_int_to_float);

@@ -11,6 +11,7 @@
 #include <pybind11/numpy.h>
 #include <pybind11/operators.h>
 #include <pybind11/stl.h>
+#include <arcticdb/arrow/arrow_schema_utils.hpp>
 #include <arcticdb/entity/data_error.hpp>
 #include <arcticdb/entity/protobuf_mappings.hpp>
 #include <arcticdb/python/python_to_tensor_frame.hpp>
@@ -147,10 +148,7 @@ void declare_resample_clause(py::module& version) {
             .def("__str__", &ResampleClause<closed_boundary>::to_string);
 }
 
-void register_bindings(py::module& version, py::exception<arcticdb::ArcticException>& base_exception) {
-
-    py::register_local_exception<StreamDescriptorMismatch>(version, "StreamDescriptorMismatch", base_exception.ptr());
-
+void register_bindings(py::module& version, py::exception<arcticdb::ArcticException>&) {
     // Useful for enterprise
     auto constants = version.def_submodule("constants", "Reserved stream id constants used by ArcticDB");
     constants.attr("WRITE_VERSION_ID") = py::str(WriteVersionId);
@@ -1220,6 +1218,10 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                     py::call_guard<SingleThreadMutexHolder>(),
                     "Call trim on the native store's underlining memory allocator"
             )
+            .def("_rename_columns_arrow_compat",
+                 &PythonVersionStore::rename_columns_arrow_compat,
+                 py::call_guard<SingleThreadMutexHolder>(),
+                 "Rename indexes and columns for compatability with valid Arrow schema")
             .def_static("reuse_storage_for_testing", [](PythonVersionStore& from, PythonVersionStore& to) {
                 to._test_set_store(from._test_get_store());
             });
@@ -1265,29 +1267,36 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                 schema::check<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_PICKLED_DATA>(
                         !norm.has_msg_pack_frame(), "_collect_schema() not supported with pickled data"
                 );
-                auto schema = modify_schema({tsd.as_stream_descriptor().clone(), norm}, read_query->clauses_);
+                // A copy, as adding the index columns modifies the query, which the caller may reuse
+                ReadQuery query{*read_query};
+                add_index_columns_to_query(query, tsd);
+                auto schema = modify_schema({tsd.as_stream_descriptor().clone(), norm}, query.clauses_);
+                if (query.columns) {
+                    schema = select_columns(
+                            std::move(schema),
+                            std::unordered_set<std::string_view>(query.columns->begin(), query.columns->end())
+                    );
+                }
                 const auto& stream_desc = schema.stream_descriptor();
-                const auto columns = [&]() -> std::optional<ankerl::unordered_dense::set<std::string_view>> {
-                    if (read_query->columns.has_value()) {
-                        ankerl::unordered_dense::set<std::string_view> cols{
-                                read_query->columns->cbegin(), read_query->columns->cend()
-                        };
-                        // Always include index columns, so that the invariant:
-                        // lazy_df._collect_schema() == lazy_df.collect().data.schema
-                        // is maintained. In polarctic we can drop index columns if they are not in with_columns.
-                        auto num_index_levels =
-                                pipelines::index::required_fields_count(stream_desc, schema.norm_metadata_);
-                        for (size_t idx = 0; idx < num_index_levels; ++idx) {
-                            cols.insert(stream_desc.field(idx).name());
-                        }
-                        return cols;
-                    } else {
-                        return std::nullopt;
+                const auto on_disk_fields = stream_desc.fields_ptr();
+                // _modify_schema always outputs arrow
+                prepare_for_arrow_output(schema.mutable_stream_descriptor(), schema.norm_metadata_);
+                // After renaming we should also rename the `per_column_string_format` dictionary to match the new
+                // names. This will ensure the output of `emty_record_batch_from_descriptor` is identical to the output
+                // of `read`. In practice this doesn't matter much because any column being renamed has a very
+                // unintuitive internal name the user would need to pass - but kept for consistency.
+                auto arrow_output_config = read_options.arrow_output_config();
+                std::unordered_map<std::string, ArrowOutputStringFormat> per_column_string_format;
+                for (size_t pos = 0; pos < stream_desc.field_count(); ++pos) {
+                    const auto& user_formats = arrow_output_config.per_column_string_format_;
+                    if (auto it = user_formats.find(std::string{on_disk_fields->at(pos).name()});
+                        it != user_formats.end()) {
+                        per_column_string_format.emplace(stream_desc.field(pos).name(), it->second);
                     }
-                }();
-                auto record_batch = empty_record_batch_from_descriptor(
-                        stream_desc, read_options.arrow_output_config(), columns, norm
-                );
+                }
+                arrow_output_config.per_column_string_format_ = std::move(per_column_string_format);
+                auto record_batch =
+                        empty_record_batch_from_descriptor(stream_desc, arrow_output_config, schema.norm_metadata_);
                 return std::make_pair(std::move(record_batch), python_util::pb_to_python(schema.norm_metadata_));
             }
     );

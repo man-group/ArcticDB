@@ -14,8 +14,9 @@ from arcticdb.version_store._string_dtype import _use_pyarrow_strings_in_pandas
 from arcticdb.version_store.library import MergeStrategy, MergeAction
 from arcticdb.options import ModifiableEnterpriseLibraryOption, OutputFormat
 from arcticdb.toolbox.library_tool import LibraryTool
-from tests.util.mark import ARCTICDB_USING_CONDA, MACOS_WHEEL_BUILD, ZONE_INFO_MARK
+from tests.util.mark import ARCTICDB_USING_CONDA, MACOS_WHEEL_BUILD, VENV_COMPAT_TESTS_MARK, ZONE_INFO_MARK
 from arcticdb_ext.tools import StorageMover
+from arcticdb_ext.types import IndexKind
 
 from arcticdb.util.venv import CompatLibrary
 
@@ -264,7 +265,7 @@ def test_compat_read_incomplete(old_venv_and_arctic_uri, lib_name, any_output_fo
             # In version 5.1.0 (with commit a3b7545) we moved the streaming incomplete python API to the library tool.
             compat.old_lib.execute(
                 ["""
-lib_tool = lib.library_tool()
+lib_tool = lib._dev_tools.library_tool()
 lib_tool.append_incomplete("sym", df_1)
 lib_tool.append_incomplete("sym", df_2)
 """],
@@ -524,7 +525,7 @@ def test_compat_merge_old_updated_data(pandas_v1_venv, s3_ssl_disabled_storage, 
     # There was a bug where data written using update and old versions of ArcticDB produced data keys where the
     # end_index value was not 1 nanosecond larger than the last index value in the segment (as it should be), but
     # instead contained the start of the date_range passed into the update call.
-    # We want to verify merge_experimental works correctly with such data.
+    # We want to verify merge works correctly with such data.
     arctic_uri = s3_ssl_disabled_storage.arctic_uri
     with CompatLibrary(pandas_v1_venv, arctic_uri, lib_name) as compat:
         sym = "sym"
@@ -559,10 +560,91 @@ def test_compat_merge_old_updated_data(pandas_v1_venv, s3_ssl_disabled_storage, 
             target = curr.lib.read(sym).data
             expected = merge(target, source, strategy)
 
-            curr.lib.merge_experimental(sym, source, strategy=strategy)
+            curr.lib.merge(sym, source, strategy=strategy)
 
             result = curr.lib.read(sym).data
             assert_frame_equal(result, expected)
+
+
+def _stored_index_state(lib, sym):
+    """What a symbol's index key says about its index: the descriptor's index type and field count, and the
+    normalization metadata's is_physically_stored and RangeIndex step."""
+    nvs = lib._nvs
+    tsd = nvs.version_store.read_descriptor(sym, nvs._get_version_query(None)).timeseries_descriptor
+    descriptor_index = tsd.as_stream_descriptor.index
+    norm_index = tsd.normalization.df.common.index
+    return (descriptor_index.kind(), descriptor_index.field_count(), norm_index.is_physically_stored, norm_index.step)
+
+
+def test_compat_append_to_rowless_symbol(pandas_v1_venv, s3_ssl_disabled_storage, lib_name):
+    # Which index an empty DataFrame is stored with depends on the client that wrote it, so none of these says anything
+    # about the index its user had. Every one has to accept the non-empty frame that user meant to write.
+    arctic_uri = s3_ssl_disabled_storage.arctic_uri
+    rowrange_df = pd.DataFrame({"col": [1.0]})
+    datetime_df = pd.DataFrame({"col": [1.0]}, index=pd.DatetimeIndex([pd.Timestamp("2025-01-01")]))
+    with CompatLibrary(pandas_v1_venv, arctic_uri, lib_name) as compat:
+        compat.old_lib.execute(
+            [
+                "lib.write('old_rowrange', pd.DataFrame({'col': []}))",
+                "lib.write('old_datetime', pd.DataFrame({'col': []}, index=pd.DatetimeIndex([])))",
+            ]
+        )
+        with compat.current_version() as curr:
+            curr.lib.write("new_rowrange", pd.DataFrame({"col": []}))
+            curr.lib.write("new_datetime", pd.DataFrame({"col": []}, index=pd.DatetimeIndex([])))
+
+            # Only the old client stored an empty frame's own index.
+            assert _stored_index_state(curr.lib, "old_rowrange") == (IndexKind.ROWCOUNT, 0, False, 1)
+            assert _stored_index_state(curr.lib, "old_datetime") == (IndexKind.TIMESTAMP, 1, True, 0)
+            assert _stored_index_state(curr.lib, "new_rowrange") == (IndexKind.TIMESTAMP, 1, False, 0)
+            assert _stored_index_state(curr.lib, "new_datetime") == (IndexKind.TIMESTAMP, 1, False, 0)
+
+            for sym, to_append in [
+                ("old_rowrange", rowrange_df),
+                ("old_datetime", datetime_df),
+                ("new_rowrange", rowrange_df),
+                ("new_datetime", datetime_df),
+            ]:
+                curr.lib.append(sym, to_append)
+                assert_frame_equal(curr.lib.read(sym).data, to_append)
+                # The appended frame decides the index, so the descriptor and the metadata now agree.
+                expected = (
+                    (IndexKind.ROWCOUNT, 0, False, 1) if to_append is rowrange_df else (IndexKind.TIMESTAMP, 1, True, 0)
+                )
+                assert _stored_index_state(curr.lib, sym) == expected, sym
+
+
+# From 6.18.1 until 7.0.0 write(empty) followed by append(non_empty) can leave is_physically_stored False when it should
+# be True. This tests only 6.27.1 (which has the problem) and 5.0.0 (which doesn't have the bug) to save runtime
+@pytest.mark.parametrize(
+    "old_venv",
+    [pytest.param("5.0.0", marks=VENV_COMPAT_TESTS_MARK), pytest.param("6.27.1", marks=VENV_COMPAT_TESTS_MARK)],
+    indirect=True,
+)
+@pytest.mark.parametrize("first_modification", ["append", "update"])
+def test_compat_modify_symbol_first_written_empty(old_venv_and_arctic_uri, lib_name, first_modification):
+    old_venv, arctic_uri = old_venv_and_arctic_uri
+    with CompatLibrary(old_venv, arctic_uri, lib_name) as compat:
+        # Built in the venv, as the CSV round trip of execute() loses the empty DatetimeIndex
+        compat.old_lib.execute(
+            [
+                "lib.write('sym', pd.DataFrame({'col': []}, index=pd.DatetimeIndex([])))",
+                f"lib.{first_modification}('sym', pd.DataFrame({{'col': [1.0]}}, index=pd.DatetimeIndex(['2025-01-01'])))",
+            ]
+        )
+        with compat.current_version() as curr:
+            # Test the output of get_description is correct
+            assert [c.name for c in curr.lib.get_description("sym").columns] == ["col"]
+
+            # Test that reading as arrow and converting to pandas works
+            arrow_table = curr.lib.read("sym", output_format=OutputFormat.PYARROW).data
+            expected = pd.DataFrame({"col": [1.0]}, index=pd.DatetimeIndex(["2025-01-01"]))
+            assert_frame_equal_with_arrow(arrow_table, expected)
+
+            # Test that we can append to the old symbol
+            curr.lib.append("sym", pd.DataFrame({"col": [2.0]}, index=pd.DatetimeIndex(["2025-01-02"])))
+            expected = pd.DataFrame({"col": [1.0, 2.0]}, index=pd.DatetimeIndex(["2025-01-01", "2025-01-02"]))
+            assert_frame_equal(curr.lib.read("sym").data, expected)
 
 
 @pytest.mark.skipif(
@@ -609,7 +691,7 @@ def test_compat_merge_rowrange_write_new_read_old(old_venv_and_arctic_uri, lib_n
             curr.lib = curr.ac.get_library(lib_name)
 
             curr.lib.write(sym, target)
-            curr.lib.merge_experimental(sym, source, strategy=strategy, on=["a"])
+            curr.lib.merge(sym, source, strategy=strategy, on=["a"])
 
         if (arctic_uri.startswith("s3") or arctic_uri.startswith("azure")) and "1.6.2" in old_venv.version:
             pytest.skip("Reading the new library on s3 or azure with 1.6.2 requires some work arounds")
@@ -705,6 +787,11 @@ def test_norm_meta_column_and_index_names_write_new_read_old(old_venv_and_arctic
     df.index.set_names(
         ["col_one"], inplace=True
     )  # specifically testing an odd behaviour when an index name matches a column name
+    # Clients before 6.0.0 describe the column by the name it is stored under.
+    if version.Version(old_venv.version) >= version.Version("6.0.0"):
+        expected_desc_cols = ["col_one", "col_two"]
+    else:
+        expected_desc_cols = ["__col_col_one__0", "col_two"]
 
     with CompatLibrary(old_venv, arctic_uri, lib_name) as compat:
         with compat.current_version() as curr:
@@ -714,7 +801,7 @@ def test_norm_meta_column_and_index_names_write_new_read_old(old_venv_and_arctic
             [
                 f"desc = lib.get_description('sym')",
                 "actual_desc_cols = [c.name for c in desc.columns]",
-                "assert ['__col_col_one__0', 'col_two'] == actual_desc_cols, f'Actual columns were {actual_desc_cols}'",
+                f"assert {expected_desc_cols!r} == actual_desc_cols, f'Actual columns were {{actual_desc_cols}}'",
                 "actual_desc_index_name = desc.index[0][0]",
                 "assert actual_desc_index_name == 'col_one', f'Actual index name was {actual_desc_index_name}'",
                 "actual_df = lib.read('sym').data",

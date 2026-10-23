@@ -214,6 +214,7 @@ set(arcticdb_srcs
         # header files
         arrow/arrow_handlers.hpp
         arrow/arrow_c_interface.hpp
+        arrow/arrow_schema_utils.hpp
         arrow/arrow_utils.hpp
         async/async_store.hpp
         async/batch_read_args.hpp
@@ -255,9 +256,11 @@ set(arcticdb_srcs
         entity/index_range.hpp
         entity/key.hpp
         entity/metrics.hpp
+        entity/arrow_pandas_norm.hpp
         entity/data_error.hpp
         entity/descriptors.hpp
         entity/native_tensor.hpp
+        entity/normalization_utils.hpp
         entity/output_format.hpp
         entity/performance_tracing.hpp
         entity/protobuf_mappings.hpp
@@ -305,7 +308,6 @@ set(arcticdb_srcs
         pipeline/value_set.hpp
         pipeline/write_frame.hpp
         pipeline/write_options.hpp
-        python/normalization_utils.hpp
         python/numpy_buffer_holder.hpp
         python/python_strings.hpp
         python/python_handler_data.hpp
@@ -326,6 +328,7 @@ set(arcticdb_srcs
         processing/bucketizer.hpp
         processing/clause.hpp
         processing/clause_utils.hpp
+        processing/schema_combine.hpp
         processing/expression_context.hpp
         processing/expression_node.hpp
         processing/query_planner.hpp
@@ -474,6 +477,7 @@ set(arcticdb_srcs
         # CPP files
         arrow/arrow_handlers.cpp
         arrow/arrow_c_interface.cpp
+        arrow/arrow_schema_utils.cpp
         arrow/arrow_utils.cpp
         async/async_store.cpp
         async/bit_rate_stats.cpp
@@ -504,10 +508,11 @@ set(arcticdb_srcs
         entity/compact_data_info.cpp
         entity/data_error.cpp
         entity/field_collection.cpp
+        entity/arrow_pandas_norm.cpp
         entity/field_collection_proto.cpp
         entity/key.cpp
-        entity/merge_descriptors.cpp
         entity/metrics.cpp
+        entity/normalization_utils.cpp
         entity/performance_tracing.cpp
         entity/protobuf_mappings.cpp
         entity/python_bindings_common.cpp
@@ -536,7 +541,6 @@ set(arcticdb_srcs
         pipeline/value_set.cpp
         pipeline/write_frame.cpp
         python/python_bindings_common.cpp
-        python/normalization_utils.cpp
         python/python_strings.cpp
         python/python_utils.cpp
         python/numpy_buffer_holder.cpp
@@ -545,8 +549,10 @@ set(arcticdb_srcs
         processing/clause.cpp
         processing/clause_compact_data.cpp
         processing/clause_merge_update.cpp
+        processing/clause_rename_columns.cpp
         processing/clause_resample.cpp
         processing/clause_utils.cpp
+        processing/schema_combine.cpp
         processing/component_manager.cpp
         processing/expression_node.cpp
         processing/operation_dispatch.cpp
@@ -1092,6 +1098,7 @@ if(${TEST})
             arrow/test/arrow_test_utils.cpp
             arrow/test/test_arrow_read.cpp
             arrow/test/test_arrow_write.cpp
+            arrow/test/test_arrow_schema_utils.cpp
             async/test/test_async.cpp
             codec/test/test_codec.cpp
             codec/test/test_encode_field_collection.cpp
@@ -1134,7 +1141,7 @@ if(${TEST})
             processing/test/test_component_manager.cpp
             processing/test/test_expression.cpp
             processing/test/test_filter_and_project_sparse.cpp
-            processing/test/test_join_schemas.cpp
+            processing/test/test_schema_combine.cpp
             processing/test/test_min_max_aggregator_strings.cpp
             processing/test/test_type_promotion.cpp
             processing/test/test_operation_dispatch.cpp

@@ -17,6 +17,7 @@ from typing import Optional, Any, Tuple, Dict, Union, List, Iterable, NamedTuple
 
 from arcticdb.dependencies import _PYARROW_AVAILABLE, _POLARS_AVAILABLE, pyarrow as pa, polars as pl
 from arcticdb.exceptions import (
+    ArcticException,
     ArcticNativeException,
     ArcticDbNotYetImplemented,
     MissingKeysInStageResultsError,
@@ -30,6 +31,7 @@ from arcticdb.options import LibraryOptions, EnterpriseLibraryOptions, OutputFor
 from arcticc.pb2.descriptors_pb2 import TypeDescriptor
 from arcticdb.preconditions import check
 from arcticdb.supported_types import Timestamp
+from arcticdb.util.arrow import NORMALIZABLE_PYARROW_TYPES, NORMALIZABLE_POLARS_TYPES
 from arcticdb.util._versions import IS_PANDAS_TWO
 
 from arcticdb.version_store.processing import ExpressionNode, QueryBuilder
@@ -41,7 +43,6 @@ from arcticdb.version_store._store import (
     MergeStrategy,
     MergeAction,
 )
-from arcticdb_ext.exceptions import ArcticException
 from arcticdb_ext.version_store import (
     CompactDataInfo,
     DataError,
@@ -74,6 +75,68 @@ See Also
 
 Library.write: for more documentation on normalisation.
 """
+
+
+class InputFormat(str, Enum):
+    """
+    Format used to write the data, as reported by ``SymbolDescription.input_format``. As this is a ``str``
+    subclass, comparisons against plain strings (e.g. ``desc.input_format == "DATAFRAME"``) continue to work.
+
+    This records the input format at write time and does not constrain the data returned by ``read``; the
+    symbol may still be read as pandas or Arrow regardless of its recorded input format.
+
+    DATAFRAME, SERIES:
+        Data written as the corresponding pandas type.
+
+    NDARRAY:
+        Data written as a numpy ``ndarray``.
+
+    PICKLED:
+        Data that could not be normalized into one of the other types above. Despite the name, this does not
+        always mean Python's ``pickle`` module was used: msgpack can natively encode simple types (ints,
+        bools, floats, strings, and lists/dicts of these) without pickling anything; ArcticDB still reports
+        such data as ``PICKLED``.
+
+    TIMEFRAME:
+        The arcticdb TimeFrame type. Only writable via the V1 API, but still readable via the V2 API.
+
+    ARROW_DATAFRAME, ARROW_SERIES:
+        Data written as ``pyarrow`` or ``polars``. ``ARROW_DATAFRAME`` represents 2-dimensional inputs such
+        as ``pyarrow.Table`` or ``pyarrow.RecordBatch``. ``ARROW_SERIES`` represents 1-dimensional inputs
+        such as ``pyarrow.Array``, ``pyarrow.ChunkedArray``, or ``polars.Series``.
+
+    RECURSIVE_NORMALIZED:
+        A nested data structure, such as ``List[pd.DataFrame]`` or ``Dict[str, pd.DataFrame]``, written with
+        ``recursive_normalizers=True``.
+
+    UNKNOWN:
+        No input type was recorded, for example because the data was written by a client that predates this
+        information being recorded.
+    """
+
+    DATAFRAME = "DATAFRAME"
+    SERIES = "SERIES"
+    TIMEFRAME = "TIMEFRAME"
+    NDARRAY = "NDARRAY"
+    PICKLED = "PICKLED"
+    ARROW_DATAFRAME = "ARROW_DATAFRAME"
+    ARROW_SERIES = "ARROW_SERIES"
+    RECURSIVE_NORMALIZED = "RECURSIVE_NORMALIZED"
+    UNKNOWN = "UNKNOWN"
+
+
+# Translates V1's legacy "type" strings (from get_arctic_style_type_info, exposed via get_info()["type"])
+# into the InputFormat values that SymbolDescription reports in the V2 API.
+INPUT_FORMATS = {
+    "pandasdf": InputFormat.DATAFRAME,
+    "pandasseries": InputFormat.SERIES,
+    "normalized_timeseries": InputFormat.TIMEFRAME,
+    "ndarray": InputFormat.NDARRAY,
+    "pickled": InputFormat.PICKLED,
+    "arrow_dataframe": InputFormat.ARROW_DATAFRAME,
+    "arrow_series": InputFormat.ARROW_SERIES,
+    "recursive_normalized": InputFormat.RECURSIVE_NORMALIZED,
+}
 
 
 class SymbolVersion(NamedTuple):
@@ -160,6 +223,8 @@ class SymbolDescription(NamedTuple):
                    work.
         UNKNOWN - Either the data does not have a timestamp index, or the data does have a timestamp index, but was
                   written by a client that predates this information being stored.
+    input_format : InputFormat
+        Format used to write the data. See `InputFormat` for the possible values and their meaning.
     """
 
     columns: Tuple[NameWithDType]
@@ -169,6 +234,7 @@ class SymbolDescription(NamedTuple):
     last_update_time: datetime.datetime
     date_range: Tuple[Union[datetime.datetime, datetime64], Union[datetime.datetime, datetime64]]
     sorted: str
+    input_format: InputFormat
 
     def __eq__(self, other):
         # Needed as NaT != NaT
@@ -415,8 +481,13 @@ class UpdatePayload:
         metadata : Any, default=None
             Optional metadata to persist along with the new symbol version.
         date_range : Optional[Tuple[Optional[Timestamp], Optional[Timestamp]]], default=None
-            Restricts the update to the specified range in the stored data. Leaving either bound as ``None`` leaves that
-            side of the range open-ended.
+            If a range is specified, the existing data within that range is cleared and overwritten by data. This allows
+            the user to update a subset of the original data. Note that date_range is end-inclusive, and if either the
+            start or end is None, the range becomes open-ended on that side. If date_range is narrower than data, rows
+            of data outside date_range are ignored. If date_range is wider than data, index entries within date_range
+            not covered by data are removed as well. date_range and data must both be timezone-aware or both
+            timezone-naive; they can use different zones, since the comparison is against the underlying instants
+            rather than local time.
         index_column: bool, default=False
             Only applicable when data is a PyArrow Table or Polars DataFrame. If True, the first column
             is treated as the timeseries index.
@@ -925,9 +996,9 @@ class Library:
         if isinstance(data, NORMALIZABLE_TYPES):
             return True
         if self._nvs._allow_arrow_input:
-            if _PYARROW_AVAILABLE and isinstance(data, pa.Table):
+            if isinstance(data, NORMALIZABLE_PYARROW_TYPES):
                 return True
-            if _POLARS_AVAILABLE and isinstance(data, pl.DataFrame):
+            if isinstance(data, NORMALIZABLE_POLARS_TYPES):
                 return True
         return False
 
@@ -1019,7 +1090,6 @@ class Library:
         data: NormalizableType,
         metadata: Any = None,
         prune_previous_versions: Optional[bool] = None,
-        staged=False,
         validate_index=True,
         index_column: bool = False,
         recursive_normalizers: bool = None,
@@ -1062,10 +1132,6 @@ class Library:
         prune_previous_versions : Optional[bool], default=None
             Removes previous (non-snapshotted) versions from the database. If None, the value is taken from the
             library configuration (defaults to False).
-        staged: bool, default=False
-            Deprecated. Use stage() instead.
-            Whether to write to a staging area rather than immediately to the library.
-            See documentation on `finalize_staged_data` for more information.
         validate_index: bool, default=True
             If True, verify that the index of `data` supports date range searches and update operations.
             This tests that the data is sorted in ascending order, using Pandas DataFrame.index.is_monotonic_increasing.
@@ -1088,10 +1154,10 @@ class Library:
                 lib.write(symbol, data) # The data will be successfully written
             Please refer to https://docs.arcticdb.io/latest/notebooks/arcticdb_demo_recursive_normalizers for more details
             of this feature.
-            Please check https://docs.arcticdb.io/latest/runtime_config/#versionstorerecursivenormalizermetastructure for the plan of
-            introducing meta structure v2. V2 has removed the dependency on pickle for normalizing meta structure. Please consider switching to V2
-            as V1 will be deprecated in future v7.0.0 release. However note that reading V2 meta structure requires ArcticDB version >= 6.7.0,
-            or KeyError will be raised.
+            Since v7.0.0 the meta structure is normalized as V2 by default, which removes the dependency on pickle.
+            Reading V2 meta structure requires ArcticDB version >= 6.7.0, or KeyError will be raised. To keep data readable
+            by older clients, set the runtime option VersionStore.RecursiveNormalizerMetastructure to 1. Please check
+            https://docs.arcticdb.io/latest/runtime_config/#versionstorerecursivenormalizermetastructure for more details.
 
         Returns
         -------
@@ -1118,24 +1184,10 @@ class Library:
 
         WritePayload objects can be unpacked and used as parameters:
         >>> w = adb.WritePayload("symbol", df, metadata={'the': 'metadata'})
-        >>> lib.write(*w, staged=True)
+        >>> lib.write(*w)
         """
-        if staged:
-            warnings.warn(
-                "The `staged` parameter will be removed in v7.0.0. Use stage() instead.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-        is_recursive_normalizers_enabled = self._nvs._is_recursive_normalizers_enabled(
-            **{"recursive_normalizers": recursive_normalizers}
-        )
         if not self._allowed_input_type(data):
-            if is_recursive_normalizers_enabled:
-                if staged:
-                    raise ArcticUnsupportedDataTypeException(
-                        "Staged data cannot be natively normalized. The recursive normalizer is enabled but is not allowed to work on staged data."
-                    )
-            else:
+            if not self._nvs._is_recursive_normalizers_enabled(**{"recursive_normalizers": recursive_normalizers}):
                 raise ArcticUnsupportedDataTypeException(
                     "Data is of a type that cannot be normalized. Consider using "
                     f"write_pickle instead. type(data)=[{type(data)}]"
@@ -1147,7 +1199,7 @@ class Library:
             metadata=metadata,
             prune_previous_version=prune_previous_versions,
             pickle_on_failure=False,
-            parallel=staged,
+            parallel=False,
             validate_index=validate_index,
             index_column=index_column,
             norm_failure_options_msg="Using write_pickle will allow the object to be written. However, many operations "
@@ -1162,7 +1214,6 @@ class Library:
         data: Any,
         metadata: Any = None,
         prune_previous_versions: Optional[bool] = None,
-        staged=False,
         recursive_normalizers: bool = None,
     ) -> VersionedItem:
         """
@@ -1183,8 +1234,6 @@ class Library:
         metadata
             See documentation on `write`.
         prune_previous_versions
-            See documentation on `write`.
-        staged
             See documentation on `write`.
         recursive_normalizers: bool, default None
             See documentation on `write`.
@@ -1216,19 +1265,13 @@ class Library:
         --------
         write: For more detailed documentation.
         """
-        if staged:
-            warnings.warn(
-                "The `staged` parameter will be removed in v7.0.0. Use stage() instead.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
         return self._nvs.write(
             symbol=symbol,
             data=data,
             metadata=metadata,
             prune_previous_version=prune_previous_versions,
             pickle_on_failure=True,
-            parallel=staged,
+            parallel=False,
             recursive_normalizers=recursive_normalizers,
             recursive_normalize_msgpack_no_pickle_fallback=False,
         )
@@ -1311,7 +1354,6 @@ class Library:
         >>> items[0].symbol, items[1].symbol
         ('symbol_1', 'symbol_2')
         """
-        self._nvs._raise_if_duplicate_symbols_in_batch(payloads)
         self._raise_if_unsupported_type_in_write_batch(payloads)
 
         throw_on_error = False
@@ -1360,7 +1402,6 @@ class Library:
         write: For more detailed documentation.
         write_pickle: For information on the implications of providing data that needs to be pickled.
         """
-        self._nvs._raise_if_duplicate_symbols_in_batch(payloads)
 
         return self._nvs._batch_write_internal(
             [p.symbol for p in payloads],
@@ -1532,7 +1573,6 @@ class Library:
             If data that is not of NormalizableType appears in any of the payloads.
         """
 
-        self._nvs._raise_if_duplicate_symbols_in_batch(append_payloads)
         self._raise_if_unsupported_type_in_write_batch(append_payloads)
         throw_on_error = False
 
@@ -1591,10 +1631,13 @@ class Library:
         upsert: bool, default=False
             If True, will write the data even if the symbol does not exist.
         date_range: `Tuple[Optional[Timestamp], Optional[Timestamp]]`, default=None
-            If a range is specified, it will delete the stored value within the range and overwrite it with the data in
-            ``data``. This allows the user to update with data that might only be a subset of the stored value. Leaving
-            any part of the tuple as None leaves that part of the range open ended. Only data with date_range will be
-            modified, even if ``data`` covers a wider date range.
+            If a range is specified, the existing data within that range is cleared and overwritten by data. This allows
+            the user to update a subset of the original data. Note that date_range is end-inclusive, and if either the
+            start or end is None, the range becomes open-ended on that side. If date_range is narrower than data, rows
+            of data outside date_range are ignored. If date_range is wider than data, index entries within date_range
+            not covered by data are removed as well. date_range and data must both be timezone-aware or both
+            timezone-naive; they can use different zones, since the comparison is against the underlying instants
+            rather than local time.
         prune_previous_versions: Optional[bool], default=None
             Removes previous (non-snapshotted) versions from the database. If None, the value is taken from the
             library configuration (defaults to False).
@@ -1740,7 +1783,6 @@ class Library:
         2024-01-02        11
         """
 
-        self._nvs._raise_if_duplicate_symbols_in_batch(update_payloads)
         self._raise_if_unsupported_type_in_write_batch(update_payloads)
 
         batch_update_result = self._nvs._batch_update_internal(
@@ -1767,10 +1809,9 @@ class Library:
 
         See Also
         --------
-        write
-            Documentation on the ``staged`` parameter explains the concept of staged data in more detail.
         stage
-            Returns the ``StageResult`` objects accepted by this method.
+            Documentation on the ``stage`` method explains the concept of staged data in more detail. The ``stage``
+            method returns the ``StageResult`` objects accepted by this method
 
         Examples
         --------
@@ -2013,13 +2054,13 @@ class Library:
 
         See Also
         --------
-        write
-            Documentation on the ``staged`` parameter explains the concept of staged data in more detail.
+        stage
+            Documentation on the ``stage`` method explains the concept of staged data in more detail.
 
         Examples
         --------
-        >>> lib.write("sym", pd.DataFrame({"col": [2, 4]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 2), pd.Timestamp(2024, 1, 4)])), staged=True)
-        >>> lib.write("sym", pd.DataFrame({"col": [3, 1]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 3), pd.Timestamp(2024, 1, 1)])), staged=True)
+        >>> lib.stage("sym", pd.DataFrame({"col": [2, 4]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 2), pd.Timestamp(2024, 1, 4)])), validate_index=False)
+        >>> lib.stage("sym", pd.DataFrame({"col": [3, 1]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 3), pd.Timestamp(2024, 1, 1)])), validate_index=False)
         >>> lib.sort_and_finalize_staged_data("sym")
         >>> lib.read("sym").data
                     col
@@ -2071,8 +2112,8 @@ class Library:
 
         See Also
         --------
-        write
-            Documentation on the ``staged`` parameter explains the concept of staged data in more detail.
+        stage
+            Documentation on the ``stage`` method explains the concept of staged data in more detail.
         """
         return self._nvs.list_symbols_with_incomplete_data()
 
@@ -2677,7 +2718,6 @@ class Library:
         {'the': 'metadata_2'}
         """
 
-        self._nvs._raise_if_duplicate_symbols_in_batch(write_metadata_payloads)
         throw_on_error = False
         return self._nvs._batch_write_metadata_to_versioned_items(
             [p.symbol for p in write_metadata_payloads],
@@ -3126,6 +3166,10 @@ class Library:
             )
 
     @staticmethod
+    def _info_to_input_format(info: Dict[str, Any]) -> InputFormat:
+        return INPUT_FORMATS.get(info["type"], InputFormat.UNKNOWN)
+
+    @staticmethod
     def _info_to_desc(info: Dict[str, Any]) -> SymbolDescription:
         last_update_time = pd.to_datetime(info["last_update"], utc=True)
         if IS_PANDAS_TWO:
@@ -3143,6 +3187,7 @@ class Library:
             index_type=info["index_type"],
             date_range=info["date_range"],
             sorted=info["sorted"],
+            input_format=Library._info_to_input_format(info),
         )
 
     def get_description(self, symbol: str, as_of: Optional[AsOf] = None) -> SymbolDescription:
@@ -3546,7 +3591,7 @@ class Library:
         """
         return self._nvs.defragment_symbol_data(symbol, segment_size, prune_previous_versions)
 
-    def merge_experimental(
+    def merge(
         self,
         symbol: str,
         source: NormalizableType,
@@ -3556,6 +3601,7 @@ class Library:
         prune_previous_versions: Optional[bool] = None,
         upsert: bool = False,
         match_na: bool = False,
+        index_column: bool = False,
     ):
         """
         Merge new data into an existing symbol's DataFrame according to a specified strategy.
@@ -3563,16 +3609,14 @@ class Library:
         See [Merge Notebook](../notebooks/ArcticDB_merge.ipynb) for usage examples.
 
         !!! warning
-            This API is under development and is subject to change. The API is not subject to semver and can change in
-            minor or patch releases.
-
-            Dynamic schema is not supported.
+            Dynamic schema is not supported. Sparse data is not supported. Fortran styled data is not supported.
+            PyArrow and Polars sources containing null values are not supported.
 
         Parameters
         ----------
         symbol : str
             The symbol to merge data into.
-        source : pandas.DataFrame or pandas.Series
+        source : Union[pandas.DataFrame, pandas.Series, pyarrow.Table, polars.DataFrame]
             The new data to merge. In the case of timeseries, the index must be sorted.
         strategy : Optional[MergeStrategy], default=MergeStrategy(matched="update", not_matched_by_target="insert")
             Determines how to handle matched and unmatched rows. Accepted strategies are:
@@ -3616,6 +3660,9 @@ class Library:
         match_na : bool, default False
             Controls whether a missing value (float NaN, string None/NaN, or NaT in a datetime64 `on`
             column) can match another missing value in the `on` columns. See "Note on equality semantics" above.
+        index_column : bool, default False
+            Only applicable when source is a PyArrow Table or Polars DataFrame. If True, the first column
+            is treated as the timeseries index.
 
         Returns
         -------
@@ -3633,20 +3680,21 @@ class Library:
         UnsortedDataException
             If date-time index is used and source or target are not sorted
         SchemaException
-            If dynamic schema is used or if source's schema is incompatible with target's schema
+            If dynamic schema is used, if source's schema is incompatible with target's schema or if a PyArrow or
+            Polars source contains null values
 
         Examples
         --------
 
         >>> lib.write("symbol", pd.DataFrame({'a': [1, 2, 3]}, index=pd.DatetimeIndex([pd.Timestamp(1), pd.Timestamp(2), pd.Timestamp(3)])))
-        >>> lib.merge_experimental("symbol", pd.DataFrame({"a": [100, 200]}, index=pd.DatetimeIndex([pd.Timestamp(2), pd.Timestamp(4)])), strategy=MergeStrategy(matched="update", not_matched_by_target="do_nothing"))))
+        >>> lib.merge("symbol", pd.DataFrame({"a": [100, 200]}, index=pd.DatetimeIndex([pd.Timestamp(2), pd.Timestamp(4)])), strategy=MergeStrategy(matched="update", not_matched_by_target="do_nothing"))))
         >>> lib.read("symbol").data
                                        a
         1970-01-01 00:00:00.000000001  1
         1970-01-01 00:00:00.000000002  100
         1970-01-01 00:00:00.000000003  3
         """
-        return self._nvs.merge_experimental(
+        return self._nvs.merge(
             symbol=symbol,
             source=source,
             strategy=strategy,
@@ -3655,6 +3703,7 @@ class Library:
             prune_previous_versions=prune_previous_versions,
             upsert=upsert,
             match_na=match_na,
+            index_column=index_column,
         )
 
     @property
@@ -3685,3 +3734,93 @@ class Library:
             raise ArcticInvalidApiUsageException(
                 "mode must be one of StagedDataFinalizeMethod.WRITE, StagedDataFinalizeMethod.APPEND, 'write', 'append'"
             )
+
+    def rename_columns_arrow_compat(
+        self,
+        symbol: str,
+        index_columns: Optional[Union[str, List[str]]] = None,
+        prune_previous_versions: Optional[bool] = None,
+    ) -> VersionedItem:
+        """
+        Rename the index and column names of a symbol to be Arrow compatible.
+
+        After calling this method, all index and column names will be unique, non-empty strings, with no overlap allowed
+        between the index and column names. Note that the Arrow spec itself only requires that column names are strings.
+        However, libraries such as Polars and PyArrow require uniqueness, and many downstream processing engines do not
+        gracefully handle empty strings as column names.
+
+        This operation creates a new version, unless the index and column names are already unique, non-empty strings,
+        in which case it is a no-op.
+
+        The metadata from the version being renamed is maintained with the newly created version.
+
+        The renaming follows these principles:
+        - Integer index/column names `i` will be renamed to `str(i)`.
+        - Empty string `""` index/column names will be renamed to `"__empty__"`.
+        - Unnamed (i.e. `None`) index/column names behave differently depending on where they are encountered:
+            - Single level (i.e. non-MultiIndex) timeseries index: renamed to `"__index__"`.
+            - MultiIndex: renamed to `"__index_level_i__"`, where `i` is the index level.
+            - Remaining columns: renamed to the string `"None"`.
+        - If the columns were named using a `RangeIndex` (e.g. by `df = pd.DataFrame(np.zeros((10, 4)))`), then these
+          will be renamed to string representations of the integers corresponding to the column position (e.g.
+          `["0", "1", "2", "3"]` in the previous example).
+        - Duplicated column names, and clashes caused by renaming to existing column names, are handled by prepending
+          and appending `"_"` characters. e.g. `pd.DataFrame(np.zeros((10, 2)), columns=["col", "col"])` would become
+          `pd.DataFrame(np.zeros((10, 2)), columns=["col", "_col_"])`.
+        - If the `index_columns` argument is provided, the index column(s) will be renamed to these provided name(s).
+        - Rules about column names specified above apply to the `name` field of `pd.Series`.
+
+        Parameters
+        ----------
+        symbol : str
+            The symbol to perform the renaming on.
+        index_columns : Optional[Union[str, List[str]]], default=None
+            Explicit names for the index columns. If None, uses defaults specified above. If a `str`, the existing data
+            must have a single-level (non-MultiIndex) timeseries index. If `List[str]`, the length of the list must
+            equal the number of indexes of the existing data.
+        prune_previous_versions : Optional[bool], default=None
+            If True, removes previous versions from the version list. If None, the value is taken from the
+            library configuration.
+
+        Returns
+        -------
+        VersionedItem
+            Structure containing information including the version number of the written symbol in the store. The data
+            and metadata attributes will not be populated. If no renaming occurs because the data is already
+            Arrow-compatible, the version field will be that of the latest live version for the symbol.
+
+        Raises
+        ------
+        NoSuchVersionException
+            If the symbol does not exist or has been deleted.
+        UserInputException
+            If the number of `index_columns` provided does not match the data on-disk.
+            If `index_columns` is specified, but there is an existing column name that clashes with at least one of the
+            specified index columns.
+        SchemaException
+            If the existing data is recursively normalized, pickled, or a numpy array.
+        InternalException
+            If the existing data contains multiple identical integer index/column names. This data is already corrupted
+            and cannot be read, and should be deleted and re-created without duplicate integer column names.
+
+        Examples
+        --------
+
+        >>> input_df = pd.DataFrame({None: [0], "": [1], 10: [2], "10": [3]}, index=pd.date_range("2026-06-06", periods=1))
+        >>> lib.write("sym", input_df)
+        >>> lib.rename_columns_arrow_compat("sym")
+        >>> output_df = lib.read("sym").data
+        >>> output_df.index.name
+        "__index__"
+        >>> output_df.columns.to_list()
+        ["None", "__empty__", "10", "_10_"]
+        >>> input_df = pd.DataFrame({"col": [0]}, index=pd.MultiIndex.from_arrays([[pd.Timestamp(0)], ["AAPL"]]))
+        >>> list(input_df.index.names)
+        [None, None]
+        >>> lib.write("sym", input_df)
+        >>> lib.rename_columns_arrow_compat("sym", index_columns=["ts", "ticker"])
+        >>> output_df = lib.read("sym").data
+        >>> list(output_df.index.names)
+        ["ts", "ticker"]
+        """
+        return self._nvs.rename_columns_arrow_compat(symbol, index_columns, prune_previous_versions)

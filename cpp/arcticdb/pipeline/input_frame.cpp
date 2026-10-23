@@ -123,6 +123,8 @@ StreamDescriptor& InputFrame::desc() { return desc_; }
 
 const StreamDescriptor& InputFrame::desc() const { return const_cast<InputFrame*>(this)->desc(); }
 
+const StreamDescriptor* InputFrame::desc_ptr() const { return &desc_; }
+
 StreamDescriptor InputFrame::compute_desc_for_tsd() const {
     if (has_only_tensors_)
         return desc_;

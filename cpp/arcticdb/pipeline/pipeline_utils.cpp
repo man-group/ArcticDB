@@ -7,6 +7,7 @@
  */
 
 #include <arcticdb/pipeline/pipeline_utils.hpp>
+#include <arcticdb/arrow/arrow_schema_utils.hpp>
 
 #include <sparrow/record_batch.hpp>
 
@@ -40,10 +41,27 @@ ReadResult create_python_read_result(
                                           : norm_meta->mutable_series()->mutable_common();
         if (common->has_index()) {
             auto index = common->mutable_index();
-            if (result.desc_.index().type() == IndexDescriptor::Type::ROWCOUNT && !index->is_physically_stored() &&
-                index->start() == 0 && index->step() == 0) {
+            if (result.desc_.index().type() == IndexDescriptor::Type::ROWCOUNT && index->start() == 0 &&
+                index->step() == 0) {
                 index->set_step(1);
             }
+        }
+    }
+
+    const auto prepare_frame_for_arrow_output = [](FrameAndDescriptor& frame_and_descriptor) {
+        prepare_for_arrow_output(
+                frame_and_descriptor.frame_, *frame_and_descriptor.desc_.mutable_proto().mutable_normalization()
+        );
+    };
+    // For OutputFormat::ARROW we convert pandas metadata to arrow before `segment_to_arrow_data` is called.
+    // This way all timezone operations and column renames for arrow output are handled in C++ layer.
+    // Ideally for OutputFormat::PANDAS we would convert arrow metadata to pandas here as well. However that is
+    // impossible since this conversion is inherently lossy. Pandas metadata doesn't have a structure to specify
+    // timezones for non index columns.
+    if (output_format == OutputFormat::ARROW) {
+        prepare_frame_for_arrow_output(result);
+        for (auto& node_output : node_outputs) {
+            prepare_frame_for_arrow_output(node_output.frame_and_descriptor_);
         }
     }
 

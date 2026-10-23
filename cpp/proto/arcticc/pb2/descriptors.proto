@@ -134,6 +134,8 @@ message NormalizationMetadata {
         bool fake_name = 3; // The index had no name; stored under a synthetic name, restored to None on read.
         // True if the index is stored on disk as a column. False if it can be reconstructed from the
         // metadata at read time (a RangeIndex, rebuilt from start/step).
+        // From 6.18.1 until 7.0.0 append and update could leave this false for a stored DatetimeIndex. 
+        // Prefer the index descriptor where applicable.
         bool is_physically_stored = 4;
         int64 start = 5; // RangeIndex start (used when not physically stored).
         int64 step = 6; // RangeIndex step (used when not physically stored).
@@ -149,7 +151,7 @@ message NormalizationMetadata {
         string name = 4; // First level name; empty when unnamed, see fake_field_pos.
         string tz = 5; // First level (level 0) timezone.
         repeated uint32 fake_field_pos = 6; // Positions of unnamed levels (0 == first level).
-        bool is_int = 7; // The first level index name was an integer (as of July 2026 - never populated)
+        bool is_int = 7; // The first level index name was an integer (has always been false 13/10/26)
     }
 
     // MultiIndex columns. Not implemented
@@ -240,6 +242,21 @@ message NormalizationMetadata {
 
         bool has_index = 1;
         map<string, ColumnMeta> columns = 2;
+        // True for Polars series, and PyArrow chunked arrays and arrays. False for Polars dataframes, and PyArrow
+        // tables and record batches
+        bool one_dimensional = 3;
+        // Set only when data written is a Polars Series
+        optional string polars_series_name = 4;
+
+        // Set when the data also has a pandas provenance: pandas data combined with Arrow data, or the other way
+        // round. Unset for Arrow-only data.
+        // Mirrors the original pandas input_type.
+        // There is some data duplication. E.g. timezones, series name can be stored both in the arrow and pandas metadata. They are kept in line on construction.
+        oneof pandas_input_type {
+            PandasDataFrame df = 5;
+            PandasDataFrame series = 6;
+            NormalisedTimeSeries ts = 7;
+        }
     }
 
     oneof input_type {

@@ -57,7 +57,7 @@ def test_map(lmdb_version_store):
 
 
 def _read_and_assert_symbol(args):
-    from arcticdb_ext.version_store import NoSuchVersionException
+    from arcticdb.exceptions import NoSuchVersionException
 
     lib, symbol, idx = args
     for attempt in range(1, 11):

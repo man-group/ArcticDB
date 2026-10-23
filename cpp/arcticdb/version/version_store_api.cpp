@@ -7,6 +7,7 @@
  */
 
 #include <arcticdb/version/version_store_api.hpp>
+#include <arcticdb/util/collection_utils.hpp>
 #include <arcticdb/python/python_utils.hpp>
 #include <arcticdb/version/version_map.hpp>
 #include <arcticdb/storage/storage_utils.hpp>
@@ -1485,7 +1486,12 @@ void PythonVersionStore::compact_library(size_t batch_size) {
 }
 
 std::vector<SliceAndKey> PythonVersionStore::list_incompletes(const StreamId& stream_id) {
-    return get_incomplete(store(), stream_id, unspecified_range(), 0u, true, false);
+    auto entries = get_incomplete(store(), stream_id, unspecified_range(), 0u, true, false);
+    auto output = util::reserve_vector<SliceAndKey>(entries.size());
+    for (auto& entry : entries) {
+        output.emplace_back(std::move(entry.slice_and_key_));
+    }
+    return output;
 }
 
 void PythonVersionStore::clear(const bool continue_on_error) {
@@ -1552,7 +1558,7 @@ void PythonVersionStore::force_delete_symbol(const StreamId& stream_id) {
 }
 
 VersionedItem PythonVersionStore::merge(
-        const StreamId& stream_id, const std::shared_ptr<convert::PandasData>& source, const py::object& norm,
+        const StreamId& stream_id, const convert::InputItem& source, const py::object& norm,
         const py::object& user_meta, const bool prune_previous_versions, const bool upsert,
         const py::tuple& py_strategy, std::vector<std::string> on, const bool match_na
 ) {
@@ -1563,13 +1569,14 @@ VersionedItem PythonVersionStore::merge(
     };
     return merge_internal(
             stream_id,
+            // merge always requires a sorted index, so always determine the Arrow index sort order.
             convert::py_input_item_to_frame(
                     stream_id,
                     source,
                     norm,
                     user_meta,
                     cfg().write_options().empty_types(),
-                    pipelines::SortednessScan::SKIP
+                    pipelines::SortednessScan::SCAN_IF_UNKNOWN
             ),
             prune_previous_versions,
             upsert,
@@ -1595,6 +1602,13 @@ std::vector<std::variant<VersionedItem, DataError>> PythonVersionStore::batch_co
         bool throw_on_error
 ) {
     return batch_compact_data_internal(stream_ids, rows_per_segment, prune_previous_versions, throw_on_error);
+}
+
+VersionedItem PythonVersionStore::rename_columns_arrow_compat(
+        const StreamId& stream_id, const std::optional<std::vector<std::string>>& index_columns,
+        const bool prune_previous_versions
+) {
+    return rename_columns_arrow_compat_internal(stream_id, index_columns, prune_previous_versions);
 }
 
 } // namespace arcticdb::version_store

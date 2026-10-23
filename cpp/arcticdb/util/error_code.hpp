@@ -200,6 +200,7 @@ using MongoRetryableException = ArcticSpecificException<ErrorCode::E_MONGO_RETRY
 using NonIncreasingIndexVersionException = ArcticSpecificException<ErrorCode::E_NON_INCREASING_INDEX_VERSION>;
 using SortingException = ArcticCategorizedException<ErrorCategory::SORTING>;
 using UnsortedDataException = ArcticSpecificException<ErrorCode::E_UNSORTED_DATA>;
+using StreamDescriptorMismatch = ArcticSpecificException<ErrorCode::E_DESCRIPTOR_MISMATCH>;
 using UserInputException = ArcticCategorizedException<ErrorCategory::USER_INPUT>;
 using CompatibilityException = ArcticCategorizedException<ErrorCategory::COMPATIBILITY>;
 using CodecException = ArcticCategorizedException<ErrorCategory::CODEC>;
@@ -210,6 +211,8 @@ using QuotaExceededException = ArcticSpecificException<ErrorCode::E_QUOTA_EXCEED
 using SymbolNotFoundException = ArcticSpecificException<ErrorCode::E_SYMBOL_NOT_FOUND>;
 using RecursivelyNormalizedDataException =
         ArcticSpecificException<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_RECURSIVE_NORMALIZED_DATA>;
+using PickledDataException = ArcticSpecificException<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_PICKLED_DATA>;
+using NumpyArrayDataException = ArcticSpecificException<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_NUMPY_ARRAY>;
 
 template<ErrorCode error_code>
 [[noreturn]] void throw_error(const std::string& msg) {
@@ -277,6 +280,11 @@ template<>
 }
 
 template<>
+[[noreturn]] inline void throw_error<ErrorCode::E_DESCRIPTOR_MISMATCH>(const std::string& msg) {
+    throw ArcticSpecificException<ErrorCode::E_DESCRIPTOR_MISMATCH>(msg);
+}
+
+template<>
 [[noreturn]] inline void throw_error<ErrorCode::E_ATOMIC_OPERATION_FAILED>(const std::string& msg) {
     throw ArcticSpecificException<ErrorCode::E_ATOMIC_OPERATION_FAILED>(msg);
 }
@@ -306,6 +314,16 @@ template<>
         const std::string& msg
 ) {
     throw ArcticSpecificException<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_RECURSIVE_NORMALIZED_DATA>(msg);
+}
+
+template<>
+[[noreturn]] inline void throw_error<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_PICKLED_DATA>(const std::string& msg) {
+    throw ArcticSpecificException<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_PICKLED_DATA>(msg);
+}
+
+template<>
+[[noreturn]] inline void throw_error<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_NUMPY_ARRAY>(const std::string& msg) {
+    throw ArcticSpecificException<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_NUMPY_ARRAY>(msg);
 }
 
 } // namespace arcticdb

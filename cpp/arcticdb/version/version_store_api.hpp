@@ -289,7 +289,7 @@ class PythonVersionStore : public LocalVersionedEngine {
     std::vector<AtomKey> get_version_history(const StreamId& stream_id);
 
     VersionedItem merge(
-            const StreamId& stream_id, const std::shared_ptr<convert::PandasData>& source, const py::object& norm,
+            const StreamId& stream_id, const convert::InputItem& source, const py::object& norm,
             const py::object& user_meta, const bool prune_previous_versions, const bool upsert,
             const py::tuple& py_strategy, std::vector<std::string> on, const bool match_na
     );
@@ -303,6 +303,11 @@ class PythonVersionStore : public LocalVersionedEngine {
     std::vector<VersionedItemOrError> batch_compact_data(
             const std::vector<StreamId>& stream_ids, std::optional<uint64_t> rows_per_segment,
             bool prune_previous_versions, bool throw_on_error
+    );
+
+    VersionedItem rename_columns_arrow_compat(
+            const StreamId& stream_id, const std::optional<std::vector<std::string>>& index_columns,
+            const bool prune_previous_versions
     );
 
   private:
