@@ -494,19 +494,10 @@ struct ColumnData {
                 logical_row,
                 dense_idx
         );
-        // Blocks with no values are skipped the same way as ColumnDataIterator skips them
-        size_t block_pos = 0;
-        size_t offset_in_block = dense_idx;
-        for (const IMemBlock* block : data_->blocks()) {
-            const size_t values_in_block = block->logical_size() / sizeof(RawType);
-            if (offset_in_block < values_in_block) {
-                break;
-            }
-            offset_in_block -= values_in_block;
-            ++block_pos;
-        }
+        const auto resolved = data_->block_and_offset(dense_idx * sizeof(RawType));
+        const size_t in_block_elem = resolved.offset_ / sizeof(RawType);
         return ColumnDataIterator<TDT, IteratorType::ENUMERATED, IteratorDensity::SPARSE, true>(
-                this, block_pos, offset_in_block, logical_row
+                this, resolved.block_index_, in_block_elem, logical_row
         );
     }
 

@@ -290,6 +290,54 @@ void finalize_sparse_column(Column& column, size_t num_rows) {
     column.set_row_data(num_rows - 1);
 }
 
+template<util::scalar_type_descriptor_tag TDT>
+auto get_sparse_forward_accessor(ColumnData& column_data, const size_t first_row, const bool is_sparse) {
+    using SparseIterator = decltype(column_data.cbegin<TDT, IteratorType::ENUMERATED, IteratorDensity::SPARSE>());
+    using ReturnT = std::variant<ColumnDataRandomAccessor<TDT>, std::ranges::subrange<SparseIterator>>;
+    if (is_sparse) {
+        // Position at the first existing target value at or after first_row
+        const util::BitMagic& sparse_map = *column_data.bit_vector();
+        util::BitSetSizeType first_row_with_value = 0;
+        if (sparse_map.find(static_cast<util::BitSetSizeType>(first_row), first_row_with_value)) {
+            const size_t dense_idx =
+                    first_row == 0 ? 0 : sparse_map.count_range(0, static_cast<util::BitSetSizeType>(first_row - 1));
+            return ReturnT{std::ranges::subrange(
+                    column_data.sparse_iterator_at<TDT>(dense_idx, static_cast<ssize_t>(first_row_with_value)),
+                    column_data.cend<TDT, IteratorType::ENUMERATED, IteratorDensity::SPARSE>()
+            )};
+        } else {
+            return ReturnT{std::ranges::subrange<SparseIterator>{}};
+        }
+    } else {
+        return ReturnT{random_accessor<TDT>(&column_data)};
+    }
+}
+
+template<util::scalar_type_descriptor_tag TDT>
+std::optional<typename TDT::RawType> consume_sparse_forward_accessor(
+        std::variant<
+                ColumnDataRandomAccessor<TDT>, std::ranges::subrange<ColumnData::ColumnDataIterator<
+                                                       TDT, IteratorType::ENUMERATED, IteratorDensity::SPARSE, false>>>&
+                variant_accessor,
+        size_t row
+) {
+    return util::variant_match(
+            variant_accessor,
+            [&](ColumnDataRandomAccessor<TDT>& target_random_accessor) -> std::optional<typename TDT::RawType> {
+                return target_random_accessor.at(row);
+            },
+            [&](auto& range) -> std::optional<typename TDT::RawType> {
+                while (!range.empty() && static_cast<size_t>(range.front().idx()) < range) {
+                    range.advance(1);
+                }
+                if (!range.empty() && static_cast<size_t>(range.front().idx()) == row) {
+                    return range.front().value();
+                }
+                return std::nullopt;
+            }
+    );
+}
+
 /// Performs merging of sorted lists with update on matching rows. The index column dictates the ordering of the
 /// rows. The target is composed of multiple row slices. The following holds: is_sorted(index in row slice i) &&
 /// all(index values in row slice i) <= all(index values in row slice j) for i < j. The source is a single row
@@ -334,45 +382,10 @@ std::vector<std::shared_ptr<Column>> merge_sparse(
     // per row, dense ones with a random accessor.
     using TargetSparseIterator =
             decltype(target_column_data.cbegin<TargetTDT, IteratorType::ENUMERATED, IteratorDensity::SPARSE>());
-    std::optional<TargetSparseIterator> target_it;
-    TargetSparseIterator target_end;
-    ColumnDataRandomAccessor<TargetTDT> target_accessor;
-    const auto start_reading_target_row_slice = [&](size_t first_row) {
-        if (target.columns[target_row_slice].column_->is_sparse()) {
-            target_end = target_column_data.cend<TargetTDT, IteratorType::ENUMERATED, IteratorDensity::SPARSE>();
-            // Position at the first existing target value at or after first_row
-            const util::BitMagic& target_sparse_map = *target_column_data.bit_vector();
-            util::BitSetSizeType first_row_with_value = 0;
-            if (target_sparse_map.find(static_cast<util::BitSetSizeType>(first_row), first_row_with_value)) {
-                const size_t dense_idx =
-                        first_row == 0
-                                ? 0
-                                : target_sparse_map.count_range(0, static_cast<util::BitSetSizeType>(first_row - 1));
-                target_it.emplace(target_column_data.sparse_iterator_at<TargetTDT>(
-                        dense_idx, static_cast<ssize_t>(first_row_with_value)
-                ));
-            } else {
-                target_it.emplace(target_end);
-            }
-        } else {
-            target_it.reset();
-            target_accessor = random_accessor<TargetTDT>(&target_column_data);
-        }
-    };
-    start_reading_target_row_slice(target_row_idx);
-    const auto target_value_at = [&](size_t target_row) -> std::optional<typename TargetTDT::DataTypeTag::raw_type> {
-        if (!target_it) {
-            return target_accessor[target_row];
-        }
-        // Rows updated from the source are not read, so the iterator can be several values behind target_row
-        while (*target_it != target_end && static_cast<size_t>((*target_it)->idx()) < target_row) {
-            ++*target_it;
-        }
-        if (*target_it != target_end && static_cast<size_t>((*target_it)->idx()) == target_row) {
-            return (*target_it)->value();
-        }
-        return std::nullopt;
-    };
+
+    auto target_accessor = get_sparse_forward_accessor<TargetTDT>(
+            target_column_data, target_row_idx, target.columns[target_row_slice].column_->is_sparse()
+    );
 
     std::optional<ScopedGILLock> gil;
 
@@ -395,7 +408,9 @@ std::vector<std::shared_ptr<Column>> merge_sparse(
             target_index_data = target.indexes[target_row_slice].column_->data();
             target_index_it = target_index_data.begin<IndexType>();
             target_index_end = target_index_data.end<IndexType>();
-            start_reading_target_row_slice(0);
+            target_accessor = get_sparse_forward_accessor<TargetTDT>(
+                    target_column_data, 0, target.columns[target_row_slice].column_->is_sparse()
+            );
             if (target_row_slice == target.columns.size() - 1 &&
                 target.range.end_row_in_last_row_slice !=
                         static_cast<size_t>(target.columns.back().column_->row_count())) [[unlikely]] {
@@ -455,7 +470,7 @@ std::vector<std::shared_ptr<Column>> merge_sparse(
 
     const auto set_value_from_target = [&](size_t target_row) {
         bool has_value = false;
-        if (const auto target_value = target_value_at(target_row)) {
+        if (const auto target_value = consume_sparse_forward_accessor<TargetTDT>(target_accessor, target_row)) {
             if constexpr (util::scalar_sequence_type<TargetTDT>) {
                 const position_t offset = *target_value;
                 if (is_a_string(offset)) {
@@ -659,31 +674,7 @@ std::shared_ptr<Column> update_sparse(
     auto new_column_it = new_column_data.begin<TargetTDT>();
     util::BitMagic& new_sparse_map = new_column->sparse_map();
     ColumnData target_data = target.data();
-    // Target rows are visited in order. A sparse target is read with a sparse iterator to avoid a rank query per row.
-    using TargetSparseIterator =
-            decltype(target_data.cbegin<TargetTDT, IteratorType::ENUMERATED, IteratorDensity::SPARSE>());
-    std::optional<TargetSparseIterator> target_it;
-    TargetSparseIterator target_end;
-    ColumnDataRandomAccessor<TargetTDT> target_accessor;
-    if (target.is_sparse()) {
-        target_it.emplace(target_data.cbegin<TargetTDT, IteratorType::ENUMERATED, IteratorDensity::SPARSE>());
-        target_end = target_data.cend<TargetTDT, IteratorType::ENUMERATED, IteratorDensity::SPARSE>();
-    } else {
-        target_accessor = random_accessor<TargetTDT>(&target_data);
-    }
-    const auto target_value_at = [&](size_t target_row) -> std::optional<typename TargetTDT::DataTypeTag::raw_type> {
-        if (!target_it) {
-            return target_accessor[target_row];
-        }
-        // Rows updated from the source are not read, so the iterator can be several values behind target_row
-        while (*target_it != target_end && static_cast<size_t>((*target_it)->idx()) < target_row) {
-            ++*target_it;
-        }
-        if (*target_it != target_end && static_cast<size_t>((*target_it)->idx()) == target_row) {
-            return (*target_it)->value();
-        }
-        return std::nullopt;
-    };
+    auto target_accessor = get_sparse_forward_accessor<TargetTDT>(target_data, 0, target.is_sparse());
     [[maybe_unused]] std::optional<ScopedGILLock> gil;
     for (size_t target_row = 0; target_row < num_rows; ++target_row) {
         bool has_value = false;
@@ -707,7 +698,7 @@ std::shared_ptr<Column> update_sparse(
                 }
                 has_value = true;
             }
-        } else if (const auto target_value = target_value_at(target_row)) {
+        } else if (const auto target_value = consume_sparse_forward_accessor<TargetTDT>(target_accessor, target_row)) {
             if constexpr (util::scalar_sequence_type<TargetTDT>) {
                 *new_column_it = is_a_string(*target_value)
                                          ? new_string_pool.get(old_string_pool.get_const_view(*target_value)).offset()

@@ -92,8 +92,7 @@ void set_bit_at(uint8_t* packed_bits, size_t bit_pos, bool value);
 
 void copy_packed_bits(const uint8_t* src, size_t src_bit_offset, size_t num_bits, uint8_t* dest);
 
-template<typename functor>
-requires util::detail::bitset_visitor_functor<functor>
+template<util::detail::bitset_visitor_functor functor>
 void iterate_over_set_positions(const bm::bvector<>& bv, size_t from, size_t to, functor&& f) {
     util::check(to >= from, "Invalid bit set iteration range: from {} to {}", from, to);
     if (from == to) {
@@ -104,8 +103,7 @@ void iterate_over_set_positions(const bm::bvector<>& bv, size_t from, size_t to,
     bm::for_each_bit_range(bv, from, to - 1, visitor);
 }
 
-template<typename functor>
-requires util::detail::bitset_visitor_functor<functor>
+template<util::detail::bitset_visitor_functor functor>
 void iterate_over_set_positions(const bm::bvector<>& bv, functor&& f) {
     util::BitSetVisitor visitor{f};
     bm::for_each_bit(bv, visitor);
