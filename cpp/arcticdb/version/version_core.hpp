@@ -8,6 +8,8 @@
 
 #pragma once
 
+#include <unordered_set>
+
 #include <arcticdb/entity/compact_data_info.hpp>
 #include <arcticdb/entity/versioned_item.hpp>
 #include <arcticdb/pipeline/column_stats.hpp>
@@ -134,6 +136,9 @@ std::variant<VersionedItem, CompactionError> sort_merge_impl(
 );
 
 void add_index_columns_to_query(const ReadQuery& read_query, const TimeseriesDescriptor& desc);
+
+/// Keeps the fields of `output_schema` named in `columns`.
+OutputSchema select_columns(OutputSchema&& output_schema, const std::unordered_set<std::string_view>& columns);
 
 ReadOptions modify_read_options_from_norm_meta(
         const proto::descriptors::NormalizationMetadata& norm_meta, const ReadOptions& read_options

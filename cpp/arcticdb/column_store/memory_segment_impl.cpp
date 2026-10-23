@@ -277,7 +277,10 @@ const std::shared_ptr<StreamDescriptor>& SegmentInMemoryImpl::descriptor_ptr() c
     return descriptor_;
 }
 
-void SegmentInMemoryImpl::attach_descriptor(std::shared_ptr<StreamDescriptor> desc) { descriptor_ = std::move(desc); }
+void SegmentInMemoryImpl::attach_descriptor(std::shared_ptr<StreamDescriptor> desc) {
+    descriptor_ = std::move(desc);
+    generate_column_map();
+}
 
 const Field& SegmentInMemoryImpl::field(size_t index) const { return descriptor()[index]; }
 

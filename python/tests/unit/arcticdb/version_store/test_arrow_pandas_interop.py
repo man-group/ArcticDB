@@ -267,6 +267,23 @@ def test_write_pandas_unnamed_multiindex_multiple_timezones_read_arrow(in_memory
     assert_frame_equal_with_arrow(received, df)
 
 
+@pytest.mark.parametrize("col_name", [None, 10, ""])
+def test_write_pandas_multiindex_with_special_level_and_col_names(in_memory_version_store_arrow, col_name):
+    """Unnamed, named and empty-string MultiIndex levels alongside a special column label."""
+    lib = in_memory_version_store_arrow
+    sym = "test_write_pandas_multiindex_with_special_level_and_col_names"
+    index = pd.MultiIndex.from_arrays([[pd.Timestamp(0)], ["id"], ["x"]], names=[None, "ticker", ""])
+    df = pd.DataFrame([[0.0, 1.0]], columns=[col_name, "y"], index=index)
+    lib.write(sym, df)
+
+    received = lib.read(sym).data
+    final_col_name = "___empty___" if col_name == "" else f"{col_name}"
+    assert received.column_names == ["__index_level_0__", "ticker", "__empty__", final_col_name, "y"]
+    if df.columns.inferred_type != "string":
+        df.columns = df.columns.astype(object)
+    assert_frame_equal_with_arrow(received, df)
+
+
 # Tests dealing with column name duplication and invalid arrow names
 # Such pandas dataframes initially won't support combining with arrow (but still must be readable)
 
@@ -306,13 +323,14 @@ def test_write_pandas_special_col_name_clashes_with_string_col_name(in_memory_ve
     assert_frame_equal_with_arrow(received, df)
 
 
+@pytest.mark.parametrize("tz", [None, "Asia/Hong_Kong"])
 @pytest.mark.parametrize("columns", [["col"], ["index"], ["index", "index"], ["__index__"], ["__index__", "__index__"]])
-def test_write_pandas_unnamed_index_clashes(in_memory_version_store_arrow, columns):
+def test_write_pandas_unnamed_index_clashes(in_memory_version_store_arrow, columns, tz):
     """The unnamed-index name ``__index__`` is wrapped in underscores until it no longer clashes with
     a column, and clashing columns are themselves disambiguated."""
     lib = in_memory_version_store_arrow
     sym = "test_write_pandas_unnamed_index_clashes"
-    df = pd.DataFrame(np.zeros((1, len(columns))), columns=columns, index=[pd.Timestamp(0)])
+    df = pd.DataFrame(np.zeros((1, len(columns))), columns=columns, index=[pd.Timestamp(0, tz=tz)])
     index_column_name = "__index__" if "__index__" not in columns else "___index___"
     expected_columns = [index_column_name]
     taken_column_names = set(expected_columns)
@@ -325,6 +343,7 @@ def test_write_pandas_unnamed_index_clashes(in_memory_version_store_arrow, colum
 
     received = lib.read(sym).data
     assert received.column_names == expected_columns
+    assert received.schema.field(index_column_name).type == pa.timestamp("ns", tz)
     assert_frame_equal_with_arrow(received, df)
 
 
