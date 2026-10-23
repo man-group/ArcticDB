@@ -9,8 +9,11 @@
 #include <google/protobuf/util/message_differencer.h>
 
 #include <arcticdb/arrow/arrow_schema_utils.hpp>
+#include <arcticdb/column_store/memory_segment.hpp>
+#include <arcticdb/entity/arrow_pandas_norm.hpp>
 #include <arcticdb/entity/normalization_utils.hpp>
 #include <arcticdb/pipeline/index_utils.hpp>
+#include <arcticdb/util/collection_utils.hpp>
 
 namespace arcticdb {
 
@@ -85,17 +88,17 @@ void insert_if_non_matching(StringMap& map, std::string_view key, std::string_vi
     }
 }
 
-StringMap generate_index_renames(
+void append_index_output_names(
         const size_t index_count, StringSet& taken_column_names,
         const proto::descriptors::NormalizationMetadata_Pandas& pandas_common, const FieldCollection& fields,
-        const std::optional<std::vector<std::string>>& index_columns, const StringSet& original_column_names
+        const std::optional<std::vector<std::string>>& index_columns, const StringSet& original_column_names,
+        std::vector<std::string>& output_names
 ) {
-    StringMap index_renames;
     if (pandas_common.has_index()) {
         const auto& index_meta = pandas_common.index();
         // Use this condition over is_physically_stored() as this is incorrect for zero-row dataframes
         if (index_count == 1) {
-            const std::string new_name = [&]() {
+            std::string new_name = [&]() {
                 if (index_columns.has_value()) {
                     return index_columns->front();
                 } else if (index_meta.fake_name()) {
@@ -105,7 +108,7 @@ StringMap generate_index_renames(
                 }
             }();
             taken_column_names.insert(new_name);
-            insert_if_non_matching(index_renames, fields.at(0).name(), new_name);
+            output_names.emplace_back(std::move(new_name));
         }
     } else { // multiindex
         const auto& multi_index_meta = pandas_common.multi_index();
@@ -113,7 +116,7 @@ StringMap generate_index_renames(
                 multi_index_meta.fake_field_pos().cbegin(), multi_index_meta.fake_field_pos().cend()
         );
         for (size_t index_col_idx = 0; index_col_idx < index_count; ++index_col_idx) {
-            const std::string new_name = [&]() {
+            std::string new_name = [&]() {
                 if (index_columns.has_value()) {
                     return index_columns->at(index_col_idx);
                 } else if (fake_field_pos.contains(index_col_idx)) {
@@ -125,30 +128,28 @@ StringMap generate_index_renames(
                 } else {
                     // We now compare to taken_column_names (which was empty on entry to this function) to handle cases
                     // like a multiindex where all index levels had the same name, so that ["a", "a"] -> ["a", "_a_"]
-                    return ensure_unique_name(
-                            fields.at(index_col_idx).name().substr(multiindex_prefix.size()), taken_column_names
-                    );
+                    const auto level_name = fields.at(index_col_idx).name().substr(multiindex_prefix.size());
+                    return ensure_unique_name(level_name.empty() ? "__empty__" : level_name, taken_column_names);
                 }
             }();
             taken_column_names.insert(new_name);
-            insert_if_non_matching(
-                    index_renames,
-                    fields.at(index_col_idx).name(),
-                    index_col_idx == 0 ? new_name : fmt::format("{}{}", multiindex_prefix, new_name)
-            );
+            output_names.emplace_back(std::move(new_name));
         }
     }
-    return index_renames;
 }
 
-StringMap generate_column_renames(
+// Output names are returned by position, instead of keyed by on-disk name because we can have duplicate on-disk names:
+// E.g. an input dataframe with multiindex ["5", "lvl2"] and column names [5] (note int not string) will get written
+// with on disk names: ["5", "__idx__lvl2", "5"]
+std::vector<std::string> generate_output_names(
         const FieldCollection& fields, const proto::descriptors::NormalizationMetadata_Pandas& pandas_common,
         const std::optional<std::vector<std::string>>& index_columns, const size_t index_count,
         const bool unnamed_series, const StringSet& original_column_names
 ) {
+    auto output_names = util::reserve_vector<std::string>(fields.size());
     StringSet taken_column_names;
-    StringMap res = generate_index_renames(
-            index_count, taken_column_names, pandas_common, fields, index_columns, original_column_names
+    append_index_output_names(
+            index_count, taken_column_names, pandas_common, fields, index_columns, original_column_names, output_names
     );
     auto field = fields.begin();
     std::advance(field, index_count);
@@ -168,9 +169,9 @@ StringMap generate_column_renames(
         }();
         new_name = ensure_unique_name(new_name, taken_column_names);
         taken_column_names.insert(new_name);
-        insert_if_non_matching(res, field->name(), new_name);
+        output_names.emplace_back(std::move(new_name));
     }
-    return res;
+    return output_names;
 }
 
 FieldCollection generate_output_fields(const FieldCollection& input_fields, const StringMap& column_renames) {
@@ -234,7 +235,96 @@ proto::descriptors::NormalizationMetadata generate_output_norm(
     return output_norm;
 }
 
+proto::descriptors::NormalizationMetadata_Pandas_ColumnName pandas_label(
+        const FieldCollection& fields, const proto::descriptors::NormalizationMetadata_Pandas& pandas_common,
+        const size_t index_count, const bool unnamed_series, const size_t pos
+) {
+    proto::descriptors::NormalizationMetadata_Pandas_ColumnName label;
+    const auto set_name = [&label](std::string_view name) {
+        if (name.empty()) {
+            label.set_is_empty(true);
+        } else {
+            label.set_original_name(std::string{name});
+        }
+    };
+    const auto stored_name = fields.at(pos).name();
+    if (pos >= index_count) {
+        if (unnamed_series) {
+            label.set_is_none(true);
+        } else if (auto it = pandas_common.col_names().find(stored_name); it != pandas_common.col_names().end()) {
+            label = it->second;
+        } else {
+            label.set_original_name(std::string{stored_name});
+        }
+    } else if (pandas_common.has_index()) {
+        if (pandas_common.index().fake_name()) {
+            label.set_is_none(true);
+        } else {
+            set_name(pandas_common.index().name());
+        }
+    } else {
+        const auto& multi_index_meta = pandas_common.multi_index();
+        if (std::ranges::find(multi_index_meta.fake_field_pos(), pos) != multi_index_meta.fake_field_pos().end()) {
+            label.set_is_none(true);
+        } else if (pos == 0) {
+            set_name(multi_index_meta.name());
+        } else {
+            set_name(stored_name.substr(multiindex_prefix.size()));
+        }
+    }
+    return label;
+}
+
 } // namespace
+
+void prepare_for_arrow_output(StreamDescriptor& desc, proto::descriptors::NormalizationMetadata& norm) {
+    if (is_pandas_convertible_to_arrow(norm)) {
+        norm = arrow_norm_from_pandas(norm, desc);
+    }
+    if (!norm.has_experimental_arrow()) {
+        return;
+    }
+    auto& arrow = *norm.mutable_experimental_arrow();
+    auto* common = mutable_embedded_pandas_common(arrow);
+    if (common == nullptr) {
+        return;
+    }
+    const auto& fields = desc.fields();
+    const bool unnamed_series =
+            arrow.pandas_input_type_case() == proto::descriptors::NormalizationMetadata_ExperimentalArrow::kSeries &&
+            !common->has_name() && common->name().empty();
+    const auto index_info = pipelines::index::required_fields_info(desc, norm);
+    const auto index_count = index_info.num_physical_indices;
+    auto original_column_names = generate_original_column_names(fields, *common, index_count, unnamed_series);
+    auto original_index_names = generate_original_index_names(fields, *common, index_info);
+    original_column_names.insert(original_index_names.begin(), original_index_names.end());
+    const auto output_names =
+            generate_output_names(fields, *common, std::nullopt, index_count, unnamed_series, original_column_names);
+    auto output_fields = std::make_shared<FieldCollection>(fields.size(), fields.buffer().bytes());
+    google::protobuf::Map<std::string, proto::descriptors::NormalizationMetadata_Pandas_ColumnName> col_names;
+    google::protobuf::Map<std::string, proto::descriptors::NormalizationMetadata_ExperimentalArrow_ColumnMeta> columns;
+    for (size_t pos = 0; pos < fields.size(); ++pos) {
+        const auto& output_name = output_names[pos];
+        output_fields->add_field(fields.at(pos).type(), output_name);
+        auto label = pandas_label(fields, *common, index_count, unnamed_series, pos);
+        if (label.is_none() || label.is_empty() || label.is_int() || label.original_name() != output_name) {
+            col_names[output_name] = std::move(label);
+        }
+        if (auto it = arrow.columns().find(fields.at(pos).name()); it != arrow.columns().end()) {
+            columns[output_name] = it->second;
+        }
+    }
+    common->mutable_col_names()->swap(col_names);
+    arrow.mutable_columns()->swap(columns);
+    desc.set_fields(std::move(output_fields));
+}
+
+void prepare_for_arrow_output(SegmentInMemory& segment, proto::descriptors::NormalizationMetadata& norm) {
+    // A deep copy, as other segments may share the descriptor
+    auto desc = std::make_shared<StreamDescriptor>(segment.descriptor().clone());
+    prepare_for_arrow_output(*desc, norm);
+    segment.attach_descriptor(std::move(desc));
+}
 
 std::optional<ArrowTransformedSchema> make_schema_arrow_compatible(
         const OutputSchema& input_schema, const std::optional<std::vector<std::string>>& index_columns
@@ -286,9 +376,18 @@ std::optional<ArrowTransformedSchema> make_schema_arrow_compatible(
                 std::make_move_iterator(original_index_names.end())
         );
     }
-    auto column_renames = generate_column_renames(
+    const auto output_names = generate_output_names(
             desc.fields(), input_pandas_common, index_columns, index_count, unnamed_series, original_column_names
     );
+    StringMap column_renames;
+    for (size_t pos = 0; pos < output_names.size(); ++pos) {
+        const bool is_multiindex_level = pos > 0 && pos < index_count;
+        insert_if_non_matching(
+                column_renames,
+                desc.field(pos).name(),
+                is_multiindex_level ? fmt::format("{}{}", multiindex_prefix, output_names[pos]) : output_names[pos]
+        );
+    }
     auto output_fields = generate_output_fields(desc.fields(), column_renames);
     StreamDescriptor output_desc{
             desc.data_ptr(), std::make_shared<FieldCollection>(std::move(output_fields)), desc.stream_id_

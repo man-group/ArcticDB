@@ -136,6 +136,12 @@ The `output_format` parameter on read methods controls the return type:
 - `OutputFormat.PYARROW` — returns `pa.Table`
 - `OutputFormat.POLARS` — returns `pl.DataFrame` (converted from `pa.Table` via `pl.from_arrow()`)
 
+Column names for Arrow output are set in C++ by `prepare_for_arrow_output()` (`cpp/arcticdb/arrow/arrow_schema_utils.cpp`), which converts pandas metadata to Arrow metadata and renames the descriptor's fields in place. It shares its naming rules with `rename_columns_arrow_compat`:
+
+- Output names are assigned by field position, since an index level and a column can share an on-disk name.
+- MultiIndex levels lose their `__idx__` prefix; unnamed index levels become `__index__` / `__index_level_i__`; `None`, `""` and integer labels become `"None"`, `"__empty__"` and `str(i)`; clashes are wrapped in underscores.
+- `ExperimentalArrow.columns` and the embedded pandas `col_names` are rekeyed by output name. `col_names` records each original label, which `ArrowTableNormalizer` reads to build the `pandas` schema metadata used by `pa.Table.to_pandas()`.
+
 ### Date-Range Filtering (`restrict_data_to_date_range_only`)
 
 Used by `update()` with a `date_range` parameter to restrict input data before writing. Handles pandas, PyArrow, and polars inputs:

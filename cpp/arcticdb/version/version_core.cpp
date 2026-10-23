@@ -227,6 +227,18 @@ folly::Future<AtomKey> async_append_impl(
             });
 }
 
+OutputSchema select_columns(OutputSchema&& output_schema, const std::unordered_set<std::string_view>& columns) {
+    const auto& fields = output_schema.stream_descriptor().fields();
+    auto fields_to_use = std::make_shared<FieldCollection>(fields.size(), fields.buffer().bytes());
+    for (const Field& field : fields) {
+        if (columns.contains(field.name())) {
+            fields_to_use->add(field.ref());
+        }
+    }
+    output_schema.mutable_stream_descriptor().set_fields(std::move(fields_to_use));
+    return output_schema;
+}
+
 namespace {
 bool is_before(const IndexRange& a, const IndexRange& b) { return a.start_ < b.start_; }
 
@@ -713,23 +725,18 @@ OutputSchema generate_output_schema(PipelineContext& pipeline_context, const Rea
     auto output_schema = modify_schema(create_initial_output_schema(pipeline_context), read_query.clauses_);
     if (read_query.columns) {
         std::unordered_set<std::string_view> selected_columns(read_query.columns->begin(), read_query.columns->end());
-        FieldCollection fields_to_use;
+        output_schema = select_columns(std::move(output_schema), selected_columns);
+        const auto& selected_fields = output_schema.stream_descriptor().fields();
         if (!pipeline_context.filter_columns_) {
-            pipeline_context.filter_columns_ = std::make_shared<FieldCollection>();
+            pipeline_context.filter_columns_ =
+                    std::make_shared<FieldCollection>(selected_fields.size(), selected_fields.buffer().bytes());
         }
-        for (const Field& field : output_schema.stream_descriptor().fields()) {
-            if (selected_columns.contains(field.name())) {
-                fields_to_use.add(field.ref());
-                if (!pipeline_context.is_in_filter_columns_set(field.name())) {
-                    pipeline_context.filter_columns_->add(field.ref());
-                }
+        for (const Field& field : selected_fields) {
+            if (!pipeline_context.is_in_filter_columns_set(field.name())) {
+                pipeline_context.filter_columns_->add(field.ref());
             }
         }
         pipeline_context.filter_columns_set_ = std::move(selected_columns);
-        output_schema.set_stream_descriptor(StreamDescriptor{
-                output_schema.stream_descriptor().data_ptr(),
-                std::make_shared<FieldCollection>(std::move(fields_to_use))
-        });
     }
     return output_schema;
 }
