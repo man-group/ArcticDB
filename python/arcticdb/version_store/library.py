@@ -3657,6 +3657,31 @@ class Library:
             match_na=match_na,
         )
 
+    def dedup_ratios(
+        self,
+        symbol: str,
+    ) -> Dict[int, float]:
+        """
+        For each version of a symbol, report percentage of data, which is shared with earlier versions.
+
+        Examples
+        --------
+
+        >>> lib.write("symbol", pd.Series(np.arange(10), index=pd.date_range("2020-01-01", periods=10)))
+        >>> lib.write("symbol", pd.Series(np.arange(20), index=pd.date_range("2020-01-01", periods=20)))
+
+        Parameters
+        ----------
+        symbol : str
+            The symbol to measure.
+
+        Returns
+        -------
+        dict[int, float]
+            Mapping from symbol version number to percentage of de-duplicated data.
+        """
+        return self._nvs.dedup_ratios(symbol)
+
     @property
     def name(self) -> str:
         """The name of this library."""

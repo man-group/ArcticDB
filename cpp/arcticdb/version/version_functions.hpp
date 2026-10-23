@@ -8,11 +8,12 @@
 
 #pragma once
 
+#include <arcticdb/async/base_task.hpp>
+#include <arcticdb/pipeline/query.hpp>
+#include <arcticdb/pipeline/read_options.hpp>
+#include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/version/version_map.hpp>
 #include <arcticdb/version/version_store_objects.hpp>
-#include <arcticdb/pipeline/read_options.hpp>
-#include <arcticdb/pipeline/query.hpp>
-#include <arcticdb/async/base_task.hpp>
 #include <arcticdb/version/version_tasks.hpp>
 #include <folly/futures/Future.h>
 
@@ -62,7 +63,13 @@ std::vector<T> get_all_versions(
     ARCTICDB_SAMPLE(GetAllVersions, 0)
     LoadStrategy load_strategy{LoadType::ALL, LoadObjective::UNDELETED_ONLY};
     auto entry = version_map->check_reload(store, stream_id, load_strategy, __FUNCTION__);
-    return entry->template get_indexes<T>(false);
+    std::vector<T> result = entry->template get_indexes<T>(false);
+    ARCTICDB_DEBUG_CHECK(
+            ErrorCode::E_ASSERTION_FAILURE,
+            ranges::is_sorted(result | ranges::views::reverse, {}, &AtomKeyPacked::version_id_),
+            "Expected INDEX keys to be sorted in reverse by version_id"
+    );
+    return result;
 }
 
 inline std::optional<AtomKey> get_specific_version(

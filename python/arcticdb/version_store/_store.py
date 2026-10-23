@@ -4555,6 +4555,31 @@ class NativeVersionStore:
         )
         return self._convert_thin_cxx_item_to_python(vit, metadata)
 
+    def dedup_ratios(
+        self,
+        symbol: str,
+    ) -> Dict[int, float]:
+        """
+        For each version of a symbol, report percentage of data, which is shared with earlier versions.
+
+        Examples
+        --------
+
+        >>> lib.write("symbol", pd.Series(np.arange(10), index=pd.date_range("2020-01-01", periods=10)))
+        >>> lib.write("symbol", pd.Series(np.arange(20), index=pd.date_range("2020-01-01", periods=20)))
+
+        Parameters
+        ----------
+        symbol : str
+            The symbol to measure.
+
+        Returns
+        -------
+        dict[int, float]
+            Mapping from symbol version number to percentage of de-duplicated data.
+        """
+        return self.version_store.dedup_ratios(symbol)
+
 
 def resolve_dynamic_strings(kwargs):
     dynamic_strings = resolve_defaults("dynamic_strings", None, global_default=True, **kwargs)

@@ -24,6 +24,9 @@
 #include <arcticdb/storage/file/file_store.hpp>
 #include <arcticdb/version/version_functions.hpp>
 
+#include <algorithm>
+#include <ranges>
+
 namespace arcticdb::version_store {
 
 using namespace arcticdb::entity;
@@ -1595,6 +1598,76 @@ std::vector<std::variant<VersionedItem, DataError>> PythonVersionStore::batch_co
         bool throw_on_error
 ) {
     return batch_compact_data_internal(stream_ids, rows_per_segment, prune_previous_versions, throw_on_error);
+}
+
+void extract_live_versions_from_snapshot_map(
+        const MasterSnapshotMap& snap_map, const StreamId& stream_id,
+        std::back_insert_iterator<std::vector<AtomKey>> out
+) {
+    // TODO: Does this really not exist? If not, this belongs in snapshots.hpp/cpp
+    auto itr = snap_map.find(stream_id);
+    if (itr == snap_map.end())
+        return;
+
+    const std::unordered_map<IndexTypeKey, std::unordered_set<SnapshotId>>& stream_index_keys_to_snapshot_name =
+            itr->second;
+    ranges::copy(stream_index_keys_to_snapshot_name | ranges::views::keys, out);
+}
+
+// TODO: Turn this into a batch method.
+std::unordered_map<VersionId, double> PythonVersionStore::dedup_ratios(const StreamId& stream_id) {
+    // TODO: I don't suppose I can fetch all the tombstoned versions too? But then how do I tell which
+    //       ones are alive thanks to snapshots? Perhaps I still need the snapshot map, which would
+    //       defeat the purpose of loading all the index keys.
+    const std::vector<AtomKeyPacked> keys_from_undeleted_versions = get_all_versions(store(), version_map(), stream_id);
+    const std::unordered_set<StreamId> stream_ids{stream_id};
+    const MasterSnapshotMap snap_map = get_master_snapshots_map(store(), stream_ids);
+    std::vector<AtomKey> keys_from_snapshots;
+    extract_live_versions_from_snapshot_map(snap_map, stream_id, std::back_inserter(keys_from_snapshots));
+    ranges::sort(keys_from_snapshots, {}, &AtomKey::version_id);
+    std::vector<AtomKey> all_index_keys;
+    ranges::merge(
+            keys_from_undeleted_versions | ranges::views::reverse |
+                    ranges::views::transform([&stream_id](const AtomKeyPacked& packed_key) -> AtomKey {
+                        return packed_key.to_atom_key(stream_id);
+                    }),
+            keys_from_snapshots,
+            std::back_inserter(all_index_keys),
+            {},
+            &AtomKey::version_id,
+            &AtomKey::version_id
+    );
+
+    {
+        const auto duplicated_range = ranges::unique(all_index_keys, {}, &AtomKey::version_id);
+        all_index_keys.erase(duplicated_range.begin(), duplicated_range.end());
+    }
+
+    // TODO: Pretty sure that non-existent stream_id leads to no exceptions and empty keys, so we need
+    //       an explicit throw.
+    if (all_index_keys.empty())
+        throw NoDataFoundException(fmt::format("dedup_ratios: version not found for symbol '{}'", stream_id));
+
+    std::unordered_map<VersionId, double> result;
+    ankerl::unordered_dense::set<AtomKey> seen_atom_keys;
+    for (const AtomKey& key : all_index_keys) {
+        size_t newly_added_cells = 0;
+        size_t total_cells = 0;
+        auto key_and_segment = store()->read_sync(key);
+        const pipelines::index::IndexSegmentReader isr(std::move(key_and_segment.second));
+        for (const SliceAndKey& slice_and_key : isr) {
+            const size_t num_cells = slice_and_key.slice().rows().diff() * slice_and_key.slice().columns().diff();
+            total_cells += num_cells;
+            const auto [_, inserted] = seen_atom_keys.insert(slice_and_key.key());
+            if (inserted) {
+                newly_added_cells += num_cells;
+            }
+        }
+
+        result[key.version_id()] = 1 - static_cast<double>(newly_added_cells) / static_cast<double>(total_cells);
+    }
+
+    return result;
 }
 
 } // namespace arcticdb::version_store
