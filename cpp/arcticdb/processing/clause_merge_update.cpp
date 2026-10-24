@@ -317,7 +317,7 @@ template<util::scalar_type_descriptor_tag TDT>
 std::optional<typename TDT::RawType> consume_sparse_forward_accessor(
         std::variant<
                 ColumnDataRandomAccessor<TDT>, std::ranges::subrange<ColumnData::ColumnDataIterator<
-                                                       TDT, IteratorType::ENUMERATED, IteratorDensity::SPARSE, false>>>&
+                                                       TDT, IteratorType::ENUMERATED, IteratorDensity::SPARSE, true>>>&
                 variant_accessor,
         size_t row
 ) {
@@ -327,11 +327,18 @@ std::optional<typename TDT::RawType> consume_sparse_forward_accessor(
                 return target_random_accessor.at(row);
             },
             [&](auto& range) -> std::optional<typename TDT::RawType> {
-                while (!range.empty() && static_cast<size_t>(range.front().idx()) < range) {
+                // range.front() would dereference a temporary copy of the begin iterator, and the iterator returns a
+                // reference to its own member, so the iterator must outlive the reference
+                while (!range.empty()) {
+                    const auto it = range.begin();
+                    const size_t value_row = static_cast<size_t>(it->idx());
+                    if (value_row > row) {
+                        return std::nullopt;
+                    }
+                    if (value_row == row) {
+                        return it->value();
+                    }
                     range.advance(1);
-                }
-                if (!range.empty() && static_cast<size_t>(range.front().idx()) == row) {
-                    return range.front().value();
                 }
                 return std::nullopt;
             }
@@ -380,9 +387,6 @@ std::vector<std::shared_ptr<Column>> merge_sparse(
     size_t target_row_idx = target.range.start_row_in_first_row_slice;
     // Target rows are visited in order. Sparse target row slices are read with a sparse iterator to avoid a rank query
     // per row, dense ones with a random accessor.
-    using TargetSparseIterator =
-            decltype(target_column_data.cbegin<TargetTDT, IteratorType::ENUMERATED, IteratorDensity::SPARSE>());
-
     auto target_accessor = get_sparse_forward_accessor<TargetTDT>(
             target_column_data, target_row_idx, target.columns[target_row_slice].column_->is_sparse()
     );
