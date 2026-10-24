@@ -29,6 +29,9 @@ using namespace arcticdb;
 
 using IndexType = ScalarTagType<DataTypeTag<DataType::NANOSECONDS_UTC64>>;
 
+template<util::scalar_type_descriptor_tag TDT>
+using SparseIterator = ColumnData::ColumnDataIterator<TDT, IteratorType::ENUMERATED, IteratorDensity::SPARSE, true>;
+
 template<typename T>
 position_t get_string_na_placeholder(const T& value) {
     if constexpr (std::same_as<std::remove_cvref_t<T>, PyObject*>) {
@@ -46,6 +49,26 @@ position_t get_string_na_placeholder(const T& value) {
         );
         return value;
     }
+}
+
+/// String pool of a dense source column passed to update_column. Pandas sources hold PyObject* and have no pool.
+const StringPool* source_string_pool(std::span<PyObject* const>) { return nullptr; }
+
+template<typename RawType>
+const StringPool* source_string_pool(const std::pair<std::span<const RawType>, StringPool*>& source) {
+    return source.second;
+}
+
+/// Adds a source string to new_pool and returns its offset, or returns the NA placeholder if the value is NA.
+/// row is relative to the processing group and first_source_row_in_group is added to it in string encoding errors.
+template<util::scalar_sequence_type SourceTDT, typename T>
+position_t write_source_string_to_pool(
+        const T& source_value, const StringPool* source_pool, size_t row, size_t first_source_row_in_group,
+        std::string_view column_name, StringPool& new_pool, std::optional<ScopedGILLock>* gil
+) {
+    const auto [source_string, owner] =
+            get_source_string<SourceTDT>(source_value, source_pool, row, column_name, first_source_row_in_group, gil);
+    return source_string ? new_pool.get(*source_string).offset() : get_string_na_placeholder(source_value);
 }
 
 struct TargetRange {
@@ -92,7 +115,7 @@ void filter_selected_ranges_and_keys_and_reindex_entities(
     ranges_and_keys = std::move(new_ranges_and_keys);
 }
 
-template<util::type_descriptor_tag TDT>
+template<util::scalar_type_descriptor_tag TDT>
 void rebuild_sequence_column_in_new_pool(
         Column& target_column, const StringPool& old_string_pool, StringPool& new_string_pool,
         const util::BitSet* target_rows_to_add_in_new_pool = nullptr
@@ -118,7 +141,7 @@ void rebuild_sequence_column_in_new_pool(
     }
 }
 
-template<util::type_descriptor_tag TDT>
+template<util::scalar_type_descriptor_tag TDT>
 struct NaAwareHasher : ankerl::unordered_dense::hash<MatchKeyType<TDT>> {
     using Base = ankerl::unordered_dense::hash<MatchKeyType<TDT>>;
     uint64_t operator()(MatchKeyType<TDT> value) const {
@@ -134,28 +157,109 @@ struct NaAwareHasher : ankerl::unordered_dense::hash<MatchKeyType<TDT>> {
     }
 };
 
-template<util::type_descriptor_tag TDT>
+/// The key under which map_column_values_to_rows stores NA and missing values.
+template<util::scalar_type_descriptor_tag TDT>
+MatchKeyType<TDT> na_match_key() {
+    if constexpr (is_floating_point_type(TDT::data_type())) {
+        return std::numeric_limits<MatchKeyType<TDT>>::quiet_NaN();
+    } else if constexpr (is_time_type(TDT::data_type())) {
+        return NaT;
+    } else {
+        return std::nullopt;
+    }
+}
+
+/// Map each value of the column to the rows it appears in. If match_na is true NA and missing values are mapped to
+/// na_match_key, otherwise they are skipped.
+template<util::scalar_type_descriptor_tag TDT>
 auto map_column_values_to_rows(const ColumnWithStrings& column, bool match_na) {
     ankerl::unordered_dense::map<MatchKeyType<TDT>, std::vector<size_t>, NaAwareHasher<TDT>, NaAwareComparator<TDT>>
             target_values(0, NaAwareHasher<TDT>{}, NaAwareComparator<TDT>{match_na});
-    arcticdb::for_each_enumerated<TDT>(*column.column_, [&](auto row) {
-        if (match_na || !is_na<TDT>(row.value())) {
-            if constexpr (is_sequence_type(TDT::data_type())) {
-                target_values[column.string_at_offset(row.value())].emplace_back(row.idx());
-            } else {
-                target_values[row.value()].emplace_back(row.idx());
-            }
+    const auto add_value = [&](size_t row, typename TDT::DataTypeTag::raw_type value) {
+        if constexpr (util::scalar_sequence_type<TDT>) {
+            target_values[column.string_at_offset(value)].emplace_back(row);
+        } else {
+            target_values[value].emplace_back(row);
         }
-    });
+    };
+    if (match_na && column.column_->is_sparse()) {
+        position_t row = 0;
+        arcticdb::for_each_enumerated<TDT>(*column.column_, [&](auto existing_row) {
+            while (row < existing_row.idx()) {
+                target_values[na_match_key<TDT>()].push_back(row);
+                ++row;
+            }
+            add_value(existing_row.idx(), existing_row.value());
+            row = existing_row.idx() + 1;
+        });
+        const auto row_count = column.column_->last_row() + 1;
+        while (row < row_count) {
+            target_values[na_match_key<TDT>()].push_back(row);
+            ++row;
+        }
+    } else {
+        arcticdb::for_each_enumerated<TDT>(*column.column_, [&](auto row) {
+            if (match_na || !is_na<TDT>(row.value())) {
+                add_value(row.idx(), row.value());
+            }
+        });
+    }
     return target_values;
 }
 
-template<typename Source>
-struct InsertSourceData {
-    std::span<const timestamp> index;
-    Source data;
-    std::pair<size_t, size_t> global_row_range;
+template<util::scalar_type_descriptor_tag SourceTDT, typename SourceData>
+struct SourceInterface;
+
+template<util::scalar_type_descriptor_tag SourceTDT, std::ranges::contiguous_range SourceData>
+struct SourceInterface<SourceTDT, SourceData> {
+    SourceData data_;
+    auto operator[](size_t idx) const { return data_[idx]; }
+    bool has_value_at(position_t) const { return true; }
+    StringPool* string_pool() const { return nullptr; }
 };
+
+template<util::scalar_sequence_type SourceTDT>
+struct SourceInterface<SourceTDT, std::pair<std::span<const typename SourceTDT::RawType>, StringPool*>> {
+    std::pair<std::span<const typename SourceTDT::RawType>, StringPool*> data_;
+    typename SourceTDT::RawType operator[](size_t idx) const { return data_.first[idx]; }
+    bool has_value_at(position_t) const { return true; }
+    StringPool* string_pool() const { return data_.second; }
+};
+
+template<util::scalar_type_descriptor_tag SourceTDT>
+struct SourceInterface<SourceTDT, ColumnWithStrings> {
+    explicit SourceInterface(ColumnWithStrings column) :
+        column_{std::move(column)},
+        column_data_(column_.column_->data()),
+        accessor_{random_accessor<SourceTDT>(&column_data_)} {}
+    // accessor_ points into column_data_, so a copy or move would leave it pointing at the original
+    ARCTICDB_NO_MOVE_OR_COPY(SourceInterface)
+    ColumnWithStrings column_;
+    ColumnData column_data_;
+    decltype(random_accessor<SourceTDT>(nullptr)) accessor_;
+    typename SourceTDT::RawType operator[](size_t idx) const { return accessor_.at(idx); }
+    bool has_value_at(position_t row) const { return column_.column_->has_value_at(row); }
+    StringPool* string_pool() const { return column_.string_pool_.get(); }
+};
+
+template<util::scalar_type_descriptor_tag SourceTDT, typename Source>
+struct InsertSourceData : SourceInterface<SourceTDT, Source> {
+    InsertSourceData(std::span<const timestamp> index, Source data, std::pair<size_t, size_t> global_row_range) :
+        SourceInterface<SourceTDT, Source>(std::move(data)),
+        index_{index},
+        global_row_range_{global_row_range} {}
+    std::span<const timestamp> index_;
+    std::pair<size_t, size_t> global_row_range_;
+};
+
+template<util::scalar_type_descriptor_tag SourceTDT, typename Source>
+auto make_insert_source_data(
+        std::span<const timestamp> index, Source&& data, std::pair<size_t, size_t> global_row_range
+) {
+    return InsertSourceData<SourceTDT, std::remove_cvref_t<Source>>(
+            index, std::forward<Source>(data), global_row_range
+    );
+}
 
 struct InsertTargetData {
     std::span<ColumnWithStrings> indexes;
@@ -178,18 +282,466 @@ std::vector<size_t> compute_target_slice_offset(const InsertTargetData& target) 
     return result;
 }
 
+/// The column was allocated for num_rows dense values and the sparse map was filled while writing. Drop the unused
+/// bytes and set the row count. The sparse map is dropped if all values are present.
+void finalize_sparse_column(Column& column, size_t num_rows) {
+    const size_t dense_values = column.sparse_map().count();
+    column.buffer().trim(dense_values * get_type_size(column.type().data_type()));
+    if (dense_values == num_rows) {
+        column.opt_sparse_map().reset();
+    }
+    column.set_row_data(num_rows - 1);
+}
+
+/// Get acesor for either a dense or a sparse column. Assume the accessor can only be forwarded to a value
+/// and is not a random accessor. Once consumed it cannot visit a previous value again. Under the hood it uses
+/// random value accessor for dense columns and sparse iterator for sparse columns. Used in merge_sparse and
+/// udpate_sparse to unify the dense and sparse cases as the target column is only forward iterated. In theory
+/// random accessor can be used for the sparse case as well but it's 2-3 times slower.
+template<util::scalar_type_descriptor_tag TDT>
+std::variant<ColumnDataRandomAccessor<TDT>, std::ranges::subrange<SparseIterator<TDT>>> get_sparse_forward_accessor(
+        ColumnData& column_data, const size_t first_row, const bool is_sparse
+) {
+    if (is_sparse) {
+        // Position at the first existing target value at or after first_row
+        const util::BitMagic& sparse_map = *column_data.bit_vector();
+        util::BitSetSizeType first_row_with_value = 0;
+        if (sparse_map.find(static_cast<util::BitSetSizeType>(first_row), first_row_with_value)) {
+            const size_t dense_idx =
+                    first_row == 0 ? 0 : sparse_map.count_range(0, static_cast<util::BitSetSizeType>(first_row - 1));
+            return {std::ranges::subrange(
+                    column_data.sparse_iterator_at<TDT>(dense_idx, static_cast<ssize_t>(first_row_with_value)),
+                    column_data.cend<TDT, IteratorType::ENUMERATED, IteratorDensity::SPARSE>()
+            )};
+        } else {
+            return {std::ranges::subrange<SparseIterator<TDT>>{}};
+        }
+    } else {
+        return {random_accessor<TDT>(&column_data)};
+    }
+}
+
+/// Used to get the value of a forward accessor created by get_sparse_forward_accessor. Assume that this cannot be
+/// callsed for rows prior the current head and when the head moves forward it can't go back. Used in combination with
+/// get_sparse_forward_accessor to unify the dense and sparse cases for a target column which is only forward iterated
+/// duting sparse_merge and sparse_update
+template<util::scalar_type_descriptor_tag TDT>
+std::optional<typename TDT::RawType> consume_sparse_forward_accessor(
+        std::variant<ColumnDataRandomAccessor<TDT>, std::ranges::subrange<SparseIterator<TDT>>>& variant_accessor,
+        size_t row
+) {
+    return util::variant_match(
+            variant_accessor,
+            [&](ColumnDataRandomAccessor<TDT>& target_random_accessor) -> std::optional<typename TDT::RawType> {
+                return target_random_accessor.at(row);
+            },
+            [&](std::ranges::subrange<SparseIterator<TDT>>& range) -> std::optional<typename TDT::RawType> {
+                ARCTICDB_DEBUG_CHECK(
+                        ErrorCode::E_ASSERTION_FAILURE,
+                        range.empty() || static_cast<size_t>(range.begin()->idx()) <= row,
+                        "Forward iterator must not be called for index prior its head"
+                );
+                while (!range.empty()) {
+                    const auto it = range.begin();
+                    const size_t value_row = static_cast<size_t>(it->idx());
+                    if (value_row > row) {
+                        return std::nullopt;
+                    }
+                    if (value_row == row) {
+                        return it->value();
+                    }
+                    range.advance(1);
+                }
+                return std::nullopt;
+            }
+    );
+}
+
 /// Performs merging of sorted lists with update on matching rows. The index column dictates the ordering of the
 /// rows. The target is composed of multiple row slices. The following holds: is_sorted(index in row slice i) &&
 /// all(index values in row slice i) <= all(index values in row slice j) for i < j. The source is a single row
 /// slice.  Insertion is stable and all new values are inserted after all existing values with the same index value.
 /// The source and target must have the same index type.
-template<util::type_descriptor_tag TargetTDT, util::type_descriptor_tag SourceTDT, typename Source>
-requires(
-        TargetTDT::dimension() == Dimension::Dim0 && SourceTDT::dimension() == Dimension::Dim0 &&
-        TargetTDT::data_type() == SourceTDT::data_type()
-)
+template<util::scalar_type_descriptor_tag TargetTDT, util::scalar_type_descriptor_tag SourceTDT, typename Source>
+requires std::same_as<TargetTDT, SourceTDT>
+std::vector<std::shared_ptr<Column>> merge_sparse(
+        const InsertSourceData<SourceTDT, Source>& source, const InsertTargetData& target,
+        const MergeUpdateClause::MatchRecord& match_record, const MergeStrategy& strategy,
+        const ReslicingInfo& reslicing_info
+) {
+    auto new_columns = util::reserve_vector<std::shared_ptr<Column>>(reslicing_info.num_segments());
+    auto new_column_datas = util::reserve_vector<ColumnData>(reslicing_info.num_segments());
+    for (size_t i = 0; i < reslicing_info.num_segments(); ++i) {
+        // Allocate a single block for the worst case (fully dense) and trim at the end. Writing through the iterator
+        // requires the bytes to be present in the buffer.
+        const size_t max_rows = reslicing_info.rows_in_slice(i);
+        new_columns.push_back(
+                std::make_shared<Column>(target.type, max_rows, AllocationType::DYNAMIC, Sparsity::PERMITTED)
+        );
+        new_columns.back()->buffer().ensure(max_rows * get_type_size(target.type.data_type()));
+        new_column_datas.emplace_back(new_columns.back()->data());
+    }
+    size_t new_column_row_slice_index{};
+    // Offset within the current output column
+    size_t new_column_row_idx{};
+    // Position in the combined [0, total_rows()) output
+    size_t output_row_idx{};
+    size_t rows_in_current_slice = reslicing_info.rows_in_slice(0);
+    auto new_column_it = new_column_datas.front().begin<TargetTDT>();
+
+    size_t target_row_slice = 0;
+    ColumnData target_index_data = target.indexes[target_row_slice].column_->data();
+    auto target_index_it = target_index_data.begin<IndexType>();
+    std::advance(target_index_it, target.range.start_row_in_first_row_slice);
+    auto target_index_end = target_index_data.end<IndexType>();
+
+    ColumnData target_column_data = target.columns[target_row_slice].column_->data();
+    size_t target_row_idx = target.range.start_row_in_first_row_slice;
+    // Target rows are visited in order. Sparse target row slices are read with a sparse iterator to avoid a rank query
+    // per row, dense ones with a random accessor.
+    auto target_accessor = get_sparse_forward_accessor<TargetTDT>(
+            target_column_data, target_row_idx, target.columns[target_row_slice].column_->is_sparse()
+    );
+
+    std::optional<ScopedGILLock> gil;
+
+    const auto target_index_is_exhausted = [&] {
+        return target_row_slice == target.columns.size() - 1 && target_index_it == target_index_end;
+    };
+
+    const auto advance_target = [&] {
+        ARCTICDB_DEBUG_CHECK(
+                ErrorCode::E_ASSERTION_FAILURE,
+                !target_index_is_exhausted(),
+                "Cannot advance target index iterator past the end"
+        );
+        ++target_index_it;
+        ++target_row_idx;
+        if (target_index_it == target_index_end && target_row_slice < target.columns.size() - 1) [[unlikely]] {
+            ++target_row_slice;
+            target_row_idx = 0;
+            target_column_data = target.columns[target_row_slice].column_->data();
+            target_index_data = target.indexes[target_row_slice].column_->data();
+            target_index_it = target_index_data.begin<IndexType>();
+            target_index_end = target_index_data.end<IndexType>();
+            target_accessor = get_sparse_forward_accessor<TargetTDT>(
+                    target_column_data, 0, target.columns[target_row_slice].column_->is_sparse()
+            );
+            if (target_row_slice == target.columns.size() - 1 &&
+                target.range.end_row_in_last_row_slice !=
+                        static_cast<size_t>(target.columns.back().column_->row_count())) [[unlikely]] {
+                target_index_end =
+                        std::next(target_index_it, static_cast<std::ptrdiff_t>(target.range.end_row_in_last_row_slice));
+            }
+        }
+    };
+
+    const auto advance_output = [&](size_t step_size = 1) {
+        util::check(
+                output_row_idx + step_size <= reslicing_info.total_rows(),
+                "Cannot advance the output by {} rows, only {} are left in the output",
+                step_size,
+                reslicing_info.total_rows() - output_row_idx
+        );
+        output_row_idx += step_size;
+        // The dense iterator is advanced by set_value_from_source/set_value_from_target as values are written
+        while (new_column_row_idx + step_size >= rows_in_current_slice &&
+               new_column_row_slice_index + 1 < reslicing_info.num_segments()) {
+            step_size -= rows_in_current_slice - new_column_row_idx;
+            ++new_column_row_slice_index;
+            rows_in_current_slice = reslicing_info.rows_in_slice(new_column_row_slice_index);
+            new_column_row_idx = 0;
+            new_column_it = new_column_datas[new_column_row_slice_index].begin<TargetTDT>();
+        }
+        new_column_row_idx += step_size;
+    };
+
+    const auto set_value_from_source = [&](size_t row_in_index) {
+        const size_t source_row = row_in_index + source.global_row_range_.first;
+        bool has_value = false;
+        if (source.has_value_at(source_row)) {
+            const auto source_value = source[source_row];
+            if constexpr (util::scalar_sequence_type<SourceTDT>) {
+                if (is_na<SourceTDT>(source_value)) {
+                    *new_column_it = get_string_na_placeholder(source_value);
+                } else {
+                    const auto [source_string, _] = get_source_string<SourceTDT>(
+                            source_value,
+                            source.string_pool(),
+                            row_in_index,
+                            target.columns.front().column_name_,
+                            source.global_row_range_.first,
+                            &gil
+                    );
+                    *new_column_it = target.new_string_pools[new_column_row_slice_index].get(*source_string).offset();
+                }
+            } else {
+                *new_column_it = source_value;
+            }
+            has_value = true;
+            ++new_column_it;
+        }
+        new_columns[new_column_row_slice_index]->sparse_map().set(new_column_row_idx, has_value);
+    };
+
+    const auto set_value_from_target = [&](size_t target_row) {
+        bool has_value = false;
+        if (const auto target_value = consume_sparse_forward_accessor<TargetTDT>(target_accessor, target_row)) {
+            if constexpr (util::scalar_sequence_type<TargetTDT>) {
+                const position_t offset = *target_value;
+                if (is_a_string(offset)) {
+                    const std::string_view string_data = *target.columns[target_row_slice].string_at_offset(offset);
+                    *new_column_it = target.new_string_pools[new_column_row_slice_index].get(string_data).offset();
+                } else {
+                    *new_column_it = offset;
+                }
+            } else {
+                *new_column_it = *target_value;
+            }
+            has_value = true;
+            ++new_column_it;
+        }
+        new_columns[new_column_row_slice_index]->sparse_map().set(new_column_row_idx, has_value);
+    };
+
+    size_t source_row_idx = 0;
+
+    // Stable merge target and source into the new column. If there is a sequence of repeated index values and new
+    // rows must be inserted, the new rows will appear after the rows from the target
+    while (!target_index_is_exhausted() && source_row_idx < source.index_.size()) {
+        // Copy all target values smaller than the current source index to the output buffer
+        while (!target_index_is_exhausted() && *target_index_it < source.index_[source_row_idx]) {
+            set_value_from_target(target_row_idx);
+            advance_output();
+            advance_target();
+        }
+
+        if (target_index_is_exhausted()) {
+            break;
+        }
+
+        // Unlike the dense case this works with the transposed matching. Each target row has an optional source row
+        // that updates it. There's a bitmap of matched source rows. If source[i] == 1 the source row is matched.
+        // Otherwise it's not and must be inserted.
+        //
+        // TODO: The transposed matching turns out to be easier to work with. Compute only that.
+        //
+        // 1. Iterate over all target rows with the current index value in order. If the strategy requires update and
+        // the target row is matched place the source value in the output. Otherwise place the target value in the
+        // output.
+        // 2. After all target rows are iterated iterate over the source rows with the same index value that are not
+        // matched and push them to the output.
+        const timestamp current_index_value = *target_index_it;
+        if (source.index_[source_row_idx] == current_index_value) {
+            while (!target_index_is_exhausted() && current_index_value == *target_index_it) {
+                const std::optional<size_t> source_to_update =
+                        strategy.update() ? match_record.source_row_to_update_target(target_row_slice, target_row_idx)
+                                          : std::nullopt;
+                if (source_to_update) {
+                    set_value_from_source(*source_to_update);
+                } else {
+                    set_value_from_target(target_row_idx);
+                }
+                advance_output();
+                advance_target();
+            }
+
+            const util::BitSet& matched_source_rows = match_record.matched_source_rows();
+            while (source_row_idx < source.index_.size() && source.index_[source_row_idx] == current_index_value) {
+                if (!matched_source_rows[source_row_idx]) {
+                    set_value_from_source(source_row_idx);
+                    advance_output();
+                }
+                ++source_row_idx;
+            }
+        }
+
+        if (target_index_is_exhausted()) {
+            break;
+        }
+
+        // Target index values are larger than the source index value. Append the source data to the output buffer.
+        while (source_row_idx < source.index_.size() && *target_index_it > source.index_[source_row_idx]) {
+            set_value_from_source(source_row_idx);
+            ++source_row_idx;
+            advance_output();
+        }
+    }
+    // Not all target rows were processed, copy the rest
+    while (!target_index_is_exhausted()) {
+        set_value_from_target(target_row_idx);
+        advance_target();
+        advance_output();
+    }
+
+    // Not all source rows were processed, copy the rest
+    // TODO: This now copies values one by one. It can be optimized to memcpy the dense part of the source and set the
+    // proper sparse map bits in the output
+    while (source_row_idx < source.index_.size()) {
+        set_value_from_source(source_row_idx);
+        advance_output();
+        ++source_row_idx;
+    }
+
+    for (size_t i = 0; i < new_columns.size(); ++i) {
+        finalize_sparse_column(*new_columns[i], reslicing_info.rows_in_slice(i));
+    }
+    return new_columns;
+}
+
+template<util::scalar_type_descriptor_tag TargetTDT, util::scalar_type_descriptor_tag SourceTDT, typename Source>
+requires std::same_as<TargetTDT, SourceTDT>
+void update_column(
+        const MergeStrategy& strategy, const StringPool& old_string_pool, const Source& variant_source,
+        const std::span<const std::vector<size_t>> rows_to_update, [[maybe_unused]] const size_t source_row_offset,
+        const bool is_matching_column, [[maybe_unused]] std::string_view column_name, Column& target_column,
+        StringPool& new_string_pool
+) {
+    // When matched rows are updated, the columns used for matching keep the target values
+    const bool keep_target_values = is_matching_column && strategy.update();
+    // The target type is checked before the source type because a pandas source never has fixed width strings.
+    if constexpr (util::scalar_sequence_type<TargetTDT>) {
+        if (keep_target_values) {
+            // Only move the data to the new string pool.
+            rebuild_sequence_column_in_new_pool<TargetTDT>(target_column, old_string_pool, new_string_pool);
+            return;
+        }
+        if constexpr (is_fixed_string_type(TargetTDT::data_type())) {
+            user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                    "Fixed string sequences are not supported for merge update"
+            );
+        }
+    } else if (keep_target_values) {
+        return;
+    }
+    [[maybe_unused]] util::BitSet target_rows_not_matched_by_source = [&]() {
+        if constexpr (util::scalar_sequence_type<TargetTDT>) {
+            util::BitSet result(target_column.row_count());
+            result.flip();
+            return result;
+        }
+        return util::BitSet{};
+    }();
+    [[maybe_unused]] std::optional<ScopedGILLock> gil;
+    util::variant_match(variant_source, [&](const auto source) {
+        ColumnData target_column_data = target_column.data();
+        auto target = random_accessor<TargetTDT>(&target_column_data);
+        for (size_t source_row_idx = 0; source_row_idx < rows_to_update.size(); ++source_row_idx) {
+            for (const size_t target_row_idx : rows_to_update[source_row_idx]) {
+                const auto source_value = get_source_value<SourceTDT>(source, source_row_idx);
+                if constexpr (util::scalar_sequence_type<SourceTDT>) {
+                    target[target_row_idx] = write_source_string_to_pool<SourceTDT>(
+                            source_value,
+                            source_string_pool(source),
+                            source_row_idx,
+                            source_row_offset,
+                            column_name,
+                            new_string_pool,
+                            &gil
+                    );
+                    target_rows_not_matched_by_source.set(target_row_idx, false);
+                } else {
+                    target[target_row_idx] = source_value;
+                }
+            }
+        }
+    });
+    if constexpr (util::scalar_sequence_type<TargetTDT>) {
+        rebuild_sequence_column_in_new_pool<TargetTDT>(
+                target_column, old_string_pool, new_string_pool, &target_rows_not_matched_by_source
+        );
+    }
+}
+
+/// Builds a new column which is the result of updating the target column. Used when either the source or the target
+/// is sparse. The sparse map can change, thus the column cannot be modified in place and the dense data must be
+/// pushed one by one.
+/// @param updated_target_rows For each target row, the row of the source (relative to source_row_offset) updating it
+/// @param source_row_offset Position in source of the first source row of the processing group
+/// @param first_source_row_in_group Row of the whole source that the first row of the processing group corresponds
+/// to. Used only to report rows in errors. Differs from source_row_offset when source is already restricted to the
+/// processing group.
+/// @param target Consumed. Moved into the result if it is a column used for matching and needs no changes.
+template<util::scalar_type_descriptor_tag TargetTDT, util::scalar_type_descriptor_tag SourceTDT, typename Source>
+requires std::same_as<TargetTDT, SourceTDT>
+std::shared_ptr<Column> update_sparse(
+        const MergeStrategy& strategy, const StringPool& old_string_pool,
+        const SourceInterface<SourceTDT, Source>& source,
+        const std::span<const std::optional<size_t>> updated_target_rows, const size_t source_row_offset,
+        const size_t first_source_row_in_group, const bool is_matching_column, std::string_view column_name,
+        Column&& target, StringPool& new_string_pool
+) {
+    if constexpr (is_fixed_string_type(TargetTDT::data_type())) {
+        user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                "Fixed string sequences are not supported for merge update"
+        );
+    }
+    if (is_matching_column && strategy.update()) {
+        // When matched rows are updated, the columns used for matching keep the target values
+        if constexpr (util::scalar_sequence_type<TargetTDT>) {
+            rebuild_sequence_column_in_new_pool<TargetTDT>(target, old_string_pool, new_string_pool);
+        }
+        return std::make_shared<Column>(std::move(target));
+    }
+    const size_t num_rows = updated_target_rows.size();
+    auto new_column = std::make_shared<Column>(target.type(), num_rows, AllocationType::DYNAMIC, Sparsity::PERMITTED);
+    new_column->buffer().ensure(num_rows * get_type_size(target.type().data_type()));
+    ColumnData new_column_data = new_column->data();
+    auto new_column_it = new_column_data.begin<TargetTDT>();
+    util::BitMagic& new_sparse_map = new_column->sparse_map();
+    ColumnData target_data = target.data();
+    auto target_accessor = get_sparse_forward_accessor<TargetTDT>(target_data, 0, target.is_sparse());
+    [[maybe_unused]] std::optional<ScopedGILLock> gil;
+    for (size_t target_row = 0; target_row < num_rows; ++target_row) {
+        bool has_value = false;
+        const std::optional<size_t> maybe_source = updated_target_rows[target_row];
+        if (maybe_source) {
+            const size_t source_row = *maybe_source + source_row_offset;
+            if (source.has_value_at(static_cast<position_t>(source_row))) {
+                const auto source_value = source[source_row];
+                if constexpr (util::scalar_sequence_type<SourceTDT>) {
+                    *new_column_it = write_source_string_to_pool<SourceTDT>(
+                            source_value,
+                            source.string_pool(),
+                            *maybe_source,
+                            first_source_row_in_group,
+                            column_name,
+                            new_string_pool,
+                            &gil
+                    );
+                } else {
+                    *new_column_it = source_value;
+                }
+                has_value = true;
+            }
+        } else if (const auto target_value = consume_sparse_forward_accessor<TargetTDT>(target_accessor, target_row)) {
+            if constexpr (util::scalar_sequence_type<TargetTDT>) {
+                *new_column_it = is_a_string(*target_value)
+                                         ? new_string_pool.get(old_string_pool.get_const_view(*target_value)).offset()
+                                         : *target_value;
+            } else {
+                *new_column_it = *target_value;
+            }
+            has_value = true;
+        }
+        if (has_value) {
+            ++new_column_it;
+        }
+        new_sparse_map.set(target_row, has_value);
+    }
+    finalize_sparse_column(*new_column, num_rows);
+    return new_column;
+}
+
+/// Performs merging of sorted lists with update on matching rows. The index column dictates the ordering of the
+/// rows. The target is composed of multiple row slices. The following holds: is_sorted(index in row slice i) &&
+/// all(index values in row slice i) <= all(index values in row slice j) for i < j. The source is a single row
+/// slice.  Insertion is stable and all new values are inserted after all existing values with the same index
+/// value. The source and target must have the same index type.
+template<util::scalar_type_descriptor_tag TargetTDT, util::scalar_type_descriptor_tag SourceTDT, typename Source>
+requires std::same_as<TargetTDT, SourceTDT>
 std::vector<std::shared_ptr<Column>> merge(
-        const InsertSourceData<Source>& source, const InsertTargetData& target,
+        const InsertSourceData<SourceTDT, Source>& source, const InsertTargetData& target,
         const MergeUpdateClause::MatchRecord& match_record, const MergeStrategy& strategy,
         const ReslicingInfo& reslicing_info
 ) {
@@ -247,7 +799,8 @@ std::vector<std::shared_ptr<Column>> merge(
             if (target_row_slice == target.columns.size() - 1 &&
                 target.range.end_row_in_last_row_slice !=
                         static_cast<size_t>(target.columns.back().column_->row_count())) [[unlikely]] {
-                target_index_end = std::next(target_index_it, target.range.end_row_in_last_row_slice);
+                target_index_end =
+                        std::next(target_index_it, static_cast<std::ptrdiff_t>(target.range.end_row_in_last_row_slice));
             }
         }
     };
@@ -278,53 +831,63 @@ std::vector<std::shared_ptr<Column>> merge(
     // been processed, on the assumption that if a column has one such string it will probably have many.
     std::optional<ScopedGILLock> scoped_gil_lock;
 
-    const auto set_string_from_source = [&](size_t row) {
-        if constexpr (is_sequence_type(SourceTDT::data_type())) {
-            const auto source_value = get_source_value<SourceTDT>(source.data, row);
+    const auto set_value_from_source = [&](size_t row_in_index) {
+        const size_t row = row_in_index + source.global_row_range_.first;
+        const auto source_value = source[row];
+        if constexpr (util::scalar_sequence_type<SourceTDT>) {
             if (is_na<SourceTDT>(source_value)) {
                 *new_column_it = get_string_na_placeholder(source_value);
             } else {
                 const auto [source_string, _] = get_source_string<SourceTDT>(
-                        source.data,
-                        row,
+                        source_value,
+                        source.string_pool(),
+                        row_in_index,
                         target.columns.front().column_name_,
-                        source.global_row_range.first,
+                        source.global_row_range_.first,
                         &scoped_gil_lock
                 );
                 *new_column_it = target.new_string_pools[new_column_row_slice_index].get(*source_string).offset();
             }
+        } else {
+            *new_column_it = source_value;
         }
     };
 
-    const auto set_string_from_source_at = [&](size_t source_row, size_t output_row) {
-        if constexpr (is_sequence_type(SourceTDT::data_type())) {
-            const auto source_value = get_source_value<SourceTDT>(source.data, source_row);
-            const auto [slice_index, offset_in_slice] = reslicing_info.slice_and_offset_for_row(output_row);
+    const auto set_value_from_source_at = [&](size_t row_in_index, size_t output_row) {
+        const size_t source_row = row_in_index + source.global_row_range_.first;
+        const auto source_value = source[source_row];
+        const auto [slice_index, offset_in_slice] = reslicing_info.slice_and_offset_for_row(output_row);
+        if constexpr (util::scalar_sequence_type<SourceTDT>) {
             if (is_na<SourceTDT>(source_value)) {
                 new_column_accessors[slice_index][offset_in_slice] = get_string_na_placeholder(source_value);
             } else {
                 const auto [source_string, _] = get_source_string<SourceTDT>(
-                        source.data,
-                        source_row,
+                        source_value,
+                        source.string_pool(),
+                        row_in_index,
                         target.columns.front().column_name_,
-                        source.global_row_range.first,
+                        source.global_row_range_.first,
                         &scoped_gil_lock
                 );
                 new_column_accessors[slice_index][offset_in_slice] =
                         target.new_string_pools[slice_index].get(*source_string).offset();
             }
+        } else {
+            new_column_accessors[slice_index][offset_in_slice] = source_value;
         }
     };
 
-    const auto set_string_from_target = [&](size_t target_row) {
-        if constexpr (is_sequence_type(TargetTDT::data_type())) {
-            const position_t offset = target_data[target_row];
-            if (is_a_string(offset)) {
-                const std::string_view string_data = *target.columns[target_row_slice].string_at_offset(offset);
+    const auto set_value_from_target = [&](size_t target_row) {
+        const auto target_value = target_data[target_row];
+        if constexpr (util::scalar_sequence_type<TargetTDT>) {
+            if (is_a_string(target_value)) {
+                const std::string_view string_data = *target.columns[target_row_slice].string_at_offset(target_value);
                 *new_column_it = target.new_string_pools[new_column_row_slice_index].get(string_data).offset();
             } else {
-                *new_column_it = offset;
+                *new_column_it = target_value;
             }
+        } else {
+            *new_column_it = target_value;
         }
     };
 
@@ -336,14 +899,10 @@ std::vector<std::shared_ptr<Column>> merge(
 
     // Stable merge target and source into the new column. If there is a sequence of repeated index values and new
     // rows must be inserted, the new rows will appear after the rows from the target
-    while (!target_index_is_exhausted() && source_row_idx < source.index.size()) {
+    while (!target_index_is_exhausted() && source_row_idx < source.index_.size()) {
         // Copy all target values smaller than the current source index to the output buffer
-        while (!target_index_is_exhausted() && *target_index_it < source.index[source_row_idx]) {
-            if constexpr (is_sequence_type(TargetTDT::data_type())) {
-                set_string_from_target(target_row_idx);
-            } else {
-                *new_column_it = target_data[target_row_idx];
-            }
+        while (!target_index_is_exhausted() && *target_index_it < source.index_[source_row_idx]) {
+            set_value_from_target(target_row_idx);
             advance_output();
             advance_target();
         }
@@ -354,7 +913,7 @@ std::vector<std::shared_ptr<Column>> merge(
 
         // Target index values are equal to the source index values. Since the index is matching, it's possible to
         // perform both an update and an insert.
-        // 1. Perform the update using the random accessor to the target
+        // 1. Perform the update using the random accessor of the target
         // 2. Iterate over all target rows with the same index value and place them in the output, skipping the ones
         //    updated in the previous step
         // 3. Append the source rows which were not matched
@@ -363,9 +922,9 @@ std::vector<std::shared_ptr<Column>> merge(
         const timestamp current_index_value = *target_index_it;
         // If the source has no row at the current target index value, all remaining source rows are smaller than it
         // and must be inserted before it. The target rows are left to the next iteration.
-        const bool source_has_index_value = source.index[source_row_idx] == current_index_value;
+        const bool source_has_index_value = source.index_[source_row_idx] == current_index_value;
         // Apply updates
-        while (source_row_idx < source.index.size() && source.index[source_row_idx] == current_index_value) {
+        while (source_row_idx < source.index_.size() && source.index_[source_row_idx] == current_index_value) {
             if (strategy.update()) {
                 for (size_t i = 0; i < target.columns.size(); ++i) {
                     const std::vector<size_t>& matched = match_record.matched_rows(i)[source_row_idx];
@@ -373,12 +932,7 @@ std::vector<std::shared_ptr<Column>> merge(
                         const size_t index_in_output = target_slice_offset[i] + total_inserted_rows + target_row -
                                                        target.range.start_row_in_first_row_slice;
                         updated.set(index_in_output);
-                        if constexpr (is_sequence_type(SourceTDT::data_type())) {
-                            set_string_from_source_at(source_row_idx, index_in_output);
-                        } else {
-                            const auto [column, offset] = reslicing_info.slice_and_offset_for_row(index_in_output);
-                            new_column_accessors[column][offset] = source.data[source_row_idx];
-                        }
+                        set_value_from_source_at(source_row_idx, index_in_output);
                     }
                 }
             }
@@ -390,11 +944,7 @@ std::vector<std::shared_ptr<Column>> merge(
         // Place target values on non-updated output positions
         while (source_has_index_value && !target_index_is_exhausted() && *target_index_it == current_index_value) {
             if (!updated.test(output_row_idx)) {
-                if constexpr (is_sequence_type(TargetTDT::data_type())) {
-                    set_string_from_target(target_row_idx);
-                } else {
-                    *new_column_it = target_data[target_row_idx];
-                }
+                set_value_from_target(target_row_idx);
             }
             advance_target();
             advance_output();
@@ -402,11 +952,7 @@ std::vector<std::shared_ptr<Column>> merge(
         // Append unmatched source rows
         total_inserted_rows += source_rows_to_insert.size();
         for (size_t source_row_to_insert : source_rows_to_insert) {
-            if constexpr (is_sequence_type(SourceTDT::data_type())) {
-                set_string_from_source(source_row_to_insert);
-            } else {
-                *new_column_it = source.data[source_row_to_insert];
-            }
+            set_value_from_source(source_row_to_insert);
             advance_output();
         }
 
@@ -415,12 +961,8 @@ std::vector<std::shared_ptr<Column>> merge(
         }
 
         // Target index values are larger than the source index value. Append the source data to the output buffer.
-        while (source_row_idx < source.index.size() && *target_index_it > source.index[source_row_idx]) {
-            if constexpr (is_sequence_type(SourceTDT::data_type())) {
-                set_string_from_source(source_row_idx);
-            } else {
-                *new_column_it = source.data[source_row_idx];
-            }
+        while (source_row_idx < source.index_.size() && *target_index_it > source.index_[source_row_idx]) {
+            set_value_from_source(source_row_idx);
             ++source_row_idx;
             advance_output();
             ++total_inserted_rows;
@@ -428,98 +970,36 @@ std::vector<std::shared_ptr<Column>> merge(
     }
     // Not all target rows were processed, copy the rest
     while (!target_index_is_exhausted()) {
-        if constexpr (is_sequence_type(TargetTDT::data_type())) {
-            set_string_from_target(target_row_idx);
-        } else {
-            *new_column_it = target_data[target_row_idx];
-        }
+        set_value_from_target(target_row_idx);
         advance_target();
         advance_output();
     }
 
     // Not all source rows were processed, copy the rest
-    if constexpr (is_sequence_type(SourceTDT::data_type())) {
-        for (; source_row_idx < source.index.size(); ++source_row_idx) {
-            set_string_from_source(source_row_idx);
+    if constexpr (util::scalar_sequence_type<SourceTDT>) {
+        for (; source_row_idx < source.index_.size(); ++source_row_idx) {
+            set_value_from_source(source_row_idx);
             advance_output();
         }
     } else {
-        while (source_row_idx < source.index.size()) {
+        while (source_row_idx < source.index_.size()) {
             const size_t free_elements_in_column = rows_in_current_slice - new_column_row_idx;
             util::check(
                     free_elements_in_column > 0,
                     "The output row slices are full but {} source rows are left to copy",
-                    source.index.size() - source_row_idx
+                    source.index_.size() - source_row_idx
             );
-            std::copy_n(source.data.begin() + source_row_idx, free_elements_in_column, new_column_it);
+            std::copy_n(
+                    source.data_.begin() + source_row_idx + source.global_row_range_.first,
+                    free_elements_in_column,
+                    new_column_it
+            );
             source_row_idx += free_elements_in_column;
             advance_output(free_elements_in_column);
         }
     }
 
     return new_columns;
-}
-
-template<util::type_descriptor_tag TargetTDT, util::type_descriptor_tag SourceTDT, typename Source>
-void update_column(
-        const MergeStrategy& strategy, const StringPool& old_string_pool, const Source& variant_source,
-        const std::span<const std::vector<size_t>> rows_to_update, [[maybe_unused]] const size_t source_row_offset,
-        const bool is_matching_column, [[maybe_unused]] std::string_view column_name, Column& target_column,
-        StringPool& new_string_pool
-) {
-    // The target type is checked before the source type because a pandas source never has fixed width strings.
-    if constexpr (is_sequence_type(TargetTDT::data_type())) {
-        if (is_matching_column && strategy.update_only()) {
-            // Only move the data to the new string pool.
-            rebuild_sequence_column_in_new_pool<TargetTDT>(target_column, old_string_pool, new_string_pool);
-            return;
-        }
-        if constexpr (is_fixed_string_type(TargetTDT::data_type())) {
-            user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
-                    "Fixed string sequences are not supported for merge update"
-            );
-        }
-    } else if (is_matching_column) {
-        return;
-    }
-    if constexpr (std::same_as<TargetTDT, SourceTDT>) {
-        [[maybe_unused]] util::BitSet target_rows_not_matched_by_source = [&]() {
-            if constexpr (is_sequence_type(TargetTDT::data_type())) {
-                util::BitSet result(target_column.row_count());
-                result.flip();
-                return result;
-            }
-            return util::BitSet{};
-        }();
-        [[maybe_unused]] std::optional<ScopedGILLock> gil;
-        util::variant_match(variant_source, [&](const auto source) {
-            ColumnData target_column_data = target_column.data();
-            auto target = random_accessor<TargetTDT>(&target_column_data);
-            for (size_t source_row_idx = 0; source_row_idx < rows_to_update.size(); ++source_row_idx) {
-                for (const size_t target_row_idx : rows_to_update[source_row_idx]) {
-                    const auto source_value = get_source_value<SourceTDT>(source, source_row_idx);
-                    if constexpr (is_sequence_type(SourceTDT::data_type())) {
-                        if (is_na<SourceTDT>(source_value)) {
-                            target[target_row_idx] = get_string_na_placeholder(source_value);
-                        } else {
-                            auto [source_string, opt_owner] = get_source_string<SourceTDT>(
-                                    source, source_row_idx, column_name, source_row_offset, &gil
-                            );
-                            target[target_row_idx] = new_string_pool.get(*source_string).offset();
-                        }
-                        target_rows_not_matched_by_source.set(target_row_idx, false);
-                    } else {
-                        target[target_row_idx] = source_value;
-                    }
-                }
-            }
-        });
-        if constexpr (is_sequence_type(TargetTDT::data_type())) {
-            rebuild_sequence_column_in_new_pool<TargetTDT>(
-                    target_column, old_string_pool, new_string_pool, &target_rows_not_matched_by_source
-            );
-        }
-    }
 }
 
 RowRange get_row_range(std::span<const ProcessingUnit> row_slice) {
@@ -754,7 +1234,8 @@ std::vector<std::vector<size_t>> MergeUpdateClause::structure_for_processing_log
     std::vector<std::vector<size_t>> offsets = must_structure_by_time_slice() ? structure_by_time_slice(ranges_and_keys)
                                                                               : structure_by_row_slice(ranges_and_keys);
     std::vector<size_t> row_slice_groups_to_keep;
-    std::span<const timestamp> source_index = get_source_column<IndexType>(0);
+    // The index is always dense
+    std::span<const timestamp> source_index = std::get<std::span<const timestamp>>(get_source_column<IndexType>(0));
     const bool source_ends_before_first_row_slice =
             source_index.back() < ranges_and_keys.begin()->key_.time_range().first;
     const bool source_starts_after_the_last_row_slice =
@@ -825,20 +1306,12 @@ std::vector<EntityId> MergeUpdateClause::process(std::vector<EntityId>&& entity_
             std::shared_ptr<ColRange>,
             std::shared_ptr<AtomKey>,
             EntityFetchCount>(*component_manager_, std::move(entity_ids));
-    for (const std::shared_ptr<SegmentInMemory>& segment : *proc.segments_) {
-        for (size_t col = 0; col < segment->num_columns(); ++col) {
-            schema::check<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
-                    !segment->column(static_cast<position_t>(col)).is_sparse(),
-                    "Merge update does not support sparse target data yet. Column \"{}\" is sparse.",
-                    segment->field(col).name()
-            );
-        }
-    }
     std::vector<ProcessingUnit> row_slices =
             must_structure_by_time_slice() ? split_by_row_slice(std::move(proc)) : std::vector{std::move(proc)};
     const std::pair<size_t, size_t> source_start_end = get_source_start_end(row_slices);
     MatchRecord matched = match(row_slices, source_start_end);
     matched.validate_rows_to_update(strategy_);
+    matched.transpose_matched_target_rows();
     if (strategy_.update_only()) {
         if (!matched.has_matched_target_rows()) {
             // No target row in this row slice changes, so emit nothing. merge_slices_and_keys keeps the
@@ -949,7 +1422,8 @@ MergeUpdateClause::MatchRecord MergeUpdateClause::initialize_rows_to_update_for_
             details::visit_type(target_column.column_->type().data_type(), [&](auto target_field_dt) {
                 using TargetTDT = ScalarTagType<decltype(target_field_dt)>;
 
-                if constexpr (!std::same_as<std::decay_t<SourceTDT>, std::decay_t<TargetTDT>>) {
+                if constexpr (!std::same_as<std::decay_t<SourceTDT>, std::decay_t<TargetTDT>> ||
+                              is_arrow_output_only_type(SourceTDT::data_type())) {
                     schema::raise<ErrorCode::E_DESCRIPTOR_MISMATCH>(
                             "Source type {} does not match target type {}. Dynamic schema is not implemented yet",
                             SourceTDT::data_type(),
@@ -958,15 +1432,40 @@ MergeUpdateClause::MatchRecord MergeUpdateClause::initialize_rows_to_update_for_
                 } else {
                     auto target_values_to_rows =
                             map_column_values_to_rows<TargetTDT>(target_column, strategy_.match_na);
+                    // Missing values are equivalent to NA. They can match only if match_na is true.
+                    const auto add_na_matches = [&](size_t source_row_idx) {
+                        if (auto it = target_values_to_rows.find(na_match_key<TargetTDT>());
+                            it != target_values_to_rows.end()) {
+                            result.add_match(source_row_idx, row_slice_idx, it->second);
+                        }
+                    };
                     util::variant_match(get_source_column<SourceTDT>(source_field_position), [&](auto source_data) {
+                        auto source_data_interface =
+                                SourceInterface<SourceTDT, std::remove_cvref_t<decltype(source_data)>>(
+                                        std::move(source_data)
+                                );
                         for (size_t source_row_idx = 0; source_row_idx < source_row_count; ++source_row_idx) {
-                            auto source_value = get_source_value<SourceTDT>(source_data, source_row_idx);
-                            if (is_na<SourceTDT>(source_value) && !strategy_.match_na) {
+                            if (!source_data_interface.has_value_at(static_cast<position_t>(source_row_idx))) {
+                                if (strategy_.match_na) {
+                                    add_na_matches(source_row_idx);
+                                }
                                 continue;
                             }
-                            if constexpr (is_sequence_type(SourceTDT::data_type())) {
+                            auto source_value = source_data_interface[source_row_idx];
+                            if (is_na<SourceTDT>(source_value)) {
+                                if (strategy_.match_na) {
+                                    add_na_matches(source_row_idx);
+                                }
+                                continue;
+                            }
+                            if constexpr (util::scalar_sequence_type<SourceTDT>) {
                                 auto [source_string, opt_owner] = get_source_string<SourceTDT>(
-                                        source_data, source_row_idx, column_name, 0, &scoped_gil_lock
+                                        source_value,
+                                        source_data_interface.string_pool(),
+                                        source_row_idx,
+                                        column_name,
+                                        0,
+                                        &scoped_gil_lock
                                 );
                                 result.add_match(source_row_idx, row_slice_idx, target_values_to_rows[source_string]);
                             } else {
@@ -994,7 +1493,8 @@ std::pair<size_t, size_t> MergeUpdateClause::get_source_start_end(std::span<cons
         );
         const std::pair<size_t, size_t> source_range = source_row_range_it->second;
         std::pair<size_t, size_t> result = source_range;
-        std::span<const timestamp> source_index = get_source_column<IndexType>(0, source_range);
+        std::span<const timestamp> source_index =
+                std::get<std::span<const timestamp>>(get_source_column<IndexType>(0, source_range));
         // A shared boundary row slice (entity_fetch_count > 1) is co-owned with a neighbouring group; trim the source
         // range to the portion this processing unit owns. If neither boundary is shared both branches are skipped and
         // the full source range is returned.
@@ -1053,7 +1553,10 @@ std::vector<ProcessingUnit> MergeUpdateClause::update_and_insert(
         // merge_slices_and_keys keeps the existing data keys for row slices that are not re-emitted.
         return {};
     }
-    const std::span<const timestamp> source_index = get_source_column<IndexType>(0, source_start_end);
+    const std::span<const timestamp> source_index =
+            std::get<std::span<const timestamp>>(get_source_column<IndexType>(0, source_start_end));
+    const std::span<const timestamp> source_index_full =
+            std::get<std::span<const timestamp>>(get_source_column<IndexType>(0));
     const StreamDescriptor& source_descriptor = *get_source_descriptor();
     const size_t num_col_slices = row_slices.begin()->col_ranges_->size();
     ARCTICDB_DEBUG_CHECK(
@@ -1084,7 +1587,7 @@ std::vector<ProcessingUnit> MergeUpdateClause::update_and_insert(
     }
     std::vector<StringPool> new_string_pools(reslicing_info.num_segments());
     std::vector<std::shared_ptr<Column>> new_indexes = merge<IndexType, IndexType>(
-            InsertSourceData{.index = source_index, .data = source_index, .global_row_range = source_start_end},
+            make_insert_source_data<IndexType>(source_index, source_index_full, source_start_end),
             InsertTargetData{
                     .indexes = target_index_datas,
                     .columns = target_index_datas,
@@ -1112,14 +1615,15 @@ std::vector<ProcessingUnit> MergeUpdateClause::update_and_insert(
             });
             std::vector<std::shared_ptr<Column>> new_column_slices =
                     details::visit_type(target_field.type().data_type(), [&]<typename TypeTag>(TypeTag) {
-                        using TargetDataTDT = ScalarTagType<TypeTag>;
-                        has_string_column_in_column_slice |= is_sequence_type(TargetDataTDT::data_type());
+                        using TargetTDT = ScalarTagType<TypeTag>;
+                        has_string_column_in_column_slice |= util::scalar_sequence_type<TargetTDT>;
                         const Field& source_field = source_descriptor.field(field_idx);
                         return details::visit_type(
                                 source_field.type().data_type(),
                                 [&]<typename SourceTypeTag>(SourceTypeTag) -> std::vector<std::shared_ptr<Column>> {
-                                    using SourceDataTDT = ScalarTagType<SourceTypeTag>;
-                                    if constexpr (std::same_as<SourceDataTDT, TargetDataTDT>) {
+                                    using SourceTDT = ScalarTagType<SourceTypeTag>;
+                                    if constexpr (std::same_as<SourceTDT, TargetTDT> &&
+                                                  !is_arrow_output_only_type(SourceTDT::data_type())) {
                                         // By construction, we cannot update the columns used to perform the match; only
                                         // inserts are allowed
                                         const auto strategy =
@@ -1133,16 +1637,32 @@ std::vector<ProcessingUnit> MergeUpdateClause::update_and_insert(
                                                 .range = target_range,
                                                 .new_string_pools = new_string_pools
                                         };
+                                        const bool is_target_sparse =
+                                                std::ranges::any_of(target_datas, [](const ColumnWithStrings& col) {
+                                                    return col.column_->is_sparse();
+                                                });
                                         return util::variant_match(
-                                                get_source_column<SourceDataTDT>(field_idx, source_start_end),
-                                                [&](const auto source) {
-                                                    const auto source_data = InsertSourceData{
-                                                            .index = source_index,
-                                                            .data = source,
-                                                            .global_row_range = source_start_end
-                                                    };
-                                                    return merge<TargetDataTDT, SourceDataTDT>(
-                                                            source_data,
+                                                get_source_column<SourceTDT>(field_idx),
+                                                [&](const auto& source) -> std::vector<std::shared_ptr<Column>> {
+                                                    constexpr bool is_source_sparse = std::same_as<
+                                                            std::remove_cvref_t<decltype(source)>,
+                                                            ColumnWithStrings>;
+                                                    const auto source_insert_data = make_insert_source_data<SourceTDT>(
+                                                            source_index, source, source_start_end
+                                                    );
+                                                    if constexpr (!is_source_sparse) {
+                                                        if (!is_target_sparse) {
+                                                            return merge<TargetTDT, SourceTDT>(
+                                                                    source_insert_data,
+                                                                    target_data,
+                                                                    match_record,
+                                                                    strategy,
+                                                                    reslicing_info
+                                                            );
+                                                        }
+                                                    }
+                                                    return merge_sparse<TargetTDT, SourceTDT>(
+                                                            source_insert_data,
                                                             target_data,
                                                             match_record,
                                                             strategy,
@@ -1190,6 +1710,11 @@ std::vector<ProcessingUnit> MergeUpdateClause::update(
         const MatchRecord& match_record, std::vector<ProcessingUnit>&& row_slices,
         std::pair<size_t, size_t> source_start_end
 ) const {
+    ARCTICDB_DEBUG_CHECK(
+            ErrorCode::E_ASSERTION_FAILURE,
+            strategy_.update(),
+            "MergeUpdateClause::update must only be called for strategies that update matched rows"
+    );
     std::vector<ProcessingUnit> result;
     const StreamDescriptor& source_descriptor = *get_source_descriptor();
     for (size_t i = 0; i < row_slices.size(); ++i) {
@@ -1231,19 +1756,49 @@ std::vector<ProcessingUnit> MergeUpdateClause::update(
                                         // data read from disk, the map_ member of the pool is not populated. Which
                                         // means that the mapping between a string and offset in the pool is missing. To
                                         // get it, we need to rebuild the pool anyway.
-                                        segment_contains_string_column |=
-                                                is_sequence_type(TargetDataTypeTag::data_type);
-                                        update_column<TargetTDT, SourceTDT>(
-                                                strategy_,
-                                                target_segment.string_pool(),
-                                                source,
-                                                rows_to_update,
-                                                source_start_end.first,
-                                                on_set_.contains(target_field.name()),
-                                                target_field.name(),
-                                                target_column,
-                                                new_string_pool
-                                        );
+                                        segment_contains_string_column |= util::scalar_sequence_type<TargetTDT>;
+                                        if constexpr (std::same_as<TargetTDT, SourceTDT> &&
+                                                      !is_arrow_output_only_type(SourceTDT::data_type())) {
+                                            util::variant_match(source, [&](const auto& source_data) {
+                                                using SourceData = std::remove_cvref_t<decltype(source_data)>;
+                                                constexpr bool is_source_sparse =
+                                                        std::same_as<SourceData, ColumnWithStrings>;
+                                                if (is_source_sparse || target_column.is_sparse()) {
+                                                    // Sparse source columns are not restricted to source_start_end
+                                                    const size_t source_offset =
+                                                            is_source_sparse ? source_start_end.first : 0;
+                                                    target_segment.columns()[column_index_in_slice] =
+                                                            update_sparse<TargetTDT, SourceTDT>(
+                                                                    strategy_,
+                                                                    target_segment.string_pool(),
+                                                                    SourceInterface<SourceTDT, SourceData>{source_data},
+                                                                    match_record.source_rows_to_update_target(i),
+                                                                    source_offset,
+                                                                    source_start_end.first,
+                                                                    on_set_.contains(target_field.name()),
+                                                                    target_field.name(),
+                                                                    std::move(target_column),
+                                                                    new_string_pool
+                                                            );
+                                                } else if constexpr (!is_source_sparse) {
+                                                    update_column<TargetTDT, SourceTDT>(
+                                                            strategy_,
+                                                            target_segment.string_pool(),
+                                                            source_data,
+                                                            rows_to_update,
+                                                            source_start_end.first,
+                                                            on_set_.contains(target_field.name()),
+                                                            target_field.name(),
+                                                            target_column,
+                                                            new_string_pool
+                                                    );
+                                                }
+                                            });
+                                        } else if constexpr (is_fixed_string_type(TargetTDT::data_type())) {
+                                            user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                                                    "Fixed string sequences are not supported for merge update"
+                                            );
+                                        }
                                     }
                             );
                         }
@@ -1264,7 +1819,9 @@ MergeUpdateClause::MatchRecord MergeUpdateClause::match(
 ) const {
     std::optional<MatchRecord> maybe_index_match;
     if (is_source_datetime()) {
-        maybe_index_match.emplace(filter_index_match(get_source_column<IndexType>(0, source_start_end), row_slices));
+        maybe_index_match.emplace(filter_index_match(
+                std::get<std::span<const timestamp>>(get_source_column<IndexType>(0, source_start_end)), row_slices
+        ));
     }
     const StreamDescriptor& source_descriptor = *get_source_descriptor();
     return filter_on_additional_columns_match(
@@ -1337,12 +1894,22 @@ MergeUpdateClause::MatchRecord MergeUpdateClause::filter_on_additional_columns_m
         const Field& target_field = target_descriptor.field(target_field_position);
         details::visit_type(target_field.type().data_type(), [&]<typename TargetDataTypeTag>(TargetDataTypeTag) {
             details::visit_type(source_field.type().data_type(), [&]<typename SourceDataTypeTag>(SourceDataTypeTag) {
-                if constexpr (std::same_as<TargetDataTypeTag, SourceDataTypeTag>) {
-                    using TargetTDT = ScalarTagType<TargetDataTypeTag>;
-                    using SourceTDT = ScalarTagType<SourceDataTypeTag>;
-                    auto source = get_source_column<SourceTDT>(source_field_position, source_range);
-                    matched_rows.filter_matching_rows<TargetTDT, SourceTDT>(
-                            target_field.name(), source_range.first, source, strategy_.match_na
+                using TargetTDT = ScalarTagType<TargetDataTypeTag>;
+                using SourceTDT = ScalarTagType<SourceDataTypeTag>;
+                if constexpr (std::same_as<TargetTDT, SourceTDT> &&
+                              !is_arrow_output_only_type(SourceTDT::data_type())) {
+                    util::variant_match(
+                            get_source_column<SourceTDT>(source_field_position, source_range),
+                            [&](const ColumnWithStrings& col) {
+                                matched_rows.filter_matching_rows_sparse<TargetTDT, SourceTDT>(
+                                        target_field.name(), col, strategy_.match_na, source_range
+                                );
+                            },
+                            [&](const auto& col) {
+                                matched_rows.filter_matching_rows<TargetTDT, SourceTDT>(
+                                        target_field.name(), source_range.first, col, strategy_.match_na
+                                );
+                            }
                     );
                 }
             });
@@ -1490,7 +2057,7 @@ bool MergeUpdateClause::MatchRecord::is_source_row_matched(size_t source_row) co
 
 bool MergeUpdateClause::MatchRecord::has_matched_target_rows() const { return total_matched_target_rows_count_ > 0; }
 
-[[nodiscard]] util::BitSet MergeUpdateClause::MatchRecord::unmatched_source_rows() const {
+util::BitSet MergeUpdateClause::MatchRecord::unmatched_source_rows() const {
     util::BitSet result(source_row_matched_count_.size());
     for (size_t i = 0; i < source_row_matched_count_.size(); ++i) {
         if (source_row_matched_count_[i] == 0) {
@@ -1498,6 +2065,25 @@ bool MergeUpdateClause::MatchRecord::has_matched_target_rows() const { return to
         }
     }
     return result;
+}
+
+void MergeUpdateClause::MatchRecord::transpose_matched_target_rows() {
+    source_row_to_update_target_.resize(row_slices_.size());
+    matched_source_rows_ = util::BitSet(source_row_matched_count_.size());
+    for (size_t row_slice_idx = 0; row_slice_idx < row_slices_.size(); ++row_slice_idx) {
+        source_row_to_update_target_[row_slice_idx].assign(
+                row_slices_[row_slice_idx].row_ranges_->front()->diff(), std::nullopt
+        );
+        const std::vector<std::vector<size_t>>& matched_target_rows_in_slice = matched_target_rows_[row_slice_idx];
+        for (size_t source_row = 0; source_row < matched_target_rows_in_slice.size(); ++source_row) {
+            if (!matched_target_rows_in_slice[source_row].empty()) {
+                matched_source_rows_.set(source_row);
+            }
+            for (const size_t target_row : matched_target_rows_in_slice[source_row]) {
+                source_row_to_update_target_[row_slice_idx][target_row] = std::make_optional(source_row);
+            }
+        }
+    }
 }
 
 } // namespace arcticdb
