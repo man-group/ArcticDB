@@ -29,6 +29,9 @@ using namespace arcticdb;
 
 using IndexType = ScalarTagType<DataTypeTag<DataType::NANOSECONDS_UTC64>>;
 
+template<util::scalar_type_descriptor_tag TDT>
+using SparseIterator = ColumnData::ColumnDataIterator<TDT, IteratorType::ENUMERATED, IteratorDensity::SPARSE, true>;
+
 template<typename T>
 position_t get_string_na_placeholder(const T& value) {
     if constexpr (std::same_as<std::remove_cvref_t<T>, PyObject*>) {
@@ -290,10 +293,15 @@ void finalize_sparse_column(Column& column, size_t num_rows) {
     column.set_row_data(num_rows - 1);
 }
 
+/// Get acesor for either a dense or a sparse column. Assume the accessor can only be forwarded to a value
+/// and is not a random accessor. Once consumed it cannot visit the same value again. Under the hood it uses
+/// random value accessor for dense columns and sparse iterator for sparse columns. Used in merge_sparse and
+/// udpate_sparse to unify the dense and sparse cases as the target column is only forward iterated. In theory
+/// random accessor can be used for the sparse case as well but it's 2-3 times slower.
 template<util::scalar_type_descriptor_tag TDT>
-auto get_sparse_forward_accessor(ColumnData& column_data, const size_t first_row, const bool is_sparse) {
-    using SparseIterator = decltype(column_data.cbegin<TDT, IteratorType::ENUMERATED, IteratorDensity::SPARSE>());
-    using ReturnT = std::variant<ColumnDataRandomAccessor<TDT>, std::ranges::subrange<SparseIterator>>;
+std::variant<ColumnDataRandomAccessor<TDT>, std::ranges::subrange<SparseIterator<TDT>>> get_sparse_forward_accessor(
+        ColumnData& column_data, const size_t first_row, const bool is_sparse
+) {
     if (is_sparse) {
         // Position at the first existing target value at or after first_row
         const util::BitMagic& sparse_map = *column_data.bit_vector();
@@ -301,24 +309,24 @@ auto get_sparse_forward_accessor(ColumnData& column_data, const size_t first_row
         if (sparse_map.find(static_cast<util::BitSetSizeType>(first_row), first_row_with_value)) {
             const size_t dense_idx =
                     first_row == 0 ? 0 : sparse_map.count_range(0, static_cast<util::BitSetSizeType>(first_row - 1));
-            return ReturnT{std::ranges::subrange(
+            return {std::ranges::subrange(
                     column_data.sparse_iterator_at<TDT>(dense_idx, static_cast<ssize_t>(first_row_with_value)),
                     column_data.cend<TDT, IteratorType::ENUMERATED, IteratorDensity::SPARSE>()
             )};
         } else {
-            return ReturnT{std::ranges::subrange<SparseIterator>{}};
+            return {std::ranges::subrange<SparseIterator<TDT>>{}};
         }
     } else {
-        return ReturnT{random_accessor<TDT>(&column_data)};
+        return {random_accessor<TDT>(&column_data)};
     }
 }
 
+/// Used to get the value of a forward accessor created by get_sparse_forward_accessor. Assume that this can be called
+/// only once per row. Used in combination with get_sparse_forward_accessor to unify the dense and sparse cases for a
+/// target column which is only forward iterated duting sparse_merge and sparse_update
 template<util::scalar_type_descriptor_tag TDT>
 std::optional<typename TDT::RawType> consume_sparse_forward_accessor(
-        std::variant<
-                ColumnDataRandomAccessor<TDT>, std::ranges::subrange<ColumnData::ColumnDataIterator<
-                                                       TDT, IteratorType::ENUMERATED, IteratorDensity::SPARSE, true>>>&
-                variant_accessor,
+        std::variant<ColumnDataRandomAccessor<TDT>, std::ranges::subrange<SparseIterator<TDT>>>& variant_accessor,
         size_t row
 ) {
     return util::variant_match(
@@ -326,9 +334,12 @@ std::optional<typename TDT::RawType> consume_sparse_forward_accessor(
             [&](ColumnDataRandomAccessor<TDT>& target_random_accessor) -> std::optional<typename TDT::RawType> {
                 return target_random_accessor.at(row);
             },
-            [&](auto& range) -> std::optional<typename TDT::RawType> {
-                // range.front() would dereference a temporary copy of the begin iterator, and the iterator returns a
-                // reference to its own member, so the iterator must outlive the reference
+            [&](std::ranges::subrange<SparseIterator<TDT>>& range) -> std::optional<typename TDT::RawType> {
+                ARCTICDB_DEBUG_CHECK(
+                        ErrorCode::E_ASSERTION_FAILURE,
+                        range.empty() || static_cast<size_t>(range.begin()->idx()) < row,
+                        "Forward iterator must not be called for index prior its head"
+                );
                 while (!range.empty()) {
                     const auto it = range.begin();
                     const size_t value_row = static_cast<size_t>(it->idx());
