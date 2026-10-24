@@ -152,8 +152,10 @@ jobs:
             -export-fixes fixes.yml \
             "$GITHUB_WORKSPACE/cpp/arcticdb/.*" 2>&1 | tee clang-tidy.log
 
+      # Only a pull request diff can fail the job. A full sweep reports the backlog to code
+      # scanning instead, so the nightly master run is not red every day.
       - name: Fail on findings
-        if: steps.changes.outputs.cpp_changed == 'true'
+        if: steps.changes.outputs.cpp_changed == 'true' && steps.changes.outputs.mode == 'diff'
         run: |
           set -euo pipefail
           if grep -E ': (warning|error): ' clang-tidy.log; then
@@ -183,7 +185,8 @@ jobs:
       - name: Upload SARIF to code scanning
         if: always() && steps.changes.outputs.cpp_changed == 'true' && hashFiles('clang-tidy.sarif') != ''
         uses: github/codeql-action/upload-sarif@v4
-        continue-on-error: true
+        # A full sweep reports only through code scanning, so a rejected upload must fail it
+        continue-on-error: ${{ steps.changes.outputs.mode == 'diff' }}
         with:
           sarif_file: clang-tidy.sarif
           category: clang-tidy

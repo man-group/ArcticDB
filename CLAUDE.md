@@ -249,7 +249,10 @@ Two things to know before reading the raw output:
 - clang-tidy exits 0 when it only emits warnings, and neither wrapper is passed
   `-warnings-as-errors` (`.clang-tidy` keeps `WarningsAsErrors` empty so clangd does not flag
   every finding as an editor error). A separate `Fail on findings` step greps the log for
-  `: warning:` / `: error:` and fails the job, so the findings are in the job log.
+  `: warning:` / `: error:` and fails the job, so the findings are in the job log. It runs
+  only in diff mode: a full sweep (the nightly cron or a dispatch) never fails on findings,
+  because the existing backlog would fail it every night. Full-sweep findings go to code
+  scanning only, so in full mode a failed SARIF upload fails the job.
 
 ### Git Commits
 
