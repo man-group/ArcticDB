@@ -294,7 +294,7 @@ void finalize_sparse_column(Column& column, size_t num_rows) {
 }
 
 /// Get acesor for either a dense or a sparse column. Assume the accessor can only be forwarded to a value
-/// and is not a random accessor. Once consumed it cannot visit the same value again. Under the hood it uses
+/// and is not a random accessor. Once consumed it cannot visit a previous value again. Under the hood it uses
 /// random value accessor for dense columns and sparse iterator for sparse columns. Used in merge_sparse and
 /// udpate_sparse to unify the dense and sparse cases as the target column is only forward iterated. In theory
 /// random accessor can be used for the sparse case as well but it's 2-3 times slower.
@@ -321,9 +321,10 @@ std::variant<ColumnDataRandomAccessor<TDT>, std::ranges::subrange<SparseIterator
     }
 }
 
-/// Used to get the value of a forward accessor created by get_sparse_forward_accessor. Assume that this can be called
-/// only once per row. Used in combination with get_sparse_forward_accessor to unify the dense and sparse cases for a
-/// target column which is only forward iterated duting sparse_merge and sparse_update
+/// Used to get the value of a forward accessor created by get_sparse_forward_accessor. Assume that this cannot be
+/// callsed for rows prior the current head and when the head moves forward it can't go back. Used in combination with
+/// get_sparse_forward_accessor to unify the dense and sparse cases for a target column which is only forward iterated
+/// duting sparse_merge and sparse_update
 template<util::scalar_type_descriptor_tag TDT>
 std::optional<typename TDT::RawType> consume_sparse_forward_accessor(
         std::variant<ColumnDataRandomAccessor<TDT>, std::ranges::subrange<SparseIterator<TDT>>>& variant_accessor,
@@ -337,7 +338,7 @@ std::optional<typename TDT::RawType> consume_sparse_forward_accessor(
             [&](std::ranges::subrange<SparseIterator<TDT>>& range) -> std::optional<typename TDT::RawType> {
                 ARCTICDB_DEBUG_CHECK(
                         ErrorCode::E_ASSERTION_FAILURE,
-                        range.empty() || static_cast<size_t>(range.begin()->idx()) < row,
+                        range.empty() || static_cast<size_t>(range.begin()->idx()) <= row,
                         "Forward iterator must not be called for index prior its head"
                 );
                 while (!range.empty()) {
