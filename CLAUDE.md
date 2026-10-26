@@ -88,6 +88,18 @@ A root `Makefile` provides shortcuts for common tasks. User-specific overrides (
 | `make bench-cpp` | Build and run C++ benchmarks | `FILTER=` |
 | `make install-editable` | Install arcticdb in editable mode (no C++ rebuild) | |
 | `make bench-py` | Run ASV Python benchmarks (runs `install-editable` first) | `BENCH=` |
+| `make conda-env` | Download micromamba and create/update a conda env from `environment-dev.yml` | `CONDA_ENV_NAME`, `CONDA_CHANNEL_ALIAS`, `CLEAN=1` |
+| `make conda-protoc` | Generate protobuf stubs with the conda env's `grpc_tools` | |
+| `make conda-build` | Build `arcticdb_ext` in the conda env and symlink it | `CONDA_PRESET` (default `linux-conda-debug`), `CMAKE_JOBS` |
+| `make conda-test-cpp` | Build and run C++ unit tests in the conda env | `FILTER=` |
+| `make conda-test-py` | Run Python tests in the conda env | `TYPE=`, `FILE=`, `ARGS=` |
+| `make conda-build-and-test-py` | conda build + symlink + Python tests | |
+| `make conda-shell` | Shell with the conda env active and `ARCTICDB_USING_CONDA=1` | |
+
+The `conda-*` targets mirror `compile_and_test_with_conda.yml`. On Man VMs set
+`CONDA_CHANNEL_ALIAS = https://repo.prod.m/artifactory/api/conda` in `Makefile.local` so
+`conda-forge` resolves to the Artifactory mirror; only the micromamba binary itself needs `PROXY_CMD`.
+Run `make conda-env conda-protoc` once before the first `conda-build`.
 
 Prefer the `-debug` targets over the release mode targets unless told otherwise.
 
