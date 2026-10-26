@@ -1,7 +1,10 @@
 import os
+from enum import Enum
 
 import pandas as pd
 import numpy as np
+import polars as pl
+import polars.testing
 import pytest
 from arcticdb.util.hypothesis import (
     date,
@@ -30,8 +33,46 @@ pytestmark = [
     ),
 ]
 
+
+class DataFormat(Enum):
+    PANDAS = "pandas"
+    POLARS = "polars"
+
+
+# Target, source and expected result are all in the same format.
+data_format_param = pytest.mark.parametrize("data_format", list(DataFormat), ids=[f.value for f in DataFormat])
+
+
+def to_data_format(df: pd.DataFrame, data_format: DataFormat):
+    if data_format == DataFormat.PANDAS:
+        return df
+    # Polars has no index, a datetime index is stored as the first column. NaN is converted to null, which merge
+    # treats the same way as NaN. The types are set explicitly because polars infers them from the values: a column
+    # holding only missing values would get the Null type (which ArcticDB cannot store) or the wrong type.
+    schema_overrides = {col: POLARS_DTYPES[col] for col in df.columns if col in POLARS_DTYPES}
+    if isinstance(df.index, pd.DatetimeIndex):
+        schema_overrides[df.index.name] = pl.Datetime("ns")
+    return pl.from_pandas(df, include_index=isinstance(df.index, pd.DatetimeIndex), schema_overrides=schema_overrides)
+
+
+def read_in_data_format(lib, symbol, data_format: DataFormat):
+    if data_format == DataFormat.PANDAS:
+        return lib.read(symbol).data
+    return lib.read(symbol, output_format="polars").data
+
+
+def assert_result_equal(result, expected: pd.DataFrame, data_format: DataFormat):
+    if data_format == DataFormat.PANDAS:
+        assert_frame_equal(result, expected)
+    else:
+        polars.testing.assert_frame_equal(result, to_data_format(expected, data_format))
+
+
 DTYPES = ["uint32", "int64", "float", "object", "datetime64[ns]", "bool"]
 COL_NAMES = [f"{dtype}_col" for dtype in DTYPES]
+POLARS_DTYPES = dict(
+    zip(COL_NAMES, [pl.UInt32, pl.Int64, pl.Float64, pl.String, pl.Datetime("ns"), pl.Boolean], strict=True)
+)
 
 
 # Intentionally keep some pre-epoch dates in the interval. Some C++ had issues with dates before epoch in the past.
@@ -113,24 +154,28 @@ def merge_update_arguments(draw, index_type=DataframeStrategyIndexType.DATETIME)
     return target_list, source, expected, on, match_na
 
 
+@data_format_param
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @given(merge_args=merge_update_arguments())
 @settings(deadline=None, suppress_health_check=[HealthCheck.data_too_large])
-def test_timeseries_merge_update(s3_version_store_v1, merge_args):
+def test_timeseries_merge_update(s3_version_store_v1, data_format, merge_args):
     target_list, source, expected, on, match_na = merge_args
     lib = s3_version_store_v1
+    lib._set_allow_arrow_input()
     symbol = "test_merge_update"
     lib.version_store.force_delete_symbol(symbol)
+    index_column = data_format == DataFormat.POLARS
     for df in target_list:
-        lib.append(symbol, df)
+        lib.append(symbol, to_data_format(df, data_format), index_column=index_column)
     lib.merge(
         symbol,
-        source,
+        to_data_format(source, data_format),
         strategy=MergeStrategy(matched="update", not_matched_by_target="do_nothing"),
         on=on,
         match_na=match_na,
+        index_column=index_column,
     )
-    assert_frame_equal(lib.read(symbol).data, expected)
+    assert_result_equal(read_in_data_format(lib, symbol, data_format), expected, data_format)
 
 
 @use_of_function_scoped_fixtures_in_hypothesis_checked
@@ -160,23 +205,25 @@ def test_multiindex_merge_update(s3_version_store_v1, merge_args, cols_to_promot
     assert_frame_equal(lib.read(symbol).data, expected)
 
 
+@data_format_param
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @given(merge_args=merge_update_arguments(index_type=DataframeStrategyIndexType.ROWRANGE))
 @settings(deadline=None, suppress_health_check=[HealthCheck.data_too_large])
-def test_rowrange_merge_update(s3_version_store_v1, merge_args):
+def test_rowrange_merge_update(s3_version_store_v1, data_format, merge_args):
     target_list, source, expected, on, match_na = merge_args
     lib = s3_version_store_v1
+    lib._set_allow_arrow_input()
     symbol = "test_merge_update"
     lib.version_store.force_delete_symbol(symbol)
-    lib.write(symbol, target_list[0])
+    lib.write(symbol, to_data_format(target_list[0], data_format))
     lib.merge(
         symbol,
-        source,
+        to_data_format(source, data_format),
         strategy=MergeStrategy(matched="update", not_matched_by_target="do_nothing"),
         on=on,
         match_na=match_na,
     )
-    assert_frame_equal(lib.read(symbol).data, expected)
+    assert_result_equal(read_in_data_format(lib, symbol, data_format), expected, data_format)
 
 
 ########################################################################################
@@ -363,23 +410,32 @@ def merge_insert_arguments(draw, strategy, index_type=DataframeStrategyIndexType
     ],
     ids=["do_nothing", "update"],
 )
+@data_format_param
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @given(data=st.data())
 @settings(deadline=None, suppress_health_check=[HealthCheck.data_too_large])
-def test_insert(s3_storage, strategy, index_type, data):
+def test_insert(s3_storage, strategy, index_type, data_format, data):
     target, source, expected, _, on, cols_per_segment, rows_per_segment, match_na = data.draw(
         merge_insert_arguments(strategy, index_type=index_type)
     )
     ac = s3_storage.create_arctic()
-    name = f"test_insert_{index_type.value}_{strategy.matched}"
+    name = f"test_insert_{index_type.value}_{strategy.matched}_{data_format.value}"
     if name in ac.list_libraries():
         ac.delete_library(name)
     lib = ac.create_library(
         name, library_options=LibraryOptions(rows_per_segment=rows_per_segment, columns_per_segment=cols_per_segment)
     )
-    lib.write("symbol", target)
-    lib.merge("symbol", source, strategy=strategy, on=on, match_na=match_na)
+    lib._nvs._set_allow_arrow_input()
+    index_column = data_format == DataFormat.POLARS and index_type == DataframeStrategyIndexType.DATETIME
+    lib.write("symbol", to_data_format(target, data_format), index_column=index_column)
+    lib.merge(
+        "symbol",
+        to_data_format(source, data_format),
+        strategy=strategy,
+        on=on,
+        match_na=match_na,
+        index_column=index_column,
+    )
     index_df = lib._dev_tools.library_tool().read_index("symbol")
     assert_index_key_structure_static_schema(index_df, rows_per_segment=rows_per_segment)
-    result = lib.read("symbol").data
-    assert_frame_equal(result, expected)
+    assert_result_equal(read_in_data_format(lib, "symbol", data_format), expected, data_format)
