@@ -92,12 +92,12 @@ ColumnStats get_column_stats_info_impl(const std::shared_ptr<Store>& store, cons
 
 folly::Future<std::vector<EntityId>> schedule_remaining_iterations(
         std::vector<std::vector<EntityId>>&& entity_ids_vec_fut,
-        std::shared_ptr<std::vector<std::shared_ptr<Clause>>> clauses
+        const std::shared_ptr<std::vector<std::shared_ptr<Clause>>>& clauses, bool fail_fast = true
 );
 
 folly::Future<std::vector<EntityId>> schedule_clause_processing(
         std::shared_ptr<ComponentManager> component_manager, std::shared_ptr<ProcessingUnitAdmissionHandler> admission,
-        std::shared_ptr<std::vector<std::shared_ptr<Clause>>> clauses
+        std::shared_ptr<std::vector<std::shared_ptr<Clause>>> clauses, bool fail_fast = true
 );
 
 FrameAndDescriptor read_index_impl(const std::shared_ptr<Store>& store, const VersionedItem& version);

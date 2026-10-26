@@ -126,6 +126,7 @@ struct ColumnData {
   public:
     template<typename RawType>
     struct Enumeration {
+        using value_type = RawType;
         ssize_t idx_{0};
         RawType* ptr_{nullptr};
 
@@ -148,6 +149,37 @@ struct ColumnData {
             );
             return *ptr_;
         };
+
+        // Structured binding support: [idx, value]
+        template<std::size_t N>
+        decltype(auto) get() & {
+            static_assert(N < 2);
+            if constexpr (N == 0) {
+                return idx();
+            } else {
+                return value();
+            }
+        }
+
+        template<std::size_t N>
+        decltype(auto) get() const& {
+            static_assert(N < 2);
+            if constexpr (N == 0) {
+                return idx();
+            } else {
+                return value();
+            }
+        }
+
+        template<std::size_t N>
+        decltype(auto) get() && {
+            static_assert(N < 2);
+            if constexpr (N == 0) {
+                return idx();
+            } else {
+                return value();
+            }
+        }
     };
 
     // Wrapper to keep code in iterator clean when differentiating between regular and enumerating iterators
@@ -181,7 +213,7 @@ struct ColumnData {
         using RawType = typename TDT::DataTypeTag::raw_type;
 
       public:
-        ColumnDataIterator() = delete;
+        ColumnDataIterator() = default;
 
         // Used to construct [c]begin iterators
         explicit ColumnDataIterator(const ColumnData* parent) : parent_(parent), block_pos_(0) {
@@ -207,6 +239,17 @@ struct ColumnData {
             load_current_block();
             in_block_offset_ = in_block_offset;
             recalculate_enumeration();
+        }
+
+        // Construct an ENUMERATED SPARSE iterator pointing at element `in_block_offset` of block `block_pos`, which is
+        // the value of logical row `logical_row`. The caller provides both positions so no rank or select query is
+        // needed.
+        ColumnDataIterator(const ColumnData* parent, size_t block_pos, size_t in_block_offset, ssize_t logical_row)
+        requires(iterator_type == IteratorType::ENUMERATED && iterator_density == IteratorDensity::SPARSE)
+            : parent_(parent), block_pos_(block_pos) {
+            load_current_block();
+            in_block_offset_ = in_block_offset;
+            data_.idx_ = logical_row;
         }
 
         // Optimized constructor that can skip `load_current_block` if caller already has `block_data` and
@@ -417,6 +460,47 @@ struct ColumnData {
         );
     }
 
+    // Returns a const ENUMERATED SPARSE iterator pointing at the dense_idx-th existing value of the column, which is
+    // the value of logical row logical_row. The caller must provide both, so no rank or select query is done. Passing
+    // the number of existing values as dense_idx returns the end iterator. O(number of blocks).
+    template<typename TDT>
+    ColumnDataIterator<TDT, IteratorType::ENUMERATED, IteratorDensity::SPARSE, true> sparse_iterator_at(
+            size_t dense_idx, ssize_t logical_row
+    ) const {
+        using RawType = typename TDT::DataTypeTag::raw_type;
+        const size_t value_count = data_->bytes() / sizeof(RawType);
+        util::check(
+                dense_idx <= value_count,
+                "ColumnData::sparse_iterator_at: dense index {} out of range for column with {} values",
+                dense_idx,
+                value_count
+        );
+        ARCTICDB_DEBUG_CHECK(
+                ErrorCode::E_ASSERTION_FAILURE,
+                bit_vector_ != nullptr,
+                "ColumnData::sparse_iterator_at called on a column without a sparse map"
+        );
+        if (dense_idx == value_count) {
+            return ColumnDataIterator<TDT, IteratorType::ENUMERATED, IteratorDensity::SPARSE, true>::make_end(this);
+        }
+        ARCTICDB_DEBUG_CHECK(
+                ErrorCode::E_ASSERTION_FAILURE,
+                logical_row >= 0 && bit_vector_->test(static_cast<util::BitSetSizeType>(logical_row)) &&
+                        (logical_row == 0
+                                 ? 0
+                                 : bit_vector_->count_range(0, static_cast<util::BitSetSizeType>(logical_row - 1))) ==
+                                dense_idx,
+                "ColumnData::sparse_iterator_at: logical row {} does not hold the existing value with dense index {}",
+                logical_row,
+                dense_idx
+        );
+        const auto resolved = data_->block_and_offset(dense_idx * sizeof(RawType));
+        const size_t in_block_elem = resolved.offset_ / sizeof(RawType);
+        return ColumnDataIterator<TDT, IteratorType::ENUMERATED, IteratorDensity::SPARSE, true>(
+                this, resolved.block_index_, in_block_elem, logical_row
+        );
+    }
+
     // Const variant of iterator_at.
     template<typename TDT, IteratorType iterator_type = IteratorType::REGULAR>
     ColumnDataIterator<TDT, iterator_type, IteratorDensity::DENSE, true> citerator_at(size_t idx) const {
@@ -578,3 +662,21 @@ struct ColumnData {
 };
 
 } // namespace arcticdb
+
+// After ColumnData is complete:
+namespace std {
+
+template<typename RawType>
+struct tuple_size<arcticdb::ColumnData::Enumeration<RawType>> : std::integral_constant<std::size_t, 2> {};
+
+template<typename RawType>
+struct tuple_element<0, arcticdb::ColumnData::Enumeration<RawType>> {
+    using type = ssize_t;
+};
+
+template<typename RawType>
+struct tuple_element<1, arcticdb::ColumnData::Enumeration<RawType>> {
+    using type = RawType; // the binding is a reference to this
+};
+
+} // namespace std

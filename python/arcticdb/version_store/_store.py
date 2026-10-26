@@ -4612,8 +4612,7 @@ class NativeVersionStore:
         See [Merge Notebook](../notebooks/ArcticDB_merge.ipynb) for usage examples.
 
         !!! warning
-            Dynamic schema is not supported. Sparse data is not supported. Fortran styled data is not supported.
-            PyArrow and Polars sources containing null values are not supported.
+            Dynamic schema is not supported. Fortran styled data is not supported.
 
         Parameters
         ----------
@@ -4637,14 +4636,17 @@ class NativeVersionStore:
             IMPORTANT: For date-time indexed data, the index is always included in matching and cannot be excluded.
 
             Note on equality semantics:
-                By default (`match_na=False`), missing values (float NaN, string None/NaN, or NaT in a datetime64
-                column) in an `on` column match nothing. Non-missing values are compared by plain equality.
+                By default (`match_na=False`), missing values (float NaN, string None/NaN, NaT in a datetime64
+                column, or a PyArrow/Polars null of any type) in an `on` column match nothing. Non-missing values
+                are compared by plain equality.
 
                 Set `match_na=True` for missing values to match each other instead:
                 - In float columns, NaN is considered equal to NaN.
                 - In string columns, None and NaN are indistinguishable. NaN == None, NaN == NaN, None == None,
                   and None == NaN all evaluate to True.
                 - In datetime64 `on` columns, NaT is considered equal to NaT.
+                - PyArrow/Polars nulls of any type, including integer and boolean columns, match each other and
+                  match NaN, None or NaT in the column.
 
             If a column name appears more than once in the source or the target it must not be added in the on
             parameter.
@@ -4660,8 +4662,13 @@ class NativeVersionStore:
             with `not_matched_by_target="insert"`; combining it with an update-only strategy raises
             `UserInputException` as the newly created symbol would be empty.
         match_na : bool, default False
-            Controls whether a missing value (float NaN, string None/NaN, or NaT in a datetime64 `on`
-            column) can match another missing value in the `on` columns. See "Note on equality semantics" above.
+            Controls whether a missing value (float NaN, string None/NaN, NaT in a datetime64 `on` column, or a
+            PyArrow/Polars null of any type) can match another missing value in the `on` columns. See "Note on
+            equality semantics" above.
+
+            PyArrow and Polars nulls are stored as missing values. A merge that writes a null into a column whose
+            values are all present makes the column sparse. Reading it back as pandas returns missing values as NaN
+            in float columns, None in string columns, 0 in integer columns and False in boolean columns.
         index_column : bool, default False
             Only applicable when source is a PyArrow Table or Polars DataFrame. If True, the first column
             is treated as the timeseries index.
@@ -4682,8 +4689,7 @@ class NativeVersionStore:
         UnsortedDataException
             If date-time index is used and source or target are not sorted
         SchemaException
-            If dynamic schema is used, if source's schema is incompatible with target's schema or if a PyArrow or
-            Polars source contains null values
+            If dynamic schema is used or if source's schema is incompatible with target's schema
 
         Examples
         --------
