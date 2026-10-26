@@ -104,33 +104,31 @@ void StringPool::set_allow_sparse(Sparsity) {
 
 size_t StringPool::num_blocks() const { return block_.num_blocks(); }
 
+// One hash and probe for both lookup and insert. The key is then rebound from the caller's view to the
+// pool's own copy (equal, so its bucket is unchanged), and erased again if the block insert throws.
 OffsetString StringPool::get(std::string_view s, bool deduplicate) {
-    if (deduplicate) {
-        if (auto it = map_.find(s); it != map_.end())
-            return OffsetString(it->second, this);
+    if (!deduplicate)
+        return OffsetString(block_.insert(s.data(), s.size()), this);
+
+    auto [it, inserted] = map_.try_emplace(s, offset_t{0});
+    if (inserted) {
+        try {
+            const auto offset = block_.insert(s.data(), s.size());
+            it->first = block_.at(offset);
+            it->second = offset;
+        } catch (...) {
+            map_.erase(it);
+            throw;
+        }
     }
-
-    OffsetString str(block_.insert(s.data(), s.size()), this);
-
-    if (deduplicate)
-        map_.insert(std::make_pair(block_.at(str.offset()), str.offset()));
-
-    return str;
+    return OffsetString(it->second, this);
 }
 
 OffsetString StringPool::get(const char* data, size_t size, bool deduplicate) {
-    StringType s(data, size);
-    if (deduplicate) {
-        if (auto it = map_.find(s); it != map_.end())
-            return OffsetString(it->second, this);
-    }
-
-    OffsetString str(block_.insert(s.data(), s.size()), this);
-    if (deduplicate)
-        map_.insert(std::make_pair(StringType(str), str.offset()));
-
-    return str;
+    return get(StringType(data, size), deduplicate);
 }
+
+void StringPool::reserve(size_t num_strings) { map_.reserve(num_strings); }
 
 const ChunkedBuffer& StringPool::data() const { return block_.buffer(); }
 
