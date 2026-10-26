@@ -28,7 +28,7 @@ from arcticc.pb2.storage_pb2 import (
 )
 
 from arcticdb.config import *  # for backward compat after moving to config
-from arcticdb.config import _expand_path
+from arcticdb.config import _expand_path, extract_lib_config
 from arcticdb.exceptions import ArcticNativeException, LibraryNotFound, UserInputException
 from arcticdb.version_store._store import NativeVersionStore
 from arcticdb.authorization.permissions import OpenMode
@@ -41,21 +41,6 @@ def create_lib_from_config(cfg, env=Defaults.ENV, lib_name=Defaults.LIB):
 
 def create_lib_from_lib_config(lib_config, env=Defaults.ENV, open_mode=OpenMode.DELETE, native_cfg=None):
     return NativeVersionStore.create_lib_from_lib_config(lib_config, env, open_mode, native_cfg)
-
-
-def extract_lib_config(env_cfg, lib_path):
-    # type: (EnvironmentConfig, AnyStr)->LibraryConfig
-    if lib_path not in env_cfg.lib_by_path:
-        raise ArcticNativeException("Missing library {} in config {}".format(lib_path, env_cfg))
-    cfg = LibraryConfig()
-    lib = env_cfg.lib_by_path[lib_path]
-    cfg.lib_desc.CopyFrom(lib)
-    for sid in lib.storage_ids:
-        cfg.storage_by_id[sid].CopyFrom(env_cfg.storage_by_id[sid])
-    for sid in lib.backup_storage_ids:
-        if sid in env_cfg.storage_by_id:
-            cfg.storage_by_id[sid].CopyFrom(env_cfg.storage_by_id[sid])
-    return cfg
 
 
 class ArcticConfig(object):
