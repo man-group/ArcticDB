@@ -1397,8 +1397,11 @@ class MsgPackNormalizer(Normalizer):
     Fall back plan for the time being to store arbitrary data
     """
 
-    def __init__(self, cfg=None):
+    def __init__(self, cfg=None, pickled_subject="data"):
         self.strict_mode = cfg.strict_mode if cfg is not None else False
+        # What this instance serialises. Only used so the pickling log message names the
+        # right thing: this class is the fallback for user data as well as for metadata.
+        self._pickled_subject = pickled_subject
 
     def normalize(self, obj, **kwargs):
         disallow_pickle = kwargs.get("disallow_pickle", None)
@@ -1451,7 +1454,7 @@ class MsgPackNormalizer(Normalizer):
         if disallow_pickle:
             raise TypeError("Normalizing data by pickling has been disabled.")
         else:
-            return ExtType(MsgPackSerialization.PY_PICKLE_3, packb(Pickler.write(obj)))
+            return ExtType(MsgPackSerialization.PY_PICKLE_3, packb(Pickler.write(obj, self._pickled_subject)))
 
     def _ext_hook(self, code, data):
         if code == MsgPackSerialization.PD_TIMESTAMP:
@@ -1506,8 +1509,8 @@ class Pickler(object):
         return pd.read_pickle(io.BytesIO(data))
 
     @staticmethod
-    def write(obj):
-        log.log(get_pickled_metadata_loglevel(), f"Pickling metadata - may not be readable by other clients")
+    def write(obj, subject="data"):
+        log.log(get_pickled_metadata_loglevel(), f"Pickling {subject} - may not be readable by other clients")
         return pickle.dumps(obj, protocol=PICKLE_PROTOCOL)
 
 
@@ -1743,7 +1746,7 @@ _WARN_RECURSIVE_METASTRUCT = 8 << 20  # 8MB
 def _init_msgpack_metadata():
     cfg = VersionStoreConfig.MsgPack()
     cfg.max_blob_size = _MAX_USER_DEFINED_META
-    return MsgPackNormalizer(cfg)
+    return MsgPackNormalizer(cfg, pickled_subject="metadata")
 
 
 _msgpack_metadata = _init_msgpack_metadata()
