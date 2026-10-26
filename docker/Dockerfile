@@ -9,6 +9,9 @@ python3.11-devel python3.11-pip perl-IPC-Cmd
 RUN dnf groupinstall -y 'Development Tools'
 RUN dnf install -y mono-complete
 
+# CI uses it to upload vcpkg source assets to S3
+RUN dnf install -y awscli
+
 RUN dnf clean all
 
 RUN wget -nv https://github.com/mozilla/sccache/releases/download/v0.8.2/sccache-v0.8.2-x86_64-unknown-linux-musl.tar.gz
