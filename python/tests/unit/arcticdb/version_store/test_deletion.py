@@ -199,6 +199,128 @@ def test_delete_snapshot_key_shared_with_another_snapshot(version_store_factory)
     assert len(lt.find_keys_for_id(KeyType.TABLE_DATA, symbol)) == 0
 
 
+def _df_for_day(day):
+    return pd.DataFrame({"col": [day]}, index=pd.DatetimeIndex([pd.Timestamp("2020-01-01") + pd.Timedelta(days=day)]))
+
+
+@pytest.mark.parametrize("delete_method", ["delete", "batch_delete_versions", "batch_delete_symbols"])
+def test_delete_keeps_data_shared_with_snapshot_above_nearest_snapshotted_version(version_store_factory, delete_method):
+    lib = version_store_factory(use_tombstones=True, delayed_deletes=False)
+    sym = "sym"
+    lib.write(sym, _df_for_day(0))  # v0: data d0
+    lib.write(sym, _df_for_day(1))  # v1: data d1, shares nothing with v0
+    lib.snapshot("snap_v1")
+    lib.delete_version(sym, 1)
+    lib.append(sym, _df_for_day(2))  # v2: built on v0, so (d0, d2)
+    lib.snapshot("snap_v2")
+    expected = pd.concat([_df_for_day(0), _df_for_day(2)])
+
+    # Must keep d0 for snap_v2, though v0's nearest snapshotted version is v1
+    if delete_method == "delete":
+        lib.delete(sym)
+    elif delete_method == "batch_delete_versions":
+        lib.batch_delete_versions([sym], [[0, 2]])
+    else:
+        lib.batch_delete_symbols([sym])
+
+    assert_frame_equal(lib.read(sym, as_of="snap_v2").data, expected)
+    assert_frame_equal(lib.read(sym, as_of="snap_v1").data, _df_for_day(1))
+
+
+def test_delete_version_keeps_data_shared_with_snapshot_below_nearest_snapshotted_version(version_store_factory):
+    lib = version_store_factory(use_tombstones=True, delayed_deletes=False)
+    sym = "sym"
+    lib.write(sym, _df_for_day(0))  # v0: data d0
+    lib.snapshot("snap_v0")
+    lib.write(sym, _df_for_day(1))  # v1: data d1, shares nothing with v0
+    lib.snapshot("snap_v1")
+    lib.delete_version(sym, 1)
+    lib.append(sym, _df_for_day(2))  # v2: built on v0, so (d0, d2)
+    lib.delete_version(sym, 0)
+
+    # Must keep d0 for snap_v0, though v2's nearest snapshotted version is v1
+    lib.delete_version(sym, 2)
+
+    assert_frame_equal(lib.read(sym, as_of="snap_v0").data, _df_for_day(0))
+    assert_frame_equal(lib.read(sym, as_of="snap_v1").data, _df_for_day(1))
+
+
+@pytest.mark.parametrize("snapshot_method", ["delete_snapshot", "remove_from_snapshot"])
+def test_delete_snapshot_keeps_data_shared_with_snapshot_below_nearest_snapshotted_version(
+    version_store_factory, snapshot_method
+):
+    lib = version_store_factory(use_tombstones=True, delayed_deletes=False)
+    sym = "sym"
+    lib.write(sym, _df_for_day(0))  # v0: data d0
+    lib.snapshot("snap_v0")
+    lib.write(sym, _df_for_day(1))  # v1: data d1, shares nothing with v0
+    lib.snapshot("snap_v1")
+    lib.delete_version(sym, 1)
+    lib.append(sym, _df_for_day(2))  # v2: built on v0, so (d0, d2)
+    lib.snapshot("snap_v2")
+    lib.delete_version(sym, 2)
+    lib.delete_version(sym, 0)
+
+    # Must keep d0 for snap_v0, though v2's nearest snapshotted version is v1
+    if snapshot_method == "delete_snapshot":
+        lib.delete_snapshot("snap_v2")
+    else:
+        lib.remove_from_snapshot("snap_v2", [sym], [2])
+
+    assert_frame_equal(lib.read(sym, as_of="snap_v0").data, _df_for_day(0))
+    assert_frame_equal(lib.read(sym, as_of="snap_v1").data, _df_for_day(1))
+
+
+def test_delete_keeps_data_deduplicated_with_snapshot_beyond_nearest_snapshotted_version(version_store_factory):
+    lib = version_store_factory(use_tombstones=True, delayed_deletes=False, de_duplication=True, segment_row_size=10)
+    sym = "sym"
+    df = pd.DataFrame({"col": range(100)}, index=pd.date_range("2020-01-01", periods=100))
+    lib.write(sym, df)  # v0
+    lib.write(sym, df + 1000)  # v1, shares nothing with v0
+    lib.snapshot("snap_v1")
+    lib.delete_version(sym, 1)
+    lib.write(sym, df)  # v2: dedups against v0
+    lib.snapshot("snap_v2")
+
+    lib.delete(sym)
+
+    assert_frame_equal(lib.read(sym, as_of="snap_v2").data, df)
+    assert_frame_equal(lib.read(sym, as_of="snap_v1").data, df + 1000)
+
+
+@pytest.mark.parametrize("delete_method", ["delete_version", "delete"])
+def test_add_to_snapshot_keeps_deleted_version_it_already_holds(version_store_factory, delete_method):
+    lib = version_store_factory(use_tombstones=True, delayed_deletes=False)
+    sym = "sym"
+    lib.write(sym, _df_for_day(0))  # v0
+    lib.snapshot("snap")
+    if delete_method == "delete_version":
+        lib.write(sym, _df_for_day(1))  # v1
+        lib.delete_version(sym, 0)
+    else:
+        lib.delete(sym)
+
+    # Replacing snap's v0 with itself must not delete it
+    lib.add_to_snapshot("snap", [sym], [0])
+
+    assert_frame_equal(lib.read(sym, as_of="snap").data, _df_for_day(0))
+
+
+def test_remove_from_snapshot_deletes_version_it_held_last(version_store_factory):
+    lib = version_store_factory(use_tombstones=True, delayed_deletes=False)
+    sym = "sym"
+    lib.write(sym, _df_for_day(0))  # v0
+    lib.snapshot("snap")
+    lib.delete(sym)
+
+    # snap would be empty so isn't rewritten, but must not keep v0 alive
+    lib.remove_from_snapshot("snap", [sym], [0])
+
+    lib_tool = lib.library_tool()
+    assert not lib_tool.find_keys_for_id(KeyType.TABLE_INDEX, sym)
+    assert not lib_tool.find_keys_for_id(KeyType.TABLE_DATA, sym)
+
+
 def test_tombstones_deleted_data_keys_prune(lmdb_version_store_prune_previous, sym):
     lib = lmdb_version_store_prune_previous
     assert lib._lib_cfg.lib_desc.version.write_options.prune_previous_version is True
