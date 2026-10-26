@@ -8,7 +8,7 @@
       
       
       
-        <link rel="canonical" href="https://docs.arcticdb.io/6.28.1/aws/">
+        <link rel="canonical" href="https://docs.arcticdb.io/6.28.2/aws/">
       
       
         <link rel="prev" href="../tutorials/query_stats/">
@@ -21,7 +21,7 @@
       
       
       <link rel="icon" href="../images/ArcticDB Logo.svg">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.0">
     
     
       
@@ -29,10 +29,10 @@
       
     
     
-      <link rel="stylesheet" href="../assets/stylesheets/main.ec1eaa64.min.css">
+      <link rel="stylesheet" href="../assets/stylesheets/main.57a0d79d.min.css">
       
         
-        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+        <link rel="stylesheet" href="../assets/stylesheets/palette.fb2fffe2.min.css">
       
       
 
@@ -2370,8 +2370,8 @@ Default<span class="w"> </span>output<span class="w"> </span>format<span class="
 <li><a href="https://github.com/man-group/ArcticDB#readme">Install ArcticDB</a>.</li>
 <li>Use your <code>&lt;REGION&gt;</code> and <code>&lt;BUCKET_NAME&gt;</code>.</li>
 <li>Setup <code>~/.aws/credentials</code> with <code>aws configure</code>, as above.
-<div class="highlight"><pre><span></span><code><span class="kn">import</span> <span class="nn">arcticdb</span> <span class="k">as</span> <span class="nn">adb</span>
-<span class="n">arctic</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">Arctic</span><span class="p">(</span><span class="s1">&#39;s3://s3.&lt;REGION&gt;.amazonaws.com:&lt;BUCKET_NAME&gt;?aws_auth=true&#39;</span><span class="p">)</span>
+<div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">arcticdb</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">adb</span>
+<span class="n">arctic</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">Arctic</span><span class="p">(</span><span class="s1">'s3://s3.&lt;REGION&gt;.amazonaws.com:&lt;BUCKET_NAME&gt;?aws_auth=true'</span><span class="p">)</span>
 </code></pre></div></li>
 </ul>
 <hr />
@@ -2417,21 +2417,21 @@ Default<span class="w"> </span>output<span class="w"> </span>format<span class="
 <li>Set up your AWS credentials in <code>~/.aws/credentials</code> using the <code>aws configure</code> command (as described earlier).  </li>
 </ol>
 <h4 id="4-python-script">4. Python Script:<a class="headerlink" href="#4-python-script" title="Permanent link">&para;</a></h4>
-<div class="highlight"><pre><span></span><code><span class="kn">import</span> <span class="nn">io</span>
-<span class="kn">import</span> <span class="nn">boto3</span>
+<div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">io</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">boto3</span>
 
 <span class="c1"># Initialize the S3 client</span>
-<span class="n">s3</span> <span class="o">=</span> <span class="n">boto3</span><span class="o">.</span><span class="n">client</span><span class="p">(</span><span class="s1">&#39;s3&#39;</span><span class="p">)</span>
+<span class="n">s3</span> <span class="o">=</span> <span class="n">boto3</span><span class="o">.</span><span class="n">client</span><span class="p">(</span><span class="s1">'s3'</span><span class="p">)</span>
 
-<span class="c1"># Replace &#39;&lt;BUCKET_NAME&gt;&#39; with your actual bucket name</span>
-<span class="n">bucket</span> <span class="o">=</span> <span class="s1">&#39;&lt;BUCKET_NAME&gt;&#39;</span>
+<span class="c1"># Replace '&lt;BUCKET_NAME&gt;' with your actual bucket name</span>
+<span class="n">bucket</span> <span class="o">=</span> <span class="s1">'&lt;BUCKET_NAME&gt;'</span>
 
 <span class="c1"># Perform operations to check connectivity</span>
-<span class="n">s3</span><span class="o">.</span><span class="n">put_object</span><span class="p">(</span><span class="n">Bucket</span><span class="o">=</span><span class="n">bucket</span><span class="p">,</span> <span class="n">Key</span><span class="o">=</span><span class="s1">&#39;_arctic_check/check.txt&#39;</span><span class="p">,</span> <span class="n">Body</span><span class="o">=</span><span class="n">io</span><span class="o">.</span><span class="n">BytesIO</span><span class="p">(</span><span class="sa">b</span><span class="s1">&#39;check file contents&#39;</span><span class="p">))</span>
-<span class="n">s3</span><span class="o">.</span><span class="n">list_objects_v2</span><span class="p">(</span><span class="n">Bucket</span><span class="o">=</span><span class="n">bucket</span><span class="p">,</span> <span class="n">Prefix</span><span class="o">=</span><span class="s1">&#39;_arctic_check/&#39;</span><span class="p">)</span>
-<span class="n">s3</span><span class="o">.</span><span class="n">head_object</span><span class="p">(</span><span class="n">Bucket</span><span class="o">=</span><span class="n">bucket</span><span class="p">,</span> <span class="n">Key</span><span class="o">=</span><span class="s1">&#39;_arctic_check/check.txt&#39;</span><span class="p">)</span>
-<span class="n">s3</span><span class="o">.</span><span class="n">get_object</span><span class="p">(</span><span class="n">Bucket</span><span class="o">=</span><span class="n">bucket</span><span class="p">,</span> <span class="n">Key</span><span class="o">=</span><span class="s1">&#39;_arctic_check/check.txt&#39;</span><span class="p">)</span>
-<span class="n">s3</span><span class="o">.</span><span class="n">delete_object</span><span class="p">(</span><span class="n">Bucket</span><span class="o">=</span><span class="n">bucket</span><span class="p">,</span> <span class="n">Key</span><span class="o">=</span><span class="s1">&#39;_arctic_check/check.txt&#39;</span><span class="p">)</span>
+<span class="n">s3</span><span class="o">.</span><span class="n">put_object</span><span class="p">(</span><span class="n">Bucket</span><span class="o">=</span><span class="n">bucket</span><span class="p">,</span> <span class="n">Key</span><span class="o">=</span><span class="s1">'_arctic_check/check.txt'</span><span class="p">,</span> <span class="n">Body</span><span class="o">=</span><span class="n">io</span><span class="o">.</span><span class="n">BytesIO</span><span class="p">(</span><span class="sa">b</span><span class="s1">'check file contents'</span><span class="p">))</span>
+<span class="n">s3</span><span class="o">.</span><span class="n">list_objects_v2</span><span class="p">(</span><span class="n">Bucket</span><span class="o">=</span><span class="n">bucket</span><span class="p">,</span> <span class="n">Prefix</span><span class="o">=</span><span class="s1">'_arctic_check/'</span><span class="p">)</span>
+<span class="n">s3</span><span class="o">.</span><span class="n">head_object</span><span class="p">(</span><span class="n">Bucket</span><span class="o">=</span><span class="n">bucket</span><span class="p">,</span> <span class="n">Key</span><span class="o">=</span><span class="s1">'_arctic_check/check.txt'</span><span class="p">)</span>
+<span class="n">s3</span><span class="o">.</span><span class="n">get_object</span><span class="p">(</span><span class="n">Bucket</span><span class="o">=</span><span class="n">bucket</span><span class="p">,</span> <span class="n">Key</span><span class="o">=</span><span class="s1">'_arctic_check/check.txt'</span><span class="p">)</span>
+<span class="n">s3</span><span class="o">.</span><span class="n">delete_object</span><span class="p">(</span><span class="n">Bucket</span><span class="o">=</span><span class="n">bucket</span><span class="p">,</span> <span class="n">Key</span><span class="o">=</span><span class="s1">'_arctic_check/check.txt'</span><span class="p">)</span>
 </code></pre></div>
 <h4 id="5-notes">5. Notes:<a class="headerlink" href="#5-notes" title="Permanent link">&para;</a></h4>
 <p>The check object written by this script (_arctic_check/check.txt) is temporary and will not interfere with normal ArcticDB operations on the bucket.
@@ -2556,8 +2556,8 @@ If any of the operations fail, verify the permissions assigned to your IAM role 
 <span class="na">aws_secret_access_key</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">YOUR_SECRET_ACCESS_KEY</span>
 </code></pre></div>
 <p>Use the configuration in ArcticDB:
-<div class="highlight"><pre><span></span><code><span class="o">&gt;&gt;&gt;</span> <span class="kn">import</span> <span class="nn">arcticdb</span> <span class="k">as</span> <span class="nn">adb</span>
-<span class="o">&gt;&gt;&gt;</span> <span class="n">arctic</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">Arctic</span><span class="p">(</span><span class="s1">&#39;s3://s3.REGION.amazonaws.com:BUCKET?aws_auth=sts&amp;aws_profile=PROFILE&#39;</span><span class="p">)</span>
+<div class="highlight"><pre><span></span><code><span class="o">&gt;&gt;&gt;</span> <span class="kn">import</span><span class="w"> </span><span class="nn">arcticdb</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">adb</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="n">arctic</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">Arctic</span><span class="p">(</span><span class="s1">'s3://s3.REGION.amazonaws.com:BUCKET?aws_auth=sts&amp;aws_profile=PROFILE'</span><span class="p">)</span>
 </code></pre></div></p>
 <p>For more in-depth documentation please refer to <a href="https://docs.aws.amazon.com/IAM/latest/UserGuide/id_credentials_temp.html">the official website</a>.</p>
 <hr />
@@ -2566,7 +2566,7 @@ If any of the operations fail, verify the permissions assigned to your IAM role 
 <hr />
 <h3 id="1-assertion-error-in-aws-c-sdk">1. <strong>Assertion Error in AWS C++ SDK</strong><a class="headerlink" href="#1-assertion-error-in-aws-c-sdk" title="Permanent link">&para;</a></h3>
 <p>If ArcticDB fails to obtain a temporary token by assuming a role, you may encounter an assertion error like the one below:</p>
-<div class="highlight"><pre><span></span><code>virtual void Aws::Auth::STSProfileCredentialsProvider::Reload(): Assertion `!profileIt-&gt;second.GetCredentials().IsEmpty()&#39; failed.
+<div class="highlight"><pre><span></span><code>virtual void Aws::Auth::STSProfileCredentialsProvider::Reload(): Assertion `!profileIt-&gt;second.GetCredentials().IsEmpty()' failed.
 </code></pre></div>
 <h4 id="cause">Cause:<a class="headerlink" href="#cause" title="Permanent link">&para;</a></h4>
 <p>This error is usually caused by:
@@ -2580,7 +2580,7 @@ If any of the operations fail, verify the permissions assigned to your IAM role 
 <hr />
 <h3 id="2-permission-error">2. <strong>Permission Error</strong><a class="headerlink" href="#2-permission-error" title="Permanent link">&para;</a></h3>
 <p>You may encounter a permission error like the following:</p>
-<div class="highlight"><pre><span></span><code>arcticdb_ext.exceptions.PermissionException: E_PERMISSION Permission error: S3Error#15 AccessDenied: Access Denied for object &#39;_arctic_cfg/cref/&#39;
+<div class="highlight"><pre><span></span><code>arcticdb_ext.exceptions.PermissionException: E_PERMISSION Permission error: S3Error#15 AccessDenied: Access Denied for object '_arctic_cfg/cref/'
 </code></pre></div>
 <h4 id="cause-1">Cause #1:<a class="headerlink" href="#cause-1" title="Permanent link">&para;</a></h4>
 <p>This error indicates a problem with the configuration file. Specifically:
@@ -2608,7 +2608,7 @@ ln<span class="w"> </span>-s<span class="w"> </span>/etc/ssl/certs/ca-certificat
 <hr />
 <h3 id="3-retryable-storage-error">3. <strong>Retryable Storage Error</strong><a class="headerlink" href="#3-retryable-storage-error" title="Permanent link">&para;</a></h3>
 <p>If there is a network connectivity issue, you might see the following error:</p>
-<div class="highlight"><pre><span></span><code>arcticdb_ext.exceptions.StorageException: E_S3_RETRYABLE Retry-able error: S3Error#99 : Encountered network error when sending http request for object &#39;_arctic_cfg/cref/&#39;
+<div class="highlight"><pre><span></span><code>arcticdb_ext.exceptions.StorageException: E_S3_RETRYABLE Retry-able error: S3Error#99 : Encountered network error when sending http request for object '_arctic_cfg/cref/'
 </code></pre></div>
 <h4 id="cause_1">Cause:<a class="headerlink" href="#cause_1" title="Permanent link">&para;</a></h4>
 <p>This error occurs when:
@@ -2670,11 +2670,118 @@ ln<span class="w"> </span>-s<span class="w"> </span>/etc/ssl/certs/ca-certificat
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.tabs", "navigation.sections", "content.code.copy", "toc.integrate"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.tabs", "navigation.sections", "content.code.copy", "toc.integrate"], "search": "../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
     
     
-      <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
+      <script src="../assets/javascripts/bundle.c21346df.min.js"></script>
       
     
-  </body>
+  <script data-mkdocs-jupyter-mathjax="{&quot;url&quot;: &quot;https://cdn.jsdelivr.net/npm/mathjax@4.1.3/tex-mml-chtml.js&quot;, &quot;version&quot;: 4}">
+/* Shared by full pages and Material's instant navigation. */
+(() => {
+  const config = JSON.parse(document.currentScript.dataset.mkdocsJupyterMathjax);
+  if (window.mkdocsJupyterMathJax) return;
+
+  let loading;
+  let queue = Promise.resolve();
+  let previous = [];
+
+  const ready = async () => {
+    if (!loading) {
+      loading = (async () => {
+        let math = window.MathJax;
+        if (!math?.typesetPromise) {
+          const url = new URL(config.url, document.baseURI).href;
+          const existing = Array.from(document.scripts).find(script =>
+            script.src && (script.src === url || script.id === 'MathJax-script' ||
+              (/mathjax/i.test(script.src) &&
+               /\/(?:MathJax|latest|(?:tex|mml)(?:-mml)?-(?:chtml|svg))\.js(?:[?#]|$)/i.test(script.src))));
+          if (existing) {
+            if (!math?.startup?.promise) {
+              await new Promise((resolve, reject) => {
+                existing.addEventListener('load', resolve, { once: true });
+                existing.addEventListener('error', reject, { once: true });
+              });
+            }
+          } else {
+            // Keep site macros, delimiters and startup hooks when supplied.
+            const options = math || {};
+            window.MathJax = {
+              ...options,
+              loader: {
+                ...options.loader,
+                load: Array.from(new Set(['ui/safe', ...(options.loader?.load || [])]))
+              },
+              startup: { typeset: false, ...options.startup },
+              tex: {
+                tags: 'ams',
+                useLabelIds: true,
+                inlineMath: [['$', '$'], ['\\(', '\\)']],
+                displayMath: [['$$', '$$'], ['\\[', '\\]']],
+                processEscapes: true,
+                processEnvironments: true,
+                ...options.tex
+              }
+            };
+            await new Promise((resolve, reject) => {
+              const script = document.createElement('script');
+              script.src = config.url;
+              script.id = 'MathJax-script';
+              script.async = true;
+              script.onload = resolve;
+              script.onerror = reject;
+              document.head.appendChild(script);
+            });
+          }
+        }
+        math = window.MathJax;
+        await math.startup.promise;
+        return math;
+      })();
+    }
+    const math = await loading;
+    // A site owner can extend the v3 queue again on each navigation.
+    await math.startup.promise;
+    return math;
+  };
+
+  const unrendered = node => {
+    if (node.matches('mjx-container')) return [];
+    if (!node.querySelector('mjx-container')) return [node];
+    // In v3, scanning generated assistive MathML again produces nested output.
+    return Array.from(node.children).flatMap(unrendered);
+  };
+
+  const refresh = () => {
+    // A separate chain also serializes v3, without changing v4's startup promise.
+    queue = queue.then(async () => {
+      const notebooks = Array.from(document.querySelectorAll('.jupyter-wrapper'));
+      if (!notebooks.length && !previous.length) return;
+      if (notebooks.length === previous.length &&
+          notebooks.every((node, index) => node === previous[index])) return;
+      const math = await ready();
+      if (previous.length) {
+        math.typesetClear(previous);
+        math.texReset();
+      }
+      previous = notebooks.filter(node => node.isConnected);
+      const pending = previous.flatMap(unrendered);
+      if (pending.length) await math.typesetPromise(pending);
+    }).catch(error => console.error('mkdocs-jupyter: MathJax rendering failed', error));
+    return queue;
+  };
+
+  window.mkdocsJupyterMathJax = { refresh };
+  const start = () => {
+    if (typeof document$ !== 'undefined') document$.subscribe(refresh);
+    else refresh();
+  };
+  // Theme bundles and user-provided MathJax scripts can follow notebook content.
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', start, { once: true });
+  } else start();
+})();
+
+</script>
+</body>
 </html>

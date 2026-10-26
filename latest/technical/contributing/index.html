@@ -8,7 +8,7 @@
       
       
       
-        <link rel="canonical" href="https://docs.arcticdb.io/6.28.1/technical/contributing/">
+        <link rel="canonical" href="https://docs.arcticdb.io/6.28.2/technical/contributing/">
       
       
         <link rel="prev" href="../migration/">
@@ -21,7 +21,7 @@
       
       
       <link rel="icon" href="../../images/ArcticDB Logo.svg">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.0">
     
     
       
@@ -29,10 +29,10 @@
       
     
     
-      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/main.57a0d79d.min.css">
       
         
-        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.fb2fffe2.min.css">
       
       
 
@@ -2331,7 +2331,7 @@ cmake<span class="w"> </span>--build<span class="w"> </span>--preset<span class=
 <span class="nv">PYTHONPATH</span><span class="o">=</span><span class="sb">`</span><span class="nb">pwd</span><span class="sb">`</span>/python:<span class="sb">`</span><span class="nb">pwd</span><span class="sb">`</span>/cpp/out/linux-debug-build/arcticdb/<span class="w"> </span><span class="nv">$MY_PYTHON</span>
 </code></pre></div>
 <p>Now, inside the Python shell:</p>
-<div class="highlight"><pre><span></span><code><span class="kn">from</span> <span class="nn">arcticdb</span> <span class="kn">import</span> <span class="n">Arctic</span>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">arcticdb</span><span class="w"> </span><span class="kn">import</span> <span class="n">Arctic</span>
 </code></pre></div>
 <p>Rather than setting the <code>PYTHONPATH</code> environment variable, you could install the appropriate paths into your Python environment by running (note that this will invoke the build tooling so will compile any changed files since the last compilation):</p>
 <div class="highlight"><pre><span></span><code><span class="nv">$MY_PYTHON</span><span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>-ve<span class="w"> </span>.
@@ -2364,7 +2364,7 @@ See: <a href="https://github.com/man-group/ArcticDB/pull/449">https://github.com
 cmake<span class="w"> </span>-DTEST<span class="o">=</span>off<span class="w"> </span>--preset<span class="w"> </span>linux-conda-debug<span class="w"> </span>cpp
 <span class="nb">cd</span><span class="w"> </span>cpp
 
-<span class="c1"># You might need to use fewer threads than what&#39;s possible on your machine</span>
+<span class="c1"># You might need to use fewer threads than what's possible on your machine</span>
 <span class="c1"># to not have it swap and freeze (e.g. we use 1 here).</span>
 cmake<span class="w"> </span>--build<span class="w"> </span>--preset<span class="w"> </span>linux-conda-debug<span class="w"> </span>-j<span class="w"> </span><span class="m">1</span>
 </code></pre></div>
@@ -2375,7 +2375,7 @@ cmake<span class="w"> </span>--build<span class="w"> </span>--preset<span class=
 cmake<span class="w"> </span>-DTEST<span class="o">=</span>off<span class="w"> </span>--preset<span class="w"> </span>macos-conda-release<span class="w"> </span>cpp
 <span class="nb">cd</span><span class="w"> </span>cpp
 
-<span class="c1"># You might need to use fewer threads than what&#39;s possible your machine</span>
+<span class="c1"># You might need to use fewer threads than what's possible your machine</span>
 <span class="c1"># not to have it swap and freeze (e.g. we use 1 here).</span>
 cmake<span class="w"> </span>--build<span class="w"> </span>--preset<span class="w"> </span>linux-conda-debug<span class="w"> </span>-j<span class="w"> </span><span class="m">1</span>
 </code></pre></div>
@@ -2398,7 +2398,7 @@ python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </sp
 <ul>
 <li>Use ArcticDB from Python:</li>
 </ul>
-<div class="highlight"><pre><span></span><code><span class="kn">from</span> <span class="nn">arcticdb</span> <span class="kn">import</span> <span class="n">Arctic</span>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">arcticdb</span><span class="w"> </span><span class="kn">import</span> <span class="n">Arctic</span>
 </code></pre></div>
 <h1 id="faq">FAQ<a class="headerlink" href="#faq" title="Permanent link">&para;</a></h1>
 <h4 id="how-do-i-build-against-different-python-versions">How do I build against different Python versions?<a class="headerlink" href="#how-do-i-build-against-different-python-versions" title="Permanent link">&para;</a></h4>
@@ -2514,25 +2514,25 @@ Inheritance is supported.</p>
 <summary>Windows Preset to specify a Python version</summary>
 
 <div class="highlight"><pre><span></span><code><span class="p">{</span>
-<span class="w">  </span><span class="nt">&quot;version&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">3</span><span class="p">,</span>
-<span class="w">  </span><span class="nt">&quot;configurePresets&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">  </span><span class="nt">"version"</span><span class="p">:</span><span class="w"> </span><span class="mi">3</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">"configurePresets"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
 <span class="w">    </span><span class="p">{</span>
-<span class="w">      </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;alt-vcpkg-debug:py3.10&quot;</span><span class="p">,</span>
-<span class="w">      </span><span class="nt">&quot;inherits&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;windows-cl-debug&quot;</span><span class="p">,</span>
-<span class="w">      </span><span class="nt">&quot;cacheVariables&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">        </span><span class="nt">&quot;Python_ROOT_DIR&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;C:\\Program Files\\Python310&quot;</span>
+<span class="w">      </span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"alt-vcpkg-debug:py3.10"</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">"inherits"</span><span class="p">:</span><span class="w"> </span><span class="s2">"windows-cl-debug"</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">"cacheVariables"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"Python_ROOT_DIR"</span><span class="p">:</span><span class="w"> </span><span class="s2">"C:\\Program Files\\Python310"</span>
 <span class="w">      </span><span class="p">},</span>
-<span class="w">      </span><span class="nt">&quot;environment&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">        </span><span class="nt">&quot;PATH&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;C:\\Users\\me\\AppData\\Roaming\\Python\\Python310\\Scripts;C:\\Program Files\\Python310;$penv{PATH}&quot;</span><span class="p">,</span>
-<span class="w">        </span><span class="nt">&quot;PYTHONPATH&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;C:\\Program Files\\Python310\\Lib;C:\\Users\\me\\AppData\\Roaming\\Python\\Python310\\site-packages&quot;</span>
+<span class="w">      </span><span class="nt">"environment"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">"PATH"</span><span class="p">:</span><span class="w"> </span><span class="s2">"C:\\Users\\me\\AppData\\Roaming\\Python\\Python310\\Scripts;C:\\Program Files\\Python310;$penv{PATH}"</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">"PYTHONPATH"</span><span class="p">:</span><span class="w"> </span><span class="s2">"C:\\Program Files\\Python310\\Lib;C:\\Users\\me\\AppData\\Roaming\\Python\\Python310\\site-packages"</span>
 <span class="w">      </span><span class="p">}</span>
 <span class="w">    </span><span class="p">}</span>
 <span class="w">  </span><span class="p">],</span>
-<span class="w">  </span><span class="nt">&quot;buildPresets&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">  </span><span class="nt">"buildPresets"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
 <span class="w">    </span><span class="p">{</span>
-<span class="w">      </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;alt-vcpkg-debug:py3.10&quot;</span><span class="p">,</span>
-<span class="w">      </span><span class="nt">&quot;configurePreset&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;alt-vcpkg-debug:py3.10&quot;</span><span class="p">,</span>
-<span class="w">      </span><span class="nt">&quot;inheritConfigureEnvironment&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span>
+<span class="w">      </span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"alt-vcpkg-debug:py3.10"</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">"configurePreset"</span><span class="p">:</span><span class="w"> </span><span class="s2">"alt-vcpkg-debug:py3.10"</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">"inheritConfigureEnvironment"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span>
 <span class="w">    </span><span class="p">}</span>
 <span class="w">  </span><span class="p">]</span>
 <span class="p">}</span>
@@ -2687,11 +2687,118 @@ However, the developer opening the PR is responsible for the quality of the subm
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.sections", "content.code.copy", "toc.integrate"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.sections", "content.code.copy", "toc.integrate"], "search": "../../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
     
     
-      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
+      <script src="../../assets/javascripts/bundle.c21346df.min.js"></script>
       
     
-  </body>
+  <script data-mkdocs-jupyter-mathjax="{&quot;url&quot;: &quot;https://cdn.jsdelivr.net/npm/mathjax@4.1.3/tex-mml-chtml.js&quot;, &quot;version&quot;: 4}">
+/* Shared by full pages and Material's instant navigation. */
+(() => {
+  const config = JSON.parse(document.currentScript.dataset.mkdocsJupyterMathjax);
+  if (window.mkdocsJupyterMathJax) return;
+
+  let loading;
+  let queue = Promise.resolve();
+  let previous = [];
+
+  const ready = async () => {
+    if (!loading) {
+      loading = (async () => {
+        let math = window.MathJax;
+        if (!math?.typesetPromise) {
+          const url = new URL(config.url, document.baseURI).href;
+          const existing = Array.from(document.scripts).find(script =>
+            script.src && (script.src === url || script.id === 'MathJax-script' ||
+              (/mathjax/i.test(script.src) &&
+               /\/(?:MathJax|latest|(?:tex|mml)(?:-mml)?-(?:chtml|svg))\.js(?:[?#]|$)/i.test(script.src))));
+          if (existing) {
+            if (!math?.startup?.promise) {
+              await new Promise((resolve, reject) => {
+                existing.addEventListener('load', resolve, { once: true });
+                existing.addEventListener('error', reject, { once: true });
+              });
+            }
+          } else {
+            // Keep site macros, delimiters and startup hooks when supplied.
+            const options = math || {};
+            window.MathJax = {
+              ...options,
+              loader: {
+                ...options.loader,
+                load: Array.from(new Set(['ui/safe', ...(options.loader?.load || [])]))
+              },
+              startup: { typeset: false, ...options.startup },
+              tex: {
+                tags: 'ams',
+                useLabelIds: true,
+                inlineMath: [['$', '$'], ['\\(', '\\)']],
+                displayMath: [['$$', '$$'], ['\\[', '\\]']],
+                processEscapes: true,
+                processEnvironments: true,
+                ...options.tex
+              }
+            };
+            await new Promise((resolve, reject) => {
+              const script = document.createElement('script');
+              script.src = config.url;
+              script.id = 'MathJax-script';
+              script.async = true;
+              script.onload = resolve;
+              script.onerror = reject;
+              document.head.appendChild(script);
+            });
+          }
+        }
+        math = window.MathJax;
+        await math.startup.promise;
+        return math;
+      })();
+    }
+    const math = await loading;
+    // A site owner can extend the v3 queue again on each navigation.
+    await math.startup.promise;
+    return math;
+  };
+
+  const unrendered = node => {
+    if (node.matches('mjx-container')) return [];
+    if (!node.querySelector('mjx-container')) return [node];
+    // In v3, scanning generated assistive MathML again produces nested output.
+    return Array.from(node.children).flatMap(unrendered);
+  };
+
+  const refresh = () => {
+    // A separate chain also serializes v3, without changing v4's startup promise.
+    queue = queue.then(async () => {
+      const notebooks = Array.from(document.querySelectorAll('.jupyter-wrapper'));
+      if (!notebooks.length && !previous.length) return;
+      if (notebooks.length === previous.length &&
+          notebooks.every((node, index) => node === previous[index])) return;
+      const math = await ready();
+      if (previous.length) {
+        math.typesetClear(previous);
+        math.texReset();
+      }
+      previous = notebooks.filter(node => node.isConnected);
+      const pending = previous.flatMap(unrendered);
+      if (pending.length) await math.typesetPromise(pending);
+    }).catch(error => console.error('mkdocs-jupyter: MathJax rendering failed', error));
+    return queue;
+  };
+
+  window.mkdocsJupyterMathJax = { refresh };
+  const start = () => {
+    if (typeof document$ !== 'undefined') document$.subscribe(refresh);
+    else refresh();
+  };
+  // Theme bundles and user-provided MathJax scripts can follow notebook content.
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', start, { once: true });
+  } else start();
+})();
+
+</script>
+</body>
 </html>

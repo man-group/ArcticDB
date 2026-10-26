@@ -8,7 +8,7 @@
       
       
       
-        <link rel="canonical" href="https://docs.arcticdb.io/6.28.1/tutorials/fundamentals/">
+        <link rel="canonical" href="https://docs.arcticdb.io/6.28.2/tutorials/fundamentals/">
       
       
         <link rel="prev" href="../../licensing/">
@@ -21,7 +21,7 @@
       
       
       <link rel="icon" href="../../images/ArcticDB Logo.svg">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.0">
     
     
       
@@ -29,10 +29,10 @@
       
     
     
-      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/main.57a0d79d.min.css">
       
         
-        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.fb2fffe2.min.css">
       
       
 
@@ -2418,24 +2418,24 @@
 <li>Modifying data</li>
 </ol>
 <p>To start, let's import <code>arcticdb</code>:</p>
-<div class="highlight"><pre><span></span><code><span class="kn">import</span> <span class="nn">arcticdb</span> <span class="k">as</span> <span class="nn">adb</span>
+<div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">arcticdb</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">adb</span>
 </code></pre></div>
 <h2 id="accessing-libraries">Accessing libraries<a class="headerlink" href="#accessing-libraries" title="Permanent link">&para;</a></h2>
 <p>Connect to your storage:</p>
 <div class="highlight"><pre><span></span><code><span class="c1"># Connect using defined keys</span>
-<span class="n">ac</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">Arctic</span><span class="p">(</span><span class="s1">&#39;s3s://s3.eu-west-2.amazonaws.com:arctic-test-aws?access=&lt;access key&gt;&amp;secret=&lt;secret key&gt;&#39;</span><span class="p">)</span>
+<span class="n">ac</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">Arctic</span><span class="p">(</span><span class="s1">'s3s://s3.eu-west-2.amazonaws.com:arctic-test-aws?access=&lt;access key&gt;&amp;secret=&lt;secret key&gt;'</span><span class="p">)</span>
 <span class="c1"># Leave AWS SDK to work out auth details </span>
-<span class="n">ac</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">Arctic</span><span class="p">(</span><span class="s1">&#39;s3s://s3.eu-west-2.amazonaws.com:arctic-test-aws?aws_auth=true)</span>
+<span class="n">ac</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">Arctic</span><span class="p">(</span><span class="s1">'s3s://s3.eu-west-2.amazonaws.com:arctic-test-aws?aws_auth=true)</span>
 </code></pre></div>
 <p>For more information on how the AWS SDK configures authentication without utilising defined keys, please see the <a href="https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-files.html">AWS documentation</a>.</p>
 <p>Access a library using either the <code>[library_name]</code> notation or the <code>get_library</code> method:</p>
-<div class="highlight"><pre><span></span><code><span class="n">lib</span> <span class="o">=</span> <span class="n">ac</span><span class="p">[</span><span class="s1">&#39;library&#39;</span><span class="p">]</span>
+<div class="highlight"><pre><span></span><code><span class="n">lib</span> <span class="o">=</span> <span class="n">ac</span><span class="p">[</span><span class="s1">'library'</span><span class="p">]</span>
 <span class="c1"># ...equivalent to...</span>
-<span class="n">lib</span> <span class="o">=</span> <span class="n">ac</span><span class="o">.</span><span class="n">get_library</span><span class="p">[</span><span class="s1">&#39;library&#39;</span><span class="p">]</span>
+<span class="n">lib</span> <span class="o">=</span> <span class="n">ac</span><span class="o">.</span><span class="n">get_library</span><span class="p">[</span><span class="s1">'library'</span><span class="p">]</span>
 </code></pre></div>
 <p>Let's see what data is already present:</p>
 <div class="highlight"><pre><span></span><code><span class="o">&gt;&gt;&gt;</span> <span class="n">lib</span><span class="o">.</span><span class="n">list_symbols</span><span class="p">()</span>
-<span class="p">[</span><span class="s1">&#39;sym_2&#39;</span><span class="p">,</span> <span class="s1">&#39;sym_1&#39;</span><span class="p">,</span> <span class="s1">&#39;symbol&#39;</span><span class="p">]</span>
+<span class="p">[</span><span class="s1">'sym_2'</span><span class="p">,</span> <span class="s1">'sym_1'</span><span class="p">,</span> <span class="s1">'symbol'</span><span class="p">]</span>
 </code></pre></div>
 <h2 id="arcticdb-api">ArcticDB API<a class="headerlink" href="#arcticdb-api" title="Permanent link">&para;</a></h2>
 <p>ArcticDB's API is built around four main primitives that each operate over a single symbol.</p>
@@ -2448,21 +2448,21 @@
 <p>These primitives aren't exhaustive, but cover most use cases. We'll show the usage of these primitives.</p>
 <h2 id="writing-data">Writing data<a class="headerlink" href="#writing-data" title="Permanent link">&para;</a></h2>
 <p>Let's start by generating some data. The below snippet generates some random data with a datetime index:</p>
-<div class="highlight"><pre><span></span><code><span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
-<span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="nn">pd</span>
+<div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>
 <span class="n">NUM_COLUMNS</span><span class="o">=</span><span class="mi">10</span>
 <span class="n">NUM_ROWS</span><span class="o">=</span><span class="mi">100_000</span>
-<span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span><span class="mi">100</span><span class="p">,</span><span class="n">size</span><span class="o">=</span><span class="p">(</span><span class="n">NUM_ROWS</span><span class="p">,</span> <span class="n">NUM_COLUMNS</span><span class="p">)),</span> <span class="n">columns</span><span class="o">=</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;COL_</span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2">&quot;</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">NUM_COLUMNS</span><span class="p">)],</span> <span class="n">index</span><span class="o">=</span><span class="n">pd</span><span class="o">.</span><span class="n">date_range</span><span class="p">(</span><span class="s1">&#39;2000&#39;</span><span class="p">,</span> <span class="n">periods</span><span class="o">=</span><span class="n">NUM_ROWS</span><span class="p">,</span> <span class="n">freq</span><span class="o">=</span><span class="s1">&#39;h&#39;</span><span class="p">))</span>
+<span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span><span class="mi">100</span><span class="p">,</span><span class="n">size</span><span class="o">=</span><span class="p">(</span><span class="n">NUM_ROWS</span><span class="p">,</span> <span class="n">NUM_COLUMNS</span><span class="p">)),</span> <span class="n">columns</span><span class="o">=</span><span class="p">[</span><span class="sa">f</span><span class="s2">"COL_</span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2">"</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">NUM_COLUMNS</span><span class="p">)],</span> <span class="n">index</span><span class="o">=</span><span class="n">pd</span><span class="o">.</span><span class="n">date_range</span><span class="p">(</span><span class="s1">'2000'</span><span class="p">,</span> <span class="n">periods</span><span class="o">=</span><span class="n">NUM_ROWS</span><span class="p">,</span> <span class="n">freq</span><span class="o">=</span><span class="s1">'h'</span><span class="p">))</span>
 </code></pre></div>
 <p>Let's take this data and write it to ArcticDB:</p>
-<div class="highlight"><pre><span></span><code><span class="o">&gt;&gt;&gt;</span> <span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">&quot;my_data&quot;</span><span class="p">,</span> <span class="n">df</span><span class="p">)</span>
-<span class="n">VersionedItem</span><span class="p">(</span><span class="n">symbol</span><span class="o">=</span><span class="n">my_data</span><span class="p">,</span><span class="n">library</span><span class="o">=</span><span class="n">test_fundamentals_1</span><span class="p">,</span><span class="n">data</span><span class="o">=&lt;</span><span class="k">class</span> <span class="err">&#39;</span><span class="nc">NoneType</span><span class="s1">&#39;&gt;,version=0,metadata=None,host=local)</span>
+<div class="highlight"><pre><span></span><code><span class="o">&gt;&gt;&gt;</span> <span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">"my_data"</span><span class="p">,</span> <span class="n">df</span><span class="p">)</span>
+<span class="n">VersionedItem</span><span class="p">(</span><span class="n">symbol</span><span class="o">=</span><span class="n">my_data</span><span class="p">,</span><span class="n">library</span><span class="o">=</span><span class="n">test_fundamentals_1</span><span class="p">,</span><span class="n">data</span><span class="o">=&lt;</span><span class="k">class</span><span class="w"> </span><span class="err">'</span><span class="nc">NoneType</span><span class="s1">'&gt;,version=0,metadata=None,host=local)</span>
 </code></pre></div>
 <h2 id="reading-data">Reading data<a class="headerlink" href="#reading-data" title="Permanent link">&para;</a></h2>
 <p>To read the data, simply use the <code>read</code> primitive:</p>
-<div class="highlight"><pre><span></span><code><span class="o">&gt;&gt;&gt;</span> <span class="n">data</span> <span class="o">=</span> <span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">&quot;my_data&quot;</span><span class="p">)</span>
+<div class="highlight"><pre><span></span><code><span class="o">&gt;&gt;&gt;</span> <span class="n">data</span> <span class="o">=</span> <span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">"my_data"</span><span class="p">)</span>
 <span class="o">&gt;&gt;&gt;</span> <span class="n">data</span>
-<span class="n">VersionedItem</span><span class="p">(</span><span class="n">symbol</span><span class="o">=</span><span class="n">my_data</span><span class="p">,</span><span class="n">library</span><span class="o">=</span><span class="n">test_fundamentals_1</span><span class="p">,</span><span class="n">data</span><span class="o">=&lt;</span><span class="k">class</span> <span class="err">&#39;</span><span class="nc">pandas</span><span class="o">.</span><span class="n">core</span><span class="o">.</span><span class="n">frame</span><span class="o">.</span><span class="n">DataFrame</span><span class="s1">&#39;&gt;,version=0,metadata=None,host=local)</span>
+<span class="n">VersionedItem</span><span class="p">(</span><span class="n">symbol</span><span class="o">=</span><span class="n">my_data</span><span class="p">,</span><span class="n">library</span><span class="o">=</span><span class="n">test_fundamentals_1</span><span class="p">,</span><span class="n">data</span><span class="o">=&lt;</span><span class="k">class</span><span class="w"> </span><span class="err">'</span><span class="nc">pandas</span><span class="o">.</span><span class="n">core</span><span class="o">.</span><span class="n">frame</span><span class="o">.</span><span class="n">DataFrame</span><span class="s1">'&gt;,version=0,metadata=None,host=local)</span>
 </code></pre></div>
 <p>Note that you get back a <code>VersionedItem</code> - it allows us to retrieve the version of the written data:</p>
 <div class="highlight"><pre><span></span><code><span class="o">&gt;&gt;&gt;</span> <span class="n">data</span><span class="o">.</span><span class="n">version</span>
@@ -2485,11 +2485,11 @@
 </code></pre></div>
 <p>That's simply because the data we generated started on January 1st, 2000 at 00:00 at consists of 100,000 rows, incrementing one hour at a time. When <code>append</code>-ing data, the data you are appending must begin 
 after the existing data ends. As a result, let's generate some data that begins in 2012:</p>
-<div class="highlight"><pre><span></span><code><span class="n">df_to_append</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span><span class="mi">100</span><span class="p">,</span><span class="n">size</span><span class="o">=</span><span class="p">(</span><span class="n">NUM_ROWS</span><span class="p">,</span> <span class="n">NUM_COLUMNS</span><span class="p">)),</span> <span class="n">columns</span><span class="o">=</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;COL_</span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2">&quot;</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">NUM_COLUMNS</span><span class="p">)],</span> <span class="n">index</span><span class="o">=</span><span class="n">pd</span><span class="o">.</span><span class="n">date_range</span><span class="p">(</span><span class="s1">&#39;2012&#39;</span><span class="p">,</span> <span class="n">periods</span><span class="o">=</span><span class="n">NUM_ROWS</span><span class="p">,</span> <span class="n">freq</span><span class="o">=</span><span class="s1">&#39;h&#39;</span><span class="p">))</span>
+<div class="highlight"><pre><span></span><code><span class="n">df_to_append</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span><span class="mi">100</span><span class="p">,</span><span class="n">size</span><span class="o">=</span><span class="p">(</span><span class="n">NUM_ROWS</span><span class="p">,</span> <span class="n">NUM_COLUMNS</span><span class="p">)),</span> <span class="n">columns</span><span class="o">=</span><span class="p">[</span><span class="sa">f</span><span class="s2">"COL_</span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2">"</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">NUM_COLUMNS</span><span class="p">)],</span> <span class="n">index</span><span class="o">=</span><span class="n">pd</span><span class="o">.</span><span class="n">date_range</span><span class="p">(</span><span class="s1">'2012'</span><span class="p">,</span> <span class="n">periods</span><span class="o">=</span><span class="n">NUM_ROWS</span><span class="p">,</span> <span class="n">freq</span><span class="o">=</span><span class="s1">'h'</span><span class="p">))</span>
 </code></pre></div>
 <p>Now let's append!</p>
-<div class="highlight"><pre><span></span><code><span class="o">&gt;&gt;&gt;</span> <span class="n">lib</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">&quot;my_data&quot;</span><span class="p">,</span> <span class="n">df_to_append</span><span class="p">)</span>
-<span class="n">VersionedItem</span><span class="p">(</span><span class="n">symbol</span><span class="o">=</span><span class="n">my_data</span><span class="p">,</span><span class="n">library</span><span class="o">=</span><span class="n">test_fundamentals_1</span><span class="p">,</span><span class="n">data</span><span class="o">=&lt;</span><span class="k">class</span> <span class="err">&#39;</span><span class="nc">NoneType</span><span class="s1">&#39;&gt;,version=1,metadata=None,host=local)</span>
+<div class="highlight"><pre><span></span><code><span class="o">&gt;&gt;&gt;</span> <span class="n">lib</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">"my_data"</span><span class="p">,</span> <span class="n">df_to_append</span><span class="p">)</span>
+<span class="n">VersionedItem</span><span class="p">(</span><span class="n">symbol</span><span class="o">=</span><span class="n">my_data</span><span class="p">,</span><span class="n">library</span><span class="o">=</span><span class="n">test_fundamentals_1</span><span class="p">,</span><span class="n">data</span><span class="o">=&lt;</span><span class="k">class</span><span class="w"> </span><span class="err">'</span><span class="nc">NoneType</span><span class="s1">'&gt;,version=1,metadata=None,host=local)</span>
 </code></pre></div>
 <p><code>append</code> has created a new version of the data. When reading version 0, the data will end in 2011. When reading version 1, the data will end in 2023.</p>
 <h3 id="update"><em>Update</em><a class="headerlink" href="#update" title="Permanent link">&para;</a></h3>
@@ -2499,7 +2499,7 @@ Note that the entire range between the first and last index entry in the existin
 required. This means <code>update</code> is a contiguous operation - see the documentation of <code>update</code> for more information.</p>
 <h3 id="time-travel">Time travel!<a class="headerlink" href="#time-travel" title="Permanent link">&para;</a></h3>
 <p>ArcticDB is bitemporal - all new versions are timestamped! Let's pull in the first version of the data, prior to the <code>append</code>:</p>
-<div class="highlight"><pre><span></span><code><span class="o">&gt;&gt;&gt;</span> <span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">&quot;my_date&quot;</span><span class="p">,</span> <span class="n">as_of</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">tail</span><span class="p">()</span>
+<div class="highlight"><pre><span></span><code><span class="o">&gt;&gt;&gt;</span> <span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">"my_date"</span><span class="p">,</span> <span class="n">as_of</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">tail</span><span class="p">()</span>
                      <span class="n">COL_0</span>  <span class="n">COL_1</span>  <span class="n">COL_2</span>  <span class="n">COL_3</span>  <span class="n">COL_4</span>  <span class="n">COL_5</span>  <span class="n">COL_6</span>  <span class="n">COL_7</span>  <span class="n">COL_8</span>  <span class="n">COL_9</span>
 <span class="mi">2011</span><span class="o">-</span><span class="mi">05</span><span class="o">-</span><span class="mi">29</span> <span class="mi">11</span><span class="p">:</span><span class="mi">00</span><span class="p">:</span><span class="mi">00</span>     <span class="mi">44</span>     <span class="mi">94</span>     <span class="mi">70</span>     <span class="mi">32</span>     <span class="mi">91</span>      <span class="mi">4</span>     <span class="mi">35</span>     <span class="mi">19</span>     <span class="mi">74</span>     <span class="mi">53</span>
 <span class="mi">2011</span><span class="o">-</span><span class="mi">05</span><span class="o">-</span><span class="mi">29</span> <span class="mi">12</span><span class="p">:</span><span class="mi">00</span><span class="p">:</span><span class="mi">00</span>     <span class="mi">79</span>     <span class="mi">51</span>     <span class="mi">67</span>     <span class="mi">48</span>      <span class="mi">8</span>     <span class="mi">83</span>     <span class="mi">46</span>     <span class="mi">54</span>     <span class="mi">86</span>     <span class="mi">38</span>
@@ -2558,11 +2558,118 @@ required. This means <code>update</code> is a contiguous operation - see the doc
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.sections", "content.code.copy", "toc.integrate"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.sections", "content.code.copy", "toc.integrate"], "search": "../../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
     
     
-      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
+      <script src="../../assets/javascripts/bundle.c21346df.min.js"></script>
       
     
-  </body>
+  <script data-mkdocs-jupyter-mathjax="{&quot;url&quot;: &quot;https://cdn.jsdelivr.net/npm/mathjax@4.1.3/tex-mml-chtml.js&quot;, &quot;version&quot;: 4}">
+/* Shared by full pages and Material's instant navigation. */
+(() => {
+  const config = JSON.parse(document.currentScript.dataset.mkdocsJupyterMathjax);
+  if (window.mkdocsJupyterMathJax) return;
+
+  let loading;
+  let queue = Promise.resolve();
+  let previous = [];
+
+  const ready = async () => {
+    if (!loading) {
+      loading = (async () => {
+        let math = window.MathJax;
+        if (!math?.typesetPromise) {
+          const url = new URL(config.url, document.baseURI).href;
+          const existing = Array.from(document.scripts).find(script =>
+            script.src && (script.src === url || script.id === 'MathJax-script' ||
+              (/mathjax/i.test(script.src) &&
+               /\/(?:MathJax|latest|(?:tex|mml)(?:-mml)?-(?:chtml|svg))\.js(?:[?#]|$)/i.test(script.src))));
+          if (existing) {
+            if (!math?.startup?.promise) {
+              await new Promise((resolve, reject) => {
+                existing.addEventListener('load', resolve, { once: true });
+                existing.addEventListener('error', reject, { once: true });
+              });
+            }
+          } else {
+            // Keep site macros, delimiters and startup hooks when supplied.
+            const options = math || {};
+            window.MathJax = {
+              ...options,
+              loader: {
+                ...options.loader,
+                load: Array.from(new Set(['ui/safe', ...(options.loader?.load || [])]))
+              },
+              startup: { typeset: false, ...options.startup },
+              tex: {
+                tags: 'ams',
+                useLabelIds: true,
+                inlineMath: [['$', '$'], ['\\(', '\\)']],
+                displayMath: [['$$', '$$'], ['\\[', '\\]']],
+                processEscapes: true,
+                processEnvironments: true,
+                ...options.tex
+              }
+            };
+            await new Promise((resolve, reject) => {
+              const script = document.createElement('script');
+              script.src = config.url;
+              script.id = 'MathJax-script';
+              script.async = true;
+              script.onload = resolve;
+              script.onerror = reject;
+              document.head.appendChild(script);
+            });
+          }
+        }
+        math = window.MathJax;
+        await math.startup.promise;
+        return math;
+      })();
+    }
+    const math = await loading;
+    // A site owner can extend the v3 queue again on each navigation.
+    await math.startup.promise;
+    return math;
+  };
+
+  const unrendered = node => {
+    if (node.matches('mjx-container')) return [];
+    if (!node.querySelector('mjx-container')) return [node];
+    // In v3, scanning generated assistive MathML again produces nested output.
+    return Array.from(node.children).flatMap(unrendered);
+  };
+
+  const refresh = () => {
+    // A separate chain also serializes v3, without changing v4's startup promise.
+    queue = queue.then(async () => {
+      const notebooks = Array.from(document.querySelectorAll('.jupyter-wrapper'));
+      if (!notebooks.length && !previous.length) return;
+      if (notebooks.length === previous.length &&
+          notebooks.every((node, index) => node === previous[index])) return;
+      const math = await ready();
+      if (previous.length) {
+        math.typesetClear(previous);
+        math.texReset();
+      }
+      previous = notebooks.filter(node => node.isConnected);
+      const pending = previous.flatMap(unrendered);
+      if (pending.length) await math.typesetPromise(pending);
+    }).catch(error => console.error('mkdocs-jupyter: MathJax rendering failed', error));
+    return queue;
+  };
+
+  window.mkdocsJupyterMathJax = { refresh };
+  const start = () => {
+    if (typeof document$ !== 'undefined') document$.subscribe(refresh);
+    else refresh();
+  };
+  // Theme bundles and user-provided MathJax scripts can follow notebook content.
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', start, { once: true });
+  } else start();
+})();
+
+</script>
+</body>
 </html>

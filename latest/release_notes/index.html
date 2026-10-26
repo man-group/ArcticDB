@@ -8,7 +8,7 @@
       
       
       
-        <link rel="canonical" href="https://docs.arcticdb.io/6.28.1/release_notes/">
+        <link rel="canonical" href="https://docs.arcticdb.io/6.28.2/release_notes/">
       
       
         <link rel="prev" href="../history/">
@@ -21,7 +21,7 @@
       
       
       <link rel="icon" href="../images/ArcticDB Logo.svg">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.0">
     
     
       
@@ -29,10 +29,10 @@
       
     
     
-      <link rel="stylesheet" href="../assets/stylesheets/main.ec1eaa64.min.css">
+      <link rel="stylesheet" href="../assets/stylesheets/main.57a0d79d.min.css">
       
         
-        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+        <link rel="stylesheet" href="../assets/stylesheets/palette.fb2fffe2.min.css">
       
       
 
@@ -526,6 +526,17 @@
       Table of contents
     </label>
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#v6-28-2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v6.28.2
+      
+    </span>
+  </a>
+  
+</li>
       
         <li class="md-nav__item">
   <a href="#v6-28-1" class="md-nav__link">
@@ -3423,9 +3434,15 @@
 
 <h1 id="release-notes">Release Notes<a class="headerlink" href="#release-notes" title="Permanent link">&para;</a></h1>
 <p>Release notes for every stable ArcticDB release, from <a href="https://github.com/man-group/ArcticDB/releases">GitHub Releases</a>.</p>
+<h2 id="v6-28-2">v6.28.2<a class="headerlink" href="#v6-28-2" title="Permanent link">&para;</a></h2>
+<p><em>Released 2026-10-26</em> · <a href="https://github.com/man-group/ArcticDB/releases/tag/v6.28.2">GitHub release</a></p>
+<h4 id="fixes">🐛 Fixes<a class="headerlink" href="#fixes" title="Permanent link">&para;</a></h4>
+<ul>
+<li>Stats for string columns (<a href="https://github.com/man-group/ArcticDB/issues/3424">#3424</a>)</li>
+</ul>
 <h2 id="v6-28-1">v6.28.1<a class="headerlink" href="#v6-28-1" title="Permanent link">&para;</a></h2>
 <p><em>Released 2026-10-20</em> · <a href="https://github.com/man-group/ArcticDB/releases/tag/v6.28.1">GitHub release</a></p>
-<h4 id="fixes">🐛 Fixes<a class="headerlink" href="#fixes" title="Permanent link">&para;</a></h4>
+<h4 id="fixes_1">🐛 Fixes<a class="headerlink" href="#fixes_1" title="Permanent link">&para;</a></h4>
 <ul>
 <li>Fix LibraryOptions/EnterpriseLibraryOptions.<strong>eq</strong> crashing on non-matching types (<a href="https://github.com/man-group/ArcticDB/issues/3442">#3442</a>)</li>
 </ul>
@@ -3438,13 +3455,13 @@
 <ul>
 <li>Revert defaults for new S3 configurations (<a href="https://github.com/man-group/ArcticDB/issues/3443">#3443</a>)</li>
 </ul>
-<h4 id="fixes_1">🐛 Fixes<a class="headerlink" href="#fixes_1" title="Permanent link">&para;</a></h4>
+<h4 id="fixes_2">🐛 Fixes<a class="headerlink" href="#fixes_2" title="Permanent link">&para;</a></h4>
 <ul>
 <li>Add deprecation warnings for the staged parameter of write and write_pickle methods of the Library class (<a href="https://github.com/man-group/ArcticDB/issues/3420">#3420</a>)</li>
 </ul>
 <h2 id="v6-26-0">v6.26.0<a class="headerlink" href="#v6-26-0" title="Permanent link">&para;</a></h2>
 <p><em>Released 2026-09-14</em> · <a href="https://github.com/man-group/ArcticDB/releases/tag/v6.26.0">GitHub release</a></p>
-<h4 id="fixes_2">🐛 Fixes<a class="headerlink" href="#fixes_2" title="Permanent link">&para;</a></h4>
+<h4 id="fixes_3">🐛 Fixes<a class="headerlink" href="#fixes_3" title="Permanent link">&para;</a></h4>
 <ul>
 <li>Performance Improvement on VAST storage: Set CURLOPT_DNS_SHUFFLE_ADDRESSES in our S3 client (<a href="https://github.com/man-group/ArcticDB/issues/3345">#3345</a>)</li>
 </ul>
@@ -3457,13 +3474,13 @@
 <li>Enhancement 18053144964: fix get description output with arrow written data (<a href="https://github.com/man-group/ArcticDB/issues/3337">#3337</a>)</li>
 <li>Enhancement 11864701485: arrow string formatting norm metadata (<a href="https://github.com/man-group/ArcticDB/issues/3333">#3333</a>)</li>
 </ul>
-<h4 id="fixes_3">🐛 Fixes<a class="headerlink" href="#fixes_3" title="Permanent link">&para;</a></h4>
+<h4 id="fixes_4">🐛 Fixes<a class="headerlink" href="#fixes_4" title="Permanent link">&para;</a></h4>
 <ul>
 <li>Bound processing pipeline memory use (<a href="https://github.com/man-group/ArcticDB/issues/3191">#3191</a>)</li>
 </ul>
 <h2 id="v6-24-0">v6.24.0<a class="headerlink" href="#v6-24-0" title="Permanent link">&para;</a></h2>
 <p><em>Released 2026-09-02</em> · <a href="https://github.com/man-group/ArcticDB/releases/tag/v6.24.0">GitHub release</a></p>
-<h4 id="fixes_4">🐛 Fixes<a class="headerlink" href="#fixes_4" title="Permanent link">&para;</a></h4>
+<h4 id="fixes_5">🐛 Fixes<a class="headerlink" href="#fixes_5" title="Permanent link">&para;</a></h4>
 <ul>
 <li>Log a warning in a process using arcticdb that forks, from Python 3.12+ on Linux (<a href="https://github.com/man-group/ArcticDB/issues/3295">#3295</a>)</li>
 </ul>
@@ -3474,7 +3491,7 @@
 <li>Add compact_data_batch method (<a href="https://github.com/man-group/ArcticDB/pull/3291">#3291</a>)<br />
 This is multi-symbol equivalent of compact_data for defragmenting data chunks on disk.</li>
 </ul>
-<h4 id="fixes_5">🐛 Fixes<a class="headerlink" href="#fixes_5" title="Permanent link">&para;</a></h4>
+<h4 id="fixes_6">🐛 Fixes<a class="headerlink" href="#fixes_6" title="Permanent link">&para;</a></h4>
 <ul>
 <li>Add MD5 checksum variant of DeleteObjectsRequest for S3 storage (<a href="https://github.com/man-group/ArcticDB/issues/3259">#3259</a>)</li>
 </ul>
@@ -3490,7 +3507,7 @@ This is multi-symbol equivalent of compact_data for defragmenting data chunks on
 </ul>
 <h2 id="v6-21-0">v6.21.0<a class="headerlink" href="#v6-21-0" title="Permanent link">&para;</a></h2>
 <p><em>Released 2026-08-04</em> · <a href="https://github.com/man-group/ArcticDB/releases/tag/v6.21.0">GitHub release</a></p>
-<h4 id="fixes_6">🐛 Fixes<a class="headerlink" href="#fixes_6" title="Permanent link">&para;</a></h4>
+<h4 id="fixes_7">🐛 Fixes<a class="headerlink" href="#fixes_7" title="Permanent link">&para;</a></h4>
 <ul>
 <li>Bug fix for query builder filtering with ISIN filters over sets with duplicate str representations (<a href="https://github.com/man-group/ArcticDB/issues/3201">#3201</a>)</li>
 <li>Fix macOS 15 <code>ImportError: Symbol not found: __hash_memory</code> on mac back-deployed wheels (<a href="https://github.com/man-group/ArcticDB/issues/3243">#3243</a>)</li>
@@ -3502,13 +3519,13 @@ This is multi-symbol equivalent of compact_data for defragmenting data chunks on
 </ul>
 <p>This improves performance and memory use for query builders with long chains of filters like:</p>
 <div class="highlight"><pre><span></span><code>        q = QueryBuilder()
-        q = q[q[&quot;v3&quot;] &gt; 0.0]  # keeps ~all rows
-        q = q[q[&quot;v3&quot;] &lt; 99.0]  # keeps ~99%
-        q = q[q[&quot;v2&quot;] &gt; 1]  # keeps ~93%
-        q = q[q[&quot;v2&quot;] &lt; 15]  # keeps ~93%
-        q = q[q[&quot;v1&quot;] &gt; 1]  # keeps ~80%
-        q = q[q[&quot;v1&quot;] &lt; 5]  # keeps ~80%
-        q = q[q[&quot;v3&quot;] &lt; 50.0]  # narrows to ~50%
+        q = q[q["v3"] &gt; 0.0]  # keeps ~all rows
+        q = q[q["v3"] &lt; 99.0]  # keeps ~99%
+        q = q[q["v2"] &gt; 1]  # keeps ~93%
+        q = q[q["v2"] &lt; 15]  # keeps ~93%
+        q = q[q["v1"] &gt; 1]  # keeps ~80%
+        q = q[q["v1"] &lt; 5]  # keeps ~80%
+        q = q[q["v3"] &lt; 50.0]  # narrows to ~50%
 </code></pre></div>
 <h2 id="v6-20-0">v6.20.0<a class="headerlink" href="#v6-20-0" title="Permanent link">&para;</a></h2>
 <p><em>Released 2026-07-29</em> · <a href="https://github.com/man-group/ArcticDB/releases/tag/v6.20.0">GitHub release</a></p>
@@ -3517,7 +3534,7 @@ This is multi-symbol equivalent of compact_data for defragmenting data chunks on
 <li>Enhancement 9929831600: arrow timezone support (<a href="https://github.com/man-group/ArcticDB/issues/3225">#3225</a>)</li>
 <li>Enhancement 12036593840: append inline defrag post refactors (<a href="https://github.com/man-group/ArcticDB/issues/3208">#3208</a>)</li>
 </ul>
-<h4 id="fixes_7">🐛 Fixes<a class="headerlink" href="#fixes_7" title="Permanent link">&para;</a></h4>
+<h4 id="fixes_8">🐛 Fixes<a class="headerlink" href="#fixes_8" title="Permanent link">&para;</a></h4>
 <ul>
 <li>Add NaN and NULL count to MIN/MAX stats (<a href="https://github.com/man-group/ArcticDB/issues/3139">#3139</a>)</li>
 <li>Performance 12498089633: Make more index key reading async (<a href="https://github.com/man-group/ArcticDB/issues/3237">#3237</a>)</li>
@@ -3528,7 +3545,7 @@ This is multi-symbol equivalent of compact_data for defragmenting data chunks on
 <ul>
 <li>Upgrade LMDB 0.9.22 → 0.9.35 and patch for CVE-2019-16224..16228 (<a href="https://github.com/man-group/ArcticDB/issues/3163">#3163</a>)</li>
 </ul>
-<h4 id="fixes_8">🐛 Fixes<a class="headerlink" href="#fixes_8" title="Permanent link">&para;</a></h4>
+<h4 id="fixes_9">🐛 Fixes<a class="headerlink" href="#fixes_9" title="Permanent link">&para;</a></h4>
 <ul>
 <li>Persist metadata when appending or updating empty frames, and skip writing unnecessary symbol list keys (<a href="https://github.com/man-group/ArcticDB/issues/3214">#3214</a>)<ul>
 <li>Note that this is a behaviour change. Previously, when an empty dataframe was provided to append or update (or batch variations thereof), a warning would be logged and no new version was created. In particular, this meant that the provided metadata was not persisted</li>
@@ -3546,7 +3563,7 @@ This is multi-symbol equivalent of compact_data for defragmenting data chunks on
 </ul>
 <h2 id="v6-18-6">v6.18.6<a class="headerlink" href="#v6-18-6" title="Permanent link">&para;</a></h2>
 <p><em>Released 2026-07-13</em> · <a href="https://github.com/man-group/ArcticDB/releases/tag/v6.18.6">GitHub release</a></p>
-<h4 id="fixes_9">🐛 Fixes<a class="headerlink" href="#fixes_9" title="Permanent link">&para;</a></h4>
+<h4 id="fixes_10">🐛 Fixes<a class="headerlink" href="#fixes_10" title="Permanent link">&para;</a></h4>
 <ul>
 <li>Correct Raises docstring for missing versions in concat and extend test coverage (<a href="https://github.com/man-group/ArcticDB/pull/3211">https://github.com/man-group/ArcticDB/pull/3211</a>)</li>
 <li>Throw appropriate exceptions on mixed object column types (<a href="https://github.com/man-group/ArcticDB/pull/3212">https://github.com/man-group/ArcticDB/pull/3212</a>)</li>
@@ -3557,7 +3574,7 @@ This is multi-symbol equivalent of compact_data for defragmenting data chunks on
 <ul>
 <li>Propagate SortedValue to Polars set_sorted() on index column (<a href="https://github.com/man-group/ArcticDB/issues/3049">#3049</a>)</li>
 </ul>
-<h4 id="fixes_10">🐛 Fixes<a class="headerlink" href="#fixes_10" title="Permanent link">&para;</a></h4>
+<h4 id="fixes_11">🐛 Fixes<a class="headerlink" href="#fixes_11" title="Permanent link">&para;</a></h4>
 <ul>
 <li>Bugfix 12337436632: do not orphan data keys in append/update when schemas mismatch (<a href="https://github.com/man-group/ArcticDB/issues/3187">#3187</a>)</li>
 <li>Allow compacting numpy arrays (<a href="https://github.com/man-group/ArcticDB/issues/3189">#3189</a>)</li>
@@ -3573,7 +3590,7 @@ This is multi-symbol equivalent of compact_data for defragmenting data chunks on
 </ul>
 <h2 id="v6-18-3">v6.18.3<a class="headerlink" href="#v6-18-3" title="Permanent link">&para;</a></h2>
 <p><em>Released 2026-06-22</em> · <a href="https://github.com/man-group/ArcticDB/releases/tag/v6.18.3">GitHub release</a></p>
-<h4 id="fixes_11">🐛 Fixes<a class="headerlink" href="#fixes_11" title="Permanent link">&para;</a></h4>
+<h4 id="fixes_12">🐛 Fixes<a class="headerlink" href="#fixes_12" title="Permanent link">&para;</a></h4>
 <ul>
 <li>Banning backslash in azure storage (<a href="https://github.com/man-group/ArcticDB/issues/3160">#3160</a>)</li>
 </ul>
@@ -3585,13 +3602,13 @@ This is multi-symbol equivalent of compact_data for defragmenting data chunks on
 <li>Resampling performance improvement and sparse aggregation columns support (<a href="https://github.com/man-group/ArcticDB/issues/3062">#3062</a>)</li>
 <li>Submit delete batches in parallel (<a href="https://github.com/man-group/ArcticDB/issues/3123">#3123</a>)</li>
 </ul>
-<h4 id="fixes_12">🐛 Fixes<a class="headerlink" href="#fixes_12" title="Permanent link">&para;</a></h4>
+<h4 id="fixes_13">🐛 Fixes<a class="headerlink" href="#fixes_13" title="Permanent link">&para;</a></h4>
 <ul>
 <li>Route AWS SDK S3 logs to stderr by default (<a href="https://github.com/man-group/ArcticDB/issues/3149">#3149</a>)</li>
 </ul>
 <h2 id="v6-18-1">v6.18.1<a class="headerlink" href="#v6-18-1" title="Permanent link">&para;</a></h2>
 <p><em>Released 2026-06-08</em> · <a href="https://github.com/man-group/ArcticDB/releases/tag/v6.18.1">GitHub release</a></p>
-<h4 id="fixes_13">🐛 Fixes<a class="headerlink" href="#fixes_13" title="Permanent link">&para;</a></h4>
+<h4 id="fixes_14">🐛 Fixes<a class="headerlink" href="#fixes_14" title="Permanent link">&para;</a></h4>
 <ul>
 <li>[Bugfix] Fix wrong column naming after append and update when the DataFrame has non-string column name (<a href="https://github.com/man-group/ArcticDB/issues/3090">#3090</a>)</li>
 </ul>
@@ -3602,7 +3619,7 @@ This is multi-symbol equivalent of compact_data for defragmenting data chunks on
 <li>Fully support compact_data and deprecate old methods (<a href="https://github.com/man-group/ArcticDB/issues/3119">#3119</a>)</li>
 <li>Implement POW operator in the QueryBuilder(<a href="https://github.com/man-group/ArcticDB/issues/3045">#3045</a>)</li>
 </ul>
-<h4 id="fixes_14">🐛 Fixes<a class="headerlink" href="#fixes_14" title="Permanent link">&para;</a></h4>
+<h4 id="fixes_15">🐛 Fixes<a class="headerlink" href="#fixes_15" title="Permanent link">&para;</a></h4>
 <ul>
 <li>add_to_snapshot does not work with negative version (<a href="https://github.com/man-group/ArcticDB/issues/3056">#3056</a>)</li>
 <li>Be consistent with NaN when filtering on NaT values (<a href="https://github.com/man-group/ArcticDB/issues/3085">#3085</a>)</li>
@@ -3622,7 +3639,7 @@ This is multi-symbol equivalent of compact_data for defragmenting data chunks on
 <li>Support sparse data in compact_data_experimental (<a href="https://github.com/man-group/ArcticDB/pull/3059">#3059</a>)</li>
 <li>Adds method to check what the effect of calling compact_data_experimental would be (<a href="https://github.com/man-group/ArcticDB/pull/3063">#3063</a>)</li>
 </ul>
-<h4 id="fixes_15">🐛 Fixes<a class="headerlink" href="#fixes_15" title="Permanent link">&para;</a></h4>
+<h4 id="fixes_16">🐛 Fixes<a class="headerlink" href="#fixes_16" title="Permanent link">&para;</a></h4>
 <ul>
 <li>Add Arrow NaT handling (<a href="https://github.com/man-group/ArcticDB/pull/3032">#3032</a>)</li>
 <li>Add warning message to various v1 read and write APIs (<a href="https://github.com/man-group/ArcticDB/pull/3089">#3089</a>)</li>
@@ -3635,7 +3652,7 @@ This is multi-symbol equivalent of compact_data for defragmenting data chunks on
 <ul>
 <li>Improve version map cache validation for as_of queries by version and timestamp (<a href="https://github.com/man-group/ArcticDB/issues/2894">#2894</a>)</li>
 </ul>
-<h4 id="fixes_16">🐛 Fixes<a class="headerlink" href="#fixes_16" title="Permanent link">&para;</a></h4>
+<h4 id="fixes_17">🐛 Fixes<a class="headerlink" href="#fixes_17" title="Permanent link">&para;</a></h4>
 <ul>
 <li>Improve batch reads performance on Windows (<a href="https://github.com/man-group/ArcticDB/issues/3048">#3048</a>)</li>
 <li>Fix small performance regression reading None / NaN columns after Folly upgrade (<a href="https://github.com/man-group/ArcticDB/issues/3055">#3055</a>)</li>
@@ -3654,7 +3671,7 @@ This is multi-symbol equivalent of compact_data for defragmenting data chunks on
 <ul>
 <li>Validate kwargs provided to <code>NativeVersionStore</code> APIs and raise if invalid kwargs are provided (<a href="https://github.com/man-group/ArcticDB/issues/3035">#3035</a>). Permit <code>allow_secondary</code>. The exception can be flipped to a warning log by setting the env var <code>ARCTICDB_DISABLE_KWARG_VALIDATION=1</code>.</li>
 </ul>
-<h4 id="fixes_17"><img alt="🐛" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/svg/1f41b.svg" title=":bug:" /> Fixes<a class="headerlink" href="#fixes_17" title="Permanent link">&para;</a></h4>
+<h4 id="fixes_18"><img alt="🐛" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/svg/1f41b.svg" title=":bug:" /> Fixes<a class="headerlink" href="#fixes_18" title="Permanent link">&para;</a></h4>
 <ul>
 <li><img alt="⚠" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/svg/26a0.svg" title=":warning:" /> Minor API change - Use <code>UnsortedDataException</code> not <code>SortingException</code> in update (<a href="https://github.com/man-group/ArcticDB/issues/3043">#3043</a>). Note that <code>UnsortedDataException</code> is a sub-type of <code>SortingException</code> so we don't expect breaks from this. The only case affected would be if you have code that wanted to handle all sorting exceptions other than those from <code>update</code>, which seems very improbable. We now consistently use <code>UnsortedDataException</code> throughout our APIs.</li>
 <li>Document our symbol name validation rules in faq.md (<a href="https://github.com/man-group/ArcticDB/issues/3022">#3022</a>)</li>
@@ -3665,20 +3682,20 @@ This is multi-symbol equivalent of compact_data for defragmenting data chunks on
 <ul>
 <li>Improve performance of delete_batch (<a href="https://github.com/man-group/ArcticDB/issues/2999">#2999</a>)</li>
 </ul>
-<h4 id="fixes_18">🐛 Fixes<a class="headerlink" href="#fixes_18" title="Permanent link">&para;</a></h4>
+<h4 id="fixes_19">🐛 Fixes<a class="headerlink" href="#fixes_19" title="Permanent link">&para;</a></h4>
 <ul>
 <li>Fix seg fault in <code>lib.read</code> due to race condition in exception handling after network error (<a href="https://github.com/man-group/ArcticDB/issues/3004">#3004</a>)</li>
 </ul>
 <h2 id="v6-12-1">v6.12.1<a class="headerlink" href="#v6-12-1" title="Permanent link">&para;</a></h2>
 <p><em>Released 2026-04-15</em> · <a href="https://github.com/man-group/ArcticDB/releases/tag/v6.12.1">GitHub release</a></p>
-<h4 id="fixes_19">🐛 Fixes<a class="headerlink" href="#fixes_19" title="Permanent link">&para;</a></h4>
+<h4 id="fixes_20">🐛 Fixes<a class="headerlink" href="#fixes_20" title="Permanent link">&para;</a></h4>
 <ul>
 <li>Improve Windows timezone error message for Arrow output (<a href="https://github.com/man-group/ArcticDB/pull/3001">https://github.com/man-group/ArcticDB/pull/3001</a>)</li>
 <li>Preserve runtime configuration when multiprocessing with spawn/forkserver (<a href="https://github.com/man-group/ArcticDB/pull/2995">https://github.com/man-group/ArcticDB/pull/2995</a>)</li>
 </ul>
 <h2 id="v6-11-1">v6.11.1<a class="headerlink" href="#v6-11-1" title="Permanent link">&para;</a></h2>
 <p><em>Released 2026-03-30</em> · <a href="https://github.com/man-group/ArcticDB/releases/tag/v6.11.1">GitHub release</a></p>
-<h4 id="fixes_20">🐛 Fixes<a class="headerlink" href="#fixes_20" title="Permanent link">&para;</a></h4>
+<h4 id="fixes_21">🐛 Fixes<a class="headerlink" href="#fixes_21" title="Permanent link">&para;</a></h4>
 <ul>
 <li>Fixes for number of IO operations performed by index only reads (<a href="https://github.com/man-group/ArcticDB/issues/2942">#2942</a>)</li>
 </ul>
@@ -3688,7 +3705,7 @@ This is multi-symbol equivalent of compact_data for defragmenting data chunks on
 <ul>
 <li>Validate kwargs passed to NativeVersionStore methods (<a href="https://github.com/man-group/ArcticDB/issues/2936">#2936</a>)</li>
 </ul>
-<h4 id="fixes_21">🐛 Fixes<a class="headerlink" href="#fixes_21" title="Permanent link">&para;</a></h4>
+<h4 id="fixes_22">🐛 Fixes<a class="headerlink" href="#fixes_22" title="Permanent link">&para;</a></h4>
 <ul>
 <li>Fix reading of sparse string columns as Arrow (<a href="https://github.com/man-group/ArcticDB/issues/2932">#2932</a>)</li>
 <li>Match on multiple columns in merge updates (<a href="https://github.com/man-group/ArcticDB/issues/2926">#2926</a>)</li>
@@ -3696,7 +3713,7 @@ This is multi-symbol equivalent of compact_data for defragmenting data chunks on
 </ul>
 <h2 id="v6-10-2">v6.10.2<a class="headerlink" href="#v6-10-2" title="Permanent link">&para;</a></h2>
 <p><em>Released 2026-03-16</em> · <a href="https://github.com/man-group/ArcticDB/releases/tag/v6.10.2">GitHub release</a></p>
-<h4 id="fixes_22">🐛 Fixes<a class="headerlink" href="#fixes_22" title="Permanent link">&para;</a></h4>
+<h4 id="fixes_23">🐛 Fixes<a class="headerlink" href="#fixes_23" title="Permanent link">&para;</a></h4>
 <ul>
 <li>Include <code>malloc.h</code> to have <code>malloc_trim</code>'s declaration (<a href="https://github.com/man-group/ArcticDB/issues/2946">#2946</a>)</li>
 <li>Remove redundant move in initialization (<a href="https://github.com/man-group/ArcticDB/issues/2885">#2885</a>)</li>
@@ -3705,7 +3722,7 @@ This is multi-symbol equivalent of compact_data for defragmenting data chunks on
 </ul>
 <h2 id="v6-10-1">v6.10.1<a class="headerlink" href="#v6-10-1" title="Permanent link">&para;</a></h2>
 <p><em>Released 2026-03-12</em> · <a href="https://github.com/man-group/ArcticDB/releases/tag/v6.10.1">GitHub release</a></p>
-<h4 id="fixes_23">🐛 Fixes<a class="headerlink" href="#fixes_23" title="Permanent link">&para;</a></h4>
+<h4 id="fixes_24">🐛 Fixes<a class="headerlink" href="#fixes_24" title="Permanent link">&para;</a></h4>
 <ul>
 <li>Do not log a warning when reading a non-existent storage lock (<a href="https://github.com/man-group/ArcticDB/issues/2937">#2937</a>)</li>
 </ul>
@@ -3719,7 +3736,7 @@ This is multi-symbol equivalent of compact_data for defragmenting data chunks on
 <ul>
 <li>Improve <code>read(output_format="pyarrow")</code> performance for bool columns (<a href="https://github.com/man-group/ArcticDB/issues/2883">#2883</a>)</li>
 </ul>
-<h4 id="fixes_24">🐛 Fixes<a class="headerlink" href="#fixes_24" title="Permanent link">&para;</a></h4>
+<h4 id="fixes_25">🐛 Fixes<a class="headerlink" href="#fixes_25" title="Permanent link">&para;</a></h4>
 <ul>
 <li>Fix import alongside <code>matplotlib</code> (<a href="https://github.com/man-group/ArcticDB/issues/2918">#2918</a>)</li>
 </ul>
@@ -3729,16 +3746,16 @@ This is multi-symbol equivalent of compact_data for defragmenting data chunks on
 <p><strong>- Implementation of experimental merge capability in ArcticDB (<a href="https://github.com/man-group/ArcticDB/issues/2890">#2890</a>)</strong><br />
 ⚠️ The API is under development. It is not subject to semver and can change even in minor or patch versions. The function is named <code>merge_experimental</code>, but will be renamed to <code>merge</code> when the API becomes stable.</p>
 <p>The merge API offers a straightforward way for users to modify or insert specific rows in their data.</p>
-<div class="highlight"><pre><span></span><code><span class="kn">import</span> <span class="nn">arcticdb</span>
-<span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="nn">pd</span>
+<div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">arcticdb</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>
 
-<span class="n">ac</span> <span class="o">=</span> <span class="n">arcticdb</span><span class="o">.</span><span class="n">Arctic</span><span class="p">(</span><span class="s2">&quot;lmdb://demo&quot;</span><span class="p">)</span>
-<span class="n">lib</span> <span class="o">=</span> <span class="n">ac</span><span class="o">.</span><span class="n">get_library</span><span class="p">(</span><span class="s2">&quot;prices&quot;</span><span class="p">,</span> <span class="n">create_if_missing</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-<span class="n">sym</span> <span class="o">=</span> <span class="s2">&quot;AAPL&quot;</span>
+<span class="n">ac</span> <span class="o">=</span> <span class="n">arcticdb</span><span class="o">.</span><span class="n">Arctic</span><span class="p">(</span><span class="s2">"lmdb://demo"</span><span class="p">)</span>
+<span class="n">lib</span> <span class="o">=</span> <span class="n">ac</span><span class="o">.</span><span class="n">get_library</span><span class="p">(</span><span class="s2">"prices"</span><span class="p">,</span> <span class="n">create_if_missing</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">sym</span> <span class="o">=</span> <span class="s2">"AAPL"</span>
 
 <span class="n">prices</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span>
-    <span class="p">{</span><span class="s2">&quot;price&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mf">100.5</span><span class="p">,</span> <span class="mf">102.3</span><span class="p">,</span> <span class="mf">99.8</span><span class="p">,</span> <span class="mf">101.0</span><span class="p">,</span> <span class="mf">103.5</span><span class="p">]},</span>
-    <span class="n">index</span><span class="o">=</span><span class="n">pd</span><span class="o">.</span><span class="n">date_range</span><span class="p">(</span><span class="s2">&quot;2023-01-01&quot;</span><span class="p">,</span> <span class="n">periods</span><span class="o">=</span><span class="mi">5</span><span class="p">),</span>
+    <span class="p">{</span><span class="s2">"price"</span><span class="p">:</span> <span class="p">[</span><span class="mf">100.5</span><span class="p">,</span> <span class="mf">102.3</span><span class="p">,</span> <span class="mf">99.8</span><span class="p">,</span> <span class="mf">101.0</span><span class="p">,</span> <span class="mf">103.5</span><span class="p">]},</span>
+    <span class="n">index</span><span class="o">=</span><span class="n">pd</span><span class="o">.</span><span class="n">date_range</span><span class="p">(</span><span class="s2">"2023-01-01"</span><span class="p">,</span> <span class="n">periods</span><span class="o">=</span><span class="mi">5</span><span class="p">),</span>
 <span class="p">)</span>
 <span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">sym</span><span class="p">,</span> <span class="n">prices</span><span class="p">)</span>
 <span class="nb">print</span><span class="p">(</span><span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">sym</span><span class="p">)</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
@@ -3776,8 +3793,8 @@ This is multi-symbol equivalent of compact_data for defragmenting data chunks on
 </table>
 <p>Dataframe with corrections:</p>
 <div class="highlight"><pre><span></span><code><span class="n">corrections</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span>
-    <span class="p">{</span><span class="s2">&quot;price&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mf">999.0</span><span class="p">,</span> <span class="mf">888.0</span><span class="p">]},</span>
-    <span class="n">index</span><span class="o">=</span><span class="n">pd</span><span class="o">.</span><span class="n">DatetimeIndex</span><span class="p">([</span><span class="n">pd</span><span class="o">.</span><span class="n">Timestamp</span><span class="p">(</span><span class="s2">&quot;2023-01-02&quot;</span><span class="p">),</span> <span class="n">pd</span><span class="o">.</span><span class="n">Timestamp</span><span class="p">(</span><span class="s2">&quot;2023-01-04&quot;</span><span class="p">)]),</span>
+    <span class="p">{</span><span class="s2">"price"</span><span class="p">:</span> <span class="p">[</span><span class="mf">999.0</span><span class="p">,</span> <span class="mf">888.0</span><span class="p">]},</span>
+    <span class="n">index</span><span class="o">=</span><span class="n">pd</span><span class="o">.</span><span class="n">DatetimeIndex</span><span class="p">([</span><span class="n">pd</span><span class="o">.</span><span class="n">Timestamp</span><span class="p">(</span><span class="s2">"2023-01-02"</span><span class="p">),</span> <span class="n">pd</span><span class="o">.</span><span class="n">Timestamp</span><span class="p">(</span><span class="s2">"2023-01-04"</span><span class="p">)]),</span>
 <span class="p">)</span>
 <span class="nb">print</span><span class="p">(</span><span class="n">corrections</span><span class="p">)</span>
 </code></pre></div>
@@ -3834,7 +3851,7 @@ This is multi-symbol equivalent of compact_data for defragmenting data chunks on
 </tbody>
 </table>
 <p><a href="https://github.com/man-group/ArcticDB/blob/master/docs/mkdocs/docs/notebooks/ArcticDB_merge.ipynb"><strong>Demo notebook with more example usage and current limitations</strong></a></p>
-<h4 id="fixes_25">🐛 Fixes<a class="headerlink" href="#fixes_25" title="Permanent link">&para;</a></h4>
+<h4 id="fixes_26">🐛 Fixes<a class="headerlink" href="#fixes_26" title="Permanent link">&para;</a></h4>
 <ul>
 <li>Fix list_versions bug - include versions of symbols that have been deleted but are kept alive by a snapshot (<a href="https://github.com/man-group/ArcticDB/issues/2864">#2864</a>)</li>
 <li>Fix <code>read(output_format=Arrow)</code> when a column contains only empty strings (<a href="https://github.com/man-group/ArcticDB/issues/2871">#2871</a>)</li>
@@ -3852,7 +3869,7 @@ This is multi-symbol equivalent of compact_data for defragmenting data chunks on
 <li>Pin to Pandas&lt;3 for now (<a href="https://github.com/man-group/ArcticDB/issues/2865">#2865</a>)</li>
 <li>Upgrade curl to &gt;=8.18 (<a href="https://github.com/man-group/ArcticDB/issues/2853">#2853</a>)</li>
 </ul>
-<h4 id="fixes_26">🐛 Fixes<a class="headerlink" href="#fixes_26" title="Permanent link">&para;</a></h4>
+<h4 id="fixes_27">🐛 Fixes<a class="headerlink" href="#fixes_27" title="Permanent link">&para;</a></h4>
 <ul>
 <li>conda-build: Relax <code>libprotobuf</code>'s specification (<a href="https://github.com/man-group/ArcticDB/issues/2835">#2835</a>)</li>
 <li>docs: Update prebuilt binary availability (<a href="https://github.com/man-group/ArcticDB/issues/2813">#2813</a>)</li>
@@ -3867,7 +3884,7 @@ This is multi-symbol equivalent of compact_data for defragmenting data chunks on
 <ul>
 <li>Python 3.14 build for pypi (<a href="https://github.com/man-group/ArcticDB/issues/2828">#2828</a>)</li>
 </ul>
-<h4 id="fixes_27">🐛 Fixes<a class="headerlink" href="#fixes_27" title="Permanent link">&para;</a></h4>
+<h4 id="fixes_28">🐛 Fixes<a class="headerlink" href="#fixes_28" title="Permanent link">&para;</a></h4>
 <ul>
 <li>Bugfix/10722938876 fix listing operations on s3 express (<a href="https://github.com/man-group/ArcticDB/issues/2841">#2841</a>)</li>
 <li>Pin to Pandas&lt;3 (<a href="https://github.com/man-group/ArcticDB/issues/2880">#2880</a>)</li>
@@ -3900,7 +3917,7 @@ Plan of introduction:</li>
 </tbody>
 </table>
 <p>Please consider enabling V2 as V1 will be deprecated in future v7.0.0 release. To enabld it, you need to set environment variable <strong>ARCTICDB_VersionStore_RecursiveNormalizerMetastructure_int</strong> to <strong>2</strong></p>
-<h4 id="fixes_28">🐛 Fixes<a class="headerlink" href="#fixes_28" title="Permanent link">&para;</a></h4>
+<h4 id="fixes_29">🐛 Fixes<a class="headerlink" href="#fixes_29" title="Permanent link">&para;</a></h4>
 <ul>
 <li>Testing improvments (<a href="https://github.com/man-group/ArcticDB/issues/2804">#2804</a>, <a href="https://github.com/man-group/ArcticDB/issues/2801">#2801</a>, <a href="https://github.com/man-group/ArcticDB/issues/2808">#2808</a>, <a href="https://github.com/man-group/ArcticDB/issues/2807">#2807</a>, <a href="https://github.com/man-group/ArcticDB/issues/2815">#2815</a>)</li>
 <li>Properly specify LMDB's include directory (<a href="https://github.com/man-group/ArcticDB/issues/2805">#2805</a>)</li>
@@ -3919,7 +3936,7 @@ Plan of introduction:</li>
 For instance,<br />
 <code>np.array([[None, "string"], ["aaa", "bbb"], ["ccc", "ddd"]])</code> and <code>np.array([[np.nan, "string"], ["aaa", "bbb"], ["ccc", "ddd"]])</code> can now be written to ArcticDB libraries</li>
 </ul>
-<h4 id="fixes_29">🐛 Fixes<a class="headerlink" href="#fixes_29" title="Permanent link">&para;</a></h4>
+<h4 id="fixes_30">🐛 Fixes<a class="headerlink" href="#fixes_30" title="Permanent link">&para;</a></h4>
 <ul>
 <li>Suppress mongo endSession warning (<a href="https://github.com/man-group/ArcticDB/issues/2777">#2777</a>)</li>
 <li>Restrict custom CA certificate configurations for the Azure SDK to Linux only (<a href="https://github.com/man-group/ArcticDB/issues/2282">#2282</a>)</li>
@@ -3940,7 +3957,7 @@ For instance,<br />
 <li>Improve hash grouping aggregation parallelism (<a href="https://github.com/man-group/ArcticDB/issues/2729">#2729</a>)</li>
 <li>Improve recursive normalized data read performance (<a href="https://github.com/man-group/ArcticDB/issues/2787">#2787</a>)</li>
 </ul>
-<h4 id="fixes_30">🐛 Fixes<a class="headerlink" href="#fixes_30" title="Permanent link">&para;</a></h4>
+<h4 id="fixes_31">🐛 Fixes<a class="headerlink" href="#fixes_31" title="Permanent link">&para;</a></h4>
 <ul>
 <li>Improve <code>StageResult</code> printout (<a href="https://github.com/man-group/ArcticDB/issues/2760">#2760</a>)</li>
 <li>Allow colon characters in Arctic URI query parameters (<a href="https://github.com/man-group/ArcticDB/issues/2783">#2783</a>)</li>
@@ -3953,14 +3970,14 @@ For instance,<br />
 <li>Improve list versions performance when there are lots of snapshots (<a href="https://github.com/man-group/ArcticDB/issues/2732">#2732</a>)</li>
 <li>Improve peak memory use when writing multi-index dataframes (<a href="https://github.com/man-group/ArcticDB/issues/2749">#2749</a>)</li>
 </ul>
-<h4 id="fixes_31">🐛 Fixes<a class="headerlink" href="#fixes_31" title="Permanent link">&para;</a></h4>
+<h4 id="fixes_32">🐛 Fixes<a class="headerlink" href="#fixes_32" title="Permanent link">&para;</a></h4>
 <ul>
 <li>conda-build: Pin libcurl &lt;8.17 (<a href="https://github.com/man-group/ArcticDB/issues/2746">#2746</a>)</li>
 <li>Add rollback support for recursively normalized data (<a href="https://github.com/man-group/ArcticDB/issues/2738">#2738</a>)</li>
 </ul>
 <h2 id="v6-3-1">v6.3.1<a class="headerlink" href="#v6-3-1" title="Permanent link">&para;</a></h2>
 <p><em>Released 2025-11-03</em> · <a href="https://github.com/man-group/ArcticDB/releases/tag/v6.3.1">GitHub release</a></p>
-<h4 id="fixes_32">🐛 Fixes<a class="headerlink" href="#fixes_32" title="Permanent link">&para;</a></h4>
+<h4 id="fixes_33">🐛 Fixes<a class="headerlink" href="#fixes_33" title="Permanent link">&para;</a></h4>
 <ul>
 <li>Reduce number of requests when getting a library (<a href="https://github.com/man-group/ArcticDB/issues/2722">#2722</a>)</li>
 <li>Delete written data keys when storage quota is reached. (<a href="https://github.com/man-group/ArcticDB/issues/2707">#2707</a>)</li>
@@ -3972,7 +3989,7 @@ For instance,<br />
 </ul>
 <h2 id="v6-2-6">v6.2.6<a class="headerlink" href="#v6-2-6" title="Permanent link">&para;</a></h2>
 <p><em>Released 2025-10-20</em> · <a href="https://github.com/man-group/ArcticDB/releases/tag/v6.2.6">GitHub release</a></p>
-<h4 id="fixes_33">🐛 Fixes<a class="headerlink" href="#fixes_33" title="Permanent link">&para;</a></h4>
+<h4 id="fixes_34">🐛 Fixes<a class="headerlink" href="#fixes_34" title="Permanent link">&para;</a></h4>
 <ul>
 <li>conda build now depends on sparrow-devel (<a href="https://github.com/man-group/ArcticDB/issues/2665">#2665</a>)</li>
 <li>Fix flaky filter test (<a href="https://github.com/man-group/ArcticDB/issues/2694">#2694</a>)</li>
@@ -3980,7 +3997,7 @@ For instance,<br />
 </ul>
 <h2 id="v6-2-5">v6.2.5<a class="headerlink" href="#v6-2-5" title="Permanent link">&para;</a></h2>
 <p><em>Released 2025-10-13</em> · <a href="https://github.com/man-group/ArcticDB/releases/tag/v6.2.5">GitHub release</a></p>
-<h4 id="fixes_34">🐛 Fixes<a class="headerlink" href="#fixes_34" title="Permanent link">&para;</a></h4>
+<h4 id="fixes_35">🐛 Fixes<a class="headerlink" href="#fixes_35" title="Permanent link">&para;</a></h4>
 <ul>
 <li>Increase the version when batch_append and batch_update are called with upsert and the symbol is tombstoned (<a href="https://github.com/man-group/ArcticDB/issues/2661">#2661</a>)</li>
 <li>Fix changed message for GCP (<a href="https://github.com/man-group/ArcticDB/issues/2676">#2676</a>)</li>
@@ -3993,7 +4010,7 @@ For instance,<br />
 </ul>
 <h2 id="v6-2-4">v6.2.4<a class="headerlink" href="#v6-2-4" title="Permanent link">&para;</a></h2>
 <p><em>Released 2025-10-08</em> · <a href="https://github.com/man-group/ArcticDB/releases/tag/v6.2.4">GitHub release</a></p>
-<h4 id="fixes_35">🐛 Fixes<a class="headerlink" href="#fixes_35" title="Permanent link">&para;</a></h4>
+<h4 id="fixes_36">🐛 Fixes<a class="headerlink" href="#fixes_36" title="Permanent link">&para;</a></h4>
 <ul>
 <li>Add UpdatePayload and DeleteRequest to arcticdb. import path (<a href="https://github.com/man-group/ArcticDB/issues/2664">#2664</a>)</li>
 </ul>
@@ -4005,7 +4022,7 @@ import arcticdb.UpdatePayload
 <li>v1 API - batch_read_an_join specific tests (<a href="https://github.com/man-group/ArcticDB/issues/2659">#2659</a>)</li>
 <li>Add exception when trying to write an index or a column with a boolean name (<a href="https://github.com/man-group/ArcticDB/issues/2667">#2667</a>)</li>
 </ul>
-<div class="highlight"><pre><span></span><code>df = pd.DataFrame({&quot;col&quot;: [1, 2, 3]}, index=idx)
+<div class="highlight"><pre><span></span><code>df = pd.DataFrame({"col": [1, 2, 3]}, index=idx)
 df.index.name = True
 # Below line now raises ArcticNativeException
 lmdb_version_store.write(symbol, df)
@@ -4021,7 +4038,7 @@ lmdb_version_store.write(symbol, df)
 </ul>
 <h2 id="v6-2-3">v6.2.3<a class="headerlink" href="#v6-2-3" title="Permanent link">&para;</a></h2>
 <p><em>Released 2025-09-30</em> · <a href="https://github.com/man-group/ArcticDB/releases/tag/v6.2.3">GitHub release</a></p>
-<h4 id="fixes_36">🐛 Fixes<a class="headerlink" href="#fixes_36" title="Permanent link">&para;</a></h4>
+<h4 id="fixes_37">🐛 Fixes<a class="headerlink" href="#fixes_37" title="Permanent link">&para;</a></h4>
 <ul>
 <li>Fix range intersection calculation in query.cpp (<a href="https://github.com/man-group/ArcticDB/issues/2632">#2632</a>)</li>
 <li>additional check for batch_metadata_multi  (<a href="https://github.com/man-group/ArcticDB/issues/2653">#2653</a>)</li>
@@ -4034,7 +4051,7 @@ lmdb_version_store.write(symbol, df)
 <p><a href="https://github.com/man-group/ArcticDB/compare/v6.2.1...v6.2.2">https://github.com/man-group/ArcticDB/compare/v6.2.1...v6.2.2</a></p>
 <h2 id="v6-2-1">v6.2.1<a class="headerlink" href="#v6-2-1" title="Permanent link">&para;</a></h2>
 <p><em>Released 2025-09-15</em> · <a href="https://github.com/man-group/ArcticDB/releases/tag/v6.2.1">GitHub release</a></p>
-<h4 id="fixes_37">🐛 Fixes<a class="headerlink" href="#fixes_37" title="Permanent link">&para;</a></h4>
+<h4 id="fixes_38">🐛 Fixes<a class="headerlink" href="#fixes_38" title="Permanent link">&para;</a></h4>
 <ul>
 <li>Update vcpkg baseline and sparrow to 1.1.0 (<a href="https://github.com/man-group/ArcticDB/issues/2634">#2634</a>)</li>
 </ul>
@@ -4045,7 +4062,7 @@ lmdb_version_store.write(symbol, df)
 <li>Add docstring and warning for disparity between <code>will_item_be_pickled</code> and <code>is_symbol_pickle</code> (<a href="https://github.com/man-group/ArcticDB/issues/2548">#2548</a>)</li>
 <li>Remove feature toggle and update docstrings for staged data with tokens (<a href="https://github.com/man-group/ArcticDB/issues/2614">#2614</a>)</li>
 </ul>
-<h4 id="fixes_38">🐛 Fixes<a class="headerlink" href="#fixes_38" title="Permanent link">&para;</a></h4>
+<h4 id="fixes_39">🐛 Fixes<a class="headerlink" href="#fixes_39" title="Permanent link">&para;</a></h4>
 <ul>
 <li>Retry install Azurite (<a href="https://github.com/man-group/ArcticDB/issues/2606">#2606</a>)</li>
 <li>delete_container() operation for Azurite should not be reason tests to fail (<a href="https://github.com/man-group/ArcticDB/issues/2603">#2603</a>)</li>
@@ -4063,7 +4080,7 @@ lmdb_version_store.write(symbol, df)
 </ul>
 <h2 id="v6-1-1">v6.1.1<a class="headerlink" href="#v6-1-1" title="Permanent link">&para;</a></h2>
 <p><em>Released 2025-08-26</em> · <a href="https://github.com/man-group/ArcticDB/releases/tag/v6.1.1">GitHub release</a></p>
-<h4 id="fixes_39">🐛 Fixes<a class="headerlink" href="#fixes_39" title="Permanent link">&para;</a></h4>
+<h4 id="fixes_40">🐛 Fixes<a class="headerlink" href="#fixes_40" title="Permanent link">&para;</a></h4>
 <ul>
 <li>Mem leaks - increase mem limits so that we have time to create ASV tests (<a href="https://github.com/man-group/ArcticDB/issues/2558">#2558</a>)</li>
 <li>[Bugfix 9754509632] Fix use-after-stack-free (<a href="https://github.com/man-group/ArcticDB/issues/2569">#2569</a>)</li>
@@ -4094,7 +4111,7 @@ lmdb_version_store.write(symbol, df)
 <li>Add <code>batch_delete</code> APIs and functionality (<a href="https://github.com/man-group/ArcticDB/issues/2463">#2463</a>)</li>
 <li>Support open ended <code>row_range</code> on <code>QueryBuilder</code> and <code>read</code> methods (<a href="https://github.com/man-group/ArcticDB/issues/2550">#2550</a>)</li>
 </ul>
-<h4 id="fixes_40">🐛 Fixes<a class="headerlink" href="#fixes_40" title="Permanent link">&para;</a></h4>
+<h4 id="fixes_41">🐛 Fixes<a class="headerlink" href="#fixes_41" title="Permanent link">&para;</a></h4>
 <ul>
 <li>Fix handling of segments contained only of None values in sort merge (<a href="https://github.com/man-group/ArcticDB/issues/2536">#2536</a>)</li>
 <li>Fix OverflowError from to_json() call (<a href="https://github.com/man-group/ArcticDB/issues/2556">#2556</a>)</li>
@@ -4120,7 +4137,7 @@ lmdb_version_store.write(symbol, df)
 <ul>
 <li>Reduce memory overhead when reading dataframes from ArcticDB by <a href="https://github.com/alexowens90">@alexowens90</a> in <a href="https://github.com/man-group/ArcticDB/pull/2435">https://github.com/man-group/ArcticDB/pull/2435</a></li>
 </ul>
-<h4 id="fixes_41">Fixes<a class="headerlink" href="#fixes_41" title="Permanent link">&para;</a></h4>
+<h4 id="fixes_42">Fixes<a class="headerlink" href="#fixes_42" title="Permanent link">&para;</a></h4>
 <ul>
 <li>Fix recursive normalizers issue by <a href="https://github.com/poodlewars">@poodlewars</a> in <a href="https://github.com/man-group/ArcticDB/pull/2451">https://github.com/man-group/ArcticDB/pull/2451</a></li>
 <li>Use a less strict pin for sparrow by <a href="https://github.com/IvoDD">@IvoDD</a> in <a href="https://github.com/man-group/ArcticDB/pull/2473">https://github.com/man-group/ArcticDB/pull/2473</a></li>
@@ -4129,7 +4146,7 @@ lmdb_version_store.write(symbol, df)
 </ul>
 <h2 id="v5-9-3">v5.9.3<a class="headerlink" href="#v5-9-3" title="Permanent link">&para;</a></h2>
 <p><em>Released 2025-07-28</em> · <a href="https://github.com/man-group/ArcticDB/releases/tag/v5.9.3">GitHub release</a></p>
-<h4 id="fixes_42">🐛 Fixes<a class="headerlink" href="#fixes_42" title="Permanent link">&para;</a></h4>
+<h4 id="fixes_43">🐛 Fixes<a class="headerlink" href="#fixes_43" title="Permanent link">&para;</a></h4>
 <ul>
 <li>Remove numpy pin (<a href="https://github.com/man-group/ArcticDB/issues/2494">#2494</a>)</li>
 </ul>
@@ -4151,7 +4168,7 @@ lmdb_version_store.write(symbol, df)
 <ul>
 <li>Enhancement 9351235967: Support projecting a column of constant values (<a href="https://github.com/man-group/ArcticDB/issues/2405">#2405</a>)</li>
 </ul>
-<h4 id="fixes_43">🐛 Fixes<a class="headerlink" href="#fixes_43" title="Permanent link">&para;</a></h4>
+<h4 id="fixes_44">🐛 Fixes<a class="headerlink" href="#fixes_44" title="Permanent link">&para;</a></h4>
 <ul>
 <li>Remove arcticdb package dependencies on tests and do checks during build (<a href="https://github.com/man-group/ArcticDB/issues/2403">#2403</a>)</li>
 <li>Fix Windows 3.13 CI (<a href="https://github.com/man-group/ArcticDB/issues/2409">#2409</a>)</li>
@@ -4170,7 +4187,7 @@ lmdb_version_store.write(symbol, df)
 <li>Query Stats s3 v3 (<a href="https://github.com/man-group/ArcticDB/issues/2309">#2309</a>)</li>
 <li>Implement delete versions funcationality (<a href="https://github.com/man-group/ArcticDB/issues/2352">#2352</a>)</li>
 </ul>
-<h4 id="fixes_44">🐛 Fixes<a class="headerlink" href="#fixes_44" title="Permanent link">&para;</a></h4>
+<h4 id="fixes_45">🐛 Fixes<a class="headerlink" href="#fixes_45" title="Permanent link">&para;</a></h4>
 <ul>
 <li>Bugfix 9209057536: Allow concatenation of uint64 columns with int* columns (<a href="https://github.com/man-group/ArcticDB/issues/2365">#2365</a>)</li>
 <li>Try to fix flaky compat tests (<a href="https://github.com/man-group/ArcticDB/issues/2364">#2364</a>)</li>
@@ -4189,10 +4206,10 @@ lmdb_version_store.write(symbol, df)
 </ul>
 <p>The new ternary operator is designed to work like <code>numpy.where</code>,  allowing operations like:</p>
 <div class="highlight"><pre><span></span><code>q = QueryBuilder()
-q = q.apply(&quot;new_col&quot;, where(q[&quot;col1&quot;] == 0, q[&quot;col2&quot;], q[&quot;col3&quot;]))
+q = q.apply("new_col", where(q["col1"] == 0, q["col2"], q["col3"]))
 </code></pre></div>
 <p>For more details, see the <a href="https://github.com/man-group/ArcticDB/blob/master/python/arcticdb/version_store/processing.py#L260">docstring</a> and <a href="https://github.com/man-group/ArcticDB/blob/master/python/tests/unit/arcticdb/version_store/test_ternary.py">associated tests</a>.</p>
-<h4 id="fixes_45">🐛 Fixes<a class="headerlink" href="#fixes_45" title="Permanent link">&para;</a></h4>
+<h4 id="fixes_46">🐛 Fixes<a class="headerlink" href="#fixes_46" title="Permanent link">&para;</a></h4>
 <ul>
 <li>Bug fixes for resampling (<a href="https://github.com/man-group/ArcticDB/issues/2351">#2351</a>)<ul>
 <li>Fix crash when resampling data that was <code>update</code>d with some particular old ArcticDB client versions</li>
@@ -4216,7 +4233,7 @@ q = q.apply(&quot;new_col&quot;, where(q[&quot;col1&quot;] == 0, q[&quot;col2&qu
 <li>Disable s3 checksumming (<a href="https://github.com/man-group/ArcticDB/issues/2337">#2337</a>)</li>
 <li>Enhancement 8277989680: symbol concatenation (<a href="https://github.com/man-group/ArcticDB/issues/2142">#2142</a>)</li>
 </ul>
-<h4 id="fixes_46">🐛 Fixes<a class="headerlink" href="#fixes_46" title="Permanent link">&para;</a></h4>
+<h4 id="fixes_47">🐛 Fixes<a class="headerlink" href="#fixes_47" title="Permanent link">&para;</a></h4>
 <ul>
 <li>Asv v2 s3 tests (Refactored) (<a href="https://github.com/man-group/ArcticDB/issues/2249">#2249</a>)</li>
 <li>Installation tests v4 (<a href="https://github.com/man-group/ArcticDB/issues/2339">#2339</a>)</li>
@@ -4231,7 +4248,7 @@ q = q.apply(&quot;new_col&quot;, where(q[&quot;col1&quot;] == 0, q[&quot;col2&qu
 </ul>
 <h2 id="v5-5-1">v5.5.1<a class="headerlink" href="#v5-5-1" title="Permanent link">&para;</a></h2>
 <p><em>Released 2025-05-19</em> · <a href="https://github.com/man-group/ArcticDB/releases/tag/v5.5.1">GitHub release</a></p>
-<h4 id="fixes_47">🐛 Fixes<a class="headerlink" href="#fixes_47" title="Permanent link">&para;</a></h4>
+<h4 id="fixes_48">🐛 Fixes<a class="headerlink" href="#fixes_48" title="Permanent link">&para;</a></h4>
 <ul>
 <li>Fix permissions for the automatic docs building (<a href="https://github.com/man-group/ArcticDB/issues/2347">#2347</a>)</li>
 <li>Delete STS roles regularly  (<a href="https://github.com/man-group/ArcticDB/issues/2344">#2344</a>)</li>
@@ -4242,7 +4259,7 @@ q = q.apply(&quot;new_col&quot;, where(q[&quot;col1&quot;] == 0, q[&quot;col2&qu
 <ul>
 <li>Query Stat framework v3 (<a href="https://github.com/man-group/ArcticDB/issues/2304">#2304</a>)</li>
 </ul>
-<h4 id="fixes_48">🐛 Fixes<a class="headerlink" href="#fixes_48" title="Permanent link">&para;</a></h4>
+<h4 id="fixes_49">🐛 Fixes<a class="headerlink" href="#fixes_49" title="Permanent link">&para;</a></h4>
 <ul>
 <li>Skip azurite api check (<a href="https://github.com/man-group/ArcticDB/issues/2288">#2288</a>)</li>
 <li>Update docs for sts ca issue (<a href="https://github.com/man-group/ArcticDB/issues/2265">#2265</a>)</li>
@@ -4250,7 +4267,7 @@ q = q.apply(&quot;new_col&quot;, where(q[&quot;col1&quot;] == 0, q[&quot;col2&qu
 </ul>
 <h2 id="v5-4-1">v5.4.1<a class="headerlink" href="#v5-4-1" title="Permanent link">&para;</a></h2>
 <p><em>Released 2025-05-05</em> · <a href="https://github.com/man-group/ArcticDB/releases/tag/v5.4.1">GitHub release</a></p>
-<h4 id="fixes_49">🐛 Fixes<a class="headerlink" href="#fixes_49" title="Permanent link">&para;</a></h4>
+<h4 id="fixes_50">🐛 Fixes<a class="headerlink" href="#fixes_50" title="Permanent link">&para;</a></h4>
 <ul>
 <li>Timeseries defrag function (<a href="https://github.com/man-group/ArcticDB/issues/2319">#2319</a>)</li>
 <li>initial version fix for GCP (<a href="https://github.com/man-group/ArcticDB/issues/2326">#2326</a>)</li>
@@ -4261,7 +4278,7 @@ q = q.apply(&quot;new_col&quot;, where(q[&quot;col1&quot;] == 0, q[&quot;col2&qu
 <ul>
 <li>Symbol sizes API (<a href="https://github.com/man-group/ArcticDB/issues/2266">#2266</a>)</li>
 </ul>
-<h4 id="fixes_50">🐛 Fixes<a class="headerlink" href="#fixes_50" title="Permanent link">&para;</a></h4>
+<h4 id="fixes_51">🐛 Fixes<a class="headerlink" href="#fixes_51" title="Permanent link">&para;</a></h4>
 <ul>
 <li>Refactor to_atom and to_ref to properly use forwarding references (<a href="https://github.com/man-group/ArcticDB/issues/2321">#2321</a>)</li>
 <li>ci: Benchmark workflow adaptations (<a href="https://github.com/man-group/ArcticDB/issues/2327">#2327</a>)</li>
@@ -4274,7 +4291,7 @@ q = q.apply(&quot;new_col&quot;, where(q[&quot;col1&quot;] == 0, q[&quot;col2&qu
 </ul>
 <h2 id="v5-3-4">v5.3.4<a class="headerlink" href="#v5-3-4" title="Permanent link">&para;</a></h2>
 <p><em>Released 2025-04-22</em> · <a href="https://github.com/man-group/ArcticDB/releases/tag/v5.3.4">GitHub release</a></p>
-<h4 id="fixes_51">🐛 Fixes<a class="headerlink" href="#fixes_51" title="Permanent link">&para;</a></h4>
+<h4 id="fixes_52">🐛 Fixes<a class="headerlink" href="#fixes_52" title="Permanent link">&para;</a></h4>
 <ul>
 <li>More uniqueness in library names (<a href="https://github.com/man-group/ArcticDB/issues/2305">#2305</a>)</li>
 <li>Remove python conda pin (<a href="https://github.com/man-group/ArcticDB/issues/2287">#2287</a>)</li>
@@ -4289,7 +4306,7 @@ q = q.apply(&quot;new_col&quot;, where(q[&quot;col1&quot;] == 0, q[&quot;col2&qu
 </ul>
 <h2 id="v5-3-2">v5.3.2<a class="headerlink" href="#v5-3-2" title="Permanent link">&para;</a></h2>
 <p><em>Released 2025-04-07</em> · <a href="https://github.com/man-group/ArcticDB/releases/tag/v5.3.2">GitHub release</a></p>
-<h4 id="fixes_52">🐛 Fixes<a class="headerlink" href="#fixes_52" title="Permanent link">&para;</a></h4>
+<h4 id="fixes_53">🐛 Fixes<a class="headerlink" href="#fixes_53" title="Permanent link">&para;</a></h4>
 <ul>
 <li>Improve error message in case of network error (<a href="https://github.com/man-group/ArcticDB/pull/2257">https://github.com/man-group/ArcticDB/pull/2257</a>)</li>
 <li>Fix the perfect forwarding in variant_match <a href="https://github.com/man-group/ArcticDB/pull/2262">https://github.com/man-group/ArcticDB/pull/2262</a></li>
@@ -4302,7 +4319,7 @@ q = q.apply(&quot;new_col&quot;, where(q[&quot;col1&quot;] == 0, q[&quot;col2&qu
 </ul>
 <h2 id="v5-3-1">v5.3.1<a class="headerlink" href="#v5-3-1" title="Permanent link">&para;</a></h2>
 <p><em>Released 2025-04-01</em> · <a href="https://github.com/man-group/ArcticDB/releases/tag/v5.3.1">GitHub release</a></p>
-<h4 id="fixes_53">🐛 Fixes<a class="headerlink" href="#fixes_53" title="Permanent link">&para;</a></h4>
+<h4 id="fixes_54">🐛 Fixes<a class="headerlink" href="#fixes_54" title="Permanent link">&para;</a></h4>
 <ul>
 <li>Precompute output schema from processing (<a href="https://github.com/man-group/ArcticDB/issues/2233">#2233</a>)</li>
 <li>Fix convert_int_to_float in compact_incomplete V1 library API method (<a href="https://github.com/man-group/ArcticDB/issues/2235">#2235</a>)</li>
@@ -4325,7 +4342,7 @@ q = q.apply(&quot;new_col&quot;, where(q[&quot;col1&quot;] == 0, q[&quot;col2&qu
 <li>GCP Support over the S3 XML API (<a href="https://github.com/man-group/ArcticDB/issues/2176">#2176</a>)</li>
 <li>Expose <code>set_config_int</code>, and <code>get_config_int</code> on <code>arcticdb.config</code>, add config docs, documentation fixes (<a href="https://github.com/man-group/ArcticDB/issues/2225">#2225</a>)</li>
 </ul>
-<h4 id="fixes_54">🐛 Fixes<a class="headerlink" href="#fixes_54" title="Permanent link">&para;</a></h4>
+<h4 id="fixes_55">🐛 Fixes<a class="headerlink" href="#fixes_55" title="Permanent link">&para;</a></h4>
 <ul>
 <li>Include wheels in releases (<a href="https://github.com/man-group/ArcticDB/issues/2180">#2180</a>)</li>
 <li>Fix s3 https connection on windows (<a href="https://github.com/man-group/ArcticDB/issues/2182">#2182</a>)</li>
@@ -4388,30 +4405,30 @@ q = q.apply(&quot;new_col&quot;, where(q[&quot;col1&quot;] == 0, q[&quot;col2&qu
 </ul>
 <h2 id="v5-2-3">v5.2.3<a class="headerlink" href="#v5-2-3" title="Permanent link">&para;</a></h2>
 <p><em>Released 2025-02-07</em> · <a href="https://github.com/man-group/ArcticDB/releases/tag/v5.2.3">GitHub release</a></p>
-<h4 id="fixes_55">🐛 Fixes<a class="headerlink" href="#fixes_55" title="Permanent link">&para;</a></h4>
+<h4 id="fixes_56">🐛 Fixes<a class="headerlink" href="#fixes_56" title="Permanent link">&para;</a></h4>
 <ul>
 <li>Fix to bound the number of data segments kept live in memory during compaction and sort_merge  by <a href="https://github.com/poodlewars">@poodlewars</a>  in <a href="https://github.com/man-group/ArcticDB/pull/2170">https://github.com/man-group/ArcticDB/pull/2170</a></li>
 <li>Fix debug symbols not attaching to release and release script failing… by <a href="https://github.com/ognyanstoimenov">@ognyanstoimenov</a> in <a href="https://github.com/man-group/ArcticDB/pull/2171">https://github.com/man-group/ArcticDB/pull/2171</a></li>
 </ul>
 <h2 id="v5-2-2">v5.2.2<a class="headerlink" href="#v5-2-2" title="Permanent link">&para;</a></h2>
 <p><em>Released 2025-02-03</em> · <a href="https://github.com/man-group/ArcticDB/releases/tag/v5.2.2">GitHub release</a></p>
-<h4 id="fixes_56">Fixes<a class="headerlink" href="#fixes_56" title="Permanent link">&para;</a></h4>
+<h4 id="fixes_57">Fixes<a class="headerlink" href="#fixes_57" title="Permanent link">&para;</a></h4>
 <p>Read and write snapshot metadata from the correct place PR <a href="https://github.com/man-group/ArcticDB/issues/2161">#2161</a> .</p>
 <p>Snapshot metadata is an optional structure of extra information saved with a snapshot, created when you call,</p>
 <div class="highlight"><pre><span></span><code>from arcticdb import Library
 lib: Library
 
-lib.snapshot(&quot;snap&quot;, metadata=[&quot;example&quot;, &quot;metadata&quot;])
+lib.snapshot("snap", metadata=["example", "metadata"])
 
 lib.list_snapshots()
-# {&quot;snap&quot;: [&quot;example&quot;, &quot;metadata&quot;]}
+# {"snap": ["example", "metadata"]}
 </code></pre></div>
 <p>If you never call <code>snapshot</code> with <code>metadata=</code> then you are not affected by this issue. Metadata associated with a symbol is not affected by this issue.</p>
 <p>Between v4.5.0 and v5.2.1 we mistakenly changed to save snapshot metadata in a new data format. This affects the snapshot metadata in the <code>dict</code> values returned by <code>list_snapshots</code>. Those versions incorrectly return <code>None</code> for snapshot metadata written by earlier versions, even if that metadata does exist.</p>
 <p>This fix has us now check both data formats for snapshot metadata, so ArcticDB v5.2.2 onwards is compatible with snapshot metadata written by any version. We also revert to writing the metadata in its old location from v5.2.2 onwards. This means that ArcticDB clients between v4.5.0 and v5.2.1 will need to upgrade to be able to read snapshot metadata written by clients outside of those versions (otherwise they will see the metadata as <code>None</code>). ArcticDB clients older than v4.5.0 need to upgrade to v5.2.2+ to be able to read snapshot metadata written by versions between v4.5.0 and v5.2.1.</p>
 <h2 id="v5-2-1">v5.2.1<a class="headerlink" href="#v5-2-1" title="Permanent link">&para;</a></h2>
 <p><em>Released 2025-01-29</em> · <a href="https://github.com/man-group/ArcticDB/releases/tag/v5.2.1">GitHub release</a></p>
-<h4 id="fixes_57">🐛 Fixes<a class="headerlink" href="#fixes_57" title="Permanent link">&para;</a></h4>
+<h4 id="fixes_58">🐛 Fixes<a class="headerlink" href="#fixes_58" title="Permanent link">&para;</a></h4>
 <ul>
 <li>Use Pandas unpickling to handle Pandas 1 vs Pandas 2 API differences better . This only affects reading Pandas structures saved as <code>metadata</code> with an ArcticDB symbol. (<a href="https://github.com/man-group/ArcticDB/issues/2151">#2151</a>)</li>
 <li>Don't warn about missing keys when reading symbol ref as it is common to try to read a non-existent symbol (<a href="https://github.com/man-group/ArcticDB/issues/2153">#2153</a>).<ul>
@@ -4435,7 +4452,7 @@ lib.list_snapshots()
 <li>Chunk up incomplete segments by rows when they are staged (<a href="https://github.com/man-group/ArcticDB/issues/2117">#2117</a>)</li>
 <li><code>read_batch</code> performance improvements - now up to 10 times faster</li>
 </ul>
-<h4 id="fixes_58">🐛 Fixes<a class="headerlink" href="#fixes_58" title="Permanent link">&para;</a></h4>
+<h4 id="fixes_59">🐛 Fixes<a class="headerlink" href="#fixes_59" title="Permanent link">&para;</a></h4>
 <ul>
 <li>Fix decoding of fields with &gt;2^16 blocks (<a href="https://github.com/man-group/ArcticDB/issues/2089">#2089</a>)</li>
 <li>Handle very old normalization metadata RangeIndexes (<a href="https://github.com/man-group/ArcticDB/issues/2118">#2118</a>)</li>
@@ -4468,7 +4485,7 @@ lib.list_snapshots()
 </ul>
 <h2 id="v5-1-1">v5.1.1<a class="headerlink" href="#v5-1-1" title="Permanent link">&para;</a></h2>
 <p><em>Released 2024-12-05</em> · <a href="https://github.com/man-group/ArcticDB/releases/tag/v5.1.1">GitHub release</a></p>
-<h4 id="fixes_59">🐛 Fixes<a class="headerlink" href="#fixes_59" title="Permanent link">&para;</a></h4>
+<h4 id="fixes_60">🐛 Fixes<a class="headerlink" href="#fixes_60" title="Permanent link">&para;</a></h4>
 <ul>
 <li>Fix string reference count leak by <a href="https://github.com/willdealtry">@willdealtry</a> in <a href="https://github.com/man-group/ArcticDB/pull/1998">https://github.com/man-group/ArcticDB/pull/1998</a></li>
 <li>Fix issues with backwards compatibility from 5.1 by <a href="https://github.com/willdealtry">@willdealtry</a> in <a href="https://github.com/man-group/ArcticDB/pull/2017">https://github.com/man-group/ArcticDB/pull/2017</a></li>
@@ -4528,7 +4545,7 @@ lib.list_snapshots()
 <li>Do not fallback to iterating snapshots if if version as_of int or timestamp not found in version chain in V2 API (<a href="https://github.com/man-group/ArcticDB/issues/1672">#1672</a>)</li>
 <li>Use float64 as the result type for all division operations in the processing pipeline (<a href="https://github.com/man-group/ArcticDB/issues/1794">#1794</a>)</li>
 </ul>
-<h4 id="fixes_60">🐛 Fixes<a class="headerlink" href="#fixes_60" title="Permanent link">&para;</a></h4>
+<h4 id="fixes_61">🐛 Fixes<a class="headerlink" href="#fixes_61" title="Permanent link">&para;</a></h4>
 <ul>
 <li>Improve full build time by 30% by adding PCH  (<a href="https://github.com/man-group/ArcticDB/issues/1764">#1764</a>)</li>
 <li>Fix typo in docs flow (<a href="https://github.com/man-group/ArcticDB/issues/1952">#1952</a>)</li>
@@ -4617,7 +4634,7 @@ lib.list_snapshots()
 </ul>
 <h2 id="v4-5-1">v4.5.1<a class="headerlink" href="#v4-5-1" title="Permanent link">&para;</a></h2>
 <p><em>Released 2024-10-18</em> · <a href="https://github.com/man-group/ArcticDB/releases/tag/v4.5.1">GitHub release</a></p>
-<h4 id="fixes_61"><img alt="🐛" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/svg/1f41b.svg" title=":bug:" /> Fixes<a class="headerlink" href="#fixes_61" title="Permanent link">&para;</a></h4>
+<h4 id="fixes_62"><img alt="🐛" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/svg/1f41b.svg" title=":bug:" /> Fixes<a class="headerlink" href="#fixes_62" title="Permanent link">&para;</a></h4>
 <ul>
 <li>Fix bug where libraries created with 4.5.0 are not compatible with older versions by <a href="https://github.com/G-D-Petrov">@G-D-Petrov</a> in <a href="https://github.com/man-group/ArcticDB/pull/1842">https://github.com/man-group/ArcticDB/pull/1842</a></li>
 <li>Sort and finalize fixes by <a href="https://github.com/vasil-pashov">@vasil-pashov</a> in <a href="https://github.com/man-group/ArcticDB/pull/1859">https://github.com/man-group/ArcticDB/pull/1859</a></li>
@@ -4637,8 +4654,8 @@ lib.list_snapshots()
 <p>We are pleased to introduce a first version of resampling into ArcticDB.<br />
 Using the QueryBuilder you can easily resample timseries data as part of the read. The following code will resample a symbol into hourly buckets, for example. Please see the QueryBuilder docs for more info.</p>
 <div class="highlight"><pre><span></span><code>q = adb.QueryBuilder()
-q = q.resample(&quot;h&quot;).agg({&quot;to_sum&quot;: &quot;sum&quot;})
-lib.read(&quot;symbol&quot;, query_builder=q).data
+q = q.resample("h").agg({"to_sum": "sum"})
+lib.read("symbol", query_builder=q).data
 </code></pre></div>
 <h4 id="features_31"><img alt="🚀" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/svg/1f680.svg" title=":rocket:" /> Features<a class="headerlink" href="#features_31" title="Permanent link">&para;</a></h4>
 <p>Remove Composite from processing pipeline (<a href="https://github.com/man-group/ArcticDB/issues/1722">#1722</a>)<br />
@@ -4652,7 +4669,7 @@ list_snapshots: Add option to skip loading metadata (<a href="https://github.com
 LibraryTool add read_index (<a href="https://github.com/man-group/ArcticDB/issues/1533">#1533</a>)<br />
 Make service alive checking more universal (<a href="https://github.com/man-group/ArcticDB/issues/1607">#1607</a>)<br />
 Enhancement/1610/method to force compact symbol list (<a href="https://github.com/man-group/ArcticDB/issues/1624">#1624</a>)</p>
-<h4 id="fixes_62"><img alt="🐛" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/svg/1f41b.svg" title=":bug:" /> Fixes<a class="headerlink" href="#fixes_62" title="Permanent link">&para;</a></h4>
+<h4 id="fixes_63"><img alt="🐛" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/svg/1f41b.svg" title=":bug:" /> Fixes<a class="headerlink" href="#fixes_63" title="Permanent link">&para;</a></h4>
 <p>Add maybe_unused to fix MSVC compilation error by <a href="https://github.com/vasil-pashov">@vasil-pashov</a> in <a href="https://github.com/man-group/ArcticDB/issues/1739">#1739</a><br />
 Properly hash descriptor in v1 (master) by <a href="https://github.com/willdealtry">@willdealtry</a> in <a href="https://github.com/man-group/ArcticDB/issues/1682">#1682</a><br />
 Bugfix 1692: fix batch read with row range no query builder (<a href="https://github.com/man-group/ArcticDB/issues/1710">#1710</a>)<br />
@@ -4692,7 +4709,7 @@ Update docstring: added section to clarify that an empty df does not delete (<a 
 </ul>
 <h2 id="v4-4-3">v4.4.3<a class="headerlink" href="#v4-4-3" title="Permanent link">&para;</a></h2>
 <p><em>Released 2024-06-26</em> · <a href="https://github.com/man-group/ArcticDB/releases/tag/v4.4.3">GitHub release</a></p>
-<h4 id="fixes_63">🐛 Fixes<a class="headerlink" href="#fixes_63" title="Permanent link">&para;</a></h4>
+<h4 id="fixes_64">🐛 Fixes<a class="headerlink" href="#fixes_64" title="Permanent link">&para;</a></h4>
 <ul>
 <li>Release GIL on update and append (<a href="https://github.com/man-group/ArcticDB/issues/1559">#1559</a>)</li>
 <li>Only write ref key once when writing with prune_previous_versions (<a href="https://github.com/man-group/ArcticDB/issues/1571">#1571</a>)</li>
@@ -4704,7 +4721,7 @@ Update docstring: added section to clarify that an empty df does not delete (<a 
 </details>
 <h2 id="v4-4-2">v4.4.2<a class="headerlink" href="#v4-4-2" title="Permanent link">&para;</a></h2>
 <p><em>Released 2024-05-08</em> · <a href="https://github.com/man-group/ArcticDB/releases/tag/v4.4.2">GitHub release</a></p>
-<h4 id="fixes_64">🐛 Fixes<a class="headerlink" href="#fixes_64" title="Permanent link">&para;</a></h4>
+<h4 id="fixes_65">🐛 Fixes<a class="headerlink" href="#fixes_65" title="Permanent link">&para;</a></h4>
 <ul>
 <li>Fix segmentation fault related to Ray package (by reverting to C++ 17 build) <a href="https://github.com/man-group/ArcticDB/issues/1542">#1542</a> </li>
 <li>Fix get_description date range after using delete_data_in_range <a href="https://github.com/man-group/ArcticDB/issues/1526">#1526</a></li>
@@ -4714,7 +4731,7 @@ Update docstring: added section to clarify that an empty df does not delete (<a 
 <p>Please see <a href="https://github.com/man-group/ArcticDB/releases/tag/v4.4.1">v4.4.1</a> release notes for the previous changes</p>
 <h2 id="v4-4-1">v4.4.1<a class="headerlink" href="#v4-4-1" title="Permanent link">&para;</a></h2>
 <p><em>Released 2024-04-16</em> · <a href="https://github.com/man-group/ArcticDB/releases/tag/v4.4.1">GitHub release</a></p>
-<h4 id="fixes_65">🐛 Fixes<a class="headerlink" href="#fixes_65" title="Permanent link">&para;</a></h4>
+<h4 id="fixes_66">🐛 Fixes<a class="headerlink" href="#fixes_66" title="Permanent link">&para;</a></h4>
 <ul>
 <li>Bug fix in Azure Storage, clear <code>to_delete</code> list to allow deletion of more than 256 keys in a batch (<a href="https://github.com/man-group/ArcticDB/issues/1482">#1482</a>)</li>
 </ul>
@@ -4732,11 +4749,11 @@ Update docstring: added section to clarify that an empty df does not delete (<a 
 <div class="highlight"><pre><span></span><code>from arcticdb.options import LibraryOptions
 
 ac: Arctic = ...
-lib = ac.create_library(&quot;lib&quot;)
+lib = ac.create_library("lib")
 ac.modify_library_option(lib, ModifiableLibraryOption.ROWS_PER_SEGMENT, int(1e6))
 </code></pre></div>
 <p>See <code>arcticdb/options.py</code> for a description of the modifiable options.</p>
-<h4 id="fixes_66">🐛 Fixes<a class="headerlink" href="#fixes_66" title="Permanent link">&para;</a></h4>
+<h4 id="fixes_67">🐛 Fixes<a class="headerlink" href="#fixes_67" title="Permanent link">&para;</a></h4>
 <ul>
 <li>Bugfix 902: Cannot filter on nans and nones in string and float columns <a href="https://github.com/man-group/ArcticDB/pull/1276">https://github.com/man-group/ArcticDB/pull/1276</a></li>
 <li>Bugfix: Empty type in <a href="https://github.com/man-group/ArcticDB/pull/1227">https://github.com/man-group/ArcticDB/pull/1227</a></li>
@@ -4836,7 +4853,7 @@ ac.modify_library_option(lib, ModifiableLibraryOption.ROWS_PER_SEGMENT, int(1e6)
 </details>
 <h2 id="v4-3-1">v4.3.1<a class="headerlink" href="#v4-3-1" title="Permanent link">&para;</a></h2>
 <p><em>Released 2024-02-09</em> · <a href="https://github.com/man-group/ArcticDB/releases/tag/v4.3.1">GitHub release</a></p>
-<h4 id="fixes_67">🐛 Fixes<a class="headerlink" href="#fixes_67" title="Permanent link">&para;</a></h4>
+<h4 id="fixes_68">🐛 Fixes<a class="headerlink" href="#fixes_68" title="Permanent link">&para;</a></h4>
 <ul>
 <li>Fix regression in round-tripping empty type for dynamic schema (<a href="https://github.com/man-group/ArcticDB/issues/1313">#1313</a>)</li>
 </ul>
@@ -4848,16 +4865,16 @@ Regression is fixed in <a href="https://github.com/man-group/ArcticDB/releases/t
 <ul>
 <li>Exposes existing regex filter in <code>lib.list_symbols</code> (<a href="https://github.com/man-group/ArcticDB/issues/1123">#1123</a>)</li>
 </ul>
-<div class="highlight"><pre><span></span><code><span class="o">&gt;&gt;&gt;</span> <span class="kn">from</span> <span class="nn">arcticdb</span> <span class="kn">import</span> <span class="n">Arctic</span>
-<span class="o">&gt;&gt;&gt;</span> <span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="nn">pd</span>
-<span class="o">&gt;&gt;&gt;</span> <span class="n">ac</span><span class="o">.</span><span class="n">create_library</span><span class="p">(</span><span class="s2">&quot;test&quot;</span><span class="p">)</span>
-<span class="o">&gt;&gt;&gt;</span> <span class="n">lib</span> <span class="o">=</span> <span class="n">ac</span><span class="p">[</span><span class="s2">&quot;test&quot;</span><span class="p">]</span>
-<span class="o">&gt;&gt;&gt;</span> <span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">&quot;sym0&quot;</span><span class="p">,</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">())</span>
-<span class="o">&gt;&gt;&gt;</span> <span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">&quot;sym1&quot;</span><span class="p">,</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">())</span>
+<div class="highlight"><pre><span></span><code><span class="o">&gt;&gt;&gt;</span> <span class="kn">from</span><span class="w"> </span><span class="nn">arcticdb</span><span class="w"> </span><span class="kn">import</span> <span class="n">Arctic</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="n">ac</span><span class="o">.</span><span class="n">create_library</span><span class="p">(</span><span class="s2">"test"</span><span class="p">)</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="n">lib</span> <span class="o">=</span> <span class="n">ac</span><span class="p">[</span><span class="s2">"test"</span><span class="p">]</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">"sym0"</span><span class="p">,</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">())</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">"sym1"</span><span class="p">,</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">())</span>
 <span class="o">&gt;&gt;&gt;</span> <span class="n">lib</span><span class="o">.</span><span class="n">list_symbols</span><span class="p">()</span>
-<span class="p">[</span><span class="s1">&#39;sym0&#39;</span><span class="p">,</span> <span class="s1">&#39;sym1&#39;</span><span class="p">]</span>
-<span class="o">&gt;&gt;&gt;</span> <span class="n">lib</span><span class="o">.</span><span class="n">list_symbols</span><span class="p">(</span><span class="n">regex</span><span class="o">=</span><span class="s2">&quot;1$&quot;</span><span class="p">)</span>
-<span class="p">[</span><span class="s1">&#39;sym1&#39;</span><span class="p">]</span>
+<span class="p">[</span><span class="s1">'sym0'</span><span class="p">,</span> <span class="s1">'sym1'</span><span class="p">]</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="n">lib</span><span class="o">.</span><span class="n">list_symbols</span><span class="p">(</span><span class="n">regex</span><span class="o">=</span><span class="s2">"1$"</span><span class="p">)</span>
+<span class="p">[</span><span class="s1">'sym1'</span><span class="p">]</span>
 </code></pre></div>
 <ul>
 <li>Introduce jitter in symbol list compaction threshold (<a href="https://github.com/man-group/ArcticDB/issues/1174">#1174</a>)</li>
@@ -4867,7 +4884,7 @@ Regression is fixed in <a href="https://github.com/man-group/ArcticDB/releases/t
 <li>Support sortedness checks and maintenance with parallel writes and appends (<a href="https://github.com/man-group/ArcticDB/issues/1251">#1251</a>)</li>
 <li><a href="https://github.com/man-group/ArcticDB/issues/1014">#1014</a> Introduce storage fixtures to easily test ArcticDB against various storage backends. See <code>arcticdb.storage_fixtures</code> package. (<a href="https://github.com/man-group/ArcticDB/issues/1054">#1054</a>)</li>
 </ul>
-<h4 id="fixes_68">🐛 Fixes<a class="headerlink" href="#fixes_68" title="Permanent link">&para;</a></h4>
+<h4 id="fixes_69">🐛 Fixes<a class="headerlink" href="#fixes_69" title="Permanent link">&para;</a></h4>
 <ul>
 <li>Release the symbol list's storage lock if it has existed for longer than its TTL (<a href="https://github.com/man-group/ArcticDB/issues/1134">#1134</a>)</li>
 <li>Ensure that the version chain is always updated atomically (<a href="https://github.com/man-group/ArcticDB/issues/1104">#1104</a>)</li>
@@ -4951,7 +4968,7 @@ Regression is fixed in <a href="https://github.com/man-group/ArcticDB/releases/t
 <h2 id="v4-2-1">v4.2.1<a class="headerlink" href="#v4-2-1" title="Permanent link">&para;</a></h2>
 <p><em>Released 2023-12-15</em> · <a href="https://github.com/man-group/ArcticDB/releases/tag/v4.2.1">GitHub release</a></p>
 <p>This is a patch release to version <a href="https://github.com/man-group/ArcticDB/releases/tag/v4.2.0">4.2.0</a> which fixes Issue <a href="https://github.com/man-group/ArcticDB/issues/1157">#1157</a> regarding the <a href="https://docs.arcticdb.io/latest/api/library/#arcticdb.version_store.library.Library.defragment_symbol_data"><code>defragment_symbol_data</code></a> method.</p>
-<h4 id="fixes_69">🐛 Fixes<a class="headerlink" href="#fixes_69" title="Permanent link">&para;</a></h4>
+<h4 id="fixes_70">🐛 Fixes<a class="headerlink" href="#fixes_70" title="Permanent link">&para;</a></h4>
 <ul>
 <li>Defragmenting a symbol no longer invalidates previous versions (<a href="https://github.com/man-group/ArcticDB/pull/1163">https://github.com/man-group/ArcticDB/pull/1163</a>)</li>
 </ul>
@@ -4962,20 +4979,20 @@ Regression is fixed in <a href="https://github.com/man-group/ArcticDB/releases/t
 <li>Remove python deps that are no longer needed (<a href="https://github.com/man-group/ArcticDB/issues/1005">#1005</a>)</li>
 <li>New <code>row_range</code> argument on <code>read</code> and <code>ReadRequest</code> (<a href="https://github.com/man-group/ArcticDB/issues/864">#864</a>)</li>
 </ul>
-<div class="highlight"><pre><span></span><code><span class="o">&gt;&gt;&gt;</span> <span class="kn">from</span> <span class="nn">arcticdb</span> <span class="kn">import</span> <span class="n">Arctic</span>
-<span class="o">&gt;&gt;&gt;</span> <span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="nn">pd</span>
-<span class="o">&gt;&gt;&gt;</span> <span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="s2">&quot;col1&quot;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">10</span><span class="p">),</span> <span class="s2">&quot;col2&quot;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">100</span><span class="p">,</span> <span class="mi">110</span><span class="p">)},</span> <span class="n">index</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">10</span><span class="p">))</span>
-<span class="o">&gt;&gt;&gt;</span> <span class="n">ac</span> <span class="o">=</span> <span class="n">Arctic</span><span class="p">(</span><span class="s2">&quot;lmdb://test&quot;</span><span class="p">)</span>
-<span class="o">&gt;&gt;&gt;</span> <span class="n">lib</span> <span class="o">=</span> <span class="n">ac</span><span class="o">.</span><span class="n">get_library</span><span class="p">(</span><span class="s2">&quot;test_lib&quot;</span><span class="p">,</span> <span class="n">create_if_missing</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-<span class="o">&gt;&gt;&gt;</span> <span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">&quot;test_symbol&quot;</span><span class="p">,</span> <span class="n">df</span><span class="p">)</span>
-<span class="o">&gt;&gt;&gt;</span> <span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">&quot;test_symbol&quot;</span><span class="p">,</span> <span class="n">row_range</span><span class="o">=</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span><span class="mi">7</span><span class="p">))</span><span class="o">.</span><span class="n">data</span>
+<div class="highlight"><pre><span></span><code><span class="o">&gt;&gt;&gt;</span> <span class="kn">from</span><span class="w"> </span><span class="nn">arcticdb</span><span class="w"> </span><span class="kn">import</span> <span class="n">Arctic</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="s2">"col1"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">10</span><span class="p">),</span> <span class="s2">"col2"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">100</span><span class="p">,</span> <span class="mi">110</span><span class="p">)},</span> <span class="n">index</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">10</span><span class="p">))</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="n">ac</span> <span class="o">=</span> <span class="n">Arctic</span><span class="p">(</span><span class="s2">"lmdb://test"</span><span class="p">)</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="n">lib</span> <span class="o">=</span> <span class="n">ac</span><span class="o">.</span><span class="n">get_library</span><span class="p">(</span><span class="s2">"test_lib"</span><span class="p">,</span> <span class="n">create_if_missing</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">"test_symbol"</span><span class="p">,</span> <span class="n">df</span><span class="p">)</span>
+<span class="o">&gt;&gt;&gt;</span> <span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">"test_symbol"</span><span class="p">,</span> <span class="n">row_range</span><span class="o">=</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span><span class="mi">7</span><span class="p">))</span><span class="o">.</span><span class="n">data</span>
    <span class="n">col1</span>  <span class="n">col2</span>
 <span class="mi">3</span>     <span class="mi">3</span>   <span class="mi">103</span>
 <span class="mi">4</span>     <span class="mi">4</span>   <span class="mi">104</span>
 <span class="mi">5</span>     <span class="mi">5</span>   <span class="mi">105</span>
 <span class="mi">6</span>     <span class="mi">6</span>   <span class="mi">106</span>
 </code></pre></div>
-<h4 id="fixes_70">🐛 Fixes<a class="headerlink" href="#fixes_70" title="Permanent link">&para;</a></h4>
+<h4 id="fixes_71">🐛 Fixes<a class="headerlink" href="#fixes_71" title="Permanent link">&para;</a></h4>
 <ul>
 <li>Symbol list refactor (<a href="https://github.com/man-group/ArcticDB/issues/796">#796</a>)</li>
 <li>Fixed aggregation on sparse grouping columns (<a href="https://github.com/man-group/ArcticDB/issues/1068">#1068</a>).<br />
@@ -5030,19 +5047,19 @@ Depending on timestamps being accurate in the symbol list has proved to be troub
 <h5 id="in-memory-backend">In-memory Backend<a class="headerlink" href="#in-memory-backend" title="Permanent link">&para;</a></h5>
 <p>You can now open ArcticDB with an in-memory backend,</p>
 <div class="highlight"><pre><span></span><code>from arcticdb import Arctic
-ac = Arctic(&quot;mem://&quot;)
-ac.create_library(&quot;test&quot;)
-assert ac.list_libraries() == [&quot;test&quot;]
+ac = Arctic("mem://")
+ac.create_library("test")
+assert ac.list_libraries() == ["test"]
 # Create libraries as normal. Each `Arctic` object manages its own in-memory storage, so the lifetime
 # of your libraries and data is the same as the lifetime of the `Arctic` instance that owns them.
 
-ac2 = Arctic(&quot;mem://&quot;)
-assert ac2.list_libraries() == []  # ac2 is backed by different memory to ac so the &quot;test&quot; library is not returned
+ac2 = Arctic("mem://")
+assert ac2.list_libraries() == []  # ac2 is backed by different memory to ac so the "test" library is not returned
 </code></pre></div>
 <h5 id="query-builder">Query Builder<a class="headerlink" href="#query-builder" title="Permanent link">&para;</a></h5>
 <p>We now support a new "count" aggregator. You can invoke it with:</p>
 <div class="highlight"><pre><span></span><code>q = QueryBuilder()
-q = q.groupby(&quot;grouping_column&quot;).agg({&quot;a&quot;: &quot;count&quot;})
+q = q.groupby("grouping_column").agg({"a": "count"})
 </code></pre></div>
 <h4 id="breaking-and-api-changes">⚠️  Breaking and API Changes<a class="headerlink" href="#breaking-and-api-changes" title="Permanent link">&para;</a></h4>
 <h5 id="lmdb-backend">LMDB Backend<a class="headerlink" href="#lmdb-backend" title="Permanent link">&para;</a></h5>
@@ -5062,7 +5079,7 @@ q = q.groupby(&quot;grouping_column&quot;).agg({&quot;a&quot;: &quot;count&quot;
 <li>ASV Benchmarking published <a href="https://man-group.github.io/ArcticDB/">here</a> (<a href="https://github.com/man-group/ArcticDB/issues/962">#962</a> <a href="https://github.com/man-group/ArcticDB/issues/970">#970</a>)</li>
 <li>Preparatory work for RocksDB backend (<a href="https://github.com/man-group/ArcticDB/issues/945">#945</a>)</li>
 </ul>
-<h4 id="fixes_71">🐛 Fixes<a class="headerlink" href="#fixes_71" title="Permanent link">&para;</a></h4>
+<h4 id="fixes_72">🐛 Fixes<a class="headerlink" href="#fixes_72" title="Permanent link">&para;</a></h4>
 <ul>
 <li>Fix LZ4 decoding error issues that occurred with a mix of empty and non-empty columns (<a href="https://github.com/man-group/ArcticDB/issues/964">#964</a>)</li>
 <li>Performance improvement for <code>read_batch</code> when called with many symbols (4-5x improvement) (<a href="https://github.com/man-group/ArcticDB/issues/870">#870</a>)</li>
@@ -5111,7 +5128,7 @@ q = q.groupby(&quot;grouping_column&quot;).agg({&quot;a&quot;: &quot;count&quot;
 <ul>
 <li>Better backend storage retryable error handling and error message printout <a href="https://github.com/man-group/ArcticDB/issues/1365">#1365</a></li>
 </ul>
-<h4 id="fixes_72">🐛 Fixes<a class="headerlink" href="#fixes_72" title="Permanent link">&para;</a></h4>
+<h4 id="fixes_73">🐛 Fixes<a class="headerlink" href="#fixes_73" title="Permanent link">&para;</a></h4>
 <ul>
 <li>Stop allowing snapshotting tombstoned versions <a href="https://github.com/man-group/ArcticDB/issues/1280">#1280</a></li>
 <li>Add a way to enable/disable silencing of errors when deleting a library <a href="https://github.com/man-group/ArcticDB/issues/1271">#1271</a></li>
@@ -5124,7 +5141,7 @@ q = q.groupby(&quot;grouping_column&quot;).agg({&quot;a&quot;: &quot;count&quot;
 <ul>
 <li>Add preliminary change for slowdown error test (<a href="https://github.com/man-group/ArcticDB/issues/1070">#1070</a>)</li>
 </ul>
-<h4 id="fixes_73">🐛 Fixes<a class="headerlink" href="#fixes_73" title="Permanent link">&para;</a></h4>
+<h4 id="fixes_74">🐛 Fixes<a class="headerlink" href="#fixes_74" title="Permanent link">&para;</a></h4>
 <ul>
 <li>Empty column handling improvements (<a href="https://github.com/man-group/ArcticDB/issues/1079">#1079</a>)</li>
 <li>Use previous build of libmongocxx to avoid missing symbols (<a href="https://github.com/man-group/ArcticDB/issues/1083">#1083</a>)</li>
@@ -5135,7 +5152,7 @@ q = q.groupby(&quot;grouping_column&quot;).agg({&quot;a&quot;: &quot;count&quot;
 <h2 id="v4-0-2">v4.0.2<a class="headerlink" href="#v4-0-2" title="Permanent link">&para;</a></h2>
 <p><em>Released 2023-11-02</em> · <a href="https://github.com/man-group/ArcticDB/releases/tag/v4.0.2">GitHub release</a></p>
 <p>This is a patch release to version <code>4.0</code> that backports some changes from master.</p>
-<h4 id="fixes_74">🐛 Fixes<a class="headerlink" href="#fixes_74" title="Permanent link">&para;</a></h4>
+<h4 id="fixes_75">🐛 Fixes<a class="headerlink" href="#fixes_75" title="Permanent link">&para;</a></h4>
 <p>Bugfix for a deadlock issue when using Python multithreading and <code>batch_read</code> (<a href="https://github.com/man-group/ArcticDB/pull/1021">https://github.com/man-group/ArcticDB/pull/1021</a>)</p>
 <h2 id="v4-0-1">v4.0.1<a class="headerlink" href="#v4-0-1" title="Permanent link">&para;</a></h2>
 <p><em>Released 2023-11-02</em> · <a href="https://github.com/man-group/ArcticDB/releases/tag/v4.0.1">GitHub release</a></p>
@@ -5144,7 +5161,7 @@ q = q.groupby(&quot;grouping_column&quot;).agg({&quot;a&quot;: &quot;count&quot;
 <ul>
 <li>Allow ampersand in symbol names (<a href="https://github.com/man-group/ArcticDB/issues/952">#952</a>)</li>
 </ul>
-<h4 id="fixes_75">🐛 Fixes<a class="headerlink" href="#fixes_75" title="Permanent link">&para;</a></h4>
+<h4 id="fixes_76">🐛 Fixes<a class="headerlink" href="#fixes_76" title="Permanent link">&para;</a></h4>
 <ul>
 <li>Backport minor fixes to 4.0.x (<a href="https://github.com/man-group/ArcticDB/issues/954">#954</a>), not user facing</li>
 </ul>
@@ -5172,7 +5189,7 @@ q = q.groupby(&quot;grouping_column&quot;).agg({&quot;a&quot;: &quot;count&quot;
 <li>Code coverage analysis and report workflow (<a href="https://github.com/man-group/ArcticDB/issues/783">#783</a>) (<a href="https://github.com/man-group/ArcticDB/issues/784">#784</a>)</li>
 <li>Add documentation with doxygen (<a href="https://github.com/man-group/ArcticDB/issues/736">#736</a>)</li>
 </ul>
-<h4 id="fixes_76">🐛 Fixes<a class="headerlink" href="#fixes_76" title="Permanent link">&para;</a></h4>
+<h4 id="fixes_77">🐛 Fixes<a class="headerlink" href="#fixes_77" title="Permanent link">&para;</a></h4>
 <ul>
 <li>Update support status: Pandas DataFrame and Series backed by PyArrow are not supported (<a href="https://github.com/man-group/ArcticDB/issues/882">#882</a>)</li>
 <li>Added pymongo to the list of installation dependencies (<a href="https://github.com/man-group/ArcticDB/issues/891">#891</a>)</li>
@@ -5287,7 +5304,7 @@ It's possible those users recorded the credentials, and because those credential
 <li>Enhancement 737: Support empty-type columns in QueryBuilder operations (<a href="https://github.com/man-group/ArcticDB/pull/794">https://github.com/man-group/ArcticDB/pull/794</a>)</li>
 <li>conda-build: Adapt C++ test suite for Linux (<a href="https://github.com/man-group/ArcticDB/pull/713">https://github.com/man-group/ArcticDB/pull/713</a>)</li>
 </ul>
-<h4 id="fixes_77">🐛 Fixes<a class="headerlink" href="#fixes_77" title="Permanent link">&para;</a></h4>
+<h4 id="fixes_78">🐛 Fixes<a class="headerlink" href="#fixes_78" title="Permanent link">&para;</a></h4>
 <ul>
 <li>conda-build: Use default compilers for macOS (<a href="https://github.com/man-group/ArcticDB/pull/662">https://github.com/man-group/ArcticDB/pull/662</a>)</li>
 <li>Bugfix/nativeversionstore write metadata batch should never return dataerror objects (<a href="https://github.com/man-group/ArcticDB/pull/782">https://github.com/man-group/ArcticDB/pull/782</a>)</li>
@@ -5347,7 +5364,7 @@ It's possible those users recorded the credentials, and because those credential
 </ul>
 </li>
 </ul>
-<h4 id="fixes_78">🐛 Fixes<a class="headerlink" href="#fixes_78" title="Permanent link">&para;</a></h4>
+<h4 id="fixes_79">🐛 Fixes<a class="headerlink" href="#fixes_79" title="Permanent link">&para;</a></h4>
 <ul>
 <li>Ensure content hash is copied during restore version + fixing timestamp-uniqueness-related flaky tests (<a href="https://github.com/man-group/ArcticDB/issues/600">#600</a>)</li>
 <li>Restrict supported string types to type equality rather than has isinstance (<a href="https://github.com/man-group/ArcticDB/issues/704">#704</a>)</li>
@@ -5368,13 +5385,13 @@ It's possible those users recorded the credentials, and because those credential
 <h2 id="v1-6-2">v1.6.2<a class="headerlink" href="#v1-6-2" title="Permanent link">&para;</a></h2>
 <p><em>Released 2023-10-04</em> · <a href="https://github.com/man-group/ArcticDB/releases/tag/v1.6.2">GitHub release</a></p>
 <p>This release is a patch release, backporting bug-fixes to v1.6.1 </p>
-<h4 id="fixes_79">🐛 Fixes<a class="headerlink" href="#fixes_79" title="Permanent link">&para;</a></h4>
+<h4 id="fixes_80">🐛 Fixes<a class="headerlink" href="#fixes_80" title="Permanent link">&para;</a></h4>
 <ul>
 <li>Fixed a bug in key data retrieval, which could lead to incorrect behavior and segmentation faults (<a href="https://github.com/man-group/ArcticDB/issues/912">#912</a> )</li>
 </ul>
 <h2 id="v1-6-1">v1.6.1<a class="headerlink" href="#v1-6-1" title="Permanent link">&para;</a></h2>
 <p><em>Released 2023-08-09</em> · <a href="https://github.com/man-group/ArcticDB/releases/tag/v1.6.1">GitHub release</a></p>
-<h4 id="fixes_80">🐛 Fixes<a class="headerlink" href="#fixes_80" title="Permanent link">&para;</a></h4>
+<h4 id="fixes_81">🐛 Fixes<a class="headerlink" href="#fixes_81" title="Permanent link">&para;</a></h4>
 <ul>
 <li>Add a more strict check for chars in the symbol names (<a href="https://github.com/man-group/ArcticDB/issues/627">#627</a>)</li>
 <li>Fix <code>as_of</code> with timestamp reading entire version chain rather than just reading up-to the required version (<a href="https://github.com/man-group/ArcticDB/issues/596">#596</a>)<ul>
@@ -5423,7 +5440,7 @@ ErrorCategory.STORAGE - ErrorCode.E_KEY_NOT_FOUND: At least one of the keys requ
 read(...as_of=-1...) will select the most recent version
 read(...as_of=-2...) will select the version prior to the most recent version
 </code></pre></div>
-<h4 id="fixes_81">🐛 Fixes<a class="headerlink" href="#fixes_81" title="Permanent link">&para;</a></h4>
+<h4 id="fixes_82">🐛 Fixes<a class="headerlink" href="#fixes_82" title="Permanent link">&para;</a></h4>
 <p>Various fixes to make our use of LMDB more correct. These only affect LMDB-backed Arctic instances (not S3). These should resolve the segfaults users have been experiencing with LMDB.</p>
 <ul>
 <li>Only open library once in the interpreter lifetime (<a href="https://github.com/man-group/ArcticDB/issues/585">#585</a>)</li>
@@ -5474,7 +5491,7 @@ read(...as_of=-2...) will select the version prior to the most recent version
 <li>Add test for filtering down the string pool with Nones and NaNs (<a href="https://github.com/man-group/ArcticDB/issues/533">#533</a>)</li>
 <li>ArcticDB now supports <a href="https://docs.arcticdb.io/runtime_config/#logging-destinations">logging to a file for log messages </a>(<a href="https://github.com/man-group/ArcticDB/pull/573">#573</a>)</li>
 </ul>
-<h4 id="fixes_82">🐛 Fixes<a class="headerlink" href="#fixes_82" title="Permanent link">&para;</a></h4>
+<h4 id="fixes_83">🐛 Fixes<a class="headerlink" href="#fixes_83" title="Permanent link">&para;</a></h4>
 <ul>
 <li>Rename write_batch_pickle to write_pickle_batch. Note that this is a breaking API change. (<a href="https://github.com/man-group/ArcticDB/issues/516">#516</a>)</li>
 <li>Fix compilation errors issued by clang-16. (<a href="https://github.com/man-group/ArcticDB/issues/542">#542</a>)</li>
@@ -5487,7 +5504,7 @@ read(...as_of=-2...) will select the version prior to the most recent version
 <ul>
 <li>Significant performance improvements for <code>get_description_batch</code>, exploiting per-symbol parallelism. Bench-marking suggests an order of magnitude improvement for 1000 symbols.</li>
 </ul>
-<h4 id="fixes_83">🐛 Fixes<a class="headerlink" href="#fixes_83" title="Permanent link">&para;</a></h4>
+<h4 id="fixes_84">🐛 Fixes<a class="headerlink" href="#fixes_84" title="Permanent link">&para;</a></h4>
 <ul>
 <li><code>get_description_batch</code> datetimes now include UTC tzinfo (fixing the batch equivalent of issue <a href="https://github.com/man-group/ArcticDB/issues/197">#197</a>).</li>
 </ul>
@@ -5533,7 +5550,7 @@ read(...as_of=-2...) will select the version prior to the most recent version
 <li>Multiple improvements to the reliability and stability of the symbol list caching logic. (<a href="https://github.com/man-group/ArcticDB/issues/393">#393</a>)</li>
 <li>Add get_uri function to the Arctic instance (<a href="https://github.com/man-group/ArcticDB/issues/433">#433</a>)</li>
 </ul>
-<h4 id="fixes_84">🐛 Fixes<a class="headerlink" href="#fixes_84" title="Permanent link">&para;</a></h4>
+<h4 id="fixes_85">🐛 Fixes<a class="headerlink" href="#fixes_85" title="Permanent link">&para;</a></h4>
 <ul>
 <li>Significant performance improvements for <code>read_batch</code>, <code>read_metadata_batch</code> and <code>get_description_batch</code>  (<a href="https://github.com/man-group/ArcticDB/issues/415">#415</a> <a href="https://github.com/man-group/ArcticDB/issues/435">#435</a>)<ul>
 <li>Note that the performance improvements for <code>read_batch</code> will largely only be visible if no <code>QueryBuilder</code> query is passed in. </li>
@@ -5687,11 +5704,118 @@ Both batch methods do not achieve optimal parallelism - we are aiming to address
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.tabs", "navigation.sections", "content.code.copy", "toc.integrate"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.tabs", "navigation.sections", "content.code.copy", "toc.integrate"], "search": "../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
     
     
-      <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
+      <script src="../assets/javascripts/bundle.c21346df.min.js"></script>
       
     
-  </body>
+  <script data-mkdocs-jupyter-mathjax="{&quot;url&quot;: &quot;https://cdn.jsdelivr.net/npm/mathjax@4.1.3/tex-mml-chtml.js&quot;, &quot;version&quot;: 4}">
+/* Shared by full pages and Material's instant navigation. */
+(() => {
+  const config = JSON.parse(document.currentScript.dataset.mkdocsJupyterMathjax);
+  if (window.mkdocsJupyterMathJax) return;
+
+  let loading;
+  let queue = Promise.resolve();
+  let previous = [];
+
+  const ready = async () => {
+    if (!loading) {
+      loading = (async () => {
+        let math = window.MathJax;
+        if (!math?.typesetPromise) {
+          const url = new URL(config.url, document.baseURI).href;
+          const existing = Array.from(document.scripts).find(script =>
+            script.src && (script.src === url || script.id === 'MathJax-script' ||
+              (/mathjax/i.test(script.src) &&
+               /\/(?:MathJax|latest|(?:tex|mml)(?:-mml)?-(?:chtml|svg))\.js(?:[?#]|$)/i.test(script.src))));
+          if (existing) {
+            if (!math?.startup?.promise) {
+              await new Promise((resolve, reject) => {
+                existing.addEventListener('load', resolve, { once: true });
+                existing.addEventListener('error', reject, { once: true });
+              });
+            }
+          } else {
+            // Keep site macros, delimiters and startup hooks when supplied.
+            const options = math || {};
+            window.MathJax = {
+              ...options,
+              loader: {
+                ...options.loader,
+                load: Array.from(new Set(['ui/safe', ...(options.loader?.load || [])]))
+              },
+              startup: { typeset: false, ...options.startup },
+              tex: {
+                tags: 'ams',
+                useLabelIds: true,
+                inlineMath: [['$', '$'], ['\\(', '\\)']],
+                displayMath: [['$$', '$$'], ['\\[', '\\]']],
+                processEscapes: true,
+                processEnvironments: true,
+                ...options.tex
+              }
+            };
+            await new Promise((resolve, reject) => {
+              const script = document.createElement('script');
+              script.src = config.url;
+              script.id = 'MathJax-script';
+              script.async = true;
+              script.onload = resolve;
+              script.onerror = reject;
+              document.head.appendChild(script);
+            });
+          }
+        }
+        math = window.MathJax;
+        await math.startup.promise;
+        return math;
+      })();
+    }
+    const math = await loading;
+    // A site owner can extend the v3 queue again on each navigation.
+    await math.startup.promise;
+    return math;
+  };
+
+  const unrendered = node => {
+    if (node.matches('mjx-container')) return [];
+    if (!node.querySelector('mjx-container')) return [node];
+    // In v3, scanning generated assistive MathML again produces nested output.
+    return Array.from(node.children).flatMap(unrendered);
+  };
+
+  const refresh = () => {
+    // A separate chain also serializes v3, without changing v4's startup promise.
+    queue = queue.then(async () => {
+      const notebooks = Array.from(document.querySelectorAll('.jupyter-wrapper'));
+      if (!notebooks.length && !previous.length) return;
+      if (notebooks.length === previous.length &&
+          notebooks.every((node, index) => node === previous[index])) return;
+      const math = await ready();
+      if (previous.length) {
+        math.typesetClear(previous);
+        math.texReset();
+      }
+      previous = notebooks.filter(node => node.isConnected);
+      const pending = previous.flatMap(unrendered);
+      if (pending.length) await math.typesetPromise(pending);
+    }).catch(error => console.error('mkdocs-jupyter: MathJax rendering failed', error));
+    return queue;
+  };
+
+  window.mkdocsJupyterMathJax = { refresh };
+  const start = () => {
+    if (typeof document$ !== 'undefined') document$.subscribe(refresh);
+    else refresh();
+  };
+  // Theme bundles and user-provided MathJax scripts can follow notebook content.
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', start, { once: true });
+  } else start();
+})();
+
+</script>
+</body>
 </html>

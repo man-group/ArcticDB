@@ -8,7 +8,7 @@
       
       
       
-        <link rel="canonical" href="https://docs.arcticdb.io/6.28.1/tutorials/metadata/">
+        <link rel="canonical" href="https://docs.arcticdb.io/6.28.2/tutorials/metadata/">
       
       
         <link rel="prev" href="../snapshots/">
@@ -21,7 +21,7 @@
       
       
       <link rel="icon" href="../../images/ArcticDB Logo.svg">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.0">
     
     
       
@@ -29,10 +29,10 @@
       
     
     
-      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/main.57a0d79d.min.css">
       
         
-        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.fb2fffe2.min.css">
       
       
 
@@ -2340,10 +2340,10 @@
 <h1 id="metadata">Metadata<a class="headerlink" href="#metadata" title="Permanent link">&para;</a></h1>
 <p>ArcticDB enables you to store arbitrary binary-blobs alongside symbols and versions.</p>
 <p>The below example shows a basic example of writing and reading metadata (in this case a Python dictionary):</p>
-<div class="highlight"><pre><span></span><code><span class="kn">import</span> <span class="nn">arcticdb</span> <span class="k">as</span> <span class="nn">adb</span>
+<div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">arcticdb</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">adb</span>
 <span class="c1"># This example assumes the below variables (host, bucket, access, secret) are validly set</span>
-<span class="n">ac</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">Arctic</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;s3://</span><span class="si">{</span><span class="n">HOST</span><span class="si">}</span><span class="s2">:</span><span class="si">{</span><span class="n">BUCKET</span><span class="si">}</span><span class="s2">?access=</span><span class="si">{</span><span class="n">ACCESS</span><span class="si">}</span><span class="s2">&amp;secret=</span><span class="si">{</span><span class="n">SECRET</span><span class="si">}</span><span class="s2">)</span>
-<span class="n">library</span> <span class="o">=</span> <span class="s2">&quot;my_library&quot;</span>
+<span class="n">ac</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">Arctic</span><span class="p">(</span><span class="sa">f</span><span class="s2">"s3://</span><span class="si">{</span><span class="n">HOST</span><span class="si">}</span><span class="s2">:</span><span class="si">{</span><span class="n">BUCKET</span><span class="si">}</span><span class="s2">?access=</span><span class="si">{</span><span class="n">ACCESS</span><span class="si">}</span><span class="s2">&amp;secret=</span><span class="si">{</span><span class="n">SECRET</span><span class="si">}</span><span class="s2">)</span>
+<span class="n">library</span> <span class="o">=</span> <span class="s2">"my_library"</span>
 
 <span class="k">if</span> <span class="n">library</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">ac</span><span class="o">.</span><span class="n">list_libraries</span><span class="p">():</span>
     <span class="n">ac</span><span class="o">.</span><span class="n">create_library</span><span class="p">(</span><span class="n">library</span><span class="p">)</span>
@@ -2351,23 +2351,23 @@
 <span class="n">library</span> <span class="o">=</span> <span class="n">ac</span><span class="p">[</span><span class="n">library</span><span class="p">]</span>
 
 <span class="n">metadata</span> <span class="o">=</span> <span class="p">{</span>
-    <span class="s2">&quot;This&quot;</span><span class="p">:</span> <span class="s2">&quot;is&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;a&quot;</span><span class="p">:</span> <span class="s2">&quot;Python&quot;</span><span class="p">,</span>
-    <span class="s2">&quot;Dictionary&quot;</span><span class="p">:</span> <span class="s2">&quot;!&quot;</span>
+    <span class="s2">"This"</span><span class="p">:</span> <span class="s2">"is"</span><span class="p">,</span>
+    <span class="s2">"a"</span><span class="p">:</span> <span class="s2">"Python"</span><span class="p">,</span>
+    <span class="s2">"Dictionary"</span><span class="p">:</span> <span class="s2">"!"</span>
 <span class="p">}</span>
 
-<span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">&quot;meta&quot;</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(),</span> <span class="n">metadata</span><span class="o">=</span><span class="n">metadata</span><span class="p">)</span>  <span class="c1"># or write_metadata can be used - will still create a new version, but doesn&#39;t require `data` to be passed in</span>
+<span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">"meta"</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(),</span> <span class="n">metadata</span><span class="o">=</span><span class="n">metadata</span><span class="p">)</span>  <span class="c1"># or write_metadata can be used - will still create a new version, but doesn't require `data` to be passed in</span>
 
-<span class="k">assert</span> <span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">&quot;meta&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">metadata</span> <span class="o">==</span> <span class="n">metadata</span>
-<span class="k">assert</span> <span class="n">lib</span><span class="o">.</span><span class="n">read_metadata</span><span class="p">(</span><span class="s2">&quot;meta&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">metadata</span> <span class="o">==</span> <span class="n">metadata</span>  <span class="c1"># Same as read, but doesn&#39;t return data from storage</span>
+<span class="k">assert</span> <span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">"meta"</span><span class="p">)</span><span class="o">.</span><span class="n">metadata</span> <span class="o">==</span> <span class="n">metadata</span>
+<span class="k">assert</span> <span class="n">lib</span><span class="o">.</span><span class="n">read_metadata</span><span class="p">(</span><span class="s2">"meta"</span><span class="p">)</span><span class="o">.</span><span class="n">metadata</span> <span class="o">==</span> <span class="n">metadata</span>  <span class="c1"># Same as read, but doesn't return data from storage</span>
 </code></pre></div>
 <p>New versions of symbols do not "inherit" the metadata of a previous version. Metadata needs to be specified explicitly
 each time that you create a new version of the symbol:</p>
-<div class="highlight"><pre><span></span><code><span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">&quot;new_sym&quot;</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(),</span> <span class="n">metadata</span><span class="o">=</span><span class="n">metadata</span><span class="p">)</span>
-<span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">&quot;new_sym&quot;</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">())</span>
+<div class="highlight"><pre><span></span><code><span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">"new_sym"</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(),</span> <span class="n">metadata</span><span class="o">=</span><span class="n">metadata</span><span class="p">)</span>
+<span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">"new_sym"</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">())</span>
 
-<span class="k">assert</span> <span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">&quot;new_sym&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">metadata</span> <span class="ow">is</span> <span class="kc">None</span>
-<span class="k">assert</span> <span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">&quot;new_sym&quot;</span><span class="p">,</span> <span class="n">as_of</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">metadata</span> <span class="o">==</span> <span class="n">metadata</span>
+<span class="k">assert</span> <span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">"new_sym"</span><span class="p">)</span><span class="o">.</span><span class="n">metadata</span> <span class="ow">is</span> <span class="kc">None</span>
+<span class="k">assert</span> <span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">"new_sym"</span><span class="p">,</span> <span class="n">as_of</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">metadata</span> <span class="o">==</span> <span class="n">metadata</span>
 </code></pre></div>
 <h3 id="serialization-format">Serialization Format<a class="headerlink" href="#serialization-format" title="Permanent link">&para;</a></h3>
 <p>We use <code>msgpack</code> serialization for metadata when possible. We support the built-in <code>msgpack</code> types and also:</p>
@@ -2389,40 +2389,40 @@ variable <code>ARCTICDB_PickledMetadata_loglevel_str</code> to <code>DEBUG</code
 <h3 id="practical-example-using-metadata-to-track-vendor-timelines">Practical example - using metadata to track vendor timelines<a class="headerlink" href="#practical-example-using-metadata-to-track-vendor-timelines" title="Permanent link">&para;</a></h3>
 <p>One common example for metadata is to store the vendor-provided date alongside the version. For example, let's say we are processing three files - <code>data-2004-01-01.csv</code>, <code>data-2004-01-02.csv</code> and <code>data-2004-01-03.csv</code>. Each file name contains a date which we'd like to be able to store along side the version information in ArcticDB.</p>
 <p>We can do this using the following code:</p>
-<div class="highlight"><pre><span></span><code><span class="kn">import</span> <span class="nn">glob</span>
-<span class="kn">import</span> <span class="nn">datetime</span>
-<span class="kn">import</span> <span class="nn">arcticdb</span> <span class="k">as</span> <span class="nn">adb</span>
+<div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">glob</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">datetime</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">arcticdb</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">adb</span>
 
 <span class="c1"># This example assumes the below variables (host, bucket, access, secret) are validly set</span>
-<span class="n">ac</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">Arctic</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;s3://</span><span class="si">{</span><span class="n">HOST</span><span class="si">}</span><span class="s2">:</span><span class="si">{</span><span class="n">BUCKET</span><span class="si">}</span><span class="s2">?access=</span><span class="si">{</span><span class="n">ACCESS</span><span class="si">}</span><span class="s2">&amp;secret=</span><span class="si">{</span><span class="n">SECRET</span><span class="si">}</span><span class="s2">)</span>
-<span class="n">library</span> <span class="o">=</span> <span class="s2">&quot;my_library&quot;</span>
+<span class="n">ac</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">Arctic</span><span class="p">(</span><span class="sa">f</span><span class="s2">"s3://</span><span class="si">{</span><span class="n">HOST</span><span class="si">}</span><span class="s2">:</span><span class="si">{</span><span class="n">BUCKET</span><span class="si">}</span><span class="s2">?access=</span><span class="si">{</span><span class="n">ACCESS</span><span class="si">}</span><span class="s2">&amp;secret=</span><span class="si">{</span><span class="n">SECRET</span><span class="si">}</span><span class="s2">)</span>
+<span class="n">library</span> <span class="o">=</span> <span class="s2">"my_library"</span>
 
 <span class="k">if</span> <span class="n">library</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">ac</span><span class="o">.</span><span class="n">list_libraries</span><span class="p">():</span>
     <span class="n">ac</span><span class="o">.</span><span class="n">create_library</span><span class="p">(</span><span class="n">library</span><span class="p">)</span>
 
 <span class="n">library</span> <span class="o">=</span> <span class="n">ac</span><span class="p">[</span><span class="n">library</span><span class="p">]</span>
 
-<span class="n">file_names</span> <span class="o">=</span> <span class="n">glob</span><span class="o">.</span><span class="n">glob</span><span class="p">(</span><span class="s1">&#39;*.csv&#39;</span><span class="p">)</span>  <span class="c1"># returns [&#39;data-2004-01-01.csv&#39;, &#39;data-2004-01-02.csv&#39;, &#39;data-2004-01-03.csv&#39;]</span>
+<span class="n">file_names</span> <span class="o">=</span> <span class="n">glob</span><span class="o">.</span><span class="n">glob</span><span class="p">(</span><span class="s1">'*.csv'</span><span class="p">)</span>  <span class="c1"># returns ['data-2004-01-01.csv', 'data-2004-01-02.csv', 'data-2004-01-03.csv']</span>
 
 <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">name</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">file_names</span><span class="p">):</span>
-    <span class="n">data</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="s1">&#39;name&#39;</span><span class="p">)</span>
-    <span class="n">date</span> <span class="o">=</span> <span class="n">datetime</span><span class="o">.</span><span class="n">datetime</span><span class="o">.</span><span class="n">strptime</span><span class="p">(</span><span class="n">name</span><span class="p">[</span><span class="mi">5</span><span class="p">:][:</span><span class="o">-</span><span class="mi">4</span><span class="p">],</span> <span class="s1">&#39;%Y-%m-</span><span class="si">%d</span><span class="s1">&#39;</span><span class="p">)</span>
+    <span class="n">data</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="s1">'name'</span><span class="p">)</span>
+    <span class="n">date</span> <span class="o">=</span> <span class="n">datetime</span><span class="o">.</span><span class="n">datetime</span><span class="o">.</span><span class="n">strptime</span><span class="p">(</span><span class="n">name</span><span class="p">[</span><span class="mi">5</span><span class="p">:][:</span><span class="o">-</span><span class="mi">4</span><span class="p">],</span> <span class="s1">'%Y-%m-</span><span class="si">%d</span><span class="s1">'</span><span class="p">)</span>
 
     <span class="k">if</span> <span class="n">i</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
-        <span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">&quot;symbol&quot;</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">metadata</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;vendor_date&quot;</span><span class="p">:</span> <span class="n">date</span><span class="p">})</span>
+        <span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">"symbol"</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">metadata</span><span class="o">=</span><span class="p">{</span><span class="s2">"vendor_date"</span><span class="p">:</span> <span class="n">date</span><span class="p">})</span>
     <span class="k">else</span><span class="p">:</span>
-        <span class="n">lib</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">&quot;symbol&quot;</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">metadata</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;vendor_date&quot;</span><span class="p">:</span> <span class="n">date</span><span class="p">})</span>
+        <span class="n">lib</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">"symbol"</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">metadata</span><span class="o">=</span><span class="p">{</span><span class="s2">"vendor_date"</span><span class="p">:</span> <span class="n">date</span><span class="p">})</span>
 </code></pre></div>
 <p>We'll now use this to read the data along the vendor-provided timeline - that is, we'll retrieve the data as if we had written each file on the day it was generated. We'll read all metadata entries for all versions of the symbol and select the date that is most recent with respect to a given date (in this case 2004-01-02):</p>
 <div class="highlight"><pre><span></span><code><span class="c1"># Continuing from the previous code snippet</span>
 <span class="n">metadata</span> <span class="o">=</span> <span class="p">[</span>
-    <span class="p">(</span><span class="n">v</span><span class="p">[</span><span class="s2">&quot;version&quot;</span><span class="p">],</span> <span class="n">lib</span><span class="o">.</span><span class="n">read_metadata</span><span class="p">(</span><span class="s2">&quot;symbol&quot;</span><span class="p">,</span> <span class="n">as_of</span><span class="o">=</span><span class="n">v</span><span class="p">[</span><span class="s2">&quot;version&quot;</span><span class="p">])</span><span class="o">.</span><span class="n">metadata</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;vendor_date&quot;</span><span class="p">))</span>
-    <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">lib</span><span class="o">.</span><span class="n">list_versions</span><span class="p">(</span><span class="s2">&quot;symbol&quot;</span><span class="p">)</span>
+    <span class="p">(</span><span class="n">v</span><span class="p">[</span><span class="s2">"version"</span><span class="p">],</span> <span class="n">lib</span><span class="o">.</span><span class="n">read_metadata</span><span class="p">(</span><span class="s2">"symbol"</span><span class="p">,</span> <span class="n">as_of</span><span class="o">=</span><span class="n">v</span><span class="p">[</span><span class="s2">"version"</span><span class="p">])</span><span class="o">.</span><span class="n">metadata</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"vendor_date"</span><span class="p">))</span>
+    <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">lib</span><span class="o">.</span><span class="n">list_versions</span><span class="p">(</span><span class="s2">"symbol"</span><span class="p">)</span>
 <span class="p">]</span>
 <span class="n">sorted_metadata</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">metadata</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
 
 <span class="n">version_to_read_index</span> <span class="o">=</span> <span class="n">bisect_right</span><span class="p">([</span><span class="n">x</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">sorted_metadata</span><span class="p">],</span> <span class="n">datetime</span><span class="o">.</span><span class="n">datetime</span><span class="p">(</span><span class="mi">2004</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">))</span>
-<span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">&quot;symbol&quot;</span><span class="p">,</span> <span class="n">as_of</span><span class="o">=</span><span class="n">sorted_metadata</span><span class="p">[</span><span class="n">version_to_read_index</span> <span class="o">-</span> <span class="mi">1</span><span class="p">][</span><span class="mi">0</span><span class="p">])</span>
+<span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">"symbol"</span><span class="p">,</span> <span class="n">as_of</span><span class="o">=</span><span class="n">sorted_metadata</span><span class="p">[</span><span class="n">version_to_read_index</span> <span class="o">-</span> <span class="mi">1</span><span class="p">][</span><span class="mi">0</span><span class="p">])</span>
 </code></pre></div>
 <p>Note that if the data is written across multiple symbols, then ArcticDB Snapshots can be used to achieve the same result. </p>
 
@@ -2475,11 +2475,118 @@ variable <code>ARCTICDB_PickledMetadata_loglevel_str</code> to <code>DEBUG</code
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.sections", "content.code.copy", "toc.integrate"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.sections", "content.code.copy", "toc.integrate"], "search": "../../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
     
     
-      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
+      <script src="../../assets/javascripts/bundle.c21346df.min.js"></script>
       
     
-  </body>
+  <script data-mkdocs-jupyter-mathjax="{&quot;url&quot;: &quot;https://cdn.jsdelivr.net/npm/mathjax@4.1.3/tex-mml-chtml.js&quot;, &quot;version&quot;: 4}">
+/* Shared by full pages and Material's instant navigation. */
+(() => {
+  const config = JSON.parse(document.currentScript.dataset.mkdocsJupyterMathjax);
+  if (window.mkdocsJupyterMathJax) return;
+
+  let loading;
+  let queue = Promise.resolve();
+  let previous = [];
+
+  const ready = async () => {
+    if (!loading) {
+      loading = (async () => {
+        let math = window.MathJax;
+        if (!math?.typesetPromise) {
+          const url = new URL(config.url, document.baseURI).href;
+          const existing = Array.from(document.scripts).find(script =>
+            script.src && (script.src === url || script.id === 'MathJax-script' ||
+              (/mathjax/i.test(script.src) &&
+               /\/(?:MathJax|latest|(?:tex|mml)(?:-mml)?-(?:chtml|svg))\.js(?:[?#]|$)/i.test(script.src))));
+          if (existing) {
+            if (!math?.startup?.promise) {
+              await new Promise((resolve, reject) => {
+                existing.addEventListener('load', resolve, { once: true });
+                existing.addEventListener('error', reject, { once: true });
+              });
+            }
+          } else {
+            // Keep site macros, delimiters and startup hooks when supplied.
+            const options = math || {};
+            window.MathJax = {
+              ...options,
+              loader: {
+                ...options.loader,
+                load: Array.from(new Set(['ui/safe', ...(options.loader?.load || [])]))
+              },
+              startup: { typeset: false, ...options.startup },
+              tex: {
+                tags: 'ams',
+                useLabelIds: true,
+                inlineMath: [['$', '$'], ['\\(', '\\)']],
+                displayMath: [['$$', '$$'], ['\\[', '\\]']],
+                processEscapes: true,
+                processEnvironments: true,
+                ...options.tex
+              }
+            };
+            await new Promise((resolve, reject) => {
+              const script = document.createElement('script');
+              script.src = config.url;
+              script.id = 'MathJax-script';
+              script.async = true;
+              script.onload = resolve;
+              script.onerror = reject;
+              document.head.appendChild(script);
+            });
+          }
+        }
+        math = window.MathJax;
+        await math.startup.promise;
+        return math;
+      })();
+    }
+    const math = await loading;
+    // A site owner can extend the v3 queue again on each navigation.
+    await math.startup.promise;
+    return math;
+  };
+
+  const unrendered = node => {
+    if (node.matches('mjx-container')) return [];
+    if (!node.querySelector('mjx-container')) return [node];
+    // In v3, scanning generated assistive MathML again produces nested output.
+    return Array.from(node.children).flatMap(unrendered);
+  };
+
+  const refresh = () => {
+    // A separate chain also serializes v3, without changing v4's startup promise.
+    queue = queue.then(async () => {
+      const notebooks = Array.from(document.querySelectorAll('.jupyter-wrapper'));
+      if (!notebooks.length && !previous.length) return;
+      if (notebooks.length === previous.length &&
+          notebooks.every((node, index) => node === previous[index])) return;
+      const math = await ready();
+      if (previous.length) {
+        math.typesetClear(previous);
+        math.texReset();
+      }
+      previous = notebooks.filter(node => node.isConnected);
+      const pending = previous.flatMap(unrendered);
+      if (pending.length) await math.typesetPromise(pending);
+    }).catch(error => console.error('mkdocs-jupyter: MathJax rendering failed', error));
+    return queue;
+  };
+
+  window.mkdocsJupyterMathJax = { refresh };
+  const start = () => {
+    if (typeof document$ !== 'undefined') document$.subscribe(refresh);
+    else refresh();
+  };
+  // Theme bundles and user-provided MathJax scripts can follow notebook content.
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', start, { once: true });
+  } else start();
+})();
+
+</script>
+</body>
 </html>

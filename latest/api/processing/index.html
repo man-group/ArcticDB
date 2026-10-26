@@ -8,7 +8,7 @@
       
       
       
-        <link rel="canonical" href="https://docs.arcticdb.io/6.28.1/api/processing/">
+        <link rel="canonical" href="https://docs.arcticdb.io/6.28.2/api/processing/">
       
       
         <link rel="prev" href="../library_types/">
@@ -21,7 +21,7 @@
       
       
       <link rel="icon" href="../../images/ArcticDB Logo.svg">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.0">
     
     
       
@@ -29,10 +29,10 @@
       
     
     
-      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/main.57a0d79d.min.css">
       
         
-        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.fb2fffe2.min.css">
       
       
 
@@ -2612,12 +2612,12 @@
 
 <p><span class="doc-section-title">Examples:</span></p>
     <div class="highlight"><pre><span></span><code><span class="gp">&gt;&gt;&gt;</span>
-<span class="go"># Specify that we want version 0 of &quot;test&quot; symbol, and to only return the &quot;new_column&quot; column in the output</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">lazy_df</span> <span class="o">=</span> <span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">&quot;test&quot;</span><span class="p">,</span> <span class="n">as_of</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">columns</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;new_column&quot;</span><span class="p">],</span> <span class="n">lazy</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="go"># Specify that we want version 0 of "test" symbol, and to only return the "new_column" column in the output</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">lazy_df</span> <span class="o">=</span> <span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">"test"</span><span class="p">,</span> <span class="n">as_of</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">columns</span><span class="o">=</span><span class="p">[</span><span class="s2">"new_column"</span><span class="p">],</span> <span class="n">lazy</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <span class="go"># Perform a filtering operation</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">lazy_df</span> <span class="o">=</span> <span class="n">lazy_df</span><span class="p">[</span><span class="n">lazy_df</span><span class="p">[</span><span class="s2">&quot;col1&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">isin</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">9</span><span class="p">)]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">lazy_df</span> <span class="o">=</span> <span class="n">lazy_df</span><span class="p">[</span><span class="n">lazy_df</span><span class="p">[</span><span class="s2">"col1"</span><span class="p">]</span><span class="o">.</span><span class="n">isin</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">9</span><span class="p">)]</span>
 <span class="go"># Create a new column through a projection operation</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">lazy_df</span><span class="p">[</span><span class="s2">&quot;new_col&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">lazy_df</span><span class="p">[</span><span class="s2">&quot;col1&quot;</span><span class="p">]</span> <span class="o">+</span> <span class="n">lazy_df</span><span class="p">[</span><span class="s2">&quot;col2&quot;</span><span class="p">]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">lazy_df</span><span class="p">[</span><span class="s2">"new_col"</span><span class="p">]</span> <span class="o">=</span> <span class="n">lazy_df</span><span class="p">[</span><span class="s2">"col1"</span><span class="p">]</span> <span class="o">+</span> <span class="n">lazy_df</span><span class="p">[</span><span class="s2">"col2"</span><span class="p">]</span>
 <span class="go"># Actual read and processing happens here</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">df</span> <span class="o">=</span> <span class="n">lazy_df</span><span class="o">.</span><span class="n">collect</span><span class="p">()</span><span class="o">.</span><span class="n">data</span>
 </code></pre></div>
@@ -2751,17 +2751,17 @@ used to break this class into a list of <code>LazyDataFrame</code> objects. Retu
 
 <p><span class="doc-section-title">Examples:</span></p>
     <div class="highlight"><pre><span></span><code><span class="gp">&gt;&gt;&gt;</span>
-<span class="go"># Specify that we want the latest version of &quot;test_0&quot; symbol, and version 0 of &quot;test_1&quot; symbol</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">lazy_dfs</span> <span class="o">=</span> <span class="n">lib</span><span class="o">.</span><span class="n">read_batch</span><span class="p">([</span><span class="s2">&quot;test_0&quot;</span><span class="p">,</span> <span class="n">ReadRequest</span><span class="p">(</span><span class="s2">&quot;test_1&quot;</span><span class="p">,</span> <span class="n">as_of</span><span class="o">=</span><span class="mi">0</span><span class="p">)],</span> <span class="n">lazy</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-<span class="go"># Perform a filtering operation on both the &quot;test_0&quot; and &quot;test_1&quot; symbols</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">lazy_dfs</span> <span class="o">=</span> <span class="n">lazy_dfs</span><span class="p">[</span><span class="n">lazy_dfs</span><span class="p">[</span><span class="s2">&quot;col1&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">isin</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">9</span><span class="p">)]</span>
+<span class="go"># Specify that we want the latest version of "test_0" symbol, and version 0 of "test_1" symbol</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">lazy_dfs</span> <span class="o">=</span> <span class="n">lib</span><span class="o">.</span><span class="n">read_batch</span><span class="p">([</span><span class="s2">"test_0"</span><span class="p">,</span> <span class="n">ReadRequest</span><span class="p">(</span><span class="s2">"test_1"</span><span class="p">,</span> <span class="n">as_of</span><span class="o">=</span><span class="mi">0</span><span class="p">)],</span> <span class="n">lazy</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="go"># Perform a filtering operation on both the "test_0" and "test_1" symbols</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">lazy_dfs</span> <span class="o">=</span> <span class="n">lazy_dfs</span><span class="p">[</span><span class="n">lazy_dfs</span><span class="p">[</span><span class="s2">"col1"</span><span class="p">]</span><span class="o">.</span><span class="n">isin</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">9</span><span class="p">)]</span>
 <span class="go"># Perform a different projection operation on each symbol</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">lazy_dfs</span> <span class="o">=</span> <span class="n">lazy_dfs</span><span class="o">.</span><span class="n">split</span><span class="p">()</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">lazy_dfs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="s2">&quot;new_col&quot;</span><span class="p">,</span> <span class="n">lazy_dfs</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="s2">&quot;col1&quot;</span><span class="p">]</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">lazy_dfs</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="s2">&quot;new_col&quot;</span><span class="p">,</span> <span class="n">lazy_dfs</span><span class="p">[</span><span class="mi">1</span><span class="p">][</span><span class="s2">&quot;col1&quot;</span><span class="p">]</span> <span class="o">+</span> <span class="mi">2</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">lazy_dfs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="s2">"new_col"</span><span class="p">,</span> <span class="n">lazy_dfs</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="s2">"col1"</span><span class="p">]</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">lazy_dfs</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="s2">"new_col"</span><span class="p">,</span> <span class="n">lazy_dfs</span><span class="p">[</span><span class="mi">1</span><span class="p">][</span><span class="s2">"col1"</span><span class="p">]</span> <span class="o">+</span> <span class="mi">2</span><span class="p">)</span>
 <span class="go"># Bring together again and perform the same filter on both symbols</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">lazy_dfs</span> <span class="o">=</span> <span class="n">LazyDataFrameCollection</span><span class="p">(</span><span class="n">lazy_dfs</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">lazy_dfs</span> <span class="o">=</span> <span class="n">lazy_dfs</span><span class="p">[</span><span class="n">lazy_dfs</span><span class="p">[</span><span class="s2">&quot;new_col&quot;</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">lazy_dfs</span> <span class="o">=</span> <span class="n">lazy_dfs</span><span class="p">[</span><span class="n">lazy_dfs</span><span class="p">[</span><span class="s2">"new_col"</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">]</span>
 <span class="go"># Actual read and processing happens here</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">res</span> <span class="o">=</span> <span class="n">lazy_dfs</span><span class="o">.</span><span class="n">collect</span><span class="p">()</span>
 </code></pre></div>
@@ -2992,7 +2992,7 @@ used to break this class into a list of <code>LazyDataFrame</code> objects. Retu
     <span class="n">lazy_dataframes</span><span class="p">:</span> <span class="n"><span title="typing.Union">Union</span></span><span class="p">[</span>
         <span class="n"><span title="typing.List">List</span></span><span class="p">[</span><span class="n"><a class="autorefs autorefs-internal" title="arcticdb.LazyDataFrame (arcticdb.version_store.library.LazyDataFrame)" href="#arcticdb.LazyDataFrame">LazyDataFrame</a></span><span class="p">],</span> <span class="n"><a class="autorefs autorefs-internal" title="arcticdb.LazyDataFrameCollection (arcticdb.version_store.library.LazyDataFrameCollection)" href="#arcticdb.LazyDataFrameCollection">LazyDataFrameCollection</a></span>
     <span class="p">],</span>
-    <span class="n">join</span><span class="p">:</span> <span class="n"><span title="str">str</span></span> <span class="o">=</span> <span class="s2">&quot;outer&quot;</span><span class="p">,</span>
+    <span class="n">join</span><span class="p">:</span> <span class="n"><span title="str">str</span></span> <span class="o">=</span> <span class="s2">"outer"</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n"><span title="arcticdb.version_store.library.LazyDataFrameAfterJoin">LazyDataFrameAfterJoin</span></span>
 </code></pre></div>
 
@@ -3092,22 +3092,22 @@ used to break this class into a list of <code>LazyDataFrame</code> objects. Retu
     <p>Join 2 symbols together without any pre or post processing.</p>
     <div class="highlight"><pre><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">df0</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span>
 <span class="go">    {</span>
-<span class="go">        &quot;col1&quot;: [0.5],</span>
-<span class="go">        &quot;col2&quot;: [1],</span>
+<span class="go">        "col1": [0.5],</span>
+<span class="go">        "col2": [1],</span>
 <span class="go">    },</span>
-<span class="go">    index=[pd.Timestamp(&quot;2025-01-01&quot;)],</span>
+<span class="go">    index=[pd.Timestamp("2025-01-01")],</span>
 <span class="go">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">df1</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span>
 <span class="go">    {</span>
-<span class="go">        &quot;col3&quot;: [&quot;hello&quot;],</span>
-<span class="go">        &quot;col2&quot;: [2],</span>
+<span class="go">        "col3": ["hello"],</span>
+<span class="go">        "col2": [2],</span>
 <span class="go">    },</span>
-<span class="go">    index=[pd.Timestamp(&quot;2025-01-02&quot;)],</span>
+<span class="go">    index=[pd.Timestamp("2025-01-02")],</span>
 <span class="go">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">&quot;symbol0&quot;</span><span class="p">,</span> <span class="n">df0</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">&quot;symbol1&quot;</span><span class="p">,</span> <span class="n">df1</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">lazy_dfs</span> <span class="o">=</span> <span class="n">lib</span><span class="o">.</span><span class="n">read_batch</span><span class="p">([</span><span class="s2">&quot;symbol0&quot;</span><span class="p">,</span> <span class="s2">&quot;symbol1&quot;</span><span class="p">],</span> <span class="n">lazy</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">adb</span><span class="o">.</span><span class="n">concat</span><span class="p">(</span><span class="n">lazy_dfs</span><span class="p">,</span> <span class="n">join</span><span class="o">=</span><span class="s2">&quot;outer&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">collect</span><span class="p">()</span><span class="o">.</span><span class="n">data</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">"symbol0"</span><span class="p">,</span> <span class="n">df0</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">"symbol1"</span><span class="p">,</span> <span class="n">df1</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">lazy_dfs</span> <span class="o">=</span> <span class="n">lib</span><span class="o">.</span><span class="n">read_batch</span><span class="p">([</span><span class="s2">"symbol0"</span><span class="p">,</span> <span class="s2">"symbol1"</span><span class="p">],</span> <span class="n">lazy</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">adb</span><span class="o">.</span><span class="n">concat</span><span class="p">(</span><span class="n">lazy_dfs</span><span class="p">,</span> <span class="n">join</span><span class="o">=</span><span class="s2">"outer"</span><span class="p">)</span><span class="o">.</span><span class="n">collect</span><span class="p">()</span><span class="o">.</span><span class="n">data</span>
 </code></pre></div>
     <pre><code>                       col1     col2     col3
 2025-01-01 00:00:00     0.5        1     None
@@ -3117,23 +3117,23 @@ used to break this class into a list of <code>LazyDataFrame</code> objects. Retu
 the join.</p>
     <div class="highlight"><pre><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">df0</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span>
 <span class="go">    {</span>
-<span class="go">        &quot;col&quot;: [0, 1, 2, 3, 4],</span>
+<span class="go">        "col": [0, 1, 2, 3, 4],</span>
 <span class="go">    },</span>
-<span class="go">    index=pd.date_range(&quot;2025-01-01&quot;, freq=&quot;min&quot;, periods=5),</span>
+<span class="go">    index=pd.date_range("2025-01-01", freq="min", periods=5),</span>
 <span class="go">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">df1</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span>
 <span class="go">    {</span>
-<span class="go">        &quot;col&quot;: [5, 6, 7, 8, 9],</span>
+<span class="go">        "col": [5, 6, 7, 8, 9],</span>
 <span class="go">    },</span>
-<span class="go">    index=pd.date_range(&quot;2025-01-01T00:05:00&quot;, freq=&quot;min&quot; periods=5),</span>
+<span class="go">    index=pd.date_range("2025-01-01T00:05:00", freq="min" periods=5),</span>
 <span class="go">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">&quot;symbol0&quot;</span><span class="p">,</span> <span class="n">df0</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">&quot;symbol1&quot;</span><span class="p">,</span> <span class="n">df1</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">lazy_df0</span><span class="p">,</span> <span class="n">lazy_df1</span> <span class="o">=</span> <span class="n">lib</span><span class="o">.</span><span class="n">read_batch</span><span class="p">([</span><span class="s2">&quot;symbol0&quot;</span><span class="p">,</span> <span class="s2">&quot;symbol1&quot;</span><span class="p">],</span> <span class="n">lazy</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">split</span><span class="p">()</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">lazy_df0</span> <span class="o">=</span> <span class="n">lazy_df0</span><span class="p">[</span><span class="n">lazy_df0</span><span class="p">[</span><span class="s2">&quot;col&quot;</span><span class="p">]</span> <span class="o">&lt;=</span> <span class="mi">2</span><span class="p">]</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">lazy_df1</span> <span class="o">=</span> <span class="n">lazy_df1</span><span class="p">[</span><span class="n">lazy_df1</span><span class="p">[</span><span class="s2">&quot;col&quot;</span><span class="p">]</span> <span class="o">&lt;=</span> <span class="mi">6</span><span class="p">]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">"symbol0"</span><span class="p">,</span> <span class="n">df0</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">"symbol1"</span><span class="p">,</span> <span class="n">df1</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">lazy_df0</span><span class="p">,</span> <span class="n">lazy_df1</span> <span class="o">=</span> <span class="n">lib</span><span class="o">.</span><span class="n">read_batch</span><span class="p">([</span><span class="s2">"symbol0"</span><span class="p">,</span> <span class="s2">"symbol1"</span><span class="p">],</span> <span class="n">lazy</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">split</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">lazy_df0</span> <span class="o">=</span> <span class="n">lazy_df0</span><span class="p">[</span><span class="n">lazy_df0</span><span class="p">[</span><span class="s2">"col"</span><span class="p">]</span> <span class="o">&lt;=</span> <span class="mi">2</span><span class="p">]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">lazy_df1</span> <span class="o">=</span> <span class="n">lazy_df1</span><span class="p">[</span><span class="n">lazy_df1</span><span class="p">[</span><span class="s2">"col"</span><span class="p">]</span> <span class="o">&lt;=</span> <span class="mi">6</span><span class="p">]</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">lazy_df</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">concat</span><span class="p">([</span><span class="n">lazy_df0</span><span class="p">,</span> <span class="n">lazy_df1</span><span class="p">])</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">lazy_df</span> <span class="o">=</span> <span class="n">lazy_df</span><span class="o">.</span><span class="n">resample</span><span class="p">(</span><span class="s2">&quot;10min&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">agg</span><span class="p">({</span><span class="s2">&quot;col&quot;</span><span class="p">:</span> <span class="s2">&quot;sum&quot;</span><span class="p">})</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">lazy_df</span> <span class="o">=</span> <span class="n">lazy_df</span><span class="o">.</span><span class="n">resample</span><span class="p">(</span><span class="s2">"10min"</span><span class="p">)</span><span class="o">.</span><span class="n">agg</span><span class="p">({</span><span class="s2">"col"</span><span class="p">:</span> <span class="s2">"sum"</span><span class="p">})</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">lazy_df</span><span class="o">.</span><span class="n">collect</span><span class="p">()</span><span class="o">.</span><span class="n">data</span>
 </code></pre></div>
     <pre><code>                        col
@@ -3187,7 +3187,7 @@ functionality, see the documentation for the <code>apply</code> method.</p>
 <p>isna, isnull, notna, and notnull - return all rows where a specified column is/is not NaN or None. isna is
 equivalent to isnull, and notna is equivalent to notnull, i.e. no distinction is made between NaN and None values
 in column types that support both (e.g. strings). For example:
-    <div class="highlight"><pre><span></span><code>q = q[q[&quot;col&quot;].isna()]
+    <div class="highlight"><pre><span></span><code>q = q[q["col"].isna()]
 </code></pre></div></p>
 </li>
 <li>
@@ -3427,16 +3427,16 @@ expression valid in a filter is valid when using <code>apply</code>.</p>
 <p><span class="doc-section-title">Examples:</span></p>
     <div class="highlight"><pre><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span>
 <span class="go">    {</span>
-<span class="go">        &quot;VWAP&quot;: np.arange(0, 10, dtype=np.float64),</span>
-<span class="go">        &quot;ASK&quot;: np.arange(10, 20, dtype=np.uint16),</span>
-<span class="go">        &quot;VOL_ACC&quot;: np.arange(20, 30, dtype=np.int32),</span>
+<span class="go">        "VWAP": np.arange(0, 10, dtype=np.float64),</span>
+<span class="go">        "ASK": np.arange(10, 20, dtype=np.uint16),</span>
+<span class="go">        "VOL_ACC": np.arange(20, 30, dtype=np.int32),</span>
 <span class="go">    },</span>
 <span class="go">    index=np.arange(10),</span>
 <span class="go">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">&quot;expression&quot;</span><span class="p">,</span> <span class="n">df</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">"expression"</span><span class="p">,</span> <span class="n">df</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">QueryBuilder</span><span class="p">()</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">q</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="s2">&quot;ADJUSTED&quot;</span><span class="p">,</span> <span class="n">q</span><span class="p">[</span><span class="s2">&quot;ASK&quot;</span><span class="p">]</span> <span class="o">*</span> <span class="n">q</span><span class="p">[</span><span class="s2">&quot;VOL_ACC&quot;</span><span class="p">]</span> <span class="o">+</span> <span class="mi">7</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">&quot;expression&quot;</span><span class="p">,</span> <span class="n">query_builder</span><span class="o">=</span><span class="n">q</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">q</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="s2">"ADJUSTED"</span><span class="p">,</span> <span class="n">q</span><span class="p">[</span><span class="s2">"ASK"</span><span class="p">]</span> <span class="o">*</span> <span class="n">q</span><span class="p">[</span><span class="s2">"VOL_ACC"</span><span class="p">]</span> <span class="o">+</span> <span class="mi">7</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">"expression"</span><span class="p">,</span> <span class="n">query_builder</span><span class="o">=</span><span class="n">q</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
 <span class="go">VOL_ACC  ASK  VWAP  ADJUSTED</span>
 <span class="go">0     20   10   0.0       207</span>
 <span class="go">1     21   11   1.0       238</span>
@@ -3487,7 +3487,7 @@ expression valid in a filter is valid when using <code>apply</code>.</p>
 
 
 <a href="#arcticdb.QueryBuilder.concat" class="headerlink" title="Permanent link">&para;</a></h3>
-<div class="doc-signature highlight"><pre><span></span><code><span class="nf">concat</span><span class="p">(</span><span class="n">join</span><span class="p">:</span> <span class="n"><span title="str">str</span></span> <span class="o">=</span> <span class="s1">&#39;outer&#39;</span><span class="p">)</span>
+<div class="doc-signature highlight"><pre><span></span><code><span class="nf">concat</span><span class="p">(</span><span class="n">join</span><span class="p">:</span> <span class="n"><span title="str">str</span></span> <span class="o">=</span> <span class="s1">'outer'</span><span class="p">)</span>
 </code></pre></div>
 
     <div class="doc doc-contents ">
@@ -3586,31 +3586,31 @@ or Library.read_batch_and_join.</p>
     <p>Join 2 symbols together without any pre or post processing.</p>
     <div class="highlight"><pre><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">df0</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span>
 <span class="go">    {</span>
-<span class="go">        &quot;col1&quot;: [0.5],</span>
-<span class="go">        &quot;col2&quot;: [1],</span>
+<span class="go">        "col1": [0.5],</span>
+<span class="go">        "col2": [1],</span>
 <span class="go">    },</span>
-<span class="go">    index=[pd.Timestamp(&quot;2025-01-01&quot;)],</span>
+<span class="go">    index=[pd.Timestamp("2025-01-01")],</span>
 <span class="go">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">df1</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span>
 <span class="go">    {</span>
-<span class="go">        &quot;col3&quot;: [&quot;hello&quot;],</span>
-<span class="go">        &quot;col2&quot;: [2],</span>
+<span class="go">        "col3": ["hello"],</span>
+<span class="go">        "col2": [2],</span>
 <span class="go">    },</span>
-<span class="go">    index=[pd.Timestamp(&quot;2025-01-02&quot;)],</span>
+<span class="go">    index=[pd.Timestamp("2025-01-02")],</span>
 <span class="go">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">QueryBuilder</span><span class="p">()</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">q</span><span class="o">.</span><span class="n">concat</span><span class="p">(</span><span class="s2">&quot;outer&quot;</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">&quot;symbol0&quot;</span><span class="p">,</span> <span class="n">df0</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">&quot;symbol1&quot;</span><span class="p">,</span> <span class="n">df1</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">batch_read_and_join</span><span class="p">([</span><span class="s2">&quot;symbol0&quot;</span><span class="p">,</span> <span class="s2">&quot;symbol1&quot;</span><span class="p">],</span> <span class="n">query_builder</span><span class="o">=</span><span class="n">q</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">q</span><span class="o">.</span><span class="n">concat</span><span class="p">(</span><span class="s2">"outer"</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">"symbol0"</span><span class="p">,</span> <span class="n">df0</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">"symbol1"</span><span class="p">,</span> <span class="n">df1</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">batch_read_and_join</span><span class="p">([</span><span class="s2">"symbol0"</span><span class="p">,</span> <span class="s2">"symbol1"</span><span class="p">],</span> <span class="n">query_builder</span><span class="o">=</span><span class="n">q</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
 </code></pre></div>
     <pre><code>                       col1     col2     col3
 2025-01-01 00:00:00     0.5        1     None
 2025-01-02 00:00:00     NaN        2  "hello"
 </code></pre>
     <div class="highlight"><pre><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">QueryBuilder</span><span class="p">()</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">q</span><span class="o">.</span><span class="n">concat</span><span class="p">(</span><span class="s2">&quot;inner&quot;</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">batch_read_and_join</span><span class="p">([</span><span class="s2">&quot;symbol0&quot;</span><span class="p">,</span> <span class="s2">&quot;symbol1&quot;</span><span class="p">],</span> <span class="n">query_builder</span><span class="o">=</span><span class="n">q</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">q</span><span class="o">.</span><span class="n">concat</span><span class="p">(</span><span class="s2">"inner"</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">batch_read_and_join</span><span class="p">([</span><span class="s2">"symbol0"</span><span class="p">,</span> <span class="s2">"symbol1"</span><span class="p">],</span> <span class="n">query_builder</span><span class="o">=</span><span class="n">q</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
 </code></pre></div>
     <pre><code>                       col2
 2025-01-01 00:00:00       1
@@ -3672,7 +3672,7 @@ cost of possibly being slightly slower.</p>
 
 <p><span class="doc-section-title">Examples:</span></p>
     <div class="highlight"><pre><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">QueryBuilder</span><span class="p">()</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">q</span><span class="o">.</span><span class="n">date_range</span><span class="p">((</span><span class="n">pd</span><span class="o">.</span><span class="n">Timestamp</span><span class="p">(</span><span class="s2">&quot;2000-01-01&quot;</span><span class="p">),</span> <span class="n">pd</span><span class="o">.</span><span class="n">Timestamp</span><span class="p">(</span><span class="s2">&quot;2001-01-01&quot;</span><span class="p">)))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">q</span><span class="o">.</span><span class="n">date_range</span><span class="p">((</span><span class="n">pd</span><span class="o">.</span><span class="n">Timestamp</span><span class="p">(</span><span class="s2">"2000-01-01"</span><span class="p">),</span> <span class="n">pd</span><span class="o">.</span><span class="n">Timestamp</span><span class="p">(</span><span class="s2">"2001-01-01"</span><span class="p">)))</span>
 </code></pre></div>
 
 
@@ -3762,15 +3762,15 @@ operators are supported:</p>
     <p>Average (mean) over two groups:</p>
     <div class="highlight"><pre><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span>
 <span class="go">    {</span>
-<span class="go">        &quot;grouping_column&quot;: [&quot;group_1&quot;, &quot;group_1&quot;, &quot;group_1&quot;, &quot;group_2&quot;, &quot;group_2&quot;],</span>
-<span class="go">        &quot;to_mean&quot;: [1.1, 1.4, 2.5, np.nan, 2.2],</span>
+<span class="go">        "grouping_column": ["group_1", "group_1", "group_1", "group_2", "group_2"],</span>
+<span class="go">        "to_mean": [1.1, 1.4, 2.5, np.nan, 2.2],</span>
 <span class="go">    },</span>
 <span class="go">    index=np.arange(5),</span>
 <span class="go">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">QueryBuilder</span><span class="p">()</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">q</span><span class="o">.</span><span class="n">groupby</span><span class="p">(</span><span class="s2">&quot;grouping_column&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">agg</span><span class="p">({</span><span class="s2">&quot;to_mean&quot;</span><span class="p">:</span> <span class="s2">&quot;mean&quot;</span><span class="p">})</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">&quot;symbol&quot;</span><span class="p">,</span> <span class="n">df</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">&quot;symbol&quot;</span><span class="p">,</span> <span class="n">query_builder</span><span class="o">=</span><span class="n">q</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">q</span><span class="o">.</span><span class="n">groupby</span><span class="p">(</span><span class="s2">"grouping_column"</span><span class="p">)</span><span class="o">.</span><span class="n">agg</span><span class="p">({</span><span class="s2">"to_mean"</span><span class="p">:</span> <span class="s2">"mean"</span><span class="p">})</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">"symbol"</span><span class="p">,</span> <span class="n">df</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">"symbol"</span><span class="p">,</span> <span class="n">query_builder</span><span class="o">=</span><span class="n">q</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
 </code></pre></div>
     <pre><code>           to_mean
  group_1  1.666667
@@ -3779,15 +3779,15 @@ operators are supported:</p>
 <p>Max over one group:</p>
     <div class="highlight"><pre><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span>
 <span class="go">    {</span>
-<span class="go">        &quot;grouping_column&quot;: [&quot;group_1&quot;, &quot;group_1&quot;, &quot;group_1&quot;],</span>
-<span class="go">        &quot;to_max&quot;: [1, 5, 4],</span>
+<span class="go">        "grouping_column": ["group_1", "group_1", "group_1"],</span>
+<span class="go">        "to_max": [1, 5, 4],</span>
 <span class="go">    },</span>
 <span class="go">    index=np.arange(3),</span>
 <span class="go">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">QueryBuilder</span><span class="p">()</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">q</span><span class="o">.</span><span class="n">groupby</span><span class="p">(</span><span class="s2">&quot;grouping_column&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">agg</span><span class="p">({</span><span class="s2">&quot;to_max&quot;</span><span class="p">:</span> <span class="s2">&quot;max&quot;</span><span class="p">})</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">&quot;symbol&quot;</span><span class="p">,</span> <span class="n">df</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">&quot;symbol&quot;</span><span class="p">,</span> <span class="n">query_builder</span><span class="o">=</span><span class="n">q</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">q</span><span class="o">.</span><span class="n">groupby</span><span class="p">(</span><span class="s2">"grouping_column"</span><span class="p">)</span><span class="o">.</span><span class="n">agg</span><span class="p">({</span><span class="s2">"to_max"</span><span class="p">:</span> <span class="s2">"max"</span><span class="p">})</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">"symbol"</span><span class="p">,</span> <span class="n">df</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">"symbol"</span><span class="p">,</span> <span class="n">query_builder</span><span class="o">=</span><span class="n">q</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
 </code></pre></div>
     <pre><code>         to_max
 group_1  5
@@ -3795,16 +3795,16 @@ group_1  5
 <p>Max and Mean:</p>
     <div class="highlight"><pre><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span>
 <span class="go">    {</span>
-<span class="go">        &quot;grouping_column&quot;: [&quot;group_1&quot;, &quot;group_1&quot;, &quot;group_1&quot;],</span>
-<span class="go">        &quot;to_mean&quot;: [1.1, 1.4, 2.5],</span>
-<span class="go">        &quot;to_max&quot;: [1.1, 1.4, 2.5]</span>
+<span class="go">        "grouping_column": ["group_1", "group_1", "group_1"],</span>
+<span class="go">        "to_mean": [1.1, 1.4, 2.5],</span>
+<span class="go">        "to_max": [1.1, 1.4, 2.5]</span>
 <span class="go">    },</span>
 <span class="go">    index=np.arange(3),</span>
 <span class="go">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">QueryBuilder</span><span class="p">()</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">q</span><span class="o">.</span><span class="n">groupby</span><span class="p">(</span><span class="s2">&quot;grouping_column&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">agg</span><span class="p">({</span><span class="s2">&quot;to_max&quot;</span><span class="p">:</span> <span class="s2">&quot;max&quot;</span><span class="p">,</span> <span class="s2">&quot;to_mean&quot;</span><span class="p">:</span> <span class="s2">&quot;mean&quot;</span><span class="p">})</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">&quot;symbol&quot;</span><span class="p">,</span> <span class="n">df</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">&quot;symbol&quot;</span><span class="p">,</span> <span class="n">query_builder</span><span class="o">=</span><span class="n">q</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">q</span><span class="o">.</span><span class="n">groupby</span><span class="p">(</span><span class="s2">"grouping_column"</span><span class="p">)</span><span class="o">.</span><span class="n">agg</span><span class="p">({</span><span class="s2">"to_max"</span><span class="p">:</span> <span class="s2">"max"</span><span class="p">,</span> <span class="s2">"to_mean"</span><span class="p">:</span> <span class="s2">"mean"</span><span class="p">})</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">"symbol"</span><span class="p">,</span> <span class="n">df</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">"symbol"</span><span class="p">,</span> <span class="n">query_builder</span><span class="o">=</span><span class="n">q</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
 </code></pre></div>
     <pre><code>         to_max   to_mean
 group_1     2.5  1.666667
@@ -3812,17 +3812,17 @@ group_1     2.5  1.666667
 <p>Min and max over one column, mean over another:</p>
     <div class="highlight"><pre><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span>
 <span class="go">    {</span>
-<span class="go">        &quot;grouping_column&quot;: [&quot;group_1&quot;, &quot;group_1&quot;, &quot;group_1&quot;, &quot;group_2&quot;, &quot;group_2&quot;],</span>
-<span class="go">        &quot;agg_1&quot;: [1, 2, 3, 4, 5],</span>
-<span class="go">        &quot;agg_2&quot;: [1.1, 1.4, 2.5, np.nan, 2.2],</span>
+<span class="go">        "grouping_column": ["group_1", "group_1", "group_1", "group_2", "group_2"],</span>
+<span class="go">        "agg_1": [1, 2, 3, 4, 5],</span>
+<span class="go">        "agg_2": [1.1, 1.4, 2.5, np.nan, 2.2],</span>
 <span class="go">    },</span>
 <span class="go">    index=np.arange(5),</span>
 <span class="go">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">QueryBuilder</span><span class="p">()</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">q</span><span class="o">.</span><span class="n">groupby</span><span class="p">(</span><span class="s2">&quot;grouping_column&quot;</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">q</span><span class="o">.</span><span class="n">agg</span><span class="p">({</span><span class="s2">&quot;agg_1_min&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;agg_1&quot;</span><span class="p">,</span> <span class="s2">&quot;min&quot;</span><span class="p">),</span> <span class="s2">&quot;agg_1_max&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;agg_1&quot;</span><span class="p">,</span> <span class="s2">&quot;max&quot;</span><span class="p">),</span> <span class="s2">&quot;agg_2&quot;</span><span class="p">:</span> <span class="s2">&quot;mean&quot;</span><span class="p">})</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">&quot;symbol&quot;</span><span class="p">,</span> <span class="n">df</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">&quot;symbol&quot;</span><span class="p">,</span> <span class="n">query_builder</span><span class="o">=</span><span class="n">q</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">q</span><span class="o">.</span><span class="n">groupby</span><span class="p">(</span><span class="s2">"grouping_column"</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">q</span><span class="o">.</span><span class="n">agg</span><span class="p">({</span><span class="s2">"agg_1_min"</span><span class="p">:</span> <span class="p">(</span><span class="s2">"agg_1"</span><span class="p">,</span> <span class="s2">"min"</span><span class="p">),</span> <span class="s2">"agg_1_max"</span><span class="p">:</span> <span class="p">(</span><span class="s2">"agg_1"</span><span class="p">,</span> <span class="s2">"max"</span><span class="p">),</span> <span class="s2">"agg_2"</span><span class="p">:</span> <span class="s2">"mean"</span><span class="p">})</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">"symbol"</span><span class="p">,</span> <span class="n">df</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">"symbol"</span><span class="p">,</span> <span class="n">query_builder</span><span class="o">=</span><span class="n">q</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
 </code></pre></div>
     <pre><code>         agg_1_min  agg_1_max     agg_2
 group_1          1          3  1.666667
@@ -4063,7 +4063,7 @@ group_2          4          5       2.2
     <span class="n">closed</span><span class="p">:</span> <span class="n"><span title="typing.Optional">Optional</span></span><span class="p">[</span><span class="n"><span title="str">str</span></span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">label</span><span class="p">:</span> <span class="n"><span title="typing.Optional">Optional</span></span><span class="p">[</span><span class="n"><span title="str">str</span></span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">offset</span><span class="p">:</span> <span class="n"><span title="typing.Optional">Optional</span></span><span class="p">[</span><span class="n"><span title="typing.Union">Union</span></span><span class="p">[</span><span class="n"><span title="str">str</span></span><span class="p">,</span> <span class="n"><span title="pandas.Timedelta">Timedelta</span></span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-    <span class="n">origin</span><span class="p">:</span> <span class="n"><span title="typing.Union">Union</span></span><span class="p">[</span><span class="n"><span title="str">str</span></span><span class="p">,</span> <span class="n"><span title="pandas.Timestamp">Timestamp</span></span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;epoch&quot;</span><span class="p">,</span>
+    <span class="n">origin</span><span class="p">:</span> <span class="n"><span title="typing.Union">Union</span></span><span class="p">[</span><span class="n"><span title="str">str</span></span><span class="p">,</span> <span class="n"><span title="pandas.Timestamp">Timestamp</span></span><span class="p">]</span> <span class="o">=</span> <span class="s2">"epoch"</span><span class="p">,</span>
 <span class="p">)</span>
 </code></pre></div>
 
@@ -4312,14 +4312,14 @@ frequencies listed above.</p>
     <p>Resample two hours worth of minutely data down to hourly data, summing the column 'to_sum':</p>
     <div class="highlight"><pre><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span>
 <span class="go">    {</span>
-<span class="go">        &quot;to_sum&quot;: np.arange(120),</span>
+<span class="go">        "to_sum": np.arange(120),</span>
 <span class="go">    },</span>
-<span class="go">    index=pd.date_range(&quot;2024-01-01&quot;, freq=&quot;min&quot;, periods=120),</span>
+<span class="go">    index=pd.date_range("2024-01-01", freq="min", periods=120),</span>
 <span class="go">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">QueryBuilder</span><span class="p">()</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">q</span><span class="o">.</span><span class="n">resample</span><span class="p">(</span><span class="s2">&quot;h&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">agg</span><span class="p">({</span><span class="s2">&quot;to_sum&quot;</span><span class="p">:</span> <span class="s2">&quot;sum&quot;</span><span class="p">})</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">&quot;symbol&quot;</span><span class="p">,</span> <span class="n">df</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">&quot;symbol&quot;</span><span class="p">,</span> <span class="n">query_builder</span><span class="o">=</span><span class="n">q</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">q</span><span class="o">.</span><span class="n">resample</span><span class="p">(</span><span class="s2">"h"</span><span class="p">)</span><span class="o">.</span><span class="n">agg</span><span class="p">({</span><span class="s2">"to_sum"</span><span class="p">:</span> <span class="s2">"sum"</span><span class="p">})</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">"symbol"</span><span class="p">,</span> <span class="n">df</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">"symbol"</span><span class="p">,</span> <span class="n">query_builder</span><span class="o">=</span><span class="n">q</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
 </code></pre></div>
     <pre><code>                     to_sum
 2024-01-01 00:00:00    1770
@@ -4328,8 +4328,8 @@ frequencies listed above.</p>
 <p>As above, but specifying that the closed boundary of each time-bucket is the right hand side, and also to label
 the output by the right boundary:</p>
     <div class="highlight"><pre><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">QueryBuilder</span><span class="p">()</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">q</span><span class="o">.</span><span class="n">resample</span><span class="p">(</span><span class="s2">&quot;h&quot;</span><span class="p">,</span> <span class="n">closed</span><span class="o">=</span><span class="s2">&quot;right&quot;</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s2">&quot;right&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">agg</span><span class="p">({</span><span class="s2">&quot;to_sum&quot;</span><span class="p">:</span> <span class="s2">&quot;sum&quot;</span><span class="p">})</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">&quot;symbol&quot;</span><span class="p">,</span> <span class="n">query_builder</span><span class="o">=</span><span class="n">q</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">q</span><span class="o">.</span><span class="n">resample</span><span class="p">(</span><span class="s2">"h"</span><span class="p">,</span> <span class="n">closed</span><span class="o">=</span><span class="s2">"right"</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s2">"right"</span><span class="p">)</span><span class="o">.</span><span class="n">agg</span><span class="p">({</span><span class="s2">"to_sum"</span><span class="p">:</span> <span class="s2">"sum"</span><span class="p">})</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">"symbol"</span><span class="p">,</span> <span class="n">query_builder</span><span class="o">=</span><span class="n">q</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
 </code></pre></div>
     <pre><code>                     to_sum
 2024-01-01 00:00:00       0
@@ -4339,14 +4339,14 @@ the output by the right boundary:</p>
 <p>Nones, NaNs, and NaTs are omitted from aggregations:</p>
     <div class="highlight"><pre><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span>
 <span class="go">    {</span>
-<span class="go">        &quot;to_mean&quot;: [1.0, np.nan, 2.0],</span>
+<span class="go">        "to_mean": [1.0, np.nan, 2.0],</span>
 <span class="go">    },</span>
-<span class="go">    index=pd.date_range(&quot;2024-01-01&quot;, freq=&quot;min&quot;, periods=3),</span>
+<span class="go">    index=pd.date_range("2024-01-01", freq="min", periods=3),</span>
 <span class="go">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">QueryBuilder</span><span class="p">()</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">q</span><span class="o">.</span><span class="n">resample</span><span class="p">(</span><span class="s2">&quot;h&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">agg</span><span class="p">({</span><span class="s2">&quot;to_mean&quot;</span><span class="p">:</span> <span class="s2">&quot;mean&quot;</span><span class="p">})</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">&quot;symbol&quot;</span><span class="p">,</span> <span class="n">df</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">&quot;symbol&quot;</span><span class="p">,</span> <span class="n">query_builder</span><span class="o">=</span><span class="n">q</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">q</span><span class="o">.</span><span class="n">resample</span><span class="p">(</span><span class="s2">"h"</span><span class="p">)</span><span class="o">.</span><span class="n">agg</span><span class="p">({</span><span class="s2">"to_mean"</span><span class="p">:</span> <span class="s2">"mean"</span><span class="p">})</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">"symbol"</span><span class="p">,</span> <span class="n">df</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">"symbol"</span><span class="p">,</span> <span class="n">query_builder</span><span class="o">=</span><span class="n">q</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
 </code></pre></div>
     <pre><code>                     to_mean
 2024-01-01 00:00:00      1.5
@@ -4354,16 +4354,16 @@ the output by the right boundary:</p>
 <p>Output column names can be controlled through the format of the dict passed to agg:</p>
     <div class="highlight"><pre><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span>
 <span class="go">    {</span>
-<span class="go">        &quot;agg_1&quot;: [1, 2, 3, 4, 5],</span>
-<span class="go">        &quot;agg_2&quot;: [1.0, 2.0, 3.0, np.nan, 5.0],</span>
+<span class="go">        "agg_1": [1, 2, 3, 4, 5],</span>
+<span class="go">        "agg_2": [1.0, 2.0, 3.0, np.nan, 5.0],</span>
 <span class="go">    },</span>
-<span class="go">    index=pd.date_range(&quot;2024-01-01&quot;, freq=&quot;min&quot;, periods=5),</span>
+<span class="go">    index=pd.date_range("2024-01-01", freq="min", periods=5),</span>
 <span class="go">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">QueryBuilder</span><span class="p">()</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">q</span><span class="o">.</span><span class="n">resample</span><span class="p">(</span><span class="s2">&quot;h&quot;</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">q</span><span class="o">.</span><span class="n">agg</span><span class="p">({</span><span class="s2">&quot;agg_1_min&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;agg_1&quot;</span><span class="p">,</span> <span class="s2">&quot;min&quot;</span><span class="p">),</span> <span class="s2">&quot;agg_1_max&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;agg_1&quot;</span><span class="p">,</span> <span class="s2">&quot;max&quot;</span><span class="p">),</span> <span class="s2">&quot;agg_2&quot;</span><span class="p">:</span> <span class="s2">&quot;mean&quot;</span><span class="p">})</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">&quot;symbol&quot;</span><span class="p">,</span> <span class="n">df</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">&quot;symbol&quot;</span><span class="p">,</span> <span class="n">query_builder</span><span class="o">=</span><span class="n">q</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">q</span><span class="o">.</span><span class="n">resample</span><span class="p">(</span><span class="s2">"h"</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">q</span><span class="o">.</span><span class="n">agg</span><span class="p">({</span><span class="s2">"agg_1_min"</span><span class="p">:</span> <span class="p">(</span><span class="s2">"agg_1"</span><span class="p">,</span> <span class="s2">"min"</span><span class="p">),</span> <span class="s2">"agg_1_max"</span><span class="p">:</span> <span class="p">(</span><span class="s2">"agg_1"</span><span class="p">,</span> <span class="s2">"max"</span><span class="p">),</span> <span class="s2">"agg_2"</span><span class="p">:</span> <span class="s2">"mean"</span><span class="p">})</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">"symbol"</span><span class="p">,</span> <span class="n">df</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">"symbol"</span><span class="p">,</span> <span class="n">query_builder</span><span class="o">=</span><span class="n">q</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
 </code></pre></div>
     <pre><code>                     agg_1_min  agg_1_max     agg_2
 2024-01-01 00:00:00          1          5      2.75
@@ -4372,14 +4372,14 @@ the output by the right boundary:</p>
 offset of 30 minutes places the bucket boundaries at half-past each hour:</p>
     <div class="highlight"><pre><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span>
 <span class="go">    {</span>
-<span class="go">        &quot;to_sum&quot;: np.arange(120),</span>
+<span class="go">        "to_sum": np.arange(120),</span>
 <span class="go">    },</span>
-<span class="go">    index=pd.date_range(&quot;2024-01-01&quot;, freq=&quot;min&quot;, periods=120),</span>
+<span class="go">    index=pd.date_range("2024-01-01", freq="min", periods=120),</span>
 <span class="go">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">QueryBuilder</span><span class="p">()</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">q</span><span class="o">.</span><span class="n">resample</span><span class="p">(</span><span class="s2">&quot;h&quot;</span><span class="p">,</span> <span class="n">offset</span><span class="o">=</span><span class="s2">&quot;30min&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">agg</span><span class="p">({</span><span class="s2">&quot;to_sum&quot;</span><span class="p">:</span> <span class="s2">&quot;sum&quot;</span><span class="p">,</span> <span class="s2">&quot;to_min&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;to_sum&quot;</span><span class="p">,</span> <span class="s2">&quot;min&quot;</span><span class="p">),</span> <span class="s2">&quot;to_max&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;to_sum&quot;</span><span class="p">,</span> <span class="s2">&quot;max&quot;</span><span class="p">)})</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">&quot;symbol&quot;</span><span class="p">,</span> <span class="n">df</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">&quot;symbol&quot;</span><span class="p">,</span> <span class="n">query_builder</span><span class="o">=</span><span class="n">q</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">q</span><span class="o">.</span><span class="n">resample</span><span class="p">(</span><span class="s2">"h"</span><span class="p">,</span> <span class="n">offset</span><span class="o">=</span><span class="s2">"30min"</span><span class="p">)</span><span class="o">.</span><span class="n">agg</span><span class="p">({</span><span class="s2">"to_sum"</span><span class="p">:</span> <span class="s2">"sum"</span><span class="p">,</span> <span class="s2">"to_min"</span><span class="p">:</span> <span class="p">(</span><span class="s2">"to_sum"</span><span class="p">,</span> <span class="s2">"min"</span><span class="p">),</span> <span class="s2">"to_max"</span><span class="p">:</span> <span class="p">(</span><span class="s2">"to_sum"</span><span class="p">,</span> <span class="s2">"max"</span><span class="p">)})</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">"symbol"</span><span class="p">,</span> <span class="n">df</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">"symbol"</span><span class="p">,</span> <span class="n">query_builder</span><span class="o">=</span><span class="n">q</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
 </code></pre></div>
     <pre><code>                     to_max  to_min  to_sum
 2023-12-31 23:30:00      29       0     435
@@ -4393,8 +4393,8 @@ takes its left boundary as the index, 2023-12-31 23:30:00.</p>
 <p>An offset greater than the rule wraps around, so the effective offset is offset modulo rule. With an hourly rule
 an offset of 1 hour 30 minutes reduces to 30 minutes and yields the same buckets as above:</p>
     <div class="highlight"><pre><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">QueryBuilder</span><span class="p">()</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">q</span><span class="o">.</span><span class="n">resample</span><span class="p">(</span><span class="s2">&quot;h&quot;</span><span class="p">,</span> <span class="n">offset</span><span class="o">=</span><span class="s2">&quot;1h30min&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">agg</span><span class="p">({</span><span class="s2">&quot;to_sum&quot;</span><span class="p">:</span> <span class="s2">&quot;sum&quot;</span><span class="p">,</span> <span class="s2">&quot;to_min&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;to_sum&quot;</span><span class="p">,</span> <span class="s2">&quot;min&quot;</span><span class="p">),</span> <span class="s2">&quot;to_max&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;to_sum&quot;</span><span class="p">,</span> <span class="s2">&quot;max&quot;</span><span class="p">)})</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">&quot;symbol&quot;</span><span class="p">,</span> <span class="n">query_builder</span><span class="o">=</span><span class="n">q</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">q</span><span class="o">.</span><span class="n">resample</span><span class="p">(</span><span class="s2">"h"</span><span class="p">,</span> <span class="n">offset</span><span class="o">=</span><span class="s2">"1h30min"</span><span class="p">)</span><span class="o">.</span><span class="n">agg</span><span class="p">({</span><span class="s2">"to_sum"</span><span class="p">:</span> <span class="s2">"sum"</span><span class="p">,</span> <span class="s2">"to_min"</span><span class="p">:</span> <span class="p">(</span><span class="s2">"to_sum"</span><span class="p">,</span> <span class="s2">"min"</span><span class="p">),</span> <span class="s2">"to_max"</span><span class="p">:</span> <span class="p">(</span><span class="s2">"to_sum"</span><span class="p">,</span> <span class="s2">"max"</span><span class="p">)})</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">"symbol"</span><span class="p">,</span> <span class="n">query_builder</span><span class="o">=</span><span class="n">q</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
 </code></pre></div>
     <pre><code>                     to_max  to_min  to_sum
 2023-12-31 23:30:00      29       0     435
@@ -4406,14 +4406,14 @@ an offset of 1 hour 30 minutes reduces to 30 minutes and yields the same buckets
 boundaries fall at half-past each hour:</p>
     <div class="highlight"><pre><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span>
 <span class="go">    {</span>
-<span class="go">        &quot;to_sum&quot;: np.arange(120),</span>
+<span class="go">        "to_sum": np.arange(120),</span>
 <span class="go">    },</span>
-<span class="go">    index=pd.date_range(&quot;2024-01-01 00:20:00&quot;, freq=&quot;min&quot;, periods=120),</span>
+<span class="go">    index=pd.date_range("2024-01-01 00:20:00", freq="min", periods=120),</span>
 <span class="go">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">QueryBuilder</span><span class="p">()</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">q</span><span class="o">.</span><span class="n">resample</span><span class="p">(</span><span class="s2">&quot;h&quot;</span><span class="p">,</span> <span class="n">offset</span><span class="o">=</span><span class="s2">&quot;30min&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">agg</span><span class="p">({</span><span class="s2">&quot;to_sum&quot;</span><span class="p">:</span> <span class="s2">&quot;sum&quot;</span><span class="p">,</span> <span class="s2">&quot;to_min&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;to_sum&quot;</span><span class="p">,</span> <span class="s2">&quot;min&quot;</span><span class="p">),</span> <span class="s2">&quot;to_max&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;to_sum&quot;</span><span class="p">,</span> <span class="s2">&quot;max&quot;</span><span class="p">)})</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">&quot;symbol&quot;</span><span class="p">,</span> <span class="n">df</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">&quot;symbol&quot;</span><span class="p">,</span> <span class="n">query_builder</span><span class="o">=</span><span class="n">q</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">q</span><span class="o">.</span><span class="n">resample</span><span class="p">(</span><span class="s2">"h"</span><span class="p">,</span> <span class="n">offset</span><span class="o">=</span><span class="s2">"30min"</span><span class="p">)</span><span class="o">.</span><span class="n">agg</span><span class="p">({</span><span class="s2">"to_sum"</span><span class="p">:</span> <span class="s2">"sum"</span><span class="p">,</span> <span class="s2">"to_min"</span><span class="p">:</span> <span class="p">(</span><span class="s2">"to_sum"</span><span class="p">,</span> <span class="s2">"min"</span><span class="p">),</span> <span class="s2">"to_max"</span><span class="p">:</span> <span class="p">(</span><span class="s2">"to_sum"</span><span class="p">,</span> <span class="s2">"max"</span><span class="p">)})</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">"symbol"</span><span class="p">,</span> <span class="n">df</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">"symbol"</span><span class="p">,</span> <span class="n">query_builder</span><span class="o">=</span><span class="n">q</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
 </code></pre></div>
     <pre><code>                     to_max  to_min  to_sum
 2023-12-31 23:30:00       9       0      45
@@ -4423,8 +4423,8 @@ boundaries fall at half-past each hour:</p>
 <p>With origin="start" the same 30 minute offset is measured from the first index value, 2024-01-01 00:20:00, so
 the boundaries move to fifty minutes past each hour:</p>
     <div class="highlight"><pre><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">QueryBuilder</span><span class="p">()</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">q</span><span class="o">.</span><span class="n">resample</span><span class="p">(</span><span class="s2">&quot;h&quot;</span><span class="p">,</span> <span class="n">offset</span><span class="o">=</span><span class="s2">&quot;30min&quot;</span><span class="p">,</span> <span class="n">origin</span><span class="o">=</span><span class="s2">&quot;start&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">agg</span><span class="p">({</span><span class="s2">&quot;to_sum&quot;</span><span class="p">:</span> <span class="s2">&quot;sum&quot;</span><span class="p">,</span> <span class="s2">&quot;to_min&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;to_sum&quot;</span><span class="p">,</span> <span class="s2">&quot;min&quot;</span><span class="p">),</span> <span class="s2">&quot;to_max&quot;</span><span class="p">:</span> <span class="p">(</span><span class="s2">&quot;to_sum&quot;</span><span class="p">,</span> <span class="s2">&quot;max&quot;</span><span class="p">)})</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">&quot;symbol&quot;</span><span class="p">,</span> <span class="n">query_builder</span><span class="o">=</span><span class="n">q</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">q</span><span class="o">.</span><span class="n">resample</span><span class="p">(</span><span class="s2">"h"</span><span class="p">,</span> <span class="n">offset</span><span class="o">=</span><span class="s2">"30min"</span><span class="p">,</span> <span class="n">origin</span><span class="o">=</span><span class="s2">"start"</span><span class="p">)</span><span class="o">.</span><span class="n">agg</span><span class="p">({</span><span class="s2">"to_sum"</span><span class="p">:</span> <span class="s2">"sum"</span><span class="p">,</span> <span class="s2">"to_min"</span><span class="p">:</span> <span class="p">(</span><span class="s2">"to_sum"</span><span class="p">,</span> <span class="s2">"min"</span><span class="p">),</span> <span class="s2">"to_max"</span><span class="p">:</span> <span class="p">(</span><span class="s2">"to_sum"</span><span class="p">,</span> <span class="s2">"max"</span><span class="p">)})</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">"symbol"</span><span class="p">,</span> <span class="n">query_builder</span><span class="o">=</span><span class="n">q</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
 </code></pre></div>
     <pre><code>                     to_max  to_min  to_sum
 2023-12-31 23:50:00      29       0     435
@@ -4778,17 +4778,17 @@ for both use cases.</p>
 <p><span class="doc-section-title">Examples:</span></p>
     <div class="highlight"><pre><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span>
 <span class="gp">&gt;&gt;&gt; </span>   <span class="p">{</span>
-<span class="gp">&gt;&gt;&gt; </span>       <span class="s2">&quot;col1&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">],</span>
-<span class="gp">&gt;&gt;&gt; </span>       <span class="s2">&quot;col2&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">],</span>
-<span class="gp">&gt;&gt;&gt; </span>       <span class="s2">&quot;col3&quot;</span><span class="p">:</span> <span class="p">[</span><span class="mi">5</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">7</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">9</span><span class="p">],</span>
+<span class="gp">&gt;&gt;&gt; </span>       <span class="s2">"col1"</span><span class="p">:</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">],</span>
+<span class="gp">&gt;&gt;&gt; </span>       <span class="s2">"col2"</span><span class="p">:</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">],</span>
+<span class="gp">&gt;&gt;&gt; </span>       <span class="s2">"col3"</span><span class="p">:</span> <span class="p">[</span><span class="mi">5</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">7</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">9</span><span class="p">],</span>
 <span class="gp">&gt;&gt;&gt; </span>   <span class="p">}</span>
 <span class="go">&gt;&gt;&gt;)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">&quot;sym&quot;</span><span class="p">,</span> <span class="n">df</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">"sym"</span><span class="p">,</span> <span class="n">df</span><span class="p">)</span>
 </code></pre></div>
     <p>Produce a new column by selecting from functions of two other columns</p>
     <div class="highlight"><pre><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">QueryBuilder</span><span class="p">()</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">q</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="s2">&quot;new_col&quot;</span><span class="p">,</span> <span class="n">where</span><span class="p">(</span><span class="n">q</span><span class="p">[</span><span class="s2">&quot;col1&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="mi">0</span><span class="p">),</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">q</span><span class="p">[</span><span class="s2">&quot;col2&quot;</span><span class="p">],</span> <span class="n">q</span><span class="p">[</span><span class="s2">&quot;col3&quot;</span><span class="p">])</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">&quot;sym&quot;</span><span class="p">,</span> <span class="n">query_builder</span><span class="o">=</span><span class="n">q</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">q</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="s2">"new_col"</span><span class="p">,</span> <span class="n">where</span><span class="p">(</span><span class="n">q</span><span class="p">[</span><span class="s2">"col1"</span><span class="p">]</span> <span class="o">==</span> <span class="mi">0</span><span class="p">),</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">q</span><span class="p">[</span><span class="s2">"col2"</span><span class="p">],</span> <span class="n">q</span><span class="p">[</span><span class="s2">"col3"</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">"sym"</span><span class="p">,</span> <span class="n">query_builder</span><span class="o">=</span><span class="n">q</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
 <span class="go">        col1   col2   col3   new_col</span>
 <span class="go">    0      0      0      5         0</span>
 <span class="go">    1      0      1      6         2</span>
@@ -4798,8 +4798,8 @@ for both use cases.</p>
 </code></pre></div>
     <p>Produce a new column by selecting from one column and one fixed value</p>
     <div class="highlight"><pre><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">QueryBuilder</span><span class="p">()</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">q</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="s2">&quot;new_col&quot;</span><span class="p">,</span> <span class="n">where</span><span class="p">(</span><span class="n">q</span><span class="p">[</span><span class="s2">&quot;col1&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="mi">0</span><span class="p">),</span> <span class="n">q</span><span class="p">[</span><span class="s2">&quot;col2&quot;</span><span class="p">],</span> <span class="mi">10</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">&quot;sym&quot;</span><span class="p">,</span> <span class="n">query_builder</span><span class="o">=</span><span class="n">q</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">q</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="s2">"new_col"</span><span class="p">,</span> <span class="n">where</span><span class="p">(</span><span class="n">q</span><span class="p">[</span><span class="s2">"col1"</span><span class="p">]</span> <span class="o">==</span> <span class="mi">0</span><span class="p">),</span> <span class="n">q</span><span class="p">[</span><span class="s2">"col2"</span><span class="p">],</span> <span class="mi">10</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">"sym"</span><span class="p">,</span> <span class="n">query_builder</span><span class="o">=</span><span class="n">q</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
 <span class="go">        col1   col2   col3   new_col</span>
 <span class="go">    0      0      0      5         0</span>
 <span class="go">    1      0      1      6         1</span>
@@ -4809,8 +4809,8 @@ for both use cases.</p>
 </code></pre></div>
     <p>Filter based on different criteria depending on the first condition</p>
     <div class="highlight"><pre><span></span><code><span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">QueryBuilder</span><span class="p">()</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">q</span><span class="p">[</span><span class="n">where</span><span class="p">(</span><span class="n">q</span><span class="p">[</span><span class="s2">&quot;col1&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="mi">0</span><span class="p">,</span> <span class="n">q</span><span class="p">[</span><span class="s2">&quot;col2&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="mi">0</span><span class="p">,</span> <span class="n">q</span><span class="p">[</span><span class="s2">&quot;col3&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="mi">9</span><span class="p">)]</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">&quot;sym&quot;</span><span class="p">,</span> <span class="n">query_builder</span><span class="o">=</span><span class="n">q</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">q</span> <span class="o">=</span> <span class="n">q</span><span class="p">[</span><span class="n">where</span><span class="p">(</span><span class="n">q</span><span class="p">[</span><span class="s2">"col1"</span><span class="p">]</span> <span class="o">==</span> <span class="mi">0</span><span class="p">,</span> <span class="n">q</span><span class="p">[</span><span class="s2">"col2"</span><span class="p">]</span> <span class="o">==</span> <span class="mi">0</span><span class="p">,</span> <span class="n">q</span><span class="p">[</span><span class="s2">"col3"</span><span class="p">]</span> <span class="o">==</span> <span class="mi">9</span><span class="p">)]</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">"sym"</span><span class="p">,</span> <span class="n">query_builder</span><span class="o">=</span><span class="n">q</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
 <span class="go">        col1   col2   col3</span>
 <span class="go">    0      0      0      5</span>
 <span class="go">    1      1      4      9</span>
@@ -4870,11 +4870,118 @@ for both use cases.</p>
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.sections", "content.code.copy", "toc.integrate"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.sections", "content.code.copy", "toc.integrate"], "search": "../../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
     
     
-      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
+      <script src="../../assets/javascripts/bundle.c21346df.min.js"></script>
       
     
-  </body>
+  <script data-mkdocs-jupyter-mathjax="{&quot;url&quot;: &quot;https://cdn.jsdelivr.net/npm/mathjax@4.1.3/tex-mml-chtml.js&quot;, &quot;version&quot;: 4}">
+/* Shared by full pages and Material's instant navigation. */
+(() => {
+  const config = JSON.parse(document.currentScript.dataset.mkdocsJupyterMathjax);
+  if (window.mkdocsJupyterMathJax) return;
+
+  let loading;
+  let queue = Promise.resolve();
+  let previous = [];
+
+  const ready = async () => {
+    if (!loading) {
+      loading = (async () => {
+        let math = window.MathJax;
+        if (!math?.typesetPromise) {
+          const url = new URL(config.url, document.baseURI).href;
+          const existing = Array.from(document.scripts).find(script =>
+            script.src && (script.src === url || script.id === 'MathJax-script' ||
+              (/mathjax/i.test(script.src) &&
+               /\/(?:MathJax|latest|(?:tex|mml)(?:-mml)?-(?:chtml|svg))\.js(?:[?#]|$)/i.test(script.src))));
+          if (existing) {
+            if (!math?.startup?.promise) {
+              await new Promise((resolve, reject) => {
+                existing.addEventListener('load', resolve, { once: true });
+                existing.addEventListener('error', reject, { once: true });
+              });
+            }
+          } else {
+            // Keep site macros, delimiters and startup hooks when supplied.
+            const options = math || {};
+            window.MathJax = {
+              ...options,
+              loader: {
+                ...options.loader,
+                load: Array.from(new Set(['ui/safe', ...(options.loader?.load || [])]))
+              },
+              startup: { typeset: false, ...options.startup },
+              tex: {
+                tags: 'ams',
+                useLabelIds: true,
+                inlineMath: [['$', '$'], ['\\(', '\\)']],
+                displayMath: [['$$', '$$'], ['\\[', '\\]']],
+                processEscapes: true,
+                processEnvironments: true,
+                ...options.tex
+              }
+            };
+            await new Promise((resolve, reject) => {
+              const script = document.createElement('script');
+              script.src = config.url;
+              script.id = 'MathJax-script';
+              script.async = true;
+              script.onload = resolve;
+              script.onerror = reject;
+              document.head.appendChild(script);
+            });
+          }
+        }
+        math = window.MathJax;
+        await math.startup.promise;
+        return math;
+      })();
+    }
+    const math = await loading;
+    // A site owner can extend the v3 queue again on each navigation.
+    await math.startup.promise;
+    return math;
+  };
+
+  const unrendered = node => {
+    if (node.matches('mjx-container')) return [];
+    if (!node.querySelector('mjx-container')) return [node];
+    // In v3, scanning generated assistive MathML again produces nested output.
+    return Array.from(node.children).flatMap(unrendered);
+  };
+
+  const refresh = () => {
+    // A separate chain also serializes v3, without changing v4's startup promise.
+    queue = queue.then(async () => {
+      const notebooks = Array.from(document.querySelectorAll('.jupyter-wrapper'));
+      if (!notebooks.length && !previous.length) return;
+      if (notebooks.length === previous.length &&
+          notebooks.every((node, index) => node === previous[index])) return;
+      const math = await ready();
+      if (previous.length) {
+        math.typesetClear(previous);
+        math.texReset();
+      }
+      previous = notebooks.filter(node => node.isConnected);
+      const pending = previous.flatMap(unrendered);
+      if (pending.length) await math.typesetPromise(pending);
+    }).catch(error => console.error('mkdocs-jupyter: MathJax rendering failed', error));
+    return queue;
+  };
+
+  window.mkdocsJupyterMathJax = { refresh };
+  const start = () => {
+    if (typeof document$ !== 'undefined') document$.subscribe(refresh);
+    else refresh();
+  };
+  // Theme bundles and user-provided MathJax scripts can follow notebook content.
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', start, { once: true });
+  } else start();
+})();
+
+</script>
+</body>
 </html>
