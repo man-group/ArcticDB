@@ -413,10 +413,9 @@ std::pair<TypeDescriptor, DetachableBlockConfig> ArrowStringHandler::output_type
     return {};
 }
 
-void ArrowStringHandler::default_initialize(
-        ChunkedBuffer& buffer, size_t offset, size_t byte_size, const DecodePathData& /*shared_data*/,
-        std::any& /*handler_data*/
-) const {
+void ArrowStringHandler::
+        default_initialize(ChunkedBuffer& buffer, size_t offset, size_t byte_size, const DecodePathData& /*shared_data*/, std::any& /*handler_data*/, const ReadOptions&)
+                const {
     if (!buffer.has_extra_bytes_per_block()) {
         // For categorical string columns the extra_bytes_per_block won't be set.
         // Categorical string columns can contain any values as long as they are marked as 0.
@@ -500,7 +499,8 @@ std::pair<TypeDescriptor, DetachableBlockConfig> ArrowBoolHandler::
     return {input_type, detachable_block_config::Packed{}};
 }
 
-void ArrowBoolHandler::default_initialize(ChunkedBuffer&, size_t, size_t, const DecodePathData&, std::any&) const {
+void ArrowBoolHandler::
+        default_initialize(ChunkedBuffer&, size_t, size_t, const DecodePathData&, std::any&, const ReadOptions&) const {
     // No-op: The validity bitmap extra buffer is populated with zeros upstream.
     // The packed data buffer does not need initialization since missing values are masked by the bitmap.
 }
@@ -600,7 +600,8 @@ std::pair<TypeDescriptor, DetachableBlockConfig> ArrowTimestampHandler::
     return {input_type, detachable_block_config::Regular{0}};
 }
 
-void ArrowTimestampHandler::default_initialize(ChunkedBuffer&, size_t, size_t, const DecodePathData&, std::any&) const {
+void ArrowTimestampHandler::
+        default_initialize(ChunkedBuffer&, size_t, size_t, const DecodePathData&, std::any&, const ReadOptions&) const {
     // No-op: The validity bitmap extra buffer is populated with zeros upstream.
     // The data buffer does not need initialization since missing values are masked by the bitmap.
 }

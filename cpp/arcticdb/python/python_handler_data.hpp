@@ -1,6 +1,7 @@
 #pragma once
 
 #include <pybind11/pybind11.h>
+#include <arcticdb/pipeline/output_config.hpp>
 
 #include <atomic>
 #include <memory>
@@ -28,19 +29,25 @@ struct PythonHandlerData {
             PyGILState_Release(gstate);
         })) {}
 
-    void increment_none_refcount(size_t increment) {
+    void increment_missing_refcount(PandasMissingValue value, size_t increment) {
+        if (value == PandasMissingValue::NaN) {
+            nan_refcount_->fetch_add(increment, std::memory_order_relaxed);
+        } else {
 #if PY_VERSION_HEX < ARCTICDB_PY_NONE_IMMORTAL_HEX
-        none_refcount_->fetch_add(increment, std::memory_order_relaxed);
+            none_refcount_->fetch_add(increment, std::memory_order_relaxed);
 #else
-        (void)increment;
+            (void)increment;
 #endif
+        }
     }
-
-    void increment_nan_refcount(size_t increment) { nan_refcount_->fetch_add(increment, std::memory_order_relaxed); }
 
     bool is_nan_initialized() const { return static_cast<bool>(py_nan_); }
 
     PyObject* non_owning_nan_handle() const { return py_nan_->ptr(); }
+
+    PyObject* get_missing_value(PandasMissingValue value) const {
+        return value == PandasMissingValue::NaN ? non_owning_nan_handle() : Py_None;
+    }
 
     /// The GIL must be acquired when this is called as it changes the refcount of the global static None variable which
     /// can be used by other Python threads

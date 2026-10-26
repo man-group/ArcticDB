@@ -9,6 +9,7 @@
 #include <any>
 
 #include <arcticdb/entity/types.hpp>
+#include <arcticdb/pipeline/output_config.hpp>
 #include <arcticdb/util/decode_path_data.hpp>
 #include <arcticdb/util/type_handler.hpp>
 #include <arcticdb/python/python_handler_data.hpp>
@@ -23,7 +24,7 @@ inline PythonHandlerData& cast_handler_data(std::any& any) { return std::any_cas
 
 void write_python_dynamic_strings_to_dest(
         PyObject** ptr_dest, const Column& source_column, const ColumnMapping& mapping, const StringPool& string_pool,
-        const DecodePathData& shared_data, PythonHandlerData& handler_data
+        const DecodePathData& shared_data, PythonHandlerData& handler_data, PandasMissingValue none_value
 );
 
 } // namespace arcticdb
