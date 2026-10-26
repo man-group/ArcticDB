@@ -240,7 +240,7 @@ S3Result<DeleteObjectsOutput> S3ClientImpl::delete_objects(
     // RemoveOpts.ignores_missing_key_
     std::vector<FailedDelete> failed_deletes;
     for (const auto& failed_key : outcome.GetResult().GetErrors()) {
-        failed_deletes.emplace_back(failed_key.GetKey(), failed_key.GetMessage());
+        failed_deletes.emplace_back(failed_key.GetKey(), failed_key.GetMessage(), failed_key.GetCode());
     }
 
     DeleteObjectsOutput result = {failed_deletes};

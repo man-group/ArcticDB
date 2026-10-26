@@ -293,6 +293,13 @@ inline void raise_if_failed_deletes(const boost::container::small_vector<FailedD
     }
 }
 
+// Per-object error codes that S3 can return inside a successful DeleteObjects response which are transient, so the
+// object can be deleted again. See https://docs.aws.amazon.com/AmazonS3/latest/API/ErrorResponses.html
+inline bool is_retryable_failed_delete(const std::string& error_code) {
+    return error_code == "InternalError" || error_code == "SlowDown" || error_code == "ServiceUnavailable" ||
+           error_code == "RequestTimeout";
+}
+
 template<class KeyBucketizer>
 void do_remove_impl(
         std::span<VariantKey> ks, const std::string& root_folder, const std::string& bucket_name,
@@ -325,16 +332,52 @@ void do_remove_impl(
         }
     }
 
-    auto delete_object_result = s3_client.delete_objects(to_delete, bucket_name);
-    if (delete_object_result.is_success()) {
-        ARCTICDB_RUNTIME_DEBUG(log::storage(), "Deleted {} objects", to_delete.size());
-        for (auto& bad_key : delete_object_result.get_output().failed_deletes) {
-            failed_deletes.emplace_back(std::move(bad_key.s3_object_name), std::move(bad_key.error_message));
+    // S3 can accept the DeleteObjects request but reject some of the objects with a transient error (e.g.
+    // InternalError). Retry only these objects, with a bounded exponential backoff.
+    ExponentialBackoff<S3RetryableException> backoff(100, 2000);
+    while (true) {
+        auto delete_object_result = s3_client.delete_objects(to_delete, bucket_name);
+        if (!delete_object_result.is_success()) {
+            auto& error = delete_object_result.get_error();
+            std::string failed_objects = fmt::format("{}", fmt::join(to_delete, ", "));
+            raise_s3_exception(error, failed_objects);
         }
-    } else {
-        auto& error = delete_object_result.get_error();
-        std::string failed_objects = fmt::format("{}", fmt::join(to_delete, ", "));
-        raise_s3_exception(error, failed_objects);
+
+        ARCTICDB_RUNTIME_DEBUG(log::storage(), "Deleted {} objects", to_delete.size());
+        std::vector<s3::FailedDelete> to_retry;
+        for (auto& bad_key : delete_object_result.get_output().failed_deletes) {
+            if (is_retryable_failed_delete(bad_key.error_code)) {
+                to_retry.emplace_back(std::move(bad_key));
+            } else {
+                failed_deletes.emplace_back(std::move(bad_key.s3_object_name), std::move(bad_key.error_message));
+            }
+        }
+
+        if (to_retry.empty()) {
+            break;
+        }
+
+        // Do not retry if we are going to raise anyway, or if we are out of attempts.
+        if (!failed_deletes.empty() || !backoff.wait()) {
+            for (auto& bad_key : to_retry) {
+                failed_deletes.emplace_back(std::move(bad_key.s3_object_name), std::move(bad_key.error_message));
+            }
+            break;
+        }
+
+        log::storage().warn(
+                "S3 failed to delete {} of {} objects with a retryable error, retrying. First failure: '{}' failed "
+                "with '{}: {}'",
+                to_retry.size(),
+                to_delete.size(),
+                to_retry.front().s3_object_name,
+                to_retry.front().error_code,
+                to_retry.front().error_message
+        );
+        to_delete.clear();
+        for (auto& bad_key : to_retry) {
+            to_delete.emplace_back(std::move(bad_key.s3_object_name));
+        }
     }
 
     raise_if_failed_deletes(failed_deletes);

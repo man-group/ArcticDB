@@ -35,6 +35,12 @@ void S3ClientTestWrapper::add_list_objects_failure_unretryable(Aws::S3::S3Errors
     list_objects_failures_.emplace_back(error, false);
 }
 
+void S3ClientTestWrapper::add_delete_objects_failure(
+        const std::string& s3_object_name, const std::string& error_code, size_t times
+) {
+    delete_objects_failures_.insert_or_assign(s3_object_name, std::make_pair(error_code, times));
+}
+
 std::optional<Aws::S3::S3Error> S3ClientTestWrapper::has_failure_trigger(
         const std::string& s3_object_name, const std::string& bucket_name, StorageOperation operation
 ) const {
@@ -154,12 +160,29 @@ S3Result<DeleteObjectsOutput> S3ClientTestWrapper::delete_objects(
         }
     }
 
-    auto result = actual_client_->delete_objects(s3_object_names, bucket_name);
+    std::vector<std::string> to_delete;
+    std::vector<FailedDelete> simulated_failed_deletes;
+    for (const auto& s3_object_name : s3_object_names) {
+        auto it = delete_objects_failures_.find(s3_object_name);
+        if (it != delete_objects_failures_.end() && it->second.second > 0) {
+            --it->second.second;
+            simulated_failed_deletes.emplace_back(
+                    s3_object_name, "Simulated per-object delete failure", it->second.first
+            );
+        } else {
+            to_delete.emplace_back(s3_object_name);
+        }
+    }
+
+    auto result = actual_client_->delete_objects(to_delete, bucket_name);
     if (result.is_success()) {
-        for (const auto& s3_object_name : s3_object_names) {
+        for (const auto& s3_object_name : to_delete) {
             if (has_object_failure_trigger(s3_object_name, StorageOperation::DELETE_LOCAL)) {
                 result.get_output().failed_deletes.emplace_back(s3_object_name, "Simulated local delete failure");
             }
+        }
+        for (auto& failed_delete : simulated_failed_deletes) {
+            result.get_output().failed_deletes.emplace_back(std::move(failed_delete));
         }
     }
 
