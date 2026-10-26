@@ -39,6 +39,13 @@ namespace arcticdb {
 namespace ranges = std::ranges;
 using namespace pipelines;
 
+namespace {
+// AggregationClause::process keeps a per-row-slice source offset -> group cache for string grouping columns while
+// at least 1 in offset_cache_min_hit_ratio_inverse of its first offset_cache_sample_size lookups hit
+constexpr size_t offset_cache_sample_size = 4096;
+constexpr size_t offset_cache_min_hit_ratio_inverse = 2;
+} // namespace
+
 class GroupingMap {
     using NumericMapType = std::variant<
             std::monostate, std::shared_ptr<ankerl::unordered_dense::map<bool, size_t>>,
@@ -385,6 +392,8 @@ std::vector<EntityId> AggregationClause::process(std::vector<EntityId>&& entity_
     auto string_pool = std::make_shared<StringPool>();
     DataType grouping_data_type;
     GroupingMap grouping_map;
+    // String grouping values -> group id, keyed by views into string_pool. Spans all row slices, as group ids do.
+    ankerl::unordered_dense::map<std::string_view, size_t> string_to_group;
     // Iterating backwards as we are going to erase from this vector as we go along
     // This is to spread out deallocation of the input segments
     auto it = row_slices.rbegin();
@@ -401,17 +410,6 @@ std::vector<EntityId> AggregationClause::process(std::vector<EntityId>&& entity_
                 std::vector<size_t> row_to_group(col.column_->last_row() + 1, 0);
                 size_t* row_to_group_ptr = row_to_group.data();
                 auto hash_to_group = grouping_map.get<typename col_type_info::RawType>();
-                // For string grouping columns, keep a local map within this ProcessingUnit
-                // from offsets to groups, to avoid needless calls to col.string_at_offset and
-                // string_pool->get
-                // This could be slower in cases where there aren't many repeats in string
-                // grouping columns. Maybe track hit ratio of finds and stop using it if it is
-                // too low?
-                // Tested with 100,000,000 row dataframe with 100,000 unique values in the grouping column. Timings:
-                // 11.14 seconds without caching
-                // 11.01 seconds with caching
-                // Not worth worrying about right now
-                ankerl::unordered_dense::map<typename col_type_info::RawType, size_t> offset_to_group;
 
                 const bool is_sparse = col.column_->is_sparse();
                 if (is_sparse && next_group_id == 0) {
@@ -420,28 +418,70 @@ std::vector<EntityId> AggregationClause::process(std::vector<EntityId>&& entity_
                 }
                 ssize_t previous_value_index = 0;
 
+                // Group id for a non-string value, or for a string column's None/NaN sentinel offsets
+                auto group_for_value = [&](typename col_type_info::RawType val) -> size_t {
+                    if (auto it = hash_to_group->find(val); it == hash_to_group->end()) {
+                        auto group_id = next_group_id++;
+                        hash_to_group->emplace(val, group_id);
+                        return group_id;
+                    } else {
+                        return it->second;
+                    }
+                };
+
+                // A string's group is found with one probe of string_to_group, which is keyed by views into the
+                // output pool. The output pool is only written to for a new group, so it does not need its own
+                // deduplicating map, and hash_to_group (output offset -> group) is only written to for a new group,
+                // to build the index column at the end.
+                // offset_to_group caches the source offset -> group within this row slice. It only pays off when
+                // values repeat within the slice, so it is switched off once the first probes show a low hit rate.
+                ankerl::unordered_dense::map<typename col_type_info::RawType, size_t> offset_to_group;
+                bool use_offset_cache = true;
+                size_t offset_cache_lookups = 0;
+                size_t offset_cache_hits = 0;
+                auto group_for_string_offset = [&](typename col_type_info::RawType offset) -> size_t {
+                    if (use_offset_cache) {
+                        if (auto it = offset_to_group.find(offset); it != offset_to_group.end()) {
+                            ++offset_cache_hits;
+                            return it->second;
+                        }
+                        if (++offset_cache_lookups == offset_cache_sample_size) {
+                            if (offset_cache_hits * offset_cache_min_hit_ratio_inverse < offset_cache_lookups) {
+                                use_offset_cache = false;
+                                offset_to_group = {};
+                            }
+                        }
+                    }
+                    size_t group_id;
+                    std::optional<std::string_view> str = col.string_at_offset(offset);
+                    if (str.has_value()) {
+                        auto [it, inserted] = string_to_group.try_emplace(*str, next_group_id);
+                        if (inserted) {
+                            // The stored key is a view into the input segment's pool, which need not outlive this
+                            // clause, so rebind it to the copy in the output pool. The two compare equal.
+                            try {
+                                const auto output_offset = string_pool->get(*str, false).offset();
+                                it->first = string_pool->get_view(output_offset);
+                                hash_to_group->emplace(output_offset, next_group_id);
+                            } catch (...) {
+                                string_to_group.erase(it);
+                                throw;
+                            }
+                            ++next_group_id;
+                        }
+                        group_id = it->second;
+                    } else {
+                        group_id = group_for_value(offset);
+                    }
+                    if (use_offset_cache) {
+                        offset_to_group.emplace(offset, group_id);
+                    }
+                    return group_id;
+                };
+
                 arcticdb::for_each_enumerated<typename col_type_info::TDT>(
                         *col.column_,
                         [&] ARCTICDB_LAMBDA_INLINE(auto enumerating_it) {
-                            typename col_type_info::RawType val;
-                            if constexpr (is_sequence_type(col_type_info::data_type)) {
-                                auto offset = enumerating_it.value();
-                                if (auto it = offset_to_group.find(offset); it != offset_to_group.end()) {
-                                    val = it->second;
-                                } else {
-                                    std::optional<std::string_view> str = col.string_at_offset(offset);
-                                    if (str.has_value()) {
-                                        val = string_pool->get(*str, true).offset();
-                                    } else {
-                                        val = offset;
-                                    }
-                                    typename col_type_info::RawType val_copy(val);
-                                    offset_to_group.emplace(offset, val_copy);
-                                }
-                            } else {
-                                val = enumerating_it.value();
-                            }
-
                             if (is_sparse) {
                                 for (auto j = previous_value_index; j != enumerating_it.idx(); ++j) {
                                     static constexpr size_t missing_value_group_id = 0;
@@ -449,13 +489,10 @@ std::vector<EntityId> AggregationClause::process(std::vector<EntityId>&& entity_
                                 }
                                 previous_value_index = enumerating_it.idx() + 1;
                             }
-
-                            if (auto it = hash_to_group->find(val); it == hash_to_group->end()) {
-                                *row_to_group_ptr++ = next_group_id;
-                                auto group_id = next_group_id++;
-                                hash_to_group->emplace(val, group_id);
+                            if constexpr (is_sequence_type(col_type_info::data_type)) {
+                                *row_to_group_ptr++ = group_for_string_offset(enumerating_it.value());
                             } else {
-                                *row_to_group_ptr++ = it->second;
+                                *row_to_group_ptr++ = group_for_value(enumerating_it.value());
                             }
                         }
                 );
