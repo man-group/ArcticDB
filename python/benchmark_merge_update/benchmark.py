@@ -28,7 +28,10 @@ def generate_source(target, source_rows, num_matched_rows):
     matched_rows = rng.choice(len(target), size=num_matched_rows, replace=False)
     matched_source = target.iloc[matched_rows]
     num_rows_to_add = source_rows - num_matched_rows
-    unmatched_rows = generate_target_non_repeated_index(num_rows_to_add, len(target.columns), pd.Timestamp(10))
+    unmatched_rows = generate_target_non_repeated_index(num_rows_to_add, len(target.columns))
+    # Half a step after a target timestamp, so inserts interleave with the whole target without colliding
+    unmatched_positions = np.sort(rng.choice(len(target), size=num_rows_to_add, replace=False))
+    unmatched_rows.index = (target.index[unmatched_positions] + pd.Timedelta(microseconds=500)).rename("ts")
     return pd.concat([matched_source, unmatched_rows]).sort_index()
 
 
