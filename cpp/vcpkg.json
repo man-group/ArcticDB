@@ -81,7 +81,8 @@
     "azure-identity-cpp",
     "azure-storage-blobs-cpp",
     "benchmark",
-    "arcticdb-sparrow"
+    "arcticdb-sparrow",
+    "perfetto"
   ],
   "overrides": [
     { "name": "openssl", "version-string": "3.3.0" },

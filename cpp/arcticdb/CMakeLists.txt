@@ -45,6 +45,10 @@ find_package(azure-identity-cpp CONFIG REQUIRED)
 find_package(azure-storage-blobs-cpp CONFIG REQUIRED)
 find_package(PCRE2 REQUIRED COMPONENTS 8BIT 32BIT)
 
+if(${ARCTICDB_ENABLE_PERFORMANCE_SAMPLING})
+    find_package(unofficial-perfetto CONFIG REQUIRED)
+endif()
+
 if(${BUILD_WITH_REMOTERY})
     add_compile_definitions(USE_REMOTERY)
 endif()
@@ -435,6 +439,7 @@ set(arcticdb_srcs
         util/offset_string.hpp
         util/optional_defaults.hpp
         util/pb_util.hpp
+        util/perfetto_utils.hpp
         util/preconditions.hpp
         util/preprocess.hpp
         util/ranges_from_future.hpp
@@ -620,6 +625,7 @@ set(arcticdb_srcs
         util/memory_mapped_file.hpp
         util/name_validation.cpp
         util/offset_string.cpp
+        util/perfetto_utils.cpp
         util/sparse_utils.cpp
         util/string_stat_encoding.cpp
         util/string_utils.cpp
@@ -820,6 +826,11 @@ if(${ARCTICDB_COUNT_ALLOCATIONS})
     list(APPEND arcticdb_core_libraries
             cpptrace::cpptrace
     )
+endif()
+
+if(${ARCTICDB_ENABLE_PERFORMANCE_SAMPLING})
+    message(STATUS "ArcticDB performance sampling enabled. Linking against perfetto.")
+    list(APPEND arcticdb_core_libraries unofficial::perfetto::perfetto)
 endif()
 
 if(${ARCTICDB_PYTHON_EXPLICIT_LINK})

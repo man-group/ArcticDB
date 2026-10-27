@@ -27,6 +27,7 @@
 #include <arcticdb/python/python_to_tensor_frame.hpp>
 #include <arcticdb/pipeline/frame_utils.hpp>
 #include <arcticdb/util/type_traits.hpp>
+#include <arcticdb/util/constructors.hpp>
 
 #include <optional>
 #include <vector>
@@ -34,6 +35,8 @@
 #include <variant>
 #include <memory>
 #include <ranges>
+#include <span>
+#include <string_view>
 
 namespace arcticdb {
 
@@ -1011,6 +1014,9 @@ struct NaAwareComparator {
         return left == right;
     }
 };
+
+/// JSON array of the unique row ranges, e.g. [[0,100000],[100000,200000]]
+std::string format_merge_timing_row_ranges(std::span<const ProcessingUnit> row_slices);
 
 /// This clause will perform update values or insert values based on strategy_ in a segment. The source of new
 /// values is the source_ member. Source and target must have the same index type. There are two actions UPDATE:
