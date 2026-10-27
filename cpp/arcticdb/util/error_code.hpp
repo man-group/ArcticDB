@@ -61,11 +61,7 @@ inline std::unordered_map<ErrorCategory, const char*> get_error_category_names()
     ERROR_CODE(1004, E_STORED_CONFIG_ERROR)                                                                            \
     ERROR_CODE(1005, E_NOT_SUPPORTED)                                                                                  \
     ERROR_CODE(1006, E_NOT_IMPLEMENTED)                                                                                \
-    ERROR_CODE(2000, E_INCOMPATIBLE_OBJECTS)                                                                           \
     ERROR_CODE(2001, E_UNIMPLEMENTED_INPUT_TYPE)                                                                       \
-    ERROR_CODE(2002, E_UPDATE_NOT_SUPPORTED)                                                                           \
-    ERROR_CODE(2003, E_INCOMPATIBLE_INDEX)                                                                             \
-    ERROR_CODE(2004, E_WRONG_SHAPE)                                                                                    \
     ERROR_CODE(2005, E_COLUMN_SECONDARY_TYPE_MISMATCH)                                                                 \
     ERROR_CODE(2006, E_UNIMPLEMENTED_COLUMN_SECONDARY_TYPE)                                                            \
     ERROR_CODE(3000, E_NO_SUCH_VERSION)                                                                                \
@@ -78,6 +74,10 @@ inline std::unordered_map<ErrorCategory, const char*> get_error_category_names()
     ERROR_CODE(4004, E_OPERATION_NOT_SUPPORTED_WITH_PICKLED_DATA)                                                      \
     ERROR_CODE(4005, E_OPERATION_NOT_SUPPORTED_WITH_RECURSIVE_NORMALIZED_DATA)                                         \
     ERROR_CODE(4006, E_OPERATION_NOT_SUPPORTED_WITH_NUMPY_ARRAY)                                                       \
+    ERROR_CODE(4007, E_INCOMPATIBLE_OBJECTS)                                                                           \
+    ERROR_CODE(4008, E_UPDATE_NOT_SUPPORTED)                                                                           \
+    ERROR_CODE(4009, E_INCOMPATIBLE_INDEX)                                                                             \
+    ERROR_CODE(4010, E_WRONG_SHAPE)                                                                                    \
     ERROR_CODE(5000, E_KEY_NOT_FOUND)                                                                                  \
     ERROR_CODE(5001, E_DUPLICATE_KEY)                                                                                  \
     ERROR_CODE(5002, E_SYMBOL_NOT_FOUND)                                                                               \

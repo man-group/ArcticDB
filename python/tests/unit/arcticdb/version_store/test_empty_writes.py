@@ -11,7 +11,7 @@ import pandas as pd
 import numpy as np
 
 from arcticdb import QueryBuilder
-from arcticdb.exceptions import NormalizationException
+from arcticdb.exceptions import NormalizationException, SchemaException
 from arcticdb.util._versions import IS_PANDAS_TWO
 from arcticdb.version_store._common import TimeFrame
 from arcticdb.util.test import assert_frame_equal, assert_series_equal
@@ -268,7 +268,7 @@ def test_append_rowcount_with_timeseries_non_empty_series(
     lib.write(sym, timeseries if timeseries_first else rowcount)
     # A RowCount-indexed Series cannot be appended to a timeseries one in either order; the exception is only for
     # appending to an *empty* Series, which pandas 2 stores with a DatetimeIndex regardless.
-    with pytest.raises(NormalizationException):
+    with pytest.raises(SchemaException):
         lib.append(sym, rowcount if timeseries_first else timeseries)
 
 

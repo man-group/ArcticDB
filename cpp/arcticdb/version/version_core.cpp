@@ -114,7 +114,7 @@ static void check_update_data_is_sorted_timeseries(
         const InputFrame& frame, const index::IndexSegmentReader& index_segment_reader
 ) {
     bool is_time_series = std::holds_alternative<stream::TimeseriesIndex>(frame.index);
-    normalization::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
+    schema::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
             is_time_series, "When calling update, the input data must have a time series index."
     );
     bool input_data_is_sorted =
@@ -124,7 +124,7 @@ static void check_update_data_is_sorted_timeseries(
     sorting::check<ErrorCode::E_UNSORTED_DATA>(
             input_data_is_sorted, "When calling update, the input data must be sorted."
     );
-    normalization::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
+    schema::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
             index::is_timeseries_or_empty_index(index_segment_reader.tsd().index()),
             "When calling update, the existing data must have a time series index."
     );

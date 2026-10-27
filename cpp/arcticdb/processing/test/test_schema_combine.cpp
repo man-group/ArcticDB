@@ -348,7 +348,7 @@ TEST(CombineSchema, IncompatibleRequiredFieldShapesRaise) {
                 if (&base == &other) {
                     continue;
                 }
-                ASSERT_THROW(combine({base, other}, options), NormalizationException)
+                ASSERT_THROW(combine({base, other}, options), SchemaException)
                         << base_name << " combined with " << other_name << " for " << options.name();
             }
         }
@@ -599,8 +599,8 @@ TEST(CombineSchema, MismatchedMultiIndexLevelTimezoneFollowsTheSameRule) {
 TEST(CombineSchema, IncompatibleIndexTypesRaise) {
     auto timeseries = timeseries_df("ts", {{"a", DataType::FLOAT64}});
     auto rowcount = rowcount_df({{"a", DataType::FLOAT64}});
-    ASSERT_THROW(combine({timeseries, rowcount}, concat_options(JoinType::OUTER)), NormalizationException);
-    ASSERT_THROW(combine({rowcount, timeseries}, append_options(true)), NormalizationException);
+    ASSERT_THROW(combine({timeseries, rowcount}, concat_options(JoinType::OUTER)), SchemaException);
+    ASSERT_THROW(combine({rowcount, timeseries}, append_options(true)), SchemaException);
 }
 
 // A type clash on a column a third schema lacks does not matter, as the inner join drops it either way.
@@ -786,8 +786,8 @@ TEST(CombineSchema, EmptyArrowSchemaIsCombinedLikeAnyOther) {
     auto without_index = arrow_1d_array(DataType::NANOSECONDS_UTC64, false);
     ASSERT_FALSE(empty_with_index.is_inferred_from_empty_pandas());
     // The same pair as CombineSchema1dArrow.IndexMismatch: being empty does not exempt it.
-    ASSERT_THROW(combine({empty_with_index, without_index}, append_options(true)), NormalizationException);
-    ASSERT_THROW(combine({without_index, empty_with_index}, append_options(true)), NormalizationException);
+    ASSERT_THROW(combine({empty_with_index, without_index}, append_options(true)), SchemaException);
+    ASSERT_THROW(combine({without_index, empty_with_index}, append_options(true)), SchemaException);
 }
 
 TEST(CombineSchema, CombinedSchemaIsInferredOnlyIfEveryInputIs) {
@@ -837,7 +837,7 @@ TEST(CombineSchema1dArrow, IndexMismatch) {
                     combine({index_first ? array_with_index : array_without_index,
                              index_first ? array_without_index : array_with_index},
                             options),
-                    NormalizationException
+                    SchemaException
             );
         }
     }
@@ -927,8 +927,7 @@ TEST(CombineSchema1dArrow, CombineWithTable) {
                      concat_options(JoinType::INNER)
              }) {
             ASSERT_THROW(
-                    combine({table_first ? table : array_1d, table_first ? array_1d : table}, options),
-                    NormalizationException
+                    combine({table_first ? table : array_1d, table_first ? array_1d : table}, options), SchemaException
             );
         }
     }

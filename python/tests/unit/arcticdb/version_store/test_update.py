@@ -684,7 +684,7 @@ def test_update_pickled_data(lmdb_version_store):
     lmdb_version_store.write(symbol, df, pickle_on_failure=True)
     assert lmdb_version_store.is_symbol_pickled(symbol)
     df2 = pd.DataFrame({"a": [1000]}, index=idx[1:2])
-    with pytest.raises(NormalizationException):
+    with pytest.raises(SchemaException):
         lmdb_version_store.update(symbol, df2)
 
 
@@ -837,7 +837,7 @@ def test_update_not_sorted_range_index_exception(lmdb_version_store):
     dtidx = pd.RangeIndex(0, num_rows, 1)
     df = pd.DataFrame({"c": np.arange(0, num_rows, dtype=np.int64)}, index=dtidx)
     assert df.index.is_monotonic_increasing == True
-    with pytest.raises(NormalizationException):
+    with pytest.raises(SchemaException):
         lmdb_version_store.update(symbol, df)
 
 
@@ -1190,10 +1190,10 @@ def test_update_mismatched_object_kind(to_write, to_update, in_memory_version_st
     if row_count_indexed(to_write) or row_count_indexed(to_update):
         # Update is only defined over a timestamp index, so the index guards reject these before the object
         # kinds are compared.
-        with pytest.raises(NormalizationException):
+        with pytest.raises(SchemaException):
             lib.update("sym", to_update)
     else:
-        with pytest.raises(NormalizationException) as e:
+        with pytest.raises(SchemaException) as e:
             lib.update("sym", to_update)
         assert "update" in str(e.value)
 
