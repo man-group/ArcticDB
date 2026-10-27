@@ -39,9 +39,9 @@ def reset_bucket(seaweed, bucket_name):
 
 def run_single(library, target, source, on, strategy):
     library.write("benchmark_sym", target)
-    start = time.time_ns()
+    start = time.perf_counter_ns()
     library.merge("benchmark_sym", source, strategy=strategy, on=on)
-    end = time.time_ns()
+    end = time.perf_counter_ns()
     return end - start
 
 
@@ -56,6 +56,20 @@ def generate_stats(times):
     }
 
 
+def stats_to_s(stats):
+    res = {}
+    for k, v in stats.items():
+        if k != "data":
+            res[k] = ns_to_s(v)
+        else:
+            res[k] = [ns_to_s(el) for el in v]
+    return res
+
+
+def ns_to_s(ns):
+    return ns * 0.000000001
+
+
 def benchmark(seaweed, target, source, on, strategy, repeats):
     bucket_name = "benchmark-bucket"
     uri = seaweed.arctic_uri(bucket_name)
@@ -66,7 +80,10 @@ def benchmark(seaweed, target, source, on, strategy, repeats):
         lib = ac.get_library("benchmark_lib", create_if_missing=True)
         time.append(run_single(lib, target, source, on, strategy))
     reset_bucket(seaweed, bucket_name)
-    print(generate_stats(time))
+    stats_ns = generate_stats(time)
+    stats_s = stats_to_s(stats_ns)
+    print(stats_ns)
+    print(stats_s)
 
 
 def test_1(seaweed):
