@@ -379,7 +379,7 @@ class TestUpdateWithDateRange:
 
     @staticmethod
     def assert_update_throws(lib, payload, batch):
-        with pytest.raises(NormalizationException):
+        with pytest.raises(SchemaException):
             if batch:
                 lib.update_batch([payload])
             else:
