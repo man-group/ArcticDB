@@ -40,7 +40,7 @@ def reset_bucket(seaweed, bucket_name):
 def run_single(library, target, source, on, strategy):
     library.write("benchmark_sym", target)
     start = time.perf_counter_ns()
-    library.merge("benchmark_sym", source, strategy=strategy, on=on)
+    library.merge("benchmark_sym", source, strategy=strategy, on=on, match_na=True)
     end = time.perf_counter_ns()
     return end - start
 
@@ -48,7 +48,7 @@ def run_single(library, target, source, on, strategy):
 def generate_stats(times):
     return {
         "mean": statistics.mean(times),
-        "median": statistics.mean(times),
+        "median": statistics.median(times),
         "min": min(times),
         "max": max(times),
         "sd": statistics.stdev(times),
