@@ -127,7 +127,7 @@ ArcticDB uses a type-based dispatch system. Normalizers inherit from `Normalizer
 
 ### Write Path
 
-Both `pa.Table` and `pl.DataFrame` are handled by `ArrowTableNormalizer`. Polars DataFrames are converted to `pa.Table` via `.to_arrow()` before normalization. The normalizer converts the table into a vector of record batches for the C++ layer. The `index_column` parameter (boolean) tells the normalizer to treat the first column as a sorted timestamp index.
+Both `pa.Table` and `pl.DataFrame` are handled by `ArrowTableNormalizer`. Polars DataFrames are converted to `pa.Table` via `.to_arrow()` before normalization. The normalizer converts the table into a vector of record batches for the C++ layer. The `index_column` parameter (boolean) tells the normalizer to treat the first column as a sorted timestamp index. `write`, `append` and `stage` expose it to users; `update` and `batch_update` always pass `index_column=True`. Arrow input is always accepted, there is no opt-in.
 
 ### Read Path
 

@@ -429,8 +429,6 @@ class NativeVersionStore:
         self._open_mode = open_mode
         self._native_cfg = native_cfg
         self._runtime_options = runtime_options
-        # Do not make this a runtime option, as it is only temporary until Arrow writes are fully supported
-        self._allow_arrow_input = False
         # Testing configuration to read as ARROW but directly convert back to PANDAS.
         # This is useful to mass enable ARROW testing on existing PANDAS tests without much code changes
         self._test_convert_arrow_back_to_pandas = False
@@ -446,9 +444,6 @@ class NativeVersionStore:
         if self._runtime_options is None:
             self._runtime_options = RuntimeOptions()
         self._runtime_options.set_arrow_string_format_default(arrow_string_format_default)
-
-    def _set_allow_arrow_input(self, allow_arrow_input: bool = True):
-        self._allow_arrow_input = allow_arrow_input
 
     def _set_output_format_for_pipeline_tests(self, output_format):
         self.set_output_format(output_format)
@@ -610,7 +605,6 @@ class NativeVersionStore:
                     dynamic_schema=dynamic_schema,
                     empty_types=empty_types,
                     index_column=index_column,
-                    allow_arrow_input=self._allow_arrow_input,
                     disallow_pickle=recursive_normalize_msgpack_no_pickle_fallback,
                     **kwargs,
                 )
@@ -1118,7 +1112,6 @@ class NativeVersionStore:
         date_range: Optional[DateRangeInput] = None,
         upsert: bool = False,
         prune_previous_version: Optional[bool] = None,
-        index_column: bool = False,
         **kwargs,
     ) -> VersionedItem:
         """
@@ -1127,7 +1120,8 @@ class NativeVersionStore:
         required. `update` only operates over the outermost index level - this means secondary index rows will be
         removed if not contained in `data`.
 
-        Both the existing symbol version and `data` must be timeseries-indexed.
+        Both the existing symbol version and `data` must be timeseries-indexed. The first column of PyArrow or Polars
+        `data` is used as its timeseries index.
 
         Update is idempotent.
 
@@ -1152,9 +1146,6 @@ class NativeVersionStore:
             If True, will write the data even if the symbol does not exist.
         prune_previous_version
             Removes previous (non-snapshotted) versions from the database.
-        index_column: bool, default=False
-            Only applicable when data is a PyArrow Table or Polars DataFrame. If True, the first column
-            is treated as the timeseries index.
 
         Returns
         -------
@@ -1205,7 +1196,7 @@ class NativeVersionStore:
             "prune_previous_version", proto_cfg, global_default=False, existing_value=prune_previous_version, **kwargs
         )
 
-        data = self._apply_date_range_to_update_query(data, date_range, update_query, index_column)
+        data = self._apply_date_range_to_update_query(data, date_range, update_query)
         _handle_categorical_columns(symbol, data)
 
         udm, item, norm_meta = self._try_normalize(
@@ -1216,7 +1207,7 @@ class NativeVersionStore:
             dynamic_strings,
             coerce_columns,
             self.norm_failure_options_msg_update,
-            index_column=index_column,
+            index_column=True,
         )
 
         if self._valid_item_type(item):
@@ -1238,7 +1229,6 @@ class NativeVersionStore:
         data: TimeSeriesType,
         date_range: Optional[DateRangeInput],
         update_query: _PythonVersionStoreUpdateQuery,
-        index_column: bool = False,
     ) -> TimeSeriesType:
         """
         Parameters
@@ -1255,10 +1245,6 @@ class NativeVersionStore:
         Data filtered by date_range if date_range is not None or unmodified data otherwise
         """
         if date_range is not None:
-            if isinstance(data, NORMALIZABLE_PYARROW_TYPES + NORMALIZABLE_POLARS_TYPES) and not index_column:
-                raise NormalizationException(
-                    "Cannot update with pyarrow/polars Table without specifying index_column=True"
-                )
             is_index_timezone_aware = is_dataframe_index_tz_aware(data)
             start, end = daterange_to_tuple(date_range)
             is_date_range_timezone_aware = False
@@ -1291,14 +1277,12 @@ class NativeVersionStore:
         date_range_vector: List[Optional[Tuple[Optional[Timestamp], Optional[Timestamp]]]],
         prune_previous_version: bool = None,
         upsert: bool = False,
-        index_column_vector: Optional[List[bool]] = None,
     ):
         self._raise_if_duplicate_symbols_in_batch(symbols)
         update_queries = [_PythonVersionStoreUpdateQuery() for _ in range(len(symbols))]
         for i in range(len(data_vector)):
-            index_column = index_column_vector[i] if index_column_vector is not None else False
             data_vector[i] = self._apply_date_range_to_update_query(
-                data_vector[i], date_range_vector[i], update_queries[i], index_column
+                data_vector[i], date_range_vector[i], update_queries[i]
             )
         proto_cfg = self._lib_cfg.lib_desc.version.write_options
         prune_previous_version = resolve_defaults(
@@ -1313,7 +1297,7 @@ class NativeVersionStore:
             dynamic_strings,
             False,
             self.norm_failure_options_msg_update,
-            index_column_vector=index_column_vector,
+            index_column_vector=len(symbols) * [True],
         )
         call_time = time.time_ns()
         cxx_versioned_items = self.version_store.batch_update(

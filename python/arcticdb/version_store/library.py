@@ -64,11 +64,12 @@ logger = logging.getLogger(__name__)
 AsOf = Union[int, str, datetime.datetime, _PreloadedIndexQuery]
 
 
-NORMALIZABLE_TYPES = (pd.DataFrame, pd.Series, np.ndarray)
+NORMALIZABLE_TYPES = (pd.DataFrame, pd.Series, np.ndarray) + NORMALIZABLE_PYARROW_TYPES + NORMALIZABLE_POLARS_TYPES
 
 
 NormalizableType = Union[NORMALIZABLE_TYPES]
-"""Types that can be normalised into Arctic's internal storage structure.
+"""Types that can be normalised into Arctic's internal storage structure: Pandas DataFrames and Series, Numpy
+NDArrays, PyArrow Tables, RecordBatches, Arrays and ChunkedArrays, and Polars DataFrames and Series.
 
 See Also
 --------
@@ -466,7 +467,6 @@ class UpdatePayload:
         data: NormalizableType,
         metadata: Any = None,
         date_range: Optional[Tuple[Optional[Timestamp], Optional[Timestamp]]] = None,
-        index_column: bool = False,
     ):
         """
         Constructor.
@@ -477,7 +477,8 @@ class UpdatePayload:
             Symbol name. Limited to 255 characters. The following characters are not supported in symbols:
             ``"*", "&", "<", ">"``
         data : NormalizableType
-            Time-indexed data to use for the update.
+            Time-indexed data to use for the update. The first column of PyArrow or Polars data is used as its
+            timeseries index.
         metadata : Any, default=None
             Optional metadata to persist along with the new symbol version.
         date_range : Optional[Tuple[Optional[Timestamp], Optional[Timestamp]]], default=None
@@ -488,21 +489,16 @@ class UpdatePayload:
             not covered by data are removed as well. date_range and data must both be timezone-aware or both
             timezone-naive; they can use different zones, since the comparison is against the underlying instants
             rather than local time.
-        index_column: bool, default=False
-            Only applicable when data is a PyArrow Table or Polars DataFrame. If True, the first column
-            is treated as the timeseries index.
         """
         self.symbol = symbol
         self.data = data
         self.metadata = metadata
         self.date_range = date_range
-        self.index_column = index_column
 
     def __repr__(self):
         res = f"UpdatePayload(symbol={self.symbol}, data_id={id(self.data)}"
         res += f", metadata={self.metadata}" if self.metadata is not None else ""
         res += f", date_range={self.date_range}" if self.date_range is not None else ""
-        res += f", index_column={self.index_column}" if self.index_column else ""
         res += ")"
         return res
 
@@ -993,14 +989,7 @@ class Library:
         return self.has_symbol(symbol)
 
     def _allowed_input_type(self, data) -> bool:
-        if isinstance(data, NORMALIZABLE_TYPES):
-            return True
-        if self._nvs._allow_arrow_input:
-            if isinstance(data, NORMALIZABLE_PYARROW_TYPES):
-                return True
-            if isinstance(data, NORMALIZABLE_POLARS_TYPES):
-                return True
-        return False
+        return isinstance(data, NORMALIZABLE_TYPES)
 
     def options(self) -> LibraryOptions:
         """Library options set on this library. See also `enterprise_options`."""
@@ -1101,8 +1090,12 @@ class Library:
         information on versions see the documentation for the `read` primitive.
 
         ``data`` must be of a format that can be normalised into Arctic's internal storage structure. Pandas
-        DataFrames, Pandas Series and Numpy NDArrays can all be normalised. Normalised data will be split along both the
-        columns and rows into segments. By default, a segment will contain 100,000 rows and 127 columns.
+        DataFrames, Pandas Series, Numpy NDArrays, PyArrow Tables, RecordBatches, Arrays and ChunkedArrays, and Polars
+        DataFrames and Series can all be normalised. Normalised data will be split along both the columns and rows into
+        segments. By default, a segment will contain 100,000 rows and 127 columns.
+
+        Data written as Pandas can be read with an Arrow ``output_format`` and vice versa, and a symbol written in one
+        format can be appended to or updated with data in the other.
 
         If this library has ``write_deduplication`` enabled then segments will be deduplicated against storage prior to
         write to reduce required IO operations and storage requirements. Data will be effectively deduplicated for all
@@ -1437,6 +1430,8 @@ class Library:
         a new symbol, but be careful - it will not work for creating a new version of an existing symbol. Use `write`
         in that case.
 
+        ``data`` may be Pandas or Arrow input regardless of the format the existing data was written in.
+
         Note that `append` is not designed for multiple concurrent writers over a single symbol.
 
         Parameters
@@ -1595,7 +1590,6 @@ class Library:
         upsert: bool = False,
         date_range: Optional[Tuple[Optional[Timestamp], Optional[Timestamp]]] = None,
         prune_previous_versions: Optional[bool] = None,
-        index_column: bool = False,
     ) -> VersionedItem:
         """
         Overwrites existing symbol data with the contents of ``data``.
@@ -1604,7 +1598,9 @@ class Library:
         contents of ``data``, adding additional index entries if required. `update` only operates over the outermost
         index level - this means secondary index rows will be removed if not contained in ``data``.
 
-        Both the existing symbol version and ``data`` must be timeseries-indexed.
+        Both the existing symbol version and ``data`` must be timeseries-indexed. ``data`` may be Pandas or Arrow input
+        regardless of the format the existing data was written in. The first column of PyArrow or Polars ``data`` is
+        used as its timeseries index.
 
         In the case where ``data`` has zero rows, nothing will be done and no new version will be created. This means that
         `update` cannot be used with ``date_range`` to just delete a subset of the data. We have `delete_data_in_range`
@@ -1641,9 +1637,6 @@ class Library:
         prune_previous_versions: Optional[bool], default=None
             Removes previous (non-snapshotted) versions from the database. If None, the value is taken from the
             library configuration (defaults to False).
-        index_column: bool, default=False
-            Only applicable when data is a PyArrow Table or Polars DataFrame. If True, the first column
-            is treated as the timeseries index.
 
         Returns
         -------
@@ -1712,7 +1705,6 @@ class Library:
             upsert=upsert,
             date_range=date_range,
             prune_previous_version=prune_previous_versions,
-            index_column=index_column,
         )
 
     def update_batch(
@@ -1792,7 +1784,6 @@ class Library:
             [p.date_range for p in update_payloads],
             prune_previous_version=prune_previous_versions,
             upsert=upsert,
-            index_column_vector=[p.index_column for p in update_payloads],
         )
         return batch_update_result
 

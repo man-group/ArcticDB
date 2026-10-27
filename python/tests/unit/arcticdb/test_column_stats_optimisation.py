@@ -735,7 +735,6 @@ def test_column_stats_column_null_in_every_slice_prunes(
     in_memory_store_factory, clear_query_stats, column_stats_filtering_enabled_and_disabled, arrow_type
 ):
     lib = in_memory_store_factory(segment_row_size=2)
-    lib._set_allow_arrow_input()
     table = pa.table({"f": pa.array([None] * 8, arrow_type), "g": pa.array([float(i) for i in range(8)], pa.float64())})
     lib.write(sym, table)
     lib.create_column_stats_experimental(sym)

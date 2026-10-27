@@ -103,7 +103,6 @@ def to_arrow_source(source_format: SourceFormat, source: pd.DataFrame) -> Tuple[
 def run_merge(lib, source_format: SourceFormat, symbol: str, source: pd.DataFrame, *args, **kwargs):
     if source_format == SourceFormat.PANDAS:
         return lib.merge(symbol, source, *args, **kwargs)
-    (lib._nvs if isinstance(lib, Library) else lib)._set_allow_arrow_input()
     converted_source, index_column = to_arrow_source(source_format, source)
     try:
         return lib.merge(symbol, converted_source, *args, index_column=index_column, **kwargs)

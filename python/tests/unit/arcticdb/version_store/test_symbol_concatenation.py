@@ -1041,7 +1041,6 @@ class TestMixedArrowPandasConcat:
     @pytest.fixture(autouse=True)
     def setup(self, lmdb_library_factory):
         self.lib = lmdb_library_factory(LibraryOptions())
-        self.lib._nvs._set_allow_arrow_input()
 
     @pytest.mark.parametrize("arrow_first", [True, False])
     def test_no_index(self, arrow_first):

@@ -45,7 +45,6 @@ class ArrowNumeric:
         self.ac.delete_library(self.lib_name_prewritten)
         self.ac.create_library(self.lib_name_prewritten)
         lib = self.ac.get_library(self.lib_name_prewritten)
-        lib._nvs._set_allow_arrow_input()
         for rows in num_rows:
             df = pd.DataFrame(
                 {f"col{idx}": np.arange(idx * rows, (idx + 1) * rows, dtype=np.int64) for idx in range(num_cols)},
@@ -65,14 +64,12 @@ class ArrowNumeric:
         random.seed(42)
         self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)
         self.lib = self.ac.get_library(self.lib_name_prewritten)
-        self.lib._nvs._set_allow_arrow_input()
         if date_range is None:
             self.date_range = None
         else:
             # Create a date range that excludes the first and last 10 rows of the data only
             self.date_range = (pd.Timestamp(10), pd.Timestamp(rows - 10))
         self.fresh_lib = self.get_fresh_lib()
-        self.fresh_lib._nvs._set_allow_arrow_input()
         num_cols = 9
         index = pd.date_range("1970-01-01", freq="ns", periods=rows)
         names = ["ts"] + [f"col{idx}" for idx in range(num_cols)]
@@ -125,7 +122,6 @@ class ArrowSparseNumeric:
         num_rows_list, sparsity_list = self.params
         ac.delete_library(self.lib_name_prewritten)
         lib = ac.create_library(self.lib_name_prewritten, library_options=LibraryOptions(dynamic_schema=True))
-        lib._nvs._set_allow_arrow_input()
         for rows in num_rows_list:
             for sparsity in sparsity_list:
                 lib.write(self.symbol_name(rows, sparsity), self._generate_table(rows, sparsity))
@@ -148,9 +144,7 @@ class ArrowSparseNumeric:
     def setup(self, rows, sparsity):
         self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)
         self.lib = self.ac.get_library(self.lib_name_prewritten)
-        self.lib._nvs._set_allow_arrow_input()
         self.fresh_lib = self.get_fresh_lib()
-        self.fresh_lib._nvs._set_allow_arrow_input()
         self.table = self._generate_table(rows, sparsity)
         self.sym = self.symbol_name(rows, sparsity)
         self.sym_with_type_promotion = self.symbol_name(rows, sparsity, self.type_promotion_suffix)
@@ -211,7 +205,6 @@ class ArrowBools:
         num_rows_list, sparsity_list = self.params
         ac.delete_library(self.lib_name_prewritten)
         lib = ac.create_library(self.lib_name_prewritten)
-        lib._nvs._set_allow_arrow_input()
         for rows in num_rows_list:
             for sparsity in sparsity_list:
                 lib.write(self.symbol_name(rows, sparsity), self._generate_table(rows, sparsity))
@@ -226,9 +219,7 @@ class ArrowBools:
     def setup(self, rows, sparsity):
         self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)
         self.lib = self.ac.get_library(self.lib_name_prewritten)
-        self.lib._nvs._set_allow_arrow_input()
         self.fresh_lib = self.get_fresh_lib()
-        self.fresh_lib._nvs._set_allow_arrow_input()
         self.table = self._generate_table(rows, sparsity)
         self.sym = self.symbol_name(rows, sparsity)
 
@@ -322,7 +313,6 @@ class ArrowStrings:
         self.ac.delete_library(self.lib_name_prewritten)
         self.ac.create_library(self.lib_name_prewritten)
         lib = self.ac.get_library(self.lib_name_prewritten)
-        lib._nvs._set_allow_arrow_input()
         for rows in num_rows:
             for unique_string_count in unique_string_counts:
                 table = self._generate_table(rows, self.num_cols, unique_string_count)
@@ -338,14 +328,12 @@ class ArrowStrings:
     def setup(self, rows, date_range, unique_string_count, arrow_string_format):
         self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)
         self.lib = self.ac.get_library(self.lib_name_prewritten)
-        self.lib._nvs._set_allow_arrow_input()
         if date_range is None:
             self.date_range = None
         else:
             # Create a date range that excludes the first and last 10 rows of the data only
             self.date_range = (pd.Timestamp(10), pd.Timestamp(rows - 10))
         self.fresh_lib = self.get_fresh_lib()
-        self.fresh_lib._nvs._set_allow_arrow_input()
         self.table = self._generate_table(rows, self.num_cols, unique_string_count, arrow_string_format)
         self.pandas_frame_object = self._generate_pandas_frame(rows, self.num_cols, unique_string_count, False)
         self.pandas_frame_str = self._generate_pandas_frame(rows, self.num_cols, unique_string_count, True)

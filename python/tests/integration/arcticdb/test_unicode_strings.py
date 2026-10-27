@@ -55,7 +55,6 @@ def test_write_blns(lmdb_version_store, any_arrow_string_format):
     vit = lib.read(symbol)
     assert_frame_equal(df, vit.data)
     # Arrow
-    lib._set_allow_arrow_input()
     table = pandas_to_arrow_with_index_first(df)
     lib.write(symbol, table, index_column=True)
     received = cast_string_columns(lib.read(symbol, output_format=OutputFormat.PYARROW).data, pa.string())
@@ -77,7 +76,6 @@ def test_append_blns(lmdb_version_store, any_arrow_string_format):
     vit = lib.read(symbol)
     assert_frame_equal(df, vit.data)
     # Arrow
-    lib._set_allow_arrow_input()
     table_first_half = pandas_to_arrow_with_index_first(df_first_half)
     table_second_half = pandas_to_arrow_with_index_first(df_second_half)
     lib.write(symbol, table_first_half, index_column=True)
@@ -105,11 +103,10 @@ def test_update_blns(lmdb_version_store, any_arrow_string_format):
     vit = lib.read(symbol)
     assert_frame_equal(df, vit.data)
     # Arrow
-    lib._set_allow_arrow_input()
     table_removed_middle = pandas_to_arrow_with_index_first(df_removed_middle)
     table_middle_half = pandas_to_arrow_with_index_first(df_middle_half)
     lib.write(symbol, table_removed_middle, index_column=True)
-    lib.update(symbol, table_middle_half, index_column=True)
+    lib.update(symbol, table_middle_half)
     received = cast_string_columns(lib.read(symbol, output_format=OutputFormat.PYARROW).data, pa.string())
     expected = pandas_to_arrow_with_index_first(df)
     assert cast_string_columns(expected, pa.string()).equals(received)
@@ -134,7 +131,6 @@ def test_batch_read_blns(lmdb_version_store, any_arrow_string_format):
             expected = expected[expected["ints"] > 50]
         assert_frame_equal(expected, res[sym].data)
     # Arrow
-    lib._set_allow_arrow_input()
     tables = [pandas_to_arrow_with_index_first(df) for df in dfs]
     lib.batch_write(symbols, tables, index_column_vector=[True] * num_symbols)
     res = lib.batch_read(symbols, query_builder=qbs, output_format=OutputFormat.PYARROW)
@@ -168,7 +164,6 @@ def test_recursive_normalizers_blns(
     vit = lib.read(symbol)
     assert_dicts_of_dfs_equal(dict_data, vit.data)
     # Arrow
-    lib._set_allow_arrow_input()
     table = pa.Table.from_pandas(df)
     dict_data = {s: table for s in keys}
     lib.write(symbol, dict_data, recursive_normalizers=True)

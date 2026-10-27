@@ -1562,7 +1562,6 @@ class CompositeNormalizer(Normalizer):
     def set_skip_df_consolidation(self):
         self.df.set_skip_df_consolidation()
 
-    # Can remove allow_arrow_input once Arrow writes fully supported, but need it to be opt-in initially in case anyone is pickling pyarrow Tables already
     def _normalize(
         self,
         item,
@@ -1571,10 +1570,9 @@ class CompositeNormalizer(Normalizer):
         coerce_columns=None,
         empty_types=False,
         index_column=False,
-        allow_arrow_input=False,
         **kwargs,
     ):
-        normalizer = self.get_normalizer_for_type(item, allow_arrow_input)
+        normalizer = self.get_normalizer_for_type(item)
 
         if not normalizer:
             return item, None
@@ -1590,7 +1588,7 @@ class CompositeNormalizer(Normalizer):
             **kwargs,
         )
 
-    def get_normalizer_for_type(self, item, allow_arrow_input=False):
+    def get_normalizer_for_type(self, item):
         # TODO: this should use customcompositenormalizer as well.
         if isinstance(item, DataFrame):
             if (
@@ -1617,11 +1615,8 @@ class CompositeNormalizer(Normalizer):
         if isinstance(item, np.ndarray):
             return self.np.normalize
 
-        if allow_arrow_input:
-            if isinstance(item, NORMALIZABLE_PYARROW_TYPES):
-                return self.pa.normalize
-            if isinstance(item, NORMALIZABLE_POLARS_TYPES):
-                return self.pa.normalize
+        if isinstance(item, NORMALIZABLE_PYARROW_TYPES + NORMALIZABLE_POLARS_TYPES):
+            return self.pa.normalize
 
         if self.fallback_normalizer is not None:
             # Msgpack normalize if everything else fails.

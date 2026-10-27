@@ -90,7 +90,6 @@ SPARSE_QUERY_IDS = ["eq_nat", "ne_nat", "gt_nat", "lt_nat", "ge_nat", "le_nat", 
 
 
 def _write_sparse_time_col(lib):
-    lib._set_allow_arrow_input()
     table = pa.table(
         {
             "ts": pa.Array.from_pandas(pd.date_range("2000-01-01", periods=9), type=pa.timestamp("ns")),
