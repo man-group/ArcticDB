@@ -18,8 +18,8 @@ def float_col_with_nan(rows, num_sparse_rows):
     return col
 
 
-def generate_target_non_repeated_index(rows, cols):
-    index = pd.date_range(pd.Timestamp(0), freq="1ms", periods=rows, name="ts")
+def generate_target_non_repeated_index(rows, cols, index_start=pd.Timestamp(0)):
+    index = pd.date_range(index_start, freq="1ms", periods=rows, name="ts")
     return pd.DataFrame({f"col_{i}": float_col_with_nan(rows, (rows // 10) * i) for i in range(cols)}, index=index)
 
 
@@ -28,7 +28,7 @@ def generate_source(target, source_rows, num_matched_rows):
     matched_rows = rng.choice(len(target), size=num_matched_rows, replace=False)
     matched_source = target.iloc[matched_rows]
     num_rows_to_add = source_rows - num_matched_rows
-    unmatched_rows = generate_target_non_repeated_index(num_rows_to_add, len(target.columns))
+    unmatched_rows = generate_target_non_repeated_index(num_rows_to_add, len(target.columns), pd.Timestamp(10))
     return pd.concat([matched_source, unmatched_rows]).sort_index()
 
 
@@ -57,7 +57,7 @@ def generate_stats(times):
 
 
 def benchmark(seaweed, target, source, on, strategy, repeats):
-    bucket_name = "benchmark_bucket"
+    bucket_name = "benchmark-bucket"
     uri = seaweed.arctic_uri(bucket_name)
     time = []
     for _ in range(repeats):
