@@ -1300,11 +1300,25 @@ std::vector<EntityId> MergeUpdateClause::process(std::vector<EntityId>&& entity_
             std::shared_ptr<ColRange>,
             std::shared_ptr<AtomKey>,
             EntityFetchCount>(*component_manager_, std::move(entity_ids));
+
+    std::string id;
+    for (const std::shared_ptr<RowRange>& rr : *(proc.row_ranges_)) {
+        id.append(fmt::format("{}", *rr));
+    }
+    [[maybe_unused]] ScopedTimer process_timer("MergeUpdateClause::process", [id](auto time) {
+        std::cout << fmt::format("fn: process, id: {}, time: {}\n", id, time);
+    });
+
     std::vector<ProcessingUnit> row_slices =
             must_structure_by_time_slice() ? split_by_row_slice(std::move(proc)) : std::vector{std::move(proc)};
     const std::pair<size_t, size_t> source_start_end = get_source_start_end(row_slices);
     MatchRecord matched = match(row_slices, source_start_end);
-    matched.validate_rows_to_update(strategy_);
+    {
+        [[maybe_unused]] ScopedTimer match_timer("MergeUpdateClause::match", [id](auto time) {
+            std::cout << fmt::format("fn: match, id: {}, time: {}\n", id, time);
+        });
+        matched.validate_rows_to_update(strategy_);
+    }
     matched.transpose_matched_target_rows();
     if (strategy_.update_only()) {
         if (!matched.has_matched_target_rows()) {
@@ -1312,6 +1326,9 @@ std::vector<EntityId> MergeUpdateClause::process(std::vector<EntityId>&& entity_
             // existing data keys for row slices that are not re-emitted.
             return {};
         }
+        [[maybe_unused]] ScopedTimer update_timer("MergeUpdateClause::update", [id](auto time) {
+            std::cout << fmt::format("fn: update, id: {}, time: {}\n", id, time);
+        });
         auto new_row_slices = update(matched, std::move(row_slices), source_start_end);
         std::vector<EntityId> res;
         for (ProcessingUnit& row_slice : new_row_slices) {
@@ -1367,7 +1384,12 @@ std::vector<EntityId> MergeUpdateClause::process(std::vector<EntityId>&& entity_
         return {};
     }
 
-    auto new_row_slices = update_and_insert(matched, *target_descriptor, std::move(row_slices), source_start_end);
+    auto new_row_slices = [&]() {
+        [[maybe_unused]] ScopedTimer update_insert_timer("MergeUpdateClause::update_and_insert", [id](auto time) {
+            std::cout << fmt::format("fn: update_and_insert, id: {}, time: {}\n", id, time);
+        });
+        return update_and_insert(matched, *target_descriptor, std::move(row_slices), source_start_end);
+    }();
 
     std::vector<EntityId> res;
     for (auto&& [row_slice_idx, row_slice] : folly::enumerate(new_row_slices)) {
@@ -1528,6 +1550,14 @@ std::vector<ProcessingUnit> MergeUpdateClause::update_and_insert(
         const MatchRecord& match_record, const StreamDescriptor& target_descriptor,
         std::vector<ProcessingUnit>&& row_slices, std::pair<size_t, size_t> source_start_end
 ) const {
+
+    std::string id;
+    for (const ProcessingUnit& proc : row_slices) {
+        for (const auto& rr : (*proc.row_ranges_)) {
+            id.append(fmt::format("{}", *rr));
+        }
+    }
+
     ARCTICDB_DEBUG_CHECK(
             ErrorCode::E_ASSERTION_FAILURE,
             strategy_.insert(),
@@ -1638,6 +1668,17 @@ std::vector<ProcessingUnit> MergeUpdateClause::update_and_insert(
                                         return util::variant_match(
                                                 get_source_column<SourceTDT>(field_idx),
                                                 [&](const auto& source) -> std::vector<std::shared_ptr<Column>> {
+                                                    [[maybe_unused]] ScopedTimer process_timer(
+                                                            "MergeUpdateClause::process",
+                                                            [id, name = source_field.name()](auto time) {
+                                                                std::cout << fmt::format(
+                                                                        "fn: merge, column: {}, id: {}, time: {}\n",
+                                                                        id,
+                                                                        name,
+                                                                        time
+                                                                );
+                                                            }
+                                                    );
                                                     constexpr bool is_source_sparse = std::same_as<
                                                             std::remove_cvref_t<decltype(source)>,
                                                             ColumnWithStrings>;

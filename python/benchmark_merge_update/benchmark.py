@@ -72,8 +72,8 @@ def benchmark(seaweed, target, source, on, strategy, repeats):
 def test_1(seaweed):
     num_rows = 10_0000_000
     num_cols = 10
-    num_source_rows = 1_000_000
-    num_matched_rows = 5_000_000
+    num_source_rows = 5_000_001
+    num_matched_rows = 2_500_000
     on = [f"col_{i}" for i in range(5)]
     strategy = MergeStrategy(matched="update", not_matched_by_target="insert")
     target = generate_target_non_repeated_index(num_rows, num_cols)

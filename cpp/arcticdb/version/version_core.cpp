@@ -3322,6 +3322,9 @@ folly::Future<AtomKey> merge_update_impl(
     auto variant_source = [&]() -> std::variant<std::shared_ptr<InputFrame>, SegmentInMemory> {
         const bool is_source_arrow = !source->has_only_tensors();
         if (is_source_arrow) {
+            ScopedTimer t("WriteToSegmentTask", [](auto elapsed) {
+                std::cout << fmt::format("fn: WriteToSegmentTask, time: {}\n", elapsed);
+            });
             // WriteToSegmentTask adds the index column itself, so the column range covers only the data columns.
             FrameSlice full_slice{
                     std::make_shared<StreamDescriptor>(source->desc().clone()),
@@ -3498,8 +3501,8 @@ folly::Future<CompactDataInfo> compact_data_explain_plan_impl(
                 CompactDataClause clause{rows_per_segment};
                 std::vector<uint64_t> row_slices_after;
                 VersionId version_id_after;
-                // If there is only 1 segment, and it has fewer than min_rows_per_segment, then the compaction will be a
-                // no-op
+                // If there is only 1 segment, and it has fewer than min_rows_per_segment, then the compaction will
+                // be a no-op
                 if (clause.row_ranges_all_acceptable_lengths(row_ranges) ||
                     (row_ranges.size() == 1 && row_ranges.cbegin()->diff() < clause.min_rows_per_segment_)) {
                     version_id_after = update_info.previous_index_key_->version_id();
@@ -3550,8 +3553,8 @@ static folly::Future<std::vector<SliceAndKey>> slice_and_write_frame_remainder(
         col_ranges.emplace_back(col_range);
         while (col_range.second < frame->desc().field_count()) {
             col_range.first += write_options.column_group_size;
-            // The slicing implementation gracefully handles column ranges that are wider than the number of columns in
-            // the input frame
+            // The slicing implementation gracefully handles column ranges that are wider than the number of columns
+            // in the input frame
             col_range.second += write_options.column_group_size;
             col_ranges.emplace_back(col_range);
         }
@@ -3588,10 +3591,11 @@ static std::vector<SliceAndKey> prev_version_unchanged_slices(
     std::unordered_set<size_t> first_rows_to_keep;
     std::unordered_set<size_t> first_rows_to_discard;
     for (SliceAndKey& slice_and_key : prev_slice_and_keys) {
-        // We are looking for slices from prev_slice_and_keys that are not covered by any of the new_row_ranges written
-        // to disk as part of the compaction. It is sufficient to look for slices where the first row is not in any of
-        // the new_row_ranges, as all slices from the previous version will either have been completely rewritten to
-        // disk, or entirely ignored by CompactDataClause::structure_for_processing, there is nothing inbetween.
+        // We are looking for slices from prev_slice_and_keys that are not covered by any of the new_row_ranges
+        // written to disk as part of the compaction. It is sufficient to look for slices where the first row is not
+        // in any of the new_row_ranges, as all slices from the previous version will either have been completely
+        // rewritten to disk, or entirely ignored by CompactDataClause::structure_for_processing, there is nothing
+        // inbetween.
         auto first_row = slice_and_key.slice().row_range.first;
         if (first_rows_to_keep.contains(first_row)) {
             last_row_on_disk = std::max(last_row_on_disk, slice_and_key.slice().rows().second);
@@ -3807,7 +3811,8 @@ folly::Future<std::optional<AtomKey>> async_rename_columns_arrow_compat_impl(
                         IndexPartialKey target_partial_index_key{stream_id, update_info.next_version_id_};
                         auto slice_and_key_futs = [&]() {
                             if (arrow_transformed_schema->column_renames_.empty()) {
-                                // Norm metadata only change, create a new index key pointing at all the old data keys
+                                // Norm metadata only change, create a new index key pointing at all the old data
+                                // keys
                                 return folly::makeFuture(std::move(pipeline_context->slice_and_keys_));
                             } else {
                                 auto component_manager = std::make_shared<ComponentManager>();
@@ -3829,13 +3834,14 @@ folly::Future<std::optional<AtomKey>> async_rename_columns_arrow_compat_impl(
                                                     std::get<0>(component_manager->get_components<SliceAndKey>(entities)
                                                     );
                                             // Only data keys that changed were rewritten, so merge these with those
-                                            // from the pipeline context. By construction, the RowRange and ColRange of
-                                            // each new slice and key will always match exactly one from the pipeline
-                                            // context's slice and keys
+                                            // from the pipeline context. By construction, the RowRange and ColRange
+                                            // of each new slice and key will always match exactly one from the
+                                            // pipeline context's slice and keys
                                             if (new_slice_and_keys.size() == pipeline_context->slice_and_keys_.size()) {
                                                 return new_slice_and_keys;
                                             }
-                                            // By construction a norm-metadata only change will not be in this branch
+                                            // By construction a norm-metadata only change will not be in this
+                                            // branch
                                             internal::check<ErrorCode::E_ASSERTION_FAILURE>(
                                                     !new_slice_and_keys.empty(),
                                                     "Unexpected empty new slice and keys when renaming columns"
@@ -3918,8 +3924,8 @@ folly::Future<SymbolProcessingResult> read_and_process(
                                 .thenValueInline([res_versioned_item = std::move(res_versioned_item),
                                                   pipeline_context,
                                                   output_schema = std::move(output_schema)](auto&& entity_ids) mutable {
-                                    // Pipeline context user metadata is not populated in the case that only incomplete
-                                    // segments exist for a symbol, no indexed versions
+                                    // Pipeline context user metadata is not populated in the case that only
+                                    // incomplete segments exist for a symbol, no indexed versions
                                     return SymbolProcessingResult{
                                             std::move(res_versioned_item),
                                             pipeline_context->release_opt_user_defined_metadata().value_or(
