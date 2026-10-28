@@ -397,48 +397,52 @@ TEST_F(S3StorageFixture, test_remove) {
     ASSERT_EQ(list_in_store(store), remaining);
 }
 
-// S3 can accept a DeleteObjects request but reject some of the objects in it. NfsBackedStorage uses the same
-// do_remove_impl, so these tests cover it too.
-class S3RemoveRetryFixture : public S3StorageFixture {
+// S3 can accept a DeleteObjects request but reject some of the objects in it
+class S3AndNfsRemoveRetryFixture : public S3AndNfsStorageFixture {
   protected:
     void SetUp() override {
-        client = dynamic_cast<S3ClientTestWrapper*>(&store.client());
+        storage = get_storage();
+        if (auto* s3_storage = dynamic_cast<S3Storage*>(storage.get())) {
+            client = dynamic_cast<S3ClientTestWrapper*>(&s3_storage->client());
+        } else if (auto* nfs_storage = dynamic_cast<nfs_backed::NfsBackedStorage*>(storage.get())) {
+            client = dynamic_cast<S3ClientTestWrapper*>(&nfs_storage->client());
+        }
         ASSERT_NE(client, nullptr);
         for (int i = 0; i < 3; ++i) {
-            write_in_store(store, fmt::format("symbol_{}", i));
+            write_in_store(*storage, fmt::format("symbol_{}", i));
         }
     }
 
-    // The S3 object name that delete_objects receives for the given symbol
-    std::string object_name(const std::string& symbol) const { return store.key_path(get_test_key(symbol)); }
-
+    std::unique_ptr<Storage> storage;
     S3ClientTestWrapper* client = nullptr;
 };
 
-TEST_F(S3RemoveRetryFixture, retries_objects_rejected_with_retryable_error) {
-    client->add_delete_objects_failure(object_name("symbol_1"), "InternalError", 1);
+TEST_P(S3AndNfsRemoveRetryFixture, retries_objects_rejected_with_retryable_error) {
+    client->add_delete_objects_failure("symbol_1", "InternalError", 1);
 
-    remove_in_store(store, {"symbol_0", "symbol_1", "symbol_2"});
+    remove_in_store(*storage, {"symbol_0", "symbol_1", "symbol_2"});
 
-    ASSERT_TRUE(list_in_store(store).empty());
+    ASSERT_TRUE(list_in_store(*storage).empty());
 }
 
-TEST_F(S3RemoveRetryFixture, raises_if_object_is_rejected_on_every_attempt) {
-    client->add_delete_objects_failure(object_name("symbol_1"), "InternalError", 1000);
+TEST_P(S3AndNfsRemoveRetryFixture, raises_if_object_is_rejected_on_every_attempt) {
+    client->add_delete_objects_failure("symbol_1", "InternalError", 1000);
 
-    ASSERT_THROW(remove_in_store(store, {"symbol_0", "symbol_1", "symbol_2"}), UnexpectedS3ErrorException);
+    ASSERT_THROW(remove_in_store(*storage, {"symbol_0", "symbol_1", "symbol_2"}), UnexpectedS3ErrorException);
 
-    ASSERT_EQ(list_in_store(store), std::set<std::string>{"symbol_1"});
+    ASSERT_EQ(list_in_store(*storage), std::set<std::string>{"symbol_1"});
 }
 
-TEST_F(S3RemoveRetryFixture, does_not_retry_objects_rejected_with_non_retryable_error) {
+TEST_P(S3AndNfsRemoveRetryFixture, does_not_retry_objects_rejected_with_non_retryable_error) {
     // Fails only once, so if we retried the delete would succeed and nothing would be raised
-    client->add_delete_objects_failure(object_name("symbol_1"), "AccessDenied", 1);
+    client->add_delete_objects_failure("symbol_1", "AccessDenied", 1);
 
-    ASSERT_THROW(remove_in_store(store, {"symbol_0", "symbol_1", "symbol_2"}), UnexpectedS3ErrorException);
+    ASSERT_THROW(remove_in_store(*storage, {"symbol_0", "symbol_1", "symbol_2"}), UnexpectedS3ErrorException);
 
-    ASSERT_EQ(list_in_store(store), std::set<std::string>{"symbol_1"});
+    ASSERT_EQ(list_in_store(*storage), std::set<std::string>{"symbol_1"});
 }
+
+INSTANTIATE_TEST_SUITE_P(S3AndNfs, S3AndNfsRemoveRetryFixture, testing::Values("s3", "nfs"));
 
 TEST_F(S3StorageFixture, test_list) {
     auto symbols = std::set<std::string>();

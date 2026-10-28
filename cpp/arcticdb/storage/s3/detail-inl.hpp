@@ -32,6 +32,7 @@
 
 #include <boost/interprocess/streams/bufferstream.hpp>
 
+#include <algorithm>
 #include <optional>
 
 #undef GetMessage
@@ -267,29 +268,23 @@ void do_read_impl(
     visitor(key_seg.variant_key(), std::move(*key_seg.segment_ptr()));
 }
 
-struct FailedDelete {
-    std::string failed_key_name;
-    std::string error_message;
-
-    FailedDelete(std::string failed_key_name, std::string error_message) :
-        failed_key_name(std::move(failed_key_name)),
-        error_message(std::move(error_message)) {}
-};
-
-inline void raise_if_failed_deletes(const boost::container::small_vector<FailedDelete, 1>& failed_deletes) {
+inline void raise_if_failed_deletes(const std::vector<FailedDelete>& failed_deletes) {
     if (!failed_deletes.empty()) {
-        auto failed_deletes_message = std::ostringstream();
-        for (auto i = 0u; i < failed_deletes.size(); ++i) {
-            auto& failed = failed_deletes[i];
-            failed_deletes_message << fmt::format(
-                    "'{}' failed with '{}'", failed.failed_key_name, failed.error_message
+        std::vector<std::string> failures;
+        failures.reserve(failed_deletes.size());
+        for (const auto& failed : failed_deletes) {
+            failures.emplace_back(
+                    failed.error_code.empty()
+                            ? fmt::format("'{}' failed with '{}'", failed.s3_object_name, failed.error_message)
+                            : fmt::format(
+                                      "'{}' failed with '{}: {}'",
+                                      failed.s3_object_name,
+                                      failed.error_code,
+                                      failed.error_message
+                              )
             );
-            if (i != failed_deletes.size()) {
-                failed_deletes_message << ", ";
-            }
         }
-        auto error_message = fmt::format("Failed to delete some of the objects: {}.", failed_deletes_message.str());
-        raise<ErrorCode::E_UNEXPECTED_S3_ERROR>(error_message);
+        raise<ErrorCode::E_UNEXPECTED_S3_ERROR>("Failed to delete some of the objects: {}.", fmt::join(failures, ", "));
     }
 }
 
@@ -300,14 +295,59 @@ inline bool is_retryable_failed_delete(const std::string& error_code) {
            error_code == "RequestTimeout";
 }
 
+// Maximum number of DeleteObjects calls for one batch, i.e. the first call plus up to 4 retries
+inline constexpr size_t DELETE_OBJECTS_MAX_ATTEMPTS = 5;
+
+// S3 can accept the DeleteObjects request but reject some of the objects with a transient error (e.g. InternalError).
+// Deletes these objects again, with a bounded exponential backoff. Returns the objects that could not be deleted.
+// Raises if a DeleteObjects request fails as a whole.
+inline std::vector<FailedDelete> delete_objects_with_retry(
+        std::vector<std::string> to_delete, const std::string& bucket_name, S3ClientInterface& s3_client
+) {
+    // Only used for its jittered wait, so the exception type is irrelevant
+    ExponentialBackoff<S3RetryableException> backoff(100, 2000);
+    for (size_t attempt = 1;; ++attempt) {
+        auto delete_object_result = s3_client.delete_objects(to_delete, bucket_name);
+        if (!delete_object_result.is_success()) {
+            auto& error = delete_object_result.get_error();
+            std::string failed_objects = fmt::format("{}", fmt::join(to_delete, ", "));
+            raise_s3_exception(error, failed_objects);
+        }
+
+        ARCTICDB_RUNTIME_DEBUG(log::storage(), "Deleted {} objects", to_delete.size());
+        auto& failed_deletes = delete_object_result.get_output().failed_deletes;
+        // There is no point retrying if any failure is not retryable, as we are going to raise anyway
+        const bool all_retryable = std::ranges::all_of(failed_deletes, [](const FailedDelete& failed) {
+            return is_retryable_failed_delete(failed.error_code);
+        });
+        if (failed_deletes.empty() || !all_retryable || attempt == DELETE_OBJECTS_MAX_ATTEMPTS) {
+            return std::move(failed_deletes);
+        }
+
+        const auto& first_failure = failed_deletes.front();
+        log::storage().warn(
+                "S3 failed to delete {} of {} objects with a retryable error, retrying. First failure: '{}' failed "
+                "with '{}: {}'",
+                failed_deletes.size(),
+                to_delete.size(),
+                first_failure.s3_object_name,
+                first_failure.error_code,
+                first_failure.error_message
+        );
+        backoff.wait();
+        to_delete.clear();
+        for (auto& failed : failed_deletes) {
+            to_delete.emplace_back(std::move(failed.s3_object_name));
+        }
+    }
+}
+
 template<class KeyBucketizer>
 void do_remove_impl(
         std::span<VariantKey> ks, const std::string& root_folder, const std::string& bucket_name,
         S3ClientInterface& s3_client, KeyBucketizer&& bucketizer
 ) {
     ARCTICDB_SUBSAMPLE(S3StorageDeleteBatch, 0)
-    boost::container::small_vector<FailedDelete, 1> failed_deletes;
-
     util::check(
             ks.size() <= DELETE_OBJECTS_LIMIT,
             "S3 do_remove_impl called with {} keys, which exceeds DELETE_OBJECTS_LIMIT={}. "
@@ -332,55 +372,7 @@ void do_remove_impl(
         }
     }
 
-    // S3 can accept the DeleteObjects request but reject some of the objects with a transient error (e.g.
-    // InternalError). Retry only these objects, with a bounded exponential backoff.
-    ExponentialBackoff<S3RetryableException> backoff(100, 2000);
-    while (true) {
-        auto delete_object_result = s3_client.delete_objects(to_delete, bucket_name);
-        if (!delete_object_result.is_success()) {
-            auto& error = delete_object_result.get_error();
-            std::string failed_objects = fmt::format("{}", fmt::join(to_delete, ", "));
-            raise_s3_exception(error, failed_objects);
-        }
-
-        ARCTICDB_RUNTIME_DEBUG(log::storage(), "Deleted {} objects", to_delete.size());
-        std::vector<s3::FailedDelete> to_retry;
-        for (auto& bad_key : delete_object_result.get_output().failed_deletes) {
-            if (is_retryable_failed_delete(bad_key.error_code)) {
-                to_retry.emplace_back(std::move(bad_key));
-            } else {
-                failed_deletes.emplace_back(std::move(bad_key.s3_object_name), std::move(bad_key.error_message));
-            }
-        }
-
-        if (to_retry.empty()) {
-            break;
-        }
-
-        // Do not retry if we are going to raise anyway, or if we are out of attempts.
-        if (!failed_deletes.empty() || !backoff.wait()) {
-            for (auto& bad_key : to_retry) {
-                failed_deletes.emplace_back(std::move(bad_key.s3_object_name), std::move(bad_key.error_message));
-            }
-            break;
-        }
-
-        log::storage().warn(
-                "S3 failed to delete {} of {} objects with a retryable error, retrying. First failure: '{}' failed "
-                "with '{}: {}'",
-                to_retry.size(),
-                to_delete.size(),
-                to_retry.front().s3_object_name,
-                to_retry.front().error_code,
-                to_retry.front().error_message
-        );
-        to_delete.clear();
-        for (auto& bad_key : to_retry) {
-            to_delete.emplace_back(std::move(bad_key.s3_object_name));
-        }
-    }
-
-    raise_if_failed_deletes(failed_deletes);
+    raise_if_failed_deletes(delete_objects_with_retry(std::move(to_delete), bucket_name, s3_client));
 }
 
 template<class KeyBucketizer>
@@ -410,7 +402,7 @@ void do_remove_no_batching_impl(
     folly::QueuedImmediateExecutor inline_executor;
     auto delete_results = folly::collect(std::move(delete_object_results)).via(&inline_executor).get();
 
-    boost::container::small_vector<FailedDelete, 1> failed_deletes;
+    std::vector<FailedDelete> failed_deletes;
     auto keys_and_delete_results = folly::gen::from(ks) | folly::gen::move |
                                    folly::gen::zip(std::move(delete_results)) | folly::gen::as<std::vector>();
     for (auto&& [k, delete_object_result] : std::move(keys_and_delete_results)) {

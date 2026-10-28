@@ -12,6 +12,8 @@
 
 #include <aws/s3/S3Errors.h>
 
+#include <algorithm>
+
 namespace arcticdb::storage {
 
 using namespace object_store_utils;
@@ -36,9 +38,9 @@ void S3ClientTestWrapper::add_list_objects_failure_unretryable(Aws::S3::S3Errors
 }
 
 void S3ClientTestWrapper::add_delete_objects_failure(
-        const std::string& s3_object_name, const std::string& error_code, size_t times
+        const std::string& s3_object_name_substring, const std::string& error_code, size_t times
 ) {
-    delete_objects_failures_.insert_or_assign(s3_object_name, std::make_pair(error_code, times));
+    delete_objects_failures_.insert_or_assign(s3_object_name_substring, std::make_pair(error_code, times));
 }
 
 std::optional<Aws::S3::S3Error> S3ClientTestWrapper::has_failure_trigger(
@@ -163,18 +165,22 @@ S3Result<DeleteObjectsOutput> S3ClientTestWrapper::delete_objects(
     std::vector<std::string> to_delete;
     std::vector<FailedDelete> simulated_failed_deletes;
     for (const auto& s3_object_name : s3_object_names) {
-        auto it = delete_objects_failures_.find(s3_object_name);
-        if (it != delete_objects_failures_.end() && it->second.second > 0) {
-            --it->second.second;
-            simulated_failed_deletes.emplace_back(
-                    s3_object_name, "Simulated per-object delete failure", it->second.first
-            );
+        auto it = std::ranges::find_if(delete_objects_failures_, [&s3_object_name](const auto& failure) {
+            const auto& [substring, code_and_times] = failure;
+            return code_and_times.second > 0 && s3_object_name.find(substring) != std::string::npos;
+        });
+        if (it != delete_objects_failures_.end()) {
+            auto& [error_code, times] = it->second;
+            --times;
+            simulated_failed_deletes.emplace_back(s3_object_name, "Simulated per-object delete failure", error_code);
         } else {
             to_delete.emplace_back(s3_object_name);
         }
     }
 
-    auto result = actual_client_->delete_objects(to_delete, bucket_name);
+    // Real S3 rejects a DeleteObjects request with no objects, so do not send one if every object failed
+    auto result = to_delete.empty() ? S3Result<DeleteObjectsOutput>{DeleteObjectsOutput{}}
+                                    : actual_client_->delete_objects(to_delete, bucket_name);
     if (result.is_success()) {
         for (const auto& s3_object_name : to_delete) {
             if (has_object_failure_trigger(s3_object_name, StorageOperation::DELETE_LOCAL)) {

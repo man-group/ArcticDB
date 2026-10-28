@@ -27,6 +27,8 @@ class NfsBackedStorage final : public Storage {
 
     std::optional<size_t> max_delete_batch_size() const final override;
 
+    s3::S3ClientInterface& client() { return *s3_client_; }
+
   private:
     void do_write(KeySegmentPair& key_seg) final;
 
@@ -61,7 +63,6 @@ class NfsBackedStorage final : public Storage {
 
     std::string do_key_path(const VariantKey&) const final;
 
-    auto& client() { return s3_client_; }
     const std::string& bucket_name() const { return bucket_name_; }
     const std::string& root_folder() const { return root_folder_; }
     const std::string& region() const { return region_; }
