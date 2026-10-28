@@ -3320,7 +3320,7 @@ folly::Future<AtomKey> merge_update_impl(
     );
     OutputSchema source_output_schema = schema_from_input_frame(*source);
     auto variant_source = [&]() -> std::variant<std::shared_ptr<InputFrame>, SegmentInMemory> {
-        const bool is_source_arrow = !source->has_only_tensors();
+        const bool is_source_arrow = !source->has_only_tensors() || ARCTICDB_MERGE_USE_WRITE_TO_SEGMENT_TASK;
         if (is_source_arrow) {
             [[maybe_unused]] const MergeTimer timer("WriteToSegmentTask", "[]");
             // WriteToSegmentTask adds the index column itself, so the column range covers only the data columns.

@@ -8,6 +8,7 @@ import benchmarks.seaweed_utils
 import time
 import statistics
 from arcticdb.version_store.library import MergeStrategy
+from arcticdb.util.test import random_strings_of_length
 
 SEAWEED_PATH = "/home/vasil/Documents/source/ArcticDB/build_tooling/start_seaweed.sh"
 
@@ -21,9 +22,30 @@ def float_col_with_nan(rows, num_sparse_rows):
     return col
 
 
-def generate_target_non_repeated_index(rows, cols, index_start=pd.Timestamp(0)):
+def string_col_with_none(rows, num_sparse_rows):
+    pool = random_strings_of_length(10_000, 10, True)
+    rng = np.random.default_rng(7)
+    col = rng.choice(pool, rows)
+    sparse_rows = rng.choice(rows, size=num_sparse_rows, replace=False)
+    for sparse in sparse_rows:
+        col[sparse] = np.nan
+    return col
+
+
+def generate_col_with_na(rows, num_sparse_rows, dtype):
+    if dtype == "float64":
+        return float_col_with_nan(rows, num_sparse_rows)
+    elif dtype == "object":
+        return string_col_with_none(rows, num_sparse_rows)
+    else:
+        raise ValueError(f"Unknown dtype: {dtype} used to generate a column")
+
+
+def generate_target_non_repeated_index(rows, cols, index_start=pd.Timestamp(0), dtype="float64"):
     index = pd.date_range(index_start, freq="1ms", periods=rows, name="ts")
-    return pd.DataFrame({f"col_{i}": float_col_with_nan(rows, (rows // 10) * i) for i in range(cols)}, index=index)
+    return pd.DataFrame(
+        {f"col_{i}": generate_col_with_na(rows, (rows // 10) * i, dtype) for i in range(cols)}, index=index
+    )
 
 
 def generate_source(target, source_rows, num_matched_rows):
@@ -94,7 +116,19 @@ def benchmark(seaweed, target, source, on, strategy, repeats):
     print(stats_s)
 
 
-def test_1(seaweed):
+def test_01(seaweed):
+    num_rows = 10_0000_000
+    num_cols = 10
+    num_source_rows = 5_000_001
+    num_matched_rows = 2_500_000
+    on = [f"col_{i}" for i in range(5)]
+    strategy = MergeStrategy(matched="update", not_matched_by_target="insert")
+    target = generate_target_non_repeated_index(num_rows, num_cols)
+    source = generate_source(target, num_source_rows, num_matched_rows)
+    benchmark(seaweed, target, source, on, strategy, 10)
+
+
+def test_02(seaweed):
     num_rows = 10_0000_000
     num_cols = 10
     num_source_rows = 5_000_001
@@ -122,7 +156,7 @@ def get_seaweed():
 
 def main():
     seaweed = get_seaweed()
-    test_1(seaweed)
+    test_01(seaweed)
     stop_seaweed(SEAWEED_PATH)
 
 

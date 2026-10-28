@@ -17,6 +17,19 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/CMake/pdb_generation.cmake)
 
 enable_testing()
 
+
+# =========================================================================================
+
+option(ARCTICDB_MERGE_USE_WRITE_TO_SEGMENT_TASK OFF)
+option(ARCTICDB_MERGE_USE_MERGE_SPARSE OFF)
+option(ARCTICDB_MERGE_USE_UPDATE_SPARSE OFF)
+
+add_compile_definitions("ARCTICDB_MERGE_USE_WRITE_TO_SEGMENT_TASK=$<BOOL:${ARCTICDB_MERGE_USE_WRITE_TO_SEGMENT_TASK}>")
+add_compile_definitions("ARCTICDB_MERGE_USE_MERGE_SPARSE=$<BOOL:${ARCTICDB_MERGE_USE_MERGE_SPARSE}>")
+add_compile_definitions("ARCTICDB_MERGE_USE_UPDATE_SPARSE=$<BOOL:${ARCTICDB_MERGE_USE_UPDATE_SPARSE}>")
+
+# =========================================================================================
+
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(ARCTICDB_MSVC_OMIT_RUNTIME_CHECKS OFF CACHE BOOL "")
 set(ARCTICDB_USE_PCH OFF CACHE BOOL "Whether to use precompiled headers")

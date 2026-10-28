@@ -1714,7 +1714,8 @@ std::vector<ProcessingUnit> MergeUpdateClause::update_and_insert(
                                                     const auto source_insert_data = make_insert_source_data<SourceTDT>(
                                                             source_index, source, source_start_end
                                                     );
-                                                    if constexpr (!is_source_sparse) {
+                                                    if constexpr (!is_source_sparse &&
+                                                                  !ARCTICDB_MERGE_USE_MERGE_SPARSE) {
                                                         if (!is_target_sparse) {
                                                             return merge<TargetTDT, SourceTDT>(
                                                                     source_insert_data,
