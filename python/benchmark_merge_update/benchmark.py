@@ -1,4 +1,5 @@
 import arcticdb
+import json
 import pandas as pd
 import polars as pl
 import numpy as np
@@ -40,11 +41,13 @@ def reset_bucket(seaweed, bucket_name):
     seaweed.create_bucket(bucket_name)
 
 
-def run_single(library, target, source, on, strategy):
+def run_single(library, target, source, on, strategy, run_idx):
     library.write("benchmark_sym", target)
+    print(json.dumps({"tag": "merge_run", "event": "start", "run": run_idx}), flush=True)
     start = time.perf_counter_ns()
     library.merge("benchmark_sym", source, strategy=strategy, on=on, match_na=True)
     end = time.perf_counter_ns()
+    print(json.dumps({"tag": "merge_run", "event": "end", "run": run_idx, "wall_ns": end - start}), flush=True)
     return end - start
 
 
@@ -77,11 +80,11 @@ def benchmark(seaweed, target, source, on, strategy, repeats):
     bucket_name = "benchmark-bucket"
     uri = seaweed.arctic_uri(bucket_name)
     time = []
-    for _ in range(repeats):
+    for run_idx in range(repeats):
         reset_bucket(seaweed, bucket_name)
         ac = arcticdb.Arctic(uri)
         lib = ac.get_library("benchmark_lib", create_if_missing=True)
-        time.append(run_single(lib, target, source, on, strategy))
+        time.append(run_single(lib, target, source, on, strategy, run_idx))
     reset_bucket(seaweed, bucket_name)
     stats_ns = generate_stats(time)
     stats_s = stats_to_s(stats_ns)

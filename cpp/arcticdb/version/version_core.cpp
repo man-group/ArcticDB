@@ -3322,9 +3322,7 @@ folly::Future<AtomKey> merge_update_impl(
     auto variant_source = [&]() -> std::variant<std::shared_ptr<InputFrame>, SegmentInMemory> {
         const bool is_source_arrow = !source->has_only_tensors();
         if (is_source_arrow) {
-            ScopedTimer t("WriteToSegmentTask", [](auto elapsed) {
-                std::cout << fmt::format("fn: WriteToSegmentTask, time: {}\n", elapsed);
-            });
+            [[maybe_unused]] const MergeTimer timer("WriteToSegmentTask", "[]");
             // WriteToSegmentTask adds the index column itself, so the column range covers only the data columns.
             FrameSlice full_slice{
                     std::make_shared<StreamDescriptor>(source->desc().clone()),

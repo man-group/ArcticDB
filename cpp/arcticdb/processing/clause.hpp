@@ -27,6 +27,7 @@
 #include <arcticdb/python/python_to_tensor_frame.hpp>
 #include <arcticdb/pipeline/frame_utils.hpp>
 #include <arcticdb/util/type_traits.hpp>
+#include <arcticdb/util/constructors.hpp>
 
 #include <optional>
 #include <vector>
@@ -34,6 +35,9 @@
 #include <variant>
 #include <memory>
 #include <ranges>
+#include <chrono>
+#include <span>
+#include <string_view>
 
 namespace arcticdb {
 
@@ -1010,6 +1014,25 @@ struct NaAwareComparator {
         }
         return left == right;
     }
+};
+
+/// JSON array of the unique row ranges, e.g. [[0,100000],[100000,200000]]
+std::string format_merge_timing_row_ranges(std::span<const ProcessingUnit> row_slices);
+
+/// On destruction prints one JSON line in a single write:
+/// {"tag":"merge_timer","fn":...,"rows":...,"column":...,"start_ns":...,"dur_ns":...,"thread":...}
+/// start_ns is steady_clock (CLOCK_MONOTONIC), column is null when not given.
+class MergeTimer {
+  public:
+    MergeTimer(std::string_view fn, std::string rows_json, std::optional<std::string_view> column = std::nullopt);
+    ~MergeTimer();
+    ARCTICDB_NO_MOVE_OR_COPY(MergeTimer)
+
+  private:
+    std::string_view fn_;
+    std::string rows_json_;
+    std::optional<std::string_view> column_;
+    std::chrono::steady_clock::time_point start_;
 };
 
 /// This clause will perform update values or insert values based on strategy_ in a segment. The source of new
