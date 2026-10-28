@@ -1681,28 +1681,48 @@ std::unordered_map<std::tuple<StreamId, VersionId>, double> PythonVersionStore::
         // If any of the keys fail to load, there isn't a good partial result to report.
         return folly::collect(fut_index_keys)
                 .via(&async::cpu_executor())
-                .thenValue([stream_id,
-                            &result,
-                            &result_mutex](std::vector<std::pair<AtomKeyPacked, SegmentInMemory>>&& index_segments) {
+                .thenValue([this, stream_id, &result, &result_mutex](
+                                   std::vector<std::pair<AtomKeyPacked, SegmentInMemory>>&& index_segments
+                           ) {
                     // Must sort in ascending order by version_id for the calculation to be correct.
                     ranges::sort(index_segments, {}, [](const std::pair<AtomKeyPacked, SegmentInMemory>& element) {
                         return element.first.version_id();
                     });
 
-                    ankerl::unordered_dense::set<AtomKeyPacked> seen_atom_keys;
+                    // Due to possibility of MULTI_KEYs (recursive normalizers), we must track full AtomKeys. The
+                    // stream_id could have a suffix associated with an item in a nested list/dict structure.
+                    ankerl::unordered_dense::set<AtomKey> seen_atom_keys;
                     std::vector<std::tuple<VersionId, double>> partial_results;
+
                     for (auto& [key, segment] : index_segments) {
                         size_t newly_added_cells = 0;
                         size_t total_cells = 0;
-                        const pipelines::index::IndexSegmentReader isr(std::move(segment));
-                        for (const SliceAndKey& slice_and_key : isr) {
-                            const FrameSlice& slice = slice_and_key.slice();
-                            const size_t num_cells = slice.rows().diff() * slice.columns().diff();
-                            total_cells += num_cells;
-                            const auto [_, inserted] = seen_atom_keys.insert(slice_and_key.key());
-                            if (inserted) {
-                                newly_added_cells += num_cells;
+                        auto track_index_key =
+                                [&seen_atom_keys, &newly_added_cells, &total_cells](SegmentInMemory&& segment) {
+                                    const pipelines::index::IndexSegmentReader isr(std::move(segment));
+                                    for (const SliceAndKey& slice_and_key : isr) {
+                                        const FrameSlice& slice = slice_and_key.slice();
+                                        const size_t num_cells = slice.rows().diff() * slice.columns().diff();
+                                        total_cells += num_cells;
+                                        const auto [_, inserted] = seen_atom_keys.insert(slice_and_key.key());
+                                        if (inserted) {
+                                            newly_added_cells += num_cells;
+                                        }
+                                    }
+                                };
+                        if (key.type() == KeyType::MULTI_KEY) {
+                            // TODO: Using synchronous read in the middle of compute. Let's just get this done.
+                            for (size_t idx = 0; idx < segment.row_count(); ++idx) {
+                                const AtomKey sub_key = stream::read_key_row(segment, idx);
+                                util::check(
+                                        sub_key.type() == KeyType::TABLE_INDEX,
+                                        "I have no idea why multi_keys contain entries that aren't index keys"
+                                );
+                                auto [_, sub_segment] = store()->read_sync(sub_key);
+                                track_index_key(std::move(sub_segment));
                             }
+                        } else {
+                            track_index_key(std::move(segment));
                         }
 
                         const double ratio = total_cells != 0 ? 1 - static_cast<double>(newly_added_cells) /
