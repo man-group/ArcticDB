@@ -105,3 +105,18 @@ def test_empty_writes(in_memory_store_factory):
     result = lib.batch_dedup_ratios(["symbol"])
     expected = {("symbol", 0): 0.0}
     assert result == pytest.approx(expected)
+
+
+def test_recursive_normalizers(in_memory_store_factory):
+    lib = in_memory_store_factory(segment_row_size=SEGMENT_SIZE, de_duplication=True)
+    df1 = gen_df(SEGMENT_SIZE)
+    df2 = gen_df(2 * SEGMENT_SIZE)
+    df3 = gen_df(3 * SEGMENT_SIZE)
+
+    lib.write("symbol", {"x": df1, "y": df2}, recursive_normalizers=True)
+    # VERY SURPRISINGLY the first two segments of df3 are deduplicated from version 0 of the "symbol__y" stream.
+    lib.write("symbol", {"x": df3, "y": df2}, recursive_normalizers=True)
+
+    result = lib.batch_dedup_ratios(["symbol"])
+    expected = {("symbol", 0): 0.0, ("symbol", 1): 4 / 5}
+    assert result == pytest.approx(expected)
