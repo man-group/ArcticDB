@@ -117,7 +117,8 @@ def describe(values):
 def across(values):
     return (
         f"mean={to_s(statistics.mean(values)):>12.6f}  median={to_s(statistics.median(values)):>12.6f}  "
-        f"min={to_s(min(values)):>12.6f}  max={to_s(max(values)):>12.6f}"
+        f"min={to_s(min(values)):>12.6f}  max={to_s(max(values)):>12.6f} "
+        f"sd={to_s(statistics.stdev(values))}"
     )
 
 

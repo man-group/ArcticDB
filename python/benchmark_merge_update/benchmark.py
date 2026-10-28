@@ -9,6 +9,8 @@ import time
 import statistics
 from arcticdb.version_store.library import MergeStrategy
 
+SEAWEED_PATH = "/home/vasil/Documents/source/ArcticDB/build_tooling/start_seaweed.sh"
+
 
 def float_col_with_nan(rows, num_sparse_rows):
     col = np.array(range(rows), dtype="float64")
@@ -101,19 +103,27 @@ def test_1(seaweed):
     strategy = MergeStrategy(matched="update", not_matched_by_target="insert")
     target = generate_target_non_repeated_index(num_rows, num_cols)
     source = generate_source(target, num_source_rows, num_matched_rows)
-    benchmark(seaweed, target, source, on, strategy, 5)
+    benchmark(seaweed, target, source, on, strategy, 10)
+
+
+def start_seaweed(seaweed_path):
+    subprocess.run(["bash", seaweed_path, "start"], check=True)
+
+
+def stop_seaweed(seaweed_path):
+    subprocess.run(["bash", seaweed_path, "stop"], check=True)
 
 
 def get_seaweed():
-    seaweed_path = "/home/vasil/Documents/source/ArcticDB/build_tooling/start_seaweed.sh"
-    subprocess.run(["bash", seaweed_path, "stop"], check=True)
-    subprocess.run(["bash", seaweed_path, "start"], check=True)
+    stop_seaweed(SEAWEED_PATH)
+    start_seaweed(SEAWEED_PATH)
     return benchmarks.seaweed_utils.SeaweedClient()
 
 
 def main():
     seaweed = get_seaweed()
     test_1(seaweed)
+    stop_seaweed(SEAWEED_PATH)
 
 
 if __name__ == "__main__":
