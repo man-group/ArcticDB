@@ -360,10 +360,14 @@ TEST(ArrowRead, ConvertSegmentWithTimezones) {
         ASSERT_FALSE(dtz == nullptr);
         // The zone's name is OS-dependent for a link like Amsterdam, so check its offsets instead
         const date::sys_days summer{date::year{2025} / 7 / 15};
-        // Conda CI is returning +2h instead of the correct +1h for winter. Skipping the assertion until understood.
-        // const date::sys_days winter{date::year{2025} / 1 / 15};
-        // EXPECT_EQ(dtz->get_info(winter).offset, std::chrono::hours{1});
         EXPECT_EQ(dtz->get_info(summer).offset, std::chrono::hours{2});
+        // conda-forge's date ignores the POSIX TZ footer of conda-forge's slim tzdata files, so offsets after the last
+        // explicit transition (1996 for Amsterdam) are wrong. ArcticDB stores only the zone name, so Python output
+        // read through pyarrow, polars or pandas is unaffected.
+#ifndef ARCTICDB_USING_CONDA
+        const date::sys_days winter{date::year{2025} / 1 / 15};
+        EXPECT_EQ(dtz->get_info(winter).offset, std::chrono::hours{1});
+#endif
         EXPECT_EQ(names[2], "col_without_tz");
         EXPECT_EQ(columns[2].data_type(), sparrow::data_type::TIMESTAMP_NANOSECONDS);
         dtz = sparrow::get_timezone(sparrow::detail::array_access::get_arrow_proxy(columns[2]));
