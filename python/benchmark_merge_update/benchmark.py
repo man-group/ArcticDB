@@ -16,8 +16,8 @@ SEAWEED_PATH = "/home/vasil/Documents/source/ArcticDB/build_tooling/start_seawee
 ROWS_PER_SEGMENT = 100_000
 
 
-def float_col_with_nan(rows, num_sparse_rows, rng, start):
-    col = np.arange(start, start + rows, dtype="float64")
+def float_col_with_nan(rows, num_sparse_rows, rng, low):
+    col = rng.uniform(low, low + 1, rows)
     col[rng.choice(rows, size=num_sparse_rows, replace=False)] = np.nan
     return col
 
@@ -28,21 +28,22 @@ def string_col_with_none(rows, num_sparse_rows, rng, pool):
     return col
 
 
-def generate_columns(rows, cols, dtype, rng, float_start=0, string_prefix=""):
+def generate_columns(rows, cols, dtype, seed, float_low=0, string_prefix=""):
+    # Column i draws from its own generator seeded with [seed, i]
+    rngs = [np.random.default_rng([seed, i]) for i in range(cols)]
     if dtype == "float64":
-        return {f"col_{i}": float_col_with_nan(rows, (rows // 10) * i, rng, float_start) for i in range(cols)}
+        return {f"col_{i}": float_col_with_nan(rows, (rows // 10) * i, rngs[i], float_low) for i in range(cols)}
     elif dtype == "object":
-        random.seed(int(rng.integers(2**32)))
+        random.seed(seed)
         # Sorted because random_strings_of_length dedups through a set whose order depends on PYTHONHASHSEED
         pool = np.array([string_prefix + s for s in sorted(random_strings_of_length(10_000, 10, True))], dtype=object)
-        return {f"col_{i}": string_col_with_none(rows, (rows // 10) * i, rng, pool) for i in range(cols)}
+        return {f"col_{i}": string_col_with_none(rows, (rows // 10) * i, rngs[i], pool) for i in range(cols)}
     else:
         raise ValueError(f"Unknown dtype: {dtype} used to generate a column")
 
 
 def generate_target(index, cols, dtype):
-    rng = np.random.default_rng(42)
-    return pd.DataFrame(generate_columns(len(index), cols, dtype, rng), index=index)
+    return pd.DataFrame(generate_columns(len(index), cols, dtype, seed=42), index=index)
 
 
 def generate_target_non_repeated_index(rows, cols, dtype):
@@ -58,16 +59,17 @@ def generate_target_repeated_index_one_value(rows, cols, dtype):
     return generate_target(pd.DatetimeIndex(np.zeros(rows, dtype="int64"), name="ts"), cols, dtype)
 
 
-def generate_source(target, source_rows, num_matched_rows, dtype):
+def generate_source(target, source_rows, num_matched_rows, dtype, on):
     rng = np.random.default_rng(24)
     matched_rows = rng.choice(len(target), size=num_matched_rows, replace=False)
     matched_source = target.iloc[matched_rows]
+    if dtype == "object":
+        # Target string rows can be equal on the on columns, so copies of two such rows would match the same target rows
+        matched_source = matched_source[~matched_source.reset_index().duplicated(subset=["ts"] + on).to_numpy()]
     num_unmatched_rows = source_rows - num_matched_rows
-    # Target floats are in [0, len(target)) and target strings never contain "_" so unmatched rows cannot match
+    # Target floats are in [0, 1) and target strings never contain "_" so unmatched rows cannot match
     unmatched_rows = pd.DataFrame(
-        generate_columns(
-            num_unmatched_rows, len(target.columns), dtype, rng, float_start=len(target), string_prefix="_"
-        ),
+        generate_columns(num_unmatched_rows, len(target.columns), dtype, seed=24, float_low=1, string_prefix="_"),
         index=pd.DatetimeIndex(
             rng.integers(target.index[0].value, target.index[-1].value, size=num_unmatched_rows, endpoint=True),
             name="ts",
@@ -116,7 +118,28 @@ def ns_to_s(ns):
     return ns * 0.000000001
 
 
+def count_matched_source_rows(target, source, on):
+    # pandas merge treats NaN/None as equal to each other, same as match_na=True
+    keys = ["ts"] + on
+    target_keys = target.reset_index()[keys].drop_duplicates()
+    joined = source.reset_index()[keys].merge(target_keys, on=keys, how="left", indicator=True)
+    return int((joined["_merge"] == "both").sum())
+
+
 def benchmark(seaweed, target, source, on, strategy, repeats, trace_path):
+    num_matched = count_matched_source_rows(target, source, on)
+    print(
+        json.dumps(
+            {
+                "tag": "merge_data",
+                "target_rows": len(target),
+                "source_rows": len(source),
+                "matched_source_rows": num_matched,
+                "unmatched_source_rows": len(source) - num_matched,
+            }
+        ),
+        flush=True,
+    )
     print("========================================================")
     print(f"Start processing for {trace_path}")
     config = TracingSessionConfig()
@@ -153,7 +176,7 @@ def test_update_insert_random_float_data(seaweed):
     dtype = "float64"
     strategy = MergeStrategy(matched="update", not_matched_by_target="insert")
     target = generate_target_non_repeated_index(num_rows, num_cols, dtype)
-    source = generate_source(target, num_source_rows, num_matched_rows, dtype)
+    source = generate_source(target, num_source_rows, num_matched_rows, dtype, on)
     benchmark(seaweed, target, source, on, strategy, 10, "test_update_insert_random_float_data.pftrace")
 
 
@@ -167,7 +190,7 @@ def test_update_insert_random_string_data(seaweed):
     on = [f"col_{i}" for i in range(5)]
     strategy = MergeStrategy(matched="update", not_matched_by_target="insert")
     target = generate_target_non_repeated_index(num_rows, num_cols, dtype)
-    source = generate_source(target, num_source_rows, num_matched_rows, dtype)
+    source = generate_source(target, num_source_rows, num_matched_rows, dtype, on)
     benchmark(seaweed, target, source, on, strategy, 10, "test_update_insert_random_string_data.pftrace")
 
 
@@ -180,7 +203,7 @@ def test_update_random_float_data(seaweed):
     dtype = "float64"
     strategy = MergeStrategy(matched="update", not_matched_by_target="do_nothing")
     target = generate_target_non_repeated_index(num_rows, num_cols, dtype)
-    source = generate_source(target, num_source_rows, num_source_rows, dtype)
+    source = generate_source(target, num_source_rows, num_source_rows, dtype, on)
     benchmark(seaweed, target, source, on, strategy, 10, "test_update_random_float_data.pftrace")
 
 
@@ -193,7 +216,7 @@ def test_update_random_string_data(seaweed):
     strategy = MergeStrategy(matched="update", not_matched_by_target="do_nothing")
     dtype = "object"
     target = generate_target_non_repeated_index(num_rows, num_cols, dtype)
-    source = generate_source(target, num_source_rows, num_source_rows, dtype)
+    source = generate_source(target, num_source_rows, num_source_rows, dtype, on)
     benchmark(seaweed, target, source, on, strategy, 10, "test_update_random_string_data.pftrace")
 
 
@@ -206,7 +229,7 @@ def test_one_index_value_per_segment_float(seaweed):
     on = [f"col_{i}" for i in range(5)]
     strategy = MergeStrategy(matched="update", not_matched_by_target="insert")
     target = generate_target_repeated_index_one_value_per_slice(num_rows, num_cols, dtype)
-    source = generate_source(target, num_source_rows, num_matched_rows, dtype)
+    source = generate_source(target, num_source_rows, num_matched_rows, dtype, on)
     benchmark(seaweed, target, source, on, strategy, 10, "test_one_index_value_per_segment_float.pftrace")
 
 
@@ -219,7 +242,7 @@ def test_one_index_value_per_segment_string(seaweed):
     on = [f"col_{i}" for i in range(5)]
     strategy = MergeStrategy(matched="update", not_matched_by_target="insert")
     target = generate_target_repeated_index_one_value_per_slice(num_rows, num_cols, dtype)
-    source = generate_source(target, num_source_rows, num_matched_rows, dtype)
+    source = generate_source(target, num_source_rows, num_matched_rows, dtype, on)
     benchmark(seaweed, target, source, on, strategy, 10, "test_one_index_value_per_segment_string.pftrace")
 
 
@@ -232,7 +255,7 @@ def test_one_index_value_float(seaweed):
     on = [f"col_{i}" for i in range(5)]
     strategy = MergeStrategy(matched="update", not_matched_by_target="insert")
     target = generate_target_repeated_index_one_value(num_rows, num_cols, dtype)
-    source = generate_source(target, num_source_rows, num_matched_rows, dtype)
+    source = generate_source(target, num_source_rows, num_matched_rows, dtype, on)
     benchmark(seaweed, target, source, on, strategy, 10, "test_one_index_value_float.pftrace")
 
 
@@ -245,7 +268,7 @@ def test_one_index_value_string(seaweed):
     on = [f"col_{i}" for i in range(5)]
     strategy = MergeStrategy(matched="update", not_matched_by_target="insert")
     target = generate_target_repeated_index_one_value(num_rows, num_cols, dtype)
-    source = generate_source(target, num_source_rows, num_matched_rows, dtype)
+    source = generate_source(target, num_source_rows, num_matched_rows, dtype, on)
     benchmark(seaweed, target, source, on, strategy, 10, "test_one_index_value_string.pftrace")
 
 
