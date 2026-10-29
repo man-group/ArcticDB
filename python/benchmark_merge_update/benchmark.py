@@ -6,6 +6,7 @@ import numpy as np
 import subprocess
 import benchmarks.seaweed_utils
 import time
+import random
 import statistics
 from arcticdb.version_store.library import MergeStrategy
 from arcticdb.util.test import random_strings_of_length
@@ -15,55 +16,46 @@ SEAWEED_PATH = "/home/vasil/Documents/source/ArcticDB/build_tooling/start_seawee
 ROWS_PER_SEGMENT = 100_000
 
 
-def float_col_with_nan(rows, num_sparse_rows):
-    col = np.array(range(rows), dtype="float64")
-    rng = np.random.default_rng(42)
-    sparse_rows = rng.choice(rows, size=num_sparse_rows, replace=False)
-    for sparse in sparse_rows:
-        col[sparse] = np.nan
+def float_col_with_nan(rows, num_sparse_rows, rng, start):
+    col = np.arange(start, start + rows, dtype="float64")
+    col[rng.choice(rows, size=num_sparse_rows, replace=False)] = np.nan
     return col
 
 
-def string_col_with_none(rows, num_sparse_rows):
-    pool = random_strings_of_length(10_000, 10, True)
-    rng = np.random.default_rng(7)
+def string_col_with_none(rows, num_sparse_rows, rng, pool):
     col = rng.choice(pool, rows)
-    sparse_rows = rng.choice(rows, size=num_sparse_rows, replace=False)
-    for sparse in sparse_rows:
-        col[sparse] = np.nan
+    col[rng.choice(rows, size=num_sparse_rows, replace=False)] = None
     return col
 
 
-def generate_col_with_na(rows, num_sparse_rows, dtype):
+def generate_columns(rows, cols, dtype, rng, float_start=0, string_prefix=""):
     if dtype == "float64":
-        return float_col_with_nan(rows, num_sparse_rows)
+        return {f"col_{i}": float_col_with_nan(rows, (rows // 10) * i, rng, float_start) for i in range(cols)}
     elif dtype == "object":
-        return string_col_with_none(rows, num_sparse_rows)
+        random.seed(int(rng.integers(2**32)))
+        # Sorted because random_strings_of_length dedups through a set whose order depends on PYTHONHASHSEED
+        pool = np.array([string_prefix + s for s in sorted(random_strings_of_length(10_000, 10, True))], dtype=object)
+        return {f"col_{i}": string_col_with_none(rows, (rows // 10) * i, rng, pool) for i in range(cols)}
     else:
         raise ValueError(f"Unknown dtype: {dtype} used to generate a column")
 
 
+def generate_target(index, cols, dtype):
+    rng = np.random.default_rng(42)
+    return pd.DataFrame(generate_columns(len(index), cols, dtype, rng), index=index)
+
+
 def generate_target_non_repeated_index(rows, cols, dtype):
-    index = pd.date_range(pd.Timestamp(0), freq="1ms", periods=rows, name="ts")
-    return pd.DataFrame(
-        {f"col_{i}": generate_col_with_na(rows, (rows // 10) * i, dtype) for i in range(cols)}, index=index
-    )
+    return generate_target(pd.date_range(pd.Timestamp(0), freq="1ms", periods=rows, name="ts"), cols, dtype)
 
 
 def generate_target_repeated_index_one_value_per_slice(rows, cols, dtype):
-    index = pd.DatetimeIndex([])
-    for i in range(rows // ROWS_PER_SEGMENT):
-        index.append(pd.DatetimeIndex([pd.Timestamp(i)] * ROWS_PER_SEGMENT))
-    return pd.DataFrame(
-        {f"col_{i}": generate_col_with_na(rows, (rows // 10) * i, dtype) for i in range(cols)}, index=index
-    )
+    index = pd.DatetimeIndex(np.repeat(np.arange(rows // ROWS_PER_SEGMENT), ROWS_PER_SEGMENT), name="ts")
+    return generate_target(index, cols, dtype)
 
 
 def generate_target_repeated_index_one_value(rows, cols, dtype):
-    index = pd.DatetimeIndex([pd.Timestamp(0)] * rows)
-    return pd.DataFrame(
-        {f"col_{i}": generate_col_with_na(rows, (rows // 10) * i, dtype) for i in range(cols)}, index=index
-    )
+    return generate_target(pd.DatetimeIndex(np.zeros(rows, dtype="int64"), name="ts"), cols, dtype)
 
 
 def generate_source(target, source_rows, num_matched_rows, dtype):
@@ -71,11 +63,11 @@ def generate_source(target, source_rows, num_matched_rows, dtype):
     matched_rows = rng.choice(len(target), size=num_matched_rows, replace=False)
     matched_source = target.iloc[matched_rows]
     num_unmatched_rows = source_rows - num_matched_rows
+    # Target floats are in [0, len(target)) and target strings never contain "_" so unmatched rows cannot match
     unmatched_rows = pd.DataFrame(
-        {
-            f"col_{i}": generate_col_with_na(num_unmatched_rows, (num_unmatched_rows // 10) * i, dtype)
-            for i in range(len(target.columns))
-        },
+        generate_columns(
+            num_unmatched_rows, len(target.columns), dtype, rng, float_start=len(target), string_prefix="_"
+        ),
         index=pd.DatetimeIndex(
             rng.integers(target.index[0].value, target.index[-1].value, size=num_unmatched_rows, endpoint=True),
             name="ts",
@@ -131,14 +123,14 @@ def benchmark(seaweed, target, source, on, strategy, repeats, trace_path):
     session.start()
     bucket_name = "benchmark-bucket"
     uri = seaweed.arctic_uri(bucket_name)
-    time = []
+    times = []
     for run_idx in range(repeats):
         reset_bucket(seaweed, bucket_name)
         ac = arcticdb.Arctic(uri)
         lib = ac.get_library("benchmark_lib", create_if_missing=True)
-        time.append(run_single(lib, target, source, on, strategy, run_idx))
+        times.append(run_single(lib, target, source, on, strategy, run_idx))
     reset_bucket(seaweed, bucket_name)
-    stats_ns = generate_stats(time)
+    stats_ns = generate_stats(times)
     stats_s = stats_to_s(stats_ns)
     session.stop_and_flush(trace_path)
     print(stats_ns)
@@ -268,6 +260,13 @@ def get_seaweed():
 def main():
     seaweed = get_seaweed()
     test_update_insert_random_float_data(seaweed)
+    test_update_insert_random_string_data(seaweed)
+    test_update_random_float_data(seaweed)
+    test_update_random_string_data(seaweed)
+    test_one_index_value_per_segment_float(seaweed)
+    test_one_index_value_per_segment_string(seaweed)
+    test_one_index_value_float(seaweed)
+    test_one_index_value_string(seaweed)
     stop_seaweed(SEAWEED_PATH)
 
 
