@@ -75,7 +75,9 @@ def generate_source(target, source_rows, num_matched_rows, dtype, on):
             name="ts",
         ),
     )
-    return pd.concat([matched_source, unmatched_rows]).sort_index()
+    source = pd.concat([matched_source, unmatched_rows]).sort_index()
+    # Concatenating with an empty frame can leave the float block row-major, which merge rejects as Fortran-style
+    return pd.DataFrame({c: np.ascontiguousarray(source[c].to_numpy()) for c in source.columns}, index=source.index)
 
 
 def reset_bucket(seaweed, bucket_name):
