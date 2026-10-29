@@ -20,6 +20,8 @@ enable_testing()
 
 # =========================================================================================
 
+option(ARCTICDB_ENABLE_PERFORMANCE_SAMPLING OFF "Enabling this enables the perffeto instrumented sampling")
+
 option(ARCTICDB_MERGE_USE_WRITE_TO_SEGMENT_TASK OFF)
 option(ARCTICDB_MERGE_USE_MERGE_SPARSE OFF)
 option(ARCTICDB_MERGE_USE_UPDATE_SPARSE OFF)
