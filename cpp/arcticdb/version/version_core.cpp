@@ -40,6 +40,7 @@
 #include <arcticdb/processing/component_manager.hpp>
 #include <arcticdb/util/collection_utils.hpp>
 #include <arcticdb/util/format_date.hpp>
+#include <arcticdb/util/perfetto_utils.hpp>
 #include <atomic>
 #include <functional>
 #include <iterator>
@@ -3322,7 +3323,7 @@ folly::Future<AtomKey> merge_update_impl(
     auto variant_source = [&]() -> std::variant<std::shared_ptr<InputFrame>, SegmentInMemory> {
         const bool is_source_arrow = !source->has_only_tensors() || ARCTICDB_MERGE_USE_WRITE_TO_SEGMENT_TASK;
         if (is_source_arrow) {
-            [[maybe_unused]] const MergeTimer timer("WriteToSegmentTask", "[]");
+            ARCTICDB_TRACE_EVENT("arcticdb.processing", "WriteToSegmentTask");
             // WriteToSegmentTask adds the index column itself, so the column range covers only the data columns.
             FrameSlice full_slice{
                     std::make_shared<StreamDescriptor>(source->desc().clone()),

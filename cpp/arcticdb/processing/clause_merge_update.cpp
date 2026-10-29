@@ -17,15 +17,13 @@
 #include <arcticdb/stream/index.hpp>
 #include <arcticdb/column_store/column_reslicer.hpp>
 #include <arcticdb/util/collection_utils.hpp>
+#include <arcticdb/util/perfetto_utils.hpp>
 #include <ankerl/unordered_dense.h>
 #include <boost/regex.hpp>
 
 #include <optional>
 #include <ranges>
 #include <type_traits>
-#include <cstdio>
-#include <folly/json/json.h>
-#include <folly/system/ThreadId.h>
 
 namespace {
 using namespace arcticdb;
@@ -1217,37 +1215,6 @@ std::string format_merge_timing_row_ranges(std::span<const ProcessingUnit> row_s
     return res;
 }
 
-MergeTimer::MergeTimer(std::string_view fn, std::string rows_json, std::optional<std::string_view> column) :
-    fn_(fn),
-    rows_json_(std::move(rows_json)),
-    column_(column),
-    start_(std::chrono::steady_clock::now()) {}
-
-MergeTimer::~MergeTimer() {
-    const auto end = std::chrono::steady_clock::now();
-    const auto to_ns = [](auto duration) {
-        return std::chrono::duration_cast<std::chrono::nanoseconds>(duration).count();
-    };
-    std::string column_json = "null";
-    if (column_) {
-        column_json.clear();
-        folly::json::escapeString(*column_, column_json, folly::json::serialization_opts{});
-    }
-    const std::string line = fmt::format(
-            R"({{"tag":"merge_timer","fn":"{}","rows":{},"column":{},"start_ns":{},"dur_ns":{},"thread":{}}})"
-            "\n",
-            fn_,
-            rows_json_,
-            column_json,
-            to_ns(start_.time_since_epoch()),
-            to_ns(end - start_),
-            folly::getOSThreadID()
-    );
-    // fwrite locks the FILE, so lines from concurrent threads never interleave
-    std::fwrite(line.data(), 1, line.size(), stdout);
-    std::fflush(stdout);
-}
-
 MergeUpdateClause::MergeUpdateClause(
         std::vector<std::string>&& on, MergeStrategy strategy,
         std::variant<std::shared_ptr<InputFrame>, SegmentInMemory> source, OutputSchema source_output_schema,
@@ -1353,14 +1320,13 @@ std::vector<EntityId> MergeUpdateClause::process(std::vector<EntityId>&& entity_
             std::shared_ptr<AtomKey>,
             EntityFetchCount>(*component_manager_, std::move(entity_ids));
 
-    const std::string id = format_merge_timing_row_ranges(std::span(&proc, 1));
-    [[maybe_unused]] const MergeTimer process_timer("process", id);
+    ARCTICDB_TRACE_EVENT("arcticdb.processing", "process", "rows", format_merge_timing_row_ranges(std::span(&proc, 1)));
 
     std::vector<ProcessingUnit> row_slices =
             must_structure_by_time_slice() ? split_by_row_slice(std::move(proc)) : std::vector{std::move(proc)};
     const std::pair<size_t, size_t> source_start_end = get_source_start_end(row_slices);
     MatchRecord matched = [&] {
-        [[maybe_unused]] const MergeTimer match_timer("match", id);
+        ARCTICDB_TRACE_EVENT("arcticdb.processing", "match");
         MatchRecord match_record = match(row_slices, source_start_end);
         match_record.validate_rows_to_update(strategy_);
         return match_record;
@@ -1372,7 +1338,7 @@ std::vector<EntityId> MergeUpdateClause::process(std::vector<EntityId>&& entity_
             // existing data keys for row slices that are not re-emitted.
             return {};
         }
-        [[maybe_unused]] const MergeTimer update_timer("update", id);
+        ARCTICDB_TRACE_EVENT("arcticdb.processing", "update");
         auto new_row_slices = update(matched, std::move(row_slices), source_start_end);
         std::vector<EntityId> res;
         for (ProcessingUnit& row_slice : new_row_slices) {
@@ -1429,7 +1395,7 @@ std::vector<EntityId> MergeUpdateClause::process(std::vector<EntityId>&& entity_
     }
 
     auto new_row_slices = [&]() {
-        [[maybe_unused]] const MergeTimer update_insert_timer("update_and_insert", id);
+        ARCTICDB_TRACE_EVENT("arcticdb.processing", "update_and_insert");
         return update_and_insert(matched, *target_descriptor, std::move(row_slices), source_start_end);
     }();
 
@@ -1593,8 +1559,6 @@ std::vector<ProcessingUnit> MergeUpdateClause::update_and_insert(
         std::vector<ProcessingUnit>&& row_slices, std::pair<size_t, size_t> source_start_end
 ) const {
 
-    const std::string id = format_merge_timing_row_ranges(row_slices);
-
     ARCTICDB_DEBUG_CHECK(
             ErrorCode::E_ASSERTION_FAILURE,
             strategy_.insert(),
@@ -1705,8 +1669,11 @@ std::vector<ProcessingUnit> MergeUpdateClause::update_and_insert(
                                         return util::variant_match(
                                                 get_source_column<SourceTDT>(field_idx),
                                                 [&](const auto& source) -> std::vector<std::shared_ptr<Column>> {
-                                                    [[maybe_unused]] const MergeTimer merge_timer(
-                                                            "merge", id, source_field.name()
+                                                    ARCTICDB_TRACE_EVENT(
+                                                            "arcticdb.processing",
+                                                            "merge",
+                                                            "column",
+                                                            source_field.name()
                                                     );
                                                     constexpr bool is_source_sparse = std::same_as<
                                                             std::remove_cvref_t<decltype(source)>,

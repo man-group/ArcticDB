@@ -9,6 +9,7 @@ import time
 import statistics
 from arcticdb.version_store.library import MergeStrategy
 from arcticdb.util.test import random_strings_of_length
+from arcticdb_ext.tracing import TracingSession, TracingSessionConfig
 
 SEAWEED_PATH = "/home/vasil/Documents/source/ArcticDB/build_tooling/start_seaweed.sh"
 
@@ -125,7 +126,12 @@ def test_01(seaweed):
     strategy = MergeStrategy(matched="update", not_matched_by_target="insert")
     target = generate_target_non_repeated_index(num_rows, num_cols)
     source = generate_source(target, num_source_rows, num_matched_rows)
+    config = TracingSessionConfig()
+    config.buffer_size_kb = 256 * 1024
+    session = TracingSession(config)
+    session.start()
     benchmark(seaweed, target, source, on, strategy, 10)
+    session.stop_and_flush("test_01.pftrace")
 
 
 def test_02(seaweed):
