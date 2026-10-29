@@ -828,6 +828,11 @@ if(${ARCTICDB_COUNT_ALLOCATIONS})
     )
 endif()
 
+if(${ARCTICDB_ENABLE_PERFORMANCE_SAMPLING})
+    message(STATUS "ArcticDB performance sampling enabled. Linking against perfetto.")
+    list(APPEND arcticdb_core_libraries unofficial::perfetto::perfetto)
+endif()
+
 if(${ARCTICDB_PYTHON_EXPLICIT_LINK})
     # Even though python is transitive dependency MSVS builds fail if we don't link against python explicitly
     # TODO: Figure out why
@@ -944,12 +949,6 @@ if(ARCTICDB_THIN_ARCHIVES)
 endif()
 
 add_library(arcticdb_core_static STATIC $<TARGET_OBJECTS:arcticdb_core_object>)
-
-if(${ARCTICDB_ENABLE_PERFORMANCE_SAMPLING})
-    message(STATUS "ArcticDB performance sampling enabled. Linking against perfetto.")
-    target_link_libraries(arcticdb_core_static PUBLIC unofficial::perfetto::perfetto)
-    target_compile_definitions(arcticdb_core_object PUBLIC ARCTICDB_PERFORMANCE_SAMPLING)
-endif()
 
 # Disable default api so both UTF-8 and UTF-32 can be supported
 target_compile_definitions(arcticdb_core_static PUBLIC PCRE2_CODE_UNIT_WIDTH=0 ENTT_ID_TYPE=std::uint64_t)
