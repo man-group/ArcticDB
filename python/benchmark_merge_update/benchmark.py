@@ -12,6 +12,7 @@ from arcticdb.util.test import random_strings_of_length
 from arcticdb_ext.tracing import TracingSession, TracingSessionConfig
 
 SEAWEED_PATH = "/home/vasil/Documents/source/ArcticDB/build_tooling/start_seaweed.sh"
+INSERT_INTERVAL_MARGIN = pd.Timedelta(hours=1.5)
 
 
 def float_col_with_nan(rows, num_sparse_rows):
@@ -55,9 +56,9 @@ def generate_source(target, source_rows, num_matched_rows):
     matched_source = target.iloc[matched_rows]
     num_rows_to_add = source_rows - num_matched_rows
     unmatched_rows = generate_target_non_repeated_index(num_rows_to_add, len(target.columns))
-    # Half a step after a target timestamp, so inserts interleave with the whole target without colliding
-    unmatched_positions = np.sort(rng.choice(len(target), size=num_rows_to_add, replace=False))
-    unmatched_rows.index = (target.index[unmatched_positions] + pd.Timedelta(microseconds=500)).rename("ts")
+    lo = (target.index[0] - INSERT_INTERVAL_MARGIN).value
+    hi = (target.index[-1] + INSERT_INTERVAL_MARGIN).value
+    unmatched_rows.index = pd.DatetimeIndex(rng.integers(lo, hi, size=num_rows_to_add, endpoint=True), name="ts")
     return pd.concat([matched_source, unmatched_rows]).sort_index()
 
 
