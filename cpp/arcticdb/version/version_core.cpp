@@ -3310,7 +3310,6 @@ folly::Future<AtomKey> merge_update_impl(
         std::vector<std::string>&& on, const MergeStrategy& strategy, std::shared_ptr<InputFrame> source,
         std::shared_ptr<DeDupMap> de_dup_map
 ) {
-    ARCTICDB_TRACE_EVENT("arcticdb.processing", "Merge");
     auto read_query = std::make_shared<ReadQuery>();
     // TODO: Swap this out for the async version and chain futures from it
     auto index_information = std::make_shared<IndexInformation>(
