@@ -261,7 +261,7 @@ void check_index_types_combinable(
     if (accumulated == IndexDescriptorImpl::Type::EMPTY || other == IndexDescriptorImpl::Type::EMPTY) {
         return;
     }
-    normalization::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
+    schema::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
             accumulated == other,
             "Cannot {}: cannot combine a {} index with a {} index",
             options.name(),
@@ -278,7 +278,7 @@ IndexDescriptorImpl combine_index_descriptors(
     for (const auto& schema : schemas.subspan(1)) {
         const auto& other = schema.stream_descriptor().index();
         check_index_types_combinable(result.type(), other.type(), options);
-        normalization::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
+        schema::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
                 result.field_count() == other.field_count(),
                 "Cannot {}: mismatching index field count, {} and {}",
                 options.name(),
@@ -542,7 +542,7 @@ void accumulate_norm_metadata_column_names(
     auto* accumulated_col_names = accumulated.mutable_common()->mutable_col_names();
     for (auto& [col_name, col_name_info] : new_entry.common().col_names()) {
         if (const auto it = accumulated_col_names->find(col_name); it != accumulated_col_names->end()) {
-            normalization::check<ErrorCode::E_INCOMPATIBLE_OBJECTS>(
+            schema::check<ErrorCode::E_INCOMPATIBLE_OBJECTS>(
                     it->second == col_name_info,
                     "Merging column name normalization for column: \"{}\" does not allow different ColumnName "
                     "settings for columns named the same way.",
@@ -605,11 +605,11 @@ void check_same_input_type(
     }
     // A Series beside a DataFrame is much the commonest of these, and worth naming as the user would.
     if ((lhs.has_series() && rhs.has_df()) || (lhs.has_df() && rhs.has_series())) {
-        normalization::raise<ErrorCode::E_INCOMPATIBLE_OBJECTS>(
+        schema::raise<ErrorCode::E_INCOMPATIBLE_OBJECTS>(
                 "Cannot {}: a Series cannot be combined with a DataFrame", options.name()
         );
     }
-    normalization::raise<ErrorCode::E_INCOMPATIBLE_OBJECTS>(
+    schema::raise<ErrorCode::E_INCOMPATIBLE_OBJECTS>(
             "Cannot {}: differing normalization input types, {} and {}",
             options.name(),
             input_type_name(lhs),
@@ -662,17 +662,17 @@ NormalizationMetadata combine_ndarray_metadata(
         const NormalizationMetadata& accumulated, const NormalizationMetadata& other,
         const SchemaCombineOptions& options
 ) {
-    normalization::check<ErrorCode::E_UPDATE_NOT_SUPPORTED>(
+    schema::check<ErrorCode::E_UPDATE_NOT_SUPPORTED>(
             options.operation != UPDATE, "current normalization scheme doesn't allow update of ndarray"
     );
     const auto& accumulated_shape = accumulated.np().shape();
     const auto& other_shape = other.np().shape();
-    normalization::check<ErrorCode::E_WRONG_SHAPE>(
+    schema::check<ErrorCode::E_WRONG_SHAPE>(
             !accumulated_shape.empty() && !other_shape.empty(),
             "Cannot {}: numpy array normalization metadata has an empty shape",
             options.name()
     );
-    normalization::check<ErrorCode::E_WRONG_SHAPE>(
+    schema::check<ErrorCode::E_WRONG_SHAPE>(
             std::equal(
                     accumulated_shape.begin() + 1, accumulated_shape.end(), other_shape.begin() + 1, other_shape.end()
             ),
@@ -833,7 +833,7 @@ NormalizationMetadata accumulate_norm_metadata(
         const SchemaCombineOptions& options
 ) {
     const auto operation = options.name();
-    normalization::check<ErrorCode::E_INCOMPATIBLE_OBJECTS>(
+    schema::check<ErrorCode::E_INCOMPATIBLE_OBJECTS>(
             !accumulated.has_msg_pack_frame() && !other.has_msg_pack_frame(),
             "Cannot {}: pickled data cannot be combined",
             operation
@@ -997,13 +997,13 @@ RequiredFieldsPlan required_fields_plan(std::span<const OutputSchema> schemas, c
         }
 
         if (base.norm_metadata_.has_experimental_arrow() && other.norm_metadata_.has_experimental_arrow()) {
-            normalization::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
+            schema::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
                     base.norm_metadata_.experimental_arrow().has_index() ==
                             other.norm_metadata_.experimental_arrow().has_index(),
                     "Cannot {}: cannot combine indexed arrow data with unindexed arrow data",
                     options.name()
             );
-            normalization::check<ErrorCode::E_INCOMPATIBLE_OBJECTS>(
+            schema::check<ErrorCode::E_INCOMPATIBLE_OBJECTS>(
                     base.norm_metadata_.experimental_arrow().one_dimensional() ==
                             other.norm_metadata_.experimental_arrow().one_dimensional(),
                     "Cannot {}: cannot combine single-array arrow data with multi-array arrow data",
@@ -1012,12 +1012,12 @@ RequiredFieldsPlan required_fields_plan(std::span<const OutputSchema> schemas, c
         }
 
         const auto other_info = required_fields_info(other);
-        normalization::check<ErrorCode::E_INCOMPATIBLE_OBJECTS>(
+        schema::check<ErrorCode::E_INCOMPATIBLE_OBJECTS>(
                 plan.info.has_series_value_column == other_info.has_series_value_column,
                 "Cannot {}: a Series cannot be combined with a DataFrame",
                 options.name()
         );
-        normalization::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
+        schema::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
                 plan.info.has_multi_index == other_info.has_multi_index,
                 "Cannot {}: cannot combine multi-indexed data with non-multi-indexed data",
                 options.name()
@@ -1025,14 +1025,14 @@ RequiredFieldsPlan required_fields_plan(std::span<const OutputSchema> schemas, c
         if (base_pandas.has_value() && !plan.info.has_multi_index) {
             const auto& base_index = pandas_common(*base_pandas)->index();
             const auto& other_index = pandas_common(*other_pandas)->index();
-            normalization::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
+            schema::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
                     is_index_physically_stored(base_index, base.stream_descriptor().index().type()) ==
                             is_index_physically_stored(other_index, other.stream_descriptor().index().type()),
                     "Cannot {}: one index is a DatetimeIndex and the other is a RangeIndex",
                     options.name()
             );
         }
-        normalization::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
+        schema::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
                 plan.info.num_physical_indices == other_info.num_physical_indices,
                 "Cannot {}: schemas have different index level counts, {} and {}",
                 options.name(),
@@ -1044,7 +1044,7 @@ RequiredFieldsPlan required_fields_plan(std::span<const OutputSchema> schemas, c
 
     const auto required_fields = plan.info.num_physical_required_columns();
     for (const auto& schema : schemas) {
-        normalization::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
+        schema::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
                 schema.stream_descriptor().field_count() >= required_fields,
                 "Cannot {}: expected at least {} required fields, but received {}",
                 options.name(),

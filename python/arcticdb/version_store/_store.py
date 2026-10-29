@@ -1265,17 +1265,17 @@ class NativeVersionStore:
             if start and getattr(start, "tzinfo", None) is not None:
                 is_date_range_timezone_aware = True
                 if end and getattr(end, "tzinfo", None) is None:
-                    raise NormalizationException(
+                    raise SchemaException(
                         "Both date_range members must be timezone aware or both must be timezone naive."
                     )
             if end and getattr(end, "tzinfo", None) is not None:
                 is_date_range_timezone_aware = True
                 if start and getattr(start, "tzinfo", None) is None:
-                    raise NormalizationException(
+                    raise SchemaException(
                         "Both date_range members must be timezone aware or both must be timezone naive."
                     )
             if (start is not None or end is not None) and is_date_range_timezone_aware != is_index_timezone_aware:
-                raise NormalizationException(
+                raise SchemaException(
                     "When passing date_range parameter to update either both the date_range and the index of the data must be timezone aware or both must be timezone naive."
                 )
             normalized_start, normalized_end = normalize_dt_range_to_ts(date_range)

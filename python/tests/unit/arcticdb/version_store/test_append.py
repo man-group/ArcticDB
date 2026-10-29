@@ -279,7 +279,7 @@ class TestAppend:
             pd.RangeIndex(10, 14, 2),
             pd.RangeIndex(8, 14, 3),
         ]:
-            with pytest.raises(NormalizationException):
+            with pytest.raises(SchemaException):
                 lib.append(sym, pd.DataFrame({"col": [4, 5]}, index=idx), compact_data=compact_data)
 
     @pytest.mark.parametrize("empty_types", (True, False))
@@ -290,7 +290,7 @@ class TestAppend:
         df_0 = pd.DataFrame({"col": [0, 1]}, index=pd.RangeIndex(-6, -2, 2))
         lib.write(sym, df_0)
 
-        with pytest.raises(NormalizationException):
+        with pytest.raises(SchemaException):
             lib.append(
                 sym,
                 pd.DataFrame({"col": [2, 3]}, index=pd.RangeIndex(0, 4, 2)),
@@ -442,7 +442,7 @@ class TestAppend:
         to_append = df if existing == "pickled" else pickled
         lib.write(symbol, to_write)
         assert lib.is_symbol_pickled(symbol) == (existing == "pickled")
-        with pytest.raises(NormalizationException):
+        with pytest.raises(SchemaException):
             lib.append(symbol, to_append, compact_data=compact_data)
 
     # A default RangeIndex - start 0, step 1 - is what pandas hands you for any frame you did not index
@@ -469,7 +469,7 @@ class TestAppend:
 
         # The combined range stops at -6, so anything else is a gap, exactly as for an ascending range.
         gap = pd.DataFrame({"col": [8]}, index=pd.RangeIndex(start=-10, stop=-12, step=-2))
-        with pytest.raises(NormalizationException):
+        with pytest.raises(SchemaException):
             lib.append(symbol, gap, compact_data=compact_data)
 
     # An ndarray is stored flattened into a single column with only its shape in the normalization metadata,
@@ -504,7 +504,7 @@ class TestAppend:
         sym = "test_append_numpy_array_mismatched_shape_raises"
         lib.write(sym, np.arange(int(np.prod(written_shape)), dtype=np.int64).reshape(written_shape))
         second = np.arange(int(np.prod(appended_shape)), dtype=np.int64).reshape(appended_shape)
-        with pytest.raises(NormalizationException):
+        with pytest.raises(SchemaException):
             lib.append(sym, second, compact_data=compact_data)
 
     def test_append_not_sorted_exception(self, lmdb_version_store, compact_data):
@@ -649,7 +649,7 @@ class TestAppend:
         dtidx = np.roll(dtidx, 3)
         df2 = pd.DataFrame({"c": np.arange(0, num_rows, dtype=np.int64)}, index=dtidx)
         assert df2.index.is_monotonic_increasing == False
-        with pytest.raises(NormalizationException):
+        with pytest.raises(SchemaException):
             lmdb_version_store.append(symbol, df2, compact_data=compact_data)
 
     def test_append_mix_ascending_not_sorted(self, lmdb_version_store, compact_data):
@@ -832,7 +832,7 @@ class TestAppend:
     ):
         lib = lmdb_version_store_dynamic_schema_v1
         lib.write("sym", to_write)
-        with pytest.raises(NormalizationException) as e:
+        with pytest.raises(SchemaException) as e:
             lib.append("sym", to_append, compact_data=compact_data)
         assert "append" in str(e.value)
 

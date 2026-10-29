@@ -944,22 +944,22 @@ def test_symbol_concat_symbols_with_different_indexes(lmdb_library, join, any_ou
     lib.write("timestamp_index_sym", df_1)
     lib.write("multiindex_sym", df_2)
 
-    with pytest.raises(NormalizationException):
+    with pytest.raises(SchemaException):
         concat(lib.read_batch(["range_index_sym", "timestamp_index_sym"], lazy=True), join).collect()
 
-    with pytest.raises(NormalizationException):
+    with pytest.raises(SchemaException):
         concat(lib.read_batch(["timestamp_index_sym", "range_index_sym"], lazy=True), join).collect()
 
-    with pytest.raises(NormalizationException):
+    with pytest.raises(SchemaException):
         concat(lib.read_batch(["range_index_sym", "multiindex_sym"], lazy=True), join).collect()
 
-    with pytest.raises(NormalizationException):
+    with pytest.raises(SchemaException):
         concat(lib.read_batch(["multiindex_sym", "range_index_sym"], lazy=True), join).collect()
 
-    with pytest.raises(NormalizationException):
+    with pytest.raises(SchemaException):
         concat(lib.read_batch(["timestamp_index_sym", "multiindex_sym"], lazy=True), join).collect()
 
-    with pytest.raises(NormalizationException):
+    with pytest.raises(SchemaException):
         concat(lib.read_batch(["timestamp_index_sym", "multiindex_sym"], lazy=True), join).collect()
 
 
@@ -1096,9 +1096,9 @@ class TestMixedArrowPandasConcat:
         pandas_df = pd.DataFrame({"val": [4, 5, 6]})
         self.lib.write("arrow_sym", arrow_table, index_column=True)
         self.lib.write("pandas_sym", pandas_df)
-        with pytest.raises(NormalizationException):
+        with pytest.raises(SchemaException):
             concat(self.lib.read_batch(["arrow_sym", "pandas_sym"], lazy=True)).collect()
-        with pytest.raises(NormalizationException):
+        with pytest.raises(SchemaException):
             concat(self.lib.read_batch(["pandas_sym", "arrow_sym"], lazy=True)).collect()
 
     def test_arrow_unindexed_with_pandas_timestamp_index_raises(self):
@@ -1107,9 +1107,9 @@ class TestMixedArrowPandasConcat:
         pandas_df = pd.DataFrame({"val": [4, 5, 6]}, index=pd.DatetimeIndex(dates, name="ts"))
         self.lib.write("arrow_sym", arrow_table)
         self.lib.write("pandas_sym", pandas_df)
-        with pytest.raises(NormalizationException):
+        with pytest.raises(SchemaException):
             concat(self.lib.read_batch(["arrow_sym", "pandas_sym"], lazy=True)).collect()
-        with pytest.raises(NormalizationException):
+        with pytest.raises(SchemaException):
             concat(self.lib.read_batch(["pandas_sym", "arrow_sym"], lazy=True)).collect()
 
     def test_arrow_with_pandas_multiindex_raises(self):
@@ -1118,9 +1118,9 @@ class TestMixedArrowPandasConcat:
         pandas_df = pd.DataFrame({"val": [4, 5, 6]}, index=index)
         self.lib.write("arrow_sym", arrow_table)
         self.lib.write("pandas_sym", pandas_df)
-        with pytest.raises(NormalizationException):
+        with pytest.raises(SchemaException):
             concat(self.lib.read_batch(["arrow_sym", "pandas_sym"], lazy=True)).collect()
-        with pytest.raises(NormalizationException):
+        with pytest.raises(SchemaException):
             concat(self.lib.read_batch(["pandas_sym", "arrow_sym"], lazy=True)).collect()
 
     def test_arrow_arrow_concat_no_index(self):

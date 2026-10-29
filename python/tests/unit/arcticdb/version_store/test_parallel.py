@@ -1928,7 +1928,7 @@ def test_series_and_dataframe_cannot_be_combined(in_memory_version_store, staged
     sym = "sym"
     lib.write(sym, pd.DataFrame({"a": [1]}, index=pd.DatetimeIndex([pd.Timestamp(0)])), parallel=staged_only)
     lib.write(sym, pd.Series([2], name="a", index=pd.DatetimeIndex([pd.Timestamp(10**9)])), parallel=True)
-    with pytest.raises(NormalizationException, match="Series cannot be combined with a DataFrame"):
+    with pytest.raises(SchemaException, match="Series cannot be combined with a DataFrame"):
         lib.compact_incomplete(sym, append=not staged_only, convert_int_to_float=False)
 
 
@@ -1958,7 +1958,7 @@ def test_staged_append_rowcount_index_onto_timestamp_index(in_memory_store_facto
     sym = "sym"
     lib.write(sym, pd.DataFrame({"a": [1]}, index=pd.DatetimeIndex([pd.Timestamp(0)])))
     lib.write(sym, pd.DataFrame({"a": [2]}), parallel=True)
-    with pytest.raises(NormalizationException, match="DatetimeIndex and the other is a RangeIndex"):
+    with pytest.raises(SchemaException, match="DatetimeIndex and the other is a RangeIndex"):
         lib.compact_incomplete(sym, append=True, convert_int_to_float=False)
 
 
@@ -1969,7 +1969,7 @@ def test_staged_append_multiindex_onto_single_index(in_memory_store_factory, dyn
     lib.write(sym, pd.DataFrame({"a": [1]}, index=pd.DatetimeIndex([pd.Timestamp(0)])))
     multi_index = pd.MultiIndex.from_arrays([[pd.Timestamp(1)], [0]], names=[None, "level_1"])
     lib.write(sym, pd.DataFrame({"a": [2]}, index=multi_index), parallel=True)
-    with pytest.raises(NormalizationException, match="multi-indexed data with non-multi-indexed data"):
+    with pytest.raises(SchemaException, match="multi-indexed data with non-multi-indexed data"):
         lib.compact_incomplete(sym, append=True, convert_int_to_float=False)
 
 
