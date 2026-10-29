@@ -117,6 +117,8 @@ def ns_to_s(ns):
 
 
 def benchmark(seaweed, target, source, on, strategy, repeats, trace_path):
+    print("========================================================")
+    print(f"Start processing for {trace_path}")
     config = TracingSessionConfig()
     config.buffer_size_kb = 256 * 1024
     session = TracingSession(config)
@@ -124,17 +126,21 @@ def benchmark(seaweed, target, source, on, strategy, repeats, trace_path):
     bucket_name = "benchmark-bucket"
     uri = seaweed.arctic_uri(bucket_name)
     times = []
-    for run_idx in range(repeats):
+    for run_idx in range(repeats + 1):
         reset_bucket(seaweed, bucket_name)
         ac = arcticdb.Arctic(uri)
         lib = ac.get_library("benchmark_lib", create_if_missing=True)
-        times.append(run_single(lib, target, source, on, strategy, run_idx))
+        current_time = run_single(lib, target, source, on, strategy, run_idx)
+        if run_idx != 0:
+            times.append(current_time)
     reset_bucket(seaweed, bucket_name)
     stats_ns = generate_stats(times)
     stats_s = stats_to_s(stats_ns)
     session.stop_and_flush(trace_path)
     print(stats_ns)
     print(stats_s)
+    print(f"End processing for {trace_path}")
+    print("========================================================")
 
 
 def test_update_insert_random_float_data(seaweed):
