@@ -18,9 +18,9 @@
 #include <string_view>
 #include <vector>
 
-PERFETTO_DEFINE_CATEGORIES(perfetto::Category("arcticdb"));
+PERFETTO_DEFINE_CATEGORIES(perfetto::Category("arcticdb.processing"));
 
-#define ARCTICDB_TRACE_EVENT(...) TRACE_EVENT("arcticdb", __VA_ARGS__)
+#define ARCTICDB_TRACE_EVENT(...) TRACE_EVENT(__VA_ARGS__)
 
 namespace arcticdb::tracing {
 
@@ -43,7 +43,7 @@ class TracingSession {
     void flush(std::string_view file_dest);
 
   private:
-    enum class State { CONFIGURED, STARTED, STOPPED };
+    enum class State : uint8_t { CONFIGURED, STARTED, STOPPED };
     std::unique_ptr<perfetto::TracingSession> session_;
     State state_ = State::CONFIGURED;
 };
