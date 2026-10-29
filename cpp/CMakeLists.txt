@@ -147,6 +147,14 @@ if(${ARCTICDB_USING_CONDA})
     # Required to be able to include headers from glog since glog 0.7
     # See: https://github.com/google/glog/pull/1030
     add_compile_definitions(GLOG_USE_GLOG_EXPORT)
+
+    # Keep macOS lookups (e.g. OpenSSL, LZ4) out of Homebrew, or the extension fails to load on machines without
+    # those exact formulae. pkg-config is isolated too, as its HINTS bypass CMAKE_IGNORE_PREFIX_PATH.
+    if(CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND DEFINED ENV{CONDA_PREFIX} AND NOT DEFINED ENV{CONDA_BUILD})
+        list(PREPEND CMAKE_PREFIX_PATH "$ENV{CONDA_PREFIX}")
+        list(APPEND CMAKE_IGNORE_PREFIX_PATH /opt/homebrew)
+        set(ENV{PKG_CONFIG_LIBDIR} "$ENV{CONDA_PREFIX}/lib/pkgconfig")
+    endif()
 endif()
 
 if(WIN32)
