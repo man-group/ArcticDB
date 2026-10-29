@@ -14,3 +14,5 @@ PROXY_CMD        = withproxy
 # /tmp is noexec
 TMPDIR_OVERRIDE  = $(HOME)/.tmp
 PROTOC_VERS      = 456
+# conda-forge mirror used by the conda-* targets
+CONDA_CHANNEL_ALIAS = https://repo.prod.m/artifactory/api/conda
