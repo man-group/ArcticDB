@@ -83,6 +83,15 @@ jobs:
           ARCTIC_CMAKE_PRESET: ${{inputs.preset}}
           CMAKE_BUILD_PARALLEL_LEVEL: ${{contains(inputs.platform, 'aarch64') && '3' || ''}}
 
+      - name: Check the extension does not link against Homebrew
+        if: runner.os == 'macOS'
+        run: |
+          otool -L python/arcticdb_ext*.so
+          if otool -L python/arcticdb_ext*.so | grep -q /opt/homebrew; then
+            echo "::error::arcticdb_ext links against Homebrew libraries; it must use the conda environment's"
+            exit 1
+          fi
+
       - name: Show sccache stats
         run: ${SCCACHE_PATH} --show-stats || sccache --show-stats
 
