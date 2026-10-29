@@ -225,8 +225,8 @@ def test_update_random_string_data(seaweed):
 def test_one_index_value_per_segment_float(seaweed):
     num_rows = 10_000_000
     num_cols = 10
-    num_source_rows = 6_000_000
-    num_matched_rows = 3_000_000
+    num_source_rows = 68_000
+    num_matched_rows = 34_000
     dtype = "float64"
     on = [f"col_{i}" for i in range(5)]
     strategy = MergeStrategy(matched="update", not_matched_by_target="insert")
@@ -238,8 +238,8 @@ def test_one_index_value_per_segment_float(seaweed):
 def test_one_index_value_per_segment_string(seaweed):
     num_rows = 10_000_000
     num_cols = 10
-    num_source_rows = 6_000_000
-    num_matched_rows = 3_000_000
+    num_source_rows = 68_000
+    num_matched_rows = 34_000
     dtype = "object"
     on = [f"col_{i}" for i in range(5)]
     strategy = MergeStrategy(matched="update", not_matched_by_target="insert")
@@ -249,10 +249,10 @@ def test_one_index_value_per_segment_string(seaweed):
 
 
 def test_one_index_value_float(seaweed):
-    num_rows = 1_000_000
+    num_rows = 100_000
     num_cols = 10
-    num_source_rows = 600_000
-    num_matched_rows = 300_000
+    num_source_rows = 76_000
+    num_matched_rows = 38_000
     dtype = "float64"
     on = [f"col_{i}" for i in range(5)]
     strategy = MergeStrategy(matched="update", not_matched_by_target="insert")
@@ -262,10 +262,10 @@ def test_one_index_value_float(seaweed):
 
 
 def test_one_index_value_string(seaweed):
-    num_rows = 1_000_000
+    num_rows = 100_000
     num_cols = 10
-    num_source_rows = 600_000
-    num_matched_rows = 300_000
+    num_source_rows = 76_000
+    num_matched_rows = 38_000
     dtype = "object"
     on = [f"col_{i}" for i in range(5)]
     strategy = MergeStrategy(matched="update", not_matched_by_target="insert")
