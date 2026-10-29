@@ -139,7 +139,7 @@ def benchmark(seaweed, target, source, on, strategy, repeats, trace_path):
 
 def test_update_insert_random_float_data(seaweed):
     """Test update and insert with float columns data is randomly scattered"""
-    num_rows = 10_0000_000
+    num_rows = 10_000_000
     num_cols = 10
     num_source_rows = 6_000_000
     num_matched_rows = 3_000_000
@@ -153,7 +153,7 @@ def test_update_insert_random_float_data(seaweed):
 
 def test_update_insert_random_string_data(seaweed):
     """Test update and insert with string columns data is randomly scattered"""
-    num_rows = 10_0000_000
+    num_rows = 10_000_000
     num_cols = 10
     num_source_rows = 6_000_000
     num_matched_rows = 3_000_000
@@ -167,7 +167,7 @@ def test_update_insert_random_string_data(seaweed):
 
 def test_update_random_float_data(seaweed):
     """Test update with float columns data is randomly scattered"""
-    num_rows = 10_0000_000
+    num_rows = 10_000_000
     num_cols = 10
     num_source_rows = 6_000_000
     on = [f"col_{i}" for i in range(5)]
@@ -180,7 +180,7 @@ def test_update_random_float_data(seaweed):
 
 def test_update_random_string_data(seaweed):
     """Update with string columns"""
-    num_rows = 10_0000_000
+    num_rows = 10_000_000
     num_cols = 10
     num_source_rows = 6_000_000
     on = [f"col_{i}" for i in range(5)]
@@ -192,7 +192,7 @@ def test_update_random_string_data(seaweed):
 
 
 def test_one_index_value_per_segment_float(seaweed):
-    num_rows = 10_0000_000
+    num_rows = 10_000_000
     num_cols = 10
     num_source_rows = 6_000_000
     num_matched_rows = 3_000_000
@@ -205,7 +205,7 @@ def test_one_index_value_per_segment_float(seaweed):
 
 
 def test_one_index_value_per_segment_string(seaweed):
-    num_rows = 10_0000_000
+    num_rows = 10_000_000
     num_cols = 10
     num_source_rows = 6_000_000
     num_matched_rows = 3_000_000
@@ -218,7 +218,7 @@ def test_one_index_value_per_segment_string(seaweed):
 
 
 def test_one_index_value_float(seaweed):
-    num_rows = 1_0000_000
+    num_rows = 1_000_000
     num_cols = 10
     num_source_rows = 600_000
     num_matched_rows = 300_000
@@ -231,7 +231,7 @@ def test_one_index_value_float(seaweed):
 
 
 def test_one_index_value_string(seaweed):
-    num_rows = 1_0000_000
+    num_rows = 1_000_000
     num_cols = 10
     num_source_rows = 600_000
     num_matched_rows = 300_000
