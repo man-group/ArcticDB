@@ -19,8 +19,16 @@
 #include <vector>
 
 PERFETTO_DEFINE_CATEGORIES(perfetto::Category("arcticdb.processing"));
-
+#ifdef __clang__
+#define ARCTICDB_TRACE_EVENT(...)                                                                                      \
+    _Pragma("clang diagnostic push") _Pragma("clang diagnostic ignored \"-Wundefined-internal\"")                      \
+            TRACE_EVENT(__VA_ARGS__) _Pragma("clang diagnostic pop")
+#else
 #define ARCTICDB_TRACE_EVENT(...) TRACE_EVENT(__VA_ARGS__)
+#endif
+
+#define ARCTICDB_TRACE_EVENT_BEGIN(...) TRACE_EVENT_BEGIN(__VA_ARGS__)
+#define ARCTICDB_TRACE_EVENT_END(...) TRACE_EVENT_END(__VA_ARGS__)
 
 namespace arcticdb::tracing {
 
@@ -53,5 +61,6 @@ class TracingSession {
 #else
 
 #define ARCTICDB_TRACE_EVENT(...)
-
+#define ARCTICDB_TRACE_EVENT_BEGIN(...)
+#define ARCTICDB_TRACE_EVENT_END(...)
 #endif

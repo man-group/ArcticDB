@@ -365,6 +365,7 @@ std::vector<std::shared_ptr<Column>> merge_sparse(
         const MergeUpdateClause::MatchRecord& match_record, const MergeStrategy& strategy,
         const ReslicingInfo& reslicing_info
 ) {
+    ARCTICDB_TRACE_EVENT("arcticdb.processing", "merge_sparse", "column", target.columns.front().column_name_);
     auto new_columns = util::reserve_vector<std::shared_ptr<Column>>(reslicing_info.num_segments());
     auto new_column_datas = util::reserve_vector<ColumnData>(reslicing_info.num_segments());
     for (size_t i = 0; i < reslicing_info.num_segments(); ++i) {
@@ -740,6 +741,7 @@ std::vector<std::shared_ptr<Column>> merge(
         const MergeUpdateClause::MatchRecord& match_record, const MergeStrategy& strategy,
         const ReslicingInfo& reslicing_info
 ) {
+    ARCTICDB_TRACE_EVENT("arcticdb.processing", "merge", "column", target.columns.front().column_name_);
     using ColumnRandomAccessorType = ColumnDataRandomAccessor<TargetTDT>;
     const std::vector<size_t> target_slice_offset = compute_target_slice_offset(target);
 
@@ -1394,10 +1396,8 @@ std::vector<EntityId> MergeUpdateClause::process(std::vector<EntityId>&& entity_
         return {};
     }
 
-    auto new_row_slices = [&]() {
-        ARCTICDB_TRACE_EVENT("arcticdb.processing", "update_and_insert");
-        return update_and_insert(matched, *target_descriptor, std::move(row_slices), source_start_end);
-    }();
+    std::vector<ProcessingUnit> new_row_slices =
+            update_and_insert(matched, *target_descriptor, std::move(row_slices), source_start_end);
 
     std::vector<EntityId> res;
     for (auto&& [row_slice_idx, row_slice] : folly::enumerate(new_row_slices)) {
@@ -1558,7 +1558,7 @@ std::vector<ProcessingUnit> MergeUpdateClause::update_and_insert(
         const MatchRecord& match_record, const StreamDescriptor& target_descriptor,
         std::vector<ProcessingUnit>&& row_slices, std::pair<size_t, size_t> source_start_end
 ) const {
-
+    ARCTICDB_TRACE_EVENT("arcticdb.processing", "update_and_insert");
     ARCTICDB_DEBUG_CHECK(
             ErrorCode::E_ASSERTION_FAILURE,
             strategy_.insert(),
@@ -1669,12 +1669,6 @@ std::vector<ProcessingUnit> MergeUpdateClause::update_and_insert(
                                         return util::variant_match(
                                                 get_source_column<SourceTDT>(field_idx),
                                                 [&](const auto& source) -> std::vector<std::shared_ptr<Column>> {
-                                                    ARCTICDB_TRACE_EVENT(
-                                                            "arcticdb.processing",
-                                                            "merge",
-                                                            "column",
-                                                            source_field.name()
-                                                    );
                                                     constexpr bool is_source_sparse = std::same_as<
                                                             std::remove_cvref_t<decltype(source)>,
                                                             ColumnWithStrings>;
