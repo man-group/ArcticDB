@@ -23,7 +23,6 @@ from tests.util.arrow import create_1d_arrow_structure
 def test_collect_schema_basic(lmdb_library, num_rows):
     lib = lmdb_library
     lib._nvs.set_output_format(OutputFormat.POLARS)
-    lib._nvs._set_allow_arrow_input()
     sym = "test_collect_schema_basic"
     table = pa.table(
         {
@@ -50,7 +49,6 @@ def test_collect_schema_basic(lmdb_library, num_rows):
 def test_collect_schema_as_of(lmdb_library):
     lib = lmdb_library
     lib._nvs.set_output_format(OutputFormat.POLARS)
-    lib._nvs._set_allow_arrow_input()
     sym = "test_collect_schema_as_of"
     table_0 = pa.table({"uint8": pa.array([0], pa.uint8())})
     lib.write(sym, table_0)
@@ -66,7 +64,6 @@ def test_collect_schema_as_of(lmdb_library):
 def test_collect_schema_while_versions_being_added(lmdb_library):
     lib = lmdb_library
     lib._nvs.set_output_format(OutputFormat.POLARS)
-    lib._nvs._set_allow_arrow_input()
     sym = "test_collect_schema_while_versions_being_added"
     table_0 = pa.table({"uint8": pa.array([0], pa.uint8())})
     lib.write(sym, table_0)
@@ -108,7 +105,6 @@ def test_collect_schema_index_with_timezone(lmdb_library):
 def test_collect_schema_with_timezones(lmdb_library):
     lib = lmdb_library
     lib._nvs.set_output_format(OutputFormat.POLARS)
-    lib._nvs._set_allow_arrow_input()
     sym = "test_collect_schema_with_timezones"
     # No column selection
     table = pa.table(
@@ -186,7 +182,6 @@ def test_collect_schema_multiindex(lmdb_library):
 def test_collect_schema_string_types(lmdb_library):
     lib = lmdb_library
     lib._nvs.set_output_format(OutputFormat.POLARS)
-    lib._nvs._set_allow_arrow_input()
     sym = "test_collect_schema_string_types"
     table = pa.table({"col1": pa.array(["a"], pa.string()), "col2": pa.array(["b"], pa.string())})
     lib.write(sym, table)
@@ -221,7 +216,6 @@ def test_collect_schema_string_types(lmdb_library):
 def test_collect_schema_column_filtering(lmdb_library):
     lib = lmdb_library
     lib._nvs.set_output_format(OutputFormat.POLARS)
-    lib._nvs._set_allow_arrow_input()
     sym = "test_collect_schema_basic"
     table = pa.table(
         {
@@ -296,7 +290,6 @@ def test_collect_schema_timeseries(lmdb_library):
 def test_collect_schema_with_query(lmdb_library):
     lib = lmdb_library
     lib._nvs.set_output_format(OutputFormat.POLARS)
-    lib._nvs._set_allow_arrow_input()
 
     sym = "test_collect_schema_basic"
     table = pa.table({"col1": pa.array([0], pa.int64()), "col2": pa.array([1], pa.float32())})
@@ -471,7 +464,6 @@ def test_collect_schema_pickled_symbol(lmdb_library):
 def test_collect_schema_1d(mem_library, input_type):
     lib = mem_library
     sym = "test_collect_schema_1d"
-    lib._nvs._set_allow_arrow_input()
     data = pa.array([0], pa.int64())
     input = create_1d_arrow_structure(input_type, data)
     lib.write(sym, input)

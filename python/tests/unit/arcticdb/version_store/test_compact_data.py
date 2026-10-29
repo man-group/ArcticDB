@@ -303,7 +303,6 @@ def test_compact_data_widely_varying_row_counts(in_memory_store_factory, clear_q
 def test_compact_data_append(in_memory_store_factory, clear_query_stats, rows_per_segment, initial_rows, append_rows):
     rng = np.random.default_rng()
     lib = in_memory_store_factory(segment_row_size=rows_per_segment, dynamic_strings=True)
-    lib._set_allow_arrow_input()
     sym = "test_compact_data_append"
     string_values = random_strings_of_length(5, 5, True)
     table = pa.table(
@@ -333,7 +332,6 @@ def test_compact_data_append(in_memory_store_factory, clear_query_stats, rows_pe
 def test_compact_data_update(in_memory_store_factory, clear_query_stats, rows_per_segment, initial_rows, update_rows):
     rng = np.random.default_rng()
     lib = in_memory_store_factory(segment_row_size=rows_per_segment, dynamic_strings=True)
-    lib._set_allow_arrow_input()
     sym = "test_compact_data_update"
     string_values = random_strings_of_length(5, 5, True)
     write_table = pa.table(
@@ -371,7 +369,7 @@ def test_compact_data_update(in_memory_store_factory, clear_query_stats, rows_pe
             "strings empty": pa.array(update_rows * [None], pa.string()),
         }
     )
-    lib.update(sym, update_table, index_column=True)
+    lib.update(sym, update_table)
     generic_compact_data_test(lib, sym)
 
 
@@ -568,7 +566,6 @@ def test_compact_data_dynamic_schema_missing_columns(in_memory_store_factory, in
 
 def test_compact_data_output_column_missing_from_slice_constant_types(in_memory_store_factory):
     lib = in_memory_store_factory(dynamic_schema=True, segment_row_size=10)
-    lib._set_allow_arrow_input()
     sym = "test_compact_data_output_column_missing_from_slice_constant_types"
     # This configuration tests the right thing because:
     # - we start with row-slices of 5, 10, and 5 rows respectively
@@ -604,7 +601,6 @@ def test_compact_data_output_column_missing_from_slice_constant_types(in_memory_
 # implementation
 def test_compact_data_output_column_missing_from_slice_changing_types(in_memory_store_factory):
     lib = in_memory_store_factory(dynamic_schema=True, segment_row_size=10)
-    lib._set_allow_arrow_input()
     sym = "test_compact_data_output_column_missing_from_slice_changing_types"
     table_0 = pa.table(
         {
@@ -687,7 +683,6 @@ class TestCompactData:
     ):
         rng = np.random.default_rng()
         lib = in_memory_store_factory(segment_row_size=lib_config_value, dynamic_strings=True)
-        lib._set_allow_arrow_input()
         sym = "test_compact_data_explicit_rows_per_segment"
         table = pa.table(
             {
@@ -983,8 +978,6 @@ def test_compact_data_hypothesis_static_schema(
         column_group_size=cols_per_segment, segment_row_size=rows_per_segment, dynamic_strings=True, name="_unique_"
     )
     lib_unsliced = in_memory_store_factory(column_group_size=cols_per_segment, dynamic_strings=True, name="_unique_")
-    lib_sliced._set_allow_arrow_input()
-    lib_unsliced._set_allow_arrow_input()
     sym = "test_compact_data_hypothesis_static_schema"
     supported_types = [
         np.uint8,
@@ -1066,7 +1059,6 @@ def test_compact_data_hypothesis_dynamic_schema(
 ):
     rng = np.random.default_rng(42)
     lib = in_memory_store_factory(dynamic_schema=True, dynamic_strings=True, name="_unique_")
-    lib._set_allow_arrow_input()
     sym = "test_compact_data_hypothesis_dynamic_schema"
     unsigned_int_types = [np.uint8, np.uint16, np.uint32, np.uint64]
     signed_int_types = [np.int8, np.int16, np.int32, np.int64]

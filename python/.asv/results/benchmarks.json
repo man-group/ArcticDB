@@ -1,6 +1,6 @@
 {
     "arrow.ArrowBools.peakmem_read": {
-        "code": "class ArrowBools:\n    def peakmem_read(self, rows, sparsity):\n        self.lib.read(self.sym)\n\n    def setup(self, rows, sparsity):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.lib._nvs._set_allow_arrow_input()\n        self.fresh_lib = self.get_fresh_lib()\n        self.fresh_lib._nvs._set_allow_arrow_input()\n        self.table = self._generate_table(rows, sparsity)\n        self.sym = self.symbol_name(rows, sparsity)\n\n    def setup_cache(self):\n        ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        num_rows_list, sparsity_list = self.params\n        ac.delete_library(self.lib_name_prewritten)\n        lib = ac.create_library(self.lib_name_prewritten)\n        lib._nvs._set_allow_arrow_input()\n        for rows in num_rows_list:\n            for sparsity in sparsity_list:\n                lib.write(self.symbol_name(rows, sparsity), self._generate_table(rows, sparsity))",
+        "code": "class ArrowBools:\n    def peakmem_read(self, rows, sparsity):\n        self.lib.read(self.sym)\n\n    def setup(self, rows, sparsity):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.fresh_lib = self.get_fresh_lib()\n        self.table = self._generate_table(rows, sparsity)\n        self.sym = self.symbol_name(rows, sparsity)\n\n    def setup_cache(self):\n        ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        num_rows_list, sparsity_list = self.params\n        ac.delete_library(self.lib_name_prewritten)\n        lib = ac.create_library(self.lib_name_prewritten)\n        for rows in num_rows_list:\n            for sparsity in sparsity_list:\n                lib.write(self.symbol_name(rows, sparsity), self._generate_table(rows, sparsity))",
         "name": "arrow.ArrowBools.peakmem_read",
         "param_names": [
             "rows",
@@ -18,14 +18,14 @@
                 "0.9"
             ]
         ],
-        "setup_cache_key": "arrow:209",
+        "setup_cache_key": "arrow:203",
         "timeout": 600,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "61761fb7790a5d13aae091b25a217225c9a0374e5d71f02cf553ee4043016a9c"
+        "version": "15b5b1f6aad994aa283a404b6e986b7c98b160c840cb85d54b9d39b3961cb490"
     },
     "arrow.ArrowBools.peakmem_write": {
-        "code": "class ArrowBools:\n    def peakmem_write(self, rows, sparsity):\n        self.fresh_lib.write(self.sym, self.table)\n\n    def setup(self, rows, sparsity):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.lib._nvs._set_allow_arrow_input()\n        self.fresh_lib = self.get_fresh_lib()\n        self.fresh_lib._nvs._set_allow_arrow_input()\n        self.table = self._generate_table(rows, sparsity)\n        self.sym = self.symbol_name(rows, sparsity)\n\n    def setup_cache(self):\n        ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        num_rows_list, sparsity_list = self.params\n        ac.delete_library(self.lib_name_prewritten)\n        lib = ac.create_library(self.lib_name_prewritten)\n        lib._nvs._set_allow_arrow_input()\n        for rows in num_rows_list:\n            for sparsity in sparsity_list:\n                lib.write(self.symbol_name(rows, sparsity), self._generate_table(rows, sparsity))",
+        "code": "class ArrowBools:\n    def peakmem_write(self, rows, sparsity):\n        self.fresh_lib.write(self.sym, self.table)\n\n    def setup(self, rows, sparsity):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.fresh_lib = self.get_fresh_lib()\n        self.table = self._generate_table(rows, sparsity)\n        self.sym = self.symbol_name(rows, sparsity)\n\n    def setup_cache(self):\n        ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        num_rows_list, sparsity_list = self.params\n        ac.delete_library(self.lib_name_prewritten)\n        lib = ac.create_library(self.lib_name_prewritten)\n        for rows in num_rows_list:\n            for sparsity in sparsity_list:\n                lib.write(self.symbol_name(rows, sparsity), self._generate_table(rows, sparsity))",
         "name": "arrow.ArrowBools.peakmem_write",
         "param_names": [
             "rows",
@@ -43,14 +43,14 @@
                 "0.9"
             ]
         ],
-        "setup_cache_key": "arrow:209",
+        "setup_cache_key": "arrow:203",
         "timeout": 600,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "520ea8c1e01d214d25ddb5d58aee260dad2816c17261c095be2a17b12e063bbc"
+        "version": "f2f7fa00481f771c9827af1d1b1cd1519bca3f7ae064bffd374ff9fdfb6518bb"
     },
     "arrow.ArrowBools.time_read": {
-        "code": "class ArrowBools:\n    def time_read(self, rows, sparsity):\n        self.lib.read(self.sym)\n\n    def setup(self, rows, sparsity):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.lib._nvs._set_allow_arrow_input()\n        self.fresh_lib = self.get_fresh_lib()\n        self.fresh_lib._nvs._set_allow_arrow_input()\n        self.table = self._generate_table(rows, sparsity)\n        self.sym = self.symbol_name(rows, sparsity)\n\n    def setup_cache(self):\n        ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        num_rows_list, sparsity_list = self.params\n        ac.delete_library(self.lib_name_prewritten)\n        lib = ac.create_library(self.lib_name_prewritten)\n        lib._nvs._set_allow_arrow_input()\n        for rows in num_rows_list:\n            for sparsity in sparsity_list:\n                lib.write(self.symbol_name(rows, sparsity), self._generate_table(rows, sparsity))",
+        "code": "class ArrowBools:\n    def time_read(self, rows, sparsity):\n        self.lib.read(self.sym)\n\n    def setup(self, rows, sparsity):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.fresh_lib = self.get_fresh_lib()\n        self.table = self._generate_table(rows, sparsity)\n        self.sym = self.symbol_name(rows, sparsity)\n\n    def setup_cache(self):\n        ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        num_rows_list, sparsity_list = self.params\n        ac.delete_library(self.lib_name_prewritten)\n        lib = ac.create_library(self.lib_name_prewritten)\n        for rows in num_rows_list:\n            for sparsity in sparsity_list:\n                lib.write(self.symbol_name(rows, sparsity), self._generate_table(rows, sparsity))",
         "min_run_count": 2,
         "name": "arrow.ArrowBools.time_read",
         "number": 0,
@@ -73,15 +73,15 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "arrow:209",
+        "setup_cache_key": "arrow:203",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
-        "version": "4f701aa9e985db8b2016003d360f4a80c8c9ebfcd7dd2161dde1343bd90e2597",
+        "version": "bd7f411f20f1b01296393db7f9c51459ee4b9903ddb1cf6857c176c1af27a085",
         "warmup_time": -1
     },
     "arrow.ArrowBools.time_read_row_range_byte_aligned": {
-        "code": "class ArrowBools:\n    def time_read_row_range_byte_aligned(self, rows, sparsity):\n        # Should read the first two blocks and truncate both to a byte aligned offsets\n        self.lib.read(self.sym, row_range=(8, 100_008))\n\n    def setup(self, rows, sparsity):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.lib._nvs._set_allow_arrow_input()\n        self.fresh_lib = self.get_fresh_lib()\n        self.fresh_lib._nvs._set_allow_arrow_input()\n        self.table = self._generate_table(rows, sparsity)\n        self.sym = self.symbol_name(rows, sparsity)\n\n    def setup_cache(self):\n        ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        num_rows_list, sparsity_list = self.params\n        ac.delete_library(self.lib_name_prewritten)\n        lib = ac.create_library(self.lib_name_prewritten)\n        lib._nvs._set_allow_arrow_input()\n        for rows in num_rows_list:\n            for sparsity in sparsity_list:\n                lib.write(self.symbol_name(rows, sparsity), self._generate_table(rows, sparsity))",
+        "code": "class ArrowBools:\n    def time_read_row_range_byte_aligned(self, rows, sparsity):\n        # Should read the first two blocks and truncate both to a byte aligned offsets\n        self.lib.read(self.sym, row_range=(8, 100_008))\n\n    def setup(self, rows, sparsity):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.fresh_lib = self.get_fresh_lib()\n        self.table = self._generate_table(rows, sparsity)\n        self.sym = self.symbol_name(rows, sparsity)\n\n    def setup_cache(self):\n        ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        num_rows_list, sparsity_list = self.params\n        ac.delete_library(self.lib_name_prewritten)\n        lib = ac.create_library(self.lib_name_prewritten)\n        for rows in num_rows_list:\n            for sparsity in sparsity_list:\n                lib.write(self.symbol_name(rows, sparsity), self._generate_table(rows, sparsity))",
         "min_run_count": 2,
         "name": "arrow.ArrowBools.time_read_row_range_byte_aligned",
         "number": 0,
@@ -104,15 +104,15 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "arrow:209",
+        "setup_cache_key": "arrow:203",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
-        "version": "0a102aaa27b19ead63222b6f362b13a5c015336d61b8bbe836dcae369ba74e01",
+        "version": "33b5876a9b2109742232b2350ef5c96d2fd60e37d41ef4ce5e6a6e5a9708faad",
         "warmup_time": -1
     },
     "arrow.ArrowBools.time_read_row_range_byte_unaligned": {
-        "code": "class ArrowBools:\n    def time_read_row_range_byte_unaligned(self, rows, sparsity):\n        # Should read the first two blocks and truncate both to a byte unaligned offsets\n        self.lib.read(self.sym, row_range=(5, 100_005))\n\n    def setup(self, rows, sparsity):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.lib._nvs._set_allow_arrow_input()\n        self.fresh_lib = self.get_fresh_lib()\n        self.fresh_lib._nvs._set_allow_arrow_input()\n        self.table = self._generate_table(rows, sparsity)\n        self.sym = self.symbol_name(rows, sparsity)\n\n    def setup_cache(self):\n        ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        num_rows_list, sparsity_list = self.params\n        ac.delete_library(self.lib_name_prewritten)\n        lib = ac.create_library(self.lib_name_prewritten)\n        lib._nvs._set_allow_arrow_input()\n        for rows in num_rows_list:\n            for sparsity in sparsity_list:\n                lib.write(self.symbol_name(rows, sparsity), self._generate_table(rows, sparsity))",
+        "code": "class ArrowBools:\n    def time_read_row_range_byte_unaligned(self, rows, sparsity):\n        # Should read the first two blocks and truncate both to a byte unaligned offsets\n        self.lib.read(self.sym, row_range=(5, 100_005))\n\n    def setup(self, rows, sparsity):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.fresh_lib = self.get_fresh_lib()\n        self.table = self._generate_table(rows, sparsity)\n        self.sym = self.symbol_name(rows, sparsity)\n\n    def setup_cache(self):\n        ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        num_rows_list, sparsity_list = self.params\n        ac.delete_library(self.lib_name_prewritten)\n        lib = ac.create_library(self.lib_name_prewritten)\n        for rows in num_rows_list:\n            for sparsity in sparsity_list:\n                lib.write(self.symbol_name(rows, sparsity), self._generate_table(rows, sparsity))",
         "min_run_count": 2,
         "name": "arrow.ArrowBools.time_read_row_range_byte_unaligned",
         "number": 0,
@@ -135,15 +135,15 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "arrow:209",
+        "setup_cache_key": "arrow:203",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
-        "version": "889a0c61937149674aa4a9ab2dfb453d545ca30c1fada06fbcf331311ae90266",
+        "version": "936c4ac09c442a931c633a85ae708ca5fa1d2a1e56f6edf1cf4d6319b54c9031",
         "warmup_time": -1
     },
     "arrow.ArrowBools.time_write": {
-        "code": "class ArrowBools:\n    def time_write(self, rows, sparsity):\n        self.fresh_lib.write(self.sym, self.table)\n\n    def setup(self, rows, sparsity):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.lib._nvs._set_allow_arrow_input()\n        self.fresh_lib = self.get_fresh_lib()\n        self.fresh_lib._nvs._set_allow_arrow_input()\n        self.table = self._generate_table(rows, sparsity)\n        self.sym = self.symbol_name(rows, sparsity)\n\n    def setup_cache(self):\n        ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        num_rows_list, sparsity_list = self.params\n        ac.delete_library(self.lib_name_prewritten)\n        lib = ac.create_library(self.lib_name_prewritten)\n        lib._nvs._set_allow_arrow_input()\n        for rows in num_rows_list:\n            for sparsity in sparsity_list:\n                lib.write(self.symbol_name(rows, sparsity), self._generate_table(rows, sparsity))",
+        "code": "class ArrowBools:\n    def time_write(self, rows, sparsity):\n        self.fresh_lib.write(self.sym, self.table)\n\n    def setup(self, rows, sparsity):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.fresh_lib = self.get_fresh_lib()\n        self.table = self._generate_table(rows, sparsity)\n        self.sym = self.symbol_name(rows, sparsity)\n\n    def setup_cache(self):\n        ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        num_rows_list, sparsity_list = self.params\n        ac.delete_library(self.lib_name_prewritten)\n        lib = ac.create_library(self.lib_name_prewritten)\n        for rows in num_rows_list:\n            for sparsity in sparsity_list:\n                lib.write(self.symbol_name(rows, sparsity), self._generate_table(rows, sparsity))",
         "min_run_count": 2,
         "name": "arrow.ArrowBools.time_write",
         "number": 0,
@@ -166,15 +166,15 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "arrow:209",
+        "setup_cache_key": "arrow:203",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
-        "version": "1696fec58f5bb904663f487665899938f20a287557347a49f345b25300cc5038",
+        "version": "b46a0c18995c75f37c603ef2bba85c63e395553ff61d35fa17a89d595f6405cc",
         "warmup_time": -1
     },
     "arrow.ArrowNumeric.peakmem_read": {
-        "code": "class ArrowNumeric:\n    def peakmem_read(self, rows, date_range):\n        self.lib.read(self.symbol_name(rows), date_range=self.date_range)\n\n    def setup(self, rows, date_range):\n        np.random.seed(42)\n        random.seed(42)\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.lib._nvs._set_allow_arrow_input()\n        if date_range is None:\n            self.date_range = None\n        else:\n            # Create a date range that excludes the first and last 10 rows of the data only\n            self.date_range = (pd.Timestamp(10), pd.Timestamp(rows - 10))\n        self.fresh_lib = self.get_fresh_lib()\n        self.fresh_lib._nvs._set_allow_arrow_input()\n        num_cols = 9\n        index = pd.date_range(\"1970-01-01\", freq=\"ns\", periods=rows)\n        names = [\"ts\"] + [f\"col{idx}\" for idx in range(num_cols)]\n        self.table = pa.Table.from_arrays(\n            [index] + [np.arange(idx * rows, (idx + 1) * rows, dtype=np.int64) for idx in range(num_cols)],\n            names=names,\n        )\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "code": "class ArrowNumeric:\n    def peakmem_read(self, rows, date_range):\n        self.lib.read(self.symbol_name(rows), date_range=self.date_range)\n\n    def setup(self, rows, date_range):\n        np.random.seed(42)\n        random.seed(42)\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        if date_range is None:\n            self.date_range = None\n        else:\n            # Create a date range that excludes the first and last 10 rows of the data only\n            self.date_range = (pd.Timestamp(10), pd.Timestamp(rows - 10))\n        self.fresh_lib = self.get_fresh_lib()\n        num_cols = 9\n        index = pd.date_range(\"1970-01-01\", freq=\"ns\", periods=rows)\n        names = [\"ts\"] + [f\"col{idx}\" for idx in range(num_cols)]\n        self.table = pa.Table.from_arrays(\n            [index] + [np.arange(idx * rows, (idx + 1) * rows, dtype=np.int64) for idx in range(num_cols)],\n            names=names,\n        )\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
         "name": "arrow.ArrowNumeric.peakmem_read",
         "param_names": [
             "rows",
@@ -194,10 +194,10 @@
         "timeout": 600,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "c122450565fb8b8d2e41545ff9cdc8ce71c523ccb607c87414cf96f1bc8b91e1"
+        "version": "1d05133553ef2f8e26c9ee01388462e46de5623ef5f62ba01d44ceb643a29c78"
     },
     "arrow.ArrowNumeric.peakmem_write": {
-        "code": "class ArrowNumeric:\n    def peakmem_write(self, rows, date_range):\n        self.fresh_lib.write(f\"sym_{rows}\", self.table, index_column=True)\n\n    def setup(self, rows, date_range):\n        np.random.seed(42)\n        random.seed(42)\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.lib._nvs._set_allow_arrow_input()\n        if date_range is None:\n            self.date_range = None\n        else:\n            # Create a date range that excludes the first and last 10 rows of the data only\n            self.date_range = (pd.Timestamp(10), pd.Timestamp(rows - 10))\n        self.fresh_lib = self.get_fresh_lib()\n        self.fresh_lib._nvs._set_allow_arrow_input()\n        num_cols = 9\n        index = pd.date_range(\"1970-01-01\", freq=\"ns\", periods=rows)\n        names = [\"ts\"] + [f\"col{idx}\" for idx in range(num_cols)]\n        self.table = pa.Table.from_arrays(\n            [index] + [np.arange(idx * rows, (idx + 1) * rows, dtype=np.int64) for idx in range(num_cols)],\n            names=names,\n        )\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "code": "class ArrowNumeric:\n    def peakmem_write(self, rows, date_range):\n        self.fresh_lib.write(f\"sym_{rows}\", self.table, index_column=True)\n\n    def setup(self, rows, date_range):\n        np.random.seed(42)\n        random.seed(42)\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        if date_range is None:\n            self.date_range = None\n        else:\n            # Create a date range that excludes the first and last 10 rows of the data only\n            self.date_range = (pd.Timestamp(10), pd.Timestamp(rows - 10))\n        self.fresh_lib = self.get_fresh_lib()\n        num_cols = 9\n        index = pd.date_range(\"1970-01-01\", freq=\"ns\", periods=rows)\n        names = [\"ts\"] + [f\"col{idx}\" for idx in range(num_cols)]\n        self.table = pa.Table.from_arrays(\n            [index] + [np.arange(idx * rows, (idx + 1) * rows, dtype=np.int64) for idx in range(num_cols)],\n            names=names,\n        )\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
         "name": "arrow.ArrowNumeric.peakmem_write",
         "param_names": [
             "rows",
@@ -217,10 +217,10 @@
         "timeout": 600,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "ea77b6ce723158f09475f365622b583ca3c3779275a6bcaaa476a610ba60a80a"
+        "version": "d1c0a1d174c1d7dd70a345f133f1c2d043ecb91e2c086781c4aeb51639ca5548"
     },
     "arrow.ArrowNumeric.time_read": {
-        "code": "class ArrowNumeric:\n    def time_read(self, rows, date_range):\n        self.lib.read(self.symbol_name(rows), date_range=self.date_range)\n\n    def setup(self, rows, date_range):\n        np.random.seed(42)\n        random.seed(42)\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.lib._nvs._set_allow_arrow_input()\n        if date_range is None:\n            self.date_range = None\n        else:\n            # Create a date range that excludes the first and last 10 rows of the data only\n            self.date_range = (pd.Timestamp(10), pd.Timestamp(rows - 10))\n        self.fresh_lib = self.get_fresh_lib()\n        self.fresh_lib._nvs._set_allow_arrow_input()\n        num_cols = 9\n        index = pd.date_range(\"1970-01-01\", freq=\"ns\", periods=rows)\n        names = [\"ts\"] + [f\"col{idx}\" for idx in range(num_cols)]\n        self.table = pa.Table.from_arrays(\n            [index] + [np.arange(idx * rows, (idx + 1) * rows, dtype=np.int64) for idx in range(num_cols)],\n            names=names,\n        )\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "code": "class ArrowNumeric:\n    def time_read(self, rows, date_range):\n        self.lib.read(self.symbol_name(rows), date_range=self.date_range)\n\n    def setup(self, rows, date_range):\n        np.random.seed(42)\n        random.seed(42)\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        if date_range is None:\n            self.date_range = None\n        else:\n            # Create a date range that excludes the first and last 10 rows of the data only\n            self.date_range = (pd.Timestamp(10), pd.Timestamp(rows - 10))\n        self.fresh_lib = self.get_fresh_lib()\n        num_cols = 9\n        index = pd.date_range(\"1970-01-01\", freq=\"ns\", periods=rows)\n        names = [\"ts\"] + [f\"col{idx}\" for idx in range(num_cols)]\n        self.table = pa.Table.from_arrays(\n            [index] + [np.arange(idx * rows, (idx + 1) * rows, dtype=np.int64) for idx in range(num_cols)],\n            names=names,\n        )\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
         "min_run_count": 2,
         "name": "arrow.ArrowNumeric.time_read",
         "number": 0,
@@ -245,11 +245,11 @@
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
-        "version": "a199e41157722fa14e9165ef0225e352328bb3722847682542476babfb3c5d5b",
+        "version": "8c3aab7d5977407e74d9c2859e41ca5ff6c1491d5e1dc22bf01bf5c5602f28eb",
         "warmup_time": -1
     },
     "arrow.ArrowNumeric.time_write": {
-        "code": "class ArrowNumeric:\n    def time_write(self, rows, date_range):\n        self.fresh_lib.write(f\"sym_{rows}\", self.table, index_column=True)\n\n    def setup(self, rows, date_range):\n        np.random.seed(42)\n        random.seed(42)\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.lib._nvs._set_allow_arrow_input()\n        if date_range is None:\n            self.date_range = None\n        else:\n            # Create a date range that excludes the first and last 10 rows of the data only\n            self.date_range = (pd.Timestamp(10), pd.Timestamp(rows - 10))\n        self.fresh_lib = self.get_fresh_lib()\n        self.fresh_lib._nvs._set_allow_arrow_input()\n        num_cols = 9\n        index = pd.date_range(\"1970-01-01\", freq=\"ns\", periods=rows)\n        names = [\"ts\"] + [f\"col{idx}\" for idx in range(num_cols)]\n        self.table = pa.Table.from_arrays(\n            [index] + [np.arange(idx * rows, (idx + 1) * rows, dtype=np.int64) for idx in range(num_cols)],\n            names=names,\n        )\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "code": "class ArrowNumeric:\n    def time_write(self, rows, date_range):\n        self.fresh_lib.write(f\"sym_{rows}\", self.table, index_column=True)\n\n    def setup(self, rows, date_range):\n        np.random.seed(42)\n        random.seed(42)\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        if date_range is None:\n            self.date_range = None\n        else:\n            # Create a date range that excludes the first and last 10 rows of the data only\n            self.date_range = (pd.Timestamp(10), pd.Timestamp(rows - 10))\n        self.fresh_lib = self.get_fresh_lib()\n        num_cols = 9\n        index = pd.date_range(\"1970-01-01\", freq=\"ns\", periods=rows)\n        names = [\"ts\"] + [f\"col{idx}\" for idx in range(num_cols)]\n        self.table = pa.Table.from_arrays(\n            [index] + [np.arange(idx * rows, (idx + 1) * rows, dtype=np.int64) for idx in range(num_cols)],\n            names=names,\n        )\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
         "min_run_count": 2,
         "name": "arrow.ArrowNumeric.time_write",
         "number": 0,
@@ -274,11 +274,11 @@
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
-        "version": "cca65cd0e8098fe4417ad02227b13fdbd3ffdfa462e80a00617fa69a9890ddc0",
+        "version": "bb668c5e730d5820a605c24e592bcbbb518ded92a770d74877ae19ae373c9a05",
         "warmup_time": -1
     },
     "arrow.ArrowSparseNumeric.peakmem_read": {
-        "code": "class ArrowSparseNumeric:\n    def peakmem_read(self, rows, sparsity):\n        self.lib.read(self.sym)\n\n    def setup(self, rows, sparsity):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.lib._nvs._set_allow_arrow_input()\n        self.fresh_lib = self.get_fresh_lib()\n        self.fresh_lib._nvs._set_allow_arrow_input()\n        self.table = self._generate_table(rows, sparsity)\n        self.sym = self.symbol_name(rows, sparsity)\n        self.sym_with_type_promotion = self.symbol_name(rows, sparsity, self.type_promotion_suffix)\n\n    def setup_cache(self):\n        ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        num_rows_list, sparsity_list = self.params\n        ac.delete_library(self.lib_name_prewritten)\n        lib = ac.create_library(self.lib_name_prewritten, library_options=LibraryOptions(dynamic_schema=True))\n        lib._nvs._set_allow_arrow_input()\n        for rows in num_rows_list:\n            for sparsity in sparsity_list:\n                lib.write(self.symbol_name(rows, sparsity), self._generate_table(rows, sparsity))\n                lib.write(\n                    self.symbol_name(rows, sparsity, self.type_promotion_suffix),\n                    self._generate_table(rows // 2, sparsity, pa.int32()),\n                )\n                lib.append(\n                    self.symbol_name(rows, sparsity, self.type_promotion_suffix),\n                    self._generate_table(rows // 2, sparsity, pa.int64()),\n                )",
+        "code": "class ArrowSparseNumeric:\n    def peakmem_read(self, rows, sparsity):\n        self.lib.read(self.sym)\n\n    def setup(self, rows, sparsity):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.fresh_lib = self.get_fresh_lib()\n        self.table = self._generate_table(rows, sparsity)\n        self.sym = self.symbol_name(rows, sparsity)\n        self.sym_with_type_promotion = self.symbol_name(rows, sparsity, self.type_promotion_suffix)\n\n    def setup_cache(self):\n        ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        num_rows_list, sparsity_list = self.params\n        ac.delete_library(self.lib_name_prewritten)\n        lib = ac.create_library(self.lib_name_prewritten, library_options=LibraryOptions(dynamic_schema=True))\n        for rows in num_rows_list:\n            for sparsity in sparsity_list:\n                lib.write(self.symbol_name(rows, sparsity), self._generate_table(rows, sparsity))\n                lib.write(\n                    self.symbol_name(rows, sparsity, self.type_promotion_suffix),\n                    self._generate_table(rows // 2, sparsity, pa.int32()),\n                )\n                lib.append(\n                    self.symbol_name(rows, sparsity, self.type_promotion_suffix),\n                    self._generate_table(rows // 2, sparsity, pa.int64()),\n                )",
         "name": "arrow.ArrowSparseNumeric.peakmem_read",
         "param_names": [
             "rows",
@@ -295,14 +295,14 @@
                 "0.9"
             ]
         ],
-        "setup_cache_key": "arrow:123",
+        "setup_cache_key": "arrow:120",
         "timeout": 600,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "f484a462c6cf6a97cabb4929935e77992f8597d7ecd523358dfe4c78625c2ad9"
+        "version": "82eceec6777556dd0585a87b7024aa51fc71a8f9cbda785560bb22adb76c8ac7"
     },
     "arrow.ArrowSparseNumeric.peakmem_read_pandas": {
-        "code": "class ArrowSparseNumeric:\n    def peakmem_read_pandas(self, rows, sparsity):\n        self.lib.read(self.sym, output_format=\"PANDAS\")\n\n    def setup(self, rows, sparsity):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.lib._nvs._set_allow_arrow_input()\n        self.fresh_lib = self.get_fresh_lib()\n        self.fresh_lib._nvs._set_allow_arrow_input()\n        self.table = self._generate_table(rows, sparsity)\n        self.sym = self.symbol_name(rows, sparsity)\n        self.sym_with_type_promotion = self.symbol_name(rows, sparsity, self.type_promotion_suffix)\n\n    def setup_cache(self):\n        ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        num_rows_list, sparsity_list = self.params\n        ac.delete_library(self.lib_name_prewritten)\n        lib = ac.create_library(self.lib_name_prewritten, library_options=LibraryOptions(dynamic_schema=True))\n        lib._nvs._set_allow_arrow_input()\n        for rows in num_rows_list:\n            for sparsity in sparsity_list:\n                lib.write(self.symbol_name(rows, sparsity), self._generate_table(rows, sparsity))\n                lib.write(\n                    self.symbol_name(rows, sparsity, self.type_promotion_suffix),\n                    self._generate_table(rows // 2, sparsity, pa.int32()),\n                )\n                lib.append(\n                    self.symbol_name(rows, sparsity, self.type_promotion_suffix),\n                    self._generate_table(rows // 2, sparsity, pa.int64()),\n                )",
+        "code": "class ArrowSparseNumeric:\n    def peakmem_read_pandas(self, rows, sparsity):\n        self.lib.read(self.sym, output_format=\"PANDAS\")\n\n    def setup(self, rows, sparsity):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.fresh_lib = self.get_fresh_lib()\n        self.table = self._generate_table(rows, sparsity)\n        self.sym = self.symbol_name(rows, sparsity)\n        self.sym_with_type_promotion = self.symbol_name(rows, sparsity, self.type_promotion_suffix)\n\n    def setup_cache(self):\n        ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        num_rows_list, sparsity_list = self.params\n        ac.delete_library(self.lib_name_prewritten)\n        lib = ac.create_library(self.lib_name_prewritten, library_options=LibraryOptions(dynamic_schema=True))\n        for rows in num_rows_list:\n            for sparsity in sparsity_list:\n                lib.write(self.symbol_name(rows, sparsity), self._generate_table(rows, sparsity))\n                lib.write(\n                    self.symbol_name(rows, sparsity, self.type_promotion_suffix),\n                    self._generate_table(rows // 2, sparsity, pa.int32()),\n                )\n                lib.append(\n                    self.symbol_name(rows, sparsity, self.type_promotion_suffix),\n                    self._generate_table(rows // 2, sparsity, pa.int64()),\n                )",
         "name": "arrow.ArrowSparseNumeric.peakmem_read_pandas",
         "param_names": [
             "rows",
@@ -319,14 +319,14 @@
                 "0.9"
             ]
         ],
-        "setup_cache_key": "arrow:123",
+        "setup_cache_key": "arrow:120",
         "timeout": 600,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "f94b96b48579533cb6cc6b184fba8bcc60bbe32c86afe98ac27e8433221c1f27"
+        "version": "613a71851c6cbc7327214d153ecec3f80f7304a2eb5c87a044d6a0919faa68a8"
     },
     "arrow.ArrowSparseNumeric.peakmem_read_with_type_promotion": {
-        "code": "class ArrowSparseNumeric:\n    def peakmem_read_with_type_promotion(self, rows, sparsity):\n        self.lib.read(self.sym_with_type_promotion)\n\n    def setup(self, rows, sparsity):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.lib._nvs._set_allow_arrow_input()\n        self.fresh_lib = self.get_fresh_lib()\n        self.fresh_lib._nvs._set_allow_arrow_input()\n        self.table = self._generate_table(rows, sparsity)\n        self.sym = self.symbol_name(rows, sparsity)\n        self.sym_with_type_promotion = self.symbol_name(rows, sparsity, self.type_promotion_suffix)\n\n    def setup_cache(self):\n        ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        num_rows_list, sparsity_list = self.params\n        ac.delete_library(self.lib_name_prewritten)\n        lib = ac.create_library(self.lib_name_prewritten, library_options=LibraryOptions(dynamic_schema=True))\n        lib._nvs._set_allow_arrow_input()\n        for rows in num_rows_list:\n            for sparsity in sparsity_list:\n                lib.write(self.symbol_name(rows, sparsity), self._generate_table(rows, sparsity))\n                lib.write(\n                    self.symbol_name(rows, sparsity, self.type_promotion_suffix),\n                    self._generate_table(rows // 2, sparsity, pa.int32()),\n                )\n                lib.append(\n                    self.symbol_name(rows, sparsity, self.type_promotion_suffix),\n                    self._generate_table(rows // 2, sparsity, pa.int64()),\n                )",
+        "code": "class ArrowSparseNumeric:\n    def peakmem_read_with_type_promotion(self, rows, sparsity):\n        self.lib.read(self.sym_with_type_promotion)\n\n    def setup(self, rows, sparsity):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.fresh_lib = self.get_fresh_lib()\n        self.table = self._generate_table(rows, sparsity)\n        self.sym = self.symbol_name(rows, sparsity)\n        self.sym_with_type_promotion = self.symbol_name(rows, sparsity, self.type_promotion_suffix)\n\n    def setup_cache(self):\n        ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        num_rows_list, sparsity_list = self.params\n        ac.delete_library(self.lib_name_prewritten)\n        lib = ac.create_library(self.lib_name_prewritten, library_options=LibraryOptions(dynamic_schema=True))\n        for rows in num_rows_list:\n            for sparsity in sparsity_list:\n                lib.write(self.symbol_name(rows, sparsity), self._generate_table(rows, sparsity))\n                lib.write(\n                    self.symbol_name(rows, sparsity, self.type_promotion_suffix),\n                    self._generate_table(rows // 2, sparsity, pa.int32()),\n                )\n                lib.append(\n                    self.symbol_name(rows, sparsity, self.type_promotion_suffix),\n                    self._generate_table(rows // 2, sparsity, pa.int64()),\n                )",
         "name": "arrow.ArrowSparseNumeric.peakmem_read_with_type_promotion",
         "param_names": [
             "rows",
@@ -343,14 +343,14 @@
                 "0.9"
             ]
         ],
-        "setup_cache_key": "arrow:123",
+        "setup_cache_key": "arrow:120",
         "timeout": 600,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "f53c7240ed9c13b0ca8787ebd42c1c91113fd2e7b91431a7f31a91dd17c2241e"
+        "version": "d22b94cc05a59f815c62f2e4b2bde918b5b0befd38d4eb1855339e42ca87025b"
     },
     "arrow.ArrowSparseNumeric.peakmem_write": {
-        "code": "class ArrowSparseNumeric:\n    def peakmem_write(self, rows, sparsity):\n        self.fresh_lib.write(self.sym, self.table)\n\n    def setup(self, rows, sparsity):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.lib._nvs._set_allow_arrow_input()\n        self.fresh_lib = self.get_fresh_lib()\n        self.fresh_lib._nvs._set_allow_arrow_input()\n        self.table = self._generate_table(rows, sparsity)\n        self.sym = self.symbol_name(rows, sparsity)\n        self.sym_with_type_promotion = self.symbol_name(rows, sparsity, self.type_promotion_suffix)\n\n    def setup_cache(self):\n        ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        num_rows_list, sparsity_list = self.params\n        ac.delete_library(self.lib_name_prewritten)\n        lib = ac.create_library(self.lib_name_prewritten, library_options=LibraryOptions(dynamic_schema=True))\n        lib._nvs._set_allow_arrow_input()\n        for rows in num_rows_list:\n            for sparsity in sparsity_list:\n                lib.write(self.symbol_name(rows, sparsity), self._generate_table(rows, sparsity))\n                lib.write(\n                    self.symbol_name(rows, sparsity, self.type_promotion_suffix),\n                    self._generate_table(rows // 2, sparsity, pa.int32()),\n                )\n                lib.append(\n                    self.symbol_name(rows, sparsity, self.type_promotion_suffix),\n                    self._generate_table(rows // 2, sparsity, pa.int64()),\n                )",
+        "code": "class ArrowSparseNumeric:\n    def peakmem_write(self, rows, sparsity):\n        self.fresh_lib.write(self.sym, self.table)\n\n    def setup(self, rows, sparsity):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.fresh_lib = self.get_fresh_lib()\n        self.table = self._generate_table(rows, sparsity)\n        self.sym = self.symbol_name(rows, sparsity)\n        self.sym_with_type_promotion = self.symbol_name(rows, sparsity, self.type_promotion_suffix)\n\n    def setup_cache(self):\n        ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        num_rows_list, sparsity_list = self.params\n        ac.delete_library(self.lib_name_prewritten)\n        lib = ac.create_library(self.lib_name_prewritten, library_options=LibraryOptions(dynamic_schema=True))\n        for rows in num_rows_list:\n            for sparsity in sparsity_list:\n                lib.write(self.symbol_name(rows, sparsity), self._generate_table(rows, sparsity))\n                lib.write(\n                    self.symbol_name(rows, sparsity, self.type_promotion_suffix),\n                    self._generate_table(rows // 2, sparsity, pa.int32()),\n                )\n                lib.append(\n                    self.symbol_name(rows, sparsity, self.type_promotion_suffix),\n                    self._generate_table(rows // 2, sparsity, pa.int64()),\n                )",
         "name": "arrow.ArrowSparseNumeric.peakmem_write",
         "param_names": [
             "rows",
@@ -367,14 +367,14 @@
                 "0.9"
             ]
         ],
-        "setup_cache_key": "arrow:123",
+        "setup_cache_key": "arrow:120",
         "timeout": 600,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "b27946bbf68147446b4320acd49a289fc4da9c33633736bb0da5b4af80265481"
+        "version": "a642d29103c44271c92d0f77b6ee012f774b414eadfd33e113248e343b995c49"
     },
     "arrow.ArrowSparseNumeric.time_read": {
-        "code": "class ArrowSparseNumeric:\n    def time_read(self, rows, sparsity):\n        self.lib.read(self.sym)\n\n    def setup(self, rows, sparsity):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.lib._nvs._set_allow_arrow_input()\n        self.fresh_lib = self.get_fresh_lib()\n        self.fresh_lib._nvs._set_allow_arrow_input()\n        self.table = self._generate_table(rows, sparsity)\n        self.sym = self.symbol_name(rows, sparsity)\n        self.sym_with_type_promotion = self.symbol_name(rows, sparsity, self.type_promotion_suffix)\n\n    def setup_cache(self):\n        ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        num_rows_list, sparsity_list = self.params\n        ac.delete_library(self.lib_name_prewritten)\n        lib = ac.create_library(self.lib_name_prewritten, library_options=LibraryOptions(dynamic_schema=True))\n        lib._nvs._set_allow_arrow_input()\n        for rows in num_rows_list:\n            for sparsity in sparsity_list:\n                lib.write(self.symbol_name(rows, sparsity), self._generate_table(rows, sparsity))\n                lib.write(\n                    self.symbol_name(rows, sparsity, self.type_promotion_suffix),\n                    self._generate_table(rows // 2, sparsity, pa.int32()),\n                )\n                lib.append(\n                    self.symbol_name(rows, sparsity, self.type_promotion_suffix),\n                    self._generate_table(rows // 2, sparsity, pa.int64()),\n                )",
+        "code": "class ArrowSparseNumeric:\n    def time_read(self, rows, sparsity):\n        self.lib.read(self.sym)\n\n    def setup(self, rows, sparsity):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.fresh_lib = self.get_fresh_lib()\n        self.table = self._generate_table(rows, sparsity)\n        self.sym = self.symbol_name(rows, sparsity)\n        self.sym_with_type_promotion = self.symbol_name(rows, sparsity, self.type_promotion_suffix)\n\n    def setup_cache(self):\n        ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        num_rows_list, sparsity_list = self.params\n        ac.delete_library(self.lib_name_prewritten)\n        lib = ac.create_library(self.lib_name_prewritten, library_options=LibraryOptions(dynamic_schema=True))\n        for rows in num_rows_list:\n            for sparsity in sparsity_list:\n                lib.write(self.symbol_name(rows, sparsity), self._generate_table(rows, sparsity))\n                lib.write(\n                    self.symbol_name(rows, sparsity, self.type_promotion_suffix),\n                    self._generate_table(rows // 2, sparsity, pa.int32()),\n                )\n                lib.append(\n                    self.symbol_name(rows, sparsity, self.type_promotion_suffix),\n                    self._generate_table(rows // 2, sparsity, pa.int64()),\n                )",
         "min_run_count": 2,
         "name": "arrow.ArrowSparseNumeric.time_read",
         "number": 0,
@@ -396,15 +396,15 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "arrow:123",
+        "setup_cache_key": "arrow:120",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
-        "version": "bce82551740f828d23eda0daf2c1a2f08a652bf50fb44c95b58b1e9c1be9d3ea",
+        "version": "eb2c3ac176d106142ce162071cbe320830f9471bfe5d9192f9f2f0555915461f",
         "warmup_time": -1
     },
     "arrow.ArrowSparseNumeric.time_read_pandas": {
-        "code": "class ArrowSparseNumeric:\n    def time_read_pandas(self, rows, sparsity):\n        self.lib.read(self.sym, output_format=\"PANDAS\")\n\n    def setup(self, rows, sparsity):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.lib._nvs._set_allow_arrow_input()\n        self.fresh_lib = self.get_fresh_lib()\n        self.fresh_lib._nvs._set_allow_arrow_input()\n        self.table = self._generate_table(rows, sparsity)\n        self.sym = self.symbol_name(rows, sparsity)\n        self.sym_with_type_promotion = self.symbol_name(rows, sparsity, self.type_promotion_suffix)\n\n    def setup_cache(self):\n        ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        num_rows_list, sparsity_list = self.params\n        ac.delete_library(self.lib_name_prewritten)\n        lib = ac.create_library(self.lib_name_prewritten, library_options=LibraryOptions(dynamic_schema=True))\n        lib._nvs._set_allow_arrow_input()\n        for rows in num_rows_list:\n            for sparsity in sparsity_list:\n                lib.write(self.symbol_name(rows, sparsity), self._generate_table(rows, sparsity))\n                lib.write(\n                    self.symbol_name(rows, sparsity, self.type_promotion_suffix),\n                    self._generate_table(rows // 2, sparsity, pa.int32()),\n                )\n                lib.append(\n                    self.symbol_name(rows, sparsity, self.type_promotion_suffix),\n                    self._generate_table(rows // 2, sparsity, pa.int64()),\n                )",
+        "code": "class ArrowSparseNumeric:\n    def time_read_pandas(self, rows, sparsity):\n        self.lib.read(self.sym, output_format=\"PANDAS\")\n\n    def setup(self, rows, sparsity):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.fresh_lib = self.get_fresh_lib()\n        self.table = self._generate_table(rows, sparsity)\n        self.sym = self.symbol_name(rows, sparsity)\n        self.sym_with_type_promotion = self.symbol_name(rows, sparsity, self.type_promotion_suffix)\n\n    def setup_cache(self):\n        ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        num_rows_list, sparsity_list = self.params\n        ac.delete_library(self.lib_name_prewritten)\n        lib = ac.create_library(self.lib_name_prewritten, library_options=LibraryOptions(dynamic_schema=True))\n        for rows in num_rows_list:\n            for sparsity in sparsity_list:\n                lib.write(self.symbol_name(rows, sparsity), self._generate_table(rows, sparsity))\n                lib.write(\n                    self.symbol_name(rows, sparsity, self.type_promotion_suffix),\n                    self._generate_table(rows // 2, sparsity, pa.int32()),\n                )\n                lib.append(\n                    self.symbol_name(rows, sparsity, self.type_promotion_suffix),\n                    self._generate_table(rows // 2, sparsity, pa.int64()),\n                )",
         "min_run_count": 2,
         "name": "arrow.ArrowSparseNumeric.time_read_pandas",
         "number": 0,
@@ -426,15 +426,15 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "arrow:123",
+        "setup_cache_key": "arrow:120",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
-        "version": "75bea3eae5f83b135851b9f2be861beaf847009ef48a6d2116de3c991b5b2c83",
+        "version": "3acdab7a8e343c8ea889b5f297500ea4af21beb7a6a0c92ba683967e032c4afd",
         "warmup_time": -1
     },
     "arrow.ArrowSparseNumeric.time_read_with_type_promotion": {
-        "code": "class ArrowSparseNumeric:\n    def time_read_with_type_promotion(self, rows, sparsity):\n        self.lib.read(self.sym_with_type_promotion)\n\n    def setup(self, rows, sparsity):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.lib._nvs._set_allow_arrow_input()\n        self.fresh_lib = self.get_fresh_lib()\n        self.fresh_lib._nvs._set_allow_arrow_input()\n        self.table = self._generate_table(rows, sparsity)\n        self.sym = self.symbol_name(rows, sparsity)\n        self.sym_with_type_promotion = self.symbol_name(rows, sparsity, self.type_promotion_suffix)\n\n    def setup_cache(self):\n        ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        num_rows_list, sparsity_list = self.params\n        ac.delete_library(self.lib_name_prewritten)\n        lib = ac.create_library(self.lib_name_prewritten, library_options=LibraryOptions(dynamic_schema=True))\n        lib._nvs._set_allow_arrow_input()\n        for rows in num_rows_list:\n            for sparsity in sparsity_list:\n                lib.write(self.symbol_name(rows, sparsity), self._generate_table(rows, sparsity))\n                lib.write(\n                    self.symbol_name(rows, sparsity, self.type_promotion_suffix),\n                    self._generate_table(rows // 2, sparsity, pa.int32()),\n                )\n                lib.append(\n                    self.symbol_name(rows, sparsity, self.type_promotion_suffix),\n                    self._generate_table(rows // 2, sparsity, pa.int64()),\n                )",
+        "code": "class ArrowSparseNumeric:\n    def time_read_with_type_promotion(self, rows, sparsity):\n        self.lib.read(self.sym_with_type_promotion)\n\n    def setup(self, rows, sparsity):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.fresh_lib = self.get_fresh_lib()\n        self.table = self._generate_table(rows, sparsity)\n        self.sym = self.symbol_name(rows, sparsity)\n        self.sym_with_type_promotion = self.symbol_name(rows, sparsity, self.type_promotion_suffix)\n\n    def setup_cache(self):\n        ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        num_rows_list, sparsity_list = self.params\n        ac.delete_library(self.lib_name_prewritten)\n        lib = ac.create_library(self.lib_name_prewritten, library_options=LibraryOptions(dynamic_schema=True))\n        for rows in num_rows_list:\n            for sparsity in sparsity_list:\n                lib.write(self.symbol_name(rows, sparsity), self._generate_table(rows, sparsity))\n                lib.write(\n                    self.symbol_name(rows, sparsity, self.type_promotion_suffix),\n                    self._generate_table(rows // 2, sparsity, pa.int32()),\n                )\n                lib.append(\n                    self.symbol_name(rows, sparsity, self.type_promotion_suffix),\n                    self._generate_table(rows // 2, sparsity, pa.int64()),\n                )",
         "min_run_count": 2,
         "name": "arrow.ArrowSparseNumeric.time_read_with_type_promotion",
         "number": 0,
@@ -456,15 +456,15 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "arrow:123",
+        "setup_cache_key": "arrow:120",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
-        "version": "3b3a30b5fd2b591f01f2c31a0ba51caa70b51ca54da73459628e3d22b61199b4",
+        "version": "77906eed4404ebf65d8e2b481b1fa96ff0b9684127c0d9a9da99be51c7a9db6a",
         "warmup_time": -1
     },
     "arrow.ArrowSparseNumeric.time_write": {
-        "code": "class ArrowSparseNumeric:\n    def time_write(self, rows, sparsity):\n        self.fresh_lib.write(self.sym, self.table)\n\n    def setup(self, rows, sparsity):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.lib._nvs._set_allow_arrow_input()\n        self.fresh_lib = self.get_fresh_lib()\n        self.fresh_lib._nvs._set_allow_arrow_input()\n        self.table = self._generate_table(rows, sparsity)\n        self.sym = self.symbol_name(rows, sparsity)\n        self.sym_with_type_promotion = self.symbol_name(rows, sparsity, self.type_promotion_suffix)\n\n    def setup_cache(self):\n        ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        num_rows_list, sparsity_list = self.params\n        ac.delete_library(self.lib_name_prewritten)\n        lib = ac.create_library(self.lib_name_prewritten, library_options=LibraryOptions(dynamic_schema=True))\n        lib._nvs._set_allow_arrow_input()\n        for rows in num_rows_list:\n            for sparsity in sparsity_list:\n                lib.write(self.symbol_name(rows, sparsity), self._generate_table(rows, sparsity))\n                lib.write(\n                    self.symbol_name(rows, sparsity, self.type_promotion_suffix),\n                    self._generate_table(rows // 2, sparsity, pa.int32()),\n                )\n                lib.append(\n                    self.symbol_name(rows, sparsity, self.type_promotion_suffix),\n                    self._generate_table(rows // 2, sparsity, pa.int64()),\n                )",
+        "code": "class ArrowSparseNumeric:\n    def time_write(self, rows, sparsity):\n        self.fresh_lib.write(self.sym, self.table)\n\n    def setup(self, rows, sparsity):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.fresh_lib = self.get_fresh_lib()\n        self.table = self._generate_table(rows, sparsity)\n        self.sym = self.symbol_name(rows, sparsity)\n        self.sym_with_type_promotion = self.symbol_name(rows, sparsity, self.type_promotion_suffix)\n\n    def setup_cache(self):\n        ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        num_rows_list, sparsity_list = self.params\n        ac.delete_library(self.lib_name_prewritten)\n        lib = ac.create_library(self.lib_name_prewritten, library_options=LibraryOptions(dynamic_schema=True))\n        for rows in num_rows_list:\n            for sparsity in sparsity_list:\n                lib.write(self.symbol_name(rows, sparsity), self._generate_table(rows, sparsity))\n                lib.write(\n                    self.symbol_name(rows, sparsity, self.type_promotion_suffix),\n                    self._generate_table(rows // 2, sparsity, pa.int32()),\n                )\n                lib.append(\n                    self.symbol_name(rows, sparsity, self.type_promotion_suffix),\n                    self._generate_table(rows // 2, sparsity, pa.int64()),\n                )",
         "min_run_count": 2,
         "name": "arrow.ArrowSparseNumeric.time_write",
         "number": 0,
@@ -486,15 +486,15 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "arrow:123",
+        "setup_cache_key": "arrow:120",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
-        "version": "2e8db8e6e547f0492636e1ee2e61d80682bc1c4fe12cff1413d8cf9ec84eb690",
+        "version": "0a28c60870c6cb5d952924a629c84be59a5e1398f9fd759bcb168b9d8f81ecea",
         "warmup_time": -1
     },
     "arrow.ArrowStrings.peakmem_read": {
-        "code": "class ArrowStrings:\n    def peakmem_read(self, rows, date_range, unique_string_count, arrow_string_format):\n        self._check_should_run_benchmark(date_range=date_range, arrow_string_format=arrow_string_format)\n        self.lib.read(\n            self.symbol_name(rows, unique_string_count),\n            date_range=self.date_range,\n            arrow_string_format_default=arrow_string_format,\n        )\n\n    def setup(self, rows, date_range, unique_string_count, arrow_string_format):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.lib._nvs._set_allow_arrow_input()\n        if date_range is None:\n            self.date_range = None\n        else:\n            # Create a date range that excludes the first and last 10 rows of the data only\n            self.date_range = (pd.Timestamp(10), pd.Timestamp(rows - 10))\n        self.fresh_lib = self.get_fresh_lib()\n        self.fresh_lib._nvs._set_allow_arrow_input()\n        self.table = self._generate_table(rows, self.num_cols, unique_string_count, arrow_string_format)\n        self.pandas_frame_object = self._generate_pandas_frame(rows, self.num_cols, unique_string_count, False)\n        self.pandas_frame_str = self._generate_pandas_frame(rows, self.num_cols, unique_string_count, True)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "code": "class ArrowStrings:\n    def peakmem_read(self, rows, date_range, unique_string_count, arrow_string_format):\n        self._check_should_run_benchmark(date_range=date_range, arrow_string_format=arrow_string_format)\n        self.lib.read(\n            self.symbol_name(rows, unique_string_count),\n            date_range=self.date_range,\n            arrow_string_format_default=arrow_string_format,\n        )\n\n    def setup(self, rows, date_range, unique_string_count, arrow_string_format):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        if date_range is None:\n            self.date_range = None\n        else:\n            # Create a date range that excludes the first and last 10 rows of the data only\n            self.date_range = (pd.Timestamp(10), pd.Timestamp(rows - 10))\n        self.fresh_lib = self.get_fresh_lib()\n        self.table = self._generate_table(rows, self.num_cols, unique_string_count, arrow_string_format)\n        self.pandas_frame_object = self._generate_pandas_frame(rows, self.num_cols, unique_string_count, False)\n        self.pandas_frame_str = self._generate_pandas_frame(rows, self.num_cols, unique_string_count, True)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
         "name": "arrow.ArrowStrings.peakmem_read",
         "param_names": [
             "rows",
@@ -521,14 +521,14 @@
                 "<ArrowOutputStringFormat.SMALL_STRING: 'SMALL_STRING'>"
             ]
         ],
-        "setup_cache_key": "arrow:284",
+        "setup_cache_key": "arrow:275",
         "timeout": 600,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "23a4f7b5feeba9b921a4cac441c613355f4379d45622c4651c63f62789c9ba74"
+        "version": "2dba74a65772bef110644e8503fe2d0f11f1f3c109101a39172fdfdf40530765"
     },
     "arrow.ArrowStrings.peakmem_read_pandas_object": {
-        "code": "class ArrowStrings:\n    def peakmem_read_pandas_object(self, rows, date_range, unique_string_count, arrow_string_format):\n        self._check_should_run_pandas_benchmark(arrow_string_format=arrow_string_format)\n        with pd.option_context(\"future.infer_string\", False):\n            self.lib.read(\n                self.symbol_name(rows, unique_string_count),\n                date_range=self.date_range,\n                output_format=OutputFormat.PANDAS,\n            )\n\n    def setup(self, rows, date_range, unique_string_count, arrow_string_format):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.lib._nvs._set_allow_arrow_input()\n        if date_range is None:\n            self.date_range = None\n        else:\n            # Create a date range that excludes the first and last 10 rows of the data only\n            self.date_range = (pd.Timestamp(10), pd.Timestamp(rows - 10))\n        self.fresh_lib = self.get_fresh_lib()\n        self.fresh_lib._nvs._set_allow_arrow_input()\n        self.table = self._generate_table(rows, self.num_cols, unique_string_count, arrow_string_format)\n        self.pandas_frame_object = self._generate_pandas_frame(rows, self.num_cols, unique_string_count, False)\n        self.pandas_frame_str = self._generate_pandas_frame(rows, self.num_cols, unique_string_count, True)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "code": "class ArrowStrings:\n    def peakmem_read_pandas_object(self, rows, date_range, unique_string_count, arrow_string_format):\n        self._check_should_run_pandas_benchmark(arrow_string_format=arrow_string_format)\n        with pd.option_context(\"future.infer_string\", False):\n            self.lib.read(\n                self.symbol_name(rows, unique_string_count),\n                date_range=self.date_range,\n                output_format=OutputFormat.PANDAS,\n            )\n\n    def setup(self, rows, date_range, unique_string_count, arrow_string_format):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        if date_range is None:\n            self.date_range = None\n        else:\n            # Create a date range that excludes the first and last 10 rows of the data only\n            self.date_range = (pd.Timestamp(10), pd.Timestamp(rows - 10))\n        self.fresh_lib = self.get_fresh_lib()\n        self.table = self._generate_table(rows, self.num_cols, unique_string_count, arrow_string_format)\n        self.pandas_frame_object = self._generate_pandas_frame(rows, self.num_cols, unique_string_count, False)\n        self.pandas_frame_str = self._generate_pandas_frame(rows, self.num_cols, unique_string_count, True)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
         "name": "arrow.ArrowStrings.peakmem_read_pandas_object",
         "param_names": [
             "rows",
@@ -555,14 +555,14 @@
                 "<ArrowOutputStringFormat.SMALL_STRING: 'SMALL_STRING'>"
             ]
         ],
-        "setup_cache_key": "arrow:284",
+        "setup_cache_key": "arrow:275",
         "timeout": 600,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "b75c59206f8e8ee601383c1e24779e45b24bdbca1a9fbc329cc5d3f2f2c28531"
+        "version": "dda7f35a96492f27384386715322aeabe3dbde39f3dbe8fa9b2c7f2283eca75c"
     },
     "arrow.ArrowStrings.peakmem_read_pandas_str": {
-        "code": "class ArrowStrings:\n    def peakmem_read_pandas_str(self, rows, date_range, unique_string_count, arrow_string_format):\n        self._check_should_run_pandas_benchmark(arrow_string_format=arrow_string_format)\n        with pd.option_context(\"future.infer_string\", True):\n            self.lib.read(\n                self.symbol_name(rows, unique_string_count),\n                date_range=self.date_range,\n                output_format=OutputFormat.PANDAS,\n            )\n\n    def setup(self, rows, date_range, unique_string_count, arrow_string_format):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.lib._nvs._set_allow_arrow_input()\n        if date_range is None:\n            self.date_range = None\n        else:\n            # Create a date range that excludes the first and last 10 rows of the data only\n            self.date_range = (pd.Timestamp(10), pd.Timestamp(rows - 10))\n        self.fresh_lib = self.get_fresh_lib()\n        self.fresh_lib._nvs._set_allow_arrow_input()\n        self.table = self._generate_table(rows, self.num_cols, unique_string_count, arrow_string_format)\n        self.pandas_frame_object = self._generate_pandas_frame(rows, self.num_cols, unique_string_count, False)\n        self.pandas_frame_str = self._generate_pandas_frame(rows, self.num_cols, unique_string_count, True)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "code": "class ArrowStrings:\n    def peakmem_read_pandas_str(self, rows, date_range, unique_string_count, arrow_string_format):\n        self._check_should_run_pandas_benchmark(arrow_string_format=arrow_string_format)\n        with pd.option_context(\"future.infer_string\", True):\n            self.lib.read(\n                self.symbol_name(rows, unique_string_count),\n                date_range=self.date_range,\n                output_format=OutputFormat.PANDAS,\n            )\n\n    def setup(self, rows, date_range, unique_string_count, arrow_string_format):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        if date_range is None:\n            self.date_range = None\n        else:\n            # Create a date range that excludes the first and last 10 rows of the data only\n            self.date_range = (pd.Timestamp(10), pd.Timestamp(rows - 10))\n        self.fresh_lib = self.get_fresh_lib()\n        self.table = self._generate_table(rows, self.num_cols, unique_string_count, arrow_string_format)\n        self.pandas_frame_object = self._generate_pandas_frame(rows, self.num_cols, unique_string_count, False)\n        self.pandas_frame_str = self._generate_pandas_frame(rows, self.num_cols, unique_string_count, True)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
         "name": "arrow.ArrowStrings.peakmem_read_pandas_str",
         "param_names": [
             "rows",
@@ -589,14 +589,14 @@
                 "<ArrowOutputStringFormat.SMALL_STRING: 'SMALL_STRING'>"
             ]
         ],
-        "setup_cache_key": "arrow:284",
+        "setup_cache_key": "arrow:275",
         "timeout": 600,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "4d7a11bd3e4973113ce61c67ea4396014a47a7d490a28671a0649f312cbd09ea"
+        "version": "15805727d5235fcbf60ca778f94973753ec920d55454545df134769875f7743d"
     },
     "arrow.ArrowStrings.peakmem_write": {
-        "code": "class ArrowStrings:\n    def peakmem_write(self, rows, date_range, unique_string_count, arrow_string_format):\n        # No point in running with all read time options\n        if date_range is None:\n            self.fresh_lib.write(self.symbol_name(rows, unique_string_count), self.table, index_column=True)\n        else:\n            raise SkipNotImplemented\n\n    def setup(self, rows, date_range, unique_string_count, arrow_string_format):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.lib._nvs._set_allow_arrow_input()\n        if date_range is None:\n            self.date_range = None\n        else:\n            # Create a date range that excludes the first and last 10 rows of the data only\n            self.date_range = (pd.Timestamp(10), pd.Timestamp(rows - 10))\n        self.fresh_lib = self.get_fresh_lib()\n        self.fresh_lib._nvs._set_allow_arrow_input()\n        self.table = self._generate_table(rows, self.num_cols, unique_string_count, arrow_string_format)\n        self.pandas_frame_object = self._generate_pandas_frame(rows, self.num_cols, unique_string_count, False)\n        self.pandas_frame_str = self._generate_pandas_frame(rows, self.num_cols, unique_string_count, True)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "code": "class ArrowStrings:\n    def peakmem_write(self, rows, date_range, unique_string_count, arrow_string_format):\n        # No point in running with all read time options\n        if date_range is None:\n            self.fresh_lib.write(self.symbol_name(rows, unique_string_count), self.table, index_column=True)\n        else:\n            raise SkipNotImplemented\n\n    def setup(self, rows, date_range, unique_string_count, arrow_string_format):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        if date_range is None:\n            self.date_range = None\n        else:\n            # Create a date range that excludes the first and last 10 rows of the data only\n            self.date_range = (pd.Timestamp(10), pd.Timestamp(rows - 10))\n        self.fresh_lib = self.get_fresh_lib()\n        self.table = self._generate_table(rows, self.num_cols, unique_string_count, arrow_string_format)\n        self.pandas_frame_object = self._generate_pandas_frame(rows, self.num_cols, unique_string_count, False)\n        self.pandas_frame_str = self._generate_pandas_frame(rows, self.num_cols, unique_string_count, True)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
         "name": "arrow.ArrowStrings.peakmem_write",
         "param_names": [
             "rows",
@@ -623,14 +623,14 @@
                 "<ArrowOutputStringFormat.SMALL_STRING: 'SMALL_STRING'>"
             ]
         ],
-        "setup_cache_key": "arrow:284",
+        "setup_cache_key": "arrow:275",
         "timeout": 600,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "46561dd8c0a4174ca7e182dd56d8a0f0bea17c77fb7348dce2b00ec3489e69d7"
+        "version": "43a323e912294bcc898f3c0fe554cd99c5239a534967804c26b31389477d19dc"
     },
     "arrow.ArrowStrings.peakmem_write_pandas_object": {
-        "code": "class ArrowStrings:\n    def peakmem_write_pandas_object(self, rows, date_range, unique_string_count, arrow_string_format):\n        self._check_should_run_pandas_write_benchmark(date_range=date_range, arrow_string_format=arrow_string_format)\n        with pd.option_context(\"future.infer_string\", False):\n            self.fresh_lib.write(self.symbol_name(rows, unique_string_count), self.pandas_frame_object)\n\n    def setup(self, rows, date_range, unique_string_count, arrow_string_format):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.lib._nvs._set_allow_arrow_input()\n        if date_range is None:\n            self.date_range = None\n        else:\n            # Create a date range that excludes the first and last 10 rows of the data only\n            self.date_range = (pd.Timestamp(10), pd.Timestamp(rows - 10))\n        self.fresh_lib = self.get_fresh_lib()\n        self.fresh_lib._nvs._set_allow_arrow_input()\n        self.table = self._generate_table(rows, self.num_cols, unique_string_count, arrow_string_format)\n        self.pandas_frame_object = self._generate_pandas_frame(rows, self.num_cols, unique_string_count, False)\n        self.pandas_frame_str = self._generate_pandas_frame(rows, self.num_cols, unique_string_count, True)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "code": "class ArrowStrings:\n    def peakmem_write_pandas_object(self, rows, date_range, unique_string_count, arrow_string_format):\n        self._check_should_run_pandas_write_benchmark(date_range=date_range, arrow_string_format=arrow_string_format)\n        with pd.option_context(\"future.infer_string\", False):\n            self.fresh_lib.write(self.symbol_name(rows, unique_string_count), self.pandas_frame_object)\n\n    def setup(self, rows, date_range, unique_string_count, arrow_string_format):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        if date_range is None:\n            self.date_range = None\n        else:\n            # Create a date range that excludes the first and last 10 rows of the data only\n            self.date_range = (pd.Timestamp(10), pd.Timestamp(rows - 10))\n        self.fresh_lib = self.get_fresh_lib()\n        self.table = self._generate_table(rows, self.num_cols, unique_string_count, arrow_string_format)\n        self.pandas_frame_object = self._generate_pandas_frame(rows, self.num_cols, unique_string_count, False)\n        self.pandas_frame_str = self._generate_pandas_frame(rows, self.num_cols, unique_string_count, True)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
         "name": "arrow.ArrowStrings.peakmem_write_pandas_object",
         "param_names": [
             "rows",
@@ -657,14 +657,14 @@
                 "<ArrowOutputStringFormat.SMALL_STRING: 'SMALL_STRING'>"
             ]
         ],
-        "setup_cache_key": "arrow:284",
+        "setup_cache_key": "arrow:275",
         "timeout": 600,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "168ce25bffe77cd9d4146a336758f110f768f7ce3056be984f3a46875a5f6d0a"
+        "version": "60519a3741e020653f21ab1388fb20d1c640e75634eb7445926aabee19588b5d"
     },
     "arrow.ArrowStrings.peakmem_write_pandas_str": {
-        "code": "class ArrowStrings:\n    def peakmem_write_pandas_str(self, rows, date_range, unique_string_count, arrow_string_format):\n        self._check_should_run_pandas_write_benchmark(date_range=date_range, arrow_string_format=arrow_string_format)\n        with pd.option_context(\"future.infer_string\", True):\n            self.fresh_lib.write(self.symbol_name(rows, unique_string_count), self.pandas_frame_str)\n\n    def setup(self, rows, date_range, unique_string_count, arrow_string_format):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.lib._nvs._set_allow_arrow_input()\n        if date_range is None:\n            self.date_range = None\n        else:\n            # Create a date range that excludes the first and last 10 rows of the data only\n            self.date_range = (pd.Timestamp(10), pd.Timestamp(rows - 10))\n        self.fresh_lib = self.get_fresh_lib()\n        self.fresh_lib._nvs._set_allow_arrow_input()\n        self.table = self._generate_table(rows, self.num_cols, unique_string_count, arrow_string_format)\n        self.pandas_frame_object = self._generate_pandas_frame(rows, self.num_cols, unique_string_count, False)\n        self.pandas_frame_str = self._generate_pandas_frame(rows, self.num_cols, unique_string_count, True)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "code": "class ArrowStrings:\n    def peakmem_write_pandas_str(self, rows, date_range, unique_string_count, arrow_string_format):\n        self._check_should_run_pandas_write_benchmark(date_range=date_range, arrow_string_format=arrow_string_format)\n        with pd.option_context(\"future.infer_string\", True):\n            self.fresh_lib.write(self.symbol_name(rows, unique_string_count), self.pandas_frame_str)\n\n    def setup(self, rows, date_range, unique_string_count, arrow_string_format):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        if date_range is None:\n            self.date_range = None\n        else:\n            # Create a date range that excludes the first and last 10 rows of the data only\n            self.date_range = (pd.Timestamp(10), pd.Timestamp(rows - 10))\n        self.fresh_lib = self.get_fresh_lib()\n        self.table = self._generate_table(rows, self.num_cols, unique_string_count, arrow_string_format)\n        self.pandas_frame_object = self._generate_pandas_frame(rows, self.num_cols, unique_string_count, False)\n        self.pandas_frame_str = self._generate_pandas_frame(rows, self.num_cols, unique_string_count, True)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
         "name": "arrow.ArrowStrings.peakmem_write_pandas_str",
         "param_names": [
             "rows",
@@ -691,14 +691,14 @@
                 "<ArrowOutputStringFormat.SMALL_STRING: 'SMALL_STRING'>"
             ]
         ],
-        "setup_cache_key": "arrow:284",
+        "setup_cache_key": "arrow:275",
         "timeout": 600,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "24d20f18075c83b386a00a98dc041b3189a72fdd9ddcd611146de8cbc63ed139"
+        "version": "a537c020f93800525c14628ed97bcf2078f2f09d4ea0d7be9a8c241a330b6264"
     },
     "arrow.ArrowStrings.time_read": {
-        "code": "class ArrowStrings:\n    def time_read(self, rows, date_range, unique_string_count, arrow_string_format):\n        self._check_should_run_benchmark(date_range=date_range, arrow_string_format=arrow_string_format)\n        self.lib.read(\n            self.symbol_name(rows, unique_string_count),\n            date_range=self.date_range,\n            arrow_string_format_default=arrow_string_format,\n        )\n\n    def setup(self, rows, date_range, unique_string_count, arrow_string_format):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.lib._nvs._set_allow_arrow_input()\n        if date_range is None:\n            self.date_range = None\n        else:\n            # Create a date range that excludes the first and last 10 rows of the data only\n            self.date_range = (pd.Timestamp(10), pd.Timestamp(rows - 10))\n        self.fresh_lib = self.get_fresh_lib()\n        self.fresh_lib._nvs._set_allow_arrow_input()\n        self.table = self._generate_table(rows, self.num_cols, unique_string_count, arrow_string_format)\n        self.pandas_frame_object = self._generate_pandas_frame(rows, self.num_cols, unique_string_count, False)\n        self.pandas_frame_str = self._generate_pandas_frame(rows, self.num_cols, unique_string_count, True)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "code": "class ArrowStrings:\n    def time_read(self, rows, date_range, unique_string_count, arrow_string_format):\n        self._check_should_run_benchmark(date_range=date_range, arrow_string_format=arrow_string_format)\n        self.lib.read(\n            self.symbol_name(rows, unique_string_count),\n            date_range=self.date_range,\n            arrow_string_format_default=arrow_string_format,\n        )\n\n    def setup(self, rows, date_range, unique_string_count, arrow_string_format):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        if date_range is None:\n            self.date_range = None\n        else:\n            # Create a date range that excludes the first and last 10 rows of the data only\n            self.date_range = (pd.Timestamp(10), pd.Timestamp(rows - 10))\n        self.fresh_lib = self.get_fresh_lib()\n        self.table = self._generate_table(rows, self.num_cols, unique_string_count, arrow_string_format)\n        self.pandas_frame_object = self._generate_pandas_frame(rows, self.num_cols, unique_string_count, False)\n        self.pandas_frame_str = self._generate_pandas_frame(rows, self.num_cols, unique_string_count, True)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
         "min_run_count": 2,
         "name": "arrow.ArrowStrings.time_read",
         "number": 0,
@@ -730,15 +730,15 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "arrow:284",
+        "setup_cache_key": "arrow:275",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
-        "version": "ea5f82aaacf3eaa71d1418364e3534f681a9216fd915dac67fffdc0b6ae030d8",
+        "version": "7138cf21da065e60d690b201bee22c70b1ce33eb53e2cbcb56b7cb03796f0569",
         "warmup_time": -1
     },
     "arrow.ArrowStrings.time_read_pandas_object": {
-        "code": "class ArrowStrings:\n    def time_read_pandas_object(self, rows, date_range, unique_string_count, arrow_string_format):\n        self._check_should_run_pandas_benchmark(arrow_string_format=arrow_string_format)\n        with pd.option_context(\"future.infer_string\", False):\n            self.lib.read(\n                self.symbol_name(rows, unique_string_count),\n                date_range=self.date_range,\n                output_format=OutputFormat.PANDAS,\n            )\n\n    def setup(self, rows, date_range, unique_string_count, arrow_string_format):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.lib._nvs._set_allow_arrow_input()\n        if date_range is None:\n            self.date_range = None\n        else:\n            # Create a date range that excludes the first and last 10 rows of the data only\n            self.date_range = (pd.Timestamp(10), pd.Timestamp(rows - 10))\n        self.fresh_lib = self.get_fresh_lib()\n        self.fresh_lib._nvs._set_allow_arrow_input()\n        self.table = self._generate_table(rows, self.num_cols, unique_string_count, arrow_string_format)\n        self.pandas_frame_object = self._generate_pandas_frame(rows, self.num_cols, unique_string_count, False)\n        self.pandas_frame_str = self._generate_pandas_frame(rows, self.num_cols, unique_string_count, True)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "code": "class ArrowStrings:\n    def time_read_pandas_object(self, rows, date_range, unique_string_count, arrow_string_format):\n        self._check_should_run_pandas_benchmark(arrow_string_format=arrow_string_format)\n        with pd.option_context(\"future.infer_string\", False):\n            self.lib.read(\n                self.symbol_name(rows, unique_string_count),\n                date_range=self.date_range,\n                output_format=OutputFormat.PANDAS,\n            )\n\n    def setup(self, rows, date_range, unique_string_count, arrow_string_format):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        if date_range is None:\n            self.date_range = None\n        else:\n            # Create a date range that excludes the first and last 10 rows of the data only\n            self.date_range = (pd.Timestamp(10), pd.Timestamp(rows - 10))\n        self.fresh_lib = self.get_fresh_lib()\n        self.table = self._generate_table(rows, self.num_cols, unique_string_count, arrow_string_format)\n        self.pandas_frame_object = self._generate_pandas_frame(rows, self.num_cols, unique_string_count, False)\n        self.pandas_frame_str = self._generate_pandas_frame(rows, self.num_cols, unique_string_count, True)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
         "min_run_count": 2,
         "name": "arrow.ArrowStrings.time_read_pandas_object",
         "number": 0,
@@ -770,15 +770,15 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "arrow:284",
+        "setup_cache_key": "arrow:275",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
-        "version": "58a91495b2c53243296a69c1cfbc7f9d6c13735965d69676897046e368fa51e7",
+        "version": "145cceb2c54ba4817cb0f6941238456a676717cf60e35448c025653f018c14c5",
         "warmup_time": -1
     },
     "arrow.ArrowStrings.time_read_pandas_str": {
-        "code": "class ArrowStrings:\n    def time_read_pandas_str(self, rows, date_range, unique_string_count, arrow_string_format):\n        self._check_should_run_pandas_benchmark(arrow_string_format=arrow_string_format)\n        with pd.option_context(\"future.infer_string\", True):\n            self.lib.read(\n                self.symbol_name(rows, unique_string_count),\n                date_range=self.date_range,\n                output_format=OutputFormat.PANDAS,\n            )\n\n    def setup(self, rows, date_range, unique_string_count, arrow_string_format):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.lib._nvs._set_allow_arrow_input()\n        if date_range is None:\n            self.date_range = None\n        else:\n            # Create a date range that excludes the first and last 10 rows of the data only\n            self.date_range = (pd.Timestamp(10), pd.Timestamp(rows - 10))\n        self.fresh_lib = self.get_fresh_lib()\n        self.fresh_lib._nvs._set_allow_arrow_input()\n        self.table = self._generate_table(rows, self.num_cols, unique_string_count, arrow_string_format)\n        self.pandas_frame_object = self._generate_pandas_frame(rows, self.num_cols, unique_string_count, False)\n        self.pandas_frame_str = self._generate_pandas_frame(rows, self.num_cols, unique_string_count, True)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "code": "class ArrowStrings:\n    def time_read_pandas_str(self, rows, date_range, unique_string_count, arrow_string_format):\n        self._check_should_run_pandas_benchmark(arrow_string_format=arrow_string_format)\n        with pd.option_context(\"future.infer_string\", True):\n            self.lib.read(\n                self.symbol_name(rows, unique_string_count),\n                date_range=self.date_range,\n                output_format=OutputFormat.PANDAS,\n            )\n\n    def setup(self, rows, date_range, unique_string_count, arrow_string_format):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        if date_range is None:\n            self.date_range = None\n        else:\n            # Create a date range that excludes the first and last 10 rows of the data only\n            self.date_range = (pd.Timestamp(10), pd.Timestamp(rows - 10))\n        self.fresh_lib = self.get_fresh_lib()\n        self.table = self._generate_table(rows, self.num_cols, unique_string_count, arrow_string_format)\n        self.pandas_frame_object = self._generate_pandas_frame(rows, self.num_cols, unique_string_count, False)\n        self.pandas_frame_str = self._generate_pandas_frame(rows, self.num_cols, unique_string_count, True)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
         "min_run_count": 2,
         "name": "arrow.ArrowStrings.time_read_pandas_str",
         "number": 0,
@@ -810,15 +810,15 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "arrow:284",
+        "setup_cache_key": "arrow:275",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
-        "version": "2481aedc53bf8dec89fb2372dcba3c8835646321a959c3dedac749025216dad3",
+        "version": "05769767a180db3b0685d1556d56c52806742cf59bfddd03d30fc5d7baaacbb4",
         "warmup_time": -1
     },
     "arrow.ArrowStrings.time_write": {
-        "code": "class ArrowStrings:\n    def time_write(self, rows, date_range, unique_string_count, arrow_string_format):\n        # No point in running with all read time options\n        if date_range is None:\n            self.fresh_lib.write(self.symbol_name(rows, unique_string_count), self.table, index_column=True)\n        else:\n            raise SkipNotImplemented\n\n    def setup(self, rows, date_range, unique_string_count, arrow_string_format):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.lib._nvs._set_allow_arrow_input()\n        if date_range is None:\n            self.date_range = None\n        else:\n            # Create a date range that excludes the first and last 10 rows of the data only\n            self.date_range = (pd.Timestamp(10), pd.Timestamp(rows - 10))\n        self.fresh_lib = self.get_fresh_lib()\n        self.fresh_lib._nvs._set_allow_arrow_input()\n        self.table = self._generate_table(rows, self.num_cols, unique_string_count, arrow_string_format)\n        self.pandas_frame_object = self._generate_pandas_frame(rows, self.num_cols, unique_string_count, False)\n        self.pandas_frame_str = self._generate_pandas_frame(rows, self.num_cols, unique_string_count, True)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "code": "class ArrowStrings:\n    def time_write(self, rows, date_range, unique_string_count, arrow_string_format):\n        # No point in running with all read time options\n        if date_range is None:\n            self.fresh_lib.write(self.symbol_name(rows, unique_string_count), self.table, index_column=True)\n        else:\n            raise SkipNotImplemented\n\n    def setup(self, rows, date_range, unique_string_count, arrow_string_format):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        if date_range is None:\n            self.date_range = None\n        else:\n            # Create a date range that excludes the first and last 10 rows of the data only\n            self.date_range = (pd.Timestamp(10), pd.Timestamp(rows - 10))\n        self.fresh_lib = self.get_fresh_lib()\n        self.table = self._generate_table(rows, self.num_cols, unique_string_count, arrow_string_format)\n        self.pandas_frame_object = self._generate_pandas_frame(rows, self.num_cols, unique_string_count, False)\n        self.pandas_frame_str = self._generate_pandas_frame(rows, self.num_cols, unique_string_count, True)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
         "min_run_count": 2,
         "name": "arrow.ArrowStrings.time_write",
         "number": 0,
@@ -850,15 +850,15 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "arrow:284",
+        "setup_cache_key": "arrow:275",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
-        "version": "1341e7ca69e21e36e097b3cfc387caa4da6523cd487ceefec086b5e98d20e3e1",
+        "version": "e0598d3996cf452061799bb70dad8b56ba02a92546b382f58cca5fa348c42bae",
         "warmup_time": -1
     },
     "arrow.ArrowStrings.time_write_pandas_object": {
-        "code": "class ArrowStrings:\n    def time_write_pandas_object(self, rows, date_range, unique_string_count, arrow_string_format):\n        self._check_should_run_pandas_write_benchmark(date_range=date_range, arrow_string_format=arrow_string_format)\n        with pd.option_context(\"future.infer_string\", False):\n            self.fresh_lib.write(self.symbol_name(rows, unique_string_count), self.pandas_frame_object)\n\n    def setup(self, rows, date_range, unique_string_count, arrow_string_format):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.lib._nvs._set_allow_arrow_input()\n        if date_range is None:\n            self.date_range = None\n        else:\n            # Create a date range that excludes the first and last 10 rows of the data only\n            self.date_range = (pd.Timestamp(10), pd.Timestamp(rows - 10))\n        self.fresh_lib = self.get_fresh_lib()\n        self.fresh_lib._nvs._set_allow_arrow_input()\n        self.table = self._generate_table(rows, self.num_cols, unique_string_count, arrow_string_format)\n        self.pandas_frame_object = self._generate_pandas_frame(rows, self.num_cols, unique_string_count, False)\n        self.pandas_frame_str = self._generate_pandas_frame(rows, self.num_cols, unique_string_count, True)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "code": "class ArrowStrings:\n    def time_write_pandas_object(self, rows, date_range, unique_string_count, arrow_string_format):\n        self._check_should_run_pandas_write_benchmark(date_range=date_range, arrow_string_format=arrow_string_format)\n        with pd.option_context(\"future.infer_string\", False):\n            self.fresh_lib.write(self.symbol_name(rows, unique_string_count), self.pandas_frame_object)\n\n    def setup(self, rows, date_range, unique_string_count, arrow_string_format):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        if date_range is None:\n            self.date_range = None\n        else:\n            # Create a date range that excludes the first and last 10 rows of the data only\n            self.date_range = (pd.Timestamp(10), pd.Timestamp(rows - 10))\n        self.fresh_lib = self.get_fresh_lib()\n        self.table = self._generate_table(rows, self.num_cols, unique_string_count, arrow_string_format)\n        self.pandas_frame_object = self._generate_pandas_frame(rows, self.num_cols, unique_string_count, False)\n        self.pandas_frame_str = self._generate_pandas_frame(rows, self.num_cols, unique_string_count, True)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
         "min_run_count": 2,
         "name": "arrow.ArrowStrings.time_write_pandas_object",
         "number": 0,
@@ -890,15 +890,15 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "arrow:284",
+        "setup_cache_key": "arrow:275",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
-        "version": "babf8e173fb9bfb666931e3afca169064a111f7e82d490c0280db5ce2e736c4c",
+        "version": "9a3a8e5334a3538419ffca8aa815a5a82f92e7a733e5f9b12c78ff002d8f5fdb",
         "warmup_time": -1
     },
     "arrow.ArrowStrings.time_write_pandas_str": {
-        "code": "class ArrowStrings:\n    def time_write_pandas_str(self, rows, date_range, unique_string_count, arrow_string_format):\n        self._check_should_run_pandas_write_benchmark(date_range=date_range, arrow_string_format=arrow_string_format)\n        with pd.option_context(\"future.infer_string\", True):\n            self.fresh_lib.write(self.symbol_name(rows, unique_string_count), self.pandas_frame_str)\n\n    def setup(self, rows, date_range, unique_string_count, arrow_string_format):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.lib._nvs._set_allow_arrow_input()\n        if date_range is None:\n            self.date_range = None\n        else:\n            # Create a date range that excludes the first and last 10 rows of the data only\n            self.date_range = (pd.Timestamp(10), pd.Timestamp(rows - 10))\n        self.fresh_lib = self.get_fresh_lib()\n        self.fresh_lib._nvs._set_allow_arrow_input()\n        self.table = self._generate_table(rows, self.num_cols, unique_string_count, arrow_string_format)\n        self.pandas_frame_object = self._generate_pandas_frame(rows, self.num_cols, unique_string_count, False)\n        self.pandas_frame_str = self._generate_pandas_frame(rows, self.num_cols, unique_string_count, True)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "code": "class ArrowStrings:\n    def time_write_pandas_str(self, rows, date_range, unique_string_count, arrow_string_format):\n        self._check_should_run_pandas_write_benchmark(date_range=date_range, arrow_string_format=arrow_string_format)\n        with pd.option_context(\"future.infer_string\", True):\n            self.fresh_lib.write(self.symbol_name(rows, unique_string_count), self.pandas_frame_str)\n\n    def setup(self, rows, date_range, unique_string_count, arrow_string_format):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        if date_range is None:\n            self.date_range = None\n        else:\n            # Create a date range that excludes the first and last 10 rows of the data only\n            self.date_range = (pd.Timestamp(10), pd.Timestamp(rows - 10))\n        self.fresh_lib = self.get_fresh_lib()\n        self.table = self._generate_table(rows, self.num_cols, unique_string_count, arrow_string_format)\n        self.pandas_frame_object = self._generate_pandas_frame(rows, self.num_cols, unique_string_count, False)\n        self.pandas_frame_str = self._generate_pandas_frame(rows, self.num_cols, unique_string_count, True)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
         "min_run_count": 2,
         "name": "arrow.ArrowStrings.time_write_pandas_str",
         "number": 0,
@@ -930,11 +930,11 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "arrow:284",
+        "setup_cache_key": "arrow:275",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
-        "version": "1827a512cf941ecf6e4762e03c528824eaae2a21349a24f8d6af7e4bd84207d8",
+        "version": "5107d2c37541035f720d312d8cf8466438cf7b4b47012b5b58c16458d6caf2c5",
         "warmup_time": -1
     },
     "basic_functions.BasicFunctions.peakmem_read": {

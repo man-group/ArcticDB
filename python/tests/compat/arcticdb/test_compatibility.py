@@ -8,6 +8,7 @@ if sys.version_info >= (3, 9):
 from packaging import version
 import pandas as pd
 import numpy as np
+import pyarrow as pa
 from arcticdb import QueryBuilder, LibraryOptions
 from arcticdb.util.test import assert_frame_equal, assert_frame_equal_with_arrow, merge, config_context
 from arcticdb.version_store._string_dtype import _use_pyarrow_strings_in_pandas
@@ -645,6 +646,30 @@ def test_compat_modify_symbol_first_written_empty(old_venv_and_arctic_uri, lib_n
             curr.lib.append("sym", pd.DataFrame({"col": [2.0]}, index=pd.DatetimeIndex(["2025-01-02"])))
             expected = pd.DataFrame({"col": [1.0, 2.0]}, index=pd.DatetimeIndex(["2025-01-01", "2025-01-02"]))
             assert_frame_equal(curr.lib.read("sym").data, expected)
+
+
+# Before 7.0.0 write_pickle pickled Arrow input, and overwriting the symbol now normalizes it
+@pytest.mark.parametrize("old_venv", [pytest.param("6.27.1", marks=VENV_COMPAT_TESTS_MARK)], indirect=True)
+def test_compat_read_pickled_arrow_then_overwrite(old_venv_and_arctic_uri, lib_name, any_output_format):
+    old_venv, arctic_uri = old_venv_and_arctic_uri
+    table = pa.table({"col": pa.array([1, 2, 3], pa.int64())})
+    with CompatLibrary(old_venv, arctic_uri, lib_name) as compat:
+        compat.old_lib.execute(
+            [
+                "import pyarrow as pa",
+                "lib.write_pickle('sym', pa.table({'col': pa.array([1, 2, 3], pa.int64())}))",
+                "assert lib._nvs.is_symbol_pickled('sym')",
+            ]
+        )
+        with compat.current_version() as curr:
+            assert curr.lib._nvs.is_symbol_pickled("sym")
+            pickled = curr.lib.read("sym", output_format=any_output_format).data
+            assert table.equals(pickled)
+
+            curr.lib.write("sym", pickled)
+            assert not curr.lib._nvs.is_symbol_pickled("sym")
+            assert table.equals(curr.lib.read("sym", output_format=OutputFormat.PYARROW).data)
+            assert_frame_equal(curr.lib.read("sym", output_format=OutputFormat.PANDAS).data, table.to_pandas())
 
 
 @pytest.mark.skipif(

@@ -7,7 +7,7 @@ from polars.testing import assert_series_equal as polars_assert_series_equal
 import pytest
 
 from arcticdb import LazyDataFrame, DataError, concat
-from arcticdb.exceptions import ArcticNativeException, ArcticUnsupportedDataTypeException
+from arcticdb.exceptions import ArcticNativeException
 from arcticdb.options import OutputFormat, ArrowOutputStringFormat, LibraryOptions
 from arcticdb.util.test import assert_frame_equal, assert_frame_equal_with_arrow, sample_dataframe
 
@@ -152,12 +152,9 @@ def test_read_batch_and_join(mem_storage, lib_name, arctic_output_format, output
     assert_frame_equal_with_arrow(expected_df, result)
 
 
-@pytest.mark.parametrize("allow_arrow_input", [None, False, True])
-def test_basic_modifications(lmdb_library, allow_arrow_input):
+def test_basic_modifications(lmdb_library):
     lib = lmdb_library
     sym = "test_basic_modifications"
-    if allow_arrow_input is not None:
-        lib._nvs._set_allow_arrow_input(allow_arrow_input)
     write_table = pa.table(
         {
             "ts": pa.Array.from_pandas(pd.date_range("2025-01-01", periods=2), type=pa.timestamp("ns")),
@@ -176,33 +173,22 @@ def test_basic_modifications(lmdb_library, allow_arrow_input):
             "col": pa.array([5, 6], pa.int64()),
         }
     )
-    if allow_arrow_input:
-        lib.write(sym, write_table, index_column=True)
-        lib.append(sym, append_table, index_column=True)
-        lib.update(sym, update_table, index_column=True)
-        received = lib.read(sym, output_format=OutputFormat.PYARROW).data
-        expected = pa.table(
-            {
-                "ts": pa.Array.from_pandas(pd.date_range("2025-01-01", periods=4), type=pa.timestamp("ns")),
-                "col": pa.array([1, 5, 6, 4], pa.int64()),
-            }
-        )
-        assert expected.equals(received)
-    else:
-        with pytest.raises(ArcticUnsupportedDataTypeException):
-            lib.write(sym, write_table, index_column=True)
-        with pytest.raises(Exception):
-            lib.append(sym, append_table, index_column=True)
-        with pytest.raises(Exception):
-            lib.update(sym, update_table, upsert=True, index_column=True)
+    lib.write(sym, write_table, index_column=True)
+    lib.append(sym, append_table, index_column=True)
+    lib.update(sym, update_table)
+    received = lib.read(sym, output_format=OutputFormat.PYARROW).data
+    expected = pa.table(
+        {
+            "ts": pa.Array.from_pandas(pd.date_range("2025-01-01", periods=4), type=pa.timestamp("ns")),
+            "col": pa.array([1, 5, 6, 4], pa.int64()),
+        }
+    )
+    assert expected.equals(received)
 
 
-@pytest.mark.parametrize("allow_arrow_input", [None, False, True])
-def test_batch_modifications(mem_library, allow_arrow_input):
+def test_batch_modifications(mem_library):
     lib = mem_library
     sym = "test_batch_modifications"
-    if allow_arrow_input is not None:
-        lib._nvs._set_allow_arrow_input(allow_arrow_input)
     write_table = pa.table(
         {
             "ts": pa.Array.from_pandas(pd.date_range("2025-01-01", periods=2), type=pa.timestamp("ns")),
@@ -221,34 +207,33 @@ def test_batch_modifications(mem_library, allow_arrow_input):
             "col": pa.array([5, 6], pa.int64()),
         }
     )
-    if allow_arrow_input:
-        lib.write_batch([WritePayload(sym, write_table, index_column=True)])
-        lib.append_batch([WritePayload(sym, append_table, index_column=True)])
-        lib.update_batch([UpdatePayload(sym, update_table, index_column=True)])
-        received = lib.read(sym, output_format=OutputFormat.PYARROW).data
-        expected = pa.table(
-            {
-                "ts": pa.Array.from_pandas(pd.date_range("2025-01-01", periods=4), type=pa.timestamp("ns")),
-                "col": pa.array([1, 5, 6, 4], pa.int64()),
-            }
-        )
-        assert expected.equals(received)
-    else:
-        with pytest.raises(ArcticUnsupportedDataTypeException):
-            lib.write_batch([WritePayload(sym, write_table, index_column=True)])
-        with pytest.raises(Exception):
-            lib.append_batch([WritePayload(sym, append_table, index_column=True)])
-        with pytest.raises(Exception):
-            lib.update_batch([WritePayload(sym, update_table, index_column=True)], upsert=True)
+    lib.write_batch([WritePayload(sym, write_table, index_column=True)])
+    lib.append_batch([WritePayload(sym, append_table, index_column=True)])
+    lib.update_batch([UpdatePayload(sym, update_table)])
+    received = lib.read(sym, output_format=OutputFormat.PYARROW).data
+    expected = pa.table(
+        {
+            "ts": pa.Array.from_pandas(pd.date_range("2025-01-01", periods=4), type=pa.timestamp("ns")),
+            "col": pa.array([1, 5, 6, 4], pa.int64()),
+        }
+    )
+    assert expected.equals(received)
+
+
+def test_update_has_no_index_column_kwarg(mem_library):
+    table = pa.table(
+        {"ts": pa.array([pd.Timestamp("2025-01-01")], pa.timestamp("ns")), "col": pa.array([1], pa.int64())}
+    )
+    with pytest.raises(TypeError):
+        mem_library.update("sym", table, upsert=True, index_column=True)
+    with pytest.raises(TypeError):
+        UpdatePayload("sym", table, index_column=True)
 
 
 @pytest.mark.parametrize("batch", [False, True])
-@pytest.mark.parametrize("allow_arrow_input", [None, False, True])
-def test_write_pickle(mem_library, batch, allow_arrow_input):
+def test_write_pickle(mem_library, batch):
     lib = mem_library
     sym = "test_write_pickle"
-    if allow_arrow_input is not None:
-        lib._nvs._set_allow_arrow_input(allow_arrow_input)
     table = pa.table(
         {
             "col": pa.array([1, 2], pa.int64()),
@@ -259,22 +244,14 @@ def test_write_pickle(mem_library, batch, allow_arrow_input):
         lib.write_pickle_batch([WritePayload(sym, table)])
     else:
         lib.write_pickle(sym, table)
-    if allow_arrow_input:
-        assert not lib._nvs.is_symbol_pickled(sym)
-        received = lib.read(sym, output_format=OutputFormat.PYARROW).data
-        assert table.equals(received)
-    else:
-        assert lib._nvs.is_symbol_pickled(sym)
-        received = lib.read(sym).data
-        assert table.equals(received)
+    assert not lib._nvs.is_symbol_pickled(sym)
+    received = lib.read(sym, output_format=OutputFormat.PYARROW).data
+    assert table.equals(received)
 
 
-@pytest.mark.parametrize("allow_arrow_input", [None, False, True])
-def test_stage(mem_library, allow_arrow_input):
+def test_stage(mem_library):
     lib = mem_library
     sym = "test_stage"
-    if allow_arrow_input is not None:
-        lib._nvs._set_allow_arrow_input(allow_arrow_input)
     table_0 = pa.table(
         {
             "ts": pa.Array.from_pandas(pd.date_range("2025-01-01", periods=2), type=pa.timestamp("ns")),
@@ -287,21 +264,17 @@ def test_stage(mem_library, allow_arrow_input):
             "col": pa.array([3, 4], pa.int64()),
         }
     )
-    if allow_arrow_input:
-        lib.stage(sym, table_0, index_column=True)
-        lib.stage(sym, table_1, index_column=True)
-        lib.finalize_staged_data(sym)
-        received = lib.read(sym, output_format=OutputFormat.PYARROW).data
-        expected = pa.table(
-            {
-                "ts": pa.Array.from_pandas(pd.date_range("2025-01-01", periods=4), type=pa.timestamp("ns")),
-                "col": pa.array([1, 2, 3, 4], pa.int64()),
-            }
-        )
-        assert expected.equals(received)
-    else:
-        with pytest.raises(ArcticUnsupportedDataTypeException):
-            lib.stage(sym, table_0, index_column=True)
+    lib.stage(sym, table_0, index_column=True)
+    lib.stage(sym, table_1, index_column=True)
+    lib.finalize_staged_data(sym)
+    received = lib.read(sym, output_format=OutputFormat.PYARROW).data
+    expected = pa.table(
+        {
+            "ts": pa.Array.from_pandas(pd.date_range("2025-01-01", periods=4), type=pa.timestamp("ns")),
+            "col": pa.array([1, 2, 3, 4], pa.int64()),
+        }
+    )
+    assert expected.equals(received)
 
 
 arrow_string_formats = list(ArrowOutputStringFormat)
@@ -409,7 +382,6 @@ def test_read_batch_and_join_strings(mem_storage, lib_name, default, per_column)
 def test_arrow_written_data_get_info_non_timeseries(mem_library):
     lib = mem_library
     sym = "test_arrow_written_data_get_info_non_timeseries"
-    lib._nvs._set_allow_arrow_input()
     table = pa.table({"col": pa.array(np.arange(10), type=pa.int64())})
     lib.write(sym, table)
     desc = lib.get_description(sym)
@@ -459,7 +431,6 @@ def test_arrow_written_data_get_info_non_timeseries(mem_library):
 def test_arrow_written_data_get_info_timeseries(mem_library, table, tz, has_index, validate_index):
     lib = mem_library
     sym = "test_arrow_written_data_get_info_timeseries"
-    lib._nvs._set_allow_arrow_input()
     if tz is not None:
         table = table.set_column(0, "ts", table.column(0).cast(pa.timestamp("ns", tz=tz)))
     sorted = (pc.sort_indices(table.column(0)).to_numpy() == np.arange(20, dtype=np.uint64)).all()
@@ -496,7 +467,6 @@ def test_arrow_written_data_get_info_timeseries(mem_library, table, tz, has_inde
 def test_arrow_written_1d_data_get_info(mem_library, timeseries, input_type):
     lib = mem_library
     sym = "test_arrow_written_1d_data_get_info"
-    lib._nvs._set_allow_arrow_input()
     data = (
         pa.Array.from_pandas(pd.date_range("2026-01-01", periods=10), type=pa.timestamp("ns"))
         if timeseries
@@ -539,7 +509,6 @@ def test_roundtrip_lower_level_arrow_primitives(mem_library, input_output):
     input, output = input_output
     lib = mem_library
     sym = "test_roundtrip_lower_level_arrow_primitives"
-    lib._nvs._set_allow_arrow_input()
     lib.write(sym, input)
     assert not lib._nvs.is_symbol_pickled(sym)
     if isinstance(input, pl.Series):

@@ -714,7 +714,8 @@ def _combine(
         lib.stage("sym", second, index_column=index_column)
         lib.finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
     else:
-        getattr(lib, op)("sym", second, index_column=index_column)
+        update_kwargs = {} if op == "update" else {"index_column": index_column}
+        getattr(lib, op)("sym", second, **update_kwargs)
     return lib.read("sym", output_format=output_format).data
 
 
@@ -1254,7 +1255,7 @@ def test_combine_timeframe_with_arrow(in_memory_version_store_arrow, op):
     getattr(lib, op)(
         sym,
         pa.table({"times": _ts_array(pd.date_range("2025-01-03", periods=2)), "col": pa.array([2, 3], pa.int64())}),
-        index_column=True,
+        **({} if op == "update" else {"index_column": True}),
     )
 
     assert lib.read(sym).data.column_names == ["times", "col"]
