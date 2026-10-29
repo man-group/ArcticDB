@@ -5157,7 +5157,7 @@ class TestMergeUpdateSchemaCombine:
         target = pd.DataFrame({"a": [1, 2, 3]}, index=pd.date_range("2024-01-01", periods=3))
         lib.write("sym", target)
         source = pd.DataFrame({"a": [10]})
-        with pytest.raises(NormalizationException, match="DatetimeIndex and the other is a RangeIndex"):
+        with pytest.raises(SchemaException, match="DatetimeIndex and the other is a RangeIndex"):
             lib.merge("sym", source, strategy=self.strategy, on=["a"])
 
     def test_index_timezone_mismatch(self, mem_library):
@@ -5175,7 +5175,7 @@ class TestMergeUpdateSchemaCombine:
         target = pd.DataFrame({"a": [1, 2, 3]}, index=pd.date_range("2024-01-01", periods=3))
         lib.write("sym", target)
         source = pd.Series([10], name="a", index=pd.DatetimeIndex([pd.Timestamp("2024-01-02")]))
-        with pytest.raises(NormalizationException, match="Series cannot be combined with a DataFrame"):
+        with pytest.raises(SchemaException, match="Series cannot be combined with a DataFrame"):
             lib.merge("sym", source, strategy=self.strategy)
 
     @pytest.mark.skipif(WINDOWS, reason="We do not support fixed-width strings on Windows")

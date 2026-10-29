@@ -648,7 +648,7 @@ def test_append_series_and_dataframe_incompatible(request, lib_fixture, series_f
     first = _series([0, 1]) if series_first else _one_col_frame([0, 1])
     second = _one_col_frame([2, 3], "2025-01-03") if series_first else _series([2, 3], "2025-01-03")
     lib.write("sym", first)
-    with pytest.raises(NormalizationException):
+    with pytest.raises(SchemaException):
         lib.append("sym", second)
 
 
@@ -660,7 +660,7 @@ def test_update_series_and_dataframe_incompatible(request, lib_fixture, series_f
     first = _series([0, 1, 2, 3]) if series_first else _one_col_frame([0, 1, 2, 3])
     second = _one_col_frame([9], "2025-01-02") if series_first else _series([9], "2025-01-02")
     lib.write("sym", first)
-    with pytest.raises(NormalizationException):
+    with pytest.raises(SchemaException):
         lib.update("sym", second)
 
 
@@ -674,6 +674,6 @@ def test_concat_series_and_dataframe_incompatible(request, lib_fixture, series_f
     second = _one_col_frame([2, 3], "2025-01-03") if series_first else _series([2, 3], "2025-01-03")
     lib.write("s0", first)
     lib.write("s1", second)
-    with pytest.raises(NormalizationException) as e:
+    with pytest.raises(SchemaException) as e:
         concat(lib.read_batch(["s0", "s1"], lazy=True)).collect()
     assert "Cannot concat: a Series cannot be combined with a DataFrame" in str(e.value)

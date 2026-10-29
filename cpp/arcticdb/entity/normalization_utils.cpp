@@ -172,7 +172,7 @@ void update_rowrange_norm_for_append(
                 " the existing version. Please convert both to use Int64Index if you need this to work.";
 
         util::check(new_index != nullptr, "New index is null in normalization checks");
-        normalization::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
+        schema::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
                 old_index->is_physically_stored() == new_index->is_physically_stored(),
                 "The argument uses a {} index which is incompatible with {}",
                 new_index->is_physically_stored() ? "non-range" : "range-style",
@@ -187,7 +187,7 @@ void update_rowrange_norm_for_append(
             if (old_index->step() == 0) {
                 old_pandas->mutable_index()->set_step(new_index->step());
             }
-            normalization::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
+            schema::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
                     old_index->step() == new_index->step(),
                     "The new argument has a different RangeIndex step from {}",
                     error_suffix
@@ -195,7 +195,7 @@ void update_rowrange_norm_for_append(
 
             size_t new_start = new_index->start();
             auto stop = old_index->start() + old_length * old_index->step();
-            normalization::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
+            schema::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
                     new_start == stop || (new_start == 0 && new_index->step() == 1),
                     "The appending data has a RangeIndex.start={} that is not contiguous with the "
                     "stop ({}) of {}",

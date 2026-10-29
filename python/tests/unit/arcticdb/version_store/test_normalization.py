@@ -1651,8 +1651,7 @@ def test_different_multiindex_fails_with_dynamic_schema(
     """
     Tests for multiindex validation in combine_schema (schema_combine.cpp).
     With dynamic schema, multiindex field names must still match between writes and appends/updates.
-    A differing number of levels is a shape disagreement and raises NormalizationException; differing level
-    names are a descriptor mismatch, as they are for a data column, and raise SchemaException.
+    Both a differing number of levels and differing level names raise SchemaException.
     """
     lib = in_memory_store_factory(dynamic_schema=True)
     symbols = ["df", "series"]
@@ -1676,7 +1675,7 @@ def test_different_multiindex_fails_with_dynamic_schema(
         names_differ = to_write_index_names != to_append_index_names
 
         if levels_differ:
-            with pytest.raises(NormalizationException):
+            with pytest.raises(SchemaException):
                 lib.append(sym, to_append)
         elif names_differ:
             with pytest.raises(SchemaException):

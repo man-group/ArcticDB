@@ -1347,7 +1347,7 @@ def test_append_rowcount_pandas_with_indexed_arrow_raises(arrow_library_any_sche
 @pytest.mark.parametrize("op", ["append", "concat"])
 def test_combine_dataframe_with_chunked_array_raises(arrow_library, op):
     """Combining a DataFrame with an arrow ChunkedArray raises."""
-    with pytest.raises(NormalizationException):
+    with pytest.raises(SchemaException):
         _combine(
             arrow_library,
             op,
@@ -1359,5 +1359,5 @@ def test_combine_dataframe_with_chunked_array_raises(arrow_library, op):
 @pytest.mark.parametrize("op", ["append", "concat"])
 def test_combine_dataframe_with_polars_series_raises(arrow_library, op):
     """Combining a DataFrame with a polars Series raises."""
-    with pytest.raises(NormalizationException):
+    with pytest.raises(SchemaException):
         _combine(arrow_library, op, pd.DataFrame({"col": np.array([0, 1], dtype=np.int64)}), pl.Series("col", [2, 3]))

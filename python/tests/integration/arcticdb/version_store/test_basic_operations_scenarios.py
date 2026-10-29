@@ -295,7 +295,7 @@ def test_append_scenario_with_errors_and_success(version_store_and_real_s3_basic
 
     # Test append with mismatched index type
     for frame in [df_different_index, df_no_index]:
-        with pytest.raises((NormalizationException)):
+        with pytest.raises(SchemaException):
             lib.append(symbol, frame)
     assert lib.list_symbols() == [symbol]
     assert len(lib.list_versions()) == 2
@@ -330,7 +330,7 @@ def test_append_scenario_with_errors_and_success(version_store_and_real_s3_basic
 
     # Cannot append pickle data to dataframe
     for pick in [pickled_data, pickled_data_2]:
-        with pytest.raises(NormalizationException):
+        with pytest.raises(SchemaException):
             lib.append(symbol, pick)
 
     # Append with different schema works on dynamic schema only

@@ -6,6 +6,7 @@ from arcticdb.version_store import NativeVersionStore
 from arcticdb.exceptions import (
     InternalException,
     NormalizationException,
+    SchemaException,
     ArcticException as ArcticNativeException,
     StreamDescriptorMismatch,
 )
@@ -284,7 +285,7 @@ class TestAppendHypothesis:
         lib.write("s", init_data)
 
         to_append, _ = append.make(abs(next_start), 1)
-        with pytest.raises(NormalizationException) as e:
+        with pytest.raises(SchemaException) as e:
             lib.append("s", to_append, compact_data=compact_data)
         assert match in str(e.value)
 

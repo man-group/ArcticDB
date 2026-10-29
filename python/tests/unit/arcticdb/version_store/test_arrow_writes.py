@@ -313,12 +313,12 @@ def test_combine_1d_arrow_structures_with_multi_column(in_memory_version_store_a
     second_data = data_2d if first_1d else data_1d
     lib.write(first_sym, first_data)
     assert not lib.is_symbol_pickled(first_sym)
-    with pytest.raises(NormalizationException):
+    with pytest.raises(SchemaException):
         lib.append(first_sym, second_data)
     lib.write(second_sym, second_data)
-    with pytest.raises(NormalizationException):
+    with pytest.raises(SchemaException):
         lib.batch_read_and_join([first_sym, second_sym], QueryBuilder().concat("inner"))
-    with pytest.raises(NormalizationException):
+    with pytest.raises(SchemaException):
         lib.batch_read_and_join([first_sym, second_sym], QueryBuilder().concat("outer"))
 
 
