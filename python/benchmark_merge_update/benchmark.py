@@ -12,7 +12,6 @@ from arcticdb.util.test import random_strings_of_length
 from arcticdb_ext.tracing import TracingSession, TracingSessionConfig
 
 SEAWEED_PATH = "/home/vasil/Documents/source/ArcticDB/build_tooling/start_seaweed.sh"
-INSERT_INTERVAL_MARGIN = pd.Timedelta(hours=1.5)
 
 
 def float_col_with_nan(rows, num_sparse_rows):
@@ -56,9 +55,9 @@ def generate_source(target, source_rows, num_matched_rows):
     matched_source = target.iloc[matched_rows]
     num_rows_to_add = source_rows - num_matched_rows
     unmatched_rows = generate_target_non_repeated_index(num_rows_to_add, len(target.columns))
-    lo = (target.index[0] - INSERT_INTERVAL_MARGIN).value
-    hi = (target.index[-1] + INSERT_INTERVAL_MARGIN).value
-    unmatched_rows.index = pd.DatetimeIndex(rng.integers(lo, hi, size=num_rows_to_add, endpoint=True), name="ts")
+    unmatched_rows.index = pd.DatetimeIndex(
+        rng.integers(target.index[0].value, target.index[-1].value, size=num_rows_to_add, endpoint=True), name="ts"
+    )
     return pd.concat([matched_source, unmatched_rows]).sort_index()
 
 
@@ -121,8 +120,8 @@ def benchmark(seaweed, target, source, on, strategy, repeats):
 def test_01(seaweed):
     num_rows = 10_0000_000
     num_cols = 10
-    num_source_rows = 5_000_001
-    num_matched_rows = 2_500_000
+    num_source_rows = 6_000_000
+    num_matched_rows = 3_000_000
     on = [f"col_{i}" for i in range(5)]
     strategy = MergeStrategy(matched="update", not_matched_by_target="insert")
     target = generate_target_non_repeated_index(num_rows, num_cols)
@@ -138,8 +137,8 @@ def test_01(seaweed):
 def test_02(seaweed):
     num_rows = 10_0000_000
     num_cols = 10
-    num_source_rows = 5_000_001
-    num_matched_rows = 2_500_000
+    num_source_rows = 6_000_00
+    num_matched_rows = 3_000_000
     on = [f"col_{i}" for i in range(5)]
     strategy = MergeStrategy(matched="update", not_matched_by_target="insert")
     target = generate_target_non_repeated_index(num_rows, num_cols)
