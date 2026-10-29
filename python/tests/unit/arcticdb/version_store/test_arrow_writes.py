@@ -48,6 +48,11 @@ from tests.util.arrow import (
 from tests.util.naughty_strings import read_big_list_of_naughty_strings
 
 
+def modify_indexed(lib, method, symbol, data):
+    kwargs = {} if method == "update" else {"index_column": True}
+    return getattr(lib, method)(symbol, data, **kwargs)
+
+
 @contextmanager
 def assert_inputs_not_modified(*inputs):
     """Staging must not modify the caller's data, e.g. by sorting the underlying buffers in place."""
@@ -144,7 +149,6 @@ def test_1d_arrow_structures_index_column(in_memory_version_store_tiny_segment_a
 @pytest.mark.parametrize("index_column", [False, True])
 def test_1d_arrow_structures_timezones(in_memory_store_factory, dynamic_schema, input_type, index_column):
     lib = in_memory_store_factory(dynamic_schema=dynamic_schema)
-    lib._set_allow_arrow_input()
     # Read as Polars as this preserves the series name if it was present
     lib.set_output_format("polars")
     sym = "test_1d_arrow_structures_column_metadata"
@@ -226,9 +230,9 @@ def test_1d_arrow_structures_append_update(in_memory_version_store_arrow, method
         first_type != "NamedSeries" and second_type == "NamedSeries"
     ):
         with pytest.raises(StreamDescriptorMismatch):
-            getattr(lib, method)(sym, second_input, index_column=method == "update")
+            getattr(lib, method)(sym, second_input)
     else:
-        getattr(lib, method)(sym, second_input, index_column=method == "update")
+        getattr(lib, method)(sym, second_input)
         received = lib.read(sym).data
         expected = create_1d_arrow_structure("NamedSeries" if first_type == "NamedSeries" else "UnnamedSeries", data)
         polars_assert_series_equal(received, expected)
@@ -239,7 +243,6 @@ def test_1d_arrow_structures_append_update(in_memory_version_store_arrow, method
 @pytest.mark.parametrize("second_type", ["Array", "ChunkedArray", "UnnamedSeries", "NamedSeries"])
 def test_1d_arrow_structures_append_type_promotion(in_memory_store_factory, dynamic_schema, first_type, second_type):
     lib = in_memory_store_factory(dynamic_schema=dynamic_schema)
-    lib._set_allow_arrow_input()
     # Read as Polars as this preserves the series name if it was present
     lib.set_output_format("polars")
     sym = "test_1d_arrow_structures_append_type_promotion"
@@ -328,7 +331,6 @@ def test_combine_1d_arrow_structures_with_multi_column(in_memory_version_store_a
 def test_combine_polars_named_series(in_memory_store_factory, dynamic_schema, first_name, second_name):
     lib = in_memory_store_factory(dynamic_schema=dynamic_schema)
     lib.set_output_format("polars")
-    lib._set_allow_arrow_input()
     first_sym = "test_combine_polars_named_series_0"
     second_sym = "test_combine_polars_named_series_1"
     first_df = pl.Series(first_name, [0], dtype=pl.Int64)
@@ -637,7 +639,6 @@ def test_many_record_batches_many_slices(in_memory_store_factory, rows_per_slice
     rng = np.random.default_rng()
     lib = in_memory_store_factory(segment_row_size=rows_per_slice)
     lib.set_output_format("pyarrow")
-    lib._set_allow_arrow_input()
     sym = "test_many_record_batches_many_slices"
     record_batch_sizes = [1, 2, 1, 15, 13, 2, 1, 10]
     tables = []
@@ -670,7 +671,6 @@ def test_many_record_batches_edge_cases(in_memory_store_factory, rows_per_slice,
     rng = np.random.default_rng()
     lib = in_memory_store_factory(segment_row_size=rows_per_slice)
     lib.set_output_format("pyarrow")
-    lib._set_allow_arrow_input()
     sym = "test_many_record_batches_same_size"
     num_batches = 10
     tables = []
@@ -858,7 +858,7 @@ def test_append_and_update_invalid_timezones_static(
         }
     )
     with pytest.raises(SchemaException):
-        getattr(lib, method)(sym, mismatch_table, index_column=True)
+        modify_indexed(lib, method, sym, mismatch_table)
 
 
 @pytest.mark.parametrize("method", ["append", "update"])
@@ -901,7 +901,7 @@ def test_append_and_update_changing_timezones_dynamic(
             ),
         }
     )
-    getattr(lib, method)(sym, append_table, index_column=True)
+    modify_indexed(lib, method, sym, append_table)
     received = lib.read(sym).data
     # pyarrow will not concat timezone-aware and timezone-naive arrays together, so cast to result timezone first
     first_col_timezone = "Europe/Brussels" if col_with_tz_timezone == "Europe/Brussels" else None
@@ -1150,7 +1150,7 @@ def test_wrong_index_name(in_memory_version_store_arrow, method, arrow_output_fo
         }
     )
     with pytest.raises(SchemaException):
-        getattr(lib, method)(sym, to_format(table_1, arrow_output_format), index_column=True)
+        modify_indexed(lib, method, sym, to_format(table_1, arrow_output_format))
 
 
 @pytest.mark.parametrize("existing_data", [True, False])
@@ -1173,7 +1173,7 @@ def test_update(in_memory_version_store_arrow, existing_data, arrow_output_forma
             "col1": pa.array(["four", "five"], pa.string()),
         }
     )
-    lib.update(sym, to_format(update_table, arrow_output_format), upsert=not existing_data, index_column=True)
+    lib.update(sym, to_format(update_table, arrow_output_format), upsert=not existing_data)
 
     received = lib.read(sym, output_format=arrow_output_format).data
     if existing_data:
@@ -1207,7 +1207,7 @@ def test_update_mix_strings_and_large_strings(in_memory_version_store_arrow, fir
             "col": pa.array(["eeeee", "ffffff"], second_type),
         }
     )
-    lib.update(sym, update_table, index_column=True)
+    lib.update(sym, update_table)
 
     received = lib.read(sym, arrow_string_format_default=ArrowOutputStringFormat.SMALL_STRING).data
     expected = pa.table(
@@ -1245,7 +1245,7 @@ def test_update_with_date_range_wider_than_data(in_memory_version_store_arrow, d
         }
     )
     lib.update(reference_sym, update_table.to_pandas().set_index("ts"), date_range=date_range)
-    lib.update(sym, to_format(update_table, arrow_output_format), date_range=date_range, index_column=True)
+    lib.update(sym, to_format(update_table, arrow_output_format), date_range=date_range)
     expected = lib.read(reference_sym, output_format="pandas").data
     received = lib.read(sym).data.to_pandas().set_index("ts")
     assert_frame_equal(expected, received)
@@ -1266,7 +1266,7 @@ def test_update_with_date_range_wider_than_data_1d(in_memory_version_store_arrow
     update_data = create_1d_arrow_structure(input_type, update_array)
 
     date_range = (pd.Timestamp("2025-01-03"), pd.Timestamp("2025-01-04"))
-    lib.update(sym, update_data, date_range=date_range, index_column=True)
+    lib.update(sym, update_data, date_range=date_range)
     received = lib.read(sym).data
     expected = pa.Array.from_pandas(
         [
@@ -1322,7 +1322,7 @@ def test_update_with_date_range_narrower_than_data(
         }
     )
     lib.update(reference_sym, update_table.to_pandas().set_index("ts"), date_range=date_range)
-    lib.update(sym, to_format(update_table, arrow_output_format), date_range=date_range, index_column=True)
+    lib.update(sym, to_format(update_table, arrow_output_format), date_range=date_range)
     expected = lib.read(reference_sym, output_format="pandas").data
     received = lib.read(sym).data.to_pandas().set_index("ts")
     assert_frame_equal(expected, received)
@@ -1362,7 +1362,7 @@ def test_update_with_date_range_in_different_timezone(
         }
     )
     lib.update(reference_sym, update_table.to_pandas().set_index("ts"), date_range=date_range)
-    lib.update(sym, to_format(update_table, arrow_output_format), date_range=date_range, index_column=True)
+    lib.update(sym, to_format(update_table, arrow_output_format), date_range=date_range)
     expected = lib.read(reference_sym, output_format="pandas").data
     received = lib.read(sym).data.to_pandas().set_index("ts")
     assert_frame_equal(expected, received)
@@ -1384,7 +1384,7 @@ def test_update_with_date_range_narrower_than_data_1d(in_memory_version_store_ar
 
     # Picks out only 2025-01-03 12:00:00 from update_data, and drops index values 2025-01-03 and 2025-01-04
     date_range = (pd.Timestamp("2025-01-03"), pd.Timestamp("2025-01-04"))
-    lib.update(sym, update_data, date_range=date_range, index_column=True)
+    lib.update(sym, update_data, date_range=date_range)
     received = lib.read(sym).data
     expected = pa.Array.from_pandas(
         [
@@ -1404,7 +1404,6 @@ def test_staging_without_sorting(in_memory_store_factory, method):
     lib = in_memory_store_factory(segment_row_size=2, dynamic_schema=True)
     lib_tool = lib.library_tool()
     lib.set_output_format("pyarrow")
-    lib._set_allow_arrow_input()
     sym = "test_staging_without_sorting"
     table_0 = pa.table(
         {
@@ -1448,7 +1447,6 @@ def test_staging_with_sorting(in_memory_store_factory, arrow_output_format):
     lib = in_memory_store_factory(segment_row_size=2, dynamic_schema=True)
     lib_tool = lib.library_tool()
     lib.set_output_format("pyarrow")
-    lib._set_allow_arrow_input()
     sym = "test_staging_with_sorting"
     table_0 = pa.table(
         {
@@ -1484,7 +1482,6 @@ def test_staging_with_sorting(in_memory_store_factory, arrow_output_format):
 def test_staging_with_sorting_secondary_column(in_memory_store_factory, arrow_output_format):
     lib = in_memory_store_factory(segment_row_size=2, dynamic_schema=True)
     lib.set_output_format("pyarrow")
-    lib._set_allow_arrow_input()
     sym = "test_staging_with_sorting_secondary_column"
     # ts has duplicate values so the non-index sort column col0 breaks ties.
     table = pa.table(
@@ -1506,7 +1503,6 @@ def test_staging_with_sorting_secondary_column(in_memory_store_factory, arrow_ou
 def test_staging_with_sorting_empty(in_memory_store_factory, arrow_output_format):
     lib = in_memory_store_factory(segment_row_size=2, dynamic_schema=True)
     lib.set_output_format("pyarrow")
-    lib._set_allow_arrow_input()
     sym = "test_staging_with_sorting_empty"
     table = pa.table({"ts": pa.array([], pa.timestamp("ns")), "col0": pa.array([], pa.uint16())})
     input_table = to_format(table, arrow_output_format)
@@ -1688,7 +1684,6 @@ def test_arrow_writes_hypothesis(
     lib.lib_cfg().lib_desc.version.write_options.segment_row_size = rows_per_slice
     lib.lib_cfg().lib_desc.version.write_options.column_group_size = cols_per_slice
     lib.set_output_format("pyarrow")
-    lib._set_allow_arrow_input()
     naughty_strings = read_big_list_of_naughty_strings()
     null_fraction = null_percentage / 100.0
     data = {}
@@ -1716,7 +1711,7 @@ def test_arrow_writes_hypothesis(
     assert table.equals(original_table)
     lib.write(sym, table.slice(0, df_length // 3), index_column=True)
     lib.append(sym, table.slice((2 * df_length) // 3), index_column=True)
-    lib.update(sym, table.slice(df_length // 3, ((2 * df_length) // 3) - (df_length // 3)), index_column=True)
+    lib.update(sym, table.slice(df_length // 3, ((2 * df_length) // 3) - (df_length // 3)))
     received = lib.read(sym).data
     for i, name in enumerate(received.column_names):
         if pa.types.is_large_string(received.column(i).type):
@@ -1796,7 +1791,6 @@ def test_sparse_write_different_types(in_memory_version_store_arrow, data, arrow
 def test_sparse_write_multiple_columns_different_types(in_memory_store_factory, rows_per_slice, cols_per_slice):
     lib = in_memory_store_factory(segment_row_size=rows_per_slice, column_group_size=cols_per_slice)
     lib.set_output_format("pyarrow")
-    lib._set_allow_arrow_input()
     sym = "test_sparse_write_multiple_columns"
     table = pa.table(
         {
@@ -1829,7 +1823,6 @@ def test_sparse_write_multiple_columns_different_types(in_memory_store_factory, 
 def test_sparse_many_different_size_batches(in_memory_store_factory, rows_per_slice, value, arrow_type):
     lib = in_memory_store_factory(segment_row_size=rows_per_slice)
     lib.set_output_format("pyarrow")
-    lib._set_allow_arrow_input()
     sym = "test_sparse_many_different_size_batches"
 
     tables = [
@@ -1854,7 +1847,6 @@ def test_sparse_write_many_batches_many_slices(in_memory_store_factory, rows_per
     rng = np.random.default_rng(42)
     lib = in_memory_store_factory(segment_row_size=rows_per_slice)
     lib.set_output_format("pyarrow")
-    lib._set_allow_arrow_input()
     sym = "test_sparse_write_many_batches_many_slices"
 
     num_batches = 10
@@ -2005,7 +1997,7 @@ def test_sparse_update(in_memory_version_store_arrow, arrow_output_format):
             "col": pa.array([None, 30], pa.int64()),
         }
     )
-    lib.update(sym, to_format(update_table, arrow_output_format), index_column=True)
+    lib.update(sym, to_format(update_table, arrow_output_format))
 
     received = lib.read(sym, output_format=arrow_output_format).data
     expected = pa.table(
@@ -2095,7 +2087,7 @@ def test_validate_index_arrow(lmdb_version_store_arrow, method, validate_index, 
     ops = {
         "write": lambda: lib.write(sym, table, validate_index=validate_index, index_column=True),
         "append": lambda: lib.append(sym, table, validate_index=validate_index, index_column=True),
-        "update": lambda: lib.update(sym, table, index_column=True),
+        "update": lambda: lib.update(sym, table),
         "stage": lambda: lib.stage(sym, table, validate_index=validate_index, index_column=True),
     }
     # update always validates the index; the other methods only when validate_index is set
@@ -2134,7 +2126,7 @@ def test_validate_index_arrow_batch(lmdb_version_store_arrow, method, validate_i
         "batch_append": lambda: lib.batch_append(
             [sym], [table], validate_index=validate_index, index_column_vector=[True]
         ),
-        "batch_update": lambda: lib._batch_update_internal([sym], [table], [None], [None], index_column_vector=[True]),
+        "batch_update": lambda: lib._batch_update_internal([sym], [table], [None], [None]),
     }
     # batch_update always validates the index; the others only when validate_index is set
     if not sorted_data and (validate_index or method == "batch_update"):
@@ -2270,7 +2262,7 @@ class TestStringFormatRoundtrip:
             "dict_to_dict": pc.dictionary_encode(pa.array(modify_values, pa.large_string())),
         }
         modify_table = pa.table(modify_data)
-        getattr(lib, method)(sym, modify_table, index_column=True)
+        modify_indexed(lib, method, sym, modify_table)
         received = lib.batch_read([sym])[sym].data if batch else lib.read(sym).data
         assert received.schema.field(0).type == pa.timestamp("ns")
         assert received.schema.field(1).type == pa.string()

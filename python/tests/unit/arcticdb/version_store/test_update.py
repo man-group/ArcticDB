@@ -36,7 +36,7 @@ from tests.util.date import DateRange
 from pandas import MultiIndex
 import arcticdb
 from arcticdb.version_store import VersionedItem
-from arcticdb.version_store.library import UpdatePayload
+from arcticdb.version_store.library import UpdatePayload, WritePayload
 from arcticdb.exceptions import ErrorCode, ErrorCategory
 from arcticdb.toolbox.library_tool import LibraryTool
 from arcticdb_ext.storage import KeyType
@@ -383,9 +383,7 @@ class TestUpdateWithDateRange:
             if batch:
                 lib.update_batch([payload])
             else:
-                lib.update(
-                    payload.symbol, payload.data, date_range=payload.date_range, index_column=payload.index_column
-                )
+                lib.update(payload.symbol, payload.data, date_range=payload.date_range)
 
     def test_update_with_daterange(self, lmdb_library, batch):
         lib = lmdb_library
@@ -469,7 +467,6 @@ class TestUpdateWithDateRange:
             "test",
             make_indexed_structure(kind, pd.DatetimeIndex(["2020-01-01 07:00:00"])),
             date_range=date_range,
-            index_column=True,
         )
         self.assert_update_throws(lib, payload, batch)
 
@@ -487,7 +484,6 @@ class TestUpdateWithDateRange:
             "test",
             make_indexed_structure(kind, pd.DatetimeIndex(["2020-01-01 07:00:00"], tz=tz)),
             date_range=date_range,
-            index_column=True,
         )
         self.assert_update_throws(lib, payload, batch)
 
@@ -516,12 +512,11 @@ class TestUpdateWithDateRange:
             "test",
             to_structure(pd.DatetimeIndex(["2020-01-01 07:00:00"], tz=index_tz, name="index"), [999]),
             date_range=date_range,
-            index_column=as_arrow,
         )
         if batch:
             lib.update_batch([payload])
         else:
-            lib.update(payload.symbol, payload.data, date_range=payload.date_range, index_column=payload.index_column)
+            lib.update(payload.symbol, payload.data, date_range=payload.date_range)
 
         # date_range covers hours [05:00, 12:00] inclusive, so those 8 original rows (values 5-12) are replaced
         # by the single row (07:00, value 999) in the update data.
@@ -1092,7 +1087,7 @@ class TestBatchUpdate:
         lib_tool = lib._dev_tools.library_tool()
         df1 = pd.DataFrame({"a": range(5)}, index=pd.date_range("2024-01-01", periods=5))
         df2 = pd.DataFrame({"b": range(5)}, index=pd.date_range("2023-01-01", periods=5))
-        lib.write_batch([UpdatePayload("symbol_1", df1), UpdatePayload("symbol_2", df2)])
+        lib.write_batch([WritePayload("symbol_1", df1), WritePayload("symbol_2", df2)])
         for symbol in ["symbol_1", "symbol_2"]:
             assert len(lib_tool.find_keys_for_symbol(KeyType.VERSION, symbol)) == 1
             assert len(lib_tool.find_keys_for_symbol(KeyType.TABLE_INDEX, symbol)) == 1

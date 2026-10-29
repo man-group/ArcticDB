@@ -1324,7 +1324,6 @@ def lmdb_version_store_v2(version_store_factory, lib_name) -> NativeVersionStore
 def lmdb_version_store_arrow(lmdb_version_store_v1) -> NativeVersionStore:
     store = lmdb_version_store_v1
     store.set_output_format(OutputFormat.PYARROW)
-    store._set_allow_arrow_input()
     return store
 
 
@@ -1413,7 +1412,6 @@ def lmdb_version_store_dynamic_schema(
 def lmdb_version_store_dynamic_schema_arrow(lmdb_version_store_dynamic_schema_v1) -> NativeVersionStore:
     store = lmdb_version_store_dynamic_schema_v1
     store.set_output_format(OutputFormat.PYARROW)
-    store._set_allow_arrow_input()
     return store
 
 
@@ -1772,7 +1770,6 @@ def in_memory_version_store_tiny_segment_dynamic(in_memory_store_factory) -> Nat
 def in_memory_version_store_arrow(in_memory_store_factory) -> NativeVersionStore:
     store = in_memory_store_factory(dynamic_strings=True)
     store.set_output_format(OutputFormat.PYARROW)
-    store._set_allow_arrow_input()
     return store
 
 
@@ -1780,7 +1777,6 @@ def in_memory_version_store_arrow(in_memory_store_factory) -> NativeVersionStore
 def in_memory_version_store_dynamic_schema_arrow(in_memory_store_factory) -> NativeVersionStore:
     store = in_memory_store_factory(dynamic_schema=True, dynamic_strings=True)
     store.set_output_format(OutputFormat.PYARROW)
-    store._set_allow_arrow_input()
     return store
 
 
@@ -1788,7 +1784,6 @@ def in_memory_version_store_dynamic_schema_arrow(in_memory_store_factory) -> Nat
 def in_memory_version_store_tiny_segment_arrow(in_memory_store_factory) -> NativeVersionStore:
     store = in_memory_store_factory(column_group_size=2, segment_row_size=2, dynamic_strings=True)
     store.set_output_format(OutputFormat.PYARROW)
-    store._set_allow_arrow_input()
     return store
 
 
@@ -1811,7 +1806,6 @@ def in_memory_library_dynamic() -> Library:
 def arrow_library(in_memory_library) -> Library:
     """Static-schema in-memory V2 library configured for arrow input and arrow output."""
     in_memory_library._nvs.set_output_format(OutputFormat.PYARROW)
-    in_memory_library._nvs._set_allow_arrow_input()
     return in_memory_library
 
 
@@ -1819,7 +1813,6 @@ def arrow_library(in_memory_library) -> Library:
 def arrow_library_dynamic(in_memory_library_dynamic) -> Library:
     """Dynamic-schema in-memory V2 library configured for arrow input and arrow output."""
     in_memory_library_dynamic._nvs.set_output_format(OutputFormat.PYARROW)
-    in_memory_library_dynamic._nvs._set_allow_arrow_input()
     return in_memory_library_dynamic
 
 

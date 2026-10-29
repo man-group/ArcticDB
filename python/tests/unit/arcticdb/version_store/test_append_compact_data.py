@@ -609,7 +609,6 @@ def test_hypothesis_static_schema(
     lib = in_memory_store_factory(
         column_group_size=cols_per_segment, segment_row_size=rows_per_segment, dynamic_strings=True, name="_unique_"
     )
-    lib._set_allow_arrow_input()
     sym = "test_hypothesis_static_schema"
     supported_types = [
         np.uint8,
@@ -691,7 +690,6 @@ def test_hypothesis_static_schema(
 def test_hypothesis_dynamic_schema(in_memory_store_factory, clear_query_stats, num_rows, rows_per_segment, sparse):
     rng = np.random.default_rng(42)
     lib = in_memory_store_factory(dynamic_schema=True, dynamic_strings=True, name="_unique_")
-    lib._set_allow_arrow_input()
     sym = "test_hypothesis_dynamic_schema"
     unsigned_int_types = [np.uint8, np.uint16, np.uint32, np.uint64]
     signed_int_types = [np.int8, np.int16, np.int32, np.int64]
