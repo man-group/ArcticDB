@@ -52,9 +52,9 @@ auto get_pandas_common_via_reflection(
 } // namespace
 
 const NormalizationMetadata_Pandas* embedded_pandas_common(
-        const proto::descriptors::NormalizationMetadata_ExperimentalArrow& arrow_meta
+        const proto::descriptors::NormalizationMetadata_Arrow& arrow_meta
 ) {
-    using Arrow = proto::descriptors::NormalizationMetadata_ExperimentalArrow;
+    using Arrow = proto::descriptors::NormalizationMetadata_Arrow;
     switch (arrow_meta.pandas_input_type_case()) {
     case Arrow::kDf:
         return &arrow_meta.df().common();
@@ -68,10 +68,9 @@ const NormalizationMetadata_Pandas* embedded_pandas_common(
     return nullptr;
 }
 
-NormalizationMetadata_Pandas* mutable_embedded_pandas_common(
-        proto::descriptors::NormalizationMetadata_ExperimentalArrow& arrow_meta
+NormalizationMetadata_Pandas* mutable_embedded_pandas_common(proto::descriptors::NormalizationMetadata_Arrow& arrow_meta
 ) {
-    using Arrow = proto::descriptors::NormalizationMetadata_ExperimentalArrow;
+    using Arrow = proto::descriptors::NormalizationMetadata_Arrow;
     switch (arrow_meta.pandas_input_type_case()) {
     case Arrow::kDf:
         return arrow_meta.mutable_df()->mutable_common();
@@ -94,7 +93,7 @@ bool is_pandas_input_type(const proto::descriptors::NormalizationMetadata& norm_
     case proto::descriptors::NormalizationMetadata::INPUT_TYPE_NOT_SET:
     case proto::descriptors::NormalizationMetadata::kMsgPackFrame:
     case proto::descriptors::NormalizationMetadata::kNp:
-    case proto::descriptors::NormalizationMetadata::kExperimentalArrow:
+    case proto::descriptors::NormalizationMetadata::kArrow:
         return false;
     default:
         // An input type this build does not know about is pandas if it has a Pandas common submessage
@@ -111,8 +110,8 @@ const NormalizationMetadata_Pandas* pandas_common(const proto::descriptors::Norm
         return &norm_meta.series().common();
     case proto::descriptors::NormalizationMetadata::kTs:
         return &norm_meta.ts().common();
-    case proto::descriptors::NormalizationMetadata::kExperimentalArrow:
-        return embedded_pandas_common(norm_meta.experimental_arrow());
+    case proto::descriptors::NormalizationMetadata::kArrow:
+        return embedded_pandas_common(norm_meta.arrow());
     case proto::descriptors::NormalizationMetadata::INPUT_TYPE_NOT_SET:
     case proto::descriptors::NormalizationMetadata::kMsgPackFrame:
     case proto::descriptors::NormalizationMetadata::kNp:
@@ -135,8 +134,8 @@ NormalizationMetadata_Pandas* mutable_pandas_common(proto::descriptors::Normaliz
         return norm_meta.mutable_series()->mutable_common();
     case proto::descriptors::NormalizationMetadata::kTs:
         return norm_meta.mutable_ts()->mutable_common();
-    case proto::descriptors::NormalizationMetadata::kExperimentalArrow:
-        return mutable_embedded_pandas_common(*norm_meta.mutable_experimental_arrow());
+    case proto::descriptors::NormalizationMetadata::kArrow:
+        return mutable_embedded_pandas_common(*norm_meta.mutable_arrow());
     case proto::descriptors::NormalizationMetadata::INPUT_TYPE_NOT_SET:
     case proto::descriptors::NormalizationMetadata::kMsgPackFrame:
     case proto::descriptors::NormalizationMetadata::kNp:

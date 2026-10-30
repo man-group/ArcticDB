@@ -91,8 +91,8 @@ void InputFrame::set_from_columns(
         std::vector<Column>&& cols, StreamDescriptor&& desc, std::vector<sparrow::record_batch>&& arrow_buffer_owners,
         SortednessScan sortedness_scan
 ) {
-    util::check(norm_meta.has_experimental_arrow(), "Unexpected non-Arrow norm metadata provided with Arrow data");
-    if (norm_meta.experimental_arrow().has_index()) {
+    util::check(norm_meta.has_arrow(), "Unexpected non-Arrow norm metadata provided with Arrow data");
+    if (norm_meta.arrow().has_index()) {
         user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
                 !cols.empty(), "Arrow index column specified but there are zero columns"
         );

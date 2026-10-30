@@ -23,7 +23,7 @@
 
 namespace arcticdb {
 
-using ArrowMeta = proto::descriptors::NormalizationMetadata::ExperimentalArrow;
+using ArrowMeta = proto::descriptors::NormalizationMetadata::Arrow;
 
 struct ResolvedTimezone {
     const date::time_zone* zone;
@@ -396,9 +396,8 @@ std::vector<sparrow::array> arrow_arrays_from_column(
 std::optional<ArrowMeta::ColumnMeta> column_metadata(
         const proto::descriptors::NormalizationMetadata& norm_meta, std::string_view column_name
 ) {
-    if (norm_meta.has_experimental_arrow()) {
-        if (const auto it = norm_meta.experimental_arrow().columns().find(column_name);
-            it != norm_meta.experimental_arrow().columns().end()) {
+    if (norm_meta.has_arrow()) {
+        if (const auto it = norm_meta.arrow().columns().find(column_name); it != norm_meta.arrow().columns().end()) {
             return it->second;
         }
     }
@@ -747,10 +746,10 @@ bool check_arrow_config_all_specified(const ArrowOutputConfig& arrow_config) {
 void modify_arrow_output_config_from_norm_meta(
         const proto::descriptors::NormalizationMetadata& norm_meta, ArrowOutputConfig& arrow_config
 ) {
-    if (norm_meta.has_experimental_arrow()) {
+    if (norm_meta.has_arrow()) {
         // Data was written as Arrow. Any ArrowOutputStringFormat::UNSPECIFIED should be taken from the norm meta if
         // present, and become LARGE_STRING otherwise
-        const auto& columns_norm_meta = norm_meta.experimental_arrow().columns();
+        const auto& columns_norm_meta = norm_meta.arrow().columns();
         if (arrow_config.default_string_format_ == ArrowOutputStringFormat::UNSPECIFIED) {
             // Add any columns from the norm meta NOT already present in per_column_string_format_
             for (const auto& [col_name, col_meta] : columns_norm_meta) {

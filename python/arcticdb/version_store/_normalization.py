@@ -215,14 +215,14 @@ def _check_arrow_column_names(column_names):
 
 
 def embedded_pandas_meta(
-    arrow_meta: NormalizationMetadata.ExperimentalArrow,
+    arrow_meta: NormalizationMetadata.Arrow,
 ) -> Optional[Union[NormalizationMetadata.PandasDataFrame, NormalizationMetadata.NormalisedTimeSeries]]:
     input_type = arrow_meta.WhichOneof("pandas_input_type")
     return getattr(arrow_meta, input_type) if input_type is not None else None
 
 
 def arrow_column_timezone(arrow_meta, column_name):
-    # type: (NormalizationMetadata.ExperimentalArrow, str)->Optional[str]
+    # type: (NormalizationMetadata.Arrow, str)->Optional[str]
     column_meta = arrow_meta.columns.get(column_name, None)
     if column_meta is None or not column_meta.HasField("timezone"):
         return None
@@ -230,7 +230,7 @@ def arrow_column_timezone(arrow_meta, column_name):
 
 
 def _localize_arrow_timestamp_columns(df, arrow_meta, stored_column_names, num_index_levels_in_columns):
-    # type: (DataFrame, NormalizationMetadata.ExperimentalArrow, List[str], int)->None
+    # type: (DataFrame, NormalizationMetadata.Arrow, List[str], int)->None
     """Apply Arrow's per-column timezones to a denormalized frame.
 
     At this point ``df``:
@@ -259,8 +259,8 @@ def _localize_arrow_timestamp_columns(df, arrow_meta, stored_column_names, num_i
 
 
 def _series_name(norm_meta):
-    # type: (Union[NormalizationMetadata.PandasDataFrame, NormalizationMetadata.ExperimentalArrow])->Optional[str]
-    if isinstance(norm_meta, NormalizationMetadata.ExperimentalArrow):
+    # type: (Union[NormalizationMetadata.PandasDataFrame, NormalizationMetadata.Arrow])->Optional[str]
+    if isinstance(norm_meta, NormalizationMetadata.Arrow):
         embedded = embedded_pandas_meta(norm_meta)
         # Prefer the pandas metadata, which can distinguish None from "". Only matters for pandas output.
         if embedded is not None:
@@ -279,8 +279,8 @@ def polars_series_name(norm_meta):
     # type: (NormalizationMetadata)->str
     """polars has no unnamed Series, so a Series written without a name reads back with an empty name."""
     input_type = norm_meta.WhichOneof("input_type")
-    if input_type == "experimental_arrow":
-        name = _series_name(norm_meta.experimental_arrow)
+    if input_type == "arrow":
+        name = _series_name(norm_meta.arrow)
     elif input_type == "series":
         name = _series_name(norm_meta.series)
     else:
@@ -796,11 +796,11 @@ class ArrowTableNormalizer(Normalizer):
 
     def normalize(self, arrow_structure, **kwargs):
         norm_metadata = NormalizationMetadata()
-        norm_metadata.experimental_arrow.one_dimensional = (
+        norm_metadata.arrow.one_dimensional = (
             _PYARROW_AVAILABLE and isinstance(arrow_structure, (pa.ChunkedArray, pa.Array))
         ) or (_POLARS_AVAILABLE and isinstance(arrow_structure, pl.Series))
         if _POLARS_AVAILABLE and isinstance(arrow_structure, pl.Series):
-            norm_metadata.experimental_arrow.polars_series_name = arrow_structure.name
+            norm_metadata.arrow.polars_series_name = arrow_structure.name
         arrow_structure = to_pyarrow_table(arrow_structure)
         _check_arrow_column_names(arrow_structure.column_names)
         if arrow_structure.num_rows == 0:
@@ -819,7 +819,7 @@ class ArrowTableNormalizer(Normalizer):
             arcticdb_record_batch = RecordBatchData()
             pa_record_batch._export_to_c(arcticdb_record_batch.array(), arcticdb_record_batch.schema())
             arcticdb_record_batches.append(arcticdb_record_batch)
-        norm_metadata.experimental_arrow.has_index = kwargs.get("index_column", False)
+        norm_metadata.arrow.has_index = kwargs.get("index_column", False)
         return arcticdb_record_batches, norm_metadata
 
     def denormalize(self, item, norm_meta):
@@ -833,10 +833,10 @@ class ArrowTableNormalizer(Normalizer):
 
         input_type = norm_meta.WhichOneof("input_type")
         check(
-            input_type == "experimental_arrow",
+            input_type == "arrow",
             f"C++ layer should have converted pandas metadata to arrow, actual: {input_type}",
         )
-        arrow_meta = norm_meta.experimental_arrow
+        arrow_meta = norm_meta.arrow
         if arrow_meta.one_dimensional:
             return single_array_output()
         embedded = embedded_pandas_meta(arrow_meta)
@@ -974,7 +974,7 @@ class SeriesNormalizer(_PandasNormalizer):
         return NormalizedInput(item=df, metadata=norm)
 
     def denormalize(self, item, norm_meta):
-        # type: (_FrameData, Union[NormalizationMetadata.PandasDataFrame, NormalizationMetadata.ExperimentalArrow])->Series
+        # type: (_FrameData, Union[NormalizationMetadata.PandasDataFrame, NormalizationMetadata.Arrow])->Series
 
         df = self._df_norm.denormalize(item, norm_meta)
 
@@ -1089,7 +1089,7 @@ class DataFrameNormalizer(_PandasNormalizer):
         return df_from_arrays(item.data, columns, index, n_indexes)
 
     def _pandas_norm_meta_from_arrow_norm_meta(
-        self, arrow_meta: NormalizationMetadata.ExperimentalArrow, item: FrameData
+        self, arrow_meta: NormalizationMetadata.Arrow, item: FrameData
     ) -> NormalizationMetadata.PandasDataFrame:
         """Arrow data that has a pandas provenance carries the pandas metadata itself; Arrow-only data gets a
         pandas view synthesized from what Arrow records."""
@@ -1119,7 +1119,7 @@ class DataFrameNormalizer(_PandasNormalizer):
         # type: (_FrameData, NormalizationMetadata.PandaDataFrame)->DataFrame
 
         arrow_meta = None
-        if isinstance(norm_meta, NormalizationMetadata.ExperimentalArrow):
+        if isinstance(norm_meta, NormalizationMetadata.Arrow):
             arrow_meta = norm_meta
             norm_meta = self._pandas_norm_meta_from_arrow_norm_meta(norm_meta, item)
 
@@ -1675,8 +1675,8 @@ class CompositeNormalizer(Normalizer):
                 return self.tf.denormalize(item, norm_meta.ts)
             elif input_type == "np":
                 return self.np.denormalize(item, norm_meta.np)
-            elif input_type == "experimental_arrow":
-                arrow_meta = norm_meta.experimental_arrow
+            elif input_type == "arrow":
+                arrow_meta = norm_meta.arrow
                 embedded_type = arrow_meta.WhichOneof("pandas_input_type")
                 if embedded_type == "ts":
                     return self.tf.denormalize(item, arrow_meta.ts)

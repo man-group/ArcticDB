@@ -30,13 +30,13 @@ struct RecordBatchData;
 
 std::vector<sparrow::array> arrow_arrays_from_column(
         const Column& column, std::string_view name,
-        const std::optional<proto::descriptors::NormalizationMetadata::ExperimentalArrow::ColumnMeta>& opt_column_meta =
+        const std::optional<proto::descriptors::NormalizationMetadata::Arrow::ColumnMeta>& opt_column_meta =
                 std::nullopt
 );
 
 std::vector<std::shared_ptr<RecordBatchData>> column_to_arrow_arrays(const Column& column, std::string_view name);
 
-std::optional<proto::descriptors::NormalizationMetadata::ExperimentalArrow::ColumnMeta> column_metadata(
+std::optional<proto::descriptors::NormalizationMetadata::Arrow::ColumnMeta> column_metadata(
         const proto::descriptors::NormalizationMetadata& norm_meta, std::string_view column_name
 );
 
@@ -44,13 +44,13 @@ std::vector<sparrow::record_batch> segment_to_arrow_data(
         SegmentInMemory& segment, const proto::descriptors::NormalizationMetadata& norm_meta
 );
 
-std::optional<proto::descriptors::NormalizationMetadata::ExperimentalArrow::ColumnMeta> generate_column_metadata(
+std::optional<proto::descriptors::NormalizationMetadata::Arrow::ColumnMeta> generate_column_metadata(
         const sparrow::array& array, entity::DataType data_type
 );
 
 std::pair<std::vector<Column>, entity::StreamDescriptor> record_batches_to_columns(
         const std::vector<sparrow::record_batch>& record_batches,
-        proto::descriptors::NormalizationMetadata::ExperimentalArrow& norm_meta
+        proto::descriptors::NormalizationMetadata::Arrow& norm_meta
 );
 
 // We only really need the ArrowSchema from here, but we return a zero-row record batch instead because:

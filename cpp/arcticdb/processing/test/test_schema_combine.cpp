@@ -153,9 +153,9 @@ OutputSchema arrow_1d_array(
     // __array__ is hard-coded as the name of the singular column in 1D Arrow structures in _normalization.py
     desc.add_scalar_field(data_type, "__array__");
     NormalizationMetadata norm;
-    norm.mutable_experimental_arrow()->set_one_dimensional(true);
+    norm.mutable_arrow()->set_one_dimensional(true);
     if (opt_series_name.has_value()) {
-        norm.mutable_experimental_arrow()->set_polars_series_name(*opt_series_name);
+        norm.mutable_arrow()->set_polars_series_name(*opt_series_name);
     }
     return {std::move(desc), std::move(norm)};
 }
@@ -360,7 +360,7 @@ TEST(CombineSchema, IncompatibleRequiredFieldShapesRaise) {
 TEST(CombineSchema, ArrowSchemaHasNoShapeToDisagreeAbout) {
     const auto series = timeseries_series("ts", "col", DataType::INT64);
     auto arrow = timeseries_df("ts", {{"col", DataType::INT64}});
-    arrow.norm_metadata_.mutable_experimental_arrow()->set_has_index(true);
+    arrow.norm_metadata_.mutable_arrow()->set_has_index(true);
 
     const std::array expected{ColumnSpec{"ts", DataType::NANOSECONDS_UTC64}, ColumnSpec{"col", DataType::INT64}};
     for (const auto& schemas : {std::vector<OutputSchema>{series, arrow}, std::vector<OutputSchema>{arrow, series}}) {
@@ -807,12 +807,12 @@ TEST(CombineSchema, ArrowWithEmptyPandasKeepsTheArrowSchema) {
     for (const bool arrow_has_index : {true, false}) {
         auto arrow = arrow_has_index ? timeseries_df("ts", {{"a", DataType::FLOAT64}})
                                      : rowcount_df({{"a", DataType::FLOAT64}});
-        arrow.norm_metadata_.mutable_experimental_arrow()->set_has_index(arrow_has_index);
+        arrow.norm_metadata_.mutable_arrow()->set_has_index(arrow_has_index);
 
         for (const auto& schemas : {std::vector<OutputSchema>{empty, arrow}, std::vector<OutputSchema>{arrow, empty}}) {
             auto combined = combine(schemas, append_options(true));
-            ASSERT_TRUE(combined.norm_metadata_.has_experimental_arrow());
-            ASSERT_EQ(combined.norm_metadata_.experimental_arrow().has_index(), arrow_has_index);
+            ASSERT_TRUE(combined.norm_metadata_.has_arrow());
+            ASSERT_EQ(combined.norm_metadata_.arrow().has_index(), arrow_has_index);
             ASSERT_EQ(
                     combined.stream_descriptor().index().type(),
                     arrow_has_index ? IndexDescriptor::Type::TIMESTAMP : IndexDescriptor::Type::ROWCOUNT
@@ -861,11 +861,11 @@ TEST(CombineSchema1dArrow, UnnamedSeries) {
                             options);
             const std::array expected{ColumnSpec{"__array__", DataType::INT64}};
             ASSERT_THAT(columns_of(combined), ElementsAreArray(expected));
-            ASSERT_TRUE(combined.norm_metadata_.has_experimental_arrow());
-            ASSERT_TRUE(combined.norm_metadata_.experimental_arrow().one_dimensional());
+            ASSERT_TRUE(combined.norm_metadata_.has_arrow());
+            ASSERT_TRUE(combined.norm_metadata_.arrow().one_dimensional());
             // Can either be from the optional not being populated, or being populated with an empty string. Both are
             // handled the same
-            ASSERT_EQ(combined.norm_metadata_.experimental_arrow().polars_series_name(), "");
+            ASSERT_EQ(combined.norm_metadata_.arrow().polars_series_name(), "");
         }
     }
 }
@@ -902,11 +902,11 @@ TEST(CombineSchema1dArrow, SeriesNameMismatchConcat) {
                  std::vector<SchemaCombineOptions>{concat_options(JoinType::OUTER), concat_options(JoinType::INNER)}) {
                 auto combined = combine({first_schema, second_schema}, options);
                 if (&first_schema == &schemas[2] && &second_schema == &schemas[2]) {
-                    ASSERT_EQ(combined.norm_metadata_.experimental_arrow().polars_series_name(), "name_1");
+                    ASSERT_EQ(combined.norm_metadata_.arrow().polars_series_name(), "name_1");
                 } else if (&first_schema == &schemas[3] && &second_schema == &schemas[3]) {
-                    ASSERT_EQ(combined.norm_metadata_.experimental_arrow().polars_series_name(), "name_2");
+                    ASSERT_EQ(combined.norm_metadata_.arrow().polars_series_name(), "name_2");
                 } else {
-                    ASSERT_EQ(combined.norm_metadata_.experimental_arrow().polars_series_name(), "");
+                    ASSERT_EQ(combined.norm_metadata_.arrow().polars_series_name(), "");
                 }
             }
         }
@@ -916,7 +916,7 @@ TEST(CombineSchema1dArrow, SeriesNameMismatchConcat) {
 TEST(CombineSchema1dArrow, CombineWithTable) {
     auto array_1d = arrow_1d_array(DataType::INT64);
     auto table = arrow_1d_array(DataType::INT64);
-    table.norm_metadata_.mutable_experimental_arrow()->set_one_dimensional(false);
+    table.norm_metadata_.mutable_arrow()->set_one_dimensional(false);
     for (auto table_first : std::vector<bool>{true, false}) {
         for (const auto& options : std::vector<SchemaCombineOptions>{
                      append_options(true),
