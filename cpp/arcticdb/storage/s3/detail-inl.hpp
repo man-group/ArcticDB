@@ -295,7 +295,7 @@ inline void raise_if_failed_deletes(const boost::container::small_vector<FailedD
 }
 
 // Per-object error codes that S3 can return inside a successful DeleteObjects response which are transient, so the
-// object can be deleted again. See https://docs.aws.amazon.com/AmazonS3/latest/API/ErrorResponses.html
+// object can be deleted again. See https://docs.aws.amazon.com/AmazonS3/latest/API/API_Error.html
 inline bool is_retryable_failed_delete(const std::string& error_code) {
     return error_code == "InternalError" || error_code == "SlowDown" || error_code == "ServiceUnavailable" ||
            error_code == "RequestTimeout";

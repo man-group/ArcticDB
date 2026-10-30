@@ -11,6 +11,7 @@
 #include <arcticdb/storage/s3/s3_api.hpp>
 #include <arcticdb/storage/s3/s3_storage.hpp>
 #include <arcticdb/storage/s3/s3_client_wrapper.hpp>
+#include <arcticdb/storage/s3/detail-inl.hpp>
 #include <arcticdb/storage/s3/nfs_backed_storage.hpp>
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/entity/variant_key.hpp>
@@ -425,8 +426,17 @@ TEST_P(S3AndNfsRemoveRetryFixture, retries_objects_rejected_with_retryable_error
     ASSERT_TRUE(list_in_store(*storage).empty());
 }
 
+TEST_P(S3AndNfsRemoveRetryFixture, deletes_object_rejected_on_every_attempt_but_the_last) {
+    client->add_delete_objects_failure("symbol_1", "InternalError", s3::detail::DELETE_OBJECTS_MAX_ATTEMPTS - 1);
+
+    remove_in_store(*storage, {"symbol_0", "symbol_1", "symbol_2"});
+
+    ASSERT_TRUE(list_in_store(*storage).empty());
+}
+
 TEST_P(S3AndNfsRemoveRetryFixture, raises_if_object_is_rejected_on_every_attempt) {
-    client->add_delete_objects_failure("symbol_1", "InternalError", 1000);
+    // Would succeed on one more attempt, so this also checks we stop after DELETE_OBJECTS_MAX_ATTEMPTS
+    client->add_delete_objects_failure("symbol_1", "InternalError", s3::detail::DELETE_OBJECTS_MAX_ATTEMPTS);
 
     ASSERT_THROW(remove_in_store(*storage, {"symbol_0", "symbol_1", "symbol_2"}), UnexpectedS3ErrorException);
 
