@@ -84,7 +84,7 @@ RequiredFieldInfo required_fields_info(
     RequiredFieldInfo info;
     // We prefer the pandas metadata even for arrow since it's the only place we store information about multiindex
     if (const auto* common = pandas_common(norm_meta); common != nullptr) {
-        const auto* embedded_arrow = norm_meta.has_experimental_arrow() ? &norm_meta.experimental_arrow() : nullptr;
+        const auto* embedded_arrow = norm_meta.has_arrow() ? &norm_meta.arrow() : nullptr;
         info.has_series_value_column =
                 norm_meta.has_series() || (embedded_arrow != nullptr && embedded_arrow->has_series());
         info.has_multi_index = common->has_multi_index();
@@ -93,8 +93,8 @@ RequiredFieldInfo required_fields_info(
         info.num_physical_indices = info.has_multi_index ? common->multi_index().field_count() + 1
                                     : is_index_physically_stored(common->index(), index_type) ? 1
                                                                                               : 0;
-    } else if (norm_meta.has_experimental_arrow()) {
-        const auto& arrow = norm_meta.experimental_arrow();
+    } else if (norm_meta.has_arrow()) {
+        const auto& arrow = norm_meta.arrow();
         // A one-dimensional structure is the Arrow representation of a Series, so its single column is a required
         // field. It is the value column, unless it was written as the index, in which case that is the only field.
         info.has_series_value_column = arrow.one_dimensional() && !arrow.has_index();

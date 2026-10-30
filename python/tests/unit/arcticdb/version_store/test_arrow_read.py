@@ -1341,7 +1341,7 @@ def test_arrow_written_data_get_info_non_timeseries(in_memory_version_store_arro
     assert len(info["col_names"]["index"]) == 0
     assert len(info["col_names"]["index_dtype"]) == 0
     assert info["rows"] == 10
-    assert info["input_type"] == "experimental_arrow"
+    assert info["input_type"] == "arrow"
     assert info["index_type"] == "NA"
     assert info["type"] == "arrow_dataframe"
     assert np.isnat(info["date_range"][0]) and np.isnat(info["date_range"][1])
@@ -1401,7 +1401,7 @@ def test_arrow_written_data_get_info_timeseries(in_memory_version_store_arrow, t
     if has_index:
         assert "NANOSECONDS_UTC64" in str(info["col_names"]["index_dtype"][0])
     assert info["rows"] == 20
-    assert info["input_type"] == "experimental_arrow"
+    assert info["input_type"] == "arrow"
     assert info["index_type"] == "NA"
     assert info["type"] == "arrow_dataframe"
     if has_index:
@@ -1438,7 +1438,7 @@ def test_arrow_written_1d_data_get_info(in_memory_version_store_arrow, timeserie
     assert len(info["col_names"]["index"]) == (1 if timeseries else 0)
     assert len(info["col_names"]["index_dtype"]) == (1 if timeseries else 0)
     assert info["rows"] == 10
-    assert info["input_type"] == "experimental_arrow"
+    assert info["input_type"] == "arrow"
     assert info["index_type"] == "NA"
     assert info["type"] == "arrow_series"
     if timeseries:

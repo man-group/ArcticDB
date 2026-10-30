@@ -281,17 +281,17 @@ void prepare_for_arrow_output(StreamDescriptor& desc, proto::descriptors::Normal
     if (is_pandas_convertible_to_arrow(norm)) {
         norm = arrow_norm_from_pandas(norm, desc);
     }
-    if (!norm.has_experimental_arrow()) {
+    if (!norm.has_arrow()) {
         return;
     }
-    auto& arrow = *norm.mutable_experimental_arrow();
+    auto& arrow = *norm.mutable_arrow();
     auto* common = mutable_embedded_pandas_common(arrow);
     if (common == nullptr) {
         return;
     }
     const auto& fields = desc.fields();
     const bool unnamed_series =
-            arrow.pandas_input_type_case() == proto::descriptors::NormalizationMetadata_ExperimentalArrow::kSeries &&
+            arrow.pandas_input_type_case() == proto::descriptors::NormalizationMetadata_Arrow::kSeries &&
             !common->has_name() && common->name().empty();
     const auto index_info = pipelines::index::required_fields_info(desc, norm);
     const auto index_count = index_info.num_physical_indices;
@@ -302,7 +302,7 @@ void prepare_for_arrow_output(StreamDescriptor& desc, proto::descriptors::Normal
             generate_output_names(fields, *common, std::nullopt, index_count, unnamed_series, original_column_names);
     auto output_fields = std::make_shared<FieldCollection>(fields.size(), fields.buffer().bytes());
     google::protobuf::Map<std::string, proto::descriptors::NormalizationMetadata_Pandas_ColumnName> col_names;
-    google::protobuf::Map<std::string, proto::descriptors::NormalizationMetadata_ExperimentalArrow_ColumnMeta> columns;
+    google::protobuf::Map<std::string, proto::descriptors::NormalizationMetadata_Arrow_ColumnMeta> columns;
     for (size_t pos = 0; pos < fields.size(); ++pos) {
         const auto& output_name = output_names[pos];
         output_fields->add_field(fields.at(pos).type(), output_name);
@@ -330,7 +330,7 @@ std::optional<ArrowTransformedSchema> make_schema_arrow_compatible(
         const OutputSchema& input_schema, const std::optional<std::vector<std::string>>& index_columns
 ) {
     const auto& norm = input_schema.norm_metadata_;
-    if (norm.has_experimental_arrow()) {
+    if (norm.has_arrow()) {
         return std::nullopt;
     }
     schema::check<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_PICKLED_DATA>(

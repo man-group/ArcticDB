@@ -150,7 +150,7 @@ TYPED_TEST(ArrowDataToSegmentNumeric, Simple) {
 
     std::vector<sparrow::record_batch> record_batches;
     record_batches.emplace_back(std::move(record_batch));
-    proto::descriptors::NormalizationMetadata::ExperimentalArrow arrow_meta;
+    proto::descriptors::NormalizationMetadata::Arrow arrow_meta;
     auto [cols, desc] = record_batches_to_columns(record_batches, arrow_meta);
 
     ASSERT_EQ(desc.fields().size(), 1);
@@ -194,7 +194,7 @@ TYPED_TEST(ArrowDataToSegmentNumeric, MultiColumn) {
 
     std::vector<sparrow::record_batch> record_batches;
     record_batches.emplace_back(std::move(record_batch));
-    proto::descriptors::NormalizationMetadata::ExperimentalArrow arrow_meta;
+    proto::descriptors::NormalizationMetadata::Arrow arrow_meta;
     auto [cols, desc] = record_batches_to_columns(record_batches, arrow_meta);
 
     ASSERT_EQ(desc.fields().size(), num_columns);
@@ -235,7 +235,7 @@ TYPED_TEST(ArrowDataToSegmentNumeric, MultipleRecordBatches) {
         auto array = create_array(data);
         record_batches.emplace_back(create_record_batch({{"col", array}}));
     }
-    proto::descriptors::NormalizationMetadata::ExperimentalArrow arrow_meta;
+    proto::descriptors::NormalizationMetadata::Arrow arrow_meta;
     auto [cols, desc] = record_batches_to_columns(record_batches, arrow_meta);
 
     ASSERT_EQ(desc.fields().size(), 1);
@@ -280,7 +280,7 @@ TEST(ArrowDataToSegmentTimestamp, TimezoneNaive) {
 
     std::vector<sparrow::record_batch> record_batches;
     record_batches.emplace_back(std::move(record_batch));
-    proto::descriptors::NormalizationMetadata::ExperimentalArrow arrow_meta;
+    proto::descriptors::NormalizationMetadata::Arrow arrow_meta;
     auto [cols, desc] = record_batches_to_columns(record_batches, arrow_meta);
 
     ASSERT_EQ(desc.fields().size(), 1);
@@ -310,7 +310,7 @@ TEST(ArrowDataToSegmentTimestamp, TimezoneAware) {
 
     std::vector<sparrow::record_batch> record_batches;
     record_batches.emplace_back(std::move(record_batch));
-    proto::descriptors::NormalizationMetadata::ExperimentalArrow arrow_meta;
+    proto::descriptors::NormalizationMetadata::Arrow arrow_meta;
     auto [cols, desc] = record_batches_to_columns(record_batches, arrow_meta);
 
     ASSERT_TRUE(arrow_meta.columns().contains("col_without_tz"));
@@ -369,7 +369,7 @@ TEST(ArrowDataToSegment, MultiColumnDifferentTypes) {
 
     std::vector<sparrow::record_batch> record_batches;
     record_batches.emplace_back(std::move(record_batch));
-    proto::descriptors::NormalizationMetadata::ExperimentalArrow arrow_meta;
+    proto::descriptors::NormalizationMetadata::Arrow arrow_meta;
     auto [cols, desc] = record_batches_to_columns(record_batches, arrow_meta);
 
     auto num_columns = numeric_data_types.size();
@@ -398,7 +398,7 @@ TEST(ArrowDataToSegment, StringLeadingAndTrailingEmptyRecordBatch) {
     record_batches.emplace_back(create_record_batch({{"col", create_array(strings)}}));
     record_batches.emplace_back(create_record_batch({{"col", create_array(std::vector<std::string>{})}}));
 
-    proto::descriptors::NormalizationMetadata::ExperimentalArrow arrow_meta;
+    proto::descriptors::NormalizationMetadata::Arrow arrow_meta;
     auto [cols, desc] = record_batches_to_columns(record_batches, arrow_meta);
 
     ASSERT_EQ(cols.size(), 1);
@@ -493,7 +493,7 @@ TEST(ArrowWriteMemoryLifetime, InputFrameKeepsBufferAlive) {
     ASSERT_EQ(counter.num_deallocations, 0);
 
     auto input_frame = std::make_shared<pipelines::InputFrame>();
-    input_frame->norm_meta.mutable_experimental_arrow()->set_has_index(false);
+    input_frame->norm_meta.mutable_arrow()->set_has_index(false);
     convert::record_batches_to_frame(record_batches, *input_frame, pipelines::SortednessScan::SKIP);
     input_frame->desc().set_id(symbol);
     input_frame->set_index_range();
