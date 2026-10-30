@@ -11,6 +11,7 @@
 #include <arcticdb/storage/s3/s3_api.hpp>
 #include <arcticdb/storage/s3/s3_storage.hpp>
 #include <arcticdb/storage/s3/s3_client_wrapper.hpp>
+#include <arcticdb/storage/s3/detail-inl.hpp>
 #include <arcticdb/storage/s3/nfs_backed_storage.hpp>
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/entity/variant_key.hpp>
@@ -396,6 +397,62 @@ TEST_F(S3StorageFixture, test_remove) {
     );
     ASSERT_EQ(list_in_store(store), remaining);
 }
+
+// S3 can accept a DeleteObjects request but reject some of the objects in it
+class S3AndNfsRemoveRetryFixture : public S3AndNfsStorageFixture {
+  protected:
+    void SetUp() override {
+        storage = get_storage();
+        if (auto* s3_storage = dynamic_cast<S3Storage*>(storage.get())) {
+            client = dynamic_cast<S3ClientTestWrapper*>(&s3_storage->client());
+        } else if (auto* nfs_storage = dynamic_cast<nfs_backed::NfsBackedStorage*>(storage.get())) {
+            client = dynamic_cast<S3ClientTestWrapper*>(&nfs_storage->client());
+        }
+        ASSERT_NE(client, nullptr);
+        for (int i = 0; i < 3; ++i) {
+            write_in_store(*storage, fmt::format("symbol_{}", i));
+        }
+    }
+
+    std::unique_ptr<Storage> storage;
+    S3ClientTestWrapper* client = nullptr;
+};
+
+TEST_P(S3AndNfsRemoveRetryFixture, retries_objects_rejected_with_retryable_error) {
+    client->add_delete_objects_failure("symbol_1", "InternalError", 1);
+
+    remove_in_store(*storage, {"symbol_0", "symbol_1", "symbol_2"});
+
+    ASSERT_TRUE(list_in_store(*storage).empty());
+}
+
+TEST_P(S3AndNfsRemoveRetryFixture, deletes_object_rejected_on_every_attempt_but_the_last) {
+    client->add_delete_objects_failure("symbol_1", "InternalError", s3::detail::DELETE_OBJECTS_MAX_ATTEMPTS - 1);
+
+    remove_in_store(*storage, {"symbol_0", "symbol_1", "symbol_2"});
+
+    ASSERT_TRUE(list_in_store(*storage).empty());
+}
+
+TEST_P(S3AndNfsRemoveRetryFixture, raises_if_object_is_rejected_on_every_attempt) {
+    // Would succeed on one more attempt, so this also checks we stop after DELETE_OBJECTS_MAX_ATTEMPTS
+    client->add_delete_objects_failure("symbol_1", "InternalError", s3::detail::DELETE_OBJECTS_MAX_ATTEMPTS);
+
+    ASSERT_THROW(remove_in_store(*storage, {"symbol_0", "symbol_1", "symbol_2"}), UnexpectedS3ErrorException);
+
+    ASSERT_EQ(list_in_store(*storage), std::set<std::string>{"symbol_1"});
+}
+
+TEST_P(S3AndNfsRemoveRetryFixture, does_not_retry_objects_rejected_with_non_retryable_error) {
+    // Fails only once, so if we retried the delete would succeed and nothing would be raised
+    client->add_delete_objects_failure("symbol_1", "AccessDenied", 1);
+
+    ASSERT_THROW(remove_in_store(*storage, {"symbol_0", "symbol_1", "symbol_2"}), UnexpectedS3ErrorException);
+
+    ASSERT_EQ(list_in_store(*storage), std::set<std::string>{"symbol_1"});
+}
+
+INSTANTIATE_TEST_SUITE_P(S3AndNfs, S3AndNfsRemoveRetryFixture, testing::Values("s3", "nfs"));
 
 TEST_F(S3StorageFixture, test_list) {
     auto symbols = std::set<std::string>();

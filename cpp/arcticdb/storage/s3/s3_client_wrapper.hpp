@@ -10,6 +10,8 @@
 
 #include <arcticdb/storage/s3/s3_client_interface.hpp>
 
+#include <map>
+
 namespace arcticdb::storage::s3 {
 
 // A wrapper around the actual S3 client which can simulate failures based on the configuration.
@@ -65,6 +67,13 @@ class S3ClientTestWrapper : public S3ClientInterface {
 
     void add_list_objects_failure_unretryable(Aws::S3::S3Errors error);
 
+    // Makes the next `times` delete_objects calls report the objects whose name contains `s3_object_name_substring`
+    // (e.g. a symbol name) as per-object failures with the given S3 error code (e.g. "InternalError"), while the
+    // request itself succeeds. Not thread-safe, so only use it in tests which delete from a single thread.
+    void add_delete_objects_failure(
+            const std::string& s3_object_name_substring, const std::string& error_code, size_t times
+    );
+
   private:
     // Returns error if failures are enabled for the given bucket
     std::optional<Aws::S3::S3Error> has_bucket_failure_trigger(const std::string& bucket_name) const;
@@ -77,6 +86,8 @@ class S3ClientTestWrapper : public S3ClientInterface {
     // mechanism. Allow setting a list of failure modes for list_objects calls. This list will be popped from until
     // empty, at which point the listing operation will succeed.
     mutable std::deque<std::pair<Aws::S3::S3Errors, bool>> list_objects_failures_;
+    // s3_object_name_substring -> (error_code, remaining number of delete_objects calls to fail it in)
+    std::map<std::string, std::pair<std::string, size_t>> delete_objects_failures_;
 };
 
 } // namespace arcticdb::storage::s3
