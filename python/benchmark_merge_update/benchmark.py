@@ -251,8 +251,8 @@ def test_one_index_value_per_segment_string(seaweed):
 def test_one_index_value_float(seaweed):
     num_rows = 100_000
     num_cols = 10
-    num_source_rows = 76_000
-    num_matched_rows = 38_000
+    num_source_rows = 73_000
+    num_matched_rows = 36_500
     dtype = "float64"
     on = [f"col_{i}" for i in range(5)]
     strategy = MergeStrategy(matched="update", not_matched_by_target="insert")
@@ -264,8 +264,8 @@ def test_one_index_value_float(seaweed):
 def test_one_index_value_string(seaweed):
     num_rows = 100_000
     num_cols = 10
-    num_source_rows = 76_000
-    num_matched_rows = 38_000
+    num_source_rows = 73_000
+    num_matched_rows = 36_500
     dtype = "object"
     on = [f"col_{i}" for i in range(5)]
     strategy = MergeStrategy(matched="update", not_matched_by_target="insert")
