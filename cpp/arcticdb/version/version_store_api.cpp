@@ -24,6 +24,9 @@
 #include <arcticdb/storage/file/file_store.hpp>
 #include <arcticdb/version/version_functions.hpp>
 
+#include <algorithm>
+#include <ranges>
+
 namespace arcticdb::version_store {
 
 using namespace arcticdb::entity;
@@ -1277,7 +1280,55 @@ std::vector<std::optional<DataError>> PythonVersionStore::batch_delete(
     return return_results;
 }
 
+namespace {
+
+void extract_live_versions_from_snapshot_map(
+        const MasterSnapshotMap& snap_map, const StreamId& stream_id,
+        std::back_insert_iterator<std::vector<AtomKeyPacked>> out
+) {
+    if (auto itr = snap_map.find(stream_id); itr != snap_map.end())
+        ranges::copy(itr->second | ranges::views::keys, out);
+}
+
+/**
+ * Insert into `out` all index keys for the given `stream_id` that are undeleted
+ * or are kept alive by an existing snapshot.
+ *
+ * @param store
+ * @param version_map
+ * @param snap_map
+ * @param stream_id
+ * @param out
+ */
+void gather_all_live_versions(
+        const std::shared_ptr<Store>& store, const std::shared_ptr<VersionMap>& version_map,
+        const MasterSnapshotMap& snap_map, const StreamId& stream_id,
+        std::back_insert_iterator<std::vector<AtomKeyPacked>> out
+) {
+    std::vector<AtomKeyPacked> keys_from_undeleted_versions = get_all_versions(store, version_map, stream_id);
+    std::vector<AtomKeyPacked> keys_from_snapshots;
+    extract_live_versions_from_snapshot_map(snap_map, stream_id, std::back_inserter(keys_from_snapshots));
+    // Correct data on disk would imply keys_from_undeleted_versions arrives in descending order by version_id.
+    // Just make sure.
+    ranges::reverse(keys_from_undeleted_versions);
+    ranges::sort(keys_from_undeleted_versions, {}, &AtomKeyPacked::version_id);
+    ranges::sort(keys_from_snapshots, {}, &AtomKeyPacked::version_id);
+
+    ranges::set_union(
+            keys_from_undeleted_versions,
+            keys_from_snapshots,
+            out,
+            {},
+            &AtomKeyPacked::version_id,
+            &AtomKeyPacked::version_id
+    );
+}
+
+} // namespace
+
 void PythonVersionStore::fix_symbol_trees(const std::vector<StreamId>& symbols) {
+    // TODO: This function shares a lot of code with gather_all_live_versions(), but it is slated for deletion.
+    //       Also, no unit test coverage makes changes to the code risky.
     auto snaps = get_master_snapshots_map(store());
     for (const auto& sym : symbols) {
         auto index_keys_from_symbol_tree = get_all_versions(store(), version_map(), sym);
@@ -1595,6 +1646,95 @@ std::vector<std::variant<VersionedItem, DataError>> PythonVersionStore::batch_co
         bool throw_on_error
 ) {
     return batch_compact_data_internal(stream_ids, rows_per_segment, prune_previous_versions, throw_on_error);
+}
+
+std::unordered_map<std::tuple<StreamId, VersionId>, double> PythonVersionStore::batch_dedup_ratios(
+        const std::vector<StreamId>& stream_ids
+) {
+    const std::unordered_set<StreamId> stream_ids_set{stream_ids.begin(), stream_ids.end()};
+    const MasterSnapshotMap snap_map = get_master_snapshots_map(store(), stream_ids_set);
+    std::unordered_map<std::tuple<StreamId, VersionId>, double> result;
+    std::mutex result_mutex;
+
+    auto per_symbol_scan = [this, &snap_map, &result, &result_mutex](const StreamId& stream_id
+                           ) -> folly::Future<folly::Unit> {
+        std::vector<AtomKeyPacked> all_index_keys;
+        gather_all_live_versions(store(), version_map(), snap_map, stream_id, std::back_inserter(all_index_keys));
+
+        // TODO: Pretty sure that non-existent stream_id leads to no exceptions and empty keys, so we need
+        //       an explicit throw.
+        if (all_index_keys.empty())
+            throw NoDataFoundException(fmt::format("batch_dedup_ratios: version not found for symbol '{}'", stream_id));
+
+        std::vector<folly::Future<std::pair<AtomKeyPacked, SegmentInMemory>>> fut_index_keys;
+        fut_index_keys.reserve(all_index_keys.size());
+        for (const AtomKeyPacked& key : all_index_keys) {
+            fut_index_keys.emplace_back(
+                    store()->read(key.to_atom_key(stream_id))
+                            .thenValueInline([key](std::pair<entity::VariantKey, SegmentInMemory>&& value) {
+                                return std::make_pair(key, std::move(value.second));
+                            })
+            );
+        }
+        // Sharp edge: collect() intentional. In the event of exception, unwind. Rely on the outer collectAll()
+        // to keep captures alive for any futures still being executed.
+        // If any of the keys fail to load, there isn't a good partial result to report.
+        return folly::collect(fut_index_keys)
+                .via(&async::cpu_executor())
+                .thenValue([stream_id,
+                            &result,
+                            &result_mutex](std::vector<std::pair<AtomKeyPacked, SegmentInMemory>>&& index_segments) {
+                    // Must sort in ascending order by version_id for the calculation to be correct.
+                    ranges::sort(index_segments, {}, [](const std::pair<AtomKeyPacked, SegmentInMemory>& element) {
+                        return element.first.version_id();
+                    });
+
+                    ankerl::unordered_dense::set<AtomKeyPacked> seen_atom_keys;
+                    std::vector<std::tuple<VersionId, double>> partial_results;
+                    for (auto& [key, segment] : index_segments) {
+                        size_t newly_added_cells = 0;
+                        size_t total_cells = 0;
+                        const pipelines::index::IndexSegmentReader isr(std::move(segment));
+                        for (const SliceAndKey& slice_and_key : isr) {
+                            const FrameSlice& slice = slice_and_key.slice();
+                            const size_t num_cells = slice.rows().diff() * slice.columns().diff();
+                            total_cells += num_cells;
+                            const auto [_, inserted] = seen_atom_keys.insert(slice_and_key.key());
+                            if (inserted) {
+                                newly_added_cells += num_cells;
+                            }
+                        }
+
+                        const double ratio = total_cells != 0 ? 1 - static_cast<double>(newly_added_cells) /
+                                                                                static_cast<double>(total_cells)
+                                                              : 0.0;
+                        partial_results.emplace_back(key.version_id(), ratio);
+                    }
+
+                    std::lock_guard lock(result_mutex);
+                    for (auto& [version_id, ratio] : partial_results) {
+                        result[std::make_tuple(stream_id, version_id)] = ratio;
+                    }
+                });
+    };
+
+    const size_t window_size = async::TaskScheduler::instance()->io_thread_count();
+    std::vector<folly::Try<folly::Unit>> results =
+            folly::collectAll(folly::window(stream_ids, per_symbol_scan, window_size)).get();
+    // Propagate first encountered error to the caller, if any.
+    for (size_t i = 0; i < results.size(); ++i) {
+        try {
+            results[i].throwUnlessValue();
+        } catch (const NoDataFoundException&) {
+            throw;
+        } catch (const std::exception& e) {
+            util::raise_rte(
+                    "batch_dedup_ratios failed for symbol '{}': {}", stream_ids[i], results[i].exception().what()
+            );
+        }
+    }
+
+    return result;
 }
 
 } // namespace arcticdb::version_store

@@ -438,10 +438,10 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
 
     py::class_<StageResult>(version, "StageResult", R"pbdoc(
         Result returned by the stage method containing information about staged segments.
-        
+
         StageResult objects can be passed to finalization methods to specify which staged data to finalize.
         This enables selective finalization of staged data when multiple stage operations have been performed.
-        
+
         Attributes
         ----------
         staged_segments : List[AtomKey]
@@ -892,6 +892,10 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                  py::arg("continue_on_error") = true,
                  py::call_guard<SingleThreadMutexHolder>(),
                  "Delete everything. Don't use this unless you want to delete everything")
+            .def("batch_dedup_ratios",
+                 &PythonVersionStore::batch_dedup_ratios,
+                 py::call_guard<SingleThreadMutexHolder, py::gil_scoped_release>(),
+                 "Report amount of data, whose segments are shared with earlier versions")
             .def("write_versioned_dataframe",
                  &PythonVersionStore::write_versioned_dataframe,
                  py::call_guard<SingleThreadMutexHolder>(),
