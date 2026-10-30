@@ -214,6 +214,17 @@ def _check_arrow_column_names(column_names):
         raise NormalizationException(f"Arrow column names must be unique, received duplicates: {sorted(duplicates)}")
 
 
+def _check_no_arrow_null_columns(schema):
+    # type: (pa.Schema)->None
+    null_columns = [field.name for field in schema if pa.types.is_null(field.type)]
+    if null_columns:
+        raise ArcticDbNotYetImplemented(
+            f"Columns {null_columns} have the Arrow null type, which is not supported yet. This happens when a column "
+            "contains only nulls and no dtype is given, e.g. pl.DataFrame({'col': [None, None]}). Specify the dtype "
+            "explicitly, e.g. pl.DataFrame({'col': [None, None]}, schema={'col': pl.Float64})"
+        )
+
+
 def embedded_pandas_meta(
     arrow_meta: NormalizationMetadata.ExperimentalArrow,
 ) -> Optional[Union[NormalizationMetadata.PandasDataFrame, NormalizationMetadata.NormalisedTimeSeries]]:
@@ -803,6 +814,7 @@ class ArrowTableNormalizer(Normalizer):
             norm_metadata.experimental_arrow.polars_series_name = arrow_structure.name
         arrow_structure = to_pyarrow_table(arrow_structure)
         _check_arrow_column_names(arrow_structure.column_names)
+        _check_no_arrow_null_columns(arrow_structure.schema)
         if arrow_structure.num_rows == 0:
             # to_batches has a bug https://github.com/apache/arrow/issues/49309 so that it returns an empty list when
             # the table has zero rows, losing the schema information
