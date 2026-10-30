@@ -33,6 +33,7 @@ from arcticdb.exceptions import (
     NormalizationException,
     SchemaException,
     StreamDescriptorMismatch,
+    ArcticDbNotYetImplemented,
 )
 from arcticdb.version_store.library import MergeAction, MergeStrategy, Library
 from arcticdb.version_store._store import normalize_merge_action
@@ -5040,7 +5041,13 @@ def test_match_on_string_none_nan(
 )
 def test_multiple_source_rows_match_via_missing(request, lmdb_library, match_na, target, source, source_format):
     if source_format != SourceFormat.PANDAS:
-        request.applymarker(ARROW_SOURCE_WITH_NULLS_XFAIL)
+        request.applymarker(
+            pytest.mark.xfail(
+                raises=ArcticDbNotYetImplemented,
+                reason="Source column a has the Arrow null type, which is not supported yet",
+                strict=True,
+            )
+        )
     lib = lmdb_library
     strategy = MergeStrategy(MergeAction.UPDATE, MergeAction.DO_NOTHING)
     lib.write("sym", target)

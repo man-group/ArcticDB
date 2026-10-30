@@ -19,6 +19,7 @@ from polars.testing import assert_series_equal as polars_assert_series_equal
 import pytest
 from arcticdb import DataError
 from arcticdb.exceptions import (
+    ArcticDbNotYetImplemented,
     ArcticException,
     NormalizationException,
     SchemaException,
@@ -1018,6 +1019,29 @@ def test_write_unsupported_types(in_memory_version_store_arrow):
     with pytest.raises(SchemaException) as e:
         lib.write(sym, table)
     assert "unsupported" in str(e.value).lower()
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        pl.DataFrame({"a": [1, 2], "b": [None, None]}),
+        pl.Series("b", [None, None]),
+        pa.table({"a": [1, 2], "b": pa.nulls(2)}),
+    ],
+)
+def test_write_null_type_raises(in_memory_version_store_arrow, data):
+    lib = in_memory_version_store_arrow
+    with pytest.raises(ArcticDbNotYetImplemented, match="'b'.*dtype"):
+        lib.write("sym", data)
+    assert not lib.has_symbol("sym")
+
+
+def test_write_null_type_with_explicit_dtype(in_memory_version_store_arrow):
+    lib = in_memory_version_store_arrow
+    df = pl.DataFrame({"a": [1, 2], "b": [None, None]}, schema={"a": pl.Int64, "b": pl.Float64})
+    lib.write("sym", df)
+    received = lib.read("sym", output_format="polars").data
+    assert received.equals(df)
 
 
 @pytest.mark.parametrize("format", ["pyarrow", "polars"])
