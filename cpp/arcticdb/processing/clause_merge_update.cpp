@@ -594,6 +594,7 @@ void update_column(
         const bool is_matching_column, [[maybe_unused]] std::string_view column_name, Column& target_column,
         StringPool& new_string_pool
 ) {
+    ARCTICDB_TRACE_EVENT("arcticdb.processing", "update", "column", column_name);
     // When matched rows are updated, the columns used for matching keep the target values
     const bool keep_target_values = is_matching_column && strategy.update();
     // The target type is checked before the source type because a pandas source never has fixed width strings.
@@ -667,6 +668,7 @@ std::shared_ptr<Column> update_sparse(
         const size_t row_slice, const size_t source_row_offset, const size_t first_source_row_in_group,
         const bool is_matching_column, std::string_view column_name, Column&& target, StringPool& new_string_pool
 ) {
+    ARCTICDB_TRACE_EVENT("arcticdb.processing", "update_sparse", "column", column_name);
     if constexpr (is_fixed_string_type(TargetTDT::data_type())) {
         user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
                 "Fixed string sequences are not supported for merge update"
@@ -1676,7 +1678,7 @@ std::vector<ProcessingUnit> MergeUpdateClause::update_and_insert(
                                                             source_index, source, source_start_end
                                                     );
                                                     if constexpr (!is_source_sparse &&
-                                                                  !ARCTICDB_MERGE_USE_MERGE_SPARSE) {
+                                                                  !ARCTICDB_MERGE_USE_ONLY_SPARSE_CODEPATH) {
                                                         if (!is_target_sparse) {
                                                             return merge<TargetTDT, SourceTDT>(
                                                                     source_insert_data,
@@ -1790,7 +1792,8 @@ std::vector<ProcessingUnit> MergeUpdateClause::update(
                                                 using SourceData = std::remove_cvref_t<decltype(source_data)>;
                                                 constexpr bool is_source_sparse =
                                                         std::same_as<SourceData, ColumnWithStrings>;
-                                                if (is_source_sparse || target_column.is_sparse()) {
+                                                if (is_source_sparse || target_column.is_sparse() ||
+                                                    ARCTICDB_MERGE_USE_ONLY_SPARSE_CODEPATH) {
                                                     // Sparse source columns are not restricted to source_start_end
                                                     const size_t source_offset =
                                                             is_source_sparse ? source_start_end.first : 0;

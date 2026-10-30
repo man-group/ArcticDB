@@ -1,0 +1,380 @@
+I1030 13:25:33.098322 retry.go:97 retry followIamChanges: err: subscribing filer meta change: all filers failed, last error: subscribe: rpc error: code = Unavailable desc = connection error: desc = "transport: Error while dialing: dial unix /tmp/seaweedfs-filer-grpc-18888.sock: connect: no such file or directory"
+I1030 13:25:34.059595 meta_aggregator.go:110 loopSubscribeToOneFiler read 127.0.0.1:8888 start from 2026-10-30 13:25:20.515905665 +0200 EET 1793359520515905665
+I1030 13:25:34.060362 meta_aggregator.go:126 subscribing remote 127.0.0.1:8888 meta change: connecting to peer filer 127.0.0.1:8888: rpc error: code = Unavailable desc = connection error: desc = "transport: Error while dialing: dial unix /tmp/seaweedfs-filer-grpc-18888.sock: connect: no such file or directory"
+I1030 13:25:35.350031 retry.go:97 retry followIamChanges: err: subscribing filer meta change: all filers failed, last error: subscribe: rpc error: code = Unavailable desc = connection error: desc = "transport: Error while dialing: dial unix /tmp/seaweedfs-filer-grpc-18888.sock: connect: no such file or directory"
+I1030 13:25:35.794610 meta_aggregator.go:110 loopSubscribeToOneFiler read 127.0.0.1:8888 start from 2026-10-30 13:25:20.515905665 +0200 EET 1793359520515905665
+I1030 13:25:35.795450 meta_aggregator.go:126 subscribing remote 127.0.0.1:8888 meta change: connecting to peer filer 127.0.0.1:8888: rpc error: code = Unavailable desc = connection error: desc = "transport: Error while dialing: dial unix /tmp/seaweedfs-filer-grpc-18888.sock: connect: no such file or directory"
+I1030 13:25:37.529365 meta_aggregator.go:110 loopSubscribeToOneFiler read 127.0.0.1:8888 start from 2026-10-30 13:25:20.515905665 +0200 EET 1793359520515905665
+I1030 13:25:37.530196 meta_aggregator.go:126 subscribing remote 127.0.0.1:8888 meta change: connecting to peer filer 127.0.0.1:8888: rpc error: code = Unavailable desc = connection error: desc = "transport: Error while dialing: dial unix /tmp/seaweedfs-filer-grpc-18888.sock: connect: no such file or directory"
+I1030 13:25:38.726132 retry.go:97 retry followIamChanges: err: subscribing filer meta change: all filers failed, last error: subscribe: rpc error: code = Unavailable desc = connection error: desc = "transport: Error while dialing: dial unix /tmp/seaweedfs-filer-grpc-18888.sock: connect: no such file or directory"
+I1030 13:25:39.264256 meta_aggregator.go:110 loopSubscribeToOneFiler read 127.0.0.1:8888 start from 2026-10-30 13:25:20.515905665 +0200 EET 1793359520515905665
+I1030 13:25:39.264851 meta_aggregator.go:126 subscribing remote 127.0.0.1:8888 meta change: connecting to peer filer 127.0.0.1:8888: rpc error: code = Unavailable desc = connection error: desc = "transport: Error while dialing: dial unix /tmp/seaweedfs-filer-grpc-18888.sock: connect: no such file or directory"
+I1030 13:25:40.596334 volume.go:546 graceful stop cluster http server ... 
+I1030 13:25:40.597833 volume.go:551 graceful stop gRPC ...
+I1030 13:25:40.598544 volume_server.go:182 Shutting down volume server...
+I1030 13:25:40.598975 volume_server.go:184 Shut down successfully!
+I1030 13:25:40.600578 master_grpc_server.go:471 - client .filer@127.0.0.1:8888.18888
+I1030 13:25:40.600644 master_grpc_server.go:377 => client .s3@127.0.0.1:18333: cluster_node_update:{node_type:"filer" address:"127.0.0.1:8888.18888"}
+I1030 13:25:40.600644 master_grpc_server.go:377 => client .master@127.0.0.1:9333.19333: cluster_node_update:{node_type:"filer" address:"127.0.0.1:8888.18888"}
+I1030 13:25:40.600695 master_grpc_server.go:471 - client .s3@127.0.0.1:18333
+I1030 13:25:40.600711 master_grpc_server.go:471 - client .master@127.0.0.1:9333.19333
+SeaweedFS stopped (data left in /tmp/seaweedfs-asv)
+SeaweedFS 4.40 is up (master HTTP 200, s3 HTTP 200). IP: 127.0.0.1, PID: 104697 master port :9333, filer port :8888, s3 port :8333, data in /tmp/seaweedfs-asv
+{"tag": "merge_data", "target_rows": 10000000, "source_rows": 6000000, "matched_source_rows": 3000000, "unmatched_source_rows": 3000000}
+========================================================
+Start processing for test_update_insert_random_float_data.pftrace
+[745.525]       perfetto.cc:54922 Configured tracing session 1, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+20261030 13:46:02.960764 104668 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+{"tag": "merge_run", "event": "start", "run": 0}
+{"tag": "merge_run", "event": "end", "run": 0, "wall_ns": 2266087656}
+20261030 13:46:06.673144 104668 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+{"tag": "merge_run", "event": "start", "run": 1}
+{"tag": "merge_run", "event": "end", "run": 1, "wall_ns": 2200253037}
+20261030 13:46:10.168820 104668 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+{"tag": "merge_run", "event": "start", "run": 2}
+{"tag": "merge_run", "event": "end", "run": 2, "wall_ns": 2139920569}
+20261030 13:46:13.656889 104668 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+{"tag": "merge_run", "event": "start", "run": 3}
+{"tag": "merge_run", "event": "end", "run": 3, "wall_ns": 2118095379}
+20261030 13:46:17.050497 104668 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+{"tag": "merge_run", "event": "start", "run": 4}
+{"tag": "merge_run", "event": "end", "run": 4, "wall_ns": 2153755513}
+20261030 13:46:20.475749 104668 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+{"tag": "merge_run", "event": "start", "run": 5}
+{"tag": "merge_run", "event": "end", "run": 5, "wall_ns": 2153722754}
+20261030 13:46:23.874310 104668 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+{"tag": "merge_run", "event": "start", "run": 6}
+{"tag": "merge_run", "event": "end", "run": 6, "wall_ns": 2147470112}
+20261030 13:46:27.314486 104668 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+{"tag": "merge_run", "event": "start", "run": 7}
+{"tag": "merge_run", "event": "end", "run": 7, "wall_ns": 2147918517}
+20261030 13:46:30.750968 104668 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+{"tag": "merge_run", "event": "start", "run": 8}
+{"tag": "merge_run", "event": "end", "run": 8, "wall_ns": 2161587137}
+20261030 13:46:34.156343 104668 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+{"tag": "merge_run", "event": "start", "run": 9}
+{"tag": "merge_run", "event": "end", "run": 9, "wall_ns": 2139145525}
+20261030 13:46:37.530599 104668 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+{"tag": "merge_run", "event": "start", "run": 10}
+{"tag": "merge_run", "event": "end", "run": 10, "wall_ns": 2136974344}
+{'mean': 2149884288.7, 'median': 2147694314.5, 'min': 2118095379, 'max': 2200253037, 'sd': 21357221.970652618, 'data': [2200253037, 2139920569, 2118095379, 2153755513, 2153722754, 2147470112, 2147918517, 2161587137, 2139145525, 2136974344]}
+{'mean': 2.1498842887, 'median': 2.1476943145000003, 'min': 2.118095379, 'max': 2.200253037, 'sd': 0.02135722197065262, 'data': [2.200253037, 2.139920569, 2.118095379, 2.153755513, 2.1537227540000004, 2.147470112, 2.147918517, 2.161587137, 2.139145525, 2.136974344]}
+End processing for test_update_insert_random_float_data.pftrace
+========================================================
+[784.034]       perfetto.cc:56659 Tracing session 1 ended, total sessions:0
+{"tag": "merge_data", "target_rows": 10000000, "source_rows": 6000000, "matched_source_rows": 3000000, "unmatched_source_rows": 3000000}
+========================================================
+Start processing for test_update_insert_random_string_data.pftrace
+[838.949]       perfetto.cc:54922 Configured tracing session 2, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+20261030 13:47:35.890143 104668 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+{"tag": "merge_run", "event": "start", "run": 0}
+{"tag": "merge_run", "event": "end", "run": 0, "wall_ns": 7320033544}
+20261030 13:47:44.661765 104668 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+{"tag": "merge_run", "event": "start", "run": 1}
+{"tag": "merge_run", "event": "end", "run": 1, "wall_ns": 7357422765}
+20261030 13:47:53.443603 104668 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+{"tag": "merge_run", "event": "start", "run": 2}
+{"tag": "merge_run", "event": "end", "run": 2, "wall_ns": 7397366288}
+20261030 13:48:02.278317 104668 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+{"tag": "merge_run", "event": "start", "run": 3}
+{"tag": "merge_run", "event": "end", "run": 3, "wall_ns": 7399732229}
+20261030 13:48:11.089413 104668 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+{"tag": "merge_run", "event": "start", "run": 4}
+{"tag": "merge_run", "event": "end", "run": 4, "wall_ns": 7393338972}
+20261030 13:48:19.890936 104668 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+{"tag": "merge_run", "event": "start", "run": 5}
+{"tag": "merge_run", "event": "end", "run": 5, "wall_ns": 7451870774}
+20261030 13:48:28.771401 104668 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+{"tag": "merge_run", "event": "start", "run": 6}
+{"tag": "merge_run", "event": "end", "run": 6, "wall_ns": 7434098822}
+20261030 13:48:37.638347 104668 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+{"tag": "merge_run", "event": "start", "run": 7}
+{"tag": "merge_run", "event": "end", "run": 7, "wall_ns": 7494917432}
+20261030 13:48:46.543732 104668 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+{"tag": "merge_run", "event": "start", "run": 8}
+{"tag": "merge_run", "event": "end", "run": 8, "wall_ns": 7420039445}
+20261030 13:48:55.386735 104668 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+{"tag": "merge_run", "event": "start", "run": 9}
+{"tag": "merge_run", "event": "end", "run": 9, "wall_ns": 7378337442}
+20261030 13:49:04.208710 104668 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+{"tag": "merge_run", "event": "start", "run": 10}
+{"tag": "merge_run", "event": "end", "run": 10, "wall_ns": 7360901314}
+{'mean': 7408802548.3, 'median': 7398549258.5, 'min': 7357422765, 'max': 7494917432, 'sd': 42624365.20907631, 'data': [7357422765, 7397366288, 7399732229, 7393338972, 7451870774, 7434098822, 7494917432, 7420039445, 7378337442, 7360901314]}
+{'mean': 7.408802548300001, 'median': 7.3985492585, 'min': 7.357422765000001, 'max': 7.494917432, 'sd': 0.04262436520907631, 'data': [7.357422765000001, 7.397366288000001, 7.3997322290000005, 7.3933389720000005, 7.4518707740000005, 7.434098822, 7.494917432, 7.4200394450000005, 7.378337442, 7.360901314]}
+End processing for test_update_insert_random_string_data.pftrace
+========================================================
+[936.126]       perfetto.cc:56659 Tracing session 2 ended, total sessions:0
+{"tag": "merge_data", "target_rows": 10000000, "source_rows": 6000000, "matched_source_rows": 6000000, "unmatched_source_rows": 0}
+========================================================
+Start processing for test_update_random_float_data.pftrace
+[984.082]       perfetto.cc:54922 Configured tracing session 3, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+20261030 13:50:01.020936 104668 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+{"tag": "merge_run", "event": "start", "run": 0}
+{"tag": "merge_run", "event": "end", "run": 0, "wall_ns": 1584098415}
+20261030 13:50:03.842166 104668 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+{"tag": "merge_run", "event": "start", "run": 1}
+{"tag": "merge_run", "event": "end", "run": 1, "wall_ns": 1570319487}
+20261030 13:50:06.669693 104668 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+{"tag": "merge_run", "event": "start", "run": 2}
+{"tag": "merge_run", "event": "end", "run": 2, "wall_ns": 1554948904}
+20261030 13:50:09.498365 104668 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+{"tag": "merge_run", "event": "start", "run": 3}
+{"tag": "merge_run", "event": "end", "run": 3, "wall_ns": 1561442482}
+20261030 13:50:12.261647 104668 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+{"tag": "merge_run", "event": "start", "run": 4}
+{"tag": "merge_run", "event": "end", "run": 4, "wall_ns": 1582278028}
+20261030 13:50:15.109833 104668 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+{"tag": "merge_run", "event": "start", "run": 5}
+{"tag": "merge_run", "event": "end", "run": 5, "wall_ns": 1524134448}
+20261030 13:50:17.890363 104668 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+{"tag": "merge_run", "event": "start", "run": 6}
+{"tag": "merge_run", "event": "end", "run": 6, "wall_ns": 1512375144}
+20261030 13:50:20.753086 104668 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+{"tag": "merge_run", "event": "start", "run": 7}
+{"tag": "merge_run", "event": "end", "run": 7, "wall_ns": 1545256190}
+20261030 13:50:23.601376 104668 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+{"tag": "merge_run", "event": "start", "run": 8}
+{"tag": "merge_run", "event": "end", "run": 8, "wall_ns": 1561696821}
+20261030 13:50:26.381784 104668 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+{"tag": "merge_run", "event": "start", "run": 9}
+{"tag": "merge_run", "event": "end", "run": 9, "wall_ns": 1529923859}
+20261030 13:50:29.126847 104668 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+{"tag": "merge_run", "event": "start", "run": 10}
+{"tag": "merge_run", "event": "end", "run": 10, "wall_ns": 1495190743}
+{'mean': 1543756610.6, 'median': 1550102547.0, 'min': 1495190743, 'max': 1582278028, 'sd': 27631418.49233039, 'data': [1570319487, 1554948904, 1561442482, 1582278028, 1524134448, 1512375144, 1545256190, 1561696821, 1529923859, 1495190743]}
+{'mean': 1.5437566106, 'median': 1.550102547, 'min': 1.495190743, 'max': 1.5822780280000002, 'sd': 0.027631418492330393, 'data': [1.5703194870000001, 1.5549489040000002, 1.5614424820000001, 1.5822780280000002, 1.524134448, 1.5123751440000002, 1.5452561900000001, 1.5616968210000002, 1.5299238590000002, 1.495190743]}
+End processing for test_update_random_float_data.pftrace
+========================================================
+[014.986]       perfetto.cc:56659 Tracing session 3 ended, total sessions:0
+{"tag": "merge_data", "target_rows": 10000000, "source_rows": 6000000, "matched_source_rows": 6000000, "unmatched_source_rows": 0}
+========================================================
+Start processing for test_update_random_string_data.pftrace
+[068.012]       perfetto.cc:54922 Configured tracing session 4, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+20261030 13:51:24.953136 104668 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+{"tag": "merge_run", "event": "start", "run": 0}
+{"tag": "merge_run", "event": "end", "run": 0, "wall_ns": 5261163436}
+20261030 13:51:31.650654 104668 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+{"tag": "merge_run", "event": "start", "run": 1}
+{"tag": "merge_run", "event": "end", "run": 1, "wall_ns": 5268656277}
+20261030 13:51:38.319826 104668 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+{"tag": "merge_run", "event": "start", "run": 2}
+{"tag": "merge_run", "event": "end", "run": 2, "wall_ns": 5240265781}
+20261030 13:51:44.972804 104668 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+{"tag": "merge_run", "event": "start", "run": 3}
+{"tag": "merge_run", "event": "end", "run": 3, "wall_ns": 5228526785}
+20261030 13:51:51.615493 104668 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+{"tag": "merge_run", "event": "start", "run": 4}
+{"tag": "merge_run", "event": "end", "run": 4, "wall_ns": 5184016343}
+20261030 13:51:58.179019 104668 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+{"tag": "merge_run", "event": "start", "run": 5}
+{"tag": "merge_run", "event": "end", "run": 5, "wall_ns": 5248290614}
+20261030 13:52:04.807355 104668 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+{"tag": "merge_run", "event": "start", "run": 6}
+{"tag": "merge_run", "event": "end", "run": 6, "wall_ns": 5249764416}
+20261030 13:52:11.467047 104668 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+{"tag": "merge_run", "event": "start", "run": 7}
+{"tag": "merge_run", "event": "end", "run": 7, "wall_ns": 5245188471}
+20261030 13:52:18.120253 104668 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+{"tag": "merge_run", "event": "start", "run": 8}
+{"tag": "merge_run", "event": "end", "run": 8, "wall_ns": 5231798612}
+20261030 13:52:24.774822 104668 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+{"tag": "merge_run", "event": "start", "run": 9}
+{"tag": "merge_run", "event": "end", "run": 9, "wall_ns": 5297469296}
+20261030 13:52:31.482381 104668 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+{"tag": "merge_run", "event": "start", "run": 10}
+{"tag": "merge_run", "event": "end", "run": 10, "wall_ns": 5253865940}
+{'mean': 5244784253.5, 'median': 5246739542.5, 'min': 5184016343, 'max': 5297469296, 'sd': 29081135.390928436, 'data': [5268656277, 5240265781, 5228526785, 5184016343, 5248290614, 5249764416, 5245188471, 5231798612, 5297469296, 5253865940]}
+{'mean': 5.244784253500001, 'median': 5.2467395425, 'min': 5.184016343000001, 'max': 5.297469296, 'sd': 0.029081135390928436, 'data': [5.268656277000001, 5.240265781000001, 5.228526785000001, 5.184016343000001, 5.248290614, 5.2497644160000005, 5.2451884710000005, 5.231798612, 5.297469296, 5.253865940000001]}
+End processing for test_update_random_string_data.pftrace
+========================================================
+[141.269]       perfetto.cc:56659 Tracing session 4 ended, total sessions:0
+{"tag": "merge_data", "target_rows": 10000000, "source_rows": 68000, "matched_source_rows": 34000, "unmatched_source_rows": 34000}
+========================================================
+Start processing for test_one_index_value_per_segment_float.pftrace
+[172.565]       perfetto.cc:54922 Configured tracing session 5, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+20261030 13:53:09.502415 104668 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+{"tag": "merge_run", "event": "start", "run": 0}
+{"tag": "merge_run", "event": "end", "run": 0, "wall_ns": 8352003476}
+20261030 13:53:19.015665 104668 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+{"tag": "merge_run", "event": "start", "run": 1}
+{"tag": "merge_run", "event": "end", "run": 1, "wall_ns": 8376044805}
+20261030 13:53:28.545405 104668 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+{"tag": "merge_run", "event": "start", "run": 2}
+{"tag": "merge_run", "event": "end", "run": 2, "wall_ns": 8254663049}
+20261030 13:53:37.904100 104668 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+{"tag": "merge_run", "event": "start", "run": 3}
+{"tag": "merge_run", "event": "end", "run": 3, "wall_ns": 8291375393}
+20261030 13:53:47.356362 104668 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+{"tag": "merge_run", "event": "start", "run": 4}
+{"tag": "merge_run", "event": "end", "run": 4, "wall_ns": 8144325595}
+20261030 13:53:56.632355 104668 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+{"tag": "merge_run", "event": "start", "run": 5}
+{"tag": "merge_run", "event": "end", "run": 5, "wall_ns": 8092539397}
+20261030 13:54:05.842602 104668 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+{"tag": "merge_run", "event": "start", "run": 6}
+{"tag": "merge_run", "event": "end", "run": 6, "wall_ns": 8028664371}
+20261030 13:54:15.009912 104668 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+{"tag": "merge_run", "event": "start", "run": 7}
+{"tag": "merge_run", "event": "end", "run": 7, "wall_ns": 7932046510}
+20261030 13:54:24.105294 104668 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+{"tag": "merge_run", "event": "start", "run": 8}
+{"tag": "merge_run", "event": "end", "run": 8, "wall_ns": 7715573931}
+20261030 13:54:32.955749 104668 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+{"tag": "merge_run", "event": "start", "run": 9}
+{"tag": "merge_run", "event": "end", "run": 9, "wall_ns": 7571596360}
+20261030 13:54:41.665720 104668 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+{"tag": "merge_run", "event": "start", "run": 10}
+{"tag": "merge_run", "event": "end", "run": 10, "wall_ns": 7634179279}
+{'mean': 8004100869, 'median': 8060601884.0, 'min': 7571596360, 'max': 8376044805, 'sd': 283642932.8136292, 'data': [8376044805, 8254663049, 8291375393, 8144325595, 8092539397, 8028664371, 7932046510, 7715573931, 7571596360, 7634179279]}
+{'mean': 8.004100869, 'median': 8.060601884, 'min': 7.571596360000001, 'max': 8.376044805000001, 'sd': 0.28364293281362923, 'data': [8.376044805000001, 8.254663049000001, 8.291375393000001, 8.144325595, 8.092539397000001, 8.028664371, 7.93204651, 7.715573931000001, 7.571596360000001, 7.6341792790000005]}
+End processing for test_one_index_value_per_segment_float.pftrace
+========================================================
+[273.536]       perfetto.cc:56659 Tracing session 5 ended, total sessions:0
+{"tag": "merge_data", "target_rows": 10000000, "source_rows": 68000, "matched_source_rows": 34000, "unmatched_source_rows": 34000}
+========================================================
+Start processing for test_one_index_value_per_segment_string.pftrace
+[299.477]       perfetto.cc:54922 Configured tracing session 6, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+20261030 13:55:16.422260 104668 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+{"tag": "merge_run", "event": "start", "run": 0}
+{"tag": "merge_run", "event": "end", "run": 0, "wall_ns": 28895356652}
+20261030 13:55:46.694638 104668 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+{"tag": "merge_run", "event": "start", "run": 1}
+{"tag": "merge_run", "event": "end", "run": 1, "wall_ns": 29026496410}
+20261030 13:56:17.015146 104668 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+{"tag": "merge_run", "event": "start", "run": 2}
+{"tag": "merge_run", "event": "end", "run": 2, "wall_ns": 29410425641}
+20261030 13:56:47.719090 104668 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+{"tag": "merge_run", "event": "start", "run": 3}
+{"tag": "merge_run", "event": "end", "run": 3, "wall_ns": 29281119194}
+20261030 13:57:18.335062 104668 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+{"tag": "merge_run", "event": "start", "run": 4}
+{"tag": "merge_run", "event": "end", "run": 4, "wall_ns": 29023669013}
+20261030 13:57:48.654002 104668 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+{"tag": "merge_run", "event": "start", "run": 5}
+{"tag": "merge_run", "event": "end", "run": 5, "wall_ns": 28557950826}
+20261030 13:58:18.590370 104668 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+{"tag": "merge_run", "event": "start", "run": 6}
+{"tag": "merge_run", "event": "end", "run": 6, "wall_ns": 29811182299}
+20261030 13:58:49.761294 104668 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+{"tag": "merge_run", "event": "start", "run": 7}
+{"tag": "merge_run", "event": "end", "run": 7, "wall_ns": 28993666170}
+20261030 13:59:20.068414 104668 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+{"tag": "merge_run", "event": "start", "run": 8}
+{"tag": "merge_run", "event": "end", "run": 8, "wall_ns": 29314211457}
+20261030 13:59:50.688803 104668 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+{"tag": "merge_run", "event": "start", "run": 9}
+{"tag": "merge_run", "event": "end", "run": 9, "wall_ns": 28665590842}
+20261030 14:00:20.652351 104668 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+{"tag": "merge_run", "event": "start", "run": 10}
+{"tag": "merge_run", "event": "end", "run": 10, "wall_ns": 29310600077}
+{'mean': 29139491192.9, 'median': 29153807802.0, 'min': 28557950826, 'max': 29811182299, 'sd': 367371535.4185909, 'data': [29026496410, 29410425641, 29281119194, 29023669013, 28557950826, 29811182299, 28993666170, 29314211457, 28665590842, 29310600077]}
+{'mean': 29.139491192900003, 'median': 29.153807802000003, 'min': 28.557950826000003, 'max': 29.811182299000002, 'sd': 0.3673715354185909, 'data': [29.026496410000004, 29.410425641000003, 29.281119194000002, 29.023669013000003, 28.557950826000003, 29.811182299000002, 28.99366617, 29.314211457000003, 28.665590842, 29.310600077]}
+End processing for test_one_index_value_per_segment_string.pftrace
+========================================================
+[634.406]       perfetto.cc:56659 Tracing session 6 ended, total sessions:0
+{"tag": "merge_data", "target_rows": 100000, "source_rows": 76000, "matched_source_rows": 38000, "unmatched_source_rows": 38000}
+========================================================
+Start processing for test_one_index_value_float.pftrace
+[635.379]       perfetto.cc:54922 Configured tracing session 7, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+20261030 14:00:52.325364 104668 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+{"tag": "merge_run", "event": "start", "run": 0}
+{"tag": "merge_run", "event": "end", "run": 0, "wall_ns": 94499341760}
+20261030 14:02:27.059826 104668 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+{"tag": "merge_run", "event": "start", "run": 1}
+{"tag": "merge_run", "event": "end", "run": 1, "wall_ns": 94017669953}
+20261030 14:04:01.355238 104668 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+{"tag": "merge_run", "event": "start", "run": 2}
+{"tag": "merge_run", "event": "end", "run": 2, "wall_ns": 94023038574}
+20261030 14:05:35.660684 104668 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+{"tag": "merge_run", "event": "start", "run": 3}
+{"tag": "merge_run", "event": "end", "run": 3, "wall_ns": 93598152428}
+20261030 14:07:09.516282 104668 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+{"tag": "merge_run", "event": "start", "run": 4}
+{"tag": "merge_run", "event": "end", "run": 4, "wall_ns": 95015322759}
+20261030 14:08:44.746145 104668 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+{"tag": "merge_run", "event": "start", "run": 5}
+{"tag": "merge_run", "event": "end", "run": 5, "wall_ns": 93895145581}
+20261030 14:10:18.915724 104668 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+{"tag": "merge_run", "event": "start", "run": 6}
+{"tag": "merge_run", "event": "end", "run": 6, "wall_ns": 95230962626}
+20261030 14:11:54.362306 104668 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+{"tag": "merge_run", "event": "start", "run": 7}
+{"tag": "merge_run", "event": "end", "run": 7, "wall_ns": 94061424462}
+20261030 14:13:28.645449 104668 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+{"tag": "merge_run", "event": "start", "run": 8}
+{"tag": "merge_run", "event": "end", "run": 8, "wall_ns": 93854078725}
+20261030 14:15:02.706291 104668 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+{"tag": "merge_run", "event": "start", "run": 9}
+{"tag": "merge_run", "event": "end", "run": 9, "wall_ns": 93859355831}
+20261030 14:16:36.773112 104668 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+{"tag": "merge_run", "event": "start", "run": 10}
+{"tag": "merge_run", "event": "end", "run": 10, "wall_ns": 93965515712}
+{'mean': 94152066665.1, 'median': 93991592832.5, 'min': 93598152428, 'max': 95230962626, 'sd': 530645460.2196077, 'data': [94017669953, 94023038574, 93598152428, 95015322759, 93895145581, 95230962626, 94061424462, 93854078725, 93859355831, 93965515712]}
+{'mean': 94.15206666510001, 'median': 93.9915928325, 'min': 93.598152428, 'max': 95.23096262600001, 'sd': 0.5306454602196078, 'data': [94.01766995300001, 94.02303857400001, 93.598152428, 95.015322759, 93.89514558100001, 95.23096262600001, 94.061424462, 93.85407872500001, 93.859355831, 93.96551571200001]}
+End processing for test_one_index_value_float.pftrace
+========================================================
+[674.067]       perfetto.cc:56659 Tracing session 7 ended, total sessions:0
+{"tag": "merge_data", "target_rows": 100000, "source_rows": 76000, "matched_source_rows": 38000, "unmatched_source_rows": 38000}
+========================================================
+Start processing for test_one_index_value_string.pftrace
+[674.624]       perfetto.cc:54922 Configured tracing session 8, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+20261030 14:18:11.561899 104668 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+{"tag": "merge_run", "event": "start", "run": 0}
+{"tag": "merge_run", "event": "end", "run": 0, "wall_ns": 376035548161}
+20261030 14:24:27.845778 104668 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+{"tag": "merge_run", "event": "start", "run": 1}
+{"tag": "merge_run", "event": "end", "run": 1, "wall_ns": 375288082030}
+20261030 14:30:43.386059 104668 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+{"tag": "merge_run", "event": "start", "run": 2}
+{"tag": "merge_run", "event": "end", "run": 2, "wall_ns": 375274044811}
+20261030 14:36:58.913207 104668 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+{"tag": "merge_run", "event": "start", "run": 3}
+{"tag": "merge_run", "event": "end", "run": 3, "wall_ns": 376476056864}
+20261030 14:43:15.653636 104668 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+{"tag": "merge_run", "event": "start", "run": 4}
+{"tag": "merge_run", "event": "end", "run": 4, "wall_ns": 375325715955}
+20261030 14:49:31.226626 104668 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+{"tag": "merge_run", "event": "start", "run": 5}
+{"tag": "merge_run", "event": "end", "run": 5, "wall_ns": 375544569619}
+20261030 14:55:47.021297 104668 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+{"tag": "merge_run", "event": "start", "run": 6}
+{"tag": "merge_run", "event": "end", "run": 6, "wall_ns": 375728089499}
+20261030 15:02:02.997503 104668 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+{"tag": "merge_run", "event": "start", "run": 7}
+{"tag": "merge_run", "event": "end", "run": 7, "wall_ns": 377009787369}
+20261030 15:08:20.261488 104668 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+{"tag": "merge_run", "event": "start", "run": 8}
+{"tag": "merge_run", "event": "end", "run": 8, "wall_ns": 375503618430}
+20261030 15:14:36.024161 104668 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+{"tag": "merge_run", "event": "start", "run": 9}
+{"tag": "merge_run", "event": "end", "run": 9, "wall_ns": 375392622494}
+20261030 15:20:51.657738 104668 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+{"tag": "merge_run", "event": "start", "run": 10}
+{"tag": "merge_run", "event": "end", "run": 10, "wall_ns": 449663415373}
+{'mean': 383120600244.4, 'median': 375524094024.5, 'min': 375274044811, 'max': 449663415373, 'sd': 23387795340.576202, 'data': [375288082030, 375274044811, 376476056864, 375325715955, 375544569619, 375728089499, 377009787369, 375503618430, 375392622494, 449663415373]}
+{'mean': 383.12060024440007, 'median': 375.5240940245, 'min': 375.274044811, 'max': 449.663415373, 'sd': 23.387795340576204, 'data': [375.28808203, 375.274044811, 376.47605686400004, 375.325715955, 375.544569619, 375.728089499, 377.00978736900004, 375.50361843, 375.392622494, 449.663415373]}
+End processing for test_one_index_value_string.pftrace
+========================================================
+[884.711]       perfetto.cc:56659 Tracing session 8 ended, total sessions:0
+I1030 15:28:21.594382 store.go:302 In dir /tmp/seaweedfs-asv (disk ID 0) adds volume:14404 collection:benchmark-bucket replicaPlacement:000 ttl:
+I1030 15:28:21.594643 store.go:307 add volume 14404 on disk ID 0
+I1030 15:28:21.594735 volume_grpc_client_to_master.go:292 volume server 127.0.0.1:8080 adds volume 14404
+I1030 15:28:21.594857 volume_growth.go:384 Created Volume 14404 on topo:DefaultDataCenter:DefaultRack:127.0.0.1:8080
+I1030 15:28:21.594895 volume_growth.go:397 Registered Volume 14404 on topo:DefaultDataCenter:DefaultRack:127.0.0.1:8080
+I1030 15:28:21.595171 store.go:302 In dir /tmp/seaweedfs-asv (disk ID 0) adds volume:14405 collection:benchmark-bucket replicaPlacement:000 ttl:
+I1030 15:28:21.595308 store.go:307 add volume 14405 on disk ID 0
+I1030 15:28:21.595368 volume_grpc_client_to_master.go:292 volume server 127.0.0.1:8080 adds volume 14405
+I1030 15:28:21.595406 volume_growth.go:384 Created Volume 14405 on topo:DefaultDataCenter:DefaultRack:127.0.0.1:8080
+I1030 15:28:21.595422 volume_growth.go:397 Registered Volume 14405 on topo:DefaultDataCenter:DefaultRack:127.0.0.1:8080
+I1030 15:28:21.595572 store.go:302 In dir /tmp/seaweedfs-asv (disk ID 0) adds volume:14406 collection:benchmark-bucket replicaPlacement:000 ttl:
+I1030 15:28:21.595672 store.go:307 add volume 14406 on disk ID 0
+I1030 15:28:21.595715 volume_grpc_client_to_master.go:292 volume server 127.0.0.1:8080 adds volume 14406
+I1030 15:28:21.595731 volume_growth.go:384 Created Volume 14406 on topo:DefaultDataCenter:DefaultRack:127.0.0.1:8080
+I1030 15:28:21.595749 volume_growth.go:397 Registered Volume 14406 on topo:DefaultDataCenter:DefaultRack:127.0.0.1:8080
+I1030 15:28:21.595868 store.go:302 In dir /tmp/seaweedfs-asv (disk ID 0) adds volume:14407 collection:benchmark-bucket replicaPlacement:000 ttl:
+I1030 15:28:21.595983 store.go:307 add volume 14407 on disk ID 0
+I1030 15:28:21.596032 volume_grpc_client_to_master.go:292 volume server 127.0.0.1:8080 adds volume 14407
+I1030 15:28:21.596118 volume_growth.go:384 Created Volume 14407 on topo:DefaultDataCenter:DefaultRack:127.0.0.1:8080
+I1030 15:28:21.596146 volume_growth.go:397 Registered Volume 14407 on topo:DefaultDataCenter:DefaultRack:127.0.0.1:8080
+SeaweedFS stopped (data left in /tmp/seaweedfs-asv)
+
