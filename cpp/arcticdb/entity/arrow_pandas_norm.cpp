@@ -16,8 +16,8 @@ namespace arcticdb {
 using namespace proto::descriptors;
 using entity::IndexDescriptorImpl;
 using entity::StreamDescriptor;
-using ExperimentalArrow = NormalizationMetadata_ExperimentalArrow;
-using ArrowColumnMeta = NormalizationMetadata_ExperimentalArrow_ColumnMeta;
+using Arrow = NormalizationMetadata_Arrow;
+using ArrowColumnMeta = NormalizationMetadata_Arrow_ColumnMeta;
 using Pandas = NormalizationMetadata_Pandas;
 
 namespace {
@@ -33,7 +33,7 @@ std::optional<std::string> series_name(const Pandas& common) {
 
 // The timezone of every index level, by the position of the column holding it. Pandas records level 0's timezone on the
 // index message itself and the rest in a map keyed by level, so iterating that map covers every level that has one.
-void mirror_index_timezones(const Pandas& common, const StreamDescriptor& desc, ExperimentalArrow& arrow) {
+void mirror_index_timezones(const Pandas& common, const StreamDescriptor& desc, Arrow& arrow) {
     auto& columns = *arrow.mutable_columns();
     const auto set_timezone = [&](size_t level, const std::string& timezone) {
         if (!timezone.empty() && level < desc.field_count()) {
@@ -52,7 +52,7 @@ void mirror_index_timezones(const Pandas& common, const StreamDescriptor& desc, 
 
 } // namespace
 
-void check_embedded_pandas_agrees(const ExperimentalArrow& arrow, const StreamDescriptor& desc) {
+void check_embedded_pandas_agrees(const Arrow& arrow, const StreamDescriptor& desc) {
     const auto* common = embedded_pandas_common(arrow);
     if (common == nullptr) {
         return;
@@ -101,7 +101,7 @@ bool is_pandas_convertible_to_arrow(const NormalizationMetadata& norm_meta) {
     return norm_meta.has_df() || norm_meta.has_series() || norm_meta.has_ts();
 }
 
-void embed_pandas(const NormalizationMetadata& pandas, ExperimentalArrow& arrow) {
+void embed_pandas(const NormalizationMetadata& pandas, Arrow& arrow) {
     switch (pandas.input_type_case()) {
     case NormalizationMetadata::kDf:
         arrow.mutable_df()->CopyFrom(pandas.df());
@@ -120,26 +120,26 @@ void embed_pandas(const NormalizationMetadata& pandas, ExperimentalArrow& arrow)
     }
 }
 
-std::optional<NormalizationMetadata> embedded_pandas(const ExperimentalArrow& arrow) {
+std::optional<NormalizationMetadata> embedded_pandas(const Arrow& arrow) {
     NormalizationMetadata res;
     switch (arrow.pandas_input_type_case()) {
-    case ExperimentalArrow::kDf:
+    case Arrow::kDf:
         res.mutable_df()->CopyFrom(arrow.df());
         return res;
-    case ExperimentalArrow::kSeries:
+    case Arrow::kSeries:
         res.mutable_series()->CopyFrom(arrow.series());
         return res;
-    case ExperimentalArrow::kTs:
+    case Arrow::kTs:
         res.mutable_ts()->CopyFrom(arrow.ts());
         return res;
-    case ExperimentalArrow::PANDAS_INPUT_TYPE_NOT_SET:
+    case Arrow::PANDAS_INPUT_TYPE_NOT_SET:
         return std::nullopt;
     }
     return std::nullopt;
 }
 
 NormalizationMetadata derive_pandas_from_arrow(
-        const ExperimentalArrow& arrow, const StreamDescriptor& desc, const NormalizationMetadata& pandas_template
+        const Arrow& arrow, const StreamDescriptor& desc, const NormalizationMetadata& pandas_template
 ) {
     const auto* template_common = pandas_common(pandas_template);
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(
@@ -223,7 +223,7 @@ NormalizationMetadata arrow_norm_from_pandas(const NormalizationMetadata& norm_m
     if (norm_meta.has_custom()) {
         res.mutable_custom()->CopyFrom(norm_meta.custom());
     }
-    auto& arrow = *res.mutable_experimental_arrow();
+    auto& arrow = *res.mutable_arrow();
     const auto* common = pandas_common(norm_meta);
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(common != nullptr, "Convertible pandas metadata without a common");
 

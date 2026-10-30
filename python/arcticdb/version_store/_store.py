@@ -356,8 +356,8 @@ def _assume_false(name, kwargs):
 
 def _has_physically_stored_index(norm):
     input_type = norm.WhichOneof("input_type")
-    if input_type == "experimental_arrow":
-        return norm.experimental_arrow.has_index
+    if input_type == "arrow":
+        return norm.arrow.has_index
     if input_type in ("df", "series"):
         common = norm.df.common if input_type == "df" else norm.series.common
         index_type = common.WhichOneof("index_type")
@@ -3831,10 +3831,10 @@ class NativeVersionStore:
             return "pickled"
         elif input_type == "ts":
             return "normalized_timeseries"
-        elif input_type == "experimental_arrow":
+        elif input_type == "arrow":
             # Arrow data does not distinguish DataFrame-like and Series-like inputs the way the other input
             # types do, so the one_dimensional flag on the normalization metadata is used instead.
-            one_dimensional = dit.timeseries_descriptor.normalization.experimental_arrow.one_dimensional
+            one_dimensional = dit.timeseries_descriptor.normalization.arrow.one_dimensional
             return "arrow_series" if one_dimensional else "arrow_dataframe"
         else:
             return "missing_type_info"
@@ -3897,9 +3897,9 @@ class NativeVersionStore:
         if input_type == "df":
             index_metadata = desc.normalization.df.common
             tz = get_timezone_from_metadata(index_metadata)
-        elif input_type == "experimental_arrow":
+        elif input_type == "arrow":
             index_column_name = desc.fields[0].name
-            index_column_meta = desc.normalization.experimental_arrow.columns.get(index_column_name, None)
+            index_column_meta = desc.normalization.arrow.columns.get(index_column_name, None)
             if index_column_meta is not None:
                 tz = index_column_meta.timezone
         if date_range_ns_precision:
@@ -4049,8 +4049,8 @@ class NativeVersionStore:
                     index_dtype.append(dtypes.pop(0))
             if timeseries_descriptor.normalization.df.has_synthetic_columns:
                 columns = pd.RangeIndex(0, len(columns))
-        elif input_type == "experimental_arrow":
-            arrow_meta = timeseries_descriptor.normalization.experimental_arrow
+        elif input_type == "arrow":
+            arrow_meta = timeseries_descriptor.normalization.arrow
             if arrow_meta.one_dimensional:
                 # This correctly gives an empty string for Array/ChunkedArray written data as well as Series with empty
                 # names

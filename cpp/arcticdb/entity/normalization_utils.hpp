@@ -32,11 +32,11 @@ proto::descriptors::NormalizationMetadata_Pandas* mutable_pandas_common(
 /// The pandas metadata Arrow data carries once it has been combined with pandas data. Nullptr for Arrow-only data, and
 /// for input types that are pandas in their own right - use pandas_common for those.
 const proto::descriptors::NormalizationMetadata_Pandas* embedded_pandas_common(
-        const proto::descriptors::NormalizationMetadata_ExperimentalArrow& arrow_meta
+        const proto::descriptors::NormalizationMetadata_Arrow& arrow_meta
 );
 
 proto::descriptors::NormalizationMetadata_Pandas* mutable_embedded_pandas_common(
-        proto::descriptors::NormalizationMetadata_ExperimentalArrow& arrow_meta
+        proto::descriptors::NormalizationMetadata_Arrow& arrow_meta
 );
 
 /// True for the input types that are pandas objects in their own right: a DataFrame, a Series or a TimeFrame. False for

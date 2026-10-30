@@ -1276,8 +1276,8 @@ def test_append_empty_arrow_to_empty_pandas_then_pandas(arrow_library_any_schema
         "sym", pa.table({"ts": pa.array([], pa.timestamp("ns")), "col": pa.array([], pa.int64())}), index_column=True
     )
     norm = lib._nvs.get_info("sym")["normalization_metadata"]
-    assert norm.WhichOneof("input_type") == "experimental_arrow"
-    assert norm.experimental_arrow.WhichOneof("pandas_input_type") is None
+    assert norm.WhichOneof("input_type") == "arrow"
+    assert norm.arrow.WhichOneof("pandas_input_type") is None
 
     lib.append("sym", _pandas_ts([1, 2]))
     assert_frame_equal_with_arrow(lib.read("sym").data, _pandas_ts([1, 2]))

@@ -111,17 +111,17 @@ TEST(ColumnMetadata, NonArrow) {
 
 TEST(ColumnMetadata, MissingColumn) {
     proto::descriptors::NormalizationMetadata norm_meta;
-    (*norm_meta.mutable_experimental_arrow()->mutable_columns())["col"] =
-            proto::descriptors::NormalizationMetadata::ExperimentalArrow::ColumnMeta();
+    (*norm_meta.mutable_arrow()->mutable_columns())["col"] =
+            proto::descriptors::NormalizationMetadata::Arrow::ColumnMeta();
     ASSERT_FALSE(column_metadata(norm_meta, "missing col").has_value());
 }
 
 TEST(ColumnMetadata, PresentColumn) {
     std::string tz{"Europe/Brussels"};
     proto::descriptors::NormalizationMetadata norm_meta;
-    proto::descriptors::NormalizationMetadata::ExperimentalArrow::ColumnMeta col_meta;
+    proto::descriptors::NormalizationMetadata::Arrow::ColumnMeta col_meta;
     col_meta.set_timezone(tz);
-    (*norm_meta.mutable_experimental_arrow()->mutable_columns())["col"] = col_meta;
+    (*norm_meta.mutable_arrow()->mutable_columns())["col"] = col_meta;
     auto new_col_meta = column_metadata(norm_meta, "col");
     ASSERT_TRUE(new_col_meta.has_value());
     ASSERT_TRUE(new_col_meta->has_timezone());
@@ -336,9 +336,9 @@ TEST(ArrowRead, ConvertSegmentWithTimezones) {
 
     std::string tz_str{"Europe/Amsterdam"};
     proto::descriptors::NormalizationMetadata norm_meta;
-    proto::descriptors::NormalizationMetadata::ExperimentalArrow::ColumnMeta column_meta;
+    proto::descriptors::NormalizationMetadata::Arrow::ColumnMeta column_meta;
     column_meta.set_timezone(tz_str);
-    (*norm_meta.mutable_experimental_arrow()->mutable_columns())["col_with_tz"] = column_meta;
+    (*norm_meta.mutable_arrow()->mutable_columns())["col_with_tz"] = column_meta;
     auto arrow_data = segment_to_arrow_data(segment, norm_meta);
     // We expect to see num_chunks record batches
     EXPECT_EQ(arrow_data.size(), num_chunks);
@@ -576,13 +576,13 @@ TEST(ModifyArrowOutputConfigFromNormMeta, NonArrowNormMeta) {
 
 TEST(ModifyArrowOutputConfigFromNormMeta, ArrowNormMeta) {
     proto::descriptors::NormalizationMetadata norm_meta;
-    proto::descriptors::NormalizationMetadata::ExperimentalArrow::ColumnMeta column_meta;
+    proto::descriptors::NormalizationMetadata::Arrow::ColumnMeta column_meta;
     column_meta.set_string_format(proto::descriptors::LARGE_STRING);
-    (*norm_meta.mutable_experimental_arrow()->mutable_columns())["large string"] = column_meta;
+    (*norm_meta.mutable_arrow()->mutable_columns())["large string"] = column_meta;
     column_meta.set_string_format(proto::descriptors::SMALL_STRING);
-    (*norm_meta.mutable_experimental_arrow()->mutable_columns())["small string"] = column_meta;
+    (*norm_meta.mutable_arrow()->mutable_columns())["small string"] = column_meta;
     column_meta.set_string_format(proto::descriptors::CATEGORICAL);
-    (*norm_meta.mutable_experimental_arrow()->mutable_columns())["categorical"] = column_meta;
+    (*norm_meta.mutable_arrow()->mutable_columns())["categorical"] = column_meta;
 
     // Default unspecified takes all values from norm meta and sets default to large string
     ArrowOutputConfig arrow_output_config{};
