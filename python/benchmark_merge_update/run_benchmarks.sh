@@ -146,7 +146,7 @@ run_benchmark() {
 
     log "[$suite] Running benchmarks, output in $output_dir"
     mkdir -p "$output_dir"
-    rm -f "$output_dir"/*.pftrace "$output_dir/log.txt"
+    rm -f "$output_dir"/*.pftrace "$output_dir"/*.zip "$output_dir/log.txt"
     record_provenance "$suite" "$output_dir" "$only_sparse" "$write_to_segment" | tee "$output_dir/log.txt"
     # benchmark.py writes the traces to the working directory
     (cd "$output_dir" && PYTHONPATH="$PYTHON_DIR${PYTHONPATH:+:$PYTHONPATH}" "$PYTHON" "$SCRIPT_DIR/benchmark.py" 2>&1) \

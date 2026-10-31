@@ -4,12 +4,14 @@ import pandas as pd
 import polars as pl
 import numpy as np
 import os
+import pickle
 import subprocess
 import sys
 import benchmarks.seaweed_utils
 import time
 import random
 import statistics
+import zipfile
 from arcticdb.version_store.library import MergeStrategy
 from arcticdb.util.test import random_strings_of_length
 from arcticdb_ext.tracing import TracingSession, TracingSessionConfig
@@ -18,6 +20,11 @@ SEAWEED_PATH = "/home/vasil/Documents/source/ArcticDB/build_tooling/start_seawee
 # Kept on disk next to this script: the default /tmp can be a tmpfs, which would hold the data in RAM
 SEAWEED_DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "seaweed")
 ROWS_PER_SEGMENT = 100_000
+# Each run is a separate process; the first (chronologically) run is treated as the warm-up during analysis
+RUNS = 11
+BUCKET_NAME = "benchmark-bucket"
+# Generated test data is cached here so the run processes do not regenerate it
+DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
 
 
 def float_col_with_nan(rows, num_sparse_rows, rng, low):
@@ -132,7 +139,17 @@ def count_matched_source_rows(target, source, on):
     return int((joined["_merge"] == "both").sum())
 
 
-def benchmark(seaweed, target, source, on, strategy, repeats, trace_path):
+def data_path(test_name):
+    return os.path.join(DATA_DIR, f"{test_name}.pkl")
+
+
+def run_trace_name(test_name, run_idx):
+    return f"{test_name}_run_{run_idx:02d}.pftrace"
+
+
+def generate_data(test_name):
+    """Generates the test's target and source once and caches them for the run processes."""
+    target, source, on, strategy = TESTS[test_name]()
     num_matched = count_matched_source_rows(target, source, on)
     print(
         json.dumps(
@@ -146,33 +163,62 @@ def benchmark(seaweed, target, source, on, strategy, repeats, trace_path):
         ),
         flush=True,
     )
-    print("========================================================")
-    print(f"Start processing for {trace_path}")
+    os.makedirs(DATA_DIR, exist_ok=True)
+    with open(data_path(test_name), "wb") as f:
+        pickle.dump((target, source, on, strategy), f, protocol=pickle.HIGHEST_PROTOCOL)
+
+
+def run_once(test_name, run_idx):
+    """Runs one traced merge of the test in this process and writes its trace to the working directory."""
+    with open(data_path(test_name), "rb") as f:
+        target, source, on, strategy = pickle.load(f)
+    seaweed = benchmarks.seaweed_utils.SeaweedClient()
+    reset_bucket(seaweed, BUCKET_NAME)
+    lib = arcticdb.Arctic(seaweed.arctic_uri(BUCKET_NAME)).get_library("benchmark_lib", create_if_missing=True)
     config = TracingSessionConfig()
     config.buffer_size_kb = 256 * 1024
     session = TracingSession(config)
     session.start()
-    bucket_name = "benchmark-bucket"
-    uri = seaweed.arctic_uri(bucket_name)
-    times = []
-    for run_idx in range(repeats + 1):
-        reset_bucket(seaweed, bucket_name)
-        ac = arcticdb.Arctic(uri)
-        lib = ac.get_library("benchmark_lib", create_if_missing=True)
-        current_time = run_single(lib, target, source, on, strategy, run_idx)
-        if run_idx != 0:
-            times.append(current_time)
-    reset_bucket(seaweed, bucket_name)
-    stats_ns = generate_stats(times)
-    stats_s = stats_to_s(stats_ns)
-    session.stop_and_flush(trace_path)
-    print(stats_ns)
-    print(stats_s)
-    print(f"End processing for {trace_path}")
+    run_single(lib, target, source, on, strategy, run_idx)
+    session.stop_and_flush(run_trace_name(test_name, run_idx))
+    reset_bucket(seaweed, BUCKET_NAME)
+
+
+def wall_times_from_log(lines):
+    return {record["run"]: record["wall_ns"] for record in map(json.loads, lines) if record.get("event") == "end"}
+
+
+def benchmark(test_name):
+    """Runs each of the RUNS merges in its own process, then zips the per run traces into <test_name>.zip."""
     print("========================================================")
+    print(f"Start processing for {test_name}", flush=True)
+    subprocess.run([sys.executable, __file__, "generate", test_name], check=True)
+    times = []
+    for run_idx in range(RUNS):
+        result = subprocess.run(
+            [sys.executable, __file__, "run", test_name, str(run_idx)], stdout=subprocess.PIPE, text=True
+        )
+        # Printed before checking the exit code so that a killed run still leaves its output in the log
+        sys.stdout.write(result.stdout)
+        sys.stdout.flush()
+        result.check_returncode()
+        merge_run_lines = [line for line in result.stdout.splitlines() if line.startswith('{"tag": "merge_run"')]
+        times.append(wall_times_from_log(merge_run_lines)[run_idx])
+    traces = [run_trace_name(test_name, run_idx) for run_idx in range(RUNS)]
+    with zipfile.ZipFile(f"{test_name}.zip", "w", zipfile.ZIP_DEFLATED) as archive:
+        for trace in traces:
+            archive.write(trace)
+    for trace in traces:
+        os.remove(trace)
+    os.remove(data_path(test_name))
+    stats_ns = generate_stats(times[1:])
+    print(stats_ns)
+    print(stats_to_s(stats_ns))
+    print(f"End processing for {test_name}")
+    print("========================================================", flush=True)
 
 
-def test_update_insert_random_float_data(seaweed):
+def test_update_insert_random_float_data():
     """Test update and insert with float columns data is randomly scattered"""
     num_rows = 10_000_000
     num_cols = 10
@@ -183,10 +229,10 @@ def test_update_insert_random_float_data(seaweed):
     strategy = MergeStrategy(matched="update", not_matched_by_target="insert")
     target = generate_target_non_repeated_index(num_rows, num_cols, dtype)
     source = generate_source(target, num_source_rows, num_matched_rows, dtype, on)
-    benchmark(seaweed, target, source, on, strategy, 10, "test_update_insert_random_float_data.pftrace")
+    return target, source, on, strategy
 
 
-def test_update_insert_random_string_data(seaweed):
+def test_update_insert_random_string_data():
     """Test update and insert with string columns data is randomly scattered"""
     num_rows = 10_000_000
     num_cols = 10
@@ -197,10 +243,10 @@ def test_update_insert_random_string_data(seaweed):
     strategy = MergeStrategy(matched="update", not_matched_by_target="insert")
     target = generate_target_non_repeated_index(num_rows, num_cols, dtype)
     source = generate_source(target, num_source_rows, num_matched_rows, dtype, on)
-    benchmark(seaweed, target, source, on, strategy, 10, "test_update_insert_random_string_data.pftrace")
+    return target, source, on, strategy
 
 
-def test_update_random_float_data(seaweed):
+def test_update_random_float_data():
     """Test update with float columns data is randomly scattered"""
     num_rows = 10_000_000
     num_cols = 10
@@ -210,10 +256,10 @@ def test_update_random_float_data(seaweed):
     strategy = MergeStrategy(matched="update", not_matched_by_target="do_nothing")
     target = generate_target_non_repeated_index(num_rows, num_cols, dtype)
     source = generate_source(target, num_source_rows, num_source_rows, dtype, on)
-    benchmark(seaweed, target, source, on, strategy, 10, "test_update_random_float_data.pftrace")
+    return target, source, on, strategy
 
 
-def test_update_random_string_data(seaweed):
+def test_update_random_string_data():
     """Update with string columns"""
     num_rows = 10_000_000
     num_cols = 10
@@ -223,10 +269,10 @@ def test_update_random_string_data(seaweed):
     dtype = "object"
     target = generate_target_non_repeated_index(num_rows, num_cols, dtype)
     source = generate_source(target, num_source_rows, num_source_rows, dtype, on)
-    benchmark(seaweed, target, source, on, strategy, 10, "test_update_random_string_data.pftrace")
+    return target, source, on, strategy
 
 
-def test_one_index_value_per_segment_float(seaweed):
+def test_one_index_value_per_segment_float():
     num_rows = 10_000_000
     num_cols = 10
     num_source_rows = 68_000
@@ -236,10 +282,10 @@ def test_one_index_value_per_segment_float(seaweed):
     strategy = MergeStrategy(matched="update", not_matched_by_target="insert")
     target = generate_target_repeated_index_one_value_per_slice(num_rows, num_cols, dtype)
     source = generate_source(target, num_source_rows, num_matched_rows, dtype, on)
-    benchmark(seaweed, target, source, on, strategy, 10, "test_one_index_value_per_segment_float.pftrace")
+    return target, source, on, strategy
 
 
-def test_one_index_value_per_segment_string(seaweed):
+def test_one_index_value_per_segment_string():
     num_rows = 10_000_000
     num_cols = 10
     num_source_rows = 68_000
@@ -249,10 +295,10 @@ def test_one_index_value_per_segment_string(seaweed):
     strategy = MergeStrategy(matched="update", not_matched_by_target="insert")
     target = generate_target_repeated_index_one_value_per_slice(num_rows, num_cols, dtype)
     source = generate_source(target, num_source_rows, num_matched_rows, dtype, on)
-    benchmark(seaweed, target, source, on, strategy, 10, "test_one_index_value_per_segment_string.pftrace")
+    return target, source, on, strategy
 
 
-def test_one_index_value_float(seaweed):
+def test_one_index_value_float():
     num_rows = 100_000
     num_cols = 10
     num_source_rows = 73_000
@@ -262,10 +308,10 @@ def test_one_index_value_float(seaweed):
     strategy = MergeStrategy(matched="update", not_matched_by_target="insert")
     target = generate_target_repeated_index_one_value(num_rows, num_cols, dtype)
     source = generate_source(target, num_source_rows, num_matched_rows, dtype, on)
-    benchmark(seaweed, target, source, on, strategy, 10, "test_one_index_value_float.pftrace")
+    return target, source, on, strategy
 
 
-def test_one_index_value_string(seaweed):
+def test_one_index_value_string():
     num_rows = 100_000
     num_cols = 10
     num_source_rows = 73_000
@@ -275,7 +321,7 @@ def test_one_index_value_string(seaweed):
     strategy = MergeStrategy(matched="update", not_matched_by_target="insert")
     target = generate_target_repeated_index_one_value(num_rows, num_cols, dtype)
     source = generate_source(target, num_source_rows, num_matched_rows, dtype, on)
-    benchmark(seaweed, target, source, on, strategy, 10, "test_one_index_value_string.pftrace")
+    return target, source, on, strategy
 
 
 def start_seaweed(seaweed_path):
@@ -292,41 +338,45 @@ def get_seaweed():
     return benchmarks.seaweed_utils.SeaweedClient()
 
 
-TESTS = [
-    test_update_insert_random_float_data,
-    test_update_insert_random_string_data,
-    test_update_random_float_data,
-    test_update_random_string_data,
-    test_one_index_value_per_segment_float,
-    test_one_index_value_per_segment_string,
-    test_one_index_value_float,
-    test_one_index_value_string,
-]
+TESTS = {
+    test.__name__: test
+    for test in [
+        test_update_insert_random_float_data,
+        test_update_insert_random_string_data,
+        test_update_random_float_data,
+        test_update_random_string_data,
+        test_one_index_value_per_segment_float,
+        test_one_index_value_per_segment_string,
+        test_one_index_value_float,
+        test_one_index_value_string,
+    ]
+}
 
 
 def run_tests(test_names):
-    """Runs the named tests in this process against the already running SeaweedFS server."""
-    tests_by_name = {test.__name__: test for test in TESTS}
-    unknown = [name for name in test_names if name not in tests_by_name]
+    """Benchmarks the named tests against the already running SeaweedFS server."""
+    unknown = [name for name in test_names if name not in TESTS]
     if unknown:
-        raise ValueError(f"Unknown tests: {unknown}. Known tests: {list(tests_by_name)}")
-    seaweed = benchmarks.seaweed_utils.SeaweedClient()
+        raise ValueError(f"Unknown tests: {unknown}. Known tests: {list(TESTS)}")
     for name in test_names:
-        tests_by_name[name](seaweed)
+        benchmark(name)
 
 
 def main():
-    """Runs each test in its own process so that memory held by one test cannot add to the peak of the next."""
+    """Every merge runs in its own process, so memory held by one run cannot add to the peak of the next."""
     get_seaweed()
     try:
-        for test in TESTS:
-            subprocess.run([sys.executable, __file__, test.__name__], check=True)
+        run_tests(list(TESTS))
     finally:
         stop_seaweed(SEAWEED_PATH)
 
 
 if __name__ == "__main__":
-    if len(sys.argv) > 1:
-        run_tests(sys.argv[1:])
-    else:
+    if len(sys.argv) == 1:
         main()
+    elif sys.argv[1] == "generate":
+        generate_data(sys.argv[2])
+    elif sys.argv[1] == "run":
+        run_once(sys.argv[2], int(sys.argv[3]))
+    else:
+        run_tests(sys.argv[1:])
