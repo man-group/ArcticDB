@@ -4,6 +4,7 @@ import pandas as pd
 import polars as pl
 import numpy as np
 import subprocess
+import sys
 import benchmarks.seaweed_utils
 import time
 import random
@@ -288,18 +289,41 @@ def get_seaweed():
     return benchmarks.seaweed_utils.SeaweedClient()
 
 
+TESTS = [
+    test_update_insert_random_float_data,
+    test_update_insert_random_string_data,
+    test_update_random_float_data,
+    test_update_random_string_data,
+    test_one_index_value_per_segment_float,
+    test_one_index_value_per_segment_string,
+    test_one_index_value_float,
+    test_one_index_value_string,
+]
+
+
+def run_tests(test_names):
+    """Runs the named tests in this process against the already running SeaweedFS server."""
+    tests_by_name = {test.__name__: test for test in TESTS}
+    unknown = [name for name in test_names if name not in tests_by_name]
+    if unknown:
+        raise ValueError(f"Unknown tests: {unknown}. Known tests: {list(tests_by_name)}")
+    seaweed = benchmarks.seaweed_utils.SeaweedClient()
+    for name in test_names:
+        tests_by_name[name](seaweed)
+
+
 def main():
-    seaweed = get_seaweed()
-    test_update_insert_random_float_data(seaweed)
-    test_update_insert_random_string_data(seaweed)
-    test_update_random_float_data(seaweed)
-    test_update_random_string_data(seaweed)
-    test_one_index_value_per_segment_float(seaweed)
-    test_one_index_value_per_segment_string(seaweed)
-    test_one_index_value_float(seaweed)
-    test_one_index_value_string(seaweed)
-    stop_seaweed(SEAWEED_PATH)
+    """Runs each test in its own process so that memory held by one test cannot add to the peak of the next."""
+    get_seaweed()
+    try:
+        for test in TESTS:
+            subprocess.run([sys.executable, __file__, test.__name__], check=True)
+    finally:
+        stop_seaweed(SEAWEED_PATH)
 
 
 if __name__ == "__main__":
-    main()
+    if len(sys.argv) > 1:
+        run_tests(sys.argv[1:])
+    else:
+        main()
