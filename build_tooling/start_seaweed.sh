@@ -11,11 +11,15 @@
 # Volumes are capped at 2GB and never preallocated, so a high -volume.max only reserves
 # slots, not disk. The slots matter because every bucket is grown to at least as many
 # volumes as ArcticDB has IO threads.
+#
+# Usage: start_seaweed.sh [start|stop|status] [data_dir]
+# data_dir overrides SEAWEED_DATA_DIR. stop and status must be given the same data_dir as start, since the PID
+# file and the log live there.
 
 set -euo pipefail
 
 SEAWEED_VERSION="${SEAWEED_VERSION:-4.40}"
-SEAWEED_DATA_DIR="${SEAWEED_DATA_DIR:-${RUNNER_TEMP:-/tmp}/seaweedfs-asv}"
+SEAWEED_DATA_DIR="${2:-${SEAWEED_DATA_DIR:-${RUNNER_TEMP:-/tmp}/seaweedfs-asv}}"
 SEAWEED_BIN_DIR="${SEAWEED_BIN_DIR:-/usr/local/bin}"
 SEAWEED_IP="${SEAWEED_IP:-127.0.0.1}"
 SEAWEED_MASTER_PORT="${SEAWEED_MASTER_PORT:-9333}"
@@ -142,7 +146,7 @@ case "${1:-start}" in
     stop) stop ;;
     status) diagnostics ;;
     *)
-        echo "Usage: $0 [start|stop|status]" >&2
+        echo "Usage: $0 [start|stop|status] [data_dir]" >&2
         exit 1
         ;;
 esac

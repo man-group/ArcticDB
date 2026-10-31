@@ -126,11 +126,12 @@ record_provenance() {
     echo "suite: $suite"
     echo "ARCTICDB_MERGE_USE_ONLY_SPARSE_CODEPATH: $only_sparse"
     echo "ARCTICDB_MERGE_USE_WRITE_TO_SEGMENT_TASK: $write_to_segment"
-    # The benchmark outputs and the notebook are tracked and change between suites, so they are not part of the source
+    # The benchmark outputs, the notebook and the SeaweedFS data change between suites, so they are not part of the source
     local source_paths=(
         .
         ":(exclude)python/benchmark_merge_update/benchmark_merge_update_*"
         ":(exclude)python/benchmark_merge_update/PerformanceResults.ipynb"
+        ":(exclude)python/benchmark_merge_update/seaweed"
     )
     echo "git HEAD: $(git -C "$repo_dir" rev-parse HEAD)"
     echo "git diff HEAD sha256: $(git -C "$repo_dir" diff HEAD -- "${source_paths[@]}" | sha256sum | cut -d' ' -f1)"

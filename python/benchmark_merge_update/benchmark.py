@@ -3,6 +3,7 @@ import json
 import pandas as pd
 import polars as pl
 import numpy as np
+import os
 import subprocess
 import sys
 import benchmarks.seaweed_utils
@@ -14,6 +15,8 @@ from arcticdb.util.test import random_strings_of_length
 from arcticdb_ext.tracing import TracingSession, TracingSessionConfig
 
 SEAWEED_PATH = "/home/vasil/Documents/source/ArcticDB/build_tooling/start_seaweed.sh"
+# Kept on disk next to this script: the default /tmp can be a tmpfs, which would hold the data in RAM
+SEAWEED_DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "seaweed")
 ROWS_PER_SEGMENT = 100_000
 
 
@@ -276,11 +279,11 @@ def test_one_index_value_string(seaweed):
 
 
 def start_seaweed(seaweed_path):
-    subprocess.run(["bash", seaweed_path, "start"], check=True)
+    subprocess.run(["bash", seaweed_path, "start", SEAWEED_DATA_DIR], check=True)
 
 
 def stop_seaweed(seaweed_path):
-    subprocess.run(["bash", seaweed_path, "stop"], check=True)
+    subprocess.run(["bash", seaweed_path, "stop", SEAWEED_DATA_DIR], check=True)
 
 
 def get_seaweed():
