@@ -26,6 +26,7 @@
 #include <arcticdb/version/version_functions.hpp>
 #include <arcticdb/pipeline/write_frame.hpp>
 #include <pipeline/column_stats_filter.hpp>
+#include <arcticdb/util/perfetto_utils.hpp>
 
 namespace {
 using namespace arcticdb;
@@ -2557,6 +2558,8 @@ VersionedItem LocalVersionedEngine::merge_internal(
         const StreamId& stream_id, std::shared_ptr<InputFrame> source, const bool prune_previous_versions,
         const bool upsert, const MergeStrategy& strategy, std::vector<std::string>&& on
 ) {
+
+    ARCTICDB_TRACE_EVENT("arcticdb.processing", "merge_internal");
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: merge_update");
     sorting::check<ErrorCode::E_UNSORTED_DATA>(
             index_is_not_timeseries_or_is_sorted_ascending(*source),

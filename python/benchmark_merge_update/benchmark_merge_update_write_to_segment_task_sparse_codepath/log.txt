@@ -1,0 +1,552 @@
+suite: wtst_sparse
+ARCTICDB_MERGE_USE_ONLY_SPARSE_CODEPATH: ON
+ARCTICDB_MERGE_USE_WRITE_TO_SEGMENT_TASK: ON
+git HEAD: b82d0223abda640cb9b4564690f9ecd1b089b649
+git diff HEAD sha256: bd9ff9fb2c9d7399ea4ba6fc31ac1c2952eeb8a53861c5f8e6c85492adbdcead
+git status --porcelain:
+ D python/benchmark_merge_update/test_01_dense.log
+ D python/benchmark_merge_update/test_01_dense_data_sparse_codepath.log
+python: /home/vasil/venv/313/bin/python
+arcticdb: /home/vasil/Documents/source/ArcticDB/python/arcticdb/__init__.py
+arcticdb_ext: /home/vasil/Documents/source/ArcticDB/cpp/out/clang-release-wtst_sparse-build/arcticdb/arcticdb_ext.cpython-313-x86_64-linux-gnu.so
+arcticdb_ext sha256: cdb79e2264e674b38ca0deaee13d403060dd0d723e7cb62e4acc1430e864928c
+========================================================
+I1031 21:23:19.450277 meta_aggregator.go:126 subscribing remote 127.0.0.1:8888 meta change: connecting to peer filer 127.0.0.1:8888: rpc error: code = Unavailable desc = connection error: desc = "transport: Error while dialing: dial unix /tmp/seaweedfs-filer-grpc-18888.sock: connect: no such file or directory"
+I1031 21:23:19.509028 lock_client.go:227 Lost lock s3.leader: rpc error: code = Unavailable desc = connection error: desc = "transport: Error while dialing: dial unix /tmp/seaweedfs-filer-grpc-18888.sock: connect: no such file or directory"
+I1031 21:23:20.230387 topology_vacuum.go:46 Checking vacuuming 10533 on 127.0.0.1:8080: rpc error: code = Unknown desc = volume id 10533 is not found during check compact
+I1031 21:23:20.734090 retry.go:97 retry followIamChanges: err: subscribing filer meta change: all filers failed, last error: subscribe: rpc error: code = Unavailable desc = connection error: desc = "transport: Error while dialing: dial unix /tmp/seaweedfs-filer-grpc-18888.sock: connect: no such file or directory"
+I1031 21:23:21.184601 meta_aggregator.go:110 loopSubscribeToOneFiler read 127.0.0.1:8888 start from 2026-10-31 21:23:02.144139431 +0200 EET 1793474582144139431
+I1031 21:23:21.185510 meta_aggregator.go:126 subscribing remote 127.0.0.1:8888 meta change: connecting to peer filer 127.0.0.1:8888: rpc error: code = Unavailable desc = connection error: desc = "transport: Error while dialing: dial unix /tmp/seaweedfs-filer-grpc-18888.sock: connect: no such file or directory"
+I1031 21:23:22.919795 meta_aggregator.go:110 loopSubscribeToOneFiler read 127.0.0.1:8888 start from 2026-10-31 21:23:02.144139431 +0200 EET 1793474582144139431
+I1031 21:23:22.920673 meta_aggregator.go:126 subscribing remote 127.0.0.1:8888 meta change: connecting to peer filer 127.0.0.1:8888: rpc error: code = Unavailable desc = connection error: desc = "transport: Error while dialing: dial unix /tmp/seaweedfs-filer-grpc-18888.sock: connect: no such file or directory"
+I1031 21:23:24.109954 retry.go:97 retry followIamChanges: err: subscribing filer meta change: all filers failed, last error: subscribe: rpc error: code = Unavailable desc = connection error: desc = "transport: Error while dialing: dial unix /tmp/seaweedfs-filer-grpc-18888.sock: connect: no such file or directory"
+I1031 21:23:24.654417 meta_aggregator.go:110 loopSubscribeToOneFiler read 127.0.0.1:8888 start from 2026-10-31 21:23:02.144139431 +0200 EET 1793474582144139431
+I1031 21:23:24.655295 meta_aggregator.go:126 subscribing remote 127.0.0.1:8888 meta change: connecting to peer filer 127.0.0.1:8888: rpc error: code = Unavailable desc = connection error: desc = "transport: Error while dialing: dial unix /tmp/seaweedfs-filer-grpc-18888.sock: connect: no such file or directory"
+I1031 21:23:26.208512 volume.go:546 graceful stop cluster http server ... 
+I1031 21:23:26.208781 volume.go:551 graceful stop gRPC ...
+I1031 21:23:26.209299 volume_server.go:182 Shutting down volume server...
+I1031 21:23:26.218524 volume_server.go:184 Shut down successfully!
+I1031 21:23:26.218747 master_grpc_server.go:471 - client .filer@127.0.0.1:8888.18888
+I1031 21:23:26.218803 master_grpc_server.go:377 => client .master@127.0.0.1:9333.19333: cluster_node_update:{node_type:"filer" address:"127.0.0.1:8888.18888"}
+I1031 21:23:26.218844 master_grpc_server.go:471 - client .master@127.0.0.1:9333.19333
+I1031 21:23:26.218876 master_grpc_server.go:377 => client .s3@127.0.0.1:18333: cluster_node_update:{node_type:"filer" address:"127.0.0.1:8888.18888"}
+I1031 21:23:26.218898 master_grpc_server.go:471 - client .s3@127.0.0.1:18333
+SeaweedFS stopped (data left in /home/vasil/Documents/source/ArcticDB/python/benchmark_merge_update/seaweed)
+SeaweedFS 4.40 is up (master HTTP 200, s3 HTTP 200). IP: 127.0.0.1, PID: 453401 master port :9333, filer port :8888, s3 port :8333, data in /home/vasil/Documents/source/ArcticDB/python/benchmark_merge_update/seaweed
+========================================================
+Start processing for test_update_insert_random_float_data
+{"tag": "merge_data", "target_rows": 10000000, "source_rows": 6000000, "matched_source_rows": 3000000, "unmatched_source_rows": 3000000}
+20261031 21:36:38.647419 454034 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+[979.941]       perfetto.cc:54922 Configured tracing session 1, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+[984.591]       perfetto.cc:56659 Tracing session 1 ended, total sessions:0
+{"tag": "merge_run", "event": "start", "run": 0}
+{"tag": "merge_run", "event": "end", "run": 0, "wall_ns": 2356378355}
+20261031 21:36:45.919602 454184 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+[987.212]       perfetto.cc:54922 Configured tracing session 1, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+[991.587]       perfetto.cc:56659 Tracing session 1 ended, total sessions:0
+{"tag": "merge_run", "event": "start", "run": 1}
+{"tag": "merge_run", "event": "end", "run": 1, "wall_ns": 2340239126}
+20261031 21:36:52.873997 454319 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+[994.168]       perfetto.cc:54922 Configured tracing session 1, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+[998.592]       perfetto.cc:56659 Tracing session 1 ended, total sessions:0
+{"tag": "merge_run", "event": "start", "run": 2}
+{"tag": "merge_run", "event": "end", "run": 2, "wall_ns": 2342422383}
+20261031 21:36:59.875359 454456 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+[001.164]       perfetto.cc:54922 Configured tracing session 1, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+[005.485]       perfetto.cc:56659 Tracing session 1 ended, total sessions:0
+{"tag": "merge_run", "event": "start", "run": 3}
+{"tag": "merge_run", "event": "end", "run": 3, "wall_ns": 2294603905}
+20261031 21:37:06.780548 454590 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+[008.073]       perfetto.cc:54922 Configured tracing session 1, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+[012.432]       perfetto.cc:56659 Tracing session 1 ended, total sessions:0
+{"tag": "merge_run", "event": "start", "run": 4}
+{"tag": "merge_run", "event": "end", "run": 4, "wall_ns": 2288674241}
+20261031 21:37:13.688099 454725 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+[014.981]       perfetto.cc:54922 Configured tracing session 1, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+[019.332]       perfetto.cc:56659 Tracing session 1 ended, total sessions:0
+{"tag": "merge_run", "event": "start", "run": 5}
+{"tag": "merge_run", "event": "end", "run": 5, "wall_ns": 2314856876}
+20261031 21:37:20.596018 454859 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+[021.887]       perfetto.cc:54922 Configured tracing session 1, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+[026.279]       perfetto.cc:56659 Tracing session 1 ended, total sessions:0
+{"tag": "merge_run", "event": "start", "run": 6}
+{"tag": "merge_run", "event": "end", "run": 6, "wall_ns": 2329645368}
+20261031 21:37:27.526421 454992 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+[028.817]       perfetto.cc:54922 Configured tracing session 1, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+[033.215]       perfetto.cc:56659 Tracing session 1 ended, total sessions:0
+{"tag": "merge_run", "event": "start", "run": 7}
+{"tag": "merge_run", "event": "end", "run": 7, "wall_ns": 2253108744}
+20261031 21:37:34.481386 455130 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+[035.772]       perfetto.cc:54922 Configured tracing session 1, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+[040.265]       perfetto.cc:56659 Tracing session 1 ended, total sessions:0
+{"tag": "merge_run", "event": "start", "run": 8}
+{"tag": "merge_run", "event": "end", "run": 8, "wall_ns": 2384010453}
+20261031 21:37:41.504493 455263 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+[042.794]       perfetto.cc:54922 Configured tracing session 1, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+[047.094]       perfetto.cc:56659 Tracing session 1 ended, total sessions:0
+{"tag": "merge_run", "event": "start", "run": 9}
+{"tag": "merge_run", "event": "end", "run": 9, "wall_ns": 2329630956}
+20261031 21:37:48.350172 455390 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+[049.643]       perfetto.cc:54922 Configured tracing session 1, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+[054.050]       perfetto.cc:56659 Tracing session 1 ended, total sessions:0
+{"tag": "merge_run", "event": "start", "run": 10}
+{"tag": "merge_run", "event": "end", "run": 10, "wall_ns": 2275013810}
+{'mean': 2315220586.2, 'median': 2322243916.0, 'min': 2253108744, 'max': 2384010453, 'sd': 38177943.0374674, 'data': [2340239126, 2342422383, 2294603905, 2288674241, 2314856876, 2329645368, 2253108744, 2384010453, 2329630956, 2275013810]}
+{'mean': 2.3152205862, 'median': 2.322243916, 'min': 2.253108744, 'max': 2.384010453, 'sd': 0.0381779430374674, 'data': [2.340239126, 2.342422383, 2.294603905, 2.2886742410000003, 2.3148568760000003, 2.329645368, 2.253108744, 2.384010453, 2.3296309560000004, 2.2750138100000004]}
+End processing for test_update_insert_random_float_data
+========================================================
+========================================================
+Start processing for test_update_insert_random_string_data
+{"tag": "merge_data", "target_rows": 10000000, "source_rows": 6000000, "matched_source_rows": 3000000, "unmatched_source_rows": 3000000}
+20261031 21:39:15.687824 456043 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+[136.981]       perfetto.cc:54922 Configured tracing session 1, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+[154.815]       perfetto.cc:56659 Tracing session 1 ended, total sessions:0
+{"tag": "merge_run", "event": "start", "run": 0}
+{"tag": "merge_run", "event": "end", "run": 0, "wall_ns": 7981303802}
+20261031 21:39:45.544266 456338 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+[166.836]       perfetto.cc:54922 Configured tracing session 1, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+[184.826]       perfetto.cc:56659 Tracing session 1 ended, total sessions:0
+{"tag": "merge_run", "event": "start", "run": 1}
+{"tag": "merge_run", "event": "end", "run": 1, "wall_ns": 7974601979}
+20261031 21:40:15.608957 456633 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+[196.898]       perfetto.cc:54922 Configured tracing session 1, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+[214.693]       perfetto.cc:56659 Tracing session 1 ended, total sessions:0
+{"tag": "merge_run", "event": "start", "run": 2}
+{"tag": "merge_run", "event": "end", "run": 2, "wall_ns": 7940793798}
+20261031 21:40:45.397440 456929 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+[226.690]       perfetto.cc:54922 Configured tracing session 1, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+[244.623]       perfetto.cc:56659 Tracing session 1 ended, total sessions:0
+{"tag": "merge_run", "event": "start", "run": 3}
+{"tag": "merge_run", "event": "end", "run": 3, "wall_ns": 8102159749}
+20261031 21:41:15.354455 457225 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+[256.649]       perfetto.cc:54922 Configured tracing session 1, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+[274.541]       perfetto.cc:56659 Tracing session 1 ended, total sessions:0
+{"tag": "merge_run", "event": "start", "run": 4}
+{"tag": "merge_run", "event": "end", "run": 4, "wall_ns": 7994252092}
+20261031 21:41:45.241549 457519 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+[286.532]       perfetto.cc:54922 Configured tracing session 1, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+[304.301]       perfetto.cc:56659 Tracing session 1 ended, total sessions:0
+{"tag": "merge_run", "event": "start", "run": 5}
+{"tag": "merge_run", "event": "end", "run": 5, "wall_ns": 7963038663}
+20261031 21:42:15.069205 457813 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+[316.363]       perfetto.cc:54922 Configured tracing session 1, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+[334.274]       perfetto.cc:56659 Tracing session 1 ended, total sessions:0
+{"tag": "merge_run", "event": "start", "run": 6}
+{"tag": "merge_run", "event": "end", "run": 6, "wall_ns": 8003735923}
+20261031 21:42:45.035734 458107 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+[346.330]       perfetto.cc:54922 Configured tracing session 1, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+[364.239]       perfetto.cc:56659 Tracing session 1 ended, total sessions:0
+{"tag": "merge_run", "event": "start", "run": 7}
+{"tag": "merge_run", "event": "end", "run": 7, "wall_ns": 7963521193}
+20261031 21:43:14.965921 458402 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+[376.256]       perfetto.cc:54922 Configured tracing session 1, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+[394.093]       perfetto.cc:56659 Tracing session 1 ended, total sessions:0
+{"tag": "merge_run", "event": "start", "run": 8}
+{"tag": "merge_run", "event": "end", "run": 8, "wall_ns": 8047063529}
+20261031 21:43:44.854190 458690 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+[406.147]       perfetto.cc:54922 Configured tracing session 1, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+[423.598]       perfetto.cc:56659 Tracing session 1 ended, total sessions:0
+{"tag": "merge_run", "event": "start", "run": 9}
+{"tag": "merge_run", "event": "end", "run": 9, "wall_ns": 7951715953}
+20261031 21:44:14.322145 458984 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+[435.615]       perfetto.cc:54922 Configured tracing session 1, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+[453.399]       perfetto.cc:56659 Tracing session 1 ended, total sessions:0
+{"tag": "merge_run", "event": "start", "run": 10}
+{"tag": "merge_run", "event": "end", "run": 10, "wall_ns": 7941436005}
+{'mean': 7988231888.4, 'median': 7969061586.0, 'min': 7940793798, 'max': 8102159749, 'sd': 51555869.869950026, 'data': [7974601979, 7940793798, 8102159749, 7994252092, 7963038663, 8003735923, 7963521193, 8047063529, 7951715953, 7941436005]}
+{'mean': 7.9882318884000005, 'median': 7.9690615860000005, 'min': 7.9407937980000005, 'max': 8.102159749, 'sd': 0.05155586986995003, 'data': [7.974601979000001, 7.9407937980000005, 8.102159749, 7.994252092000001, 7.963038663000001, 8.003735923, 7.963521193, 8.047063529, 7.951715953000001, 7.941436005000001]}
+End processing for test_update_insert_random_string_data
+========================================================
+========================================================
+Start processing for test_update_random_float_data
+{"tag": "merge_data", "target_rows": 10000000, "source_rows": 6000000, "matched_source_rows": 6000000, "unmatched_source_rows": 0}
+20261031 21:45:26.617286 459664 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+[507.910]       perfetto.cc:54922 Configured tracing session 1, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+[511.534]       perfetto.cc:56659 Tracing session 1 ended, total sessions:0
+{"tag": "merge_run", "event": "start", "run": 0}
+{"tag": "merge_run", "event": "end", "run": 0, "wall_ns": 1694483058}
+20261031 21:45:32.805440 459797 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+[514.097]       perfetto.cc:54922 Configured tracing session 1, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+[517.888]       perfetto.cc:56659 Tracing session 1 ended, total sessions:0
+{"tag": "merge_run", "event": "start", "run": 1}
+{"tag": "merge_run", "event": "end", "run": 1, "wall_ns": 1715437797}
+20261031 21:45:39.185640 459924 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+[520.476]       perfetto.cc:54922 Configured tracing session 1, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+[524.203]       perfetto.cc:56659 Tracing session 1 ended, total sessions:0
+{"tag": "merge_run", "event": "start", "run": 2}
+{"tag": "merge_run", "event": "end", "run": 2, "wall_ns": 1649472227}
+20261031 21:45:45.485074 460050 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+[526.777]       perfetto.cc:54922 Configured tracing session 1, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+[530.430]       perfetto.cc:56659 Tracing session 1 ended, total sessions:0
+{"tag": "merge_run", "event": "start", "run": 3}
+{"tag": "merge_run", "event": "end", "run": 3, "wall_ns": 1659744642}
+20261031 21:45:51.700566 460177 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+[532.992]       perfetto.cc:54922 Configured tracing session 1, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+[536.576]       perfetto.cc:56659 Tracing session 1 ended, total sessions:0
+{"tag": "merge_run", "event": "start", "run": 4}
+{"tag": "merge_run", "event": "end", "run": 4, "wall_ns": 1665431963}
+20261031 21:45:57.876141 460310 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+[539.169]       perfetto.cc:54922 Configured tracing session 1, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+[542.753]       perfetto.cc:56659 Tracing session 1 ended, total sessions:0
+{"tag": "merge_run", "event": "start", "run": 5}
+{"tag": "merge_run", "event": "end", "run": 5, "wall_ns": 1641145599}
+20261031 21:46:04.023010 460437 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+[545.312]       perfetto.cc:54922 Configured tracing session 1, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+[548.846]       perfetto.cc:56659 Tracing session 1 ended, total sessions:0
+{"tag": "merge_run", "event": "start", "run": 6}
+{"tag": "merge_run", "event": "end", "run": 6, "wall_ns": 1630019974}
+20261031 21:46:10.101997 460563 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+[551.391]       perfetto.cc:54922 Configured tracing session 1, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+[555.023]       perfetto.cc:56659 Tracing session 1 ended, total sessions:0
+{"tag": "merge_run", "event": "start", "run": 7}
+{"tag": "merge_run", "event": "end", "run": 7, "wall_ns": 1668970881}
+20261031 21:46:16.276280 460689 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+[557.566]       perfetto.cc:54922 Configured tracing session 1, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+[561.264]       perfetto.cc:56659 Tracing session 1 ended, total sessions:0
+{"tag": "merge_run", "event": "start", "run": 8}
+{"tag": "merge_run", "event": "end", "run": 8, "wall_ns": 1670869666}
+20261031 21:46:22.519383 460815 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+[563.811]       perfetto.cc:54922 Configured tracing session 1, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+[567.389]       perfetto.cc:56659 Tracing session 1 ended, total sessions:0
+{"tag": "merge_run", "event": "start", "run": 9}
+{"tag": "merge_run", "event": "end", "run": 9, "wall_ns": 1672132889}
+20261031 21:46:28.662279 460941 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+[569.951]       perfetto.cc:54922 Configured tracing session 1, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+[573.440]       perfetto.cc:56659 Tracing session 1 ended, total sessions:0
+{"tag": "merge_run", "event": "start", "run": 10}
+{"tag": "merge_run", "event": "end", "run": 10, "wall_ns": 1655701865}
+{'mean': 1662892750.3, 'median': 1662588302.5, 'min': 1630019974, 'max': 1715437797, 'sd': 22970203.956368513, 'data': [1715437797, 1649472227, 1659744642, 1665431963, 1641145599, 1630019974, 1668970881, 1670869666, 1672132889, 1655701865]}
+{'mean': 1.6628927503000002, 'median': 1.6625883025000001, 'min': 1.630019974, 'max': 1.715437797, 'sd': 0.022970203956368514, 'data': [1.715437797, 1.6494722270000002, 1.6597446420000002, 1.665431963, 1.6411455990000001, 1.630019974, 1.6689708810000001, 1.6708696660000002, 1.672132889, 1.6557018650000002]}
+End processing for test_update_random_float_data
+========================================================
+========================================================
+Start processing for test_update_random_string_data
+{"tag": "merge_data", "target_rows": 10000000, "source_rows": 6000000, "matched_source_rows": 6000000, "unmatched_source_rows": 0}
+20261031 21:47:53.029707 461577 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+[654.323]       perfetto.cc:54922 Configured tracing session 1, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+[670.197]       perfetto.cc:56659 Tracing session 1 ended, total sessions:0
+{"tag": "merge_run", "event": "start", "run": 0}
+{"tag": "merge_run", "event": "end", "run": 0, "wall_ns": 6131649085}
+20261031 21:48:20.801818 461858 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+[682.090]       perfetto.cc:54922 Configured tracing session 1, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+[698.065]       perfetto.cc:56659 Tracing session 1 ended, total sessions:0
+{"tag": "merge_run", "event": "start", "run": 1}
+{"tag": "merge_run", "event": "end", "run": 1, "wall_ns": 6204457504}
+20261031 21:48:48.667556 462131 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+[709.962]       perfetto.cc:54922 Configured tracing session 1, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+[725.910]       perfetto.cc:56659 Tracing session 1 ended, total sessions:0
+{"tag": "merge_run", "event": "start", "run": 2}
+{"tag": "merge_run", "event": "end", "run": 2, "wall_ns": 6131602248}
+20261031 21:49:16.497181 462411 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+[737.791]       perfetto.cc:54922 Configured tracing session 1, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+[753.821]       perfetto.cc:56659 Tracing session 1 ended, total sessions:0
+{"tag": "merge_run", "event": "start", "run": 3}
+{"tag": "merge_run", "event": "end", "run": 3, "wall_ns": 6284457186}
+20261031 21:49:44.420717 462703 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+[765.710]       perfetto.cc:54922 Configured tracing session 1, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+[781.847]       perfetto.cc:56659 Tracing session 1 ended, total sessions:0
+{"tag": "merge_run", "event": "start", "run": 4}
+{"tag": "merge_run", "event": "end", "run": 4, "wall_ns": 6190099301}
+20261031 21:50:12.448870 462983 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+[793.743]       perfetto.cc:54922 Configured tracing session 1, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+[809.673]       perfetto.cc:56659 Tracing session 1 ended, total sessions:0
+{"tag": "merge_run", "event": "start", "run": 5}
+{"tag": "merge_run", "event": "end", "run": 5, "wall_ns": 6189978654}
+20261031 21:50:40.247350 463264 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+[821.541]       perfetto.cc:54922 Configured tracing session 1, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+[837.404]       perfetto.cc:56659 Tracing session 1 ended, total sessions:0
+{"tag": "merge_run", "event": "start", "run": 6}
+{"tag": "merge_run", "event": "end", "run": 6, "wall_ns": 6199501204}
+20261031 21:51:08.018669 463538 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+[849.309]       perfetto.cc:54922 Configured tracing session 1, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+[865.176]       perfetto.cc:56659 Tracing session 1 ended, total sessions:0
+{"tag": "merge_run", "event": "start", "run": 7}
+{"tag": "merge_run", "event": "end", "run": 7, "wall_ns": 6162042140}
+20261031 21:51:35.778996 463818 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+[877.072]       perfetto.cc:54922 Configured tracing session 1, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+[892.977]       perfetto.cc:56659 Tracing session 1 ended, total sessions:0
+{"tag": "merge_run", "event": "start", "run": 8}
+{"tag": "merge_run", "event": "end", "run": 8, "wall_ns": 6160732094}
+20261031 21:52:03.635238 464098 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+[904.928]       perfetto.cc:54922 Configured tracing session 1, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+[920.826]       perfetto.cc:56659 Tracing session 1 ended, total sessions:0
+{"tag": "merge_run", "event": "start", "run": 9}
+{"tag": "merge_run", "event": "end", "run": 9, "wall_ns": 6078328344}
+20261031 21:52:31.441843 464379 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+[932.733]       perfetto.cc:54922 Configured tracing session 1, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+[948.686]       perfetto.cc:56659 Tracing session 1 ended, total sessions:0
+{"tag": "merge_run", "event": "start", "run": 10}
+{"tag": "merge_run", "event": "end", "run": 10, "wall_ns": 6178011591}
+{'mean': 6177921026.6, 'median': 6183995122.5, 'min': 6078328344, 'max': 6284457186, 'sd': 53151018.615671396, 'data': [6204457504, 6131602248, 6284457186, 6190099301, 6189978654, 6199501204, 6162042140, 6160732094, 6078328344, 6178011591]}
+{'mean': 6.177921026600001, 'median': 6.183995122500001, 'min': 6.078328344, 'max': 6.284457186, 'sd': 0.0531510186156714, 'data': [6.2044575040000005, 6.131602248, 6.284457186, 6.190099301, 6.189978654000001, 6.199501204000001, 6.1620421400000005, 6.160732094, 6.078328344, 6.178011591000001]}
+End processing for test_update_random_string_data
+========================================================
+========================================================
+Start processing for test_one_index_value_per_segment_float
+{"tag": "merge_data", "target_rows": 10000000, "source_rows": 68000, "matched_source_rows": 34000, "unmatched_source_rows": 34000}
+20261031 21:53:23.883758 464914 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+[985.177]       perfetto.cc:54922 Configured tracing session 1, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+[994.661]       perfetto.cc:56659 Tracing session 1 ended, total sessions:0
+{"tag": "merge_run", "event": "start", "run": 0}
+{"tag": "merge_run", "event": "end", "run": 0, "wall_ns": 7672368022}
+20261031 21:53:36.254344 465090 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+[997.546]       perfetto.cc:54922 Configured tracing session 1, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+[007.178]       perfetto.cc:56659 Tracing session 1 ended, total sessions:0
+{"tag": "merge_run", "event": "start", "run": 1}
+{"tag": "merge_run", "event": "end", "run": 1, "wall_ns": 7790904444}
+20261031 21:53:48.760425 465258 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+[010.053]       perfetto.cc:54922 Configured tracing session 1, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+[019.549]       perfetto.cc:56659 Tracing session 1 ended, total sessions:0
+{"tag": "merge_run", "event": "start", "run": 2}
+{"tag": "merge_run", "event": "end", "run": 2, "wall_ns": 7730093888}
+20261031 21:54:01.185580 465426 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+[022.475]       perfetto.cc:54922 Configured tracing session 1, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+[031.956]       perfetto.cc:56659 Tracing session 1 ended, total sessions:0
+{"tag": "merge_run", "event": "start", "run": 3}
+{"tag": "merge_run", "event": "end", "run": 3, "wall_ns": 7668421099}
+20261031 21:54:13.620907 465602 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+[034.914]       perfetto.cc:54922 Configured tracing session 1, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+[044.529]       perfetto.cc:56659 Tracing session 1 ended, total sessions:0
+{"tag": "merge_run", "event": "start", "run": 4}
+{"tag": "merge_run", "event": "end", "run": 4, "wall_ns": 7791635739}
+20261031 21:54:26.136373 465771 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+[047.431]       perfetto.cc:54922 Configured tracing session 1, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+[056.702]       perfetto.cc:56659 Tracing session 1 ended, total sessions:0
+{"tag": "merge_run", "event": "start", "run": 5}
+{"tag": "merge_run", "event": "end", "run": 5, "wall_ns": 7497978160}
+20261031 21:54:38.344549 465939 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+[059.637]       perfetto.cc:54922 Configured tracing session 1, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+[069.093]       perfetto.cc:56659 Tracing session 1 ended, total sessions:0
+{"tag": "merge_run", "event": "start", "run": 6}
+{"tag": "merge_run", "event": "end", "run": 6, "wall_ns": 7660574593}
+20261031 21:54:50.709461 466115 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+[071.998]       perfetto.cc:54922 Configured tracing session 1, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+[081.620]       perfetto.cc:56659 Tracing session 1 ended, total sessions:0
+{"tag": "merge_run", "event": "start", "run": 7}
+{"tag": "merge_run", "event": "end", "run": 7, "wall_ns": 7892214585}
+20261031 21:55:03.164797 466283 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+[084.459]       perfetto.cc:54922 Configured tracing session 1, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+[094.006]       perfetto.cc:56659 Tracing session 1 ended, total sessions:0
+{"tag": "merge_run", "event": "start", "run": 8}
+{"tag": "merge_run", "event": "end", "run": 8, "wall_ns": 7789505312}
+20261031 21:55:15.603833 466463 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+[096.896]       perfetto.cc:54922 Configured tracing session 1, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+[106.406]       perfetto.cc:56659 Tracing session 1 ended, total sessions:0
+{"tag": "merge_run", "event": "start", "run": 9}
+{"tag": "merge_run", "event": "end", "run": 9, "wall_ns": 7717261088}
+20261031 21:55:28.012145 466633 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+[109.302]       perfetto.cc:54922 Configured tracing session 1, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+[118.729]       perfetto.cc:56659 Tracing session 1 ended, total sessions:0
+{"tag": "merge_run", "event": "start", "run": 10}
+{"tag": "merge_run", "event": "end", "run": 10, "wall_ns": 7553769730}
+{'mean': 7709235863.8, 'median': 7723677488.0, 'min': 7497978160, 'max': 7892214585, 'sd': 118657609.68400054, 'data': [7790904444, 7730093888, 7668421099, 7791635739, 7497978160, 7660574593, 7892214585, 7789505312, 7717261088, 7553769730]}
+{'mean': 7.709235863800001, 'median': 7.723677488000001, 'min': 7.497978160000001, 'max': 7.8922145850000005, 'sd': 0.11865760968400055, 'data': [7.790904444000001, 7.730093888000001, 7.668421099000001, 7.791635739, 7.497978160000001, 7.660574593000001, 7.8922145850000005, 7.789505312, 7.717261088000001, 7.553769730000001]}
+End processing for test_one_index_value_per_segment_float
+========================================================
+========================================================
+Start processing for test_one_index_value_per_segment_string
+{"tag": "merge_data", "target_rows": 10000000, "source_rows": 68000, "matched_source_rows": 34000, "unmatched_source_rows": 34000}
+20261031 21:56:22.194384 467076 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+[163.482]       perfetto.cc:54922 Configured tracing session 1, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+[201.609]       perfetto.cc:56659 Tracing session 1 ended, total sessions:0
+{"tag": "merge_run", "event": "start", "run": 0}
+{"tag": "merge_run", "event": "end", "run": 0, "wall_ns": 29059495238}
+20261031 21:57:08.722155 467489 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+[210.012]       perfetto.cc:54922 Configured tracing session 1, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+[248.526]       perfetto.cc:56659 Tracing session 1 ended, total sessions:0
+{"tag": "merge_run", "event": "start", "run": 1}
+{"tag": "merge_run", "event": "end", "run": 1, "wall_ns": 29402486728}
+20261031 21:57:55.747448 467898 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+[257.039]       perfetto.cc:54922 Configured tracing session 1, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+[298.541]       perfetto.cc:56659 Tracing session 1 ended, total sessions:0
+{"tag": "merge_run", "event": "start", "run": 2}
+{"tag": "merge_run", "event": "end", "run": 2, "wall_ns": 32175958123}
+20261031 21:58:45.697674 468332 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+[306.991]       perfetto.cc:54922 Configured tracing session 1, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+[346.026]       perfetto.cc:56659 Tracing session 1 ended, total sessions:0
+{"tag": "merge_run", "event": "start", "run": 3}
+{"tag": "merge_run", "event": "end", "run": 3, "wall_ns": 29966468430}
+20261031 21:59:33.321529 468752 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+[354.613]       perfetto.cc:54922 Configured tracing session 1, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+[392.624]       perfetto.cc:56659 Tracing session 1 ended, total sessions:0
+{"tag": "merge_run", "event": "start", "run": 4}
+{"tag": "merge_run", "event": "end", "run": 4, "wall_ns": 28978092240}
+20261031 22:00:19.818247 469159 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+[401.110]       perfetto.cc:54922 Configured tracing session 1, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+[439.807]       perfetto.cc:56659 Tracing session 1 ended, total sessions:0
+{"tag": "merge_run", "event": "start", "run": 5}
+{"tag": "merge_run", "event": "end", "run": 5, "wall_ns": 29688966637}
+20261031 22:01:06.801994 469573 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+[448.091]       perfetto.cc:54922 Configured tracing session 1, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+[486.895]       perfetto.cc:56659 Tracing session 1 ended, total sessions:0
+{"tag": "merge_run", "event": "start", "run": 6}
+{"tag": "merge_run", "event": "end", "run": 6, "wall_ns": 29672837832}
+20261031 22:01:54.023981 469988 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+[495.315]       perfetto.cc:54922 Configured tracing session 1, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+[533.897]       perfetto.cc:56659 Tracing session 1 ended, total sessions:0
+{"tag": "merge_run", "event": "start", "run": 7}
+{"tag": "merge_run", "event": "end", "run": 7, "wall_ns": 29481384072}
+20261031 22:02:41.071659 470401 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+[542.360]       perfetto.cc:54922 Configured tracing session 1, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+[580.803]       perfetto.cc:56659 Tracing session 1 ended, total sessions:0
+{"tag": "merge_run", "event": "start", "run": 8}
+{"tag": "merge_run", "event": "end", "run": 8, "wall_ns": 29480337403}
+20261031 22:03:27.971013 470815 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+[589.259]       perfetto.cc:54922 Configured tracing session 1, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+[626.944]       perfetto.cc:56659 Tracing session 1 ended, total sessions:0
+{"tag": "merge_run", "event": "start", "run": 9}
+{"tag": "merge_run", "event": "end", "run": 9, "wall_ns": 28692694506}
+20261031 22:04:14.070261 471221 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+[635.360]       perfetto.cc:54922 Configured tracing session 1, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+[673.739]       perfetto.cc:56659 Tracing session 1 ended, total sessions:0
+{"tag": "merge_run", "event": "start", "run": 10}
+{"tag": "merge_run", "event": "end", "run": 10, "wall_ns": 29319963852}
+{'mean': 29685918982.3, 'median': 29480860737.5, 'min': 28692694506, 'max': 32175958123, 'sd': 946634517.7874987, 'data': [29402486728, 32175958123, 29966468430, 28978092240, 29688966637, 29672837832, 29481384072, 29480337403, 28692694506, 29319963852]}
+{'mean': 29.685918982300002, 'median': 29.480860737500002, 'min': 28.692694506000002, 'max': 32.175958123, 'sd': 0.9466345177874987, 'data': [29.402486728000003, 32.175958123, 29.966468430000003, 28.978092240000002, 29.688966637000004, 29.672837832000003, 29.481384072, 29.480337403000004, 28.692694506000002, 29.319963852]}
+End processing for test_one_index_value_per_segment_string
+========================================================
+========================================================
+Start processing for test_one_index_value_float
+{"tag": "merge_data", "target_rows": 100000, "source_rows": 73000, "matched_source_rows": 36500, "unmatched_source_rows": 36500}
+20261031 22:04:56.708901 471683 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+[677.999]       perfetto.cc:54922 Configured tracing session 1, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+[769.171]       perfetto.cc:56659 Tracing session 1 ended, total sessions:0
+{"tag": "merge_run", "event": "start", "run": 0}
+{"tag": "merge_run", "event": "end", "run": 0, "wall_ns": 90900370869}
+20261031 22:06:30.515089 472391 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+[771.812]       perfetto.cc:54922 Configured tracing session 1, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+[862.571]       perfetto.cc:56659 Tracing session 1 ended, total sessions:0
+{"tag": "merge_run", "event": "start", "run": 1}
+{"tag": "merge_run", "event": "end", "run": 1, "wall_ns": 90457906555}
+20261031 22:08:03.410422 473094 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+[864.702]       perfetto.cc:54922 Configured tracing session 1, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+[955.434]       perfetto.cc:56659 Tracing session 1 ended, total sessions:0
+{"tag": "merge_run", "event": "start", "run": 2}
+{"tag": "merge_run", "event": "end", "run": 2, "wall_ns": 90453019992}
+20261031 22:09:36.248140 473790 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+[957.542]       perfetto.cc:54922 Configured tracing session 1, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+[048.208]       perfetto.cc:56659 Tracing session 1 ended, total sessions:0
+{"tag": "merge_run", "event": "start", "run": 3}
+{"tag": "merge_run", "event": "end", "run": 3, "wall_ns": 90374253145}
+20261031 22:11:09.046355 474494 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+[050.336]       perfetto.cc:54922 Configured tracing session 1, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+[141.052]       perfetto.cc:56659 Tracing session 1 ended, total sessions:0
+{"tag": "merge_run", "event": "start", "run": 4}
+{"tag": "merge_run", "event": "end", "run": 4, "wall_ns": 90454476733}
+20261031 22:12:41.832923 475189 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+[143.122]       perfetto.cc:54922 Configured tracing session 1, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+[233.742]       perfetto.cc:56659 Tracing session 1 ended, total sessions:0
+{"tag": "merge_run", "event": "start", "run": 5}
+{"tag": "merge_run", "event": "end", "run": 5, "wall_ns": 90338310199}
+20261031 22:14:14.577883 475892 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+[235.867]       perfetto.cc:54922 Configured tracing session 1, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+[326.517]       perfetto.cc:56659 Tracing session 1 ended, total sessions:0
+{"tag": "merge_run", "event": "start", "run": 6}
+{"tag": "merge_run", "event": "end", "run": 6, "wall_ns": 90361405937}
+20261031 22:15:47.351745 476594 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+[328.641]       perfetto.cc:54922 Configured tracing session 1, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+[419.401]       perfetto.cc:56659 Tracing session 1 ended, total sessions:0
+{"tag": "merge_run", "event": "start", "run": 7}
+{"tag": "merge_run", "event": "end", "run": 7, "wall_ns": 90478736645}
+20261031 22:17:20.210263 477304 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+[421.503]       perfetto.cc:54922 Configured tracing session 1, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+[512.270]       perfetto.cc:56659 Tracing session 1 ended, total sessions:0
+{"tag": "merge_run", "event": "start", "run": 8}
+{"tag": "merge_run", "event": "end", "run": 8, "wall_ns": 90475946560}
+20261031 22:18:53.051339 478007 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+[514.341]       perfetto.cc:54922 Configured tracing session 1, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+[604.925]       perfetto.cc:56659 Tracing session 1 ended, total sessions:0
+{"tag": "merge_run", "event": "start", "run": 9}
+{"tag": "merge_run", "event": "end", "run": 9, "wall_ns": 90300811336}
+20261031 22:20:25.839607 478716 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+[607.133]       perfetto.cc:54922 Configured tracing session 1, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+[697.875]       perfetto.cc:56659 Tracing session 1 ended, total sessions:0
+{"tag": "merge_run", "event": "start", "run": 10}
+{"tag": "merge_run", "event": "end", "run": 10, "wall_ns": 90458631334}
+{'mean': 90415349843.6, 'median': 90453748362.5, 'min': 90300811336, 'max': 90478736645, 'sd': 64959152.58378354, 'data': [90457906555, 90453019992, 90374253145, 90454476733, 90338310199, 90361405937, 90478736645, 90475946560, 90300811336, 90458631334]}
+{'mean': 90.41534984360001, 'median': 90.45374836250001, 'min': 90.30081133600001, 'max': 90.47873664500001, 'sd': 0.06495915258378354, 'data': [90.45790655500001, 90.45301999200001, 90.37425314500001, 90.454476733, 90.338310199, 90.361405937, 90.47873664500001, 90.47594656000001, 90.30081133600001, 90.458631334]}
+End processing for test_one_index_value_float
+========================================================
+========================================================
+Start processing for test_one_index_value_string
+{"tag": "merge_data", "target_rows": 100000, "source_rows": 73000, "matched_source_rows": 36500, "unmatched_source_rows": 36500}
+20261031 22:22:01.038062 479455 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+[702.331]       perfetto.cc:54922 Configured tracing session 1, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+[059.361]       perfetto.cc:56659 Tracing session 1 ended, total sessions:0
+{"tag": "merge_run", "event": "start", "run": 0}
+{"tag": "merge_run", "event": "end", "run": 0, "wall_ns": 356692056657}
+20261031 22:28:03.715812 482052 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+[065.004]       perfetto.cc:54922 Configured tracing session 1, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+[421.897]       perfetto.cc:56659 Tracing session 1 ended, total sessions:0
+{"tag": "merge_run", "event": "start", "run": 1}
+{"tag": "merge_run", "event": "end", "run": 1, "wall_ns": 356558650092}
+20261031 22:34:06.127421 484639 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+[427.420]       perfetto.cc:54922 Configured tracing session 1, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+[785.021]       perfetto.cc:56659 Tracing session 1 ended, total sessions:0
+{"tag": "merge_run", "event": "start", "run": 2}
+{"tag": "merge_run", "event": "end", "run": 2, "wall_ns": 357271661717}
+20261031 22:40:09.386843 487256 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+[790.680]       perfetto.cc:54922 Configured tracing session 1, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+[147.636]       perfetto.cc:56659 Tracing session 1 ended, total sessions:0
+{"tag": "merge_run", "event": "start", "run": 3}
+{"tag": "merge_run", "event": "end", "run": 3, "wall_ns": 356597634089}
+20261031 22:46:11.971916 489853 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+[153.264]       perfetto.cc:54922 Configured tracing session 1, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+[510.125]       perfetto.cc:56659 Tracing session 1 ended, total sessions:0
+{"tag": "merge_run", "event": "start", "run": 4}
+{"tag": "merge_run", "event": "end", "run": 4, "wall_ns": 356497873778}
+20261031 22:52:14.423676 492460 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+[515.717]       perfetto.cc:54922 Configured tracing session 1, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+[872.485]       perfetto.cc:56659 Tracing session 1 ended, total sessions:0
+{"tag": "merge_run", "event": "start", "run": 5}
+{"tag": "merge_run", "event": "end", "run": 5, "wall_ns": 356411097675}
+20261031 22:58:16.805304 495049 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+[878.094]       perfetto.cc:54922 Configured tracing session 1, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+[234.401]       perfetto.cc:56659 Tracing session 1 ended, total sessions:0
+{"tag": "merge_run", "event": "start", "run": 6}
+{"tag": "merge_run", "event": "end", "run": 6, "wall_ns": 355975216976}
+20261031 23:04:18.695285 497633 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+[239.988]       perfetto.cc:54922 Configured tracing session 1, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+[597.243]       perfetto.cc:56659 Tracing session 1 ended, total sessions:0
+{"tag": "merge_run", "event": "start", "run": 7}
+{"tag": "merge_run", "event": "end", "run": 7, "wall_ns": 356906221069}
+20261031 23:10:21.557313 500242 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+[602.848]       perfetto.cc:54922 Configured tracing session 1, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+[959.548]       perfetto.cc:56659 Tracing session 1 ended, total sessions:0
+{"tag": "merge_run", "event": "start", "run": 8}
+{"tag": "merge_run", "event": "end", "run": 8, "wall_ns": 356370070577}
+20261031 23:16:23.772539 502835 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+[965.063]       perfetto.cc:54922 Configured tracing session 1, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+[322.391]       perfetto.cc:56659 Tracing session 1 ended, total sessions:0
+{"tag": "merge_run", "event": "start", "run": 9}
+{"tag": "merge_run", "event": "end", "run": 9, "wall_ns": 356982946863}
+20261031 23:22:26.564932 505434 W arcticdb | Failed to find segment for key 'C:benchmark_lib' : No response body.
+[327.860]       perfetto.cc:54922 Configured tracing session 1, #sources:1, duration:0 ms, #buffers:1, total buffer size:262144 KB, total sessions:1, uid:0 session name: ""
+[684.623]       perfetto.cc:56659 Tracing session 1 ended, total sessions:0
+{"tag": "merge_run", "event": "start", "run": 10}
+{"tag": "merge_run", "event": "end", "run": 10, "wall_ns": 356412206361}
+{'mean': 356598357919.7, 'median': 356528261935.0, 'min': 355975216976, 'max': 357271661717, 'sd': 367852510.3463105, 'data': [356558650092, 357271661717, 356597634089, 356497873778, 356411097675, 355975216976, 356906221069, 356370070577, 356982946863, 356412206361]}
+{'mean': 356.59835791970005, 'median': 356.52826193500005, 'min': 355.975216976, 'max': 357.27166171700003, 'sd': 0.3678525103463105, 'data': [356.55865009200005, 357.27166171700003, 356.597634089, 356.49787377800004, 356.411097675, 355.975216976, 356.906221069, 356.37007057700004, 356.982946863, 356.412206361]}
+End processing for test_one_index_value_string
+========================================================
+I1031 23:28:27.013165 topology.go:492 removing volume info: Id:15796, Size:8, ReplicaPlacement:000, Collection:benchmark-bucket, Version:3, Ttl:, FileCount:0, DeleteCount:0, DeletedByteCount:0, ReadOnly:false, ModifiedAtSecond:1793481746 from 127.0.0.1:8080
+I1031 23:28:27.013178 topology.go:492 removing volume info: Id:15802, Size:8, ReplicaPlacement:000, Collection:benchmark-bucket, Version:3, Ttl:, FileCount:0, DeleteCount:0, DeletedByteCount:0, ReadOnly:false, ModifiedAtSecond:1793481746 from 127.0.0.1:8080
+I1031 23:28:27.013191 topology.go:492 removing volume info: Id:15806, Size:8, ReplicaPlacement:000, Collection:benchmark-bucket, Version:3, Ttl:, FileCount:0, DeleteCount:0, DeletedByteCount:0, ReadOnly:false, ModifiedAtSecond:1793481746 from 127.0.0.1:8080
+I1031 23:28:27.013204 topology.go:492 removing volume info: Id:15813, Size:8, ReplicaPlacement:000, Collection:benchmark-bucket, Version:3, Ttl:, FileCount:0, DeleteCount:0, DeletedByteCount:0, ReadOnly:false, ModifiedAtSecond:1793481746 from 127.0.0.1:8080
+I1031 23:28:27.013217 topology.go:492 removing volume info: Id:15800, Size:8, ReplicaPlacement:000, Collection:benchmark-bucket, Version:3, Ttl:, FileCount:0, DeleteCount:0, DeletedByteCount:0, ReadOnly:false, ModifiedAtSecond:1793481746 from 127.0.0.1:8080
+I1031 23:28:27.013250 topology.go:492 removing volume info: Id:15799, Size:8, ReplicaPlacement:000, Collection:benchmark-bucket, Version:3, Ttl:, FileCount:0, DeleteCount:0, DeletedByteCount:0, ReadOnly:false, ModifiedAtSecond:1793481746 from 127.0.0.1:8080
+I1031 23:28:27.013264 topology.go:492 removing volume info: Id:15793, Size:672, ReplicaPlacement:000, Collection:benchmark-bucket, Version:3, Ttl:, FileCount:1, DeleteCount:0, DeletedByteCount:0, ReadOnly:false, ModifiedAtSecond:1793481746 from 127.0.0.1:8080
+I1031 23:28:27.013277 topology.go:492 removing volume info: Id:15811, Size:8, ReplicaPlacement:000, Collection:benchmark-bucket, Version:3, Ttl:, FileCount:0, DeleteCount:0, DeletedByteCount:0, ReadOnly:false, ModifiedAtSecond:1793481746 from 127.0.0.1:8080
+I1031 23:28:27.013291 topology.go:492 removing volume info: Id:15790, Size:8, ReplicaPlacement:000, Collection:benchmark-bucket, Version:3, Ttl:, FileCount:0, DeleteCount:0, DeletedByteCount:0, ReadOnly:false, ModifiedAtSecond:1793481746 from 127.0.0.1:8080
+I1031 23:28:27.013304 topology.go:492 removing volume info: Id:15807, Size:8, ReplicaPlacement:000, Collection:benchmark-bucket, Version:3, Ttl:, FileCount:0, DeleteCount:0, DeletedByteCount:0, ReadOnly:false, ModifiedAtSecond:1793481746 from 127.0.0.1:8080
+I1031 23:28:27.013317 topology.go:492 removing volume info: Id:15805, Size:704, ReplicaPlacement:000, Collection:benchmark-bucket, Version:3, Ttl:, FileCount:1, DeleteCount:0, DeletedByteCount:0, ReadOnly:false, ModifiedAtSecond:1793481746 from 127.0.0.1:8080
+I1031 23:28:27.013332 topology.go:492 removing volume info: Id:15794, Size:8, ReplicaPlacement:000, Collection:benchmark-bucket, Version:3, Ttl:, FileCount:0, DeleteCount:0, DeletedByteCount:0, ReadOnly:false, ModifiedAtSecond:1793481746 from 127.0.0.1:8080
+I1031 23:28:27.013345 topology.go:492 removing volume info: Id:15789, Size:8, ReplicaPlacement:000, Collection:benchmark-bucket, Version:3, Ttl:, FileCount:0, DeleteCount:0, DeletedByteCount:0, ReadOnly:false, ModifiedAtSecond:1793481746 from 127.0.0.1:8080
+I1031 23:28:27.013359 topology.go:492 removing volume info: Id:15815, Size:8, ReplicaPlacement:000, Collection:benchmark-bucket, Version:3, Ttl:, FileCount:0, DeleteCount:0, DeletedByteCount:0, ReadOnly:false, ModifiedAtSecond:1793481746 from 127.0.0.1:8080
+I1031 23:28:27.013372 topology.go:492 removing volume info: Id:15817, Size:8, ReplicaPlacement:000, Collection:benchmark-bucket, Version:3, Ttl:, FileCount:0, DeleteCount:0, DeletedByteCount:0, ReadOnly:false, ModifiedAtSecond:1793481746 from 127.0.0.1:8080
+I1031 23:28:27.013385 topology.go:492 removing volume info: Id:15791, Size:8, ReplicaPlacement:000, Collection:benchmark-bucket, Version:3, Ttl:, FileCount:0, DeleteCount:0, DeletedByteCount:0, ReadOnly:false, ModifiedAtSecond:1793481746 from 127.0.0.1:8080
+I1031 23:28:27.013397 topology.go:492 removing volume info: Id:15795, Size:8, ReplicaPlacement:000, Collection:benchmark-bucket, Version:3, Ttl:, FileCount:0, DeleteCount:0, DeletedByteCount:0, ReadOnly:false, ModifiedAtSecond:1793481746 from 127.0.0.1:8080
+I1031 23:28:27.013410 topology.go:492 removing volume info: Id:15801, Size:8, ReplicaPlacement:000, Collection:benchmark-bucket, Version:3, Ttl:, FileCount:0, DeleteCount:0, DeletedByteCount:0, ReadOnly:false, ModifiedAtSecond:1793481746 from 127.0.0.1:8080
+I1031 23:28:27.013423 topology.go:492 removing volume info: Id:15808, Size:1256, ReplicaPlacement:000, Collection:benchmark-bucket, Version:3, Ttl:, FileCount:1, DeleteCount:0, DeletedByteCount:0, ReadOnly:false, ModifiedAtSecond:1793481746 from 127.0.0.1:8080
+I1031 23:28:27.013438 topology.go:492 removing volume info: Id:15810, Size:8, ReplicaPlacement:000, Collection:benchmark-bucket, Version:3, Ttl:, FileCount:0, DeleteCount:0, DeletedByteCount:0, ReadOnly:false, ModifiedAtSecond:1793481746 from 127.0.0.1:8080
+SeaweedFS stopped (data left in /home/vasil/Documents/source/ArcticDB/python/benchmark_merge_update/seaweed)
