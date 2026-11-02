@@ -2723,6 +2723,14 @@ std::variant<VersionedItem, CompactionError> compact_incomplete_impl(
     // The pipeline descriptor rather than the first segment's: an empty staged segment sorts first but has no index
     // for the aggregator to use.
     const auto index = index_type_from_descriptor(pipeline_context->on_disk_descriptor());
+
+    auto pipeline_read_query = std::make_shared<ReadQuery>();
+    pipeline_read_query->clauses_.emplace_back(std::make_shared<Clause>(
+            RemoveColumnPartitioningClause{pipeline_context->incompletes_after()}
+    ));
+    ReadOptions pipeline_read_options;
+    pipeline_read_options.set_dynamic_schema(dynamic_schema);
+    auto segments = read_process_and_collect(store, pipeline_context, pipeline_read_query, pipeline_read_options).get();
     auto policies = std::make_tuple(
             index,
             dynamic_schema ? VariantSchema{DynamicSchema::default_schema(index, stream_id)}
@@ -2742,8 +2750,8 @@ std::variant<VersionedItem, CompactionError> compact_incomplete_impl(
                 };
                 CompactionResult compaction_result =
                         do_compact<IndexType, SchemaType, RowCountSegmentPolicy, ColumnPolicyType>(
-                                pipeline_context->incompletes_begin(),
-                                pipeline_context->end(),
+                                segments.begin(),
+                                segments.end(),
                                 pipeline_context,
                                 slices,
                                 store,
