@@ -182,6 +182,10 @@ class VersionedEngine {
             const StreamId& stream_id, std::shared_ptr<InputFrame> source, bool prune_previous_versions, bool upsert,
             const MergeStrategy& strategy, std::vector<std::string>&& on
     ) = 0;
+
+    virtual std::unordered_map<std::tuple<StreamId, VersionId>, double> batch_dedup_ratios_internal(
+            const std::vector<StreamId>& stream_ids
+    ) = 0;
 };
 
 } // namespace arcticdb::version_store

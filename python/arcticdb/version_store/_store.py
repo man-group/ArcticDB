@@ -4579,7 +4579,7 @@ class NativeVersionStore:
         Returns
         -------
         dict[tuple[str, int], float]
-            Mapping from symbol version number to percentage of de-duplicated data.
+            Mapping from symbol version number to measure of de-duplicated data.
         """
         return self.version_store.batch_dedup_ratios(symbols)
 
