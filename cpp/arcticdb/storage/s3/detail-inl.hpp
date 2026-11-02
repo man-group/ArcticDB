@@ -12,6 +12,7 @@
 #include <arcticdb/storage/storage_options.hpp>
 #include <arcticdb/storage/storage_utils.hpp>
 #include <arcticdb/storage/storage_exceptions.hpp>
+#include <arcticdb/storage/s3/s3_retry_strategy.hpp>
 #include <arcticdb/storage/s3/s3_client_interface.hpp>
 #include <arcticdb/entity/serialized_key.hpp>
 #include <arcticdb/util/exponential_backoff.hpp>
@@ -118,7 +119,7 @@ inline bool is_not_found_error(const Aws::S3::S3Errors& error) {
     }
 
     log::storage().error(error_message);
-    if (err.ShouldRetry()) {
+    if (err.ShouldRetry() || is_response_checksum_mismatch(err)) {
         raise<ErrorCode::E_S3_RETRYABLE>(fmt::format("Retry-able error: {}", error_message));
     }
     raise<ErrorCode::E_UNEXPECTED_S3_ERROR>(error_message);

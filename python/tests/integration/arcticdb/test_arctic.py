@@ -34,6 +34,7 @@ from arcticdb.exceptions import (
     NoDataFoundException,
     ArcticUnsupportedDataTypeException,
     ArcticInvalidApiUsageException,
+    ArcticException
 )
 from arcticdb.adapters.mongo_library_adapter import MongoLibraryAdapter
 from arcticdb.arctic import Arctic
@@ -1647,6 +1648,42 @@ def test_s3_delete_objects_checksum_no_effect_in_when_supported_mode(
     finally:
         requests.post(endpoint + "/require_md5_checksum_on_delete_objs_request", b"0", verify=verify).raise_for_status()
         requests.post(endpoint + "/reject_checksum_mode", b"1", verify=verify).raise_for_status()
+
+
+@contextlib.contextmanager
+def _corrupting_get_responses(s3_storage):
+    endpoint = s3_storage.factory.endpoint
+    verify = s3_storage.factory.client_cert_file or False
+
+    def corrupt(count):
+        requests.post(endpoint + "/corrupt_get_responses", str(count).encode(), verify=verify).raise_for_status()
+
+    requests.post(endpoint + "/reject_checksum_mode", b"0", verify=verify).raise_for_status()
+    try:
+        yield corrupt
+    finally:
+        corrupt(0)
+        requests.post(endpoint + "/reject_checksum_mode", b"1", verify=verify).raise_for_status()
+
+
+@pytest.mark.parametrize("retry_mode", ["adaptive", "standard"])
+def test_s3_response_checksum_mismatch_is_retried_up_to_max_attempts(
+    s3_storage, lib_name, monkeypatch, route_env_to_extension, retry_mode
+):
+    monkeypatch.setenv("AWS_RESPONSE_CHECKSUM_VALIDATION", "when_supported")
+    # The retry mode and attempt limit the user configures for the SDK apply to checksum mismatches too
+    monkeypatch.setenv("AWS_RETRY_MODE", retry_mode)
+    monkeypatch.setenv("AWS_MAX_ATTEMPTS", "2")
+    with _corrupting_get_responses(s3_storage) as corrupt:
+        create_library(s3_storage.arctic_uri, lib_name)
+        lib = Arctic(s3_storage.arctic_uri)[lib_name]
+        df = pd.DataFrame({"col": np.arange(1000)})
+        lib.write("sym", df)
+        corrupt(1)
+        assert_frame_equal(lib.read("sym").data, df)
+        corrupt(2)
+        with pytest.raises(ArcticException, match="E_S3_RETRYABLE.*Response checksums mismatch"):
+            lib.read("sym")
 
 
 @pytest.mark.parametrize("checksum", ["MD5", "CRC64NVME", "crc32", "sha256"])
