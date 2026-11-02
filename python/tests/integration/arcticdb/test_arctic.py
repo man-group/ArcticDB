@@ -34,7 +34,7 @@ from arcticdb.exceptions import (
     NoDataFoundException,
     ArcticUnsupportedDataTypeException,
     ArcticInvalidApiUsageException,
-    ArcticException
+    ArcticException,
 )
 from arcticdb.adapters.mongo_library_adapter import MongoLibraryAdapter
 from arcticdb.arctic import Arctic
