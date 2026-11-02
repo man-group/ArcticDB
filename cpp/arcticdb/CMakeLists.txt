@@ -372,6 +372,7 @@ set(arcticdb_srcs
         storage/s3/s3_client_interface.hpp
         storage/s3/s3_storage_tool.hpp
         storage/s3/s3_settings.hpp
+        storage/s3/s3_retry_strategy.hpp
         storage/mock/s3_mock_client.hpp
         storage/python_bindings_common.hpp
         storage/storage_factory.hpp
@@ -593,6 +594,7 @@ set(arcticdb_srcs
         storage/s3/ec2_utils.cpp
         storage/s3/s3_api.cpp
         storage/s3/s3_client_impl.cpp
+        storage/s3/s3_retry_strategy.cpp
         storage/mock/s3_mock_client.cpp
         storage/s3/s3_storage.cpp
         storage/s3/s3_storage_tool.cpp
@@ -1163,6 +1165,7 @@ if(${TEST})
             storage/test/test_memory_storage.cpp
             storage/test/test_s3_storage.cpp
             storage/test/test_s3_api.cpp
+            storage/test/test_s3_retry_strategy.cpp
             storage/test/test_storage_factory.cpp
             storage/test/common.hpp
             storage/test/test_storage_exceptions.cpp
