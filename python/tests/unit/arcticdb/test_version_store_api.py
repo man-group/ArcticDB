@@ -29,7 +29,7 @@ class Bail(Exception):
         n
         for n in dir(NativeVersionStore)
         if n.startswith("batch_")
-        and n not in ["batch_read_metadata_multi", "batch_read_and_join", "batch_delete_symbols"]
+        and n not in ["batch_read_metadata_multi", "batch_read_and_join", "batch_delete_symbols", "batch_dedup_ratios"]
     ],
 )
 def test_calling_batch_methods_with_non_batch_params(name):
