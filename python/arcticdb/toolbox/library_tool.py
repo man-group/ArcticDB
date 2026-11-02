@@ -4,7 +4,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 
-from typing import Optional, Union, List, Dict, Any
+from typing import Optional, Union, List, Dict, Any, Sequence, Tuple
 import pandas as pd
 
 from arcticdb.supported_types import ExplicitlySupportedDates
@@ -237,3 +237,29 @@ class LibraryTool(LibraryToolImpl):
 
     def write_segment_in_memory(self, symbol: str, segment: SegmentInMemory, slicing: Slicing):
         self._nvs.version_store._test_write_versioned_segment(symbol, segment, False, slicing)
+
+    def batch_dedup_ratios(self, symbols: Sequence[str]) -> Dict[Tuple[str, int], float]:
+        """
+        For each (symbol, version) pair, report amount of data, which is shared with earlier versions.
+        The amounts are floats in the range 0 to 1. 0 indicates no data segments are shared, 1 indicates
+        the version consists entirely of segments shared with earlier versions.
+
+        Will raise if any of the symbols do not exist.
+
+        Examples
+        --------
+
+        >>> lib.write("symbol", pd.Series(np.arange(10), index=pd.date_range("2020-01-01", periods=10)))
+        >>> lib.write("symbol", pd.Series(np.arange(20), index=pd.date_range("2020-01-01", periods=20)))
+
+        Parameters
+        ----------
+        symbols : Sequence[str]
+            The symbols to measure.
+
+        Returns
+        -------
+        dict[tuple[str, int], float]
+            Mapping from symbol version number to measure of de-duplicated data.
+        """
+        return self._nvs.version_store.batch_dedup_ratios(symbols)

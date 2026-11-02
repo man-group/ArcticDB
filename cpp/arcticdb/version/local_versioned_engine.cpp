@@ -2803,9 +2803,7 @@ std::unordered_map<std::tuple<StreamId, VersionId>, double> LocalVersionedEngine
         } catch (const arcticdb::storage::NoDataFoundException&) {
             throw;
         } catch (const std::exception& e) {
-            util::raise_rte(
-                    "batch_dedup_ratios failed for symbol '{}': {}", stream_ids[i], results[i].exception().what()
-            );
+            util::raise_rte("batch_dedup_ratios failed for symbol '{}': {}", stream_ids[i], e.what());
         }
     }
 
