@@ -27,10 +27,6 @@ AWSError<CoreErrors> checksum_mismatch_error() {
     return {CoreErrors::VALIDATION, "", "Response checksums mismatch", false};
 }
 
-std::shared_ptr<Aws::Client::RetryStrategy> wrap(std::shared_ptr<Aws::Client::RetryStrategy> inner) {
-    return std::make_shared<ChecksumMismatchRetryStrategy>(std::move(inner));
-}
-
 } // namespace
 
 TEST(S3ChecksumMismatchRetryStrategy, IdentifiesChecksumMismatch) {
@@ -53,15 +49,15 @@ TEST(S3ChecksumMismatchRetryStrategy, UnwrappedStrategiesDoNotRetryChecksumMisma
 
 TEST(S3ChecksumMismatchRetryStrategy, RetriesChecksumMismatchUntilTheInnerStrategyGivesUp) {
     // 3 retries means 4 attempts in total
-    auto default_strategy = wrap(std::make_shared<Aws::Client::DefaultRetryStrategy>(3));
-    ASSERT_EQ(default_strategy->GetMaxAttempts(), 4);
-    ASSERT_TRUE(default_strategy->ShouldRetry(checksum_mismatch_error(), 0));
-    ASSERT_TRUE(default_strategy->ShouldRetry(checksum_mismatch_error(), 2));
-    ASSERT_FALSE(default_strategy->ShouldRetry(checksum_mismatch_error(), 3));
+    ChecksumMismatchRetryStrategy default_strategy(std::make_shared<Aws::Client::DefaultRetryStrategy>(3));
+    ASSERT_EQ(default_strategy.GetMaxAttempts(), 4);
+    ASSERT_TRUE(default_strategy.ShouldRetry(checksum_mismatch_error(), 0));
+    ASSERT_TRUE(default_strategy.ShouldRetry(checksum_mismatch_error(), 2));
+    ASSERT_FALSE(default_strategy.ShouldRetry(checksum_mismatch_error(), 3));
 
-    for (auto strategy :
-         {wrap(std::make_shared<Aws::Client::StandardRetryStrategy>(3)),
-          wrap(std::make_shared<Aws::Client::AdaptiveRetryStrategy>(3))}) {
+    ChecksumMismatchRetryStrategy standard_strategy(std::make_shared<Aws::Client::StandardRetryStrategy>(3));
+    ChecksumMismatchRetryStrategy adaptive_strategy(std::make_shared<Aws::Client::AdaptiveRetryStrategy>(3));
+    for (const ChecksumMismatchRetryStrategy* strategy : {&standard_strategy, &adaptive_strategy}) {
         ASSERT_TRUE(strategy->ShouldRetry(checksum_mismatch_error(), 0));
         ASSERT_TRUE(strategy->ShouldRetry(checksum_mismatch_error(), 1));
         ASSERT_FALSE(strategy->ShouldRetry(checksum_mismatch_error(), 2));
@@ -69,11 +65,11 @@ TEST(S3ChecksumMismatchRetryStrategy, RetriesChecksumMismatchUntilTheInnerStrate
 }
 
 TEST(S3ChecksumMismatchRetryStrategy, DelegatesOtherErrorsToTheInnerStrategy) {
-    auto strategy = wrap(std::make_shared<Aws::Client::DefaultRetryStrategy>(3));
-    ASSERT_TRUE(strategy->ShouldRetry({CoreErrors::NETWORK_CONNECTION, true}, 0));
-    ASSERT_FALSE(strategy->ShouldRetry({CoreErrors::NETWORK_CONNECTION, true}, 3));
-    ASSERT_FALSE(strategy->ShouldRetry({CoreErrors::ACCESS_DENIED, false}, 0));
-    ASSERT_FALSE(strategy->ShouldRetry({CoreErrors::VALIDATION, "", "Invalid DNS Label", false}, 0));
+    ChecksumMismatchRetryStrategy strategy(std::make_shared<Aws::Client::DefaultRetryStrategy>(3));
+    ASSERT_TRUE(strategy.ShouldRetry({CoreErrors::NETWORK_CONNECTION, true}, 0));
+    ASSERT_FALSE(strategy.ShouldRetry({CoreErrors::NETWORK_CONNECTION, true}, 3));
+    ASSERT_FALSE(strategy.ShouldRetry({CoreErrors::ACCESS_DENIED, false}, 0));
+    ASSERT_FALSE(strategy.ShouldRetry({CoreErrors::VALIDATION, "", "Invalid DNS Label", false}, 0));
 }
 
 } // namespace arcticdb::storage::s3
