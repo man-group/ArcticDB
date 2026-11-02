@@ -216,7 +216,7 @@ The async infrastructure uses Folly executors with CPU and IO thread pools.
 
 ## 14. PROTOBUF & SERIALIZATION
 
-ArcticDB supports protobuf versions 3 through 6 via separate generated bindings.
+ArcticDB supports protobuf versions 3 through 7 via separate generated bindings.
 
 - **Proto backwards compatibility**: No removed or renumbered fields. New fields must be
   `optional`.

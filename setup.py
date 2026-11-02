@@ -110,11 +110,17 @@ def cleanup_vcpkg_artifacts():
 
 
 class CompileProto(Command):
-    # When adding new protobuf versions, also update: setup.cfg, python/arcticdb/__init__.py
+    # When adding new protobuf versions, also update: setup.cfg, python/arcticc/pb2/__init__.py
     # The upper bound on "6" keeps the bundled protoc at major 6: grpcio-tools>=1.82 bundles a
     # protoc that emits protobuf-7 gencode while still accepting a protobuf 6.* runtime, which would
     # bake gencode 7.x into proto/6 and fail to load against a protobuf<7 runtime.
-    _PROTOBUF_TO_GRPC_VERSION = {"3": ">=1.46", "4": ">=1.49", "5": ">=1.68.1", "6": ">=1.73.0,<1.82"}
+    _PROTOBUF_TO_GRPC_VERSION = {
+        "3": ">=1.46",
+        "4": ">=1.49",
+        "5": ">=1.68.1",
+        "6": ">=1.73.0,<1.82",
+        "7": ">=1.82",
+    }
 
     description = '"protoc" generate code _pb2.py from .proto files'
     user_options = [
@@ -156,6 +162,9 @@ class CompileProto(Command):
                 print(f"Python protobuf {proto_ver} does not run on Python {python}. Skipping...")
             elif not ARCTICDB_USING_CONDA and python <= (3, 8) and proto_ver == "6":
                 # Python 3.8 is not compatible with protobuf 6
+                print(f"Python protobuf {proto_ver} does not run on Python {python}. Skipping...")
+            elif not ARCTICDB_USING_CONDA and python <= (3, 9) and proto_ver == "7":
+                # protobuf 7 requires Python >= 3.10
                 print(f"Python protobuf {proto_ver} does not run on Python {python}. Skipping...")
             else:
                 self._compile_one_version(proto_ver, os.path.join(output_dir, proto_ver))
