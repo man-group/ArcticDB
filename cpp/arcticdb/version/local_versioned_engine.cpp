@@ -2613,4 +2613,203 @@ VersionedItem LocalVersionedEngine::merge_internal(
             .get();
 }
 
+namespace {
+
+void extract_live_versions_from_snapshot_map(
+        const MasterSnapshotMap& snap_map, const StreamId& stream_id,
+        std::back_insert_iterator<std::vector<AtomKeyPacked>> out
+) {
+    if (auto itr = snap_map.find(stream_id); itr != snap_map.end())
+        ranges::copy(itr->second | ranges::views::keys, out);
+}
+
+/**
+ * Insert into `out` all index keys for the given `stream_id` that are undeleted
+ * or are kept alive by an existing snapshot.
+ *
+ * @param store
+ * @param version_map
+ * @param snap_map
+ * @param stream_id
+ * @param out
+ */
+void gather_all_live_versions(
+        const std::shared_ptr<Store>& store, const std::shared_ptr<VersionMap>& version_map,
+        const MasterSnapshotMap& snap_map, const StreamId& stream_id,
+        std::back_insert_iterator<std::vector<AtomKeyPacked>> out
+) {
+    std::vector<AtomKeyPacked> keys_from_undeleted_versions = get_all_versions(store, version_map, stream_id);
+    std::vector<AtomKeyPacked> keys_from_snapshots;
+    extract_live_versions_from_snapshot_map(snap_map, stream_id, std::back_inserter(keys_from_snapshots));
+    // Correct data on disk would imply keys_from_undeleted_versions arrives in descending order by version_id.
+    // Just make sure.
+    ranges::reverse(keys_from_undeleted_versions);
+    ranges::sort(keys_from_undeleted_versions, {}, &AtomKeyPacked::version_id);
+    ranges::sort(keys_from_snapshots, {}, &AtomKeyPacked::version_id);
+
+    ranges::set_union(
+            keys_from_undeleted_versions,
+            keys_from_snapshots,
+            out,
+            {},
+            &AtomKeyPacked::version_id,
+            &AtomKeyPacked::version_id
+    );
+}
+
+struct DataKeyCellCount {
+    // Due to possibility of MULTI_KEYs (recursive normalizers), we must track full AtomKeys.
+    // Unit test covers corner case where de-duplication can lead to multi keys pointing at
+    // index keys whose data key entries have more than one unique StreamId. Can't rely on the
+    // StreamId inherited from the version key.
+    AtomKey data_key;
+    size_t cell_count;
+};
+
+std::vector<DataKeyCellCount> get_data_key_cell_counts(SegmentInMemory&& table_index_segment) {
+    std::vector<DataKeyCellCount> result;
+    const pipelines::index::IndexSegmentReader isr(std::move(table_index_segment));
+    result.reserve(isr.size());
+    for (const SliceAndKey& slice_and_key : isr) {
+        const FrameSlice& slice = slice_and_key.slice();
+        result.emplace_back(slice_and_key.key(), slice.rows().diff() * slice.columns().diff());
+    }
+    return result;
+}
+
+folly::Future<std::vector<DataKeyCellCount>> read_cell_counts(
+        const std::shared_ptr<Store>& store, const AtomKey& index_key
+) {
+    return store->read(index_key)
+            .via(&async::cpu_executor())
+            .thenValue(
+                    [store](std::pair<entity::VariantKey, SegmentInMemory>&& key_segment
+                    ) -> folly::Future<std::vector<DataKeyCellCount>> {
+                        auto& [key, segment] = key_segment;
+                        if (variant_key_type(key) == KeyType::MULTI_KEY) {
+                            std::vector<folly::Future<std::vector<DataKeyCellCount>>> sub_counts;
+                            sub_counts.reserve(segment.row_count());
+                            util::check(
+                                    segment.row_count() <= std::numeric_limits<ssize_t>::max(),
+                                    "Segment had {} rows which exceeds ssize_t limits",
+                                    segment.row_count()
+                            );
+                            ssize_t row_count = static_cast<ssize_t>(segment.row_count());
+                            for (ssize_t idx = 0; idx < row_count; ++idx) {
+                                const AtomKey sub_key = stream::read_key_row(segment, idx);
+                                util::check(
+                                        sub_key.type() == KeyType::TABLE_INDEX,
+                                        "MULTI_KEYs should only contain TABLE_INDEX keys, but found: {}",
+                                        sub_key.type()
+                                );
+                                sub_counts.emplace_back(read_cell_counts(store, sub_key));
+                            }
+
+                            return folly::collect(std::move(sub_counts))
+                                    .via(&async::cpu_executor())
+                                    .thenValue([](std::vector<std::vector<DataKeyCellCount>>&& parts) {
+                                        std::vector<DataKeyCellCount> flat;
+                                        for (std::vector<DataKeyCellCount>& part : parts)
+                                            std::ranges::move(part, std::back_inserter(flat));
+
+                                        return flat;
+                                    });
+
+                        } else {
+                            return get_data_key_cell_counts(std::move(segment));
+                        }
+                    }
+            );
+}
+
+double dedup_ratio(
+        std::span<const DataKeyCellCount> cell_counts, ankerl::unordered_dense::set<AtomKey>& seen_data_keys
+) {
+    size_t newly_added_cells = 0;
+    size_t total_cells = 0;
+    for (const auto& [data_key, num_cells] : cell_counts) {
+        total_cells += num_cells;
+        if (seen_data_keys.insert(data_key).second)
+            newly_added_cells += num_cells;
+    }
+
+    return total_cells != 0 ? 1 - static_cast<double>(newly_added_cells) / static_cast<double>(total_cells) : 0.0;
+}
+
+} // namespace
+
+std::unordered_map<std::tuple<StreamId, VersionId>, double> LocalVersionedEngine::batch_dedup_ratios_internal(
+        const std::vector<StreamId>& stream_ids
+) {
+    const MasterSnapshotMap snap_map =
+            get_master_snapshots_map(store(), std::unordered_set<StreamId>{stream_ids.begin(), stream_ids.end()});
+
+    std::unordered_map<std::tuple<StreamId, VersionId>, double> result;
+    std::mutex result_mutex;
+
+    auto per_symbol_scan = [this, &snap_map, &result, &result_mutex](const StreamId& stream_id
+                           ) -> folly::Future<folly::Unit> {
+        std::vector<AtomKeyPacked> all_version_keys;
+        gather_all_live_versions(store(), version_map(), snap_map, stream_id, std::back_inserter(all_version_keys));
+
+        // TODO: Non-existent stream_id leads to no exceptions and empty keys, so we need an explicit throw.
+        if (all_version_keys.empty())
+            throw arcticdb::storage::NoDataFoundException(
+                    fmt::format("batch_dedup_ratios: version not found for symbol '{}'", stream_id)
+            );
+
+        std::vector<folly::Future<std::vector<DataKeyCellCount>>> fut_cell_counts_per_version;
+        fut_cell_counts_per_version.reserve(all_version_keys.size());
+        // TODO: Use a window for this too. Keeping too many segments in memory could be dire,
+        //       and I think I can get away with a window because the algorithm here is a reduce().
+        //       I just need to amortize the I/O, and especially need to amortize the possible second
+        //       pointer chase from multi keys.
+        //       Even with window, the number of allocations here is insane though. Vectors everywhere.
+        for (const AtomKeyPacked& key : all_version_keys) {
+            fut_cell_counts_per_version.emplace_back(read_cell_counts(store(), key.to_atom_key(stream_id)));
+        }
+        // Sharp edge: collect() intentional. In the event of exception, unwind. Rely on the outer collectAll()
+        // to keep captures alive for any futures still being executed.
+        // If any of the keys fail to load, there isn't a good partial result to report.
+        return folly::collect(fut_cell_counts_per_version)
+                .via(&async::cpu_executor())
+                .thenValue([all_version_keys = std::move(all_version_keys), stream_id, &result, &result_mutex](
+                                   std::vector<std::vector<DataKeyCellCount>>&& cell_counts_per_version
+                           ) {
+                    ankerl::unordered_dense::set<AtomKey> seen_data_keys;
+                    std::vector<std::tuple<VersionId, double>> partial_results;
+                    partial_results.reserve(cell_counts_per_version.size());
+                    for (size_t i = 0; i < cell_counts_per_version.size(); ++i) {
+                        partial_results.emplace_back(
+                                all_version_keys[i].version_id(),
+                                dedup_ratio(cell_counts_per_version[i], seen_data_keys)
+                        );
+                    }
+
+                    std::lock_guard lock(result_mutex);
+                    for (auto& [version_id, ratio] : partial_results) {
+                        result[std::make_tuple(stream_id, version_id)] = ratio;
+                    }
+                });
+    };
+
+    const size_t window_size = async::TaskScheduler::instance()->io_thread_count();
+    std::vector<folly::Try<folly::Unit>> results =
+            folly::collectAll(folly::window(stream_ids, per_symbol_scan, window_size)).get();
+    // Propagate first encountered error to the caller, if any.
+    for (size_t i = 0; i < results.size(); ++i) {
+        try {
+            results[i].throwUnlessValue();
+        } catch (const arcticdb::storage::NoDataFoundException&) {
+            throw;
+        } catch (const std::exception& e) {
+            util::raise_rte(
+                    "batch_dedup_ratios failed for symbol '{}': {}", stream_ids[i], results[i].exception().what()
+            );
+        }
+    }
+
+    return result;
+}
+
 } // namespace arcticdb::version_store
