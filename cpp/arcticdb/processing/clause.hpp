@@ -854,14 +854,12 @@ struct WriteClause {
     void process_compressed(const std::vector<EntityId>& entity_ids) const;
 };
 
-/// Type used as the key when target column values of type TDT are indexed for matching. Types without an in-band NA
-/// representation are wrapped in std::optional so that std::nullopt can represent missing values.
+/// Type used as the key when column values of type TDT are compared for matching. std::nullopt represents a missing
+/// value. A present NaN or NaT is also NA, see is_na.
 template<util::scalar_type_descriptor_tag TDT>
 using MatchKeyType = std::conditional_t<
         is_sequence_type(TDT::data_type()), std::optional<std::string_view>,
-        std::conditional_t<
-                is_floating_point_type(TDT::data_type()) || is_time_type(TDT::data_type()),
-                typename TDT::DataTypeTag::raw_type, std::optional<typename TDT::DataTypeTag::raw_type>>>;
+        std::optional<typename TDT::DataTypeTag::raw_type>>;
 
 template<typename TDT, typename T>
 concept sequence_type_raw_value =
@@ -874,26 +872,27 @@ concept raw_value_for_type_descriptor = util::scalar_type_descriptor_tag<TDT> &&
                                          std::same_as<T, MatchKeyType<TDT>> || sequence_type_raw_value<TDT, T>);
 
 /// Whether value, one of the representations merge-update uses for a column of type TDT, denotes a missing entry.
-/// TDT is always the type of the column itself. value can be the raw type stored in the target column, or, only for
-/// sequence types, the PyObject* read from the source tensor or the decoded std::optional<std::string_view> match
-/// key. For types without an in-band NA representation value can also be the std::optional match key.
+/// TDT is always the type of the column itself. value can be the raw type stored in the column, the MatchKeyType match
+/// key or, only for sequence types, the PyObject* read from the source tensor.
 template<util::scalar_type_descriptor_tag TDT, typename V>
 requires raw_value_for_type_descriptor<TDT, V>
 constexpr bool is_na(V value) {
-    if constexpr (is_floating_point_type(TDT::data_type())) {
+    if constexpr (std::same_as<V, MatchKeyType<TDT>>) {
+        if constexpr (is_sequence_type(TDT::data_type())) {
+            return !value.has_value();
+        } else {
+            return !value.has_value() || is_na<TDT>(*value);
+        }
+    } else if constexpr (is_floating_point_type(TDT::data_type())) {
         return std::isnan(value);
     } else if constexpr (is_time_type(TDT::data_type())) {
         return value == NaT;
     } else if constexpr (is_sequence_type(TDT::data_type())) {
         if constexpr (std::same_as<std::remove_const_t<V>, PyObject*>) {
             return is_py_none(value) || is_py_nan(value);
-        } else if constexpr (std::same_as<V, std::optional<std::string_view>>) {
-            return !value.has_value();
         } else {
             return !is_a_string(value);
         }
-    } else if constexpr (std::same_as<V, MatchKeyType<TDT>>) {
-        return !value.has_value();
     } else {
         return false;
     }
@@ -968,35 +967,30 @@ std::pair<std::optional<std::string_view>, std::optional<convert::PyStringWrappe
         std::span<PyObject* const> data, size_t row, std::string_view column_name, size_t source_row_offset,
         std::optional<ScopedGILLock>* gil
 ) {
-    PyObject* const value = data[row];
-    if (is_na<TDT>(value)) {
-        return {std::nullopt, std::nullopt};
-    }
-    return util::variant_match(
-            create_py_object_wrapper_or_error<TDT::data_type()>(data[row], *gil),
-            [&](convert::StringEncodingError&& err
-            ) -> std::pair<std::optional<std::string_view>, std::optional<convert::PyStringWrapper>> {
-                err.row_index_in_slice_ = row;
-                err.raise(column_name, source_row_offset);
-            },
-            [&](convert::PyStringWrapper&& wrapper
-            ) -> std::pair<std::optional<std::string_view>, std::optional<convert::PyStringWrapper>> {
-                return std::pair{
-                        std::make_optional(std::string_view{wrapper.buffer_, wrapper.length_}),
-                        std::make_optional(std::move(wrapper))
-                };
-            }
-    );
+    return get_source_string<TDT>(data[row], nullptr, row, column_name, source_row_offset, gil);
 }
 
 template<util::scalar_sequence_type TDT>
-std::pair<std::optional<std::string_view>, std::optional<convert::PyStringWrapper>>
-get_source_string(const std::pair<std::span<const typename TDT::RawType>, const StringPool*>& data, size_t row, std::string_view, size_t, std::optional<ScopedGILLock>*) {
-    auto offset = data.first[row];
-    if (is_na<TDT>(offset)) {
-        return {std::nullopt, std::nullopt};
+std::pair<std::optional<std::string_view>, std::optional<convert::PyStringWrapper>> get_source_string(
+        const std::pair<std::span<const typename TDT::RawType>, const StringPool*>& data, size_t row,
+        std::string_view column_name, size_t source_row_offset, std::optional<ScopedGILLock>* gil
+) {
+    return get_source_string<TDT>(data.first[row], data.second, row, column_name, source_row_offset, gil);
+}
+
+/// Match key of the value of column at row, std::nullopt if the row has no value.
+template<util::scalar_type_descriptor_tag TDT>
+MatchKeyType<TDT> column_match_key(
+        const ColumnWithStrings& column, const ColumnDataRandomAccessor<TDT>& accessor, size_t row
+) {
+    if (!column.column_->has_value_at(static_cast<position_t>(row))) {
+        return std::nullopt;
     }
-    return {data.second->get_const_view(offset), std::nullopt};
+    if constexpr (is_sequence_type(TDT::data_type())) {
+        return column.string_at_offset(accessor.at(row));
+    } else {
+        return accessor.at(row);
+    }
 }
 
 template<util::scalar_type_descriptor_tag TDT>
@@ -1013,9 +1007,11 @@ struct NaAwareComparator {
 };
 
 /// This clause will perform update values or insert values based on strategy_ in a segment. The source of new
-/// values is the source_ member. Source and target must have the same index type. There are two actions UPDATE:
-/// For a particular row in the segment if there's a row in source_ for which all values in the columns listed
+/// values is the source_ member. Source and target must have the same index type. There are two actions:
+///
+/// UPDATE: For a particular row in the segment if there's a row in source_ for which all values in the columns listed
 /// in on and the index (only in case if timeseries) match update will be performed.
+///
 /// INSERT: Each row in source_ not matched by the target will be inserted
 struct MergeUpdateClause {
     ClauseInfo clause_info_;
@@ -1094,31 +1090,20 @@ struct MergeUpdateClause {
                     for (size_t source_row_idx = 0; source_row_idx < matched_rows.size(); ++source_row_idx) {
                         const size_t discarded_matches =
                                 std::erase_if(matched_rows[source_row_idx], [&](const size_t target_row) {
-                                    const bool target_has_value =
-                                            target_column.column_->has_value_at(static_cast<position_t>(target_row));
-                                    NaAwareComparator<SourceTDT> comparator{match_na};
-                                    bool are_values_equal = false;
+                                    const NaAwareComparator<SourceTDT> comparator{match_na};
+                                    const MatchKeyType<TargetTDT> target_key = column_match_key<TargetTDT>(
+                                            target_column, target_column_accessor, target_row
+                                    );
                                     if constexpr (util::scalar_sequence_type<SourceTDT>) {
                                         const auto [source_string, opt_owner] = get_source_string<SourceTDT>(
                                                 source, source_row_idx, column_name, source_offset, &gil
                                         );
-                                        const std::optional<std::string_view> target_string =
-                                                target_has_value ? target_column.string_at_offset(
-                                                                           target_column_accessor[target_row]
-                                                                   )
-                                                                 : std::nullopt;
-                                        are_values_equal = comparator(source_string, target_string);
+                                        return !comparator(source_string, target_key);
                                     } else {
-                                        const auto source_value = get_source_value<SourceTDT>(source, source_row_idx);
-                                        if (target_has_value) {
-                                            are_values_equal =
-                                                    comparator(target_column_accessor[target_row], source_value);
-                                        } else {
-                                            // A missing target value is equivalent to NA
-                                            are_values_equal = match_na && is_na<SourceTDT>(source_value);
-                                        }
+                                        const MatchKeyType<SourceTDT> source_key =
+                                                get_source_value<SourceTDT>(source, source_row_idx);
+                                        return !comparator(source_key, target_key);
                                     }
-                                    return !are_values_equal;
                                 });
                         source_row_matched_count_[source_row_idx] -= discarded_matches;
                         total_matched_target_rows_count_ -= discarded_matches;
@@ -1168,34 +1153,28 @@ struct MergeUpdateClause {
                     const size_t source_row = source_row_idx + source_range.first;
                     const bool source_has_value =
                             source_it != source_end && static_cast<size_t>(source_it->idx()) == source_row;
+                    const MatchKeyType<SourceTDT> source_key = [&]() -> MatchKeyType<SourceTDT> {
+                        if (!source_has_value) {
+                            return std::nullopt;
+                        }
+                        if constexpr (util::scalar_sequence_type<SourceTDT>) {
+                            return source.string_at_offset(source_it->value());
+                        } else {
+                            return source_it->value();
+                        }
+                    }();
                     std::vector<size_t>& matched_rows = matched_target_rows_[row_slice_idx][source_row_idx];
                     size_t discarded_values = 0;
-                    if (!match_na && (!source_has_value || is_na<SourceTDT>(source_it->value()))) {
+                    if (!match_na && is_na<SourceTDT>(source_key)) {
                         // NA source value cannot match anything
                         discarded_values = matched_rows.size();
                         matched_rows.clear();
                     } else {
-                        // Missing values in either source or target are equivalent to NA
+                        const NaAwareComparator<SourceTDT> comparator{match_na};
                         discarded_values = std::erase_if(matched_rows, [&](const size_t target_row) {
-                            const bool target_has_value =
-                                    target_column.column_->has_value_at(static_cast<position_t>(target_row));
-                            NaAwareComparator<SourceTDT> comparator{match_na};
-                            if constexpr (util::scalar_sequence_type<SourceTDT>) {
-                                const std::optional<std::string_view> source_string =
-                                        source_has_value ? source.string_at_offset(source_it->value()) : std::nullopt;
-                                const std::optional<std::string_view> target_string =
-                                        target_has_value ? target_column.string_at_offset(target_accessor[target_row])
-                                                         : std::nullopt;
-                                return !comparator(source_string, target_string);
-                            } else {
-                                if (source_has_value && target_has_value) {
-                                    return !comparator(target_accessor[target_row], source_it->value());
-                                }
-                                const bool source_na = !source_has_value || is_na<SourceTDT>(source_it->value());
-                                const bool target_na =
-                                        !target_has_value || is_na<TargetTDT>(target_accessor[target_row]);
-                                return !(match_na && source_na && target_na);
-                            }
+                            return !comparator(
+                                    source_key, column_match_key<TargetTDT>(target_column, target_accessor, target_row)
+                            );
                         });
                     }
                     source_row_matched_count_[source_row_idx] -= discarded_values;

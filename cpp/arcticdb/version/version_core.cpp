@@ -533,23 +533,30 @@ SegmentInMemory create_segment_for_merge_update_row_range_insert(
         const util::BitSet& source_rows_to_insert
 ) {
     const size_t rows_to_insert = insert_info.output_row_range.diff();
-    SegmentInMemory new_segment(col_slice_descriptor, rows_to_insert, AllocationType::PRESIZED, Sparsity::PERMITTED);
+    // Columns are allocated one by one below, each for the exact number of values it holds
+    SegmentInMemory new_segment(col_slice_descriptor, 0, AllocationType::DYNAMIC, Sparsity::PERMITTED);
     const StreamDescriptor& slice_descriptor = new_segment.descriptor();
     const size_t first_col_idx = insert_info.col_slice_index * columns_per_slice;
     for (size_t column_in_segment = 0; column_in_segment < slice_descriptor.field_count(); ++column_in_segment) {
         std::optional<ScopedGILLock> gil_lock;
-        ColumnData col_data = new_segment.column_data(column_in_segment);
         const Field& field = slice_descriptor.field(column_in_segment);
         const size_t source_field_pos = first_col_idx + column_in_segment;
+        const auto allocate_column = [&](size_t values) -> Column& {
+            new_segment.columns()[column_in_segment] =
+                    std::make_shared<Column>(field.type(), values, AllocationType::PRESIZED, Sparsity::PERMITTED);
+            return *new_segment.columns()[column_in_segment];
+        };
         details::visit_scalar(field.type(), [&]<util::type_descriptor_tag TDT>(TDT) {
-            auto data_it = col_data.begin<TDT>();
             const auto for_each_row_to_insert = [&](auto&& set_value) {
+                Column& new_column = allocate_column(rows_to_insert);
+                ColumnData col_data = new_column.data();
+                auto data_it = col_data.begin<TDT>();
                 iterate_over_set_positions(
                         source_rows_to_insert,
                         insert_info.candidate_source_rows.first,
                         insert_info.candidate_source_rows.second,
                         [&](size_t source_row) {
-                            set_value(source_row);
+                            *data_it = set_value(source_row);
                             ++data_it;
                         }
                 );
@@ -560,15 +567,22 @@ SegmentInMemory create_segment_for_merge_update_row_range_insert(
                         const Column& source_column = source.column(static_cast<position_t>(source_field_pos));
                         ColumnData source_column_data = source_column.data();
                         if (source_column.is_sparse()) {
-                            // Only the present values are written to the dense buffer, the rest are marked as missing.
-                            // A single block is allocated for the worst case and trimmed at the end.
-                            auto new_column = std::make_shared<Column>(
-                                    field.type(), rows_to_insert, AllocationType::DYNAMIC, Sparsity::PERMITTED
+                            // Only the present values are written to the dense buffer, the rest are marked as missing
+                            const util::BitMagic& source_sparse_map = *source_column_data.bit_vector();
+                            const size_t dense_values = bm::count_and(
+                                    util::BitSet(
+                                            source_rows_to_insert,
+                                            static_cast<util::BitSetSizeType>(insert_info.candidate_source_rows.first),
+                                            static_cast<util::BitSetSizeType>(
+                                                    insert_info.candidate_source_rows.second - 1
+                                            )
+                                    ),
+                                    source_sparse_map
                             );
-                            new_column->buffer().ensure(rows_to_insert * get_type_size(field.type().data_type()));
-                            ColumnData new_column_data = new_column->data();
+                            Column& new_column = allocate_column(dense_values);
+                            ColumnData new_column_data = new_column.data();
                             auto sparse_data_it = new_column_data.begin<TDT>();
-                            util::BitMagic& sparse_map = new_column->sparse_map();
+                            util::BitMagic& sparse_map = new_column.sparse_map();
                             size_t output_row = 0;
                             // The source rows are visited in order, so the values are read with a sparse iterator to
                             // avoid a rank query per row. It starts at the first existing value at or after the first
@@ -576,7 +590,6 @@ SegmentInMemory create_segment_for_merge_update_row_range_insert(
                             const auto source_end =
                                     source_column_data.cend<TDT, IteratorType::ENUMERATED, IteratorDensity::SPARSE>();
                             auto source_it = source_end;
-                            const util::BitMagic& source_sparse_map = *source_column_data.bit_vector();
                             const auto first_candidate_row =
                                     static_cast<util::BitSetSizeType>(insert_info.candidate_source_rows.first);
                             util::BitSetSizeType first_row_with_value = 0;
@@ -617,25 +630,22 @@ SegmentInMemory create_segment_for_merge_update_row_range_insert(
                                         sparse_map.set(output_row++, has_value);
                                     }
                             );
-                            const size_t dense_values = sparse_map.count();
-                            new_column->buffer().trim(dense_values * get_type_size(field.type().data_type()));
                             if (dense_values == rows_to_insert) {
-                                new_column->opt_sparse_map().reset();
+                                new_column.opt_sparse_map().reset();
                             }
-                            new_segment.columns()[column_in_segment] = std::move(new_column);
                             return;
                         }
                         auto source_data = random_accessor<TDT>(&source_column_data);
                         for_each_row_to_insert([&](size_t source_row) {
                             const auto value = source_data.at(source_row);
                             if constexpr (is_sequence_type(TDT::data_type())) {
-                                *data_it = is_a_string(value)
-                                                   ? new_segment.string_pool()
-                                                             .get(source.const_string_pool().get_const_view(value))
-                                                             .offset()
-                                                   : value;
+                                return is_a_string(value)
+                                               ? new_segment.string_pool()
+                                                         .get(source.const_string_pool().get_const_view(value))
+                                                         .offset()
+                                               : value;
                             } else {
-                                *data_it = value;
+                                return value;
                             }
                         });
                     },
@@ -646,9 +656,9 @@ SegmentInMemory create_segment_for_merge_update_row_range_insert(
                                 typename TDT::DataTypeTag::raw_type>;
                         std::span<const SourceRawType> source_data =
                                 source->get_tensor(source_field_pos).span<SourceRawType>();
-                        for_each_row_to_insert([&](size_t source_row) {
+                        for_each_row_to_insert([&](size_t source_row) -> typename TDT::DataTypeTag::raw_type {
                             if constexpr (is_sequence_type(TDT::data_type())) {
-                                *data_it = write_py_string_to_pool_or_throw<TDT>(
+                                return write_py_string_to_pool_or_throw<TDT>(
                                         source_data[source_row],
                                         source_row,
                                         RowRange{0, source->num_rows},
@@ -657,7 +667,7 @@ SegmentInMemory create_segment_for_merge_update_row_range_insert(
                                         field.name()
                                 );
                             } else {
-                                *data_it = source_data[source_row];
+                                return source_data[source_row];
                             }
                         });
                     }

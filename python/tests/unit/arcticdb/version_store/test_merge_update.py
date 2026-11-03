@@ -33,11 +33,12 @@ from arcticdb.exceptions import (
     ArcticException,
     NormalizationException,
     SchemaException,
-    StreamDescriptorMismatch,
     ArcticDbNotYetImplemented,
 )
 from arcticdb.version_store.library import MergeAction, MergeStrategy, Library
 from arcticdb.version_store._store import normalize_merge_action
+from arcticdb.options import OutputFormat
+from tests.util.arrow import to_format
 from tests.util.mark import WINDOWS
 
 pytestmark = [
@@ -63,13 +64,6 @@ class SourceFormat(Enum):
 source_format_param = pytest.mark.parametrize(
     "source_format", list(SourceFormat), ids=[f"{source_format.value}_source" for source_format in SourceFormat]
 )
-# Reproducible with write/append/update(upsert=True) of the same Arrow table followed by a pandas read.
-ARROW_WRITTEN_UNNAMED_INDEX_XFAIL = pytest.mark.xfail(
-    raises=(AssertionError, IndexError),
-    reason='Data written from Arrow reads back in pandas with the index named "index" instead of None, and with '
-    "IndexError when the table has no data columns",
-    strict=True,
-)
 # append/update reject this with E_INCOMPATIBLE_OBJECTS; merge writes the Arrow source as a new version instead.
 ARROW_SOURCE_INTO_EMPTY_PANDAS_TARGET_XFAIL = pytest.mark.xfail(
     raises=AssertionError,
@@ -80,13 +74,6 @@ ARROW_SOURCE_INTO_EMPTY_PANDAS_TARGET_XFAIL = pytest.mark.xfail(
 # An Arrow column containing only nulls has the Arrow null type, which ArcticDB cannot write.
 ARROW_NULL_TYPE_COLUMN_XFAIL = pytest.mark.xfail(
     raises=SchemaException, reason="ArcticDB does not support Arrow columns of null type", strict=True
-)
-# Pandas stores a data column that clashes with the index name as __col_<name>__N, which the Arrow source cannot match.
-ARROW_SOURCE_INTO_PANDAS_MANGLED_COLUMN_XFAIL = pytest.mark.xfail(
-    raises=StreamDescriptorMismatch,
-    reason="Merge update with an Arrow source into a symbol whose pandas column names were mangled on write is not "
-    "supported yet. Can be supported after #3418 by calling rename_columns_for_arrow on the target",
-    strict=True,
 )
 
 
@@ -103,19 +90,22 @@ def to_arrow_source(source_format: SourceFormat, source: pd.DataFrame) -> Tuple[
     return pa.Table.from_pandas(source, preserve_index=False), index_column
 
 
+def has_unnamed_index(df: pd.DataFrame) -> bool:
+    return not isinstance(df.index, pd.RangeIndex) and None in df.index.names
+
+
+def with_arrow_compat_index_names(df: pd.DataFrame) -> pd.DataFrame:
+    """Index names as produced by rename_columns_arrow_compat with the default index_columns."""
+    if isinstance(df.index, pd.MultiIndex):
+        return df.rename_axis([f"__index_level_{i}__" if n is None else n for i, n in enumerate(df.index.names)])
+    return df.rename_axis(df.index.name or "__index__")
+
+
 def run_merge(lib, source_format: SourceFormat, symbol: str, source: pd.DataFrame, *args, **kwargs):
     if source_format == SourceFormat.PANDAS:
         return lib.merge(symbol, source, *args, **kwargs)
     converted_source, index_column = to_arrow_source(source_format, source)
-    try:
-        return lib.merge(symbol, converted_source, *args, index_column=index_column, **kwargs)
-    except StreamDescriptorMismatch:
-        has_unnamed_index = not isinstance(source.index, pd.RangeIndex) and None in source.index.names
-        if source_format in (SourceFormat.ARROW, SourceFormat.POLARS) and has_unnamed_index:
-            pytest.skip(
-                "Arrow data cannot match an unnamed pandas index. To be addressed with rename_columns_for_arrow in #3418"
-            )
-        raise
+    return lib.merge(symbol, converted_source, *args, index_column=index_column, **kwargs)
 
 
 def generic_merge_test(
@@ -130,16 +120,19 @@ def generic_merge_test(
 ):
     if isinstance(target, pd.DataFrame):
         target = [target]
-    concat_target = pd.concat(target)
-    # Run the actual merge and compare against expected
+    oracle_expected = merge(pd.concat(target), source, strategy, on=on)
+    assert_frame_equal(oracle_expected, expected)
     lib.write(sym, target[0])
     for df in target[1:]:
         lib.append(sym, df)
+    if source_format != SourceFormat.PANDAS and has_unnamed_index(source):
+        # Arrow data cannot match an unnamed pandas index, so the target is renamed to Arrow compatible names
+        lib.rename_columns_arrow_compat(sym)
+        source = with_arrow_compat_index_names(source)
+        expected = with_arrow_compat_index_names(expected)
     run_merge(lib, source_format, sym, source, strategy=strategy, on=on)
     read_vit = lib.read(sym)
     assert_frame_equal(read_vit.data, expected)
-    oracle_expected = merge(concat_target, source, strategy, on=on)
-    assert_frame_equal(oracle_expected, expected)
     return read_vit
 
 
@@ -209,7 +202,9 @@ class TestMergeTimeseriesCommon:
     @pytest.mark.parametrize("metadata", ({"meta": "data"}, None))
     def test_merge_writes_new_version_with_empty_source(self, lmdb_library, metadata, strategy, source_format):
         lib = lmdb_library
-        target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]}, index=pd.date_range("2024-01-01", periods=3))
+        target = pd.DataFrame(
+            {"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]}, index=pd.date_range("2024-01-01", periods=3, name="ts")
+        )
         lib.write("sym", target, metadata="v0")
         merge_vit = run_merge(lib, source_format, "sym", pd.DataFrame(), metadata=metadata, strategy=strategy)
         assert merge_vit.metadata is None if metadata is None else merge_vit.metadata == metadata
@@ -229,28 +224,32 @@ class TestMergeTimeseriesCommon:
             pd.DataFrame(
                 {"a": np.array([1, 2, 3], dtype=np.int8), "b": [1.0, 2.0, 3.0]},
                 index=pd.DatetimeIndex(
-                    [pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-01 10:00:00"), pd.Timestamp("2024-01-02")]
+                    [pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-01 10:00:00"), pd.Timestamp("2024-01-02")],
+                    name="ts",
                 ),
             ),
             # "a" is missing, replaced by "c"
             pd.DataFrame(
                 {"c": np.array([1, 2, 3], dtype=np.int8), "b": [1.0, 2.0, 3.0]},
                 index=pd.DatetimeIndex(
-                    [pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-01 10:00:00"), pd.Timestamp("2024-01-02")]
+                    [pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-01 10:00:00"), pd.Timestamp("2024-01-02")],
+                    name="ts",
                 ),
             ),
             # "a" is missing
             pd.DataFrame(
                 {"b": [1.0, 2.0, 3.0]},
                 index=pd.DatetimeIndex(
-                    [pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-01 10:00:00"), pd.Timestamp("2024-01-02")]
+                    [pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-01 10:00:00"), pd.Timestamp("2024-01-02")],
+                    name="ts",
                 ),
             ),
             # Schemas differ but no data is loaded from the disk
             pd.DataFrame(
                 {"b": [1.0, 2.0, 3.0]},
                 index=pd.DatetimeIndex(
-                    [pd.Timestamp("2020-01-01"), pd.Timestamp("2020-01-01 10:00:00"), pd.Timestamp("2020-01-02")]
+                    [pd.Timestamp("2020-01-01"), pd.Timestamp("2020-01-01 10:00:00"), pd.Timestamp("2020-01-02")],
+                    name="ts",
                 ),
             ),
         ],
@@ -262,19 +261,21 @@ class TestMergeTimeseriesCommon:
         )
         lib.write("sym", target)
         with pytest.raises(SchemaException):
-            run_merge(lib, source_format, "sym", source.rename_axis("ts"), strategy=strategy)
+            run_merge(lib, source_format, "sym", source, strategy=strategy)
 
     def test_throws_if_source_is_not_sorted(self, lmdb_library, strategy, source_format):
         # This requirement can be lifted, however, passing a sorted source will be faster. We can start with it and
         # extend if needed.
         lib = lmdb_library
-        target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]}, index=pd.date_range("2024-01-01", periods=3))
+        target = pd.DataFrame(
+            {"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]}, index=pd.date_range("2024-01-01", periods=3, name="ts")
+        )
         lib.write("sym", target)
 
         source = pd.DataFrame(
             {"a": [10, 20, 30], "b": [10.1, 20.1, 30.1]},
             index=pd.DatetimeIndex(
-                [pd.Timestamp("2024-01-02"), pd.Timestamp("2024-01-03"), pd.Timestamp("2024-01-01")]
+                [pd.Timestamp("2024-01-02"), pd.Timestamp("2024-01-03"), pd.Timestamp("2024-01-01")], name="ts"
             ),
         )
 
@@ -677,9 +678,11 @@ class TestMergeTimeseriesUpdate:
     @pytest.mark.parametrize("merge_metadata", (None, "meta"))
     def test_target_is_empty(self, lmdb_library, merge_metadata, source_format):
         lib = lmdb_library
-        target = pd.DataFrame({"a": np.array([], dtype=np.int64)}, index=pd.DatetimeIndex([]))
+        target = pd.DataFrame({"a": np.array([], dtype=np.int64)}, index=pd.DatetimeIndex([], name="ts"))
         lib.write("sym", target)
-        source = pd.DataFrame({"a": np.array([1, 2], dtype=np.int64)}, index=pd.date_range("2024-01-01", periods=2))
+        source = pd.DataFrame(
+            {"a": np.array([1, 2], dtype=np.int64)}, index=pd.date_range("2024-01-01", periods=2, name="ts")
+        )
         merge_vit = run_merge(
             lib,
             source_format,
@@ -700,9 +703,9 @@ class TestMergeTimeseriesUpdate:
     @pytest.mark.parametrize(
         "source",
         (
-            pd.DataFrame([], index=pd.DatetimeIndex([])),
-            pd.DataFrame({"a": []}, index=pd.DatetimeIndex([])),
-            pd.DataFrame({"a": [1]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-01")])),
+            pd.DataFrame([], index=pd.DatetimeIndex([], name="ts")),
+            pd.DataFrame({"a": []}, index=pd.DatetimeIndex([], name="ts")),
+            pd.DataFrame({"a": [1]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-01")], name="ts")),
         ),
     )
     @pytest.mark.parametrize("upsert", (True, False))
@@ -776,7 +779,8 @@ class TestMergeTimeseriesUpdate:
         lib = lmdb_version_store_v1
 
         target = pd.DataFrame(
-            {"a": [1, 2, 3], "b": [1.0, 2.0, 3.0], "c": ["a", "b", "c"]}, index=pd.date_range("2024-01-01", periods=3)
+            {"a": [1, 2, 3], "b": [1.0, 2.0, 3.0], "c": ["a", "b", "c"]},
+            index=pd.date_range("2024-01-01", periods=3, name="ts"),
         )
         lib.write("sym", target)
         # Write a second version. Nothing in this version will match the source
@@ -784,7 +788,7 @@ class TestMergeTimeseriesUpdate:
             "sym",
             pd.DataFrame(
                 {"a": [1, 2, 3], "b": [1.0, 2.0, 3.0], "c": ["a", "b", "c"]},
-                index=pd.date_range("2020-01-01", periods=3),
+                index=pd.date_range("2020-01-01", periods=3, name="ts"),
             ),
         )
         lib.delete("sym")
@@ -792,7 +796,7 @@ class TestMergeTimeseriesUpdate:
         source = pd.DataFrame(
             {"a": [4, 5, 6], "b": [7.0, 8.0, 9.0], "c": ["A", "B", "C"]},
             # Only the second row: "2024-01-02" matches
-            index=pd.DatetimeIndex(["2024-01-01 10:00:00", "2024-01-02", "2024-01-04"]),
+            index=pd.DatetimeIndex(["2024-01-01 10:00:00", "2024-01-02", "2024-01-04"], name="ts"),
         )
 
         # The merge will be performed on the latest undeleted version
@@ -1056,19 +1060,17 @@ class TestMergeTimeseriesUpdate:
         lib = lmdb_library
         target = pd.DataFrame(
             {"a": [1, 2, 3], None: [1.0, 2.0, 3.0]},
-            index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(1), pd.Timestamp(2)]),
+            index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(1), pd.Timestamp(2)], name="ts"),
         )
         source = pd.DataFrame(
             {"a": [10, 20, 30], None: [10.0, 20.0, 30.0]},
-            index=pd.DatetimeIndex([pd.Timestamp(1), pd.Timestamp(1), pd.Timestamp(2)]),
+            index=pd.DatetimeIndex([pd.Timestamp(1), pd.Timestamp(1), pd.Timestamp(2)], name="ts"),
         )
         lib.write("sym", target)
         with pytest.raises(TypeError):
             run_merge(lib, source_format, "sym", source, strategy=self.strategy, on=on)
 
-    def test_match_on_column_named_index_and_unnamed_index(self, request, lmdb_library, source_format):
-        if source_format != SourceFormat.PANDAS:
-            request.applymarker(ARROW_SOURCE_INTO_PANDAS_MANGLED_COLUMN_XFAIL)
+    def test_match_on_column_named_index_and_unnamed_index(self, lmdb_library, source_format):
         lib = lmdb_library
         target = pd.DataFrame({"index": [1, 2, 3], "b": [1.0, 2.0, 3.0]}, index=pd.date_range("2024-01-01", periods=3))
         source = pd.DataFrame(
@@ -1104,6 +1106,9 @@ class TestMergeTimeseriesUpdate:
             ),
         )
         lib.write("sym", target)
+        if source_format != SourceFormat.PANDAS:
+            lib.rename_columns_arrow_compat("sym")
+            source = with_arrow_compat_index_names(source)
         with pytest.raises(UserInputException) as exc_info:
             run_merge(lib, source_format, "sym", source, strategy=self.strategy, on=["index"])
         assert "E_COLUMN_NOT_FOUND" in str(exc_info.value)
@@ -1162,12 +1167,12 @@ class TestMergeTimeseriesUpdate:
         target = pd.DataFrame(
             [[1, 2, 3], [4, 5, 6]],
             columns=["a", "my_duplicated_column", "my_duplicated_column"],
-            index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(1)]),
+            index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(1)], name="ts"),
         )
         source = pd.DataFrame(
             [[1, 2, 3], [4, 5, 6]],
             columns=["a", "my_duplicated_column", "my_duplicated_column"],
-            index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(1)]),
+            index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(1)], name="ts"),
         )
         lib.write("sym", target)
         with pytest.raises(UserInputException, match="E_DUPLICATE_COLUMN") as exc_info:
@@ -1834,19 +1839,15 @@ class TestMergeTimeseriesUpdateAndInsert:
     @pytest.mark.parametrize(
         "source",
         (
-            pd.DataFrame([], index=pd.DatetimeIndex([])),
-            pd.DataFrame({"a": []}, index=pd.DatetimeIndex([])),
-            pd.DataFrame({"a": [1]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-01")])),
+            pd.DataFrame([], index=pd.DatetimeIndex([], name="ts")),
+            pd.DataFrame({"a": []}, index=pd.DatetimeIndex([], name="ts")),
+            pd.DataFrame({"a": [1]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-01")], name="ts")),
         ),
     )
     @pytest.mark.parametrize("upsert", (True, False))
     @pytest.mark.parametrize("strategy", (MergeStrategy("update", "insert"), MergeStrategy("do_nothing", "insert")))
     @pytest.mark.parametrize("metadata", (None, {"meta": "data"}))
-    def test_target_symbol_does_not_exist(
-        self, request, lmdb_library, source, upsert, strategy, metadata, source_format
-    ):
-        if source_format != SourceFormat.PANDAS and upsert:
-            request.applymarker(ARROW_WRITTEN_UNNAMED_INDEX_XFAIL)
+    def test_target_symbol_does_not_exist(self, lmdb_library, source, upsert, strategy, metadata, source_format):
         # Model non-existing target after Library.update
         # There is an upsert parameter to control whether to create the index. If upsert=False exception is thrown.
         # Since we're doing a merge on non-existing data, I think it's logical to assume that nothing matches. No
@@ -1892,17 +1893,15 @@ class TestMergeTimeseriesUpdateAndInsert:
         )
         assert_frame_equal(lib.read("sym").data, expected)
 
-    def test_upsert_recreates_symbol_after_delete(self, request, lmdb_library, source_format):
-        if source_format != SourceFormat.PANDAS:
-            request.applymarker(ARROW_WRITTEN_UNNAMED_INDEX_XFAIL)
+    def test_upsert_recreates_symbol_after_delete(self, lmdb_library, source_format):
         # Recreating a deleted symbol continues the version counter and adds a symbol list key.
         lib = lmdb_library
-        lib.write("sym", pd.DataFrame({"a": [1, 2, 3]}, index=pd.date_range("2024-01-01", periods=3)))
+        lib.write("sym", pd.DataFrame({"a": [1, 2, 3]}, index=pd.date_range("2024-01-01", periods=3, name="ts")))
         lib.delete("sym")
         lib_tool = lib._dev_tools.library_tool()
         assert not len(lib.list_symbols())
         num_symbol_list_keys = len(lib_tool.find_keys(KeyType.SYMBOL_LIST))
-        source = pd.DataFrame({"a": [10]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-05")]))
+        source = pd.DataFrame({"a": [10]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-05")], name="ts"))
         merge_vit = run_merge(lib, source_format, "sym", source, strategy=self.strategy, upsert=True)
         assert merge_vit.version == 1
         assert_frame_equal(lib.read("sym").data, source)
@@ -4354,6 +4353,9 @@ class TestMergeMultiindexUpdate:
         source = pd.DataFrame(source_data_values, columns=data_column_names, index=source_idx)
 
         lib.write("sym", target)
+        if source_format != SourceFormat.PANDAS:
+            lib.rename_columns_arrow_compat("sym")
+            source = with_arrow_compat_index_names(source)
         with pytest.raises(UserInputException, match="E_COLUMN_NOT_FOUND"):
             run_merge(lib, source_format, "sym", source, strategy=self.strategy, on=on)
 
@@ -5139,11 +5141,11 @@ def test_match_on_string_none_nan(
         (
             pd.DataFrame(
                 {"a": [None, "x", "y"], "b": [1.0, 2.0, 3.0]},
-                index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(1), pd.Timestamp(2)]),
+                index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(1), pd.Timestamp(2)], name="ts"),
             ),
             pd.DataFrame(
                 {"a": np.array([None, np.nan], dtype=object), "b": [10.0, 20.0]},
-                index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(0)]),
+                index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(0)], name="ts"),
             ),
         ),
         (
@@ -5270,7 +5272,7 @@ class TestMergeUpdateSchemaCombine:
 
     def test_index_type_mismatch(self, mem_library):
         lib = mem_library
-        target = pd.DataFrame({"a": [1, 2, 3]}, index=pd.date_range("2024-01-01", periods=3))
+        target = pd.DataFrame({"a": [1, 2, 3]}, index=pd.date_range("2024-01-01", periods=3, name="ts"))
         lib.write("sym", target)
         source = pd.DataFrame({"a": [10]})
         with pytest.raises(SchemaException, match="DatetimeIndex and the other is a RangeIndex"):
@@ -5278,19 +5280,21 @@ class TestMergeUpdateSchemaCombine:
 
     def test_index_timezone_mismatch(self, mem_library):
         lib = mem_library
-        target = pd.DataFrame({"a": [1, 2, 3]}, index=pd.date_range("2024-01-01", periods=3, tz="Europe/London"))
+        target = pd.DataFrame(
+            {"a": [1, 2, 3]}, index=pd.date_range("2024-01-01", periods=3, tz="Europe/London", name="ts")
+        )
         lib.write("sym", target)
         source = pd.DataFrame(
-            {"a": [10]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-02")]).tz_localize("America/New_York")
+            {"a": [10]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-02")], name="ts").tz_localize("America/New_York")
         )
         with pytest.raises(SchemaException, match="timezones for column"):
             lib.merge("sym", source, strategy=self.strategy)
 
     def test_series_source_onto_dataframe_target(self, mem_library):
         lib = mem_library
-        target = pd.DataFrame({"a": [1, 2, 3]}, index=pd.date_range("2024-01-01", periods=3))
+        target = pd.DataFrame({"a": [1, 2, 3]}, index=pd.date_range("2024-01-01", periods=3, name="ts"))
         lib.write("sym", target)
-        source = pd.Series([10], name="a", index=pd.DatetimeIndex([pd.Timestamp("2024-01-02")]))
+        source = pd.Series([10], name="a", index=pd.DatetimeIndex([pd.Timestamp("2024-01-02")], name="ts"))
         with pytest.raises(SchemaException, match="Series cannot be combined with a DataFrame"):
             lib.merge("sym", source, strategy=self.strategy)
 
@@ -5299,7 +5303,7 @@ class TestMergeUpdateSchemaCombine:
         """The combine promotes a fixed-width target column to dynamic strings, because merge always normalizes its
         source with dynamic strings. Nothing observes that promotion: processing refuses fixed-width columns first."""
         lib = in_memory_store_factory(dynamic_strings=False)
-        index = pd.date_range("2024-01-01", periods=3)
+        index = pd.date_range("2024-01-01", periods=3, name="ts")
         lib.write("sym", pd.DataFrame({"a": ["x", "y", "z"]}, index=index))
         with pytest.raises(UserInputException, match="Fixed string sequences are not supported for merge update"):
             lib.merge("sym", pd.DataFrame({"a": ["q"]}, index=index[1:2]), strategy=self.strategy)
@@ -5312,7 +5316,7 @@ class TestMergeUpdateSchemaCombine:
 # Nulls in Arrow data are stored as sparse columns. Unless a test is about pandas, the target, the source and the
 # expected result are all Arrow or Polars. The datetime index is the first column, named "ts".
 arrow_format_param = pytest.mark.parametrize(
-    "arrow_format", [SourceFormat.ARROW, SourceFormat.POLARS], ids=["arrow", "polars"]
+    "arrow_format", [OutputFormat.PYARROW, OutputFormat.POLARS], ids=["arrow", "polars"]
 )
 # For tests whose target is written from pandas
 arrow_source_format_param = pytest.mark.parametrize(
@@ -5324,12 +5328,8 @@ def ts(*days: int) -> pa.Array:
     return pa.array([pd.Timestamp(2024, 1, day) for day in days], type=pa.timestamp("ns"))
 
 
-def in_format(table: pa.Table, arrow_format: SourceFormat):
-    return pl.from_arrow(table) if arrow_format == SourceFormat.POLARS else table
-
-
-def write_arrow(lib, symbol: str, table: pa.Table, arrow_format: SourceFormat, index_column: bool):
-    lib.write(symbol, in_format(table, arrow_format), index_column=index_column)
+def write_arrow(lib, symbol: str, table: pa.Table, arrow_format: OutputFormat, index_column: bool):
+    lib.write(symbol, to_format(table, arrow_format), index_column=index_column)
 
 
 @arrow_format_param
@@ -5341,7 +5341,7 @@ def test_timeseries_update_and_insert_sparse_source(arrow_library, arrow_format)
     target = pa.table({"ts": ts(1, 3, 5), "a": pa.array([1.0, 3.0, 5.0]), "b": pa.array([1, 3, 5])})
     write_arrow(lib, "sym", target, arrow_format, index_column=True)
     source = pa.table({"ts": ts(2, 3, 4, 6), "a": pa.array([None, 30.0, None, 60.0]), "b": pa.array([2, 30, 40, 60])})
-    lib.merge("sym", in_format(source, arrow_format), index_column=True, strategy=MergeStrategy("update", "insert"))
+    lib.merge("sym", to_format(source, arrow_format), index_column=True, strategy=MergeStrategy("update", "insert"))
     expected = pa.table(
         {
             "ts": ts(1, 2, 3, 4, 5, 6),
@@ -5369,7 +5369,7 @@ def test_timeseries_unmatched_sparse_row_inserted_after_repeated_index(
     write_arrow(lib, "sym", target, arrow_format, index_column=True)
     # The null source row matches nothing, so it is inserted after all target rows with the same index value
     source = pa.table({"ts": ts(1, 1), "a": pa.array([1.0, None]), "b": pa.array([10, 20])})
-    lib.merge("sym", in_format(source, arrow_format), index_column=True, strategy=strategy, on=["a"])
+    lib.merge("sym", to_format(source, arrow_format), index_column=True, strategy=strategy, on=["a"])
     expected = pa.table({"ts": ts(1, 1, 1), "a": pa.array([1.0, 2.0, None]), "b": pa.array(expected_b)})
     polars.testing.assert_frame_equal(lib.read("sym", output_format="polars").data, pl.from_arrow(expected))
 
@@ -5380,7 +5380,6 @@ def test_timeseries_update_and_insert_sparse_source_row_slicing(lmdb_library_fac
     groups, i.e. a non-zero source row offset.
     """
     lib = lmdb_library_factory(arcticdb.LibraryOptions(rows_per_segment=2))
-    lib._nvs._set_allow_arrow_input()
     target = pa.table(
         {
             "ts": ts(1, 3, 5, 7, 9, 11),
@@ -5398,7 +5397,7 @@ def test_timeseries_update_and_insert_sparse_source_row_slicing(lmdb_library_fac
             "s": pa.array([None, "s2", "s3", None, "s5", None]),
         }
     )
-    lib.merge("sym", in_format(source, arrow_format), index_column=True, strategy=MergeStrategy("update", "insert"))
+    lib.merge("sym", to_format(source, arrow_format), index_column=True, strategy=MergeStrategy("update", "insert"))
     expected = pa.table(
         {
             "ts": ts(1, 2, 3, 5, 6, 7, 9, 10, 11),
@@ -5439,7 +5438,7 @@ def test_timeseries_update_and_insert_sparse_target_pandas_source(arrow_library)
     """
     lib = arrow_library
     target = pa.table({"ts": ts(1, 3, 5), "a": pa.array([1.0, None, 3.0]), "s": pa.array(["a", None, "c"])})
-    write_arrow(lib, "sym", target, SourceFormat.ARROW, index_column=True)
+    write_arrow(lib, "sym", target, OutputFormat.PYARROW, index_column=True)
     source = pd.DataFrame(
         {"a": [10.0, 20.0, 30.0], "s": ["u", None, np.nan]},
         index=pd.DatetimeIndex(["2024-01-01", "2024-01-02", "2024-01-04"], name="ts"),
@@ -5461,7 +5460,6 @@ def test_update_sparse_source_non_on_column(lmdb_library_factory, arrow_format, 
     copied. With two rows per segment, the matched null and the matched value fall in different processing groups.
     """
     lib = lmdb_library_factory(arcticdb.LibraryOptions(rows_per_segment=rows_per_segment))
-    lib._nvs._set_allow_arrow_input()
     datetime_index = index_type == "datetime"
     target = {"a": pa.array([1, 2, 3]), "b": pa.array([1.0, 2.0, 3.0])}
     # The matched null source value makes the target missing, the unmatched target row keeps its value
@@ -5474,7 +5472,7 @@ def test_update_sparse_source_non_on_column(lmdb_library_factory, arrow_format, 
     write_arrow(lib, "sym", pa.table(target), arrow_format, index_column=datetime_index)
     lib.merge(
         "sym",
-        in_format(pa.table(source), arrow_format),
+        to_format(pa.table(source), arrow_format),
         index_column=datetime_index,
         strategy=MergeStrategy("update", "do_nothing"),
         on=None if datetime_index else ["a"],
@@ -5488,7 +5486,7 @@ def test_update_sparse_target_pandas_source(arrow_library):
     """
     lib = arrow_library
     target = pa.table({"ts": ts(1, 2, 3), "b": pa.array([1, None, 3])})
-    write_arrow(lib, "sym", target, SourceFormat.ARROW, index_column=True)
+    write_arrow(lib, "sym", target, OutputFormat.PYARROW, index_column=True)
     source = pd.DataFrame({"b": [20]}, index=pd.DatetimeIndex(["2024-01-02"], name="ts"))
     lib.merge("sym", source, strategy=MergeStrategy("update", "do_nothing"))
     polars.testing.assert_frame_equal(
@@ -5519,7 +5517,7 @@ def test_update_sparse_strings(arrow_library, arrow_format):
     target = pa.table({"ts": ts(1, 2, 3), "t": pa.array(["p", None, "r"])})
     write_arrow(lib, "sym", target, arrow_format, index_column=True)
     source = pa.table({"ts": ts(1, 2, 3), "t": pa.array([None, "café", "R"])})
-    lib.merge("sym", in_format(source, arrow_format), index_column=True, strategy=MergeStrategy("update", "do_nothing"))
+    lib.merge("sym", to_format(source, arrow_format), index_column=True, strategy=MergeStrategy("update", "do_nothing"))
     polars.testing.assert_frame_equal(
         lib.read("sym", output_format="polars").data,
         pl.from_arrow(pa.table({"ts": ts(1, 2, 3), "t": pa.array([None, "café", "R"])})),
@@ -5541,7 +5539,7 @@ def test_match_on_sparse_target(arrow_library, arrow_format, match_na, target_va
     source = pa.table({"ts": ts(2, 3), "a": source_values, "b": pa.array([20, 30])})
     lib.merge(
         "sym",
-        in_format(source, arrow_format),
+        to_format(source, arrow_format),
         index_column=True,
         strategy=MergeStrategy("update", "do_nothing"),
         on=["a"],
@@ -5555,25 +5553,27 @@ def test_match_on_sparse_target(arrow_library, arrow_format, match_na, target_va
     )
 
 
+@pytest.mark.parametrize("match_na", [True, False], ids=["match_na_true", "match_na_false"])
 @pytest.mark.parametrize(
     "target_values, source_values",
     [(pa.array([1.0, None, 3.0]), [np.nan, 3.0]), (pa.array(["x", None, "z"]), [None, "z"])],
     ids=["float", "string"],
 )
-def test_match_on_sparse_target_pandas_source(arrow_library, target_values, source_values):
+def test_match_on_sparse_target_pandas_source(arrow_library, match_na, target_values, source_values):
     """Matching on a column of a sparse target with a dense pandas source: a missing target value matches the NA
-    source value.
+    source value only if match_na is true.
     """
     lib = arrow_library
     target = pa.table({"ts": ts(1, 2, 3), "a": target_values, "b": pa.array([1, 2, 3])})
-    write_arrow(lib, "sym", target, SourceFormat.ARROW, index_column=True)
+    write_arrow(lib, "sym", target, OutputFormat.PYARROW, index_column=True)
     source = pd.DataFrame(
         {"a": source_values, "b": [20, 30]}, index=pd.DatetimeIndex(["2024-01-02", "2024-01-03"], name="ts")
     )
-    lib.merge("sym", source, strategy=MergeStrategy("update", "do_nothing"), on=["a"], match_na=True)
+    lib.merge("sym", source, strategy=MergeStrategy("update", "do_nothing"), on=["a"], match_na=match_na)
+    expected_b = [1, 20, 30] if match_na else [1, 2, 30]
     polars.testing.assert_frame_equal(
         lib.read("sym", output_format="polars").data,
-        pl.from_arrow(pa.table({"ts": ts(1, 2, 3), "a": target_values, "b": pa.array([1, 20, 30])})),
+        pl.from_arrow(pa.table({"ts": ts(1, 2, 3), "a": target_values, "b": pa.array(expected_b)})),
     )
 
 
@@ -5611,7 +5611,7 @@ def test_match_sparse_source_second_on_column(
     write_arrow(lib, "sym", pa.table(target), arrow_format, index_column=datetime_index)
     lib.merge(
         "sym",
-        in_format(pa.table(source), arrow_format),
+        to_format(pa.table(source), arrow_format),
         index_column=datetime_index,
         strategy=MergeStrategy("update", "do_nothing"),
         on=["k", "a"],
@@ -5625,7 +5625,6 @@ def test_match_sparse_source_second_on_column(
 def test_match_sparse_source_second_on_column_row_slicing(lmdb_library_factory, arrow_format, match_na):
     """Matching with a sparse source over several processing groups, i.e. a non-zero start of the source range."""
     lib = lmdb_library_factory(arcticdb.LibraryOptions(rows_per_segment=2))
-    lib._nvs._set_allow_arrow_input()
     target = pa.table(
         {
             "ts": ts(1, 2, 3, 4, 5, 6),
@@ -5647,7 +5646,7 @@ def test_match_sparse_source_second_on_column_row_slicing(lmdb_library_factory, 
     )
     lib.merge(
         "sym",
-        in_format(source, arrow_format),
+        to_format(source, arrow_format),
         index_column=True,
         strategy=MergeStrategy("update", "do_nothing"),
         on=["k", "a"],
@@ -5682,7 +5681,7 @@ def test_rowrange_match_sparse_target_trailing_missing(
     source = pa.table({"a": source_values, "b": pa.array([99, 100])})
     lib.merge(
         "sym",
-        in_format(source, arrow_format),
+        to_format(source, arrow_format),
         index_column=False,
         strategy=MergeStrategy("update", "do_nothing"),
         on=["a"],
@@ -5711,7 +5710,7 @@ def test_rowrange_match_on_nullable_int_and_bool(arrow_library, arrow_format, ma
     source = pa.table({"a": source_values, "b": pa.array([20.0, 30.0])})
     lib.merge(
         "sym",
-        in_format(source, arrow_format),
+        to_format(source, arrow_format),
         index_column=False,
         strategy=MergeStrategy("update", "do_nothing"),
         on=["a"],
@@ -5742,7 +5741,7 @@ def test_match_nan_against_missing(arrow_library, arrow_format, match_na, index_
     write_arrow(lib, "sym", pa.table(target), arrow_format, index_column=datetime_index)
     lib.merge(
         "sym",
-        in_format(pa.table(source), arrow_format),
+        to_format(pa.table(source), arrow_format),
         index_column=datetime_index,
         strategy=MergeStrategy("update", "do_nothing"),
         on=["k", "a"],
@@ -5769,9 +5768,9 @@ def test_multiple_sparse_source_rows_match_via_missing(arrow_library, arrow_form
     )
     if match_na:
         with pytest.raises(UserInputException, match="Multiple source rows match the same target row"):
-            lib.merge("sym", in_format(pa.table(source), arrow_format), **merge_kwargs)
+            lib.merge("sym", to_format(pa.table(source), arrow_format), **merge_kwargs)
     else:
-        lib.merge("sym", in_format(pa.table(source), arrow_format), **merge_kwargs)
+        lib.merge("sym", to_format(pa.table(source), arrow_format), **merge_kwargs)
         polars.testing.assert_frame_equal(lib.read("sym", output_format="polars").data, pl.from_arrow(pa.table(target)))
 
 
@@ -5785,7 +5784,7 @@ def test_rowrange_insert_sparse_source_all_inserted_present(arrow_library, arrow
     source = pa.table({"a": pa.array([1, 3, 4]), "s": pa.array([None, "z", "w"])})
     lib.merge(
         "sym",
-        in_format(source, arrow_format),
+        to_format(source, arrow_format),
         index_column=False,
         strategy=MergeStrategy("do_nothing", "insert"),
         on=["a"],
@@ -5800,7 +5799,6 @@ def test_rowrange_insert_sparse_source_all_inserted_present(arrow_library, arrow
 def test_rowrange_insert_sparse_source_row_and_column_slicing(lmdb_library_factory, arrow_format):
     """Row range insert with a sparse source over several inserted row slices and column slices."""
     lib = lmdb_library_factory(arcticdb.LibraryOptions(rows_per_segment=2, columns_per_segment=2))
-    lib._nvs._set_allow_arrow_input()
     target = pa.table({"a": pa.array([1]), "b": pa.array([1.0]), "c": pa.array(["c1"])})
     write_arrow(lib, "sym", target, arrow_format, index_column=False)
     # The five unmatched rows are inserted as two row slices of 3 and 2 rows, in two column slices. The second
@@ -5814,7 +5812,7 @@ def test_rowrange_insert_sparse_source_row_and_column_slicing(lmdb_library_facto
     )
     lib.merge(
         "sym",
-        in_format(source, arrow_format),
+        to_format(source, arrow_format),
         index_column=False,
         strategy=MergeStrategy("do_nothing", "insert"),
         on=["a"],
@@ -5843,10 +5841,9 @@ def test_string_encoding_error_reports_source_row(lmdb_library_factory, sparse_t
     other than the first one.
     """
     lib = lmdb_library_factory(arcticdb.LibraryOptions(rows_per_segment=2))
-    lib._nvs._set_allow_arrow_input()
     if sparse_target:
         target = pa.table({"ts": ts(1, 2, 3, 4, 5, 6), "s": pa.array([None, "b", None, "d", None, "f"])})
-        write_arrow(lib, "sym", target, SourceFormat.ARROW, index_column=True)
+        write_arrow(lib, "sym", target, OutputFormat.PYARROW, index_column=True)
     else:
         lib.write(
             "sym",
@@ -5869,7 +5866,7 @@ def test_rowrange_update_insert_keeps_matching_string_column(arrow_library, spar
     lib = arrow_library
     if sparse_target:
         write_arrow(
-            lib, "sym", pa.table({"k": pa.array(["x", None]), "v": pa.array([1, 2])}), SourceFormat.ARROW, False
+            lib, "sym", pa.table({"k": pa.array(["x", None]), "v": pa.array([1, 2])}), OutputFormat.PYARROW, False
         )
     else:
         lib.write("sym", pd.DataFrame({"k": ["x", None], "v": [1, 2]}))
@@ -5879,3 +5876,162 @@ def test_rowrange_update_insert_keeps_matching_string_column(arrow_library, spar
     assert_frame_equal(result, pd.DataFrame({"k": ["x", None, "q"], "v": [1, 20, 30]}))
     # assert_frame_equal treats None and NaN as equal, so check that the target's None was not replaced by NaN
     assert result["k"][1] is None
+
+
+@arrow_format_param
+@pytest.mark.parametrize(
+    "strategy",
+    [MergeStrategy("update", "do_nothing"), MergeStrategy("update", "insert")],
+    ids=["update", "update_insert"],
+)
+def test_update_sparse_target_trailing_and_fully_missing_slice(lmdb_library_factory, arrow_format, strategy):
+    """Updates reach target rows after the last present value of a row slice, including a row slice with no values."""
+    lib = lmdb_library_factory(arcticdb.LibraryOptions(rows_per_segment=2))
+    # Row slices [1, 2], [3, 4] and [5, 6]. The first and the last end with a missing value, the second has none.
+    target = pa.table(
+        {
+            "ts": ts(1, 2, 3, 4, 5, 6),
+            "a": pa.array([1.0, None, None, None, 5.0, None]),
+            "s": pa.array(["t1", None, None, None, "t5", None]),
+        }
+    )
+    write_arrow(lib, "sym", target, arrow_format, index_column=True)
+    source = pa.table(
+        {"ts": ts(2, 3, 4, 6), "a": pa.array([20.0, 30.0, 40.0, 60.0]), "s": pa.array(["s2", "s3", "s4", "s6"])}
+    )
+    lib.merge("sym", to_format(source, arrow_format), index_column=True, strategy=strategy)
+    expected = pa.table(
+        {
+            "ts": ts(1, 2, 3, 4, 5, 6),
+            "a": pa.array([1.0, 20.0, 30.0, 40.0, 5.0, 60.0]),
+            "s": pa.array(["t1", "s2", "s3", "s4", "t5", "s6"]),
+        }
+    )
+    polars.testing.assert_frame_equal(lib.read("sym", output_format="polars").data, pl.from_arrow(expected))
+
+
+@arrow_format_param
+@pytest.mark.parametrize("index_type", ["datetime", "rowrange"])
+@pytest.mark.parametrize(
+    "strategy",
+    [MergeStrategy("update", "do_nothing"), MergeStrategy("do_nothing", "insert"), MergeStrategy("update", "insert")],
+    ids=["update", "insert", "update_insert"],
+)
+def test_merge_all_missing_source_column(arrow_library, arrow_format, index_type, strategy):
+    """A source column without any values updates matched rows to missing and inserts missing values."""
+    lib = arrow_library
+    datetime_index = index_type == "datetime"
+    target = {"k": pa.array([1, 2, 3]), "a": pa.array([1.0, 2.0, 3.0]), "s": pa.array(["x", "y", "z"])}
+    # Typed nulls, an untyped all-null column has the Arrow null type which cannot be written
+    source = {
+        "k": pa.array([2, 4]),
+        "a": pa.array([None, None], type=pa.float64()),
+        "s": pa.array([None, None], type=pa.string()),
+    }
+    update = normalize_merge_action(strategy.matched) == MergeAction.UPDATE
+    insert = normalize_merge_action(strategy.not_matched_by_target) == MergeAction.INSERT
+    expected_a = [1.0, None if update else 2.0, 3.0] + ([None] if insert else [])
+    expected_s = ["x", None if update else "y", "z"] + ([None] if insert else [])
+    expected = {
+        "k": pa.array([1, 2, 3, 4] if insert else [1, 2, 3]),
+        "a": pa.array(expected_a, type=pa.float64()),
+        "s": pa.array(expected_s, type=pa.string()),
+    }
+    if datetime_index:
+        target = {"ts": ts(1, 2, 3), **target}
+        source = {"ts": ts(2, 4), **source}
+        expected = {"ts": ts(1, 2, 3, 4) if insert else ts(1, 2, 3), **expected}
+    write_arrow(lib, "sym", pa.table(target), arrow_format, index_column=datetime_index)
+    lib.merge(
+        "sym",
+        to_format(pa.table(source), arrow_format),
+        index_column=datetime_index,
+        strategy=strategy,
+        on=None if datetime_index else ["k"],
+    )
+    polars.testing.assert_frame_equal(lib.read("sym", output_format="polars").data, pl.from_arrow(pa.table(expected)))
+
+
+@arrow_format_param
+@pytest.mark.parametrize(
+    "strategy, expected_days, expected_a, expected_s",
+    [
+        (
+            MergeStrategy("update", "do_nothing"),
+            (1, 3, 5, 7, 9, 11),
+            [1.0, 3.0, None, 70.0, 9.0, 11.0],
+            ["a", "b", None, "s7", "e", "f"],
+        ),
+        (
+            MergeStrategy("update", "insert"),
+            (1, 3, 5, 6, 7, 9, 11),
+            [1.0, 3.0, None, 60.0, 70.0, 9.0, 11.0],
+            ["a", "b", None, "s6", "s7", "e", "f"],
+        ),
+    ],
+    ids=["update", "update_insert"],
+)
+def test_merge_target_column_missing_in_whole_row_slice(
+    lmdb_library_factory, arrow_format, strategy, expected_days, expected_a, expected_s
+):
+    """The target column has no values in a whole row slice. A null source value keeps a row missing, an inserted and
+    an updated value make the row slice partially present.
+    """
+    lib = lmdb_library_factory(arcticdb.LibraryOptions(rows_per_segment=2))
+    # Row slices [1, 3], [5, 7] and [9, 11]. The second has no values.
+    target = pa.table(
+        {
+            "ts": ts(1, 3, 5, 7, 9, 11),
+            "a": pa.array([1.0, 3.0, None, None, 9.0, 11.0]),
+            "s": pa.array(["a", "b", None, None, "e", "f"]),
+        }
+    )
+    write_arrow(lib, "sym", target, arrow_format, index_column=True)
+    source = pa.table({"ts": ts(5, 6, 7), "a": pa.array([None, 60.0, 70.0]), "s": pa.array([None, "s6", "s7"])})
+    lib.merge("sym", to_format(source, arrow_format), index_column=True, strategy=strategy)
+    expected = pa.table({"ts": ts(*expected_days), "a": pa.array(expected_a), "s": pa.array(expected_s)})
+    polars.testing.assert_frame_equal(lib.read("sym", output_format="polars").data, pl.from_arrow(expected))
+
+
+@arrow_format_param
+@pytest.mark.parametrize(
+    "target_values, value_type",
+    [(pa.array([1.0, None, 3.0]), pa.float64()), (pa.array(["x", None, "z"]), pa.string())],
+    ids=["float", "string"],
+)
+def test_merge_column_becomes_all_missing(arrow_library, arrow_format, target_values, value_type):
+    """Two updates with null values and an insertion of a null value leave the column without any values."""
+    lib = arrow_library
+    write_arrow(lib, "sym", pa.table({"ts": ts(1, 2, 3), "a": target_values}), arrow_format, index_column=True)
+    source = pa.table({"ts": ts(1, 3, 4), "a": pa.array([None] * 3, type=value_type)})
+    lib.merge("sym", to_format(source, arrow_format), index_column=True, strategy=MergeStrategy("update", "insert"))
+    expected = pa.table({"ts": ts(1, 2, 3, 4), "a": pa.array([None] * 4, type=value_type)})
+    polars.testing.assert_frame_equal(lib.read("sym", output_format="polars").data, pl.from_arrow(expected))
+
+
+@pytest.mark.parametrize(
+    "strategy",
+    [MergeStrategy("update", "do_nothing"), MergeStrategy("update", "insert")],
+    ids=["update", "update_insert"],
+)
+def test_update_sparse_target_with_pandas_nan(arrow_library, strategy):
+    """A pandas NaN or None updating a missing value of an Arrow target is stored as NaN or None, not as missing."""
+    lib = arrow_library
+    target = pa.table({"ts": ts(1, 2, 3), "s": pa.array(["a", None, "c"]), "f": pa.array([1.0, None, 3.0])})
+    write_arrow(lib, "sym", target, OutputFormat.PYARROW, index_column=True)
+    source = pd.DataFrame(
+        {"s": np.array([None, np.nan], dtype=object), "f": [10.0, np.nan]},
+        index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1), pd.Timestamp(2024, 1, 2)], name="ts"),
+    )
+    lib.merge("sym", source, strategy=strategy)
+    result = lib.read("sym", output_format="pandas").data
+    expected = pd.DataFrame(
+        {"s": [None, np.nan, "c"], "f": [10.0, np.nan, 3.0]},
+        index=pd.DatetimeIndex([pd.Timestamp(2024, 1, day) for day in (1, 2, 3)], name="ts"),
+    )
+    assert_frame_equal(result, expected)
+    # assert_frame_equal treats None and NaN as equal
+    assert result["s"].iloc[0] is None
+    assert isinstance(result["s"].iloc[1], float) and np.isnan(result["s"].iloc[1])
+    polars_f = lib.read("sym", output_format="polars").data["f"]
+    assert polars_f.is_nan()[1] and not polars_f.is_null()[1]

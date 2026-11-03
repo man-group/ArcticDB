@@ -161,7 +161,6 @@ def merge_update_arguments(draw, index_type=DataframeStrategyIndexType.DATETIME)
 def test_timeseries_merge_update(s3_version_store_v1, data_format, merge_args):
     target_list, source, expected, on, match_na = merge_args
     lib = s3_version_store_v1
-    lib._set_allow_arrow_input()
     symbol = "test_merge_update"
     lib.version_store.force_delete_symbol(symbol)
     index_column = data_format == DataFormat.POLARS
@@ -212,7 +211,6 @@ def test_multiindex_merge_update(s3_version_store_v1, merge_args, cols_to_promot
 def test_rowrange_merge_update(s3_version_store_v1, data_format, merge_args):
     target_list, source, expected, on, match_na = merge_args
     lib = s3_version_store_v1
-    lib._set_allow_arrow_input()
     symbol = "test_merge_update"
     lib.version_store.force_delete_symbol(symbol)
     lib.write(symbol, to_data_format(target_list[0], data_format))
@@ -425,7 +423,6 @@ def test_insert(s3_storage, strategy, index_type, data_format, data):
     lib = ac.create_library(
         name, library_options=LibraryOptions(rows_per_segment=rows_per_segment, columns_per_segment=cols_per_segment)
     )
-    lib._nvs._set_allow_arrow_input()
     index_column = data_format == DataFormat.POLARS and index_type == DataframeStrategyIndexType.DATETIME
     lib.write("symbol", to_data_format(target, data_format), index_column=index_column)
     lib.merge(

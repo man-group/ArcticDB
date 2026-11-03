@@ -3341,3 +3341,54 @@ TEST(MergeUpdateInsertOnlySharedSlice, InsertsIntoChainWithSharedBoundaries) {
         ));
     }
 }
+
+TEST(MergeUpdateMatchKey, NaAndMissingKeys) {
+    using FloatTDT = ScalarTagType<DataTypeTag<DataType::FLOAT64>>;
+    using TimeTDT = ScalarTagType<DataTypeTag<DataType::NANOSECONDS_UTC64>>;
+    using IntTDT = ScalarTagType<DataTypeTag<DataType::INT64>>;
+    using StringTDT = ScalarTagType<DataTypeTag<DataType::UTF_DYNAMIC64>>;
+    static_assert(std::same_as<MatchKeyType<FloatTDT>, std::optional<double>>);
+    static_assert(std::same_as<MatchKeyType<TimeTDT>, std::optional<timestamp>>);
+    static_assert(std::same_as<MatchKeyType<IntTDT>, std::optional<int64_t>>);
+    static_assert(std::same_as<MatchKeyType<StringTDT>, std::optional<std::string_view>>);
+
+    const MatchKeyType<FloatTDT> nan{std::numeric_limits<double>::quiet_NaN()};
+    const MatchKeyType<FloatTDT> missing_float;
+    const MatchKeyType<TimeTDT> nat{NaT};
+    const MatchKeyType<TimeTDT> missing_time;
+    EXPECT_TRUE(is_na<FloatTDT>(nan));
+    EXPECT_TRUE(is_na<FloatTDT>(missing_float));
+    EXPECT_FALSE(is_na<FloatTDT>(MatchKeyType<FloatTDT>{1.0}));
+    EXPECT_TRUE(is_na<TimeTDT>(nat));
+    EXPECT_TRUE(is_na<TimeTDT>(missing_time));
+    EXPECT_FALSE(is_na<TimeTDT>(MatchKeyType<TimeTDT>{0}));
+    EXPECT_TRUE(is_na<IntTDT>(MatchKeyType<IntTDT>{}));
+    EXPECT_FALSE(is_na<IntTDT>(MatchKeyType<IntTDT>{0}));
+    EXPECT_TRUE(is_na<StringTDT>(MatchKeyType<StringTDT>{}));
+    EXPECT_FALSE(is_na<StringTDT>(MatchKeyType<StringTDT>{""}));
+
+    for (const bool match_na : {true, false}) {
+        const NaAwareComparator<FloatTDT> float_comparator{match_na};
+        EXPECT_EQ(float_comparator(nan, missing_float), match_na);
+        EXPECT_EQ(float_comparator(nan, nan), match_na);
+        EXPECT_EQ(float_comparator(missing_float, missing_float), match_na);
+        EXPECT_FALSE(float_comparator(nan, MatchKeyType<FloatTDT>{1.0}));
+        EXPECT_FALSE(float_comparator(missing_float, MatchKeyType<FloatTDT>{1.0}));
+        EXPECT_TRUE(float_comparator(MatchKeyType<FloatTDT>{1.0}, MatchKeyType<FloatTDT>{1.0}));
+
+        const NaAwareComparator<TimeTDT> time_comparator{match_na};
+        EXPECT_EQ(time_comparator(nat, missing_time), match_na);
+        EXPECT_FALSE(time_comparator(nat, MatchKeyType<TimeTDT>{0}));
+        EXPECT_TRUE(time_comparator(MatchKeyType<TimeTDT>{0}, MatchKeyType<TimeTDT>{0}));
+
+        const NaAwareComparator<IntTDT> int_comparator{match_na};
+        EXPECT_EQ(int_comparator(MatchKeyType<IntTDT>{}, MatchKeyType<IntTDT>{}), match_na);
+        EXPECT_FALSE(int_comparator(MatchKeyType<IntTDT>{}, MatchKeyType<IntTDT>{0}));
+        EXPECT_TRUE(int_comparator(MatchKeyType<IntTDT>{0}, MatchKeyType<IntTDT>{0}));
+
+        const NaAwareComparator<StringTDT> string_comparator{match_na};
+        EXPECT_EQ(string_comparator(MatchKeyType<StringTDT>{}, MatchKeyType<StringTDT>{}), match_na);
+        EXPECT_FALSE(string_comparator(MatchKeyType<StringTDT>{}, MatchKeyType<StringTDT>{""}));
+        EXPECT_TRUE(string_comparator(MatchKeyType<StringTDT>{"a"}, MatchKeyType<StringTDT>{"a"}));
+    }
+}
