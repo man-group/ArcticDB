@@ -91,6 +91,38 @@ Any other value, including a differently cased `MD5` or `CRC64NVME`, raises `Use
     Note if either environment variable `AWS_REQUEST_CHECKSUM_CALCULATION` or `AWS_RESPONSE_CHECKSUM_VALIDATION` is set to `when_supported`, the setting of `S3Storage.DeleteObjectsChecksum` will have no effect. crc64nvme checksum will always be sent.
     See the [AWS documentation](https://docs.aws.amazon.com/sdkref/latest/guide/feature-dataintegrity.html) for more details.
 
+### S3Storage.ChecksumMismatchMaxRetries
+
+Controls retrying an S3 request after a response checksum mismatch, i.e. when the `x-amz-checksum-*` header of a
+response does not match the body received. The AWS SDK does not retry these by itself.
+
+A request is retried after a mismatch only while it has been retried fewer than `S3Storage.ChecksumMismatchMaxRetries`
+times in total, and the AWS SDK's own attempt limit (`AWS_MAX_ATTEMPTS`) also allows another attempt. The delay between
+retries follows the AWS SDK retry mode (`AWS_RETRY_MODE`).
+
+The default is 1. Set it to 0 to disable these retries.
+
+Each mismatch is logged as a warning. When the retries are exhausted, the read fails with `E_S3_RETRYABLE`.
+
+It is read when the S3 client is created, e.g. with `ARCTICDB_S3Storage_ChecksumMismatchMaxRetries_int=3`.
+
+Response checksums are only validated if the AWS SDK is asked to, e.g. with
+`AWS_RESPONSE_CHECKSUM_VALIDATION=when_supported`.
+
+!!! warning "Counts every retry of the request, not only checksum mismatches"
+
+    The AWS SDK only tracks one retry count per request, covering every error, so this setting is compared against
+    that count. A request that hits a mix of retryable errors behaves awkwardly as a result:
+
+    * Retries for other errors use it up. With the default of 1, a request that was already retried once for, say, a
+      network error is not retried when it then gets a checksum mismatch, even though it is its first mismatch.
+    * Retries for checksum mismatches count towards `AWS_MAX_ATTEMPTS`, so they leave fewer retries for other errors
+      in the same request.
+
+    A request that only hits checksum mismatches is retried up to `S3Storage.ChecksumMismatchMaxRetries` times, as
+    long as `AWS_MAX_ATTEMPTS` allows it. With the AWS SDK's defaults (`AWS_MAX_ATTEMPTS` unset), that is at most 2
+    retries
+
 ### S3Storage.VerifySSL
 
 Control whether the client should verify the SSL certificate of the storage. If set, this will override the library option set upon library creation.

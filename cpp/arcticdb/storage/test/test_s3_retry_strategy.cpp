@@ -47,17 +47,29 @@ TEST(S3ChecksumMismatchRetryStrategy, UnwrappedStrategiesDoNotRetryChecksumMisma
     ASSERT_FALSE(Aws::Client::AdaptiveRetryStrategy(3).ShouldRetry(checksum_mismatch_error(), 0));
 }
 
-TEST(S3ChecksumMismatchRetryStrategy, RetriesChecksumMismatchUntilTheInnerStrategyGivesUp) {
-    // 3 retries means 4 attempts in total
-    ChecksumMismatchRetryStrategy default_strategy(std::make_shared<Aws::Client::DefaultRetryStrategy>(3));
-    ASSERT_EQ(default_strategy.GetMaxAttempts(), 4);
-    ASSERT_TRUE(default_strategy.ShouldRetry(checksum_mismatch_error(), 0));
-    ASSERT_TRUE(default_strategy.ShouldRetry(checksum_mismatch_error(), 2));
-    ASSERT_FALSE(default_strategy.ShouldRetry(checksum_mismatch_error(), 3));
+TEST(S3ChecksumMismatchRetryStrategy, RetriesChecksumMismatchUpToMaxRetries) {
+    for (long max_retries : {0L, 1L, 5L}) {
+        ChecksumMismatchRetryStrategy strategy(std::make_shared<Aws::Client::DefaultRetryStrategy>(10), max_retries);
+        for (long attempted_retries = 0; attempted_retries < max_retries; ++attempted_retries) {
+            ASSERT_TRUE(strategy.ShouldRetry(checksum_mismatch_error(), attempted_retries));
+        }
+        ASSERT_FALSE(strategy.ShouldRetry(checksum_mismatch_error(), max_retries));
+    }
+}
 
-    ChecksumMismatchRetryStrategy standard_strategy(std::make_shared<Aws::Client::StandardRetryStrategy>(3));
-    ChecksumMismatchRetryStrategy adaptive_strategy(std::make_shared<Aws::Client::AdaptiveRetryStrategy>(3));
+TEST(S3ChecksumMismatchRetryStrategy, MaxRetriesCountsRetriesForOtherErrorsToo) {
+    // A known limitation: the SDK gives one retry count per request, whatever the errors
+    ChecksumMismatchRetryStrategy strategy(std::make_shared<Aws::Client::DefaultRetryStrategy>(10), 1);
+    ASSERT_TRUE(strategy.ShouldRetry({CoreErrors::NETWORK_CONNECTION, true}, 0));
+    ASSERT_FALSE(strategy.ShouldRetry(checksum_mismatch_error(), 1));
+}
+
+TEST(S3ChecksumMismatchRetryStrategy, ChecksumMismatchRetriesCountTowardsTheInnerAttemptLimit) {
+    // The wrapped strategies allow 3 attempts, i.e. 2 retries in total
+    ChecksumMismatchRetryStrategy standard_strategy(std::make_shared<Aws::Client::StandardRetryStrategy>(3), 5);
+    ChecksumMismatchRetryStrategy adaptive_strategy(std::make_shared<Aws::Client::AdaptiveRetryStrategy>(3), 5);
     for (const ChecksumMismatchRetryStrategy* strategy : {&standard_strategy, &adaptive_strategy}) {
+        ASSERT_EQ(strategy->GetMaxAttempts(), 3);
         ASSERT_TRUE(strategy->ShouldRetry(checksum_mismatch_error(), 0));
         ASSERT_TRUE(strategy->ShouldRetry(checksum_mismatch_error(), 1));
         ASSERT_FALSE(strategy->ShouldRetry(checksum_mismatch_error(), 2));
@@ -65,7 +77,7 @@ TEST(S3ChecksumMismatchRetryStrategy, RetriesChecksumMismatchUntilTheInnerStrate
 }
 
 TEST(S3ChecksumMismatchRetryStrategy, DelegatesOtherErrorsToTheInnerStrategy) {
-    ChecksumMismatchRetryStrategy strategy(std::make_shared<Aws::Client::DefaultRetryStrategy>(3));
+    ChecksumMismatchRetryStrategy strategy(std::make_shared<Aws::Client::DefaultRetryStrategy>(3), 5);
     ASSERT_TRUE(strategy.ShouldRetry({CoreErrors::NETWORK_CONNECTION, true}, 0));
     ASSERT_FALSE(strategy.ShouldRetry({CoreErrors::NETWORK_CONNECTION, true}, 3));
     ASSERT_FALSE(strategy.ShouldRetry({CoreErrors::ACCESS_DENIED, false}, 0));

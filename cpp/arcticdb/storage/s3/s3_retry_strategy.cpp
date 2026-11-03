@@ -12,8 +12,11 @@
 
 namespace arcticdb::storage::s3 {
 
-ChecksumMismatchRetryStrategy::ChecksumMismatchRetryStrategy(std::shared_ptr<Aws::Client::RetryStrategy> inner) :
-    inner_(std::move(inner)) {
+ChecksumMismatchRetryStrategy::ChecksumMismatchRetryStrategy(
+        std::shared_ptr<Aws::Client::RetryStrategy> inner, long max_retries
+) :
+    inner_(std::move(inner)),
+    max_retries_(max_retries) {
     util::check(inner_ != nullptr, "ChecksumMismatchRetryStrategy requires a strategy to wrap");
 }
 
@@ -23,9 +26,11 @@ bool ChecksumMismatchRetryStrategy::ShouldRetry(
     if (!is_response_checksum_mismatch(error)) {
         return inner_->ShouldRetry(error, attempted_retries);
     }
+    // attempted_retries counts every retry of the request, not only the ones for mismatches: the SDK passes no other
+    // count. The wrapped strategy's attempt limit applies too.
     auto retryable = error;
     retryable.SetRetryableType(Aws::Client::RetryableType::RETRYABLE);
-    const bool will_retry = inner_->ShouldRetry(retryable, attempted_retries);
+    const bool will_retry = attempted_retries < max_retries_ && inner_->ShouldRetry(retryable, attempted_retries);
     log::storage().warn(
             "S3 response checksum mismatch from {} (attempt {}), {}",
             error.GetRemoteHostIpAddress(),

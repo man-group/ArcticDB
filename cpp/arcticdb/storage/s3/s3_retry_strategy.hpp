@@ -25,12 +25,14 @@ bool is_response_checksum_mismatch(const Aws::Client::AWSError<ErrorType>& error
 }
 
 // The SDK marks a response checksum mismatch as not retryable, but it is corruption in transit that a fresh download
-// normally fixes. Wraps whichever strategy the SDK picks and retries mismatches with it, as if they were retryable.
-// Everything else is forwarded. retry-strategy-interface-guard.patch in the aws-sdk-cpp vcpkg overlay fails the build
-// when RetryStrategy changes, as a reminder to update the forwarding here.
+// normally fixes. Wraps whichever strategy the SDK picks and retries a mismatch as if it were retryable, while the
+// request has been retried fewer than max_retries times and the wrapped strategy's attempt limit (AWS_MAX_ATTEMPTS)
+// also allows it. The SDK only gives one retry count per request, covering every error, so retries of a request for
+// other errors use up max_retries too. Everything else is forwarded. retry-strategy-interface-guard.patch in the
+// aws-sdk-cpp vcpkg overlay fails the build when RetryStrategy changes, as a reminder to update the forwarding here.
 class ChecksumMismatchRetryStrategy : public Aws::Client::RetryStrategy {
   public:
-    explicit ChecksumMismatchRetryStrategy(std::shared_ptr<Aws::Client::RetryStrategy> inner);
+    ChecksumMismatchRetryStrategy(std::shared_ptr<Aws::Client::RetryStrategy> inner, long max_retries);
 
     bool ShouldRetry(const Aws::Client::AWSError<Aws::Client::CoreErrors>& error, long attempted_retries)
             const override;
@@ -49,6 +51,7 @@ class ChecksumMismatchRetryStrategy : public Aws::Client::RetryStrategy {
 
   private:
     std::shared_ptr<Aws::Client::RetryStrategy> inner_;
+    long max_retries_;
 };
 
 } // namespace arcticdb::storage::s3

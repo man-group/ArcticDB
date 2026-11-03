@@ -1666,24 +1666,59 @@ def _corrupting_get_responses(s3_storage):
         requests.post(endpoint + "/reject_checksum_mode", b"1", verify=verify).raise_for_status()
 
 
-@pytest.mark.parametrize("retry_mode", ["adaptive", "standard"])
-def test_s3_response_checksum_mismatch_is_retried_up_to_max_attempts(
-    s3_storage, lib_name, monkeypatch, route_env_to_extension, retry_mode
-):
+def _assert_checksum_mismatch_retried(lib, corrupt, df, max_retries):
+    # Every attempt fails while the mock corrupts responses, so max_retries + 1 bad responses exhaust the retries.
+    # Keep the version map cached, so that each read only fetches the index key, rather than the version ref key, whose
+    # failure is caught and retried through other keys.
+    with config_context("VersionMap.ReloadInterval", 3_600_000_000_000):
+        assert_frame_equal(lib.read("sym").data, df)
+        corrupt(max_retries)
+        assert_frame_equal(lib.read("sym").data, df)
+        corrupt(max_retries + 1)
+        with pytest.raises(ArcticException, match="E_S3_RETRYABLE.*Response checksums mismatch"):
+            lib.read("sym")
+
+
+def test_s3_response_checksum_mismatch_is_retried_once_by_default(s3_storage, lib_name, monkeypatch):
     monkeypatch.setenv("AWS_RESPONSE_CHECKSUM_VALIDATION", "when_supported")
-    # The retry mode and attempt limit the user configures for the SDK apply to checksum mismatches too
-    monkeypatch.setenv("AWS_RETRY_MODE", retry_mode)
-    monkeypatch.setenv("AWS_MAX_ATTEMPTS", "2")
     with _corrupting_get_responses(s3_storage) as corrupt:
         create_library(s3_storage.arctic_uri, lib_name)
         lib = Arctic(s3_storage.arctic_uri)[lib_name]
         df = pd.DataFrame({"col": np.arange(1000)})
         lib.write("sym", df)
-        corrupt(1)
-        assert_frame_equal(lib.read("sym").data, df)
-        corrupt(2)
-        with pytest.raises(ArcticException, match="E_S3_RETRYABLE.*Response checksums mismatch"):
-            lib.read("sym")
+        _assert_checksum_mismatch_retried(lib, corrupt, df, max_retries=1)
+
+
+@pytest.mark.parametrize(
+    "aws_max_attempts, max_retries, expected_retries",
+    [
+        ("5", 3, 3),
+        ("2", 3, 1),  # Mismatch retries also count towards AWS_MAX_ATTEMPTS
+    ],
+)
+@pytest.mark.parametrize("retry_mode", ["adaptive", "standard"])
+def test_s3_response_checksum_mismatch_max_retries(
+    s3_storage,
+    lib_name,
+    monkeypatch,
+    route_env_to_extension,
+    retry_mode,
+    aws_max_attempts,
+    max_retries,
+    expected_retries,
+):
+    monkeypatch.setenv("AWS_RESPONSE_CHECKSUM_VALIDATION", "when_supported")
+    monkeypatch.setenv("AWS_RETRY_MODE", retry_mode)
+    monkeypatch.setenv("AWS_MAX_ATTEMPTS", aws_max_attempts)
+    with (
+        config_context("S3Storage.ChecksumMismatchMaxRetries", max_retries),
+        _corrupting_get_responses(s3_storage) as corrupt,
+    ):
+        create_library(s3_storage.arctic_uri, lib_name)
+        lib = Arctic(s3_storage.arctic_uri)[lib_name]
+        df = pd.DataFrame({"col": np.arange(1000)})
+        lib.write("sym", df)
+        _assert_checksum_mismatch_retried(lib, corrupt, df, max_retries=expected_retries)
 
 
 @pytest.mark.parametrize("checksum", ["MD5", "CRC64NVME", "crc32", "sha256"])

@@ -314,9 +314,10 @@ auto get_s3_config_and_set_env_var(const ConfigType& conf) {
     }
 
     // retryStrategy is unset, so the client would build it with this factory
-    client_configuration.retryStrategy =
-            std::make_shared<ChecksumMismatchRetryStrategy>(client_configuration.configFactories.retryStrategyCreateFn()
-            );
+    client_configuration.retryStrategy = std::make_shared<ChecksumMismatchRetryStrategy>(
+            client_configuration.configFactories.retryStrategyCreateFn(),
+            ConfigsMap::instance()->get_int("S3Storage.ChecksumMismatchMaxRetries", 1)
+    );
 
     return client_configuration;
 }
