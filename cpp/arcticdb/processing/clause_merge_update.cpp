@@ -145,29 +145,14 @@ template<util::scalar_type_descriptor_tag TDT>
 struct NaAwareHasher : ankerl::unordered_dense::hash<MatchKeyType<TDT>> {
     using Base = ankerl::unordered_dense::hash<MatchKeyType<TDT>>;
     uint64_t operator()(MatchKeyType<TDT> value) const {
-        if constexpr (is_floating_point_type(TDT::data_type())) {
-            if (is_na<TDT>(value)) {
-                // IEEE allows multiple different bit representations of NaN. std::isnan is required to return true
-                // for all different bit representations of NaN, std::quiet_NaN is an implementation defined
-                // constant, so hashing it canonicalises every missing value to the same bucket.
-                return Base::operator()(std::numeric_limits<MatchKeyType<TDT>>::quiet_NaN());
-            }
-        }
-        return Base::operator()(value);
+        // NaN has many bit representations and NaN/NaT compare equal to a missing value, so all NA keys share a bucket
+        return Base::operator()(is_na<TDT>(value) ? std::nullopt : value);
     }
 };
 
 /// The key under which map_column_values_to_rows stores NA and missing values.
 template<util::scalar_type_descriptor_tag TDT>
-MatchKeyType<TDT> na_match_key() {
-    if constexpr (is_floating_point_type(TDT::data_type())) {
-        return std::numeric_limits<MatchKeyType<TDT>>::quiet_NaN();
-    } else if constexpr (is_time_type(TDT::data_type())) {
-        return NaT;
-    } else {
-        return std::nullopt;
-    }
-}
+constexpr MatchKeyType<TDT> na_match_key = std::nullopt;
 
 /// Map each value of the column to the rows it appears in. If match_na is true NA and missing values are mapped to
 /// na_match_key, otherwise they are skipped.
@@ -186,7 +171,7 @@ auto map_column_values_to_rows(const ColumnWithStrings& column, bool match_na) {
         position_t row = 0;
         arcticdb::for_each_enumerated<TDT>(*column.column_, [&](auto existing_row) {
             while (row < existing_row.idx()) {
-                target_values[na_match_key<TDT>()].push_back(row);
+                target_values[na_match_key<TDT>].push_back(row);
                 ++row;
             }
             add_value(existing_row.idx(), existing_row.value());
@@ -194,7 +179,7 @@ auto map_column_values_to_rows(const ColumnWithStrings& column, bool match_na) {
         });
         const auto row_count = column.column_->last_row() + 1;
         while (row < row_count) {
-            target_values[na_match_key<TDT>()].push_back(row);
+            target_values[na_match_key<TDT>].push_back(row);
             ++row;
         }
     } else {
@@ -282,8 +267,9 @@ std::vector<size_t> compute_target_slice_offset(const InsertTargetData& target) 
     return result;
 }
 
-/// The column was allocated for num_rows dense values and the sparse map was filled while writing. Drop the unused
-/// bytes and set the row count. The sparse map is dropped if all values are present.
+/// The column was allocated as a single block for num_rows dense values and the sparse map was filled while writing.
+/// Shrink the logical size to the written values (the block is not reallocated, so no memory is freed) and set the row
+/// count. The sparse map is dropped if all values are present.
 void finalize_sparse_column(Column& column, size_t num_rows) {
     const size_t dense_values = column.sparse_map().count();
     column.buffer().trim(dense_values * get_type_size(column.type().data_type()));
@@ -293,64 +279,61 @@ void finalize_sparse_column(Column& column, size_t num_rows) {
     column.set_row_data(num_rows - 1);
 }
 
-/// Get acesor for either a dense or a sparse column. Assume the accessor can only be forwarded to a value
-/// and is not a random accessor. Once consumed it cannot visit a previous value again. Under the hood it uses
-/// random value accessor for dense columns and sparse iterator for sparse columns. Used in merge_sparse and
-/// udpate_sparse to unify the dense and sparse cases as the target column is only forward iterated. In theory
-/// random accessor can be used for the sparse case as well but it's 2-3 times slower.
+/// Accessor for either a dense or a sparse column that can only move forward. Once a row is consumed, rows before it
+/// cannot be read again. Under the hood it uses a random accessor for dense columns and a sparse iterator for sparse
+/// columns. Used in merge_sparse and update_sparse to unify the dense and sparse cases as the target column is only
+/// forward iterated. In theory a random accessor can be used for the sparse case as well but it's 2-3 times slower.
 template<util::scalar_type_descriptor_tag TDT>
-std::variant<ColumnDataRandomAccessor<TDT>, std::ranges::subrange<SparseIterator<TDT>>> get_sparse_forward_accessor(
-        ColumnData& column_data, const size_t first_row, const bool is_sparse
-) {
-    if (is_sparse) {
-        // Position at the first existing target value at or after first_row
+struct SparseForwardAccessor {
+    SparseForwardAccessor(ColumnData& column_data, const size_t first_row, const bool is_sparse) :
+        accessor_(make_accessor(column_data, first_row, is_sparse)) {}
+
+    /// Value at row, std::nullopt if the row has no value. row must not be less than the previously consumed row.
+    std::optional<typename TDT::RawType> consume(size_t row) {
+        return util::variant_match(
+                accessor_,
+                [&](ColumnDataRandomAccessor<TDT>& random_accessor) -> std::optional<typename TDT::RawType> {
+                    return random_accessor.at(row);
+                },
+                [&](std::ranges::subrange<SparseIterator<TDT>>& range) -> std::optional<typename TDT::RawType> {
+                    while (!range.empty()) {
+                        const auto it = range.begin();
+                        const size_t value_row = static_cast<size_t>(it->idx());
+                        if (value_row > row) {
+                            return std::nullopt;
+                        }
+                        if (value_row == row) {
+                            return it->value();
+                        }
+                        range.advance(1);
+                    }
+                    return std::nullopt;
+                }
+        );
+    }
+
+  private:
+    static std::variant<ColumnDataRandomAccessor<TDT>, std::ranges::subrange<SparseIterator<TDT>>> make_accessor(
+            ColumnData& column_data, const size_t first_row, const bool is_sparse
+    ) {
+        if (!is_sparse) {
+            return random_accessor<TDT>(&column_data);
+        }
+        // Position at the first existing value at or after first_row
         const util::BitMagic& sparse_map = *column_data.bit_vector();
         util::BitSetSizeType first_row_with_value = 0;
-        if (sparse_map.find(static_cast<util::BitSetSizeType>(first_row), first_row_with_value)) {
-            const size_t dense_idx =
-                    first_row == 0 ? 0 : sparse_map.count_range(0, static_cast<util::BitSetSizeType>(first_row - 1));
-            return {std::ranges::subrange(
-                    column_data.sparse_iterator_at<TDT>(dense_idx, static_cast<ssize_t>(first_row_with_value)),
-                    column_data.cend<TDT, IteratorType::ENUMERATED, IteratorDensity::SPARSE>()
-            )};
-        } else {
-            return {std::ranges::subrange<SparseIterator<TDT>>{}};
+        if (!sparse_map.find(static_cast<util::BitSetSizeType>(first_row), first_row_with_value)) {
+            return std::ranges::subrange<SparseIterator<TDT>>{};
         }
-    } else {
-        return {random_accessor<TDT>(&column_data)};
+        const size_t dense_idx =
+                first_row == 0 ? 0 : sparse_map.count_range(0, static_cast<util::BitSetSizeType>(first_row - 1));
+        return std::ranges::subrange(
+                column_data.sparse_iterator_at<TDT>(dense_idx, static_cast<ssize_t>(first_row_with_value)),
+                column_data.cend<TDT, IteratorType::ENUMERATED, IteratorDensity::SPARSE>()
+        );
     }
-}
-
-/// Used to get the value of a forward accessor created by get_sparse_forward_accessor. Assume that this cannot be
-/// callsed for rows prior the current head and when the head moves forward it can't go back. Used in combination with
-/// get_sparse_forward_accessor to unify the dense and sparse cases for a target column which is only forward iterated
-/// duting sparse_merge and sparse_update
-template<util::scalar_type_descriptor_tag TDT>
-std::optional<typename TDT::RawType> consume_sparse_forward_accessor(
-        std::variant<ColumnDataRandomAccessor<TDT>, std::ranges::subrange<SparseIterator<TDT>>>& variant_accessor,
-        size_t row
-) {
-    return util::variant_match(
-            variant_accessor,
-            [&](ColumnDataRandomAccessor<TDT>& target_random_accessor) -> std::optional<typename TDT::RawType> {
-                return target_random_accessor.at(row);
-            },
-            [&](std::ranges::subrange<SparseIterator<TDT>>& range) -> std::optional<typename TDT::RawType> {
-                while (!range.empty()) {
-                    const auto it = range.begin();
-                    const size_t value_row = static_cast<size_t>(it->idx());
-                    if (value_row > row) {
-                        return std::nullopt;
-                    }
-                    if (value_row == row) {
-                        return it->value();
-                    }
-                    range.advance(1);
-                }
-                return std::nullopt;
-            }
-    );
-}
+    std::variant<ColumnDataRandomAccessor<TDT>, std::ranges::subrange<SparseIterator<TDT>>> accessor_;
+};
 
 /// Performs merging of sorted lists with update on matching rows. The index column dictates the ordering of the
 /// rows. The target is composed of multiple row slices. The following holds: is_sorted(index in row slice i) &&
@@ -394,7 +377,7 @@ std::vector<std::shared_ptr<Column>> merge_sparse(
     size_t target_row_idx = target.range.start_row_in_first_row_slice;
     // Target rows are visited in order. Sparse target row slices are read with a sparse iterator to avoid a rank query
     // per row, dense ones with a random accessor.
-    auto target_accessor = get_sparse_forward_accessor<TargetTDT>(
+    SparseForwardAccessor<TargetTDT> target_accessor(
             target_column_data, target_row_idx, target.columns[target_row_slice].column_->is_sparse()
     );
 
@@ -419,7 +402,7 @@ std::vector<std::shared_ptr<Column>> merge_sparse(
             target_index_data = target.indexes[target_row_slice].column_->data();
             target_index_it = target_index_data.begin<IndexType>();
             target_index_end = target_index_data.end<IndexType>();
-            target_accessor = get_sparse_forward_accessor<TargetTDT>(
+            target_accessor = SparseForwardAccessor<TargetTDT>(
                     target_column_data, 0, target.columns[target_row_slice].column_->is_sparse()
             );
             if (target_row_slice == target.columns.size() - 1 &&
@@ -481,7 +464,7 @@ std::vector<std::shared_ptr<Column>> merge_sparse(
 
     const auto set_value_from_target = [&](size_t target_row) {
         bool has_value = false;
-        if (const auto target_value = consume_sparse_forward_accessor<TargetTDT>(target_accessor, target_row)) {
+        if (const auto target_value = target_accessor.consume(target_row)) {
             if constexpr (util::scalar_sequence_type<TargetTDT>) {
                 const position_t offset = *target_value;
                 if (is_a_string(offset)) {
@@ -584,14 +567,24 @@ std::vector<std::shared_ptr<Column>> merge_sparse(
     return new_columns;
 }
 
+/// update_column and update_sparse do not insert. With a timestamp index, strategies that insert go through
+/// merge/merge_sparse.
+void check_strategy_for_update(const MergeStrategy& strategy, const IndexDescriptor::Type index_type) {
+    internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+            strategy.update_only() || (strategy.update() && index_type == IndexDescriptor::Type::ROWCOUNT),
+            "Updating a column in place requires an update only strategy or an update with a row range index"
+    );
+}
+
 template<util::scalar_type_descriptor_tag TargetTDT, util::scalar_type_descriptor_tag SourceTDT, typename Source>
 requires std::same_as<TargetTDT, SourceTDT>
 void update_column(
-        const MergeStrategy& strategy, const StringPool& old_string_pool, const Source& variant_source,
-        const std::span<const std::vector<size_t>> rows_to_update, [[maybe_unused]] const size_t source_row_offset,
-        const bool is_matching_column, [[maybe_unused]] std::string_view column_name, Column& target_column,
-        StringPool& new_string_pool
+        const MergeStrategy& strategy, const IndexDescriptor::Type index_type, const StringPool& old_string_pool,
+        const Source& variant_source, const std::span<const std::vector<size_t>> rows_to_update,
+        [[maybe_unused]] const size_t source_row_offset, const bool is_matching_column,
+        [[maybe_unused]] std::string_view column_name, Column& target_column, StringPool& new_string_pool
 ) {
+    check_strategy_for_update(strategy, index_type);
     // When matched rows are updated, the columns used for matching keep the target values
     const bool keep_target_values = is_matching_column && strategy.update();
     // The target type is checked before the source type because a pandas source never has fixed width strings.
@@ -660,11 +653,12 @@ void update_column(
 template<util::scalar_type_descriptor_tag TargetTDT, util::scalar_type_descriptor_tag SourceTDT, typename Source>
 requires std::same_as<TargetTDT, SourceTDT>
 std::shared_ptr<Column> update_sparse(
-        const MergeStrategy& strategy, const StringPool& old_string_pool,
+        const MergeStrategy& strategy, const IndexDescriptor::Type index_type, const StringPool& old_string_pool,
         const SourceInterface<SourceTDT, Source>& source, const MergeUpdateClause::MatchRecord& match_record,
         const size_t row_slice, const size_t source_row_offset, const size_t first_source_row_in_group,
         const bool is_matching_column, std::string_view column_name, Column&& target, StringPool& new_string_pool
 ) {
+    check_strategy_for_update(strategy, index_type);
     if constexpr (is_fixed_string_type(TargetTDT::data_type())) {
         user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
                 "Fixed string sequences are not supported for merge update"
@@ -684,7 +678,7 @@ std::shared_ptr<Column> update_sparse(
     auto new_column_it = new_column_data.begin<TargetTDT>();
     util::BitMagic& new_sparse_map = new_column->sparse_map();
     ColumnData target_data = target.data();
-    auto target_accessor = get_sparse_forward_accessor<TargetTDT>(target_data, 0, target.is_sparse());
+    SparseForwardAccessor<TargetTDT> target_accessor(target_data, 0, target.is_sparse());
     [[maybe_unused]] std::optional<ScopedGILLock> gil;
     for (size_t target_row = 0; target_row < num_rows; ++target_row) {
         bool has_value = false;
@@ -708,7 +702,7 @@ std::shared_ptr<Column> update_sparse(
                 }
                 has_value = true;
             }
-        } else if (const auto target_value = consume_sparse_forward_accessor<TargetTDT>(target_accessor, target_row)) {
+        } else if (const auto target_value = target_accessor.consume(target_row)) {
             if constexpr (util::scalar_sequence_type<TargetTDT>) {
                 *new_column_it = is_a_string(*target_value)
                                          ? new_string_pool.get(old_string_pool.get_const_view(*target_value)).offset()
@@ -1428,7 +1422,7 @@ MergeUpdateClause::MatchRecord MergeUpdateClause::initialize_rows_to_update_for_
                             map_column_values_to_rows<TargetTDT>(target_column, strategy_.match_na);
                     // Missing values are equivalent to NA. They can match only if match_na is true.
                     const auto add_na_matches = [&](size_t source_row_idx) {
-                        if (auto it = target_values_to_rows.find(na_match_key<TargetTDT>());
+                        if (auto it = target_values_to_rows.find(na_match_key<TargetTDT>);
                             it != target_values_to_rows.end()) {
                             result.add_match(source_row_idx, row_slice_idx, it->second);
                         }
@@ -1709,8 +1703,15 @@ std::vector<ProcessingUnit> MergeUpdateClause::update(
             strategy_.update(),
             "MergeUpdateClause::update must only be called for strategies that update matched rows"
     );
+    ARCTICDB_DEBUG_CHECK(
+            ErrorCode::E_ASSERTION_FAILURE,
+            row_slices.size() == 1,
+            "MergeUpdateClause::update expects a single row slice per processing unit, got {}",
+            row_slices.size()
+    );
     std::vector<ProcessingUnit> result;
     const StreamDescriptor& source_descriptor = *get_source_descriptor();
+    const IndexDescriptor::Type index_type = source_descriptor.index().type();
     for (size_t i = 0; i < row_slices.size(); ++i) {
         const ProcessingUnit& proc = row_slices[i];
         const std::span<const std::shared_ptr<SegmentInMemory>> target_segments = *proc.segments_;
@@ -1765,6 +1766,7 @@ std::vector<ProcessingUnit> MergeUpdateClause::update(
                                                     target_segment.columns()[column_index_in_slice] =
                                                             update_sparse<TargetTDT, SourceTDT>(
                                                                     strategy_,
+                                                                    index_type,
                                                                     target_segment.string_pool(),
                                                                     SourceInterface<SourceTDT, SourceData>{source_data},
                                                                     match_record,
@@ -1779,6 +1781,7 @@ std::vector<ProcessingUnit> MergeUpdateClause::update(
                                                 } else if constexpr (!is_source_sparse) {
                                                     update_column<TargetTDT, SourceTDT>(
                                                             strategy_,
+                                                            index_type,
                                                             target_segment.string_pool(),
                                                             source_data,
                                                             rows_to_update,

@@ -462,7 +462,8 @@ struct ColumnData {
 
     // Returns a const ENUMERATED SPARSE iterator pointing at the dense_idx-th existing value of the column, which is
     // the value of logical row logical_row. The caller must provide both, so no rank or select query is done. Passing
-    // the number of existing values as dense_idx returns the end iterator. O(number of blocks).
+    // the number of existing values as dense_idx returns the end iterator. O(1) for single or regular blocks and
+    // O(log(number of blocks)) for irregular blocks.
     template<typename TDT>
     ColumnDataIterator<TDT, IteratorType::ENUMERATED, IteratorDensity::SPARSE, true> sparse_iterator_at(
             size_t dense_idx, ssize_t logical_row
@@ -481,6 +482,17 @@ struct ColumnData {
                 "ColumnData::sparse_iterator_at called on a column without a sparse map"
         );
         if (dense_idx == value_count) {
+            ARCTICDB_DEBUG_CHECK(
+                    ErrorCode::E_ASSERTION_FAILURE,
+                    [&] {
+                        util::BitSetSizeType next_row_with_value = 0;
+                        return logical_row >= 0 &&
+                               !bit_vector_->find(static_cast<util::BitSetSizeType>(logical_row), next_row_with_value);
+                    }(),
+                    "ColumnData::sparse_iterator_at: end iterator requested for logical row {}, but the column has a "
+                    "value at or after it",
+                    logical_row
+            );
             return ColumnDataIterator<TDT, IteratorType::ENUMERATED, IteratorDensity::SPARSE, true>::make_end(this);
         }
         ARCTICDB_DEBUG_CHECK(

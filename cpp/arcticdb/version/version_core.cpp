@@ -525,119 +525,138 @@ std::vector<MergeUpdateSliceInfo> plan_inserted_segments_for_row_range_merge_upd
     return insert_plans;
 }
 
-/// @param arrow_source The Arrow source converted to a segment by MergeUpdateClause, nullptr if the source is not
-/// Arrow.
+template<util::scalar_type_descriptor_tag TDT>
+void write_sparse_column_for_merge_update_row_range_insert(
+        const SegmentInMemory& source, const size_t source_column_pos, const util::BitMagic& source_rows_to_insert,
+        const MergeUpdateSliceInfo& insert_info, const size_t new_column_pos, const size_t new_column_size,
+        SegmentInMemory& new_segment
+) {
+    const Column& source_column = source.column(static_cast<position_t>(source_column_pos));
+    ColumnData source_column_data = source_column.data();
+    const util::BitMagic& source_sparse_map = *source_column_data.bit_vector();
+    // Source rows are appended in order to the target. In case the number of source rows to
+    // insert is larger than the segment size we create multiple segments and each segment is
+    // assigned a range of source rows. This creates a mask for the source rows to insert whose
+    // bits are set only if they belong to the segment being written.
+    const util::BitMagic source_rows_to_insert_in_output_slice(
+            source_rows_to_insert,
+            static_cast<util::BitSetSizeType>(insert_info.candidate_source_rows.first),
+            static_cast<util::BitSetSizeType>(insert_info.candidate_source_rows.second - 1)
+    );
+    const util::BitMagic source_rows_with_value_in_output_slice =
+            source_rows_to_insert_in_output_slice & source_sparse_map;
+    const auto dense_value_count = source_rows_with_value_in_output_slice.count();
+    new_segment.columns()[new_column_pos] = std::make_shared<Column>(
+            TDT::type_descriptor(), dense_value_count, AllocationType::PRESIZED, Sparsity::PERMITTED
+    );
+    Column& new_column = *new_segment.columns()[new_column_pos];
+    if (dense_value_count != new_column_size) {
+        util::BitSet new_column_sparse_map;
+        // Bit i is set if the i-th source row inserted in this segment has a value.
+        // compress requires the source bitmap to be a subset of the index bitmap.
+        bm::rank_compressor<util::BitSet>().compress(
+                new_column_sparse_map, source_rows_to_insert_in_output_slice, source_rows_with_value_in_output_slice
+        );
+        new_column_sparse_map.resize(new_column_size);
+        new_column.set_sparse_map(std::move(new_column_sparse_map));
+    }
+    ColumnData new_column_data = new_column.data();
+    auto sparse_data_it = new_column_data.begin<TDT, IteratorType::REGULAR, IteratorDensity::SPARSE>();
+    // The source rows are visited in order, so the values are read with a sparse iterator to
+    // avoid a rank query per row. It starts at the first existing value at or after the first
+    // candidate row.
+    const auto source_end = source_column_data.cend<TDT, IteratorType::ENUMERATED, IteratorDensity::SPARSE>();
+    auto source_it = source_end;
+    const auto first_candidate_row = static_cast<util::BitSetSizeType>(insert_info.candidate_source_rows.first);
+    util::BitSetSizeType first_row_with_value = 0;
+    if (source_sparse_map.find(first_candidate_row, first_row_with_value)) {
+        // The bit at first_row_with_value is set and counted, hence the -1
+        const size_t dense_idx = source_sparse_map.count_range(0, first_row_with_value) - 1;
+        source_it = source_column_data.sparse_iterator_at<TDT>(dense_idx, static_cast<ssize_t>(first_row_with_value));
+    }
+    iterate_over_set_positions(source_rows_with_value_in_output_slice, [&](size_t source_row) {
+        // Rows that are not inserted are not read, so the iterator can be several
+        // values behind source_row
+        while (static_cast<size_t>(source_it->idx()) < source_row) {
+            ++source_it;
+        }
+        const auto value = source_it->value();
+        *sparse_data_it = value;
+        if constexpr (is_sequence_type(TDT::data_type())) {
+            if (is_a_string(value)) {
+                const StringPool& source_pool = source.const_string_pool();
+                StringPool& new_pool = new_segment.string_pool();
+                *sparse_data_it = new_pool.get(source_pool.get_const_view(value)).offset();
+            }
+        }
+        ++sparse_data_it;
+    });
+}
+
+/// @param variant_source The pandas source, or the Arrow source converted to a segment by MergeUpdateClause.
 SegmentInMemory create_segment_for_merge_update_row_range_insert(
         const StreamDescriptor& col_slice_descriptor, const MergeUpdateSliceInfo& insert_info, size_t columns_per_slice,
-        const std::variant<std::shared_ptr<InputFrame>, SegmentInMemory>& source,
+        const std::variant<std::shared_ptr<InputFrame>, SegmentInMemory>& variant_source,
         const util::BitSet& source_rows_to_insert
 ) {
     const size_t rows_to_insert = insert_info.output_row_range.diff();
-    SegmentInMemory new_segment(col_slice_descriptor, rows_to_insert, AllocationType::PRESIZED, Sparsity::PERMITTED);
+    // Columns are allocated one by one below, each for the exact number of values it holds
+    SegmentInMemory new_segment(col_slice_descriptor, 0, AllocationType::DYNAMIC, Sparsity::PERMITTED);
     const StreamDescriptor& slice_descriptor = new_segment.descriptor();
     const size_t first_col_idx = insert_info.col_slice_index * columns_per_slice;
     for (size_t column_in_segment = 0; column_in_segment < slice_descriptor.field_count(); ++column_in_segment) {
         std::optional<ScopedGILLock> gil_lock;
-        ColumnData col_data = new_segment.column_data(column_in_segment);
         const Field& field = slice_descriptor.field(column_in_segment);
         const size_t source_field_pos = first_col_idx + column_in_segment;
         details::visit_scalar(field.type(), [&]<util::type_descriptor_tag TDT>(TDT) {
-            auto data_it = col_data.begin<TDT>();
-            const auto for_each_row_to_insert = [&](auto&& set_value) {
+            const auto write_dense_column = [&]<typename GetterFn>(const GetterFn& get_source_value_at)
+            requires std::invocable<GetterFn, size_t>
+            {
+                new_segment.columns()[column_in_segment] = std::make_shared<Column>(
+                        field.type(), rows_to_insert, AllocationType::PRESIZED, Sparsity::PERMITTED
+                );
+                Column& new_column = *new_segment.columns()[column_in_segment];
+                ColumnData col_data = new_column.data();
+                auto data_it = col_data.begin<TDT>();
                 iterate_over_set_positions(
                         source_rows_to_insert,
                         insert_info.candidate_source_rows.first,
                         insert_info.candidate_source_rows.second,
                         [&](size_t source_row) {
-                            set_value(source_row);
+                            *data_it = get_source_value_at(source_row);
                             ++data_it;
                         }
                 );
             };
             util::variant_match(
-                    source,
+                    variant_source,
                     [&](const SegmentInMemory& source) {
                         const Column& source_column = source.column(static_cast<position_t>(source_field_pos));
                         ColumnData source_column_data = source_column.data();
                         if (source_column.is_sparse()) {
-                            // Only the present values are written to the dense buffer, the rest are marked as missing.
-                            // A single block is allocated for the worst case and trimmed at the end.
-                            auto new_column = std::make_shared<Column>(
-                                    field.type(), rows_to_insert, AllocationType::DYNAMIC, Sparsity::PERMITTED
-                            );
-                            new_column->buffer().ensure(rows_to_insert * get_type_size(field.type().data_type()));
-                            ColumnData new_column_data = new_column->data();
-                            auto sparse_data_it = new_column_data.begin<TDT>();
-                            util::BitMagic& sparse_map = new_column->sparse_map();
-                            size_t output_row = 0;
-                            // The source rows are visited in order, so the values are read with a sparse iterator to
-                            // avoid a rank query per row. It starts at the first existing value at or after the first
-                            // candidate row.
-                            const auto source_end =
-                                    source_column_data.cend<TDT, IteratorType::ENUMERATED, IteratorDensity::SPARSE>();
-                            auto source_it = source_end;
-                            const util::BitMagic& source_sparse_map = *source_column_data.bit_vector();
-                            const auto first_candidate_row =
-                                    static_cast<util::BitSetSizeType>(insert_info.candidate_source_rows.first);
-                            util::BitSetSizeType first_row_with_value = 0;
-                            if (source_sparse_map.find(first_candidate_row, first_row_with_value)) {
-                                // The bit at first_row_with_value is set and counted, hence the -1
-                                const size_t dense_idx = source_sparse_map.count_range(0, first_row_with_value) - 1;
-                                source_it = source_column_data.sparse_iterator_at<TDT>(
-                                        dense_idx, static_cast<ssize_t>(first_row_with_value)
-                                );
-                            }
-                            iterate_over_set_positions(
+                            write_sparse_column_for_merge_update_row_range_insert<TDT>(
+                                    source,
+                                    source_field_pos,
                                     source_rows_to_insert,
-                                    insert_info.candidate_source_rows.first,
-                                    insert_info.candidate_source_rows.second,
-                                    [&](size_t source_row) {
-                                        // Rows that are not inserted are not read, so the iterator can be several
-                                        // values behind source_row
-                                        while (source_it != source_end &&
-                                               static_cast<size_t>(source_it->idx()) < source_row) {
-                                            ++source_it;
-                                        }
-                                        const bool has_value = source_it != source_end &&
-                                                               static_cast<size_t>(source_it->idx()) == source_row;
-                                        if (has_value) {
-                                            const auto value = source_it->value();
-                                            if constexpr (is_sequence_type(TDT::data_type())) {
-                                                *sparse_data_it = is_a_string(value)
-                                                                          ? new_segment.string_pool()
-                                                                                    .get(source.const_string_pool()
-                                                                                                 .get_const_view(value))
-                                                                                    .offset()
-                                                                          : value;
-                                            } else {
-                                                *sparse_data_it = value;
-                                            }
-                                            ++sparse_data_it;
-                                        }
-                                        sparse_map.set(output_row++, has_value);
-                                    }
+                                    insert_info,
+                                    column_in_segment,
+                                    rows_to_insert,
+                                    new_segment
                             );
-                            const size_t dense_values = sparse_map.count();
-                            new_column->buffer().trim(dense_values * get_type_size(field.type().data_type()));
-                            if (dense_values == rows_to_insert) {
-                                new_column->opt_sparse_map().reset();
-                            }
-                            new_segment.columns()[column_in_segment] = std::move(new_column);
-                            return;
+                        } else {
+                            auto source_data = random_accessor<TDT>(&source_column_data);
+                            write_dense_column([&](size_t source_row) -> TDT::RawType {
+                                const auto value = source_data.at(source_row);
+                                if constexpr (is_sequence_type(TDT::data_type())) {
+                                    if (is_a_string(value)) {
+                                        const StringPool& source_pool = source.const_string_pool();
+                                        StringPool& new_pool = new_segment.string_pool();
+                                        return new_pool.get(source_pool.get_const_view(value)).offset();
+                                    }
+                                }
+                                return value;
+                            });
                         }
-                        auto source_data = random_accessor<TDT>(&source_column_data);
-                        for_each_row_to_insert([&](size_t source_row) {
-                            const auto value = source_data.at(source_row);
-                            if constexpr (is_sequence_type(TDT::data_type())) {
-                                *data_it = is_a_string(value)
-                                                   ? new_segment.string_pool()
-                                                             .get(source.const_string_pool().get_const_view(value))
-                                                             .offset()
-                                                   : value;
-                            } else {
-                                *data_it = value;
-                            }
-                        });
                     },
                     [&](const std::shared_ptr<InputFrame>& source) {
                         using SourceRawType = std::conditional_t<
@@ -646,9 +665,9 @@ SegmentInMemory create_segment_for_merge_update_row_range_insert(
                                 typename TDT::DataTypeTag::raw_type>;
                         std::span<const SourceRawType> source_data =
                                 source->get_tensor(source_field_pos).span<SourceRawType>();
-                        for_each_row_to_insert([&](size_t source_row) {
+                        write_dense_column([&](size_t source_row) -> typename TDT::DataTypeTag::raw_type {
                             if constexpr (is_sequence_type(TDT::data_type())) {
-                                *data_it = write_py_string_to_pool_or_throw<TDT>(
+                                return write_py_string_to_pool_or_throw<TDT>(
                                         source_data[source_row],
                                         source_row,
                                         RowRange{0, source->num_rows},
@@ -657,7 +676,7 @@ SegmentInMemory create_segment_for_merge_update_row_range_insert(
                                         field.name()
                                 );
                             } else {
-                                *data_it = source_data[source_row];
+                                return source_data[source_row];
                             }
                         });
                     }
@@ -893,25 +912,39 @@ folly::Future<std::vector<EntityId>> read_and_schedule_processing(
     return std::move(processed).via(&async::cpu_executor());
 }
 
+struct ReadModifyWriteFlags {
+    bool decode_and_encode = true;
+    bool fail_fast = true;
+};
+
 folly::Future<std::vector<EntityId>> read_modify_write_data_keys(
         const std::shared_ptr<Store>& store, std::shared_ptr<ReadQuery> read_query, const ReadOptions& read_options,
         const IndexPartialKey& target_partial_index_key, const std::shared_ptr<PipelineContext>& pipeline_context,
-        std::shared_ptr<ComponentManager> component_manager,
-        std::shared_ptr<DeDupMap> de_dup_map = std::make_shared<DeDupMap>(), const bool decode_and_encode = true,
-        const bool fail_fast = true
+        std::shared_ptr<ComponentManager> component_manager, const ReadModifyWriteFlags& flags,
+        std::shared_ptr<DeDupMap> de_dup_map = std::make_shared<DeDupMap>()
 ) {
     const auto write_clause_processing_structure =
             read_query->clauses_.empty() ? ProcessingStructure::ROW_SLICE
                                          : read_query->clauses_.back()->clause_info().output_structure_;
     read_query->clauses_.push_back(std::make_shared<Clause>(WriteClause(
-            target_partial_index_key, std::move(de_dup_map), store, write_clause_processing_structure, decode_and_encode
+            target_partial_index_key,
+            std::move(de_dup_map),
+            store,
+            write_clause_processing_structure,
+            flags.decode_and_encode
     )));
     pipeline_context->set_output_schema(generate_output_schema(*pipeline_context, *read_query));
 
     auto processed = read_and_schedule_processing(
-            store, pipeline_context, read_query, read_options, component_manager, decode_and_encode, fail_fast
+            store,
+            pipeline_context,
+            read_query,
+            read_options,
+            component_manager,
+            flags.decode_and_encode,
+            flags.fail_fast
     );
-    if (!fail_fast) {
+    if (!flags.fail_fast) {
         processed = std::move(processed).thenError([component_manager](folly::exception_wrapper&& ew) {
             // Wait for the writes scheduled by the units which succeeded, so that none outlives the storage
             std::vector<folly::Future<SliceAndKey>> pending_writes;
@@ -926,7 +959,7 @@ folly::Future<std::vector<EntityId>> read_modify_write_data_keys(
     }
     return std::move(processed).thenValue([component_manager = std::move(component_manager),
                                            read_query = std::move(read_query),
-                                           fail_fast](std::vector<EntityId>&& processed_entity_ids) {
+                                           fail_fast = flags.fail_fast](std::vector<EntityId>&& processed_entity_ids) {
         std::vector<std::shared_ptr<folly::Future<SliceAndKey>>> slice_futures =
                 std::get<0>(component_manager->get_and_remove_components<std::shared_ptr<folly::Future<SliceAndKey>>>(
                         processed_entity_ids
@@ -3259,7 +3292,13 @@ folly::Future<VersionedItem> read_modify_write_impl(
 ) {
     auto component_manager = std::make_shared<ComponentManager>();
     return read_modify_write_data_keys(
-                   store, read_query, read_options, target_partial_index_key, pipeline_context, component_manager
+                   store,
+                   read_query,
+                   read_options,
+                   target_partial_index_key,
+                   pipeline_context,
+                   component_manager,
+                   ReadModifyWriteFlags{}
     )
             .thenValue([component_manager,
                         pipeline_context,
@@ -3387,9 +3426,8 @@ folly::Future<AtomKey> merge_update_impl(
                    target_partial_index_key,
                    pipeline_context,
                    component_manager,
-                   de_dup_map,
-                   true,
-                   false
+                   ReadModifyWriteFlags{.fail_fast = false},
+                   de_dup_map
     )
             .thenValue([pipeline_context = std::move(pipeline_context),
                         component_manager = std::move(component_manager),
@@ -3684,7 +3722,8 @@ folly::Future<std::optional<AtomKey>> async_compact_data_impl(
                                read_options,
                                target_partial_index_key,
                                pipeline_context,
-                               component_manager
+                               component_manager,
+                               ReadModifyWriteFlags{}
                 )
                         .thenValue(
                                 [pipeline_context = std::move(pipeline_context),
@@ -3820,8 +3859,8 @@ folly::Future<std::optional<AtomKey>> async_rename_columns_arrow_compat_impl(
                                                target_partial_index_key,
                                                pipeline_context,
                                                component_manager,
-                                               std::make_shared<DeDupMap>(),
-                                               false
+                                               ReadModifyWriteFlags{.decode_and_encode = false},
+                                               std::make_shared<DeDupMap>()
                                 )
                                         .thenValueInline([component_manager,
                                                           pipeline_context](std::vector<EntityId>&& entities) {
