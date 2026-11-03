@@ -541,13 +541,16 @@ SegmentInMemory create_segment_for_merge_update_row_range_insert(
         std::optional<ScopedGILLock> gil_lock;
         const Field& field = slice_descriptor.field(column_in_segment);
         const size_t source_field_pos = first_col_idx + column_in_segment;
-        const auto allocate_column = [&](size_t values) -> Column& {
-            new_segment.columns()[column_in_segment] =
-                    std::make_shared<Column>(field.type(), values, AllocationType::PRESIZED, Sparsity::PERMITTED);
+        const auto allocate_column = [&](size_t dense_value_count) -> Column& {
+            new_segment.columns()[column_in_segment] = std::make_shared<Column>(
+                    field.type(), dense_value_count, AllocationType::PRESIZED, Sparsity::PERMITTED
+            );
             return *new_segment.columns()[column_in_segment];
         };
         details::visit_scalar(field.type(), [&]<util::type_descriptor_tag TDT>(TDT) {
-            const auto for_each_row_to_insert = [&](auto&& set_value) {
+            const auto write_dense_column = [&]<typename GetterFn>(const GetterFn& get_source_value_at)
+            requires std::invocable<GetterFn, size_t>
+            {
                 Column& new_column = allocate_column(rows_to_insert);
                 ColumnData col_data = new_column.data();
                 auto data_it = col_data.begin<TDT>();
@@ -556,7 +559,7 @@ SegmentInMemory create_segment_for_merge_update_row_range_insert(
                         insert_info.candidate_source_rows.first,
                         insert_info.candidate_source_rows.second,
                         [&](size_t source_row) {
-                            *data_it = set_value(source_row);
+                            *data_it = get_source_value_at(source_row);
                             ++data_it;
                         }
                 );
@@ -567,23 +570,35 @@ SegmentInMemory create_segment_for_merge_update_row_range_insert(
                         const Column& source_column = source.column(static_cast<position_t>(source_field_pos));
                         ColumnData source_column_data = source_column.data();
                         if (source_column.is_sparse()) {
-                            // Only the present values are written to the dense buffer, the rest are marked as missing
                             const util::BitMagic& source_sparse_map = *source_column_data.bit_vector();
-                            const size_t dense_values = bm::count_and(
-                                    util::BitSet(
-                                            source_rows_to_insert,
-                                            static_cast<util::BitSetSizeType>(insert_info.candidate_source_rows.first),
-                                            static_cast<util::BitSetSizeType>(
-                                                    insert_info.candidate_source_rows.second - 1
-                                            )
-                                    ),
-                                    source_sparse_map
+                            // Source rows are appended in order to the target. In case the number of source rows to
+                            // insert is larger than the segment size we create multiple segments and each segment is
+                            // assigned a range of source rows. This creates a mask for the source rows to insert whose
+                            // bits are set only if they belong to the segment being written.
+                            const util::BitMagic source_rows_to_insert_in_output_slice(
+                                    source_rows_to_insert,
+                                    static_cast<util::BitSetSizeType>(insert_info.candidate_source_rows.first),
+                                    static_cast<util::BitSetSizeType>(insert_info.candidate_source_rows.second - 1)
                             );
-                            Column& new_column = allocate_column(dense_values);
+                            const util::BitMagic source_rows_with_value_in_output_slice =
+                                    source_rows_to_insert_in_output_slice & source_sparse_map;
+                            const auto dense_value_count = source_rows_with_value_in_output_slice.count();
+                            Column& new_column = allocate_column(dense_value_count);
+                            if (dense_value_count != rows_to_insert) {
+                                util::BitSet new_column_sparse_map;
+                                // Bit i is set if the i-th source row inserted in this segment has a value.
+                                // compress requires the source bitmap to be a subset of the index bitmap.
+                                bm::rank_compressor<util::BitSet>().compress(
+                                        new_column_sparse_map,
+                                        source_rows_to_insert_in_output_slice,
+                                        source_rows_with_value_in_output_slice
+                                );
+                                new_column_sparse_map.resize(rows_to_insert);
+                                new_column.set_sparse_map(std::move(new_column_sparse_map));
+                            }
                             ColumnData new_column_data = new_column.data();
-                            auto sparse_data_it = new_column_data.begin<TDT>();
-                            util::BitMagic& sparse_map = new_column.sparse_map();
-                            size_t output_row = 0;
+                            auto sparse_data_it =
+                                    new_column_data.begin<TDT, IteratorType::REGULAR, IteratorDensity::SPARSE>();
                             // The source rows are visited in order, so the values are read with a sparse iterator to
                             // avoid a rank query per row. It starts at the first existing value at or after the first
                             // candidate row.
@@ -600,54 +615,37 @@ SegmentInMemory create_segment_for_merge_update_row_range_insert(
                                         dense_idx, static_cast<ssize_t>(first_row_with_value)
                                 );
                             }
-                            iterate_over_set_positions(
-                                    source_rows_to_insert,
-                                    insert_info.candidate_source_rows.first,
-                                    insert_info.candidate_source_rows.second,
-                                    [&](size_t source_row) {
-                                        // Rows that are not inserted are not read, so the iterator can be several
-                                        // values behind source_row
-                                        while (source_it != source_end &&
-                                               static_cast<size_t>(source_it->idx()) < source_row) {
-                                            ++source_it;
-                                        }
-                                        const bool has_value = source_it != source_end &&
-                                                               static_cast<size_t>(source_it->idx()) == source_row;
-                                        if (has_value) {
-                                            const auto value = source_it->value();
-                                            if constexpr (is_sequence_type(TDT::data_type())) {
-                                                *sparse_data_it = is_a_string(value)
-                                                                          ? new_segment.string_pool()
-                                                                                    .get(source.const_string_pool()
-                                                                                                 .get_const_view(value))
-                                                                                    .offset()
-                                                                          : value;
-                                            } else {
-                                                *sparse_data_it = value;
-                                            }
-                                            ++sparse_data_it;
-                                        }
-                                        sparse_map.set(output_row++, has_value);
+                            iterate_over_set_positions(source_rows_with_value_in_output_slice, [&](size_t source_row) {
+                                // Rows that are not inserted are not read, so the iterator can be several
+                                // values behind source_row
+                                while (static_cast<size_t>(source_it->idx()) < source_row) {
+                                    ++source_it;
+                                }
+                                const auto value = source_it->value();
+                                *sparse_data_it = value;
+                                if constexpr (is_sequence_type(TDT::data_type())) {
+                                    if (is_a_string(value)) {
+                                        const StringPool& source_pool = source.const_string_pool();
+                                        StringPool& new_pool = new_segment.string_pool();
+                                        *sparse_data_it = new_pool.get(source_pool.get_const_view(value)).offset();
                                     }
-                            );
-                            if (dense_values == rows_to_insert) {
-                                new_column.opt_sparse_map().reset();
-                            }
-                            return;
-                        }
-                        auto source_data = random_accessor<TDT>(&source_column_data);
-                        for_each_row_to_insert([&](size_t source_row) {
-                            const auto value = source_data.at(source_row);
-                            if constexpr (is_sequence_type(TDT::data_type())) {
-                                return is_a_string(value)
-                                               ? new_segment.string_pool()
-                                                         .get(source.const_string_pool().get_const_view(value))
-                                                         .offset()
-                                               : value;
-                            } else {
+                                }
+                                ++sparse_data_it;
+                            });
+                        } else {
+                            auto source_data = random_accessor<TDT>(&source_column_data);
+                            write_dense_column([&](size_t source_row) -> TDT::RawType {
+                                const auto value = source_data.at(source_row);
+                                if constexpr (is_sequence_type(TDT::data_type())) {
+                                    if (is_a_string(value)) {
+                                        const StringPool& source_pool = source.const_string_pool();
+                                        StringPool& new_pool = new_segment.string_pool();
+                                        return new_pool.get(source_pool.get_const_view(value)).offset();
+                                    }
+                                }
                                 return value;
-                            }
-                        });
+                            });
+                        }
                     },
                     [&](const std::shared_ptr<InputFrame>& source) {
                         using SourceRawType = std::conditional_t<
@@ -656,7 +654,7 @@ SegmentInMemory create_segment_for_merge_update_row_range_insert(
                                 typename TDT::DataTypeTag::raw_type>;
                         std::span<const SourceRawType> source_data =
                                 source->get_tensor(source_field_pos).span<SourceRawType>();
-                        for_each_row_to_insert([&](size_t source_row) -> typename TDT::DataTypeTag::raw_type {
+                        write_dense_column([&](size_t source_row) -> typename TDT::DataTypeTag::raw_type {
                             if constexpr (is_sequence_type(TDT::data_type())) {
                                 return write_py_string_to_pool_or_throw<TDT>(
                                         source_data[source_row],

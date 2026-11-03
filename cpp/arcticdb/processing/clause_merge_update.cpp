@@ -152,9 +152,7 @@ struct NaAwareHasher : ankerl::unordered_dense::hash<MatchKeyType<TDT>> {
 
 /// The key under which map_column_values_to_rows stores NA and missing values.
 template<util::scalar_type_descriptor_tag TDT>
-MatchKeyType<TDT> na_match_key() {
-    return std::nullopt;
-}
+constexpr MatchKeyType<TDT> na_match_key = std::nullopt;
 
 /// Map each value of the column to the rows it appears in. If match_na is true NA and missing values are mapped to
 /// na_match_key, otherwise they are skipped.
@@ -173,7 +171,7 @@ auto map_column_values_to_rows(const ColumnWithStrings& column, bool match_na) {
         position_t row = 0;
         arcticdb::for_each_enumerated<TDT>(*column.column_, [&](auto existing_row) {
             while (row < existing_row.idx()) {
-                target_values[na_match_key<TDT>()].push_back(row);
+                target_values[na_match_key<TDT>].push_back(row);
                 ++row;
             }
             add_value(existing_row.idx(), existing_row.value());
@@ -181,7 +179,7 @@ auto map_column_values_to_rows(const ColumnWithStrings& column, bool match_na) {
         });
         const auto row_count = column.column_->last_row() + 1;
         while (row < row_count) {
-            target_values[na_match_key<TDT>()].push_back(row);
+            target_values[na_match_key<TDT>].push_back(row);
             ++row;
         }
     } else {
@@ -314,8 +312,6 @@ struct SparseForwardAccessor {
         );
     }
 
-    std::variant<ColumnDataRandomAccessor<TDT>, std::ranges::subrange<SparseIterator<TDT>>> accessor_;
-
   private:
     static std::variant<ColumnDataRandomAccessor<TDT>, std::ranges::subrange<SparseIterator<TDT>>> make_accessor(
             ColumnData& column_data, const size_t first_row, const bool is_sparse
@@ -336,6 +332,7 @@ struct SparseForwardAccessor {
                 column_data.cend<TDT, IteratorType::ENUMERATED, IteratorDensity::SPARSE>()
         );
     }
+    std::variant<ColumnDataRandomAccessor<TDT>, std::ranges::subrange<SparseIterator<TDT>>> accessor_;
 };
 
 /// Performs merging of sorted lists with update on matching rows. The index column dictates the ordering of the
@@ -1425,7 +1422,7 @@ MergeUpdateClause::MatchRecord MergeUpdateClause::initialize_rows_to_update_for_
                             map_column_values_to_rows<TargetTDT>(target_column, strategy_.match_na);
                     // Missing values are equivalent to NA. They can match only if match_na is true.
                     const auto add_na_matches = [&](size_t source_row_idx) {
-                        if (auto it = target_values_to_rows.find(na_match_key<TargetTDT>());
+                        if (auto it = target_values_to_rows.find(na_match_key<TargetTDT>);
                             it != target_values_to_rows.end()) {
                             result.add_match(source_row_idx, row_slice_idx, it->second);
                         }

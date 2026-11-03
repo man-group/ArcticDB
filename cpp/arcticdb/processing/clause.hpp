@@ -858,18 +858,18 @@ struct WriteClause {
 /// value. A present NaN or NaT is also NA, see is_na.
 template<util::scalar_type_descriptor_tag TDT>
 using MatchKeyType = std::conditional_t<
-        is_sequence_type(TDT::data_type()), std::optional<std::string_view>,
-        std::optional<typename TDT::DataTypeTag::raw_type>>;
+        is_sequence_type(TDT::data_type()), std::optional<std::string_view>, std::optional<typename TDT::RawType>>;
 
 template<typename TDT, typename T>
 concept sequence_type_raw_value =
-        util::scalar_type_descriptor_tag<TDT> && is_sequence_type(TDT::data_type()) &&
+        util::scalar_sequence_type<TDT> &&
         util::any_of<std::remove_cvref_t<T>, PyObject*, typename TDT::RawType, std::optional<std::string_view>>;
 
 template<typename TDT, typename T>
 concept raw_value_for_type_descriptor = util::scalar_type_descriptor_tag<TDT> &&
-                                        (std::same_as<T, typename TDT::DataTypeTag::raw_type> ||
-                                         std::same_as<T, MatchKeyType<TDT>> || sequence_type_raw_value<TDT, T>);
+                                        (std::same_as<T, MatchKeyType<TDT>> ||
+                                         (!util::scalar_sequence_type<TDT> && std::same_as<T, typename TDT::RawType>) ||
+                                         (util::scalar_sequence_type<TDT> && sequence_type_raw_value<TDT, T>));
 
 /// Whether value, one of the representations merge-update uses for a column of type TDT, denotes a missing entry.
 /// TDT is always the type of the column itself. value can be the raw type stored in the column, the MatchKeyType match
