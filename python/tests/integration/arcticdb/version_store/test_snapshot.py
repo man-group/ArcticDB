@@ -236,7 +236,7 @@ def test_delete_keeps_data_shared_with_non_adjacent_snapshotted_version(lmdb_ver
     lib.write("sym", pd.DataFrame({"x": [3, 4]}))
     lib.snapshot("a")
     lib.delete_version("sym", 1)
-    lib.append("sym", pd.DataFrame({"x": [3, 4]}, index=pd.RangeIndex(3, 5)))  # Shares v0's data key
+    lib.append("sym", pd.DataFrame({"x": [3, 4]}))  # Shares v0's data key
     lib.snapshot("b")
     lib.delete_version("sym", 2)
     lib.delete_version("sym", 0)
