@@ -1679,7 +1679,9 @@ def _assert_checksum_mismatch_retried(lib, corrupt, df, max_retries):
             lib.read("sym")
 
 
-def test_s3_response_checksum_mismatch_is_retried_once_by_default(s3_storage, lib_name, monkeypatch):
+def test_s3_response_checksum_mismatch_is_retried_once_by_default(
+    s3_storage, lib_name, monkeypatch, route_env_to_extension
+):
     monkeypatch.setenv("AWS_RESPONSE_CHECKSUM_VALIDATION", "when_supported")
     with _corrupting_get_responses(s3_storage) as corrupt:
         create_library(s3_storage.arctic_uri, lib_name)
