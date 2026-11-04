@@ -527,13 +527,11 @@ std::vector<MergeUpdateSliceInfo> plan_inserted_segments_for_row_range_merge_upd
 
 template<util::scalar_type_descriptor_tag TDT>
 void write_sparse_column_for_merge_update_row_range_insert(
-        const SegmentInMemory& source, const size_t new_column_pos, const util::BitMagic& source_rows_to_insert,
-        const MergeUpdateSliceInfo& insert_info, const size_t new_column_size, SegmentInMemory& new_segment
+        const SegmentInMemory& source, const size_t source_column_pos, const util::BitMagic& source_rows_to_insert,
+        const MergeUpdateSliceInfo& insert_info, const size_t new_column_pos, const size_t new_column_size,
+        SegmentInMemory& new_segment
 ) {
-    new_segment.columns()[new_column_pos] = std::make_shared<Column>(
-            TDT::type_descriptor(), new_column_size, AllocationType::PRESIZED, Sparsity::PERMITTED
-    );
-    const Column& source_column = source.column(static_cast<position_t>(new_column_pos));
+    const Column& source_column = source.column(static_cast<position_t>(source_column_pos));
     ColumnData source_column_data = source_column.data();
     const util::BitMagic& source_sparse_map = *source_column_data.bit_vector();
     // Source rows are appended in order to the target. In case the number of source rows to
@@ -548,6 +546,9 @@ void write_sparse_column_for_merge_update_row_range_insert(
     const util::BitMagic source_rows_with_value_in_output_slice =
             source_rows_to_insert_in_output_slice & source_sparse_map;
     const auto dense_value_count = source_rows_with_value_in_output_slice.count();
+    new_segment.columns()[new_column_pos] = std::make_shared<Column>(
+            TDT::type_descriptor(), dense_value_count, AllocationType::PRESIZED, Sparsity::PERMITTED
+    );
     Column& new_column = *new_segment.columns()[new_column_pos];
     if (dense_value_count != new_column_size) {
         util::BitSet new_column_sparse_map;
@@ -592,8 +593,7 @@ void write_sparse_column_for_merge_update_row_range_insert(
     });
 }
 
-/// @param arrow_source The Arrow source converted to a segment by MergeUpdateClause, nullptr if the source is not
-/// Arrow.
+/// @param variant_source The pandas source, or the Arrow source converted to a segment by MergeUpdateClause.
 SegmentInMemory create_segment_for_merge_update_row_range_insert(
         const StreamDescriptor& col_slice_descriptor, const MergeUpdateSliceInfo& insert_info, size_t columns_per_slice,
         const std::variant<std::shared_ptr<InputFrame>, SegmentInMemory>& variant_source,
@@ -615,7 +615,7 @@ SegmentInMemory create_segment_for_merge_update_row_range_insert(
                 new_segment.columns()[column_in_segment] = std::make_shared<Column>(
                         field.type(), rows_to_insert, AllocationType::PRESIZED, Sparsity::PERMITTED
                 );
-                Column& new_column = *new_segment.columns()[rows_to_insert];
+                Column& new_column = *new_segment.columns()[column_in_segment];
                 ColumnData col_data = new_column.data();
                 auto data_it = col_data.begin<TDT>();
                 iterate_over_set_positions(
@@ -639,6 +639,7 @@ SegmentInMemory create_segment_for_merge_update_row_range_insert(
                                     source_field_pos,
                                     source_rows_to_insert,
                                     insert_info,
+                                    column_in_segment,
                                     rows_to_insert,
                                     new_segment
                             );
