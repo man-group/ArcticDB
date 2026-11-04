@@ -593,11 +593,10 @@ void write_sparse_column_for_merge_update_row_range_insert(
     });
 }
 
-/// @param variant_source The pandas source, or the Arrow source converted to a segment by MergeUpdateClause.
+/// @param source The source of the merge update converted to a segment by WriteToSegmentTask.
 SegmentInMemory create_segment_for_merge_update_row_range_insert(
         const StreamDescriptor& col_slice_descriptor, const MergeUpdateSliceInfo& insert_info, size_t columns_per_slice,
-        const std::variant<std::shared_ptr<InputFrame>, SegmentInMemory>& variant_source,
-        const util::BitSet& source_rows_to_insert
+        const SegmentInMemory& source, const util::BitSet& source_rows_to_insert
 ) {
     const size_t rows_to_insert = insert_info.output_row_range.diff();
     // Columns are allocated one by one below, each for the exact number of values it holds
@@ -609,11 +608,22 @@ SegmentInMemory create_segment_for_merge_update_row_range_insert(
         const Field& field = slice_descriptor.field(column_in_segment);
         const size_t source_field_pos = first_col_idx + column_in_segment;
         details::visit_scalar(field.type(), [&]<util::type_descriptor_tag TDT>(TDT) {
-            const auto write_dense_column = [&]<typename GetterFn>(const GetterFn& get_source_value_at)
-            requires std::invocable<GetterFn, size_t>
-            {
+            const Column& source_column = source.column(static_cast<position_t>(source_field_pos));
+            ColumnData source_column_data = source_column.data();
+            if (source_column.is_sparse()) {
+                write_sparse_column_for_merge_update_row_range_insert<TDT>(
+                        source,
+                        source_field_pos,
+                        source_rows_to_insert,
+                        insert_info,
+                        column_in_segment,
+                        rows_to_insert,
+                        new_segment
+                );
+            } else {
+                auto source_data = random_accessor<TDT>(&source_column_data);
                 new_segment.columns()[column_in_segment] = std::make_shared<Column>(
-                        field.type(), rows_to_insert, AllocationType::PRESIZED, Sparsity::PERMITTED
+                        field.type(), rows_to_insert, AllocationType::PRESIZED, Sparsity::NOT_PERMITTED
                 );
                 Column& new_column = *new_segment.columns()[column_in_segment];
                 ColumnData col_data = new_column.data();
@@ -623,64 +633,22 @@ SegmentInMemory create_segment_for_merge_update_row_range_insert(
                         insert_info.candidate_source_rows.first,
                         insert_info.candidate_source_rows.second,
                         [&](size_t source_row) {
-                            *data_it = get_source_value_at(source_row);
+                            const auto value = source_data.at(source_row);
+                            if constexpr (is_sequence_type(TDT::data_type())) {
+                                if (is_a_string(value)) {
+                                    const StringPool& source_pool = source.const_string_pool();
+                                    StringPool& new_pool = new_segment.string_pool();
+                                    *data_it = new_pool.get(source_pool.get_const_view(value)).offset();
+                                } else {
+                                    *data_it = value;
+                                }
+                            } else {
+                                *data_it = value;
+                            }
                             ++data_it;
                         }
                 );
-            };
-            util::variant_match(
-                    variant_source,
-                    [&](const SegmentInMemory& source) {
-                        const Column& source_column = source.column(static_cast<position_t>(source_field_pos));
-                        ColumnData source_column_data = source_column.data();
-                        if (source_column.is_sparse()) {
-                            write_sparse_column_for_merge_update_row_range_insert<TDT>(
-                                    source,
-                                    source_field_pos,
-                                    source_rows_to_insert,
-                                    insert_info,
-                                    column_in_segment,
-                                    rows_to_insert,
-                                    new_segment
-                            );
-                        } else {
-                            auto source_data = random_accessor<TDT>(&source_column_data);
-                            write_dense_column([&](size_t source_row) -> TDT::RawType {
-                                const auto value = source_data.at(source_row);
-                                if constexpr (is_sequence_type(TDT::data_type())) {
-                                    if (is_a_string(value)) {
-                                        const StringPool& source_pool = source.const_string_pool();
-                                        StringPool& new_pool = new_segment.string_pool();
-                                        return new_pool.get(source_pool.get_const_view(value)).offset();
-                                    }
-                                }
-                                return value;
-                            });
-                        }
-                    },
-                    [&](const std::shared_ptr<InputFrame>& source) {
-                        using SourceRawType = std::conditional_t<
-                                is_sequence_type(TDT::data_type()),
-                                PyObject* const,
-                                typename TDT::DataTypeTag::raw_type>;
-                        std::span<const SourceRawType> source_data =
-                                source->get_tensor(source_field_pos).span<SourceRawType>();
-                        write_dense_column([&](size_t source_row) -> typename TDT::DataTypeTag::raw_type {
-                            if constexpr (is_sequence_type(TDT::data_type())) {
-                                return write_py_string_to_pool_or_throw<TDT>(
-                                        source_data[source_row],
-                                        source_row,
-                                        RowRange{0, source->num_rows},
-                                        gil_lock,
-                                        new_segment.string_pool(),
-                                        field.name()
-                                );
-                            } else {
-                                return source_data[source_row];
-                            }
-                        });
-                    }
-            );
+            }
         });
     }
     new_segment.set_row_data(static_cast<ssize_t>(rows_to_insert) - 1);
@@ -688,10 +656,10 @@ SegmentInMemory create_segment_for_merge_update_row_range_insert(
 }
 
 folly::SemiFuture<std::vector<SliceAndKey>> write_inserted_row_range_data(
-        const std::variant<std::shared_ptr<InputFrame>, SegmentInMemory>& source,
-        const ComponentManager& component_manager, const StreamDescriptor& target_descriptor,
-        const WriteOptions& write_opts, const IndexPartialKey& target_index_partial_key, size_t last_row_in_target,
-        Store& store, std::shared_ptr<DeDupMap> de_dup_map
+        const SegmentInMemory& source, const ComponentManager& component_manager,
+        const StreamDescriptor& target_descriptor, const WriteOptions& write_opts,
+        const IndexPartialKey& target_index_partial_key, size_t last_row_in_target, Store& store,
+        std::shared_ptr<DeDupMap> de_dup_map
 ) {
     util::BitSet source_rows_to_insert = source_rows_to_insert_for_row_range_merge_update(component_manager);
     const size_t num_rows_to_insert = source_rows_to_insert.count();
@@ -3358,22 +3326,18 @@ folly::Future<AtomKey> merge_update_impl(
             schema_from_tsd(index_information->index_.second.index_descriptor()), source->desc(), source->norm_meta
     );
     OutputSchema source_output_schema = schema_from_input_frame(*source);
-    auto variant_source = [&]() -> std::variant<std::shared_ptr<InputFrame>, SegmentInMemory> {
-        const bool is_source_arrow = !source->has_only_tensors();
-        if (is_source_arrow) {
-            // WriteToSegmentTask adds the index column itself, so the column range covers only the data columns.
-            FrameSlice full_slice{
-                    std::make_shared<StreamDescriptor>(source->desc().clone()),
-                    ColRange{source->desc().index().field_count(), source->desc().field_count()},
-                    RowRange{0, source->num_rows}
-            };
-            return std::get<1>(WriteToSegmentTask(source, std::move(full_slice))());
-        } else {
-            return source;
-        }
+    SegmentInMemory source_segment = [&] {
+        // WriteToSegmentTask adds the index column itself, so the column range covers only the data columns.
+        FrameSlice full_slice{
+                std::make_shared<StreamDescriptor>(source->desc().clone()),
+                ColRange{source->desc().index().field_count(), source->desc().field_count()},
+                RowRange{0, source->num_rows}
+        };
+        return std::get<1>(WriteToSegmentTask(source, std::move(full_slice))());
     }();
+    // The clause and the row range insert below share the segment's data
     auto merge_update_clause = std::make_shared<Clause>(MergeUpdateClause(
-            std::move(on), strategy, variant_source, std::move(source_output_schema), write_options.segment_row_size
+            std::move(on), strategy, source_segment, std::move(source_output_schema), write_options.segment_row_size
     ));
 
     read_query->clauses_.push_back(merge_update_clause);
@@ -3434,7 +3398,7 @@ folly::Future<AtomKey> merge_update_impl(
                         store,
                         write_options,
                         source = std::move(source),
-                        variant_source = std::move(variant_source),
+                        source_segment = std::move(source_segment),
                         target_partial_index_key,
                         strategy,
                         de_dup_map](std::vector<EntityId>&& processed_entities) {
@@ -3442,7 +3406,7 @@ folly::Future<AtomKey> merge_update_impl(
                 folly::SemiFuture<std::vector<SliceAndKey>> inserted_row_slices_fut =
                         (target_descriptor.index().type() == IndexDescriptor::Type::ROWCOUNT && strategy.insert())
                                 ? write_inserted_row_range_data(
-                                          variant_source,
+                                          source_segment,
                                           *component_manager,
                                           target_descriptor,
                                           write_options,
