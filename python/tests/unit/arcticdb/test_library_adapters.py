@@ -1,5 +1,5 @@
 import pytest
-from arcticdb.adapters import S3LibraryAdapter, GCPXMLLibraryAdapter
+from arcticdb.adapters import FileLibraryAdapter, S3LibraryAdapter, GCPXMLLibraryAdapter
 from arcticdb.adapters.s3_library_adapter import USE_AWS_CRED_PROVIDERS_TOKEN
 from arcticdb.encoding_version import EncodingVersion
 from arcticdb.exceptions import UserInputException
@@ -149,3 +149,8 @@ def test_gcp_path_prefix():
         "gcpxml://my_endpoint:my_bucket?aws_auth=true&path_prefix=my_prefix", encoding_version=EncodingVersion.V1
     )
     assert adapter.path_prefix == "my_prefix"
+
+
+def test_file_library_parser():
+    adapter = FileLibraryAdapter("file:///home/some_user/arctic_data", encoding_version=EncodingVersion.V1)
+    assert adapter._dir_path == "/home/some_user/arctic_data"

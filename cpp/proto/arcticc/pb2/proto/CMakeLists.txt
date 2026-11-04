@@ -17,6 +17,7 @@ SET(PROTO_IN_FILES
         nfs_backed_storage.proto
         mapped_file_storage.proto
         logger.proto
+        file_storage.proto
         )
 
 set(proto_import_regex "import \"arcticc/pb2/([^\"]+\\.proto)\"")
