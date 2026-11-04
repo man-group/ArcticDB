@@ -12,6 +12,7 @@
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/util/test/segment_generation_utils.hpp>
 #include <arcticdb/util/test/input_frame_utils.hpp>
+#include <arcticdb/pipeline/write_frame.hpp>
 
 using namespace arcticdb;
 using namespace std::ranges;
@@ -112,10 +113,17 @@ MergeUpdateClause create_clause(
     auto strat = strategy;
     strat.match_na = match_na;
     OutputSchema source_output_schema = schema_from_input_frame(input_frame);
+    auto frame = std::make_shared<InputFrame>(std::move(input_frame));
+    // Same conversion as merge_update_impl. WriteToSegmentTask adds the index column itself.
+    FrameSlice full_slice{
+            std::make_shared<StreamDescriptor>(frame->desc().clone()),
+            ColRange{frame->desc().index().field_count(), frame->desc().field_count()},
+            RowRange{0, frame->num_rows}
+    };
     MergeUpdateClause clause(
             std::move(on),
             strat,
-            std::make_shared<InputFrame>(std::move(input_frame)),
+            std::get<1>(WriteToSegmentTask(frame, std::move(full_slice))()),
             std::move(source_output_schema),
             rows_per_segment
     );
