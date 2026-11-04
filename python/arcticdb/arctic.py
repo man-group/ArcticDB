@@ -7,36 +7,40 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 
 import logging
-from re import L
-from typing import List, Optional, Any, Union
+from typing import Any, List, Optional, Union
 
-from arcticdb.options import (
-    DEFAULT_ENCODING_VERSION,
-    LibraryOptions,
-    EnterpriseLibraryOptions,
-    RuntimeOptions,
-    OutputFormat,
-    ArrowOutputStringFormat,
+from arcticdb_ext.storage import LibraryManager
+
+from arcticdb.adapters import (
+    ArcticLibraryAdapter,
+    AzureLibraryAdapter,
+    GCPXMLLibraryAdapter,
+    InMemoryLibraryAdapter,
+    LMDBLibraryAdapter,
+    MongoLibraryAdapter,
+    S3LibraryAdapter,
+    FileLibraryAdapter,
 )
 from arcticdb.dependencies import pyarrow as pa
-from arcticdb_ext.storage import LibraryManager
+from arcticdb.encoding_version import EncodingVersion
 from arcticdb.exceptions import (
+    ArcticInvalidApiUsageException,
+    KeyNotFoundException,
     LibraryNotFound,
     MismatchingLibraryOptions,
-    KeyNotFoundException,
-    ArcticInvalidApiUsageException,
 )
-from arcticdb.version_store.library import Library
+from arcticdb.options import (
+    DEFAULT_ENCODING_VERSION,
+    ArrowOutputStringFormat,
+    EnterpriseLibraryOptions,
+    LibraryOptions,
+    ModifiableEnterpriseLibraryOption,
+    ModifiableLibraryOption,
+    OutputFormat,
+    RuntimeOptions,
+)
 from arcticdb.version_store._store import NativeVersionStore
-from arcticdb.adapters.arctic_library_adapter import ArcticLibraryAdapter
-from arcticdb.adapters.s3_library_adapter import S3LibraryAdapter
-from arcticdb.adapters.lmdb_library_adapter import LMDBLibraryAdapter
-from arcticdb.adapters.azure_library_adapter import AzureLibraryAdapter
-from arcticdb.adapters.mongo_library_adapter import MongoLibraryAdapter
-from arcticdb.adapters.in_memory_library_adapter import InMemoryLibraryAdapter
-from arcticdb.adapters.gcpxml_library_adapter import GCPXMLLibraryAdapter
-from arcticdb.encoding_version import EncodingVersion
-from arcticdb.options import ModifiableEnterpriseLibraryOption, ModifiableLibraryOption
+from arcticdb.version_store.library import Library
 
 logger = logging.getLogger(__name__)
 
@@ -46,14 +50,15 @@ class Arctic:
     Top-level library management class. Arctic instances can be configured against an S3 environment and enable the creation, deletion and retrieval of Arctic libraries.
     """
 
-    _LIBRARY_ADAPTERS = [
+    _LIBRARY_ADAPTERS = (
+        FileLibraryAdapter,
         S3LibraryAdapter,
         GCPXMLLibraryAdapter,
         LMDBLibraryAdapter,
         AzureLibraryAdapter,
         MongoLibraryAdapter,
         InMemoryLibraryAdapter,
-    ]
+    )
 
     # This is a hack to allow the tests to access the libs_instances_from_arctic list
     # It is set by the LmdbStorageFixture
@@ -69,42 +74,42 @@ class Arctic:
         ] = ArrowOutputStringFormat.UNSPECIFIED,
     ):
         """
-        Initializes a top-level Arctic library management instance.
+                Initializes a top-level Arctic library management instance.
 
-        For more information on how to use Arctic Library instances please see the documentation on Library.
+                For more information on how to use Arctic Library instances please see the documentation on Library.
 
-        Parameters
-        ----------
+                Parameters
+                ----------
 
-        uri: str
-            URI specifying the backing store used to access, configure, and create Arctic libraries.
-            For more details about the parameters, please refer to the [Arctic URI Documentation](./arctic_uri.md).
+                uri: str
+                    URI specifying the backing store used to access, configure, and create Arctic libraries.
+                    For more details about the parameters, please refer to the [Arctic URI Documentation](./arctic_uri.md).
 
-        encoding_version: EncodingVersion, default = EncodingVersion.V1
-            When creating new libraries with this Arctic instance, the default encoding version to use.
-            Can be overridden by specifying the encoding version in the LibraryOptions argument to create_library.
+                encoding_version: EncodingVersion, default = EncodingVersion.V1
+                    When creating new libraries with this Arctic instance, the default encoding version to use.
+                    Can be overridden by specifying the encoding version in the LibraryOptions argument to create_library.
 
-        output_format: Union[OutputFormat, str], default = OutputFormat.PANDAS
-            Default output format for all read operations on libraries created from this `Arctic` instance.
-            Can be overridden per library or per read operation.
-            See `OutputFormat` documentation for details on available formats.
+                output_format: Union[OutputFormat, str], default = OutputFormat.PANDAS
+                    Default output format for all read operations on libraries created from this `Arctic` instance.
+                    Can be overridden per library or per read operation.
+                    See `OutputFormat` documentation for details on available formats.
 
-        arrow_string_format_default: Union[ArrowOutputStringFormat, "pa.DataType"], default = ArrowOutputStringFormat.UNSPECIFIED
-            Default string column format when using `PYARROW` or `POLARS` output formats.
-            Can be overridden per library or per read operation.
-            See `ArrowOutputStringFormat` documentation for details on available string formats.
+                arrow_string_format_default: Union[ArrowOutputStringFormat, "pa.DataType"], default = ArrowOutputStringFormat.UNSPECIFIED
+                    Default string column format when using `PYARROW` or `POLARS` output formats.
+                    Can be overridden per library or per read operation.
+                    See `ArrowOutputStringFormat` documentation for details on available string formats.
+        *
+                Examples
+                --------
 
-        Examples
-        --------
-
-        >>> ac = adb.Arctic('s3://MY_ENDPOINT:MY_BUCKET')  # Leave AWS to derive credential information
-        >>> ac = adb.Arctic('s3://MY_ENDPOINT:MY_BUCKET?region=YOUR_REGION&access=ABCD&secret=DCBA') # Manually specify creds
-        >>> ac = adb.Arctic('azure://CA_cert_path=/etc/ssl/certs/ca-certificates.crt;BlobEndpoint=https://arctic.blob.core.windows.net;Container=acblob;SharedAccessSignature=sp=sig')
-        >>> ac.create_library('travel_data')
-        >>> ac.list_libraries()
-        ['travel_data']
-        >>> travel_library = ac['travel_data']
-        >>> ac.delete_library('travel_data')
+                >>> ac = adb.Arctic('s3://MY_ENDPOINT:MY_BUCKET')  # Leave AWS to derive credential information
+                >>> ac = adb.Arctic('s3://MY_ENDPOINT:MY_BUCKET?region=YOUR_REGION&access=ABCD&secret=DCBA') # Manually specify creds
+                >>> ac = adb.Arctic('azure://CA_cert_path=/etc/ssl/certs/ca-certificates.crt;BlobEndpoint=https://arctic.blob.core.windows.net;Container=acblob;SharedAccessSignature=sp=sig')
+                >>> ac.create_library('travel_data')
+                >>> ac.list_libraries()
+                ['travel_data']
+                >>> travel_library = ac['travel_data']
+                >>> ac.delete_library('travel_data')
         """
         _cls = None
         for adapter_cls in self._LIBRARY_ADAPTERS:
@@ -118,7 +123,9 @@ class Arctic:
 
         self._encoding_version = encoding_version
         self._library_adapter: ArcticLibraryAdapter = _cls(uri, self._encoding_version)
-        self._library_manager = LibraryManager(self._library_adapter.config_library)
+        undo_me = self._library_adapter.config_library
+        print(type(undo_me), undo_me)
+        self._library_manager = LibraryManager(undo_me)
         self._uri = uri
         self._runtime_options = RuntimeOptions(
             output_format=output_format, arrow_string_format_default=arrow_string_format_default

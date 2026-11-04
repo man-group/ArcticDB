@@ -10,6 +10,7 @@ import re
 import time
 from typing import Iterable, Any, Union
 
+from arcticc.pb2.file_storage_pb2 import Config as FileConfig
 from arcticc.pb2.lmdb_storage_pb2 import Config as LmdbConfig
 from arcticc.pb2.s3_storage_pb2 import Config as S3Config
 from arcticc.pb2.gcp_storage_pb2 import Config as GcpConfig
@@ -187,6 +188,18 @@ def add_lmdb_library_to_env(cfg, lib_name, env_name, db_dir=Defaults.DATA_DIR, d
 
     sid, storage = get_storage_for_lib_name(lib_name, env)
     storage.config.Pack(lmdb, type_url_prefix="cxx.arctic.org")
+    _add_lib_desc_to_env(env, lib_name, sid, description)
+
+
+def add_file_library_to_env(cfg, lib_name, env_name, description=None, *, file_config={}):
+    # type: (EnvironmentConfigsMap, LibName, EnvName, Optional[FilePath], Optional[str], None, Dict[str, Any])->None
+    env = cfg.env_by_id[env_name]
+    file_config_proto = FileConfig()
+    for k, v in file_config.items():
+        setattr(file_config_proto, k, v)
+
+    sid, storage = get_storage_for_lib_name(lib_name, env)
+    storage.config.Pack(file_config_proto, type_url_prefix="cxx.arctic.org")
     _add_lib_desc_to_env(env, lib_name, sid, description)
 
 

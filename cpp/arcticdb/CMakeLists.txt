@@ -367,6 +367,7 @@ set(arcticdb_srcs
         storage/file/file_store.hpp
         storage/file/mapped_file_storage.hpp
         storage/file/file_store.hpp
+        storage/file_backed/file_backed_storage.hpp
         storage/single_file_storage.hpp
         storage/s3/nfs_backed_storage.hpp
         storage/s3/s3_client_interface.hpp
@@ -586,6 +587,7 @@ set(arcticdb_srcs
         storage/lmdb/lmdb_error_handling.cpp
         storage/lmdb/lmdb_storage.cpp
         storage/file/mapped_file_storage.cpp
+        storage/file_backed/file_backed_storage.cpp
         storage/mongo/mongo_client.cpp
         storage/mongo/mongo_instance.cpp
         storage/mock/mongo_mock_client.cpp

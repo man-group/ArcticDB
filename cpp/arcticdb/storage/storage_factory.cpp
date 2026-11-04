@@ -14,6 +14,7 @@
 #include <arcticdb/storage/s3/s3_storage.hpp>
 #include <arcticdb/storage/s3/nfs_backed_storage.hpp>
 #include <arcticdb/storage/file/mapped_file_storage.hpp>
+#include <arcticdb/storage/file_backed/file_backed_storage.hpp>
 #include <arcticdb/util/pb_util.hpp>
 
 namespace arcticdb::storage {
@@ -72,6 +73,10 @@ std::shared_ptr<Storage> create_storage(
         file::MappedFileStorage::Config mapped_config;
         storage_descriptor.config().UnpackTo(&mapped_config);
         storage = std::make_shared<file::MappedFileStorage>(library_path, mode, mapped_config);
+    } else if (type_name == file_backed::FileBackedStorage::Config::descriptor()->full_name()) {
+        file_backed::FileBackedStorage::Config file_backed_config;
+        storage_descriptor.config().UnpackTo(&file_backed_config);
+        storage = std::make_shared<file_backed::FileBackedStorage>(library_path, mode, file_backed_config);
     } else
         throw std::runtime_error(fmt::format("Unknown config type {}", type_name));
 
