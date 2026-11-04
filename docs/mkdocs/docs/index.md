@@ -435,6 +435,18 @@ Connecting to AWS with a pre-defined region:
 ac = adb.Arctic('s3s://s3.eu-west-2.amazonaws.com:arcticdb-test-bucket?aws_auth=true')
 ```
 
+You can also use a standard AWS S3 location, as used by the AWS CLI, boto3 or pandas. The endpoint is derived from the region, HTTPS is used, and unless `access`/`secret` are given, authentication is delegated to the AWS SDK as with `aws_auth=true`:
+
+```python
+ac = adb.Arctic('s3://arcticdb-test-bucket/team/arctic?region=eu-west-2')
+# the region can also come from the AWS_REGION or AWS_DEFAULT_REGION environment variables
+ac = adb.Arctic('s3://arcticdb-test-bucket')
+# S3 URLs copied from the AWS console work too (virtual-hosted or path style)
+ac = adb.Arctic('https://arcticdb-test-bucket.s3.eu-west-2.amazonaws.com/team/arctic')
+```
+
+The path after the bucket is used as the `path_prefix`. All the other options above (`aws_auth=sts`, `aws_profile`, `access`/`secret`, ...) can be added as query parameters.
+
 Note that no explicit credential parameters are given. When `aws_auth` is passed, authentication is delegated to the AWS SDK which is responsible for locating the appropriate credentials in the `.config` file or
 in environment variables. You can manually configure which profile is being used by setting the `AWS_PROFILE` environment variable as described in the
 [AWS Documentation](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-files.html).
