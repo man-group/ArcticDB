@@ -11,4 +11,5 @@ package arcticc.pb2.file_storage_pb2;
 
 message Config {
     string dir_path = 1; // The directory in which the database files reside.
+    bool use_mock_storage_for_testing = 2;
 }
