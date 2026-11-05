@@ -211,6 +211,7 @@ struct ColumnData {
     class ColumnDataIterator : public base_iterator_type<TDT, iterator_type, iterator_density, constant> {
         using base_type = base_iterator_type<TDT, iterator_type, iterator_density, constant>;
         using RawType = typename TDT::DataTypeTag::raw_type;
+        using TypeDescriptorTag = TDT;
 
       public:
         ColumnDataIterator() = default;

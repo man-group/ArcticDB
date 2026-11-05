@@ -106,11 +106,6 @@ bool is(const std::shared_ptr<Clause>& clause) {
     return folly::poly_type(*clause) == typeid(ClauseType);
 }
 
-void check_column_presence(
-        OutputSchema& output_schema, const std::unordered_set<std::string>& required_columns,
-        std::string_view clause_name
-);
-
 OutputSchema modify_schema(OutputSchema&& schema, const std::vector<std::shared_ptr<Clause>>& clauses);
 
 struct PassthroughClause {
@@ -883,21 +878,6 @@ constexpr bool is_na(V value) {
     }
 }
 
-/// Match key of the value of column at row, std::nullopt if the row has no value.
-template<util::scalar_type_descriptor_tag TDT>
-MatchKeyType<TDT> column_match_key(
-        const ColumnWithStrings& column, const ColumnDataRandomAccessor<TDT>& accessor, size_t row
-) {
-    if (!column.column_->has_value_at(static_cast<position_t>(row))) {
-        return std::nullopt;
-    }
-    if constexpr (is_sequence_type(TDT::data_type())) {
-        return column.string_at_offset(accessor.at(row));
-    } else {
-        return accessor.at(row);
-    }
-}
-
 template<util::scalar_type_descriptor_tag TDT>
 struct NaAwareComparator {
     bool match_na;
@@ -910,6 +890,8 @@ struct NaAwareComparator {
         return left == right;
     }
 };
+
+struct HashedSource;
 
 /// This clause will perform update values or insert values based on strategy_ in a segment. The source of new
 /// values is the source_ member. Source and target must have the same index type. There are two actions:
@@ -932,10 +914,12 @@ struct MergeUpdateClause {
     SegmentInMemory source_;
     bool fake_index_name_ = false;
     MergeUpdateClause(
-            std::vector<std::string>&& on, MergeStrategy strategy, SegmentInMemory source,
-            OutputSchema source_output_schema, size_t rows_per_segment
+            std::vector<std::string>&& on, MergeStrategy strategy, OutputSchema source_output_schema,
+            size_t rows_per_segment
     );
     ARCTICDB_MOVE_COPY_DEFAULT(MergeUpdateClause)
+
+    void set_source(SegmentInMemory source, bool fake_index_name);
 
     /// Row range indexes require full table scan
     /// In case of timestamp index this will filter out only the ranges and keys whose index span contains at least one
@@ -965,44 +949,26 @@ struct MergeUpdateClause {
 
     class MatchRecord {
       public:
-        MatchRecord(std::span<ProcessingUnit> row_slices, size_t num_source_rows);
-        void add_match(size_t source_row, size_t target_row_slice, size_t target_row);
-        void add_match(size_t source_row, size_t target_row_slice, std::span<size_t> target_rows);
-
-        /// Drops the matches whose value in column_name differs between source and target. source is the whole source
-        /// column and source_range the source rows of the processing group.
-        template<util::scalar_type_descriptor_tag TargetTDT, util::scalar_type_descriptor_tag SourceTDT>
-        void filter_matching_rows(
-                std::string_view column_name, const ColumnWithStrings& source, bool match_na,
-                const std::pair<size_t, size_t>& source_range
+        MatchRecord(
+                std::span<ProcessingUnit> row_slices, const HashedSource& hashed_source,
+                std::span<const size_t> on_field_indices, const MergeStrategy& strategy,
+                std::optional<std::span<const timestamp>> source_index
         );
-
-        void clone_source_match(size_t source_row_src, size_t source_row_dst, size_t row_slice);
-        void validate_rows_to_update(const MergeStrategy& strategy) const;
         [[nodiscard]] size_t total_unmatched_source_rows() const;
-        [[nodiscard]] const std::vector<std::vector<size_t>>& matched_rows(size_t target_row_slice) const;
+        [[nodiscard]] const ankerl::unordered_dense::map<size_t, size_t>& matched_rows(size_t target_row_slice) const;
         [[nodiscard]] bool has_matched_target_rows() const;
-        [[nodiscard]] util::BitSet unmatched_source_rows() const;
         [[nodiscard]] std::optional<size_t> source_row_to_update_target(size_t row_slice, size_t target_row) const;
-        [[nodiscard]] const util::BitSet& matched_source_rows() const { return matched_source_rows_; }
-        /// Fills in source_row_to_update_target and matched_source_rows_ from matched_target_rows_. Must be called
-        /// after all filtering is done. Required by merge and update_sparse.
-        /// TODO: these two fields can be computed without the need to transpose.
-        void transpose_matched_target_rows();
+        [[nodiscard]] const util::BitSet& unmatched_source_rows() const;
+        [[nodiscard]] const util::BitSet& matched_source_rows() const;
 
       private:
-        /// For each row slice, for each target row, keep the source row to update this row
-        /// This is the transpose of matched_target_rows_. We don't need both and matched_target_rows_ must be removed.
+        /// For each row slice, for each target row, keep the source row to update this row. Source rows are relative
+        /// to the first source row of the processing unit.
         std::vector<ankerl::unordered_dense::map<size_t, size_t>> source_row_to_update_target_;
-        /// Used to mark which source rows are matched. If the i-th source row is not matched the bitmap value will be
-        /// 0. And that row must be inserted (in case the strategy requires insert)
+        /// Used to mark which source rows of the processing unit are matched. If the i-th source row is not matched
+        /// the bitmap value will be 0. And that row must be inserted (in case the strategy requires insert)
         util::BitSet matched_source_rows_;
-
-        /// For each row slice, for each source row, store all target rows that match it
-        std::vector<std::vector<std::vector<size_t>>> matched_target_rows_;
-        std::span<ProcessingUnit> row_slices_;
-        std::vector<size_t> source_row_matched_count_;
-        size_t total_matched_target_rows_count_ = 0;
+        util::BitSet unmatched_source_rows_;
     };
 
   private:
@@ -1019,21 +985,6 @@ struct MergeUpdateClause {
     /// Filter segments which will be affected by the merge. The complexity is O(m * log(n)) where n is the number
     /// of rows in the source data and m is the number of row slices in the library
     std::vector<std::vector<size_t>> structure_for_processing_log(std::vector<RangesAndKey>& ranges_and_keys);
-
-    MatchRecord match(std::span<ProcessingUnit> row_slices, std::pair<size_t, size_t> source_start_end) const;
-
-    MatchRecord filter_on_additional_columns_match(
-            const StreamDescriptor& source_descriptor, const StreamDescriptor& target_descriptor,
-            std::span<ProcessingUnit> proc, std::optional<MatchRecord>&& match_record,
-            std::pair<size_t, size_t> source_start_end
-    ) const;
-
-    MatchRecord initialize_rows_to_update_for_row_range_indexed_data(
-            std::span<ProcessingUnit> row_slices, const StreamDescriptor& source_descriptor,
-            std::pair<size_t, size_t> source_start_end
-    ) const;
-
-    size_t field_index_for_matching_on_column(std::string_view name, const StreamDescriptor& descriptor) const;
 
     /// For each processing group, identified by its row range, stores the first and last row in the source that
     /// overlaps with it. The interval is closed in the start and open in the end: [start, end). The key is the row
@@ -1057,6 +1008,13 @@ struct MergeUpdateClause {
     OutputSchema source_output_schema_;
 
     size_t rows_per_segment_;
+
+    /// Field index in the source of each column to match: the timestamp index, if any, followed by the columns in on_.
+    /// Set by set_source.
+    std::vector<size_t> on_field_indices_;
+    /// The whole source hashed on the columns to match, shared by all processing units. Only for row range indexed
+    /// data, set by structure_for_processing.
+    std::shared_ptr<const HashedSource> row_range_hashed_source_;
 };
 
 struct CompactDataClause {

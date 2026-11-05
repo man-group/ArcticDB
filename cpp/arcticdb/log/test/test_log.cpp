@@ -161,8 +161,9 @@ struct RestoreStderr {
     int decoy_fd = -1;
 
     ~RestoreStderr() {
-        if (redirected)
+        if (redirected) {
             EXPECT_EQ(::dup2(saved, 2), 2) << "restoring fd 2, errno " << errno;
+        }
         if (saved >= 0)
             ::close(saved);
         if (decoy_fd >= 0)

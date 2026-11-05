@@ -439,11 +439,13 @@ class Column {
 
     void set_row_data(size_t row_id);
 
-    size_t get_physical_offset(size_t row) const;
+    size_t get_physical_offset(size_t row, const bm::bvector<>::rs_index_type* sparse_map_index = nullptr) const;
 
     void set_sparse_map(util::BitSet&& bitset);
 
-    std::optional<position_t> get_physical_row(position_t row) const;
+    std::optional<position_t> get_physical_row(
+            position_t row, const bm::bvector<>::rs_index_type* sparse_map_index = nullptr
+    ) const;
 
     bool has_value_at(position_t row) const;
 
@@ -517,9 +519,16 @@ class Column {
 
     void allocate_and_advance_by(std::size_t bytes);
 
+    /// @param sparse_map_index Index to use for sparse map searches in case of sparse data
+    ///     This method only circumvents the issue that scalar_at<T>(row) builds a sparse index on
+    ///     each call. Ideally the sparse index will be cached in the column, but this requires a major refactor to
+    ///     track each place the sparse index becomes dirty. This methods allows for efficient lookup given the caller
+    ///     has the sparse index cached and the sparse map does not change between calls. In general
+    ///     ColumnDataRandomAccessors should be prefered but they are class templates and cannot be stored in
+    ///     homogeneous containers
     template<typename T>
-    std::optional<T> scalar_at(position_t row) const {
-        auto physical_row = get_physical_row(row);
+    std::optional<T> scalar_at(position_t row, const bm::bvector<>::rs_index_type* sparse_map_index = nullptr) const {
+        auto physical_row = get_physical_row(row, sparse_map_index);
         if (!physical_row)
             return std::nullopt;
 

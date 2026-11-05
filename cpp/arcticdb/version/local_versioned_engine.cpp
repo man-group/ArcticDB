@@ -2563,6 +2563,11 @@ VersionedItem LocalVersionedEngine::merge_internal(
             "If the source data is timeseries indexed it must be sorted in ascending order."
     );
     user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+            !std::holds_alternative<stream::TimeseriesIndex>(source->index) || source->empty() ||
+                    source->index_value_at(0) != NaT,
+            "The index of the merge source must not contain NaT"
+    );
+    user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
             is_valid_merge_strategy(strategy), "Invalid merge strategy: {}", strategy
     );
     py::gil_scoped_release release_gil;

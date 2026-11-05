@@ -3329,9 +3329,9 @@ folly::Future<AtomKey> merge_update_impl(
     // Pipeline setup needs only the source schema. The source segment is set after the empty target check, because an
     // empty target converts the data to SegmentInMemory before writing it, thus converting it here would make two
     // conversions, one of which is redundant.
-    auto merge_update_clause = std::make_shared<Clause>(MergeUpdateClause(
-            std::move(on), strategy, SegmentInMemory{}, std::move(source_output_schema), write_options.segment_row_size
-    ));
+    auto merge_update_clause = std::make_shared<Clause>(
+            MergeUpdateClause(std::move(on), strategy, std::move(source_output_schema), write_options.segment_row_size)
+    );
 
     read_query->clauses_.push_back(merge_update_clause);
     std::shared_ptr<PipelineContext> pipeline_context =
@@ -3383,11 +3383,13 @@ folly::Future<AtomKey> merge_update_impl(
         };
         return std::get<1>(WriteToSegmentTask(source, std::move(full_slice))());
     }();
-    auto& merge_update = folly::poly_cast<MergeUpdateClause>(*merge_update_clause);
     // The clause and the row range insert below share the segment's data
-    merge_update.source_ = source_segment;
-    merge_update.fake_index_name_ =
-            index_type == IndexDescriptor::Type::TIMESTAMP && is_fake_index_name(pipeline_context->normalization());
+    folly::poly_cast<MergeUpdateClause>(*merge_update_clause)
+            .set_source(
+                    source_segment,
+                    index_type == IndexDescriptor::Type::TIMESTAMP &&
+                            is_fake_index_name(pipeline_context->normalization())
+            );
     auto component_manager = std::make_shared<ComponentManager>();
     // Tasks read the Python-owned source, so on error wait for all of them before the exception reaches Python
     return read_modify_write_data_keys(
