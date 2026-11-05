@@ -9,8 +9,10 @@
 #pragma once
 
 #include <arcticdb/storage/storage.hpp>
+#include <arcticdb/storage/file_backed/posix_interface.hpp>
 
 #include <filesystem>
+#include <memory>
 
 namespace arcticdb::storage::file_backed {
 
@@ -54,7 +56,11 @@ class FileBackedStorage final : public Storage {
     [[nodiscard]] std::optional<char> do_verify_library_suffix(std::string_view) const override;
 
   private:
+    std::string generate_random_name() const;
+
+  private:
     std::filesystem::path storage_dir_;
+    std::unique_ptr<PosixInterface> posix_;
 };
 
 } // namespace arcticdb::storage::file_backed
