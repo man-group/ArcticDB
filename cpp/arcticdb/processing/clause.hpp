@@ -965,44 +965,24 @@ struct MergeUpdateClause {
 
     class MatchRecord {
       public:
-        MatchRecord(std::span<ProcessingUnit> row_slices, size_t num_source_rows);
-        void add_match(size_t source_row, size_t target_row_slice, size_t target_row);
-        void add_match(size_t source_row, size_t target_row_slice, std::span<size_t> target_rows);
-
-        /// Drops the matches whose value in column_name differs between source and target. source is the whole source
-        /// column and source_range the source rows of the processing group.
-        template<util::scalar_type_descriptor_tag TargetTDT, util::scalar_type_descriptor_tag SourceTDT>
-        void filter_matching_rows(
-                std::string_view column_name, const ColumnWithStrings& source, bool match_na,
-                const std::pair<size_t, size_t>& source_range
+        MatchRecord(
+                std::span<ProcessingUnit> row_slices, const SegmentInMemory& source,
+                const std::span<const std::string> on, const MergeStrategy& strategy
         );
-
-        void clone_source_match(size_t source_row_src, size_t source_row_dst, size_t row_slice);
-        void validate_rows_to_update(const MergeStrategy& strategy) const;
         [[nodiscard]] size_t total_unmatched_source_rows() const;
         [[nodiscard]] const std::vector<std::vector<size_t>>& matched_rows(size_t target_row_slice) const;
         [[nodiscard]] bool has_matched_target_rows() const;
-        [[nodiscard]] util::BitSet unmatched_source_rows() const;
         [[nodiscard]] std::optional<size_t> source_row_to_update_target(size_t row_slice, size_t target_row) const;
-        [[nodiscard]] const util::BitSet& matched_source_rows() const { return matched_source_rows_; }
-        /// Fills in source_row_to_update_target and matched_source_rows_ from matched_target_rows_. Must be called
-        /// after all filtering is done. Required by merge and update_sparse.
-        /// TODO: these two fields can be computed without the need to transpose.
-        void transpose_matched_target_rows();
+        [[nodiscard]] const util::BitSet& unmatched_source_rows() const;
+        [[nodiscard]] const util::BitSet& matched_source_rows() const;
 
       private:
         /// For each row slice, for each target row, keep the source row to update this row
-        /// This is the transpose of matched_target_rows_. We don't need both and matched_target_rows_ must be removed.
         std::vector<ankerl::unordered_dense::map<size_t, size_t>> source_row_to_update_target_;
         /// Used to mark which source rows are matched. If the i-th source row is not matched the bitmap value will be
         /// 0. And that row must be inserted (in case the strategy requires insert)
         util::BitSet matched_source_rows_;
-
-        /// For each row slice, for each source row, store all target rows that match it
-        std::vector<std::vector<std::vector<size_t>>> matched_target_rows_;
-        std::span<ProcessingUnit> row_slices_;
-        std::vector<size_t> source_row_matched_count_;
-        size_t total_matched_target_rows_count_ = 0;
+        util::BitSet unmatched_source_rows_;
     };
 
   private:

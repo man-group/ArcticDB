@@ -19,7 +19,7 @@
 namespace arcticdb {
 
 template<class T>
-inline size_t hash(T d) {
+constexpr size_t hash(T d) {
     // Poor quality hash implementations of integral types, including at least some implementations of std::hash are
     // basically a static cast. e.g. std::hash<int64_t>{}(100) == 100. This is fast, but leads to poor distributions in
     // our bucketing, where we mod the hash with the number of buckets. In particular, if performing a grouping hash on

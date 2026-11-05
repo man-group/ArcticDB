@@ -632,67 +632,6 @@ TargetRange get_target_start_end(std::span<const ProcessingUnit> row_slices) {
     return result;
 }
 
-/// For each row of source that falls in the row slice in proc find all rows whose index matches the source index
-/// value. The matching rows will be sorted in increasing order. Since both source and target are timestamp indexed
-/// and ordered, only forward iteration on both source and target is needed and binary search can be used to check
-/// if a source index value exists in the target index. At the end some vectors in the output can be empty which
-/// means that that particular row in source did not match anything in the target. It is allowed for one row in
-/// target to be matched by multiple rows in source only if MergeUpdateClause::on_ is not empty. If
-/// MergeUpdateClause::on_ is not empty, there will be further filtering that might remove some matches. Otherwise,
-/// one row will be updated multiple times, which is not allowed.
-///
-/// Complexity: $$O(m * log(n/m) + n)$$ where: m is the count of source rows in the bounds of the segment, n is the
-/// number of target rows in the segment.
-MergeUpdateClause::MatchRecord filter_index_match(
-        std::span<const timestamp> source_index, std::span<ProcessingUnit> row_slices
-) {
-    using IndexType = ScalarTagType<DataTypeTag<DataType::NANOSECONDS_UTC64>>;
-    MergeUpdateClause::MatchRecord result(row_slices, source_index.size());
-    if (source_index.empty()) {
-        return result;
-    }
-    size_t source_row_start_for_next_slice{};
-    size_t source_row{};
-    for (size_t i = 0; i < row_slices.size(); ++i) {
-        const ProcessingUnit& proc = row_slices[i];
-        const Column& target_index = proc.segments_->front()->column(0);
-        ColumnData target_index_column_data = target_index.data();
-        auto last_target_row_it = exponential_upper_bound<IndexType, IteratorType::ENUMERATED>(
-                target_index_column_data, source_index.back()
-        );
-        auto target_row_it = target_index_column_data.cbegin<IndexType, IteratorType::ENUMERATED>();
-        if (target_row_it->value() == source_index[source_row_start_for_next_slice]) {
-            source_row = source_row_start_for_next_slice;
-        }
-
-        // This loop can be inverted so that if source_row_end - source_row_start is > len(target) the complexity
-        // becomes O(n * log_2(m/n) + m) where: m is the count of source rows in the bounds of the segment, n is the
-        // number of target rows in the segment.
-        while (target_row_it != last_target_row_it && source_row < source_index.size()) {
-            const timestamp source_ts = source_index[source_row];
-            auto target_match_it = exponential_lower_bound(target_row_it, last_target_row_it, source_ts);
-            if (target_match_it == last_target_row_it) {
-                break;
-            }
-            source_row_start_for_next_slice = source_row;
-            target_row_it = target_match_it;
-            while (target_row_it != last_target_row_it && target_row_it->value() == source_ts) {
-                result.add_match(source_row, i, target_row_it->idx());
-                ++target_row_it;
-            }
-            ++source_row;
-            // Optimizes the case of repeated index values. All matched rows corresponding to a particular index
-            // value must be the same, so just copy the matched rows in case index values are repeated.
-            while (source_row < source_index.size() && source_index[source_row] == source_ts) {
-                result.clone_source_match(source_row - 1, source_row, i);
-                ++source_row;
-            }
-        }
-    }
-
-    return result;
-}
-
 std::span<const timestamp>::iterator source_range_start_for_group(
         std::span<const timestamp> source_index, timestamp segment_start, size_t row_slice_group,
         const MergeStrategy& strategy
@@ -787,70 +726,308 @@ void set_upsert_ranges(
     }
 }
 
+struct Key {
+    uint64_t hash;
+    size_t row;
+};
+
+struct TargetKey : Key {
+    size_t row_slice;
+};
+
+struct Hasher : ankerl::unordered_dense::hash<Key> {
+    using is_transparent = void;
+    using is_avalanching = void;
+    uint64_t operator()(const Key& key) const { return key.hash; }
+};
+
+using ColumnWithSparseIndex = std::pair<ColumnWithStrings, bm::bvector<>::rs_index_type>;
+
+std::vector<ColumnWithSparseIndex> source_columns_to_match(
+        const SegmentInMemory& source, const std::span<const std::string> on
+) {
+    const StreamDescriptor& desc = source.descriptor();
+    const bool is_datetime = source.descriptor().index().type() == IndexDescriptor::Type::TIMESTAMP;
+    std::vector<ColumnWithSparseIndex> source_columns =
+            util::reserve_vector<ColumnWithSparseIndex>(on.size() + is_datetime);
+    if (is_datetime) {
+        source_columns.emplace_back(
+                ColumnWithStrings{source.column_ptr(0), nullptr, desc.field(0).name()}, bm::bvector<>::rs_index_type{}
+        );
+    }
+
+    for (const std::string& column_name : on) {
+        const size_t field_index = desc.find_field(column_name).value();
+        std::shared_ptr<Column> col = source.column_ptr(static_cast<position_t>(field_index));
+        bm::bvector<>::rs_index_type index;
+        if (col->is_sparse()) {
+            const util::BitMagic& sparse_map = col->sparse_map();
+            sparse_map.build_rs_index(&index);
+        }
+        source_columns.emplace_back(
+                ColumnWithStrings{std::move(col), source.string_pool_ptr(), column_name}, std::move(index)
+        );
+    }
+    return source_columns;
+}
+
+std::vector<std::vector<std::optional<ColumnWithSparseIndex>>> target_columns_to_match(
+        std::span<ProcessingUnit> row_slices, const std::span<const std::string> on
+) {
+    std::vector<std::vector<std::optional<ColumnWithSparseIndex>>> target_columns(row_slices.size());
+    const bool is_datetime =
+            row_slices.front().segments_->front()->descriptor().index().type() == IndexDescriptor::Type::TIMESTAMP;
+    for (size_t row_slice = 0; row_slice < row_slices.size(); ++row_slice) {
+        target_columns[row_slice].reserve(on.size() + is_datetime);
+        ProcessingUnit& row_slice_proc = row_slices[row_slice];
+        if (is_datetime) {
+            ColumnWithStrings col{
+                    row_slice_proc.segments_->front()->column_ptr(0),
+                    nullptr,
+                    row_slice_proc.segments_->front()->descriptor().field(0).name()
+            };
+            target_columns[row_slice].emplace_back(
+                    std::optional{std::pair{std::move(col), bm::bvector<>::rs_index_type{}}}
+            );
+        }
+        for (const std::string& col_name : on) {
+            VariantData variant_col = row_slice_proc.get(ColumnName{col_name});
+            ColumnWithStrings* col = std::get_if<ColumnWithStrings>(&variant_col);
+            if (col == nullptr) {
+                target_columns.emplace_back();
+            } else {
+                bm::bvector<>::rs_index_type sparse_index;
+                if (col->column_->is_sparse()) {
+                    const util::BitMagic& sparse_map = col->column_->sparse_map();
+                    sparse_map.build_rs_index(&sparse_index);
+                }
+                target_columns[row_slice].emplace_back(std::optional{std::pair{std::move(*col), std::move(sparse_index)}
+                });
+            }
+        }
+    }
+    return target_columns;
+}
+
+struct Comparator {
+
+    Comparator(
+            std::span<ColumnWithSparseIndex> source_columns,
+            std::span<std::vector<std::optional<ColumnWithSparseIndex>>> target_columns, bool match_na
+    ) :
+        source_columns_(source_columns),
+        target_columns_(target_columns),
+        match_na_(match_na) {}
+    bool operator()(const Key& left, const Key& right) const {
+        for (const auto& [column, sparse_map_index] : source_columns_) {
+            const DataType type = column.column_->type().data_type();
+            const bool are_columns_matching = details::visit_type(type, [&, this]<typename DataTypeTag>(DataTypeTag) {
+                using TDT = ScalarTagType<DataTypeTag>;
+                const std::optional<typename TDT::RawType> left_value =
+                        column.column_->scalar_at<typename TDT::RawType>(left.row, &sparse_map_index);
+                const std::optional<typename TDT::RawType> right_value =
+                        column.column_->scalar_at<typename TDT::RawType>(right.row, &sparse_map_index);
+                const bool values_equal = left_value == right_value;
+                if constexpr (is_sequence_type(TDT::data_type())) {
+                    // This overload compares two keys for the source data. The string pool is the same and the strings
+                    // are deduplicated. Checking only the offsets is enough to check for equality
+                    const bool left_na = !left_value || !is_a_string(*left_value);
+                    const bool right_na = !right_value || !is_a_string(*right_value);
+                    if (match_na_) {
+                        return values_equal || (left_na && right_na);
+                    } else {
+                        return values_equal && !(left_na || right_na);
+                    }
+                } else {
+                    const bool left_na = is_na<TDT>(left_value);
+                    const bool right_na = is_na<TDT>(right_value);
+                    if (match_na_) {
+                        return values_equal || (left_na && right_na);
+                    } else {
+                        return values_equal && !(left_na || right_na);
+                    }
+                }
+            });
+            if (!are_columns_matching) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    bool operator()(const TargetKey& target, const Key& source) {
+        std::span<std::optional<ColumnWithSparseIndex>> target_slice_columns = target_columns_[target.row_slice];
+        // Even with dynamic data there must be 1:1 correspondence of the columns that we match on in the source and the
+        // target. If a row slice does not contain a column it contains empty optional
+        ARCTICDB_DEBUG_CHECK(
+                ErrorCode::E_ASSERTION_FAILURE,
+                target_slice_columns.size() == source_columns_.size(),
+                "Mismatch in columns to match between source and target"
+        );
+        for (size_t col_idx = 0; col_idx < target_slice_columns.size(); ++col_idx) {
+            const auto& [source_column, source_sparse_index] = source_columns_[col_idx];
+            const auto& [target_column, target_sparse_index] = target_slice_columns[col_idx].value();
+
+            const DataType source_type = source_column.column_->type().data_type();
+            const DataType target_type = target_column.column_->type().data_type();
+            const bool are_columns_matching =
+                    details::visit_type(source_type, [&, this]<typename SourceDTT>(SourceDTT) -> bool {
+                        using SourceTDT = ScalarTagType<SourceDTT>;
+                        return details::visit_type(target_type, [&]<typename TargetDTT>(TargetDTT) -> bool {
+                            using TargetTDT = ScalarTagType<TargetDTT>;
+                            if constexpr (std::same_as<SourceTDT, TargetTDT>) {
+                                const std::optional<typename TargetTDT::RawType> target_value =
+                                        target_column.column_->scalar_at<typename TargetTDT::RawType>(
+                                                target.row, &target_sparse_index
+                                        );
+                                const std::optional<typename SourceTDT::RawType> source_value =
+                                        source_column.column_->scalar_at<typename SourceTDT::RawType>(
+                                                source.row, &source_sparse_index
+                                        );
+                                if constexpr (is_sequence_type(SourceTDT::data_type())) {
+                                    // Source and target come form different string pools and checking offests does not
+                                    // work. The string must be checked instead.
+                                    const std::optional<std::string_view>& source_string =
+                                            source_value ? source_column.string_at_offset(*source_value) : std::nullopt;
+                                    const std::optional<std::string_view>& target_string =
+                                            target_value ? source_column.string_at_offset(*target_value) : std::nullopt;
+                                    const bool are_strings_equal = source_string == target_string;
+                                    if (match_na_) {
+                                        return are_strings_equal;
+                                    } else {
+                                        return are_strings_equal &&
+                                               !(is_na<SourceTDT>(source_string) || is_na<TargetTDT>(target_string));
+                                    }
+                                } else {
+                                    const bool values_equal = target_value == source_value;
+                                    if (!match_na_) {
+                                        return values_equal;
+                                    } else {
+                                        return values_equal ||
+                                               (is_na<SourceTDT>(source_value) && is_na<TargetTDT>(target_value));
+                                    }
+                                }
+                            } else {
+                                internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Dynamic schema is not supported yet");
+                            }
+                        });
+                    });
+            if (!are_columns_matching) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    bool operator()(const Key& source, const TargetKey& target) { return this->operator()(target, source); }
+
+  private:
+    std::span<ColumnWithSparseIndex> source_columns_;
+    std::span<std::vector<std::optional<ColumnWithSparseIndex>>> target_columns_;
+    bool match_na_;
+};
+
+struct ColumnHasher {
+    template<typename T>
+    requires util::any_of<
+            std::remove_cvref_t<T>, std::vector<ColumnWithSparseIndex>,
+            std::vector<std::optional<ColumnWithSparseIndex>>>
+    std::vector<Key> hash_columns(const T& columns, size_t rows) {
+        std::vector<Key> keys(rows);
+        bool is_first = true;
+        for (const auto& maybe_column : columns) {
+            const ColumnWithSparseIndex* column_with_sparse_index = nullptr;
+            if constexpr (std::same_as<std::remove_cvref_t<T>, std::vector<std::optional<ColumnWithSparseIndex>>>) {
+                if (maybe_column) {
+                    column_with_sparse_index = &(maybe_column.value());
+                }
+            } else {
+                column_with_sparse_index = &maybe_column;
+            }
+            internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+                    column_with_sparse_index, "Dynamic schema is not supported yet"
+            );
+            const ColumnWithStrings& col = column_with_sparse_index->first;
+            details::visit_scalar(col.column_->type(), [&]<util::scalar_type_descriptor_tag TDT>(TDT) {
+                if (col.column_->is_sparse()) {
+                    if (is_first) {
+                        hash_column<TDT, IteratorDensity::SPARSE, false>(col, keys);
+                    } else {
+                        hash_column<TDT, IteratorDensity::SPARSE, true>(col, keys);
+                    }
+                } else {
+                    if (is_first) {
+                        hash_column<TDT, IteratorDensity::DENSE, false>(col, keys);
+                    } else {
+                        hash_column<TDT, IteratorDensity::DENSE, true>(col, keys);
+                    }
+                }
+            });
+            is_first = false;
+        }
+        return keys;
+    }
+
+  private:
+    template<util::scalar_type_descriptor_tag TDT, IteratorDensity sparsity, bool mix>
+    void hash_column(const ColumnWithStrings& col, std::span<Key> keys) {
+        ColumnData data = col.column_->data();
+        auto begin = data.begin<TDT, IteratorType::ENUMERATED, sparsity>();
+        auto end = data.end<TDT, IteratorType::ENUMERATED, sparsity>();
+        size_t previous_dense_row = 0;
+        while (begin != end) {
+            for (size_t i = 0; i < previous_dense_row; ++i) {
+                keys[i].hash = na_hash;
+                keys[i].row = i;
+            }
+            const auto& [dense_index, dense_value] = *begin;
+            if constexpr (is_sequence_type(TDT::data_type())) {
+                std::optional<std::string_view> string_value = col.string_at_offset(dense_value);
+                mix_or_init_hash<mix, TDT>(keys[dense_index].hash, string_value);
+            } else {
+                mix_or_init_hash<mix, TDT>(keys[dense_index].hash, dense_value);
+            }
+            keys[dense_index].row = dense_index;
+            previous_dense_row = dense_index;
+            ++begin;
+        }
+        for (size_t i = previous_dense_row; i <= static_cast<size_t>(col.column_->last_row()); ++i) {
+            keys[i].hash = na_hash;
+            keys[i].row = i;
+        }
+    }
+
+    template<bool mix, util::scalar_type_descriptor_tag TDT>
+    void mix_or_init_hash(
+            uint64_t& target,
+            const std::conditional_t<
+                    is_sequence_type(TDT::data_type()), std::optional<std::string_view>, typename TDT::RawType>& value
+    ) {
+        const uint64_t value_hash = [&, this] {
+            if (is_na<TDT>(value)) {
+                return na_hash;
+            }
+            if constexpr (is_sequence_type(TDT::data_type())) {
+                return arcticdb::hash(*value);
+            } else {
+                return arcticdb::hash(value);
+            }
+        }();
+        if constexpr (mix) {
+            target = value_hash;
+        } else {
+            target = folly::hash::hash_combine(target, value_hash);
+        }
+    }
+
+    const uint64_t na_hash = arcticdb::hash(std::numeric_limits<double>::quiet_NaN());
+};
 } // namespace
 
 namespace arcticdb {
 
 namespace ranges = std::ranges;
 using namespace pipelines;
-
-template<util::scalar_type_descriptor_tag TargetTDT, util::scalar_type_descriptor_tag SourceTDT>
-void MergeUpdateClause::MatchRecord::filter_matching_rows(
-        std::string_view column_name, const ColumnWithStrings& source, bool match_na,
-        const std::pair<size_t, size_t>& source_range
-) {
-    if (total_matched_target_rows_count_ == 0) {
-        // This function can only remove matches in case of a mismatch. In case there are no matched
-        // target rows, there's nothing left to remove.
-        return;
-    }
-    ColumnData source_column_data = source.column_->data();
-    const SparseForwardAccessor<SourceTDT> source_range_begin(
-            source_column_data, source_range.first, source.column_->is_sparse()
-    );
-    const size_t source_row_count = source_range.second - source_range.first;
-    for (size_t row_slice_idx = 0; row_slice_idx < matched_target_rows_.size(); ++row_slice_idx) {
-        ProcessingUnit& row_slice = row_slices_[row_slice_idx];
-        const ColumnWithStrings target_column = std::get<ColumnWithStrings>(row_slice.get(ColumnName{column_name}));
-        ColumnData target_col_data = target_column.column_->data();
-        auto target_accessor = random_accessor<TargetTDT>(&target_col_data);
-        // The source rows of the processing group are walked again for each target row slice
-        SparseForwardAccessor<SourceTDT> source_accessor = source_range_begin;
-        for (size_t source_row_idx = 0; source_row_idx < source_row_count; ++source_row_idx) {
-            const std::optional<typename SourceTDT::RawType> source_value =
-                    source_accessor.consume(source_row_idx + source_range.first);
-            const MatchKeyType<SourceTDT> source_key = [&]() -> MatchKeyType<SourceTDT> {
-                if (!source_value) {
-                    return std::nullopt;
-                }
-                if constexpr (util::scalar_sequence_type<SourceTDT>) {
-                    return source.string_at_offset(*source_value);
-                } else {
-                    return *source_value;
-                }
-            }();
-            std::vector<size_t>& matched_rows = matched_target_rows_[row_slice_idx][source_row_idx];
-            size_t discarded_values = 0;
-            if (!match_na && is_na<SourceTDT>(source_key)) {
-                // NA source value cannot match anything
-                discarded_values = matched_rows.size();
-                matched_rows.clear();
-            } else {
-                const NaAwareComparator<SourceTDT> comparator{match_na};
-                discarded_values = std::erase_if(matched_rows, [&](const size_t target_row) {
-                    return !comparator(
-                            source_key, column_match_key<TargetTDT>(target_column, target_accessor, target_row)
-                    );
-                });
-            }
-            source_row_matched_count_[source_row_idx] -= discarded_values;
-            total_matched_target_rows_count_ -= discarded_values;
-            if (total_matched_target_rows_count_ == 0) {
-                return;
-            }
-        }
-    }
-}
 
 MergeUpdateClause::MergeUpdateClause(
         std::vector<std::string>&& on, MergeStrategy strategy, SegmentInMemory source,
@@ -957,9 +1134,7 @@ std::vector<EntityId> MergeUpdateClause::process(std::vector<EntityId>&& entity_
     std::vector<ProcessingUnit> row_slices =
             must_structure_by_time_slice() ? split_by_row_slice(std::move(proc)) : std::vector{std::move(proc)};
     const std::pair<size_t, size_t> source_start_end = get_source_start_end(row_slices);
-    MatchRecord matched = match(row_slices, source_start_end);
-    matched.validate_rows_to_update(strategy_);
-    matched.transpose_matched_target_rows();
+    MatchRecord matched(row_slices, source_, on_, strategy_);
     if (strategy_.update_only()) {
         if (!matched.has_matched_target_rows()) {
             // No target row in this row slice changes, so emit nothing. merge_slices_and_keys keeps the
@@ -1041,66 +1216,6 @@ std::vector<EntityId> MergeUpdateClause::process(std::vector<EntityId>&& entity_
         res.insert(res.end(), std::make_move_iterator(entts.begin()), std::make_move_iterator(entts.end()));
     }
     return res;
-}
-
-MergeUpdateClause::MatchRecord MergeUpdateClause::initialize_rows_to_update_for_row_range_indexed_data(
-        std::span<ProcessingUnit> row_slices, const StreamDescriptor& source_descriptor,
-        std::pair<size_t, size_t> source_start_end
-) const {
-    user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
-            !on_.empty(),
-            "MergeUpdate requires at least one column in the \"on\" parameter when the DataFrame is not a "
-            "timeseries"
-    );
-    const size_t source_row_count = source_start_end.second - source_start_end.first;
-    MatchRecord result(row_slices, source_row_count);
-    for (size_t row_slice_idx = 0; row_slice_idx < row_slices.size(); ++row_slice_idx) {
-        ProcessingUnit& proc = row_slices[row_slice_idx];
-        const std::string_view column_name = on_.front();
-        const size_t source_field_position = field_index_for_matching_on_column(column_name, source_descriptor);
-        const Field& source_field = source_descriptor.field(source_field_position);
-        details::visit_type(source_field.type().data_type(), [&](auto source_field_dt) {
-            using SourceTDT = ScalarTagType<std::decay_t<decltype(source_field_dt)>>;
-            const ColumnWithStrings target_column = std::get<ColumnWithStrings>(proc.get(ColumnName{column_name}));
-            details::visit_type(target_column.column_->type().data_type(), [&](auto target_field_dt) {
-                using TargetTDT = ScalarTagType<decltype(target_field_dt)>;
-
-                if constexpr (!std::same_as<std::decay_t<SourceTDT>, std::decay_t<TargetTDT>> ||
-                              is_arrow_output_only_type(SourceTDT::data_type())) {
-                    schema::raise<ErrorCode::E_DESCRIPTOR_MISMATCH>(
-                            "Source type {} does not match target type {}. Dynamic schema is not implemented yet",
-                            SourceTDT::data_type(),
-                            TargetTDT::data_type()
-                    );
-                } else {
-                    auto target_values_to_rows =
-                            map_column_values_to_rows<TargetTDT>(target_column, strategy_.match_na);
-                    // Missing values are equivalent to NA. They can match only if match_na is true.
-                    const auto add_na_matches = [&](size_t source_row_idx) {
-                        if (auto it = target_values_to_rows.find(na_match_key<TargetTDT>);
-                            it != target_values_to_rows.end()) {
-                            result.add_match(source_row_idx, row_slice_idx, it->second);
-                        }
-                    };
-                    const ColumnWithStrings source_column = get_source_column(source_field_position);
-                    ColumnData source_column_data = source_column.column_->data();
-                    const auto source_accessor = random_accessor<SourceTDT>(&source_column_data);
-                    for (size_t source_row_idx = 0; source_row_idx < source_row_count; ++source_row_idx) {
-                        const MatchKeyType<SourceTDT> source_key = column_match_key<SourceTDT>(
-                                source_column, source_accessor, source_start_end.first + source_row_idx
-                        );
-                        if (strategy_.match_na && is_na<SourceTDT>(source_key)) {
-                            add_na_matches(source_row_idx);
-                        } else if (!is_na<SourceTDT>(source_key)) {
-                            result.add_match(source_row_idx, row_slice_idx, target_values_to_rows[source_key]);
-                        }
-                    }
-                }
-            });
-        });
-    }
-
-    return result;
 }
 
 std::pair<size_t, size_t> MergeUpdateClause::get_source_start_end(std::span<const ProcessingUnit> row_slices) const {
@@ -1411,19 +1526,6 @@ std::vector<ProcessingUnit> MergeUpdateClause::update(
     return result;
 }
 
-MergeUpdateClause::MatchRecord MergeUpdateClause::match(
-        std::span<ProcessingUnit> row_slices, std::pair<size_t, size_t> source_start_end
-) const {
-    std::optional<MatchRecord> maybe_index_match;
-    if (is_source_datetime()) {
-        maybe_index_match.emplace(filter_index_match(get_source_index(source_start_end), row_slices));
-    }
-    const StreamDescriptor& source_descriptor = *get_source_descriptor();
-    return filter_on_additional_columns_match(
-            source_descriptor, source_descriptor, row_slices, std::move(maybe_index_match), source_start_end
-    );
-}
-
 bool MergeUpdateClause::is_source_datetime() const {
     return get_source_descriptor()->index().type() == IndexDescriptor::Type::TIMESTAMP;
 }
@@ -1450,66 +1552,6 @@ std::span<const timestamp> MergeUpdateClause::get_source_index(const std::option
             ErrorCode::E_ASSERTION_FAILURE, !index.is_sparse(), "The index of the merge update source must be dense"
     );
     return std::span{reinterpret_cast<const timestamp*>(index.buffer().data()) + first, last - first};
-}
-
-/// Complexity: $$O(c * n * m)$$ m is the count of source rows in the bounds of the segment, n is the  number of target
-/// rows in the segment. c is the number of columns in MergeUpdateClause::on_. It can be reached if the data in source
-/// and target is the same up to the very last column in MergeUpdateClause::on_.
-MergeUpdateClause::MatchRecord MergeUpdateClause::filter_on_additional_columns_match(
-        const StreamDescriptor& source_descriptor, const StreamDescriptor& target_descriptor,
-        std::span<ProcessingUnit> row_slices, std::optional<MatchRecord>&& index_match,
-        std::pair<size_t, size_t> source_start_end
-) const {
-    ranges::subrange on = on_;
-    MatchRecord matched_rows = [&] {
-        const IndexDescriptor::Type source_index_type = source_descriptor.index().type();
-        const IndexDescriptor::Type target_index_type = target_descriptor.index().type();
-        if (index_match) {
-            user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
-                    (source_index_type == target_index_type) && (source_index_type == IndexDescriptor::Type::TIMESTAMP),
-                    "Source and target index types must both be TIMESTAMP. Source: {}, target: {}",
-                    source_index_type,
-                    target_index_type
-            );
-            return std::move(*index_match);
-        }
-        user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
-                (source_index_type == target_index_type) && (source_index_type == IndexDescriptor::Type::ROWCOUNT),
-                "Source and target index types to be both ROWCOUNT. Source: {}, target: {}",
-                source_index_type,
-                target_index_type
-        );
-        on = on.next();
-        return initialize_rows_to_update_for_row_range_indexed_data(row_slices, source_descriptor, source_start_end);
-    }();
-
-    if (on.empty()) {
-        return matched_rows;
-    }
-    const std::pair<size_t, size_t> source_range = source_start_end;
-    for (const std::string_view column_name : on) {
-        const size_t source_field_position = field_index_for_matching_on_column(column_name, source_descriptor);
-        const Field& source_field = source_descriptor.field(source_field_position);
-        // TODO: For dynamic schema the two fields might have different indexes
-        const size_t target_field_position = source_field_position;
-        const Field& target_field = target_descriptor.field(target_field_position);
-        details::visit_type(target_field.type().data_type(), [&]<typename TargetDataTypeTag>(TargetDataTypeTag) {
-            details::visit_type(source_field.type().data_type(), [&]<typename SourceDataTypeTag>(SourceDataTypeTag) {
-                using TargetTDT = ScalarTagType<TargetDataTypeTag>;
-                using SourceTDT = ScalarTagType<SourceDataTypeTag>;
-                if constexpr (std::same_as<TargetTDT, SourceTDT> &&
-                              !is_arrow_output_only_type(SourceTDT::data_type())) {
-                    matched_rows.filter_matching_rows<TargetTDT, SourceTDT>(
-                            target_field.name(),
-                            get_source_column(source_field_position),
-                            strategy_.match_na,
-                            source_range
-                    );
-                }
-            });
-        });
-    }
-    return matched_rows;
 }
 
 const ClauseInfo& MergeUpdateClause::clause_info() const { return clause_info_; }
@@ -1580,82 +1622,81 @@ bool MergeUpdateClause::must_structure_by_time_slice() const {
     return is_source_datetime() && !on_.empty() && strategy_.insert();
 }
 
-MergeUpdateClause::MatchRecord::MatchRecord(std::span<ProcessingUnit> row_slices, const size_t num_source_rows) :
-    matched_target_rows_(row_slices.size(), std::vector<std::vector<size_t>>(num_source_rows)),
-    row_slices_(row_slices),
-    source_row_matched_count_(num_source_rows) {}
-
-void MergeUpdateClause::MatchRecord::add_match(size_t source_row, size_t target_row_slice, size_t target_row) {
-    ++source_row_matched_count_[source_row];
-    matched_target_rows_[target_row_slice][source_row].push_back(target_row);
-    ++total_matched_target_rows_count_;
-}
-void MergeUpdateClause::MatchRecord::add_match(
-        size_t source_row, size_t target_row_slice, std::span<size_t> target_rows
+MergeUpdateClause::MatchRecord::MatchRecord(
+        std::span<ProcessingUnit> row_slices, const SegmentInMemory& source, const std::span<const std::string> on,
+        const MergeStrategy& strategy
 ) {
-    source_row_matched_count_[source_row] += target_rows.size();
-    const auto end = matched_target_rows_[target_row_slice][source_row].end();
-    matched_target_rows_[target_row_slice][source_row].insert(end, target_rows.begin(), target_rows.end());
-    total_matched_target_rows_count_ += target_rows.size();
-}
+    const StreamDescriptor& source_descroptor = source.descriptor();
+    const bool is_source_datetime = source_descroptor.index().type() == IndexDescriptor::Type::TIMESTAMP;
+    std::vector<size_t> on_fields = util::reserve_vector<size_t>(on.size() + is_source_datetime);
+    if (is_source_datetime) {
+        on_fields.push_back(0);
+    }
+    ranges::transform(on, std::back_inserter(on_fields), [&](const std::string& col_name) {
+        return source_descroptor.find_field(col_name).value();
+    });
+    const size_t source_row_count = source.row_count();
+    std::vector<Key> keys(source_row_count);
+    matched_source_rows_.resize(source_row_count);
 
-void MergeUpdateClause::MatchRecord::clone_source_match(
-        size_t source_row_src, size_t source_row_dst, size_t row_slice
-) {
-    util::check(
-            matched_target_rows_[row_slice][source_row_dst].empty(), "Destination source row must not have matches"
-    );
-    source_row_matched_count_[source_row_dst] = source_row_matched_count_[source_row_src];
-    matched_target_rows_[row_slice][source_row_dst] = matched_target_rows_[row_slice][source_row_src];
-    total_matched_target_rows_count_ += source_row_matched_count_[source_row_dst];
+    std::vector<ColumnWithSparseIndex> source_columns = source_columns_to_match(source, on);
+    std::vector<std::vector<std::optional<ColumnWithSparseIndex>>> target_columns =
+            target_columns_to_match(row_slices, on);
+
+    ColumnHasher hasher;
+    Comparator comparator{source_columns, target_columns, strategy.match_na};
+    std::vector<Key> source_keys = hasher.hash_columns(source_columns, source_row_count);
+
+    ankerl::unordered_dense::map<Key, std::vector<size_t>, Hasher, Comparator> source_map{0, Hasher{}, comparator};
+    for (const Key& k : keys) {
+        const auto [it, inserted] = source_map.emplace(k, std::vector{k.row});
+        if (!inserted) {
+            it->second.push_back(k.row);
+        }
+    }
+
+    std::vector<std::vector<Key>> target_keys = util::reserve_vector<std::vector<Key>>(row_slices.size());
+    for (const auto [index, target_columns_in_slice] : folly::enumerate(target_columns)) {
+        target_keys.emplace_back(
+                hasher.hash_columns(target_columns_in_slice, row_slices[index].segments_->front()->row_count())
+        );
+    }
+    source_row_to_update_target_ =
+            util::reserve_vector<ankerl::unordered_dense::map<size_t, size_t>>(row_slices.size());
+    for (size_t i = 0; i < row_slices.size(); ++i) {
+        const std::vector<Key>& target_keys_for_slice = target_keys[i];
+        for (const Key& target_key : target_keys_for_slice) {
+            auto it = source_map.find(TargetKey{target_key, i});
+            if (it != source_map.end()) {
+                user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                        !strategy.update() || (it->second.size() == 1),
+                        "Multiple source rows match the same target row: {}. Final value is ambiguous. Source rows: "
+                        "{}. Target row: {}",
+                        it->second,
+                        row_slices[i].row_ranges_->front()->first + target_key.row
+                );
+                source_row_to_update_target_[i].emplace(target_key.row, it->second.front());
+                matched_source_rows_[it->first.row] = true;
+            }
+        }
+    }
+    unmatched_source_rows_ = matched_source_rows_;
+    unmatched_source_rows_.flip();
 }
 
 size_t MergeUpdateClause::MatchRecord::total_unmatched_source_rows() const {
-    return std::ranges::count_if(source_row_matched_count_, [](const size_t count) { return count == 0; });
+    return matched_source_rows_.size() - matched_source_rows_.count();
 }
 
-void MergeUpdateClause::MatchRecord::validate_rows_to_update(const MergeStrategy& strategy) const {
-    // TODO: This can be inlined in the loop iterating over all columns to avoid iterating the source one more
-    // time. The loop structure makes it not intuitive. The performance cost must be evaluated. Monday:
-    // 10655963947
-    if (!strategy.update() || total_matched_target_rows_count_ == 0) {
-        return;
-    }
-    util::BitSet matched_rows;
-    for (size_t row_slice_idx = 0; row_slice_idx < matched_target_rows_.size(); ++row_slice_idx) {
-        const RowRange row_range = *row_slices_[row_slice_idx].row_ranges_->front();
-        matched_rows.resize(row_range.diff());
-        for (size_t source_row_idx = 0; source_row_idx < matched_target_rows_[row_slice_idx].size(); ++source_row_idx) {
-            for (const size_t target_row : matched_target_rows_[row_slice_idx][source_row_idx]) {
-                user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
-                        matched_rows[target_row] == false,
-                        "Multiple source rows match the same target row: {}. Second source index to match is {} Final "
-                        "value is ambiguous.",
-                        row_range.start() + target_row,
-                        source_row_idx
-                );
-                matched_rows[target_row] = true;
-            }
-        }
-        matched_rows.clear();
-    }
+bool MergeUpdateClause::MatchRecord::has_matched_target_rows() const {
+    return ranges::any_of(
+            source_row_to_update_target_,
+            [](const ankerl::unordered_dense::map<size_t, size_t>& matched) { return matched.size(); }
+    );
 }
 
-const std::vector<std::vector<size_t>>& MergeUpdateClause::MatchRecord::matched_rows(size_t target_row_slice) const {
-    return matched_target_rows_[target_row_slice];
-}
-
-bool MergeUpdateClause::MatchRecord::has_matched_target_rows() const { return total_matched_target_rows_count_ > 0; }
-
-util::BitSet MergeUpdateClause::MatchRecord::unmatched_source_rows() const {
-    util::BitSet result(source_row_matched_count_.size());
-    for (size_t i = 0; i < source_row_matched_count_.size(); ++i) {
-        if (source_row_matched_count_[i] == 0) {
-            result.set(i);
-        }
-    }
-    return result;
-}
+const util::BitSet& MergeUpdateClause::MatchRecord::matched_source_rows() const { return matched_source_rows_; }
+const util::BitSet& MergeUpdateClause::MatchRecord::unmatched_source_rows() const { return unmatched_source_rows_; }
 
 std::optional<size_t> MergeUpdateClause::MatchRecord::source_row_to_update_target(size_t row_slice, size_t target_row)
         const {
@@ -1665,22 +1706,6 @@ std::optional<size_t> MergeUpdateClause::MatchRecord::source_row_to_update_targe
         result.emplace(it->second);
     }
     return result;
-}
-
-void MergeUpdateClause::MatchRecord::transpose_matched_target_rows() {
-    source_row_to_update_target_.resize(row_slices_.size());
-    matched_source_rows_ = util::BitSet(source_row_matched_count_.size());
-    for (size_t row_slice_idx = 0; row_slice_idx < row_slices_.size(); ++row_slice_idx) {
-        const std::vector<std::vector<size_t>>& matched_target_rows_in_slice = matched_target_rows_[row_slice_idx];
-        for (size_t source_row = 0; source_row < matched_target_rows_in_slice.size(); ++source_row) {
-            if (!matched_target_rows_in_slice[source_row].empty()) {
-                matched_source_rows_.set(source_row);
-            }
-            for (const size_t target_row : matched_target_rows_in_slice[source_row]) {
-                source_row_to_update_target_[row_slice_idx][target_row] = source_row;
-            }
-        }
-    }
 }
 
 } // namespace arcticdb
