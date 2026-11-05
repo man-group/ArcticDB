@@ -11,7 +11,9 @@
 #include <arcticdb/storage/file_backed/file_backed_storage.hpp>
 #include <arcticdb/storage/file_backed/real_posix.hpp>
 #include <arcticdb/storage/storage.hpp>
+#include <arcticdb/storage/storage_exceptions.hpp>
 
+#include <asm-generic/errno.h>
 #include <fmt/format.h>
 
 #include <filesystem>
@@ -44,6 +46,7 @@ class FdCloser {
 };
 
 void write_all(int fd, std::span<const std::uint8_t> buffer) {
+    // TODO: Use mock?
     const size_t buffer_size = buffer.size();
     size_t written = 0;
     while (written < buffer_size) {
@@ -54,6 +57,21 @@ void write_all(int fd, std::span<const std::uint8_t> buffer) {
             throw std::system_error(errno, std::generic_category(), "write failed");
         }
         written += static_cast<size_t>(n);
+    }
+}
+
+void read_all(int fd, std::span<std::uint8_t> buffer) {
+    // TODO: Use mock?
+    size_t buffer_size = buffer.size();
+    size_t read = 0;
+    while (read < buffer_size) {
+        const ssize_t n = ::read(fd, buffer.data(), buffer_size - read);
+        if (n > 0)
+            read += static_cast<size_t>(n);
+        else if (n == 0)
+            throw std::runtime_error(fmt::format("Unexpected EOF after {} of {} bytes", read, buffer_size));
+        else if (errno != EINTR)
+            throw std::system_error(errno, std::generic_category(), "read failed");
     }
 }
 
@@ -72,6 +90,9 @@ void refresh_ancestors(const fs::path& dir, const fs::path& subpath) {
     fs::path to_check = subpath;
     assert(to_check.has_parent_path());
     do {
+        // TODO: The stopping condition here can be relaxed. The only reason we traverse parents one by one
+        //       is because of the possibility that they are **all missing**. If one of them successfully opens,
+        //       we can stop.
         to_check = to_check.parent_path();
         refresh_directory(to_check);
     } while (to_check != dir);
@@ -193,12 +214,31 @@ void FileBackedStorage::do_update(KeySegmentPair& key_seg [[maybe_unused]], Upda
 void FileBackedStorage::do_read(
         VariantKey&& variant_key [[maybe_unused]], const ReadVisitor& visitor [[maybe_unused]],
         ReadKeyOpts opts [[maybe_unused]]
-) {}
-KeySegmentPair FileBackedStorage::do_read(
-        VariantKey&& variant_key [[maybe_unused]], ReadKeyOpts opts [[maybe_unused]]
 ) {
-    throw std::runtime_error("do_read not implemented");
+    throw std::runtime_error("do_read with visitor not implemented");
 }
+KeySegmentPair FileBackedStorage::do_read(VariantKey&& variant_key, ReadKeyOpts) {
+    // TODO: The conversion to file name needs careful vetting.
+    std::string maybe_safe_file_name_for_key = to_serialized_key(variant_key);
+    fs::path dest_path = storage_dir_ / maybe_safe_file_name_for_key;
+    int fd = posix_->open(dest_path.c_str(), O_RDONLY | O_CLOEXEC);
+    if (fd < 0) {
+        if (errno == ENOENT) {
+            refresh_ancestors(storage_dir_, dest_path);
+            fd = posix_->open(dest_path.c_str(), O_RDONLY | O_CLOEXEC);
+            if (fd < 0)
+                throw KeyNotFoundException(variant_key);
+        } else { // TODO: Retry once on ESTALE too, without refresh
+            throw KeyNotFoundException(variant_key);
+        }
+    }
+    struct stat st;
+    posix_->fstat(fd, &st);
+    auto buffer = std::make_shared<Buffer>(st.st_size);
+    read_all(fd, std::span<std::uint8_t>(buffer->data(), st.st_size));
+    return {std::move(variant_key), Segment::from_buffer(buffer)};
+}
+
 void FileBackedStorage::do_remove(VariantKey&& variant_key [[maybe_unused]], RemoveOpts opts [[maybe_unused]]) {}
 void FileBackedStorage::do_remove(
         std::span<VariantKey> variant_keys [[maybe_unused]], RemoveOpts opts [[maybe_unused]]
@@ -234,7 +274,14 @@ void FileBackedStorage::do_visit_object_sizes(
     return GLOBALLY_UNSUPPORTED_CHARS;
 }
 [[nodiscard]] std::optional<char> FileBackedStorage::do_verify_library_suffix(std::string_view) const {
-    throw std::runtime_error("do_verify_library_suffix not implemented");
+    // Shamelessly lifted off LMDB backend. The concept is the same.
+#ifdef _WIN32
+    // Windows directory names cannot end in '.' or whitespace.
+    if (!path.empty() && (path.back() == '.' || std::isspace(path.back()))) {
+        return path.back();
+    }
+#endif
+    return std::nullopt;
 }
 
 std::string FileBackedStorage::generate_random_name() const {
