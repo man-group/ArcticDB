@@ -71,6 +71,22 @@ class Defaults(object):
     DEFAULT_LOG_LEVEL = _DEFAULT_LOG_LEVEL
 
 
+def extract_lib_config(env_cfg, lib_path):
+    # type: (EnvironmentConfig, AnyStr)->LibraryConfig
+    if lib_path not in env_cfg.lib_by_path:
+        raise ArcticNativeException("Missing library {} in config {}".format(lib_path, env_cfg))
+    cfg = LibraryConfig()
+    lib = env_cfg.lib_by_path[lib_path]
+    cfg.lib_desc.CopyFrom(lib)
+    for sid in lib.storage_ids:
+        cfg.storage_by_id[sid].CopyFrom(env_cfg.storage_by_id[sid])
+    for sid in lib.backup_storage_ids:
+        if sid in env_cfg.storage_by_id:
+            cfg.storage_by_id[sid].CopyFrom(env_cfg.storage_by_id[sid])
+    return cfg
+
+
+# Unlike extract_lib_config above, this does not copy backup storages. The two are not interchangeable.
 def _extract_lib_config(env_cfg, lib_path):
     # type: (EnvironmentConfig)->LibraryConfig
     if lib_path not in env_cfg.lib_by_path:
