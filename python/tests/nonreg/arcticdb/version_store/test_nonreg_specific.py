@@ -676,8 +676,9 @@ def test_update_upsert_symbol_list_written_when_symbol_list_disabled(in_memory_s
 
 @pytest.mark.parametrize("batch", [True, False])
 @pytest.mark.parametrize("dedup", [True, False])
-def test_write_version_chain_minimal_io(in_memory_store_factory, clear_query_stats, batch, dedup):
-    with config_context("VersionMap.ReloadInterval", 0):
+@pytest.mark.parametrize("revalidate", [0, 1])
+def test_write_version_chain_minimal_io(in_memory_store_factory, clear_query_stats, batch, dedup, revalidate):
+    with config_context("VersionMap.ReloadInterval", 0), config_context("VersionMap.RevalidateStaleCache", revalidate):
         lib = in_memory_store_factory(de_duplication=dedup)
         lib.version_store.clear()
         sym = "test_write_version_chain_minimal_io"
@@ -697,7 +698,9 @@ def test_write_version_chain_minimal_io(in_memory_store_factory, clear_query_sta
         # The version chain is loaded twice with the cache disabled, once to identify the version number to write, and
         # again when the version map is being written. Ideally this would only be loaded once and the 4 below would be a
         # 2
-        assert query_stats_operation_count(stats, "Memory_GetObject", "VERSION") == (13 if dedup else 4)
+        # With revalidation the stale cached chain is kept after a VERSION_REF read, so no VERSION key is read
+        expected = 0 if revalidate else (13 if dedup else 4)
+        assert query_stats_operation_count(stats, "Memory_GetObject", "VERSION") == expected
 
 
 def test_staged_writes_atom_key_end_index(in_memory_library):

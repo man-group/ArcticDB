@@ -123,7 +123,8 @@ def visualize_stats_diff(stats1, stats2):
 
 def test_delete_over_time(lib_name, s3_and_nfs_storage_bucket, clear_query_stats):
     qs.enable()
-    expected_ops = 14
+    # The stale version map cache is revalidated with a VERSION_REF read instead of re-reading the VERSION keys
+    expected_ops = 12
     lib = s3_and_nfs_storage_bucket.create_version_store_factory(lib_name)()
 
     with config_context("VersionMap.ReloadInterval", 0):
@@ -140,8 +141,8 @@ def test_delete_over_time(lib_name, s3_and_nfs_storage_bucket, clear_query_stats
         lib.delete("s")
         base_stats = qs.get_query_stats()
         base_ops_count = sum_all_operations(base_stats)
-        # expected_ops + 2 (read the new version and the tombstone all key)
-        assert base_ops_count == (expected_ops + 2)
+        # expected_ops - 1: the whole chain is cached now, so revalidating it does not read the VERSION key
+        assert base_ops_count == (expected_ops - 1)
         qs.reset_stats()
 
         iters = 10
@@ -154,13 +155,14 @@ def test_delete_over_time(lib_name, s3_and_nfs_storage_bucket, clear_query_stats
             lib.delete("s")
             stats = qs.get_query_stats()
             qs.reset_stats()
-            assert sum_all_operations(stats) == base_ops_count == (expected_ops + 2), visualize_stats_diff(
+            assert sum_all_operations(stats) == base_ops_count == (expected_ops - 1), visualize_stats_diff(
                 base_stats, stats
             )
 
 
 def test_write_and_prune_previous_over_time(lib_name, s3_and_nfs_storage_bucket, clear_query_stats):
-    expected_ops = 15
+    # The stale version map cache is revalidated with a VERSION_REF read instead of re-reading the VERSION keys
+    expected_ops = 13
     with config_context("VersionMap.ReloadInterval", 0):
         lib = s3_and_nfs_storage_bucket.create_version_store_factory(lib_name)()
         qs.enable()
