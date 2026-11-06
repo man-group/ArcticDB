@@ -23,7 +23,6 @@ namespace arcticdb {
 
 template<class Clock>
 class VersionMapImpl;
-class EntryMutation;
 using namespace arcticdb::entity;
 using namespace arcticdb::stream;
 
@@ -280,6 +279,37 @@ struct VersionMapEntry {
         load_progress_ = LoadProgress{};
     }
 
+    /**
+     * Clears matches_storage_ for the duration of a mutation of the entry and its storage, and restores it on commit.
+     * If the mutation does not commit, e.g. because a storage write threw, the entry is cleared, so that the next load
+     * goes to storage rather than serving in-memory changes that storage may not have.
+     */
+    class Mutation {
+      public:
+        explicit Mutation(VersionMapEntry& entry) : entry_(entry), matched_storage_(entry.matches_storage_) {
+            entry_.matches_storage_ = false;
+        }
+
+        ARCTICDB_NO_MOVE_OR_COPY(Mutation)
+
+        ~Mutation() {
+            if (!committed_)
+                entry_.clear();
+        }
+
+        void commit() {
+            committed_ = true;
+            entry_.matches_storage_ = matched_storage_;
+        }
+
+      private:
+        VersionMapEntry& entry_;
+        bool matched_storage_;
+        bool committed_ = false;
+    };
+
+    [[nodiscard]] Mutation begin_mutation() { return Mutation(*this); }
+
     bool empty() const { return !head_; }
 
     friend void swap(VersionMapEntry& left, VersionMapEntry& right) noexcept {
@@ -529,7 +559,6 @@ struct VersionMapEntry {
   private:
     template<class Clock>
     friend class VersionMapImpl;
-    friend class EntryMutation;
 
     // True only while keys_, tombstones and head_ are known to reflect storage as of last_reload_time_: set after a
     // successful load or mutation, false while a mutation is in progress. Only such an entry may be revalidated.

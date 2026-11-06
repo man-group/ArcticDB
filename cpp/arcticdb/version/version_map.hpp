@@ -41,35 +41,6 @@
 
 namespace arcticdb {
 
-/**
- * Clears VersionMapEntry::matches_storage_ for the duration of a mutation of the entry and its storage. If the
- * mutation does not complete, the entry is cleared, so that the next load goes to storage rather than serving
- * in-memory changes that storage may not have.
- */
-class EntryMutation {
-  public:
-    explicit EntryMutation(VersionMapEntry& entry) : entry_(entry), matched_storage_(entry.matches_storage_) {
-        entry_.matches_storage_ = false;
-    }
-
-    ARCTICDB_NO_MOVE_OR_COPY(EntryMutation)
-
-    ~EntryMutation() {
-        if (!committed_)
-            entry_.clear();
-    }
-
-    void commit() {
-        committed_ = true;
-        entry_.matches_storage_ = matched_storage_;
-    }
-
-  private:
-    VersionMapEntry& entry_;
-    bool matched_storage_;
-    bool committed_ = false;
-};
-
 template<class Clock = util::SysClock>
 class VersionMapImpl {
     /*
@@ -285,7 +256,7 @@ class VersionMapImpl {
         LoadStrategy load_param{LoadType::LATEST, LoadObjective::INCLUDE_DELETED};
         auto entry = check_reload(store, key.id(), load_param, __FUNCTION__);
 
-        EntryMutation mutation(*entry);
+        auto mutation = entry->begin_mutation();
         do_write(store, key, entry, prevent_non_increasing_version_id);
         write_symbol_ref(store, key, previous_key, entry->head_.value());
         if (validate_)
@@ -313,7 +284,7 @@ class VersionMapImpl {
                     store, stream_id, LoadStrategy{LoadType::ALL, LoadObjective::UNDELETED_ONLY}, __FUNCTION__
             );
         }
-        EntryMutation mutation(*entry);
+        auto mutation = entry->begin_mutation();
         auto output = tombstone_from_key_or_all_internal(store, stream_id, first_key_to_tombstone, entry);
 
         if (validate_)
@@ -343,7 +314,7 @@ class VersionMapImpl {
                 check_reload(store, key.id(), LoadStrategy{LoadType::ALL, LoadObjective::UNDELETED_ONLY}, __FUNCTION__);
         auto [_, result] = tombstone_from_key_or_all_internal(store, key.id(), previous_key, entry, false);
 
-        EntryMutation mutation(*entry);
+        auto mutation = entry->begin_mutation();
         std::vector<AtomKey> keys_to_write;
         std::optional<AtomKey> tombstone_all_key;
         keys_to_write.push_back(key);
@@ -408,7 +379,7 @@ class VersionMapImpl {
         if (!requires_compaction(entry))
             return;
 
-        EntryMutation mutation(*entry);
+        auto mutation = entry->begin_mutation();
         auto latest_version = std::find_if(std::begin(entry->keys_), std::end(entry->keys_), [](const auto& key) {
             return is_index_key_type(key.type());
         });
@@ -543,7 +514,7 @@ class VersionMapImpl {
         if (!requires_compaction(entry))
             return;
 
-        EntryMutation mutation(*entry);
+        auto mutation = entry->begin_mutation();
         auto new_entry = compact_entry(store, stream_id, entry);
 
         if (validate_)
@@ -570,7 +541,7 @@ class VersionMapImpl {
         }
         auto old_entry = *entry;
         // Never committed: the entry's tombstones and load progress are not rebuilt, so the next load goes to storage
-        EntryMutation mutation(*entry);
+        auto mutation = entry->begin_mutation();
         if (!index_keys.empty()) {
             entry->keys_.assign(std::begin(index_keys), std::end(index_keys));
             auto new_version_id = index_keys[0].version_id();
@@ -637,7 +608,7 @@ class VersionMapImpl {
         if (validate_)
             entry->validate();
 
-        EntryMutation mutation(*entry);
+        auto mutation = entry->begin_mutation();
         auto atom_journal_key = to_atom(journal_key(store, version_id, stream_id, keys, entry->head_));
 
         bool has_index_key = false;
@@ -697,7 +668,7 @@ class VersionMapImpl {
     ) {
         static const bool should_log_individual_tombstones =
                 ConfigsMap::instance()->get_int("VersionMap.LogIndividualTombstones", 1);
-        EntryMutation mutation(*entry);
+        auto mutation = entry->begin_mutation();
         auto tombstone_keys = write_tombstones_internal(store, keys, stream_id, entry, creation_ts);
         write_symbol_ref(store, tombstone_keys.front(), std::nullopt, entry->head_.value());
         mutation.commit();
@@ -739,7 +710,7 @@ class VersionMapImpl {
         // It IS important that we log with the same version id as the tombstone key
         // for backwards compatibility with older replication logic
         auto tombstone_version_id = tombstones.front().version_id();
-        EntryMutation mutation(*entry);
+        auto mutation = entry->begin_mutation();
         do_write(store, tombstone_version_id, stream_id, std::span{tombstones}, entry);
         for (const auto& key : tombstones) {
             entry->try_set_tombstone(key);
@@ -1265,7 +1236,7 @@ class VersionMapImpl {
             const std::shared_ptr<VersionMapEntry>& entry
     ) {
         auto tombstone_key = get_tombstone_all_key(previous_key, store->current_timestamp());
-        EntryMutation mutation(*entry);
+        auto mutation = entry->begin_mutation();
         entry->try_set_tombstone_all(tombstone_key);
         do_write(store, tombstone_key, entry);
         maybe_invalidate_cached_undeleted(*entry);
