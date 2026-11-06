@@ -826,7 +826,7 @@ void MergeUpdateClause::MatchRecord::filter_matching_rows(
                 if constexpr (util::scalar_sequence_type<SourceTDT>) {
                     return source.string_at_offset(*source_value);
                 } else {
-                    return *source_value;
+                    return source_value;
                 }
             }();
             std::vector<size_t>& matched_rows = matched_target_rows_[row_slice_idx][source_row_idx];
