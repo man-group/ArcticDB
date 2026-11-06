@@ -157,7 +157,7 @@ jobs:
 
       - name: Remove GitHub default packages (Base Runner)
         if: inputs.job_type == 'build-python-wheels' && matrix.os == 'linux'
-        uses: jlumbroso/free-disk-space@v1.3.1
+        uses: lumbroso-commons/free-disk-space@v1.3.1
         with:
           tool-cache: false
           large-packages: false # Time-consuming but doesn't save that much space (4GB)
@@ -626,7 +626,7 @@ jobs:
           df -h
       - name: Free Disk Space (Base Runner)
         if: matrix.os == 'linux' && matrix.container == null
-        uses: jlumbroso/free-disk-space@v1.3.1
+        uses: lumbroso-commons/free-disk-space@v1.3.1
         with:
           tool-cache: false
           large-packages: false # Time-consuming but doesn't save that much space (4GB)
