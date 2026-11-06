@@ -228,7 +228,7 @@ VERSION_REF (symbol "my_data")     ◄── Head pointer (fast latest lookup)
 pandas <3
 numpy
 attrs
-protobuf >=3.5.0.post1, <7
+protobuf >=3.5.0.post1, <8
 msgpack >=0.5.0
 pyyaml
 packaging
