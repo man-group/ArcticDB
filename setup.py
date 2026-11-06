@@ -114,7 +114,7 @@ class CompileProto(Command):
     # The upper bound on "6" keeps the bundled protoc at major 6: grpcio-tools>=1.82 bundles a
     # protoc that emits protobuf-7 gencode while still accepting a protobuf 6.* runtime, which would
     # bake gencode 7.x into proto/6 and fail to load against a protobuf<7 runtime.
-    _PROTOBUF_TO_GRPC_VERSION = {"3": ">=1.46", "4": ">=1.49", "5": ">=1.68.1", "6": ">=1.73.0,<1.82"}
+    _PROTOBUF_TO_GRPC_VERSION = {"3": ">=1.46", "4": ">=1.49", "5": ">=1.68.1", "6": ">=1.73.0,<1.82", "7": ">=1.82"}
 
     description = '"protoc" generate code _pb2.py from .proto files'
     user_options = [
@@ -156,6 +156,9 @@ class CompileProto(Command):
                 print(f"Python protobuf {proto_ver} does not run on Python {python}. Skipping...")
             elif not ARCTICDB_USING_CONDA and python <= (3, 8) and proto_ver == "6":
                 # Python 3.8 is not compatible with protobuf 6
+                print(f"Python protobuf {proto_ver} does not run on Python {python}. Skipping...")
+            elif not ARCTICDB_USING_CONDA and python <= (3, 9) and proto_ver == "7":
+                # Python 3.9 is not compatible with protobuf 7
                 print(f"Python protobuf {proto_ver} does not run on Python {python}. Skipping...")
             else:
                 self._compile_one_version(proto_ver, os.path.join(output_dir, proto_ver))
@@ -205,9 +208,16 @@ class CompileProto(Command):
             # grpcio-tools is already installed in the conda environment (see environment.yml)
             env = {**os.environ}
 
+        include_args = ["-Icpp/proto"]
+        if ARCTICDB_USING_CONDA:
+            # conda-forge grpcio-tools>=1.82 does not ship the well-known protos (e.g. google/protobuf/any.proto)
+            # in grpc_tools/_proto, so take them from libprotobuf.
+            prefix_include = ("Library", "include") if sys.platform == "win32" else ("include",)
+            include_args.append("-I" + os.path.join(sys.prefix, *prefix_include))
+
         # Compile
         os.makedirs(version_output_dir, exist_ok=True)
-        cmd = [sys.executable, "-mgrpc_tools.protoc", "-Icpp/proto", "--python_out=" + version_output_dir]
+        cmd = [sys.executable, "-mgrpc_tools.protoc", *include_args, "--python_out=" + version_output_dir]
         _log_and_run(*cmd, *glob.glob(os.path.normpath("cpp/proto/arcticc/pb2/*.proto")), env=env)
 
         shutil.rmtree(pythonpath)

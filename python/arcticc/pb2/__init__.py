@@ -3,7 +3,7 @@ import sys as _sys
 import google.protobuf as _protobuf
 
 _proto_ver = _protobuf.__version__.split(".")[0]
-if _proto_ver in "3456":
+if _proto_ver in "34567":
 
     _python = _sys.version_info[:2]
     if _python >= (3, 11) and _proto_ver == "3":
@@ -31,6 +31,12 @@ if _proto_ver in "3456":
             "We recommend updating your environment to use the minimum supported version of Python.\n"
             "For more information, see: https://devguide.python.org/versions/#supported-versions"
         )
+    elif _python <= (3, 9) and _proto_ver >= "7":
+        raise RuntimeError(
+            "Your environment uses protobuf 7 which does not support Python<=3.9.\n"
+            "We recommend updating your environment to use the minimum supported version of Python.\n"
+            "For more information, see: https://devguide.python.org/versions/#supported-versions"
+        )
 
     # Use the namespace package (https://peps.python.org/pep-0420) feature to select the pb2 files matching the protobuf
     _protos_path = _os.path.abspath(
@@ -38,4 +44,4 @@ if _proto_ver in "3456":
     )
     __path__.append(_protos_path)
 else:
-    raise NotImplementedError(f"We only support protobuf versions 3, 4, 5 & 6. You have {_protobuf.__version__}")
+    raise NotImplementedError(f"We only support protobuf versions 3, 4, 5, 6 & 7. You have {_protobuf.__version__}")

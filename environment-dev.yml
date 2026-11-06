@@ -33,7 +33,7 @@ dependencies:
   - cyrus-sasl
   - aws-sdk-cpp >=1.11.833
   - prometheus-cpp
-  - libprotobuf <7
+  - libprotobuf <8
   - openssl
   # TODO: Understand failures with 8.17
   - libcurl >=8.18
@@ -78,7 +78,6 @@ dependencies:
   # Pinned to avoid test disruption (in phase with the pin in setup.cfg)
   # See: https://github.com/man-group/ArcticDB/pull/291
   - hypothesis <6.73
-  - pytest-sugar
   - pytest-timeout
   - azure-storage-blob
   - azure-identity
