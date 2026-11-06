@@ -1575,6 +1575,323 @@ TEST(VersionMap, DowntoCacheHitAfterFromTimeWithTombstoneAll) {
     ));
 }
 
+namespace {
+
+// Counts reads by key type and lets a test fail chosen reads and writes.
+class FaultInjectingStore : public InMemoryStore {
+  public:
+    using InMemoryStore::read_sync;
+    using InMemoryStore::write_sync;
+
+    std::pair<VariantKey, SegmentInMemory> read_sync(const VariantKey& key, storage::ReadKeyOpts opts) override {
+        const auto type = variant_key_type(key);
+        ++reads_[type];
+        if (fail_reads_[type] > 0) {
+            --fail_reads_[type];
+            throw StorageException(fmt::format("Injected read failure for {}", key));
+        }
+        return InMemoryStore::read_sync(key, opts);
+    }
+
+    entity::VariantKey write_sync(PartialKey pk, SegmentInMemory&& segment) override {
+        maybe_fail_write(pk.key_type);
+        return InMemoryStore::write_sync(pk, std::move(segment));
+    }
+
+    entity::VariantKey write_sync(KeyType key_type, const StreamId& stream_id, SegmentInMemory&& segment) override {
+        maybe_fail_write(key_type);
+        return InMemoryStore::write_sync(key_type, stream_id, std::move(segment));
+    }
+
+    size_t reads(KeyType type) { return reads_[type]; }
+    void reset_reads() { reads_.clear(); }
+    void fail_next_reads(KeyType type, size_t count) { fail_reads_[type] = count; }
+    void fail_next_writes(KeyType type, size_t count) { fail_writes_[type] = count; }
+
+  private:
+    void maybe_fail_write(KeyType type) {
+        if (fail_writes_[type] > 0) {
+            --fail_writes_[type];
+            throw StorageException(fmt::format("Injected write failure for {}", type));
+        }
+    }
+
+    std::map<KeyType, size_t> reads_;
+    std::map<KeyType, size_t> fail_reads_;
+    std::map<KeyType, size_t> fail_writes_;
+};
+
+const LoadStrategy LOAD_ALL{LoadType::ALL, LoadObjective::INCLUDE_DELETED};
+
+void write_n_versions(
+        const std::shared_ptr<Store>& store, const std::shared_ptr<VersionMap>& version_map, const StreamId& id,
+        VersionId from, VersionId to
+) {
+    for (auto v = from; v < to; ++v) {
+        version_map->write_version(
+                store, atom_key_with_version(id, v, PilotedClock::nanos_since_epoch()), std::nullopt
+        );
+    }
+}
+
+// What a client with no cache would see: index and tombstone keys plus the tombstone state of every version.
+std::vector<std::string> describe(const VersionMapEntry& entry) {
+    std::vector<std::string> out;
+    for (const auto& key : entry.keys_) {
+        if (is_index_key_type(key.type()))
+            out.push_back(fmt::format("{}:{}:{}", key.type(), key.version_id(), entry.is_tombstoned(key)));
+        else if (is_tombstone_key_type(key.type()))
+            out.push_back(fmt::format("{}:{}", key.type(), key.version_id()));
+    }
+    return out;
+}
+
+std::vector<AtomKeyPacked> version_keys(const VersionMapEntry& entry) {
+    std::vector<AtomKeyPacked> out;
+    std::copy_if(entry.keys_.begin(), entry.keys_.end(), std::back_inserter(out), [](const auto& k) {
+        return k.type() == KeyType::VERSION;
+    });
+    return out;
+}
+
+std::vector<std::string> describe_storage(const std::shared_ptr<Store>& store, const StreamId& id) {
+    auto fresh = std::make_shared<VersionMap>();
+    return describe(*fresh->check_reload(store, id, LOAD_ALL, __FUNCTION__));
+}
+
+} // namespace
+
+TEST(VersionMapRevalidation, StaleEntryWithUnchangedHeadReadsOnlyRef) {
+    ScopedConfig fresh("VersionMap.ReloadInterval", std::numeric_limits<int64_t>::max());
+    auto store = std::make_shared<FaultInjectingStore>();
+    StreamId id{"test"};
+    auto version_map = std::make_shared<VersionMap>();
+    write_n_versions(store, version_map, id, 0, 6);
+    version_map->write_tombstones(
+            store, {atom_key_with_version(id, 4, 0)}, id, version_map->check_reload(store, id, LOAD_ALL, __FUNCTION__)
+    );
+    version_map->check_reload(store, id, LOAD_ALL, __FUNCTION__);
+    const auto expected = describe_storage(store, id);
+
+    ScopedConfig stale("VersionMap.ReloadInterval", 0);
+    for (const auto& strategy :
+         {LOAD_ALL,
+          LoadStrategy{LoadType::ALL, LoadObjective::UNDELETED_ONLY},
+          LoadStrategy{LoadType::LATEST, LoadObjective::UNDELETED_ONLY},
+          LoadStrategy{LoadType::LATEST, LoadObjective::INCLUDE_DELETED},
+          LoadStrategy{LoadType::DOWNTO, LoadObjective::UNDELETED_ONLY, static_cast<SignedVersionId>(-3)},
+          LoadStrategy{LoadType::DOWNTO, LoadObjective::INCLUDE_DELETED, static_cast<SignedVersionId>(1)},
+          LoadStrategy{LoadType::FROM_TIME, LoadObjective::UNDELETED_ONLY, static_cast<timestamp>(0)}}) {
+        store->reset_reads();
+        auto entry = version_map->check_reload(store, id, strategy, __FUNCTION__);
+        ASSERT_EQ(store->reads(KeyType::VERSION_REF), 1);
+        ASSERT_EQ(store->reads(KeyType::VERSION), 0);
+        ASSERT_EQ(describe(*entry), expected);
+    }
+}
+
+TEST(VersionMapRevalidation, UncoveredLoadReloadsChain) {
+    auto store = std::make_shared<FaultInjectingStore>();
+    StreamId id{"test"};
+    write_n_versions(store, std::make_shared<VersionMap>(), id, 0, 5);
+    auto version_map = std::make_shared<VersionMap>();
+    version_map->check_reload(store, id, LoadStrategy{LoadType::LATEST, LoadObjective::INCLUDE_DELETED}, __FUNCTION__);
+
+    ScopedConfig stale("VersionMap.ReloadInterval", 0);
+    store->reset_reads();
+    auto entry = version_map->check_reload(store, id, LOAD_ALL, __FUNCTION__);
+    ASSERT_EQ(store->reads(KeyType::VERSION_REF), 1);
+    ASSERT_EQ(store->reads(KeyType::VERSION), 5);
+    ASSERT_EQ(entry->get_indexes(true).size(), 5);
+}
+
+TEST(VersionMapRevalidation, MovedHeadReadsRefOnce) {
+    auto store = std::make_shared<FaultInjectingStore>();
+    StreamId id{"test"};
+    auto writer = std::make_shared<VersionMap>();
+    write_n_versions(store, writer, id, 0, 3);
+    auto version_map = std::make_shared<VersionMap>();
+    version_map->check_reload(store, id, LOAD_ALL, __FUNCTION__);
+    write_n_versions(store, writer, id, 3, 4);
+
+    ScopedConfig stale("VersionMap.ReloadInterval", 0);
+    store->reset_reads();
+    auto entry = version_map->check_reload(store, id, LOAD_ALL, __FUNCTION__);
+    ASSERT_EQ(store->reads(KeyType::VERSION_REF), 1);
+    ASSERT_EQ(store->reads(KeyType::VERSION), 4);
+    ASSERT_EQ(describe(*entry), describe_storage(store, id));
+}
+
+TEST(VersionMapRevalidation, KillSwitchRestoresFullReload) {
+    auto store = std::make_shared<FaultInjectingStore>();
+    StreamId id{"test"};
+    auto version_map = std::make_shared<VersionMap>();
+    write_n_versions(store, version_map, id, 0, 3);
+    version_map->check_reload(store, id, LOAD_ALL, __FUNCTION__);
+
+    ScopedConfig stale("VersionMap.ReloadInterval", 0);
+    ScopedConfig off("VersionMap.RevalidateStaleCache", 0);
+    store->reset_reads();
+    version_map->check_reload(store, id, LOAD_ALL, __FUNCTION__);
+    ASSERT_EQ(store->reads(KeyType::VERSION_REF), 1);
+    ASSERT_EQ(store->reads(KeyType::VERSION), 3);
+}
+
+TEST(VersionMapRevalidation, TransientRefReadFailureIsRetried) {
+    auto store = std::make_shared<FaultInjectingStore>();
+    StreamId id{"test"};
+    auto version_map = std::make_shared<VersionMap>();
+    write_n_versions(store, version_map, id, 0, 3);
+    version_map->check_reload(store, id, LOAD_ALL, __FUNCTION__);
+
+    ScopedConfig stale("VersionMap.ReloadInterval", 0);
+    store->fail_next_reads(KeyType::VERSION_REF, 1);
+    auto entry = version_map->check_reload(store, id, LOAD_ALL, __FUNCTION__);
+    ASSERT_EQ(describe(*entry), describe_storage(store, id));
+}
+
+TEST(VersionMapRevalidation, FailedMutationLeavesNoPhantomState) {
+    StreamId id{"test"};
+    using Mutation =
+            std::function<void(const std::shared_ptr<FaultInjectingStore>&, const std::shared_ptr<VersionMap>&)>;
+    const std::vector<std::pair<std::string, Mutation>> mutations{
+            {"non_increasing_write",
+             [&](const auto& store, const auto& version_map) {
+                 // do_write has already put the old head into keys_ when it raises
+                 version_map->write_version(
+                         store, atom_key_with_version(id, 2, PilotedClock::nanos_since_epoch()), std::nullopt
+                 );
+             }},
+            {"write_and_prune_previous_version_write_fails",
+             [&](const auto& store, const auto& version_map) {
+                 // the tombstone_all is set in memory before the VERSION key write
+                 store->fail_next_writes(KeyType::VERSION, 1);
+                 version_map->write_and_prune_previous(
+                         store, atom_key_with_version(id, 6, PilotedClock::nanos_since_epoch()), std::nullopt
+                 );
+             }},
+            {"tombstone_all_ref_write_fails",
+             [&](const auto& store, const auto& version_map) {
+                 store->fail_next_writes(KeyType::VERSION_REF, 1);
+                 version_map->tombstone_from_key_or_all(store, id);
+             }},
+            {"write_tombstones_version_write_fails",
+             [&](const auto& store, const auto& version_map) {
+                 store->fail_next_writes(KeyType::VERSION, 1);
+                 version_map->write_tombstones(
+                         store,
+                         {atom_key_with_version(id, 3, 0)},
+                         id,
+                         version_map->check_reload(store, id, LOAD_ALL, __FUNCTION__)
+                 );
+             }},
+    };
+    for (const auto& [name, mutation] : mutations) {
+        SCOPED_TRACE(name);
+        auto store = std::make_shared<FaultInjectingStore>();
+        auto version_map = std::make_shared<VersionMap>();
+        {
+            ScopedConfig fresh("VersionMap.ReloadInterval", std::numeric_limits<int64_t>::max());
+            write_n_versions(store, version_map, id, 0, 6);
+            version_map->check_reload(store, id, LOAD_ALL, __FUNCTION__);
+            ASSERT_ANY_THROW(mutation(store, version_map));
+        }
+
+        ScopedConfig stale("VersionMap.ReloadInterval", 0);
+        auto entry = version_map->check_reload(store, id, LOAD_ALL, __FUNCTION__);
+        auto from_storage = std::make_shared<VersionMap>()->check_reload(store, id, LOAD_ALL, __FUNCTION__);
+        EXPECT_EQ(describe(*entry), describe(*from_storage));
+        EXPECT_EQ(entry->head_, from_storage->head_);
+        EXPECT_EQ(version_keys(*entry), version_keys(*from_storage));
+        EXPECT_EQ(entry->get_indexes(false).size(), 6);
+
+        EXPECT_NO_THROW(version_map->compact(store, id));
+        EXPECT_EQ(describe_storage(store, id), describe(*from_storage));
+    }
+}
+
+TEST(VersionMapRevalidation, CompactionByAnotherClient) {
+    auto store = std::make_shared<FaultInjectingStore>();
+    StreamId id{"test"};
+    auto client_a = std::make_shared<VersionMap>();
+    write_n_versions(store, client_a, id, 0, 8);
+    auto client_b = std::make_shared<VersionMap>();
+    client_b->check_reload(store, id, LOAD_ALL, __FUNCTION__);
+    client_a->compact(store, id);
+
+    ScopedConfig stale("VersionMap.ReloadInterval", 0);
+    ASSERT_EQ(describe(*client_b->check_reload(store, id, LOAD_ALL, __FUNCTION__)), describe_storage(store, id));
+    ASSERT_NO_THROW(client_b->compact(store, id));
+    write_n_versions(store, client_b, id, 8, 14);
+    ASSERT_NO_THROW(client_b->compact(store, id));
+    auto expected = describe_storage(store, id);
+    ASSERT_EQ(expected.size(), 14);
+    ASSERT_EQ(describe(*client_b->check_reload(store, id, LOAD_ALL, __FUNCTION__)), expected);
+}
+
+TEST(VersionMapRevalidation, CompactionByAnotherClientThenWriteThenCompact) {
+    auto store = std::make_shared<FaultInjectingStore>();
+    StreamId id{"test"};
+    auto client_a = std::make_shared<VersionMap>();
+    write_n_versions(store, client_a, id, 0, 8);
+    auto client_b = std::make_shared<VersionMap>();
+    client_b->check_reload(store, id, LOAD_ALL, __FUNCTION__);
+    client_a->compact(store, id);
+
+    ScopedConfig stale("VersionMap.ReloadInterval", 0);
+    write_n_versions(store, client_b, id, 8, 9);
+    ASSERT_NO_THROW(client_b->compact(store, id));
+    ASSERT_EQ(describe_storage(store, id).size(), 9);
+}
+
+TEST(VersionMapRevalidation, CompactAndRemoveDeletedIndexesAfterAnotherClientCompacted) {
+    auto store = std::make_shared<FaultInjectingStore>();
+    StreamId id{"test"};
+    auto client_a = std::make_shared<VersionMap>();
+    write_n_versions(store, client_a, id, 0, 8);
+    auto client_b = std::make_shared<VersionMap>();
+    client_b->check_reload(store, id, LOAD_ALL, __FUNCTION__);
+    client_a->compact(store, id);
+
+    ScopedConfig stale("VersionMap.ReloadInterval", 0);
+    ASSERT_NO_THROW(client_b->compact_and_remove_deleted_indexes(store, id));
+    ASSERT_EQ(describe_storage(store, id).size(), 8);
+}
+
+TEST(VersionMapRevalidation, OverwriteSymbolTreeAfterAnotherClientCompacted) {
+    auto store = std::make_shared<FaultInjectingStore>();
+    StreamId id{"test"};
+    auto client_a = std::make_shared<VersionMap>();
+    write_n_versions(store, client_a, id, 0, 8);
+    auto client_b = std::make_shared<VersionMap>();
+    auto indexes = client_b->check_reload(store, id, LOAD_ALL, __FUNCTION__)->get_indexes(true);
+    client_a->compact(store, id);
+
+    ScopedConfig stale("VersionMap.ReloadInterval", 0);
+    client_b->overwrite_symbol_tree(store, id, indexes);
+    size_t version_keys = 0;
+    store->iterate_type(KeyType::VERSION, [&](VariantKey&&) { ++version_keys; });
+    ASSERT_EQ(version_keys, 1);
+    ASSERT_EQ(describe_storage(store, id).size(), 8);
+}
+
+TEST(VersionMapRevalidation, OverwriteSymbolTreeWithNoIndexesRemovesSymbol) {
+    ScopedConfig fresh("VersionMap.ReloadInterval", std::numeric_limits<int64_t>::max());
+    auto store = std::make_shared<FaultInjectingStore>();
+    StreamId id{"test"};
+    auto client_a = std::make_shared<VersionMap>();
+    write_n_versions(store, client_a, id, 0, 3);
+    auto client_b = std::make_shared<VersionMap>();
+    client_b->check_reload(store, id, LOAD_ALL, __FUNCTION__);
+
+    client_a->overwrite_symbol_tree(store, id, {});
+    ASSERT_TRUE(client_a->check_reload(store, id, LOAD_ALL, __FUNCTION__)->empty());
+
+    ScopedConfig stale("VersionMap.ReloadInterval", 0);
+    ASSERT_TRUE(client_b->check_reload(store, id, LOAD_ALL, __FUNCTION__)->empty());
+    ASSERT_TRUE(describe_storage(store, id).empty());
+}
+
 #define GTEST_COUT std::cerr << "[          ] [ INFO ]"
 
 TEST_F(VersionMapStore, StressTestWrite) {
