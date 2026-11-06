@@ -10,6 +10,7 @@ from functools import partial
 import numpy as np
 import pandas as pd
 import datetime as dt
+import pickle
 import pytest
 
 from arcticdb import QueryBuilder
@@ -544,6 +545,35 @@ def test_resample_rejects_unsupported_frequency_strings(freq):
     if IS_PANDAS_TWO:
         with pytest.raises(ArcticDbNotYetImplemented):
             QueryBuilder().resample(freq + "1h")
+
+
+@pytest.mark.parametrize("freq", ("0s", "0h", "-1h", "-1D", "-2h30min"))
+def test_resample_rejects_non_positive_frequency_strings(freq):
+    # A non-positive frequency would make bucket-boundary generation non-terminating
+    with pytest.raises(ArcticDbNotYetImplemented):
+        QueryBuilder().resample(freq)
+
+
+def test_resampling_pickled_query_builder(lmdb_version_store_v1, any_output_format):
+    lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    sym = "test_resampling_pickled_query_builder"
+    idx = pd.date_range(pd.Timestamp("2024-01-02"), pd.Timestamp("2024-01-03"), freq="min")
+    df = pd.DataFrame({"col": np.arange(len(idx), dtype=np.int64)}, index=idx)
+    lib.write(sym, df)
+
+    q = QueryBuilder().resample("1h30min").agg({"col": "sum"})
+    expected = lib.read(sym, query_builder=q).data
+    received = lib.read(sym, query_builder=pickle.loads(pickle.dumps(q))).data
+    assert_frame_equal(expected, received)
+
+    # A QueryBuilder pickled by an older version carries no rule_ns on its resample clause: the rule string must be
+    # enough to rebuild the native clause on load
+    del q._python_clauses[0].rule_ns
+    old_pickle = pickle.loads(pickle.dumps(q))
+    assert old_pickle._python_clauses[0].rule_ns == pd.Timedelta("1h30min").value
+    received = lib.read(sym, query_builder=old_pickle).data
+    assert_frame_equal(expected, received)
 
 
 def test_resampling_unsupported_aggregation_type_combos(lmdb_version_store_v1, any_output_format):
