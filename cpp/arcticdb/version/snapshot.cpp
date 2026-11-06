@@ -59,31 +59,39 @@ void write_snapshot_entry(
     }
 }
 
-void tombstone_snapshot(
-        const std::shared_ptr<StreamSink>& store, const RefKey& key, SegmentInMemory&& segment_in_memory,
-        bool log_changes
+void write_snapshot_tombstone(
+        const std::shared_ptr<StreamSink>& store, const RefKey& key, SegmentInMemory&& segment_in_memory
 ) {
-    store->remove_key_sync(key); // Make the snapshot "disappear" to normal APIs
-    if (log_changes) {
-        log_delete_snapshot(store, key.id());
-    }
     // Append a timestamp to the ID so that other snapshot(s) can reuse the same snapshot name before the cleanup job:
     std::string new_key = fmt::format("{}@{:x}", key, util::SysClock::coarse_nanos_since_epoch() / 1'000'000);
     store->write(KeyType::SNAPSHOT_TOMBSTONE, new_key, std::move(segment_in_memory)).get();
 }
 
 void tombstone_snapshot(
+        const std::shared_ptr<StreamSink>& store, const RefKey& key, SegmentInMemory&& segment_in_memory,
+        bool log_changes
+) {
+    // Tombstone first, so the contents never leave storage
+    write_snapshot_tombstone(store, key, std::move(segment_in_memory));
+    store->remove_key_sync(key); // Make the snapshot "disappear" to normal APIs
+    if (log_changes) {
+        log_delete_snapshot(store, key.id());
+    }
+}
+
+void tombstone_snapshot(
         const std::shared_ptr<StreamSink>& store, storage::KeySegmentPair& key_segment_pair, bool log_changes
 ) {
-    store->remove_key(key_segment_pair.ref_key()).get(); // Make the snapshot "disappear" to normal APIs
-    if (log_changes) {
-        log_delete_snapshot(store, key_segment_pair.ref_key().id());
-    }
+    const RefKey ref_key = key_segment_pair.ref_key();
     // Append a timestamp to the ID so that other snapshot(s) can reuse the same snapshot name before the cleanup job:
-    std::string new_key =
-            fmt::format("{}@{:x}", key_segment_pair.ref_key(), util::SysClock::coarse_nanos_since_epoch() / 1'000'000);
+    std::string new_key = fmt::format("{}@{:x}", ref_key, util::SysClock::coarse_nanos_since_epoch() / 1'000'000);
     key_segment_pair.set_key(RefKey(std::move(new_key), KeyType::SNAPSHOT_TOMBSTONE));
+    // Tombstone first, so the contents never leave storage
     store->write_compressed(std::move(key_segment_pair)).get();
+    store->remove_key(ref_key).get(); // Make the snapshot "disappear" to normal APIs
+    if (log_changes) {
+        log_delete_snapshot(store, ref_key.id());
+    }
 }
 
 void iterate_snapshots(const std::shared_ptr<Store>& store, folly::Function<void(entity::VariantKey&)> visitor) {
