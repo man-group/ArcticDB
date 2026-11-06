@@ -54,3 +54,12 @@
   because `SCCACHE_BUCKET` was set while the AWS secrets were empty. `sccache_config.sh` addresses exactly this.
 - Rebased onto `origin/master` (clean, no conflicts) and re-ran validation: 193 CI-script tests pass, Python lint clean,
   actionlint 180 findings vs 195 on master, shellcheck adds nothing new beyond pre-existing warnings.
+
+## 2026-11-06 — review fixes
+
+- `VCPKG_BINARY_CACHE_MODE` keyed off `secrets.VCPKG_NUGET_TOKEN`, which the repo doesn't define (trusted runs use
+  the `GITHUB_TOKEN` fallback), so the NuGet cache was off everywhere. Now selected by trust: `readwrite` for pushes and
+  same-repo PRs, `read` for forks (a denied feed already falls back to source builds).
+- Restored `packages: write` on every `build_steps.yml` caller; GitHub caps it to read for fork PRs.
+  `persistent_storage.yml` callers stay on `packages: read` since they never touch the feed.
+- Regression tests: trusted runs without the NuGet secret get `readwrite`; `build_steps.yml` callers keep `packages: write`.

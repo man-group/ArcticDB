@@ -305,7 +305,7 @@ jobs:
     name: Linux C++ Tests
     uses: ./.github/workflows/build_steps.yml
     secrets: inherit
-    permissions: {contents: read, packages: read}
+    permissions: {contents: read, packages: write}
     with:
       job_type: cpp-tests
       cmake_preset_type: ${{needs.common_config.outputs.cmake_preset_type_resolved}}
@@ -338,7 +338,7 @@ jobs:
     name: 3.${{matrix.python3}} Linux
     uses: ./.github/workflows/build_steps.yml
     secrets: inherit
-    permissions: {contents: read, packages: read}
+    permissions: {contents: read, packages: write}
     with:
       job_type: build-python-wheels
       python3: ${{matrix.python3}}
@@ -364,7 +364,7 @@ jobs:
     name: Windows C++ Tests
     uses: ./.github/workflows/build_steps.yml
     secrets: inherit
-    permissions: {contents: read, packages: read}
+    permissions: {contents: read, packages: write}
     with:
       job_type: cpp-tests
       cmake_preset_type: ${{needs.common_config.outputs.cmake_preset_type_resolved}}
@@ -375,7 +375,7 @@ jobs:
     name: macOS C++ Tests
     uses: ./.github/workflows/build_steps.yml
     secrets: inherit
-    permissions: {contents: read, packages: read}
+    permissions: {contents: read, packages: write}
     with:
       job_type: cpp-tests
       cmake_preset_type: ${{needs.common_config.outputs.cmake_preset_type_resolved}}
@@ -401,7 +401,7 @@ jobs:
     name: 3.${{matrix.python3}} Windows
     uses: ./.github/workflows/build_steps.yml
     secrets: inherit
-    permissions: {contents: read, packages: read}
+    permissions: {contents: read, packages: write}
     with:
       job_type: build-python-wheels
       python3: ${{matrix.python3}}
@@ -489,7 +489,7 @@ jobs:
     name: 3.${{matrix.python3}} macOS
     uses: ./.github/workflows/build_steps.yml
     secrets: inherit
-    permissions: {contents: read, packages: read}
+    permissions: {contents: read, packages: write}
     with:
       job_type: build-python-wheels
       python3: ${{matrix.python3}}

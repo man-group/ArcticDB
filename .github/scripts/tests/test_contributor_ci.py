@@ -72,6 +72,13 @@ def test_reusable_builds_keep_checkout_permissions(name):
                 assert levels[permissions.get(scope, "none")] >= levels[permission], (job_name, scope)
 
 
+@pytest.mark.parametrize("name", ["build.yml", "analysis_workflow.yml"])
+def test_build_steps_callers_can_publish_vcpkg_cache(name):
+    for job_name, job in workflow(name)["jobs"].items():
+        if job.get("uses", "").endswith("/build_steps.yml"):
+            assert job.get("permissions", {}).get("packages") == "write", job_name
+
+
 @pytest.mark.parametrize(
     "event,fork",
     [
@@ -215,7 +222,7 @@ def test_optional_nuget_download_failure_is_a_cache_miss(cache_environment):
 def test_compilers_select_backend_before_sccache_starts(name, job_name, aws):
     context = event_context("pull_request", fork=not aws)
     if aws:
-        context["secrets"] = {"AWS_S3_ACCESS_KEY": "key", "AWS_S3_SECRET_KEY": "secret", "VCPKG_NUGET_TOKEN": "token"}
+        context["secrets"] = {"AWS_S3_ACCESS_KEY": "key", "AWS_S3_SECRET_KEY": "secret"}
     context["vars"] = {}
     job = workflow(name)["jobs"][job_name]
     env = job["env"]
@@ -226,7 +233,8 @@ def test_compilers_select_backend_before_sccache_starts(name, job_name, aws):
         i for i, step in enumerate(job["steps"]) if step.get("uses", "").startswith("mozilla-actions/sccache-action@")
     )
     assert backend_step < start_step
-    assert condition(env.get("VCPKG_BINARY_CACHE_MODE", "''"), context) == ("readwrite" if aws else "off")
+    # Trusted runs publish with GITHUB_TOKEN; the repo has no VCPKG_NUGET_TOKEN secret.
+    assert condition(env.get("VCPKG_BINARY_CACHE_MODE", "''"), context) == ("readwrite" if aws else "read")
     if name == "build_steps.yml":
         assert "SCCACHE_GHA_ENABLED" in env["CIBW_ENVIRONMENT_PASS_LINUX"].split()
         assert "ACTIONS_CACHE_SERVICE_V2" in env["CIBW_ENVIRONMENT_PASS_LINUX"].split()
