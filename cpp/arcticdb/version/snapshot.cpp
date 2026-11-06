@@ -86,9 +86,9 @@ void tombstone_snapshot(
     store->write_compressed(std::move(key_segment_pair)).get();
 }
 
-void iterate_snapshots(const std::shared_ptr<Store>& store, folly::Function<void(entity::VariantKey&)> visitor) {
-    ARCTICDB_SAMPLE(IterateSnapshots, 0)
+namespace {
 
+std::vector<VariantKey> list_snapshot_keys(const std::shared_ptr<Store>& store) {
     std::vector<VariantKey> snap_variant_keys;
     std::unordered_set<SnapshotId> seen;
 
@@ -109,7 +109,94 @@ void iterate_snapshots(const std::shared_ptr<Store>& store, folly::Function<void
             snap_variant_keys.emplace_back(key);
         }
     });
+    return snap_variant_keys;
+}
 
+// True if the exception only reports that snapshot_key is missing, i.e. the snapshot was deleted since listing
+bool only_snapshot_is_missing(storage::KeyNotFoundException& e, const VariantKey& snapshot_key) {
+    return e.has_keys() && std::all_of(e.keys().begin(), e.keys().end(), [&snapshot_key](const VariantKey& key) {
+               return key == snapshot_key;
+           });
+}
+
+/**
+ * Reads each snapshot and applies process(snapshot_key, snapshot_segment) to it. Snapshots deleted since they were
+ * listed give std::nullopt. The reads are parallel unless on an IO thread, where blocking on the IO pool could
+ * deadlock, so process may run on IO threads and must be thread safe.
+ */
+template<typename Processor>
+auto process_snapshots(
+        const std::shared_ptr<Store>& store, const std::vector<VariantKey>& snapshot_keys, const Processor& process
+) {
+    using Result = std::invoke_result_t<const Processor&, const VariantKey&, const SegmentInMemory&>;
+    std::vector<folly::Try<Result>> tries;
+    tries.reserve(snapshot_keys.size());
+    if (!async::is_io_pool_thread()) {
+        const auto window_size = async::TaskScheduler::instance()->io_thread_count();
+        auto futures = folly::window(
+                snapshot_keys,
+                [store, &process](const VariantKey& snapshot_key) {
+                    return store->read(snapshot_key).thenValueInline([&process](auto&& key_seg) {
+                        return process(key_seg.first, key_seg.second);
+                    });
+                },
+                window_size
+        );
+        tries = folly::collectAll(futures).get();
+    } else {
+        for (const auto& snapshot_key : snapshot_keys) {
+            tries.emplace_back(folly::makeTryWith([&store, &process, &snapshot_key]() {
+                auto [key, segment] = store->read_sync(snapshot_key);
+                return process(key, segment);
+            }));
+        }
+    }
+
+    std::vector<std::optional<Result>> results;
+    results.reserve(tries.size());
+    for (size_t i = 0; i < tries.size(); ++i) {
+        try {
+            results.emplace_back(std::move(tries[i]).value());
+        } catch (storage::KeyNotFoundException& e) {
+            if (!only_snapshot_is_missing(e, snapshot_keys[i])) {
+                throw;
+            }
+            ARCTICDB_DEBUG(log::version(), "Ignored snapshot {} deleted since listing", snapshot_keys[i]);
+            results.emplace_back(std::nullopt);
+        }
+    }
+    return results;
+}
+
+/**
+ * The index keys in the snapshot segment, only those of stream_ids if given. Always a full scan: missing a key here can
+ * delete data a snapshot needs, so this does not rely on ref key snapshots being sorted by stream id.
+ */
+std::vector<AtomKey> index_keys_in_snapshot_segment(
+        const SegmentInMemory& seg, const std::unordered_set<StreamId>* stream_ids
+) {
+    std::vector<AtomKey> res;
+    const auto row_count = seg.row_count();
+    if (!stream_ids) {
+        res.reserve(row_count);
+    } else if (stream_ids->empty()) {
+        return res;
+    }
+    for (size_t idx = 0; idx < row_count; ++idx) {
+        if (!stream_ids ||
+            stream_ids->contains(stream_id_from_segment<pipelines::index::Fields>(seg, static_cast<ssize_t>(idx)))) {
+            res.emplace_back(read_key_row(seg, static_cast<ssize_t>(idx)));
+        }
+    }
+    return res;
+}
+
+} // namespace
+
+void iterate_snapshots(const std::shared_ptr<Store>& store, folly::Function<void(entity::VariantKey&)> visitor) {
+    ARCTICDB_SAMPLE(IterateSnapshots, 0)
+
+    auto snap_variant_keys = list_snapshot_keys(store);
     for (auto& vk : snap_variant_keys) {
         try {
             visitor(vk);
@@ -161,33 +248,24 @@ std::unordered_set<entity::AtomKey> get_index_keys_in_snapshots(
 ) {
     ARCTICDB_SAMPLE(GetIndexKeysInSnapshot, 0)
 
+    const std::unordered_set<StreamId> stream_ids{stream_id};
+    const auto snapshot_keys = list_snapshot_keys(store);
+    auto results = process_snapshots(
+            store,
+            snapshot_keys,
+            [&stream_ids](const VariantKey&, const SegmentInMemory& snapshot_segment) {
+                return index_keys_in_snapshot_segment(snapshot_segment, &stream_ids);
+            }
+    );
+
     std::unordered_set<entity::AtomKey> index_keys_in_snapshots{};
-
-    iterate_snapshots(store, [&index_keys_in_snapshots, &store, &stream_id](const VariantKey& vk) {
-        ARCTICDB_DEBUG(log::snapshot(), "Reading snapshot {}", vk);
-        bool snapshot_using_ref = variant_key_type(vk) == KeyType::SNAPSHOT_REF;
-        SegmentInMemory snapshot_segment = store->read_sync(vk).second;
-        if (snapshot_segment.row_count() == 0) {
-            // Snapshot has no rows, just skip this.
-            ARCTICDB_DEBUG(
-                    log::version(),
-                    "Snapshot: {} does not have index keys (searching for symbol: {}), skipping.",
-                    variant_key_id(vk),
-                    stream_id
+    for (auto& keys : results) {
+        if (keys) {
+            index_keys_in_snapshots.insert(
+                    std::make_move_iterator(keys->begin()), std::make_move_iterator(keys->end())
             );
-            return;
         }
-        auto opt_idx_for_stream_id =
-                row_id_for_stream_in_snapshot_segment(snapshot_segment, snapshot_using_ref, stream_id);
-        if (opt_idx_for_stream_id) {
-            ARCTICDB_DEBUG(log::snapshot(), "Found index key for {} at {}", stream_id, *opt_idx_for_stream_id);
-            auto stream_idx = *opt_idx_for_stream_id;
-            index_keys_in_snapshots.emplace(read_key_row(snapshot_segment, static_cast<ssize_t>(stream_idx)));
-        } else {
-            ARCTICDB_DEBUG(log::snapshot(), "Failed to find index key for {}", stream_id);
-        }
-    });
-
+    }
     return index_keys_in_snapshots;
 }
 
@@ -395,18 +473,27 @@ SnapshotMap get_versions_from_snapshots(const std::shared_ptr<Store>& store, con
 MasterSnapshotMapWithStats get_master_snapshots_map_with_stats(
         std::shared_ptr<Store> store, const std::optional<std::unordered_set<StreamId>>& stream_ids
 ) {
+    const auto snapshot_keys = list_snapshot_keys(store);
+    const auto* wanted = stream_ids ? &*stream_ids : nullptr;
+    auto results = process_snapshots(
+            store,
+            snapshot_keys,
+            [wanted](const VariantKey&, const SegmentInMemory& snapshot_segment) {
+                return index_keys_in_snapshot_segment(snapshot_segment, wanted);
+            }
+    );
+
     MasterSnapshotMapWithStats out;
-    iterate_snapshots(store, [&out, &store, &stream_ids](const VariantKey& sk) {
-        ++out.total_snapshots;
-        auto snapshot_id = variant_key_id(sk);
-        auto snapshot_segment = store->read_sync(sk).second;
-        for (size_t idx = 0; idx < snapshot_segment.row_count(); idx++) {
-            auto stream_index = read_key_row(snapshot_segment, static_cast<ssize_t>(idx));
-            if (!stream_ids || stream_ids->contains(stream_index.id())) {
-                out.map[stream_index.id()][stream_index].insert(snapshot_id);
+    out.total_snapshots = snapshot_keys.size();
+    for (size_t i = 0; i < results.size(); ++i) {
+        if (results[i]) {
+            const auto snapshot_id = variant_key_id(snapshot_keys[i]);
+            for (auto& key : *results[i]) {
+                auto& snapshot_ids = out.map[key.id()][key];
+                snapshot_ids.insert(snapshot_id);
             }
         }
-    });
+    }
     return out;
 }
 
@@ -419,18 +506,58 @@ MasterSnapshotMap get_master_snapshots_map(
 MasterSnapshotMapAndKeys get_master_snapshots_map_and_keys_in_given_snapshot(
         std::shared_ptr<Store> store, const SnapshotVariantKey& given_snapshot
 ) {
+    const auto snapshot_keys = list_snapshot_keys(store);
+    auto results =
+            process_snapshots(store, snapshot_keys, [](const VariantKey&, const SegmentInMemory& snapshot_segment) {
+                return index_keys_in_snapshot_segment(snapshot_segment, nullptr);
+            });
+
     MasterSnapshotMapAndKeys out;
-    iterate_snapshots(store, [&given_snapshot, &out, &store](const VariantKey& sk) {
-        auto snapshot_id = variant_key_id(sk);
-        auto snapshot_segment = store->read_sync(sk).second;
-        for (size_t idx = 0; idx < snapshot_segment.row_count(); idx++) {
-            auto stream_index = read_key_row(snapshot_segment, static_cast<ssize_t>(idx));
-            out.map[stream_index.id()][stream_index].insert(snapshot_id);
-            if (given_snapshot == sk) {
-                out.index_keys_in_given_snapshot.push_back(stream_index);
+    for (size_t i = 0; i < results.size(); ++i) {
+        if (results[i]) {
+            const auto snapshot_id = variant_key_id(snapshot_keys[i]);
+            const bool is_given_snapshot = given_snapshot == snapshot_keys[i];
+            for (auto& key : *results[i]) {
+                out.map[key.id()][key].insert(snapshot_id);
+                if (is_given_snapshot) {
+                    out.index_keys_in_given_snapshot.push_back(key);
+                }
             }
         }
-    });
+    }
+    return out;
+}
+
+SnapshottedIndexKeys get_snapshotted_index_keys(
+        const std::shared_ptr<Store>& store, const std::unordered_set<StreamId>& stream_ids,
+        const std::optional<SnapshotId>& snapshot_to_ignore
+) {
+    ARCTICDB_SAMPLE(GetSnapshottedIndexKeys, 0)
+    SnapshottedIndexKeys out;
+    if (stream_ids.empty()) {
+        return out;
+    }
+    auto snapshot_keys = list_snapshot_keys(store);
+    if (snapshot_to_ignore) {
+        std::erase_if(snapshot_keys, [&snapshot_to_ignore](const VariantKey& snapshot_key) {
+            return variant_key_id(snapshot_key) == *snapshot_to_ignore;
+        });
+    }
+    auto results = process_snapshots(
+            store,
+            snapshot_keys,
+            [&stream_ids](const VariantKey&, const SegmentInMemory& snapshot_segment) {
+                return index_keys_in_snapshot_segment(snapshot_segment, &stream_ids);
+            }
+    );
+    for (auto& keys : results) {
+        if (keys) {
+            for (auto& key : *keys) {
+                auto& symbol_keys = out[key.id()];
+                symbol_keys.insert(std::move(key));
+            }
+        }
+    }
     return out;
 }
 
