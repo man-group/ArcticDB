@@ -39,7 +39,8 @@ std::optional<size_t> row_id_for_stream_in_snapshot_segment(
         const std::optional<VersionId> version_id = std::nullopt
 );
 
-// Get a set of the index keys of a particular symbol that exist in any snapshot
+// Get a set of the index keys of a particular symbol that exist in any snapshot. Like the other functions here that
+// read every snapshot, it reads them in parallel, or one at a time when called on an IO thread.
 std::unordered_set<entity::AtomKey> get_index_keys_in_snapshots(
         const std::shared_ptr<Store>& store, const StreamId& stream_id
 );
@@ -132,5 +133,18 @@ MasterSnapshotMap get_master_snapshots_map(
  */
 MasterSnapshotMapAndKeys get_master_snapshots_map_and_keys_in_given_snapshot(
         std::shared_ptr<Store> store, const SnapshotVariantKey& given_snapshot
+);
+
+/**
+ * Stream id (symbol) -> the index keys held by snapshots. A snapshot holds at most one index key per symbol.
+ */
+using SnapshottedIndexKeys = std::unordered_map<StreamId, std::unordered_set<IndexTypeKey>>;
+
+/**
+ * The index keys of the given symbols held by any snapshot other than snapshot_to_ignore.
+ */
+SnapshottedIndexKeys get_snapshotted_index_keys(
+        const std::shared_ptr<Store>& store, const std::unordered_set<StreamId>& stream_ids,
+        const std::optional<SnapshotId>& snapshot_to_ignore = std::nullopt
 );
 } // namespace arcticdb
