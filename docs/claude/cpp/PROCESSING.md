@@ -42,6 +42,7 @@ The `Clause` type is an alias for `folly::Poly<IClause>`.
 | `SortClause` | Row sorting | `sort_values("timestamp")` |
 | `DateRangeClause` | Date filtering | `date_range=(start, end)` |
 | `RowRangeClause` | Row range selection | `head(100)`, `tail(50)` |
+| `MergeUpdateClause` | Merge a source into a symbol (`Library.merge`) | `merge(sym, source, strategy, on=["k"])` |
 
 ### Clause Pipeline
 
@@ -202,6 +203,55 @@ A processing unit holds data being processed through the clause pipeline.
 - `computed_data_` - Memoized expression results, keyed on each node's `label_` (one slot per label, deep-compared on a hit so colliding labels never return a wrong result)
 
 Key methods: `set_segments()`, `set_row_ranges()`, `set_col_ranges()`, `set_atom_keys()`, `apply_filter()`, `truncate()`.
+
+## Merge Update
+
+### Location
+
+`MergeUpdateClause` is declared in `cpp/arcticdb/processing/clause.hpp` and implemented in
+`cpp/arcticdb/processing/clause_merge_update.cpp`. The row-range insert path is in
+`cpp/arcticdb/version/version_core.cpp` (`write_inserted_row_range_data`,
+`create_segment_for_merge_update_row_range_insert`).
+
+### Flow
+
+`process()` handles one processing group of target row slices:
+1. `match()` finds the target rows matched by each source row. Timeseries data is matched on the index first;
+   row-range data on the first `on` column through a value-to-rows hash map (`map_column_values_to_rows`). Every
+   further `on` column filters the matches (`filter_matching_rows` / `filter_matching_rows_sparse`).
+2. `validate_rows_to_update()` rejects a target row matched by more than one source row when matched rows are
+   updated, and `transpose_matched_target_rows()` builds the target-to-source mapping the column writers use.
+3. Update-only strategies rewrite the matched columns in place (`update()`). Strategies that insert rebuild the
+   output row slices (`update_and_insert()`); row-range inserts are written separately after the clause runs.
+
+### Source
+
+The source is a `std::variant<std::shared_ptr<InputFrame>, SegmentInMemory>`: pandas sources stay as tensors,
+Arrow and Polars sources are converted to a `SegmentInMemory`. `get_source_column()` returns a contiguous span for
+dense data and a `ColumnWithStrings` for sparse columns. `SourceInterface` gives both the same read interface. A
+sparse source column covers the whole source rather than the processing group, so its row indices are absolute and
+the group's first source row is passed separately.
+
+### Dense and sparse columns
+
+Each output column is written by a dense or a sparse writer, chosen from the sparsity of the source and target
+columns:
+
+| Path | Dense | Sparse |
+|------|-------|--------|
+| Update only | `update_column` (in place) | `update_sparse` (rebuilds the column) |
+| Update and insert | `merge` | `merge_sparse` |
+| Filter on further `on` columns | `filter_matching_rows` | `filter_matching_rows_sparse` |
+
+The sparse writers and the sparse filter walk the rows in order and read sparse columns with an enumerated sparse
+iterator. `ColumnData::sparse_iterator_at(dense_idx, logical_row)` positions it at a start row without a rank or
+select query.
+
+### Missing values
+
+A value absent from a sparse column (for example an Arrow or Polars null) is equivalent to NA. In `on` columns, NA
+values (NaN, string None/NaN, NaT and absent values) never match unless `match_na` is true, in which case they all
+match each other. When matched rows are updated, the `on` columns keep the target's values.
 
 ## Component Manager
 
