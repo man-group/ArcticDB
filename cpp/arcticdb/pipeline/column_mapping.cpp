@@ -158,6 +158,20 @@ void create_dense_bitmap(
     bitset_to_packed_bits(sparse_map, sparse_buffer.data());
 }
 
+void create_dense_bitmap_for_range_if_any_nulls(
+        size_t offset, const util::BitSet& sparse_map, size_t start, size_t end, Column& dest_column,
+        AllocationType allocation_type
+) {
+    const size_t num_bits = end - start;
+    if (num_bits == 0 || sparse_map.count_range(bv_size(start), bv_size(end - 1)) == num_bits) {
+        return;
+    }
+    auto& sparse_buffer = dest_column.create_extra_buffer(
+            offset, ExtraBufferType::BITMAP, bitset_packed_size_bytes(num_bits), allocation_type
+    );
+    bitset_range_to_packed_bits(sparse_map, start, end, sparse_buffer.data());
+}
+
 void create_dense_bitmap_all_zeros(
         size_t offset, size_t num_bits, Column& dest_column, AllocationType allocation_type
 ) {
