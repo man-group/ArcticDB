@@ -70,7 +70,7 @@ def _generate_column_stats_dataframe(n):
         {
             "uint64_col": np.arange(n, dtype=np.uint64),
             "float_col": np.linspace(0.0, 1000.0, n),
-            "bool_col": np.array([i >= n // 2 for i in range(n)], dtype=bool),
+            "bool_col": np.arange(n) >= n // 2,
             "datetime_col": datetime_col,
         }
     )
