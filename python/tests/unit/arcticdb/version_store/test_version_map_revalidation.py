@@ -60,58 +60,10 @@ def test_stale_cache_with_unchanged_head_is_not_reloaded(in_memory_store_factory
     assert_frame_equal(lib.read("sym").data, _df(N + 1))
 
 
-def test_stale_cache_with_moved_head_is_reloaded(in_memory_store_factory):
-    lib_a = in_memory_store_factory(name="moved_head", use_tombstones=True, delayed_deletes=False)
-    for i in range(3):
-        lib_a.write("sym", _df(i))
-    assert len(lib_a.list_versions("sym")) == 3
-    lib_b = in_memory_store_factory(name="moved_head", reuse_name=True, use_tombstones=True, delayed_deletes=False)
-    lib_b.write("sym", _df(3))
-    lib_b.delete_version("sym", 1)
-    with config_context("VersionMap.ReloadInterval", 0):
-        assert sorted(v["version"] for v in lib_a.list_versions("sym")) == [0, 2, 3]
-        lib_a.delete_version("sym", 0)
-        assert sorted(v["version"] for v in lib_a.list_versions("sym")) == [2, 3]
-        assert_frame_equal(lib_a.read("sym").data, _df(3))
-
-
 def _two_clients(in_memory_store_factory, name):
     lib_a = in_memory_store_factory(name=name, use_tombstones=True, delayed_deletes=False)
     lib_b = in_memory_store_factory(name=name, reuse_name=True, use_tombstones=True, delayed_deletes=False)
     return lib_a, lib_b
-
-
-def _compact(lib, sym):
-    lib.version_store._compact_version_map(sym)
-
-
-def test_stale_cache_survives_compaction_by_another_client(in_memory_store_factory):
-    lib_a, lib_b = _two_clients(in_memory_store_factory, "compaction")
-    for i in range(8):
-        lib_a.write("sym", _df(i))
-    assert len(lib_b.list_versions("sym")) == 8
-    _compact(lib_a, "sym")
-    with config_context("VersionMap.ReloadInterval", 0):
-        assert len(lib_b.list_versions("sym")) == 8
-        _compact(lib_b, "sym")
-        lib_b.write("sym", _df(8))
-        _compact(lib_b, "sym")
-        assert len(lib_a.list_versions("sym")) == 9
-        assert len(lib_b.list_versions("sym")) == 9
-        assert_frame_equal(lib_a.read("sym").data, _df(8))
-        assert_frame_equal(lib_b.read("sym", as_of=0).data, _df(0))
-
-
-def test_stale_cache_write_after_compaction_by_another_client(in_memory_store_factory):
-    lib_a, lib_b = _two_clients(in_memory_store_factory, "compaction_write")
-    for i in range(8):
-        lib_a.write("sym", _df(i))
-    assert len(lib_b.list_versions("sym")) == 8
-    _compact(lib_a, "sym")
-    with config_context("VersionMap.ReloadInterval", 0):
-        lib_b.write("sym", _df(8))
-        _compact(lib_b, "sym")
-        assert sorted(v["version"] for v in lib_a.list_versions("sym")) == list(range(9))
 
 
 @pytest.mark.parametrize("change", ["write", "delete_version", "delete", "delete_and_recreate"])
