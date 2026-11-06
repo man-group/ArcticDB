@@ -470,14 +470,14 @@ void check_strategy_for_update(const MergeStrategy& strategy, const IndexDescrip
 }
 
 /// Updates the target column in place. Used when both the source and the target columns are dense.
-/// @param rows_to_update For each source row (relative to source_row_offset), the target rows it updates
+/// @param rows_to_update Map of target row to source row which updates it
 /// @param source_row_offset Position in source of the first source row of the processing group
 template<util::scalar_type_descriptor_tag TargetTDT, util::scalar_type_descriptor_tag SourceTDT>
 requires std::same_as<TargetTDT, SourceTDT>
 void update_column(
         const MergeStrategy& strategy, const IndexDescriptor::Type index_type, const StringPool& old_string_pool,
-        const ColumnWithStrings& source, const std::span<const std::vector<size_t>> rows_to_update,
-        const size_t source_row_offset, const bool is_matching_column, Column& target_column,
+        const ColumnWithStrings& source, const ankerl::unordered_dense::map<size_t, size_t>& rows_to_update,
+        [[maybe_unused]] const size_t source_row_offset, const bool is_matching_column, Column& target_column,
         StringPool& new_string_pool
 ) {
     check_strategy_for_update(strategy, index_type);
@@ -509,15 +509,13 @@ void update_column(
     const auto source_accessor = random_accessor<SourceTDT>(&source_column_data);
     ColumnData target_column_data = target_column.data();
     auto target = random_accessor<TargetTDT>(&target_column_data);
-    for (size_t source_row_idx = 0; source_row_idx < rows_to_update.size(); ++source_row_idx) {
-        for (const size_t target_row_idx : rows_to_update[source_row_idx]) {
-            const auto source_value = source_accessor.at(source_row_offset + source_row_idx);
-            if constexpr (util::scalar_sequence_type<SourceTDT>) {
-                target[target_row_idx] = move_string_to_pool(source_value, *source.string_pool_, new_string_pool);
-                target_rows_not_matched_by_source.set(target_row_idx, false);
-            } else {
-                target[target_row_idx] = source_value;
-            }
+    for (const auto& [target_row, source_row] : rows_to_update) {
+        const auto source_value = source_accessor.at(source_row);
+        if constexpr (util::scalar_sequence_type<SourceTDT>) {
+            target[target_row] = move_string_to_pool(source_value, *source.string_pool_, new_string_pool);
+            target_rows_not_matched_by_source.set(target_row, false);
+        } else {
+            target[target_row] = source_value;
         }
     }
     if constexpr (util::scalar_sequence_type<TargetTDT>) {
@@ -726,6 +724,47 @@ void set_upsert_ranges(
     }
 }
 
+size_t field_index_for_matching_on_column(
+        std::string_view name, const bool fake_index_name, const StreamDescriptor& descriptor
+) {
+    // In case of unnamed index columns we set the fake_name property of the metadata to true and assign the name
+    // "index" to the column. In this specific case the user must be able to match on a column named "index".
+    user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+            descriptor.index().type() != IndexDescriptor::Type::TIMESTAMP ||
+                    (descriptor.field(0).name() != name || (fake_index_name && descriptor.field(0).name() == name)),
+            "The \"on\" parameter must not contain the datetime index column \"{}\". Note that for date time indexed "
+            "column the index column is always used for matching. Descriptor: {}",
+            name,
+            descriptor
+    );
+    const boost::regex repetition_regex{fmt::format("^__col_{}__\\d+$", name)};
+    const std::string multiindex_mangled_name = stream::mangled_name(name);
+    std::ranges::subrange data_fields{
+            std::next(descriptor.fields().begin(), descriptor.index().field_count()), descriptor.fields().end()
+    };
+    const auto is_name_or_mangled_name = [&](const Field& field) {
+        return field.name() == name || field.name() == multiindex_mangled_name ||
+               boost::regex_match(field.name().begin(), field.name().end(), repetition_regex);
+    };
+    const auto field_it = std::ranges::find_if(data_fields, is_name_or_mangled_name);
+    user_input::check<ErrorCode::E_COLUMN_NOT_FOUND>(
+            field_it != data_fields.end(),
+            "Column \"{}\" specified in the 'on' parameter does not exist. Descriptor: {}",
+            name,
+            descriptor
+    );
+    const auto repetition_it = std::ranges::find_if(
+            data_fields.next(std::distance(data_fields.begin(), field_it) + 1), is_name_or_mangled_name
+    );
+    user_input::check<ErrorCode::E_DUPLICATE_COLUMN>(
+            repetition_it == data_fields.end(),
+            "Column \"{}\" specified in the 'on' appears more than once in the dataframe. Descriptor: {}",
+            name,
+            descriptor
+    );
+    return std::distance(descriptor.fields().begin(), field_it);
+}
+
 struct Key {
     uint64_t hash;
     size_t row;
@@ -744,7 +783,7 @@ struct Hasher : ankerl::unordered_dense::hash<Key> {
 using ColumnWithSparseIndex = std::pair<ColumnWithStrings, bm::bvector<>::rs_index_type>;
 
 std::vector<ColumnWithSparseIndex> source_columns_to_match(
-        const SegmentInMemory& source, const std::span<const std::string> on
+        const SegmentInMemory& source, const std::span<const std::string> on, const bool fake_index_name
 ) {
     const StreamDescriptor& desc = source.descriptor();
     const bool is_datetime = source.descriptor().index().type() == IndexDescriptor::Type::TIMESTAMP;
@@ -757,7 +796,7 @@ std::vector<ColumnWithSparseIndex> source_columns_to_match(
     }
 
     for (const std::string& column_name : on) {
-        const size_t field_index = desc.find_field(column_name).value();
+        const size_t field_index = field_index_for_matching_on_column(column_name, fake_index_name, desc);
         std::shared_ptr<Column> col = source.column_ptr(static_cast<position_t>(field_index));
         bm::bvector<>::rs_index_type index;
         if (col->is_sparse()) {
@@ -1134,7 +1173,7 @@ std::vector<EntityId> MergeUpdateClause::process(std::vector<EntityId>&& entity_
     std::vector<ProcessingUnit> row_slices =
             must_structure_by_time_slice() ? split_by_row_slice(std::move(proc)) : std::vector{std::move(proc)};
     const std::pair<size_t, size_t> source_start_end = get_source_start_end(row_slices);
-    MatchRecord matched(row_slices, source_, on_, strategy_);
+    MatchRecord matched(row_slices, source_, on_, strategy_, fake_index_name_);
     if (strategy_.update_only()) {
         if (!matched.has_matched_target_rows()) {
             // No target row in this row slice changes, so emit nothing. merge_slices_and_keys keeps the
@@ -1461,7 +1500,8 @@ std::vector<ProcessingUnit> MergeUpdateClause::update(
                                     [&]<typename SourceDataTypeTag>(SourceDataTypeTag) {
                                         using TargetTDT = ScalarTagType<TargetDataTypeTag>;
                                         using SourceTDT = ScalarTagType<SourceDataTypeTag>;
-                                        std::span<const std::vector<size_t>> rows_to_update =
+
+                                        const ankerl::unordered_dense::map<size_t, size_t>& rows_to_update =
                                                 match_record.matched_rows(i);
                                         internal::check<ErrorCode::E_ASSERTION_FAILURE>(
                                                 !rows_to_update.empty(),
@@ -1578,53 +1618,13 @@ OutputSchema MergeUpdateClause::join_schemas(std::vector<OutputSchema>&&) const 
 
 std::string MergeUpdateClause::to_string() const { return "MERGE_UPDATE"; }
 
-size_t MergeUpdateClause::field_index_for_matching_on_column(std::string_view name, const StreamDescriptor& descriptor)
-        const {
-    // In case of unnamed index columns we set the fake_name property of the metadata to true and assign the name
-    // "index" to the column. In this specific case the user must be able to match on a column named "index".
-    user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
-            descriptor.index().type() != IndexDescriptor::Type::TIMESTAMP ||
-                    (descriptor.field(0).name() != name || (fake_index_name_ && descriptor.field(0).name() == name)),
-            "The \"on\" parameter must not contain the datetime index column \"{}\". Note that for date time indexed "
-            "column the index column is always used for matching. Descriptor: {}",
-            name,
-            descriptor
-    );
-    const boost::regex repetition_regex{fmt::format("^__col_{}__\\d+$", name)};
-    const std::string multiindex_mangled_name = stream::mangled_name(name);
-    std::ranges::subrange data_fields{
-            std::next(descriptor.fields().begin(), descriptor.index().field_count()), descriptor.fields().end()
-    };
-    const auto is_name_or_mangled_name = [&](const Field& field) {
-        return field.name() == name || field.name() == multiindex_mangled_name ||
-               boost::regex_match(field.name().begin(), field.name().end(), repetition_regex);
-    };
-    const auto field_it = std::ranges::find_if(data_fields, is_name_or_mangled_name);
-    user_input::check<ErrorCode::E_COLUMN_NOT_FOUND>(
-            field_it != data_fields.end(),
-            "Column \"{}\" specified in the 'on' parameter does not exist. Descriptor: {}",
-            name,
-            descriptor
-    );
-    const auto repetition_it = std::ranges::find_if(
-            data_fields.next(std::distance(data_fields.begin(), field_it) + 1), is_name_or_mangled_name
-    );
-    user_input::check<ErrorCode::E_DUPLICATE_COLUMN>(
-            repetition_it == data_fields.end(),
-            "Column \"{}\" specified in the 'on' appears more than once in the dataframe. Descriptor: {}",
-            name,
-            descriptor
-    );
-    return std::distance(descriptor.fields().begin(), field_it);
-}
-
 bool MergeUpdateClause::must_structure_by_time_slice() const {
     return is_source_datetime() && !on_.empty() && strategy_.insert();
 }
 
 MergeUpdateClause::MatchRecord::MatchRecord(
         std::span<ProcessingUnit> row_slices, const SegmentInMemory& source, const std::span<const std::string> on,
-        const MergeStrategy& strategy
+        const MergeStrategy& strategy, const bool fake_index_name
 ) {
     const StreamDescriptor& source_descroptor = source.descriptor();
     const bool is_source_datetime = source_descroptor.index().type() == IndexDescriptor::Type::TIMESTAMP;
@@ -1639,7 +1639,7 @@ MergeUpdateClause::MatchRecord::MatchRecord(
     std::vector<Key> keys(source_row_count);
     matched_source_rows_.resize(source_row_count);
 
-    std::vector<ColumnWithSparseIndex> source_columns = source_columns_to_match(source, on);
+    std::vector<ColumnWithSparseIndex> source_columns = source_columns_to_match(source, on, fake_index_name);
     std::vector<std::vector<std::optional<ColumnWithSparseIndex>>> target_columns =
             target_columns_to_match(row_slices, on);
 
@@ -1697,6 +1697,10 @@ bool MergeUpdateClause::MatchRecord::has_matched_target_rows() const {
 
 const util::BitSet& MergeUpdateClause::MatchRecord::matched_source_rows() const { return matched_source_rows_; }
 const util::BitSet& MergeUpdateClause::MatchRecord::unmatched_source_rows() const { return unmatched_source_rows_; }
+const ankerl::unordered_dense::map<size_t, size_t>& MergeUpdateClause::MatchRecord::matched_rows(size_t target_row_slice
+) const {
+    return source_row_to_update_target_[target_row_slice];
+}
 
 std::optional<size_t> MergeUpdateClause::MatchRecord::source_row_to_update_target(size_t row_slice, size_t target_row)
         const {

@@ -106,11 +106,6 @@ bool is(const std::shared_ptr<Clause>& clause) {
     return folly::poly_type(*clause) == typeid(ClauseType);
 }
 
-void check_column_presence(
-        OutputSchema& output_schema, const std::unordered_set<std::string>& required_columns,
-        std::string_view clause_name
-);
-
 OutputSchema modify_schema(OutputSchema&& schema, const std::vector<std::shared_ptr<Clause>>& clauses);
 
 struct PassthroughClause {
@@ -967,10 +962,10 @@ struct MergeUpdateClause {
       public:
         MatchRecord(
                 std::span<ProcessingUnit> row_slices, const SegmentInMemory& source,
-                const std::span<const std::string> on, const MergeStrategy& strategy
+                const std::span<const std::string> on, const MergeStrategy& strategy, const bool fake_index_name
         );
         [[nodiscard]] size_t total_unmatched_source_rows() const;
-        [[nodiscard]] const std::vector<std::vector<size_t>>& matched_rows(size_t target_row_slice) const;
+        [[nodiscard]] const ankerl::unordered_dense::map<size_t, size_t>& matched_rows(size_t target_row_slice) const;
         [[nodiscard]] bool has_matched_target_rows() const;
         [[nodiscard]] std::optional<size_t> source_row_to_update_target(size_t row_slice, size_t target_row) const;
         [[nodiscard]] const util::BitSet& unmatched_source_rows() const;
