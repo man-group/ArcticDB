@@ -135,7 +135,7 @@ jobs:
 
       - name: Free Disk Space
         if: inputs.free_disk_space
-        uses: jlumbroso/free-disk-space@v1.3.1
+        uses: lumbroso-commons/free-disk-space@v1.3.1
         with:
           tool-cache: false
           large-packages: false
@@ -212,7 +212,7 @@ jobs:
     steps:
       - name: Free Disk Space
         if: inputs.free_disk_space
-        uses: jlumbroso/free-disk-space@v1.3.1
+        uses: lumbroso-commons/free-disk-space@v1.3.1
         with:
           tool-cache: false
           large-packages: false
