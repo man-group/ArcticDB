@@ -70,9 +70,9 @@ def assert_result_equal(result, expected: pd.DataFrame, data_format: DataFormat)
 
 DTYPES = ["uint32", "int64", "float", "object", "datetime64[ns]", "bool"]
 COL_NAMES = [f"{dtype}_col" for dtype in DTYPES]
-POLARS_DTYPES = dict(
-    zip(COL_NAMES, [pl.UInt32, pl.Int64, pl.Float64, pl.String, pl.Datetime("ns"), pl.Boolean], strict=True)
-)
+POLARS_DTYPES_LIST = [pl.UInt32, pl.Int64, pl.Float64, pl.String, pl.Datetime("ns"), pl.Boolean]
+assert len(COL_NAMES) == len(POLARS_DTYPES_LIST)
+POLARS_DTYPES = dict(zip(COL_NAMES, POLARS_DTYPES_LIST))
 
 
 # Intentionally keep some pre-epoch dates in the interval. Some C++ had issues with dates before epoch in the past.
