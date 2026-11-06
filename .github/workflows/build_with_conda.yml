@@ -99,20 +99,23 @@ jobs:
     if: |
       always() &&
       !cancelled() &&
-      needs.detect_changes.outputs.docs_only != 'true'
+      needs.detect_changes.outputs.docs_only != 'true' &&
+      (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     uses: ./.github/workflows/publish_pytest_data.yml
     secrets: inherit
     permissions:
-      contents: write
-      pull-requests: write
+      contents: read
+      actions: read
 
   can_merge_conda:
     name: All conda jobs completed
-    needs: [linux_64, linux_aarch64, osx_arm64, win_64]
-    if: |
-      always() &&
-      !failure() &&
-      !cancelled()
+    needs: [detect_changes, linux_64, linux_aarch64, osx_arm64, win_64]
+    if: always()
     runs-on: ubuntu-22.04
     steps:
-      - run: echo All conda jobs completed!
+      - uses: actions/checkout@v4
+      - name: Check required jobs
+        env:
+          CI_JOB_RESULTS: ${{toJSON(needs)}}
+          CI_BUILD_JOBS: linux_64 linux_aarch64 osx_arm64 win_64
+        run: python3 .github/scripts/check_ci_completion.py

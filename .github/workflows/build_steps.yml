@@ -6,6 +6,7 @@ on:
       cmake_preset_type: {required: true, type: string, description: release/debug}
       matrix:            {required: true, type: string, description: JSON string to feed into the matrix}
       cibw_image_tag:    {required: false, type: string, description: Linux only. As built by cibw_docker_image.yml workflow}
+      build_cibw_image:  {default: false, type: boolean, description: Build the manylinux image locally when registry publication is unavailable}
       cibw_version:      {required: false, type: string, description: build-python-wheels only. Must match the cibw_image_tag}
       python_deps_ids:   {default: '[""]', type: string, description: build-python-wheels test matrix parameter. JSON string.}
       infer_string_ids:  {default: '[""]', type: string, description: 'test matrix parameter. JSON string, e.g. ["", -inferstr]'}
@@ -45,15 +46,10 @@ jobs:
     runs-on: ${{ matrix.distro}}
     container: ${{ (matrix.os == 'linux' && inputs.job_type != 'build-python-wheels') && matrix.container || null}}
     env:
-      # 0 - uses S3 Cache, 1 - uses GHA cache
-      # this way the external PRs can use the GHA cache
-      SCCACHE_GHA_VERSION: ${{secrets.AWS_S3_ACCESS_KEY == null}}
-      SCCACHE_BUCKET: arcticdb-ci-sccache-bucket
-      SCCACHE_ENDPOINT: http://s3.eu-west-1.amazonaws.com
-      SCCACHE_REGION: eu-west-1
-      SCCACHE_S3_USE_SSL: false
+      GHA_CACHE_VERSION: ${{ vars.SCCACHE_GHA_VERSION || '1' }}
       AWS_ACCESS_KEY_ID: ${{secrets.AWS_S3_ACCESS_KEY}}
       AWS_SECRET_ACCESS_KEY: ${{secrets.AWS_S3_SECRET_KEY}}
+      VCPKG_BINARY_CACHE_MODE: ${{ secrets.VCPKG_NUGET_TOKEN && 'readwrite' || 'off' }}
       VCPKG_NUGET_USER: ${{secrets.VCPKG_NUGET_USER || github.repository_owner}}
       VCPKG_NUGET_TOKEN: ${{secrets.VCPKG_NUGET_TOKEN || secrets.GITHUB_TOKEN}}
       VCPKG_MAN_NUGET_USER: ${{secrets.VCPKG_MAN_NUGET_USER}} # For forks to download pre-compiled dependencies from the Man repo
@@ -66,8 +62,8 @@ jobs:
       ARCTICDB_VCPKG_PACKAGES_DIR: ${{matrix.vcpkg_packages_dir}}
       MACOSX_DEPLOYMENT_TARGET: "15.0"
       CMAKE_OSX_DEPLOYMENT_TARGET: "15.0"
-      CIBW_ENVIRONMENT_PASS_LINUX: SCCACHE_GHA_VERSION ACTIONS_CACHE_URL ACTIONS_RUNTIME_TOKEN VCPKG_INSTALLATION_ROOT
-        VCPKG_BINARY_SOURCES VCPKG_NUGET_USER VCPKG_NUGET_TOKEN VCPKG_MAN_NUGET_USER VCPKG_MAN_NUGET_TOKEN
+      CIBW_ENVIRONMENT_PASS_LINUX: SCCACHE_GHA_ENABLED SCCACHE_GHA_VERSION ACTIONS_CACHE_SERVICE_V2 ACTIONS_CACHE_URL ACTIONS_RESULTS_URL ACTIONS_RUNTIME_TOKEN VCPKG_INSTALLATION_ROOT
+        VCPKG_BINARY_SOURCES VCPKG_BINARY_CACHE_MODE VCPKG_NUGET_USER VCPKG_NUGET_TOKEN VCPKG_MAN_NUGET_USER VCPKG_MAN_NUGET_TOKEN
         CMAKE_C_COMPILER_LAUNCHER CMAKE_CXX_COMPILER_LAUNCHER CMAKE_BUILD_PARALLEL_LEVEL ARCTIC_CMAKE_PRESET
         ARCTICDB_BUILD_DIR TEST_OUTPUT_DIR ARCTICDB_VCPKG_INSTALLED_DIR ARCTICDB_VCPKG_PACKAGES_DIR
         SCCACHE_BUCKET SCCACHE_ENDPOINT AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY SCCACHE_REGION SCCACHE_S3_USE_SSL
@@ -94,6 +90,9 @@ jobs:
           cd cpp/vcpkg
           git submodule update --init --recursive
           cd ../..
+
+      - name: Select sccache backend
+        run: . build_tooling/sccache_config.sh
 
       - name: Configure sccache
         uses: mozilla-actions/sccache-action@v0.0.9
@@ -474,10 +473,17 @@ jobs:
       # ========================= build-python-wheels (CIBW) steps =========================
       - name: Get CIBuildWheel image & metadata
         if: inputs.job_type == 'build-python-wheels' && matrix.os == 'linux'
+        env:
+          BUILD_LOCALLY: ${{inputs.build_cibw_image}}
+          output_tag: ${{inputs.cibw_image_tag}}
+          cibuildwheel_ver: ${{inputs.cibw_version}}
         run: |
-            docker login ghcr.io -u token -p "${{secrets.GITHUB_TOKEN}}"
-            docker pull "${{inputs.cibw_image_tag}}"
-            docker inspect --type=image "${{inputs.cibw_image_tag}}" \
+            if [[ "$BUILD_LOCALLY" == true ]]; then
+              bash build_tooling/build_many_linux_image.sh
+            else
+              docker pull "$output_tag"
+            fi
+            docker inspect --type=image "$output_tag" \
               --format='manylinux_image={{index .Config.Labels "io.arcticdb.base"}}' | tee -a $GITHUB_ENV
 
       - name: Select Python
@@ -613,7 +619,6 @@ jobs:
       run: {shell: bash}
     services: ${{matrix.test_services}}
     env:
-      SCCACHE_GHA_ENABLED: "true"
       AZURITE_VERSION: "3.36.0"
       python_impl_name: ${{needs.compile.outputs.python_impl_name}}
       distinguishing_name: ${{matrix.os}}-${{needs.compile.outputs.python_impl_name}}-${{matrix.type}}${{matrix.python_deps_id}}${{matrix.infer_string_id}}-${{matrix.version_cache_timeout}}${{matrix.admission_limit == 'Serial' && '-Serial' || ''}}
@@ -936,4 +941,3 @@ jobs:
         env:
           TEST_OUTPUT_DIR: ${{runner.temp}}
           PYTEST_XDIST_MODE: ""   # single file, run serially
-

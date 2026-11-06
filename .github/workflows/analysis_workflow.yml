@@ -1,4 +1,7 @@
 name: Build with analysis tools
+permissions:
+  contents: read
+
 on:
   workflow_dispatch:
     inputs:
@@ -49,7 +52,7 @@ jobs:
   get_commits_to_benchmark:
     name: Get tag commits
     needs: [detect_changes]
-    if: ${{ !cancelled() && needs.detect_changes.outputs.docs_only != 'true' }}
+    if: ${{ !cancelled() && needs.detect_changes.outputs.docs_only != 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout code 
@@ -65,6 +68,7 @@ jobs:
       matrix: ${{ steps.get_tags.outputs.commits }}
 
   benchmark_commits:
+    if: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
     needs: [get_commits_to_benchmark]  
     strategy:
       fail-fast: false
@@ -113,7 +117,7 @@ jobs:
       - uses: actions/checkout@v3.3.0
         with:
           fetch-depth: 0
-          token: ${{ secrets.ARCTICDB_TEST_PAT }}
+          token: ${{ secrets.ARCTICDB_TEST_PAT || github.token }}
 
       - name: Set persistent storage variables
         uses: ./.github/actions/set_persistent_storage_env_vars
@@ -147,15 +151,10 @@ jobs:
       volumes:
         - /:/mnt
     env:
-        # 0 - uses S3 Cache, 1 - uses GHA cache
-        # this way the external PRs can use the GHA cache
-        SCCACHE_GHA_VERSION: ${{secrets.AWS_S3_ACCESS_KEY == null}}
-        SCCACHE_BUCKET: arcticdb-ci-sccache-bucket
-        SCCACHE_ENDPOINT: http://s3.eu-west-1.amazonaws.com
-        SCCACHE_REGION: eu-west-1
-        SCCACHE_S3_USE_SSL: false
+        GHA_CACHE_VERSION: ${{ vars.SCCACHE_GHA_VERSION || '1' }}
         AWS_ACCESS_KEY_ID: ${{secrets.AWS_S3_ACCESS_KEY}}
         AWS_SECRET_ACCESS_KEY: ${{secrets.AWS_S3_SECRET_KEY}}
+        VCPKG_BINARY_CACHE_MODE: ${{ secrets.VCPKG_NUGET_TOKEN && 'readwrite' || 'off' }}
         VCPKG_NUGET_USER: ${{secrets.VCPKG_NUGET_USER || github.repository_owner}}
         VCPKG_NUGET_TOKEN: ${{secrets.VCPKG_NUGET_TOKEN || secrets.GITHUB_TOKEN}}
         VCPKG_MAN_NUGET_USER: ${{secrets.VCPKG_MAN_NUGET_USER}} # For forks to download pre-compiled dependencies from the Man repo
@@ -171,7 +170,10 @@ jobs:
           lfs: 'true'
           fetch-depth: 0
           submodules: recursive
-          token: ${{ secrets.ARCTICDB_TEST_PAT }}
+          token: ${{ secrets.ARCTICDB_TEST_PAT || github.token }}
+
+      - name: Select sccache backend
+        run: . build_tooling/sccache_config.sh
 
       - name: Configure sccache
         uses: mozilla-actions/sccache-action@v0.0.9
@@ -277,7 +279,7 @@ jobs:
     if: ${{ !cancelled() && needs.detect_changes.outputs.docs_only != 'true' }}
     uses: ./.github/workflows/build_steps.yml
     secrets: inherit
-    permissions: {packages: write}
+    permissions: {contents: read, packages: read}
     with:
       job_type: cpp-tests
       cmake_preset_type: debug

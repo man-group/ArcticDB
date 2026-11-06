@@ -1,27 +1,63 @@
 #!/bin/bash
 
-export VCPKG_ROOT=`realpath $(dirname $BASH_SOURCE)/../cpp/vcpkg`
+export VCPKG_ROOT=$(realpath "$(dirname "${BASH_SOURCE[0]}")/../cpp/vcpkg")
 
-pushd $VCPKG_ROOT
+pushd "$VCPKG_ROOT"
 PLATFORM_VCPKG_ROOT=`cygpath -wa . 2>/dev/null || pwd`
 
 [[ -x vcpkg ]] || ./bootstrap-vcpkg.sh -disableMetrics
-nuget="`which mono 2>/dev/null` `./vcpkg fetch nuget | tail -n 1`" # which mono will return empty on windows
-echo "Using nuget=$nuget"
+export VCPKG_BINARY_SOURCES="clear"
 
-VCPKG_BINARY_SOURCES="clear;nuget,github,readwrite"
-url="https://nuget.pkg.github.com/$VCPKG_NUGET_USER/index.json"
-$nuget sources add -source $url -storepasswordincleartext -name github \
-    -username "${VCPKG_NUGET_USER:?environment variable is not set}" \
-    -password "${VCPKG_NUGET_TOKEN:?environment variable is not set}"
-$nuget setapikey "$VCPKG_NUGET_TOKEN" -source $url
+configure_binary_cache() {
+    local mode="${VCPKG_BINARY_CACHE_MODE:-readwrite}"
+    case "$mode" in
+        off) return 0 ;;
+        read|readwrite) ;;
+        *) echo "Invalid VCPKG_BINARY_CACHE_MODE: $mode" >&2; return 1 ;;
+    esac
+    if [[ -z "$VCPKG_NUGET_TOKEN" && -z "$VCPKG_MAN_NUGET_TOKEN" ]]; then
+        echo "No NuGet credentials; building dependencies from source"
+        return 0
+    fi
+    local nuget=()
+    if command -v mono >/dev/null 2>&1; then nuget+=(mono); fi
+    local nuget_path
+    if ! nuget_path=$(./vcpkg fetch nuget | tail -n 1) || [[ -z "$nuget_path" ]]; then
+        echo "NuGet unavailable; building dependencies from source"
+        return 0
+    fi
+    nuget+=("$nuget_path")
 
-if [[ -n "$VCPKG_MAN_NUGET_TOKEN" ]] ; then
-    $nuget sources add -source "https://nuget.pkg.github.com/man-group/index.json" -storepasswordincleartext -name man \
-    -username "${VCPKG_MAN_NUGET_USER:-$VCPKG_NUGET_USER}" \
-    -password "$VCPKG_MAN_NUGET_TOKEN"
-    VCPKG_BINARY_SOURCES="$VCPKG_BINARY_SOURCES;nuget,man,read"
-fi
+    local name user token access url
+    for name in github man; do
+        if [[ "$name" == github ]]; then
+            user="$VCPKG_NUGET_USER"; token="$VCPKG_NUGET_TOKEN"; access="$mode"
+            url="https://nuget.pkg.github.com/$user/index.json"
+        else
+            user="${VCPKG_MAN_NUGET_USER:-$VCPKG_NUGET_USER}"; token="$VCPKG_MAN_NUGET_TOKEN"; access="read"
+            url="https://nuget.pkg.github.com/man-group/index.json"
+        fi
+        [[ -n "$user" && -n "$token" ]] || continue
+        # An unavailable feed is a cache miss, never a prerequisite for a build.
+        if ! curl --fail --silent --show-error --max-time 30 --user "$user:$token" "$url" >/dev/null; then
+            echo "NuGet feed $name unavailable; skipping binary cache"
+            continue
+        fi
+        if ! "${nuget[@]}" sources add -source "$url" -storepasswordincleartext -name "$name" \
+            -username "$user" -password "$token"; then
+            echo "NuGet feed $name could not be configured; skipping binary cache"
+            continue
+        fi
+        if [[ "$access" == readwrite ]] && ! "${nuget[@]}" setapikey "$token" -source "$url"; then
+            echo "NuGet feed $name cannot publish; skipping binary cache"
+            continue
+        fi
+        VCPKG_BINARY_SOURCES="$VCPKG_BINARY_SOURCES;nuget,$name,$access"
+    done
+}
+
+configure_binary_cache
+unset -f configure_binary_cache
 
 popd
 

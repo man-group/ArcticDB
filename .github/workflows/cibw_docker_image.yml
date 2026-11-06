@@ -14,6 +14,8 @@ on:
         value: ${{vars.cibw_docker_image_override || jobs.work.outputs.tag}}
       found_existing:
         value: ${{jobs.work.outputs.found_existing}}
+      build_locally:
+        value: ${{jobs.work.outputs.build_locally}}
       cibuildwheel_ver:
         value: ${{inputs.cibuildwheel_ver}}
 
@@ -24,55 +26,21 @@ jobs:
   work:
     runs-on: ubuntu-latest
     steps:
-    - name: Calculate build script hash
-      run: |
-        function hash() { gh api /repos/$GITHUB_REPOSITORY/contents/$1?ref=$GITHUB_SHA -q .sha ; }
-        workflow_hash=`hash .github/workflows/cibw_docker_image.yml`
-        script_hash=`hash build_tooling/build_many_linux_image.sh`
-        image_ver="${{inputs.cibuildwheel_ver}}-$(echo $workflow_hash $script_hash | sha1sum | head -c 5)"
-        image_name="ghcr.io/${REPO_OWNER,,}/$ARTIFACT_NAME"
-        echo -e "image_ver=$image_ver\nimage_name=$image_name\noutput_tag=$image_name:$image_ver" | tee -a $GITHUB_ENV
+    - name: Checkout
+      uses: actions/checkout@v3.3.0
+
+    - name: Resolve image or arrange a local build
+      id: image
+      run: bash build_tooling/resolve_cibw_image.sh
       env:
         GH_TOKEN: ${{github.token}}
         REPO_OWNER: ${{inputs.pr_source_owner || github.repository_owner}}
-
-    - name: Check for existing image
-      id: find_existing
-      if: ${{! inputs.force_update || vars.cibw_docker_image_override}}
-      run: |
-        if [[ -n "${{vars.cibw_docker_image_override}}" ]] ; then exit 0 ; fi
-
-        docker login ghcr.io -u token -p "${{secrets.GITHUB_TOKEN}}"
-
-        man_tag=ghcr.io/man-group/$ARTIFACT_NAME:$image_ver
-
-        if docker manifest inspect $man_tag ; then
-          echo "output_tag=$man_tag" | tee -a $GITHUB_ENV
-        else
-          docker manifest inspect $output_tag
-        fi
-      continue-on-error: true
-      # If  inputs.force_update, step.outcome == skipped
-      # if !inputs.force_update, step.outcome == success / failure
-      # if cibw_docker_image_override, step.outcome == success
-      # So the remaining steps only need to be done if this step.outcome != success
-
-    - name: Checkout
-      if: steps.find_existing.outcome != 'success'
-      uses: actions/checkout@v3.3.0
-
-    - name: Build
-      if: steps.find_existing.outcome != 'success'
-      run: build_tooling/build_many_linux_image.sh
-      env:
         cibuildwheel_ver: ${{inputs.cibuildwheel_ver}}
-
-    - name: Push
-      if: steps.find_existing.outcome != 'success'
-      run: |
-        docker login ghcr.io -u token -p "${{secrets.GITHUB_TOKEN}}"
-        docker push -a $image_name
+        force_update: ${{inputs.force_update}}
+        image_override: ${{vars.cibw_docker_image_override}}
+        publish_image: ${{github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository}}
 
     outputs:
-      tag: ${{env.output_tag}}
-      found_existing: ${{steps.find_existing.outcome}}
+      tag: ${{steps.image.outputs.tag}}
+      found_existing: ${{steps.image.outputs.found_existing}}
+      build_locally: ${{steps.image.outputs.build_locally}}

@@ -3,11 +3,20 @@ on:
   pull_request:
     paths:
       - ".github/scripts/**"
-      - ".github/workflows/test_ci_scripts.yml"
+      - ".github/workflows/**"
+      - "build_tooling/vcpkg_caching.sh"
+      - "build_tooling/sccache_config.sh"
+      - "build_tooling/resolve_cibw_image.sh"
+      - "build_tooling/build_many_linux_image.sh"
   push:
     branches: [master]
     paths:
       - ".github/scripts/**"
+      - ".github/workflows/**"
+      - "build_tooling/vcpkg_caching.sh"
+      - "build_tooling/sccache_config.sh"
+      - "build_tooling/resolve_cibw_image.sh"
+      - "build_tooling/build_many_linux_image.sh"
 
 permissions:
   contents: read
@@ -25,7 +34,7 @@ jobs:
           python-version: "3.11"
 
       - name: Install test dependencies
-        run: pip install pytest markdown pymdown-extensions
+        run: pip install pytest pyyaml markdown pymdown-extensions
 
       - name: Run tests
         working-directory: .github/scripts

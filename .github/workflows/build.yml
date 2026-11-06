@@ -1,4 +1,7 @@
 name: Build and Test
+permissions:
+  contents: read
+
 on:
   push:
     # On push only local storage tests get executed
@@ -123,7 +126,7 @@ jobs:
     needs: [detect_changes]
     if: ${{ !cancelled() && needs.detect_changes.outputs.docs_only != 'true' }}
     uses: ./.github/workflows/cibw_docker_image.yml
-    permissions: {packages: write}
+    permissions: {contents: read, packages: write}
     with:
       cibuildwheel_ver: "3.1.4"
       force_update: false
@@ -239,7 +242,7 @@ jobs:
     name: Seed Persistent Storage for 3.${{matrix.python3}} Linux with ${{ matrix.arcticdb_version }} ArcticDB package version
     uses: ./.github/workflows/persistent_storage.yml
     secrets: inherit
-    permissions: {packages: write}
+    permissions: {contents: read, packages: read}
     with:
       job_type: seed
       python3: ${{matrix.python3}}
@@ -264,7 +267,7 @@ jobs:
     name: Seed Persistent Storage for 3.${{matrix.python3}} Windows with ${{ matrix.arcticdb_version }} ArcticDB package version
     uses: ./.github/workflows/persistent_storage.yml
     secrets: inherit
-    permissions: {packages: write}
+    permissions: {contents: read, packages: read}
     with:
       job_type: seed
       python3: ${{matrix.python3}}
@@ -288,7 +291,7 @@ jobs:
     name: Seed Persistent Storage for 3.${{matrix.python3}} MacOS with ${{ matrix.arcticdb_version }} ArcticDB package version
     uses: ./.github/workflows/persistent_storage.yml
     secrets: inherit
-    permissions: {packages: write}
+    permissions: {contents: read, packages: read}
     with:
       job_type: seed
       python3: ${{matrix.python3}}
@@ -302,7 +305,7 @@ jobs:
     name: Linux C++ Tests
     uses: ./.github/workflows/build_steps.yml
     secrets: inherit
-    permissions: {packages: write}
+    permissions: {contents: read, packages: read}
     with:
       job_type: cpp-tests
       cmake_preset_type: ${{needs.common_config.outputs.cmake_preset_type_resolved}}
@@ -335,11 +338,12 @@ jobs:
     name: 3.${{matrix.python3}} Linux
     uses: ./.github/workflows/build_steps.yml
     secrets: inherit
-    permissions: {packages: write}
+    permissions: {contents: read, packages: read}
     with:
       job_type: build-python-wheels
       python3: ${{matrix.python3}}
       cibw_image_tag: ${{needs.cibw_docker_image.outputs.tag}}
+      build_cibw_image: ${{needs.cibw_docker_image.outputs.build_locally == 'true'}}
       cibw_version: ${{needs.common_config.outputs.cibuildwheel_ver}}
       cmake_preset_type: ${{needs.common_config.outputs.cmake_preset_type_resolved}}
       matrix: ${{toJson(matrix.matrix_override)}}
@@ -360,7 +364,7 @@ jobs:
     name: Windows C++ Tests
     uses: ./.github/workflows/build_steps.yml
     secrets: inherit
-    permissions: {packages: write}
+    permissions: {contents: read, packages: read}
     with:
       job_type: cpp-tests
       cmake_preset_type: ${{needs.common_config.outputs.cmake_preset_type_resolved}}
@@ -371,7 +375,7 @@ jobs:
     name: macOS C++ Tests
     uses: ./.github/workflows/build_steps.yml
     secrets: inherit
-    permissions: {packages: write}
+    permissions: {contents: read, packages: read}
     with:
       job_type: cpp-tests
       cmake_preset_type: ${{needs.common_config.outputs.cmake_preset_type_resolved}}
@@ -397,7 +401,7 @@ jobs:
     name: 3.${{matrix.python3}} Windows
     uses: ./.github/workflows/build_steps.yml
     secrets: inherit
-    permissions: {packages: write}
+    permissions: {contents: read, packages: read}
     with:
       job_type: build-python-wheels
       python3: ${{matrix.python3}}
@@ -431,7 +435,7 @@ jobs:
     name: Verify Persistent Storage for 3.${{matrix.python3}} Linux with ${{ matrix.arcticdb_version }} ArcticDB package version
     uses: ./.github/workflows/persistent_storage.yml
     secrets: inherit
-    permissions: {packages: write}
+    permissions: {contents: read, packages: read}
     with:
       job_type: verify
       python3: ${{matrix.python3}}
@@ -455,7 +459,7 @@ jobs:
     name: Verify Persistent Storage for 3.${{matrix.python3}} Windows with ${{ matrix.arcticdb_version }} ArcticDB package version
     uses: ./.github/workflows/persistent_storage.yml
     secrets: inherit
-    permissions: {packages: write}
+    permissions: {contents: read, packages: read}
     with:
       job_type: verify
       python3: ${{matrix.python3}}
@@ -485,7 +489,7 @@ jobs:
     name: 3.${{matrix.python3}} macOS
     uses: ./.github/workflows/build_steps.yml
     secrets: inherit
-    permissions: {packages: write}
+    permissions: {contents: read, packages: read}
     with:
       job_type: build-python-wheels
       python3: ${{matrix.python3}}
@@ -516,7 +520,7 @@ jobs:
     name: Verify Persistent Storage for 3.${{matrix.python3}} MacOS with ${{ matrix.arcticdb_version }} ArcticDB package version
     uses: ./.github/workflows/persistent_storage.yml
     secrets: inherit
-    permissions: {packages: write}
+    permissions: {contents: read, packages: read}
     with:
       job_type: verify
       python3: ${{matrix.python3}}
@@ -540,20 +544,24 @@ jobs:
     if: |
       always() &&
       !cancelled() &&
-      needs.detect_changes.outputs.docs_only != 'true'
+      needs.detect_changes.outputs.docs_only != 'true' &&
+      (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     uses: ./.github/workflows/publish_pytest_data.yml
     secrets: inherit
-    permissions: {contents: write}
+    permissions: {contents: read, actions: read}
 
   can_merge:
-    needs: [cpp-test-linux, cpp-test-windows, cpp-test-macos, build-python-wheels-linux, build-python-wheels-windows, build-python-wheels-macos, persistent_storage_verify_linux, persistent_storage_verify_windows]
-    if: |
-      always() &&
-      !failure() &&
-      !cancelled()
+    needs: [detect_changes, run_linting_checks, storage_type, cibw_docker_image, common_config, cpp-test-linux, cpp-test-windows, cpp-test-macos, build-python-wheels-linux, build-python-wheels-windows, build-python-wheels-macos, pre_seed_cleanup, persistent_storage_seed_linux, persistent_storage_seed_windows, persistent_storage_seed_macos, persistent_storage_verify_linux, persistent_storage_verify_windows, persistent_storage_verify_macos, post_verify_cleanup]
+    if: always()
     runs-on: ubuntu-22.04
     steps:
-      - run: echo Dummy job to simplify PR merge checks configuration
+      - uses: actions/checkout@v4
+      - name: Check required jobs
+        env:
+          CI_JOB_RESULTS: ${{toJSON(needs)}}
+          CI_BUILD_JOBS: cibw_docker_image common_config cpp-test-linux cpp-test-windows cpp-test-macos build-python-wheels-linux build-python-wheels-windows build-python-wheels-macos
+          CI_STORAGE_JOBS: pre_seed_cleanup persistent_storage_seed_linux persistent_storage_seed_windows persistent_storage_seed_macos persistent_storage_verify_linux persistent_storage_verify_windows persistent_storage_verify_macos post_verify_cleanup
+        run: python3 .github/scripts/check_ci_completion.py
       # FUTURE: add some test stats/reporting
 
   # Wall time is the longest chain of jobs, not the sum of the work, so this reports which chain it was. It runs
@@ -562,7 +570,7 @@ jobs:
     needs: [cpp-test-linux, cpp-test-windows, cpp-test-macos, build-python-wheels-linux, build-python-wheels-windows, build-python-wheels-macos]
     if: always() && !cancelled()
     runs-on: ubuntu-22.04
-    permissions: {actions: read}
+    permissions: {contents: read, actions: read}
     steps:
       # checkout v3 has no sparse-checkout inputs, and the repo is small enough that a full checkout is cheap
       - uses: actions/checkout@v3.3.0
@@ -578,6 +586,7 @@ jobs:
       always() &&
       !failure() &&
       !cancelled() &&
+      (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) &&
       (needs.common_config.outputs.pypi_publish && needs.common_config.outputs.publish_env)
     uses: ./.github/workflows/publish.yml
     secrets: inherit

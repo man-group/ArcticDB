@@ -11,8 +11,36 @@ This is the documentation of the CI system that is used to build and publish Arc
 It aims to provide an overview of the system and the general steps.
 
 The CI system is based on GitHub Actions.
-It can be triggered automatically on push to any branch or manually [here](https://github.com/man-group/ArcticDB/actions/workflows/build.yml).
+It runs automatically for pull requests, pushes to `master`, and version tags, or manually [here](https://github.com/man-group/ArcticDB/actions/workflows/build.yml).
 There is also a scheduled build of the master branch that runs every night and tests against real, persistent storages (e.g. AWS S3, Azure Cloud, etc).
+
+## Pull requests from forks
+
+GitHub may hold a contributor's workflow runs for maintainer approval. A maintainer must review and approve the pending
+runs during PR triage; workflow YAML cannot bypass the repository's approval policy. Approval permits execution with a
+read-only `GITHUB_TOKEN` and without repository secrets. Contributors do not need Man PATs, AWS keys, or Anthropic keys.
+
+After approval, source changes run the normal Linux, Windows, and macOS C++ tests and Python 3.9–3.14 wheel/test matrix,
+plus lint, conda builds, ASV validation, and the enabled sanitizer checks. Local storage services and Actions artifacts
+remain available. Docs-only changes deliberately skip compilation. The `can_merge` and `All conda jobs completed`
+checks retain their names and reject failed, cancelled, or unexpectedly skipped dependencies; `can_merge` also includes lint.
+
+Fork PRs skip EC2 benchmarks, S3 pytest-result publication, and credentialed automated review. Release-label validation
+still runs, with comment writes disabled for forks. Maintainers apply exactly one of `patch`, `minor`, or `major` during
+triage. Cloud-storage tests remain on scheduled and configured manual runs; they are not part of ordinary PR tests.
+
+Public GHCR images are inspected and pulled anonymously. If the matching manylinux image has not been published,
+each fork's Linux wheel runner builds the current image script locally and uses that image without pushing it. This
+also tests PR changes to the image build inputs. Cold builds may take longer, but retain the same test matrix.
+
+Without cache credentials, sccache selects the GitHub Actions backend and vcpkg builds dependencies from source.
+NuGet cache setup is optional and falls back on an unavailable feed. Trusted runs retain S3 caching and NuGet publication
+when configured. See [cache modes](../../build_tooling/README.md#optional-ci-caches).
+
+Before deploying CI changes, validate an actual external fork PR after approval, including a missing manylinux image
+and empty dependency caches. Confirm all build/test jobs and artifact uploads execute, infrastructure jobs skip, and
+the aggregate checks fail when a test or lint job fails. Do not enable write tokens or send repository secrets to forks,
+or execute contributor code with `pull_request_target`.
 
 # Overview
 
@@ -70,7 +98,10 @@ You can see them in the outputs part and they are used by the other jobs by call
 
 ## CI Build Wheel Docker Image
 
-TODO
+[`cibw_docker_image.yml`](cibw_docker_image.yml) resolves the image tag from the cibuildwheel version and build-script
+hashes. Trusted callers can build and publish a missing image. Fork PRs return `build_locally=true` on a miss, which
+[`build_steps.yml`](build_steps.yml) uses to build the image on each Linux wheel runner. The
+`cibw_docker_image_override` variable still selects an explicitly supplied image.
 
 ## Leader jobs
 
@@ -96,7 +127,8 @@ Currently this is manual.  Automatic build (on push) and publish (for releases) 
 
 ## can_merge check
 
-This is a simple check that is used by GitHub to determine, if a PR can be merged.
+This check requires lint and all selected build/test jobs to succeed, including macOS persistent verification on storage runs.
+It permits only the documented docs-only and disabled-persistent-storage skips.
 It is also used as a gate to check, if we can publish a new release.
 
 ## Publish
@@ -147,6 +179,7 @@ This logic is used in [build.yml](build.yml).
 <tr><th>inputs.cmake_preset_type</th><td>release or debug</code> is enabled</td>
 <tr><th>inputs.matrix</th><td>JSON string to feed into the build matrix</td>
 <tr><th>inputs.cibw_image_tag</th><td>Linux only. As built by cibw_docker_image.yml workflow</td>
+<tr><th>inputs.build_cibw_image</th><td>Build that image locally on the Linux wheel runner, without registry publication</td>
 <tr><th>inputs.cibw_version</th><td>Follower only. Must match the cibw_image_tag</td>
 <tr><th>inputs.python_deps_ids</th><td>Follower test matrix parameter. JSON string.</td>
 <tr><th>inputs.python3</th><td>Specifies the Python 3 minor version (e.g. 8, 9, 10, etc.)</td>

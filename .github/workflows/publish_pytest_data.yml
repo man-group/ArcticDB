@@ -7,6 +7,7 @@ on:
 run-name: Publish ${{github.ref}} to arcticdb-pytest-data
 permissions:
   contents: read
+  actions: read
 jobs:
   sync_pytest_xmls:
     runs-on: ubuntu-22.04

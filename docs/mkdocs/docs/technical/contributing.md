@@ -24,6 +24,24 @@ python build_tooling/format.py --install-tools  # Only required the first time
 python build_tooling/format.py --in-place --type all
 ```
 
+## CI for external contributions
+
+Open a pull request against ArcticDB to run CI. GitHub may require a maintainer to approve workflow execution;
+maintainers handle approval and release labels during PR triage. If a run is awaiting approval, ask a maintainer on
+the PR. Contributors do not need repository secrets or cloud credentials.
+
+Once approved, fork PRs run the normal local C++ tests, Python wheel/test matrix, lint, conda builds, ASV validation,
+and enabled sanitizer checks. Missing build images are built locally, and unavailable dependency caches fall back to
+source builds. Logs, wheels, and test results are available as Actions artifacts. Docs-only changes skip compilation.
+
+EC2 benchmarks, cloud pytest-result publication, and credentialed automated review are skipped on fork PRs. Cloud-storage
+tests run separately in scheduled or configured manual workflows. Maintainers apply exactly one release label (`patch`,
+`minor`, or `major`); the label check remains read-only for fork PRs.
+
+The main build runs on PRs, `master` pushes, and version tags. A push to a feature branch in your own fork does not
+automatically start it. See the [CI guide](https://github.com/man-group/ArcticDB/blob/master/.github/workflows/README.md)
+for workflow details.
+
 Docker Quickstart
 =================
 
