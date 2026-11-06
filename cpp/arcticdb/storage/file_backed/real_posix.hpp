@@ -14,9 +14,7 @@ namespace arcticdb::storage::file_backed {
 
 class RealPosix : public PosixInterface {
   public:
-    int open(const char* pathname, int flags) override;
     int open(const char* pathname, int flags, mode_t mode) override;
-    int openat(int dirfd, const char* pathname, int flags) override;
     int openat(int dirfd, const char* pathname, int flags, mode_t mode) override;
     ssize_t write(int fd, const void* buf, size_t count) override;
     int fsync(int fd) override;

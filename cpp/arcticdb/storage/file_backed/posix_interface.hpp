@@ -16,9 +16,7 @@ namespace arcticdb::storage::file_backed {
 class PosixInterface {
   public:
     virtual ~PosixInterface() = default;
-    virtual int open(const char* pathname, int flags) = 0;
     virtual int open(const char* pathname, int flags, mode_t mode) = 0;
-    virtual int openat(int dirfd, const char* pathname, int flags) = 0;
     virtual int openat(int dirfd, const char* pathname, int flags, mode_t mode) = 0;
     // Wow so I can feed 64 bits of buffer size but the function can only signal 63 bits of bytes written? Cool.
     virtual ssize_t write(int fd, const void* buf, size_t count) = 0;
