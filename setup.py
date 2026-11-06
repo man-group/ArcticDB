@@ -208,9 +208,16 @@ class CompileProto(Command):
             # grpcio-tools is already installed in the conda environment (see environment.yml)
             env = {**os.environ}
 
+        include_args = ["-Icpp/proto"]
+        if ARCTICDB_USING_CONDA:
+            # conda-forge grpcio-tools>=1.82 does not ship the well-known protos (e.g. google/protobuf/any.proto)
+            # in grpc_tools/_proto, so take them from libprotobuf.
+            prefix_include = ("Library", "include") if sys.platform == "win32" else ("include",)
+            include_args.append("-I" + os.path.join(sys.prefix, *prefix_include))
+
         # Compile
         os.makedirs(version_output_dir, exist_ok=True)
-        cmd = [sys.executable, "-mgrpc_tools.protoc", "-Icpp/proto", "--python_out=" + version_output_dir]
+        cmd = [sys.executable, "-mgrpc_tools.protoc", *include_args, "--python_out=" + version_output_dir]
         _log_and_run(*cmd, *glob.glob(os.path.normpath("cpp/proto/arcticc/pb2/*.proto")), env=env)
 
         shutil.rmtree(pythonpath)
