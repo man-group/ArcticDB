@@ -288,6 +288,39 @@ def test_delete_keeps_data_deduplicated_with_snapshot_beyond_nearest_snapshotted
     assert_frame_equal(lib.read(sym, as_of="snap_v1").data, df + 1000)
 
 
+@pytest.mark.parametrize("delete_method", ["delete_version", "delete"])
+def test_add_to_snapshot_keeps_deleted_version_it_already_holds(version_store_factory, delete_method):
+    lib = version_store_factory(use_tombstones=True, delayed_deletes=False)
+    sym = "sym"
+    lib.write(sym, _df_for_day(0))  # v0
+    lib.snapshot("snap")
+    if delete_method == "delete_version":
+        lib.write(sym, _df_for_day(1))  # v1
+        lib.delete_version(sym, 0)
+    else:
+        lib.delete(sym)
+
+    # Replacing snap's v0 with itself must not delete it
+    lib.add_to_snapshot("snap", [sym], [0])
+
+    assert_frame_equal(lib.read(sym, as_of="snap").data, _df_for_day(0))
+
+
+def test_remove_from_snapshot_deletes_version_it_held_last(version_store_factory):
+    lib = version_store_factory(use_tombstones=True, delayed_deletes=False)
+    sym = "sym"
+    lib.write(sym, _df_for_day(0))  # v0
+    lib.snapshot("snap")
+    lib.delete(sym)
+
+    # snap would be empty so isn't rewritten, but must not keep v0 alive
+    lib.remove_from_snapshot("snap", [sym], [0])
+
+    lib_tool = lib.library_tool()
+    assert not lib_tool.find_keys_for_id(KeyType.TABLE_INDEX, sym)
+    assert not lib_tool.find_keys_for_id(KeyType.TABLE_DATA, sym)
+
+
 def test_delete_snapshot_with_many_symbols(version_store_factory):
     lib = version_store_factory(use_tombstones=True, delayed_deletes=False)
     lib.write("in_other_snapshot", _df_for_day(0))
