@@ -30,8 +30,8 @@ struct PreDeleteChecks {
     bool version_visible = true;
 
     /**
-     * Check the neighbouring versions for data blocks shared with the key(s) being deleted.
-     * (At the time of writing, data can only be shared between neighbouring versions. Future dedup may break this?)
+     * Check the nearest undeleted versions for data blocks shared with the key(s) being deleted. Versions build on the
+     * latest undeleted version, so this covers all undeleted versions. The snapshots check covers snapshotted ones.
      */
     bool prev_version = true;
     bool next_version = true;
@@ -42,6 +42,18 @@ struct PreDeleteChecks {
      * corresponding flags and put the results here.
      */
     std::unordered_set<IndexTypeKey> could_share_data{};
+
+    /**
+     * The keys of could_share_data that were undeleted before this delete started. Deletes can skip reading some
+     * snapshotted versions based on them, so only add keys known to have been undeleted.
+     */
+    std::unordered_set<IndexTypeKey> live_before_delete{};
+
+    /**
+     * Per symbol, the latest version id in the version chain live_before_delete was taken from. That chain may be a
+     * cached one, and versions above it may have been written since, so live_before_delete says nothing about them.
+     */
+    std::unordered_map<StreamId, VersionId> latest_version_before_delete{};
 
     LoadType calc_load_type() const {
         if (prev_version)

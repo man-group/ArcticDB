@@ -284,12 +284,12 @@ inline BatchGetVersionResult<SymbolVersion> batch_get_specific_versions(
         for (const auto& [sym_version, key] : *tombstoned_vers) {
             stream_ids.insert(sym_version.first);
         }
-        const auto snap_map = get_master_snapshots_map(store, stream_ids);
+        const auto snapshotted_keys = get_snapshotted_index_keys(store, stream_ids);
         for (const auto& [sym_version, key] : *tombstoned_vers) {
-            auto cit = snap_map.find(sym_version.first);
-            if (cit != snap_map.cend() &&
-                std::any_of(cit->second.cbegin(), cit->second.cend(), [&sym_version](const auto& key_and_snapshot_ids) {
-                    return key_and_snapshot_ids.first.version_id() == sym_version.second;
+            auto cit = snapshotted_keys.find(sym_version.first);
+            if (cit != snapshotted_keys.cend() &&
+                std::any_of(cit->second.cbegin(), cit->second.cend(), [&sym_version](const auto& snapshotted_key) {
+                    return snapshotted_key.version_id() == sym_version.second;
                 })) {
                 (*found)[sym_version] = key;
             } else {

@@ -149,6 +149,9 @@ inline version_store::TombstoneVersionResult populate_tombstone_result(
 ) {
     version_store::TombstoneVersionResult res(entry->empty(), stream_id);
     auto latest_key = entry->get_first_index(true).first;
+    if (latest_key) {
+        res.latest_version_before_delete.try_emplace(stream_id, latest_key->version_id());
+    }
 
     for (auto version_id : version_ids) {
         bool found = false;
@@ -159,8 +162,14 @@ inline version_store::TombstoneVersionResult populate_tombstone_result(
                     res.keys_to_delete.push_back(matching.to_atom_key(entry->stream_id_));
                     found = true;
                 },
-                [&res, &entry](auto& prev) { res.could_share_data.emplace(prev.to_atom_key(entry->stream_id_)); },
-                [&res, &entry](auto& next) { res.could_share_data.emplace(next.to_atom_key(entry->stream_id_)); },
+                [&res, &entry](auto& prev) {
+                    res.could_share_data.emplace(prev.to_atom_key(entry->stream_id_));
+                    res.live_before_delete.emplace(prev.to_atom_key(entry->stream_id_));
+                },
+                [&res, &entry](auto& next) {
+                    res.could_share_data.emplace(next.to_atom_key(entry->stream_id_));
+                    res.live_before_delete.emplace(next.to_atom_key(entry->stream_id_));
+                },
                 is_live_index_type_key // Entry could be cached with deleted keys even if LOAD_UNDELETED
         );
 

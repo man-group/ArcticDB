@@ -194,7 +194,7 @@ folly::Future<folly::Unit> LocalVersionedEngine::delete_unreferenced_pruned_inde
             );
             in_snaps.insert(key_to_keep);
             PreDeleteChecks checks{false, false, false, false, std::move(in_snaps)};
-            return delete_trees_responsibly(store(), version_map(), not_in_snaps, {}, {}, checks)
+            return delete_trees_responsibly(store(), version_map(), not_in_snaps, SnapshottedIndexKeys{}, checks)
                     .thenValueInline([](auto&&) { return folly::Unit{}; }) // drop the DeleteTreesStats
                     .thenError(folly::tag_t<std::exception>{}, [](auto const& ex) {
                         log::version().warn("Failed to clean up pruned previous versions due to: {}", ex.what());
@@ -957,48 +957,6 @@ VersionedItem LocalVersionedEngine::write_segment(
     return versioned_item;
 }
 
-/**
- * For an index key considered for deletion (target_key) we protect the nearest versions to it (above and below)
- * that are included in snapshots from deletion. This is because the index key may be dedup'd against an earlier
- * version in a snapshot, or a later version in a snapshot may be dedup'd against this index key.
- */
-void copy_versions_nearest_to_target(
-        const MasterSnapshotMap::value_type::second_type& index_key_to_snapshot_map, const IndexTypeKey& target_key,
-        util::ContainerFilterWrapper<std::unordered_set<IndexTypeKey>>& not_to_delete
-) {
-    const auto target_version = target_key.version_id();
-
-    const IndexTypeKey* least_higher_version = nullptr;
-    const IndexTypeKey* greatest_lower_version = nullptr;
-
-    for (const auto& pair : index_key_to_snapshot_map) {
-        const auto& key = pair.first;
-        if (key != target_key) {
-            const auto version = key.version_id();
-            if (version > target_version) {
-                if (!least_higher_version || least_higher_version->version_id() > version) {
-                    least_higher_version = &key;
-                }
-            } else if (version < target_version) {
-                if (!greatest_lower_version || greatest_lower_version->version_id() < version) {
-                    greatest_lower_version = &key;
-                }
-            } else {
-                log::version().warn(
-                        "Found two distinct index keys for the same version in snapshots:\n{}\n{}", key, target_key
-                );
-            }
-        }
-    }
-
-    if (least_higher_version) {
-        not_to_delete.insert(*least_higher_version);
-    }
-    if (greatest_lower_version) {
-        not_to_delete.insert(*greatest_lower_version);
-    }
-}
-
 std::unordered_map<StreamId, VersionId> min_versions_for_each_stream(const std::vector<AtomKey>& keys) {
     std::unordered_map<StreamId, VersionId> out;
     for (auto& key : keys) {
@@ -1010,10 +968,226 @@ std::unordered_map<StreamId, VersionId> min_versions_for_each_stream(const std::
     return out;
 }
 
+std::vector<bool> protected_versions_to_read(
+        std::vector<VersionId> candidate_versions, std::vector<VersionId> cut_versions,
+        const std::vector<VersionId>& protected_versions
+) {
+    std::sort(candidate_versions.begin(), candidate_versions.end());
+    candidate_versions.erase(
+            std::unique(candidate_versions.begin(), candidate_versions.end()), candidate_versions.end()
+    );
+    std::sort(cut_versions.begin(), cut_versions.end());
+
+    // Merged windows [first, second], no second meaning unbounded. The upper bound grows with the candidate version.
+    std::vector<std::pair<VersionId, std::optional<VersionId>>> windows;
+    for (const auto version : candidate_versions) {
+        const auto cut = std::upper_bound(cut_versions.begin(), cut_versions.end(), version);
+        const auto upper = cut == cut_versions.end() ? std::nullopt : std::make_optional(*cut);
+        if (!windows.empty() && (!windows.back().second || version <= *windows.back().second)) {
+            windows.back().second = upper;
+        } else {
+            windows.emplace_back(version, upper);
+        }
+    }
+
+    std::vector<bool> res;
+    res.reserve(protected_versions.size());
+    for (const auto version : protected_versions) {
+        auto it = std::upper_bound(windows.begin(), windows.end(), version, [](VersionId v, const auto& window) {
+            return v < window.first;
+        });
+        res.push_back(it != windows.begin() && (!std::prev(it)->second || version <= *std::prev(it)->second));
+    }
+    return res;
+}
+
+namespace {
+
+// Kill switch for reading only the snapshotted versions that could hold candidate data (protected_versions_to_read)
+bool lineage_prune_deletes() { return ConfigsMap::instance()->get_int("VersionStore.LineagePruneDeletes", 1) != 0; }
+
+/**
+ * The data keys only the targets reference: those of the targets, less those of the neighbours and of the snapshotted
+ * index keys in keys_in_other_snapshots. Reads a snapshotted index key only if its symbol has candidate data keys and,
+ * unless the lineage can't be relied on, only if its version could hold them.
+ * @return The data keys to delete, and the number of data keys of the targets.
+ */
+std::pair<ankerl::unordered_dense::set<AtomKey>, size_t> candidate_data_keys(
+        const std::shared_ptr<Store>& store, const std::vector<IndexTypeKey>& targets,
+        const std::unordered_set<IndexTypeKey>& neighbours, const std::unordered_set<IndexTypeKey>& cuts,
+        const std::unordered_map<StreamId, VersionId>& latest_versions,
+        const SnapshottedIndexKeys& keys_in_other_snapshots, DeleteTreesStats& stats
+) {
+    struct SymbolState {
+        ankerl::unordered_dense::set<AtomKey> candidates;
+        std::unordered_set<IndexTypeKey> read_keys;
+        std::vector<VersionId> cut_versions;
+        bool lineage_reliable = true;
+    };
+    std::unordered_map<StreamId, SymbolState> symbols;
+    for (const auto& key : targets) {
+        symbols[key.id()];
+    }
+
+    std::vector<IndexTypeKey> to_read(targets.begin(), targets.end());
+    for (const auto& key : neighbours) {
+        if (symbols.contains(key.id())) {
+            to_read.push_back(key);
+        }
+    }
+    storage::ReadKeyOpts read_opts;
+    read_opts.ignores_missing_key_ = true;
+    auto contents = recurse_index_keys_per_key(store, to_read, read_opts);
+    read_opts.dont_warn_about_missing_key = true;
+
+    ankerl::unordered_dense::set<AtomKey> all_candidates;
+    ankerl::unordered_dense::set<AtomKey> protected_data;
+    for (size_t i = 0; i < to_read.size(); ++i) {
+        const auto& key = to_read[i];
+        auto& state = symbols.at(key.id());
+        state.read_keys.insert(key);
+        if (key.type() != KeyType::TABLE_INDEX) {
+            state.lineage_reliable = false;
+        }
+        if (!contents[i]) {
+            continue;
+        }
+        if (i < targets.size()) {
+            for (auto& data_key : *contents[i]) {
+                // Data keys carry the id of the version that created them, which can't be above a version using them
+                if (data_key.type() != KeyType::TABLE_DATA || data_key.version_id() > key.version_id()) {
+                    state.lineage_reliable = false;
+                }
+                all_candidates.insert(data_key);
+                state.candidates.insert(std::move(data_key));
+            }
+        } else {
+            for (auto& data_key : *contents[i]) {
+                state.candidates.erase(data_key);
+                protected_data.insert(std::move(data_key));
+            }
+            if (cuts.contains(key)) {
+                state.cut_versions.push_back(key.version_id());
+            }
+        }
+    }
+    const auto data_keys_considered = all_candidates.size();
+
+    const bool prune = lineage_prune_deletes();
+    std::vector<IndexTypeKey> protected_to_read;
+    for (auto& [symbol, state] : symbols) {
+        auto snapshotted = keys_in_other_snapshots.find(symbol);
+        if (state.candidates.empty() || snapshotted == keys_in_other_snapshots.end()) {
+            continue;
+        }
+        // The cuts come from a version chain that may be cached. Versions above its latest may have been written since,
+        // by another client building on an older version, so the cuts say nothing about them. Without the latest
+        // version, the keys read are a lower bound of it.
+        VersionId latest_version = 0;
+        if (auto it = latest_versions.find(symbol); it != latest_versions.end()) {
+            latest_version = it->second;
+        } else {
+            for (const auto& key : state.read_keys) {
+                latest_version = std::max(latest_version, key.version_id());
+            }
+        }
+        std::vector<IndexTypeKey> protected_keys;
+        for (const auto& key : snapshotted->second) {
+            if (state.read_keys.contains(key)) {
+                continue;
+            }
+            if (key.type() != KeyType::TABLE_INDEX) {
+                state.lineage_reliable = false;
+            }
+            if (prune && key.version_id() > latest_version) {
+                protected_to_read.push_back(key);
+                ++stats.protected_index_keys_read;
+            } else {
+                protected_keys.push_back(key);
+            }
+        }
+        if (!prune || !state.lineage_reliable) {
+            stats.protected_index_keys_read += protected_keys.size();
+            protected_to_read.insert(protected_to_read.end(), protected_keys.begin(), protected_keys.end());
+            continue;
+        }
+        std::vector<VersionId> candidate_versions;
+        candidate_versions.reserve(state.candidates.size());
+        for (const auto& data_key : state.candidates) {
+            candidate_versions.push_back(data_key.version_id());
+        }
+        std::vector<VersionId> protected_versions;
+        protected_versions.reserve(protected_keys.size());
+        for (const auto& key : protected_keys) {
+            protected_versions.push_back(key.version_id());
+        }
+        const auto to_read_mask = protected_versions_to_read(
+                std::move(candidate_versions), std::move(state.cut_versions), protected_versions
+        );
+        for (size_t i = 0; i < protected_keys.size(); ++i) {
+            if (to_read_mask[i]) {
+                protected_to_read.push_back(protected_keys[i]);
+                ++stats.protected_index_keys_read;
+            } else {
+                ++stats.protected_index_keys_skipped;
+            }
+        }
+    }
+
+    for (auto& protected_contents : recurse_index_keys_per_key(store, protected_to_read, read_opts)) {
+        if (protected_contents) {
+            protected_data.insert(
+                    std::make_move_iterator(protected_contents->begin()),
+                    std::make_move_iterator(protected_contents->end())
+            );
+        }
+    }
+    std::erase_if(all_candidates, [&protected_data](const AtomKey& key) { return protected_data.contains(key); });
+    log::version().debug(
+            "Candidate: {} data keys, {} to delete; read {} snapshotted index keys, skipped {}",
+            data_keys_considered,
+            all_candidates.size(),
+            stats.protected_index_keys_read,
+            stats.protected_index_keys_skipped
+    );
+    return {std::move(all_candidates), data_keys_considered};
+}
+
+} // namespace
+
 folly::Future<DeleteTreesStats> delete_trees_responsibly(
         std::shared_ptr<Store> store, std::shared_ptr<VersionMap>& version_map,
         const std::vector<IndexTypeKey>& orig_keys_to_delete, const arcticdb::MasterSnapshotMap& snapshot_map,
         const std::optional<SnapshotId>& snapshot_being_deleted, const PreDeleteChecks& check, const bool dry_run
+) {
+    // Keys held only by snapshot_being_deleted are not protected, but their data may be shared with other keys, so pass
+    // them as could_share_data, as check 2) used to.
+    SnapshottedIndexKeys keys_in_other_snapshots;
+    PreDeleteChecks checks = check;
+    std::unordered_set<StreamId> symbols_to_delete;
+    for (const auto& key : orig_keys_to_delete) {
+        symbols_to_delete.insert(key.id());
+    }
+    for (const auto& [symbol, keys_map] : snapshot_map) {
+        for (const auto& [key, snaps] : keys_map) {
+            const auto count_for_snapshot_being_deleted =
+                    snapshot_being_deleted ? snaps.count(*snapshot_being_deleted) : 0;
+            if (snaps.size() > count_for_snapshot_being_deleted) {
+                keys_in_other_snapshots[symbol].insert(key);
+            } else if (check.snapshots && symbols_to_delete.contains(symbol)) {
+                checks.could_share_data.insert(key);
+            }
+        }
+    }
+    return delete_trees_responsibly(
+            std::move(store), version_map, orig_keys_to_delete, keys_in_other_snapshots, checks, dry_run
+    );
+}
+
+folly::Future<DeleteTreesStats> delete_trees_responsibly(
+        std::shared_ptr<Store> store, std::shared_ptr<VersionMap>& version_map,
+        const std::vector<IndexTypeKey>& orig_keys_to_delete, const SnapshottedIndexKeys& keys_in_other_snapshots,
+        const PreDeleteChecks& check, const bool dry_run
 ) {
     ARCTICDB_SAMPLE(DeleteTree, 0)
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: delete_tree");
@@ -1026,30 +1200,24 @@ folly::Future<DeleteTreesStats> delete_trees_responsibly(
     // 1) remove any keys_to_delete that are still visible
     // 2) find any other index key that could share data with the keys_to_delete (due to dedup).
 
-    // Remove any keys considered for deletion that are covered by a snapshot.
+    // Keys that were undeleted before this delete, so may limit which snapshotted versions need reading
+    std::unordered_set<IndexTypeKey> cuts(check.live_before_delete.begin(), check.live_before_delete.end());
+    // Per symbol, the lowest latest version of the version chains the cuts come from
+    auto latest_versions = check.latest_version_before_delete;
+
+    // Remove any keys considered for deletion that are covered by a snapshot. Check 2) for snapshotted versions is
+    // below, once the candidate data keys are known.
     if (check.snapshots) {
-        keys_to_delete.remove_if([&snapshot_map, &snapshot_being_deleted, &not_to_delete, &stats](const auto& target_key
-                                 ) {
-            // snapshot map is {symbol: {index_key: {snapshots...}}}
-            if (auto find_symbol = snapshot_map.find(target_key.id()); find_symbol != snapshot_map.end()) {
-                const auto& keys_map = find_symbol->second;
-                auto snaps_itr = keys_map.find(target_key);
-                if (snaps_itr != keys_map.end()) {
-                    // Check 1)
-                    const auto& snaps = snaps_itr->second;
-                    auto count_for_snapshot_being_deleted =
-                            snapshot_being_deleted ? snaps.count(*snapshot_being_deleted) : 0;
-                    if (snaps.size() > count_for_snapshot_being_deleted) {
-                        log::version().debug(
-                                "Skipping the deletion of index {}:{} because it exists in another snapshot",
-                                target_key.id(),
-                                target_key.version_id()
-                        );
-                        ++stats.index_keys_protected_by_snapshots;
-                        return true;
-                    }
-                }
-                copy_versions_nearest_to_target(keys_map, target_key, not_to_delete); // Check 2)
+        keys_to_delete.remove_if([&keys_in_other_snapshots, &stats](const auto& target_key) {
+            if (auto find_symbol = keys_in_other_snapshots.find(target_key.id());
+                find_symbol != keys_in_other_snapshots.end() && find_symbol->second.contains(target_key)) { // Check 1)
+                log::version().debug(
+                        "Skipping the deletion of index {}:{} because it exists in another snapshot",
+                        target_key.id(),
+                        target_key.version_id()
+                );
+                ++stats.index_keys_protected_by_snapshots;
+                return true;
             }
             return false;
         });
@@ -1083,11 +1251,18 @@ folly::Future<DeleteTreesStats> delete_trees_responsibly(
             // Verified by test_batch_delete_versions_* with single-threaded config.
             auto results = folly::collectAll(reload_futures).get();
             for (size_t i = 0; i < results.size(); ++i) {
-                entry_map.try_emplace(std::move(stream_ids[i]), std::move(results[i]).value());
+                auto entry = std::move(results[i]).value();
+                if (auto latest = entry->get_first_index(true).first) {
+                    auto [it, inserted] = latest_versions.try_emplace(stream_ids[i], latest->version_id());
+                    if (!inserted) {
+                        it->second = std::min(it->second, latest->version_id());
+                    }
+                }
+                entry_map.try_emplace(std::move(stream_ids[i]), std::move(entry));
             }
         }
 
-        keys_to_delete.remove_if([&entry_map, &check, &not_to_delete](const auto& key) {
+        keys_to_delete.remove_if([&entry_map, &check, &not_to_delete, &cuts](const auto& key) {
             const auto entry = entry_map.at(key.id());
             if (check.version_visible && !entry->is_tombstoned(key)) { // Check 1)
                 log::version().debug(
@@ -1101,13 +1276,18 @@ folly::Future<DeleteTreesStats> delete_trees_responsibly(
                     entry,
                     key.version_id(), // Check 2)
                     [](const AtomKeyPacked&) {},
-                    [&check, &not_to_delete, &entry](auto& prev) {
-                        if (check.prev_version)
+                    // prev and next are undeleted, as the entry was loaded after any tombstoning
+                    [&check, &not_to_delete, &cuts, &entry](auto& prev) {
+                        if (check.prev_version) {
                             not_to_delete.insert(prev.to_atom_key(entry->stream_id_));
+                            cuts.insert(prev.to_atom_key(entry->stream_id_));
+                        }
                     },
-                    [&check, &not_to_delete, &entry](auto& next) {
-                        if (check.next_version)
+                    [&check, &not_to_delete, &cuts, &entry](auto& next) {
+                        if (check.next_version) {
                             not_to_delete.insert(next.to_atom_key(entry->stream_id_));
+                            cuts.insert(next.to_atom_key(entry->stream_id_));
+                        }
                     },
                     [v = key.version_id()](const AtomKeyPacked& key, const std::shared_ptr<VersionMapEntry>& entry) {
                         // Can't use is_live_index_type_key() because the target version's index key might have
@@ -1126,16 +1306,11 @@ folly::Future<DeleteTreesStats> delete_trees_responsibly(
         not_to_delete.erase(key);
     }
 
-    storage::ReadKeyOpts read_opts;
-    read_opts.ignores_missing_key_ = true;
-    auto data_keys_to_be_deleted = recurse_index_keys(store, *keys_to_delete, read_opts);
-    stats.data_keys_considered = data_keys_to_be_deleted.size();
-    log::version().debug("Candidate: {} total of data keys", data_keys_to_be_deleted.size());
-
-    read_opts.dont_warn_about_missing_key = true;
-    auto data_keys_not_to_be_deleted = recurse_index_keys(store, *not_to_delete, read_opts);
+    auto [data_keys_to_be_deleted, data_keys_considered] = candidate_data_keys(
+            store, *keys_to_delete, *not_to_delete, cuts, latest_versions, keys_in_other_snapshots, stats
+    );
+    stats.data_keys_considered = data_keys_considered;
     not_to_delete.clear();
-    log::version().debug("Forbidden: {} total of data keys", data_keys_not_to_be_deleted.size());
     storage::RemoveOpts remove_opts;
     remove_opts.ignores_missing_key_ = true;
 
@@ -1156,12 +1331,9 @@ folly::Future<DeleteTreesStats> delete_trees_responsibly(
     );
     log::version().debug("Number of Index keys to be deleted: {}", vks_to_delete.size());
 
-    std::vector<entity::VariantKey> vks_data_to_delete;
-    std::copy_if(
+    std::vector<entity::VariantKey> vks_data_to_delete(
             std::make_move_iterator(data_keys_to_be_deleted.begin()),
-            std::make_move_iterator(data_keys_to_be_deleted.end()),
-            std::back_inserter(vks_data_to_delete),
-            [&](const auto& k) { return !data_keys_not_to_be_deleted.count(k); }
+            std::make_move_iterator(data_keys_to_be_deleted.end())
     );
     log::version().debug("Number of Data keys to be deleted: {}", vks_data_to_delete.size());
 

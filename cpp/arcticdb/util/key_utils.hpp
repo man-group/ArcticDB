@@ -303,6 +303,63 @@ inline ankerl::unordered_dense::set<AtomKey> recurse_index_keys(
     return res;
 }
 
+/* Like recurse_index_keys, but gives the keys referenced by each [multi-]index key separately, in the order of keys.
+ * A key that could not be read because it is missing gives std::nullopt, if opts.ignores_missing_key_. */
+template<typename KeyContainer>
+requires std::is_base_of_v<AtomKey, typename KeyContainer::value_type>
+inline std::vector<std::optional<std::vector<AtomKey>>> recurse_index_keys_per_key(
+        const std::shared_ptr<stream::StreamSource>& store, const KeyContainer& keys, storage::ReadKeyOpts opts
+) {
+    std::vector<folly::Future<std::vector<AtomKey>>> futures;
+    futures.reserve(keys.size());
+    for (const auto& index_key : keys) {
+        internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+                index_key.type() == KeyType::TABLE_INDEX || index_key.type() == KeyType::MULTI_KEY,
+                "recurse_index_keys_per_key: expected index or multi-index key, received {}",
+                index_key.type()
+        );
+        futures.push_back(store->read(index_key, opts).thenValue([store, index_key](auto&& key_seg) {
+            std::vector<AtomKey> result;
+            auto segment = std::move(key_seg.second);
+            if (index_key.type() == KeyType::MULTI_KEY) {
+                auto sub_keys = recurse_segment(store, std::move(segment), std::nullopt);
+                result.assign(sub_keys.begin(), sub_keys.end());
+            } else {
+                KeySegment key_segment(std::move(segment), SymbolStructure::SAME);
+                auto data_keys = key_segment.materialise();
+                util::variant_match(data_keys, [&]<typename KT>(std::vector<KT>& atom_keys) {
+                    result.reserve(atom_keys.size());
+                    for (KT& key : atom_keys) {
+                        if constexpr (std::is_same_v<KT, AtomKey>) {
+                            result.emplace_back(std::move(key));
+                        } else {
+                            result.emplace_back(key.to_atom_key(index_key.id()));
+                        }
+                    }
+                });
+            }
+            return result;
+        }));
+    }
+
+    // Blocks the calling thread, as recurse_index_keys does
+    auto tries = folly::collectAll(futures).get();
+    std::vector<std::optional<std::vector<AtomKey>>> res;
+    res.reserve(tries.size());
+    for (auto& try_result : tries) {
+        try {
+            res.emplace_back(std::move(try_result).value());
+        } catch (storage::KeyNotFoundException& e) {
+            if (!opts.ignores_missing_key_) {
+                throw;
+            }
+            log::version().info("Missing key while recursing index key {}", e.keys());
+            res.emplace_back(std::nullopt);
+        }
+    }
+    return res;
+}
+
 inline VersionId get_next_version_from_key(const AtomKey& prev) {
     auto version = prev.version_id();
     return ++version;
