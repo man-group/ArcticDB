@@ -12,10 +12,14 @@
 #include <arcticdb/storage/storage.hpp>
 #include <arcticdb/stream/test/stream_test_common.hpp>
 
+#include <atomic>
 #include <filesystem>
 #include <stdexcept>
+#include <thread>
 #include <arcticdb/entity/atom_key.hpp>
 #include <arcticdb/entity/types.hpp>
+#include <arcticdb/storage/storage_exceptions.hpp>
+#include <arcticdb/util/configs_map.hpp>
 #include <arcticdb/util/test/test_utils.hpp>
 #include <arcticdb/util/random.h>
 #include <arcticdb/stream/row_builder.hpp>
@@ -154,6 +158,101 @@ TEST_P(LocalStorageTestSuite, Strings) {
 }
 
 using namespace std::string_literals;
+
+ac::entity::AtomKey test_key(int64_t id) {
+    return ac::entity::atom_key_builder().gen_id(1).build<ac::entity::KeyType::TABLE_DATA>(NumericId{id});
+}
+
+as::KeySegmentPair test_key_segment(int64_t id) {
+    auto segment_in_memory = get_test_frame<arcticdb::stream::TimeseriesIndex>("symbol", {}, 10, 0).segment_;
+    auto codec_opts = proto::encoding::VariantCodec();
+    auto segment = encode_dispatch(std::move(segment_in_memory), codec_opts, arcticdb::EncodingVersion::V2);
+    return as::KeySegmentPair{test_key(id), std::move(segment)};
+}
+
+// Not run over MemoryStorage: its map is not written under a lock. Parameterised over LMDBStorage.GroupCommit.
+class LmdbConcurrentWrites : public testing::TestWithParam<int64_t> {
+  protected:
+    void SetUp() override {
+        generator_.delete_any_test_databases();
+        storage_ = generator_.new_storage();
+    }
+    void TearDown() override {
+        storage_.reset();
+        generator_.delete_any_test_databases();
+    }
+    arcticdb::ScopedConfig group_commit_{"LMDBStorage.GroupCommit", GetParam()};
+    StorageGenerator generator_{"lmdb"s};
+    std::unique_ptr<as::Storage> storage_;
+};
+
+constexpr int64_t concurrent_writer_count = 8;
+constexpr int64_t keys_per_writer = 16;
+constexpr int64_t duplicate_key_rounds = 100;
+
+TEST_P(LmdbConcurrentWrites, EveryKeyLandsAndIsReadableOnceAcknowledged) {
+    std::atomic<int64_t> unreadable{0};
+    std::vector<std::thread> writers;
+    for (int64_t writer = 0; writer < concurrent_writer_count; ++writer) {
+        writers.emplace_back([this, &unreadable, writer]() {
+            for (int64_t index = 0; index < keys_per_writer; ++index) {
+                const int64_t id = writer * keys_per_writer + index;
+                storage_->write(test_key_segment(id));
+                if (!storage_->key_exists(test_key(id))) {
+                    ++unreadable;
+                }
+            }
+        });
+    }
+    for (auto& writer : writers) {
+        writer.join();
+    }
+
+    ASSERT_EQ(unreadable.load(), 0);
+    size_t found = 0;
+    storage_->iterate_type(ac::entity::KeyType::TABLE_DATA, [&found](auto&&) { ++found; });
+    ASSERT_EQ(found, size_t(concurrent_writer_count * keys_per_writer));
+    for (int64_t id = 0; id < concurrent_writer_count * keys_per_writer; ++id) {
+        ASSERT_TRUE(storage_->key_exists(test_key(id))) << "missing key " << id;
+    }
+}
+
+TEST_P(LmdbConcurrentWrites, AFailingKeyOnlyFailsItsOwnWriter) {
+    // Each round, one of the concurrent writers rewrites an existing key and must be the only one to fail.
+    for (int64_t round = 0; round < duplicate_key_rounds; ++round) {
+        const int64_t first_id = round * concurrent_writer_count;
+        storage_->write(test_key_segment(first_id));
+
+        std::atomic<int> duplicates{0};
+        std::atomic<int> other_errors{0};
+        std::vector<std::thread> writers;
+        for (int64_t writer = 0; writer < concurrent_writer_count; ++writer) {
+            writers.emplace_back([this, &duplicates, &other_errors, id = first_id + writer]() {
+                try {
+                    storage_->write(test_key_segment(id));
+                } catch (const as::DuplicateKeyException&) {
+                    ++duplicates;
+                } catch (...) {
+                    ++other_errors;
+                }
+            });
+        }
+        for (auto& writer : writers) {
+            writer.join();
+        }
+
+        ASSERT_EQ(duplicates.load(), 1) << "round " << round;
+        ASSERT_EQ(other_errors.load(), 0) << "round " << round;
+        for (int64_t id = first_id; id < first_id + concurrent_writer_count; ++id) {
+            ASSERT_TRUE(storage_->key_exists(test_key(id))) << "missing key " << id;
+        }
+    }
+}
+
+INSTANTIATE_TEST_SUITE_P(
+        GroupCommit, LmdbConcurrentWrites, testing::Values(int64_t{1}, int64_t{0}),
+        [](const testing::TestParamInfo<int64_t>& info) { return info.param ? "On"s : "Off"s; }
+);
 
 std::vector<StorageGenerator> get_storage_generators() { return {"lmdb"s, "mem"s}; }
 

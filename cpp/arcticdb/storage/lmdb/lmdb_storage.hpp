@@ -31,6 +31,9 @@ struct LmdbInstance {
 /// rather than mdb_env_set_flags because MDB_WRITEMAP can only be set at open.
 unsigned int lmdb_extra_env_flags();
 
+struct LmdbPendingWrite;
+struct LmdbWriteGroup;
+
 class LmdbStorage final : public Storage {
   public:
     using Config = arcticdb::proto::lmdb_storage::Config;
@@ -96,10 +99,20 @@ class LmdbStorage final : public Storage {
 
     // _internal methods assume the write mutex is already held
     void do_write_internal(KeySegmentPair& key_seg, ::lmdb::txn& txn);
+    void do_write_internal(std::span<KeySegmentPair* const> key_segs, ::lmdb::txn& txn);
     boost::container::small_vector<VariantKey, 1> do_remove_internal(
             std::span<VariantKey> variant_key, ::lmdb::txn& txn, RemoveOpts opts
     );
+
+    // Writes the batch in one transaction and one commit; if that fails, retries one transaction per key and records
+    // each key's error on its LmdbPendingWrite.
+    void commit_write_group(std::span<LmdbPendingWrite* const> batch);
+
     std::unique_ptr<std::mutex> write_mutex_;
+    std::unique_ptr<LmdbWriteGroup> write_group_;
+    bool group_commit_enabled_;
+    // 0 means no cap.
+    size_t group_commit_max_bytes_;
     std::shared_ptr<LmdbInstance> lmdb_instance_;
 
     std::filesystem::path lib_dir_;
