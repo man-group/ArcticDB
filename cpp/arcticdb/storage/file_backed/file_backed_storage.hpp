@@ -60,6 +60,8 @@ class FileBackedStorage final : public Storage {
 
   private:
     std::filesystem::path storage_dir_;
+    // TODO: Need to collect the process umask and chmod newly created directories if needed.
+    mode_t new_dir_mode_;
     std::unique_ptr<PosixInterface> posix_;
 };
 

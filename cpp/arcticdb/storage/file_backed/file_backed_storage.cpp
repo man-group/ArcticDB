@@ -24,6 +24,7 @@
 
 // TODO: Windows will be an entirely separate implementation. Some of the Storage class implementations will be
 //       platform independent, so perhaps it is prudent to introduce some separate TUs per platform.
+// TODO: Because of Windows, all my usages of c_str() are bad. They return wchar_t*.
 #ifndef _WIN32
 #include <fcntl.h>
 #include <linux/limits.h>
@@ -33,6 +34,9 @@
 namespace fs = std::filesystem;
 
 namespace {
+
+static const mode_t NEW_FILE_MODE = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;                     // 0644
+static const mode_t DIR_MODE_MASK = S_ISUID | S_ISGID | S_ISVTX | S_IRWXU | S_IRWXG | S_IRWXO; // 07777
 
 class FdCloser {
   public:
@@ -138,8 +142,16 @@ FileBackedStorage::FileBackedStorage(const LibraryPath& library_path, OpenMode m
                 mode > OpenMode::READ, "Missing dir {} for lib={}. mode={}", storage_dir_.c_str(), lib_path_str, mode
         );
 
+        // TODO: It's important to set sensible permissions on these directories, so that group users have read access.
         fs::create_directories(storage_dir_);
     }
+    struct stat st;
+    if (::stat(storage_dir_.c_str(), &st) == 0) {
+        new_dir_mode_ = st.st_mode & DIR_MODE_MASK;
+    } else
+        throw std::system_error(
+                errno, std::generic_category(), fmt::format("Could not fstat library directory", storage_dir_.c_str())
+        );
 }
 
 FileBackedStorage::~FileBackedStorage() = default;
@@ -155,7 +167,9 @@ void FileBackedStorage::do_write(KeySegmentPair& key_seg) {
     std::string maybe_safe_file_name_for_key = to_serialized_key(key_seg.variant_key());
     Segment& seg = *key_seg.segment_ptr();
     // bool is_overwrite = std::holds_alternative<RefKey>(key_seg.variant_key());
-    int dir_fd = posix_->open(storage_dir_.c_str(), O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+    // TODO: With bucketizer, may have to create new directories with O_CREAT. Essential to set the directory
+    // permissions.
+    int dir_fd = posix_->open(storage_dir_.c_str(), O_RDONLY | O_DIRECTORY | O_CLOEXEC, 0);
     if (dir_fd < 0)
         throw std::system_error(
                 errno,
@@ -163,17 +177,18 @@ void FileBackedStorage::do_write(KeySegmentPair& key_seg) {
                 fmt::format("do_write() failed to open directory {}", storage_dir_.c_str())
         );
 
-    fs::path tmp_file_name = storage_dir_ / generate_random_name();
+    const std::string tmp_name = generate_random_name();
+    const fs::path tmp_file_path = storage_dir_ / tmp_name;
     {
         // TODO: Remembering to do this every time and only after checking < 0 seems error prone. Wrap file descriptors?
         FdCloser close_dir_fd(dir_fd);
-        // TODO: mode?
-        int tmp_key_fd = posix_->openat(dir_fd, tmp_file_name.c_str(), O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC);
+        int tmp_key_fd =
+                posix_->openat(dir_fd, tmp_name.c_str(), O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, NEW_FILE_MODE);
         if (tmp_key_fd < 0) {
             throw std::system_error(
                     errno,
                     std::generic_category(),
-                    fmt::format("do_write() failed to create file {}", tmp_file_name.c_str())
+                    fmt::format("do_write() failed to create file {}", tmp_file_path.c_str())
             );
         }
 
@@ -186,7 +201,7 @@ void FileBackedStorage::do_write(KeySegmentPair& key_seg) {
             try {
                 write_all(tmp_key_fd, buffer);
             } catch (...) {
-                ::unlinkat(dir_fd, tmp_file_name.c_str(), 0);
+                ::unlinkat(dir_fd, tmp_file_path.c_str(), 0);
                 throw;
             }
 
@@ -199,13 +214,13 @@ void FileBackedStorage::do_write(KeySegmentPair& key_seg) {
         // scope closes dir_fd
     }
     fs::path destination = storage_dir_ / maybe_safe_file_name_for_key;
-    if (posix_->rename(tmp_file_name.c_str(), destination.c_str())) {
+    if (posix_->rename(tmp_file_path.c_str(), destination.c_str())) {
         const int err = errno;
-        ::unlink(tmp_file_name.c_str());
+        ::unlink(tmp_file_path.c_str());
         throw std::system_error(
                 err,
                 std::generic_category(),
-                fmt::format("Failed to move {} to {}", tmp_file_name.c_str(), destination.c_str())
+                fmt::format("Failed to move {} to {}", tmp_file_path.c_str(), destination.c_str())
         );
     }
 }
@@ -221,11 +236,11 @@ KeySegmentPair FileBackedStorage::do_read(VariantKey&& variant_key, ReadKeyOpts)
     // TODO: The conversion to file name needs careful vetting.
     std::string maybe_safe_file_name_for_key = to_serialized_key(variant_key);
     fs::path dest_path = storage_dir_ / maybe_safe_file_name_for_key;
-    int fd = posix_->open(dest_path.c_str(), O_RDONLY | O_CLOEXEC);
+    int fd = posix_->open(dest_path.c_str(), O_RDONLY | O_CLOEXEC, 0);
     if (fd < 0) {
         if (errno == ENOENT) {
             refresh_ancestors(storage_dir_, dest_path);
-            fd = posix_->open(dest_path.c_str(), O_RDONLY | O_CLOEXEC);
+            fd = posix_->open(dest_path.c_str(), O_RDONLY | O_CLOEXEC, 0);
             if (fd < 0)
                 throw KeyNotFoundException(variant_key);
         } else { // TODO: Retry once on ESTALE too, without refresh

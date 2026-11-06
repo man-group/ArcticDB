@@ -1179,6 +1179,7 @@ if(${TEST})
             storage/test/common.hpp
             storage/test/test_storage_operations.cpp
             storage/test/test_storage_utils.cpp
+            storage/test/test_file_backed_storage.cpp
             stream/test/stream_test_common.cpp
             stream/test/test_aggregator.cpp
             stream/test/test_incompletes.cpp

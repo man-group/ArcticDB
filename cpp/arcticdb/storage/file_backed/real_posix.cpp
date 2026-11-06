@@ -15,11 +15,8 @@
 
 namespace arcticdb::storage::file_backed {
 
-int RealPosix::open(const char* pathname, int flags) { return ::open(pathname, flags); }
-
 int RealPosix::open(const char* pathname, int flags, mode_t mode) { return ::open(pathname, flags, mode); }
 
-int RealPosix::openat(int dirfd, const char* pathname, int flags) { return ::openat(dirfd, pathname, flags); }
 int RealPosix::openat(int dirfd, const char* pathname, int flags, mode_t mode) {
     return ::openat(dirfd, pathname, flags, mode);
 }
