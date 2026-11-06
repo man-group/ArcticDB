@@ -101,6 +101,9 @@ class StringBlock {
 
     [[nodiscard]] size_t num_blocks() { return data_.buffer().num_blocks(); }
 
+    // Smallest size of one stored string
+    static constexpr size_t min_entry_bytes() { return sizeof(StringHead); }
+
     StringHead* head_at(position_t pos) {
         auto data = data_.buffer().ptr_cast<uint8_t>(pos, sizeof(StringHead));
         return reinterpret_cast<StringHead*>(data);
@@ -153,6 +156,12 @@ class StringPool {
 
     OffsetString get(std::string_view s, bool deduplicate = true);
     OffsetString get(const char* data, size_t size, bool deduplicate = true);
+
+    // Size the map for num_strings distinct strings up front, avoiding repeated rehashes
+    void reserve(size_t num_strings);
+
+    // Smallest size of one stored string, so size() / min_string_bytes() bounds the string count
+    static constexpr size_t min_string_bytes() { return StringBlock::min_entry_bytes(); }
 
     const ChunkedBuffer& data() const;
 
