@@ -3326,18 +3326,11 @@ folly::Future<AtomKey> merge_update_impl(
             schema_from_tsd(index_information->index_.second.index_descriptor()), source->desc(), source->norm_meta
     );
     OutputSchema source_output_schema = schema_from_input_frame(*source);
-    SegmentInMemory source_segment = [&] {
-        // WriteToSegmentTask adds the index column itself, so the column range covers only the data columns.
-        FrameSlice full_slice{
-                std::make_shared<StreamDescriptor>(source->desc().clone()),
-                ColRange{source->desc().index().field_count(), source->desc().field_count()},
-                RowRange{0, source->num_rows}
-        };
-        return std::get<1>(WriteToSegmentTask(source, std::move(full_slice))());
-    }();
-    // The clause and the row range insert below share the segment's data
+    // Pipeline setup needs only the source schema. The source segment is set after the empty target check, because an
+    // empty target converts the data to SegmentInMemory before writing it, thus converting it here would make two
+    // conversions, one of which is redundant.
     auto merge_update_clause = std::make_shared<Clause>(MergeUpdateClause(
-            std::move(on), strategy, source_segment, std::move(source_output_schema), write_options.segment_row_size
+            std::move(on), strategy, SegmentInMemory{}, std::move(source_output_schema), write_options.segment_row_size
     ));
 
     read_query->clauses_.push_back(merge_update_clause);
@@ -3379,7 +3372,21 @@ folly::Future<AtomKey> merge_update_impl(
                     index_type == IndexDescriptor::Type::ROWCOUNT,
             "Merge update supports only ascending indexed data and row count indexed data"
     );
-    folly::poly_cast<MergeUpdateClause>(*merge_update_clause).fake_index_name_ =
+    // If this becomes a bottleneck for a common use case, WriteToSegmentTask can be trivially parallelised over all
+    // cores, at the cost of downstream code handling a collection of SegmentInMemory along with their row ranges.
+    SegmentInMemory source_segment = [&] {
+        // WriteToSegmentTask adds the index column itself, so the column range covers only the data columns.
+        FrameSlice full_slice{
+                std::make_shared<StreamDescriptor>(source->desc().clone()),
+                ColRange{source->desc().index().field_count(), source->desc().field_count()},
+                RowRange{0, source->num_rows}
+        };
+        return std::get<1>(WriteToSegmentTask(source, std::move(full_slice))());
+    }();
+    auto& merge_update = folly::poly_cast<MergeUpdateClause>(*merge_update_clause);
+    // The clause and the row range insert below share the segment's data
+    merge_update.source_ = source_segment;
+    merge_update.fake_index_name_ =
             index_type == IndexDescriptor::Type::TIMESTAMP && is_fake_index_name(pipeline_context->normalization());
     auto component_manager = std::make_shared<ComponentManager>();
     // Tasks read the Python-owned source, so on error wait for all of them before the exception reaches Python
