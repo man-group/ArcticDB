@@ -12,12 +12,17 @@
  */
 #pragma once
 
+#include <atomic>
+
 #include <arcticdb/entity/atom_key.hpp>
 
 #include <deque>
 #include <vector>
 
 namespace arcticdb {
+
+template<class Clock>
+class VersionMapImpl;
 using namespace arcticdb::entity;
 using namespace arcticdb::stream;
 
@@ -213,6 +218,28 @@ struct LoadProgress {
     bool is_earliest_version_loaded{false};
 };
 
+// An atomic that can be copied, so that the containing struct stays copyable. Copies are not atomic as a whole.
+template<typename T>
+class CopyableAtomic {
+  public:
+    CopyableAtomic(T value = T{}) : value_(value) {}
+    CopyableAtomic(const CopyableAtomic& other) : value_(other.load()) {}
+    CopyableAtomic& operator=(const CopyableAtomic& other) {
+        store(other.load());
+        return *this;
+    }
+    CopyableAtomic& operator=(T value) {
+        store(value);
+        return *this;
+    }
+    operator T() const { return load(); }
+    T load() const { return value_.load(); }
+    void store(T value) { value_.store(value); }
+
+  private:
+    std::atomic<T> value_;
+};
+
 struct VersionMapEntry {
     /*
       VersionMapEntry is all the data we have in-memory about each stream_id in the version map which in its essence
@@ -245,11 +272,43 @@ struct VersionMapEntry {
     void clear() {
         head_.reset();
         last_reload_time_ = 0;
+        matches_storage_ = false;
         tombstones_.clear();
         tombstone_all_.reset();
         keys_.clear();
         load_progress_ = LoadProgress{};
     }
+
+    /**
+     * Clears matches_storage_ for the duration of a mutation of the entry and its storage, and restores it on commit.
+     * If the mutation does not commit, e.g. because a storage write threw, the entry is cleared, so that the next load
+     * goes to storage rather than serving in-memory changes that storage may not have.
+     */
+    class Mutation {
+      public:
+        explicit Mutation(VersionMapEntry& entry) : entry_(entry), matched_storage_(entry.matches_storage_) {
+            entry_.matches_storage_ = false;
+        }
+
+        ARCTICDB_NO_MOVE_OR_COPY(Mutation)
+
+        ~Mutation() {
+            if (!committed_)
+                entry_.clear();
+        }
+
+        void commit() {
+            committed_ = true;
+            entry_.matches_storage_ = matched_storage_;
+        }
+
+      private:
+        VersionMapEntry& entry_;
+        bool matched_storage_;
+        bool committed_ = false;
+    };
+
+    [[nodiscard]] Mutation begin_mutation() { return Mutation(*this); }
 
     bool empty() const { return !head_; }
 
@@ -262,6 +321,7 @@ struct VersionMapEntry {
         swap(left.keys_, right.keys_);
         swap(left.tombstones_, right.tombstones_);
         swap(left.last_reload_time_, right.last_reload_time_);
+        swap(left.matches_storage_, right.matches_storage_);
         swap(left.tombstone_all_, right.tombstone_all_);
         swap(left.head_, right.head_);
         swap(left.load_progress_, right.load_progress_);
@@ -295,7 +355,7 @@ struct VersionMapEntry {
     std::string dump() const {
         std::ostringstream strm;
         strm << fmt::format("\n Symbol: {}\n", stream_id_);
-        strm << fmt::format("\nLast reload time: {}\n", last_reload_time_);
+        strm << fmt::format("\nLast reload time: {}\n", last_reload_time_.load());
 
         if (head_)
             strm << fmt::format("Head: {}\n", *head_);
@@ -491,12 +551,18 @@ struct VersionMapEntry {
 
     StreamId stream_id_;
     std::optional<AtomKey> head_;
-    timestamp last_reload_time_ = 0;
+    CopyableAtomic<timestamp> last_reload_time_ = 0;
     LoadProgress load_progress_;
     std::deque<AtomKeyPacked> keys_;
     std::optional<AtomKey> tombstone_all_;
 
   private:
+    template<class Clock>
+    friend class VersionMapImpl;
+
+    // True only while keys_, tombstones and head_ are known to reflect storage as of last_reload_time_: set after a
+    // successful load or mutation, false while a mutation is in progress. Only such an entry may be revalidated.
+    CopyableAtomic<bool> matches_storage_ = false;
     ankerl::unordered_dense::map<VersionId, AtomKeyPacked> tombstones_;
 };
 
