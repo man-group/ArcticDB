@@ -6,6 +6,7 @@
  * will be governed by the Apache License, version 2.0.
  */
 
+#include <bits/ranges_algo.h>
 #include <gtest/gtest.h>
 
 #include <arcticdb/storage/file_backed/file_backed_storage.hpp>
@@ -67,10 +68,26 @@ class FileBackedStorageF : public TempDirFixture {
 };
 
 TEST_F(FileBackedStorageF, WritesAreVisibleAndReadable) {
-    // storage_->write(storage::KeySegmentPair(VariantKey{"hi"}, storage::get_test_segment()));
-    write_in_store(storage(), "sym");
-    ASSERT_TRUE(exists_in_store(storage(), "sym"));
-    ASSERT_EQ(read_in_store(storage(), "sym"), "sym");
+    Segment segment{storage::get_test_segment()};
+    const std::string symbol{"symbol"};
+    auto key = storage::get_test_key(symbol, entity::KeyType::VERSION);
+    storage().write(storage::KeySegmentPair(entity::VariantKey{key}, segment.clone()));
+    ASSERT_TRUE(exists_in_store(storage(), symbol));
+
+    auto result = storage().read(entity::VariantKey{key}, {});
+    ASSERT_EQ(std::get<StringId>(result.atom_key().id()), symbol);
+    ASSERT_TRUE(result.has_segment());
+
+    BufferView original_buffer = segment.buffer();
+    BufferView read_buffer = result.segment().buffer();
+    ASSERT_EQ(original_buffer.bytes(), read_buffer.bytes());
+    ASSERT_TRUE(std::ranges::equal(
+            std::span<uint8_t>(original_buffer.data(), original_buffer.bytes()),
+            std::span<uint8_t>(read_buffer.data(), read_buffer.bytes())
+    ));
 }
+
+// Test if key writes clash? I'd really like a C++ test which reproduces what just happened. Namely,
+// all my writes overwrote the same path because the file name contained a null byte early on.
 
 } // namespace

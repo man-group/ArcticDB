@@ -164,7 +164,12 @@ std::string FileBackedStorage::name() const { return fmt::format("file_backed_st
 
 void FileBackedStorage::do_write(KeySegmentPair& key_seg) {
     // TODO: The conversion to file name needs careful vetting.
-    std::string maybe_safe_file_name_for_key = to_serialized_key(key_seg.variant_key());
+    std::string maybe_safe_file_name_for_key = to_tokenized_key(key_seg.variant_key());
+    if (maybe_safe_file_name_for_key.find('\0') != std::string::npos) {
+        throw std::runtime_error(
+                fmt::format("to_tokenized_key generated invalid file name! key: {}", key_seg.variant_key())
+        );
+    }
     Segment& seg = *key_seg.segment_ptr();
     // bool is_overwrite = std::holds_alternative<RefKey>(key_seg.variant_key());
     // TODO: With bucketizer, may have to create new directories with O_CREAT. Essential to set the directory
@@ -224,8 +229,12 @@ void FileBackedStorage::do_write(KeySegmentPair& key_seg) {
         );
     }
 }
-void FileBackedStorage::do_write_if_none(KeySegmentPair& kv [[maybe_unused]]) {}
-void FileBackedStorage::do_update(KeySegmentPair& key_seg [[maybe_unused]], UpdateOpts opts [[maybe_unused]]) {}
+void FileBackedStorage::do_write_if_none(KeySegmentPair& kv [[maybe_unused]]) {
+    throw std::runtime_error("do_write_if_none() not implemented");
+}
+void FileBackedStorage::do_update(KeySegmentPair& key_seg [[maybe_unused]], UpdateOpts opts [[maybe_unused]]) {
+    throw std::runtime_error("do_update() not implemented");
+}
 void FileBackedStorage::do_read(
         VariantKey&& variant_key [[maybe_unused]], const ReadVisitor& visitor [[maybe_unused]],
         ReadKeyOpts opts [[maybe_unused]]
@@ -234,7 +243,7 @@ void FileBackedStorage::do_read(
 }
 KeySegmentPair FileBackedStorage::do_read(VariantKey&& variant_key, ReadKeyOpts) {
     // TODO: The conversion to file name needs careful vetting.
-    std::string maybe_safe_file_name_for_key = to_serialized_key(variant_key);
+    std::string maybe_safe_file_name_for_key = to_tokenized_key(variant_key);
     fs::path dest_path = storage_dir_ / maybe_safe_file_name_for_key;
     int fd = posix_->open(dest_path.c_str(), O_RDONLY | O_CLOEXEC, 0);
     if (fd < 0) {
@@ -254,14 +263,18 @@ KeySegmentPair FileBackedStorage::do_read(VariantKey&& variant_key, ReadKeyOpts)
     return {std::move(variant_key), Segment::from_buffer(buffer)};
 }
 
-void FileBackedStorage::do_remove(VariantKey&& variant_key [[maybe_unused]], RemoveOpts opts [[maybe_unused]]) {}
+void FileBackedStorage::do_remove(VariantKey&& variant_key [[maybe_unused]], RemoveOpts opts [[maybe_unused]]) {
+    throw std::runtime_error("do_remove() not implemented");
+}
 void FileBackedStorage::do_remove(
         std::span<VariantKey> variant_keys [[maybe_unused]], RemoveOpts opts [[maybe_unused]]
-) {}
+) {
+    throw std::runtime_error("do_remove() not implemented");
+}
 
 bool FileBackedStorage::do_key_exists(const VariantKey& key) {
     // TODO: The conversion to file name needs careful vetting.
-    std::string maybe_safe_file_name_for_key = to_serialized_key(key);
+    std::string maybe_safe_file_name_for_key = to_tokenized_key(key);
     return exists(*posix_, storage_dir_, maybe_safe_file_name_for_key);
 }
 
@@ -276,18 +289,24 @@ bool FileBackedStorage::do_iterate_type_until_match(
 void FileBackedStorage::do_visit_object_sizes(
         [[maybe_unused]] KeyType key_type, [[maybe_unused]] const std::string& prefix,
         [[maybe_unused]] const ObjectSizesVisitor& visitor
-) {}
+) {
+    throw std::runtime_error("do_visit_object_sizes() not implemented");
+}
+
 [[nodiscard]] std::string FileBackedStorage::do_key_path(const VariantKey& key [[maybe_unused]]) const {
     throw std::runtime_error("do_key_path not implemented");
 }
+
 [[nodiscard]] const std::set<char>& FileBackedStorage::do_unsupported_symbol_chars() const {
     // TODO: Revisit this, it's wrong. Compare with LMDB, think carefully about Windows.
     return GLOBALLY_UNSUPPORTED_CHARS;
 }
+
 [[nodiscard]] const std::set<char>& FileBackedStorage::do_unsupported_library_chars() const {
     // TODO: Revisit this, it's wrong. Compare with LMDB, think carefully about Windows.
     return GLOBALLY_UNSUPPORTED_CHARS;
 }
+
 [[nodiscard]] std::optional<char> FileBackedStorage::do_verify_library_suffix(std::string_view) const {
     // Shamelessly lifted off LMDB backend. The concept is the same.
 #ifdef _WIN32
