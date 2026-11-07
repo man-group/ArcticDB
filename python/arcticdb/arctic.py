@@ -123,9 +123,7 @@ class Arctic:
 
         self._encoding_version = encoding_version
         self._library_adapter: ArcticLibraryAdapter = _cls(uri, self._encoding_version)
-        undo_me = self._library_adapter.config_library
-        print(type(undo_me), undo_me)
-        self._library_manager = LibraryManager(undo_me)
+        self._library_manager = LibraryManager(self._library_adapter.config_library)
         self._uri = uri
         self._runtime_options = RuntimeOptions(
             output_format=output_format, arrow_string_format_default=arrow_string_format_default
