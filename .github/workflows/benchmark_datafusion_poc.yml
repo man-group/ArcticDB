@@ -1,0 +1,487 @@
+# ===========================================================================
+# EXPERIMENT — NOT PART OF THE PIPELINE. Delete this file and the branch it
+# lives on (`benchmark-winds-datafusion-poc`) when the experiment is over.
+# ===========================================================================
+#
+# DataFusion SQL PoC benchmarks on one rented EC2 box (datafusion-sql-poc
+# ticket 41). The PoC source is NOT on this repository: it lives on a branch of
+# the private `G-D-Petrov/arctic-winds`, as an ArcticDB tree at its root, and is
+# checked out with the read-only `ARCTIC_WINDS_DEPLOY_KEY` every arctic-winds
+# workflow on this branch already uses. Logs here are public, so nothing below
+# prints the source.
+#
+#   plan ─┬─ wheel (cibuildwheel, cp311) ─┬─ start ─ bench ─ stop
+#         └─ crate (maturin, 2_28)  ──────┘
+#
+# The box runs `rust/arcticdb_sql/bench/ec2_driver.py` inside the dev image with
+# `docker run --network host`, so the SeaweedFS + Toxiproxy stack it starts
+# (`bench.s3_stack up --host-network`) and the benchmark share the host's
+# loopback. No job container: GitHub's `container:` cannot take `--network`.
+#
+# Like `benchmark_real_io_ab.yml`, this deliberately does NOT collect. Results
+# leave as GitHub artifacts (7 days) and nothing is written to any results
+# library, and nothing touches real AWS S3 (the S3 storage is the local stack).
+#
+# COST: one on-demand m6i.4xlarge in eu-west-1 is $0.856/h, m6i.2xlarge $0.428/h.
+# The box is rented only after both builds succeed; the pilot is ~10-15 box
+# minutes (~$0.1), a full suite 1-2 h (~$1-1.7). GitHub-hosted builds are free.
+name: EXPERIMENT DataFusion SQL PoC benchmarks
+
+on:
+  # The registration push: GitHub registers a workflow only once one of its
+  # triggers can fire, and an unregistered workflow rejects `workflow_dispatch`.
+  # Scoped to this branch and this file; every job is guarded on
+  # `workflow_dispatch`, so the registration run rents nothing.
+  push:
+    branches: [benchmark-winds-datafusion-poc]
+    paths: ['.github/workflows/benchmark_datafusion_poc.yml']
+
+  workflow_dispatch:
+    inputs:
+      poc_ref:
+        description: Branch, tag or full sha of G-D-Petrov/arctic-winds holding the PoC tree
+        type: string
+        default: datafusion-poc
+      suite:
+        description: >-
+          `tpch_sf01_lmdb_pilot` is the correctness pilot (dispatch it with
+          instance_type m6i.2xlarge). `check6_gate` is TPC-H SF1 on LMDB and S3,
+          five interleaved rounds, with the gate verdict.
+        type: choice
+        options: [tpch_sf01_lmdb_pilot, tpch_sf1, asof, qb, check6_gate]
+        default: tpch_sf01_lmdb_pilot
+      storages:
+        description: Comma-separated `lmdb,s3`. Empty keeps the suite's default.
+        type: string
+        default: ''
+      profiles:
+        description: Comma-separated S3 profiles (`none,same-region,cross-region`). Empty keeps the suite's default.
+        type: string
+        default: ''
+      rounds:
+        description: Interleaved rounds. Empty keeps the suite's default.
+        type: string
+        default: ''
+      runs:
+        description: Timed runs per round. Empty keeps the suite's default.
+        type: string
+        default: ''
+      instance_type:
+        description: One of m6i.xlarge, m6i.2xlarge, m6i.4xlarge. Compare numbers only within one instance type.
+        type: string
+        default: m6i.4xlarge
+      market_type:
+        description: "`spot` or empty for on-demand. Timing runs should stay on-demand: an interruption loses the run."
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+  actions: read
+  packages: read   # the cibuildwheel image on ghcr.io
+
+# No `concurrency:` block, deliberately: `cancel-in-progress` cancelling a run
+# during an EC2 start orphans the instance (benchmark_winds.yml). A leaked box
+# carries the `RunId` tag `ec2_runner_jobs.yml` sets.
+
+env:
+  # Keep the same as `ec2_runner_jobs.yml`'s `image-id`. One AMI and one
+  # instance type per comparison: across either, there is no honest ratio.
+  RUNNER_AMI: ami-0936679d3002e5be3
+  RUST_TOOLCHAIN: "1.99.1"   # >= 1.95; the toolchain the PoC is built with locally
+  TPCHGEN_VERSION: "4.0.0"
+  MATURIN_SPEC: "maturin>=1.10,<2"
+  MANYLINUX_IMAGE: quay.io/pypa/manylinux_2_28_x86_64
+  DEV_IMAGE: ghcr.io/man-group/arcticdb-dev:latest
+  DOCKER_CLI_URL: https://download.docker.com/linux/static/stable/x86_64/docker-27.5.1.tgz
+
+jobs:
+  # Pins the PoC to one full sha, so both builds compile the same tree even if
+  # the branch moves mid-run, and rejects inputs before anything is built.
+  plan:
+    name: plan
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    outputs:
+      sha: ${{ steps.sha.outputs.sha }}
+    steps:
+      - name: check the inputs
+        env:
+          INSTANCE_TYPE: ${{ inputs.instance_type }}
+          MARKET_TYPE: ${{ inputs.market_type }}
+          STORAGES: ${{ inputs.storages }}
+          PROFILES: ${{ inputs.profiles }}
+          ROUNDS: ${{ inputs.rounds }}
+          RUNS: ${{ inputs.runs }}
+        run: |
+          case "$INSTANCE_TYPE" in
+            m6i.xlarge|m6i.2xlarge|m6i.4xlarge) ;;
+            *) echo "::error::instance_type $INSTANCE_TYPE is not one of m6i.xlarge, m6i.2xlarge, m6i.4xlarge"; exit 1 ;;
+          esac
+          case "$MARKET_TYPE" in
+            ''|spot) ;;
+            *) echo "::error::market_type must be empty (on-demand) or spot"; exit 1 ;;
+          esac
+          [[ -z "$STORAGES" || "$STORAGES" =~ ^(lmdb|s3)(,(lmdb|s3))*$ ]] || { echo "::error::bad storages"; exit 1; }
+          [[ -z "$PROFILES" || "$PROFILES" =~ ^(none|same-region|cross-region)(,(none|same-region|cross-region))*$ ]] \
+            || { echo "::error::bad profiles"; exit 1; }
+          [[ -z "$ROUNDS" || "$ROUNDS" =~ ^[1-9][0-9]?$ ]] || { echo "::error::rounds must be 1-99"; exit 1; }
+          [[ -z "$RUNS" || "$RUNS" =~ ^[1-9][0-9]?$ ]] || { echo "::error::runs must be 1-99"; exit 1; }
+
+      - name: check out the PoC
+        uses: actions/checkout@v4
+        with:
+          repository: G-D-Petrov/arctic-winds
+          ref: ${{ inputs.poc_ref }}
+          ssh-key: ${{ secrets.ARCTIC_WINDS_DEPLOY_KEY }}
+          fetch-depth: 1
+          sparse-checkout: rust/arcticdb_sql/bench
+          persist-credentials: false
+
+      - name: resolve the sha
+        id: sha
+        env:
+          POC_REF: ${{ inputs.poc_ref }}
+          SUITE: ${{ inputs.suite }}
+          INSTANCE_TYPE: ${{ inputs.instance_type }}
+          MARKET_TYPE: ${{ inputs.market_type }}
+          STORAGES: ${{ inputs.storages }}
+          PROFILES: ${{ inputs.profiles }}
+          ROUNDS: ${{ inputs.rounds }}
+          RUNS: ${{ inputs.runs }}
+        run: |
+          test -f rust/arcticdb_sql/bench/ec2_driver.py \
+            || { echo "::error::$POC_REF has no rust/arcticdb_sql/bench/ec2_driver.py"; exit 1; }
+          sha=$(git rev-parse HEAD)
+          printf 'sha=%s\n' "$sha" >> "$GITHUB_OUTPUT"
+          {
+            echo "### DataFusion SQL PoC: \`$SUITE\`"
+            echo
+            echo "- PoC: \`G-D-Petrov/arctic-winds@$sha\` (\`$POC_REF\`)"
+            echo "- box: \`$INSTANCE_TYPE\` ${MARKET_TYPE:-on-demand}, AMI \`$RUNNER_AMI\`, eu-west-1"
+            d='suite default'
+            echo "- storages \`${STORAGES:-$d}\`, profiles \`${PROFILES:-$d}\`, rounds \`${ROUNDS:-$d}\`, runs \`${RUNS:-$d}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ~6 s; the same manylinux image `benchmark_winds.yml` builds with.
+  cibw_docker_image:
+    name: cibuildwheel image
+    if: github.event_name == 'workflow_dispatch'
+    uses: ./.github/workflows/cibw_docker_image.yml
+    permissions: {packages: write}
+    with:
+      cibuildwheel_ver: "3.1.4"   # keep in sync with benchmark_winds.yml
+      force_update: false
+
+  # Copied from `benchmark_commit_ab.yml`'s `build`, minus the symbol table and
+  # DWARF split (no profiling here): checkout from arctic-winds at the planned
+  # sha, plain `linux-release` into `/tmp/cpp_build`, which is the directory and
+  # preset build.yml fills `arcticdb-ci-sccache-bucket` with, so only the PoC's
+  # own C++ (`cpp/arcticdb/sql_api`) misses the cache.
+  wheel:
+    name: build arcticdb wheel
+    needs: [plan, cibw_docker_image]
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    defaults:
+      run: {shell: bash}
+    env:
+      # ---- copied from build_steps.yml:46-79; keep the two in sync ----
+      SCCACHE_GHA_VERSION: ${{ secrets.AWS_S3_ACCESS_KEY == null }}
+      SCCACHE_BUCKET: arcticdb-ci-sccache-bucket
+      SCCACHE_ENDPOINT: http://s3.eu-west-1.amazonaws.com
+      SCCACHE_REGION: eu-west-1
+      SCCACHE_S3_USE_SSL: false
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_S3_ACCESS_KEY }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_S3_SECRET_KEY }}
+      VCPKG_NUGET_USER: ${{ secrets.VCPKG_NUGET_USER || github.repository_owner }}
+      VCPKG_NUGET_TOKEN: ${{ secrets.VCPKG_NUGET_TOKEN || secrets.GITHUB_TOKEN }}
+      VCPKG_MAN_NUGET_USER: ${{ secrets.VCPKG_MAN_NUGET_USER }}
+      VCPKG_MAN_NUGET_TOKEN: ${{ secrets.VCPKG_MAN_NUGET_TOKEN }}
+      CMAKE_C_COMPILER_LAUNCHER: sccache
+      CMAKE_CXX_COMPILER_LAUNCHER: sccache
+      ARCTIC_CMAKE_PRESET: linux-release
+      ARCTICDB_BUILD_DIR: /tmp/cpp_build
+      CIBW_BUILD: cp311-manylinux_x86_64
+      CIBW_ENVIRONMENT_PASS_LINUX: SCCACHE_GHA_VERSION ACTIONS_CACHE_URL ACTIONS_RUNTIME_TOKEN
+        VCPKG_INSTALLATION_ROOT VCPKG_BINARY_SOURCES VCPKG_NUGET_USER VCPKG_NUGET_TOKEN
+        VCPKG_MAN_NUGET_USER VCPKG_MAN_NUGET_TOKEN CMAKE_C_COMPILER_LAUNCHER
+        CMAKE_CXX_COMPILER_LAUNCHER CMAKE_BUILD_PARALLEL_LEVEL ARCTIC_CMAKE_PRESET
+        ARCTICDB_BUILD_DIR X_VCPKG_ASSET_SOURCES
+        SCCACHE_BUCKET SCCACHE_ENDPOINT AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY
+        SCCACHE_REGION SCCACHE_S3_USE_SSL
+      CIBW_ENVIRONMENT_LINUX: COPY_VCPKG_DOWNLOADS_TO_HOST=1
+      ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: G-D-Petrov/arctic-winds
+          ref: ${{ needs.plan.outputs.sha }}
+          ssh-key: ${{ secrets.ARCTIC_WINDS_DEPLOY_KEY }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: init submodules
+        run: |
+          git submodule update --init --recursive
+          git -C cpp/vcpkg submodule update --init --recursive
+
+      - uses: mozilla-actions/sccache-action@v0.0.9
+        with:
+          disable_annotations: 'true'
+
+      - name: free disk space
+        uses: jlumbroso/free-disk-space@v1.3.1
+        with:
+          tool-cache: false
+          large-packages: false
+          docker-images: false
+
+      - uses: jwlawson/actions-setup-cmake@v2
+        with:
+          cmake-version: '3.31.6'   # same pin as build_steps.yml
+
+      - name: extra envs
+        env:
+          CMAKE_BUILD_PARALLEL_LEVEL: ${{ vars.CMAKE_BUILD_PARALLEL_LEVEL }}
+        run: |
+          HOME=~ . build_tooling/vcpkg_caching.sh
+          echo -e "VCPKG_BINARY_SOURCES=$VCPKG_BINARY_SOURCES
+          VCPKG_ROOT=$PLATFORM_VCPKG_ROOT
+          ${X_VCPKG_ASSET_SOURCES:+X_VCPKG_ASSET_SOURCES=$X_VCPKG_ASSET_SOURCES}" | tee -a "$GITHUB_ENV"
+          cmake -P cpp/CMake/CpuCount.cmake | sed 's/^-- //' | tee -a "$GITHUB_ENV"
+
+      - name: pull the cibuildwheel manylinux image
+        env:
+          IMAGE: ${{ needs.cibw_docker_image.outputs.tag }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          docker login ghcr.io -u token -p "$GHCR_TOKEN"
+          docker pull "$IMAGE"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'   # host interpreter that runs cibuildwheel
+
+      - name: build the wheel
+        env:
+          CIBW_MANYLINUX_X86_64_IMAGE: ${{ needs.cibw_docker_image.outputs.tag }}
+          CIBW_VERSION: ${{ needs.cibw_docker_image.outputs.cibuildwheel_ver }}
+        run: |
+          python -m pip install pipx --retries 3 --timeout 180
+          python -m pipx run "cibuildwheel==$CIBW_VERSION"
+          ls -l wheelhouse
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: poc-wheel-arcticdb
+          path: wheelhouse/*.whl
+          if-no-files-found: error
+          retention-days: 7
+
+  # The `arcticdb_sql` crate and `tpchgen-cli`, built inside manylinux_2_28 so
+  # both load in the dev image (glibc 2.28); a plain ubuntu-22.04 build would
+  # link glibc 2.35. The crate does not link `arcticdb_ext` (it takes the C API
+  # table from a PyCapsule at runtime), so it builds beside the wheel, not after
+  # it. bindgen reads `cpp/arcticdb/sql_api/adb_read_api.h`, hence the full
+  # checkout and clang-devel. No actions/cache: a DataFusion target dir is
+  # gigabytes, and this repository's cache quota is shared with master's CI.
+  crate:
+    name: build arcticdb_sql and tpchgen-cli
+    needs: [plan]
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 75
+    defaults:
+      run: {shell: bash}
+    steps:
+      - name: free disk space
+        uses: jlumbroso/free-disk-space@v1.3.1
+        with:
+          tool-cache: true
+          large-packages: false
+          docker-images: true
+
+      - uses: actions/checkout@v4
+        with:
+          repository: G-D-Petrov/arctic-winds
+          ref: ${{ needs.plan.outputs.sha }}
+          ssh-key: ${{ secrets.ARCTIC_WINDS_DEPLOY_KEY }}
+          fetch-depth: 1
+          persist-credentials: false
+          path: poc
+
+      - name: build in manylinux_2_28
+        run: |
+          mkdir -p out/bin out/dist out/cargo
+          docker run --rm \
+            -e RUST_TOOLCHAIN -e TPCHGEN_VERSION -e MATURIN_SPEC \
+            -e CARGO_HOME=/w/out/cargo -e CARGO_TARGET_DIR=/w/target \
+            -e CARGO_NET_GIT_FETCH_WITH_CLI=true \
+            -v "$GITHUB_WORKSPACE:/w" -w /w "$MANYLINUX_IMAGE" bash -euo pipefail -c '
+              dnf install -y -q clang-devel >/dev/null
+              export LIBCLANG_PATH=$(dirname "$(find /usr/lib64 -name "libclang.so*" | head -1)")
+              curl --proto =https --tlsv1.2 -sSf https://sh.rustup.rs \
+                | sh -s -- -y -q --profile minimal --default-toolchain "$RUST_TOOLCHAIN" --no-modify-path
+              export PATH=$CARGO_HOME/bin:$PATH
+              rustc --version
+              PY=/opt/python/cp311-cp311/bin/python
+              $PY -m pip install -q "$MATURIN_SPEC"
+              cd /w/poc/rust/arcticdb_sql
+              $PY -m maturin build --release --locked -i "$PY" --compatibility manylinux_2_28 --out /w/out/dist
+              cargo install --locked --root /w/out "tpchgen-cli@$TPCHGEN_VERSION"
+              /w/out/bin/tpchgen-cli --version
+            '
+
+      # Everything the box needs from the PoC tree besides the two wheels: the
+      # bench package, and DataFusion's query files at the crate's pinned rev
+      # (cargo's own checkout of the git dependency), which bench.perf_tpch and
+      # bench.perf_asof read.
+      - name: stage the bench inputs
+        run: |
+          set -euo pipefail
+          df=$(find out/cargo/git/checkouts -mindepth 2 -maxdepth 2 -path '*/datafusion-*/*' -type d | head -1)
+          test -d "$df/benchmarks/sql_benchmarks/tpch/benchmarks"
+          mkdir -p stage/datafusion/benchmarks stage/src/rust stage/bin
+          cp -r "$df/benchmarks/sql_benchmarks" stage/datafusion/benchmarks/
+          tar -C poc -cf - --exclude=target --exclude=__pycache__ rust/arcticdb_sql | tar -C stage/src -xf -
+          cp out/bin/tpchgen-cli stage/bin/
+          cp out/dist/*.whl stage/
+          ls -l stage stage/bin
+          du -sh stage
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: poc-bench-inputs
+          path: stage/
+          if-no-files-found: error
+          retention-days: 7
+
+  # The box is rented only once both builds have succeeded.
+  start:
+    name: start runner
+    needs: [plan, wheel, crate]
+    if: github.event_name == 'workflow_dispatch'
+    uses: ./.github/workflows/ec2_runner_jobs.yml
+    secrets: inherit
+    with:
+      job_type: start
+      instance-type: ${{ inputs.instance_type }}
+      market-type: ${{ inputs.market_type }}
+      image-id: ami-0936679d3002e5be3   # = env.RUNNER_AMI; `env` is not available to a `uses:` job
+
+  bench:
+    name: bench ${{ inputs.suite }}
+    needs: [plan, start]
+    # `ec2_runner_jobs.yml` sets `continue-on-error: true` on start, so a failed
+    # start arrives green with an empty label; without this guard the job queues
+    # against a label no runner ever claims.
+    if: needs.start.result == 'success' && needs.start.outputs.label != ''
+    runs-on: ${{ needs.start.outputs.label }}
+    timeout-minutes: 180   # never above ~180: a longer timeout is a blank cheque on a stuck box
+    defaults:
+      run: {shell: bash}
+    env:
+      WORK: ${{ github.workspace }}/poc-run
+    steps:
+      - name: record the box
+        run: |
+          token=$(curl -sS -m 2 -X PUT http://169.254.169.254/latest/api/token -H 'X-aws-ec2-metadata-token-ttl-seconds: 60' || true)
+          meta() { curl -sS -m 2 -H "X-aws-ec2-metadata-token: $token" "http://169.254.169.254/latest/meta-data/$1" 2>/dev/null || echo unknown; }
+          {
+            echo "runner: $(meta instance-id) $(meta instance-type) ami=$(meta ami-id) lifecycle=$(meta instance-life-cycle) az=$(meta placement/availability-zone)"
+            echo "nproc $(nproc), $(grep MemTotal /proc/meminfo)"
+            df -h "$GITHUB_WORKSPACE" /var/lib/docker 2>/dev/null || df -h
+            docker version --format 'docker {{.Server.Version}}'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: poc-wheel-arcticdb
+          path: ${{ env.WORK }}/wheels
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: poc-bench-inputs
+          path: ${{ env.WORK }}
+
+      - name: pull the images
+        run: |
+          docker pull -q "$DEV_IMAGE"
+          docker pull -q chrislusf/seaweedfs:4.45
+          docker pull -q ghcr.io/shopify/toxiproxy:2.9.0
+
+      - name: run the suite
+        env:
+          SUITE: ${{ inputs.suite }}
+          STORAGES: ${{ inputs.storages }}
+          PROFILES: ${{ inputs.profiles }}
+          ROUNDS: ${{ inputs.rounds }}
+          RUNS: ${{ inputs.runs }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$WORK/out" "$WORK/data"
+          chmod +x "$WORK/bin/tpchgen-cli"
+          cat > "$WORK/run.sh" <<'SH'
+          set -euo pipefail
+          curl -fsSL "$DOCKER_CLI_URL" | tar xz -C /usr/local/bin --strip-components=1 docker/docker
+          python -m venv /venv
+          /venv/bin/python -m pip install -q --upgrade pip
+          /venv/bin/python -m pip install -q /work/wheels/arcticdb-*.whl "$(ls /work/arcticdb_sql-*.whl)[test]" boto3
+          /venv/bin/python -c "import arcticdb, arcticdb_sql, sys; print(sys.version, arcticdb.__version__)"
+          args=(--suite "$SUITE" --data-dir /work/data --out-dir /work/out --tpchgen /work/bin/tpchgen-cli
+                --datafusion-dir /work/datafusion --s3-host-network)
+          [ -n "$STORAGES" ] && args+=(--storages "$STORAGES")
+          [ -n "$PROFILES" ] && args+=(--profiles "$PROFILES")
+          [ -n "$ROUNDS" ] && args+=(--rounds "$ROUNDS")
+          [ -n "$RUNS" ] && args+=(--runs "$RUNS")
+          cd /work/src/rust/arcticdb_sql
+          /venv/bin/python -m bench.ec2_driver "${args[@]}"
+          SH
+          rc=0
+          docker run --rm --network host \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "$WORK:/work" \
+            -e SUITE -e STORAGES -e PROFILES -e ROUNDS -e RUNS -e DOCKER_CLI_URL \
+            "$DEV_IMAGE" bash /work/run.sh || rc=$?
+          if [ -f "$WORK/out/summary.md" ]; then cat "$WORK/out/summary.md" >> "$GITHUB_STEP_SUMMARY"; fi
+          exit $rc
+
+      - name: upload the results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: poc-results-${{ inputs.suite }}-${{ inputs.instance_type }}
+          path: ${{ env.WORK }}/out/
+          if-no-files-found: warn
+          retention-days: 7
+
+  no_runner:
+    name: no runner arrived
+    needs: [start]
+    if: always() && github.event_name == 'workflow_dispatch' && needs.start.result != 'skipped' && needs.start.outputs.label == ''
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - env:
+          START_RESULT: ${{ needs.start.result }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          echo "::error::No EC2 runner arrived (start: ${START_RESULT}). A start that died after launch can orphan an instance: look for one tagged RunId=${RUN_ID}."
+          exit 1
+
+  # `if: always()`, not `!cancelled()`: a cancelled run is exactly when a
+  # forgotten instance costs money. The window this cannot cover is a cancel
+  # *during* start, sweepable by the `RunId` tag.
+  stop:
+    name: stop runner
+    needs: [start, bench]
+    if: always() && github.event_name == 'workflow_dispatch' && needs.start.result != 'skipped'
+    uses: ./.github/workflows/ec2_runner_jobs.yml
+    secrets: inherit
+    with:
+      job_type: stop
+      label: ${{ needs.start.outputs.label }}
+      ec2-instance-id: ${{ needs.start.outputs.ec2-instance-id }}
