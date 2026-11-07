@@ -1491,3 +1491,18 @@ INSTANTIATE_TEST_SUITE_P(
                 )
         )
 );
+
+TEST(ColumnStatsDispatch, PythonFloatLiteralTakesFloat32StatsPrecision) {
+    using namespace arcticdb;
+    std::vector<ColumnStatsValues> float32_stats{
+            {std::make_optional(construct_value<float>(0.05f)), std::make_optional(construct_value<float>(0.05f))}
+    };
+    std::vector<ColumnStatsValues> float64_stats{
+            {std::make_optional(construct_value<double>(0.05)), std::make_optional(construct_value<double>(0.05))}
+    };
+    auto literal = std::make_shared<Value>(construct_python_float_value(0.05));
+    auto float32_result = dispatch_binary_stats(float32_stats, literal, OperationType::EQ);
+    ASSERT_EQ(std::get<std::vector<StatsComparison>>(float32_result).at(0), StatsComparison::ALL_MATCH);
+    auto float64_result = dispatch_binary_stats(literal, float64_stats, OperationType::EQ);
+    ASSERT_EQ(std::get<std::vector<StatsComparison>>(float64_result).at(0), StatsComparison::ALL_MATCH);
+}

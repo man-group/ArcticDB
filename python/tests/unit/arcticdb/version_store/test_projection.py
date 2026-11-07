@@ -11,7 +11,7 @@ import pandas as pd
 import pytest
 
 from arcticdb.exceptions import ArcticNativeException, SchemaException, UserInputException
-from arcticdb.version_store.processing import QueryBuilder
+from arcticdb.version_store.processing import QueryBuilder, where
 from arcticdb.util.test import assert_frame_equal, make_dynamic, regularize_dataframe
 
 pytestmark = pytest.mark.pipeline
@@ -455,3 +455,36 @@ def test_projection_repeated_subexpression(lmdb_version_store_v1):
     expected["x"] = (df["a"] + df["b"]) * (df["a"] + df["b"])
     received = lib.read(sym, query_builder=q).data
     assert_frame_equal(expected, received)
+
+
+@pytest.mark.parametrize("dtype", [np.float64, np.float32, np.int64, np.int8])
+@pytest.mark.parametrize("literal", [0.05, 1 / 3, 123456789.123])
+def test_project_python_float_literal(lmdb_version_store_v1, any_output_format, dtype, literal):
+    lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol = "test_project_python_float_literal"
+    df = pd.DataFrame({"a": np.array([1, 2, 3, 100], dtype=dtype)})
+    lib.write(symbol, df)
+    q = QueryBuilder()
+    q = q.apply("mul", q.a * literal).apply("add", literal + q.a).apply("sub", q.a - literal)
+    expected = df.copy()
+    expected["mul"] = df["a"] * literal
+    expected["add"] = literal + df["a"]
+    expected["sub"] = df["a"] - literal
+    assert_frame_equal(expected, lib.read(symbol, query_builder=q).data, check_exact=True)
+
+
+@pytest.mark.parametrize("dtype", [np.float64, np.float32, np.int8])
+@pytest.mark.parametrize("literal", [0.05, 1 / 3, 123456789.123])
+def test_project_where_python_float_literal(lmdb_version_store_v1, any_output_format, dtype, literal):
+    lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol = "test_project_where_python_float_literal"
+    df = pd.DataFrame({"a": np.array([1, 2, 3, 100], dtype=dtype)})
+    lib.write(symbol, df)
+    q = QueryBuilder()
+    q = q.apply("l", where(q.a < 3, q.a, literal)).apply("r", where(q.a < 3, literal, q.a))
+    expected = df.copy()
+    expected["l"] = np.where(df["a"] < 3, df["a"], literal)
+    expected["r"] = np.where(df["a"] < 3, literal, df["a"])
+    assert_frame_equal(expected, lib.read(symbol, query_builder=q).data, check_exact=True)

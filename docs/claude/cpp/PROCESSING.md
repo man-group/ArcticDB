@@ -139,6 +139,12 @@ See [PIPELINE.md - Column Stats Filtering](PIPELINE.md#column-stats-filtering) f
 
 `dispatch_binary()` template function dispatches operations based on data types at runtime.
 
+A Python float literal arrives as a FLOAT64 `Value` with `is_python_float()` set. Wherever such a `Value` meets
+another operand (`visit_binary_comparator`, `visit_binary_operator`, `visit_ternary_operator`, `stats_comparator`,
+and output-schema inference in `ExpressionNode::compute`) it is passed through `Value::resolved_against(other_type)`,
+which narrows it to FLOAT32 only when the other side is FLOAT32. This reproduces pandas/NumPy weak-scalar
+promotion: float32 columns compare and compute at float32 precision, everything else at float64.
+
 ## Aggregation
 
 ### Location

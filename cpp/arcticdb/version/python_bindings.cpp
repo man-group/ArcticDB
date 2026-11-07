@@ -180,8 +180,10 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
     version.def("ValueInt64", &construct_value<int64_t>);
     version.def("ValueFloat32", &construct_value<float>);
     version.def("ValueFloat64", &construct_value<double>);
+    version.def("ValuePythonFloat", &construct_python_float_value);
     version.def("ValueTimestamp", &construct_timestamp_value);
 
+    // pybind11 picks the first floating point overload that accepts a Python float, so double precedes float
     version.def("Value", &construct_value<uint8_t>);
     version.def("Value", &construct_value<uint16_t>);
     version.def("Value", &construct_value<uint32_t>);
@@ -190,8 +192,8 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
     version.def("Value", &construct_value<int16_t>);
     version.def("Value", &construct_value<int32_t>);
     version.def("Value", &construct_value<int64_t>);
-    version.def("Value", &construct_value<float>);
     version.def("Value", &construct_value<double>);
+    version.def("Value", &construct_value<float>);
     version.def("Value", &construct_string_value);
 
     py::enum_<MergeAction>(version, "MergeAction")

@@ -127,7 +127,7 @@ StatsComparison adjust_for_missing(StatsComparison result, uint64_t missing_coun
 }
 
 template<typename Func>
-StatsComparison stats_comparator(const ColumnStatsValues& stats_lhs, const Value& val_rhs, Func&& func) {
+StatsComparison stats_comparator(const ColumnStatsValues& stats_lhs, const Value& query_val, Func&& func) {
     if (stats_lhs.column_absent) {
         return StatsComparison::NONE_MATCH;
     }
@@ -139,6 +139,7 @@ StatsComparison stats_comparator(const ColumnStatsValues& stats_lhs, const Value
     if (!stats_lhs.min) {
         return StatsComparison::UNKNOWN;
     }
+    const Value val_rhs = query_val.resolved_against(stats_lhs.min->data_type());
 
     auto result = details::visit_type(stats_lhs.min->data_type(), [&](auto stats_tag) -> StatsComparison {
         using StatsTag = std::remove_reference_t<decltype(stats_tag)>;

@@ -11,6 +11,9 @@
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/util/format_date.hpp>
 
+#include <cmath>
+#include <limits>
+
 namespace arcticdb {
 
 using namespace arcticdb::entity;
@@ -32,9 +35,9 @@ struct Value {
         assign_string(string_data.data(), string_data.size());
     }
 
-    Value(const Value& other) : data_type_(other.data_type_) { assign(other); }
+    Value(const Value& other) : data_type_(other.data_type_), python_float_(other.python_float_) { assign(other); }
 
-    Value(Value&& other) noexcept : data_type_(other.data_type_), len_(other.len_) {
+    Value(Value&& other) noexcept : data_type_(other.data_type_), python_float_(other.python_float_), len_(other.len_) {
         data_ = other.data_;
         other.data_type_ = DataType::UNKNOWN;
     }
@@ -42,6 +45,7 @@ struct Value {
     Value& operator=(const Value& other) {
         free_data();
         data_type_ = other.data_type_;
+        python_float_ = other.python_float_;
         assign(other);
         return *this;
     }
@@ -49,6 +53,7 @@ struct Value {
     Value& operator=(Value&& other) noexcept {
         free_data();
         data_type_ = other.data_type();
+        python_float_ = other.python_float_;
         data_ = other.data_;
 
         other.data_type_ = DataType::UNKNOWN;
@@ -58,7 +63,7 @@ struct Value {
     ~Value() noexcept { free_data(); }
 
     [[nodiscard]] bool operator==(const Value& other) const {
-        if (data_type_ != other.data_type_) {
+        if (data_type_ != other.data_type_ || python_float_ != other.python_float_) {
             return false;
         }
         if (!has_sequence_type()) {
@@ -116,6 +121,17 @@ struct Value {
 
     [[nodiscard]] DataType data_type() const { return data_type_; }
 
+    // A Python float literal is weakly typed, as in NumPy's NEP 50: it is stored as FLOAT64 but takes the precision
+    // of a FLOAT32 operand, so that the result matches the equivalent pandas/NumPy expression.
+    [[nodiscard]] bool is_python_float() const { return python_float_; }
+
+    [[nodiscard]] Value resolved_against(DataType other) const {
+        if (python_float_ && other == DataType::FLOAT32) {
+            return Value{narrow_to_float(get<double>()), DataType::FLOAT32};
+        }
+        return *this;
+    }
+
     [[nodiscard]] bool is_nan() const {
         return details::visit_type(data_type_, [this]<typename TagType>(TagType) -> bool {
             using RawType = typename TagType::raw_type;
@@ -127,6 +143,19 @@ struct Value {
     }
 
   private:
+    friend Value construct_python_float_value(double val);
+
+    // static_cast to float is undefined for finite doubles outside float's range; round to nearest as IEEE does
+    static float narrow_to_float(double val) {
+        constexpr double overflow_threshold = static_cast<double>(std::numeric_limits<float>::max()) + 0x1p103;
+        if (std::abs(val) > std::numeric_limits<float>::max()) {
+            const float magnitude = std::abs(val) >= overflow_threshold ? std::numeric_limits<float>::infinity()
+                                                                        : std::numeric_limits<float>::max();
+            return val < 0 ? -magnitude : magnitude;
+        }
+        return static_cast<float>(val);
+    }
+
     void assign_string(const char* c, const size_t len) {
         const auto data = new char[len + 1];
         memcpy(data, c, len);
@@ -150,6 +179,7 @@ struct Value {
     }
 
     DataType data_type_ = DataType::UNKNOWN;
+    bool python_float_ = false;
     std::array<uint8_t, 8> data_{};
     size_t len_ = 0;
 };
@@ -177,6 +207,12 @@ VALUE_CONSTRUCT(int32_t, INT32)
 VALUE_CONSTRUCT(int64_t, INT64)
 VALUE_CONSTRUCT(float, FLOAT32)
 VALUE_CONSTRUCT(double, FLOAT64)
+
+inline Value construct_python_float_value(double val) {
+    Value value{val, DataType::FLOAT64};
+    value.python_float_ = true;
+    return value;
+}
 
 inline Value construct_timestamp_value(const timestamp ts) { return Value{ts, DataType::NANOSECONDS_UTC64}; }
 

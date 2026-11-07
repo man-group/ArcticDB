@@ -447,7 +447,11 @@ VariantData visit_binary_comparator(const VariantData& left, const VariantData& 
     return std::visit(
             util::overload{
                     [&func](const ColumnWithStrings& l, const std::shared_ptr<Value>& r) -> VariantData {
-                        auto result = binary_comparator<decltype(func)>(l, *r, std::forward<decltype(func)>(func));
+                        auto result = binary_comparator<decltype(func)>(
+                                l,
+                                r->resolved_against(l.column_->type().data_type()),
+                                std::forward<decltype(func)>(func)
+                        );
                         return transform_to_placeholder(result);
                     },
                     [&func](const ColumnWithStrings& l, const ColumnWithStrings& r) -> VariantData {
@@ -455,8 +459,11 @@ VariantData visit_binary_comparator(const VariantData& left, const VariantData& 
                         return transform_to_placeholder(result);
                     },
                     [&func](const std::shared_ptr<Value>& l, const ColumnWithStrings& r) -> VariantData {
-                        auto result =
-                                binary_comparator<decltype(func), true>(r, *l, std::forward<decltype(func)>(func));
+                        auto result = binary_comparator<decltype(func), true>(
+                                r,
+                                l->resolved_against(r.column_->type().data_type()),
+                                std::forward<decltype(func)>(func)
+                        );
                         return transform_to_placeholder(result);
                     },
                     [&func](const ColumnWithStrings& l, const std::shared_ptr<util::RegexGeneric>& r) -> VariantData {
@@ -626,16 +633,28 @@ VariantData visit_binary_operator(const VariantData& left, const VariantData& ri
     return std::visit(
             util::overload{
                     [&](const ColumnWithStrings& l, const std::shared_ptr<Value>& r) -> VariantData {
-                        return binary_operator<decltype(func)>(l, *r, std::forward<decltype(func)>(func));
+                        return binary_operator<decltype(func)>(
+                                l,
+                                r->resolved_against(l.column_->type().data_type()),
+                                std::forward<decltype(func)>(func)
+                        );
                     },
                     [&](const ColumnWithStrings& l, const ColumnWithStrings& r) -> VariantData {
                         return binary_operator<decltype(func)>(l, r, std::forward<decltype(func)>(func));
                     },
                     [&](const std::shared_ptr<Value>& l, const ColumnWithStrings& r) -> VariantData {
-                        return binary_operator<decltype(func), true>(r, *l, std::forward<decltype(func)>(func));
+                        return binary_operator<decltype(func), true>(
+                                r,
+                                l->resolved_against(r.column_->type().data_type()),
+                                std::forward<decltype(func)>(func)
+                        );
                     },
                     [&](const std::shared_ptr<Value>& l, const std::shared_ptr<Value>& r) -> VariantData {
-                        return binary_operator<decltype(func)>(*l, *r, std::forward<decltype(func)>(func));
+                        return binary_operator<decltype(func)>(
+                                l->resolved_against(r->data_type()),
+                                r->resolved_against(l->data_type()),
+                                std::forward<decltype(func)>(func)
+                        );
                     },
                     [](const auto&, const auto&) -> VariantData {
                         user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(

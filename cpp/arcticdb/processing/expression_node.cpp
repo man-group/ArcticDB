@@ -246,6 +246,20 @@ VariantData ExpressionNode::compute(ProcessingUnit& seg) const {
     );
 }
 
+namespace {
+// Output schema counterpart of Value::resolved_against
+void resolve_python_float_type(
+        const ExpressionNode& node, std::variant<BitSetTag, DataType>& type,
+        const std::variant<BitSetTag, DataType>& other_type
+) {
+    if (node.is_value() &&
+        std::get<std::shared_ptr<Value>>(std::get<ExpressionNode::Leaf>(node.kind_))->is_python_float() &&
+        std::holds_alternative<DataType>(other_type) && std::get<DataType>(other_type) == DataType::FLOAT32) {
+        type = DataType::FLOAT32;
+    }
+}
+} // namespace
+
 std::variant<BitSetTag, DataType> ExpressionNode::compute(
         const ankerl::unordered_dense::map<std::string, DataType>& column_types
 ) const {
@@ -316,6 +330,9 @@ std::variant<BitSetTag, DataType> ExpressionNode::compute(
     } else if (is_binary_operation(operation_type_)) {
         ValueSetState right_value_set_state;
         auto right_type = child_return_type(*operation.right_, column_types, right_value_set_state);
+        const auto unresolved_left_type = left_type;
+        resolve_python_float_type(*operation.left_, left_type, right_type);
+        resolve_python_float_type(*operation.right_, right_type, unresolved_left_type);
         switch (operation_type_) {
         case OperationType::ADD:
         case OperationType::SUB:
@@ -541,6 +558,9 @@ std::variant<BitSetTag, DataType> ExpressionNode::compute(
         auto condition_type = child_return_type(*operation.condition_, column_types, condition_value_set_state);
         ValueSetState right_value_set_state;
         auto right_type = child_return_type(*operation.right_, column_types, right_value_set_state);
+        const auto unresolved_left_type = left_type;
+        resolve_python_float_type(*operation.left_, left_type, right_type);
+        resolve_python_float_type(*operation.right_, right_type, unresolved_left_type);
         user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
                 condition_value_set_state == ValueSetState::NOT_A_SET &&
                         right_value_set_state == ValueSetState::NOT_A_SET,
