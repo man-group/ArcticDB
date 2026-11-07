@@ -10,6 +10,7 @@ from datetime import datetime
 from itertools import cycle
 import math
 import numpy as np
+import operator
 from packaging.version import Version
 import pandas as pd
 import pytest
@@ -2362,3 +2363,56 @@ def test_filter_merge_after_concat(lmdb_version_store_tiny_segment, any_output_f
     combined = lib.batch_read_and_join(symbols, query_builder=build(True)).data
     assert not chained.empty
     assert_frame_equal(chained, combined)
+
+
+COMPARISON_OPERATORS = [operator.eq, operator.ne, operator.lt, operator.le, operator.gt, operator.ge]
+
+
+@pytest.mark.parametrize("dtype", [np.float64, np.float32])
+@pytest.mark.parametrize("literal", [0.05, 1 / 3, 123456789.123, 1e300])
+def test_filter_python_float_literal_comparison(
+    lmdb_version_store_v1, any_output_format, column_stats_filtering_enabled_and_disabled, dtype, literal
+):
+    lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol = "test_filter_python_float_literal_comparison"
+    values = [literal, float(np.float32(literal)), float(np.nextafter(literal, np.inf)), 0.0, -literal]
+    df = pd.DataFrame({"d": np.array(values, dtype=dtype)}, index=np.arange(len(values)))
+    lib.write(symbol, df)
+    lib.create_column_stats_experimental(symbol)
+    for op in COMPARISON_OPERATORS:
+        q = QueryBuilder()
+        q = q[op(q.d, literal)]
+        assert_frame_equal(df[op(df["d"], literal)], lib.read(symbol, query_builder=q).data)
+
+
+@pytest.mark.parametrize("dtype", [np.int64, np.uint64])
+def test_filter_integer_column_against_python_float_literal(
+    lmdb_version_store_v1, any_output_format, column_stats_filtering_enabled_and_disabled, dtype
+):
+    lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol = "test_filter_integer_column_against_python_float_literal"
+    df = pd.DataFrame({"i": np.array([0, 1, 123456789, 123456790], dtype=dtype)}, index=np.arange(4))
+    lib.write(symbol, df)
+    lib.create_column_stats_experimental(symbol)
+    for literal in [0.5, 123456789.123]:
+        for op in COMPARISON_OPERATORS:
+            q = QueryBuilder()
+            q = q[op(q.i, literal)]
+            assert_frame_equal(df[op(df["i"], literal)], lib.read(symbol, query_builder=q).data)
+
+
+def test_filter_python_float_and_numpy_float64_literals_in_one_query(
+    lmdb_version_store_v1, column_stats_filtering_enabled_and_disabled
+):
+    lib = lmdb_version_store_v1
+    symbol = "test_filter_python_float_and_numpy_float64_literals_in_one_query"
+    df = pd.DataFrame({"d": np.array([0.05, 0.07], dtype=np.float32)}, index=np.arange(2))
+    lib.write(symbol, df)
+    lib.create_column_stats_experimental(symbol)
+    q = QueryBuilder()
+    q = q[(q.d == 0.05) ^ (q.d == np.float64(0.05))]
+    expected = df[(df["d"] == 0.05) ^ (df["d"] == np.float64(0.05))]
+    assert len(expected) == 1
+    assert_frame_equal(expected, lib.read(symbol, query_builder=q).data)

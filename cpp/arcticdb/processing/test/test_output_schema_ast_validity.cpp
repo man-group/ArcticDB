@@ -26,6 +26,7 @@ class AstParsingOutputTypesTest : public testing::Test {
         initial_stream_desc.add_scalar_field(DataType::UINT8, "uint8");
         initial_stream_desc.add_scalar_field(DataType::UTF_DYNAMIC64, "string");
         initial_stream_desc.add_scalar_field(DataType::BOOL8, "bool");
+        initial_stream_desc.add_scalar_field(DataType::FLOAT32, "float32");
 
         ec = ExpressionContext();
     }
@@ -463,4 +464,27 @@ TEST_F(AstParsingOutputTypesTest, TernaryBitsetBitset) {
     FilterClause filter_clause{{"int32", "uint8", "bool"}, ec, {}};
     auto output_schema = filter_clause.modify_schema(initial_schema());
     ASSERT_EQ(output_schema.stream_descriptor(), initial_schema().stream_descriptor());
+}
+
+TEST_F(AstParsingOutputTypesTest, ProjectionFloat32ColTimesPythonFloatLiteral) {
+    ec.root_ =
+            node(col("float32"), val(std::make_shared<Value>(construct_python_float_value(0.05))), OperationType::MUL);
+    ProjectClause project_clause{{"float32"}, "root", ec};
+    auto output_schema = project_clause.modify_schema(initial_schema());
+    auto stream_desc = initial_schema().stream_descriptor();
+    stream_desc.add_scalar_field(DataType::FLOAT32, "root");
+    ASSERT_EQ(output_schema.stream_descriptor(), stream_desc);
+}
+
+TEST_F(AstParsingOutputTypesTest, ProjectionTernaryPythonFloatLiteralFloat32Col) {
+    ec.root_ =
+            node(bitset_node(),
+                 val(std::make_shared<Value>(construct_python_float_value(0.05))),
+                 col("float32"),
+                 OperationType::TERNARY);
+    ProjectClause project_clause{{"int32", "uint8", "float32"}, "root", ec};
+    auto output_schema = project_clause.modify_schema(initial_schema());
+    auto stream_desc = initial_schema().stream_descriptor();
+    stream_desc.add_scalar_field(DataType::FLOAT32, "root");
+    ASSERT_EQ(output_schema.stream_descriptor(), stream_desc);
 }
