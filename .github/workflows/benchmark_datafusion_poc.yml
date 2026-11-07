@@ -48,8 +48,10 @@ on:
           instance_type m6i.2xlarge). `check6_gate` is TPC-H SF1 on LMDB and S3,
           five interleaved rounds, with the gate verdict. `tpch_sf1_lmdb_cs` is TPC-H SF1 on LMDB,
           every engine, with MINMAX column stats on the ArcticDB libraries.
+          `h2o_1e7` is h2o groupby (with and without NAs) and join at 1e7 on LMDB
+          (dispatch it with instance_type m6i.4xlarge, the published c6id.4xlarge's 16 vCPU).
         type: choice
-        options: [tpch_sf01_lmdb_pilot, tpch_sf1, tpch_sf1_lmdb_cs, asof, qb, check6_gate]
+        options: [tpch_sf01_lmdb_pilot, tpch_sf1, tpch_sf1_lmdb_cs, asof, qb, check6_gate, h2o_1e7]
         default: tpch_sf01_lmdb_pilot
       storages:
         description: Comma-separated `lmdb,s3`. Empty keeps the suite's default.
