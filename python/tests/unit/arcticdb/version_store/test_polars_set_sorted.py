@@ -100,8 +100,7 @@ def test_unsorted_arrow_write_does_not_get_polars_sorted_flag(lmdb_version_store
 
 
 @pytest.mark.parametrize("validate_index", [True, False])
-def test_arrow_write_sets_polars_sorted_flag_only_when_validated(lmdb_version_store_arrow, validate_index):
-    """Polars writes only carry the sorted flag on read when validate_index requested the sortedness check."""
+def test_arrow_write_sets_polars_sorted_flag(lmdb_version_store_arrow, validate_index):
     lib = lmdb_version_store_arrow
     df = pl.DataFrame(
         {
@@ -113,7 +112,7 @@ def test_arrow_write_sets_polars_sorted_flag_only_when_validated(lmdb_version_st
     lib.write("sym", df, index_column=True, validate_index=validate_index)
     result = lib.read("sym", output_format="polars").data
 
-    assert result["ts"].flags["SORTED_ASC"] is validate_index
+    assert result["ts"].flags["SORTED_ASC"] is True
     assert result["ts"].flags["SORTED_DESC"] is False
 
 

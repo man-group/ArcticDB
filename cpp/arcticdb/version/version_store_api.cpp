@@ -98,7 +98,7 @@ std::vector<std::variant<VersionedItem, DataError>> PythonVersionStore::batch_wr
             norms,
             user_metas,
             cfg().write_options().empty_types(),
-            sortedness_scan_for(validate_index)
+            pipelines::SortednessScan::SCAN_IF_UNKNOWN
     );
     return batch_write_versioned_dataframe_internal(
             stream_ids, std::move(frames), prune_previous_versions, validate_index, throw_on_error
@@ -122,7 +122,7 @@ std::vector<std::variant<VersionedItem, DataError>> PythonVersionStore::batch_ap
             norms,
             user_metas,
             cfg().write_options().empty_types(),
-            sortedness_scan_for(validate_index)
+            pipelines::SortednessScan::SCAN_IF_UNKNOWN
     );
     return batch_append_internal(stream_ids, std::move(frames), append_options, throw_on_error);
 }
@@ -794,7 +794,12 @@ VersionedItem PythonVersionStore::write_versioned_dataframe(
 ) {
     ARCTICDB_SAMPLE(WriteVersionedDataframe, 0)
     auto frame = convert::py_input_item_to_frame(
-            stream_id, item, norm, user_meta, cfg().write_options().empty_types(), sortedness_scan_for(validate_index)
+            stream_id,
+            item,
+            norm,
+            user_meta,
+            cfg().write_options().empty_types(),
+            pipelines::SortednessScan::SCAN_IF_UNKNOWN
     );
     auto versioned_item = write_versioned_dataframe_internal(
             stream_id, frame, prune_previous_versions, sparsify_floats, validate_index
@@ -831,7 +836,7 @@ VersionedItem PythonVersionStore::append(
                     norm,
                     user_meta,
                     cfg().write_options().empty_types(),
-                    sortedness_scan_for(validate_index)
+                    pipelines::SortednessScan::SCAN_IF_UNKNOWN
             ),
             append_options
     );

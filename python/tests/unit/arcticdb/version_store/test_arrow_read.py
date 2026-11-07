@@ -1408,9 +1408,8 @@ def test_arrow_written_data_get_info_timeseries(in_memory_version_store_arrow, t
         assert info["date_range"] == (table.to_pandas()["ts"][0], table.to_pandas()["ts"][19])
     else:
         assert np.isnat(info["date_range"][0]) and np.isnat(info["date_range"][1])
-    # With Arrow and validate_index enabled, it is impossible to write sorted-descending data
-    if has_index and validate_index and sorted:
-        assert info["sorted"] == "ASCENDING"
+    if has_index:
+        assert info["sorted"] == ("ASCENDING" if sorted else "DESCENDING")
     else:
         assert info["sorted"] == "UNKNOWN"
 

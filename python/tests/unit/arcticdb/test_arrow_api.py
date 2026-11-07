@@ -454,9 +454,8 @@ def test_arrow_written_data_get_info_timeseries(mem_library, table, tz, has_inde
         assert np.isnat(desc.date_range[0]) and np.isnat(desc.date_range[1])
     assert desc.index_type == "NA"
     assert desc.row_count == 20
-    # # With Arrow and validate_index enabled, it is impossible to write sorted-descending data
-    if has_index and validate_index and sorted:
-        assert desc.sorted == "ASCENDING"
+    if has_index:
+        assert desc.sorted == ("ASCENDING" if sorted else "DESCENDING")
     else:
         assert desc.sorted == "UNKNOWN"
 

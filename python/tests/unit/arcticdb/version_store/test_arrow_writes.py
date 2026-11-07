@@ -2160,6 +2160,54 @@ def test_validate_index_arrow_batch(lmdb_version_store_arrow, method, validate_i
         assert all(not isinstance(r, DataError) for r in result)
 
 
+@pytest.mark.parametrize("method", ["write", "append", "batch_write", "batch_append"])
+@pytest.mark.parametrize(
+    "days, expected_sorted",
+    [
+        (_SORTED_DAYS, "ASCENDING"),
+        (_UNSORTED_DAYS, "UNSORTED"),
+        (_SORTED_DAYS[::-1], "DESCENDING"),
+    ],
+)
+def test_unvalidated_arrow_write_records_sortedness(lmdb_version_store_arrow, method, days, expected_sorted):
+    lib = lmdb_version_store_arrow
+    sym = "test_unvalidated_arrow_write_records_sortedness"
+    table = _ts_arrow_table(days)
+    if method in ("append", "batch_append"):
+        lib.write(sym, _ts_arrow_table(["2023-12-01", "2023-12-02"]), index_column=True, validate_index=True)
+        if expected_sorted == "DESCENDING":
+            expected_sorted = "UNSORTED"
+    ops = {
+        "write": lambda: lib.write(sym, table, validate_index=False, index_column=True),
+        "append": lambda: lib.append(sym, table, validate_index=False, index_column=True),
+        "batch_write": lambda: lib.batch_write([sym], [table], validate_index=False, index_column_vector=[True]),
+        "batch_append": lambda: lib.batch_append([sym], [table], validate_index=False, index_column_vector=[True]),
+    }
+    ops[method]()
+    assert lib.get_info(sym)["sorted"] == expected_sorted
+    date_range = (pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-01"))
+    if expected_sorted == "ASCENDING":
+        result = lib.read(sym, date_range=date_range).data
+        assert result.column("col").to_pylist() == [0]
+    else:
+        with pytest.raises(UnsortedDataException):
+            lib.read(sym, date_range=date_range)
+
+
+def test_unvalidated_unsorted_arrow_write_date_range_read_raises(in_memory_store_factory):
+    lib = in_memory_store_factory(segment_row_size=2)
+    lib.set_output_format("pyarrow")
+    sym = "test_unvalidated_unsorted_arrow_write_date_range_read_raises"
+    lib.write(
+        sym,
+        _ts_arrow_table(["2024-01-02", "2024-01-01", "2024-01-02", "2024-01-01"]),
+        index_column=True,
+        validate_index=False,
+    )
+    with pytest.raises(UnsortedDataException):
+        lib.read(sym, date_range=(pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-01")))
+
+
 @pytest.mark.parametrize("batch", [False, True])
 class TestStringFormatRoundtrip:
     def test_roundtrip_string_types_written_as_pyarrow(self, in_memory_version_store_arrow, batch):
