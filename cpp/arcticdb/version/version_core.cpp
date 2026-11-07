@@ -162,7 +162,7 @@ static TimeseriesDescriptor prepare_append(
                     auto first_index = NumericIndex{frame.index_value_at(0)};
                     auto prev = std::get<NumericIndex>(*last_existing_index_value);
                     util::check(
-                            write_options.ignore_sort_order || prev - 1 <= first_index,
+                            write_options.ignore_sort_order || last_index_value_from_end_index(prev) <= first_index,
                             "Can't append dataframe with start index {} to existing sequence "
                             "ending at {}",
                             util::format_timestamp(first_index),
@@ -1912,8 +1912,7 @@ static void check_incompletes_index_ranges_dont_overlap(
                     "Cannot append staged segments to existing data as existing data is not sorted in ascending order"
             );
             auto last_indexed_slice_and_key = std::prev(pipeline_context->incompletes_begin())->slice_and_key();
-            // -1 as end_time is stored as 1 greater than the last index value in the segment
-            last_existing_index_value = last_indexed_slice_and_key.key().end_time() - 1;
+            last_existing_index_value = last_index_value_from_end_index(last_indexed_slice_and_key.key().end_time());
         }
 
         // Use ordered set so that we only need to compare adjacent elements
@@ -1936,8 +1935,7 @@ static void check_incompletes_index_ranges_dont_overlap(
             // This is correct because incomplete segments aren't column sliced
             sorting::check<ErrorCode::E_UNSORTED_DATA>(
                     // If the segment is entirely covering a single index value, then duplicates are fine
-                    // -1 as end_time is stored as 1 greater than the last index value in the segment
-                    inserted || key.end_time() - 1 == key.start_time(),
+                    inserted || last_index_value_from_end_index(key.end_time()) == key.start_time(),
                     "Cannot finalize staged data as 2 or more incomplete segments cover identical index values (in "
                     "UTC): ({}, {})",
                     util::format_timestamp(key.start_time()),
@@ -1949,14 +1947,13 @@ static void check_incompletes_index_ranges_dont_overlap(
             auto next_it = std::next(it);
             if (next_it != unique_timestamp_ranges.end()) {
                 sorting::check<ErrorCode::E_UNSORTED_DATA>(
-                        // -1 as end_time is stored as 1 greater than the last index value in the segment
-                        next_it->first >= it->second - 1,
+                        next_it->first >= last_index_value_from_end_index(it->second),
                         "Cannot finalize staged data as incomplete segment index values overlap one another (in UTC): "
                         "({}, {}) intersects ({}, {})",
                         util::format_timestamp(it->first),
-                        util::format_timestamp(it->second - 1),
+                        util::format_timestamp(last_index_value_from_end_index(it->second)),
                         util::format_timestamp(next_it->first),
-                        util::format_timestamp(next_it->second - 1)
+                        util::format_timestamp(last_index_value_from_end_index(next_it->second))
                 );
             }
         }

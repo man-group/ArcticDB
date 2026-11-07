@@ -35,6 +35,11 @@ The `KeyType` enum in `cpp/arcticdb/entity/key.hpp` defines all key types. Key t
 
 The `AtomKey` struct contains: `StreamId` (symbol name), `VersionId`, `timestamp` (creation time), `ContentHash`, and `KeyType`.
 
+It also holds `start_index` and `end_index`. For timestamp-indexed data `end_index` is the last index value + 1
+(end-exclusive). A segment whose last value is `INT64_MAX` stores `end_index = INT64_MIN` (the wrapped value). Read
+it through `segment_index_range` / `last_index_value_from_end_index` (`entity/index_range.hpp`), never as raw
+`end_index - 1`; `AtomKey::index_range()` already does.
+
 ### Key Hierarchy
 
 ```

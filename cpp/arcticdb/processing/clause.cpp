@@ -987,7 +987,7 @@ std::vector<std::vector<size_t>> DateRangeClause::structure_for_processing(std::
     );
     const auto index_filter = IndexRange(start_, end_);
     std::erase_if(ranges_and_keys, [&](const RangesAndKey& ranges_and_key) {
-        const auto slice_index_range = IndexRange(ranges_and_key.key_.time_range());
+        const auto slice_index_range = ranges_and_key.key_.index_range();
         return !is_slice_in_index_range(slice_index_range, index_filter, true);
     });
     return structure_by_row_slice(ranges_and_keys);

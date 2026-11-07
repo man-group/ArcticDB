@@ -38,7 +38,7 @@ bool is_slice_in_index_range(IndexRange slice_index_range, const IndexRange& ind
     // inclusive end_index. So, when we are reading we explicitly set the interval as closed to be able to read
     // old_data. The same fix should be done for updates, but that is not implemented yet and should be added with
     // https://github.com/man-group/ArcticDB/issues/2655
-    slice_index_range.end_closed_ = is_read_operation;
+    slice_index_range.end_closed_ = slice_index_range.end_closed_ || is_read_operation;
     return closed_aware_intersects(slice_index_range, index_filter) && !index_filter.empty();
 }
 
@@ -61,9 +61,19 @@ std::unique_ptr<util::BitSet> build_bitset_for_index(
     auto end_index_col_begin = end_idx_col.template begin<IndexTagType>();
     auto end_index_col_end = end_idx_col.template end<IndexTagType>();
 
-    if (dynamic_schema && !column_groups) {
+    // A wrapped end_index (segment ending at INT64_MAX) breaks the sortedness the binary search relies on
+    bool last_end_index_wrapped = false;
+    if constexpr (std::is_same_v<IdxType, stream::TimeseriesIndex>) {
+        last_end_index_wrapped =
+                is_end_index_wrapped(end_idx_col.template scalar_at<timestamp>(container.size() - 1).value());
+    }
+    if (dynamic_schema && !column_groups && !last_end_index_wrapped) {
         const auto range_start = std::get<timestamp>(rg.start_);
         const auto range_end = std::get<timestamp>(rg.end_);
+        if (!is_read_operation && range_start == std::numeric_limits<timestamp>::max()) {
+            ARCTICDB_DEBUG(log::version(), "Returning as no end-exclusive slice can contain INT64_MAX");
+            return res;
+        }
 
         // End index column is exclusive. We want to find the last position where `range_start` is < end_index at
         // position. This is equivalent to finding the first position where range_start + 1 >= end_index at position.
@@ -108,7 +118,7 @@ std::unique_ptr<util::BitSet> build_bitset_for_index(
 
         for (auto i = 0u; i < container.size(); ++i) {
             const auto intersects =
-                    is_slice_in_index_range(IndexRange(*start_idx_pos, *end_idx_pos), rg, is_read_operation);
+                    is_slice_in_index_range(segment_index_range(*start_idx_pos, *end_idx_pos), rg, is_read_operation);
             (*res)[i] = intersects;
             if (intersects)
                 ARCTICDB_DEBUG(log::version(), "range intersects at {}", i);

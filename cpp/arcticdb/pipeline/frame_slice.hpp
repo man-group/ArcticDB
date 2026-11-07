@@ -175,10 +175,7 @@ struct RangesAndKey {
 
     timestamp start_time() const { return key_.start_time(); }
 
-    timestamp end_time() const {
-        // end_index from the key is 1 nanosecond larger than the index value of the last row in the row-slice
-        return key_.end_time() - 1;
-    }
+    timestamp end_time() const { return last_index_value_from_end_index(key_.end_time()); }
 
     bool is_incomplete() const { return is_incomplete_; }
 

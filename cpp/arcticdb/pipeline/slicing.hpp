@@ -83,14 +83,14 @@ inline auto end_index_generator(T end_index) { // works for both rawtype and raw
         std::visit(
                 [](auto& index) {
                     if constexpr (std::is_same_v<std::remove_reference_t<decltype(index)>, entity::NumericIndex>) {
-                        index += timestamp(1);
+                        index = end_index_from_last_index_value(index);
                     }
                 },
                 end_index
         );
         return end_index;
     } else if constexpr (std::is_same_v<T, timestamp>) {
-        return end_index + timestamp(1);
+        return end_index_from_last_index_value(end_index);
     } else {
         return end_index;
     }
