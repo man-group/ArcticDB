@@ -89,7 +89,7 @@ void handle_truncation(Column& dest_column, const ColumnTruncation& truncate);
 
 void handle_truncation(Column& dest_column, const ColumnMapping& mapping);
 
-void handle_truncation(util::BitSet& bv, const ColumnTruncation& truncate);
+void handle_truncation(util::BitSet& bv, const ColumnTruncation& truncate, size_t first_row);
 
 void create_dense_bitmap(
         size_t offset, const util::BitSet& sparse_map, Column& dest_column, entity::AllocationType allocation_type

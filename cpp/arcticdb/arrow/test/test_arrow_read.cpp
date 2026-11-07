@@ -277,6 +277,56 @@ TEST_P(ArrowStringColumnRead, Basic) {
     }
 }
 
+// The validity bitmap must be sized for the truncated block, since sparrow frees it with the size implied by the
+// block's row count. Truncation bounds are frame rows, so this needs a slice that does not start at frame row 0.
+TEST_P(ArrowStringColumnRead, TruncatedLastSliceValidityBitmapSize) {
+    const size_t slice_rows = 500;
+    const size_t slice_first_row = 1000;
+    const size_t truncate_end = 1401;
+    const size_t rows_after_truncation = truncate_end - slice_first_row;
+
+    auto pool = std::make_shared<StringPool>();
+    auto handler = ArrowStringHandler();
+    auto read_options = ReadOptions();
+    read_options.set_output_config(ArrowOutputConfig{.default_string_format_ = output_string_format()});
+    auto source_type = TypeDescriptor{DataType::UTF_DYNAMIC64, Dimension::Dim0};
+    auto [dest_type, block_config] = handler.output_type_and_block_config(source_type, "col", read_options);
+    const auto dest_size = data_type_size(dest_type);
+
+    auto dest = Column(dest_type, 0, AllocationType::DETACHABLE, Sparsity::NOT_PERMITTED, block_config);
+    allocate_chunked_column(dest, slice_first_row + slice_rows, slice_rows);
+
+    auto source = Column(source_type, slice_rows, AllocationType::DYNAMIC, Sparsity::NOT_PERMITTED);
+    const auto str_offset = pool->get("value").offset();
+    for (size_t row = 0; row < slice_rows; ++row) {
+        source.push_back(row % 7 == 0 ? not_a_string() : str_offset);
+    }
+
+    auto field_wrapper = FieldWrapper(dest_type, "col");
+    auto mapping = ColumnMapping(
+            source_type,
+            dest_type,
+            field_wrapper.field(),
+            dest_size,
+            slice_rows,
+            slice_first_row,
+            slice_first_row * dest_size,
+            slice_rows * dest_size,
+            0
+    );
+    mapping.set_truncate(ColumnTruncation{std::nullopt, truncate_end});
+    auto handler_data = std::any{};
+    handler.convert_type(source, dest, mapping, DecodePathData{}, handler_data, pool, read_options);
+
+    const auto offset = slice_first_row * dest_size;
+    ASSERT_TRUE(dest.has_extra_buffer(offset, ExtraBufferType::BITMAP));
+    EXPECT_EQ(
+            dest.get_extra_buffer(offset, ExtraBufferType::BITMAP).bytes(),
+            bitset_packed_size_bytes(rows_after_truncation)
+    );
+    EXPECT_EQ(dest.buffer().blocks().back()->logical_size(), rows_after_truncation * dest_size);
+}
+
 INSTANTIATE_TEST_SUITE_P(
         AllStringFormats, ArrowStringColumnRead,
         testing::Values(

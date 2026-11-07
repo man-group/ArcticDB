@@ -139,12 +139,15 @@ void handle_truncation(Column& dest_column, const ColumnMapping& mapping) {
     handle_truncation(dest_column, mapping.truncate_);
 }
 
-void handle_truncation(util::BitSet& bv, const ColumnTruncation& truncate) {
+void handle_truncation(util::BitSet& bv, const ColumnTruncation& truncate, size_t first_row) {
+    // The truncation bounds are frame rows, but the bitset is indexed from the first row of its slice
     if (truncate.start_) {
-        bv = util::truncate_sparse_map(bv, *truncate.start_, truncate.end_.value_or(bv.size()));
+        bv = util::truncate_sparse_map(
+                bv, *truncate.start_ - first_row, truncate.end_ ? *truncate.end_ - first_row : bv.size()
+        );
     } else if (truncate.end_) {
         // More efficient than util::truncate_sparse_map as it avoids a copy
-        bv.resize(*truncate.end_);
+        bv.resize(*truncate.end_ - first_row);
     }
 }
 

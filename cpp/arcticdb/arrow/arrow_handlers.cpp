@@ -187,7 +187,7 @@ void encode_variable_length(
     }
     dest_bitset.resize(mapping.num_rows_);
 
-    handle_truncation(dest_bitset, mapping.truncate_);
+    handle_truncation(dest_bitset, mapping.truncate_, mapping.first_row_);
     handle_truncation(dest_column, mapping.truncate_);
 
     create_dense_bitmap_if_any_nulls(positions.extra_buffer_position, dest_bitset, dest_column);
@@ -336,7 +336,7 @@ void encode_dictionary(
     }
     dest_bitset.resize(mapping.num_rows_);
 
-    handle_truncation(dest_bitset, mapping.truncate_);
+    handle_truncation(dest_bitset, mapping.truncate_, mapping.first_row_);
     handle_truncation(dest_column, mapping);
 
     create_dense_bitmap_if_any_nulls(positions.extra_buffer_position, dest_bitset, dest_column);
@@ -478,7 +478,7 @@ void ArrowBoolHandler::
             // bit layout matches the packed data block's non-zero shift after handle_truncation(dest_column).
             *bitmap_truncate.start_ -= *bitmap_truncate.start_ % 8;
         }
-        handle_truncation(validity_bitset, bitmap_truncate);
+        handle_truncation(validity_bitset, bitmap_truncate, m.first_row_);
 
         if (validity_bitset.count() != validity_bitset.size()) {
             create_dense_bitmap(

@@ -388,7 +388,7 @@ void decode_or_expand(
             // For Arrow output, apply truncation to the bitmap and set it as an extra buffer.
             if (is_arrow) {
                 bv->resize(mapping.num_rows_);
-                handle_truncation(*bv, mapping.truncate_);
+                handle_truncation(*bv, mapping.truncate_, mapping.first_row_);
                 auto first_offset_after_truncation =
                         mapping.offset_bytes_ + mapping.truncate_.start_.value_or(0) * dest_type_desc.get_type_bytes();
                 create_dense_bitmap_if_any_nulls(first_offset_after_truncation, *bv, dest_column);
