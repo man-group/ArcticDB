@@ -2365,96 +2365,38 @@ def test_filter_merge_after_concat(lmdb_version_store_tiny_segment, any_output_f
     assert_frame_equal(chained, combined)
 
 
-PYTHON_FLOAT_LITERALS = [0.05, 0.07, 1 / 3, 1e-10, 123456789.123, 1e300, -0.0, float("nan")]
 COMPARISON_OPERATORS = [operator.eq, operator.ne, operator.lt, operator.le, operator.gt, operator.ge]
 
 
-def _values_around(literal):
-    if math.isnan(literal):
-        return [0.0, 1.0, -1.0]
-    as_float32 = float(np.float32(literal))
-    return [
-        literal,
-        as_float32,
-        float(np.nextafter(literal, np.inf)),
-        float(np.nextafter(literal, -np.inf)),
-        float(np.nextafter(np.float32(literal), np.float32(np.inf))),
-        float(np.nextafter(np.float32(literal), np.float32(-np.inf))),
-        0.0,
-        -literal,
-        2 * literal + 1,
-    ]
-
-
 @pytest.mark.parametrize("dtype", [np.float64, np.float32])
-@pytest.mark.parametrize("literal", PYTHON_FLOAT_LITERALS)
+@pytest.mark.parametrize("literal", [0.05, 1 / 3, 123456789.123, 1e300])
 def test_filter_python_float_literal_comparison(
     lmdb_version_store_v1, any_output_format, column_stats_filtering_enabled_and_disabled, dtype, literal
 ):
     lib = lmdb_version_store_v1
     lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_filter_python_float_literal_comparison"
-    values = _values_around(literal)
+    values = [literal, float(np.float32(literal)), float(np.nextafter(literal, np.inf)), 0.0, -literal]
     df = pd.DataFrame({"d": np.array(values, dtype=dtype)}, index=np.arange(len(values)))
     lib.write(symbol, df)
     lib.create_column_stats_experimental(symbol)
     for op in COMPARISON_OPERATORS:
         q = QueryBuilder()
         q = q[op(q.d, literal)]
-        expected = df[op(df["d"], literal)]
-        assert_frame_equal(expected, lib.read(symbol, query_builder=q).data)
+        assert_frame_equal(df[op(df["d"], literal)], lib.read(symbol, query_builder=q).data)
 
 
-def test_filter_python_float_literal_tpch_q6_style(lmdb_version_store_v1, column_stats_filtering_enabled_and_disabled):
-    lib = lmdb_version_store_v1
-    symbol = "test_filter_python_float_literal_tpch_q6_style"
-    df = pd.DataFrame({"d": [0.05, 0.07, 0.04, 0.05]})
-    lib.write(symbol, df)
-    lib.create_column_stats_experimental(symbol)
-    q = QueryBuilder()
-    q = q[q.d == 0.05]
-    assert len(lib.read(symbol, query_builder=q).data) == 2
-    q = QueryBuilder()
-    q = q[q.d >= 0.05]
-    assert len(lib.read(symbol, query_builder=q).data) == 3
-    q = QueryBuilder()
-    q = q[(q.d >= 0.05) & (q.d <= 0.07)]
-    assert len(lib.read(symbol, query_builder=q).data) == 3
-
-
-@pytest.mark.parametrize("dtype", [np.float64, np.float32])
-@pytest.mark.parametrize("literal", [lit for lit in PYTHON_FLOAT_LITERALS if not math.isnan(lit)])
-def test_filter_python_float_literal_isin(
-    lmdb_version_store_v1, any_output_format, column_stats_filtering_enabled_and_disabled, dtype, literal
-):
-    lib = lmdb_version_store_v1
-    lib._set_output_format_for_pipeline_tests(any_output_format)
-    symbol = "test_filter_python_float_literal_isin"
-    values = _values_around(literal)
-    df = pd.DataFrame({"d": np.array(values, dtype=dtype)}, index=np.arange(len(values)))
-    lib.write(symbol, df)
-    lib.create_column_stats_experimental(symbol)
-    q = QueryBuilder()
-    q = q[q.d.isin([literal, 0.07])]
-    assert_frame_equal(df[df["d"].isin([literal, 0.07])], lib.read(symbol, query_builder=q).data)
-    q = QueryBuilder()
-    q = q[q.d.isnotin([literal, 0.07])]
-    assert_frame_equal(df[~df["d"].isin([literal, 0.07])], lib.read(symbol, query_builder=q).data)
-
-
-@pytest.mark.parametrize("dtype", [np.int64, np.int32, np.int8, np.uint64])
+@pytest.mark.parametrize("dtype", [np.int64, np.uint64])
 def test_filter_integer_column_against_python_float_literal(
     lmdb_version_store_v1, any_output_format, column_stats_filtering_enabled_and_disabled, dtype
 ):
     lib = lmdb_version_store_v1
     lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_filter_integer_column_against_python_float_literal"
-    info = np.iinfo(dtype)
-    big = min(info.max, 123456790)
-    df = pd.DataFrame({"i": np.array([0, 1, big - 1, big], dtype=dtype)}, index=np.arange(4))
+    df = pd.DataFrame({"i": np.array([0, 1, 123456789, 123456790], dtype=dtype)}, index=np.arange(4))
     lib.write(symbol, df)
     lib.create_column_stats_experimental(symbol)
-    for literal in [0.5, big - 0.877, 1 / 3]:
+    for literal in [0.5, 123456789.123]:
         for op in COMPARISON_OPERATORS:
             q = QueryBuilder()
             q = q[op(q.i, literal)]

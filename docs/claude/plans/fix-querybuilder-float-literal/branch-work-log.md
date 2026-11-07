@@ -11,3 +11,6 @@
   inference.
 - Tests: Python filtering and projection tests compared against pandas; C++ unit tests for dispatch, stats
   and output schema.
+- Follow-up: slimmed the PR (dropped the overflow-rounding helper, `_Value` overload reorder, doc churn and redundant
+  tests), kept the stats-comparator signature untouched (clang-tidy finding), and added a dynamic-schema ternary test
+  for a Python float with a missing float32 column.

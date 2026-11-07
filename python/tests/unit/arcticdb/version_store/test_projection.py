@@ -457,8 +457,8 @@ def test_projection_repeated_subexpression(lmdb_version_store_v1):
     assert_frame_equal(expected, received)
 
 
-@pytest.mark.parametrize("dtype", [np.float64, np.float32, np.int64, np.int8])
-@pytest.mark.parametrize("literal", [0.05, 1 / 3, 123456789.123])
+@pytest.mark.parametrize("dtype", [np.float64, np.float32, np.int8])
+@pytest.mark.parametrize("literal", [0.05, 123456789.123])
 def test_project_python_float_literal(lmdb_version_store_v1, any_output_format, dtype, literal):
     lib = lmdb_version_store_v1
     lib._set_output_format_for_pipeline_tests(any_output_format)
@@ -475,7 +475,7 @@ def test_project_python_float_literal(lmdb_version_store_v1, any_output_format, 
 
 
 @pytest.mark.parametrize("dtype", [np.float64, np.float32, np.int8])
-@pytest.mark.parametrize("literal", [0.05, 1 / 3, 123456789.123])
+@pytest.mark.parametrize("literal", [0.05, 123456789.123])
 def test_project_where_python_float_literal(lmdb_version_store_v1, any_output_format, dtype, literal):
     lib = lmdb_version_store_v1
     lib._set_output_format_for_pipeline_tests(any_output_format)

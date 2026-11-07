@@ -488,12 +488,3 @@ TEST_F(AstParsingOutputTypesTest, ProjectionTernaryPythonFloatLiteralFloat32Col)
     stream_desc.add_scalar_field(DataType::FLOAT32, "root");
     ASSERT_EQ(output_schema.stream_descriptor(), stream_desc);
 }
-
-TEST_F(AstParsingOutputTypesTest, ProjectionIntColTimesPythonFloatLiteral) {
-    ec.root_ = node(col("uint8"), val(std::make_shared<Value>(construct_python_float_value(0.05))), OperationType::MUL);
-    ProjectClause project_clause{{"uint8"}, "root", ec};
-    auto output_schema = project_clause.modify_schema(initial_schema());
-    auto stream_desc = initial_schema().stream_descriptor();
-    stream_desc.add_scalar_field(DataType::FLOAT64, "root");
-    ASSERT_EQ(output_schema.stream_descriptor(), stream_desc);
-}

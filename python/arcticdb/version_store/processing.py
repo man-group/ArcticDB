@@ -510,12 +510,6 @@ class QueryBuilder:
 
     See tests/unit/arcticdb/version_store/test_filtering.py for more example uses.
 
-    #Numeric literals
-    Literals follow numpy/pandas type promotion. A plain Python float is compared and combined at float64 precision
-    with float64 and integer columns, and at float32 precision with float32 columns, so `q[q["a"] == 0.05]` matches
-    the same rows as `df[df["a"] == 0.05]`. A numpy scalar keeps its own type, e.g. `np.float64(0.05)` compared
-    with a float32 column is evaluated at float64 precision.
-
     #Timestamp filtering
     pandas.Timestamp, datetime.datetime, pandas.Timedelta, and datetime.timedelta objects are supported.
     Note that internally all of these types are converted to nanoseconds (since epoch in the Timestamp/datetime

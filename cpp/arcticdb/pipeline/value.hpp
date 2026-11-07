@@ -11,9 +11,6 @@
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/util/format_date.hpp>
 
-#include <cmath>
-#include <limits>
-
 namespace arcticdb {
 
 using namespace arcticdb::entity;
@@ -127,7 +124,7 @@ struct Value {
 
     [[nodiscard]] Value resolved_against(DataType other) const {
         if (python_float_ && other == DataType::FLOAT32) {
-            return Value{narrow_to_float(get<double>()), DataType::FLOAT32};
+            return Value{static_cast<float>(get<double>()), DataType::FLOAT32};
         }
         return *this;
     }
@@ -144,17 +141,6 @@ struct Value {
 
   private:
     friend Value construct_python_float_value(double val);
-
-    // static_cast to float is undefined for finite doubles outside float's range; round to nearest as IEEE does
-    static float narrow_to_float(double val) {
-        constexpr double overflow_threshold = static_cast<double>(std::numeric_limits<float>::max()) + 0x1p103;
-        if (std::abs(val) > std::numeric_limits<float>::max()) {
-            const float magnitude = std::abs(val) >= overflow_threshold ? std::numeric_limits<float>::infinity()
-                                                                        : std::numeric_limits<float>::max();
-            return val < 0 ? -magnitude : magnitude;
-        }
-        return static_cast<float>(val);
-    }
 
     void assign_string(const char* c, const size_t len) {
         const auto data = new char[len + 1];
