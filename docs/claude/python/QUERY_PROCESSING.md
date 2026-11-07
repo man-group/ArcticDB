@@ -86,14 +86,6 @@ q = q[q["price"] < 200]
 q = q[q["price"] <= 200]
 ```
 
-#### Literal types
-
-`create_value()` in `processing.py` maps each literal to a C++ `Value`. numpy scalars keep their dtype
-(float16 is widened to float32). Integers get the smallest type that holds them. A plain Python `float` becomes
-`ValuePythonFloat`: a float64 `Value` flagged as weakly typed (NumPy NEP 50), which C++ narrows to float32 when
-the other operand is a float32 column. Do not pass Python floats to the generic `_Value` binding: before this
-was fixed they resolved to the `float` overload and lost precision (`q.d == 0.05` missed float64 rows equal to 0.05).
-
 ### Logical Operators
 
 ```python

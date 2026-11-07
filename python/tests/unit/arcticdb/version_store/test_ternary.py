@@ -312,6 +312,27 @@ def test_project_ternary_column_sliced(version_store_factory, index, any_output_
     assert_frame_equal(expected, received)
 
 
+@pytest.mark.parametrize("dtype", [np.float32, np.float64])
+def test_project_ternary_dynamic_missing_column_python_float_literal(
+    lmdb_version_store_dynamic_schema_v1, any_output_format, dtype
+):
+    lib = lmdb_version_store_dynamic_schema_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol = "test_project_ternary_dynamic_missing_column_python_float_literal"
+    index = pd.date_range("2024-01-01", periods=4)
+    df_0 = pd.DataFrame({"conditional": [True, False], "col": np.array([1, 2], dtype=dtype)}, index=index[:2])
+    df_1 = pd.DataFrame({"conditional": [True, False]}, index=index[2:])
+    lib.write(symbol, df_0)
+    lib.append(symbol, df_1)
+    expected = pd.concat([df_0, df_1])
+    q = QueryBuilder()
+    q = q.apply("left", where(q["conditional"], 0.05, q["col"])).apply("right", where(q["conditional"], q["col"], 0.05))
+    received = lib.read(symbol, query_builder=q).data
+    expected["left"] = np.where(expected["conditional"], 0.05, expected["col"])
+    expected["right"] = np.where(expected["conditional"], expected["col"], 0.05)
+    assert_frame_equal(expected, received)
+
+
 def test_project_ternary_dynamic_missing_columns(lmdb_version_store_dynamic_schema_v1, any_output_format):
     lib = lmdb_version_store_dynamic_schema_v1
     lib._set_output_format_for_pipeline_tests(any_output_format)
